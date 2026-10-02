@@ -1,6 +1,6 @@
 # desktop_pet
 
-桌宠包模型、校验、导入服务、角色选择与单点启用状态由 `backend/` 拥有。
+桌宠包模型、校验、导入服务、角色选择与单点启用状态由 `backend/` 拥有。后端仅依赖 `shiori-sdk` 与 Pillow；`setup(ctx)` 通过 SDK 的 `roles`、`storage`、`events`、`tools`、`rpc` 能力装配，角色存储和迁移实现由宿主注入。插件测试使用 `shiori-sdk[testing]`，独立安装见 `TESTING.md`。
 角色能力页中的开关由 `ui/roleSettings.tsx` 贡献，修改草稿后仍通过角色页的「保存」提交；选择/删除桌宠包后的投影刷新保留其他角色字段的未保存修改。
 
 ## 持久化边界
@@ -21,7 +21,12 @@
 
 `pets.import` 保持 `{role_id, source}` 契约，RPC 边界只接受该插件暂存目录内的普通 ZIP，拒绝外部路径、路径穿越、链接逃逸和超限文件；包结构与图片校验仍由插件服务负责。
 
-## 仍待后续交付
+## Surface 与语音
 
-- 动作通过 `ctx.rpc.emit("action", ...)` 下发；UI/surface 通过注入 client 的 `background.call("sync", ...)` 通知后台，宿主不持有桌宠通信特例。
-- #220 / #221：观察与语音对桌宠表面的兼容耦合不在本次范围内。
+后台在绑定解析后调用 `ctx.surfaces.setInteraction("pet", { roleId, available: true })`，显示状态由 surface 的生命周期决定；隐藏、解绑与停用立即撤销目标。宿主不读取桌宠设备 KV 的 `visible/roleId/packageId`。旧 `desktop-pet.json` 的一次性文件位置迁移仍保留。
+
+Surface 通过注入的 `surface.voice.gesture("press" | "move" | "release" | "cancel")` 和 `surface.voice.onState` 使用宿主语音；ASR/TTS、录音、热键与播放继续由宿主拥有。宿主按真实窗口 ID 归属手势，按下时固定角色，隐藏、角色替换、renderer 重载/崩溃都会取消旧轮次。`surface.onRoleActivity` 只提供当前角色的 typed activity，目标变化发出 `null` 重置动画；动画优先级与提示挥手时长仍由插件决定。
+
+拖动、惯性、窗口扩展与菜单继续走通用 surface 能力。动作通过 `ctx.rpc.emit("action", ...)` 下发；UI/surface 用注入 client 的 `background.call("sync", ...)` 通知后台。异步 workArea 返回后再次核对绑定，不能移动后来替换的角色。
+
+`pnpm typecheck:plugins` 独立检查所有插件源码与单测，仅解析 SDK 和根 workspace 声明的依赖，不包含宿主 ambient 类型；全局桥接调用和类型引用同时由 ESLint 反例测试禁止。

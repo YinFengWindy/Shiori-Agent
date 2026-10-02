@@ -4,6 +4,7 @@
  * React- and DOM-free.
  */
 import type { BridgeEvent, PluginRpcClient } from "../rpc";
+import type { SurfaceInteractionTarget } from "./surfaceInteraction";
 import type {
   SurfaceCreateResult,
   SurfacePlacement,
@@ -24,6 +25,8 @@ export type PluginBackgroundSettled = {
  * plugin id, so a background module never passes its own id around by hand.
  */
 export type PluginBackgroundSurfaces = {
+  /** Declare the surface's current role and availability; null revokes interaction immediately. */
+  setInteraction(surfaceId: string, target: SurfaceInteractionTarget | null): void;
   create(
     surfaceId: string,
     spec: SurfaceSpec,

@@ -21,4 +21,5 @@ export type {
   SurfaceWorkArea,
 } from "./contract/surface";
 export type { PluginBackgroundSettled } from "./contract/background";
-export type { VoiceStatePayload } from "./contract/voice";
+export type { VoiceStatePayload, VoiceInputSource } from "./contract/voice";
+export type { SurfaceInteractionTarget, SurfaceVoiceGesture, SurfaceVoice, SurfaceRoleActivity } from "./contract/surfaceInteraction";

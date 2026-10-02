@@ -3,21 +3,26 @@
 from __future__ import annotations
 
 from typing import Any
+from pathlib import Path
+from shiori_sdk.extensions import PrivateStorage
 
 from .import_source import resolve_package_import_source
 from .models import RolePetPackage, RolePetState
 from .pet_packages import RolePetPackageService
 from .pet_state import RolePetStateStore
 from .storage import asset_path
-from core.roles.store import RoleStore
+from shiori_sdk.roles import Roles
 
 
 class DesktopPetRpcHandlers:
     """Owns request/response shaping for every ``plugin.desktop_pet.*`` method."""
 
-    def __init__(self, *, role_store: RoleStore) -> None:
+    def __init__(
+        self, *, role_store: Roles, workspace: Path, storage: PrivateStorage
+    ) -> None:
+        self._workspace = workspace
         self._role_store = role_store
-        self._packages = RolePetPackageService(role_store)
+        self._packages = RolePetPackageService(role_store, workspace, storage)
         self._state = RolePetStateStore(role_store)
 
     async def pets_list(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -40,9 +45,7 @@ class DesktopPetRpcHandlers:
         source = str(payload.get("source") or "").strip()
         if not source:
             raise ValueError("缺少桌宠包路径")
-        staged_source = resolve_package_import_source(
-            self._role_store.workspace, source
-        )
+        staged_source = resolve_package_import_source(self._workspace, source)
         package = self._packages.import_package(role_id, staged_source)
         return {"package": self._serialize(package), **await self.pets_list(payload)}
 
@@ -74,7 +77,7 @@ class DesktopPetRpcHandlers:
         ``apps/desktop/src/assets/localAssetPolicy.ts``; the names are the
         contract, not the shape, so they match what ``role_presenter`` emitted.
         """
-        workspace = self._role_store.workspace
+        workspace = self._workspace
         preview = package.preview_path
         return {
             **package.to_dict(),
@@ -102,7 +105,7 @@ class DesktopPetRpcHandlers:
         package = self._selected_package(role)
         if package is None:
             return {"binding": None}
-        spritesheet = asset_path(self._role_store.workspace, package.spritesheet_path)
+        spritesheet = asset_path(self._workspace, package.spritesheet_path)
         if not spritesheet.is_file():
             return {"binding": None}
         return {

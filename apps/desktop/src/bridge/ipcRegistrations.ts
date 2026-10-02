@@ -20,6 +20,7 @@ import { applyRuntimeSettings, readRuntimeSettings } from "../settingsRuntime.js
 import type { BrowserVoiceRecorder } from "../voice/recorder.js";
 import type { DesktopVoiceController } from "../voice/controller.js";
 import type { BrowserVoicePlayback } from "../voice/playback.js";
+import type { SurfaceVoiceController } from "../voice/surfaceVoice.js";
 import type { registerVoiceIpc } from "../voice/ipc.js";
 import { openExternalLink } from "../externalLinks.js";
 import type {
@@ -61,8 +62,9 @@ export type RegisterDesktopIpcOptions = {
   localAssets: LocalAssetRegistry;
   localAssetImportsRoot: string;
   openLocalAttachment: (value: string) => Promise<LocalAssetOpenResult>;
-  /** Whether a sending window is the pet's surface, supplied by `main.ts`. */
-  isPetWindow: (window: { readonly id: number } | null) => boolean;
+  /** Whether a sending window is a live surface, supplied by `main.ts`. */
+  surfaceVoice: Pick<SurfaceVoiceController, "gesture">;
+  isSurfaceWindow: (window: { readonly id: number } | null) => boolean;
   /**
    * Notified once per plugin id that just left the admitted-active set
    * between two `plugins.list` responses — disabled, failed, or rolled back
@@ -116,7 +118,8 @@ export function registerDesktopIpcHandlers(
     localAssets,
     localAssetImportsRoot,
     openLocalAttachment,
-    isPetWindow,
+    isSurfaceWindow,
+    surfaceVoice,
     voiceRecorder,
     voiceController,
     voicePlayback,
@@ -236,7 +239,7 @@ export function registerDesktopIpcHandlers(
   host.handle("desktop:app-relaunch", (event) => {
     // Plugin surfaces (the pet) share this preload; restarting the app is a
     // decision for the main window only.
-    if (isPetWindow(host.windowFromWebContents(event.sender))) return false;
+    if (isSurfaceWindow(host.windowFromWebContents(event.sender))) return false;
     relaunchApp();
     return true;
   });
@@ -313,7 +316,7 @@ export function registerDesktopIpcHandlers(
   // the generic DesktopSurface channels in `src/surface/ipc.ts`, where the host
   // attributes them by the sending window's identity rather than by a
   // pet-specific check here.
-  host.registerVoiceIpc({ isPetWindow, voiceRecorder, voiceController, voicePlayback });
+  host.registerVoiceIpc({ surfaceVoice, voiceRecorder, voiceController, voicePlayback });
   host.handle("desktop:pick-chat-attachments", async (_event, options?: { multiple?: boolean }) => {
     const result = await host.showOpenDialog({
       properties: options?.multiple ? ["openFile", "multiSelections"] : ["openFile"],

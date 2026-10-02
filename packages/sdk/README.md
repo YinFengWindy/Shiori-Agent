@@ -216,6 +216,15 @@ Actual kernel ordering, role saves, session media adoption, runtime lease
 retention, screen/desktop-pet integration and Windows Job cleanup remain in host
 tests. PR CI includes a dedicated Windows process-lifecycle job.
 
+Desktop pet also consumes `roles`, `storage`, `tools`, `rpc` and typed
+`role_events.RoleDeleted` through this context. Sprite packages, role selection,
+exclusive visibility and asset reconciliation remain plugin policies. Host
+integration tests exercise canonical role locks, atomic saves, migration receipts
+and kernel replacement with those public capabilities. `rpc.register` supports
+`admission_exempt=True` for bounded controls that must remain reachable while
+ordinary admission pauses; desktop-pet bubble dismissal uses this flag.
+Pure timestamp/path helpers are defined once in `shiori_sdk.values`.
+
 ## Channel and account contracts
 
 Channel plugins use `shiori_sdk.channels.context.ChannelPluginContext`; transport startup receives `shiori_sdk.channels.ChannelContext`. Account values/rules/targets live in `shiori_sdk.accounts`, message values in `shiori_sdk.messages`, stream events in `shiori_sdk.channel_events`, and provenance/quote helpers in `shiori_sdk.channels.message_source` and `reply_context`. The host injects intake, routing, attachment storage, HTTP and avatar services; it retains lifecycle and cache policy.
@@ -223,3 +232,27 @@ Channel plugins use `shiori_sdk.channels.context.ChannelPluginContext`; transpor
 Declare `processes` for native children. `Processes.popen` is the synchronous counterpart of `spawn`, returning a process and an optional `ProcessOwner`; only the host implements OS ownership. QQ keeps NapCat installation, private profiles, QR codes and OneBot policy. Independent testing uses shared `FakeAccounts`, `FakeChannelPluginContext`, `FakeChannelIntake`, `FakeHttp`, `FakeAvatars` and `FakeProcesses`, never host services.
 
 `ChannelsCapability.group(name)` constructs the host account-group coordinator; `ChannelSessions.identity_index(...)` constructs the host metadata-backed identity view. Platform dedupe, credential/authentication, stream formatting and reconnect policy stay in plugins. Use `FakeAccountChannelGroup` and `FakeChannelSessions` for independent tests. Scoped KV supports idempotent `delete`; `read_mapping` validates object-valued records before consumers access them. Telegram tool-call preview events and `EventBinding` are shared SDK values.
+
+
+## Surface interaction
+
+A background owner declares `surfaces.setInteraction(surfaceId, { roleId, available })`
+(or `null` to revoke). The host derives admission from that declaration plus its
+existing visibility, readiness and live window identity; private retained state
+and plugin KV never participate. Hidden, destroyed or reloading windows cannot
+admit speech. An unchanged declaration does not reset an active turn.
+
+Every `SurfaceHandle` receives `voice.gesture("press" | "move" | "release" | "cancel")`,
+`voice.onState(listener)` and `onRoleActivity(listener)`. Voice remains host-owned;
+an accepted press pins the role before any awaited recording or ASR. Pointer
+input is attributed by window identity. A global hotkey uses the active available
+owner, otherwise the first available surface in creation order. Another surface
+cannot steal a busy turn. Activity contains only role/session identity, phase and
+notification intent; `null` resets activity on a target change. Plugins own animation
+priority and timing. Reload/crash revokes readiness and stops native drag timers.
+
+`createFakeSurfaceHandle(overrides)` in `/testing` supplies a complete independent
+fixture. `pnpm typecheck:plugins` checks every plugin entry and colocated test in a
+standalone TypeScript program with declared workspace dependencies and no host
+ambient declarations. Boundary tests reject both global bridge calls and host
+ambient type references.

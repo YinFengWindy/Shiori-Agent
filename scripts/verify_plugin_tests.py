@@ -27,6 +27,7 @@ if not Path(UV).is_file():
 # Measured as the longest suites in CI; starting them first shortens the pool's tail.
 SDK_PLUGINS = frozenset(
     {
+        "desktop_pet",
         "citation",
         "context_pressure",
         "default_memory",

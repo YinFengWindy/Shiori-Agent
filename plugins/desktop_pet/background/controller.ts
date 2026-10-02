@@ -35,7 +35,7 @@ const persistedSettleReasons = new Set(["drag", "momentum", "move"]);
 /** The slice of `ctx.surfaces` this controller uses; narrowed so tests can fake it. */
 export type DesktopPetSurfaces = Pick<
   PluginBackgroundSurfaces,
-  "create" | "destroy" | "setPosition" | "moveTo" | "post" | "setState" | "workArea"
+  "create" | "destroy" | "setPosition" | "moveTo" | "post" | "setState" | "workArea" | "setInteraction"
 >;
 
 export type DesktopPetControllerOptions = {
@@ -69,8 +69,8 @@ export type DesktopPetControllerOptions = {
  * listeners there could never be reclaimed on disable, so "停用插件后订阅全部
  * 回收" could only be pretended.
  *
- * What stays in the host, and why, is listed in
- * `apps/desktop/src/pluginCoupling/desktopPet.ts`.
+ * Voice implementation stays in the host; this controller declares only the
+ * current interaction target through the surface capability.
  */
 export class DesktopPetController {
   private readonly surfaces: DesktopPetSurfaces;
@@ -82,6 +82,8 @@ export class DesktopPetController {
   /** Reply lifecycle is owned and reclaimed alongside this plugin controller. */
   readonly replies: ReplyBubbleController;
   private running = false;
+  /** A hide retires queued/in-flight presentation work without mirroring visibility. */
+  private presentationEpoch = 0;
   /**
    * Set the moment teardown starts, and never cleared.
    *
@@ -92,10 +94,9 @@ export class DesktopPetController {
    * disabled, and without this it would open a window purely so the queued
    * destroy could close it again, which the user sees as a flash.
    *
-   * Checked only where an await inside the queue can straddle teardown, i.e.
-   * right after `resolveBinding` in `show` and `sync`. Adding more checks
-   * further in would be unreachable: the queue already guarantees nothing else
-   * runs between those points and the destroy.
+   * Paired with the presentation epoch at async boundaries: teardown and hide
+   * both revoke immediately, even while an older queued operation is awaiting
+   * binding, native window creation or persistence.
    */
   private disposed = false;
   /**
@@ -159,40 +160,51 @@ export class DesktopPetController {
   }
 
   show(): Promise<void> {
+    const epoch = this.presentationEpoch;
     return this.enqueue(async () => {
+      if (!this.isCurrentPresentation(epoch)) return;
       const binding = await this.options.resolveBinding();
-      // Teardown can land inside the round trip above; from here on there is
-      // nothing left to reclaim what this would build or write.
-      if (this.disposed) return;
+      if (!this.isCurrentPresentation(epoch)) return;
       if (!binding) throw new Error("没有已启用且已选择素材的桌宠角色");
-      await this.load(binding, "idle");
-      if (this.disposed) return;
+      await this.load(binding, "idle", epoch);
+      if (!this.isCurrentPresentation(epoch)) return;
       await this.saveSettings(desktopPetBindingPatch(binding, true));
     });
   }
 
   hide(): Promise<void> {
+    const epoch = this.invalidatePresentation();
     return this.enqueue(async () => {
       await this.destroySurface();
+      if (!this.isCurrentPresentation(epoch)) return;
       await this.saveSettings({ visible: false });
     });
   }
 
   sync(forceVisible?: boolean): Promise<void> {
+    const epoch = forceVisible === false ? this.invalidatePresentation() : this.presentationEpoch;
     return this.enqueue(async () => {
-      const binding = await this.options.resolveBinding();
-      if (this.disposed) return;
-      if (!binding) {
+      if (!this.isCurrentPresentation(epoch)) return;
+      // Forced hiding also comes from role-save: reclaim the window before
+      // querying the new binding, then retain its metadata/availability update.
+      if (forceVisible === false) {
         await this.destroySurface();
+        if (!this.isCurrentPresentation(epoch)) return;
+      }
+      const binding = await this.options.resolveBinding();
+      if (!this.isCurrentPresentation(epoch)) return;
+      if (!binding) {
+        if (forceVisible !== false) await this.destroySurface();
+        if (!this.isCurrentPresentation(epoch)) return;
         await this.saveSettings({ visible: false, roleId: null, packageId: null });
         return;
       }
       const current = this.settings;
       const changedBinding = current.roleId !== binding.roleId || current.packageId !== binding.package.id;
       const visible = forceVisible ?? (changedBinding || current.visible);
-      if (visible) await this.load(binding, "idle");
-      else await this.destroySurface();
-      if (this.disposed) return;
+      if (visible) await this.load(binding, "idle", epoch);
+      else if (forceVisible !== false) await this.destroySurface();
+      if (!this.isCurrentPresentation(epoch)) return;
       await this.saveSettings(desktopPetBindingPatch(binding, visible));
     });
   }
@@ -217,10 +229,11 @@ export class DesktopPetController {
     const target = value.target;
     if (!target) return;
     const current = this.anchor;
+    const activeLoad = this.activeLoad;
     void this.surfaces.workArea(desktopPetSurfaceId).then((workArea) => {
       // The surface can be torn down while the work area is in flight; moving a
       // surface that no longer exists would be reported as a host error.
-      if (!this.running) return;
+      if (!this.running || this.disposed || this.activeLoad !== activeLoad) return;
       const next = desktopPetTargetPosition(target, workArea);
       // The host runs the tween and reports the landing through `handleSettled`.
       this.surfaces.moveTo(desktopPetSurfaceId, next, desktopPetAgentMoveDurationMs);
@@ -234,6 +247,7 @@ export class DesktopPetController {
   /** Tears the pet's window down when the plugin is disabled or reloaded. */
   async terminate(): Promise<void> {
     this.disposed = true;
+    this.invalidatePresentation();
     this.replies.dispose();
     // Through the queue, so a `show()` that is mid-flight finishes (and bails
     // on `disposed`) before the destroy runs, rather than racing it.
@@ -246,7 +260,7 @@ export class DesktopPetController {
     return next;
   }
 
-  private async load(binding: DesktopPetBinding, state: DesktopPetState): Promise<void> {
+  private async load(binding: DesktopPetBinding, state: DesktopPetState, epoch: number): Promise<void> {
     // Host window creation is an IPC round trip. Retain replies arriving after
     // the role is resolved but before the new surface acknowledges creation.
     this.replies.bind(binding.roleId);
@@ -270,7 +284,7 @@ export class DesktopPetController {
         this.replies.bind("");
         throw error;
       });
-      if (this.disposed) return;
+      if (!this.isCurrentPresentation(epoch)) return;
       this.running = true;
       this.anchor = { x: placement.x, y: placement.y };
       this.displayId = placement.displayId;
@@ -279,10 +293,12 @@ export class DesktopPetController {
       const remembered = this.settings.positions[positionKey(binding.roleId, placement.displayId)];
       if (remembered) this.surfaces.setPosition(desktopPetSurfaceId, remembered);
     }
+    if (this.activeRoleId !== binding.roleId) this.revokeInteraction();
     this.activeRoleId = binding.roleId;
     this.activeLoad = { binding, state };
     // Retained, so a renderer that mounts or reloads later still gets it.
     this.pushRetainedState();
+    this.surfaces.setInteraction(desktopPetSurfaceId, { roleId: binding.roleId, available: true });
   }
 
   private pushRetainedState(): void {
@@ -327,7 +343,22 @@ export class DesktopPetController {
     });
   }
 
+  private revokeInteraction(): void {
+    if (this.running) this.surfaces.setInteraction(desktopPetSurfaceId, null);
+  }
+
+  private invalidatePresentation() {
+    this.presentationEpoch += 1;
+    this.revokeInteraction();
+    return this.presentationEpoch;
+  }
+
+  private isCurrentPresentation(epoch: number) {
+    return !this.disposed && epoch === this.presentationEpoch;
+  }
+
   private async destroySurface(): Promise<void> {
+    this.revokeInteraction();
     // Called unconditionally rather than only when `running`: the host treats
     // an unknown surface as a no-op, and doing it this way also reclaims a
     // window this controller has somehow lost track of.

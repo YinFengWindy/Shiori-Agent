@@ -38,15 +38,8 @@ import {
 } from "./windowLifecycle.js";
 import { registerDesktopContentSecurityPolicy } from "./windowSecurity.js";
 import { PluginDataStore } from "./plugins/dataStore.js";
-import {
-  desktopPetPluginId,
-  desktopPetPresenceChanged,
-  desktopPetSurfaceKey,
-  isDesktopPetWindow,
-  noDesktopPetPresence,
-  readDesktopPetPresence,
-  type DesktopPetPresence,
-} from "./pluginCoupling/desktopPet.js";
+import { SurfaceVoiceController } from "./voice/surfaceVoice.js";
+import { surfaceRoleActivity } from "./surface/roleActivity.js";
 import { startDesktopPresenceReporting } from "./presence/reporter.js";
 import { createVoiceCaptureWindow } from "./voice/window.js";
 import { BrowserVoiceRecorder } from "./voice/recorder.js";
@@ -91,8 +84,7 @@ let desktopTray: ReturnType<typeof createDesktopTray> | null = null;
  */
 const pluginTray = new PluginTrayRegistry();
 let desktopSurfaces: DesktopSurfaceHost | null = null;
-/** The pet's state as the host sees it; refreshed whenever the plugin writes. */
-let desktopPetPresence: DesktopPetPresence = noDesktopPetPresence;
+let surfaceVoice: SurfaceVoiceController | null = null;
 let voiceRecorder: BrowserVoiceRecorder | null = null;
 let voiceController: DesktopVoiceController | null = null;
 let voicePlayback: BrowserVoicePlayback | null = null;
@@ -189,7 +181,7 @@ async function openLocalAttachment(value: string) {
  * Nothing else in the host reads this path.
  */
 function legacyPluginDataPath(pluginId: string): string | null {
-  if (pluginId !== desktopPetPluginId) return null;
+  if (pluginId !== "desktop_pet") return null;
   return resolve(app.getPath("userData"), "desktop-pet.json");
 }
 
@@ -204,20 +196,13 @@ function publishDesktopEvent(method: string, payload: Record<string, unknown>): 
   }
 }
 
-/** Whether the pet's surface window currently exists, asked of the capability that owns it. */
-function isDesktopPetRunning(): boolean {
-  return Boolean(desktopSurfaces?.has(desktopPetSurfaceKey));
-}
-
 function requestAppQuit(): void {
   isQuitting = true;
   app.quit();
 }
 
 function publishVoiceState(payload: VoiceStatePayload): void {
-  for (const window of BrowserWindow.getAllWindows()) {
-    window.webContents.send("desktop:voice-state", payload);
-  }
+  surfaceVoice?.publish(payload);
 }
 
 function syncVoiceAvailability(cancelCurrentTurn = true): void {
@@ -225,8 +210,7 @@ function syncVoiceAvailability(cancelCurrentTurn = true): void {
   if (!hotkey) return;
   const available = isVoiceHotkeyAvailable({
     voiceEnabled: Boolean(voiceSettings?.enabled),
-    petRunning: isDesktopPetRunning(),
-    petVisible: desktopPetPresence.visible,
+    targetAvailable: Boolean(desktopSurfaces?.interactionTargets().length),
   });
   applyVoiceAvailability(available, cancelCurrentTurn, {
     start: () => hotkey.start(),
@@ -241,36 +225,6 @@ function reloadVoiceSettings(): void {
   voiceHotkey?.setHotkey(voiceSettings.hotkey);
   // Applying settings changes admission of new input; existing voice work keeps its owner.
   syncVoiceAvailability(false);
-}
-
-/**
- * Reacts to the pet plugin having written its settings.
- *
- * Since #181-C the host cannot await a pet operation — it publishes a command
- * and the plugin acts on it. This is the other half: the plugin's store write
- * is what tells the host the pet started or stopped, and it lands *after* the
- * surface was created or destroyed, so `isDesktopPetRunning()` is already
- * correct by the time anything here reads it. It also covers changes the host
- * never asked for, which the old `await pet.hide()` path did not.
- *
- * Position writes also pass through here. Only actual presence changes should
- * re-evaluate voice admission; reply state is owned entirely by the plugin.
- *
- * The tray is no longer one of those consumers and is not protected by this
- * guard: since #181-D it follows `PluginTrayRegistry`, which the pet drives
- * from its own side. That path has its own no-change check, in
- * `PluginTrayRegistry.setEntry`.
- */
-function handleDesktopPetSettingsChanged(stored: unknown): void {
-  const next = readDesktopPetPresence(stored);
-  const changed = desktopPetPresenceChanged(desktopPetPresence, next);
-  desktopPetPresence = next;
-  if (!changed) return;
-  // The tray is not refreshed here any more: since #181-D the pet contributes
-  // its own item through `ctx.tray` and rewrites its own label, so the menu
-  // follows the plugin rather than this mirror. What is left is voice, which
-  // still rides on the pet until #221.
-  syncVoiceAvailability();
 }
 
 function shouldHideDesktopWindowOnClose(): boolean {
@@ -316,9 +270,7 @@ void app.whenReady().then(async () => {
   configureSettingsConfigPath(runtimePaths.configPath);
   reloadVoiceSettings();
   process.env.SHIORI_DESKTOP_USER_DATA_DIR = app.getPath("userData");
-  // Per-plugin persisted state (#181-C). Read before the tray exists so its
-  // "显示桌宠/隐藏桌宠" entry is right on the first paint rather than after the
-  // pet plugin's first write.
+  // Opaque per-plugin persistence, with one legacy file-location migration.
   const activePluginData = new PluginDataStore({
     directory: resolve(app.getPath("userData"), "plugin-data"),
     legacyPathFor: legacyPluginDataPath,
@@ -328,15 +280,6 @@ void app.whenReady().then(async () => {
   });
   registerDesktopPluginDataIpc(activePluginData);
   registerDesktopTrayIpc(pluginTray);
-  // Read first, subscribe second. A first-run migration writes through `read`,
-  // which would otherwise fire `handleDesktopPetSettingsChanged` before the
-  // tray, the hotkey controller exist. They are all null-safe
-  // today, so it is harmless today — and it only happens on the one launch
-  // where a user upgrades, which is the worst possible place for a latent trap.
-  desktopPetPresence = readDesktopPetPresence(await activePluginData.read(desktopPetPluginId));
-  activePluginData.onChanged((pluginId, value) => {
-    if (pluginId === desktopPetPluginId) handleDesktopPetSettingsChanged(value);
-  });
   const activeVoiceRecorder = new BrowserVoiceRecorder(createVoiceCaptureWindow);
   voiceRecorder = activeVoiceRecorder;
   const privateWorkspaceRoot = runtimePaths.workspacePath;
@@ -358,6 +301,10 @@ void app.whenReady().then(async () => {
   // #181-C the pet's controller lives in `plugins/desktop_pet/background/` and
   // reaches these primitives over IPC like any other plugin would.
   const activeDesktopSurfaces = new DesktopSurfaceHost({
+    onInteractionChanged: () => {
+      surfaceVoice?.revalidate();
+      syncVoiceAvailability();
+    },
     createWindow: (key, spec) => createDesktopSurfaceWindow(key, spec, { openLocalAttachment }),
     workAreaFor: workAreaForSurface,
     displayIdFor: displayIdForSurface,
@@ -413,7 +360,6 @@ void app.whenReady().then(async () => {
       // renderer, so leaving them would give the user menu entries that do
       // nothing when clicked.
       pluginTray.clear();
-      desktopPetPresence = noDesktopPetPresence;
       syncVoiceAvailability();
     },
   });
@@ -422,11 +368,10 @@ void app.whenReady().then(async () => {
     bridge,
     isEnabled: () => Boolean(
       voiceSettings?.enabled
-      && isDesktopPetRunning()
-      && desktopPetPresence.visible
+      && activeDesktopSurfaces.interactionTargets().length > 0
       && !activeVoiceRecorder.isBusy
     ),
-    roleId: () => desktopPetPresence.roleId,
+    roleId: () => activeDesktopSurfaces.interactionTargets()[0]?.roleId ?? null,
     microphoneDeviceId: () => voiceSettings?.microphoneDeviceId ?? "",
     publishState: publishVoiceState,
     onNewInput: (previousTurnId, nextTurnId) => {
@@ -450,6 +395,8 @@ void app.whenReady().then(async () => {
     },
   });
   voiceController = activeVoiceController;
+  const activeSurfaceVoice = new SurfaceVoiceController(activeDesktopSurfaces, activeVoiceController);
+  surfaceVoice = activeSurfaceVoice;
   const activeVoicePlayback = new BrowserVoicePlayback(
     createVoiceCaptureWindow,
     createVoicePlaybackCallbacks(activeVoiceController),
@@ -457,7 +404,7 @@ void app.whenReady().then(async () => {
   voicePlayback = activeVoicePlayback;
   if (process.platform === "win32") {
     voiceHotkey = new VoiceHotkeyController({
-      onPress: (source) => activeVoiceController.startPress(source),
+      onPress: () => activeSurfaceVoice.startPress(),
       onRelease: (source) => activeVoiceController.release(source),
       onCancel: () => activeVoiceController.cancel(),
     });
@@ -469,6 +416,8 @@ void app.whenReady().then(async () => {
   });
   wireBridgeEvents(bridge, localAssets, (event) => {
     messageNotifications?.handleEvent(event);
+    const activity = surfaceRoleActivity(event);
+    if (activity) activeDesktopSurfaces.publishActivity(activity);
     if (handleVoiceBridgeEvent(event, activeVoiceController, activeVoicePlayback)) return;
   });
   // The host reports OS availability; plugins own their presentation and behavior.
@@ -487,7 +436,8 @@ void app.whenReady().then(async () => {
     localAssets,
     localAssetImportsRoot,
     openLocalAttachment,
-    isPetWindow: (window) => isDesktopPetWindow(activeDesktopSurfaces, window),
+    isSurfaceWindow: (window) => activeDesktopSurfaces.keyForWindowId(window?.id) !== null,
+    surfaceVoice: activeSurfaceVoice,
     voiceRecorder: activeVoiceRecorder,
     voiceController: activeVoiceController,
     voicePlayback: activeVoicePlayback,

@@ -26,3 +26,20 @@ test("plugin renderer and SDK code cannot import host source or host-only SDK in
     assert.deepEqual(await boundaryViolations('import { PluginBridgeError } from "@shiori/sdk";\nimport { deferred } from "@shiori/sdk/testing";', path), []);
   }
 });
+
+test("every plugin entry and SDK module rejects host global bridge access, including type-only access", async () => {
+  const examples = [
+    "window.miraDesktop.startVoicePress();",
+    'window["miraDesktop"].voiceCancel();',
+    "globalThis.miraDesktop.onEvent(() => {});",
+    "const { miraDesktop: bridge } = window;",
+    'type Bridge = Window["miraDesktop"];',
+    "let bridge: DesktopApi;",
+  ];
+  for (const path of ["plugins/desktop_pet/surface/probe.ts", "plugins/boundary_probe/ui/probe.ts", "plugins/boundary_probe/background/probe.ts", "plugins/boundary_probe/shared/probe.ts", "packages/sdk/src/probe.ts"]) {
+    for (const code of examples) {
+      const [result] = await eslint.lintText(code, { filePath: resolve(repoRoot, path) });
+      assert.ok(result.messages.some((entry) => entry.ruleId === "no-restricted-syntax"), `${path}: ${code}`);
+    }
+  }
+});

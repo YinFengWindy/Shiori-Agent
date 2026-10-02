@@ -2,8 +2,8 @@
 
 from typing import Any
 
-from agent.plugin_host.capabilities import RpcCapability
-from desktop_bridge.method_policy import Concurrency
+from shiori_sdk.rpc import RpcCapability
+from shiori_sdk.rpc import Concurrency
 
 
 def register_bubble_rpc(rpc: RpcCapability) -> None:

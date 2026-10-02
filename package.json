@@ -29,14 +29,16 @@
     "//lint": "Run from the repository root, not through --filter: ESLint takes the lintable area from the working directory, so an apps/desktop-rooted run cannot reach plugins/*/{ui,surface}/. See eslint.config.js.",
     "lint": "node scripts/sync_sdk_version.mjs --check && eslint apps/desktop/src apps/desktop/renderer/src apps/desktop/site apps/desktop/tests/integration apps/desktop/tests/plugin-ui/packaged*.ts tests/fixtures/external-plugin/src plugins packages/sdk/src",
     "test": "pnpm run desktop:test",
-    "typecheck": "pnpm --filter shiori-desktop run typecheck",
+    "typecheck": "pnpm run desktop:typecheck && pnpm run typecheck:plugins",
     "prepare:browser-use": "node apps/desktop/scripts/browser-runtime.mjs",
     "prepare:computer-use": "node apps/desktop/scripts/computer-runtime.mjs",
-    "sdk:smoke": "node scripts/verify_sdk.mjs"
+    "sdk:smoke": "node scripts/verify_sdk.mjs",
+    "typecheck:plugins": "tsc -p plugins/tsconfig.json"
   },
   "devDependencies": {
     "@phosphor-icons/react": "^2.1.10",
     "@shiori/sdk": "workspace:*",
+    "@types/node": "26.6.3",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "eslint": "^10.2.1",

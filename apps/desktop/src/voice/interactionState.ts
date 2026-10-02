@@ -1,5 +1,5 @@
-/** The input sources that can start a desktop-pet voice turn. */
-export type VoiceInputSource = "pet" | "hotkey";
+import type { VoiceInputSource } from "@shiori/sdk/contract";
+export type { VoiceInputSource } from "@shiori/sdk/contract";
 
 /** The delay that distinguishes a voice press from a pet drag or accidental click. */
 export const VOICE_PRESS_THRESHOLD_MS = 300;
@@ -74,7 +74,7 @@ export function transitionVoiceInteraction(
       if (event.type === "pointer_moved") {
         return { kind: "dragging" };
       }
-      if (event.type === "released" || event.type === "escape") {
+      if (event.type === "released" || event.type === "escape" || event.type === "reset") {
         return { kind: "idle" };
       }
       return state;
@@ -87,7 +87,7 @@ export function transitionVoiceInteraction(
       if (event.type === "released" || event.type === "recording_timed_out") {
         return { kind: "transcribing" };
       }
-      if (event.type === "escape") {
+      if (event.type === "escape" || event.type === "reset") {
         return { kind: "idle" };
       }
       if (event.type === "recording_failed") {

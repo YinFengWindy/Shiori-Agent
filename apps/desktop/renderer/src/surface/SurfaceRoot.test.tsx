@@ -1,3 +1,4 @@
+import { createFakeSurfaceHandle } from "@shiori/sdk/testing";
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, test } from "node:test";
 import { useEffect } from "react";
@@ -8,6 +9,7 @@ import { PluginSurfaceRegistry } from "./pluginSurfaceRegistry";
 import { loadRuntimePluginSurface } from "./runtimePluginSurface";
 
 const noopSurface: SurfaceHandle = {
+  ...createFakeSurfaceHandle(),
   beginDrag() {}, endDrag() {}, setExtension() {}, setClickThrough() {},
   onPlacement() { return () => {}; }, onMessage() { return () => {}; },
   onState() { return () => {}; }, ready() {},

@@ -1,4 +1,4 @@
-import type { BridgeEvent } from "@shiori/sdk";
+import type { SurfaceRoleActivity } from "@shiori/sdk";
 import type { SpriteState } from "./spriteContract";
 
 type PetActivityState = Extract<SpriteState, "failed" | "waiting" | "running" | "review">;
@@ -28,57 +28,17 @@ export function resolvePetActivityState(activities: PetActivityBySession): PetAc
   return current;
 }
 
-/** Reduces one bridge event into a session-aware Codex task animation state. */
+/** Reduces one role activity into a session-aware Codex task animation state. */
 export function transitionPetActivity(
   activities: PetActivityBySession,
-  event: BridgeEvent,
+  event: SurfaceRoleActivity,
 ): PetActivityTransition {
-  const sessionKey = eventSessionKey(event);
+  const sessionKey = event.sessionKey;
   if (!sessionKey) return { activities, state: resolvePetActivityState(activities), showNotification: false, handled: false };
 
   const nextActivities = { ...activities };
-  let nextState: PetActivityState | null = null;
-  let showNotification = false;
-  if (event.method === "chat.delta") nextState = "running";
-  if (event.method === "chat.done") nextState = "review";
-  if (event.method === "chat.error") nextState = "failed";
-  if (event.method === "session.updated") {
-    const proactive = sessionNeedsUserReply(event);
-    nextState = proactive ? "waiting" : "review";
-    showNotification = proactive && activities[sessionKey] !== "waiting";
-  }
-  if (!nextState) return { activities, state: resolvePetActivityState(activities), showNotification: false, handled: false };
+  const nextState = event.phase;
+  const showNotification = event.notify && activities[sessionKey] !== "waiting";
   nextActivities[sessionKey] = nextState;
   return { activities: nextActivities, state: resolvePetActivityState(nextActivities), showNotification, handled: true };
-}
-
-function eventSessionKey(event: BridgeEvent): string | null {
-  const eventSessionKey = event.payload.session_key;
-  if (typeof eventSessionKey === "string" && eventSessionKey) return eventSessionKey;
-  if (event.method !== "session.updated") return null;
-  const session = event.payload.session;
-  if (!session || typeof session !== "object") return null;
-  const key = (session as { key?: unknown }).key;
-  return typeof key === "string" && key ? key : null;
-}
-
-function sessionNeedsUserReply(event: BridgeEvent): boolean {
-  const changedMessage = event.payload.message;
-  if (changedMessage && typeof changedMessage === "object") {
-    return messageNeedsUserReply(changedMessage);
-  }
-  const session = event.payload.session;
-  if (!session || typeof session !== "object") return false;
-  const messages = (session as { messages?: unknown }).messages;
-  if (!Array.isArray(messages) || messages.length === 0) return false;
-  const lastMessage = messages[messages.length - 1];
-  return messageNeedsUserReply(lastMessage);
-}
-
-function messageNeedsUserReply(value: unknown): boolean {
-  const lastMessage = value;
-  if (!lastMessage || typeof lastMessage !== "object") return false;
-  const message = lastMessage as { role?: unknown; metadata?: unknown };
-  if (message.role !== "assistant" || !message.metadata || typeof message.metadata !== "object") return false;
-  return (message.metadata as { proactive?: unknown }).proactive === true;
 }

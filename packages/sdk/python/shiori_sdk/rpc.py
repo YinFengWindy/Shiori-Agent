@@ -22,7 +22,11 @@ type RpcHandler = Callable[[dict[str, object]], Awaitable[dict[str, object] | No
 
 
 class RpcCapability(Protocol):
-    """Registers a handler owned by the current plugin scope."""
+    """Registers a handler owned by the current plugin scope.
+
+    ``admission_exempt`` keeps bounded control RPCs (such as dismissal) available
+    while ordinary backend admission is paused for a settings transaction.
+    """
 
     def register(
         self,
@@ -30,6 +34,7 @@ class RpcCapability(Protocol):
         handler: RpcHandler,
         *,
         concurrency: Concurrency = Concurrency.MUTATION,
+        admission_exempt: bool = False,
     ) -> None: ...
 
     async def emit(self, name: str, payload: dict[str, object]) -> bool: ...

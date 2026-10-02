@@ -172,7 +172,8 @@ export type {
   PluginBackgroundSurfaces,
   PluginBackgroundTray,
 } from "./contract/background";
-export type { VoiceStatePayload } from "./contract/voice";
+export type { VoiceStatePayload, VoiceInputSource } from "./contract/voice";
+export type { SurfaceInteractionTarget, SurfaceVoiceGesture, SurfaceVoice, SurfaceRoleActivity } from "./contract/surfaceInteraction";
 
 // Runtime API 2.16.0: shared visual transitions and sidebar resizing.
 export { CrossfadeLayers } from "./components/CrossfadeLayers";

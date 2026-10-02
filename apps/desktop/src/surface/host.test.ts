@@ -8,6 +8,7 @@ import {
   surfaceMessageChannel,
   surfacePositionChannel,
   surfaceStateChannel,
+  surfaceActivityChannel,
   type DesktopSurfaceHostOptions,
   type SurfaceKey,
   type SurfaceWindowHandle,
@@ -27,6 +28,9 @@ class FakeWindow implements SurfaceWindowHandle {
   shown = 0;
   ignoreMouse: { ignore: boolean; forward?: boolean } | null = null;
   readonly sent: { channel: string; payload: unknown }[] = [];
+  private unavailableListeners: (() => void)[] = [];
+  onUnavailable(listener: () => void) { this.unavailableListeners.push(listener); }
+  emitUnavailable() { for (const listener of this.unavailableListeners) listener(); }
   private closedListeners: (() => void)[] = [];
 
   setBounds(bounds: SurfaceBounds) { this.bounds = bounds; }
@@ -83,6 +87,7 @@ function setup(options: {
   cursor?: () => { x: number; y: number };
   displayId?: () => string;
   onSettled?: DesktopSurfaceHostOptions["onSettled"];
+  onInteractionChanged?: () => void;
 } = {}) {
   const clock = new FakeClock();
   const windows: FakeWindow[] = [];
@@ -93,6 +98,7 @@ function setup(options: {
     displayIdFor: options.displayId,
     cursorScreenPoint: options.cursor ?? (() => cursor),
     onSettled: options.onSettled,
+    onInteractionChanged: options.onInteractionChanged,
     now: () => clock.nowMs,
     setTimer: clock.setTimer,
     clearTimer: clock.clearTimer,
@@ -614,4 +620,66 @@ test("destroyAll reclaims every plugin's surface, whoever owns it", () => {
 
   assert.equal(host.hasAny(), false);
   assert.deepEqual(windows.map((window) => window.destroyed), [true, true]);
+});
+
+
+test("interaction admission derives from public declarations and lifecycle, never private retained state", () => {
+  let changes = 0;
+  const { host, windows } = setup({ onInteractionChanged: () => { changes++; } });
+  host.create(key, spec, { x: 0, y: 0 });
+  host.setState(key, { roleId: "private", visible: true, packageId: "private-package" });
+  host.markReady(key);
+  assert.deepEqual(host.interactionTargets(), []);
+  host.setInteraction(key, { roleId: "declared", available: true });
+  assert.deepEqual(host.interactionTargets(), [{ key, windowId: windows[0].id, roleId: "declared" }]);
+  const before = changes;
+  host.setInteraction(key, { roleId: "declared", available: true });
+  assert.equal(changes, before, "unchanged targets must not cancel an active press");
+  host.hide(key);
+  assert.deepEqual(host.interactionTargets(), []);
+  host.markReady(key);
+  assert.deepEqual(host.interactionTargets(), [], "reload must preserve hidden state");
+  host.show(key);
+  assert.equal(host.interactionTargets().length, 1);
+  windows[0].emitUnavailable();
+  assert.deepEqual(host.interactionTargets(), []);
+  host.markReady(key);
+  assert.equal(host.interactionTargets().length, 1);
+  host.setInteraction(key, { roleId: "declared", available: false });
+  assert.deepEqual(host.interactionTargets(), []);
+  host.setInteraction(key, { roleId: "replacement", available: true });
+  assert.equal(host.interactionTargets()[0]?.roleId, "replacement");
+  windows[0].emitClosed();
+  assert.deepEqual(host.interactionTargets(), []);
+});
+
+test("activity reaches only the available role target and target changes reset previous activity", () => {
+  const { host, windows } = setup();
+  const other = { pluginId: "another", surfaceId: "panel" };
+  for (const surface of [key, other]) { host.create(surface, spec, { x: 0, y: 0 }); host.markReady(surface); }
+  host.setInteraction(key, { roleId: "first", available: true });
+  host.setInteraction(other, { roleId: "second", available: true });
+  windows.forEach((window) => { window.sent.length = 0; });
+  const activity = { roleId: "first", sessionKey: "role:first", phase: "running" as const, notify: false };
+  host.publishActivity(activity);
+  assert.deepEqual(windows[0].sent, [{ channel: surfaceActivityChannel, payload: activity }]);
+  assert.deepEqual(windows[1].sent, []);
+  host.setInteraction(key, { roleId: "second", available: true });
+  assert.deepEqual(windows[0].sent.at(-1), { channel: surfaceActivityChannel, payload: null });
+  const count = windows[0].sent.length;
+  host.publishActivity(activity);
+  assert.equal(windows[0].sent.length, count);
+  host.destroyAll();
+  assert.deepEqual(host.interactionTargets(), []);
+});
+
+
+test("renderer loss stops native drag timers until a fresh gesture arrives", () => {
+  const { host, windows, clock } = setup();
+  host.create(key, spec, { x: 100, y: 100 });
+  host.markReady(key);
+  host.beginDrag(key, { x: 0, y: 0 });
+  assert.ok(clock.pending > 0);
+  windows[0].emitUnavailable();
+  assert.equal(clock.pending, 0);
 });

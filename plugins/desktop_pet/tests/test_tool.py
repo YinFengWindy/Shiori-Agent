@@ -6,13 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from agent.tools.registry import ToolRegistry
-from bus.event_bus import EventBus
-from agent.plugin_host.bridge_events import PluginBridgeEvent
-from agent.plugin_host.capabilities import RpcCapability
-from agent.plugin_host.effects import EffectScope
-from agent.plugin_host.rpc import PluginRpcRegistry
-from core.roles.store import RoleStore
+from shiori_sdk.testing.roles import FakeRoles
+from shiori_sdk.testing.tools import FakeTools
+from shiori_sdk.testing.memory_context import FakeRpc
 from plugins.desktop_pet.backend.models import RolePetPackage
 from plugins.desktop_pet.backend.pet_state import RolePetStateStore
 from plugins.desktop_pet.backend.tool import DesktopPetActionTool
@@ -20,8 +16,8 @@ from plugins.desktop_pet.backend.tool import DesktopPetActionTool
 
 def _build_tool(
     tmp_path: Path, *, clock_value: list[float]
-) -> tuple[DesktopPetActionTool, ToolRegistry]:
-    store = RoleStore(tmp_path / "workspace")
+) -> tuple[DesktopPetActionTool, FakeTools]:
+    store = FakeRoles(tmp_path / "workspace")
     role = store.create_role(role_id="mira", name="Mira", system_prompt="test")
     RolePetStateStore(store).replace_packages(
         role.id,
@@ -39,19 +35,10 @@ def _build_tool(
     )
     RolePetStateStore(store).select_package(role.id, "pet-1")
     RolePetStateStore(store).set_enabled(role.id, True)
-    event_bus = EventBus()
-
-    async def dispatch(event: PluginBridgeEvent) -> PluginBridgeEvent:
-        event.dispatched = True
-        return event
-
-    event_bus.on(PluginBridgeEvent, dispatch)
-    registry = ToolRegistry()
+    registry = FakeTools()
     tool = DesktopPetActionTool(
         role_store=store,
-        rpc=RpcCapability(
-            PluginRpcRegistry(), EffectScope("desktop_pet"), "desktop_pet", event_bus
-        ),
+        rpc=FakeRpc(),
         tool_registry=registry,
         clock=lambda: clock_value[0],
     )
@@ -60,13 +47,13 @@ def _build_tool(
 
 async def _execute(
     tool: DesktopPetActionTool,
-    registry: ToolRegistry,
+    registry: FakeTools,
     *,
     channel: str,
     timestamp: str = "2026-07-25T12:00:00+08:00",
     **arguments: str,
 ) -> dict[str, object]:
-    registry.set_context(
+    registry.context.update(
         channel=channel,
         chat_id="role:mira",
         role_id="mira",
@@ -80,10 +67,10 @@ def test_pet_action_schema_exposes_current_desktop_pet_state_and_actions(
     tmp_path: Path,
 ) -> None:
     tool, registry = _build_tool(tmp_path, clock_value=[0.0])
-    registry.set_context(channel="desktop", role_id="mira", session_key="role:mira")
+    registry.context.update(channel="desktop", role_id="mira", session_key="role:mira")
     registry.register(tool, always_on=True)
 
-    function = registry.get_schemas(names={"pet_action"})[0]["function"]
+    function = tool.to_schema()["function"]
     description = function["description"]
     name_schema = function["parameters"]["properties"]["name"]
 
@@ -95,11 +82,11 @@ def test_pet_action_schema_exposes_current_desktop_pet_state_and_actions(
 
 def test_pet_action_schema_reports_disabled_desktop_pet(tmp_path: Path) -> None:
     tool, registry = _build_tool(tmp_path, clock_value=[0.0])
-    registry.set_context(channel="desktop", role_id="mira", session_key="role:mira")
+    registry.context.update(channel="desktop", role_id="mira", session_key="role:mira")
     registry.register(tool, always_on=True)
     tool._state.set_enabled("mira", False)
 
-    function = registry.get_schemas(names={"pet_action"})[0]["function"]
+    function = tool.to_schema()["function"]
 
     assert "桌宠状态：已关闭" in function["description"]
     assert function["parameters"]["properties"]["name"]["enum"] == []
@@ -180,17 +167,13 @@ async def test_pet_action_serializes_concurrent_calls_for_one_role(
     started = asyncio.Event()
     release = asyncio.Event()
 
-    async def dispatch(event: PluginBridgeEvent) -> PluginBridgeEvent:
-        started.set()
-        await release.wait()
-        event.dispatched = True
-        return event
+    class Rpc(FakeRpc):
+        async def emit(self, name, payload):
+            started.set()
+            await release.wait()
+            return await super().emit(name, payload)
 
-    event_bus = EventBus()
-    event_bus.on(PluginBridgeEvent, dispatch)
-    tool._rpc = RpcCapability(
-        PluginRpcRegistry(), EffectScope("desktop_pet"), "desktop_pet", event_bus
-    )
+    tool._rpc = Rpc()
 
     first = asyncio.create_task(
         _execute(tool, registry, channel="desktop", action="move", target="center")
@@ -212,22 +195,24 @@ async def test_pet_action_serializes_concurrent_calls_for_one_role(
 @pytest.mark.asyncio
 async def test_no_connected_transport_does_not_consume_cooldown_or_turn(tmp_path: Path):
     tool, registry = _build_tool(tmp_path, clock_value=[0.0])
-    bus = EventBus()
-    tool._rpc = RpcCapability(
-        PluginRpcRegistry(), EffectScope("desktop_pet"), "desktop_pet", bus
-    )
+
+    class Rpc(FakeRpc):
+        connected = False
+
+        async def emit(self, name, payload):
+            assert name == "action"
+            assert payload["state"] == "waving"
+            return self.connected
+
+    rpc = Rpc()
+    tool._rpc = rpc
     failed = await _execute(
         tool, registry, channel="desktop", action="play", name="greeting"
     )
     assert failed["accepted"] is False
     assert failed["reason"] == "desktop_bridge_unavailable"
 
-    def dispatch(event):
-        assert event.method == "plugin.desktop_pet.action"
-        assert event.payload["state"] == "waving"
-        event.dispatched = True
-
-    bus.on(PluginBridgeEvent, dispatch)
+    rpc.connected = True
     retried = await _execute(
         tool, registry, channel="desktop", action="play", name="greeting"
     )

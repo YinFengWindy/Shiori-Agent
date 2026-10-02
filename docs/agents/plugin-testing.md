@@ -48,10 +48,10 @@ uv run python scripts/verify_plugin_tests.py --output /absolute/path/outside-rep
 
 ## SDK 隔离与导入守护
 
-citation/context_pressure/default_memory/shell_safety/shell_restore/tool_loop_guard/plugin_undo/observe/status_commands/meme/novelai/story/screen_perception/browser_use/computer_use/qqbot/qq/telegram/feishu 已迁入 `shiori-sdk[testing]`，安装声明不再依赖宿主。
-`uv run python scripts/verify_plugin_tests.py --sdk-only` 仅为这十九个插件构建
+citation/context_pressure/default_memory/shell_safety/shell_restore/tool_loop_guard/plugin_undo/observe/status_commands/meme/novelai/story/screen_perception/browser_use/computer_use/qqbot/qq/telegram/feishu/desktop_pet 已迁入 `shiori-sdk[testing]`，安装声明不再依赖宿主。
+`uv run python scripts/verify_plugin_tests.py --sdk-only` 仅为这二十个插件构建
 SDK/插件 wheel，逐一在仓库外普通安装、执行全部测试，并断言没有
-shiori-agent、testkit、宿主测试支持与源码路径注入；default_memory 只在验证自己时安装。普通全插件验证也对这十九个插件
+shiori-agent、testkit、宿主测试支持与源码路径注入；default_memory 只在验证自己时安装。普通全插件验证也对这二十个插件
 使用相同无宿主路径；其余插件保留真实宿主安装与资源检查。
 
 `uv run python -m scripts.verify_sdk` 另外安装 SDK wheel 并执行 SDK 自身测试；
@@ -81,4 +81,11 @@ runtime lease、kernel 卸载顺序及 screen_perception/desktop_pet 组合留�
 
 QQ 已在同票完成 SDK-only 安装验证；平台原文来源/引用的纯函数与测试分别归 `shiori_sdk.channels.message_source`、`reply_context` 及 SDK 镜像测试。投递账本、账号重启/删除与头像持久化集成留在宿主对应 owner 测试。NapCat 使用宿主 `Processes.popen`，Windows CI 保留已有进程测试并加入同步能力和 QQ 直接调用者。
 
-#589 已完成四渠道。Telegram 以 SDK fake 验证命令菜单、用户名/话题、媒体和流式，飞书保留真实离线 HTTP/WebSocket 线程替身验证；两者的存储/生命周期宿主集成继续由根 CI 执行。SDK wheel 冒烟执行镜像后的纯值测试和新增公共 fake 测试。尚未迁移的仅桌宠，归 #590；#591 做全插件最终发行验收。
+#589 已完成四渠道。Telegram 以 SDK fake 验证命令菜单、用户名/话题、媒体和流式，飞书保留真实离线 HTTP/WebSocket 线程替身验证；两者的存储/生命周期宿主集成继续由根 CI 执行。SDK wheel 冒烟执行镜像后的纯值测试和新增公共 fake 测试。桌宠的 Python 后端与测试已由 #590 迁入 SDK；#591 做全插件最终发行验收。
+
+#590 的桌宠包校验、binding/pets RPC、启用互斥、清理重试与动作限流在插件内使用 SDK fake。实际角色事务/锁、资产迁移凭证与 kernel 装配、停用/重载由宿主集成验证。桌宠安装只依赖 SDK 与 Pillow，最后 44 条 Python 宿主导入豁免已删除。局部开发可使用 `uv run python -m pytest plugins/desktop_pet/tests`；仓库外非 editable 验证用 `uv run python scripts/verify_plugin_tests.py --plugins desktop_pet --sdk-only`。
+
+
+桌宠 renderer 的控制策略移到 `plugins/desktop_pet/background/controller.test.ts`，surface 几何、惯性、ready/hide/reload/window identity 由宿主 `src/surface/host.test.ts` 的中性 fixture 验证。`desktopPetSurfaceController.test.ts` 保留真实 surface/voice/controller 的公开能力装配，验证隐藏与 ASR 期间角色替换的取消行为。原私有 KV 耦合测试随耦合实现一起移除。
+
+`pnpm typecheck` 包含 `pnpm typecheck:plugins`；后者使用独立 `plugins/tsconfig.json`，覆盖全部插件入口、共享模块与单测，未引用宿主 `types.d.ts`。`pluginTypecheckBoundary.test.ts` 检查实际编译依赖图并验证宿主 ambient bridge/type 不存在；`pluginHostImportBoundary.test.ts` 包含直接调用、计算属性、解构与类型引用的 ESLint 反例。插件测试也不能通过注入宿主全局对象绕过 SDK。

@@ -3,10 +3,10 @@ import type {
   NativeFilePickerOptions,
   PluginBackgroundSettled,
   SurfaceCreateResult,
+  SurfaceInteractionTarget,
   SurfaceHandle,
   SurfacePlacement,
   SurfaceSpec,
-  VoiceStatePayload,
 } from "@shiori/sdk/contract";
 
 export type BridgeRequest = {
@@ -31,6 +31,8 @@ export type SurfaceSettledPayload = PluginBackgroundSettled & {
  * `settings.section` from #179.
  */
 export type DesktopSurfacesApi = {
+  /** Declare interaction independently of private retained payloads. */
+  setInteraction(pluginId: string, surfaceId: string, target: SurfaceInteractionTarget | null): void;
   create(
     pluginId: string,
     surfaceId: string,
@@ -360,14 +362,4 @@ export type DesktopApi = {
   voicePlaybackFinished(id: string): void;
   /** Reports a playback decode or device error. */
   voicePlaybackError(id: string, message: string): void;
-  /** Starts the shared pet long-press voice gesture. */
-  startVoicePress(): void;
-  /** Lets pet dragging cancel a pending voice gesture. */
-  voicePointerMoved(): void;
-  /** Releases a pending or active pet voice gesture. */
-  voiceRelease(): void;
-  /** Cancels a pet voice gesture without submitting audio. */
-  voiceCancel(): void;
-  /** Subscribes to main-process voice state updates. */
-  onVoiceState(listener: (payload: VoiceStatePayload) => void): () => void;
 };

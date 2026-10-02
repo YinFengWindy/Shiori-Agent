@@ -1,37 +1,62 @@
-"""Restart reconciliation repairs legacy visibility and retries orphan cleanup."""
+"""Plugin reconciliation clears unavailable packages and orphan private assets."""
 
 import shutil
-
 import pytest
-
-from core.roles.store import RoleStore
+from shiori_sdk.testing.roles import FakeRoles
+from shiori_sdk.testing.memory import FakeMemoryStorage
 from plugins.desktop_pet.backend.models import RolePetPackage
 from plugins.desktop_pet.backend.pet_state import RolePetStateStore
 from plugins.desktop_pet.backend.reconcile import PetStateReconciler
 
 
+def test_reconcile_clears_missing_packages_and_deleted_roles(tmp_path):
+    roles = FakeRoles(tmp_path)
+    roles.create_role(role_id="mira", name="Mira", system_prompt="test")
+    state = RolePetStateStore(roles)
+    state.replace_packages(
+        "mira",
+        [
+            RolePetPackage(
+                "pet",
+                "codex-sprite@1",
+                "Pet",
+                "plugin-data/desktop_pet/pets-mira/pet.json",
+                "plugin-data/desktop_pet/pets-mira/sprite.webp",
+                "today",
+            )
+        ],
+    )
+    state.select_package("mira", "pet")
+    state.set_enabled("mira", True)
+    orphan = tmp_path / "plugin-data/desktop_pet/pets-deleted"
+    orphan.mkdir(parents=True)
+    roles.extensions.values["desktop_pet"]["deleted"] = {}
+    reconciler = PetStateReconciler(roles, tmp_path, FakeMemoryStorage())
+    reconciler.reconcile()
+    assert not orphan.exists()
+    assert "deleted" not in roles.extensions.read("desktop_pet")
+    assert not state.require_role("mira").desktop_pet_enabled
+    assert not state.require_role("mira").pet_packages
+
+
 def test_reconcile_keeps_newest_enabled_role_and_retries_failed_asset_cleanup(
     tmp_path, monkeypatch
 ):
-    roles = RoleStore(tmp_path)
-    for role_id in ("older", "newer"):
+    roles = FakeRoles(tmp_path)
+    for role_id in ("newer", "older"):
         roles.create_role(role_id=role_id, name=role_id, system_prompt="test")
-    payload = roles._load_payload()
-    for role in payload["roles"]:
-        role["updated_at"] = "2026-01-01" if role["id"] == "older" else "2026-01-02"
-    roles._repository.save_payload(payload["roles"])
 
     def seed(data):
-        for role_id in ("older", "newer"):
+        for role_id in ("newer", "older"):
             package = RolePetPackage(
                 "pet",
                 "codex-sprite@1",
                 "Pet",
-                f"assets/{role_id}/pets/pet/pet.json",
-                f"assets/{role_id}/pets/pet/spritesheet.webp",
+                f"plugin-data/desktop_pet/pets-{role_id}/pet/pet.json",
+                f"plugin-data/desktop_pet/pets-{role_id}/pet/spritesheet.webp",
                 "today",
             )
-            sprite = roles.roles_dir / package.spritesheet_path
+            sprite = tmp_path / package.spritesheet_path
             sprite.parent.mkdir(parents=True)
             sprite.write_bytes(b"pet")
             data[role_id] = {
@@ -41,10 +66,10 @@ def test_reconcile_keeps_newest_enabled_role_and_retries_failed_asset_cleanup(
             }
 
     roles.extensions.update("desktop_pet", seed)
-    orphan = roles.assets_dir / "deleted" / "pets"
+    orphan = tmp_path / "plugin-data/desktop_pet/pets-deleted"
     orphan.mkdir(parents=True)
     (orphan / "leftover.tmp").write_text("interrupted import", encoding="utf-8")
-    reconcile = PetStateReconciler(roles)
+    reconcile = PetStateReconciler(roles, tmp_path, FakeMemoryStorage())
     with monkeypatch.context() as patch:
 
         def fail(_path):

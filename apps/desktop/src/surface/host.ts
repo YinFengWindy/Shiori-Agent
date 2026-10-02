@@ -1,5 +1,8 @@
 import type {
   SurfaceMenuItem,
+  SurfaceInteractionTarget,
+  SurfaceRoleActivity,
+  VoiceStatePayload,
   SurfacePlacement,
   SurfaceSettleReason,
   SurfaceExtension,
@@ -46,6 +49,8 @@ export type SurfaceWindowHandle = {
   setIgnoreMouseEvents(ignore: boolean, options?: { forward?: boolean }): void;
   send(channel: string, payload: unknown): void;
   onClosed(listener: () => void): void;
+  /** Reloads/crashes revoke readiness until the renderer installs its listeners again. */
+  onUnavailable?(listener: () => void): void;
 };
 
 type TimerHandle = { readonly __surfaceTimer?: never } | ReturnType<typeof setTimeout>;
@@ -72,6 +77,8 @@ export type DesktopSurfaceHostOptions = {
    * decide whether the new position is worth remembering (#181-C). Never
    * called from a drag, glide or tween frame.
    */
+  /** A target, readiness or visibility changed; consumers must revalidate active input. */
+  onInteractionChanged?(): void;
   onSettled?(key: SurfaceKey, placement: SurfacePlacement, reason: SurfaceSettleReason): void;
   /** Opens a native context menu over a surface; resolves the chosen id, or null. */
   showContextMenu?(
@@ -95,6 +102,12 @@ export const surfacePositionChannel = "desktop:surface-position";
 export const surfaceMessageChannel = "desktop:surface-message";
 /** Channel carrying a surface's retained state, replayed whenever it reports ready. */
 export const surfaceStateChannel = "desktop:surface-state";
+/** Host-owned interaction events scoped to one surface. */
+export const surfaceVoiceChannel = "desktop:surface-voice";
+export const surfaceActivityChannel = "desktop:surface-activity";
+
+/** An available target resolved from the host's live window record. */
+export type SurfaceTarget = { key: SurfaceKey; windowId: number; roleId: string };
 /**
  * Channel carrying a settle to the plugin-host renderer (#181-C).
  *
@@ -125,6 +138,7 @@ type SurfaceRecord = {
   moveTimer: TimerHandle | null;
   /** Last value passed to `setState`, replayed on `markReady`. See `setState`. */
   retained: { payload: unknown } | null;
+  interaction: SurfaceInteractionTarget | null;
   /**
    * Whether the plugin wants this surface on screen.
    *
@@ -189,6 +203,7 @@ export class DesktopSurfaceHost {
       move: null,
       moveTimer: null,
       retained: null,
+      interaction: null,
       visible: true,
       ready: false,
     };
@@ -197,6 +212,12 @@ export class DesktopSurfaceHost {
     // timers running against a destroyed handle.
     window.onClosed(() => {
       if (this.surfaces.get(id) === record) this.forget(record);
+    });
+    window.onUnavailable?.(() => {
+      if (this.surfaces.get(id) !== record) return;
+      record.ready = false;
+      this.stopInteractions(record);
+      this.options.onInteractionChanged?.();
     });
     if (spec.clickThrough) window.setIgnoreMouseEvents(true, { forward: true });
     const applied = this.applyAnchor(record, anchor);
@@ -274,6 +295,7 @@ export class DesktopSurfaceHost {
     const record = this.require(key);
     record.visible = true;
     if (record.ready) record.window.showInactive();
+    this.options.onInteractionChanged?.();
   }
 
   hide(key: SurfaceKey): void {
@@ -281,6 +303,38 @@ export class DesktopSurfaceHost {
     record.visible = false;
     this.stopInteractions(record);
     record.window.hide();
+    this.options.onInteractionChanged?.();
+  }
+
+  /** Store only the public declaration; private plugin state remains opaque. */
+  setInteraction(key: SurfaceKey, target: SurfaceInteractionTarget | null): void {
+    const record = this.require(key);
+    if (record.interaction?.roleId === target?.roleId && record.interaction?.available === target?.available) return;
+    record.interaction = target ? { ...target } : null;
+    record.window.send(surfaceActivityChannel, null);
+    this.options.onInteractionChanged?.();
+  }
+
+  /** Derive admission from the authoritative lifecycle record, without mirroring visibility. */
+  interactionTargets(): SurfaceTarget[] {
+    return [...this.surfaces.values()].flatMap((record) =>
+      record.visible && record.ready && !record.window.isDestroyed() && record.interaction?.available
+        ? [{ key: record.key, windowId: record.window.id, roleId: record.interaction.roleId }]
+        : []);
+  }
+
+  /** Deliver voice state only to its owning window, including the final idle on revocation. */
+  publishVoice(windowId: number, state: VoiceStatePayload): void {
+    for (const record of this.surfaces.values()) {
+      if (record.window.id === windowId && !record.window.isDestroyed()) record.window.send(surfaceVoiceChannel, state);
+    }
+  }
+
+  /** Relay typed activity only to ready, available surfaces bound to this role. */
+  publishActivity(activity: SurfaceRoleActivity): void {
+    for (const target of this.interactionTargets()) {
+      if (target.roleId === activity.roleId) this.require(target.key).window.send(surfaceActivityChannel, activity);
+    }
   }
 
   /** Places the body anchor, clamped into the work area; returns where it landed. */
@@ -362,6 +416,7 @@ export class DesktopSurfaceHost {
     if (record.retained) record.window.send(surfaceStateChannel, record.retained.payload);
     this.notifyPlacement(record, "ready");
     if (record.visible) record.window.showInactive();
+    this.options.onInteractionChanged?.();
   }
 
   /**
@@ -561,6 +616,7 @@ export class DesktopSurfaceHost {
   private forget(record: SurfaceRecord): void {
     this.stopInteractions(record);
     this.surfaces.delete(surfaceKeyId(record.key));
+    this.options.onInteractionChanged?.();
   }
 
   private require(key: SurfaceKey): SurfaceRecord {

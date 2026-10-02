@@ -51,6 +51,7 @@ export class DesktopVoiceController {
   private pendingReplyPress: { source: VoiceInputSource; atMs: number } | null = null;
   private recordingTimer: ReturnType<typeof setTimeout> | null = null;
   private recordingStart: Promise<void> | null = null;
+  private pressRoleId: string | null = null;
   private activeTurnId: string | null = null;
   private inputOwner: VoiceInputSource | null = null;
   private operationGeneration = 0;
@@ -74,10 +75,11 @@ export class DesktopVoiceController {
   }
 
   /** Starts the shared press-pending phase for a pet or global-hotkey input. */
-  startPress(source: VoiceInputSource, atMs = this.now()): boolean {
-    if (this.disposed || !this.options.isEnabled()) return false;
+  startPress(source: VoiceInputSource, atMs = this.now(), roleId = this.options.roleId()): boolean {
+    if (this.disposed || !this.options.isEnabled() || !roleId) return false;
     if (["waiting_reply", "speaking_prepare", "speaking", "finish_current_sentence_then_idle"].includes(this.state.kind)) {
       if (this.pendingReplyPress) return false;
+      this.pressRoleId = roleId;
       this.inputOwner = source;
       this.pendingReplyPress = { source, atMs };
       this.clearPressTimer();
@@ -86,6 +88,7 @@ export class DesktopVoiceController {
     }
     if (this.state.kind === "error") this.apply({ type: "reset" });
     if (this.state.kind !== "idle") return false;
+    this.pressRoleId = roleId;
     this.inputOwner = source;
     this.apply({ type: "press_started", source, atMs });
     this.clearPressTimer();
@@ -260,7 +263,7 @@ export class DesktopVoiceController {
       const asrMetrics = normalizeVoiceMetrics(transcribe.payload.metrics);
       this.apply({ type: "asr_succeeded", text });
       if (!this.isCurrentOperation(generation) || this.currentState.kind !== "sending") return;
-      const roleId = this.options.roleId();
+      const roleId = this.pressRoleId;
       if (!roleId) {
         this.apply({ type: "chat_failed", message: "当前没有可用角色" });
         return;

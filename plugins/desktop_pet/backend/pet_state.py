@@ -4,22 +4,21 @@ from __future__ import annotations
 
 from typing import Any
 
-from core.roles.store import RoleStore
+from shiori_sdk.roles import Roles
 
 from .models import RolePetPackage, RolePetState
-
-PLUGIN_ID = "desktop_pet"
+from .storage import PLUGIN_ID
 
 
 class RolePetStateStore:
     """Owns package membership and the single enabled role across all instances."""
 
-    def __init__(self, role_store: RoleStore) -> None:
+    def __init__(self, role_store: Roles) -> None:
         self.roles = role_store
 
     def get_role(self, role_id: str) -> RolePetState | None:
         """Reads plugin state only for a role which still exists."""
-        with self.roles.lock:
+        with self.roles.read_scope():
             if self.roles.get_role(role_id) is None:
                 return None
             return RolePetState.from_dict(
@@ -28,7 +27,7 @@ class RolePetStateStore:
 
     def list_roles(self) -> list[RolePetState]:
         """Reads one consistent cross-role plugin snapshot."""
-        with self.roles.lock:
+        with self.roles.read_scope():
             data = self.roles.extensions.read(PLUGIN_ID)
             return [
                 RolePetState.from_dict(role.id, data.get(role.id, {}))
@@ -46,7 +45,7 @@ class RolePetStateStore:
         self, role_id: str, packages: list[RolePetPackage]
     ) -> RolePetState:
         """Replaces packages and clears visibility if their selection disappeared."""
-        with self.roles.lock:
+        with self.roles.read_scope():
             role = self.require_role(role_id)
             role.pet_packages = list(packages)
             if role.selected_pet_package_id not in {package.id for package in packages}:
@@ -59,7 +58,7 @@ class RolePetStateStore:
 
     def select_package(self, role_id: str, package_id: str) -> RolePetState:
         """Selects an installed package without enabling it."""
-        with self.roles.lock:
+        with self.roles.read_scope():
             role = self.require_role(role_id)
             if package_id not in {package.id for package in role.pet_packages}:
                 raise KeyError(f"桌宠包不存在: {package_id}")
@@ -71,7 +70,7 @@ class RolePetStateStore:
 
     def set_enabled(self, role_id: str, enabled: bool) -> None:
         """Commits plugin visibility for non-form callers using the same validator."""
-        with self.roles.lock:
+        with self.roles.read_scope():
             self.require_role(role_id)
             self.roles.extensions.update(
                 PLUGIN_ID,

@@ -28,6 +28,7 @@ function fakeSurfaces(): DesktopSurfacesApi & { calls: unknown[][] } {
     setPosition: (...args) => { calls.push(["setPosition", ...args]); },
     moveTo: (...args) => { calls.push(["moveTo", ...args]); },
     post: (...args) => { calls.push(["post", ...args]); },
+    setInteraction: (...args) => { calls.push(["setInteraction", ...args]); },
     setState: (...args) => { calls.push(["setState", ...args]); },
   };
 }

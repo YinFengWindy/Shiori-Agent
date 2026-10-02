@@ -461,6 +461,30 @@ unchanged (the host uses the same SDK types):
 The React-free ones the host's main process and preload use are also available
 from `@shiori/sdk/contract`.
 
+### Runtime API 3.0 surface interaction
+
+`BackgroundCtx.surfaces.setInteraction(surfaceId, { roleId, available })` declares
+an interaction target; `null` revokes it. The declaration is independent of opaque
+retained state and plugin KV. The host combines it with its authoritative window
+visibility/readiness/lifetime, so hiding, closing, reloading or crashing a surface
+revokes voice admission. Repeating the same declaration does not cancel input.
+
+`SurfaceHandle.voice` provides `gesture("press" | "move" | "release" | "cancel")`
+and `onState(listener)`. Gestures are attributed to the sending window. The host
+pins the accepted role before awaited recorder/ASR work, cancels invalidated targets,
+and keeps ASR/TTS implementation private. The global hotkey selects its current
+available owner or the first available surface; a busy owner cannot be stolen by
+another surface. `VoiceInputSource` is `"surface" | "hotkey"`.
+
+`SurfaceHandle.onRoleActivity(listener)` exposes `SurfaceRoleActivity` with
+`roleId`, `sessionKey`, `phase` (`running/review/failed/waiting`) and `notify`.
+Only matching available targets receive it. A changed target receives `null` so
+plugins clear prior activity and timers. Raw backend event subscription and
+`window.miraDesktop`/`Window["miraDesktop"]` are not plugin surface APIs. Shape
+translation is host-owned; animation state, priority and notification timing stay
+with each plugin. All these types are defined once in the SDK's `surfaceInteraction`
+and `voice` contracts and are available from the main and `/contract` entries.
+
 ### Test entry
 
 `@shiori/sdk/testing` remains development-only: it is not in the peer ABI
@@ -472,6 +496,7 @@ or the import map, and production renderer code must not import it. It provides:
 | `chooseSelectOption(label, optionLabel, index?)` | picks an option of the SDK `Select` through its visible trigger and a real pointer event |
 | `deferred()` | a promise the test settles on demand |
 | `createFakeHostServices(options)` | in-memory `PluginHostServices` whose calls can be asserted: `host` (pass as the prop or to the Provider), `calls` (every service call in order), `feedback` (the toasts), `uiRenders` (the props of each `host.ui` render), `config()` (the stored config), `emit(event)` (delivers a bridge event to `onEvent` listeners) and `accountDetailActionsZone()` (where `host.ui.AccountDetailActions` render). Options answer `listRoles`, `pickImages`, `pickFiles`, the initial `config`, `saveConfig` and `assetUrl` |
+| `createFakeSurfaceHandle(overrides)` | complete injected surface fixture, including voice and role activity, without a host bridge |
 | `createFakePluginClient(overrides)` | an injected `client` with no bridge behind it: pass the parts the component uses (usually `call`, answering by local method name); any other request rejects, `dispose` resolves |
 
 The fake `host.ui` components are plain stand-ins: they render the text, buttons,

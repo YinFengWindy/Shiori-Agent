@@ -8,13 +8,14 @@ import tempfile
 import zipfile
 from pathlib import Path, PurePosixPath
 
-from core.roles.store import RoleStore
+from shiori_sdk.roles import Roles
+from shiori_sdk.extensions import PrivateStorage
 
 from .models import RolePetPackage, RolePetState
 from .pet_state import RolePetStateStore
 from .storage import prepare_assets, role_asset_directory
 from . import package_archive, package_images
-from core.roles.models import now_iso
+from shiori_sdk.values import now_iso
 
 _FORMAT = "codex-sprite@1"
 
@@ -22,15 +23,19 @@ _FORMAT = "codex-sprite@1"
 class RolePetPackageService:
     """Handles only complete, self-contained pet packages under the plugin’s private asset root."""
 
-    def __init__(self, role_store: RoleStore) -> None:
+    def __init__(
+        self, role_store: Roles, workspace: Path, storage: PrivateStorage
+    ) -> None:
+        self._workspace = workspace
+        self._storage = storage
         self._role_store = role_store
-        prepare_assets(role_store)
+        prepare_assets(role_store, workspace, storage)
         self._state = RolePetStateStore(role_store)
 
     def import_package(self, role_id: str, source: str | Path) -> RolePetPackage:
         """Validates a ZIP first, then atomically promotes it into the plugin’s role-specific directory."""
-        with self._role_store.lock:
-            prepare_assets(self._role_store)
+        with self._role_store.read_scope():
+            prepare_assets(self._role_store, self._workspace, self._storage)
             return self._import_package(role_id, source)
 
     def _import_package(self, role_id: str, source: str | Path) -> RolePetPackage:
@@ -104,7 +109,7 @@ class RolePetPackageService:
             except Exception:
                 shutil.rmtree(temporary, ignore_errors=True)
                 raise
-        root = destination.relative_to(self._role_store.workspace.resolve()).as_posix()
+        root = destination.relative_to(self._workspace.resolve()).as_posix()
         package = RolePetPackage(
             id=package_id,
             format=_FORMAT,
@@ -124,7 +129,7 @@ class RolePetPackageService:
 
     def remove_package(self, role_id: str, package_id: str) -> None:
         """Removes all package files and its metadata as one role-owned asset operation."""
-        with self._role_store.lock:
+        with self._role_store.read_scope():
             self._remove_package(role_id, package_id)
 
     def _remove_package(self, role_id: str, package_id: str) -> None:
@@ -153,7 +158,7 @@ class RolePetPackageService:
                 or identifier in {".", ".."}
             ):
                 raise ValueError("桌宠包所属路径不安全")
-        root = role_asset_directory(self._role_store.workspace, role_id).resolve()
+        root = role_asset_directory(self._workspace, role_id).resolve()
         destination = (root / package_id).resolve()
         destination.relative_to(root)
         return destination
