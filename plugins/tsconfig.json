@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM"],
+    "jsx": "react-jsx",
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "types": ["react", "react-dom"]
+  },
+  "include": ["*/ui/**/*.ts", "*/ui/**/*.tsx", "*/surface/**/*.ts", "*/surface/**/*.tsx", "*/background/**/*.ts", "*/background/**/*.tsx", "*/shared/**/*.ts", "*/shared/**/*.tsx"]
+}

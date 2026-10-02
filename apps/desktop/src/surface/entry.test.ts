@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { surfaceKeyFromSearch, surfaceQueryString } from "./entry.js";
 
 test("a surface key round-trips through the window query string", () => {
-  const key = { pluginId: "desktop_pet", surfaceId: "main" };
+  const key = { pluginId: "demo", surfaceId: "main" };
   assert.deepEqual(surfaceKeyFromSearch(surfaceQueryString(key)), key);
 });
 

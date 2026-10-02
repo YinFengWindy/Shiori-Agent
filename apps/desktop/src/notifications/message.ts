@@ -20,8 +20,8 @@ export function notificationMessages(event: BridgeEvent) {
   if (event.method !== "session.updated" || event.payload.change !== "message_appended") return [];
   const session = record(event.payload.session);
   const sessionKey = text(session?.key);
-  if (!sessionKey.startsWith("role:") || !sessionKey.slice(5)) return [];
-  const roleId = sessionKey.slice(5);
+  const roleId = roleIdFromSessionKey(sessionKey);
+  if (!roleId) return [];
   const metadata = record(session?.metadata);
   const title = text(metadata?.role_name) || roleId;
   // Only the explicit changed-message fields are authoritative; session.messages is history.
@@ -44,3 +44,4 @@ export function notificationMessages(event: BridgeEvent) {
     return [{ roleId, title, body: boundedPreview(body), key: `${sessionKey}:${id || `seq:${seq}`}` }];
   });
 }
+import { roleIdFromSessionKey } from "../bridge/sessionIdentity.js";

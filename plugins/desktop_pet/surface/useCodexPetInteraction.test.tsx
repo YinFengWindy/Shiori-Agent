@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { act } from "react";
-import type { SurfaceHandle } from "@shiori/sdk";
-import { mountTestComponent } from "@shiori/sdk/testing";
+import { createFakeSurfaceHandle, mountTestComponent } from "@shiori/sdk/testing";
 import { useCodexPetInteraction } from "./useCodexPetInteraction";
 
 type BridgeCall = { name: string; args: unknown[] };
@@ -10,7 +9,7 @@ type BridgeCall = { name: string; args: unknown[] };
 /** Records every surface and voice call so tests assert on the exact commands. */
 function fakeBridges(calls: BridgeCall[]) {
   const record = (name: string) => (...args: unknown[]) => { calls.push({ name, args }); };
-  const surface = {
+  const surface = createFakeSurfaceHandle({
     beginDrag: record("beginDrag"),
     endDrag: record("endDrag"),
     setExtension: record("setExtension"),
@@ -21,23 +20,21 @@ function fakeBridges(calls: BridgeCall[]) {
     ready: record("ready"),
     showContextMenu: async () => null,
     activateMainWindow: record("activateMainWindow"),
-  } as unknown as SurfaceHandle;
-  const voice = {
-    startVoicePress: record("startVoicePress"),
-    voicePointerMoved: record("voicePointerMoved"),
-    voiceRelease: record("voiceRelease"),
-    voiceCancel: record("voiceCancel"),
-  } as unknown as Parameters<typeof useCodexPetInteraction>[1];
-  return { surface, voice };
+    voice: {
+      gesture: (gesture) => record({ press: "startVoicePress", move: "voicePointerMoved", release: "voiceRelease", cancel: "voiceCancel" }[gesture])(),
+      onState: () => () => {},
+    },
+  });
+  return { surface };
 }
 
 async function mountPet() {
   const calls: BridgeCall[] = [];
-  const { surface, voice } = fakeBridges(calls);
+  const { surface } = fakeBridges(calls);
   let hook!: ReturnType<typeof useCodexPetInteraction>;
 
   function Harness() {
-    hook = useCodexPetInteraction(surface, voice);
+    hook = useCodexPetInteraction(surface);
     return <div data-pet="true" {...hook.pointerHandlers} />;
   }
 

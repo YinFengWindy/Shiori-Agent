@@ -83,6 +83,10 @@ export function adaptSurfaceWindow(window: BrowserWindow): SurfaceWindowHandle {
     send: (channel, payload) => {
       if (!window.isDestroyed()) window.webContents.send(channel, payload);
     },
+    onUnavailable: (listener) => {
+      window.webContents.on("did-start-loading", listener);
+      window.webContents.on("render-process-gone", listener);
+    },
     onClosed: (listener) => window.on("closed", listener),
   };
 }

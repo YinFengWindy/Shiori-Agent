@@ -48,7 +48,7 @@ export function DesktopPetSurface({ surface, client }: PluginSurfaceComponentPro
   const [reply, setReply] = useState<PetReplyBubble>(emptyPetReply);
   const [bubbleLayout, setBubbleLayout] = useState<PetBubblePlacement>(noPetBubble);
   const [voice, setVoice] = useState<VoiceStatePayload>(defaultVoice);
-  const activityState = usePetActivityState(state);
+  const activityState = usePetActivityState(surface, state);
   const onTransientFinished = useCallback(() => setTransientState(null), []);
 
   const placementRef = useRef<SurfacePlacement | null>(null);
@@ -119,11 +119,7 @@ export function DesktopPetSurface({ surface, client }: PluginSurfaceComponentPro
       placementRef.current = placement;
       syncBubble();
     });
-    // TEMPORARY COUPLING: voice stays a host feature (#221); see petMenu.ts and
-    // useCodexPetInteraction.ts for the other two.
-    const offVoice = window.miraDesktop.onVoiceState((next) => {
-      if (isVoiceState(next)) setVoice(next);
-    });
+    const offVoice = surface.voice.onState(setVoice);
     // Tells the host to replay the retained state and the current placement.
     // Without this the pet comes up as an empty transparent rectangle whenever
     // it mounts after its state was set.
@@ -152,20 +148,4 @@ export function DesktopPetSurface({ surface, client }: PluginSurfaceComponentPro
       onBubbleHeight={onBubbleHeight}
     />
   );
-}
-
-function isVoiceState(value: unknown): value is VoiceStatePayload {
-  if (!value || typeof value !== "object") return false;
-  const status = (value as { status?: unknown }).status;
-  return status === "idle"
-    || status === "press_pending"
-    || status === "dragging"
-    || status === "recording"
-    || status === "transcribing"
-    || status === "sending"
-    || status === "waiting_reply"
-    || status === "speaking_prepare"
-    || status === "speaking"
-    || status === "finish_current_sentence_then_idle"
-    || status === "error";
 }

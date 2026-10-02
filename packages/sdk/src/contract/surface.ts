@@ -9,6 +9,7 @@
  * definitions through `@shiori/sdk/contract`.
  */
 import type { PluginRpcClient } from "../rpc";
+import type { SurfaceVoice, SurfaceRoleActivity } from "./surfaceInteraction";
 
 /** A display's usable region in screen coordinates, excluding taskbars and other reserved chrome. */
 export type SurfaceWorkArea = { x: number; y: number; width: number; height: number };
@@ -81,6 +82,10 @@ export type SurfaceSettleReason =
  * window identity rather than by anything the renderer claims.
  */
 export type SurfaceHandle = {
+  /** Host-owned push-to-talk gestures and state, scoped to this window. */
+  voice: SurfaceVoice;
+  /** Activity for the currently declared interaction role; null resets a changed target. */
+  onRoleActivity(listener: (activity: SurfaceRoleActivity | null) => void): () => void;
   /** Starts host-driven cursor following; `offset` is where inside the body the pointer grabbed. */
   beginDrag(offset: { x: number; y: number }): void;
   /** Releases the drag, optionally handing over a velocity (px/s) for the host to glide out. */

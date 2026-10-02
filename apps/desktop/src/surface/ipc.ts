@@ -1,5 +1,6 @@
 import type {
   SurfaceExtension,
+  SurfaceInteractionTarget,
   SurfaceSpec,
   SurfaceWorkArea,
   SurfaceMenuItem,
@@ -42,6 +43,7 @@ export const surfaceChannels = {
   workArea: "desktop:surface-work-area",
   post: "desktop:surface-post",
   setState: "desktop:surface-set-state",
+  setInteraction: "desktop:surface-set-interaction",
   ready: "desktop:surface-ready",
   contextMenu: "desktop:surface-context-menu",
   activateMainWindow: "desktop:surface-activate-main-window",
@@ -129,6 +131,13 @@ export function registerSurfaceIpc(host: SurfaceIpcHost, options: RegisterSurfac
   host.on(surfaceChannels.setState, (_event, payload) => {
     const key = readKey(payload);
     if (key) surfaces.setState(key, (payload as { state?: unknown }).state);
+  });
+
+  host.on(surfaceChannels.setInteraction, (_event, payload) => {
+    const key = readKey(payload);
+    if (!key || !payload || typeof payload !== "object" || !("target" in payload)) return;
+    const target = readInteractionTarget(payload.target);
+    if (target !== undefined) guard(surfaceChannels.setInteraction, () => surfaces.setInteraction(key, target));
   });
 
   host.on(surfaceChannels.ready, (event) => {
@@ -273,4 +282,12 @@ function readExtension(payload: unknown): SurfaceExtension | null {
 /** Accepts only real, finite numbers — a NaN from a renderer must never reach window bounds. */
 function readNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+/** Invalid declarations are rejected rather than silently retargeted. */
+function readInteractionTarget(value: unknown): SurfaceInteractionTarget | null | undefined {
+  if (value === null) return null;
+  if (!value || typeof value !== "object" || !("roleId" in value) || !("available" in value)) return undefined;
+  if (typeof value.roleId !== "string" || !value.roleId.trim() || typeof value.available !== "boolean") return undefined;
+  return { roleId: value.roleId, available: value.available };
 }

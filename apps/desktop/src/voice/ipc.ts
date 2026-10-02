@@ -1,3 +1,4 @@
+import type { SurfaceVoiceController } from "./surfaceVoice.js";
 import { BrowserWindow, ipcMain } from "electron";
 import type { IpcMainInvokeEvent } from "electron";
 import type { DesktopVoiceController } from "./controller.js";
@@ -7,16 +8,7 @@ import type { BrowserVoiceRecorder } from "./recorder.js";
 
 /** Main-process dependencies needed by the voice-specific IPC boundary. */
 export type RegisterVoiceIpcOptions = {
-  /**
-   * Whether a sending window is the pet's surface.
-   *
-   * Injected rather than resolved here: voice input rides on the pet (see
-   * `availability.ts`) but this module has no business knowing which plugin
-   * that is. `main.ts` supplies the check from
-   * `pluginCoupling/desktopPet.ts`, and #221 removes it altogether by making
-   * voice a host capability injected into the surface.
-   */
-  isPetWindow: (window: { readonly id: number } | null) => boolean;
+  surfaceVoice: Pick<SurfaceVoiceController, "gesture">;
   voiceRecorder: BrowserVoiceRecorder;
   voiceController: DesktopVoiceController;
   voicePlayback: BrowserVoicePlayback;
@@ -24,7 +16,7 @@ export type RegisterVoiceIpcOptions = {
 
 /** Registers capture, testing, playback, and pet voice IPC handlers. */
 export function registerVoiceIpc({
-  isPetWindow,
+  surfaceVoice,
   voiceRecorder,
   voiceController,
   voicePlayback,
@@ -104,20 +96,8 @@ export function registerVoiceIpc({
     const payload = value && typeof value === "object" ? value as { id?: unknown; message?: unknown } : {};
     voicePlayback.handleError(event.sender, String(payload.id || ""), String(payload.message || "音频播放失败"));
   });
-  ipcMain.on("desktop:voice-press-start", (event) => {
-    if (!isPetWindow(BrowserWindow.fromWebContents(event.sender))) return;
-    voiceController.startPress("pet");
-  });
-  ipcMain.on("desktop:voice-pointer-moved", (event) => {
-    if (!isPetWindow(BrowserWindow.fromWebContents(event.sender))) return;
-    voiceController.pointerMoved("pet");
-  });
-  ipcMain.on("desktop:voice-release", (event) => {
-    if (!isPetWindow(BrowserWindow.fromWebContents(event.sender))) return;
-    voiceController.release("pet");
-  });
-  ipcMain.on("desktop:voice-cancel", (event) => {
-    if (!isPetWindow(BrowserWindow.fromWebContents(event.sender))) return;
-    voiceController.cancel("pet");
+  ipcMain.on("desktop:surface-voice-gesture", (event, gesture: unknown) => {
+    if (gesture !== "press" && gesture !== "move" && gesture !== "release" && gesture !== "cancel") return;
+    surfaceVoice.gesture(BrowserWindow.fromWebContents(event.sender)?.id ?? null, gesture);
   });
 }

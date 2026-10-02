@@ -145,3 +145,19 @@ test("work area is reported for a named surface and refused for an unknown one",
   assert.deepEqual(ipc.invoke(surfaceChannels.workArea, { ...key }), workArea);
   assert.throws(() => ipc.invoke(surfaceChannels.workArea, { pluginId: "demo" }));
 });
+
+
+test("interaction declarations are explicit, validated and revoked independently of retained data", () => {
+  const { ipc, surfaces, windows } = setup();
+  ipc.invoke(surfaceChannels.create, { ...key, spec });
+  ipc.windowId = windows[0].id;
+  ipc.send(surfaceChannels.ready, {});
+  for (const target of [{ roleId: "", available: true }, { roleId: "a", available: "yes" }, { visible: true, roleId: "a", packageId: "pet" }]) {
+    ipc.send(surfaceChannels.setInteraction, { ...key, target });
+    assert.deepEqual(surfaces.interactionTargets(), []);
+  }
+  ipc.send(surfaceChannels.setInteraction, { ...key, target: { roleId: "a", available: true } });
+  assert.equal(surfaces.interactionTargets()[0]?.roleId, "a");
+  ipc.send(surfaceChannels.setInteraction, { ...key, target: null });
+  assert.deepEqual(surfaces.interactionTargets(), []);
+});

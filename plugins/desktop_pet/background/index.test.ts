@@ -10,7 +10,7 @@ import { desktopPetSurfaceId } from "./controller";
 /**
  * Covers the wiring, not the behaviour behind it.
  *
- * `apps/desktop/tests/integration/desktopPetSurfaceController.test.ts` proves
+ * `./controller.test.ts` proves
  * that a correctly-wired controller does the right thing; this file proves the wiring exists and routes correctly, which is the
  * part #181-C actually wrote from scratch. The two failure modes it exists for
  * are both invisible to every other test and to the type checker: dropping one
@@ -72,6 +72,7 @@ function recorder(overrides: Partial<RecorderState> = {}): Recorder {
     state,
     ctx: {
       surfaces: {
+        setInteraction: () => {},
         create: (surfaceId) => {
           surfaceCalls.push(["create", surfaceId]);
           return Promise.resolve({ x: 0, y: 0, displayId: "display-1" });

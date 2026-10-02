@@ -1,19 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { transitionPetActivity, type PetActivityTransition } from "./activity";
+import type { SurfaceHandle } from "@shiori/sdk";
 import type { SpriteState } from "./spriteContract";
 
 /** Lets a proactive message complete its Codex waving acknowledgement before waiting. */
 export const petNotificationAnimationMs = 720;
 
-/**
- * Subscribes to bridge activity while keeping brief notification animation above task status.
- *
- * TEMPORARY COUPLING: reads the host's backend event stream directly through
- * `window.miraDesktop.onEvent` rather than through this plugin's own RPC
- * channel. Left as-is deliberately — #181 moves the pet's *window* onto the
- * DesktopSurface capability and nothing else.
- */
-export function usePetActivityState(initialState: SpriteState): SpriteState {
+/** Retains plugin animation priority while consuming only typed role activity. */
+export function usePetActivityState(surface: SurfaceHandle, initialState: SpriteState): SpriteState {
   const [state, setState] = useState<SpriteState>(initialState);
   const activitiesRef = useRef<PetActivityTransition["activities"]>({});
   const notificationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -28,7 +22,13 @@ export function usePetActivityState(initialState: SpriteState): SpriteState {
       if (notificationTimerRef.current) clearTimeout(notificationTimerRef.current);
       notificationTimerRef.current = null;
     };
-    const off = window.miraDesktop.onEvent((event) => {
+    const off = surface.onRoleActivity((event) => {
+      if (!event) {
+        activitiesRef.current = {};
+        clearNotificationTimer();
+        setState("idle");
+        return;
+      }
       const transition = transitionPetActivity(activitiesRef.current, event);
       if (!transition.handled) return;
       activitiesRef.current = transition.activities;
@@ -47,7 +47,7 @@ export function usePetActivityState(initialState: SpriteState): SpriteState {
       clearNotificationTimer();
       off();
     };
-  }, []);
+  }, [surface]);
 
   return state;
 }

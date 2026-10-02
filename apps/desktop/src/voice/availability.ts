@@ -1,8 +1,7 @@
 /** Everything that decides whether the push-to-talk hotkey may accept new input. */
 export type VoiceAvailabilityInputs = {
   voiceEnabled: boolean;
-  petRunning: boolean;
-  petVisible: boolean;
+  targetAvailable: boolean;
 };
 
 /** Side effects the main process applies once availability is resolved. */
@@ -14,21 +13,19 @@ export type VoiceAvailabilityEffects = {
 };
 
 /**
- * Voice input rides on the desktop pet: it is only reachable while the pet is
- * both running and visible, so a hidden pet must never leave the hotkey armed.
+ * Voice input requires an explicitly available target in a ready, visible surface.
  */
 export function isVoiceHotkeyAvailable({
   voiceEnabled,
-  petRunning,
-  petVisible,
+  targetAvailable,
 }: VoiceAvailabilityInputs): boolean {
-  return voiceEnabled && petRunning && petVisible;
+  return voiceEnabled && targetAvailable;
 }
 
 /**
  * Applies the availability decision.
  *
- * `cancelCurrentTurn` separates the two reasons availability drops: the pet
+ * `cancelCurrentTurn` separates the two reasons availability drops: the surface target
  * going away must abort whatever is in flight, while a settings change only
  * stops admitting new presses and lets the current one finish.
  */

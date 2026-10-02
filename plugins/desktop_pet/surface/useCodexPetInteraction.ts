@@ -11,19 +11,6 @@ import {
 import type { SpriteState } from "./spriteContract";
 import type { SurfaceHandle } from "@shiori/sdk";
 
-/**
- * The host voice gesture a pet press doubles as.
- *
- * TEMPORARY COUPLING: voice (ASR/TTS) stays in the host by decision — it is
- * not becoming a plugin — so these calls go straight to `window.miraDesktop`
- * instead of through the surface. The intended end state is voice offered as a
- * host capability injected into a surface; tracked in #221.
- */
-export type PetVoiceBridge = Pick<
-  Window["miraDesktop"],
-  "startVoicePress" | "voicePointerMoved" | "voiceRelease" | "voiceCancel"
->;
-
 type DragState = {
   pointerId: number;
   previousScreenX: number;
@@ -45,7 +32,6 @@ type DragState = {
  */
 export function useCodexPetInteraction(
   surface: SurfaceHandle | null,
-  voice: PetVoiceBridge | null,
 ) {
   const [interactionState, setInteractionState] = useState<SpriteState | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -59,7 +45,7 @@ export function useCodexPetInteraction(
   function onPointerDown(event: ReactPointerEvent<HTMLDivElement>): void {
     if (event.button !== 0 || !surface) return;
     event.preventDefault();
-    voice?.startVoicePress();
+    surface.voice.gesture("press");
     setNextInteractionState(null);
     lastGestureWasDragRef.current = true;
     dragRef.current = {
@@ -82,7 +68,7 @@ export function useCodexPetInteraction(
     drag.samples = petDragSamplesWith(drag.samples, sample);
     if (!hasPetDragMoved(drag.previousScreenX, drag.previousScreenY, event.screenX, event.screenY)) return;
     drag.hasMoved = true;
-    voice?.voicePointerMoved();
+    surface?.voice.gesture("move");
     const nextState = petDragState(drag.previousScreenX, event.screenX);
     drag.previousScreenX = event.screenX;
     drag.previousScreenY = event.screenY;
@@ -99,7 +85,7 @@ export function useCodexPetInteraction(
     // The host already knows where the surface is; only the throw velocity is
     // news, and only when the release was fast enough to be worth a glide.
     surface?.endDrag(release.velocity ?? undefined);
-    voice?.voiceRelease();
+    surface?.voice.gesture("release");
     setNextInteractionState(petHoverState);
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
   }
@@ -111,7 +97,7 @@ export function useCodexPetInteraction(
     setIsDragging(false);
     lastGestureWasDragRef.current = true;
     surface?.endDrag();
-    voice?.voiceCancel();
+    surface?.voice.gesture("cancel");
     setNextInteractionState(null);
   }
 

@@ -16,3 +16,4 @@ export {
 } from "./fakeHostServices";
 export type { FakeHostUiRenders } from "./fakeHostUi";
 export { createFakePluginClient } from "./fakePluginClient";
+export { createFakeSurfaceHandle } from "./fakeSurface";

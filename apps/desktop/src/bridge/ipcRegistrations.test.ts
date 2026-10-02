@@ -24,7 +24,7 @@ class FakeWindow {
 }
 
 function setup(overrides: {
-  petWindowLabel?: string;
+  surfaceWindowLabel?: string;
   invoke?: RegisterDesktopIpcOptions["bridge"]["invoke"];
   showOpenDialog?: DesktopIpcHost["showOpenDialog"];
   pluginUiResources?: PluginUiResources;
@@ -43,7 +43,7 @@ function setup(overrides: {
     [other.webContents, other],
     [pet.webContents, pet],
   ]);
-  const petWindowLabel = overrides.petWindowLabel ?? "pet";
+  const surfaceWindowLabel = overrides.surfaceWindowLabel ?? "pet";
 
   const host = {
     handle: (channel: string, listener: unknown) => {
@@ -63,8 +63,8 @@ function setup(overrides: {
 
   // Since #181-C there is no pet object in this process: the boundary takes a
   // window predicate and a command sink, both supplied by `main.ts`.
-  const isPetWindow = (window: BrowserWindow | null) =>
-    Boolean(window) && (window as unknown as FakeWindow).label === petWindowLabel;
+  const isSurfaceWindow = (window: BrowserWindow | null) =>
+    Boolean(window) && (window as unknown as FakeWindow).label === surfaceWindowLabel;
 
 
   registerDesktopIpcHandlers(host, {
@@ -82,7 +82,8 @@ function setup(overrides: {
     },
     localAssetImportsRoot: "imports",
     openLocalAttachment: async () => ({ ok: true }),
-    isPetWindow,
+    isSurfaceWindow,
+    surfaceVoice: { gesture: () => undefined },
     voiceRecorder: {},
     voiceController: {},
     voicePlayback: {},
@@ -223,7 +224,8 @@ it("notifies onPluginDeactivated for exactly the plugin ids a fresh roster dropp
     localAssets: { grantTrustedPayload: () => [], grantPath: () => null, resolveReference: () => null },
     localAssetImportsRoot: "imports",
     openLocalAttachment: async () => ({ ok: true }),
-    isPetWindow: () => false,
+    isSurfaceWindow: () => false,
+    surfaceVoice: { gesture: () => undefined },
     voiceRecorder: {},
     voiceController: {},
     voicePlayback: {},

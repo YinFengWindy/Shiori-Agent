@@ -6,45 +6,16 @@ test("Codex pet activity keeps needs-input above blocked, ready, and running", (
   assert.equal(resolvePetActivityState({ active: "running", failed: "failed", ready: "review", waiting: "waiting" }), "waiting");
 });
 
-test("Codex pet maps desktop bridge task events to the documented animation rows", () => {
-  const running = transitionPetActivity({}, {
-    id: "request-1",
-    type: "event",
-    method: "chat.delta",
-    payload: { session_key: "role-a" },
-  });
+test("role activity preserves priority and acknowledges a proactive message once", () => {
+  const running = transitionPetActivity({}, { roleId: "a", sessionKey: "a-main", phase: "running", notify: false });
   assert.equal(running.state, "running");
-
-  const needsInput = transitionPetActivity(running.activities, {
-    id: "proactive:role-b",
-    type: "event",
-    method: "session.updated",
-    payload: {
-      session_key: "role-b",
-      session: { key: "role-b" },
-      message: { role: "assistant", metadata: { proactive: true } },
-    },
-  });
+  const needsInput = transitionPetActivity(running.activities, { roleId: "a", sessionKey: "a-secondary", phase: "waiting", notify: true });
   assert.equal(needsInput.state, "waiting");
   assert.equal(needsInput.showNotification, true);
-
-  const blocked = transitionPetActivity(needsInput.activities, {
-    id: "request-1",
-    type: "event",
-    method: "chat.error",
-    payload: { session_key: "role-a" },
-  });
+  const repeated = transitionPetActivity(needsInput.activities, { roleId: "a", sessionKey: "a-secondary", phase: "waiting", notify: true });
+  assert.equal(repeated.showNotification, false);
+  const blocked = transitionPetActivity(needsInput.activities, { roleId: "a", sessionKey: "a-main", phase: "failed", notify: false });
   assert.equal(blocked.state, "waiting");
-
-  const reviewed = transitionPetActivity(blocked.activities, {
-    id: "role-b",
-    type: "event",
-    method: "session.updated",
-    payload: {
-      session_key: "role-b",
-      session: { key: "role-b" },
-      message: { role: "assistant", metadata: { proactive: false } },
-    },
-  });
+  const reviewed = transitionPetActivity(blocked.activities, { roleId: "a", sessionKey: "a-secondary", phase: "review", notify: false });
   assert.equal(reviewed.state, "failed");
 });

@@ -3,6 +3,8 @@ import { PreloadLocalAssetCache } from "./assets/preloadLocalAssetCache.js";
 import { localAssetScheme } from "./assets/localAssetContract.js";
 import {
   surfaceMessageChannel,
+  surfaceVoiceChannel,
+  surfaceActivityChannel,
   surfacePositionChannel,
   surfaceSettledChannel,
   surfaceStateChannel,
@@ -11,7 +13,7 @@ import { surfaceChannels } from "./surface/ipc.js";
 import { pluginDataChannels } from "./plugins/ipc.js";
 import { trayChannels } from "./tray/ipc.js";
 import { notificationChannels, type NotificationChatTarget } from "./notifications/contract.js";
-import type { BridgeEvent, SurfaceCreateResult, SurfacePlacement, VoiceStatePayload } from "@shiori/sdk/contract";
+import type { BridgeEvent, SurfaceCreateResult, SurfacePlacement, SurfaceRoleActivity, VoiceStatePayload } from "@shiori/sdk/contract";
 import type {
   BridgeResponse,
   DesktopApi,
@@ -201,6 +203,7 @@ const api: DesktopApi = {
   // The pet's own drag, sprite, bubble and menu channels are gone: since #181-B
   // the pet is a plugin surface and uses the generic `surface` API below.
   surfaces: {
+    setInteraction(pluginId, surfaceId, target) { ipcRenderer.send(surfaceChannels.setInteraction, { pluginId, surfaceId, target }); },
     create(pluginId, surfaceId, spec, anchor) {
       return ipcRenderer.invoke(surfaceChannels.create, {
         pluginId, surfaceId, spec, x: anchor.x, y: anchor.y,
@@ -236,6 +239,19 @@ const api: DesktopApi = {
     },
   },
   surface: {
+    voice: {
+      gesture(gesture) { ipcRenderer.send("desktop:surface-voice-gesture", gesture); },
+      onState(listener) {
+        const wrapped = (_event: unknown, value: VoiceStatePayload) => listener(value);
+        ipcRenderer.on(surfaceVoiceChannel, wrapped);
+        return () => ipcRenderer.off(surfaceVoiceChannel, wrapped);
+      },
+    },
+    onRoleActivity(listener) {
+      const wrapped = (_event: unknown, value: SurfaceRoleActivity | null) => listener(value);
+      ipcRenderer.on(surfaceActivityChannel, wrapped);
+      return () => ipcRenderer.off(surfaceActivityChannel, wrapped);
+    },
     beginDrag(offset) {
       ipcRenderer.send(surfaceChannels.beginDrag, { offsetX: offset.x, offsetY: offset.y });
     },
@@ -368,26 +384,7 @@ const api: DesktopApi = {
   voicePlaybackError(id, message) {
     ipcRenderer.send("desktop:voice-playback-error", { id, message });
   },
-  startVoicePress() {
-    ipcRenderer.send("desktop:voice-press-start");
-  },
-  voicePointerMoved() {
-    ipcRenderer.send("desktop:voice-pointer-moved");
-  },
-  voiceRelease() {
-    ipcRenderer.send("desktop:voice-release");
-  },
-  voiceCancel() {
-    ipcRenderer.send("desktop:voice-cancel");
-  },
-  onVoiceState(listener) {
-    const wrapped = (_event: unknown, value: unknown) => {
-      if (!value || typeof value !== "object") return;
-      listener(value as VoiceStatePayload);
-    };
-    ipcRenderer.on("desktop:voice-state", wrapped);
-    return () => ipcRenderer.off("desktop:voice-state", wrapped);
-  },
+
 };
 
 contextBridge.exposeInMainWorld("miraDesktop", api);

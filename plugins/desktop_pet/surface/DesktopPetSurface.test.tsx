@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { act } from "react";
-import type { SurfaceHandle, SurfacePlacement } from "@shiori/sdk";
-import { createFakePluginClient, mountTestComponent } from "@shiori/sdk/testing";
+import type { SurfacePlacement, VoiceStatePayload, SurfaceRoleActivity } from "@shiori/sdk";
+import { createFakeSurfaceHandle, createFakePluginClient, mountTestComponent } from "@shiori/sdk/testing";
 import { DesktopPetSurface } from "./DesktopPetSurface";
 import { petBubbleGap } from "./bubbleExtension";
 
@@ -24,7 +24,11 @@ function fakeSurface() {
   const placementListeners: ((value: SurfacePlacement) => void)[] = [];
   const record = (name: string) => (...args: unknown[]) => { calls.push({ name, args }); };
 
-  const surface = {
+  const voiceListeners = new Set<(value: VoiceStatePayload) => void>();
+  const activityListeners = new Set<(value: SurfaceRoleActivity | null) => void>();
+  const surface = createFakeSurfaceHandle({
+    voice: { gesture() {}, onState: (listener) => { voiceListeners.add(listener); return () => { voiceListeners.delete(listener); }; } },
+    onRoleActivity: (listener) => { activityListeners.add(listener); return () => { activityListeners.delete(listener); }; },
     beginDrag: record("beginDrag"),
     endDrag: record("endDrag"),
     setExtension: record("setExtension"),
@@ -44,13 +48,14 @@ function fakeSurface() {
     ready: record("ready"),
     showContextMenu: async () => null,
     activateMainWindow: record("activateMainWindow"),
-  } as unknown as SurfaceHandle;
+  });
 
   return {
     surface,
     calls,
     callNames: () => calls.map((call) => call.name),
     extensions: () => calls.filter((call) => call.name === "setExtension").map((call) => call.args[0]),
+    interactionCounts: () => ({ voice: voiceListeners.size, activity: activityListeners.size }),
     listenerCounts: () => ({
       state: stateListeners.length,
       message: messageListeners.length,
@@ -68,37 +73,16 @@ function fakeSurface() {
   };
 }
 
-function fakeMiraDesktop() {
-  const voiceListeners: ((value: unknown) => void)[] = [];
-  const eventListeners: ((value: unknown) => void)[] = [];
-  return {
-    bridge: {
-      onVoiceState: (listener: (value: unknown) => void) => {
-        voiceListeners.push(listener);
-        return () => { voiceListeners.splice(voiceListeners.indexOf(listener), 1); };
-      },
-      onEvent: (listener: (value: unknown) => void) => {
-        eventListeners.push(listener);
-        return () => { eventListeners.splice(eventListeners.indexOf(listener), 1); };
-      },
-    },
-    counts: () => ({ voice: voiceListeners.length, event: eventListeners.length }),
-  };
-}
-
 async function mountSurface() {
   const host = fakeSurface();
-  const desktop = fakeMiraDesktop();
   const rpcCalls: string[] = [];
   const props = {
     surfaceId: "pet",
     surface: host.surface,
     client: createFakePluginClient({ call: async <T,>(method: string) => { rpcCalls.push(method); return { ok: true } as T; } }),
   };
-  const view = await mountTestComponent(<DesktopPetSurface {...props} />, {
-    windowGlobals: { miraDesktop: desktop.bridge },
-  });
-  return { ...view, host, desktop, rpcCalls };
+  const view = await mountTestComponent(<DesktopPetSurface {...props} />);
+  return { ...view, host, rpcCalls };
 }
 
 const idleLoad = { load: { package: { spritesheetUrl }, state: "idle" } };
@@ -245,11 +229,11 @@ describe("desktop pet surface", () => {
     const pet = await mountSurface();
     await pet.host.pushState(idleLoad);
     assert.deepEqual(pet.host.listenerCounts(), { state: 1, message: 1, placement: 1 });
-    assert.equal(pet.desktop.counts().voice, 1);
+    assert.equal(pet.host.interactionCounts().voice, 1);
 
     await pet.cleanup();
 
     assert.deepEqual(pet.host.listenerCounts(), { state: 0, message: 0, placement: 0 });
-    assert.equal(pet.desktop.counts().voice, 0);
+    assert.equal(pet.host.interactionCounts().voice, 0);
   });
 });

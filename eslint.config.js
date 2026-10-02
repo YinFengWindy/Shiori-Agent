@@ -49,6 +49,10 @@ export default [
   {
     files: pluginRendererFiles,
     rules: {
+      "no-restricted-syntax": ["error", {
+        selector: "Identifier[name='miraDesktop'], Literal[value='miraDesktop'], Identifier[name='DesktopApi']",
+        message: "Plugins must not access the host global bridge or ambient DesktopApi; use injected SDK capabilities.",
+      }],
       "no-restricted-imports": ["error", {
         patterns: [
           // Any relative (`../../../apps/desktop/...`) or aliased spelling that names the host tree.

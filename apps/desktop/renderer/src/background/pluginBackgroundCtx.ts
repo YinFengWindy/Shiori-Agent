@@ -33,6 +33,7 @@ function createPluginBackgroundSurfaces(
   scope: BackgroundEffectScope,
 ): PluginBackgroundSurfaces {
   return {
+    setInteraction: (surfaceId, target) => api.setInteraction(pluginId, surfaceId, target),
     create: (surfaceId, spec, anchor) => api.create(pluginId, surfaceId, spec, anchor),
     destroy: (surfaceId) => api.destroy(pluginId, surfaceId),
     show: (surfaceId) => api.show(pluginId, surfaceId),

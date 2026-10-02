@@ -35,7 +35,7 @@ const persistedSettleReasons = new Set(["drag", "momentum", "move"]);
 /** The slice of `ctx.surfaces` this controller uses; narrowed so tests can fake it. */
 export type DesktopPetSurfaces = Pick<
   PluginBackgroundSurfaces,
-  "create" | "destroy" | "setPosition" | "moveTo" | "post" | "setState" | "workArea"
+  "create" | "destroy" | "setPosition" | "moveTo" | "post" | "setState" | "workArea" | "setInteraction"
 >;
 
 export type DesktopPetControllerOptions = {
@@ -69,8 +69,8 @@ export type DesktopPetControllerOptions = {
  * listeners there could never be reclaimed on disable, so "停用插件后订阅全部
  * 回收" could only be pretended.
  *
- * What stays in the host, and why, is listed in
- * `apps/desktop/src/pluginCoupling/desktopPet.ts`.
+ * Voice implementation stays in the host; this controller declares only the
+ * current interaction target through the surface capability.
  */
 export class DesktopPetController {
   private readonly surfaces: DesktopPetSurfaces;
@@ -172,6 +172,7 @@ export class DesktopPetController {
   }
 
   hide(): Promise<void> {
+    this.revokeInteraction();
     return this.enqueue(async () => {
       await this.destroySurface();
       await this.saveSettings({ visible: false });
@@ -217,10 +218,11 @@ export class DesktopPetController {
     const target = value.target;
     if (!target) return;
     const current = this.anchor;
+    const activeLoad = this.activeLoad;
     void this.surfaces.workArea(desktopPetSurfaceId).then((workArea) => {
       // The surface can be torn down while the work area is in flight; moving a
       // surface that no longer exists would be reported as a host error.
-      if (!this.running) return;
+      if (!this.running || this.disposed || this.activeLoad !== activeLoad) return;
       const next = desktopPetTargetPosition(target, workArea);
       // The host runs the tween and reports the landing through `handleSettled`.
       this.surfaces.moveTo(desktopPetSurfaceId, next, desktopPetAgentMoveDurationMs);
@@ -234,6 +236,7 @@ export class DesktopPetController {
   /** Tears the pet's window down when the plugin is disabled or reloaded. */
   async terminate(): Promise<void> {
     this.disposed = true;
+    this.revokeInteraction();
     this.replies.dispose();
     // Through the queue, so a `show()` that is mid-flight finishes (and bails
     // on `disposed`) before the destroy runs, rather than racing it.
@@ -279,10 +282,12 @@ export class DesktopPetController {
       const remembered = this.settings.positions[positionKey(binding.roleId, placement.displayId)];
       if (remembered) this.surfaces.setPosition(desktopPetSurfaceId, remembered);
     }
+    if (this.activeRoleId !== binding.roleId) this.revokeInteraction();
     this.activeRoleId = binding.roleId;
     this.activeLoad = { binding, state };
     // Retained, so a renderer that mounts or reloads later still gets it.
     this.pushRetainedState();
+    this.surfaces.setInteraction(desktopPetSurfaceId, { roleId: binding.roleId, available: true });
   }
 
   private pushRetainedState(): void {
@@ -327,7 +332,12 @@ export class DesktopPetController {
     });
   }
 
+  private revokeInteraction(): void {
+    if (this.running) this.surfaces.setInteraction(desktopPetSurfaceId, null);
+  }
+
   private async destroySurface(): Promise<void> {
+    this.revokeInteraction();
     // Called unconditionally rather than only when `running`: the host treats
     // an unknown surface as a no-op, and doing it this way also reclaims a
     // window this controller has somehow lost track of.

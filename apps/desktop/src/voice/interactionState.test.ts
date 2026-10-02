@@ -11,7 +11,7 @@ test("a short press is cancelled and a long press starts recording", () => {
   const initial = createVoiceInteractionState();
   const pending = transitionVoiceInteraction(initial, {
     type: "press_started",
-    source: "pet",
+    source: "surface",
     atMs: 100,
   });
 
@@ -24,13 +24,13 @@ test("a short press is cancelled and a long press starts recording", () => {
     type: "press_elapsed",
     atMs: 100 + VOICE_PRESS_THRESHOLD_MS,
   });
-  assert.deepEqual(longPress, { kind: "recording", source: "pet", startedAtMs: 100 });
+  assert.deepEqual(longPress, { kind: "recording", source: "surface", startedAtMs: 100 });
 });
 
 test("movement wins over a pending pet voice press", () => {
   const pending = transitionVoiceInteraction(createVoiceInteractionState(), {
     type: "press_started",
-    source: "pet",
+    source: "surface",
     atMs: 0,
   });
 
@@ -43,7 +43,7 @@ test("movement wins over a pending pet voice press", () => {
 test("releasing or cancelling a pet drag clears the interaction state", () => {
   let state = transitionVoiceInteraction(createVoiceInteractionState(), {
     type: "press_started",
-    source: "pet",
+    source: "surface",
     atMs: 0,
   });
   state = transitionVoiceInteraction(state, { type: "pointer_moved" });
@@ -62,8 +62,8 @@ test("only active voice phases block a microphone test", () => {
   assert.equal(isVoiceInteractionBusy({ kind: "idle" }), false);
   assert.equal(isVoiceInteractionBusy({ kind: "dragging" }), false);
   assert.equal(isVoiceInteractionBusy({ kind: "error", message: "ASR 失败" }), false);
-  assert.equal(isVoiceInteractionBusy({ kind: "press_pending", source: "pet", startedAtMs: 0 }), true);
-  assert.equal(isVoiceInteractionBusy({ kind: "recording", source: "pet", startedAtMs: 0 }), true);
+  assert.equal(isVoiceInteractionBusy({ kind: "press_pending", source: "surface", startedAtMs: 0 }), true);
+  assert.equal(isVoiceInteractionBusy({ kind: "recording", source: "surface", startedAtMs: 0 }), true);
   assert.equal(isVoiceInteractionBusy({ kind: "waiting_reply" }), true);
   assert.equal(isVoiceInteractionBusy({ kind: "speaking", sentenceId: "s1" }), true);
 });
@@ -91,7 +91,7 @@ test("recording release, empty ASR and chat failure are fail-closed", () => {
 
 test("recording startup failures and Esc leave no active voice task", () => {
   assert.deepEqual(
-    transitionVoiceInteraction({ kind: "recording", source: "pet", startedAtMs: 0 }, {
+    transitionVoiceInteraction({ kind: "recording", source: "surface", startedAtMs: 0 }, {
       type: "recording_failed",
       message: "麦克风权限被拒绝",
     }),
@@ -154,4 +154,11 @@ test("stale playback events do not advance a different sentence", () => {
     }),
     state,
   );
+});
+
+
+test("host revocation resets both a pending press and active recording", () => {
+  for (const kind of ["press_pending", "recording"] as const) {
+    assert.deepEqual(transitionVoiceInteraction({ kind, source: "surface", startedAtMs: 0 }, { type: "reset" }), { kind: "idle" });
+  }
 });

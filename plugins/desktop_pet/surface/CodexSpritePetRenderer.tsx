@@ -30,7 +30,6 @@ export function CodexSpritePetRenderer({ onContextMenu = noop, spritesheetUrl, s
   const [frame, setFrame] = useState(0);
   const { interactionState, isDragging, pointerHandlers } = useCodexPetInteraction(
     surface,
-    typeof window === "undefined" ? null : window.miraDesktop,
   );
   const replyState: SpriteState | null = reply.paused ? "waiting" : null;
   const voicePlaybackState: SpriteState | null = voice.status === "recording"

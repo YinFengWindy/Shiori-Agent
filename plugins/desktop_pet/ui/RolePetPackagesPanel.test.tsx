@@ -58,18 +58,10 @@ function fakeClient(answers: Record<string, unknown>, calls: Call[]): PluginRpcC
  * Must run *after* `mountTestComponent`: the harness is what creates `window`,
  * so stubbing before it means writing onto nothing.
  */
-function stubDesktopApi() {
-  const host = globalThis as { window?: { miraDesktop?: unknown } };
-  const mustUseInjectedServices = () => { throw new Error("must use injected services"); };
-  const miraDesktop = { localAssetUrl: mustUseInjectedServices, pickFiles: mustUseInjectedServices };
-  if (!host.window) throw new Error("stubDesktopApi must run after mountTestComponent");
-  host.window.miraDesktop = miraDesktop;
-  return miraDesktop;
-}
+
 
 it("renders each package as a selectable preview card, with no hardcoded colours", async () => {
   const view = await mountTestComponent(null);
-  stubDesktopApi();
   try {
     await view.render(<RolePetPackagesPanel
       roleId="mira" disabled={false} client={fakeClient({}, [])} onRoleDataChanged={() => undefined}
@@ -90,7 +82,6 @@ it("renders each package as a selectable preview card, with no hardcoded colours
 it("asks for the open role's packages, and for no role asks for nothing", async () => {
   const calls: Call[] = [];
   const view = await mountTestComponent(null);
-  stubDesktopApi();
   try {
     await view.render(<RolePetPackagesPanel
       roleId="mira" disabled={false} client={fakeClient({}, calls)} onRoleDataChanged={() => undefined}
@@ -112,7 +103,6 @@ it("selecting a package tells the host to re-read the role and the pet to re-res
   const calls: Call[] = [];
   let roleDataChanged = 0;
   const view = await mountTestComponent(null);
-  stubDesktopApi();
   try {
     await view.render(<RolePetPackagesPanel
       roleId="mira" disabled={false}
@@ -140,7 +130,6 @@ it("selecting a package tells the host to re-read the role and the pet to re-res
 
 it("a failed refresh shows the reason and keeps the rows it already had", async () => {
   const view = await mountTestComponent(null);
-  stubDesktopApi();
   try {
     await view.render(<RolePetPackagesPanel
       roleId="mira" disabled={false} client={fakeClient({}, [])} onRoleDataChanged={() => undefined}
@@ -168,7 +157,6 @@ it("removing a package also tells the host to re-read the role", async () => {
   const calls: Call[] = [];
   let roleDataChanged = 0;
   const view = await mountTestComponent(null);
-  stubDesktopApi();
   try {
     await view.render(<RolePetPackagesPanel
       roleId="mira" disabled={false}
@@ -196,7 +184,6 @@ it("removing a package also tells the host to re-read the role", async () => {
 
 it("a response for the previous role is discarded rather than shown under the new one", async () => {
   const view = await mountTestComponent(null);
-  stubDesktopApi();
   let releaseFirst: (() => void) | null = null;
   const slowClient: PluginRpcClient = createFakePluginClient({
     call: <T,>() => new Promise<T>((resolve) => {
@@ -234,7 +221,6 @@ it("imports through the injected picker and retains the pets.import role/source 
   const selected: unknown[] = [];
   let refreshed = 0;
   const view = await mountTestComponent(null);
-  stubDesktopApi();
   try {
     await view.render(<RolePetPackagesPanel roleId="mira" disabled={false} client={fakeClient({}, calls)}
       onRoleDataChanged={() => { refreshed += 1; }}
@@ -254,7 +240,6 @@ it("cancelled import preserves packages and failed staging reports its error wit
   const calls: Call[] = [];
   let refreshed = 0;
   const view = await mountTestComponent(null);
-  stubDesktopApi();
   try {
     const props = { roleId: "mira", disabled: false, client: fakeClient({}, calls), onRoleDataChanged: () => { refreshed += 1; } };
     await view.render(<RolePetPackagesPanel {...props} pickFiles={async () => []} />);
@@ -279,7 +264,6 @@ it("a backend import failure retains the visible packages and does not refresh s
   const calls: Call[] = [];
   let refreshed = false;
   const view = await mountTestComponent(null);
-  stubDesktopApi();
   try {
     await view.render(<RolePetPackagesPanel roleId="mira" disabled={false}
       client={fakeClient({ "pets.import": new Error("桌宠包缺少 spritesheet") }, calls)}
