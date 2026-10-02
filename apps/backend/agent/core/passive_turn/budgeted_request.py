@@ -1,9 +1,13 @@
 """Bounded provider recovery at one request boundary, never at the tool loop."""
 
+import logging
+
 from agent.provider import LLMProvider
 from agent.prompting.usage_accounting import current_usage, mark_speaking_request
 from core.compaction import CompactionFailedError
 from .compaction import current_request_compaction
+
+logger = logging.getLogger("agent.budgeted_request")
 
 
 async def budgeted_chat(provider: LLMProvider, **kwargs):
@@ -26,8 +30,12 @@ async def budgeted_chat(provider: LLMProvider, **kwargs):
             if not isinstance(exc, ContextLengthError):
                 # Provider, network, timeout and safety failures are not budget
                 # failures; the pipeline's error boundary owns them unchanged.
-                await scope.observe_request(None, error=exc)
-                raise
+                try:
+                    await scope.observe_request(None, error=exc)
+                except Exception:
+                    # Observation is secondary; it must not mask the provider error.
+                    logger.exception("记录请求失败观测时出错")
+                raise exc
             result = await scope.observe_request(
                 None,
                 error=exc,

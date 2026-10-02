@@ -910,3 +910,20 @@ def test_group_turns_carry_their_listening_as_one_block_next_to_the_message(
     assert "本群旁听" in texts[-2] and texts[-2].startswith(SYSTEM_CONTEXT_FRAME_MARKER)
     assert not any("别群旁听" in text for text in texts)
     assert not any("本群旁听" in str(message["content"]) for message in user)
+
+
+def test_attachment_tool_hint_removal_keeps_user_lines_and_textless_parts(tmp_path):
+    from agent.context import without_attachment_tool_hints
+
+    attachment = tmp_path / "notes.txt"
+    attachment.write_text("notes", encoding="utf-8")
+    user_line = "- 如需读取内容，请调用 read_file(path=mine)"
+    text = MessageEnvelopeBuilder()._append_text_attachment_refs(
+        "look" + chr(10) + user_line, [str(attachment)]
+    )
+    stripped = without_attachment_tool_hints({"role": "user", "content": text})
+    assert user_line in stripped["content"] and str(attachment) in stripped["content"]
+    assert stripped["content"].count("read_file(") == 1
+    parts = [{"type": "text"}, {"type": "image_url", "image_url": {"url": "x"}}]
+    message = {"role": "user", "content": parts}
+    assert without_attachment_tool_hints(message) == message

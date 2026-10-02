@@ -19,10 +19,15 @@ from core.compaction import CompactionController, CompactionPolicy
 
 
 @pytest.mark.parametrize(
-    "error", [OSError("network unavailable"), asyncio.TimeoutError()]
+    ("error", "record_fails"),
+    [
+        (OSError("network unavailable"), False),
+        (asyncio.TimeoutError(), False),
+        (OSError("network unavailable"), True),
+    ],
 )
 async def test_ordinary_provider_failure_keeps_type_and_last_compaction(
-    memory_harness, error
+    memory_harness, error, record_fails
 ):
     h = memory_harness
     session = h.manager.get_or_create("cli:ordinary-failure")
@@ -48,6 +53,9 @@ async def test_ordinary_provider_failure_keeps_type_and_last_compaction(
         AsyncMock(),
         lambda _: [],
     )
+    if record_fails:
+        # A broken observation must not mask the provider error.
+        controller.record = AsyncMock(side_effect=RuntimeError("record broken"))
     messages = [
         {"role": "system", "content": "constraints"},
         {"role": "user", "content": "current"},
@@ -58,10 +66,13 @@ async def test_ordinary_provider_failure_keeps_type_and_last_compaction(
             usage_context((session.key,)),
             request_compaction_scope(scope),
         ):
-            with pytest.raises(type(error)):
+            with pytest.raises(type(error)) as caught:
                 await budgeted_chat(
                     provider, messages=messages, tools=[], model="m", max_tokens=100
                 )
+        assert caught.value is error
+        if record_fails:
+            return
         assert controller.latest(session.key, None) is None
         request = controller.latest(session.key, None, request=True)
         assert request is not None and request["phase"] == "request"

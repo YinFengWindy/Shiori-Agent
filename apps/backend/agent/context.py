@@ -57,6 +57,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger("agent.context")
 
 _READABLE_TEXT_ATTACHMENT_SUFFIXES = {".md", ".txt"}
+_ATTACHED_FILES_HEADER = "[附加文件]"
 _READ_FILE_HINT_PREFIX = "- 如需读取内容，请调用 read_file("
 
 
@@ -68,10 +69,21 @@ def without_attachment_tool_hints(message: dict) -> dict:
     """
 
     def strip(text: str) -> str:
+        # The generated block is appended after the user's text, so only lines
+        # after its last header are ours; user text keeps look-alike lines.
+        lines = text.split("\n")
+        if _ATTACHED_FILES_HEADER not in lines:
+            return text
+        start = len(lines) - lines[::-1].index(_ATTACHED_FILES_HEADER)
         return "\n".join(
-            line
-            for line in text.split("\n")
-            if not line.startswith(_READ_FILE_HINT_PREFIX)
+            [
+                *lines[:start],
+                *(
+                    line
+                    for line in lines[start:]
+                    if not line.startswith(_READ_FILE_HINT_PREFIX)
+                ),
+            ]
         )
 
     content = message.get("content")
@@ -83,7 +95,7 @@ def without_attachment_tool_hints(message: dict) -> dict:
             "content": [
                 (
                     {**part, "text": strip(part["text"])}
-                    if part.get("type") == "text"
+                    if part.get("type") == "text" and isinstance(part.get("text"), str)
                     else part
                 )
                 for part in content
@@ -231,7 +243,7 @@ class MessageEnvelopeBuilder:
             file_refs.append(f"{_READ_FILE_HINT_PREFIX}path={quoted_path})")
         if not file_refs:
             return text
-        lines = [text, "", "[附加文件]", *file_refs]
+        lines = [text, "", _ATTACHED_FILES_HEADER, *file_refs]
         return "\n".join(lines)
 
     def _stamp_current_message(
