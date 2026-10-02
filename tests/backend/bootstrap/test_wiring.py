@@ -1,15 +1,15 @@
 from __future__ import annotations
-from typing import Any, cast
 
 import json
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any, cast
 from unittest.mock import AsyncMock
 
 import pytest
-
 from agent.config import Config
-from agent.config_models import Config as ConfigModel, WiringConfig
+from agent.config_models import Config as ConfigModel
+from agent.config_models import WiringConfig
 from agent.lifecycle.facade import TurnLifecycle
 from agent.lifecycle.types import AfterStepCtx
 from agent.looping.interrupt import TurnInterruptState
@@ -19,16 +19,16 @@ from bootstrap.tools import (
     _resolve_plugin_llm_dependencies,
     build_registered_tools,
 )
-from core.roles import RoleStore
 from bootstrap.wiring import (
-    wire_turn_lifecycle,
     register_memory_plugin,
     resolve_context_factory,
     resolve_memory_plugin,
     resolve_memory_toolset_provider,
     resolve_toolset_provider,
+    wire_turn_lifecycle,
 )
 from bus.event_bus import EventBus
+from core.roles import RoleStore
 
 
 def _toml_value(value):
@@ -725,12 +725,14 @@ def test_memory_plugin_resolver_loads_plugin_directory(monkeypatch, tmp_path: Pa
     (plugin_dir / "memory_plugin.py").write_text(
         "\n".join(
             [
-                "from core.memory.plugin import MemoryPluginRuntime",
+                "from shiori_sdk.memory.build import MemoryPluginRuntime",
                 "",
                 "class MemoryPlugin:",
                 "    plugin_id = 'demo_memory'",
                 "    def build(self, deps):",
                 "        raise AssertionError('not used')",
+                "    def validate_transition(self, previous, candidate, workspace, storage): pass",
+                "    def ensure_workspace_storage(self, *, config, workspace, storage): return []",
             ]
         ),
         encoding="utf-8",

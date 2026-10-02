@@ -2,14 +2,32 @@ import json
 from pathlib import Path
 
 import pytest
-
 from agent.tools.forget_memory import ForgetMemoryTool
 from core.memory.engine import MemoryMutation, MemoryMutationResult, MemoryToolSpec
-from memory2.store import MemoryStore2
+
+
+class _Records:
+    def __init__(self, _path):
+        self.items = {}
+
+    def upsert_item(self, **values):
+        item_id = str(len(self.items) + 1)
+        self.items[item_id] = {"id": item_id, "status": "active", **values}
+        return "new:" + item_id
+
+    def get_items_by_ids(self, ids):
+        return [self.items[item_id] for item_id in ids if item_id in self.items]
+
+    def mark_superseded_batch(self, ids):
+        for item_id in ids:
+            self.items[item_id]["status"] = "superseded"
+
+    def close(self):
+        pass
 
 
 class _MemoryWriter:
-    def __init__(self, store: MemoryStore2) -> None:
+    def __init__(self, store: _Records) -> None:
         self._store = store
         self.last_request: MemoryMutation | None = None
 
@@ -49,7 +67,7 @@ def _forget_tool(writer: _MemoryWriter) -> ForgetMemoryTool:
 
 @pytest.mark.asyncio
 async def test_forget_memory_marks_existing_items_superseded(tmp_path: Path):
-    store = MemoryStore2(tmp_path / "memory2.db")
+    store = _Records(tmp_path / "memory2.db")
     try:
         result = store.upsert_item(
             memory_type="event",
@@ -73,7 +91,7 @@ async def test_forget_memory_marks_existing_items_superseded(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_forget_memory_passes_runtime_scope_to_engine(tmp_path: Path):
-    store = MemoryStore2(tmp_path / "memory2.db")
+    store = _Records(tmp_path / "memory2.db")
     try:
         result = store.upsert_item(
             memory_type="event",
@@ -104,7 +122,7 @@ async def test_forget_memory_passes_runtime_scope_to_engine(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_forget_memory_ignores_duplicates_and_reports_missing(tmp_path: Path):
-    store = MemoryStore2(tmp_path / "memory2.db")
+    store = _Records(tmp_path / "memory2.db")
     try:
         result = store.upsert_item(
             memory_type="event",

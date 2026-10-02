@@ -1,23 +1,25 @@
 from __future__ import annotations
 
-from shiori_sdk.lifecycle import (
-    AfterStepCtx as AfterStepCtx,
-    AfterReasoningCtx as AfterReasoningCtx,
-)
-
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from core.common.message_source import MessageSource
-from conversation.context_scope import source_belongs_to_user
 from agent.prompting.assembler import PromptSectionRender
 from bus.events import InboundMessage, OutboundMessage
+from conversation.context_scope import source_belongs_to_user
+from core.common.message_source import MessageSource
+from shiori_sdk.lifecycle import (
+    AfterReasoningCtx as AfterReasoningCtx,
+)
+from shiori_sdk.lifecycle import (
+    AfterStepCtx as AfterStepCtx,
+)
+from shiori_sdk.lifecycle import AfterToolResultCtx as AfterToolResultCtx
 
 if TYPE_CHECKING:
-    from agent.turns.turn_pushes import TurnPushDrafts
     from agent.core.runtime_support import SessionLike, TurnRunResult
     from agent.core.types import HistoryMessage
+    from agent.turns.turn_pushes import TurnPushDrafts
     from conversation.context_scope import ContextScope, ContextView
 
 
@@ -245,17 +247,6 @@ class BeforeToolCallCtx:
     chat_id: str
     tool_name: str
     arguments: dict[str, Any]
-
-
-@dataclass(frozen=True)
-class AfterToolResultCtx:
-    session_key: str
-    channel: str
-    chat_id: str
-    tool_name: str
-    arguments: dict[str, Any]
-    result: str
-    status: str
 
 
 @dataclass

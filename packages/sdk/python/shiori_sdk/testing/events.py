@@ -1,8 +1,9 @@
 """In-memory event subscriptions with typed handlers and no host bus."""
 
+import asyncio
+import inspect
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-import inspect
 
 from shiori_sdk.runtime import EventHandler
 
@@ -20,6 +21,7 @@ class FakeEvents:
     def __init__(self) -> None:
         self._subscriptions: list[_Subscription] = []
         self._closed = False
+        self._pending: list[asyncio.Task[None]] = []
 
     def on[EventT](
         self, event_type: type[EventT], handler: EventHandler[EventT]
@@ -63,3 +65,24 @@ class FakeEvents:
         """Unsubscribes the fake scope before custom cleanup runs."""
         self._closed = True
         self._subscriptions.clear()
+
+    def enqueue(self, event: object) -> None:
+        """Queues observation for tests that exercise post-response dispatch."""
+        self._pending.append(asyncio.create_task(self.fanout(event)))
+
+    async def fanout(self, event: object) -> None:
+        """Runs fake observers deterministically."""
+        for entry in tuple(self._subscriptions):
+            if type(event) is entry.event_type:
+                await entry.dispatch(event)
+
+    async def drain(self) -> None:
+        """Awaits queued observations."""
+        while self._pending:
+            pending, self._pending = self._pending, []
+            await asyncio.gather(*pending)
+
+    async def aclose(self) -> None:
+        """Finishes observations before dropping subscriptions."""
+        await self.drain()
+        self.close()

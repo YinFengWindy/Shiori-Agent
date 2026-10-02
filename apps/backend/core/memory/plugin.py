@@ -1,13 +1,20 @@
+"""Disabled host engine and imports of the SDK build contracts."""
+
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from datetime import datetime
-from pathlib import Path
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
-from core.memory.engine import (
+from shiori_sdk.memory.build import (
+    MemoryPlugin as MemoryPlugin,
+)
+from shiori_sdk.memory.build import (
+    MemoryPluginBuildDeps as MemoryPluginBuildDeps,
+)
+from shiori_sdk.memory.build import (
+    MemoryPluginRuntime as MemoryPluginRuntime,
+)
+from shiori_sdk.memory.engine import (
     EngineProfile,
-    MemoryAdminApi,
     MemoryEngine,
     MemoryEngineDescriptor,
     MemoryIngestRequest,
@@ -18,41 +25,6 @@ from core.memory.engine import (
     MemoryQueryResult,
     MemoryToolProfile,
 )
-
-if TYPE_CHECKING:
-    from agent.config_models import Config
-    from agent.provider import LLMProvider
-    from bus.event_bus import EventBus
-    from core.memory.markdown import MarkdownMemoryRuntime
-    from core.net.http import SharedHttpResources
-
-
-@dataclass(frozen=True)
-class MemoryPluginBuildDeps:
-    config: "Config"
-    workspace: Path
-    provider: "LLMProvider"
-    light_provider: "LLMProvider | None"
-    http_resources: "SharedHttpResources"
-    event_publisher: "EventBus | None"
-    markdown: "MarkdownMemoryRuntime"
-
-
-@dataclass
-class MemoryPluginRuntime:
-    engine: MemoryEngine
-    closeables: list[object] = field(default_factory=list[object])
-    admin: MemoryAdminApi | None = None
-
-
-@runtime_checkable
-class MemoryPlugin(Protocol):
-    plugin_id: str
-
-    def build(
-        self,
-        deps: MemoryPluginBuildDeps,
-    ) -> MemoryPluginRuntime: ...
 
 
 class DisabledMemoryEngine(MemoryEngine):
@@ -84,6 +56,9 @@ class DisabledMemoryEngine(MemoryEngine):
     def reinforce_items_batch(self, ids: list[str]) -> None:
         return None
 
+    def list_role_filter_values(self, role_id: str) -> dict[str, list[str]]:
+        return {}
+
     def describe(self) -> MemoryEngineDescriptor:
         return self.DESCRIPTOR
 
@@ -110,6 +85,8 @@ class DisabledMemoryEngine(MemoryEngine):
         *,
         q: str = "",
         memory_type: str = "",
+        memory_domain: str = "",
+        role_id: str = "",
         status: str = "",
         source_ref: str = "",
         scope_channel: str = "",

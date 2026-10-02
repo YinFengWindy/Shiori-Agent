@@ -19,7 +19,6 @@
     "apps/backend/core",
     "apps/backend/desktop_bridge",
     "apps/backend/infra",
-    "apps/backend/memory2",
     "plugins",
     "apps/backend/proactive_v2",
     "apps/backend/prompts",

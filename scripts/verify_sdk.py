@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
 import shutil
 import sys
 import tempfile
+from pathlib import Path
 
 from scripts.verify_plugin_tests import REPOSITORY, UV, build_wheel, run
 
@@ -38,7 +38,7 @@ def main() -> None:
         "def test_unrelated():\n"
         "    assert shiori_sdk.RUNTIME_API_VERSION == shiori_sdk.__version__\n"
         "    assert importlib.util.find_spec('pytest_asyncio') is None\n"
-        "    assert importlib.util.find_spec('httpx') is None\n",
+        "    assert importlib.util.find_spec('httpx') is not None\n",
         encoding="utf-8",
     )
     run(

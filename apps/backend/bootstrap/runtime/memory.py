@@ -1,46 +1,28 @@
-"""Checks persistent vector compatibility before preparing a memory version."""
+"""Dispatch persistent compatibility checks to the selected memory plugin."""
 
 from pathlib import Path
 
 from agent.config_models import Config
-from bootstrap.memory_plugins import load_memory_plugin_module, normalize_memory_engine
+from shiori_sdk.memory.build import (
+    MemoryStorageIncompatibleError as MemoryStorageIncompatibleError,
+)
 
-
-class MemoryStorageIncompatibleError(ValueError):
-    """A requested vector space cannot read the existing persistent index."""
-
-    code = "memory_storage_incompatible"
-
-    def to_details(self):
-        """Provides a non-secret remediation code for settings error reporting."""
-        return {"code": self.code, "reason": "embedding_migration_required"}
+from bootstrap.memory_capabilities import HostMemoryStorage, memory_build_config
+from bootstrap.memory_plugins import normalize_memory_engine
 
 
 def validate_memory_transition(
     previous: Config, candidate: Config, workspace: Path
 ) -> None:
-    """Rejects incompatible vector spaces without silently rebuilding stored data."""
-    if (
-        not candidate.memory.enabled
-        or normalize_memory_engine(candidate.memory.engine) != "default"
-    ):
+    """Runs engine-owned compatibility rules before preparing a new generation."""
+    if not candidate.memory.enabled:
         return
-    module = load_memory_plugin_module("default", "config")
-    load_default_memory_config = module.load_default_memory_config
-    resolve_memory_db_path = module.resolve_memory_db_path
-    from memory2.store import VEC_DIM
+    from bootstrap.wiring import resolve_memory_plugin
 
-    path = resolve_memory_db_path(
-        workspace=workspace,
-        default_config=load_default_memory_config(workspace=workspace),
+    plugin = resolve_memory_plugin(normalize_memory_engine(candidate.memory.engine))
+    plugin.validate_transition(
+        memory_build_config(previous),
+        memory_build_config(candidate),
+        workspace,
+        HostMemoryStorage(),
     )
-    if not path.exists():
-        return
-    old = previous.memory.embedding
-    new = candidate.memory.embedding
-    if old.model != new.model or (old.output_dimensionality or VEC_DIM) != (
-        new.output_dimensionality or VEC_DIM
-    ):
-        raise MemoryStorageIncompatibleError(
-            "Existing memory vectors require an explicit migration before changing embedding model or dimensions"
-        )

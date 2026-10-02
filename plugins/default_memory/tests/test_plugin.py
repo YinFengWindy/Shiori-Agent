@@ -7,13 +7,11 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from shiori_plugin_testkit.packages import stage_plugin_package
+from shiori_sdk.lifecycle import AfterToolResultCtx
+from shiori_sdk.rpc import Concurrency
+from shiori_sdk.testing.memory import FakeMemoryStorage
+from shiori_sdk.testing.memory_context import FakeMemoryPluginContext
 
-from agent.lifecycle.types import AfterToolResultCtx, BeforeTurnCtx
-from agent.plugin_host import HostServices, PluginKernel
-from bus.event_bus import EventBus
-from core.roles import RoleStore
-from desktop_bridge.method_policy import Concurrency
 from plugins.default_memory.backend.plugin import (
     ContextPrepareRecordModule,
     _DefaultMemoryRecorder,
@@ -24,14 +22,14 @@ def test_missing_workspace_rejects_package_log_fallback(tmp_path):
     from plugins.default_memory.backend.plugin import _data_path
 
     with pytest.raises(RuntimeError, match="不能写入安装包"):
-        _data_path(plugin_dir=tmp_path, workspace=None)
+        _data_path(plugin_dir=tmp_path, workspace=None, storage=FakeMemoryStorage())
     assert not (tmp_path / ".data").exists()
 
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
 
 
-def _before_turn_ctx(**overrides: object) -> BeforeTurnCtx:
+def _before_turn_ctx(**overrides: object):
     defaults: dict[str, object] = dict(
         session_key="cli:1",
         channel="cli",
@@ -44,7 +42,7 @@ def _before_turn_ctx(**overrides: object) -> BeforeTurnCtx:
         context_scope=None,
     )
     defaults.update(overrides)
-    return BeforeTurnCtx(**defaults)
+    return SimpleNamespace(**defaults)
 
 
 def _read_jsonl(path: Path) -> list[dict[str, Any]]:
@@ -133,144 +131,27 @@ async def test_recall_memory_recorded_only_for_matching_tool_when_active(
     assert rows[0]["recall_memory"]["count"] == 1
 
 
-# ── setup(ctx) 通过真实内核装配的端到端验证 ────────────────────────────────
-
-
-def _load_default_memory_kernel(
-    *, tmp_path: Path, memory_engine: object, workspace: Path
-) -> tuple[PluginKernel, EventBus]:
-    root = tmp_path / "plugins"
-    root.mkdir()
-    stage_plugin_package(PLUGIN_DIR, root / "default_memory")
-    bus = EventBus()
-    kernel = PluginKernel(
-        [root],
-        services=HostServices(
-            event_bus=bus,
-            workspace=workspace,
-            role_store=RoleStore(workspace),
-            memory_engine=memory_engine,
-        ),
-    )
-    return kernel, bus
-
-
 @pytest.mark.asyncio
-async def test_markdown_rpc_is_read_only_and_unloads_with_plugin(
-    tmp_path: Path,
-) -> None:
-    workspace = tmp_path / "workspace"
-    workspace.mkdir()
-    store = RoleStore(workspace)
-    store.create_role(role_id="mira", name="Mira", system_prompt="test")
-    root = workspace / "roles" / "mira" / "memory"
-    root.mkdir(parents=True)
-    (root / "SELF.md").write_text("# Mira", encoding="utf-8")
-    kernel, _ = _load_default_memory_kernel(
-        tmp_path=tmp_path, memory_engine=None, workspace=workspace
+async def test_setup_registers_scoped_documents_semantics_and_observation(tmp_path):
+    from plugins.default_memory.backend.plugin import setup
+
+    ctx = FakeMemoryPluginContext(tmp_path)
+    await setup(ctx)
+    assert set(ctx.rpc.handlers) == {
+        "roles.memory.documents",
+        "roles.memory.semantic.list",
+        "roles.memory.semantic.detail",
+    }
+    assert set(ctx.rpc.concurrency.values()) == {Concurrency.READ_ONLY}
+    assert len(ctx.lifecycle.modules["before_turn"]) == 1
+    await ctx.events.emit(
+        AfterToolResultCtx("cli:1", "cli", "1", "recall_memory", {}, "{}", "ok")
     )
-    await kernel.load_all()
-    method = "plugin.default_memory.roles.memory.documents"
-    assert kernel.rpc.policy_for(method).concurrency is Concurrency.READ_ONLY
-    resolved = kernel.rpc.resolve(method)
-    assert resolved is not None
-    assert resolved[0] == "default_memory"
-    result = await resolved[1]({"role_id": "mira"})
-    assert (
-        next(item for item in result["documents"] if item["name"] == "SELF.md")[
-            "content"
-        ]
-        == "# Mira"
+    path = tmp_path / "plugin-data/default_memory/recall_inspector.jsonl"
+    assert len(_read_jsonl(path)) == 1
+    events = ctx.events
+    await ctx.aclose()
+    await events.emit(
+        AfterToolResultCtx("cli:1", "cli", "1", "recall_memory", {}, "{}", "ok")
     )
-    with pytest.raises(ValueError, match="role not found"):
-        await resolved[1]({"role_id": "missing"})
-    await kernel.unload("default_memory")
-    assert kernel.rpc.resolve(method) is None
-
-
-@pytest.mark.asyncio
-async def test_setup_wires_before_turn_module_and_tool_result_event(
-    tmp_path: Path,
-) -> None:
-    """setup(ctx) 必须与旧 DefaultMemoryInspector 等价：贡献 before_turn 模块，
-    并把 recall_memory 工具结果记录经 AFTER_TOOL_RESULT 事件接线。"""
-    workspace = tmp_path / "workspace"
-    workspace.mkdir()
-    kernel, bus = _load_default_memory_kernel(
-        tmp_path=tmp_path,
-        memory_engine=SimpleNamespace(describe=lambda: SimpleNamespace(name="default")),
-        workspace=workspace,
-    )
-    await kernel.load_all()
-
-    assert [type(m).__name__ for m in kernel.before_turn_modules] == [
-        "ContextPrepareRecordModule"
-    ]
-
-    data_path = workspace / "plugin-data" / "default_memory" / "recall_inspector.jsonl"
-    _ = await bus.emit(
-        AfterToolResultCtx(
-            session_key="cli:1",
-            channel="cli",
-            chat_id="1",
-            tool_name="recall_memory",
-            arguments={"query": "q"},
-            result=json.dumps({"items": []}),
-            status="ok",
-        )
-    )
-    rows = _read_jsonl(data_path)
-    assert len(rows) == 1
-    assert rows[0]["kind"] == "recall_memory"
-
-    # 卸载后贡献必须整体撤回，证明 phase 槽位与事件订阅都挂在插件作用域上
-    _ = await kernel.unload("default_memory")
-    assert kernel.before_turn_modules == []
-    _ = await bus.emit(
-        AfterToolResultCtx(
-            session_key="cli:1",
-            channel="cli",
-            chat_id="1",
-            tool_name="recall_memory",
-            arguments={},
-            result="{}",
-            status="ok",
-        )
-    )
-    assert len(_read_jsonl(data_path)) == 1
-
-
-@pytest.mark.asyncio
-async def test_setup_still_wires_module_but_recorder_is_inactive_for_other_engine(
-    tmp_path: Path,
-) -> None:
-    """引擎不是 default 时模块仍会贡献（对齐旧行为），但记录内部被抑制。"""
-    workspace = tmp_path / "workspace"
-    workspace.mkdir()
-    kernel, bus = _load_default_memory_kernel(
-        tmp_path=tmp_path,
-        memory_engine=SimpleNamespace(
-            describe=lambda: SimpleNamespace(name="disabled")
-        ),
-        workspace=workspace,
-    )
-    await kernel.load_all()
-
-    assert [type(m).__name__ for m in kernel.before_turn_modules] == [
-        "ContextPrepareRecordModule"
-    ]
-
-    _ = await bus.emit(
-        AfterToolResultCtx(
-            session_key="cli:1",
-            channel="cli",
-            chat_id="1",
-            tool_name="recall_memory",
-            arguments={},
-            result="{}",
-            status="ok",
-        )
-    )
-    assert not (
-        workspace / "plugin-data" / "default_memory" / "recall_inspector.jsonl"
-    ).exists()
+    assert len(_read_jsonl(path)) == 1

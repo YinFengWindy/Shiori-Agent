@@ -2,7 +2,8 @@
 
 from collections.abc import MutableMapping, Sequence
 from dataclasses import dataclass, field
-from typing import Protocol
+from datetime import datetime
+from typing import Protocol, runtime_checkable
 
 
 class LifecycleFrame(Protocol):
@@ -73,3 +74,36 @@ class AfterReasoningCtx:
     media: list[str] = field(default_factory=list)
     meme_tag: str | None = None
     outbound_metadata: dict[str, object] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class AfterToolResultCtx:
+    """Final tool result observed by plugin lifecycle subscribers."""
+
+    session_key: str
+    channel: str
+    chat_id: str
+    tool_name: str
+    arguments: dict[str, object]
+    result: str
+    status: str
+
+
+@runtime_checkable
+class BeforeTurnObservation(Protocol):
+    """Read-only retrieval fields needed by memory inspection modules."""
+
+    @property
+    def session_key(self) -> str: ...
+    @property
+    def channel(self) -> str: ...
+    @property
+    def chat_id(self) -> str: ...
+    @property
+    def content(self) -> str: ...
+    @property
+    def timestamp(self) -> datetime: ...
+    @property
+    def retrieved_memory_block(self) -> str: ...
+    @property
+    def retrieval_trace_raw(self) -> object | None: ...

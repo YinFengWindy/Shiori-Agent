@@ -6,22 +6,22 @@ build-backend = "setuptools.build_meta"
 name = "shiori-plugin-default-memory"
 version = "0.1.0"
 requires-python = ">=3.12"
-dependencies = ["shiori-agent==0.1.0"]
+dependencies = ["shiori-sdk==3.0.0", "numpy>=2.0.0", "sqlite-vec>=0.1.6", "json-repair>=0.40.0", "httpx>=0.28.1", "tzdata>=2025.2; sys_platform == 'win32'"]
 
 [project.optional-dependencies]
-test = ["shiori-plugin-testkit==0.1.0"]
+test = ["shiori-sdk[testing]==3.0.0"]
 
 [tool.setuptools]
 include-package-data = false
-packages = ["plugins.default_memory", "plugins.default_memory.backend", "plugins.default_memory.backend.engine"]
+packages = ["plugins.default_memory", "plugins.default_memory.backend", "plugins.default_memory.backend.engine", "plugins.default_memory.backend.semantic", "plugins.default_memory.backend.semantic.store"]
 package-dir = {"plugins.default_memory" = "."}
 
 [tool.setuptools.package-data]
-"plugins.default_memory" = ["manifest.yaml", "TESTING.md", "backend/**/*.json", "backend/**/*.yaml", "backend/**/*.md"]
+"plugins.default_memory" = ["manifest.yaml", "TESTING.md", "backend/**/*.json", "backend/**/*.yaml", "backend/**/*.md", "backend/config.example.toml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-W error --import-mode=importlib"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
-required_plugins = ["pytest-asyncio", "shiori-plugin-testkit"]
+required_plugins = ["pytest-asyncio", "shiori-sdk"]

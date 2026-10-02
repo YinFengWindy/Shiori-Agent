@@ -1,17 +1,22 @@
 """Host assembly and storage initialization select exactly one memory engine."""
 
-from pathlib import Path
 import shutil
 import sys
+from pathlib import Path
+from types import SimpleNamespace
+from typing import Any, cast
 from unittest.mock import AsyncMock, Mock
 
 import pytest
-
-from agent.config_models import Config
+from agent.config_models import Config, MemoryConfig
 from agent.provider import LLMProvider
 from agent.tools.registry import ToolRegistry
 from bootstrap.memory import build_memory_runtime, ensure_memory_plugin_storage
 from bootstrap.paths import REPOSITORY_ROOT
+from core.memory.engine import (
+    MemoryCapability,
+)
+from core.memory.plugin import MemoryPluginRuntime
 from core.net.http import HttpRequester, SharedHttpResources
 from session.store import SessionStore
 
@@ -59,7 +64,7 @@ async def test_default_engine_assembles_without_model_requests(
         )
         try:
             assert runtime.engine.describe().name == "default"
-            assert len(runtime.closeables) == 2
+            assert len(runtime.resources) == 2
             engine_file = sys.modules[type(runtime.engine).__module__].__file__
             assert engine_file is not None
             assert Path(engine_file).is_relative_to(backend)
@@ -101,3 +106,85 @@ def test_retired_engine_in_source_layout_fails_without_creating_data(tmp_path):
     with pytest.raises(ValueError, match="未知 memory engine: akasha"):
         ensure_memory_plugin_storage(config, tmp_path)
     assert not (tmp_path / "plugin-data").exists()
+
+
+def test_build_memory_runtime_uses_memory_plugin(monkeypatch, tmp_path: Path):
+    import bootstrap.memory as memory_module
+
+    monkeypatch.setattr(
+        memory_module,
+        "register_memory_meta_tools",
+        lambda *args, **kwargs: None,
+    )
+
+    captured: dict[str, object] = {}
+
+    class _CustomEngine:
+        def describe(self):
+            return SimpleNamespace(name="custom")
+
+    class _CustomPlugin:
+        plugin_id = "custom"
+
+        def build(self, deps):
+            captured["deps"] = deps
+            return MemoryPluginRuntime(engine=cast(Any, _CustomEngine()))
+
+    monkeypatch.setattr(
+        "bootstrap.wiring.resolve_memory_plugin",
+        lambda name: _CustomPlugin(),
+    )
+
+    runtime = build_memory_runtime(
+        config=Config(
+            provider="test",
+            model="gpt-test",
+            api_key="k",
+            memory=MemoryConfig(enabled=True, engine="custom"),
+        ),
+        workspace=tmp_path,
+        tools=ToolRegistry(),
+        provider=cast(Any, SimpleNamespace()),
+        light_provider=None,
+        http_resources=cast(Any, SimpleNamespace(external_default=SimpleNamespace())),
+    )
+
+    assert runtime.engine is not None
+    assert runtime.engine.describe().name == "custom"
+    deps = captured["deps"]
+    assert deps.config.model == "gpt-test"
+    assert deps.workspace == tmp_path
+    assert deps.requester is not None
+
+
+def test_build_memory_runtime_exposes_default_memory_engine(
+    monkeypatch,
+    tmp_path: Path,
+):
+    import bootstrap.memory as memory_module
+
+    monkeypatch.setattr(
+        memory_module,
+        "register_memory_meta_tools",
+        lambda *args, **kwargs: None,
+    )
+
+    runtime = build_memory_runtime(
+        config=Config(
+            provider="test",
+            model="gpt-test",
+            api_key="k",
+            memory=MemoryConfig(enabled=True),
+        ),
+        workspace=tmp_path,
+        tools=ToolRegistry(),
+        provider=cast(Any, SimpleNamespace()),
+        light_provider=None,
+        http_resources=cast(Any, SimpleNamespace(external_default=SimpleNamespace())),
+    )
+
+    assert runtime.engine is not None
+    assert runtime.engine.describe().name == "default"
+    assert (
+        MemoryCapability.SEMANTICS_RICH_MEMORY in runtime.engine.describe().capabilities
+    )

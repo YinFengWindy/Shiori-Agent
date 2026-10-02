@@ -6,7 +6,7 @@ import json
 from datetime import datetime
 from typing import cast
 
-from memory2.store import MemoryStore2
+from ..semantic.store import MemoryStore2
 
 
 def _source_ref_message_ids(source_ref: str) -> list[str]:

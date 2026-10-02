@@ -5,15 +5,16 @@ from __future__ import annotations
 import logging
 from typing import cast
 
-from core.memory.engine import (
+from shiori_sdk.memory.engine import (
     MemoryIngestRequest,
     MemoryIngestResult,
     MemoryMutation,
     MemoryMutationResult,
     MemoryScope,
 )
-from core.memory.utils import resolve_memory_scope
-from memory2.rule_schema import build_procedure_rule_schema
+from shiori_sdk.memory.utils import resolve_memory_scope
+
+from ..semantic.rule_schema import build_procedure_rule_schema
 
 logger = logging.getLogger(__name__)
 

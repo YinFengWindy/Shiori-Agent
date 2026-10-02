@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import TypedDict, cast
 
-from core.memory.engine import MemoryMutation, MemoryQuery, MemoryRecord
-from core.memory.utils import evidence_from_source_ref
-from core.roles.policy import get_role_for_runtime_scope, is_shared_memory_enabled
-from memory2.store import MemoryStore2
+from shiori_sdk.memory.engine import MemoryMutation, MemoryQuery, MemoryRecord
+from shiori_sdk.memory.utils import evidence_from_source_ref
+
+from ..semantic.store import MemoryStore2
 
 
 class _NormalizedIngestContent(TypedDict):
@@ -202,5 +201,4 @@ class _PolicyMixin:
         clean_domain = str(memory_domain).strip()
         if clean_domain != "shared":
             return True
-        role = get_role_for_runtime_scope(Path(self._workspace), role_id)
-        return is_shared_memory_enabled(role)
+        return self._roles.shared_memory_enabled(role_id)

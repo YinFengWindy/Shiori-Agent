@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from bus.event_bus import EventBus
     from bus.queue import MessageBus
     from core.net.http import SharedHttpResources
+    from core.roles.role_runtime import RoleRuntimeRegistry
 
 
 @dataclass
@@ -20,7 +21,7 @@ class ToolsetDeps:
     workspace: Path
     provider: Any = None
     light_provider: Any = None
-    role_runtime_registry: Any = None
+    role_runtime_registry: RoleRuntimeRegistry | None = None
     http_resources: "SharedHttpResources | None" = None
     session_store: object | None = None
     push_tool: "MessagePushTool | None" = None

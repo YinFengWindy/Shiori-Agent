@@ -834,8 +834,10 @@ update the declared range when migrating. The 2.x sections above describe featur
 history; all current examples target the unified 3.x ABI.
 
 Python contracts, shared lifecycle values, event handler/effect types and pure test
-fakes now belong to `shiori_sdk`. citation and context_pressure consume only that
-package. Other plugins remain under a decreasing import baseline until their
+fakes now belong to `shiori_sdk`. citation, context_pressure and default_memory consume SDK contracts and their
+declared third-party dependencies. Memory construction, resource handoff and setup
+capabilities are documented in the shared guide; the default memory implementation
+and vector compatibility rules are owned entirely by its plugin. Other plugins remain under a decreasing import baseline until their
 respective migration tickets. The SDK never imports host modules or creates host
 storage. See [the shared SDK guide](../../packages/sdk/README.md) for installation,
 capability typing, testing and artifact checks.

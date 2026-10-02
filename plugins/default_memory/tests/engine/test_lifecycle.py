@@ -1,18 +1,188 @@
-import asyncio
-import json
-import threading
-from pathlib import Path
+from __future__ import annotations
+
 from types import SimpleNamespace
+from typing import Any, cast
 from unittest.mock import AsyncMock
 
 import pytest
+from shiori_sdk.memory.committed import TurnCommitted
+from shiori_sdk.memory.engine import (
+    EngineProfile,
+    MemoryCapability,
+)
+from shiori_sdk.memory.events import ConsolidationCommitted, TurnIngested
+from shiori_sdk.testing.events import FakeEvents as EventBus
+from shiori_sdk.testing.memory import FakeModelResponse as LLMResponse
 
-from agent.provider import LLMResponse
-from memory2.store import MemoryStore2
-from bus.event_bus import EventBus
-from core.memory.events import ConsolidationCommitted
 from plugins.default_memory.backend.engine.lifecycle import DefaultMemoryEngine
-from session.manager import ConsolidationCommitRequest, SessionManager
+from plugins.default_memory.backend.semantic.store import MemoryStore2
+
+
+async def test_default_memory_engine_handles_turn_committed_via_event_bus(make_engine):
+    event_bus = EventBus()
+    worker = SimpleNamespace(run=AsyncMock(), handle=AsyncMock())
+    _ = make_engine(
+        retriever=cast(Any, SimpleNamespace()),
+        post_response_worker=cast(Any, worker),
+        event_publisher=event_bus,
+    )
+
+    event_bus.enqueue(
+        TurnCommitted(
+            session_key="cli:1",
+            channel="cli",
+            chat_id="1",
+            input_message="以后用中文",
+            persisted_user_message="以后用中文",
+            assistant_response="好的",
+            tools_used=[],
+            tool_chain_raw=[{"text": "memo", "calls": []}],
+        )
+    )
+    await event_bus.drain()
+
+    worker.handle.assert_awaited_once()
+    event = worker.handle.await_args.args[0]
+    assert isinstance(event, TurnIngested)
+    assert event.session_key == "cli:1"
+    assert event.tool_chain == [{"text": "memo", "calls": []}]
+    await event_bus.aclose()
+
+
+async def test_default_memory_engine_respects_skip_post_memory_event_flag(make_engine):
+    event_bus = EventBus()
+    worker = SimpleNamespace(run=AsyncMock(), handle=AsyncMock())
+    _ = make_engine(
+        retriever=cast(Any, SimpleNamespace()),
+        post_response_worker=cast(Any, worker),
+        event_publisher=event_bus,
+    )
+
+    event_bus.enqueue(
+        TurnCommitted(
+            session_key="cli:1",
+            channel="cli",
+            chat_id="1",
+            input_message="以后用中文",
+            persisted_user_message="以后用中文",
+            assistant_response="好的",
+            tools_used=[],
+            extra={"skip_post_memory": True},
+        )
+    )
+    await event_bus.drain()
+
+    worker.handle.assert_not_awaited()
+    await event_bus.aclose()
+
+
+async def test_default_memory_engine_consumes_markdown_consolidation_event(make_engine):
+    memorizer = SimpleNamespace(
+        save_from_consolidation=AsyncMock(),
+        save_item_with_supersede=AsyncMock(return_value="new:memu-1"),
+    )
+    provider = SimpleNamespace(
+        chat=AsyncMock(
+            return_value=SimpleNamespace(
+                content='{"profile":[{"summary":"用户买了 Zigbee 网关","category":"purchase","emotional_weight":4}],"preference":[],"procedure":[]}'
+            )
+        )
+    )
+    engine = make_engine(
+        provider=cast(Any, provider),
+        memorizer=cast(Any, memorizer),
+        v2_store=SimpleNamespace(list_items_for_admin=lambda **_kwargs: ([], 0)),
+    )
+
+    await engine._on_consolidation_committed(
+        ConsolidationCommitted(
+            history_entry_payloads=[("[2026-03-15 10:00] 用户聊了 Zigbee", 6)],
+            source_ref='["m1"]',
+            scope_channel="desktop",
+            scope_chat_id="role:mira",
+            conversation="USER: 我买了 Zigbee 网关",
+            role_id="mira",
+        )
+    )
+
+    memorizer.save_from_consolidation.assert_awaited_once()
+    memorizer.save_item_with_supersede.assert_awaited_once()
+
+
+async def test_default_memory_engine_consolidation_role_scope_persists_role_id(
+    make_engine,
+):
+    memorizer = SimpleNamespace(
+        save_from_consolidation=AsyncMock(),
+        save_item_with_supersede=AsyncMock(return_value="new:memu-1"),
+    )
+    provider = SimpleNamespace(
+        chat=AsyncMock(
+            return_value=SimpleNamespace(
+                content='{"profile":[{"summary":"用户买了 Zigbee 网关","category":"purchase","emotional_weight":4}],"preference":[],"procedure":[]}'
+            )
+        )
+    )
+    engine = make_engine(
+        provider=cast(Any, provider),
+        memorizer=cast(Any, memorizer),
+        v2_store=SimpleNamespace(list_items_for_admin=lambda **_kwargs: ([], 0)),
+    )
+
+    await engine._on_consolidation_committed(
+        ConsolidationCommitted(
+            history_entry_payloads=[("[2026-03-15 10:00] 用户聊了 Zigbee", 6)],
+            source_ref='["m1"]',
+            scope_channel="cli",
+            scope_chat_id="1",
+            conversation="USER: 我买了 Zigbee 网关",
+            role_id="mira",
+        )
+    )
+
+    assert memorizer.save_from_consolidation.await_args.kwargs["role_id"] == "mira"
+    assert (
+        memorizer.save_item_with_supersede.await_args.kwargs["extra"]["role_id"]
+        == "mira"
+    )
+
+
+async def test_default_memory_engine_reports_implicit_extraction_failure(make_engine):
+    memorizer = SimpleNamespace(
+        save_from_consolidation=AsyncMock(),
+        save_item_with_supersede=AsyncMock(return_value="new:memu-1"),
+    )
+    provider = SimpleNamespace(
+        chat=AsyncMock(return_value=SimpleNamespace(content="not json"))
+    )
+    engine = make_engine(
+        provider=cast(Any, provider),
+        memorizer=cast(Any, memorizer),
+        v2_store=SimpleNamespace(list_items_for_admin=lambda **_kwargs: ([], 0)),
+    )
+
+    with pytest.raises(RuntimeError, match="long_term extraction failed"):
+        await engine._on_consolidation_committed(
+            ConsolidationCommitted(
+                history_entry_payloads=[("[2026-03-15 10:00] 用户聊了 Zigbee", 6)],
+                source_ref='["m1"]',
+                scope_channel="cli",
+                scope_chat_id="1",
+                conversation="USER: 我买了 Zigbee 网关",
+                role_id="mira",
+            )
+        )
+
+    memorizer.save_from_consolidation.assert_awaited_once()
+    memorizer.save_item_with_supersede.assert_not_awaited()
+
+
+def test_default_memory_engine_descriptor_keeps_messages_capability_only():
+    descriptor = DefaultMemoryEngine.DESCRIPTOR
+
+    assert descriptor.profile == EngineProfile.RICH_MEMORY_ENGINE
+    assert MemoryCapability.INGEST_MESSAGES in descriptor.capabilities
+    assert MemoryCapability.INGEST_TEXT not in descriptor.capabilities
 
 
 async def test_implicit_long_term_extraction_uses_auxiliary_budget(monkeypatch):
@@ -72,133 +242,46 @@ async def test_post_response_extraction_receives_current_role_memory(tmp_path) -
         store.close()
 
 
-class _ConcurrentMemorizer:
-    def __init__(self, store: MemoryStore2):
-        self.store = store
-        self.started = asyncio.Event()
-        self.failed = asyncio.Event()
-        self.release = threading.Event()
-        self.finished = asyncio.Event()
-        self.error = RuntimeError("first memory save failed")
-        self.item_ids: list[str] = []
-        self.loop = asyncio.get_running_loop()
-
-    async def save_from_consolidation(
-        self, history_entry: str, source_ref: str, **_kwargs: object
-    ) -> None:
-        if history_entry == "failure":
-            await self.started.wait()
-            self.failed.set()
-            raise self.error
-        await asyncio.to_thread(self._delayed_save, source_ref)
-
-    def _delayed_save(self, source_ref: str) -> None:
-        self.loop.call_soon_threadsafe(self.started.set)
-        if not self.release.wait(timeout=5):
-            raise TimeoutError("test did not release delayed memory write")
-        result = self.store.upsert_item(
-            memory_type="event",
-            summary="delayed memory",
-            embedding=[0.1, 0.2],
-            source_ref=source_ref,
-        )
-        self.item_ids.append(result.split(":", 1)[1])
-        self.loop.call_soon_threadsafe(self.finished.set)
-
-
 @pytest.mark.asyncio
-@pytest.mark.parametrize("cancel_count", [0, 1, 2])
-async def test_failed_parallel_consumer_settles_writes_before_undo_and_error(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cancel_count: int
-):
-    manager = SessionManager(tmp_path)
-    session = manager.get_or_create("role:mira")
-    for index in range(3):
-        session.add_message("user", f"question {index}")
-        session.add_message("assistant", f"answer {index}")
-    manager.save(session)
-    message_ids = tuple(message["id"] for message in session.messages)
-    store = MemoryStore2(tmp_path / "memory2.db")
-    memorizer = _ConcurrentMemorizer(store)
+async def test_consolidation_waits_for_sibling_writes_before_propagating_failure():
+    import asyncio
+
+    from shiori_sdk.memory.events import ConsolidationCommitted
+
     engine = DefaultMemoryEngine.__new__(DefaultMemoryEngine)
-    engine._v2_store = store
-    monkeypatch.setattr(engine, "_memorizer", memorizer, raising=False)
-    implicit = AsyncMock(return_value=None)
-    monkeypatch.setattr(engine, "_extract_implicit_long_term", implicit)
-    bus = EventBus()
-    bus.on(ConsolidationCommitted, engine._on_consolidation_committed)
-    event = ConsolidationCommitted(
-        history_entry_payloads=[("failure", 0), ("delayed", 0)],
-        source_ref=json.dumps(message_ids),
-        scope_channel="desktop",
-        scope_chat_id=session.key,
-        conversation="question 2",
-        role_id="mira",
-    )
+    entered, release, finished = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    failure = ValueError("first save failed")
 
-    async def publish():
-        await bus.emit(event)
+    async def save(*, history_entry, **kwargs):
+        if history_entry == "fail":
+            await entered.wait()
+            raise failure
+        entered.set()
+        await release.wait()
+        finished.set()
 
-    def resolve_sources(message_ids: list[str]) -> list[str]:
-        preview = engine.undo_by_message_sources(message_ids, dry_run=True)
-        sources = preview["rollback_source_ids"]
-        assert isinstance(sources, list)
-        return [str(source) for source in sources]
-
-    async def undo_session():
-        result = await manager.undo_last_turn(
-            session.key, rollback_source_resolver=resolve_sources
-        )
-        assert result is not None
-        return engine.undo_by_message_sources(result.deleted_ids)
-
+    engine._save_from_consolidation = save
+    implicit = AsyncMock()
+    engine._extract_implicit_long_term = implicit
     task = asyncio.create_task(
-        manager.commit_consolidation(
-            ConsolidationCommitRequest(session.key, message_ids, 0, 6),
-            AsyncMock(),
-            publish,
+        engine._on_consolidation_committed(
+            ConsolidationCommitted(
+                [("fail", 0), ("slow", 0)],
+                "source",
+                "desktop",
+                "1",
+                "conversation",
+                "mira",
+            )
         )
     )
-    undo_task = None
-    try:
-        await asyncio.wait_for(memorizer.failed.wait(), timeout=2)
-        for _ in range(cancel_count):
-            task.cancel()
-            await asyncio.sleep(0)
-        undo_task = asyncio.create_task(undo_session())
-        # Let the failing child, gather completion and queued undo all take their turns.
-        for _ in range(5):
-            await asyncio.sleep(0)
-        assert not undo_task.done()
-        assert not task.done()
-        assert session.last_consolidated == 6
-        assert len(session.messages) == 6
-        memorizer.release.set()
-        outcome, cleanup = await asyncio.wait_for(
-            asyncio.gather(task, undo_task, return_exceptions=True), timeout=2
-        )
-        if cancel_count:
-            assert isinstance(outcome, asyncio.CancelledError)
-        else:
-            # Committed-memory failures wrap the original consumer error. Keep
-            # this boundary assertion without introducing another host import.
-            assert isinstance(outcome, RuntimeError)
-            assert type(outcome).__name__ == "MemoryConsumersFailedError"
-            assert outcome.__cause__ is memorizer.error
-        assert isinstance(cleanup, dict)
-        assert cleanup["affected_ids"] == memorizer.item_ids
-        assert memorizer.finished.is_set()
-        assert store.get_items_by_ids(memorizer.item_ids)[0]["status"] == "superseded"
-        assert len(session.messages) == 4
-        assert session.last_consolidated == 0
-        implicit.assert_not_awaited()
-        manager.invalidate(session.key)
-        assert manager.get_or_create(session.key).last_consolidated == 0
-    finally:
-        memorizer.release.set()
-        await asyncio.gather(
-            task, *([undo_task] if undo_task else []), return_exceptions=True
-        )
-        await asyncio.wait_for(memorizer.finished.wait(), timeout=2)
-        store.close()
-        await bus.aclose()
+    await entered.wait()
+    for _ in range(5):
+        await asyncio.sleep(0)
+    assert not task.done()
+    release.set()
+    with pytest.raises(ValueError) as result:
+        await task
+    assert result.value is failure
+    assert finished.is_set()
+    implicit.assert_not_awaited()

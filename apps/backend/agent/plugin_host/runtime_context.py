@@ -2,18 +2,21 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
-from collections.abc import Callable
-from shiori_sdk import PluginRuntimeContext as SdkRuntimeContext
-from shiori_sdk.runtime import (
-    CapabilityNotGranted as CapabilityNotGranted,
-    EventsCapability,
-)
-from agent.plugin_host.capabilities import LifecycleCapability
 
+from agent.plugin_host.capabilities import LifecycleCapability, RpcCapability
 from agent.plugin_host.effects import Dispose, EffectScope
 from agent.plugin_host.manifest import PluginManifest
+from shiori_sdk import PluginRuntimeContext as SdkRuntimeContext
+from shiori_sdk.memory.context import MemoryCapability, MemoryPluginContext
+from shiori_sdk.runtime import (
+    CapabilityNotGranted as CapabilityNotGranted,
+)
+from shiori_sdk.runtime import (
+    EventsCapability,
+)
 
 
 class PluginSetupContext:
@@ -34,6 +37,8 @@ class PluginSetupContext:
         publish_api: Callable[[object], None] | None = None,
         lifecycle: LifecycleCapability | None = None,
         events: EventsCapability | None = None,
+        memory: MemoryCapability | None = None,
+        rpc: RpcCapability | None = None,
     ) -> None:
         self.plugin_id = plugin_id
         self.plugin_dir = plugin_dir
@@ -43,9 +48,15 @@ class PluginSetupContext:
         self._publish_api = publish_api
         self._lifecycle = lifecycle
         self._events = events
+        self._memory = memory
+        self._rpc = rpc
 
     def as_sdk_context(self) -> SdkRuntimeContext:
         """Checks the setup boundary against this static base, without __getattr__."""
+        return self
+
+    def as_memory_context(self) -> MemoryPluginContext:
+        """Checks the memory setup surface without relying on __getattr__."""
         return self
 
     def expose(self, api: object) -> None:
@@ -84,6 +95,20 @@ class PluginSetupContext:
                 f"插件 {self.plugin_id} 未声明 capability 'events'"
             )
         return self._events
+
+    @property
+    def memory(self) -> MemoryCapability:
+        """Returns the typed memory surface granted to this plugin."""
+        if self._memory is None:
+            raise CapabilityNotGranted("Plugin did not request memory capability")
+        return self._memory
+
+    @property
+    def rpc(self) -> RpcCapability:
+        """Returns scoped RPC registration without a dynamic capability escape."""
+        if self._rpc is None:
+            raise CapabilityNotGranted("Plugin did not request rpc capability")
+        return self._rpc
 
 
 class PluginRuntimeContext(PluginSetupContext):

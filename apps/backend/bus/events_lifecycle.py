@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Literal
 
+from shiori_sdk.memory.committed import TurnCommitted as TurnCommitted
+
 if TYPE_CHECKING:
     from agent.core.types import ToolCallGroup
 
@@ -81,34 +83,6 @@ class BeforeReasoning:
 # （群友、陌生人），这类回合仍会触发记忆整理，由整理按发送者拆段。
 SKIP_POST_MEMORY_KEY = "skip_post_memory"
 NOT_USER_AUTHORED_KEY = "not_user_authored"
-
-
-@dataclass(frozen=True)
-class TurnCommitted:
-    session_key: str
-    channel: str
-    chat_id: str
-    input_message: str
-    persisted_user_message: str | None
-    assistant_response: str
-    tools_used: list[str]
-    thinking: str | None = None
-    raw_reply: str | None = None
-    meme_tag: str | None = None
-    meme_media_count: int | None = None
-    tool_chain_raw: list[dict[str, Any]] = field(default_factory=_empty_tool_chain)
-    tool_call_groups: list["ToolCallGroup"] = field(
-        default_factory=_empty_tool_call_groups
-    )
-    timestamp: datetime | None = None
-    post_reply_budget: dict[str, int] = field(default_factory=_empty_int_metadata)
-    react_stats: dict[str, int] = field(default_factory=_empty_int_metadata)
-    extra: dict[str, Any] = field(default_factory=_empty_metadata)
-    role_id: str = ""
-    request_id: str = ""
-    thread_id: str = ""
-    total_tokens: int | None = None
-    thinking_duration_ms: int | None = None
 
 
 @dataclass(frozen=True)
