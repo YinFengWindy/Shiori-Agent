@@ -3,7 +3,11 @@
 import inspect
 from pathlib import Path
 
-from shiori_sdk.runtime import CapabilityNotGranted, Dispose
+from shiori_sdk.runtime import (
+    CapabilityNotGranted,
+    Dispose,
+    require_known_capabilities,
+)
 from .events import FakeEvents
 from .lifecycle import FakeLifecycle
 
@@ -12,8 +16,9 @@ class FakePluginContext:
     """Records setup effects and exports without instantiating any host services.
 
     ``capabilities`` are the grants, normally a manifest's declaration (see the
-    ``sdk_context`` fixture). Only ``lifecycle`` and ``events`` have fakes here;
-    other declared names are recorded in ``granted`` for specialized fakes.
+    ``sdk_context`` fixture); names unknown to the host are rejected like the host
+    does. Only ``lifecycle`` and ``events`` have fakes here; other declared names
+    are recorded in ``granted`` for specialized fakes.
     """
 
     def __init__(
@@ -23,6 +28,7 @@ class FakePluginContext:
         *,
         capabilities: tuple[str, ...] = ("lifecycle", "events"),
     ) -> None:
+        require_known_capabilities(capabilities, f"FakePluginContext({plugin_id})")
         self.plugin_id = plugin_id
         self.plugin_dir = plugin_dir
         self.granted = tuple(sorted(set(capabilities)))

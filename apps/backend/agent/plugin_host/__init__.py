@@ -13,7 +13,6 @@ from agent.plugin_host.kernel import HostServices, PluginKernel
 from agent.plugin_host.manifest import (
     DEFAULT_ENTRY,
     ChannelDeclaration,
-    KNOWN_CAPABILITIES,
     ManifestError,
     PluginManifest,
     load_manifest,
@@ -33,7 +32,6 @@ __all__ = [
     "DEFAULT_ENTRY",
     "EffectScope",
     "HostServices",
-    "KNOWN_CAPABILITIES",
     "ManifestError",
     "PluginConfigSchemaRegistry",
     "PluginContributions",

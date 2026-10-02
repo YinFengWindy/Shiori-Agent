@@ -38,6 +38,7 @@ def test_sdk_context_always_disposes_registered_effects(tmp_path: Path) -> None:
         tmp_path,
         "from pathlib import Path\n\n"
         "async def test_cleanup(sdk_context):\n"
+        "    assert not (sdk_context.plugin_dir / 'manifest.yaml').exists()\n"
         "    def dispose():\n"
         "        Path('disposed.txt').write_text('closed', encoding='utf-8')\n"
         "    sdk_context.effect('probe', dispose)\n"
@@ -76,7 +77,19 @@ def test_find_plugin_dir_stops_at_the_test_root(tmp_path: Path) -> None:
     assert find_plugin_dir(test_file, plugin) == plugin.resolve()
 
 
-def test_manifest_without_a_capability_list_is_rejected(tmp_path: Path) -> None:
-    (tmp_path / "manifest.yaml").write_text("id: probe\n", encoding="utf-8")
-    with pytest.raises(ValueError, match="capabilities must be a list"):
+@pytest.mark.parametrize(
+    ("capabilities", "message"),
+    [
+        ("", "v2 manifest 缺少 capabilities 声明"),
+        ("capabilities: lifecycle\n", "capabilities 必须是列表"),
+        ("capabilities: [lifecycle, host_storage]\n", "未知 capability"),
+    ],
+)
+def test_manifest_capabilities_are_validated_like_the_host(
+    tmp_path: Path, capabilities: str, message: str
+) -> None:
+    (tmp_path / "manifest.yaml").write_text(
+        f"id: probe\n{capabilities}", encoding="utf-8"
+    )
+    with pytest.raises(ValueError, match=message):
         load_manifest_grants(tmp_path)

@@ -10,10 +10,12 @@ from shiori_sdk.testing import FakePluginContext
 
 @pytest.fixture
 def sdk_plugin_dir(tmp_path: Path) -> Path:
-    (tmp_path / "manifest.yaml").write_text(
+    package = tmp_path / "package"
+    package.mkdir()
+    (package / "manifest.yaml").write_text(
         "id: probe\ncapabilities:\n  - lifecycle\n", encoding="utf-8"
     )
-    return tmp_path
+    return package
 
 
 async def test_sdk_fixture_is_a_usable_setup_context(
@@ -23,7 +25,10 @@ async def test_sdk_fixture_is_a_usable_setup_context(
     api = object()
     context.expose(api)
     assert sdk_context.exported is api
-    assert sdk_context.plugin_dir == sdk_plugin_dir
+    # The manifest is only read; setup writes land in an isolated directory.
+    assert sdk_context.plugin_dir.is_dir()
+    assert sdk_context.plugin_dir != sdk_plugin_dir
+    assert not (sdk_context.plugin_dir / "manifest.yaml").exists()
 
 
 async def test_sdk_fixture_grants_only_manifest_capabilities(
@@ -88,3 +93,10 @@ def test_only_requested_capabilities_are_accessible() -> None:
     _ = context.lifecycle
     with pytest.raises(CapabilityNotGranted, match="events"):
         _ = context.events
+
+
+def test_unknown_capability_names_are_rejected_like_the_host() -> None:
+    with pytest.raises(
+        ValueError, match=r"manifest 声明了未知 capability \['host_storage'\]"
+    ):
+        FakePluginContext(capabilities=("lifecycle", "host_storage"))

@@ -8,6 +8,7 @@ import inspect
 import weakref
 
 import pytest
+from shiori_sdk.lifecycle import PHASE_SLOTS
 
 from agent.plugin_host.capabilities import (
     AccountsCapability,
@@ -25,7 +26,6 @@ from agent.plugin_host.diagnostics import ChannelDeclarationError
 from agent.plugin_host.effects import EffectScope
 from agent.plugin_host.rpc import PluginRpcRegistry
 from agent.tools.base import Tool
-from shiori_sdk.lifecycle import PHASE_SLOTS
 from agent.tools.registry import ToolRegistry
 from desktop_bridge.method_policy import Concurrency, Handler
 
