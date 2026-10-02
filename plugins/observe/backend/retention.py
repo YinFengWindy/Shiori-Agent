@@ -21,6 +21,7 @@ _RETENTION_DAYS = {
     "turns": 180,
     "rag_queries": 90,
     "global_errors": 90,
+    "context_budgets": 180,
 }
 _STAMP_FILE = ".last_cleanup"
 

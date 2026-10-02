@@ -1,6 +1,7 @@
 """Idle inspection and manual compaction use the real prompt/budget/memory owners."""
 
 from copy import deepcopy
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -65,6 +66,89 @@ def _window(h, keep=2):
     return window, provider
 
 
+@pytest.mark.parametrize("summary_fails", [False, True])
+async def test_manual_operation_preserves_the_last_actual_speaking_request(
+    memory_harness, summary_fails
+):
+    from agent.core.passive_turn.budgeted_request import budgeted_chat
+    from agent.core.passive_turn.compaction import (
+        RequestCompaction,
+        request_compaction_scope,
+    )
+    from agent.prompting.usage_accounting import turn_usage
+    from core.compaction import CompactionPolicy
+
+    h = memory_harness
+    session = h.manager.get_or_create("cli:manual-after-actual")
+    session.metadata["role_id"] = "mira"
+    _turn(session, "tea")
+    h.manager.save(session)
+    window, provider = _window(h, 0)
+    provider.chat = LLMProvider.chat.__get__(provider)
+    transport = AsyncMock(
+        return_value=SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(content="reply", tool_calls=[]),
+                    finish_reason="stop",
+                )
+            ],
+            usage=SimpleNamespace(
+                prompt_tokens=123, completion_tokens=2, total_tokens=125
+            ),
+        )
+    )
+    provider._create_with_retry = transport
+    if summary_fails:
+        window.controller.writer.generate = AsyncMock(
+            side_effect=RuntimeError("summary failed")
+        )
+    msg = InboundMessage(
+        channel="cli", sender="user", chat_id="manual-after-actual", content=""
+    )
+    messages = [
+        {"role": "system", "content": "constraints"},
+        {"role": "user", "content": "current"},
+    ]
+    try:
+        await window.inspect(session=session, context_view=None, msg=msg)
+        scope = RequestCompaction(
+            window.controller,
+            session.key,
+            None,
+            CompactionPolicy(0),
+            2,
+            2,
+            AsyncMock(),
+            lambda _: [],
+        )
+        with turn_usage(), request_compaction_scope(scope):
+            await scope.ensure(
+                messages, [], provider, "explicit-model", 4000, "default"
+            )
+            await budgeted_chat(
+                provider,
+                messages=messages,
+                tools=[],
+                model="explicit-model",
+                max_tokens=4000,
+            )
+        previous = window.controller.latest(session.key, None, request=True)
+        assert previous is not None and previous["after_source"] == "actual"
+        assert previous["after_tokens"] == 123
+        status = await window.inspect(
+            session=session, context_view=None, msg=msg, compact=True
+        )
+        assert transport.await_count == 1
+        assert status["last_request"] == previous
+        assert status["last_compaction"]["reason"] == "manual"
+        assert status["last_compaction"]["phase"] == (
+            "failed" if summary_fails else "completed"
+        )
+    finally:
+        await provider.aclose()
+
+
 @pytest.mark.parametrize("keep", [0, 2, 4])
 async def test_idle_read_is_model_free_and_manual_uses_completed_turns_below_trigger(
     memory_harness, keep
@@ -97,6 +181,12 @@ async def test_idle_read_is_model_free_and_manual_uses_completed_turns_below_tri
         assert state["result"]["committed"]
         assert state["result"]["configured_retained_turns"] == keep
         assert state["result"]["retained_turns"] == keep
+        assert state["budget"]["max_output_tokens"] == 8192
+        assert state["budget"]["output_reservation_tokens"] == 4000
+        assert state["budget"]["estimate"]["tokens"] == state["tokens"]
+        assert state["compaction_count"] == 1
+        assert state["window_start"] == state["result"]["retained_start"]
+        assert state["memory_version"] == state["result"]["memory_version"]
         assert history_start(session, None) == 12 - 2 * keep
         assert session.messages == original
         assert h.prompts and all(
@@ -137,6 +227,9 @@ async def test_manual_failure_preserves_window_and_reports_memory_commit_then_re
         )
         assert result["result"]["committed"] is False
         assert result["result"]["memory_committed"] is (failure != "memory")
+        assert result["memory_version"] == result["result"]["memory_version"]
+        assert result["window_start"] == 0 and result["compaction_count"] == 0
+        assert result["budget"]["estimate"]["tokens"] == result["tokens"]
         assert history_start(session, None) == 0
         assert session.messages == original
         calls = len(h.prompts)

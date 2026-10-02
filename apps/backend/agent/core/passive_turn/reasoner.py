@@ -205,6 +205,7 @@ class DefaultReasoner(
                     llm_config.model,
                     llm_config.max_tokens,
                 ),
+                observe=event_bus.observe if event_bus is not None else None,
             )
             if session_manager is not None and compaction_memory is not None
             else None
@@ -494,11 +495,18 @@ class DefaultReasoner(
                 window_sources=window_sources,
             )
             prompt_render = await self.render_prompt(render_input)
+            from .minimal_request import current_input, replace_current_input
+
+            owned_current = current_input(
+                prompt_render.messages, prompt_render.current_message
+            )
             if protected_current is None:
-                protected_current = deepcopy(prompt_render.messages[-1])
+                protected_current = deepcopy(owned_current)
             elif protected_current.get("role") == "user":
                 # A fresh window must not reread or replace this execution's input.
-                prompt_render.messages[-1] = deepcopy(protected_current)
+                replace_current_input(
+                    prompt_render.messages, protected_current, owned_current
+                )
             initial_messages = with_working_summary(
                 prompt_render.messages, working_summary
             )
@@ -528,6 +536,7 @@ class DefaultReasoner(
                     renderer.render,
                     renderer.history_tools,
                     results=compaction_results,
+                    render_minimal=renderer.render_minimal,
                 )
                 if self._compaction is not None
                 else None
@@ -626,7 +635,10 @@ class DefaultReasoner(
                 prefix_length = (
                     compaction.prefix_length if compaction else request_prefix_length
                 )
-                if any(
+                if (
+                    compaction is not None
+                    and (compaction.tools_started or compaction.degraded)
+                ) or any(
                     message.get("tool_calls")
                     for message in initial_messages[prefix_length:]
                 ):

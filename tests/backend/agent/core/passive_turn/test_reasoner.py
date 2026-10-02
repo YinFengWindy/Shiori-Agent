@@ -30,6 +30,246 @@ class _ArchivedTool(Tool):
         return "ok"
 
 
+@pytest.mark.parametrize(
+    "case",
+    [
+        "normal",
+        "minimal",
+        "image",
+        "too_large",
+        "memory_failure",
+        "consumer_failure",
+        "summary_failure",
+        "provider_limit",
+        "provider_error",
+        "unexpected_tool",
+        "external",
+    ],
+)
+async def test_minimal_request_uses_real_prompt_controller_and_transport(
+    memory_harness, monkeypatch, case
+):
+    import json
+    from agent.context import ContextBuilder
+    from agent.provider import LLMProvider
+    from agent.prompting.input_budget import BudgetPolicy
+    from bus.event_bus import EventBus
+    from conversation.context_scope import history_start, turn_context_view
+    from conversation.service import network_thread_id
+    from core.compaction import CompactionFailedError
+    from core.roles import RoleStore
+    from shiori_sdk.context import ContextBudgetObserved
+
+    h = memory_harness
+    roles = RoleStore(h.manager.workspace)
+    roles.create_role(role_id="mira", name="Mira", system_prompt="保留角色约束")
+    session = h.manager.get_or_create(
+        "role:mira" if case == "external" else "cli:minimal"
+    )
+    session.metadata["role_id"] = "mira"
+    thread = network_thread_id("mira", "qq", "group") if case == "external" else ""
+    view = turn_context_view(h.manager.workspace, "mira", thread) if thread else None
+    for index in range(3):
+        session.add_message("user", f"old task {index}", thread_id=thread)
+        session.add_message("assistant", "done", thread_id=thread)
+    if thread:
+        session.add_message(
+            "user",
+            "OTHER_GROUP_SECRET",
+            thread_id=network_thread_id("mira", "qq", "other"),
+        )
+        session.add_message(
+            "assistant",
+            "other reply",
+            thread_id=network_thread_id("mira", "qq", "other"),
+        )
+    h.manager.save(session)
+    original = deepcopy(session.messages)
+    context = ContextBuilder(
+        h.manager.workspace, h.maintenance._store, runtime_roles=roles
+    )
+    tool = _ArchivedTool()
+    tool.description = "工具目录 " * 3000
+    tool.execute = AsyncMock(return_value="must not execute")
+    registry = ToolRegistry()
+    registry.register(tool, always_on=True)
+    provider = LLMProvider(
+        api_key="test",
+        context_window_tokens=100000 if case == "normal" else 20000,
+        max_output_tokens=2000,
+        budget_policy=BudgetPolicy(safety_margin_tokens=100),
+    )
+    events = []
+    bus = EventBus()
+    bus.on(ContextBudgetObserved, lambda event: events.append(event))
+    reasoner = DefaultReasoner(
+        LLMServices(provider, provider),
+        LLMConfig(model="controlled", max_tokens=300),
+        registry,
+        ToolDiscoveryState(),
+        tool_search_enabled=False,
+        memory_window=40,
+        context=context,
+        session_manager=h.manager,
+        compaction_memory=h.maintenance,
+        event_bus=bus,
+    )
+    monkeypatch.setattr(
+        "agent.core.passive_turn.reasoning_loop.fetch_role_mood",
+        AsyncMock(return_value=None),
+    )
+    if case == "memory_failure":
+        h.fail = True
+    if case == "consumer_failure":
+        h.maintenance._after_consolidation = AsyncMock(
+            side_effect=RuntimeError("consumer failed")
+        )
+    sent = []
+
+    async def transport(kwargs, **unused):
+        if "Rewrite the current working state" in kwargs["messages"][0]["content"]:
+            if case == "summary_failure":
+                raise RuntimeError("summary unavailable")
+            data = json.loads(kwargs["messages"][-1]["content"])
+            text = json.dumps(
+                {
+                    "tasks": "continue tea plan",
+                    "constraints": "keep intent",
+                    "decisions": "",
+                    "unfinished": "next",
+                    "tool_state": "",
+                    "entities": "tea",
+                    "source_message_ids": [data["messages"][0]["id"]],
+                }
+            )
+        else:
+            sent.append(deepcopy(kwargs))
+            if case == "provider_limit":
+                raise ContextLengthError("real provider limit")
+            if case == "provider_error":
+                raise OSError("model connection failed")
+            text = "continue tea plan"
+        calls = (
+            [
+                SimpleNamespace(
+                    id="forbidden",
+                    function=SimpleNamespace(name="archived_tool", arguments="{}"),
+                )
+            ]
+            if case == "unexpected_tool" and sent
+            else []
+        )
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(content=text, tool_calls=calls),
+                    finish_reason="stop",
+                )
+            ],
+            usage=None,
+        )
+
+    provider._create_with_retry = transport
+    current = "保留当前意图" + ("巨大的输入" * 5000 if case == "too_large" else "")
+    media = []
+    if case == "image":
+        image = h.manager.workspace / "input.png"
+        image.write_bytes(b"fake-image" * 20000)
+        media = [str(image)]
+    msg = InboundMessage(
+        channel="qq" if thread else "cli",
+        sender="friend" if thread else "user",
+        chat_id="group" if thread else "minimal",
+        content=current,
+        media=media,
+    )
+    expected = {
+        "too_large": "minimal_budget",
+        "memory_failure": "memory",
+        "consumer_failure": "consumers",
+        "summary_failure": "summary",
+        "provider_limit": "provider",
+        "provider_error": "provider",
+    }
+    try:
+        if case in expected:
+            with pytest.raises(CompactionFailedError) as caught:
+                await reasoner.run_turn(
+                    msg=msg,
+                    session=session,
+                    context_view=view,
+                    retrieved_memory_block="OPTIONAL_RETRIEVAL " * 1500,
+                    extra_hints=["OPTIONAL_HINT call archived_tool " * 300],
+                )
+            assert caught.value.result.failure_stage == expected[case]
+            if case not in {"memory_failure"}:
+                assert caught.value.result.memory_committed
+            if case in {"memory_failure", "consumer_failure", "summary_failure"}:
+                assert caught.value.result.degradation_attempts == 0
+            if case.startswith("provider"):
+                assert len(sent) == 1
+                assert caught.value.result.failure_kind == (
+                    "provider_context_length"
+                    if case == "provider_limit"
+                    else "provider_error"
+                )
+            else:
+                assert not sent
+        elif case == "unexpected_tool":
+            with pytest.raises(CompactionFailedError) as caught:
+                await reasoner.run_turn(
+                    msg=msg,
+                    session=session,
+                    retrieved_memory_block="OPTIONAL_RETRIEVAL " * 1500,
+                )
+        else:
+            result = await reasoner.run_turn(
+                msg=msg,
+                session=session,
+                context_view=view,
+                retrieved_memory_block=(
+                    "" if case == "normal" else "OPTIONAL_RETRIEVAL " * 1500
+                ),
+                extra_hints=(
+                    []
+                    if case == "normal"
+                    else ["OPTIONAL_HINT call archived_tool " * 3000]
+                ),
+            )
+            assert result.reply == "continue tea plan"
+            if case == "normal":
+                assert not result.context_retry["compaction"]
+            else:
+                final = sent[-1]
+                text = json.dumps(final, ensure_ascii=False)
+                assert not final.get("tools")
+                assert (
+                    "保留角色约束" in text
+                    and current in text
+                    and "continue tea plan" in text
+                )
+                assert "OPTIONAL_RETRIEVAL" not in text and "OPTIONAL_HINT" not in text
+                assert "工具目录 " * 3 not in text and "OTHER_GROUP_SECRET" not in text
+                outcomes = result.context_retry["compaction"]
+                assert isinstance(outcomes, list) and outcomes[-1]["degraded"]
+                if case == "image":
+                    assert "data:image/png;base64," in text and len(text) > 200000
+                final_fact = events[-1].status
+                assert final_fact["after_source"] == "local"
+                assert final_fact["final_budget"]["schema_tokens"] == 0
+                assert final_fact["final_budget"]["max_output_tokens"] == 2000
+                assert final_fact["final_budget"]["output_reservation_tokens"] == 300
+                assert (
+                    final_fact["request_usage"]["last_request"]["prompt_tokens"] is None
+                )
+                assert "base64" not in json.dumps(final_fact)
+        assert history_start(session, view) == 0
+        assert session.messages == original
+        tool.execute.assert_not_awaited()
+    finally:
+        await provider.aclose()
+
+
 @pytest.mark.parametrize("error_type", [ContentSafetyError])
 @pytest.mark.parametrize("last_consolidated", [0, 6])
 @pytest.mark.parametrize(
@@ -323,7 +563,18 @@ async def test_real_turn_history_append_uses_usage_anchor_with_replaced_context_
 
 @pytest.mark.parametrize(
     "boundary",
-    ["initial", "tool", "recovery", "finalize", "unfit", "safety_after_tool"],
+    [
+        "initial",
+        "tool",
+        "recovery",
+        "finalize",
+        "unfit",
+        "safety_after_tool",
+        "provider_retry",
+        "provider_retry_safety",
+        "provider_retry_failure",
+        "provider_retry_tool",
+    ],
 )
 async def test_all_request_boundaries_compact_without_replaying_current_tools(
     memory_harness, boundary, monkeypatch
@@ -351,6 +602,10 @@ async def test_all_request_boundaries_compact_without_replaying_current_tools(
         "finalize": 3000,
         "unfit": 3000,
         "safety_after_tool": 3000,
+        "provider_retry": 3000,
+        "provider_retry_safety": 3000,
+        "provider_retry_failure": 3000,
+        "provider_retry_tool": 3000,
     }[boundary]
     for index in range(5):
         session.add_message("user", f"task {index} " + "x" * width)
@@ -365,7 +620,7 @@ async def test_all_request_boundaries_compact_without_replaying_current_tools(
                                 "call_id": "past",
                                 "name": "archived_tool",
                                 "arguments": {},
-                                "result": "done",
+                                "result": "OLD_TOOL_HISTORY_MUST_NOT_REAPPEAR",
                             }
                         ]
                     }
@@ -428,6 +683,10 @@ async def test_all_request_boundaries_compact_without_replaying_current_tools(
                 "finalize",
                 "unfit",
                 "safety_after_tool",
+                "provider_retry",
+                "provider_retry_safety",
+                "provider_retry_failure",
+                "provider_retry_tool",
             }:
                 text = "working"
                 calls = [
@@ -436,6 +695,20 @@ async def test_all_request_boundaries_compact_without_replaying_current_tools(
                         function=SimpleNamespace(name="side_effect", arguments="{}"),
                     )
                 ]
+            elif boundary.startswith("provider_retry") and len(sent) == 2:
+                raise ContextLengthError("actual provider rejected request")
+            elif boundary == "provider_retry_tool" and len(sent) == 3:
+                text = "must not execute twice"
+                calls = [
+                    SimpleNamespace(
+                        id="again",
+                        function=SimpleNamespace(name="side_effect", arguments="{}"),
+                    )
+                ]
+            elif boundary == "provider_retry_safety" and len(sent) == 3:
+                raise ContentSafetyError("degraded result rejected")
+            elif boundary == "provider_retry_failure" and len(sent) == 3:
+                raise OSError("network unavailable")
             elif len(sent) == 2 and boundary == "safety_after_tool":
                 raise ContentSafetyError("current tool output rejected")
             elif len(sent) == 1 and boundary == "recovery":
@@ -502,22 +775,84 @@ async def test_all_request_boundaries_compact_without_replaying_current_tools(
             assert history_start(session, None) > 0
             assert session.maintenance_progress.summaries
             return
-        if boundary == "unfit":
+        if boundary.startswith("provider_retry"):
             from core.compaction import CompactionFailedError
 
-            with pytest.raises(CompactionFailedError) as caught:
-                await reasoner.run_turn(
-                    msg=InboundMessage(
-                        channel="cli",
-                        sender="user",
-                        chat_id="four-boundaries",
-                        content="current" + "z" * 3000,
-                    ),
-                    session=session,
+            args = dict(
+                msg=InboundMessage(
+                    channel="cli",
+                    sender="user",
+                    chat_id="four-boundaries",
+                    content="do once",
+                ),
+                session=session,
+            )
+            if boundary == "provider_retry_tool":
+                with pytest.raises(CompactionFailedError):
+                    await reasoner.run_turn(**args)
+                latest = reasoner._compaction.latest(session.key, None)
+                assert (
+                    latest["phase"] == "failed"
+                    and latest["failure_stage"] == "response"
                 )
-            assert caught.value.result.failure_stage == "budget"
-            assert caught.value.result.memory_committed
-            assert tool.calls == 1 and len(sent) == 1
+                assert latest["tools_disabled"]
+            elif boundary == "provider_retry_safety":
+                with pytest.raises(
+                    ContentSafetyError, match="degraded result rejected"
+                ):
+                    await reasoner.run_turn(**args)
+            elif boundary == "provider_retry_failure":
+                with pytest.raises(CompactionFailedError) as caught:
+                    await reasoner.run_turn(**args)
+                assert caught.value.result.failure_kind == "provider_error"
+                latest = reasoner._compaction.latest(session.key, None)
+                assert latest["request_usage"]["last_request"]["prompt_tokens"] is None
+                assert (
+                    latest["request_usage"]["cumulative"]["prompt_tokens_unknown_calls"]
+                    == 2
+                )
+                assert latest["request_usage"]["cumulative"]["prompt_tokens"] > 0
+            else:
+                result = await reasoner.run_turn(**args)
+                outcomes = result.context_retry["compaction"]
+                assert isinstance(outcomes, list)
+                assert outcomes[-1]["degraded"] and outcomes[-1]["memory_committed"]
+                assert any(item["committed"] for item in outcomes)
+                usage = result.context_retry["request_usage"]
+                assert isinstance(usage, dict)
+                assert usage["cumulative"]["prompt_tokens_unknown_calls"] == 1
+            assert tool.calls == 1 and len(sent) == 3
+            assert not sent[-1].get("tools")
+            assert "OLD_TOOL_HISTORY_MUST_NOT_REAPPEAR" not in str(sent[-1]["messages"])
+            assert "y" * 9000 in str(sent[-1]["messages"])
+            assert not any(
+                m.get("tool_calls") or m.get("role") == "tool"
+                for m in sent[-1]["messages"]
+            )
+            return
+        if boundary == "unfit":
+            result = await reasoner.run_turn(
+                msg=InboundMessage(
+                    channel="cli",
+                    sender="user",
+                    chat_id="four-boundaries",
+                    content="current" + "z" * 3000,
+                ),
+                session=session,
+            )
+            outcomes = result.context_retry["compaction"]
+            assert isinstance(outcomes, list)
+            outcome = outcomes[-1]
+            assert outcome["degraded"] and not outcome["committed"]
+            assert outcome["degradation_attempts"] == 1 and outcome["memory_committed"]
+            assert tool.calls == 1 and len(sent) == 2
+            assert not sent[-1].get("tools")
+            assert "OLD_TOOL_HISTORY_MUST_NOT_REAPPEAR" not in str(sent[-1]["messages"])
+            assert "y" * 9000 in str(sent[-1]["messages"])
+            assert not any(
+                m.get("tool_calls") or m.get("role") == "tool"
+                for m in sent[-1]["messages"]
+            )
             assert (
                 history_start(session, None) == 0
                 and not session.maintenance_progress.summaries

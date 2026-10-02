@@ -42,6 +42,9 @@ class InputBudget:
     trigger_tokens: int
     target_tokens: int
     schema_tokens: int
+    max_output_tokens: int | None = None
+    trigger_ratio: float = 0.75
+    target_ratio: float = 0.40
 
     @property
     def needs_trim(self) -> bool:
@@ -77,4 +80,7 @@ def build_input_budget(
         trigger,
         target,
         schema_tokens,
+        max_output_tokens,
+        policy.trigger_ratio,
+        policy.target_ratio,
     )

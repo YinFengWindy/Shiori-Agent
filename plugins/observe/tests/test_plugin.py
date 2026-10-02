@@ -412,3 +412,31 @@ async def test_writer_and_public_reader_use_the_storage_owners_resolved_database
     finally:
         await ctx.aclose()
     assert (destination / ".last_cleanup").is_file()
+
+
+async def test_context_budget_sdk_event_is_observed_without_a_committed_turn(tmp_path):
+    from shiori_sdk.context import ContextBudgetObserved
+
+    ctx = FakeExtensionContext("observe", workspace=tmp_path)
+    try:
+        await setup(ctx)
+        await ctx.events.emit(
+            ContextBudgetObserved(
+                "role:mira",
+                "user",
+                {
+                    "reason": "manual",
+                    "failure_stage": "summary",
+                    "memory_committed": True,
+                },
+            )
+        )
+        async with asyncio.timeout(5):
+            while not (
+                records := ctx.exported.recent_context_budgets("role:mira", "user")
+            ):
+                await asyncio.sleep(0.01)
+        assert records[0]["status"]["memory_committed"]
+        assert records[0]["status"]["failure_stage"] == "summary"
+    finally:
+        await ctx.aclose()

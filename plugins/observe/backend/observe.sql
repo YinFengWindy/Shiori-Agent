@@ -38,6 +38,17 @@ CREATE TABLE IF NOT EXISTS turns (
 CREATE INDEX IF NOT EXISTS ix_turns_sk_ts ON turns (session_key, ts);
 CREATE INDEX IF NOT EXISTS ix_turns_source ON turns (source, ts);
 
+CREATE TABLE IF NOT EXISTS context_budgets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    session_key TEXT NOT NULL,
+    context_key TEXT NOT NULL,
+    status_json TEXT NOT NULL,
+    error TEXT
+);
+CREATE INDEX IF NOT EXISTS ix_context_budgets_owner
+    ON context_budgets (session_key, context_key, id);
+
 -- ─────────────────────────────────────────────
 -- 2. rag_queries  当前 memory 检索记录
 -- ─────────────────────────────────────────────

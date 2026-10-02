@@ -150,11 +150,15 @@ class PromptRenderInput:
     window_sources: tuple[MessageSource, ...] = ()
     # Idle context inspection has no draft/current turn; use the same owner render.
     include_current_message: bool = True
+    # Host-owned last resort; optional plugin exports cannot re-enable tools.
+    minimal_request: bool = False
 
 
 @dataclass(frozen=True)
 class PromptRenderResult:
     messages: list[dict[str, Any]]
+    # The envelope owner's input, before any trailing plugin hints.
+    current_message: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)

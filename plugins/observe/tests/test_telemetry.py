@@ -43,6 +43,50 @@ def test_missing_storage_returns_no_data_without_creating_files(
     assert not workspace.exists()
 
 
+async def test_budget_observations_persist_manual_failure_and_exact_context(
+    tmp_path, backend
+):
+    from shiori_sdk.context import ContextBudgetObserved
+
+    writer = backend.writer.TraceWriter(database_path(tmp_path))
+    reader = backend.telemetry.ObserveTelemetry(database_path(tmp_path))
+    task = asyncio.create_task(writer.run())
+    try:
+        writer.emit(
+            ContextBudgetObserved(
+                "role:mira",
+                "user",
+                {
+                    "reason": "manual",
+                    "memory_committed": True,
+                    "failure_stage": "summary",
+                    "after_tokens": None,
+                    "request_usage": {"last_request": None},
+                },
+            )
+        )
+        writer.emit(
+            ContextBudgetObserved(
+                "role:mira",
+                "external:group",
+                {"reason": "hard_limit", "degraded": True},
+            )
+        )
+        writer.emit(ContextBudgetObserved("role:other", "user", {"degraded": True}))
+        await writer.drain()
+        records = reader.recent_context_budgets("role:mira", "user")
+        assert len(records) == 1
+        assert records[0]["status"]["failure_stage"] == "summary"
+        assert records[0]["status"]["memory_committed"]
+        assert records[0]["status"]["after_tokens"] is None
+        assert records[0]["status"]["request_usage"]["last_request"] is None
+        assert reader.recent_context_budgets("missing", "user") == ()
+    finally:
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
+
+
 @pytest.mark.asyncio
 async def test_real_writer_query_filters_orders_limits_and_preserves_nulls(
     tmp_path: Path, backend
