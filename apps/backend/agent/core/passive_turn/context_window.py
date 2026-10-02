@@ -70,7 +70,8 @@ class ContextWindow:
         prepared = await self.sessions.prepare_window(
             session.key,
             context_view,
-            keep_turns=policy.retained_turns,
+            # The same bound as the controller's configured candidate.
+            keep_turns=min(policy.retained_turns, limit),
             message_limit=limit,
         )
         progress = self.sessions.maintenance_progress(session)

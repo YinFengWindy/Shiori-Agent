@@ -25,6 +25,15 @@ def compaction_feedback(
 ) -> dict:
     """Keep committed-memory facts while moving technical causes into details."""
     payload = result.dump()
+    # The single wording for a budget-driven reduction, shown by every surface.
+    payload["reduction"] = (
+        f"保留 {result.configured_retained_turns} 个轮次会超出模型输入上限，"
+        f"本次保留 {result.retained_turns} 个"
+        if result.committed
+        and result.retained_reduction_reason == "budget"
+        and result.retained_turns < result.configured_retained_turns
+        else ""
+    )
     if not result.committed:
         payload["error"] = _FAILURE_MESSAGES.get(
             result.failure_stage, "上下文压缩未完成，请稍后重试"

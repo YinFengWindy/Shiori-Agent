@@ -393,8 +393,15 @@ class CompactionController:
         the target wins; otherwise the largest count projected below the hard
         input limit; otherwise the fewest turns, left to the measured result.
         Returns the preparation and whether it retains fewer turns than the first.
-        A manual run returns None when the configured retention removes nothing.
+        A manual run keeps the configured count whenever it fits the hard limit,
+        and returns None when the configured retention removes nothing.
         """
+
+        def acceptable(tokens: int, projected: InputBudget) -> bool:
+            # Manual runs only reduce retention when the budget truly requires it.
+            line = projected.input_limit_tokens if manual else projected.target_tokens
+            return tokens < line
+
         candidates: list[tuple[WindowPreparation, int, InputBudget]] = []
         seen: set[int] = set()
         configured = min(policy.retained_turns, message_limit)
@@ -416,7 +423,7 @@ class CompactionController:
                 ) from exc
             tokens = projected.estimate.tokens + SUMMARY_TOKEN_LIMIT
             candidates.append((prepared, tokens, projected))
-            if tokens < projected.target_tokens:
+            if acceptable(tokens, projected):
                 break
         if not candidates:
             return None
@@ -424,7 +431,7 @@ class CompactionController:
         fits = [
             prepared
             for prepared, tokens, projected in candidates
-            if tokens < projected.target_tokens
+            if acceptable(tokens, projected)
         ] or [
             prepared
             for prepared, tokens, projected in candidates

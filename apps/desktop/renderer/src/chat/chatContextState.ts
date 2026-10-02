@@ -38,6 +38,8 @@ export type ContextCompactionResult = {
   retained_start?: number;
   snapshot_stop?: number;
   retained_reduction_reason?: string;
+  /** Host wording for a budget-driven retention reduction; empty otherwise. */
+  reduction?: string;
   memory_required?: boolean;
   memory_start?: number | null;
   memory_stop?: number | null;
@@ -98,12 +100,13 @@ export function contextUsageLabel(status: ChatContextStatus | null) {
 }
 
 /**
- * Apply a status read; a busy host reports no usage, so the ring keeps the last
- * known value of the same session and only adopts the busy state and reason.
+ * Apply a status read; a busy host reports no usage, so the ring keeps only the
+ * last known usage numbers of the same session and takes everything else from the read.
  */
 export function mergeContextStatus(previous: ChatContextStatus | null, next: ChatContextStatus) {
   if (!next.busy || next.tokens != null || previous?.tokens == null || previous.session_key !== next.session_key) return next;
-  return { ...previous, busy: true, can_compact: false, reason: next.reason };
+  const { tokens, source, model_context_window, input_limit_tokens } = previous;
+  return { ...next, tokens, source, model_context_window, input_limit_tokens };
 }
 
 /** Preserve the controller's distinction between memory and window commits. */
@@ -116,11 +119,8 @@ export function contextResultFeedback(status: ChatContextStatus) {
   const result = status.result;
   if (!result) return errorFeedback(status.reason, "当前无法压缩上下文");
   if (result.committed) {
-    // Retention only drops below the configured count when the budget requires it.
-    const reduced = result.retained_reduction_reason === "budget" && result.configured_retained_turns != null && result.retained_turns < result.configured_retained_turns
-      ? `；保留 ${result.configured_retained_turns} 轮会超出预算，本次保留 ${result.retained_turns} 轮`
-      : "";
-    return { message: `上下文已压缩：${result.before_tokens?.toLocaleString() ?? "未知"} → ${result.after_tokens?.toLocaleString() ?? "未知"} token（估算）${reduced}`, detail: "" };
+    const reduction = result.reduction ? `；${result.reduction}` : "";
+    return { message: `上下文已压缩：${result.before_tokens?.toLocaleString() ?? "未知"} → ${result.after_tokens?.toLocaleString() ?? "未知"} token（估算）${reduction}`, detail: "" };
   }
   const failure = errorFeedback({ message: result.error, details: { detail: result.detail } }, "压缩未完成，请稍后重试");
   return { ...failure, message: `${result.memory_committed ? "记忆已整理、压缩失败" : "压缩失败"}：${failure.message}` };

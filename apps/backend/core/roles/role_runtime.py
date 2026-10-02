@@ -193,19 +193,20 @@ class RoleRuntime:
         operation: Callable[[], Awaitable[T]],
         *,
         reject_busy: bool = False,
-        notify_context: bool = False,
+        notify_context: bool = True,
     ) -> T:
         """Runs role work serially across all transport threads.
 
-        ``notify_context`` marks work that commits conversation messages; only it
-        publishes the single per-operation context refresh. Callers that change
-        the context window themselves (manual compaction) publish their own.
+        Every operation, including a rejected one, publishes one context refresh
+        after release. Only callers that cannot change the conversation (role
+        state) or publish their own refresh (manual compaction) pass
+        ``notify_context=False``.
         """
 
-        self._validate_context(context)
-        if reject_busy and self.busy:
-            raise RuntimeError("当前角色正在回复或整理上下文，请稍后重试")
         try:
+            self._validate_context(context)
+            if reject_busy and self.busy:
+                raise RuntimeError("当前角色正在回复或整理上下文，请稍后重试")
             async with self._execution.turn_lock:
                 self._validate_context(context)
                 self._execution.active_work += 1
@@ -240,27 +241,27 @@ class RoleRuntime:
             # Restore the accepted turn snapshot before entering the conversation.
             return await operation()
 
-        return await self.execute_thread(context, initialized_turn, notify_context=True)
+        return await self.execute_thread(context, initialized_turn)
 
     async def run_proactive_tick(
         self, context: RoleExecutionContext, operation: Callable[[], Awaitable[T]]
     ) -> T:
         """Runs the role's proactive capability."""
         self._require_work_kind(context, "proactive_tick")
-        return await self.execute_thread(context, operation, notify_context=True)
+        return await self.execute_thread(context, operation)
 
     async def run_background_task(
         self, context: RoleExecutionContext, operation: Callable[[], Awaitable[T]]
     ) -> T:
         """Runs the role's persisted or deferred background capability."""
         self._require_work_kind(context, "scheduled_job")
-        return await self.execute_thread(context, operation, notify_context=True)
+        return await self.execute_thread(context, operation)
 
     async def send_channel(
         self, context: RoleExecutionContext, operation: Callable[[], Awaitable[T]]
     ) -> T:
         """Runs a role-authorized channel send through its owning runtime."""
-        return await self.execute_thread(context, operation, notify_context=True)
+        return await self.execute_thread(context, operation)
 
     async def execute_role_state(
         self,
@@ -269,7 +270,7 @@ class RoleRuntime:
     ) -> T:
         """Serializes mutations to role-wide state such as relationship data."""
 
-        return await self.execute_thread(context, operation)
+        return await self.execute_thread(context, operation, notify_context=False)
 
     def _validate_context(self, context: RoleExecutionContext) -> None:
         if self._execution.closing:

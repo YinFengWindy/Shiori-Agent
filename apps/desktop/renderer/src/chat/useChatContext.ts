@@ -31,7 +31,8 @@ export function useChatContext(activeRoleId: string, sessionKey: string, bridgeR
       }
     }
   }, [activeRoleId, bridgeReady, sessionKey]);
-  const refreshFromEvent = useEffectEvent(() => { void refresh(); });
+  // Subscriptions live per scope but must read with the latest bridge state.
+  const refreshLatest = useEffectEvent(() => { void refresh(); });
 
   useEffect(() => {
     setStatus(null);
@@ -43,24 +44,24 @@ export function useChatContext(activeRoleId: string, sessionKey: string, bridgeR
       ++generation.current;
       setStatus(null);
       setNotice(pending ? "正在切换模型" : "");
-      if (!pending) refreshFromEvent();
+      if (!pending) refreshLatest();
     });
     const off = window.miraDesktop.onEvent((event) => {
       if (["runtime.applied", "roles.updated", "identities.updated"].includes(event.method)) {
         ++generation.current;
         setStatus(null);
-        refreshFromEvent();
+        refreshLatest();
       } else if (event.method === "chat.context.updated" && event.payload.session_key === sessionKey && !operation.current) {
         // The host publishes this once a role turn releases its gate; the turn's
         // chat.done / session.updated would only repeat the same read.
-        refreshFromEvent();
+        refreshLatest();
       }
     });
     return () => { invalidate(); operation.current = null; off(); offModels(); };
   }, [activeRoleId, invalidate, sessionKey]);
 
   // Scope changes and reconnection re-read usage; the last known value stays meanwhile.
-  useEffect(() => { refreshFromEvent(); }, [activeRoleId, sessionKey, bridgeReady]);
+  useEffect(() => { void refresh(); }, [refresh]);
 
   const unavailable = !bridgeReady ? "桌面服务未连接" : !activeRoleId ? "请选择角色" : sending ? "正在回复" : busy ? "正在整理记忆并压缩上下文" : status?.busy ? status.reason : "";
   const compact = useCallback(async () => {

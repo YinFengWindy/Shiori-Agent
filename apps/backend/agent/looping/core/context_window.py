@@ -40,14 +40,8 @@ def format_compaction_status(state: dict) -> str:
         f"上下文已压缩：{result['before_tokens']} → {result['after_tokens']} token（估算）；"
         f"保留 {result['retained_turns']} 个完整轮次，原文从位置 {result['retained_start']} 保留。"
     )
-    # Retention only drops below the configured count when the budget requires it.
-    configured = result.get("configured_retained_turns", result["retained_turns"])
-    if (
-        result.get("retained_reduction_reason") == "budget"
-        and result["retained_turns"] < configured
-    ):
-        status += f"保留 {configured} 个轮次会超出模型预算，本次已减少。"
-    return status
+    reduction = result.get("reduction")
+    return f"{status}{reduction}。" if reduction else status
 
 
 class _ContextWindowMixin:
@@ -107,8 +101,9 @@ class _ContextWindowMixin:
 
         try:
             if compact and runtime and context:
+                # The surrounding finally publishes this operation's refresh.
                 return await runtime.execute_thread(
-                    context, with_model, reject_busy=True
+                    context, with_model, reject_busy=True, notify_context=False
                 )
             return await with_model()
         except ModelConfigurationError as error:
