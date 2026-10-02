@@ -80,3 +80,53 @@ async def test_render_refreshes_member_sources_without_replacing_current_attachm
     assert [source.sender_id for source in called.window_sources] == ["retained"]
     assert len(called.history) == 2
     assert "retained" in called.history[0]["content"]
+
+
+async def test_minimal_render_drops_disabled_read_file_instruction(tmp_path):
+    from agent.context import MessageEnvelopeBuilder
+
+    attachment = tmp_path / "notes.txt"
+    attachment.write_text("notes", encoding="utf-8")
+    text = MessageEnvelopeBuilder()._append_text_attachment_refs(
+        "look", [str(attachment)]
+    )
+    assert "read_file(" in text
+    current = {"role": "user", "content": text}
+    request = PromptRenderInput(
+        session_key="cli:minimal",
+        channel="cli",
+        chat_id="minimal",
+        content="look",
+        media=[str(attachment)],
+        timestamp=datetime.now(),
+        history=[],
+        skill_names=None,
+        retrieved_memory_block="",
+        disabled_sections=set(),
+        turn_injection_prompt="",
+    )
+    render = AsyncMock(
+        return_value=PromptRenderResult(
+            messages=[
+                {"role": "system", "content": "constraints"},
+                {"role": "user", "content": text},
+            ]
+        )
+    )
+    renderer = CompactionRenderer(
+        SessionManager(tmp_path),
+        None,
+        0,
+        request,
+        current,
+        render,
+        ToolRegistry(),
+        False,
+        set(),
+        False,
+        lambda: [],
+    )
+    result = await renderer.render_minimal("")
+    assert "read_file(" not in result[-1]["content"]
+    assert str(attachment) in result[-1]["content"] and "look" in result[-1]["content"]
+    assert "read_file(" in current["content"]
