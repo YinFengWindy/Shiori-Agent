@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from infra.channels.base import AttachmentStore, MessageDeduper, SessionIdentityIndex
+from infra.channels.base import AttachmentStore, SessionIdentityIndex
 from session.manager import SessionManager
 
 
@@ -24,16 +24,6 @@ def test_attachment_store_uses_default_workspace(tmp_path: Path, monkeypatch) ->
     )
 
     assert AttachmentStore().root == workspace / "uploads"
-
-
-def test_message_deduper_evicts_oldest_keys():
-    deduper = MessageDeduper(max_size=2)
-
-    assert deduper.seen("a") is False
-    assert deduper.seen("b") is False
-    assert deduper.seen("a") is True
-    assert deduper.seen("c") is False
-    assert deduper.seen("a") is False
 
 
 @pytest.mark.asyncio

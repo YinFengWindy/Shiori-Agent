@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
-from core.accounts import (
+from shiori_sdk.accounts import (
     AccountDeletionPlan,
     AccountResponseRules,
     response_rules_to_dict,
@@ -20,8 +20,8 @@ from .credentials import (
 )
 
 if TYPE_CHECKING:
-    from agent.plugin_host.runtime_context import PluginRuntimeContext
-    from infra.channels.account_group import AccountChannelGroup
+    from shiori_sdk.channels.context import ChannelPluginContext
+    from shiori_sdk.channels.group import AccountChannelGroup
 
     from .channel.lifecycle import TelegramChannel
 
@@ -33,7 +33,7 @@ class TelegramBots:
 
     def __init__(
         self,
-        ctx: PluginRuntimeContext,
+        ctx: ChannelPluginContext,
         store: TelegramBotStore,
         group: AccountChannelGroup,
     ) -> None:
@@ -43,6 +43,10 @@ class TelegramBots:
         self._group = group
         # Registered host account ID per Bot ref.
         self._account_ids: dict[str, str] = {}
+
+    async def verify_token(self, payload: dict[str, object]) -> dict[str, object]:
+        """Resolve stored references through the granted host config policy."""
+        return await verify_bot_token(payload, self._ctx.config.resolve_reference)
 
     async def load(self) -> None:
         """Registers every saved Bot; a Bot of a deleted role is deleted with its data."""
@@ -85,7 +89,9 @@ class TelegramBots:
         if not row.get("enabled", True):
             self._accounts.report(account_id, connection="offline")
             return
-        token = resolve_token(str(row.get("token") or ""))
+        token = resolve_token(
+            str(row.get("token") or ""), self._ctx.config.resolve_reference
+        )
         if not token:
             self._accounts.report(
                 account_id,
@@ -114,7 +120,12 @@ class TelegramBots:
 
     def channel(self, ref: str) -> TelegramChannel | None:
         """The running channel of one Bot, if connected."""
-        return cast("TelegramChannel | None", self._group.member(ref))
+        from .channel import TelegramChannel
+
+        channel = self._group.member(ref)
+        if channel is not None and not isinstance(channel, TelegramChannel):
+            raise TypeError("Telegram group contains another channel type")
+        return channel
 
     def ref_for_account(self, account_id: str) -> str:
         """Resolves a host account ID to its Bot ref."""
@@ -129,7 +140,7 @@ class TelegramBots:
             raise ValueError("这个 Bot 已属于另一个角色")
         return ref
 
-    async def save(self, payload: dict[str, Any]) -> dict[str, str]:
+    async def save(self, payload: dict[str, Any]) -> dict[str, object]:
         """Adds a Bot for ``role_id``, or updates and reconnects one it owns."""
         role_id = str(payload.get("role_id") or "").strip()
         token = str(payload.get("token") or "").strip()
@@ -137,14 +148,16 @@ class TelegramBots:
             ref = self._owned_ref(payload)
             row = {**self._store.get(ref), "enabled": True}
             if token:
-                identity = await verify_bot_token({"token": token})
+                identity = await self.verify_token({"token": token})
                 if identity["bot_id"] != row["bot_id"]:
                     raise ValueError("新 Token 属于另一个 Bot，请添加新账号")
                 row["token"] = token
         else:
             if not token:
                 raise ValueError("新账号需要 Bot Token")
-            bot_id = (await verify_bot_token({"token": token}))["bot_id"]
+            bot_id = (await self.verify_token({"token": token}))["bot_id"]
+            if not isinstance(bot_id, str):
+                raise TypeError("Verified Telegram bot_id must be text")
             if any(
                 bot_id in (item.get("bot_id"), item.get("ref"))
                 for item in self._store.list()
@@ -174,7 +187,7 @@ class TelegramBots:
         await self._attach(row)
         return {"account_id": snapshot.record.id}
 
-    async def disconnect(self, payload: dict[str, Any]) -> dict[str, str]:
+    async def disconnect(self, payload: dict[str, Any]) -> dict[str, object]:
         """Stops a Bot the role owns; it stays saved and listed offline."""
         ref = self._owned_ref(payload)
         self._store.save({**self._store.get(ref), "enabled": False})

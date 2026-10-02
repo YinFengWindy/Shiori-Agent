@@ -270,7 +270,9 @@ async def test_paused_intake_buffers_until_resumed(
 
 
 def _manifest_chat_types() -> Any:
-    from agent.plugin_host.manifest import load_manifest
+    from shiori_sdk.testing.channel_context import (
+        FakeChannelDeclarations as load_manifest,
+    )
 
     manifest = load_manifest(Path(__file__).resolve().parents[1])
     assert manifest is not None

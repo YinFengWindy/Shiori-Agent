@@ -7,7 +7,7 @@ import logging
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from core.common.message_source import MENTIONED_KEY
+from shiori_sdk.channels.message_source import MENTIONED_KEY
 
 from .formatting import _build_inbound_text_with_reply
 from .identity import (

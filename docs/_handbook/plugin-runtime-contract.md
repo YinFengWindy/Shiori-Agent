@@ -206,7 +206,7 @@ API 2.3 replaces the host's channel-name checks with optional hooks on the
 channel object. The core resolves a hook by channel name against the published
 connections (a draining, retired connection still answers for its own replies);
 an absent hook yields the neutral default. Protocols live in
-`infra.channels.contract`:
+`shiori_sdk.channels`:
 
 | Hook | Effect | Default |
 | --- | --- | --- |
@@ -872,4 +872,6 @@ explicit dependencies; desktop-pet integration is tested on the host side.
 
 ### SDK 3.0 channel services (#589)
 
-QQBot and QQ consume the public `ChannelPluginContext`/`ChannelContext` and SDK-only testing support. Channel values (accounts, targets, message events, declarations, session keys and message source/quotes) have one SDK definition. `ctx.intake_factory` creates host-owned admission coordination; `avatars` schedules host-owned caching, and `http` provides bounded requests. `processes.popen` exposes the synchronous counterpart to owned async spawn, preserving WindowsJob adoption before execution without moving any OS implementation into the SDK. Platform credentials, clients, reconnect/streaming, NapCat installation and QR/profile policy remain plugin-owned. Actual host construction checks these protocols with pyright.
+QQBot, QQ, Telegram and Feishu consume the public `ChannelPluginContext`/`ChannelContext` and SDK-only testing support. Channel values (accounts, targets, message events, declarations, session keys and message source/quotes) have one SDK definition. `ctx.intake_factory` creates host-owned admission coordination; `avatars` schedules host-owned caching, and `http` provides bounded requests. `processes.popen` exposes the synchronous counterpart to owned async spawn, preserving WindowsJob adoption before execution without moving any OS implementation into the SDK. Platform credentials, clients, reconnect/streaming, NapCat installation and QR/profile policy remain plugin-owned. Actual host construction checks these protocols with pyright.
+
+Channel groups and identity indexes are obtained from granted services (`channels.group`, `session_manager.identity_index`); their runtime and persistence implementations remain host-owned. The SDK only declares these protocols and supplies independent fakes. Channel credential references resolve through granted `config.resolve_reference` at use time while stored credentials retain their original reference. `KeyValueStore.delete` is idempotent.

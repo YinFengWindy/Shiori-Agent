@@ -9,9 +9,9 @@ from telegram.constants import ChatAction
 from telegram.error import Conflict, InvalidToken, NetworkError, TelegramError, TimedOut
 from telegram.ext import ContextTypes
 
-from bus.events import OutboundMessage
-from core.common.channel_chat_types import REPLY_MENTION_IDS_KEY, is_group_chat_type
-from infra.channels.session_key import resolve_outbound_session_key
+from shiori_sdk.messages import OutboundMessage
+from shiori_sdk.channels.chat_types import REPLY_MENTION_IDS_KEY, is_group_chat_type
+from shiori_sdk.channels.session_key import resolve_outbound_session_key
 
 from ..utils import TelegramStreamMessage, sent_message_id
 from ..utils.topic import telegram_topic_kwargs

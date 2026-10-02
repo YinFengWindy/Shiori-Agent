@@ -13,6 +13,7 @@ from shiori_sdk.http import HttpClient
 from .avatars import AvatarsCapability
 from . import Channel
 from .chat_types import ChatTypeDeclaration
+from .group import AccountChannelGroup
 
 
 class ChannelDeclarations(Protocol):
@@ -25,6 +26,9 @@ class ChannelsCapability(Protocol):
     """Contribute declared transports to the host lifecycle."""
 
     def add(self, channel: Channel) -> None: ...
+    def group(self, name: str) -> AccountChannelGroup:
+        """Construct a host-owned group; add it through the same declaration gate."""
+        ...
 
 
 class ChannelPluginContext(PluginRuntimeContext, Protocol):

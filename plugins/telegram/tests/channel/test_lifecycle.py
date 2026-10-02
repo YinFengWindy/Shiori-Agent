@@ -9,18 +9,16 @@ from telegram.ext import ExtBot
 
 from plugins.telegram.backend.channel.lifecycle import TelegramChannel
 from plugins.telegram.backend.channel.polling import ObservedBot
-from agent.plugin_host.kv import PluginKVStore
+from shiori_sdk.testing.storage import FakeKV
 
 
 @pytest.mark.asyncio
 async def test_username_index_rejects_group_targets_live_and_on_rebuild():
-    sessions = SimpleNamespace(
-        get_channel_metadata=lambda _: [
-            {"chat_id": "123", "metadata": {"username": "alice"}},
-            {"chat_id": "-1001", "metadata": {"username": "alice"}},
-            {"chat_id": "-1002", "metadata": {"username": "bob"}},
-        ],
-    )
+    from shiori_sdk.testing.channel_sessions import FakeChannelSessions
+
+    sessions = FakeChannelSessions()
+    for chat_id, username in (("123", "alice"), ("-1001", "alice"), ("-1002", "bob")):
+        sessions.get_or_create(f"telegram:{chat_id}").metadata["username"] = username
     channel = TelegramChannel.__new__(TelegramChannel)
     # Bind the real index through the same lifecycle path used at startup.
     channel._channel = "telegram"
@@ -36,7 +34,7 @@ async def test_username_index_rejects_group_targets_live_and_on_rebuild():
 
 
 def test_observed_topics_are_private_to_the_receiving_bot(tmp_path):
-    store = PluginKVStore(tmp_path / "telegram.json")
+    store = FakeKV()
     first = TelegramChannel.__new__(TelegramChannel)
     first._known_store, first._config_ref = store, "first"
     second = TelegramChannel.__new__(TelegramChannel)
@@ -46,9 +44,12 @@ def test_observed_topics_are_private_to_the_receiving_bot(tmp_path):
     first._remember_chat(chat, user, SimpleNamespace(message_thread_id=42))
     first._remember_chat(chat, user, SimpleNamespace(message_thread_id=53))
     second._remember_chat(chat, user, SimpleNamespace(message_thread_id=7))
-    assert store.get("known_chats:first")["-1001"]["topics"] == [42, 53]
-    assert store.get("known_chats:second")["-1001"]["topics"] == [7]
-    assert store.get("known_chats:first")["-1001"]["username"] == ""
+    first_known = store.get("known_chats:first")
+    second_known = store.get("known_chats:second")
+    assert isinstance(first_known, dict) and isinstance(second_known, dict)
+    assert first_known["-1001"]["topics"] == [42, 53]
+    assert second_known["-1001"]["topics"] == [7]
+    assert first_known["-1001"]["username"] == ""
 
 
 @pytest.mark.asyncio
@@ -181,7 +182,7 @@ async def test_channel_recovers_on_empty_successful_poll(monkeypatch):
 async def test_bot_photo_is_stored_and_kept_when_its_refresh_fails(tmp_path, fetch_ok):
     png = bytes.fromhex("89504e470d0a1a0a")
     old = "data:image/png;base64,AAAA"
-    store = PluginKVStore(tmp_path / "telegram.json")
+    store = FakeKV()
     store.set("avatar:first", old)
     channel = TelegramChannel("123:abc", name="telegram_first", config_ref="first")
     accounts = Mock()

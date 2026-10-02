@@ -18,10 +18,10 @@ import httpx
 import pytest
 from PIL import Image
 
-from bus.event_bus import EventBus
-from bus.events import InboundMessage, OutboundMessage
-from infra.channels.base import AttachmentStore
-from infra.channels.contract import ChannelContext
+from shiori_sdk.testing.events import FakeEvents as EventBus
+from shiori_sdk.messages import InboundMessage, OutboundMessage
+from shiori_sdk.testing.channel_services import FakeAttachmentStore as AttachmentStore
+from shiori_sdk.channels import ChannelContext
 from plugins.feishu.backend.channel import FeishuChannel
 from plugins.feishu.backend.ws import EventCallback
 

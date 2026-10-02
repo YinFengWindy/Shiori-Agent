@@ -12,10 +12,8 @@ from datetime import datetime
 from typing import Any
 from unittest.mock import AsyncMock
 
-from agent.looping.core import AgentLoop
-from bus.events import InboundMessage, OutboundMessage
-from bus.events_lifecycle import TurnStarted
-from core.common.channel_directory import ChannelDirectory
+from shiori_sdk.messages import InboundMessage, OutboundMessage
+from shiori_sdk.channel_events import TurnStarted, StreamDeltaReady
 from plugins.feishu.backend.formatting import CARD_TEXT_LIMIT, LIVE_ELEMENT_ID
 from plugins.feishu.backend.streaming import LiveCardStreamer
 
@@ -53,7 +51,7 @@ async def _turn(harness: Any, make_event: Any) -> Any:
     connection.emit(make_event())
     await harness.settle()
     [inbound] = harness.bus.inbound
-    await harness.event_bus.observe(
+    await harness.event_bus.emit(
         TurnStarted(
             session_key=SESSION_KEY,
             channel="feishu",
@@ -67,14 +65,21 @@ async def _turn(harness: Any, make_event: Any) -> Any:
 
 
 def _stream_sink(channel: Any, event_bus: Any, inbound: InboundMessage) -> Any:
-    loop = object.__new__(AgentLoop)
-    loop._event_bus = event_bus
-    loop._active_turn_states = {}
-    directory = ChannelDirectory()
-    directory.bind({"feishu": channel}.get)
-    loop._channel_directory = directory
-    sink = AgentLoop._build_stream_event_sink(loop, inbound)
-    assert sink is not None
+    """Emit the SDK stream contract; real AgentLoop gating is host-tested."""
+
+    async def sink(content: str):
+        await event_bus.emit(
+            StreamDeltaReady(
+                session_key=SESSION_KEY,
+                channel=inbound.channel,
+                chat_id=inbound.chat_id,
+                content_delta=content,
+                external_message_id=str(
+                    inbound.metadata.get("external_message_id", "")
+                ),
+            )
+        )
+
     return sink
 
 
@@ -94,14 +99,12 @@ def _stream_updates(api: Any) -> list[tuple[str, int]]:
 def test_hooks_opt_private_chats_into_streaming_and_rendering_rules(
     harness: Any,
 ) -> None:
-    directory = ChannelDirectory()
-    directory.bind({"feishu": harness.channel}.get)
 
-    assert directory.supports_stream_events("feishu", CHAT_ID)
-    hint = directory.system_prompt_hint("feishu", CHAT_ID)
+    assert harness.channel.supports_stream_events(CHAT_ID)
+    hint = harness.channel.system_prompt_hint(CHAT_ID)
     assert hint.startswith("## 飞书渠道渲染限制")
     assert "`channel=feishu`" in hint
-    assert directory.default_chat_type("feishu") == "private"
+    assert harness.channel.default_chat_type == "private"
 
 
 async def test_deltas_coalesce_into_one_card_finished_in_place(
@@ -238,7 +241,7 @@ async def test_a_card_left_open_by_an_interrupted_turn_is_closed(
     await harness.channel._streamer.drain()
 
     # /stop: no outbound reply arrives; the next turn closes the old card.
-    await harness.event_bus.observe(
+    await harness.event_bus.emit(
         TurnStarted(
             session_key=SESSION_KEY,
             channel="feishu",
@@ -271,7 +274,7 @@ async def test_a_turn_without_an_inbound_message_streams_unquoted(
     harness: Any, make_event: Any
 ) -> None:
     await harness.start()
-    await harness.event_bus.observe(
+    await harness.event_bus.emit(
         TurnStarted(
             session_key=SESSION_KEY,
             channel="feishu",

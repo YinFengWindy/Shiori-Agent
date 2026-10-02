@@ -6,6 +6,7 @@ from typing import Protocol
 
 from shiori_sdk.messages import InboundMessage, OutboundMessage
 from .identity import IdentityScope
+from .identity_index import IdentityIndexes
 
 type Sender = Callable[[str, str], Awaitable[str | None]]
 type OutboundHandler = Callable[[OutboundMessage], Awaitable[None]]
@@ -18,6 +19,11 @@ class MessageBus(Protocol):
     async def publish_inbound(self, msg: InboundMessage) -> None: ...
     def subscribe_outbound(self, channel: str, callback: OutboundHandler) -> None: ...
     def unsubscribe_outbound(self, channel: str, callback: OutboundHandler) -> None: ...
+    def has_pending_outbound(
+        self, channel: str, chat_id: str, external_message_id: str
+    ) -> bool:
+        """Whether a committed reply still owns this turn's live preview."""
+        ...
 
 
 class ChannelIntake(Protocol):
@@ -44,7 +50,7 @@ class AttachmentStore(Protocol):
     def write_bytes(self, data: bytes, *, prefix: str, suffix: str) -> Path: ...
 
 
-class ChannelSessions(Protocol):
+class ChannelSessions(IdentityIndexes, Protocol):
     """Read transport identity metadata without exposing the session repository."""
 
     def get_channel_metadata(self, channel: str) -> Sequence[Mapping[str, object]]: ...

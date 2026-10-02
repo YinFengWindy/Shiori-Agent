@@ -45,6 +45,12 @@ class FakeMessageBus:
         for callback in self.outbound.get(msg.channel, []):
             await callback(msg)
 
+    def has_pending_outbound(
+        self, channel: str, chat_id: str, external_message_id: str
+    ) -> bool:
+        """The fake dispatches immediately and never owns a pending reply queue."""
+        return False
+
 
 class FakeAttachmentStore:
     """Write test attachments only beneath an explicitly supplied directory."""

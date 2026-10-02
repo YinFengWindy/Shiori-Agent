@@ -14,6 +14,7 @@ from .memory_context import FakeRpc
 from .processes import FakeProcesses
 from .http import FakeHttp
 from .avatars import FakeAvatars
+from .channel_group import FakeAccountChannelGroup
 
 
 class FakeChannelDeclarations:
@@ -50,6 +51,10 @@ class FakeChannels:
     def add(self, channel: Channel) -> None:
         """Retain the plugin's contributed transport for explicit test driving."""
         self.channels.append(channel)
+
+    def group(self, name: str) -> FakeAccountChannelGroup:
+        """Construct a test-owned collection without host coordination."""
+        return FakeAccountChannelGroup(name)
 
 
 class FakeChannelPluginContext(FakePluginContext):

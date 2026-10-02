@@ -73,7 +73,7 @@ async def test_unbound_chat_is_observed_without_publishing_its_message():
 
 @pytest.mark.asyncio
 async def test_private_pairing_code_binds_with_platform_scope_only_in_private_chats():
-    from bus.events import InboundMessage
+    from shiori_sdk.messages import InboundMessage
 
     pairings = []
 
@@ -115,7 +115,7 @@ async def test_private_pairing_code_binds_with_platform_scope_only_in_private_ch
 
 @pytest.mark.asyncio
 async def test_received_message_refreshes_its_sender_and_chat_avatars():
-    from bus.events import InboundMessage
+    from shiori_sdk.messages import InboundMessage
 
     channel = _InboundMixin()
     channel._avatars = Mock(refresh=Mock(return_value=None))

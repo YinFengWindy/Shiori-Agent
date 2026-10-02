@@ -14,3 +14,7 @@ class FakeKV:
     def set(self, key: str, value: object) -> None:
         """Record a plugin value."""
         self.values[key] = value
+
+    def delete(self, key: str) -> None:
+        """Drop one fixture value if present."""
+        self.values.pop(key, None)

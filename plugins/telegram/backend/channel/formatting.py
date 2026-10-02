@@ -7,7 +7,7 @@ import json
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from infra.channels.reply_context import build_inbound_text_with_reply_context
+from shiori_sdk.channels.reply_context import build_inbound_text_with_reply_context
 
 _CHANNEL = "telegram"
 _SEEN_MSG_MAXSIZE = 500  # 滑动窗口大小，防止内存无限增长

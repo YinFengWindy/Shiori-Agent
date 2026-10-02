@@ -13,21 +13,21 @@ from typing import TYPE_CHECKING, Any
 
 import httpx
 
-from agent.looping.interrupt import InterruptController
-from agent.tools.message_push import MessagePushTool
-from bus.event_bus import EventBus
-from bus.events import InboundMessage, OutboundMessage
-from bus.events_lifecycle import StreamDeltaReady, TurnStarted
-from bus.queue import MessageBus
-from core.accounts import VIA_ACCOUNT_KEY, ViaAccount
-from core.channels import ChannelHub
-from core.channels.chat_id_command import answer_chat_id_command
-from core.channels.pairing_command import answer_pairing_code
-from core.common.channel_chat_types import ChatTypeDeclaration, is_chat_id_command
-from core.common.message_source import SENDER_NAME_KEY
-from infra.channels.contract import ChannelContext, ChannelStatus
-from infra.channels.intake import ChannelIntake
-from infra.channels.session_key import resolve_outbound_session_key
+from shiori_sdk.channels.services import InterruptController
+from shiori_sdk.channels.services import PushSenders as MessagePushTool
+from shiori_sdk.runtime import EventsCapability as EventBus
+from shiori_sdk.messages import InboundMessage, OutboundMessage
+from shiori_sdk.channel_events import StreamDeltaReady, TurnStarted
+from shiori_sdk.channels.services import MessageBus
+from shiori_sdk.accounts import VIA_ACCOUNT_KEY, ViaAccount
+from shiori_sdk.channels.services import ChannelHub
+from shiori_sdk.channels.chat_id_command import answer_chat_id_command
+from shiori_sdk.channels.pairing_command import answer_pairing_code
+from shiori_sdk.channels.chat_types import ChatTypeDeclaration, is_chat_id_command
+from shiori_sdk.channels.message_source import SENDER_NAME_KEY
+from shiori_sdk.channels import ChannelContext, ChannelStatus
+from shiori_sdk.channels.services import ChannelIntake
+from shiori_sdk.channels.session_key import resolve_outbound_session_key
 
 from .api import FeishuApi, FeishuApiError, is_rate_limited, with_rate_limit_retry
 from .avatar import fetch_bot_avatar
@@ -54,8 +54,8 @@ logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from shiori_sdk.channels.avatars import AvatarsCapability
     from shiori_sdk.accounts.capability import AccountsCapability
-    from agent.plugin_host.kv import PluginKVStore
-    from core.accounts import ConnectionState as AccountConnectionState
+    from shiori_sdk.storage import KeyValueStore
+    from shiori_sdk.accounts import ConnectionState as AccountConnectionState
 
 STOP_COMMAND = "/stop"
 PENDING_QUOTES_PER_SESSION = 16
@@ -85,7 +85,7 @@ class FeishuChannel:
         name: str = CHANNEL,
         account_id: str = "",
         accounts: "AccountsCapability | None" = None,
-        profile_store: "PluginKVStore | None" = None,
+        profile_store: "KeyValueStore | None" = None,
         profile_ref: str = "",
         role_id: str | None = None,
         avatars: "AvatarsCapability | None" = None,
@@ -108,7 +108,7 @@ class FeishuChannel:
             app_id, app_secret, domain
         )
         self._streamer = LiveCardStreamer(self._api, self._send_live_card)
-        self._intake = ChannelIntake(self._accept_inbound, self.send)
+        self._intake: ChannelIntake | None = None
         self._seen = ExpiringIdSet()
         self._runner: LongConnectionRunner | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
@@ -211,6 +211,7 @@ class FeishuChannel:
         self._channel_hub = ctx.channel_hub
         self._interrupt_controller = ctx.interrupt_controller
         self._resolver = InboundResolver(self._api, ctx.attachment_store)
+        self._intake = ctx.intake_factory(self._accept_inbound, self.send)
         self._api.open()
         if not self._events_bound:
             for event_type, handler in self._event_bindings:
@@ -263,7 +264,8 @@ class FeishuChannel:
             await asyncio.gather(self._avatar_task, return_exceptions=True)
             self._avatar_task = None
         await self._streamer.close()
-        await self._intake.close()
+        if self._intake is not None:
+            await self._intake.close()
         if self._bus is not None and self._outbound_bound:
             self._bus.unsubscribe_outbound(self.name, self._on_response)
             self._outbound_bound = False
@@ -283,11 +285,13 @@ class FeishuChannel:
 
     def pause_intake(self) -> None:
         """Buffers incoming turns while existing replies remain deliverable."""
-        self._intake.pause()
+        if self._intake is not None:
+            self._intake.pause()
 
     def resume_intake(self) -> None:
         """Restores intake after a rejected settings transaction."""
-        self._intake.resume()
+        if self._intake is not None:
+            self._intake.resume()
 
     # ── inbound (long-connection thread) ─────────────────────────────
 

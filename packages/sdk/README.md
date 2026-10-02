@@ -86,7 +86,7 @@ checks the missing-extra diagnostic, then installs the extra and runs all SDK te
 The plugin probe executes citation, context_pressure, default_memory, shell_safety,
 shell_restore, tool_loop_guard, plugin_undo, observe and status_commands with no
 host or testkit, plus meme, novelai, story, screen_perception, browser_use and
-computer_use, qqbot and qq. default_memory is installed only for its own target. It verifies installed
+computer_use, qqbot, qq, telegram and feishu. default_memory is installed only for its own target. It verifies installed
 origins and that async failures really execute. The original full host CI and
 legacy plugin integration job remain enabled.
 
@@ -221,3 +221,5 @@ tests. PR CI includes a dedicated Windows process-lifecycle job.
 Channel plugins use `shiori_sdk.channels.context.ChannelPluginContext`; transport startup receives `shiori_sdk.channels.ChannelContext`. Account values/rules/targets live in `shiori_sdk.accounts`, message values in `shiori_sdk.messages`, stream events in `shiori_sdk.channel_events`, and provenance/quote helpers in `shiori_sdk.channels.message_source` and `reply_context`. The host injects intake, routing, attachment storage, HTTP and avatar services; it retains lifecycle and cache policy.
 
 Declare `processes` for native children. `Processes.popen` is the synchronous counterpart of `spawn`, returning a process and an optional `ProcessOwner`; only the host implements OS ownership. QQ keeps NapCat installation, private profiles, QR codes and OneBot policy. Independent testing uses shared `FakeAccounts`, `FakeChannelPluginContext`, `FakeChannelIntake`, `FakeHttp`, `FakeAvatars` and `FakeProcesses`, never host services.
+
+`ChannelsCapability.group(name)` constructs the host account-group coordinator; `ChannelSessions.identity_index(...)` constructs the host metadata-backed identity view. Platform dedupe, credential/authentication, stream formatting and reconnect policy stay in plugins. Use `FakeAccountChannelGroup` and `FakeChannelSessions` for independent tests. Scoped KV supports idempotent `delete`; `read_mapping` validates object-valued records before consumers access them. Telegram tool-call preview events and `EventBinding` are shared SDK values.

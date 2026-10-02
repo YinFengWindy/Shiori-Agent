@@ -9,12 +9,12 @@ from typing import TYPE_CHECKING, Any
 
 from telegram.error import NetworkError, TelegramError
 
-from desktop_bridge.method_policy import Concurrency
+from shiori_sdk.rpc import Concurrency
+from shiori_sdk.storage import read_mapping
 
-from .credentials import verify_bot_token
-from core.accounts import VIA_ACCOUNT_KEY
-from core.common.media import detect_image_mime_from_header
-from core.accounts.target_contract import (
+from shiori_sdk.accounts import VIA_ACCOUNT_KEY
+from shiori_sdk.media import detect_image_mime_from_header
+from shiori_sdk.accounts.targets import (
     ACCOUNT_SEND_METHOD,
     ACCOUNT_TARGETS_METHOD,
     GROUP_MEMBER_TARGET,
@@ -24,8 +24,8 @@ from core.accounts.target_contract import (
 from .channel.formatting import mention_markdown
 
 if TYPE_CHECKING:
-    from agent.plugin_host.capabilities import RpcCapability
-    from agent.plugin_host.kv import PluginKVStore
+    from shiori_sdk.rpc import RpcCapability
+    from shiori_sdk.storage import KeyValueStore
     from .bots import TelegramBots
     from .channel.lifecycle import TelegramChannel
 
@@ -41,7 +41,7 @@ class TelegramAccountApi:
         self,
         bots: TelegramBots,
         rpc: RpcCapability,
-        store: PluginKVStore,
+        store: KeyValueStore,
     ) -> None:
         self._bots = bots
         self._rpc = rpc
@@ -49,7 +49,7 @@ class TelegramAccountApi:
 
     def register(self) -> None:
         self._rpc.register(
-            "token.verify", verify_bot_token, concurrency=Concurrency.INTEGRATION
+            "token.verify", self._bots.verify_token, concurrency=Concurrency.INTEGRATION
         )
         self._rpc.register(
             "identity.get", self.get_identity, concurrency=Concurrency.READ_ONLY
@@ -143,18 +143,21 @@ class TelegramAccountApi:
     async def list_known(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Return only chats observed by this Bot, never a full contact list."""
         ref = self._known_ref(payload)
-        known = self._store.get(f"known_chats:{ref}", {})
+        known = read_mapping(self._store, f"known_chats:{ref}")
+        chats = []
+        for value in known.values():
+            if not isinstance(value, dict):
+                raise ValueError("Stored Telegram conversation must be an object")
+            chats.append(value)
         return {
             "scope": "known_conversations",
-            "chats": sorted(
-                known.values(), key=lambda item: item["last_seen"], reverse=True
-            ),
+            "chats": sorted(chats, key=lambda item: item["last_seen"], reverse=True),
         }
 
     async def get_identity(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Return the last verified Bot identity without exposing its Token."""
         ref = self._known_ref(payload)
-        return dict(self._store.get(f"identity:{ref}", {}))
+        return read_mapping(self._store, f"identity:{ref}")
 
     async def get_member(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Query one group member; Telegram may reject it without bot permission."""
@@ -162,7 +165,7 @@ class TelegramAccountApi:
         channel = self._channel(payload)
         chat_id = str(payload.get("chat_id") or "")
         user_id = str(payload.get("user_id") or "")
-        known = self._store.get(f"known_chats:{ref}", {})
+        known = read_mapping(self._store, f"known_chats:{ref}")
         if not chat_id.startswith("-") or chat_id not in known or not user_id.isdigit():
             raise ValueError("A known group and numeric user ID are required")
         try:

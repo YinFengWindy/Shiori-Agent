@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -39,3 +40,34 @@ class TurnCancelled:
     channel: str
     chat_id: str
     external_message_id: str = ""
+
+
+@dataclass(frozen=True)
+class ToolCallStarted:
+    """A tool invocation offered to the current turn's live channel presentation."""
+
+    session_key: str
+    channel: str
+    chat_id: str
+    iteration: int
+    call_id: str
+    tool_name: str
+    arguments: dict[str, Any]
+    role_id: str = ""
+
+
+@dataclass(frozen=True)
+class ToolCallCompleted:
+    """The observable result summary for a previously announced tool invocation."""
+
+    session_key: str
+    channel: str
+    chat_id: str
+    iteration: int
+    call_id: str
+    tool_name: str
+    arguments: dict[str, Any]
+    final_arguments: dict[str, Any]
+    status: str
+    result_preview: str
+    role_id: str = ""

@@ -5,18 +5,16 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from agent.plugin_host.runtime_context import PluginRuntimeContext
+    from shiori_sdk.channels.context import ChannelPluginContext
 
 
-async def setup(ctx: "PluginRuntimeContext") -> None:
+async def setup(ctx: "ChannelPluginContext") -> None:
     """Registers saved Bots and the RPCs that add, connect and remove them."""
-    from infra.channels.account_group import AccountChannelGroup
-
     from .account_api import TelegramAccountApi
     from .bots import TelegramBots
     from .credentials import TelegramBotStore
 
-    group = AccountChannelGroup("telegram")
+    group = ctx.channels.group("telegram")
     ctx.channels.add(group)
     bots = TelegramBots(ctx, TelegramBotStore(ctx.kv), group)
     await bots.load()

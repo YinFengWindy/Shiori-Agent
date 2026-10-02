@@ -1,6 +1,11 @@
 from __future__ import annotations
 
 from shiori_sdk.channel_events import (
+    ToolCallStarted as ToolCallStarted,
+    ToolCallCompleted as ToolCallCompleted,
+)
+
+from shiori_sdk.channel_events import (
     TurnStarted as TurnStarted,
     StreamDeltaReady as StreamDeltaReady,
     TurnCancelled as TurnCancelled,
@@ -138,30 +143,3 @@ class ExternalTextPushed:
     tool: str = "message_push"
     media: tuple[str, ...] = ()
     message_metadata: dict[str, Any] = field(default_factory=_empty_metadata)
-
-
-@dataclass(frozen=True)
-class ToolCallStarted:
-    session_key: str
-    channel: str
-    chat_id: str
-    iteration: int
-    call_id: str
-    tool_name: str
-    arguments: dict[str, Any]
-    role_id: str = ""
-
-
-@dataclass(frozen=True)
-class ToolCallCompleted:
-    session_key: str
-    channel: str
-    chat_id: str
-    iteration: int
-    call_id: str
-    tool_name: str
-    arguments: dict[str, Any]
-    final_arguments: dict[str, Any]
-    status: str
-    result_preview: str
-    role_id: str = ""

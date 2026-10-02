@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 from telegram import Bot
 from telegram.error import TelegramError
 
-from bus.events import InboundMessage
+from shiori_sdk.messages import InboundMessage
 
 if TYPE_CHECKING:
     from shiori_sdk.channels.avatars import AvatarsCapability

@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from bus.events import OutboundMessage
+from shiori_sdk.messages import OutboundMessage
 from plugins.telegram.backend.channel.outbound import _OutboundMixin
 from plugins.telegram.backend.utils import TelegramOutboundLimiter
 

@@ -10,10 +10,8 @@ from unittest.mock import AsyncMock
 import pytest
 from PIL import Image
 
-from agent.plugin_host.avatars import AvatarsCapability
-from agent.plugin_host.effects import EffectScope
-from bus.events import InboundMessage
-from core.channel_avatars import ChannelAvatarStore
+from shiori_sdk.testing.avatars import FakeAvatars
+from shiori_sdk.messages import InboundMessage
 from plugins.telegram.backend.channel.avatar import refresh_message_avatars
 
 
@@ -56,13 +54,11 @@ def _message(sender: str) -> InboundMessage:
     )
 
 
-async def _refreshed(tmp_path, bot: _FakeBot, sender: str) -> ChannelAvatarStore:
-    store = ChannelAvatarStore(tmp_path)
-    avatars = AvatarsCapability(store, EffectScope("telegram"), "telegram")
+async def _refreshed(tmp_path, bot: _FakeBot, sender: str) -> FakeAvatars:
+    avatars = FakeAvatars()
     refresh_message_avatars(avatars, cast(Any, bot), _message(sender))
-    for task in list(avatars._tasks):
-        await task
-    return store
+    await avatars.drain()
+    return avatars
 
 
 @pytest.mark.asyncio
@@ -77,9 +73,8 @@ async def test_sender_profile_photo_and_group_photo_are_cached(tmp_path):
         ("get_file", "user-160"),
         ("get_file", "photo:-1001"),
     }
-    index = store.index()
-    assert index.sender("telegram_bot", "77") is not None
-    assert index.chat("telegram_bot", "-1001") is not None
+    assert store.images[("sender", "telegram_bot", "77")] == _png()
+    assert store.images[("chat", "telegram_bot", "-1001")] == _png()
 
 
 @pytest.mark.asyncio
@@ -90,4 +85,4 @@ async def test_anonymous_sender_chat_uses_that_chats_photo(tmp_path):
 
     assert ("get_chat", "-1009") in bot.calls
     assert not any(call[0] == "get_user_profile_photos" for call in bot.calls)
-    assert store.index().sender("telegram_bot", "chat:-1009") is not None
+    assert store.images[("sender", "telegram_bot", "chat:-1009")] == _png()
