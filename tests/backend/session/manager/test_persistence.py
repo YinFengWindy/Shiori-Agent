@@ -49,6 +49,35 @@ async def test_stale_message_rewrite_preserves_progress_and_clear_invalidates_it
     assert len(restored.messages) == 1
 
 
+async def test_clear_without_persisted_progress_expires_old_observations(tmp_path):
+    from core.compaction import CompactionController, CompactionResult
+
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("cli:never-maintained")
+    session.add_message("user", "old")
+    session.add_message("assistant", "answer")
+    manager.save(session)
+    assert not manager._store.get_session_meta(session.key)["maintenance_progress"]
+    progress = manager.maintenance_progress(session)
+    controller = CompactionController(manager, None, None)  # type: ignore[arg-type]
+    await controller.record(
+        session.key,
+        None,
+        CompactionResult(
+            phase="completed",
+            ownership=progress.ownership,
+            generation=progress.generation,
+        ),
+        request_usage={},
+        request_attempted=True,
+    )
+    assert controller.latest(session.key, None) is not None
+    session.clear()
+    manager.save(session)
+    assert controller.latest(session.key, None) is None
+    assert controller.latest(session.key, None, request=True) is None
+
+
 async def test_media_replacement_copies_assets_preserves_cache_and_rejects_stale_cas(
     tmp_path,
 ):

@@ -37,11 +37,13 @@ async def test_context_refresh_is_published_after_role_gate_release(tmp_path, fa
         if fails:
             raise RuntimeError("failed formal turn")
 
+    # Role-state mutations do not change the context; only the turn refreshes.
+    await runtime.execute_role_state(_context(role), AsyncMock())
     if fails:
         with pytest.raises(RuntimeError, match="failed formal turn"):
-            await runtime.execute_thread(_context(role), operation)
+            await runtime.run_passive_turn(_context(role), operation)
     else:
-        await runtime.execute_thread(_context(role), operation)
+        await runtime.run_passive_turn(_context(role), operation)
     assert observed == [("role:mira", False)]
 
 

@@ -36,10 +36,18 @@ def format_compaction_status(state: dict) -> str:
     if not result["committed"]:
         prefix = "记忆已整理、压缩失败" if result["memory_committed"] else "压缩失败"
         return f"{prefix}：{result['error']}"
-    return (
+    status = (
         f"上下文已压缩：{result['before_tokens']} → {result['after_tokens']} token（估算）；"
         f"保留 {result['retained_turns']} 个完整轮次，原文从位置 {result['retained_start']} 保留。"
     )
+    # Retention only drops below the configured count when the budget requires it.
+    configured = result.get("configured_retained_turns", result["retained_turns"])
+    if (
+        result.get("retained_reduction_reason") == "budget"
+        and result["retained_turns"] < configured
+    ):
+        status += f"保留 {configured} 个轮次会超出模型预算，本次已减少。"
+    return status
 
 
 class _ContextWindowMixin:

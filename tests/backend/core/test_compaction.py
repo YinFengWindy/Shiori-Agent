@@ -578,6 +578,31 @@ async def test_manual_budget_failure_never_calls_minimal_renderer(memory_harness
     minimal.assert_not_awaited()
 
 
+async def test_manual_without_removable_configured_turns_commits_nothing(
+    memory_harness,
+):
+    h = memory_harness
+    session = h.manager.get_or_create("cli:manual-retained")
+    _turn(session)
+    _turn(session)
+    h.manager.save(session)
+    controller = _controller(h)
+    with pytest.raises(CompactionFailedError) as caught:
+        await controller.ensure(
+            session_key=session.key,
+            view=None,
+            policy=CompactionPolicy(2),
+            message_limit=len(session.messages),
+            budget=_budget(3500),
+            render=AsyncMock(return_value=[]),
+            measure=lambda _: _budget(100),
+            reason="manual",
+        )
+    assert caught.value.result.failure_stage == "no_turns"
+    assert history_start(session, None) == 0 and not h.prompts
+    controller.writer.generate.assert_not_awaited()
+
+
 async def test_observation_from_another_binding_at_the_same_generation_is_stale():
     from core.compaction import CompactionResult
     from session.maintenance_progress import MaintenanceProgress

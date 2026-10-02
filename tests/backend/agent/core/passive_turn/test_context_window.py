@@ -282,6 +282,37 @@ async def test_manual_external_scope_keeps_other_threads_and_unfinished_input(
         await provider.aclose()
 
 
+async def test_manual_never_retains_fewer_than_configured_turns_with_budget_room(
+    memory_harness,
+):
+    h = memory_harness
+    session = h.manager.get_or_create("cli:configured")
+    session.metadata["role_id"] = "mira"
+    for index in range(3):
+        _turn(session, f"tea task {index}")
+    h.manager.save(session)
+    window, provider = _window(h, 2)
+    msg = InboundMessage(channel="cli", sender="u", chat_id="configured", content="")
+    try:
+        first = await window.inspect(
+            session=session, context_view=None, msg=msg, compact=True
+        )
+        assert first["result"]["committed"] and history_start(session, None) == 2
+        generated = window.controller.writer.generate.await_count
+        # Only the configured two complete turns remain in the window.
+        state = await window.inspect(session=session, context_view=None, msg=msg)
+        assert not state["can_compact"]
+        assert state["reason"] == "没有可压缩的完整轮次"
+        again = await window.inspect(
+            session=session, context_view=None, msg=msg, compact=True
+        )
+        assert again["result"] is None and again["reason"] == "没有可压缩的完整轮次"
+        assert history_start(session, None) == 2
+        assert window.controller.writer.generate.await_count == generated
+    finally:
+        await provider.aclose()
+
+
 async def test_no_complete_turn_is_unavailable_without_model_work(memory_harness):
     h = memory_harness
     session = h.manager.get_or_create("cli:empty")

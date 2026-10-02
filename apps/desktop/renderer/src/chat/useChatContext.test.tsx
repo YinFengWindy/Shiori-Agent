@@ -17,8 +17,10 @@ async function setup() {
   const pending: { method: string; finish: (status: ChatContextStatus) => void }[] = [];
   const listeners = new Set<(event: BridgeEvent) => void>();
   let role = "mira";
+  type Props = { bridgeReady: boolean; sending: boolean };
+  let props: Props = { bridgeReady: true, sending: false };
   let hook!: ReturnType<typeof useChatContext>;
-  function Harness() { hook = useChatContext(role, `role:${role}`, true, false); return null; }
+  function Harness() { hook = useChatContext(role, `role:${role}`, props.bridgeReady, props.sending); return null; }
   const view = await mountTestComponent(null);
   Object.defineProperty(window, "miraDesktop", { configurable: true, value: {
     invoke: ({ method }: { method: string }) => new Promise((resolve) => pending.push({ method, finish: (payload) => resolve({ payload }) })),
@@ -28,6 +30,7 @@ async function setup() {
   return { ...view, pending, hook: () => hook,
     async finish(index: number, status = state()) { await act(async () => { pending[index]!.finish(status); }); },
     async switchRole(next: string) { role = next; await view.render(<Harness />); },
+    async update(next: Partial<Props>) { props = { ...props, ...next }; await view.render(<Harness />); },
     async emit(method: string) { await act(async () => { for (const listener of listeners) listener({ id: "", type: "event", method, payload: { session_key: `role:${role}` } }); }); },
   };
 }
@@ -39,7 +42,7 @@ test("role/model changes invalidate already-running status reads", async () => {
     await view.finish(1, state("other", 100));
     await view.finish(0, state("mira", 999));
     assert.equal(view.hook().status?.tokens, 100);
-    await view.emit("chat.done");
+    await view.emit("chat.context.updated");
     await act(async () => notifyChatModelChange("other", true));
     await view.finish(2, state("other", 999));
     assert.equal(view.hook().status, null);
@@ -108,16 +111,44 @@ test("unmount invalidates compaction ownership before its completion can refresh
   } finally { await view.cleanup(); }
 });
 
-test("completion and external compaction events refresh the same context", async () => {
+test("a turn refreshes once from the host context event, not from its completion events", async () => {
   const view = await setup();
   try {
     await view.finish(0);
-    for (const method of ["chat.done", "chat.context.updated", "runtime.applied"]) {
+    for (const method of ["chat.done", "chat.error", "session.updated"]) await view.emit(method);
+    assert.equal(view.pending.length, 1);
+    for (const method of ["chat.context.updated", "runtime.applied"]) {
       await view.emit(method);
-      const index = view.pending.length - 1;
+      const index: number = view.pending.length - 1;
       assert.equal(view.pending[index]!.method, "chat.context.status");
       await view.finish(index);
     }
+  } finally { await view.cleanup(); }
+});
+
+test("a running compaction still reports after sending and bridge reconnection, keeping the last usage", async () => {
+  const view = await setup();
+  try {
+    await view.finish(0);
+    let compact!: Promise<void>;
+    await act(async () => { compact = view.hook().compact(); });
+    await view.update({ sending: true });
+    await view.update({ bridgeReady: false });
+    await view.update({ bridgeReady: true });
+    for (let index = 2; index < view.pending.length; index++) {
+      await view.finish(index, { ...state("mira"), tokens: null, model_context_window: null, busy: true, can_compact: false, reason: "正在回复或整理上下文，请稍后重试" });
+    }
+    assert.equal(view.hook().status?.tokens, 32000);
+    assert.equal(view.hook().busy, true);
+    await view.update({ sending: false });
+    await view.finish(1, { ...state("mira", 8000), result: { committed: true, memory_committed: true, before_tokens: 32000, after_tokens: 8000, retained_turns: 2, failure_stage: "", error: "" } });
+    assert.match(view.hook().notice, /上下文已压缩/);
+    const last: number = view.pending.length - 1;
+    assert.equal(view.pending[last]!.method, "chat.context.status");
+    await view.finish(last, state("mira", 8000));
+    await compact;
+    assert.equal(view.hook().busy, false);
+    assert.equal(view.hook().status?.tokens, 8000);
   } finally { await view.cleanup(); }
 });
 
