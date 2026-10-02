@@ -16,6 +16,7 @@ from .helpers import (
 from .interrupts import _InterruptMixin
 from .processing import _ProcessingMixin
 from .streaming import _StreamingMixin
+from .context_window import _ContextWindowMixin
 
 __all__ = ["AgentLoop"]
 
@@ -25,6 +26,7 @@ class AgentLoop(
     _StreamingMixin,
     _ProcessingMixin,
     _InterruptMixin,
+    _ContextWindowMixin,
 ):
     """
     主循环：从 MessageBus 消费 InboundMessage，

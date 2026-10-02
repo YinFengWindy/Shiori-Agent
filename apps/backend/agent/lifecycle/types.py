@@ -148,6 +148,8 @@ class PromptRenderInput:
     thread_id: str = ""
     # 本回合可见历史窗口里非用户本人消息的来源，旧的在前；外部回合据此注入成员档案（#498）。
     window_sources: tuple[MessageSource, ...] = ()
+    # Idle context inspection has no draft/current turn; use the same owner render.
+    include_current_message: bool = True
 
 
 @dataclass(frozen=True)

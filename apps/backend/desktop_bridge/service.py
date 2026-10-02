@@ -26,6 +26,7 @@ from agent.plugin_host.rpc import PluginRpcRegistry
 from agent.tools.message_push import MessagePushTool
 from agent.turns.turn_pushes import current_turn_pushes
 from bus.event_bus import EventBus
+from bus.events_context import ContextWindowChanged
 from bus.events_lifecycle import (
     ProactiveMessageCommitted,
     RoleDeleted,
@@ -47,6 +48,7 @@ from desktop_bridge.app_service import DesktopAppService
 from desktop_bridge.account_requests import DesktopAccountRequestHandler
 from desktop_bridge.identity_requests import DesktopIdentityRequestHandler
 from desktop_bridge.chat_requests import DesktopChatRequestHandler
+from desktop_bridge.context_requests import DesktopContextRequests
 from desktop_bridge.chat_service import ChatTurnBusyError, DesktopChatService
 from desktop_bridge.method_policy import MethodPolicy, resolve_plugin_method_policy
 from desktop_bridge.models import BridgeError, BridgeEvent, BridgeResponse
@@ -135,6 +137,8 @@ class DesktopBridgeService:
         self._plugin_event_registry = plugin_rpc_registry
         self.event_bus.on(PluginBridgeEvent, self._plugin_event_listener)
         self._turn_committed_listener = self._on_turn_committed
+        self._context_window_listener = self._on_context_window_changed
+        self.event_bus.on(ContextWindowChanged, self._context_window_listener)
         self._proactive_message_listener = self._on_proactive_message_committed
         self.event_bus.on(TurnCommitted, self._turn_committed_listener)
         self.event_bus.on(
@@ -296,12 +300,32 @@ class DesktopBridgeService:
                 start_chat_turn=lambda **kwargs: self._start_chat_turn(**kwargs),
                 session_presenter=self.session_presenter,
                 sanitize_voice_metrics=_sanitize_voice_metrics,
+                context_requests=DesktopContextRequests(
+                    self.role_service,
+                    self.app_service,
+                    self.chat_service,
+                    self.agent_loop,
+                ),
             ),
             voice=self.voice_handler,
             plugins=DesktopPluginRequestHandler(plugin_rpc_registry),
         )
         if push_tool is not None and activate_transport:
             self.register_desktop_push_channel(push_tool)
+
+    async def _on_context_window_changed(self, event: ContextWindowChanged) -> None:
+        await self._broadcast_event(
+            BridgeEvent(
+                id="",
+                type="event",
+                method="chat.context.updated",
+                payload={
+                    "session_key": event.session_key,
+                    "context_key": event.context_key,
+                    "busy": event.busy,
+                },
+            ).to_dict()
+        )
 
     async def _on_turn_committed(self, event: TurnCommitted) -> None:
         """Broadcasts a role turn's committed rows once its shared session is saved.
@@ -466,6 +490,7 @@ class DesktopBridgeService:
         """Releases bridge event subscriptions and desktop chat tasks."""
 
         self.event_bus.off(TurnCommitted, self._turn_committed_listener)
+        self.event_bus.off(ContextWindowChanged, self._context_window_listener)
         self.event_bus.off(
             ProactiveMessageCommitted,
             self._proactive_message_listener,

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ModelRegistrationFormData } from "../../../src/bridge/shared";
 import { type RoleRecord, BridgeError, errorMessage } from "@shiori/sdk";
 import { mascotFeedback as feedback } from "../shared/mascot/mascotFeedback";
+import { notifyChatModelChange } from "./chatModelChanges";
 import {
   runtimeConfigForSelection,
   selectionFromRole,
@@ -58,6 +59,7 @@ export function useRoleModelSelection(activeRoleId: string, bridgeReady: boolean
   const update = useCallback(async (kind: RoleModelSelectionChange, value: string): Promise<boolean> => {
     if (!selection || !activeRoleId) return false;
     const runtimeConfig = runtimeConfigForSelection(selection, kind, value);
+    notifyChatModelChange(activeRoleId, true);
     try {
       const response = await window.miraDesktop.invoke({
         method: "roles.update",
@@ -76,6 +78,8 @@ export function useRoleModelSelection(activeRoleId: string, bridgeReady: boolean
     } catch (error) {
       feedback.error(`模型切换失败：${errorMessage(error, { includeDetail: true })}`);
       return false;
+    } finally {
+      notifyChatModelChange(activeRoleId, false);
     }
   }, [activeRoleId, registrations, selection]);
 

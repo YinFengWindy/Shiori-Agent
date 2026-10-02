@@ -188,6 +188,10 @@ METHOD_POLICIES: dict[str, MethodPolicy] = {
         admission_exempt=True,
         owner_routing=OwnerRouting.BUSY_CHAT_SESSION,
     ),
+    # Context transactions own their role gate and reject concurrent work;
+    # they must not queue behind the global mutation lane.
+    "chat.context.status": MethodPolicy(concurrency=Concurrency.READ_ONLY),
+    "chat.context.compact": MethodPolicy(concurrency=Concurrency.READ_ONLY),
     "voice.turn.cancel": MethodPolicy(
         admission_exempt=True,
         owner_routing=OwnerRouting.BUSY_VOICE_TURN,

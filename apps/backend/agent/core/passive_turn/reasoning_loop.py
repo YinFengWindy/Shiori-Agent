@@ -34,6 +34,7 @@ from agent.tools.turn_scope import tool_turn
 from agent.provider import LLMProvider
 from agent.prompting.input_budget import InputBudget
 from .helpers import turn_tool_names
+from .tool_visibility import initial_tool_order
 from .reply_recovery import complete_reply
 from .compaction import ensure_request_budget
 
@@ -174,15 +175,13 @@ class _PassiveReasoningLoopMixin:
 
         if self._tool_search_enabled:
             always_on = self._tools.get_always_on_names()
-            visible_names = set(
-                _turn_tool_names(always_on | (preloaded_tools or set()))
+            visible_order = initial_tool_order(
+                self._tools,
+                preloaded_tool_order or sorted(preloaded_tools or set()),
+                disabled=disabled,
+                external_restricted=external_restricted,
             )
-            visible_order = self._tools.get_registered_order(always_on & visible_names)
-            seen_visible = set(visible_order)
-            for name in preloaded_tool_order or sorted(preloaded_tools or set()):
-                if name in visible_names and name not in seen_visible:
-                    visible_order.append(name)
-                    seen_visible.add(name)
+            visible_names = set(visible_order)
             logger.info(
                 "[tool_search] visible=%d 个工具 always_on=%d preloaded=%d need_search=%s",
                 len(visible_names),
