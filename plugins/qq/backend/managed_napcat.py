@@ -5,12 +5,10 @@ from __future__ import annotations
 import asyncio
 import os
 import subprocess
-import sys
 from pathlib import Path
 from typing import Any
 
-from infra.process.owned_spawn import popen_owned
-from infra.process.windows_job import WindowsJob
+from shiori_sdk.processes import Processes, ProcessOwner
 
 from . import napcat_process_guard as guard
 from .napcat_account_files import NapCatAccountFiles
@@ -22,14 +20,15 @@ from .napcat_webui import NapCatWebUi
 class ManagedNapCat(NapCatInstaller):
     """Starts and stops only plugin-owned per-account NapCat processes."""
 
-    def __init__(self, data_dir: Path) -> None:
+    def __init__(self, data_dir: Path, processes: Processes) -> None:
         super().__init__(data_dir)
+        self._process_service = processes
         self._files = NapCatAccountFiles(self.root)
         self._qr = NapCatQrCache(self._files.account_dir)
         self._processes: dict[str, subprocess.Popen[bytes]] = {}
         # Kill-on-close jobs make the OS reap each NapCat tree when this bridge
         # dies without running stop_all (crash, kill, hot reload).
-        self._jobs: dict[str, WindowsJob] = {}
+        self._jobs: dict[str, ProcessOwner] = {}
         self._webui = NapCatWebUi(self._files.metadata)
 
     def endpoint(self, ref: str) -> tuple[str, str]:
@@ -90,12 +89,11 @@ class ManagedNapCat(NapCatInstaller):
         self._webui.reset(ref)
         log = (account_dir / "process.log").open("ab")
         try:
-            process, job = popen_owned(
+            process, job = self._process_service.popen(
                 [
                     str(self.install_dir / "node.exe"),
                     str(self.install_dir / "index.js"),
                 ],
-                owned=sys.platform == "win32",
                 cwd=account_dir,
                 env=environment,
                 stdout=log,

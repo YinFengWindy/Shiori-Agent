@@ -1,12 +1,16 @@
 """Explicitly granted setup services consumed by channel plugins."""
 
 from typing import Protocol
+from pathlib import Path
 
 from shiori_sdk.accounts.capability import AccountsCapability
 from shiori_sdk.extensions import ConfigValues
 from shiori_sdk.rpc import RpcCapability
 from shiori_sdk.runtime import PluginRuntimeContext
 from shiori_sdk.storage import KeyValueStore
+from shiori_sdk.processes import Processes
+from shiori_sdk.http import HttpClient
+from .avatars import AvatarsCapability
 from . import Channel
 from .chat_types import ChatTypeDeclaration
 
@@ -38,3 +42,11 @@ class ChannelPluginContext(PluginRuntimeContext, Protocol):
     def config(self) -> ConfigValues: ...
     @property
     def rpc(self) -> RpcCapability: ...
+    @property
+    def avatars(self) -> AvatarsCapability: ...
+    @property
+    def workspace(self) -> Path | None: ...
+    @property
+    def processes(self) -> Processes: ...
+    @property
+    def http(self) -> HttpClient: ...

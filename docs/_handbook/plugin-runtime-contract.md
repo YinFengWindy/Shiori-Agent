@@ -869,3 +869,7 @@ including Windows Job ownership before execution. See the SDK README for the
 small contracts and independent test fixtures. Plugin-private generation, Story
 and observation policy is unchanged. Story/NovelAI and Meme/Citation remain
 explicit dependencies; desktop-pet integration is tested on the host side.
+
+### SDK 3.0 channel services (#589)
+
+QQBot and QQ consume the public `ChannelPluginContext`/`ChannelContext` and SDK-only testing support. Channel values (accounts, targets, message events, declarations, session keys and message source/quotes) have one SDK definition. `ctx.intake_factory` creates host-owned admission coordination; `avatars` schedules host-owned caching, and `http` provides bounded requests. `processes.popen` exposes the synchronous counterpart to owned async spawn, preserving WindowsJob adoption before execution without moving any OS implementation into the SDK. Platform credentials, clients, reconnect/streaming, NapCat installation and QR/profile policy remain plugin-owned. Actual host construction checks these protocols with pyright.

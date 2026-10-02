@@ -95,7 +95,6 @@
   },
   "plugins/feishu/backend/channel.py": {
     "agent.looping.interrupt.InterruptController": 1,
-    "agent.plugin_host.avatars.AvatarsCapability": 1,
     "agent.plugin_host.kv.PluginKVStore": 1,
     "agent.tools.message_push.MessagePushTool": 1,
     "bus.event_bus.EventBus": 1,
@@ -123,7 +122,6 @@
     "agent.plugin_host.kv.PluginKVStore": 1
   },
   "plugins/feishu/backend/contacts.py": {
-    "agent.plugin_host.avatars.AvatarsCapability": 1,
     "agent.plugin_host.kv.PluginKVStore": 1,
     "bus.events.InboundMessage": 1
   },
@@ -186,117 +184,6 @@
     "bus.events_lifecycle.TurnStarted": 1,
     "core.common.channel_directory.ChannelDirectory": 1
   },
-  "plugins/qq/backend/accounts_actions.py": {
-    "core.accounts.target_contract.UncertainDeliveryError": 1,
-    "core.common.media.detect_image_mime_from_header": 1
-  },
-  "plugins/qq/backend/accounts_avatar.py": {
-    "agent.plugin_host.avatars.AvatarsCapability": 1,
-    "bus.events.InboundMessage": 1,
-    "core.net.http.shared_ssl_context": 1
-  },
-  "plugins/qq/backend/accounts_inbound.py": {
-    "bus.events.InboundMessage": 1,
-    "core.accounts.VIA_ACCOUNT_KEY": 1,
-    "core.common.message_source.MENTIONED_IDS_KEY": 1,
-    "core.common.message_source.MENTIONED_KEY": 1,
-    "core.common.message_source.SENDER_NAME_KEY": 1
-  },
-  "plugins/qq/backend/accounts_inbound_adapter.py": {
-    "agent.plugin_host.avatars.AvatarsCapability": 1,
-    "bus.events.InboundMessage": 1,
-    "core.channels.pairing_command.answer_pairing_code": 1,
-    "core.common.message_source.GROUP_NAME_KEY": 1,
-    "core.common.message_source.addresses_account": 1,
-    "infra.channels.contract.ChannelContext": 1,
-    "infra.channels.intake.ChannelIntake": 1
-  },
-  "plugins/qq/backend/accounts_outbound_adapter.py": {
-    "bus.events.OutboundMessage": 1,
-    "core.common.channel_chat_types.REPLY_MENTION_IDS_KEY": 1,
-    "infra.channels.contract.ChannelContext": 1
-  },
-  "plugins/qq/backend/accounts_reply_quote.py": {
-    "bus.events.InboundMessage": 1,
-    "core.common.message_source.REPLY_TO_SENDER_ID_KEY": 1,
-    "infra.channels.reply_context.with_reply_quote": 1
-  },
-  "plugins/qq/backend/accounts_runtime.py": {
-    "agent.plugin_host.avatars.AvatarsCapability": 1,
-    "infra.channels.contract.ChannelContext": 1,
-    "infra.channels.intake.ChannelIntake": 1
-  },
-  "plugins/qq/backend/accounts_settings.py": {
-    "core.accounts.AccountResponseRules": 1,
-    "infra.channels.intake.ChannelIntake": 1
-  },
-  "plugins/qq/backend/accounts_store.py": {
-    "agent.plugin_host.plugin_data.plugin_data_dir": 1,
-    "core.accounts.AccountResponseRules": 1,
-    "core.accounts.ViaAccount": 1,
-    "core.accounts.response_rules_to_dict": 1,
-    "core.accounts.stored_response_rules": 1,
-    "infra.persistence.json_store.atomic_save_json": 1
-  },
-  "plugins/qq/backend/channel/compat.py": {
-    "infra.channels.base.AttachmentStore": 1
-  },
-  "plugins/qq/backend/channel/formatting.py": {
-    "core.common.channel_identifiers.QQ_GROUP_PREFIX": 1
-  },
-  "plugins/qq/backend/managed_napcat.py": {
-    "infra.process.owned_spawn.popen_owned": 1,
-    "infra.process.windows_job.WindowsJob": 1
-  },
-  "plugins/qq/backend/napcat_account_files.py": {
-    "infra.persistence.json_store.atomic_save_json": 1
-  },
-  "plugins/qq/backend/napcat_installer.py": {
-    "infra.persistence.json_store.atomic_save_json": 1
-  },
-  "plugins/qq/backend/plugin.py": {
-    "agent.plugin_host.runtime_context.PluginRuntimeContext": 1,
-    "core.accounts.AccountDeletionPlan": 1,
-    "core.accounts.VIA_ACCOUNT_KEY": 1,
-    "core.accounts.target_contract.ACCOUNT_SEND_METHOD": 1,
-    "core.accounts.target_contract.ACCOUNT_TARGETS_METHOD": 1,
-    "core.accounts.target_contract.account_send_media": 1,
-    "desktop_bridge.method_policy.Concurrency": 1
-  },
-  "plugins/qq/tests/test_accounts_actions.py": {
-    "agent.account_delivery.AccountDelivery": 1,
-    "core.accounts.AccountRegistry": 1,
-    "core.accounts.delivery_ledger.AccountDeliveryLedger": 1,
-    "core.accounts.target_contract.AccountTarget": 1,
-    "core.accounts.target_contract.UncertainDeliveryError": 1,
-    "core.identity.UserIdentityStore": 1
-  },
-  "plugins/qq/tests/test_accounts_avatar.py": {
-    "agent.plugin_host.avatars.AvatarsCapability": 1,
-    "agent.plugin_host.effects.EffectScope": 1,
-    "core.channel_avatars.ChannelAvatarStore": 1
-  },
-  "plugins/qq/tests/test_accounts_outbound_adapter.py": {
-    "bus.events.OutboundMessage": 1
-  },
-  "plugins/qq/tests/test_accounts_runtime.py": {
-    "infra.persistence.json_store.atomic_save_json": 1
-  },
-  "plugins/qq/tests/test_compat.py": {
-    "core.net.http.HttpRequester": 1,
-    "core.net.http.RequestBudget": 1,
-    "core.net.http.RetryPolicy": 1
-  },
-  "plugins/qq/tests/test_plugin.py": {
-    "agent.plugin_host.HostServices": 1,
-    "agent.plugin_host.PluginKernel": 1,
-    "agent.plugin_host.load_manifest": 1,
-    "bus.event_bus.EventBus": 1,
-    "core.accounts.AccountResponseRules": 1,
-    "core.roles.store.RoleStore": 1,
-    "shiori_plugin_testkit.bridge.plugin_bridge_request": 1,
-    "shiori_plugin_testkit.packages.stage_plugin_package": 1
-  },
   "plugins/telegram/backend/account_api.py": {
     "agent.plugin_host.capabilities.RpcCapability": 1,
     "agent.plugin_host.kv.PluginKVStore": 1,
@@ -318,7 +205,6 @@
     "infra.channels.account_group.AccountChannelGroup": 1
   },
   "plugins/telegram/backend/channel/avatar.py": {
-    "agent.plugin_host.avatars.AvatarsCapability": 1,
     "bus.events.InboundMessage": 1
   },
   "plugins/telegram/backend/channel/commands.py": {
@@ -333,7 +219,6 @@
     "core.common.message_source.SENDER_NAME_KEY": 1
   },
   "plugins/telegram/backend/channel/inbound.py": {
-    "agent.plugin_host.avatars.AvatarsCapability": 1,
     "bus.events.InboundMessage": 1,
     "core.accounts.VIA_ACCOUNT_KEY": 1,
     "core.channels.pairing_command.answer_pairing_code": 1,
@@ -341,7 +226,6 @@
   },
   "plugins/telegram/backend/channel/lifecycle.py": {
     "agent.looping.interrupt.InterruptController": 1,
-    "agent.plugin_host.avatars.AvatarsCapability": 1,
     "agent.plugin_host.kv.PluginKVStore": 1,
     "bus.event_binding.EventBinding": 1,
     "bus.event_bus.EventBus": 1,

@@ -43,6 +43,7 @@ SDK_PLUGINS = frozenset(
         "browser_use",
         "computer_use",
         "qqbot",
+        "qq",
     }
 )
 SLOW_PLUGINS = ("telegram", "feishu", "qqbot")

@@ -189,4 +189,4 @@ jobs:
       - name: Verify owned process, MCP and turn lifecycle
         env:
           PYTHONUTF8: "1"
-        run: .venv/Scripts/pytest.exe -q tests/backend/infra/process tests/backend/agent/mcp tests/backend/agent/tools/test_turn_scope.py tests/backend/agent/plugin_host/test_processes_browser_use.py tests/backend/agent/plugin_host/test_processes_computer_use.py plugins/browser_use/tests plugins/computer_use/tests
+        run: .venv/Scripts/pytest.exe -q tests/backend/infra/process tests/backend/agent/mcp tests/backend/agent/tools/test_turn_scope.py tests/backend/agent/plugin_host/test_processes_browser_use.py tests/backend/agent/plugin_host/test_processes_computer_use.py plugins/browser_use/tests plugins/computer_use/tests tests/backend/agent/plugin_host/test_processes.py plugins/qq/tests/test_managed_napcat.py plugins/qq/tests/test_napcat_process_guard.py

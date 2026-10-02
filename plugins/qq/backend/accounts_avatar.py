@@ -12,11 +12,11 @@ from typing import TYPE_CHECKING
 
 import httpx
 
-from bus.events import InboundMessage
-from core.net.http import shared_ssl_context
+from shiori_sdk.messages import InboundMessage
+from shiori_sdk.http import HttpGet, RequestBudget
 
 if TYPE_CHECKING:
-    from agent.plugin_host.avatars import AvatarsCapability
+    from shiori_sdk.channels.avatars import AvatarsCapability
 
 logger = logging.getLogger(__name__)
 
@@ -43,21 +43,16 @@ def _avatar_data_uri(content: bytes) -> str:
     return f"data:{mime};base64,{base64.b64encode(content).decode('ascii')}"
 
 
-async def download_avatar(
-    url: str, *, transport: httpx.AsyncBaseTransport | None = None
-) -> bytes:
+async def download_avatar(url: str, *, requester: HttpGet) -> bytes:
     """The image bytes at a QQ avatar ``url``; raises ``httpx.HTTPError``."""
-    async with httpx.AsyncClient(
-        timeout=10.0, transport=transport, verify=shared_ssl_context()
-    ) as client:
-        response = await client.get(url, follow_redirects=True)
-        _ = response.raise_for_status()
+    response = await requester.get(
+        url, follow_redirects=True, timeout_s=10.0, budget=RequestBudget(10.0)
+    )
+    _ = response.raise_for_status()
     return response.content
 
 
-async def fetch_qq_avatar(
-    uin: str, *, transport: httpx.AsyncBaseTransport | None = None
-) -> str | None:
+async def fetch_qq_avatar(uin: str, *, requester: HttpGet) -> str | None:
     """The QQ number's 100px avatar as a data URI; None when it cannot be fetched.
 
     A network boundary: failures are logged, never raised, so a connection
@@ -65,7 +60,7 @@ async def fetch_qq_avatar(
     """
     try:
         content = await download_avatar(
-            QQ_AVATAR_URL.format(uin=uin), transport=transport
+            QQ_AVATAR_URL.format(uin=uin), requester=requester
         )
         return _avatar_data_uri(content)
     except (httpx.HTTPError, ValueError) as exc:
@@ -74,7 +69,7 @@ async def fetch_qq_avatar(
 
 
 def refresh_message_avatars(
-    avatars: AvatarsCapability, message: InboundMessage
+    avatars: AvatarsCapability, message: InboundMessage, *, requester: HttpGet
 ) -> None:
     """Asks the host to refresh the avatars an admitted message shows.
 
@@ -84,7 +79,10 @@ def refresh_message_avatars(
     """
     sender_url = QQ_AVATAR_URL.format(uin=message.sender)
     _ = avatars.refresh(
-        "sender", message.channel, message.sender, lambda: download_avatar(sender_url)
+        "sender",
+        message.channel,
+        message.sender,
+        lambda: download_avatar(sender_url, requester=requester),
     )
     chat_url = (
         QQ_GROUP_AVATAR_URL.format(group=message.metadata["group_id"])
@@ -92,5 +90,8 @@ def refresh_message_avatars(
         else sender_url
     )
     _ = avatars.refresh(
-        "chat", message.channel, message.chat_id, lambda: download_avatar(chat_url)
+        "chat",
+        message.channel,
+        message.chat_id,
+        lambda: download_avatar(chat_url, requester=requester),
     )

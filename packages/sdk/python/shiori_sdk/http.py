@@ -27,7 +27,21 @@ class HttpRequester(Protocol):
     ) -> httpx.Response: ...
 
 
-class HttpClient(Protocol):
+class HttpGet(Protocol):
+    """Bounded downloads share the owning host transport and connection pool."""
+
+    async def get(
+        self,
+        url: str,
+        *,
+        headers: dict[str, str] | None = None,
+        follow_redirects: bool = False,
+        timeout_s: float | None = None,
+        budget: RequestBudget | None = None,
+    ) -> httpx.Response: ...
+
+
+class HttpClient(HttpGet, Protocol):
     """External generation requests use the host-selected transport budget by default."""
 
     async def post(
@@ -39,10 +53,9 @@ class HttpClient(Protocol):
         timeout_s: float | None = None,
         budget: RequestBudget | None = None,
     ) -> httpx.Response: ...
-    async def get(self, url: str, *, headers: dict[str, str]) -> httpx.Response: ...
 
 
-class ChannelHttp(Protocol):
+class ChannelHttp(HttpGet, Protocol):
     """Budgeted transport for channel media and local platform services."""
 
     async def request(
@@ -54,15 +67,6 @@ class ChannelHttp(Protocol):
         params: dict[str, object] | None = None,
         content: bytes | str | None = None,
         json: object = None,
-        follow_redirects: bool = False,
-        timeout_s: float | None = None,
-        budget: RequestBudget | None = None,
-    ) -> httpx.Response: ...
-    async def get(
-        self,
-        url: str,
-        *,
-        headers: dict[str, str] | None = None,
         follow_redirects: bool = False,
         timeout_s: float | None = None,
         budget: RequestBudget | None = None,

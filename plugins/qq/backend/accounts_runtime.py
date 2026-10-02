@@ -8,8 +8,11 @@ from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
-from infra.channels.contract import ChannelContext
-from infra.channels.intake import ChannelIntake
+from shiori_sdk.channels import ChannelContext
+from shiori_sdk.channels.services import ChannelIntake
+from shiori_sdk.accounts.capability import AccountsCapability
+from shiori_sdk.processes import Processes
+from shiori_sdk.http import HttpGet
 
 from .accounts_actions import QQAccountActions, qq_number
 from .accounts_avatar import fetch_qq_avatar
@@ -22,7 +25,7 @@ from .managed_napcat import ManagedNapCat
 from .onebot import OneBotAuthError, OneBotError, OneBotSocket
 
 if TYPE_CHECKING:
-    from agent.plugin_host.avatars import AvatarsCapability
+    from shiori_sdk.channels.avatars import AvatarsCapability
 
 logger = logging.getLogger(__name__)
 _CAPABILITIES = frozenset({"friends", "groups", "group_members", "send"})
@@ -37,12 +40,16 @@ class QQAccountsRuntime(QQAccountSettings, QQInboundAdapter, QQOutboundAdapter):
     def __init__(
         self,
         store: QQAccountsStore,
-        accounts: Any,
+        accounts: AccountsCapability,
         avatars: AvatarsCapability | None = None,
+        *,
+        processes: Processes,
+        http: HttpGet,
     ) -> None:
         self._store = store
         self._avatars = avatars
-        self._managed = ManagedNapCat(store.path.parent)
+        self._managed = ManagedNapCat(store.path.parent, processes)
+        self._http = http
         self._accounts = accounts
         self._generation_key = uuid4().hex
         self._configs = store.load()
@@ -298,7 +305,7 @@ class QQAccountsRuntime(QQAccountSettings, QQInboundAdapter, QQOutboundAdapter):
 
         A failed download keeps the stored avatar and never affects the socket.
         """
-        avatar = await fetch_qq_avatar(uin)
+        avatar = await fetch_qq_avatar(uin, requester=self._http)
         if avatar is None:
             return
         config = self._configs.get(ref)

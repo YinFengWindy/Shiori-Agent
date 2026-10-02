@@ -16,7 +16,7 @@ from telegram.error import TelegramError
 from bus.events import InboundMessage
 
 if TYPE_CHECKING:
-    from agent.plugin_host.avatars import AvatarsCapability
+    from shiori_sdk.channels.avatars import AvatarsCapability
 
 # Anonymous senders post as a chat (a channel or the group itself): ``chat:<id>``.
 _SENDER_CHAT_PREFIX = "chat:"

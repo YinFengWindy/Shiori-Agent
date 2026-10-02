@@ -1,10 +1,11 @@
 """Host-owned native services; plugins supply commands and own their policy."""
 
 from pathlib import Path
+import sys
 from typing import BinaryIO
 from agent.mcp.client import McpClient
 from bootstrap.paths import common_emojis_paths, resource_root
-from infra.process.owned_spawn import spawn_owned
+from infra.process.owned_spawn import spawn_owned, popen_owned
 from shiori_sdk.processes import Processes, Resources
 
 
@@ -48,6 +49,25 @@ class HostProcesses:
     def as_capability(self) -> Processes:
         """Check MCP and process results at their real construction point."""
         return self
+
+    def popen(
+        self,
+        command: list[str],
+        *,
+        cwd: Path,
+        env: dict[str, str],
+        stdout: BinaryIO,
+        stderr: int | BinaryIO,
+    ):
+        """Use the same suspended-spawn/WindowsJob ownership for synchronous channel children."""
+        return popen_owned(
+            command,
+            owned=sys.platform == "win32",
+            cwd=cwd,
+            env=env,
+            stdout=stdout,
+            stderr=stderr,
+        )
 
 
 class HostResources:

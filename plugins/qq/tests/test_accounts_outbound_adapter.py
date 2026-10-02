@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from bus.events import OutboundMessage
+from shiori_sdk.messages import OutboundMessage
 from plugins.qq.backend.accounts_actions import qq_image_segment
 from plugins.qq.backend.accounts_outbound_adapter import QQOutboundAdapter
 

@@ -54,7 +54,7 @@ from .streaming import _StreamingMixin
 logger = logging.getLogger("plugins.telegram.channel")
 
 if TYPE_CHECKING:
-    from agent.plugin_host.avatars import AvatarsCapability
+    from shiori_sdk.channels.avatars import AvatarsCapability
     from shiori_sdk.accounts.capability import AccountsCapability
     from agent.plugin_host.kv import PluginKVStore
     from core.accounts import ConnectionState

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from bus.events import InboundMessage
-from infra.channels.reply_context import (
+from shiori_sdk.messages import InboundMessage
+from shiori_sdk.channels.reply_context import (
     build_inbound_text_with_reply_context,
     with_reply_quote,
 )

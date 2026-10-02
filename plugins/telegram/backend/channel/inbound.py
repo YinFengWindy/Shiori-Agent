@@ -23,7 +23,7 @@ from .identity import (
 )
 
 if TYPE_CHECKING:
-    from agent.plugin_host.avatars import AvatarsCapability
+    from shiori_sdk.channels.avatars import AvatarsCapability
 
 logger = logging.getLogger("plugins.telegram.channel")
 

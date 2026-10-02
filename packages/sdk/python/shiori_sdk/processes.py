@@ -1,6 +1,7 @@
 """Injected process ownership and turn lifetime; SDK never launches native children."""
 
 import asyncio
+import subprocess
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import BinaryIO, Protocol
@@ -44,6 +45,18 @@ class Processes(Protocol):
         stdout: BinaryIO,
         stderr: BinaryIO,
     ) -> tuple[asyncio.subprocess.Process, ProcessOwner | None]: ...
+
+    def popen(
+        self,
+        command: list[str],
+        *,
+        cwd: Path,
+        env: dict[str, str],
+        stdout: BinaryIO,
+        stderr: int | BinaryIO,
+    ) -> tuple[subprocess.Popen[bytes], ProcessOwner | None]:
+        """Start a synchronous child with host-selected tree ownership before execution."""
+        ...
 
 
 class Resources(Protocol):

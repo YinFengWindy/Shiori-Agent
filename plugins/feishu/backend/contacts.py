@@ -20,7 +20,7 @@ from .api import FeishuApi
 from .formatting import as_dict
 
 if TYPE_CHECKING:
-    from agent.plugin_host.avatars import AvatarsCapability
+    from shiori_sdk.channels.avatars import AvatarsCapability
     from agent.plugin_host.kv import PluginKVStore
 
 

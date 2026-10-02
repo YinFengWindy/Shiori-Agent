@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from infra.persistence.json_store import atomic_save_json
+from shiori_sdk.files.json import atomic_save_json
 
 from .installed_qq import resolve_official_qq
 

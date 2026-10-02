@@ -603,6 +603,13 @@ class PluginKernel:
                 if "accounts" in grants and services.role_store is not None
                 else None
             ),
+            avatars=(
+                AvatarsCapability(
+                    services.role_store.avatars, handle.effects, handle.plugin_id
+                )
+                if "avatars" in grants and services.role_store is not None
+                else None
+            ),
             publish_api=lambda api: setattr(handle, "instance", api),
         )
         context.as_hook_context()
@@ -643,9 +650,7 @@ class PluginKernel:
             ),
             "channels": lambda: None,
             "accounts": lambda: None,
-            "avatars": lambda: AvatarsCapability(
-                services.role_store.avatars, handle.effects, handle.plugin_id
-            ),
+            "avatars": lambda: None,
             "background": lambda: None,
             "bot_commands": lambda: None,
             "rpc": lambda: rpc,

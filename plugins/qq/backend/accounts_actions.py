@@ -10,8 +10,8 @@ from pathlib import Path
 from typing import Any
 
 from .onebot import OneBotDisconnected, OneBotError, OneBotSocket
-from core.accounts.target_contract import UncertainDeliveryError
-from core.common.media import detect_image_mime_from_header
+from shiori_sdk.accounts.targets import UncertainDeliveryError
+from shiori_sdk.media import detect_image_mime_from_header
 
 _QQ_ID = re.compile(r"^[1-9][0-9]*$")
 # Image types NapCat sends as a QQ picture.

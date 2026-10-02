@@ -11,6 +11,9 @@ from .extensions import FakeConfig
 from .context import FakePluginContext
 from .storage import FakeKV
 from .memory_context import FakeRpc
+from .processes import FakeProcesses
+from .http import FakeHttp
+from .avatars import FakeAvatars
 
 
 class FakeChannelDeclarations:
@@ -60,7 +63,18 @@ class FakeChannelPluginContext(FakePluginContext):
         self.kv = FakeKV()
         self.config = FakeConfig()
         self.rpc = FakeRpc()
+        self.workspace = plugin_dir
+        self.processes = FakeProcesses()
+        self.http = FakeHttp()
+        self.avatars = FakeAvatars()
 
     def as_capability(self) -> ChannelPluginContext:
         """Check this composition at the same setup boundary as the host."""
         return self
+
+    async def aclose(self) -> None:
+        """Dispose setup registrations and cancel pending avatar downloads."""
+        try:
+            await super().aclose()
+        finally:
+            await self.avatars.aclose()
