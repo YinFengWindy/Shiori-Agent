@@ -19,7 +19,7 @@ def context_unavailable(session_key: str, reason: str, *, busy: bool = False) ->
         "model_identity": "",
         "tokens": None,
         "source": None,
-        "context_window_tokens": None,
+        "model_context_window": None,
         "input_limit_tokens": None,
         "can_compact": False,
         "busy": busy,

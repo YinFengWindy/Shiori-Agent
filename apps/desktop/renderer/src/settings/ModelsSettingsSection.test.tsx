@@ -45,7 +45,6 @@ describe("ModelsSettingsSection 「添加模型」", () => {
       const modelInput = catalog.view.container.querySelector<HTMLInputElement>('input[aria-label="模型"]')!;
       await changeInputValue(modelInput, "gpt-5");
       await changeInputValue(catalog.view.container.querySelector<HTMLInputElement>('[aria-label="上下文窗口"]')!, "128000");
-      await changeInputValue(catalog.view.container.querySelector<HTMLInputElement>('[aria-label="模型最大输出"]')!, "32768");
       assert.equal(catalog.updates.length, 1);
       assert.deepEqual(catalog.draft().models.registrations.map((item) => [item.provider, item.model]), [["openai", "gpt-5"]]);
       assert.doesNotMatch(catalog.view.container.textContent ?? "", /未保存/);

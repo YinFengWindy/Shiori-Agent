@@ -47,11 +47,13 @@ class RoleModelRuntime:
         registrations: list[ModelRegistration],
         dev_mode: bool = False,
         budget_policy: BudgetPolicy | None = None,
+        default_max_tokens: int,
     ) -> None:
         self._roles = role_store
         self._registrations = {item.id: item for item in registrations}
         self._dev_mode = dev_mode
         self._budget_policy = budget_policy or BudgetPolicy()
+        self._default_max_tokens = default_max_tokens
         self._usage_anchors = UsageAnchors()
         self._providers: dict[tuple[str, str], LLMProvider] = {}
 
@@ -76,8 +78,11 @@ class RoleModelRuntime:
                 extra_body=extra_body,
                 provider_name=registration.provider,
                 payload_snapshot_enabled=self._dev_mode,
-                context_window_tokens=registration.context_window_tokens,
-                max_output_tokens=registration.max_output_tokens,
+                model_context_window=registration.model_context_window,
+                model_auto_compact_token_limit=(
+                    registration.model_auto_compact_token_limit
+                ),
+                default_max_tokens=self._default_max_tokens,
                 budget_policy=self._budget_policy,
                 usage_anchors=self._usage_anchors,
             )

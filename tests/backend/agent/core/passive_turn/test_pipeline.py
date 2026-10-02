@@ -331,8 +331,8 @@ def _isolation_pipeline(manager, *, input_token_threshold=75000):
 
     provider = LLMProvider(
         api_key="test",
-        context_window_tokens=input_token_threshold + 8192,
-        max_output_tokens=8192,
+        model_context_window=input_token_threshold + 8192,
+        default_max_tokens=8192,
         budget_policy=BudgetPolicy(safety_margin_tokens=0),
     )
     reasoner = DefaultReasoner(

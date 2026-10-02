@@ -39,21 +39,21 @@ class ModelRegistration:
     api_key: str
     model: str
     effort: Effort = "none"
-    # None represents legacy configuration requiring explicit user repair.
-    context_window_tokens: int | None = None
-    max_output_tokens: int | None = None
+    # None represents an incomplete registration requiring explicit user repair.
+    model_context_window: int | None = None
+    # Optional per-model auto compaction trigger; None uses the global ratio.
+    model_auto_compact_token_limit: int | None = None
 
     def __post_init__(self) -> None:
-        for name in ("context_window_tokens", "max_output_tokens"):
+        for name in ("model_context_window", "model_auto_compact_token_limit"):
             value = getattr(self, name)
             if value is not None and (type(value) is not int or value <= 0):
                 raise ValueError(f"模型注册 {name} 必须是正整数")
-        if (
-            self.context_window_tokens is not None
-            and self.max_output_tokens is not None
-            and self.max_output_tokens > self.context_window_tokens
-        ):
-            raise ValueError("模型最大输出能力不得超过上下文窗口")
+        # An incomplete registration keeps its threshold until the window is filled.
+        limit = self.model_auto_compact_token_limit
+        window = self.model_context_window
+        if limit is not None and window is not None and limit >= window:
+            raise ValueError("自动压缩阈值必须小于上下文窗口")
 
 
 # Distinguish omitted legacy constructor arguments from an explicitly empty registry.

@@ -121,8 +121,7 @@ async def test_partial_candidate_construction_closes_new_provider_and_preserves_
         api_key="key",
         model_registrations=[
             ModelRegistration(
-                context_window_tokens=128000,
-                max_output_tokens=32768,
+                model_context_window=128000,
                 id="model",
                 provider="openai",
                 model="configured",

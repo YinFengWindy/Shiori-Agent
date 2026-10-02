@@ -15,8 +15,7 @@ from core.roles.model_errors import (
 )
 def test_local_openai_compatible_endpoint_can_omit_api_key(url):
     registration = ModelRegistration(
-        context_window_tokens=128000,
-        max_output_tokens=32768,
+        model_context_window=128000,
         id="local",
         provider="openai",
         base_url=url,
@@ -34,8 +33,7 @@ def test_local_openai_compatible_endpoint_can_omit_api_key(url):
 )
 def test_invalid_connection_address_is_a_repairable_field(url):
     registration = ModelRegistration(
-        context_window_tokens=128000,
-        max_output_tokens=32768,
+        model_context_window=128000,
         id="remote",
         provider="openai",
         base_url=url,
@@ -54,14 +52,10 @@ def test_connection_readiness_does_not_imply_conversation_capacity_is_complete()
         model="m",
     )
     assert incomplete_connection_fields(legacy) == ()
-    assert incomplete_registration_fields(legacy) == (
-        "context_window_tokens",
-        "max_output_tokens",
-    )
+    assert incomplete_registration_fields(legacy) == ("model_context_window",)
     broken = replace(legacy, api_key="")
     assert incomplete_connection_fields(broken) == ("api_key",)
     assert incomplete_registration_fields(broken) == (
         "api_key",
-        "context_window_tokens",
-        "max_output_tokens",
+        "model_context_window",
     )

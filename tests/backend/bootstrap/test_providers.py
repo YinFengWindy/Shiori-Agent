@@ -27,8 +27,7 @@ def test_bootstrap_providers_set_a_shared_request_budget(monkeypatch):
                 model="main",
                 api_key="main-key",
                 base_url="https://example.com/v1",
-                context_window_tokens=128000,
-                max_output_tokens=32768,
+                model_context_window=128000,
             )
         ],
     )

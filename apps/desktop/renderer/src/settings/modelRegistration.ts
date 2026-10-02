@@ -1,9 +1,10 @@
 import type { ModelRegistrationFormData } from "../../../src/bridge/shared";
+import { modelCapacityError } from "../../../src/settingsContract.js";
 import { applyProviderPreset } from "./modelProviderPresets";
 
 /** Creates an unsaved model registration, starting from the OpenAI preset. */
 export function createModelRegistration(): ModelRegistrationFormData {
-  return applyProviderPreset({ id: crypto.randomUUID(), provider: "", baseUrl: "", apiKey: "", model: "", effort: "none", contextWindowTokens: null, maxOutputTokens: null }, "openai");
+  return applyProviderPreset({ id: crypto.randomUUID(), provider: "", baseUrl: "", apiKey: "", model: "", effort: "none", modelContextWindow: null, modelAutoCompactTokenLimit: null }, "openai");
 }
 
 /**
@@ -15,10 +16,7 @@ export function isModelRegistrationComplete(registration: ModelRegistrationFormD
   return hasModelCapacity(registration) && [registration.provider, registration.baseUrl, registration.model].every((value) => value.trim() !== "");
 }
 
-/** Whether explicit model capacities are valid, without guessing from its name. */
+/** Whether the explicit window is filled and every entered capacity is valid, without guessing from its name. */
 export function hasModelCapacity(registration: ModelRegistrationFormData) {
-  const { contextWindowTokens, maxOutputTokens } = registration;
-  return contextWindowTokens != null && maxOutputTokens != null
-    && Number.isSafeInteger(contextWindowTokens) && Number.isSafeInteger(maxOutputTokens)
-    && contextWindowTokens > 0 && maxOutputTokens > 0 && maxOutputTokens <= contextWindowTokens;
+  return registration.modelContextWindow != null && modelCapacityError(registration) === null;
 }

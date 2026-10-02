@@ -299,38 +299,52 @@ def test_load_config_resolves_plugin_environment_values(tmp_path, monkeypatch):
     }
 
 
+_REGISTRATION_ID = "12345678-1234-1234-1234-123456789012"
+
+
+def _registration(**fields):
+    return config.load_config_data(
+        {"llm": {"registrations": [{"id": _REGISTRATION_ID, **fields}]}}
+    ).model_registrations[0]
+
+
 @pytest.mark.parametrize("capacity", [0, -1, True, 1.5, "128000"])
 def test_registration_rejects_invalid_capacity(capacity):
-    with pytest.raises(ValueError, match="context_window_tokens"):
-        config.load_config_data(
-            {
-                "llm": {
-                    "registrations": [
-                        {
-                            "id": "12345678-1234-1234-1234-123456789012",
-                            "context_window_tokens": capacity,
-                        }
-                    ]
-                }
-            }
-        )
+    with pytest.raises(ValueError, match="model_context_window"):
+        _registration(model_context_window=capacity)
 
 
-def test_registration_capacity_roundtrip_and_legacy_incomplete():
+@pytest.mark.parametrize("limit", [0, -1, 128000, 200000])
+def test_registration_rejects_auto_compact_limit_outside_window(limit):
+    with pytest.raises(
+        ValueError, match="model_auto_compact_token_limit|小于上下文窗口"
+    ):
+        _registration(model_context_window=128000, model_auto_compact_token_limit=limit)
+
+
+def test_legacy_capacity_migrates_window_and_drops_output_capability():
     from core.roles.model_errors import incomplete_registration_fields
 
-    legacy = '[llm]\n[[llm.registrations]]\nid = "12345678-1234-1234-1234-123456789012"\nprovider = "openai"\nmodel = "m"\napi_key = "test"\n'
-    registration = config.load_config_text(legacy).model_registrations[0]
-    assert incomplete_registration_fields(registration) == (
-        "context_window_tokens",
-        "max_output_tokens",
+    legacy = _registration(
+        provider="openai",
+        model="m",
+        api_key="test",
+        context_window_tokens=128000,
+        max_output_tokens=32768,
     )
-    saved = config.load_config_text(
-        legacy + "context_window_tokens = 128000\nmax_output_tokens = 32768\n"
+    assert legacy.model_context_window == 128000
+    assert legacy.model_auto_compact_token_limit is None
+    assert not hasattr(legacy, "max_output_tokens")
+    assert not incomplete_registration_fields(legacy)
+    current = _registration(
+        model_context_window=200000, model_auto_compact_token_limit=150000
     )
-    assert saved.model_registrations[0].context_window_tokens == 128000
-    assert saved.model_registrations[0].max_output_tokens == 32768
-    assert not incomplete_registration_fields(saved.model_registrations[0])
+    assert current.model_auto_compact_token_limit == 150000
+    missing = _registration(provider="openai", model="m", api_key="test")
+    assert incomplete_registration_fields(missing) == ("model_context_window",)
+    # An incomplete registration may keep its threshold until the window is filled.
+    pending = _registration(model_auto_compact_token_limit=1000)
+    assert pending.model_auto_compact_token_limit == 1000
 
 
 @pytest.mark.parametrize("value", [0, 2, 7])

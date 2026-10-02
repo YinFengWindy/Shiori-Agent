@@ -86,7 +86,9 @@ async def test_recurring_desktop_delivery_persists_once_per_occurrence(tmp_path,
     memory.read_recent_context.return_value = ""
     memory.get_memory_context.return_value = ""
     memory.has_long_term_memory.return_value = False
-    model_runtime = RoleModelRuntime(role_store=role_store, registrations=[])
+    model_runtime = RoleModelRuntime(
+        default_max_tokens=8192, role_store=role_store, registrations=[]
+    )
     model_runtime.resolve = MagicMock(
         return_value=RoleModelSnapshot(
             registration_id="test",

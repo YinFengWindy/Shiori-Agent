@@ -92,8 +92,8 @@ async def test_role_summary_recovery_obeys_input_budget_and_skips_mood():
 
     provider = LLMProvider(
         api_key="test",
-        context_window_tokens=2000,
-        max_output_tokens=100,
+        model_context_window=2000,
+        default_max_tokens=100,
         budget_policy=BudgetPolicy(safety_margin_tokens=20),
     )
     provider._create_with_retry = AsyncMock(
@@ -168,8 +168,8 @@ async def test_non_role_finalize_degrades_then_rejects_invalid_response(
     h.manager.save(session)
     provider = LLMProvider(
         api_key="test",
-        context_window_tokens=10000,
-        max_output_tokens=500,
+        model_context_window=10000,
+        default_max_tokens=500,
         budget_policy=BudgetPolicy(safety_margin_tokens=100),
     )
     tools = ToolRegistry()
