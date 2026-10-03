@@ -115,6 +115,19 @@ Windows 上使用 Agent 的 shell 工具需要安装 PowerShell 7，并确保 `p
 | NovelAI | 图片生成和自动场景 CG | 否 |
 | ASR / TTS 服务 | 桌宠语音交互 | 否 |
 
+## 插件 SDK
+
+SDK 与 Runtime API 当前版本均为 **3.1.0**。前端使用 npm 包 [@yinfengwindy/shiori-sdk](https://www.npmjs.com/package/@yinfengwindy/shiori-sdk)，后端使用 PyPI 包 [shiori-sdk](https://pypi.org/project/shiori-sdk/)（Python 3.12+）。在自己的插件项目中按需安装：
+
+```sh
+pnpm add -D "@yinfengwindy/shiori-sdk@^3.1.0"
+uv add "shiori-sdk>=3.1.0,<4"
+```
+
+插件前端构建时将 SDK、React 和 React DOM 保留为 external，由 Shiori 在运行时提供。使用 3.1 API 的插件在 `manifest.yaml` 中声明 `runtime_api: ">=3.1.0 <4.0.0"`。
+
+安装、React peer 与独立测试配置见 [SDK README](./packages/sdk/README.md)；开发流程见 [插件教程](./docs/_handbook/plugins-tutorial.md)，包结构和兼容要求见 [运行时契约](./docs/_handbook/plugin-runtime-contract.md)。
+
 ## 开发
 
 环境要求：Windows x64、Node.js 22+、pnpm 10.33.0、Python 3.12+、PowerShell 7（`pwsh` 可从 PATH 启动）。
