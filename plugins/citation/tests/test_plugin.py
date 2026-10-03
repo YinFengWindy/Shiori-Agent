@@ -27,6 +27,13 @@ def test_citation_extracts_ascii_marker_only_at_end() -> None:
     assert ids == ["mem_1", "mem-2"]
 
 
+def test_citation_extracts_model_marker_without_terminator() -> None:
+    clean, ids = extract_cited_ids("§cited:[9b615a9c5f29,7e190efce6ff]")
+
+    assert clean == ""
+    assert ids == ["9b615a9c5f29", "7e190efce6ff"]
+
+
 def test_citation_extracts_marker_with_spaces_after_commas() -> None:
     clean, ids = extract_cited_ids("答复正文\n§cited:[mem_1, mem-2]§")
 
@@ -50,8 +57,11 @@ def test_citation_strips_empty_marker() -> None:
     assert ids == []
 
 
-def test_citation_keeps_body_text_when_marker_not_at_end() -> None:
-    text = "正文里提到 §cited:[mem_1]§ 这串文本，但不是协议行。\n后面还有内容"
+@pytest.mark.parametrize("terminator", ["§", ""])
+def test_citation_keeps_body_text_when_marker_not_at_end(terminator: str) -> None:
+    text = (
+        f"正文里提到 §cited:[mem_1]{terminator} 这串文本，但不是协议行。\n后面还有内容"
+    )
 
     clean, ids = extract_cited_ids(text)
 
@@ -59,15 +69,19 @@ def test_citation_keeps_body_text_when_marker_not_at_end() -> None:
     assert ids == []
 
 
-def test_citation_extracts_before_trailing_protocol_tag() -> None:
-    clean, ids = extract_cited_ids("答复正文\n§cited:[mem_1]§ <meme:shy>")
+@pytest.mark.parametrize("terminator", ["§", ""])
+def test_citation_extracts_before_trailing_protocol_tag(terminator: str) -> None:
+    clean, ids = extract_cited_ids(f"答复正文\n§cited:[mem_1]{terminator} <meme:shy>")
 
     assert clean == "答复正文 <meme:shy>"
     assert ids == ["mem_1"]
 
 
-def test_citation_keeps_multiple_trailing_protocol_tags() -> None:
-    clean, ids = extract_cited_ids("答复正文\n§cited:[mem_1]§ <meme:shy> <foo:bar>")
+@pytest.mark.parametrize("terminator", ["§", ""])
+def test_citation_keeps_multiple_trailing_protocol_tags(terminator: str) -> None:
+    clean, ids = extract_cited_ids(
+        f"答复正文\n§cited:[mem_1]{terminator} <meme:shy> <foo:bar>"
+    )
 
     assert clean == "答复正文 <meme:shy> <foo:bar>"
     assert ids == ["mem_1"]
@@ -152,8 +166,26 @@ def test_citation_tool_chain_fallback_uses_item_ids() -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("reply", ["答复正文\n§cited:[mem_1]§", "答复正文"])
-async def test_citation_after_reasoning_writes_persist_slot(reply: str) -> None:
+@pytest.mark.parametrize(
+    ("reply", "expected_reply", "expected_ids"),
+    [
+        ("答复正文\n§cited:[mem_1]§", "答复正文", ["mem_1"]),
+        (
+            "答复正文\n§cited:[9b615a9c5f29,7e190efce6ff]",
+            "答复正文",
+            ["9b615a9c5f29", "7e190efce6ff"],
+        ),
+        (
+            "答复正文\n§cited:[9b615a9c5f29,7e190efce6ff] <meme:shy>",
+            "答复正文 <meme:shy>",
+            ["9b615a9c5f29", "7e190efce6ff"],
+        ),
+        ("答复正文", "答复正文", ["mem_1"]),
+    ],
+)
+async def test_citation_after_reasoning_writes_persist_slot(
+    reply: str, expected_reply: str, expected_ids: list[str]
+) -> None:
     module = CitationAfterReasoningModule()
     ctx = AfterReasoningCtx(
         session_key="telegram:1",
@@ -180,8 +212,8 @@ async def test_citation_after_reasoning_writes_persist_slot(reply: str) -> None:
 
     await module.run(frame)
 
-    assert ctx.reply == "答复正文"
-    assert frame.slots["persist:assistant:cited_memory_ids"] == ["mem_1"]
+    assert ctx.reply == expected_reply
+    assert frame.slots["persist:assistant:cited_memory_ids"] == expected_ids
 
 
 @pytest.mark.asyncio
