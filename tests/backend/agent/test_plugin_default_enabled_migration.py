@@ -15,7 +15,7 @@ from agent.plugin_default_enabled_migration import (
 )
 from bootstrap.paths import REPOSITORY_ROOT
 
-_TEMPLATE = REPOSITORY_ROOT / "config" / "examples" / "config.example.toml"
+_TEMPLATE = REPOSITORY_ROOT / "config.example.toml"
 
 
 @pytest.fixture(autouse=True)

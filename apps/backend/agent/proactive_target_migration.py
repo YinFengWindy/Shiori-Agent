@@ -10,7 +10,7 @@
   删除这些旧键（没有旧键也照样）并写回执；有回执时不再迁移。
 - 迁移之后旧键再次出现（例如手工加回）不会被静默删除，而是由
   ``proactive_v2.config_loader.reject_removed_target_keys`` 在加载配置时报错。
-- 新安装的配置复制自 ``config/examples/config.example.toml``，模板自带回执。
+- 新安装的配置复制自 ``config.example.toml``，模板自带回执。
 
 写回走 ``agent/config_migration_writer.py``：尽量保留用户 TOML 的格式和注释。
 """

@@ -1,5 +1,5 @@
 include apps/backend/requirements/production.txt
-include config/examples/config.example.toml
+include config.example.toml
 include apps/desktop/renderer/src/chat/common_emojis.json
 recursive-include apps/backend/skills *
 global-exclude __pycache__ *.py[cod]

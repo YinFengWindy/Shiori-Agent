@@ -9,7 +9,7 @@ from scripts.verify_host_distribution import check_host_wheel
 
 REQUIRED = (
     "agent/provider.py",
-    "shiori_runtime_resources/config/examples/config.example.toml",
+    "shiori_runtime_resources/config.example.toml",
     "shiori_runtime_resources/common_emojis.json",
     "shiori_runtime_resources/skills/example/SKILL.md",
 )
