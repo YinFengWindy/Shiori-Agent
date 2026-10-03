@@ -11,7 +11,7 @@
   原文，其他外部会话只以最近动态出现。整理仍按整类外部上下文进行，共用一个游标。
 
 划分按会话而不是按发送者：已绑定用户在群里的发言属于外部上下文。归属在读取时按
-当前的身份绑定计算，绑定或解绑之后，相应私聊的历史随之改变可见性，消息本身不变。
+当前的身份绑定计算；新绑定只从登记起点共享私聊消息，解绑后隔离，消息本身不变。
 历史组装与主动消息都直接使用本模块，不各写一套规则。桌面聊天界面只显示其中
 桌面这一路（``in_desktop_view``），同样由本模块判定。
 
@@ -23,7 +23,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -31,9 +31,11 @@ from conversation.service import desktop_thread_id, is_scheduler_thread
 from shiori_sdk.channels.threads import network_thread_id
 from shiori_sdk.channels.message_source import MessageSource
 from core.identity import UserIdentity, UserIdentityStore
+from core.common.timekit import parse_local_iso
 from session.manager.helpers import role_id_from_session_key, role_session_key
 from session.manager.models import (
     HistoryFilter,
+    CONTEXT_TURN_STARTED_AT,
     message_thread_id,
 )
 from session.store.common import CONTEXT_SCOPES, ContextScope
@@ -49,12 +51,36 @@ class UserContextThreads:
 
     role_id: str
     bound_chat_thread_ids: frozenset[str]
+    context_since: Mapping[str, str] = field(default_factory=dict)
 
     def contains(self, thread_id: str) -> bool:
         """``thread_id`` 是否属于用户上下文；空值代表统一会话之前的旧消息。"""
         return (
             in_desktop_view(self.role_id, thread_id)
             or thread_id in self.bound_chat_thread_ids
+        )
+
+    def includes(self, message: Mapping[str, Any]) -> bool:
+        """Whether a message belongs to the user's currently shared history.
+
+        Identity membership remains independent. New chats share only messages
+        admitted after binding; legacy bindings without a boundary keep history.
+        """
+        thread_id = message_thread_id(message)
+        if not self.contains(thread_id):
+            return False
+        since = self.context_since.get(thread_id, "")
+        if not since:
+            return True
+        metadata = message.get("metadata")
+        started = (
+            metadata.get(CONTEXT_TURN_STARTED_AT)
+            if isinstance(metadata, Mapping)
+            else None
+        )
+        timestamp = started or message.get("timestamp")
+        return bool(timestamp) and parse_local_iso(str(timestamp)) >= parse_local_iso(
+            since
         )
 
 
@@ -136,18 +162,28 @@ def user_context_threads(
     clean_role_id = role_id.strip()
     if not clean_role_id:
         raise ValueError("role_id 不能为空")
+    boundaries: dict[str, str] = {}
+    for identity in identities:
+        for chat in identity.chats:
+            thread_id = network_thread_id(clean_role_id, chat.channel, chat.chat_id)
+            since = chat.context_since
+            if (
+                thread_id not in boundaries
+                or not since
+                or (
+                    boundaries[thread_id]
+                    and parse_local_iso(since) < parse_local_iso(boundaries[thread_id])
+                )
+            ):
+                # Several accounts may share a thread; adding one cannot hide
+                # history already visible through an earlier (or legacy) binding.
+                boundaries[thread_id] = since
     return UserContextThreads(
         role_id=clean_role_id,
         bound_chat_thread_ids=frozenset(
-            {
-                desktop_thread_id(clean_role_id),
-                *(
-                    network_thread_id(clean_role_id, chat.channel, chat.chat_id)
-                    for identity in identities
-                    for chat in identity.chats
-                ),
-            }
+            {desktop_thread_id(clean_role_id), *boundaries}
         ),
+        context_since=boundaries,
     )
 
 
@@ -170,6 +206,14 @@ class ContextView:
         return self.scope == "external"
 
     @property
+    def has_message_boundary(self) -> bool:
+        """Whether thread membership alone is insufficient for visible history."""
+        return self.scope == "user" and any(
+            since and self.includes_thread(thread)
+            for thread, since in self.user_threads.context_since.items()
+        )
+
+    @property
     def category(self) -> ContextView:
         """视图所在的整类上下文：外部回合的视图去掉会话限定。
 
@@ -180,7 +224,9 @@ class ContextView:
 
     def includes(self, message: Mapping[str, Any]) -> bool:
         """``message`` 是否对本回合可见。"""
-        return self.includes_thread(message_thread_id(message))
+        return self.includes_thread(message_thread_id(message)) and (
+            self.scope != "user" or self.user_threads.includes(message)
+        )
 
     def includes_thread(self, thread_id: str) -> bool:
         """会话 ``thread_id`` 的消息是否对本回合可见；空值代表旧消息。"""

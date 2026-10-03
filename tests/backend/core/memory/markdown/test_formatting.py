@@ -1,8 +1,19 @@
 from __future__ import annotations
 
 import json
+
+import pytest
 from types import SimpleNamespace
 from typing import Any, cast
+
+from conversation.context_scope import (
+    UserContextThreads,
+    belongs_to_user,
+    role_context_views,
+)
+from conversation.service import desktop_thread_id
+from shiori_sdk.channels.threads import network_thread_id
+from session.manager import Session
 
 from core.memory.markdown import (
     build_consolidation_source_ref,
@@ -159,3 +170,46 @@ def test_build_consolidation_source_ref_keeps_only_messages_with_ids():
 def test_format_conversation_for_consolidation_skips_tool_and_proactive_turns():
     conversation = format_conversation_for_consolidation(_window_session().messages)
     assert conversation.count("USER") == 1
+
+
+@pytest.mark.parametrize("archive_all", [False, True])
+def test_consolidation_window_does_not_reclassify_pre_binding_messages(
+    archive_all: bool,
+):
+    desktop = desktop_thread_id("mira")
+    bound = network_thread_id("mira", "qq", "902")
+    group = network_thread_id("mira", "qq", "group:7")
+    threads = UserContextThreads(
+        "mira",
+        frozenset({desktop, bound}),
+        context_since={bound: "2026-01-01T00:00:10+00:00"},
+    )
+    session = Session("role:mira")
+    for thread, content, timestamp in (
+        (bound, "excluded old DM", "2026-01-01T00:00:09+00:00"),
+        (desktop, "existing desktop", "2026-01-01T00:00:00+00:00"),
+        (bound, "new DM", "2026-01-01T00:00:10+00:00"),
+        (group, "group chatter", "2026-01-01T00:00:00+00:00"),
+    ):
+        session.add_message("user", content, thread_id=thread, timestamp=timestamp)
+
+    window = _select_consolidation_window(
+        session,
+        keep_count=0,
+        consolidation_min_new_messages=5,
+        archive_all=archive_all,
+        force=True,
+        views=role_context_views(threads),
+    )
+
+    assert window is not None
+    assert [message["content"] for message in window.old_messages] == [
+        "existing desktop",
+        "new DM",
+        "group chatter",
+    ]
+    assert window.consolidate_up_to == 4
+    assert window.scopes == ("user", "external")
+    # Filtering model/maintenance input does not rewrite raw history or identity.
+    assert len(session.messages) == 4
+    assert belongs_to_user(session.messages[0], threads)

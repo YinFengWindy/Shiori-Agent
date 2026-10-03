@@ -297,13 +297,26 @@ class _PersistenceMixin:
         removed_metadata_keys: tuple[str, ...] = (),
         metadata_enricher: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         before_commit: Callable[[], Awaitable[bool]] | None = None,
+        delivery_key: str | None = None,
     ) -> bool:
         """Serialize formal replies and commit private messages only after delivery.
 
         The reply lock orders passive and proactive state owners. Transports never
         run under the save lock: image synchronization may itself need that lock.
         The callback must not recursively submit another formal reply.
+        ``delivery_key`` deduplicates one already-delivered private draft under
+        the session write lock; duplicates return False without publishing it.
         """
+        if delivery_key is not None and (
+            not delivery_key
+            or not pending_messages
+            or len(messages) != 1
+            or before_commit is not None
+            or (messages[0].get("metadata") or {}).get("delivery_key") != delivery_key
+        ):
+            raise ValueError(
+                "delivery_key requires one matching private draft without before_commit"
+            )
 
         async def commit() -> bool:
             if before_commit is not None:
@@ -320,7 +333,7 @@ class _PersistenceMixin:
                         raise ValueError("角色已有更新的正式回复，已丢弃过时回合状态")
                 if not await before_commit():
                     return False
-            await self._append_messages(
+            return await self._append_messages(
                 session,
                 messages,
                 metadata_updates=metadata_updates,
@@ -328,8 +341,8 @@ class _PersistenceMixin:
                 pending_messages=pending_messages,
                 removed_metadata_keys=removed_metadata_keys,
                 metadata_enricher=metadata_enricher,
+                delivery_key=delivery_key,
             )
-            return True
 
         if expected_mood_updated_at is not None:
             async with self._reply_lock(session.key):
@@ -346,7 +359,8 @@ class _PersistenceMixin:
         pending_messages: bool = False,
         removed_metadata_keys: tuple[str, ...] = (),
         metadata_enricher: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
-    ) -> None:
+        delivery_key: str | None = None,
+    ) -> bool:
         """Commit message facts and state together; optionally publish private drafts.
 
         Existing callers may pass messages already added to their session. Formal
@@ -357,6 +371,11 @@ class _PersistenceMixin:
         async with self._lock(session.key):
             if pending_messages:
                 session = self._cache.get(session.key, session)
+            if delivery_key is not None and any(
+                (stored.get("metadata") or {}).get("delivery_key") == delivery_key
+                for stored in session.messages
+            ):
+                return False
             if (
                 expected_mood_updated_at is not None
                 and str(session.metadata.get("current_mood_updated_at", ""))
@@ -395,6 +414,7 @@ class _PersistenceMixin:
             session.metadata = staged.metadata
             session.updated_at = staged.updated_at
             self._cache[session.key] = session
+            return True
 
     def get_message_media(
         self,

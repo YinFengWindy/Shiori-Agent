@@ -7,7 +7,8 @@ import logging
 import re
 from typing import TYPE_CHECKING
 
-from conversation.context_scope import UserContextThreads, in_user_context
+from conversation.context_scope import ContextView, UserContextThreads
+from .recent_context_document import stamp_recent_context, visible_recent_context
 
 from .contracts import ConsolidationFailure, ConsolidationWindow
 from .formatting import (
@@ -40,12 +41,13 @@ def _user_context_messages(
     """RECENT_CONTEXT 的输入只取用户上下文会话的消息。
 
     RECENT_CONTEXT 会原样注入用户上下文的回合，所以按会话划分，与历史组装同一条
-    规则：外部会话的消息（包括用户本人在群里的发言）都不进入。``user_threads``
+    规则：外部会话的消息与新绑定私聊起点之前的消息都不进入。``user_threads``
     为 None 表示会话没有划分，全部保留。
     """
     if user_threads is None:
         return list(messages)
-    return [message for message in messages if in_user_context(message, user_threads)]
+    view = ContextView(scope="user", user_threads=user_threads)
+    return [message for message in messages if view.includes(message)]
 
 
 def _format_recent_context_messages(
@@ -360,6 +362,7 @@ ongoing_threads 严格限制：
             old_recent_context = str(
                 await asyncio.to_thread(profile_maint.read_recent_context) or ""
             )
+        old_recent_context = visible_recent_context(old_recent_context, user_threads)
         conversation = _format_conversation_for_recent_context(
             compact_source,
             nsfw_memory_enabled=nsfw_memory_enabled,
@@ -429,7 +432,7 @@ ongoing_threads 严格限制：
                 )
         elif old_recent_context.strip():
             compression = self._extract_recent_context_compression(old_recent_context)
-        return _render_recent_context(
+        rendered = _render_recent_context(
             compression=compression,
             compression_until=(
                 compression_until
@@ -446,6 +449,7 @@ ongoing_threads 严格限制：
             ),
             recent_turns=rendered_recent_turns,
         )
+        return stamp_recent_context(rendered, user_threads)
 
     async def refresh_recent_turns(
         self,
@@ -469,6 +473,10 @@ ongoing_threads 严格限制：
             existing_text = str(
                 await asyncio.to_thread(profile.read_recent_context) or ""
             )
+        existing_text = visible_recent_context(existing_text, user_threads)
         updated = _replace_recent_turns_block(existing_text, rendered_recent_turns)
         if hasattr(profile, "write_recent_context"):
-            await asyncio.to_thread(profile.write_recent_context, updated)
+            await asyncio.to_thread(
+                profile.write_recent_context,
+                stamp_recent_context(updated, user_threads),
+            )

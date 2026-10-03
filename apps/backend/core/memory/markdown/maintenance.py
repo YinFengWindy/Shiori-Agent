@@ -471,6 +471,7 @@ class MarkdownMemoryMaintenance:
         expected_ownership = ownership_key(user_threads)
         draft = await self._worker.prepare_consolidation(
             request.session,
+            profile_maint=self._resolve_store_for_session(request.session),
             archive_all=request.archive_all,
             force=request.force,
             through_index=request.through_index,
@@ -617,11 +618,12 @@ class MarkdownMemoryMaintenance:
         request: RefreshRecentTurnsRequest,
     ) -> None:
         source_ids = tuple(str(m.get("id") or "") for m in request.session.messages)
-        ownership = ownership_key(self._user_threads_for_session(request.session))
+        user_threads = self._user_threads_for_session(request.session)
+        ownership = ownership_key(user_threads)
         await self._worker.refresh_recent_turns(
             session=request.session,
             profile_maint=self._resolve_store_for_session(request.session),
-            user_threads=self._user_threads_for_session(request.session),
+            user_threads=user_threads,
         )
         if self._record_recent_context is not None:
             await self._record_recent_context(

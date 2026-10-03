@@ -2,7 +2,7 @@
 
 import asyncio
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -17,7 +17,9 @@ from agent.lifecycle.phases.after_reasoning import (
 from agent.lifecycle.types import AfterReasoningInput, TurnState
 from bus.event_bus import EventBus
 from shiori_sdk.messages import InboundMessage
-from conversation.context_scope import turn_context_view
+from conversation.context_scope import turn_context_view, user_context_view
+from core.identity import IdentityChat, UserIdentityStore
+from shiori_sdk.accounts.models import AccountRecord
 from shiori_sdk.channels.threads import network_thread_id
 from core.roles import RoleRelationshipRuntimeService, RoleStore
 from core.roles.reply_state import InvalidRoleReply, RoleReply
@@ -122,6 +124,47 @@ async def test_channel_user_source_survives_commit_and_reload(tmp_path):
     assert (
         '"chat_id": "gqq:123"'
         in reloaded.get_history(include=whole_session)[0]["content"]
+    )
+
+
+async def test_pre_binding_turn_committed_later_keeps_all_its_messages_out(tmp_path):
+    manager = SessionManager(tmp_path)
+    session = role_session(manager)
+    request = turn(session)
+    request.state.msg.channel = "qq"
+    request.state.msg.chat_id = "902"
+    request.state.msg.timestamp = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    request.state.msg.metadata.update(
+        thread_id=network_thread_id("yin", "qq", "902"),
+        context_turn_started_at="2099-01-01T00:00:00+00:00",
+    )
+    identities = UserIdentityStore(
+        tmp_path, clock=lambda: datetime(2026, 1, 2, tzinfo=timezone.utc)
+    )
+    record = AccountRecord(
+        id="qq:101",
+        plugin_id="qq",
+        platform="qq",
+        platform_account_id="101",
+        config_ref="101",
+        role_id="yin",
+    )
+    assert identities.pair(
+        identities.create_pairing_code().code,
+        record=record,
+        user_id="902",
+        scope="platform",
+        chat=IdentityChat(record.id, "qq", "902"),
+    )
+    await phase(manager).run(request)
+    reloaded = SessionManager(tmp_path).get_or_create(session.key)
+    view = user_context_view(tmp_path, "yin")
+    assert len(reloaded.messages) == 2
+    assert reloaded.get_history(include=view.includes) == []
+    assert all(
+        message["metadata"]["context_turn_started_at"]
+        == request.state.msg.timestamp.isoformat()
+        for message in reloaded.messages
     )
 
 

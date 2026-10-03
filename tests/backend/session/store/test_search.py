@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+import pytest
+
 from session.store import SessionStore
 
 
@@ -80,5 +82,47 @@ def test_search_limits_hits_by_thread_and_session_prefix(tmp_path: Path):
             "role:mira:3",
         ]
         assert total == 3
+    finally:
+        store.close()
+
+
+@pytest.mark.parametrize("query", ["benchmark", "天气"])
+def test_search_filters_candidates_before_count_and_pagination(
+    tmp_path: Path, query: str
+):
+    store = SessionStore(tmp_path / "sessions.db")
+    store.create_session(key="role:mira", metadata={})
+    for seq in range(6):
+        store.insert_message(
+            "role:mira",
+            role="user",
+            content="benchmark 天气",
+            ts=(
+                "2026-01-01T00:00:20+00:00"
+                if seq % 2 == 0
+                else "2026-01-01T00:00:00+00:00"
+            ),
+            seq=seq,
+            thread_id="qq",
+        )
+
+    def include(message):
+        return message["timestamp"] >= "2026-01-01T00:00:10+00:00"
+
+    try:
+        first, total = store.search_messages(query, include=include, limit=2)
+        second, second_total = store.search_messages(
+            query, include=include, limit=2, offset=2
+        )
+        beyond, beyond_total = store.search_messages(
+            query, include=include, limit=2, offset=3
+        )
+        raw, raw_total = store.search_message_previews(query)
+
+        assert [item["seq"] for item in first] == [4, 2]
+        assert [item["seq"] for item in second] == [0]
+        assert total == second_total == beyond_total == 3
+        assert beyond == []
+        assert len(raw) == raw_total == 6
     finally:
         store.close()

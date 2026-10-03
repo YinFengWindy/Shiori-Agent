@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -11,6 +11,7 @@ from shiori_sdk.accounts.models import AccountResponseRules
 from core.common.channel_directory import ChannelDirectory
 from core.roles import RoleAggregateService, RoleStore
 from session.manager import SessionManager
+from conversation.context_scope import user_context_view
 
 
 def test_channel_hub_routes_owned_inbound_to_role_session(tmp_path: Path) -> None:
@@ -847,6 +848,29 @@ def test_pairing_code_binds_the_sender_and_marks_their_messages(
     store.identities.unbind(identity.id)
     after = hub.route_account_inbound(_private(account_id, "hello"))
     assert after is not None and "sender_is_user" not in after.metadata
+
+
+def test_first_message_in_new_bound_chat_sets_its_own_context_boundary(tmp_path):
+    hub, store, account_id = _hub_with_qq_account(tmp_path)
+    assert hub.claim_pairing(
+        _private(account_id, store.identities.create_pairing_code().code),
+        scope="platform",
+    )
+    message = _private(account_id, "first new message")
+    message.chat_id = "new-private-chat"
+    message.timestamp = datetime(2026, 1, 3, tzinfo=timezone.utc)
+    routed = hub.route_account_inbound(message)
+    assert routed is not None
+    identity = store.identities.list()[0]
+    chat = identity.chat_for(account_id)
+    assert chat is not None
+    assert chat.context_since == message.timestamp.isoformat()
+    assert user_context_view(tmp_path, "mira").includes(
+        {"metadata": routed.metadata, "timestamp": routed.timestamp.isoformat()}
+    )
+    message.timestamp = datetime(2026, 1, 4, tzinfo=timezone.utc)
+    assert hub.route_account_inbound(message) is not None
+    assert store.identities.list()[0].chats == identity.chats
 
 
 def test_plugins_cannot_claim_the_user_flag(tmp_path: Path) -> None:

@@ -1,6 +1,7 @@
 """Invalidation replaces derived state without publishing changes to old readers."""
 
 from session.maintenance_progress import MaintenanceProgress
+import json
 
 
 def test_invalidation_discards_every_derived_artifact_without_mutating_previous_state():
@@ -51,3 +52,26 @@ def test_rebinding_away_and_back_never_revives_an_unscoped_session_window():
     restored = unbound.rebound('["thread:mira:desktop"]').rebound("")
     assert restored.windows["session"] == 0
     assert not restored.summaries and not restored.summary_source_ids
+
+
+def test_additive_binding_preserves_user_window_but_rebinding_invalidates_it():
+    desktop, private = "thread:mira:desktop", "thread:mira:qq:902"
+    previous = MaintenanceProgress(
+        ownership=json.dumps([desktop]),
+        windows={"user": 40},
+        summaries={"user": "desktop working state"},
+        summary_source_ids={"user": ["desktop-message"]},
+        memory_version=7,
+    )
+    ownership = {desktop: "", private: "2026-01-01T00:00:00+00:00"}
+    added = previous.rebound(json.dumps(ownership))
+    assert added.windows["user"] == 40
+    assert added.summaries == previous.summaries
+    assert added.summary_source_ids == previous.summary_source_ids
+    assert added.memory_version == 7 and added.generation == 1
+    rebound = added.rebound(
+        json.dumps({**ownership, private: "2026-01-02T00:00:00+00:00"})
+    )
+    assert rebound.windows["user"] == 0 and not rebound.summaries
+    removed = added.rebound(json.dumps([desktop]))
+    assert removed.windows["user"] == 0 and not removed.summaries

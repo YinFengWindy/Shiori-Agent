@@ -74,7 +74,6 @@ class ExternalPushSyncService:
             in_turn=event.attach_to_turn,
             content="",
             media=media,
-            persist=lambda: self._persist_push(event, content="", media=media),
         )
         return event
 
@@ -92,7 +91,6 @@ class ExternalPushSyncService:
             in_turn=event.in_turn,
             content=event.text,
             media=_text_media(event),
-            persist=lambda: self._persist_text(event),
         )
         return event
 
@@ -103,7 +101,6 @@ class ExternalPushSyncService:
         in_turn: bool,
         content: str,
         media: list[str] | None,
-        persist: Callable[[], Awaitable[None]],
     ) -> None:
         """Records one delivered push with its live turn, or at once via ``persist``.
 
@@ -111,25 +108,22 @@ class ExternalPushSyncService:
         committed with its messages; if the turn never commits, ``persist``
         records it then. Without a live turn owning it, ``persist`` runs now.
         """
+        message = self._push_message(event, content=content, media=media)
+
+        async def persist():
+            # The same draft retains its delivery time and host turn identity
+            # when failure/cancellation records a push that was already sent.
+            await self._persist_push(event, message)
+
         drafts = self._live_turn_pushes(event.session_key) if in_turn else None
         if drafts is None:
             await persist()
             return
         drafts.append(
-            self._push_message(event, content=content, media=media),
+            message,
             owner=self,
             if_abandoned=persist,
         )
-
-    async def _persist_text(self, event: ExternalTextPushed) -> None:
-        session = self._sessions.get_or_create(self._role_session_key(event))
-        if event.delivery_key and any(
-            (message.get("metadata") or {}).get("delivery_key") == event.delivery_key
-            for message in session.messages
-        ):
-            # A retried delivery: the first send is already recorded.
-            return
-        await self._persist_push(event, content=event.text, media=_text_media(event))
 
     def _role_session_key(self, event: ExternalImagePushed | ExternalTextPushed) -> str:
         """The role's session, which records every push of the role."""
@@ -176,23 +170,30 @@ class ExternalPushSyncService:
     async def _persist_push(
         self,
         event: ExternalImagePushed | ExternalTextPushed,
-        *,
-        content: str,
-        media: list[str] | None,
+        message: dict[str, Any],
     ) -> None:
         """Appends one delivered push to the role session under the chat's thread."""
         session_key = self._role_session_key(event)
         session = self._sessions.get_or_create(session_key)
-        session.add_message(**self._push_message(event, content=content, media=media))
-        pushed = session.messages[-1]
-        await self._sessions.append_messages(session, [pushed])
+        committed = await self._sessions.append_messages(
+            session,
+            [message],
+            pending_messages=True,
+            delivery_key=(
+                (event.delivery_key or None)
+                if isinstance(event, ExternalTextPushed)
+                else None
+            ),
+        )
+        if not committed:
+            return
         await self._event_bus.fanout(
             ProactiveMessageCommitted(
                 session_key=session_key,
                 channel=event.channel,
                 role_id=event.role_id,
-                thread_id=str(pushed["thread_id"]),
-                message_id=str(pushed["id"]),
+                thread_id=str(message["thread_id"]),
+                message_id=str(message["id"]),
             )
         )
 

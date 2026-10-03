@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from collections.abc import Callable, Collection
+from collections.abc import Callable, Collection, Mapping
 from typing import Any
 
 from shiori_sdk.sql import LIKE_ESCAPE_CLAUSE, like_contains, like_prefix
@@ -211,13 +211,15 @@ class _SearchMixin:
         thread_ids: Collection[str] | None = None,
         session_prefix: str | None = None,
         excluded_session_prefix: str | None = None,
+        include: Callable[[Mapping[str, Any]], bool] | None = None,
     ) -> tuple[list[dict[str, Any]], int]:
         """Searches message text; ``thread_ids`` limits hits to those threads.
 
         An empty string in ``thread_ids`` stands for messages stored without a
         thread; an empty collection matches nothing. Only sessions whose key
         starts with ``session_prefix`` are searched, and those starting with
-        ``excluded_session_prefix`` are left out.
+        ``excluded_session_prefix`` are left out. ``include`` filters matching
+        messages before counting and paging; omitted for raw history readers.
         """
         limit = max(1, min(int(limit), 100))
         offset = max(0, int(offset))
@@ -282,21 +284,22 @@ class _SearchMixin:
                     f"{where_sql} {connector} (fts.rowid IS NOT NULL OR ({term_conditions_or})) "
                     "ORDER BY match_score DESC, "
                     "CASE WHEN rank_score IS NULL THEN 1 ELSE 0 END ASC, "
-                    "rank_score ASC, m.seq DESC LIMIT ? OFFSET ?"
+                    "rank_score ASC, m.seq DESC"
                 )
                 fts_params.extend(like_contains(t) for t in terms)
                 fts_params.append(fts_query)
                 fts_params.extend(params[:])
                 fts_params.extend(like_contains(t) for t in terms)
-                fts_params.extend([limit, offset])
                 try:
-                    with self._lock:
-                        count_row = self._conn.execute(
-                            count_sql, tuple(count_params)
-                        ).fetchone()
-                        rows = self._conn.execute(fts_sql, tuple(fts_params)).fetchall()
-                    total = int((count_row["c"] if count_row else 0) or 0)
-                    return [self._row_to_message(row) for row in rows], total
+                    return self._search_page(
+                        fts_sql,
+                        fts_params,
+                        count_sql=count_sql,
+                        count_params=count_params,
+                        limit=limit,
+                        offset=offset,
+                        include=include,
+                    )
                 except sqlite3.OperationalError:
                     pass
 
@@ -311,18 +314,57 @@ class _SearchMixin:
             "m.thread_id, m.sender_role, m.media, m.external_message_id, m.delivery_status, "
             f"({score_expr}) AS match_score "
             f"FROM messages m {where_sql} {connector} ({term_conditions_or}) "
-            f"ORDER BY match_score DESC, m.seq DESC LIMIT ? OFFSET ?"
+            f"ORDER BY match_score DESC, m.seq DESC"
         )
         # score_expr binds: one %t% per term; term_conditions_or binds: one %t% per term
         like_params.extend(like_contains(t) for t in terms)  # for score_expr
         like_params.extend(params)
         like_params.extend(like_contains(t) for t in terms)  # for WHERE OR
-        like_params.extend([limit, offset])
+        return self._search_page(
+            like_sql,
+            like_params,
+            count_sql=count_sql,
+            count_params=count_params,
+            limit=limit,
+            offset=offset,
+            include=include,
+        )
+
+    def _search_page(
+        self,
+        sql: str,
+        params: list[Any],
+        *,
+        count_sql: str,
+        count_params: list[Any],
+        limit: int,
+        offset: int,
+        include: Callable[[Mapping[str, Any]], bool] | None,
+    ) -> tuple[list[dict[str, Any]], int]:
+        """Page ranked hits after the caller's message visibility predicate."""
         with self._lock:
-            count_row = self._conn.execute(count_sql, tuple(count_params)).fetchone()
-            rows = self._conn.execute(like_sql, tuple(like_params)).fetchall()
-        total = int((count_row["c"] if count_row else 0) or 0)
-        return [self._row_to_message(row) for row in rows], total
+            if include is None:
+                count_row = self._conn.execute(
+                    count_sql, tuple(count_params)
+                ).fetchone()
+                rows = self._conn.execute(
+                    sql + " LIMIT ? OFFSET ?", (*params, limit, offset)
+                ).fetchall()
+                total = int((count_row["c"] if count_row else 0) or 0)
+                return [self._row_to_message(row) for row in rows], total
+
+            # Stream SQL's ranked candidates so hidden rows cannot consume a page
+            # or inflate its total, while only retaining the requested page.
+            matches: list[dict[str, Any]] = []
+            total = 0
+            for row in self._conn.execute(sql, tuple(params)):
+                message = self._row_to_message(row)
+                if not include(message):
+                    continue
+                if offset <= total < offset + limit:
+                    matches.append(message)
+                total += 1
+            return matches, total
 
     def search_message_previews(
         self,

@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from dataclasses import replace
+import asyncio
 
 import pytest
 
@@ -10,6 +11,92 @@ from session.manager.models import build_session_message
 from session.manager.consolidation import ConsolidationCommitRequest
 from unittest.mock import AsyncMock
 from conversation.context_scope import history_start
+
+
+async def test_private_delivery_deduplication_is_inside_the_session_write_lock(
+    tmp_path,
+):
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("role:mira")
+    manager.save(session)
+    drafts = [
+        build_session_message(
+            "assistant", "delivered", metadata={"delivery_key": "same"}
+        )
+        for _ in range(2)
+    ]
+    tasks = []
+    try:
+        async with manager._lock(session.key):
+            tasks = [
+                asyncio.create_task(
+                    manager.append_messages(
+                        session, [draft], pending_messages=True, delivery_key="same"
+                    )
+                )
+                for draft in drafts
+            ]
+            await asyncio.sleep(0)
+            assert not any(task.done() for task in tasks)
+            assert session.messages == []
+        assert await asyncio.gather(*tasks) == [True, False]
+        assert len(manager._store.fetch_session_messages(session.key)) == 1
+        assert len(session.messages) == 1
+        assert "id" not in drafts[1]
+    finally:
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+
+@pytest.mark.parametrize("failure", [OSError("disk full"), asyncio.CancelledError()])
+async def test_failed_private_delivery_can_retry_the_same_key(
+    tmp_path, monkeypatch, failure
+):
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("role:mira")
+    manager.save(session)
+    draft = build_session_message(
+        "assistant", "delivered", metadata={"delivery_key": "same"}
+    )
+    original = manager._project_session_threads
+
+    def fail_after_insert(*args):
+        raise failure
+
+    monkeypatch.setattr(manager, "_project_session_threads", fail_after_insert)
+    with pytest.raises(type(failure)):
+        await manager.append_messages(
+            session, [draft], pending_messages=True, delivery_key="same"
+        )
+    assert session.messages == [] and "id" not in draft
+    assert manager._store.fetch_session_messages(session.key) == []
+    monkeypatch.setattr(manager, "_project_session_threads", original)
+    assert await manager.append_messages(
+        session, [draft], pending_messages=True, delivery_key="same"
+    )
+    assert not await manager.append_messages(
+        session, [draft], pending_messages=True, delivery_key="same"
+    )
+    assert len(manager._store.fetch_session_messages(session.key)) == 1
+
+
+async def test_delivery_deduplication_cannot_repeat_a_transport_callback(tmp_path):
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("role:mira")
+    draft = build_session_message(
+        "assistant", "delivered", metadata={"delivery_key": "same"}
+    )
+    send = AsyncMock(return_value=True)
+    with pytest.raises(ValueError, match="before_commit"):
+        await manager.append_messages(
+            session,
+            [draft],
+            pending_messages=True,
+            delivery_key="same",
+            expected_mood_updated_at="",
+            before_commit=send,
+        )
+    send.assert_not_awaited()
+    assert session.messages == []
 
 
 async def test_stale_message_rewrite_preserves_progress_and_clear_invalidates_it(

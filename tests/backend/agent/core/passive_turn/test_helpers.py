@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from agent.core.passive_turn.helpers import (
     get_window_history,
     get_window_sources,
+    get_window_tool_names,
 )
 from agent.prompting.listening_block import HeardLine
 from conversation.context_scope import ContextView, UserContextThreads
@@ -12,6 +13,42 @@ from conversation.service import desktop_thread_id
 from shiori_sdk.channels.threads import network_thread_id
 from shiori_sdk.channels.message_source import MessageSource
 from session.manager.models import Session
+
+
+def test_bound_history_and_tools_share_the_turn_admission_boundary():
+    private = network_thread_id("mira", "qq", "902")
+    threads = UserContextThreads(
+        role_id="mira",
+        bound_chat_thread_ids=frozenset({private}),
+        context_since={private: "2026-01-02T00:00:00+00:00"},
+    )
+    view = ContextView(scope="user", user_threads=threads)
+    session = Session("role:mira")
+    for label, started in (("old", "2026-01-01"), ("new", "2026-01-03")):
+        metadata = {"context_turn_started_at": started + "T00:00:00+00:00"}
+        session.add_message("user", label, thread_id=private, metadata=metadata)
+        session.add_message(
+            "assistant",
+            label,
+            thread_id=private,
+            metadata=metadata,
+            tool_chain=[
+                {
+                    "calls": [
+                        {
+                            "call_id": label,
+                            "name": label + "_tool",
+                            "result": label + " output",
+                        }
+                    ]
+                }
+            ],
+        )
+    history = get_window_history(session, view)
+    assert not any("old" in str(message) for message in history)
+    assert any("new output" in str(message) for message in history)
+    assert get_window_tool_names(session, view) == ["new_tool"]
+    assert get_window_sources(session, view) == ()
 
 
 def test_window_sources_are_the_external_members_seen_since_consolidation() -> None:
