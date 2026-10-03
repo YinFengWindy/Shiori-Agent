@@ -14,26 +14,232 @@ function state(role = "mira", tokens = 32000): ChatContextStatus {
 }
 
 async function setup() {
-  const pending: { method: string; finish: (status: ChatContextStatus) => void }[] = [];
+  const pending: { method: string; roleId: string; finish: (status: ChatContextStatus) => void; fail: (error: Error) => void }[] = [];
   const listeners = new Set<(event: BridgeEvent) => void>();
   let role = "mira";
+  let sessionKey = "role:mira";
   type Props = { bridgeReady: boolean; sending: boolean };
   let props: Props = { bridgeReady: true, sending: false };
   let hook!: ReturnType<typeof useChatContext>;
-  function Harness() { hook = useChatContext(role, `role:${role}`, props.bridgeReady, props.sending); return null; }
+  function Harness() {
+    hook = useChatContext(role, sessionKey, props.bridgeReady, props.sending);
+    return <span>{hook.status?.tokens ?? "正在读取上下文"}</span>;
+  }
   const view = await mountTestComponent(null);
   Object.defineProperty(window, "miraDesktop", { configurable: true, value: {
-    invoke: ({ method }: { method: string }) => new Promise((resolve) => pending.push({ method, finish: (payload) => resolve({ payload }) })),
+    invoke: ({ method, payload }: { method: string; payload: { role_id: string } }) => new Promise((resolve, reject) => pending.push({ method, roleId: payload.role_id, finish: (payload) => resolve({ payload }), fail: reject })),
     onEvent: (listener: (event: BridgeEvent) => void) => { listeners.add(listener); return () => listeners.delete(listener); },
   } });
   await view.render(<Harness />);
   return { ...view, pending, hook: () => hook,
     async finish(index: number, status = state()) { await act(async () => { pending[index]!.finish(status); }); },
-    async switchRole(next: string) { role = next; await view.render(<Harness />); },
+    async fail(index: number) { await act(async () => { pending[index]!.fail(new Error("offline")); }); },
+    async switchRole(next: string, nextSession = `role:${next}`) { role = next; sessionKey = nextSession; await view.render(<Harness />); },
     async update(next: Partial<Props>) { props = { ...props, ...next }; await view.render(<Harness />); },
-    async emit(method: string) { await act(async () => { for (const listener of listeners) listener({ id: "", type: "event", method, payload: { session_key: `role:${role}` } }); }); },
+    async emit(method: string, payload: Record<string, unknown> = { session_key: sessionKey }, id = "") {
+      await act(async () => { for (const listener of listeners) listener({ id, type: "event", method, payload }); });
+    },
   };
 }
+
+test("returning to an unchanged role restores its usage without reading it again", async () => {
+  const view = await setup();
+  try {
+    await view.finish(0, state("mira", 123));
+    await view.switchRole("other");
+    await view.finish(1, state("other", 456));
+    await view.switchRole("mira");
+    assert.equal(view.hook().status?.tokens, 123);
+    assert.equal(view.container.textContent, "123");
+    assert.equal(view.pending.length, 2);
+  } finally { await view.cleanup(); }
+});
+
+test("pending reads are shared across role switches and retain their own session", async () => {
+  const view = await setup();
+  try {
+    await view.switchRole("other");
+    await view.switchRole("mira");
+    assert.deepEqual(view.pending.map((request) => request.roleId), ["mira", "other"]);
+    await view.finish(1, state("other", 456));
+    assert.equal(view.hook().status, null);
+    await view.finish(0, state("mira", 123));
+    assert.equal(view.hook().status?.tokens, 123);
+    await view.switchRole("other");
+    assert.equal(view.hook().status?.tokens, 456);
+    assert.equal(view.pending.length, 2);
+  } finally { await view.cleanup(); }
+});
+
+test("a context update invalidates an inactive session without rereading the active one", async () => {
+  const view = await setup();
+  try {
+    await view.finish(0, state("mira", 123));
+    await view.switchRole("other");
+    await view.finish(1, state("other", 456));
+    await view.emit("chat.context.updated", { session_key: "role:mira" });
+    assert.equal(view.pending.length, 2);
+    assert.equal(view.hook().status?.tokens, 456);
+    await view.switchRole("mira");
+    assert.equal(view.pending.length, 3);
+    await view.finish(2, state("mira", 789));
+    assert.equal(view.hook().status?.tokens, 789);
+  } finally { await view.cleanup(); }
+});
+
+for (const method of ["runtime.applied", "identities.updated", "roles.updated"]) {
+  test(`${method} discards all cached configurations and obsolete reads`, async () => {
+    const view = await setup();
+    try {
+      await view.switchRole("other");
+      await view.finish(1, state("other", 456));
+      await view.emit(method, {});
+      assert.equal(view.hook().status, null);
+      await view.finish(0, state("mira", 999));
+      await view.finish(2, state("other", 789));
+      await view.switchRole("mira");
+      assert.equal(view.hook().status, null);
+      assert.equal(view.pending.length, 4);
+      await view.finish(3, state("mira", 123));
+      assert.equal(view.hook().status?.tokens, 123);
+    } finally { await view.cleanup(); }
+  });
+}
+
+test("role updates invalidate only the affected role, including inactive model changes", async () => {
+  const view = await setup();
+  try {
+    await view.finish(0);
+    await view.switchRole("other");
+    await view.finish(1, state("other", 456));
+    await act(async () => notifyChatModelChange("mira", true));
+    await view.emit("roles.updated", { role_id: "mira" });
+    assert.equal(view.hook().status?.tokens, 456);
+    assert.equal(view.pending.length, 2);
+    await view.switchRole("mira");
+    assert.equal(view.hook().status, null);
+    assert.equal(view.hook().notice, "正在切换模型");
+    assert.equal(view.pending.length, 2);
+    await act(async () => notifyChatModelChange("mira", false));
+    await view.finish(2, { ...state("mira", 123), model: "new-model" });
+    assert.equal(view.hook().status?.model, "new-model");
+  } finally { await view.cleanup(); }
+});
+
+test("reconnection invalidates inactive usage and ignores pre-disconnect reads", async () => {
+  const view = await setup();
+  try {
+    await view.finish(0);
+    await view.switchRole("other");
+    await view.update({ bridgeReady: false });
+    await view.finish(1, state("other", 999));
+    assert.equal(view.hook().status, null);
+    await view.update({ bridgeReady: true });
+    await view.finish(2, state("other", 456));
+    await view.switchRole("mira");
+    assert.equal(view.pending.length, 4);
+    await view.finish(3, state("mira", 123));
+    assert.equal(view.hook().status?.tokens, 123);
+  } finally { await view.cleanup(); }
+});
+
+test("the same role's different session keys do not share usage or stale responses", async () => {
+  const view = await setup();
+  try {
+    await view.switchRole("mira", "role:mira:next");
+    await view.finish(0, state("mira", 999));
+    assert.equal(view.hook().status, null);
+    await view.finish(1, { ...state("mira", 123), session_key: "role:mira:next" });
+    assert.equal(view.hook().status?.tokens, 123);
+    await view.switchRole("mira");
+    assert.equal(view.hook().status?.tokens, 999);
+    assert.equal(view.pending.length, 2);
+  } finally { await view.cleanup(); }
+});
+
+for (const id of ["proactive", "proactive:mira"]) {
+  test(`${id} message appends invalidate usage but opening metadata does not`, async () => {
+    const view = await setup();
+    try {
+      await view.finish(0);
+      await view.switchRole("other");
+      await view.finish(1, state("other", 456));
+      const payload = { session_key: "role:mira", session: { key: "role:mira" }, change: "metadata_updated" };
+      await view.emit("session.updated", payload, id);
+      await view.switchRole("mira");
+      assert.equal(view.pending.length, 2);
+      await view.switchRole("other");
+      await view.emit("session.updated", { ...payload, change: "message_appended" }, id);
+      assert.equal(view.pending.length, 2);
+      await view.switchRole("mira");
+      assert.equal(view.pending.length, 3);
+      await view.finish(2, state("mira", 123));
+      assert.equal(view.hook().status?.tokens, 123);
+    } finally { await view.cleanup(); }
+  });
+}
+
+test("sending defers context reads until the turn ends and completion events share one refresh", async () => {
+  const view = await setup();
+  try {
+    await view.finish(0);
+    await view.update({ sending: true });
+    await view.emit("chat.context.updated");
+    assert.equal(view.pending.length, 1);
+    await view.emit("chat.done");
+    await view.emit("session.updated", { session_key: "role:mira", session: { key: "role:mira" }, change: "message_appended" }, "desktop-request");
+    await view.update({ sending: false });
+    assert.equal(view.pending.length, 2);
+    await view.finish(1, state("mira", 123));
+    assert.equal(view.pending.length, 2);
+    assert.equal(view.hook().status?.tokens, 123);
+  } finally { await view.cleanup(); }
+});
+
+test("a terminal event retries a busy response that was still in flight", async () => {
+  const view = await setup();
+  try {
+    await view.finish(0);
+    await view.emit("chat.context.updated");
+    await view.emit("chat.done");
+    assert.equal(view.pending.length, 2);
+    await view.finish(1, { ...state(), tokens: null, busy: true, can_compact: false });
+    assert.equal(view.pending.length, 3);
+    await view.finish(2, state("mira", 123));
+    assert.equal(view.hook().busy, false);
+    assert.equal(view.hook().status?.tokens, 123);
+  } finally { await view.cleanup(); }
+});
+
+for (const transient of ["busy", "unknown", "error", "wrong-session"] as const) {
+  test(`${transient} results are retried when returning to the session`, async () => {
+    const view = await setup();
+    try {
+      if (transient === "error") await view.fail(0);
+      else await view.finish(0, transient === "wrong-session" ? state("wrong") : {
+        ...state(), tokens: null, busy: transient === "busy", model_context_window: null,
+      });
+      await view.switchRole("other");
+      await view.finish(1, state("other", 456));
+      await view.switchRole("mira");
+      assert.equal(view.pending.length, 3);
+      await view.finish(2, state("mira", 123));
+      assert.equal(view.hook().status?.tokens, 123);
+      assert.equal(view.hook().notice, "");
+      assert.equal(view.hook().busy, false);
+    } finally { await view.cleanup(); }
+  });
+}
+
+test("unmount revokes an in-flight terminal retry as well as its status response", async () => {
+  const view = await setup();
+  try {
+    await view.emit("chat.done");
+    await view.render(null);
+    await view.finish(0, { ...state(), tokens: null, busy: true });
+    assert.equal(view.pending.length, 1);
+  } finally { await view.cleanup(); }
+});
 
 test("role/model changes invalidate already-running status reads", async () => {
   const view = await setup();
@@ -108,6 +314,23 @@ test("unmount invalidates compaction ownership before its completion can refresh
     await view.finish(1);
     await compact;
     assert.equal(view.pending.length, 2);
+  } finally { await view.cleanup(); }
+});
+
+test("compaction completion waits for reconnection before refreshing usage", async () => {
+  const view = await setup();
+  try {
+    await view.finish(0);
+    let compact!: Promise<void>;
+    await act(async () => { compact = view.hook().compact(); });
+    await view.update({ bridgeReady: false });
+    await view.finish(1, { ...state("mira", 8000), result: { committed: true, memory_committed: true, before_tokens: 32000, after_tokens: 8000, retained_turns: 2, failure_stage: "", error: "" } });
+    assert.equal(view.pending.length, 2);
+    await compact;
+    assert.match(view.hook().notice, /上下文已压缩/);
+    await view.update({ bridgeReady: true });
+    await view.finish(2, state("mira", 8000));
+    assert.equal(view.hook().status?.tokens, 8000);
   } finally { await view.cleanup(); }
 });
 
