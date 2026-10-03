@@ -1,10 +1,83 @@
 from dataclasses import replace
+import asyncio
 from unittest.mock import AsyncMock
 
 import pytest
 
 from agent.config_models import Config, ModelRegistration
 from bootstrap.app import AppRuntime, RuntimeFeatures
+from core.common.runtime_scope import bind_runtime
+from shiori_sdk.messages import OutboundMessage
+
+
+@pytest.mark.asyncio
+async def test_reused_transport_publication_does_not_wait_for_old_unleased_work(
+    runtime_channels,
+):
+    runtime_channels.reuse = True
+    app = await runtime_channels.start()
+    entered, finish = asyncio.Event(), asyncio.Event()
+
+    async def observe(_):
+        entered.set()
+        await finish.wait()
+
+    app.core.event_bus.on(str, observe)
+    app.core.event_bus.enqueue("pending")
+    await entered.wait()
+    prepared = await app.prepare(replace(app.config, max_tokens=2048))
+    publishing = asyncio.create_task(app.publish(prepared))
+    try:
+        await asyncio.wait_for(asyncio.shield(publishing), 1)
+        assert prepared.published
+        assert not finish.is_set()
+    finally:
+        finish.set()
+        await publishing
+        await app.shutdown()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("shutdown_during_retirement", [False, True])
+async def test_removed_channel_keeps_older_generation_work_and_scope_until_stop(
+    runtime_channels, shutdown_during_retirement
+):
+    runtime_channels.reuse = True
+    app = await runtime_channels.start()
+    oldest = app.acquire()
+    connection = app.channel_host.get("lifecycle")
+    second = await app.prepare(replace(app.config, max_tokens=2048))
+    await app.publish(second)
+    assert app.channel_host.get("lifecycle") is connection
+    runtime_channels.events.clear()  # The unused duplicate was stopped during prepare.
+    removed = await app.prepare(
+        replace(app.config, plugins={"lifecycle": {"enabled": False}})
+    )
+    await app.publish(removed)
+    shutdown = (
+        asyncio.create_task(app.shutdown()) if shutdown_during_retirement else None
+    )
+    try:
+        await asyncio.sleep(0)
+        assert not connection.stopped
+        with bind_runtime(oldest):
+            await oldest.core.push_tool.execute(
+                channel="lifecycle", chat_id="one", message="direct old"
+            )
+            await app.bus.publish_outbound(
+                OutboundMessage("lifecycle", "one", "queued old")
+            )
+        await oldest.release()
+        await asyncio.wait_for(app.channel_host._retirements.drain(), 3)
+        assert runtime_channels.events == ["direct old", "queued old", "stop"]
+        assert connection.stop_calls == 1
+        assert not app.channel_host._retirements.errors
+    finally:
+        await oldest.release()
+        if shutdown is not None:
+            await asyncio.wait_for(shutdown, 3)
+        else:
+            await app.shutdown()
 
 
 @pytest.mark.asyncio

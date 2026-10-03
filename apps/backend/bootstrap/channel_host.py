@@ -7,6 +7,7 @@ from dataclasses import dataclass, replace
 from typing import Literal, NotRequired, TypedDict
 
 from core.common.task_collector import TaskCollector
+from core.common.cleanup import run_cleanup_steps
 from infra.channels.account_group import SupportsMemberChannels
 from shiori_sdk.channels import Channel, ChannelStatus, SupportsChannelStatus
 from infra.channels.runtime_context import RuntimeChannelContext
@@ -71,6 +72,7 @@ class ChannelHost:
         self._retired_transports: dict[str, Channel] = {}
         self._runtime_adoptions: list[tuple[Channel, Channel]] = []
         self._retirements = TaskCollector("Channel retirement")
+        self._stop_task: asyncio.Task[None] | None = None
 
     def add(self, channel: Channel, *, configuration: object = None) -> None:
         """Registers one candidate without starting it or binding subscribers."""
@@ -101,6 +103,11 @@ class ChannelHost:
             for channel in candidate.channels
         )
 
+    def removes_channels(self, candidate: ChannelHost) -> bool:
+        """Reports connections that need deferred retirement after publication."""
+        names = {channel.name for channel in candidate.channels}
+        return any(channel.name not in names for channel in self._channels)
+
     def pause_intake(self) -> None:
         """Closes channel admission while existing replies drain on their credentials."""
         paused = []
@@ -124,8 +131,9 @@ class ChannelHost:
         *,
         commit: Callable[[], None] | None = None,
         retire_after: Callable[[], Awaitable[None]] | None = None,
-    ) -> None:
-        """Switches changed connections under the send barrier and rolls back failures."""
+        retire_complete: Callable[[], Awaitable[None]] | None = None,
+    ) -> bool:
+        """Switches connections; returns whether deferred retirement owns completion."""
         async with self._transport_lock:
             parked = await self.handover_channels(
                 candidate,
@@ -137,9 +145,11 @@ class ChannelHost:
                     self._retired_transports[channel.name] = channel
                     self._ctx_factory(channel).push_tool.retire_channel(channel.name)
                 self._retirements.spawn(
-                    self._retire_transports(parked, retire_after),
+                    self._retire_transports(parked, retire_after, retire_complete),
                     name="channel-retire",
                 )
+                return True
+            return False
 
     async def handover_channels(
         self,
@@ -269,18 +279,35 @@ class ChannelHost:
             self._retired_transports.pop(channel.name, None)
         return parked
 
-    async def _retire_transports(self, channels, ready) -> None:
-        await ready()
-        async with self._transport_lock:
-            for channel in channels:
-                if self._retired_transports.get(channel.name) is not channel:
-                    continue
-                try:
-                    await channel.stop()
-                except Exception as error:
-                    self.record_failure(channel.name, phase="retire", error=error)
-                    raise
-                self._retired_transports.pop(channel.name, None)
+    async def _retire_transports(self, channels, ready, complete=None) -> None:
+        async def stop() -> None:
+            async with self._transport_lock:
+                owned = [
+                    channel
+                    for channel in channels
+                    if self._retired_transports.get(channel.name) is channel
+                ]
+                # A stop that failed has already been attempted. Preserve its
+                # diagnostic without retrying the disposed connection at exit.
+                for channel in owned:
+                    self._retired_transports.pop(channel.name)
+                await self._stop_channels(owned, phase="retire")
+
+        steps = [("retired_work.drain", ready), ("retired_channels.stop", stop)]
+        if complete is not None:
+            steps.append(("retired_resources.release", complete))
+        await run_cleanup_steps(*steps)
+
+    async def _stop_channels(self, channels, *, phase: str) -> None:
+        errors = []
+        for channel in reversed(channels):
+            try:
+                await channel.stop()
+            except Exception as error:
+                self.record_failure(channel.name, phase=phase, error=error)
+                errors.append(error)
+        if errors:
+            raise ExceptionGroup("Channel cleanup failed", errors)
 
     def record_failure(self, channel: str, *, phase: str, error: BaseException) -> None:
         """Records a channel failure while allowing independent channels to proceed."""
@@ -304,13 +331,26 @@ class ChannelHost:
                 logger.error("渠道启动失败 %s: %s", channel.name, e)
 
     async def stop_all(self) -> None:
-        self._retirements.cancel_all()
+        """Stops every connection once and surfaces current and retired failures."""
+        if self._stop_task is None:
+            self._stop_task = asyncio.create_task(self._stop_all())
+        await asyncio.shield(self._stop_task)
+
+    async def _stop_all(self) -> None:
+        # Retirement owns live plugin scopes until its transport stops. Cancelling
+        # it here could release those scopes before the remaining stop attempts.
         await self._retirements.drain()
-        for channel in reversed([*self._channels, *self._retired_transports.values()]):
+        errors = self._retirements.errors
+        async with self._transport_lock:
+            channels = [*self._channels, *self._retired_transports.values()]
+            self._channels = []
+            self._retired_transports.clear()
             try:
-                await channel.stop()
-            except Exception as e:
-                logger.warning("渠道停止失败 %s: %s", channel.name, e)
+                await self._stop_channels(channels, phase="stop")
+            except Exception as error:
+                errors.append(error)
+        if errors:
+            raise ExceptionGroup("Channel cleanup failed", errors)
 
     @property
     def channels(self) -> list[Channel]:

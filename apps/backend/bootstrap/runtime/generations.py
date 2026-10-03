@@ -147,6 +147,54 @@ class RuntimeLease:
         await self.release()
 
 
+class RuntimeRetention:
+    """Keeps generation resources alive while their work and transports drain."""
+
+    def __init__(self, generations: tuple[RuntimeCandidate, ...]) -> None:
+        self._generations = generations
+        # Resource ownership does not count as accepted work. Acquire before
+        # publication/shutdown can release the last ordinary lease.
+        self._retained = {
+            generation
+            for generation in generations
+            if not generation.closed
+            and (not generation.retired or generation.references)
+        }
+        self._leases = [
+            generation.acquire(persistent=True) for generation in self._retained
+        ]
+
+    async def drain(self) -> None:
+        """Waits for every accepted owner, including ones already closing."""
+        outcomes = await asyncio.gather(
+            *(self._drain_generation(generation) for generation in self._generations),
+            return_exceptions=True,
+        )
+        errors = [error for error in outcomes if isinstance(error, Exception)]
+        if errors:
+            raise ExceptionGroup("Runtime work failed to drain", errors)
+
+    async def _drain_generation(self, generation: RuntimeCandidate) -> None:
+        if generation not in self._retained:
+            # A preceding reload may have scheduled or begun unleased core drain;
+            # it can still produce replies for the transport being removed.
+            await generation.drained.wait()
+            await generation.close_if_idle()
+            return
+        await generation.wait_for_work()
+        await generation.core.drain()
+
+    async def release(self) -> None:
+        """Releases retained resources once, after transport cleanup was attempted."""
+        leases, self._leases = self._leases, []
+        outcomes = await asyncio.gather(
+            *(lease.release() for lease in leases), return_exceptions=True
+        )
+        errors = [error for error in outcomes if isinstance(error, Exception)]
+        if errors:
+            raise ExceptionGroup("Retained runtime cleanup failed", errors)
+
+
 class GenerationManager:
     """Owns the published pointer, tracked generations and the admission gate."""
 

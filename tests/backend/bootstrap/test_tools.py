@@ -485,5 +485,8 @@ async def test_core_stop_preflights_before_teardown_and_force_continues_after_fa
         assert state == ["started", "closed"]
         assert core.event_bus._closed
     finally:
-        scene_close.side_effect = None
-        await app.shutdown()
+        # Drain is shared with transport retirement, so it runs only once and
+        # preserves a failure for the process cleanup boundary to report.
+        with pytest.raises(ExceptionGroup, match="Runtime work failed to drain"):
+            await app.shutdown()
+        scene_close.assert_awaited_once()

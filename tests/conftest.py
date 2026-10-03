@@ -8,3 +8,4 @@ from tests.support.scheduler import (
     store_path,
     tracker,
 )
+from tests.support.runtime_channels import runtime_channels
