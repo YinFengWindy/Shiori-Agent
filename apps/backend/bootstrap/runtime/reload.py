@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from copy import deepcopy
+from functools import partial
 
 from agent.config_models import Config
 from bootstrap.runtime.events import RuntimeEventBus
-from bootstrap.runtime.generations import RuntimeCandidate
+from bootstrap.runtime.generations import RuntimeCandidate, RuntimeRetention
 from bootstrap.tools import build_core_runtime
 from bootstrap.channels import start_channels
 from bootstrap.runtime.memory import validate_memory_transition
@@ -122,11 +123,24 @@ class RuntimeReloadMixin:
             drain_outbound=self.bus.drain_outbound,
             restore_background=lambda: self._restore_background(current),
         ) as accepted_generations:
-            await self.channel_host.handover(
-                candidate.channel_host,
-                commit=lambda: self._publish_pointer(candidate, commit),
-                retire_after=lambda: self._retire_transports(accepted_generations),
+            retained = (
+                RuntimeRetention(accepted_generations)
+                if self.channel_host.removes_channels(candidate.channel_host)
+                else None
             )
+            transferred = False
+            try:
+                transferred = await self.channel_host.handover(
+                    candidate.channel_host,
+                    commit=lambda: self._publish_pointer(candidate, commit),
+                    retire_after=(
+                        partial(self._retire_transports, retained) if retained else None
+                    ),
+                    retire_complete=retained.release if retained else None,
+                )
+            finally:
+                if retained is not None and not transferred:
+                    await retained.release()
 
     async def discard(self, candidate: RuntimeCandidate) -> None:
         """Closes an unpublished candidate after failed preparation or persistence."""
@@ -166,8 +180,12 @@ class RuntimeReloadMixin:
                 ) from error
             raise
 
-    async def _retire_transports(self, accepted: tuple[RuntimeCandidate, ...]) -> None:
-        """Releases replaced transports only after their accepted replies drain."""
-        for generation in accepted:
-            await generation.drained.wait()
-        await self.bus.drain_outbound()
+    async def _retire_transports(self, retained: RuntimeRetention) -> None:
+        """Drains removed connections' replies without disposing their capabilities."""
+        from core.common.cleanup import run_cleanup_steps
+
+        await run_cleanup_steps(
+            ("runtime_work.drain", retained.drain),
+            ("outbound.drain", self.bus.drain_outbound),
+            aggregate_errors=True,
+        )

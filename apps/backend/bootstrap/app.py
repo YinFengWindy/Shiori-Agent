@@ -96,6 +96,7 @@ class AppRuntime(RuntimeReloadMixin, RuntimeBackgroundMixin, RuntimeShutdownMixi
         self._background_tasks: list[asyncio.Task[None]] = []
         self._memory_optimizer = None
         self._shutdown = False
+        self._shutdown_task: asyncio.Task[None] | None = None
         self._started = False
         self._dispatcher = RuntimeDispatcher(self)
         self._background_groups = {}

@@ -241,7 +241,7 @@ async def _wait_for_delivered_reply(app: AppRuntime) -> dict[str, Any]:
 
 @pytest.mark.asyncio
 async def test_private_message_is_answered_by_the_role_and_marked_sent(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
     api = FakeBotApi()
     async with _telegram_host(tmp_path, monkeypatch, api) as (app, service):
@@ -274,3 +274,9 @@ async def test_private_message_is_answered_by_the_role_and_marked_sent(
         assert INBOUND_TEXT in user_turn["content"]
         assert user_turn["metadata"]["account_id"] == account_id
         assert user_turn["metadata"]["thread_id"] == reply["metadata"]["thread_id"]
+        shutdown_logs = len(caplog.records)
+    # The full host exit must stop Telegram while its account capability is
+    # still alive; a logged cleanup failure used to leave this test green.
+    assert not [
+        record for record in caplog.records[shutdown_logs:] if record.levelno >= 30
+    ]

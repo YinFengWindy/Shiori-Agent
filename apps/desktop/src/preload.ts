@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 import { PreloadLocalAssetCache } from "./assets/preloadLocalAssetCache.js";
 import { localAssetScheme } from "./assets/localAssetContract.js";
+import { createDesktopEventSubscription } from "./bridge/desktopEventSubscription.js";
 import {
   surfaceMessageChannel,
   surfaceVoiceChannel,
@@ -13,7 +14,7 @@ import { surfaceChannels } from "./surface/ipc.js";
 import { pluginDataChannels } from "./plugins/ipc.js";
 import { trayChannels } from "./tray/ipc.js";
 import { notificationChannels, type NotificationChatTarget } from "./notifications/contract.js";
-import type { BridgeEvent, SurfaceCreateResult, SurfacePlacement, SurfaceRoleActivity, VoiceStatePayload } from "@yinfengwindy/shiori-sdk/contract";
+import type { SurfaceCreateResult, SurfacePlacement, SurfaceRoleActivity, VoiceStatePayload } from "@yinfengwindy/shiori-sdk/contract";
 import type {
   BridgeResponse,
   DesktopApi,
@@ -127,13 +128,7 @@ const api: DesktopApi = {
     return (ipcRenderer.invoke("desktop:invoke", request) as Promise<LocalAssetTransport<BridgeResponse>>)
       .then((transport) => localAssets.consume(transport));
   },
-  onEvent(listener) {
-    const wrapped = (_event: unknown, payload: unknown) => {
-      listener(localAssets.consume(payload as LocalAssetTransport<BridgeEvent>));
-    };
-    ipcRenderer.on("desktop:event", wrapped);
-    return () => ipcRenderer.off("desktop:event", wrapped);
-  },
+  onEvent: createDesktopEventSubscription(ipcRenderer, localAssets),
   pickImages(options) {
     return (ipcRenderer.invoke("desktop:pick-images", options) as Promise<LocalAssetTransport<string[]>>)
       .then((transport) => localAssets.consume(transport));

@@ -6,15 +6,19 @@ from collections.abc import Awaitable, Callable
 logger = logging.getLogger(__name__)
 
 
-async def run_cleanup_steps(*steps: tuple[str, Callable[[], Awaitable[None]]]) -> None:
-    """Attempts every independent cleanup step and reports the first failure."""
-    first_error: Exception | None = None
+async def run_cleanup_steps(
+    *steps: tuple[str, Callable[[], Awaitable[None]]],
+    aggregate_errors: bool = False,
+) -> None:
+    """Attempts all cleanup, reporting the first failure or an explicit error group."""
+    errors: list[Exception] = []
     for name, step in steps:
         try:
             await step()
         except Exception as exc:
-            if first_error is None:
-                first_error = exc
+            errors.append(exc)
             logger.warning("shutdown step failed: %s: %s", name, exc)
-    if first_error is not None:
-        raise first_error
+    if errors:
+        if aggregate_errors:
+            raise ExceptionGroup("Cleanup steps failed", errors)
+        raise errors[0]

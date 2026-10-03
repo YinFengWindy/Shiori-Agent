@@ -73,6 +73,9 @@ async def test_app_runtime_resolves_channel_hooks_through_its_channel_host(
     class _Streaming:
         name = "qqbot"
 
+        async def stop(self):
+            pass
+
         def supports_stream_events(self, chat_id: str) -> bool:
             return True
 

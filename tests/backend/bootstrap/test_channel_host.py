@@ -1,5 +1,6 @@
+import asyncio
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -8,6 +9,91 @@ from bootstrap.channel_host import ChannelHost
 
 def connection(name):
     return SimpleNamespace(name=name, pause_intake=Mock(), resume_intake=Mock())
+
+
+@pytest.mark.asyncio
+async def test_stop_all_attempts_each_channel_once_and_reports_failure():
+    host = ChannelHost(lambda channel: None)
+    first, second = connection("one"), connection("two")
+    first.stop = AsyncMock()
+    second.stop = AsyncMock(side_effect=RuntimeError("stop failed"))
+    host.add(first)
+    host.add(second)
+    with pytest.raises(ExceptionGroup, match="Channel cleanup failed"):
+        await host.stop_all()
+    first.stop.assert_awaited_once()
+    second.stop.assert_awaited_once()
+    with pytest.raises(ExceptionGroup, match="Channel cleanup failed"):
+        await host.stop_all()
+    first.stop.assert_awaited_once()
+    second.stop.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_stop_all_reports_prior_retirement_failure_without_retrying_stop():
+    context = SimpleNamespace(push_tool=SimpleNamespace(retire_channel=Mock()))
+    host = ChannelHost(lambda channel: context)
+    channel = connection("one")
+    channel.stop = AsyncMock(side_effect=RuntimeError("retirement failed"))
+    host.add(channel)
+    candidate = ChannelHost(lambda channel: context)
+    await host.handover(candidate, retire_after=AsyncMock())
+    await host._retirements.drain()
+    with pytest.raises(ExceptionGroup, match="Channel cleanup failed"):
+        await host.stop_all()
+    channel.stop.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_retirement_reports_drain_stop_and_release_failures_together():
+    context = SimpleNamespace(push_tool=SimpleNamespace(retire_channel=Mock()))
+    host = ChannelHost(lambda channel: context)
+    channel = connection("one")
+    drain_error = ValueError("accepted work drain failed")
+    stop_error = RuntimeError("offline failed")
+    release_error = OSError("retained resources failed")
+    channel.stop = AsyncMock(side_effect=stop_error)
+    host.add(channel)
+    candidate = ChannelHost(lambda channel: context)
+    ready = AsyncMock(side_effect=drain_error)
+    complete = AsyncMock(side_effect=release_error)
+    await host.handover(candidate, retire_after=ready, retire_complete=complete)
+    await host._retirements.drain()
+    with pytest.raises(ExceptionGroup) as caught:
+        await host.stop_all()
+    for expected in (drain_error, stop_error, release_error):
+        assert caught.value.subgroup(lambda error: error is expected) is not None
+    ready.assert_awaited_once()
+    channel.stop.assert_awaited_once()
+    complete.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_cancelled_stop_waiter_does_not_cancel_retirement_or_lose_completion():
+    context = SimpleNamespace(push_tool=SimpleNamespace(retire_channel=Mock()))
+    host = ChannelHost(lambda channel: context)
+    channel = connection("one")
+    channel.stop = AsyncMock()
+    host.add(channel)
+    candidate = ChannelHost(lambda channel: context)
+    entered, finish = asyncio.Event(), asyncio.Event()
+
+    async def ready():
+        entered.set()
+        await finish.wait()
+
+    complete = AsyncMock()
+    await host.handover(candidate, retire_after=ready, retire_complete=complete)
+    await entered.wait()
+    stopping = asyncio.create_task(host.stop_all())
+    await asyncio.sleep(0)
+    stopping.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await stopping
+    finish.set()
+    await asyncio.wait_for(host.stop_all(), 1)
+    channel.stop.assert_awaited_once()
+    complete.assert_awaited_once()
 
 
 def test_same_name_new_credentials_require_exclusive_handover():
