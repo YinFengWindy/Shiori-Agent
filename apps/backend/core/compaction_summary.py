@@ -19,6 +19,8 @@ if TYPE_CHECKING:
     from session.manager.window import WindowPreparation
 
 SUMMARY_TOKEN_LIMIT = 2000
+# Known thinking-off providers get room to finish JSON; stored state stays bounded.
+_SUMMARY_GENERATION_TOKEN_LIMIT = 4000
 # Below this a message no longer carries usable content; fail instead of shrinking.
 _MIN_TEXT_CHARS = 200
 _SOURCE_KEYS = (
@@ -128,7 +130,9 @@ class WorkingSummaryWriter:
         self.sessions = sessions
         self.provider = provider
         self.model = model
-        self.max_tokens = min(max_tokens, SUMMARY_TOKEN_LIMIT)
+        # Generic providers may spend this allowance on reasoning as well as JSON.
+        # Only the provider can safely apply the smaller auxiliary generation cap.
+        self.max_tokens = max_tokens
 
     @property
     def model_name(self) -> str:
@@ -180,6 +184,7 @@ class WorkingSummaryWriter:
             model=self.model,
             max_tokens=self.max_tokens,
             call_purpose="auxiliary",
+            auxiliary_max_tokens=_SUMMARY_GENERATION_TOKEN_LIMIT,
         )
         return budget is None or budget.estimate.tokens <= budget.input_limit_tokens
 
@@ -216,6 +221,7 @@ class WorkingSummaryWriter:
             model=self.model,
             max_tokens=self.max_tokens,
             call_purpose="auxiliary",
+            auxiliary_max_tokens=_SUMMARY_GENERATION_TOKEN_LIMIT,
         )
         if is_truncated_finish_reason(response.finish_reason):
             raise ValueError("工作摘要输出被截断")

@@ -2,6 +2,7 @@
 
 from types import SimpleNamespace
 import asyncio
+import json
 from unittest.mock import AsyncMock
 
 import pytest
@@ -9,6 +10,7 @@ import pytest
 from agent.prompting.input_budget import BudgetPolicy, build_input_budget
 from agent.prompting.token_estimate import estimate_tokens
 from agent.prompting.usage_anchor import InputEstimate
+from agent.provider import LLMProvider
 from conversation.context_scope import (
     history_start,
     turn_context_view,
@@ -21,7 +23,7 @@ from core.compaction import (
     CompactionFailedError,
     CompactionPolicy,
 )
-from core.compaction_summary import WorkingSummary
+from core.compaction_summary import WorkingSummary, WorkingSummaryWriter
 from core.memory.markdown import ConsolidateRequest
 from session.manager import SessionManager
 from session.maintenance_progress import window_key
@@ -291,6 +293,76 @@ async def test_memory_failure_never_generates_or_publishes_a_summary(memory_harn
     assert not caught.value.result.memory_committed
     controller.writer.generate.assert_not_awaited()
     assert history_start(session, None) == 0
+
+
+async def test_truncated_summary_retry_commits_window_without_repeating_memory(
+    memory_harness, monkeypatch
+):
+    h = memory_harness
+    session = h.manager.get_or_create("cli:truncated-summary")
+    _turn(session)
+    h.manager.save(session)
+    provider = LLMProvider(
+        api_key="test",
+        provider_name="StepFun",
+        model_context_window=1000000,
+        default_max_tokens=16384,
+    )
+    content = json.dumps(
+        {
+            "tasks": "finish the tea plan",
+            "constraints": "",
+            "decisions": "",
+            "unfinished": "",
+            "tool_state": "",
+            "entities": "",
+            "source_message_ids": [session.messages[0]["id"]],
+        }
+    )
+
+    async def complete(**kwargs):
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(content=content, tool_calls=[]),
+                    finish_reason="length" if kwargs["max_tokens"] <= 2000 else "stop",
+                )
+            ],
+            usage=None,
+        )
+
+    create = AsyncMock(side_effect=complete)
+    monkeypatch.setattr(provider._client.chat.completions, "create", create)
+    controller = CompactionController(
+        h.manager,
+        h.maintenance,
+        WorkingSummaryWriter(h.manager, provider, "step-5-preview", 2000),
+    )
+    try:
+        with pytest.raises(CompactionFailedError) as caught:
+            await _ensure(controller, session, keep=0)
+        assert caught.value.result.failure_stage == "summary"
+        assert caught.value.result.memory_committed
+        assert "工作摘要输出被截断" in caught.value.result.error
+        assert history_start(session, None) == 0
+        assert not session.maintenance_progress.summaries
+        memory_calls = len(h.prompts)
+        assert memory_calls > 0
+        controller.writer = WorkingSummaryWriter(
+            h.manager, provider, "step-5-preview", 16384
+        )
+        _, result = await _ensure(controller, session, keep=0)
+        assert result.committed and history_start(session, None) == 2
+        assert len(h.prompts) == memory_calls
+        assert json.loads(session.maintenance_progress.summaries["session"]) == (
+            json.loads(content)
+        )
+        assert [call.kwargs["max_tokens"] for call in create.await_args_list] == [
+            2000,
+            16384,
+        ]
+    finally:
+        await provider.aclose()
 
 
 async def test_memory_only_keeps_the_window_and_semantic_consumers(memory_harness):
