@@ -129,6 +129,46 @@ def _text_sync(tmp_path: Path):
     return session_manager, push_tool, committed, texts
 
 
+async def test_concurrent_delivery_events_commit_and_notify_only_once(
+    tmp_path, monkeypatch
+):
+    manager = SessionManager(tmp_path)
+    session = manager.open_role_session("mira", role_name="Mira")
+    bus = EventBus()
+    service = ExternalPushSyncService(
+        live_turn_pushes=current_turn_pushes, session_manager=manager, event_bus=bus
+    )
+    committed = []
+    bus.on(ProactiveMessageCommitted, committed.append)
+    append = AsyncMock(wraps=manager._append_messages)
+    monkeypatch.setattr(manager, "_append_messages", append)
+    event = ExternalTextPushed(
+        session_key=session.key,
+        role_id="mira",
+        channel="qq",
+        chat_id="902",
+        text="delivered once",
+        delivery_key="scheduler:once",
+    )
+    tasks = []
+    try:
+        async with manager._lock(session.key):
+            tasks = [
+                asyncio.create_task(service.handle_text_pushed(event)) for _ in range(2)
+            ]
+            await asyncio.sleep(0)
+            assert append.await_count == 2
+            assert not any(task.done() for task in tasks)
+            assert session.messages == []
+        await asyncio.gather(*tasks)
+        stored = manager._store.fetch_session_messages(session.key)
+        assert len(stored) == 1
+        assert [item.message_id for item in committed] == [stored[0]["id"]]
+    finally:
+        await asyncio.gather(*tasks, return_exceptions=True)
+        await bus.aclose()
+
+
 @pytest.mark.parametrize("kind", ["text", "image"])
 @pytest.mark.parametrize("failure", [RuntimeError, asyncio.CancelledError])
 async def test_abandoned_push_retains_the_admitted_turn_boundary(

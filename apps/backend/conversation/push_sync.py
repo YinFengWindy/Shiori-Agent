@@ -175,16 +175,18 @@ class ExternalPushSyncService:
         """Appends one delivered push to the role session under the chat's thread."""
         session_key = self._role_session_key(event)
         session = self._sessions.get_or_create(session_key)
-        if (
-            isinstance(event, ExternalTextPushed)
-            and event.delivery_key
-            and any(
-                (stored.get("metadata") or {}).get("delivery_key") == event.delivery_key
-                for stored in session.messages
-            )
-        ):
+        committed = await self._sessions.append_messages(
+            session,
+            [message],
+            pending_messages=True,
+            delivery_key=(
+                (event.delivery_key or None)
+                if isinstance(event, ExternalTextPushed)
+                else None
+            ),
+        )
+        if not committed:
             return
-        await self._sessions.append_messages(session, [message], pending_messages=True)
         await self._event_bus.fanout(
             ProactiveMessageCommitted(
                 session_key=session_key,
