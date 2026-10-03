@@ -2,15 +2,11 @@
   <img src="./assets/shiori-app-icon.png" alt="Shiori 图标" width="96" />
   <h1>Shiori</h1>
   <p><strong>让角色走进日常</strong></p>
-  <p>以角色为核心的Personal Agent。<br />得聊过的往事，会主动找你聊天，也能帮你处理手头的事</p>
+  <p>以角色为核心的Personal Agent。<br />记得聊过的往事，会主动找你聊天，也能帮你处理手头的事</p>
   <p>
     <a href="https://github.com/YinFengWindy/Shiori-Agent/releases/latest"><strong>下载 Windows 版</strong></a>
     ·
     <a href="https://yinfengwindy.github.io/Shiori-Agent/">官网</a>
-    ·
-    <a href="https://github.com/YinFengWindy/Shiori-Agent/releases">更新记录</a>
-    ·
-    <a href="https://github.com/YinFengWindy/Shiori-Agent/issues">反馈问题</a>
   </p>
   <p>
     <img src="https://img.shields.io/badge/platform-Windows%20x64-2563eb?style=flat-square" alt="Windows x64" />
