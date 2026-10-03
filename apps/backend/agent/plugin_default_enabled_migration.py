@@ -30,7 +30,7 @@ from agent.config_migration_writer import save_migrated_config
 logger = logging.getLogger(__name__)
 
 # manifest 声明 default_enabled: false 的内置插件，按改为默认停用的先后追加。
-DEFAULT_DISABLED_PLUGINS: tuple[str, ...] = ("browser_use", "computer_use")
+DEFAULT_DISABLED_PLUGINS: tuple[str, ...] = ("browser_use", "computer_use", "novelai")
 RECEIPT_KEY = "plugin_default_disabled"
 
 
