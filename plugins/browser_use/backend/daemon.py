@@ -29,7 +29,7 @@ class BrowserDaemon:
         )
         socket_dir.mkdir(parents=True, exist_ok=True)
         session = self._env["AGENT_BROWSER_SESSION"]
-        # v0.38.1 connection.rs::daemon_config_fingerprint, verified against
+        # v0.38.2 connection.rs::daemon_config_fingerprint, verified against
         # this fixed binary: debug=false, policies=None, idle_timeout=Some("0"),
         # default_timeout=None, no_auto_dialog=false. Other launch flags are not
         # part of this daemon-owned fingerprint. Never adopt an existing session.
