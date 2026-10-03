@@ -25,6 +25,7 @@ async function mount(load: () => Promise<string>, options: { enabled?: boolean; 
   await flush();
   return {
     view,
+    get listenerCount() { return listeners.size; },
     get latest() {
       assert.ok(latest);
       return latest;
@@ -125,6 +126,43 @@ test("does not load while disabled", async () => {
   } finally {
     await probe.view.cleanup();
   }
+});
+
+test("repeated page mounts, disables and unmounts release bridge and focus subscriptions", async () => {
+  let calls = 0;
+  const load = async () => `v${++calls}`;
+  const probe = await mount(load);
+  try {
+    for (let cycle = 0; cycle < 12; cycle += 1) {
+      assert.equal(probe.listenerCount, 1);
+      const beforeRefresh = calls;
+      await probe.emit("session.updated");
+      await probe.focus();
+      assert.equal(calls, beforeRefresh + 2, "each active subscription refreshes once");
+
+      await probe.rerender(false, load);
+      assert.equal(probe.listenerCount, 0, "disabled pages release their subscription");
+      const beforeDisable = calls;
+      await probe.emit("session.updated");
+      await probe.focus();
+      assert.equal(calls, beforeDisable);
+
+      await probe.rerender(true, load);
+      assert.equal(probe.listenerCount, 1);
+      await probe.view.render(null);
+      assert.equal(probe.listenerCount, 0, "unmounted pages release their subscription");
+      const beforeUnmount = calls;
+      await probe.emit("session.updated");
+      await probe.focus();
+      assert.equal(calls, beforeUnmount);
+
+      await probe.rerender(true, load);
+      assert.equal(calls, beforeUnmount + 1);
+    }
+  } finally {
+    await probe.view.cleanup();
+  }
+  assert.equal(probe.listenerCount, 0);
 });
 
 test("a predicate with keepValueOnError keeps the last value on failure and skips focus when asked", async () => {
