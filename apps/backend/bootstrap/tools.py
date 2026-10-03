@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -123,6 +124,7 @@ class CoreRuntime:
     scene_followup_subscription: SceneFollowupSubscription | None = None
     # Shared by every generation; bound to the long-lived channel host at start.
     channel_directory: ChannelDirectory = field(default_factory=ChannelDirectory)
+    _drain_task: asyncio.Task[None] | None = field(default=None, init=False, repr=False)
 
     async def start(self) -> None:
         self.mcp_registry.start_connect_all_background()
@@ -169,16 +171,21 @@ class CoreRuntime:
         if self.plugin_manager is not None:
             self.plugin_manager.assert_hot_unloadable()
 
-    async def stop(self, *, force: bool = False) -> None:
-        """Drains owned work and releases resources; shutdown/rollback may force cleanup."""
-        if not force:
-            self.assert_hot_unloadable()
+    async def drain(self) -> None:
+        """Finishes accepted work once while plugin capabilities remain usable."""
+        if self._drain_task is None:
+            self._drain_task = asyncio.create_task(self._drain_work())
+        await asyncio.shield(self._drain_task)
+
+    async def _drain_work(self) -> None:
         steps = []
         if self.scene_service is not None:
             steps.append(("scene.close", self.scene_service.close))
         spawn = self.tools.get_tool("spawn")
         if spawn is not None:
             steps.append(("spawn.drain", spawn.manager.drain))
+        if self.plugin_manager is not None:
+            steps.append(("plugins.drain", self.plugin_manager.drain))
         maintenance = self.memory_runtime.markdown.maintenance
 
         async def detach_listening() -> None:
@@ -197,6 +204,14 @@ class CoreRuntime:
                 self.scene_followup_subscription.stop()
 
             steps.append(("scene_followup.stop", stop_scene_followup))
+        await run_cleanup_steps(*steps)
+
+    async def stop(self, *, force: bool = False) -> None:
+        """Drains owned work and releases resources; shutdown/rollback may force cleanup."""
+        if not force:
+            self.assert_hot_unloadable()
+        # A failed drain must still allow every resource disposal to run.
+        steps = [("work.drain", self.drain)]
         if self.plugin_manager is not None:
             steps.append(
                 (

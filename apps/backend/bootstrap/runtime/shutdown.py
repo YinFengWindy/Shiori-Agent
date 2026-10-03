@@ -4,6 +4,7 @@ import asyncio
 
 from core.common.cleanup import run_cleanup_steps
 from core.net.http import clear_default_shared_http_resources
+from bootstrap.runtime.generations import RuntimeRetention
 
 
 class RuntimeShutdownMixin:
@@ -11,25 +12,42 @@ class RuntimeShutdownMixin:
 
     async def shutdown(self) -> None:
         """Closes the process without leaving queued generation references behind."""
-        if self._shutdown:
-            return
-        self._shutdown = True
-        self._generation_manager.close()
+        if self._shutdown_task is None:
+            self._shutdown = True
+            self._generation_manager.close()
+            retained = RuntimeRetention(self._generation_manager.tracked)
+            self._shutdown_task = asyncio.create_task(
+                self._shutdown_resources(retained), name="runtime-shutdown"
+            )
+        # A cancelled waiter must not abandon the resource holds or interrupt
+        # channels halfway through cleanup. Later callers join the same exit.
+        await asyncio.shield(self._shutdown_task)
+
+    async def _shutdown_resources(self, retained: RuntimeRetention) -> None:
         try:
             await run_cleanup_steps(
                 ("inbound.close", self._close_inbound),
                 ("control_tasks.stop", self._stop_control_tasks),
                 ("background.stop", self._stop_background),
-                ("generations.close", self._close_generations),
+                ("generations.drain", lambda: self._drain_generations(retained)),
                 ("outbound.drain", self._drain_outbound),
                 ("channels.stop", self._stop_channels),
+                ("generations.release", retained.release),
+                ("generations.close", self._close_generations),
                 ("outbound.stop", self._stop_outbound),
                 ("events.close", self._close_events),
                 ("http_resources.aclose", self.http_resources.aclose),
                 ("retired_runtime_cleanup", self._report_cleanup_errors),
+                aggregate_errors=True,
             )
         finally:
             clear_default_shared_http_resources(self.http_resources)
+
+    async def _drain_generations(self, retained: RuntimeRetention) -> None:
+        if not self._generation_manager.tracked and self.core is not None:
+            await self.core.drain()
+            return
+        await retained.drain()
 
     async def _close_inbound(self) -> None:
         if self.bus is not None:
@@ -60,6 +78,7 @@ class RuntimeShutdownMixin:
             await run_cleanup_steps(
                 ("partial_core.stop", lambda: self.core.stop(force=True)),
                 ("partial_memory.close", self.core.memory_runtime.aclose),
+                aggregate_errors=True,
             )
             return
         await self._generation_manager.close_all(force=True)
