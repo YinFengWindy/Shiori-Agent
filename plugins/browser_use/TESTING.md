@@ -33,6 +33,10 @@ third-generation open/tab-close sequence, omitting the preceding form/screenshot
 and multi-tab interaction. Select either with `-k complete` or `-k recovery`.
 Each case uses a fresh isolated profile and a local HTTP server.
 
+Before launch, acceptance compares the prepared runtime manifest with the plugin's
+pin and verifies the local agent-browser executable's SHA256. The evidence records
+that actual digest, so an old executable cannot pass under newer version metadata.
+
 Each case writes its own evidence subdirectory: `acceptance.json` records every
 attempt, elapsed time, generation, exceptions, cleanup warnings and remaining
 owned PIDs; `daemon-NN.log` retains each generation before profile reuse can
@@ -40,6 +44,16 @@ overwrite it. Empty native logs are preserved too. Failures remain test failures
 the recorder does not retry operations or change timeouts. Use a different
 evidence directory for each repeated run.
 
-The pinned runtime's intermittent native/CDP failures remain under investigation
-in [#636](https://github.com/YinFengWindy/Shiori-Agent/issues/636). They have also
-occurred in the first generation, so cancellation is not a necessary trigger.
+The native/CDP stalls investigated in
+[#636](https://github.com/YinFengWindy/Shiori-Agent/issues/636) were caused by
+agent-browser 0.38.1 leaving Chrome's stderr pipe unread after startup. Once the
+pipe filled, synchronous logging could block Chrome operations. Cancellation was
+not required to trigger the stall. Upstream
+[PR #2003](https://github.com/vercel-labs/agent-browser/pull/2003) adds continuous
+draining and is included in the pinned 0.38.2 release.
+
+Both acceptance cases pass with the official 0.38.2 executable and the unchanged
+Chrome for Testing 153.0.8010.52. They verify three browser generations, profile
+reuse, cancellation of in-flight and queued work, and final tab closure without
+diagnostic builds or manual pipe draining. The daemon fingerprint and cached core
+tool schemas remain compatible; timeout, retry and browser launch flags are unchanged.

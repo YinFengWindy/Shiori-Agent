@@ -4,6 +4,7 @@ import asyncio
 import base64
 import ctypes
 from ctypes import wintypes
+import hashlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
@@ -89,7 +90,17 @@ async def test_fixed_runtime_local_page_multimodal_persistence_and_cancellation(
         "agent.plugin_host.processes.resource_root", lambda: native.parent.parent
     )
     metadata = json.loads((native / "native-runtime.json").read_text(encoding="utf-8"))
-    assert metadata["agentBrowser"]["version"] == "0.38.1"
+    expected = json.loads(
+        (plugin_directory("browser_use") / "native-runtime.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert metadata == expected
+    assert metadata["agentBrowser"]["version"] == "0.38.2"
+    # Runtime evidence must describe the executable actually used by this test.
+    with (native / "agent-browser.exe").open("rb") as executable:
+        runtime_sha256 = hashlib.file_digest(executable, "sha256").hexdigest()
+    assert runtime_sha256 == metadata["agentBrowser"]["sha256"]
     evidence = BrowserAcceptanceEvidence(
         Path(os.environ.get("SHIORI_BROWSER_USE_EVIDENCE", str(tmp_path / "evidence")))
         / scenario,
@@ -122,6 +133,7 @@ async def test_fixed_runtime_local_page_multimodal_persistence_and_cancellation(
     url = f"http://127.0.0.1:{server.server_port}"
     report = evidence.report
     report["scenario"] = scenario
+    report["runtime_sha256"] = runtime_sha256
 
     roots = tmp_path / "plugins"
     stage_plugin_package(plugin_directory("browser_use"), roots / "browser_use")

@@ -35,7 +35,7 @@ _OWNED = frozenset(
 
 
 def browser_tools(sessions: BrowserSessions) -> list["BrowserTool"]:
-    """Loads schemas captured from agent-browser v0.38.1 without starting a browser."""
+    """Loads v0.38.1 schemas verified against v0.38.2 without starting a browser."""
     specs = json.loads(
         Path(__file__).with_name("tools.json").read_text(encoding="utf-8")
     )
