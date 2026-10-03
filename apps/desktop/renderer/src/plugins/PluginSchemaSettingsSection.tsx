@@ -28,6 +28,11 @@ type PluginSchemaSettingsSectionProps = { pluginId: string };
 
 /** Renders and autosaves a plugin's config form, generated from its declared JSON Schema. */
 export function PluginSchemaSettingsSection({ pluginId }: PluginSchemaSettingsSectionProps) {
+  // Each plugin owns its pending draft and final flush, including during navigation.
+  return <PluginSchemaSettingsForm key={pluginId} pluginId={pluginId} />;
+}
+
+function PluginSchemaSettingsForm({ pluginId }: PluginSchemaSettingsSectionProps) {
   const { schema, envStatus, draft, loadError, loadDetail, savePhase, statusMessage, statusDetail, updateDraft, retrySave, reloadConfig } =
     usePluginConfigController(pluginId);
 
@@ -57,7 +62,7 @@ export function PluginSchemaSettingsSection({ pluginId }: PluginSchemaSettingsSe
   );
   return (
     <div className="grid gap-7">
-      <SettingsStatus><SettingsSavedIndicator phase={savePhase} /></SettingsStatus>
+      <SettingsStatus><SettingsSavedIndicator phase={savePhase} showPending /></SettingsStatus>
       <SettingsSaveFeedback
         phase={savePhase}
         message={statusMessage} detail={statusDetail}

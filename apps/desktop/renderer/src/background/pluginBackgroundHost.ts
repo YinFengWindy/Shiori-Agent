@@ -5,12 +5,15 @@ import type { PluginBackgroundEntry } from "./pluginBackgroundRegistry";
 /** A registry surface narrow enough to fake in tests without the real singleton. */
 export type PluginBackgroundRegistryLike = { list(): PluginBackgroundEntry[] };
 
+/** Distinguishes a runtime replacement from an availability-only refresh. */
+export type PluginBackgroundChange = "runtime" | "roster" | "unavailable";
+
 export type PluginBackgroundHostDeps = {
   registry: PluginBackgroundRegistryLike;
   /** Fetches the current enabled-plugin roster; called at startup and on every reconcile. */
   listEnabledPluginIds(): Promise<Set<string>>;
   /** Subscribes to whatever signals "the enabled roster may have changed"; returns an unsubscribe. */
-  subscribeRosterChanged(listener: (available?: boolean) => void): () => void;
+  subscribeRosterChanged(listener: (change: PluginBackgroundChange) => void): () => void;
   createCtx(pluginId: string, scope: BackgroundEffectScope): BackgroundCtx;
   /** Reports a failure. `pluginId` is empty for `"roster"`, which is not attributable to one plugin. */
   onError?(pluginId: string, phase: "setup" | "dispose" | "roster", error: unknown): void;
@@ -31,12 +34,9 @@ export type PluginBackgroundHostDeps = {
  * `usePluginManagementController.ts` — and this is a different renderer
  * entirely). Instead of duplicating that store, this host asks the backend
  * directly (`listEnabledPluginIds`, backed by `plugins.list`) at startup and
- * again whenever `subscribeRosterChanged` fires. In `main.ts` that signal is
- * the `runtime.applied` bridge event — which, note, did *not* previously fire
- * for a plugin toggle: it is published explicitly per request branch in
- * `desktop_bridge/runtime/service.py`, and `plugins.setEnabled` reached no
- * publish at all until #226 added one. See `main.ts`'s `subscribeRosterChanged`
- * for why that publish must not be "cleaned up" as redundant.
+ * again whenever the roster changes. `runtime.applied` replaces generation
+ * scopes; `plugins.changed` only reconciles availability. A renderer entry
+ * becoming ready must not restart unrelated plugins.
  */
 export class PluginBackgroundHost {
   private readonly running = new Map<string, BackgroundEffectScope>();
@@ -48,12 +48,12 @@ export class PluginBackgroundHost {
 
   constructor(private readonly deps: PluginBackgroundHostDeps) {}
 
-  /** Runs the first reconcile and starts listening for roster changes. */
+  /** Subscribes before queued startup so publications during async setup are retained. */
   async start(): Promise<void> {
-    await this.reconcile();
-    this.unsubscribeRosterChanged = this.deps.subscribeRosterChanged((available = true) => {
-      this.enqueue(() => available ? this.reconcile(true) : this.teardownAll());
+    this.unsubscribeRosterChanged = this.deps.subscribeRosterChanged((change) => {
+      void this.enqueue(() => change === "unavailable" ? this.teardownAll() : this.reconcile(change === "runtime"));
     });
+    await this.enqueue(() => this.reconcile());
   }
 
   /** Tears down every currently running plugin and stops listening for roster changes. */

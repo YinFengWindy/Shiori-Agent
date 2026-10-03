@@ -1,5 +1,5 @@
 import { errorMessage } from "@yinfengwindy/shiori-sdk";
-import { pluginRuntimeChanged } from "../plugins/pluginRuntimeChanged";
+import { pluginRosterChanged } from "../plugins/pluginRuntimeChanged";
 // Registers every plugin's `background/index.ts` before the host reads the registry.
 import "./pluginBackgroundModules";
 import { createPluginBridgeClient } from "../plugins/pluginBridgeClient";
@@ -58,18 +58,9 @@ const host = new PluginBackgroundHost({
     return activePluginIds(plugins);
   },
   subscribeRosterChanged(listener) {
-    // `runtime.applied` is the roster-changed signal — but note *where* it is
-    // published from. The backend emits it explicitly, per request branch, in
-    // `desktop_bridge/runtime/service.py`. `RuntimeSettingsApplication.apply()`
-    // itself publishes nothing; its `publish_service(service)` call only swaps
-    // the service generation. `plugins.setEnabled` reached no publish at all
-    // until #226 added one to the PLUGIN_MANAGEMENT branch — before that, this
-    // window never learned a plugin had been disabled and kept its background
-    // contribution running. **Do not delete that publish as redundant**: it is
-    // the only thing making disable-means-disable true here, and
-    // `test_set_enabled_publishes_runtime_applied` pins it.
     return onEvent((event) => {
-      if (pluginRuntimeChanged(event)) listener(event.method !== "bridge.exit");
+      if (!pluginRosterChanged(event)) return;
+      listener(event.method === "bridge.exit" ? "unavailable" : event.method === "plugins.changed" ? "roster" : "runtime");
     });
   },
   createCtx(pluginId, scope) {

@@ -30,7 +30,7 @@ test("mounted contributions renew client subscriptions on real generation change
   };
   try {
     assert.equal(listeners.size, 2, "the owner and active RPC client each hold one subscription");
-    await act(async () => { emit("plugin.demo.changed"); emit("runtime.applied", { changed: false }); });
+    await act(async () => { emit("plugin.demo.changed"); emit("plugins.changed", { plugin_id: "demo" }); emit("runtime.applied", { changed: false }); });
     assert.equal(clients.length, 1);
     assert.equal(listeners.size, 2);
     token = "g2";

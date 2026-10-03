@@ -19,6 +19,7 @@ async function mountLifecycle({ cancelling = false, health = "online", viewKind 
   const healthChanges: string[] = [];
   const invokedMethods: string[] = [];
   const openedRoles: string[] = [];
+  let roleReads = 0;
   let unreadCounts: Record<string, number> = {};
   const ignore = () => {};
   const args: Parameters<typeof useDesktopBridgeLifecycle>[0] = {
@@ -47,7 +48,7 @@ async function mountLifecycle({ cancelling = false, health = "online", viewKind 
       statesAtError.push(current);
       activeSessionRef.current = { ...current, messages: [...current.messages, { role: "error", content: message, ...(detail ? { metadata: { error_detail: detail } } : {}) }] };
     },
-    loadRolesFromBridge: async () => [{ id: "mira" } as never],
+    loadRolesFromBridge: async () => { roleReads++; return [{ id: "mira" } as never]; },
     openRole: async (roleId) => { openedRoles.push(roleId); return initialOpen; },
     buildNavigationEntry: () => ({ view: { kind: "chat" }, activeRoleId: "mira", settingsSection: "models", settingsSubsection: "" }),
     pushNavigationEntry: ignore,
@@ -62,13 +63,14 @@ async function mountLifecycle({ cancelling = false, health = "online", viewKind 
     onEvent: (callback: typeof listener) => { listener = callback; return ignore; },
     windowState: async () => ({ isMaximized: false, isVisible: true }),
     bridgeStatus: async () => ({ running: true }),
-    invoke: async (request: { method: string }) => { invokedMethods.push(request.method); return { error: null, payload: {} }; },
+    invoke: async (request: { method: string }) => { invokedMethods.push(request.method); return { error: null, payload: request.method === "plugins.list" ? { plugins: [] } : {} }; },
     plugins: undefined,
   } });
   await view.render(<Harness />);
   return {
     ...view, activeSessionRef, completions, statesAtError, feedback, healthRef, healthChanges, invokedMethods, openedRoles,
     unreadCounts: () => unreadCounts,
+    roleReads: () => roleReads,
     ready: () => lifecycle.ready,
     async emit(method: string, payload: BridgeEvent["payload"] = {}, id = "request-1") {
       await act(async () => listener({ id, type: "event", method, payload: {
@@ -241,4 +243,16 @@ describe("useDesktopBridgeLifecycle", () => {
       assert.deepEqual(view.invokedMethods, []);
     } finally { await view.cleanup(); }
   });
+});
+
+
+it("refreshes plugin availability after readiness without reloading roles", async () => {
+  const view = await mountLifecycle();
+  try {
+    const beforeRoles = view.roleReads();
+    const beforeLists = view.invokedMethods.filter((method) => method === "plugins.list").length;
+    await view.emit("plugins.changed", { plugin_id: "demo", kind: "ui", generation: 1 });
+    assert.equal(view.invokedMethods.filter((method) => method === "plugins.list").length, beforeLists + 1);
+    assert.equal(view.roleReads(), beforeRoles);
+  } finally { await view.cleanup(); }
 });
