@@ -20,6 +20,11 @@
 私有草稿、上传所有顶层制品，并核对 GitHub 返回的大小和 SHA256。发布前再次
 检查正式基线、草稿归属和 tag SHA，最后公开为 stable / latest Release。
 
+Windows installer 使用 `${productName}-Setup-${version}.${ext}` 命名，例如
+`Shiori-Setup-0.5.1.exe`；blockmap、更新元数据和校验清单沿用同一个名称。
+自动发布在上传前拒绝含空格或其他不安全字符的文件名，避免 GitHub 重命名
+制品后导致下载路径或校验清单失配。
+
 ## 失败恢复与冲突
 
 所有 Windows 发版入口共用 concurrency 队列，不取消进行中的发版。检查和构建

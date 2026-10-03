@@ -6,6 +6,10 @@ import { hashReleaseFile } from "./hash-release.mjs";
 export async function readDailyAssets(directory, version) {
   const names = (await readdir(directory, { withFileTypes: true }))
     .filter((entry) => entry.isFile()).map((entry) => entry.name).sort();
+  // GitHub rewrites spaces and special characters in uploaded asset names. Keep
+  // the builder's filenames, update metadata and checksums identical end to end.
+  const unsafeName = names.find((name) => !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name));
+  if (unsafeName) throw new Error(`Release filename is not GitHub-safe: ${unsafeName}`);
   for (const required of ["latest.yml", "SHA256SUMS.txt"]) {
     if (!names.includes(required)) throw new Error(`Missing release file: ${required}`);
   }

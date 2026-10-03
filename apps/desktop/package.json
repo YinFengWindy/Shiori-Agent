@@ -91,6 +91,7 @@
       }
     ],
     "win": {
+      "artifactName": "${productName}-Setup-${version}.${ext}",
       "icon": "../../assets/shiori-app-icon.ico",
       "target": [
         {
