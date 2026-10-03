@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
-import type { FeedbackTone } from "@shiori/sdk";
+import type { FeedbackTone } from "@yinfengwindy/shiori-sdk";
 import { getFeedbackSnapshot, resetFeedback } from "../feedback/feedbackStore";
 import { feedbackPersonaCue, feedbackTonePersona, mascotFeedback } from "./mascotFeedback";
 import { feedbackPersonaLines } from "./mascotLines";

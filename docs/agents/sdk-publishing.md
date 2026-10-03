@@ -1,6 +1,6 @@
 # SDK 发布
 
-SDK 使用同一个版本号发布 `@shiori/sdk`（npm）与 `shiori-sdk`（PyPI），当前为
+SDK 使用同一个版本号发布 `@yinfengwindy/shiori-sdk`（npm）与 `shiori-sdk`（PyPI），当前为
 `3.1.0`。版本来源是 `packages/sdk/python/shiori_sdk/_version.py`；修改后运行
 `node scripts/sync_sdk_version.mjs` 同步 npm 元数据。
 
@@ -20,16 +20,16 @@ SDK 使用同一个版本号发布 `@shiori/sdk`（npm）与 `shiori-sdk`（PyPI
 
 ## 首次账号配置
 
-提交此工作流不等于已经拥有注册表权限。维护者须先完成下面的外部设置；
-`@shiori` 的拥有权尚未确认，不能把包名存在或注册表返回 404 当作授权。
-如果最终无法取得该 scope，应另行统一修改包名、消费者导入与发布脚本，不能只改工作流。
+采用 npm 账号 `yinfengwindy` 的个人 scope `@yinfengwindy`，无需创建 npm 组织。
+GitHub owner `YinFengWindy` 与 npm scope 分属不同账号系统；Trusted Publisher 的
+owner 字段填写 GitHub owner。维护者仍需完成下面的外部设置。
 
-1. 确认 npm 账号拥有 `@shiori` scope（组织或个人 scope）且能公开发布 `@shiori/sdk`。
+1. 登录 npm 账号 `yinfengwindy`，确认能在个人 scope 公开发布 `@yinfengwindy/shiori-sdk`。
    开启账号要求的 2FA。npm 的 Trusted Publisher 配置要求包已经存在；首次发布
    按下节使用该次 tag 构建的原始 tarball，由拥有者交互式发布。
 2. 在 GitHub 仓库创建名为 `npm`、`pypi` 的两个 Environments。若设置部署分支/标签
    规则，允许 **tag** `sdk-v*`；不要只允许分支 `main`。可按团队策略设置审核人。
-3. 在 npm 的 `@shiori/sdk` 包设置中添加 GitHub Actions Trusted Publisher：
+3. 在 npm 的 `@yinfengwindy/shiori-sdk` 包设置中添加 GitHub Actions Trusted Publisher：
 
    | 字段 | 值 |
    | --- | --- |
@@ -42,7 +42,9 @@ SDK 使用同一个版本号发布 `@shiori/sdk`（npm）与 `shiori-sdk`（PyPI
    不调整会阻止本工作流直发。包的 `repository.url` 必须保持与此 GitHub 仓库匹配。
    工作流使用 Node `24` 和明确安装的 npm `11.5.1`，满足 OIDC 的 Node `>=22.14`
    与 npm `>=11.5.1` 要求；无需保存 `NPM_TOKEN`。
-4. 在 PyPI 账号的 Publishing 页面创建 **pending publisher**（包尚不存在时）：
+4. PyPI 首次设置前，完成账号邮箱验证、恢复码确认和两步验证（验证器或安全密钥），才能添加
+   publisher；恢复码应保存在个人安全存储中，不写入仓库。在 PyPI 账号的 Publishing
+   页面创建 **pending publisher**（包尚不存在时）：
 
    | 字段 | 值 |
    | --- | --- |
@@ -85,7 +87,7 @@ SDK 使用同一个版本号发布 `@shiori/sdk`（npm）与 `shiori-sdk`（PyPI
    gh run download <run-id> --name sdk-release-<run-id>-<build-attempt> --dir sdk-first-release
    uv run python -m scripts.sdk_release verify sdk-first-release --ref refs/tags/sdk-v3.1.0 --commit <标签提交-SHA>
    npm login
-   npm publish sdk-first-release/shiori-sdk-3.1.0.tgz --access public
+   npm publish sdk-first-release/yinfengwindy-shiori-sdk-3.1.0.tgz --access public
    ```
 
    手动首次发布使用账号 2FA；本地不加 `--provenance`，后续 GitHub OIDC 发布自动生成

@@ -1,7 +1,7 @@
 import { Check, UserCircle } from "@phosphor-icons/react";
 import { motion } from "motion/react";
 import { useLayoutEffect, useRef } from "react";
-import { cx, inputClass } from "@shiori/sdk";
+import { cx, inputClass } from "@yinfengwindy/shiori-sdk";
 import type { StoryCreationInput, StoryRoleChoice } from "./types";
 import type { CreationStep } from "./storyCreationWizard";
 import { STORY_TIME_BANDS, normalizeStoryTimeBand } from "./storyTime";

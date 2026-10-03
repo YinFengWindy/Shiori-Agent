@@ -1,6 +1,6 @@
 import type React from "react";
 
-import { cx } from "@shiori/sdk";
+import { cx } from "@yinfengwindy/shiori-sdk";
 
 type SettingsFieldProps = {
   label: React.ReactNode;

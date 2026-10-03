@@ -3,7 +3,7 @@ import type React from "react";
 import { readPluginRoleSettings, refreshPluginRoleDrafts } from "../plugins/pluginRoleSettings";
 import { pluginRoleSettingsRegistry } from "../plugins/pluginFeatureRegistry";
 import { usePluginEnabledState } from "../plugins/usePluginEnabledState";
-import { useLatestRef, type RoleRecord, errorMessage } from "@shiori/sdk";
+import { useLatestRef, type RoleRecord, errorMessage } from "@yinfengwindy/shiori-sdk";
 import type { RoleFormState } from "../shared/types";
 
 type RolePluginRefreshArgs = {

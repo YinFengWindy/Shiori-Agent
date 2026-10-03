@@ -1,5 +1,5 @@
 import { ImageSquare } from "@phosphor-icons/react";
-import { RoleCapabilityCard, SettingsToggleCard, roleToggleStatus, type PluginRoleSettingsContribution, type PluginRoleSettingsProps } from "@shiori/sdk";
+import { RoleCapabilityCard, SettingsToggleCard, roleToggleStatus, type PluginRoleSettingsContribution, type PluginRoleSettingsProps } from "@yinfengwindy/shiori-sdk";
 
 /** NovelAI's per-role preference stays independent of the global plugin enable switch. */
 export function NovelAiRoleSettings({ values, onChange }: PluginRoleSettingsProps) {

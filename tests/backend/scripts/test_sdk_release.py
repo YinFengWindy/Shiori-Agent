@@ -14,6 +14,11 @@ import pytest
 from scripts import sdk_release as release
 
 
+def test_npm_tarball_uses_the_public_personal_scope() -> None:
+    assert release.NPM_PACKAGE_NAME == "@yinfengwindy/shiori-sdk"
+    assert release.npm_tarball_name("3.1.0") == "yinfengwindy-shiori-sdk-3.1.0.tgz"
+
+
 def _tar(path: Path, files: dict[str, bytes]) -> None:
     with tarfile.open(path, "w:gz") as archive:
         for name, data in files.items():
@@ -40,7 +45,7 @@ def archives(tmp_path: Path) -> Path:
     directory = tmp_path / "artifacts"
     directory.mkdir()
     manifest = {
-        "name": "@shiori/sdk",
+        "name": "@yinfengwindy/shiori-sdk",
         "version": "3.1.0",
         "license": "MIT",
         "repository": {"url": f"git+{release.REPOSITORY_URL}.git"},
@@ -51,7 +56,7 @@ def archives(tmp_path: Path) -> Path:
         },
     }
     _tar(
-        directory / "shiori-sdk-3.1.0.tgz",
+        directory / "yinfengwindy-shiori-sdk-3.1.0.tgz",
         {
             "package/package.json": json.dumps(manifest).encode(),
             "package/LICENSE": b"MIT license text",
@@ -124,14 +129,14 @@ def test_valid_archives_include_both_registries(
     )
     assert manifest["version"] == "3.1.0"
     assert set(manifest["sha256"]) == {
-        "shiori-sdk-3.1.0.tgz",
+        "yinfengwindy-shiori-sdk-3.1.0.tgz",
         "shiori_sdk-3.1.0.tar.gz",
         "shiori_sdk-3.1.0-py3-none-any.whl",
     }
 
 
 def test_npm_pack_source_exports_are_rejected(archives: Path) -> None:
-    path = archives / "shiori-sdk-3.1.0.tgz"
+    path = archives / "yinfengwindy-shiori-sdk-3.1.0.tgz"
     files = release._tar_contents(path)
     manifest = json.loads(files["package/package.json"])
     manifest["exports"]["."] = "./src/index.ts"
@@ -154,7 +159,7 @@ def test_linux_artifacts_verify_from_windows_checkout(
     repository: Path, archives: Path
 ) -> None:
     linux_license = b"MIT\nlicense text\n"
-    for name in ("shiori-sdk-3.1.0.tgz", "shiori_sdk-3.1.0.tar.gz"):
+    for name in ("yinfengwindy-shiori-sdk-3.1.0.tgz", "shiori_sdk-3.1.0.tar.gz"):
         path = archives / name
         files = release._tar_contents(path)
         license_path = next(name for name in files if name.endswith("/LICENSE"))
@@ -196,7 +201,7 @@ def test_download_verification_rejects_changed_bytes(
     ]
     monkeypatch.setattr(sys, "argv", command)
     release.main()
-    path = archives / "shiori-sdk-3.1.0.tgz"
+    path = archives / "yinfengwindy-shiori-sdk-3.1.0.tgz"
     files = release._tar_contents(path)
     files["package/README.md"] = b"Changed after verification"
     _tar(path, files)

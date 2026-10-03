@@ -1,6 +1,6 @@
 import { PuzzlePieceIcon } from "@phosphor-icons/react";
 import type { ComponentType } from "react";
-import { cx } from "@shiori/sdk";
+import { cx } from "@yinfengwindy/shiori-sdk";
 
 const sizes = {
   md: { box: "h-9 w-9", icon: "h-5 w-5", badge: "h-4 w-4", badgeIcon: "h-2.5 w-2.5" },

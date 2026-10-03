@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { act } from "react";
-import { BridgeError } from "@shiori/sdk";
-import { mountTestComponent } from "@shiori/sdk/testing";
+import { BridgeError } from "@yinfengwindy/shiori-sdk";
+import { mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import { useStoryPresentationOperation } from "./useStoryPresentationOperation";
 
 test("Story commands store a safe summary and separate diagnostic detail", async () => {

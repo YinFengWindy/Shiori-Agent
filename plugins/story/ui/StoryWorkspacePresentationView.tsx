@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { usePluginHostServices, type RoleRecord } from "@shiori/sdk";
+import { usePluginHostServices, type RoleRecord } from "@yinfengwindy/shiori-sdk";
 import { StoryArchiveSurface, StoryCreateFlow, StoryGameSurface, StoryLauncher, StoryLoadList, StoryLoadingScreen, StorySettings, StoryWorkspaceBackdrop, type StoryWorkspaceBackdropBlur } from "./components";
 import { StoryCgGallerySurface } from "./components";
 import { resolveStoryCharacterIllustration } from "./storyCharacterPresentation";

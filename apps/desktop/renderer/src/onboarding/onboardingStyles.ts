@@ -3,7 +3,7 @@ import {
   cx,
   ghostButtonSurfaceClass,
   primaryButtonSurfaceClass,
-} from "@shiori/sdk";
+} from "@yinfengwindy/shiori-sdk";
 
 /** Primary command in a setup card's footer. */
 export const onboardingActionClass = cx(primaryButtonSurfaceClass, "inline-flex min-h-10 items-center justify-center gap-2 px-5 py-2 text-body font-medium");

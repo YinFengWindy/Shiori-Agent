@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { act } from "react";
-import type { BridgeEvent } from "@shiori/sdk";
-import { mountTestComponent } from "@shiori/sdk/testing";
+import type { BridgeEvent } from "@yinfengwindy/shiori-sdk";
+import { mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import { useChatContext } from "./useChatContext";
 import { notifyChatModelChange } from "./chatModelChanges";
 import type { ChatContextStatus } from "./chatContextState";

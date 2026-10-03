@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "node:test";
 import { act, useState } from "react";
-import { mountTestComponent } from "@shiori/sdk/testing";
+import { mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import { RoleCardImportPreviewDialog } from "./RoleCardImportPreview";
 
 it("requires duplicate selection before continuing and keeps compatibility reports hidden", async () => {

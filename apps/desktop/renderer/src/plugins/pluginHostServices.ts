@@ -1,4 +1,4 @@
-import type { PluginHostServices, RoleRecord } from "@shiori/sdk";
+import type { PluginHostServices, RoleRecord } from "@yinfengwindy/shiori-sdk";
 import { AccountDetailActions } from "../accounts/AccountDetailActions";
 import { AccountStatusCard } from "../accounts/AccountStatusCard";
 import { invokeBridgePayload } from "../shared/bridgeInvoke";

@@ -1,4 +1,4 @@
-import type { SessionMessage } from "@shiori/sdk";
+import type { SessionMessage } from "@yinfengwindy/shiori-sdk";
 import { normalizeSessionMediaPaths } from "./chatMedia";
 
 function normalized(value: unknown) {

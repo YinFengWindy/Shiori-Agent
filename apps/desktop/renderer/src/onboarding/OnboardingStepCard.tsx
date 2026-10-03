@@ -1,4 +1,4 @@
-import type { RoleRecord } from "@shiori/sdk";
+import type { RoleRecord } from "@yinfengwindy/shiori-sdk";
 import { OnboardingErrorCard } from "./OnboardingErrorCard";
 import { OnboardingModelStep } from "./OnboardingModelStep";
 import { OnboardingRoleStep } from "./OnboardingRoleStep";

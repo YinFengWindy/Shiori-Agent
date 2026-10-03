@@ -1,4 +1,4 @@
-import type { SessionMessagePage, SessionSummary } from "@shiori/sdk";
+import type { SessionMessagePage, SessionSummary } from "@yinfengwindy/shiori-sdk";
 import type {
   SettingsFormData,
   SettingsSnapshot,

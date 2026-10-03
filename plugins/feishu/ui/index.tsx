@@ -1,5 +1,5 @@
 import { BuildingsIcon } from "@phosphor-icons/react";
-import type { PluginUiModule } from "@shiori/sdk";
+import type { PluginUiModule } from "@yinfengwindy/shiori-sdk";
 import { FeishuAccountDetail } from "./FeishuAccountDetail";
 
 /** Feishu/Lark apps are added and managed only from a role's account page. */

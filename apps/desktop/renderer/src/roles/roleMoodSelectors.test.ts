@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { RoleRecord, SessionPayload } from "@shiori/sdk";
+import type { RoleRecord, SessionPayload } from "@yinfengwindy/shiori-sdk";
 import type { RoleFormState } from "../shared/types";
 import { resolveCurrentMood, resolveCurrentThought, resolveMoodIllustration } from "./roleMoodSelectors";
 

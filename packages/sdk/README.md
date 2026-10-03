@@ -1,6 +1,6 @@
 # Shiori SDK
 
-`@shiori/sdk` and `shiori-sdk` are the TypeScript and Python distributions of the
+`@yinfengwindy/shiori-sdk` and `shiori-sdk` are the TypeScript and Python distributions of the
 same plugin contract. Both are version **3.1.0**, with Runtime API **3.1.0**.
 Release tags `sdk-v<version>` publish the validated npm tarball and Python wheel/sdist.
 Maintainers: see the [publishing guide](https://github.com/YinFengWindy/Shiori-Agent/blob/main/docs/agents/sdk-publishing.md)
@@ -12,6 +12,11 @@ External plugin manifests declare `runtime_api: ">=3.0.0 <4.0.0"`, or
 an incompatible range with an `incompatible_runtime` diagnostic before executing
 the plugin backend. Version 3 requires rebuilding existing renderer imports.
 
+Before the first public release, the npm package moved to the personal scope
+`@yinfengwindy/shiori-sdk`. SDK and Runtime API stay at `3.1.0`; renderer plugins
+built against the earlier internal package name must update their imports and
+rebuild. The host provides only the public package name, without an old-name alias.
+
 ## TypeScript
 
 The main entry exports plugin contracts, components and helpers. `/contract`
@@ -20,7 +25,7 @@ provides independent UI fakes and a DOM harness and is never a runtime peer.
 TypeScript consumers of `/testing` use `@types/node >=26.6.3`, declared as an
 optional type peer because happy-dom exposes Web Streams types from that version.
 This is a declaration requirement, not a change to the runtime Node requirement.
-Workspace consumers resolve source; `pnpm --filter @shiori/sdk pack` builds an ESM
+Workspace consumers resolve source; `pnpm --filter @yinfengwindy/shiori-sdk pack` builds an ESM
 tarball with declarations and external React peers. The host import map provides
 the same main entry to precompiled plugins. Only the main entry belongs in a
 plugin's production peer imports.

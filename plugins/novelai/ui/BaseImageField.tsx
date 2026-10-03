@@ -1,5 +1,5 @@
 import { ArrowsClockwise, ImageSquare, X } from "@phosphor-icons/react";
-import { compactPressableClass, cx, pressableClass, usePluginHostServices } from "@shiori/sdk";
+import { compactPressableClass, cx, pressableClass, usePluginHostServices } from "@yinfengwindy/shiori-sdk";
 import type { ImageStudioFormState } from "./types";
 
 type BaseImageFieldProps = {

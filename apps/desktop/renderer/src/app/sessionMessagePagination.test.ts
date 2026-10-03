@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { mergeSessionMessagePage, mergeSessionMessagesAround, parseSessionMessagesAround, mergeOpenedSessionSnapshot, mergeSessionMessage, mergeSessionSummaryAndMessage } from "./sessionMessagePagination.js";
-import type { SessionMessage, SessionPayload, SessionSummary } from "@shiori/sdk";
+import type { SessionMessage, SessionPayload, SessionSummary } from "@yinfengwindy/shiori-sdk";
 
 function createSummary(): SessionSummary {
   return {

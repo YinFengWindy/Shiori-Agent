@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "node:test";
 import { act } from "react";
-import { deferred, mountTestComponent } from "@shiori/sdk/testing";
+import { deferred, mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import { useMemoryRead } from "./useMemoryRead";
 
 type Batch = { items: string[] };

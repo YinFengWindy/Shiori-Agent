@@ -1,4 +1,4 @@
-import { BridgeError, type PluginPersona } from "@shiori/sdk";
+import { BridgeError, type PluginPersona } from "@yinfengwindy/shiori-sdk";
 
 /** Which kind of problem stopped a generation; decides copy and the offered next step. */
 export type GenerationFailureKind =

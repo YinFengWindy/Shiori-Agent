@@ -1,4 +1,4 @@
-import type { BridgeEvent, SurfaceRoleActivity } from "@shiori/sdk/contract";
+import type { BridgeEvent, SurfaceRoleActivity } from "@yinfengwindy/shiori-sdk/contract";
 import { roleIdFromSessionKey } from "../bridge/sessionIdentity.js";
 
 /** Translate host events once, exposing only role-scoped activity to surfaces. */

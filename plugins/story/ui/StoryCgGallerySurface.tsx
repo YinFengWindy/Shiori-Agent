@@ -2,7 +2,7 @@ import { StoryError } from "./StoryError";
 import { ArrowClockwise, ArrowLeft, ImageBroken, X } from "@phosphor-icons/react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useMemo, useState } from "react";
-import { usePluginHostServices } from "@shiori/sdk";
+import { usePluginHostServices } from "@yinfengwindy/shiori-sdk";
 import type { StoryCgGallery, StoryResource } from "./types";
 import { StorySurface } from "./StorySurface";
 import type { StoryMenuBackground } from "./useStoryMenuBackground";

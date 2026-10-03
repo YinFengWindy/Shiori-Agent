@@ -1,4 +1,4 @@
-import { errorFeedback } from "@shiori/sdk/host-internal";
+import { errorFeedback } from "@yinfengwindy/shiori-sdk/host-internal";
 
 /** The provider's complete normalized input and actual output reservation. */
 export type ContextBudget = {

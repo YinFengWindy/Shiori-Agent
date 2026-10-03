@@ -1,7 +1,7 @@
-import { errorMessage } from "@shiori/sdk";
+import { errorMessage } from "@yinfengwindy/shiori-sdk";
 import { useState } from "react";
 import { InlineError } from "../shared/feedback/InlineError";
-import { textareaClass, type AccountResponseRules, type AccountSnapshot } from "@shiori/sdk";
+import { textareaClass, type AccountResponseRules, type AccountSnapshot } from "@yinfengwindy/shiori-sdk";
 import { createAccountClient } from "./accountClient";
 
 const client = createAccountClient();

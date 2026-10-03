@@ -1,4 +1,4 @@
-import { PetalIcon, usePluginHostServices, type PluginNavPageComponentProps } from "@shiori/sdk";
+import { PetalIcon, usePluginHostServices, type PluginNavPageComponentProps } from "@yinfengwindy/shiori-sdk";
 import { useEffect } from "react";
 import { ImageStudioPage } from "./ImageStudioPage";
 import { PromptTagLibraryPage } from "./PromptTagLibraryPage";

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { errorMessage, usePluginHostServices, type PluginRpcClient } from "@shiori/sdk";
+import { errorMessage, usePluginHostServices, type PluginRpcClient } from "@yinfengwindy/shiori-sdk";
 import type { PromptTagWorkspaceSectionId } from "./novelAiPageStore";
 import type { PromptTagEntry } from "./types";
 

@@ -6,7 +6,7 @@ import {
   cx,
   ghostButtonSurfaceClass,
   sidebarNavItemClass,
-} from "@shiori/sdk";
+} from "@yinfengwindy/shiori-sdk";
 import type { PluginSummary } from "./pluginBridgeClient";
 import { pluginDisplayName, pluginProblem, pluginStateLabel } from "./pluginPresentation";
 

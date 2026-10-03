@@ -1,4 +1,4 @@
-import type { SessionMessage, SessionMessagePage, SessionPayload, SessionSummary } from "@shiori/sdk";
+import type { SessionMessage, SessionMessagePage, SessionPayload, SessionSummary } from "@yinfengwindy/shiori-sdk";
 import { createChatMessageMatcher } from "../chat/chatMessageMatching";
 import { isRecord } from "../shared/isRecord";
 

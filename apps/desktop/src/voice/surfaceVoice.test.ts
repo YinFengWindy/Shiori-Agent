@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { VoiceStatePayload } from "@shiori/sdk/contract";
+import type { VoiceStatePayload } from "@yinfengwindy/shiori-sdk/contract";
 import type { SurfaceTarget } from "../surface/host.js";
 import type { VoiceInteractionState } from "./interactionState.js";
 import type { DesktopVoiceController } from "./controller.js";

@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { type BridgeEvent, useLatestRef } from "@shiori/sdk";
+import { type BridgeEvent, useLatestRef } from "@yinfengwindy/shiori-sdk";
 import type { PhoneConversationUpdate, PhoneListeningHeard } from "./phoneClient";
 import { phoneConversationUpdateOf, phoneListeningHeardOf } from "./phonePayloads";
 

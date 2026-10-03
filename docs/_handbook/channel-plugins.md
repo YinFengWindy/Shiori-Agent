@@ -243,7 +243,7 @@ uv run python -m scripts.verify_plugin_tests --plugins <id>
 
 ## 统一 SDK 3.0
 
-新插件前端使用 `@shiori/sdk`，后端契约使用 `shiori_sdk`，并声明
+新插件前端使用 `@yinfengwindy/shiori-sdk`，后端契约使用 `shiori_sdk`，并声明
 `runtime_api: ">=3.0.0 <4.0.0"`。SDK 主文档位于
 [packages/sdk/README.md](../../packages/sdk/README.md)，包括 wheel/tarball 构建、
 公开协议和 `shiori-sdk[testing]` 的无宿主测试入口。

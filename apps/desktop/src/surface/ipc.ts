@@ -4,7 +4,7 @@ import type {
   SurfaceSpec,
   SurfaceWorkArea,
   SurfaceMenuItem,
-} from "@shiori/sdk/contract";
+} from "@yinfengwindy/shiori-sdk/contract";
 import type { SurfacePoint } from "./contract.js";
 import { DesktopSurfaceError, type DesktopSurfaceHost, type SurfaceKey } from "./host.js";
 

@@ -1,5 +1,5 @@
 import type { DesktopApi } from "../../../src/bridge/shared";
-import { BridgeError, type RoleRecord } from "@shiori/sdk";
+import { BridgeError, type RoleRecord } from "@yinfengwindy/shiori-sdk";
 import type { NewRoleFormState } from "../shared/types";
 
 /** Builds the shared manual/import request and validates required role fields. */

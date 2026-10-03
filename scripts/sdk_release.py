@@ -13,6 +13,14 @@ from pathlib import Path
 
 REPOSITORY = Path(__file__).resolve().parents[1]
 REPOSITORY_URL = "https://github.com/YinFengWindy/Shiori-Agent"
+# The public npm identity is shared by archive validation and registry lookups.
+NPM_PACKAGE_NAME = "@yinfengwindy/shiori-sdk"
+
+
+def npm_tarball_name(version: str) -> str:
+    """Return the scoped package filename produced by pnpm pack."""
+    basename = NPM_PACKAGE_NAME.removeprefix("@").replace("/", "-")
+    return f"{basename}-{version}.tgz"
 
 
 def _license_content(raw: bytes) -> bytes:
@@ -78,7 +86,7 @@ def _python_metadata(raw: bytes, version: str) -> None:
 def validate_archives(directory: Path, version: str, license_text: bytes) -> list[Path]:
     """Inspect package identities, published entries and distributable license files."""
     license_text = _license_content(license_text)
-    npm = directory / f"shiori-sdk-{version}.tgz"
+    npm = directory / npm_tarball_name(version)
     wheel = directory / f"shiori_sdk-{version}-py3-none-any.whl"
     sdist = directory / f"shiori_sdk-{version}.tar.gz"
     paths = [npm, wheel, sdist]
@@ -89,7 +97,7 @@ def validate_archives(directory: Path, version: str, license_text: bytes) -> lis
     files = _tar_contents(npm)
     manifest = json.loads(files["package/package.json"])
     if (manifest["name"], manifest["version"], manifest.get("license")) != (
-        "@shiori/sdk",
+        NPM_PACKAGE_NAME,
         version,
         "MIT",
     ):

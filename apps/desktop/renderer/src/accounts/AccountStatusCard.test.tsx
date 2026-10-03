@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { act } from "react";
-import { mountTestComponent } from "@shiori/sdk/testing";
-import type { AccountSnapshot } from "@shiori/sdk";
+import { mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
+import type { AccountSnapshot } from "@yinfengwindy/shiori-sdk";
 import { AccountStatusCard } from "./AccountStatusCard";
 
 const account: AccountSnapshot = {

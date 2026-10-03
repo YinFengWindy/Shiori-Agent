@@ -3,7 +3,7 @@ import { useAccounts } from "../accounts/useAccounts";
 import { pluginUiRegistry } from "../plugins/pluginUiRegistry";
 import { usePluginEnabledState, usePluginRosterLoaded } from "../plugins/usePluginEnabledState";
 import { toFileUrl } from "../shared/format";
-import type { RoleRecord } from "@shiori/sdk";
+import type { RoleRecord } from "@yinfengwindy/shiori-sdk";
 import { PhoneConversationList } from "./PhoneConversationList";
 import { PhoneConversationScreens } from "./PhoneConversationScreens";
 import { PhoneHomeScreen } from "./PhoneHomeScreen";

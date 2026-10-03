@@ -1,4 +1,4 @@
-import type { PluginRpcClient } from "@shiori/sdk";
+import type { PluginRpcClient } from "@yinfengwindy/shiori-sdk";
 import { ImageFilmstrip } from "./ImageFilmstrip";
 import { ImageStage } from "./ImageStage";
 import { clearFailure, selectRecord, updateStudioForm } from "./novelAiPageStore";

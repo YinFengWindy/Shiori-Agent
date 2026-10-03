@@ -1,4 +1,4 @@
-import { Select } from "@shiori/sdk";
+import { Select } from "@yinfengwindy/shiori-sdk";
 import { SettingsField as Field } from "./SettingsField";
 import {
   SettingsGroup,

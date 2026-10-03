@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import React, { act } from "react";
-import { createFakePluginClient, mountTestComponent } from "@shiori/sdk/testing";
+import { createFakePluginClient, mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import { useQQAccountForm } from "./useQQAccountForm";
 
 test("a temporary QQ login begins only when the user connects", async () => {
@@ -64,7 +64,7 @@ test("closing before begin returns cancels the late temporary login", async () =
 
 
 test("QQ account settings preserve an RPC diagnostic in the error disclosure", async () => {
-  const { PluginBridgeError } = await import("@shiori/sdk");
+  const { PluginBridgeError } = await import("@yinfengwindy/shiori-sdk");
   const client = createFakePluginClient({ call: async () => { throw new PluginBridgeError("本地服务处理失败", "internal_error", { detail: "settings read failed" }); } });
   let latest!: ReturnType<typeof useQQAccountForm>;
   function Probe() { latest = useQQAccountForm({ roleId: "mira", client, onChanged: () => undefined, onCleanupError: () => undefined }); return null; }

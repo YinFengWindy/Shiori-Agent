@@ -3,7 +3,7 @@ import { afterEach, before, describe, it } from "node:test";
 import { act } from "react";
 import { setInFlightChatTurns } from "../shared/chatTurnActivity";
 import { getFeedbackSnapshot, resetFeedback } from "../shared/feedback/feedbackStore";
-import { mountTestComponent } from "@shiori/sdk/testing";
+import { mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import type { PluginSummary } from "./pluginBridgeClient";
 
 // Imported after a DOM exists: the dialog library reads browser globals at module load.

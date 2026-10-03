@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { BridgeError } from "@shiori/sdk";
+import { BridgeError } from "@yinfengwindy/shiori-sdk";
 import { invokeBridgePayload } from "./bridgeInvoke";
 
 test("failed RPC envelopes retain the stable code and independent diagnostic detail", async () => {

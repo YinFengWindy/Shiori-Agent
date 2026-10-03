@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type React from "react";
 import { act } from "react";
-import { PluginHostServicesProvider } from "@shiori/sdk";
-import { createFakeHostServices, mountTestComponent, type FakeHostServices } from "@shiori/sdk/testing";
+import { PluginHostServicesProvider } from "@yinfengwindy/shiori-sdk";
+import { createFakeHostServices, mountTestComponent, type FakeHostServices } from "@yinfengwindy/shiori-sdk/testing";
 import { ImageStage } from "./ImageStage";
 import type { StageView } from "./studioSelectors";
 

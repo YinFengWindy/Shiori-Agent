@@ -1,4 +1,4 @@
-import type { RoleRecord, SessionPayload } from "@shiori/sdk";
+import type { RoleRecord, SessionPayload } from "@yinfengwindy/shiori-sdk";
 import { readRoleSessionCache, removeRoleSessionCache, retainRoleSessionCache, writeRoleSessionCache } from "../chat/roleSessionCache";
 import type { DesktopSessionStateArgs } from "./desktopSessionTypes";
 type Args = Pick<DesktopSessionStateArgs, "roleSessionCacheRef">;

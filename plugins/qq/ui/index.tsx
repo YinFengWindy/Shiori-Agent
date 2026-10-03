@@ -1,6 +1,6 @@
 import React, { useEffect } from "react";
 import { ChatCircleIcon } from "@phosphor-icons/react";
-import { errorMessage, type PluginAccountDetailComponentProps, type PluginUiModule } from "@shiori/sdk";
+import { errorMessage, type PluginAccountDetailComponentProps, type PluginUiModule } from "@yinfengwindy/shiori-sdk";
 import { QQAccountForm } from "./QQAccountForm";
 import { useQQAccountForm } from "./useQQAccountForm";
 

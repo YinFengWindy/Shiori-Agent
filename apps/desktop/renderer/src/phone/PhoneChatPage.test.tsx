@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { before, test } from "node:test";
 import { act } from "react";
-import type { BridgeEvent } from "@shiori/sdk";
-import { mountTestComponent } from "@shiori/sdk/testing";
+import type { BridgeEvent } from "@yinfengwindy/shiori-sdk";
+import { mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import type { PhoneConversation } from "./phoneClient";
 
 // Base UI's dialog reads browser globals when it loads: import after a window exists.

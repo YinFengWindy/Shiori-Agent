@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { it } from "node:test";
 import { act } from "react";
-import type { AccountSnapshot } from "@shiori/sdk";
-import { changeInputValue, createFakeHostServices, createFakePluginClient, mountTestComponent } from "@shiori/sdk/testing";
+import type { AccountSnapshot } from "@yinfengwindy/shiori-sdk";
+import { changeInputValue, createFakeHostServices, createFakePluginClient, mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import { FeishuAccountDetail } from "./FeishuAccountDetail";
 
 type Request = { method: string; payload?: Record<string, unknown> };

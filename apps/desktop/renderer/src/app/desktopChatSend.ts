@@ -1,6 +1,6 @@
 import type { ChatSendFailure } from "../chat/chatSendFailure";
-import { errorMessage } from "@shiori/sdk";
-import { errorFeedback } from "@shiori/sdk/host-internal";
+import { errorMessage } from "@yinfengwindy/shiori-sdk";
+import { errorFeedback } from "@yinfengwindy/shiori-sdk/host-internal";
 import type { DesktopSessionStateArgs } from "./desktopSessionTypes";
 import type { useDesktopChatTurns } from "./useDesktopChatTurns";
 import type { createDesktopSessionSnapshot } from "./desktopSessionSnapshot";

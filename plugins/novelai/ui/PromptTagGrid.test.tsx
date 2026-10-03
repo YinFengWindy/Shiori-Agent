@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { act, type ReactElement } from "react";
-import { PluginHostServicesProvider } from "@shiori/sdk";
-import { createFakeHostServices, mountTestComponent } from "@shiori/sdk/testing";
+import { PluginHostServicesProvider } from "@yinfengwindy/shiori-sdk";
+import { createFakeHostServices, mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import { PromptTagGrid } from "./PromptTagGrid";
 import type { PromptTagEntry } from "./types";
 

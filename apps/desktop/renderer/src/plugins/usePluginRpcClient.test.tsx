@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { act, useEffect } from "react";
-import type { BridgeEvent, PluginRpcClient } from "@shiori/sdk";
-import { mountTestComponent } from "@shiori/sdk/testing";
+import type { BridgeEvent, PluginRpcClient } from "@yinfengwindy/shiori-sdk";
+import { mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import { usePluginRpcClient } from "./usePluginRpcClient";
 
 test("mounted contributions renew client subscriptions on real generation changes and release them on unmount", async () => {

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { createEmptyNewRoleForm } from "../app/appState";
 import { useRoleCardImport } from "../app/useRoleCardImport";
 import type { NewRoleFormState } from "../shared/types";
-import { useLatestRef } from "@shiori/sdk";
+import { useLatestRef } from "@yinfengwindy/shiori-sdk";
 import type { FeedbackOptions } from "../shared/feedback/feedbackStore";
 
 /** Shares role draft and import staging between creation entry points. */

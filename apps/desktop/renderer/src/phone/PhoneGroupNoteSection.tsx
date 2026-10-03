@@ -1,5 +1,5 @@
 import { InlineError } from "../shared/feedback/InlineError";
-import { textareaClass } from "@shiori/sdk";
+import { textareaClass } from "@yinfengwindy/shiori-sdk";
 import { compactPrimaryButtonClass, compactTextButtonClass } from "../shared/styles";
 import type { PhoneChatInfoSectionProps } from "./PhoneChatInfoSections";
 import { PhoneLoadError } from "./PhoneLoadError";

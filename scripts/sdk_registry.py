@@ -9,8 +9,11 @@ import json
 import os
 import shutil
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
+
+from scripts.sdk_release import NPM_PACKAGE_NAME, npm_tarball_name
 
 
 def registry_metadata(url: str) -> dict | None:
@@ -27,10 +30,9 @@ def registry_metadata(url: str) -> dict | None:
 def pending_files(registry: str, directory: Path, version: str) -> list[Path]:
     """Skip identical published bytes and fail before uploading conflicting files."""
     if registry == "npm":
-        tarball = directory / f"shiori-sdk-{version}.tgz"
-        metadata = registry_metadata(
-            f"https://registry.npmjs.org/@shiori%2fsdk/{version}"
-        )
+        tarball = directory / npm_tarball_name(version)
+        package = urllib.parse.quote(NPM_PACKAGE_NAME, safe="@")
+        metadata = registry_metadata(f"https://registry.npmjs.org/{package}/{version}")
         if metadata is None:
             return [tarball]
         digest = base64.b64encode(

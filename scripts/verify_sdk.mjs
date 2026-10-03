@@ -16,7 +16,7 @@ function run(args, cwd) {
 }
 let tarball = values.tarball && resolve(values.tarball);
 if (!tarball) {
-  run(["--filter", "@shiori/sdk", "pack", "--pack-destination", output], root);
+  run(["--filter", "@yinfengwindy/shiori-sdk", "pack", "--pack-destination", output], root);
   const name = (await readdir(output)).find((name) => name.endsWith(".tgz"));
   if (!name) throw new Error("SDK tarball was not produced");
   tarball = join(output, name);
@@ -27,14 +27,14 @@ const source = JSON.parse(await readFile(join(root, "packages/sdk/package.json")
 await writeFile(join(output, "smoke.mjs"), `
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { BridgeError, errorMessage } from "@shiori/sdk";
-import * as contract from "@shiori/sdk/contract";
-import * as host from "@shiori/sdk/host-internal";
-import { deferred, createFakePluginClient, mountTestComponent } from "@shiori/sdk/testing";
+import { BridgeError, errorMessage } from "@yinfengwindy/shiori-sdk";
+import * as contract from "@yinfengwindy/shiori-sdk/contract";
+import * as host from "@yinfengwindy/shiori-sdk/host-internal";
+import { deferred, createFakePluginClient, mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import { createElement } from "react";
-const manifest = JSON.parse(await readFile("node_modules/@shiori/sdk/package.json", "utf8"));
+const manifest = JSON.parse(await readFile("node_modules/@yinfengwindy/shiori-sdk/package.json", "utf8"));
 assert.equal(manifest.version, ${JSON.stringify(source.version)});
-assert.ok(import.meta.resolve("@shiori/sdk").includes("/dist/index.js"));
+assert.ok(import.meta.resolve("@yinfengwindy/shiori-sdk").includes("/dist/index.js"));
 assert.equal(typeof BridgeError, "function");
 assert.equal(errorMessage(new Error("probe")), "probe");
 assert.equal(typeof createFakePluginClient, "function");
@@ -47,8 +47,8 @@ console.log("Non-editable npm SDK import + DOM testing smoke passed", manifest.v
 `, "utf8");
 execFileSync(process.execPath, ["smoke.mjs"], { cwd: output, stdio: "inherit" });
 await writeFile(join(output, "consumer.ts"), `
-import { type PluginRpcClient } from "@shiori/sdk";
-import { createFakePluginClient } from "@shiori/sdk/testing";
+import { type PluginRpcClient } from "@yinfengwindy/shiori-sdk";
+import { createFakePluginClient } from "@yinfengwindy/shiori-sdk/testing";
 const client: PluginRpcClient = createFakePluginClient();
 void client;
 `, "utf8");

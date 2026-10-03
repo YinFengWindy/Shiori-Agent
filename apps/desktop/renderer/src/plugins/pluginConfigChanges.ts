@@ -1,4 +1,4 @@
-import type { PluginConfigValues } from "@shiori/sdk";
+import type { PluginConfigValues } from "@yinfengwindy/shiori-sdk";
 
 /** Receives a plugin's stored config after a save, with the writer that saved it. */
 export type PluginConfigChangeListener = (values: PluginConfigValues, origin: object) => void;

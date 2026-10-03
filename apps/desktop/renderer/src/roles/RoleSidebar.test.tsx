@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { act } from "react";
 import { appearancePrefsStorageKey } from "../shared/appearancePrefs";
-import { mountTestComponent } from "@shiori/sdk/testing";
+import { mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import { resetAppearancePrefsCache } from "../shared/useAppearancePrefs";
 import { RoleSidebar } from "./RoleSidebar";
 

@@ -3,7 +3,7 @@ import { Plus } from "@phosphor-icons/react";
 import { emptyStateLines } from "../shared/mascot/mascotLines";
 import { MascotEmptyState } from "../shared/mascot/MascotSpeech";
 import { useMascotEnabled } from "../shared/mascot/useMascotEnabled";
-import { SidebarResizeHandle } from "@shiori/sdk";
+import { SidebarResizeHandle } from "@yinfengwindy/shiori-sdk";
 import {
   cx,
   pressableClass,
@@ -11,7 +11,7 @@ import {
   sidebarNavItemClass,
   type RoleRecord,
   PetalIcon,
-} from "@shiori/sdk";
+} from "@yinfengwindy/shiori-sdk";
 import { RoleAvatar } from "./RoleAvatar";
 import { formatChatListTime, previewFromRoleLastMessage, type RoleChatPreview } from "./roleChatPreview";
 

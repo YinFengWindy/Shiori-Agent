@@ -1,7 +1,7 @@
 import { Dialog } from "@base-ui/react/dialog";
 import { XIcon } from "@phosphor-icons/react";
 import { toFileUrl } from "../shared/format";
-import { cx } from "@shiori/sdk";
+import { cx } from "@yinfengwindy/shiori-sdk";
 import { compactIconButtonClass, dialogBackdropClass } from "../shared/styles";
 
 /**

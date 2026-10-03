@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { BackgroundCtx, PluginBackgroundSettled } from "@shiori/sdk";
-import { createFakePluginClient } from "@shiori/sdk/testing";
+import type { BackgroundCtx, PluginBackgroundSettled } from "@yinfengwindy/shiori-sdk";
+import { createFakePluginClient } from "@yinfengwindy/shiori-sdk/testing";
 import petBackground, {
   desktopPetTrayEntryId,
 } from "./index";

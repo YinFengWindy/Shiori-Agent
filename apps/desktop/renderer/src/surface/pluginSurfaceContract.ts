@@ -1,4 +1,4 @@
-import type { PluginSurfaceModule } from "@shiori/sdk";
+import type { PluginSurfaceModule } from "@yinfengwindy/shiori-sdk";
 import { pluginSurfaceRegistry, type PluginSurfaceRegistry } from "./pluginSurfaceRegistry";
 
 /**

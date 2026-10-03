@@ -8,7 +8,7 @@ import {
   cx,
   pressableClass,
   primaryButtonSurfaceClass,
-} from "@shiori/sdk";
+} from "@yinfengwindy/shiori-sdk";
 import { hasModelCapacity } from "./modelRegistration";
 import { registrationHost, registrationInitials, registrationProviderLabel } from "./modelRegistrationSummary";
 

@@ -1,5 +1,5 @@
 import { useLayoutEffect } from "react";
-import { useLatestRef } from "@shiori/sdk";
+import { useLatestRef } from "@yinfengwindy/shiori-sdk";
 import { dismissFeedbackWhere, setFeedbackFilter, type FeedbackFilter } from "../shared/feedback/feedbackStore";
 
 // The main process reports a bridge that went away with these raw English

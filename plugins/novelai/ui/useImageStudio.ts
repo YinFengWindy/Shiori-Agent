@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { usePluginHostServices, type PluginHostFeedback, type PluginRpcClient } from "@shiori/sdk";
+import { usePluginHostServices, type PluginHostFeedback, type PluginRpcClient } from "@yinfengwindy/shiori-sdk";
 import { failurePersona, type GenerationFailure } from "./generationFailure";
 import { loadHistory, refreshReadiness, submitGenerate } from "./novelAiGeneration";
 import { clearFailure, getNovelAiState, updateStudioForm, useNovelAiPageStore } from "./novelAiPageStore";

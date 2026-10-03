@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { toFileUrl } from "../shared/format";
-import { cx, type RoleRecord } from "@shiori/sdk";
+import { cx, type RoleRecord } from "@yinfengwindy/shiori-sdk";
 import type { RoleFormState } from "../shared/types";
 import { RoleCapabilitiesPanel } from "./RoleCapabilitiesPanel";
 import { resolveRoleCardCover } from "./roleCardState";

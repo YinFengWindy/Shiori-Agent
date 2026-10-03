@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { SurfaceSpec } from "@shiori/sdk/contract";
+import type { SurfaceSpec } from "@yinfengwindy/shiori-sdk/contract";
 import { DesktopSurfaceHost, type SurfaceWindowHandle } from "./host.js";
 import { registerSurfaceIpc, surfaceChannels, type SurfaceIpcEvent } from "./ipc.js";
 

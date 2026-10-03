@@ -1,4 +1,4 @@
-import { errorMessage, type SessionMessage, type SessionMessagePage, type SessionMessageUpdatePayload, type SessionPayload } from "@shiori/sdk";
+import { errorMessage, type SessionMessage, type SessionMessagePage, type SessionMessageUpdatePayload, type SessionPayload } from "@yinfengwindy/shiori-sdk";
 import { isRecord } from "../shared/isRecord";
 import { getSessionPaginationState, parseSessionMessagePage, parseSessionSummary } from "./sessionMessagePagination";
 

@@ -1,4 +1,4 @@
-import { errorFeedbackText } from "@shiori/sdk/host-internal";
+import { errorFeedbackText } from "@yinfengwindy/shiori-sdk/host-internal";
 import { useCallback, useEffect, useState } from "react";
 import type { DesktopUpdateState } from "../../../src/updateContract.js";
 

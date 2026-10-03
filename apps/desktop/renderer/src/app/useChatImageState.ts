@@ -1,11 +1,11 @@
-import { errorMessage } from "@shiori/sdk";
+import { errorMessage } from "@yinfengwindy/shiori-sdk";
 import { useEffect, useRef } from "react";
 import type {
   ChatImageHistoryEntry,
   RoleRecord,
   SessionPayload,
   SessionMessageUpdatePayload,
-} from "@shiori/sdk";
+} from "@yinfengwindy/shiori-sdk";
 import { applySessionMessageUpdate } from "../chat/applySessionMessageUpdate";
 import type { FeedbackReporter } from "../shared/feedback/feedbackStore";
 

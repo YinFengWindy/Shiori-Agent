@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { act } from "react";
-import { mountTestComponent } from "@shiori/sdk/testing";
+import { mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import { DesktopExternalLink } from "./DesktopExternalLink";
 
 test("external links prevent renderer navigation and use the desktop shell", async () => {

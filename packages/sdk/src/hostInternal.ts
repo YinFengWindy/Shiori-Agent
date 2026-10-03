@@ -1,5 +1,5 @@
 /**
- * `@shiori/sdk/host-internal`: host-only access to SDK internals that
+ * `@yinfengwindy/shiori-sdk/host-internal`: host-only access to SDK internals that
  * no plugin uses, exposed only so the host and the SDK keep one
  * implementation (the host's own menus, capability badge beside a section
  * switch, mood particles and account status wording share these with the

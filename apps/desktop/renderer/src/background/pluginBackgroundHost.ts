@@ -1,5 +1,5 @@
 import { BackgroundEffectScope } from "./backgroundEffectScope";
-import type { BackgroundCtx } from "@shiori/sdk";
+import type { BackgroundCtx } from "@yinfengwindy/shiori-sdk";
 import type { PluginBackgroundEntry } from "./pluginBackgroundRegistry";
 
 /** A registry surface narrow enough to fake in tests without the real singleton. */

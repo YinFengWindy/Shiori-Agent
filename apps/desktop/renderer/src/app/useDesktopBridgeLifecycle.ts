@@ -7,7 +7,7 @@ import {
   failChatStream,
   finishChatStream,
 } from "../chat/chatStreamingState";
-import { useLatestRef, type RoleRecord, type SessionPayload, errorMessage } from "@shiori/sdk";
+import { useLatestRef, type RoleRecord, type SessionPayload, errorMessage } from "@yinfengwindy/shiori-sdk";
 import { parseChatTurnMetrics } from "../chat/chatTurnMetrics";
 import { getRoleIdFromSession, isProactiveAssistantMessage, type NavigationEntry } from "./appState";
 import { shouldProcessDesktopBridgeEventSynchronously } from "./desktopBridgeEventPriority";

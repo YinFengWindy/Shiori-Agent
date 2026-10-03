@@ -1,5 +1,5 @@
 import type { ModelRegistrationFormData } from "../../../src/bridge/shared";
-import type { RoleRecord } from "@shiori/sdk";
+import type { RoleRecord } from "@yinfengwindy/shiori-sdk";
 import { normalizeModelEffort } from "./modelEffort";
 
 /** Supported reasoning effort values exposed by model controls. */

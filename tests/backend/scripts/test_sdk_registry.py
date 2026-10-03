@@ -15,17 +15,23 @@ from scripts import sdk_registry as registry
 def test_new_npm_version_needs_upload(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(registry, "registry_metadata", lambda _url: None)
+    requested = []
+
+    def missing(url: str) -> None:
+        requested.append(url)
+
+    monkeypatch.setattr(registry, "registry_metadata", missing)
     assert registry.pending_files("npm", tmp_path, "3.1.0") == [
-        tmp_path / "shiori-sdk-3.1.0.tgz"
+        tmp_path / "yinfengwindy-shiori-sdk-3.1.0.tgz"
     ]
+    assert requested == ["https://registry.npmjs.org/@yinfengwindy%2Fshiori-sdk/3.1.0"]
 
 
 def test_identical_npm_upload_is_skipped(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     content = b"verified tarball"
-    (tmp_path / "shiori-sdk-3.1.0.tgz").write_bytes(content)
+    (tmp_path / "yinfengwindy-shiori-sdk-3.1.0.tgz").write_bytes(content)
     digest = base64.b64encode(hashlib.sha512(content).digest()).decode()
     monkeypatch.setattr(
         registry,
@@ -38,7 +44,7 @@ def test_identical_npm_upload_is_skipped(
 def test_conflicting_npm_version_fails(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    (tmp_path / "shiori-sdk-3.1.0.tgz").write_bytes(b"new tarball")
+    (tmp_path / "yinfengwindy-shiori-sdk-3.1.0.tgz").write_bytes(b"new tarball")
     monkeypatch.setattr(
         registry,
         "registry_metadata",

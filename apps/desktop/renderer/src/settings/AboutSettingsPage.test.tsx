@@ -3,7 +3,7 @@ import test from "node:test";
 import { act } from "react";
 import type { DesktopUpdateApi, DesktopUpdateState } from "../../../src/updateContract.js";
 import { appearancePrefsStorageKey } from "../shared/appearancePrefs";
-import { mountTestComponent } from "@shiori/sdk/testing";
+import { mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import { resetAppearancePrefsCache } from "../shared/useAppearancePrefs";
 import { AboutSettingsPage } from "./AboutSettingsPage";
 

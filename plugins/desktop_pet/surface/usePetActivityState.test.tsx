@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { act } from "react";
-import type { SurfaceRoleActivity } from "@shiori/sdk";
-import { createFakeSurfaceHandle, mountTestComponent } from "@shiori/sdk/testing";
+import type { SurfaceRoleActivity } from "@yinfengwindy/shiori-sdk";
+import { createFakeSurfaceHandle, mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import { usePetActivityState, petNotificationAnimationMs } from "./usePetActivityState";
 
 test("typed activity waves before waiting, resets on rebind, and releases its subscription", async (context) => {

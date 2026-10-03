@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { act, useEffect } from "react";
-import type { BridgeEvent } from "@shiori/sdk";
-import { mountTestComponent } from "@shiori/sdk/testing";
+import type { BridgeEvent } from "@yinfengwindy/shiori-sdk";
+import { mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import { useBridgeRefreshedValue } from "./useBridgeRefreshedValue";
 
 type Snapshot = ReturnType<typeof useBridgeRefreshedValue<string>>;
@@ -159,7 +159,7 @@ test("a predicate with keepValueOnError keeps the last value on failure and skip
 });
 
 test("read-only consumers retain a structured bridge cause for their shared error disclosure", async () => {
-  const { BridgeError } = await import("@shiori/sdk");
+  const { BridgeError } = await import("@yinfengwindy/shiori-sdk");
   const probe = await mount(async () => { throw new BridgeError("本地服务处理失败", "internal_error", { detail: "phone history unavailable token=private-value" }); });
   try {
     assert.equal(probe.latest.error.split("\n")[0], "本地服务处理失败");

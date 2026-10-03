@@ -8,7 +8,7 @@ import {
   parseSessionMessagesAround,
   parseSessionSummary,
 } from "./sessionMessagePagination";
-import { type SessionPayload, BridgeError, errorMessage } from "@shiori/sdk";
+import { type SessionPayload, BridgeError, errorMessage } from "@yinfengwindy/shiori-sdk";
 
 type UseDesktopSessionPaginationArgs = {
   activeRoleIdRef: React.MutableRefObject<string>;

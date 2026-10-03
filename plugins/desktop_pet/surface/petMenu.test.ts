@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { SurfaceHandle } from "@shiori/sdk";
-import { createFakePluginClient } from "@shiori/sdk/testing";
+import type { SurfaceHandle } from "@yinfengwindy/shiori-sdk";
+import { createFakePluginClient } from "@yinfengwindy/shiori-sdk/testing";
 import {
   openPetContextMenu,
   petContextMenuItems,

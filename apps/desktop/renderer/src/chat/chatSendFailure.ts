@@ -1,5 +1,5 @@
 import type { BridgeResponse } from "../../../src/bridge/shared";
-import type { FeedbackAction } from "@shiori/sdk";
+import type { FeedbackAction } from "@yinfengwindy/shiori-sdk";
 import type { FeedbackPersona } from "../shared/mascot/mascotLines";
 
 /** The bridge error shape a failed `chat.send` reports (or a thrown transport error). */

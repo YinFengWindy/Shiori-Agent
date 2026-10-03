@@ -57,7 +57,7 @@ jobs:
         run: |
           node scripts/sync_sdk_version.mjs --check
           mkdir release-artifacts
-          pnpm --filter @shiori/sdk pack --pack-destination "$PWD/release-artifacts"
+          pnpm --filter @yinfengwindy/shiori-sdk pack --pack-destination "$PWD/release-artifacts"
           .venv/bin/uv build --sdist --no-create-gitignore --out-dir release-artifacts packages/sdk
           .venv/bin/uv build --wheel --no-create-gitignore --out-dir release-artifacts release-artifacts/*.tar.gz
           .venv/bin/python -m scripts.sdk_release seal release-artifacts --ref "$GITHUB_REF" --commit "$GITHUB_SHA"

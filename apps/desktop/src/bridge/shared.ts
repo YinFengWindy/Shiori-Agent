@@ -7,7 +7,7 @@ import type {
   SurfaceHandle,
   SurfacePlacement,
   SurfaceSpec,
-} from "@shiori/sdk/contract";
+} from "@yinfengwindy/shiori-sdk/contract";
 
 export type BridgeRequest = {
   id: string;

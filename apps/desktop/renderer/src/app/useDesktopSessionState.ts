@@ -1,4 +1,4 @@
-import { useLatestRef } from "@shiori/sdk";
+import { useLatestRef } from "@yinfengwindy/shiori-sdk";
 import type { DesktopSessionStateArgs } from "./desktopSessionTypes";
 import { fetchRoleSession } from "./desktopSessionProtocol";
 import { createDesktopSessionCache } from "./desktopSessionCache";

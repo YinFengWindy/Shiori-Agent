@@ -28,7 +28,7 @@ describe("SettingsFieldPrimitives", () => {
 });
 
 it("SettingsNumberInput accepts a decimal ratio typed from an empty box", async () => {
-  const { mountTestComponent, changeInputValue } = await import("@shiori/sdk/testing");
+  const { mountTestComponent, changeInputValue } = await import("@yinfengwindy/shiori-sdk/testing");
   const { SettingsNumberInput } = await import("./SettingsFieldPrimitives.js");
   const state = { value: 0.75 };
   const view = await mountTestComponent(null);

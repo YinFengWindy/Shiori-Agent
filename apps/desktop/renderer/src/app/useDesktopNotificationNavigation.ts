@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { errorMessage, useLatestRef } from "@shiori/sdk";
+import { errorMessage, useLatestRef } from "@yinfengwindy/shiori-sdk";
 import type { FeedbackReporter } from "../shared/feedback/feedbackStore";
 
 type NotificationNavigationOptions = {

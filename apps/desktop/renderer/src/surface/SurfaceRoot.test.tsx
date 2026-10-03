@@ -1,10 +1,10 @@
-import { createFakeSurfaceHandle } from "@shiori/sdk/testing";
+import { createFakeSurfaceHandle } from "@yinfengwindy/shiori-sdk/testing";
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, test } from "node:test";
 import { useEffect } from "react";
-import { mountTestComponent } from "@shiori/sdk/testing";
+import { mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import { SurfaceRoot } from "./SurfaceRoot";
-import type { PluginSurfaceComponentProps, SurfaceHandle } from "@shiori/sdk";
+import type { PluginSurfaceComponentProps, SurfaceHandle } from "@yinfengwindy/shiori-sdk";
 import { PluginSurfaceRegistry } from "./pluginSurfaceRegistry";
 import { loadRuntimePluginSurface } from "./runtimePluginSurface";
 

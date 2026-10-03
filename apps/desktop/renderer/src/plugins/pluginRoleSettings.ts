@@ -1,5 +1,5 @@
 import { createPluginRpcClient } from "./pluginBridgeClient";
-import type { PluginRoleValues } from "@shiori/sdk";
+import type { PluginRoleValues } from "@yinfengwindy/shiori-sdk";
 import { pluginRoleSettingsRegistry } from "./pluginFeatureRegistry";
 import { isPluginEnabled } from "./pluginEnabledStateStore";
 

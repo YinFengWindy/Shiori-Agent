@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
-import { errorFeedback } from "@shiori/sdk/host-internal";
+import { errorFeedback } from "@yinfengwindy/shiori-sdk/host-internal";
 import { invokeBridgePayload } from "../shared/bridgeInvoke";
 import { mascotFeedback as feedback } from "../shared/mascot/mascotFeedback";
 import { subscribeChatModelChanges } from "./chatModelChanges";

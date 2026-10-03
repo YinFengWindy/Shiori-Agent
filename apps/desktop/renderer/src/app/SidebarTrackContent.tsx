@@ -4,7 +4,7 @@ import { RoleSidebar } from "../roles/RoleSidebar";
 import type { RoleChatPreview } from "../roles/roleChatPreview";
 import { RoleWorkspaceSidebar, type RoleWorkspaceSectionId } from "../roles/RoleWorkspaceSidebar";
 import { SettingsSidebar, type SettingsSectionId } from "../settings/SettingsSidebar";
-import type { RoleRecord } from "@shiori/sdk";
+import type { RoleRecord } from "@yinfengwindy/shiori-sdk";
 import type { AppMainView } from "../shared/types";
 
 export type SidebarViewState = {

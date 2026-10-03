@@ -1,6 +1,6 @@
-import { errorFeedback, scrubErrorDetail } from "@shiori/sdk/host-internal";
+import { errorFeedback, scrubErrorDetail } from "@yinfengwindy/shiori-sdk/host-internal";
 import { getChatMessageReactKey } from "./chatMessageIdentity";
-import type { SessionMessage } from "@shiori/sdk";
+import type { SessionMessage } from "@yinfengwindy/shiori-sdk";
 
 /** Longest error text shown inline when no separate detail exists; longer or multi-line text moves behind 「详情」. */
 const inlineErrorMaxLength = 80;

@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useLatestRef } from "@shiori/sdk";
+import { useLatestRef } from "@yinfengwindy/shiori-sdk";
 import { resolveGlobalShortcut } from "./globalShortcuts";
 
 type UseGlobalShortcutsArgs = {

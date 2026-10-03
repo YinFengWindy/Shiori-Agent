@@ -1,6 +1,6 @@
 import { useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { compactPressableClass, cx } from "@shiori/sdk";
+import { compactPressableClass, cx } from "@yinfengwindy/shiori-sdk";
 import { contextUsageLabel, type ChatContextStatus } from "./chatContextState";
 import { useChatComposerPopover } from "./useChatComposerPopover";
 

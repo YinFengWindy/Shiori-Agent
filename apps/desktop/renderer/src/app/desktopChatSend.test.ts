@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { BridgeError, type SessionPayload } from "@shiori/sdk";
-import { mountTestComponent } from "@shiori/sdk/testing";
+import { BridgeError, type SessionPayload } from "@yinfengwindy/shiori-sdk";
+import { mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import { createDesktopChatSend } from "./desktopChatSend";
 
 test("direct desktop /compact callers never create optimistic chat rows or sending state", async () => {

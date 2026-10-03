@@ -1,4 +1,4 @@
-import { BridgeError } from "@shiori/sdk";
+import { BridgeError } from "@yinfengwindy/shiori-sdk";
 
 /** The renderer-side desktop bridge's `invoke` function, shared by every per-domain client. */
 export type DesktopInvoke = typeof window.miraDesktop.invoke;

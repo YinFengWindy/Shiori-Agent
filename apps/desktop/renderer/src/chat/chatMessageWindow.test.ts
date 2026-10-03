@@ -7,7 +7,7 @@ import {
   getVisibleChatMessages,
   getVisibleChatMessageStartIndex,
 } from "./chatMessageWindow";
-import type { SessionMessage } from "@shiori/sdk";
+import type { SessionMessage } from "@yinfengwindy/shiori-sdk";
 
 function createMessages(count: number): SessionMessage[] {
   return Array.from({ length: count }, (_value, index) => ({

@@ -1,6 +1,6 @@
 import React from "react";
-import { cx, menuPanelClass } from "@shiori/sdk";
-import { menuItemClass, menuItemSelectedClass } from "@shiori/sdk/host-internal";
+import { cx, menuPanelClass } from "@yinfengwindy/shiori-sdk";
+import { menuItemClass, menuItemSelectedClass } from "@yinfengwindy/shiori-sdk/host-internal";
 
 /** Non-interactive group caption. */
 export const menuLabelClass = "px-2.5 py-1 text-[11px] text-ink-muted";

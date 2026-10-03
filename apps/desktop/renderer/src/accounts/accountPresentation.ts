@@ -1,4 +1,4 @@
-import type { AccountSnapshot } from "@shiori/sdk";
+import type { AccountSnapshot } from "@yinfengwindy/shiori-sdk";
 import { prettifyPluginId } from "../plugins/pluginPresentation";
 
 type AccountIdentity = Pick<AccountSnapshot, "platform" | "displayName" | "platformAccountId">;

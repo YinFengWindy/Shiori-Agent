@@ -1,6 +1,6 @@
 import { CheckIcon, CopyIcon, KeyIcon } from "@phosphor-icons/react";
 import { InlineError } from "../shared/feedback/InlineError";
-import { cardClass, compactGhostButtonClass, cx } from "@shiori/sdk";
+import { cardClass, compactGhostButtonClass, cx } from "@yinfengwindy/shiori-sdk";
 import { compactPrimaryButtonClass } from "../shared/styles";
 import { useCopyText } from "../shared/useCopyText";
 import { formatCountdown } from "./identityPresentation";

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { act } from "react";
-import { createFakePluginClient, mountTestComponent } from "@shiori/sdk/testing";
+import { createFakePluginClient, mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import { NovelAiChatImageActions, isNovelAiOutput } from "./ChatImageActions";
 
 test("NovelAI regeneration keeps its target and deadline when the selected image changes", async () => {

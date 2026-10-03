@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { act } from "react";
-import { mountTestComponent } from "@shiori/sdk/testing";
+import { mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import type { DesktopNotificationsApi, NotificationChatTarget } from "../../../src/notifications/contract";
 import { createFeedbackRecorder } from "../shared/testing/feedbackRecorder";
 import { useDesktopNotificationNavigation } from "./useDesktopNotificationNavigation";

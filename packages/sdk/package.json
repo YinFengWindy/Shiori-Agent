@@ -1,5 +1,5 @@
 {
-  "name": "@shiori/sdk",
+  "name": "@yinfengwindy/shiori-sdk",
   "version": "3.1.0",
   "description": "Public Shiori plugin contracts, shared UI and independent test support.",
   "license": "MIT",

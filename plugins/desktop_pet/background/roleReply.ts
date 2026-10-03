@@ -1,4 +1,4 @@
-import type { BridgeEvent } from "@shiori/sdk";
+import type { BridgeEvent } from "@yinfengwindy/shiori-sdk";
 
 /** Extracts a new role reply while ignoring ordinary session refreshes. */
 export function readRoleReply(event: BridgeEvent) {

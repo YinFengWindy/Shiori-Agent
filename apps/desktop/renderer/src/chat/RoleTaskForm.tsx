@@ -1,7 +1,7 @@
 import { ArrowLeft } from "@phosphor-icons/react";
 import { useState, type FormEvent } from "react";
 import type { ScheduleTaskFormData, ScheduleTaskTier, ScheduleTaskTrigger } from "../shared/types";
-import { cx, AutosizeTextarea } from "@shiori/sdk";
+import { cx, AutosizeTextarea } from "@yinfengwindy/shiori-sdk";
 import { focusResetClass } from "../shared/styles";
 import { InlineError } from "../shared/feedback/InlineError";
 import {

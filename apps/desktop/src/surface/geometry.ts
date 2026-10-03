@@ -1,4 +1,4 @@
-import type { SurfaceExtension, SurfaceWorkArea } from "@shiori/sdk/contract";
+import type { SurfaceExtension, SurfaceWorkArea } from "@yinfengwindy/shiori-sdk/contract";
 import type { SurfaceBody, SurfaceBounds, SurfacePoint } from "./contract.js";
 
 /**

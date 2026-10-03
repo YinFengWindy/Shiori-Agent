@@ -1,7 +1,7 @@
 import { CheckCircle, CircleNotch, PlugsConnected } from "@phosphor-icons/react";
 import { InlineError } from "../shared/feedback/InlineError";
 import type { ModelRegistrationFormData } from "../../../src/bridge/shared";
-import { cx, pressableClass } from "@shiori/sdk";
+import { cx, pressableClass } from "@yinfengwindy/shiori-sdk";
 import type { ModelConnectionTestOutcome } from "./modelConnectionTest";
 import { useModelConnectionTest } from "./useModelConnectionTest";
 

@@ -1,4 +1,4 @@
-import type { SelectOption } from "@shiori/sdk";
+import type { SelectOption } from "@yinfengwindy/shiori-sdk";
 import type { ImageStudioFormState } from "./types";
 
 /** Upper bound of one custom side; the total is capped by `maxCustomPixels`. */

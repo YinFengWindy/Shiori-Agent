@@ -1,4 +1,4 @@
-import { type PluginRpcClient, PluginBridgeError } from "@shiori/sdk";
+import { type PluginRpcClient, PluginBridgeError } from "@yinfengwindy/shiori-sdk";
 import { createPluginCommunicationClient } from "./pluginCommunicationClient";
 import { invokeBridgePayload, type DesktopInvoke } from "../shared/bridgeInvoke";
 import type { JsonSchema } from "./jsonSchemaForm";

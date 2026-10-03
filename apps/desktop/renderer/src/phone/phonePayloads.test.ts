@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { BridgeEvent } from "@shiori/sdk";
+import type { BridgeEvent } from "@yinfengwindy/shiori-sdk";
 import { phoneConversationUpdateOf, phoneListeningHeardOf } from "./phonePayloads";
 
 const event = (method: string, payload: Record<string, unknown>): BridgeEvent => ({ id: "e", type: "event", method, payload });

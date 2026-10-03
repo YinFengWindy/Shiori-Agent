@@ -1,4 +1,4 @@
-import { compactPressableClass, cx, pressableClass } from "@shiori/sdk";
+import { compactPressableClass, cx, pressableClass } from "@yinfengwindy/shiori-sdk";
 
 /** Underline-style identity field (name/intro) shared by detail and create pages; opts out of the global focus halo. */
 export const roleIdentityInputClass =

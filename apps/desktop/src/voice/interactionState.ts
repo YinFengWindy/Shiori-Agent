@@ -1,5 +1,5 @@
-import type { VoiceInputSource } from "@shiori/sdk/contract";
-export type { VoiceInputSource } from "@shiori/sdk/contract";
+import type { VoiceInputSource } from "@yinfengwindy/shiori-sdk/contract";
+export type { VoiceInputSource } from "@yinfengwindy/shiori-sdk/contract";
 
 /** The delay that distinguishes a voice press from a pet drag or accidental click. */
 export const VOICE_PRESS_THRESHOLD_MS = 300;

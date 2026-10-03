@@ -2,7 +2,7 @@ import type React from "react";
 import { useState } from "react";
 import { Eye, EyeSlash } from "@phosphor-icons/react";
 import { SettingsField } from "./SettingsField";
-import { SettingsToggleCard, cardClass, compactPressableClass, cx } from "@shiori/sdk";
+import { SettingsToggleCard, cardClass, compactPressableClass, cx } from "@yinfengwindy/shiori-sdk";
 import { parseCompleteSettingsNumber } from "./settingsSectionUtils";
 
 /** Shared compact field styling for editable settings values. */

@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { act } from "react";
-import { changeInputValue, mountTestComponent } from "@shiori/sdk/testing";
+import { changeInputValue, mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import { AccountResponseRulesEditor } from "./AccountResponseRulesEditor";
-import type { AccountSnapshot } from "@shiori/sdk";
+import type { AccountSnapshot } from "@yinfengwindy/shiori-sdk";
 
 const account: AccountSnapshot = {
   id: "a", pluginId: "demo", platform: "demo", platformAccountId: "101", configRef: "demo",

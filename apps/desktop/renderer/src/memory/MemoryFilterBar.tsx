@@ -1,4 +1,4 @@
-import { inputClass, Select, type SelectOption } from "@shiori/sdk";
+import { inputClass, Select, type SelectOption } from "@yinfengwindy/shiori-sdk";
 import {
   defaultSemanticStatus, pickOffered, semanticSortOptions, semanticSortOrders, semanticStatusLabels,
   type RoleSemanticFilters, type RoleSemanticQuery,

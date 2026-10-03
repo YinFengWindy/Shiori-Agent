@@ -1,14 +1,14 @@
 /**
- * `@shiori/sdk`: the renderer contract between plugins and the Shiori
+ * `@yinfengwindy/shiori-sdk`: the renderer contract between plugins and the Shiori
  * desktop host (#440).
  *
  * At runtime this entry is a host peer, like React: every value exported here
  * must also be listed in the renderer peer ABI
- * (`pluginUiPeerExports["@shiori/sdk"]` in
+ * (`pluginUiPeerExports["@yinfengwindy/shiori-sdk"]` in
  * `apps/desktop/src/plugins/uiContract.ts`), and changing that list is a
  * runtime API change. This package must never import host source. Host-only
  * internals shared with the SDK live in `./hostInternal.ts`
- * (`@shiori/sdk/host-internal`), outside the plugin contract.
+ * (`@yinfengwindy/shiori-sdk/host-internal`), outside the plugin contract.
  */
 
 // Errors and the injected RPC client (runtime API 2.8.0).

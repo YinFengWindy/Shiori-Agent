@@ -1,4 +1,4 @@
-import type { BridgeEvent } from "@shiori/sdk";
+import type { BridgeEvent } from "@yinfengwindy/shiori-sdk";
 import { pluginRuntimeChanged } from "../plugins/pluginRuntimeChanged";
 import { useBridgeRefreshedValue } from "../shared/useBridgeRefreshedValue";
 import { createAccountClient } from "./accountClient";

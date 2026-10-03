@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { act } from "react";
-import { mountTestComponent } from "@shiori/sdk/testing";
+import { mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import { SettingsSubsectionNav } from "./SettingsSubsectionNav";
 
 test("renders the section label as a heading, with the header supplying the spacing under it", async () => {

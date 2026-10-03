@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { act } from "react";
-import { changeInputValue, mountTestComponent } from "@shiori/sdk/testing";
+import { changeInputValue, mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import { configureSettingsConfigPath, loadSettingsData } from "../../../src/settings";
 import { OnboardingModelStep } from "./OnboardingModelStep";
 

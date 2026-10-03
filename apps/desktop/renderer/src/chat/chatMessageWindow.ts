@@ -1,5 +1,5 @@
 import { getChatMessageDomKey } from "./chatMessageIdentity";
-import type { SessionMessage } from "@shiori/sdk";
+import type { SessionMessage } from "@yinfengwindy/shiori-sdk";
 
 export const initialVisibleChatMessageCount = 160;
 export const visibleChatMessageCountStep = 120;

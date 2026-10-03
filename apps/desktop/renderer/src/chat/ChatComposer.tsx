@@ -8,7 +8,7 @@ import { canSubmitChatMessage, normalizeChatAttachmentPaths } from "./chatCompos
 import { insertEmojiIntoChatDraft } from "./chatEmojiState";
 import { PlusIcon, SendIcon } from "../shared/icons";
 import type { ChatReplyTarget, ChatSendRequest } from "../shared/types";
-import { AutosizeTextarea, compactPressableClass, cx } from "@shiori/sdk";
+import { AutosizeTextarea, compactPressableClass, cx } from "@yinfengwindy/shiori-sdk";
 import { ChatModelMenu } from "./ChatModelMenu";
 import { ChatContextRing } from "./ChatContextRing";
 import { useChatContext } from "./useChatContext";

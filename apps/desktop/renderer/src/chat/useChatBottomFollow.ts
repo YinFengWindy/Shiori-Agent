@@ -3,7 +3,7 @@ import type React from "react";
 import { chatScrollBottomThreshold } from "./chatScrollController";
 import { listenForChatScrollIntent } from "./chatScrollIntent";
 import { shouldAutoScrollOnContentSizeChange } from "./chatAutoScroll";
-import { useLatestRef } from "@shiori/sdk";
+import { useLatestRef } from "@yinfengwindy/shiori-sdk";
 
 type Args = {
   conversationListRef: React.RefObject<HTMLDivElement | null>;

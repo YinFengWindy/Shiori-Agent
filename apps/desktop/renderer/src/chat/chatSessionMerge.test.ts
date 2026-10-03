@@ -7,7 +7,7 @@ import {
   mergeIncomingSessionDuringSend,
   shouldClearPendingUserMessage,
 } from "./chatSessionMerge.js";
-import type { SessionMessage, SessionPayload } from "@shiori/sdk";
+import type { SessionMessage, SessionPayload } from "@yinfengwindy/shiori-sdk";
 
 function createSession(messages: SessionMessage[]): SessionPayload {
   return {

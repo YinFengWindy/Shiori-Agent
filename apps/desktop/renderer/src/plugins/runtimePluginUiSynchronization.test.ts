@@ -41,7 +41,7 @@ test("a changed activationToken alone does not reevaluate an otherwise-unchanged
 
 
 test("runtime UI failures retain the RPC cause in their displayed diagnostic state", async () => {
-  const { PluginBridgeError } = await import("@shiori/sdk");
+  const { PluginBridgeError } = await import("@yinfengwindy/shiori-sdk");
   const sync = createRuntimePluginUiSynchronization({
     importModule: async () => { throw new PluginBridgeError("本地服务处理失败", "internal_error", { detail: "module asset missing token=private-value" }); },
     loadCss: async () => () => undefined, register: () => undefined, unregister: () => undefined, failed: () => undefined,

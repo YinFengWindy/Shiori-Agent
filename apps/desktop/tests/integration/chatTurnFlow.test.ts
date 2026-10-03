@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import test from "node:test";
-import type { SessionMessage, SessionPayload } from "@shiori/sdk";
+import type { SessionMessage, SessionPayload } from "@yinfengwindy/shiori-sdk";
 import { buildOptimisticUserChatMessage } from "../../renderer/src/chat/chatComposerState";
 import { ensureChatMessageRenderId, reconcileSessionMessageRenderIds } from "../../renderer/src/chat/chatMessageIdentity";
 import { mergeIncomingSessionDuringSend, shouldClearPendingUserMessage } from "../../renderer/src/chat/chatSessionMerge";

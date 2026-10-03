@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { BridgeEvent } from "@shiori/sdk/contract";
+import type { BridgeEvent } from "@yinfengwindy/shiori-sdk/contract";
 import { notificationMessages } from "./message.js";
 
 function event(payload: Record<string, unknown> = {}): BridgeEvent {

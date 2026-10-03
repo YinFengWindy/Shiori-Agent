@@ -1,4 +1,4 @@
-import type { NativeFilePickerOptions, PluginHostServices } from "@shiori/sdk";
+import type { NativeFilePickerOptions, PluginHostServices } from "@yinfengwindy/shiori-sdk";
 
 /** Pet package format and staging policy belongs to this plugin. */
 export const petPackagePickerOptions: NativeFilePickerOptions = {
