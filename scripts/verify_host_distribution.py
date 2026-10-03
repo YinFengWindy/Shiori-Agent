@@ -31,7 +31,7 @@ def check_host_wheel(wheel: Path, log: Path) -> None:
         assert "/tests/" not in name and "__pycache__" not in name, name
         assert not name.endswith((".pyc", ".kv.json", "plugin_config.json")), name
     assert "agent/provider.py" in names
-    assert "shiori_runtime_resources/config/examples/config.example.toml" in names
+    assert "shiori_runtime_resources/config.example.toml" in names
     assert "shiori_runtime_resources/common_emojis.json" in names
     assert any(
         name.startswith("shiori_runtime_resources/skills/")

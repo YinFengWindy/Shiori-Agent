@@ -106,7 +106,7 @@ def test_init_workspace_respects_force_for_text_assets(tmp_path):
 def test_frozen_workspace_copies_the_bundled_template(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    template = tmp_path / "bundle/config/examples/config.example.toml"
+    template = tmp_path / "bundle/config.example.toml"
     template.parent.mkdir(parents=True)
     original = workspace_init.CONFIG_TEMPLATE_PATH.read_text(encoding="utf-8")
     template.write_text(original + "\n# bundled template\n", encoding="utf-8")
@@ -139,13 +139,6 @@ def test_config_example_does_not_expose_default_memory_private_config() -> None:
     assert "[memory.hyde]" not in text
     assert "output_dimensionality" not in text
     assert "[memory_v2]" not in text
-
-
-def test_mcp_servers_example_is_public_empty_configuration() -> None:
-    example_path = REPOSITORY_ROOT / "config/examples/mcp_servers.example.json"
-    payload = json.loads(example_path.read_text(encoding="utf-8"))
-
-    assert payload == {"servers": {}}
 
 
 def test_init_preserves_retired_quota_and_engine_data(tmp_path):

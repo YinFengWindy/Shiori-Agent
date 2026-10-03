@@ -388,7 +388,7 @@ def test_builtin_default_disabled_plugins_match_the_upgrade_migration():
         if manifest and not manifest.default_enabled
     }
     assert default_disabled == set(DEFAULT_DISABLED_PLUGINS)
-    assert default_disabled == {"browser_use", "computer_use"}
+    assert default_disabled == {"browser_use", "computer_use", "novelai"}
 
 
 def test_manifest_looks_up_one_channel_session_types(tmp_path):

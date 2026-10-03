@@ -12,7 +12,7 @@ from shiori_sdk.files.json import save_json
 from session.store import SessionStore
 
 # Canonical template copied into the user-owned workspace during setup.
-CONFIG_TEMPLATE_PATH = resource_root() / "config" / "examples" / "config.example.toml"
+CONFIG_TEMPLATE_PATH = resource_root() / "config.example.toml"
 
 _TEXT_FILES: dict[str, str] = {}
 

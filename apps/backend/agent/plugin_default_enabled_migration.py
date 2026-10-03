@@ -11,7 +11,7 @@ manifest 的 ``default_enabled: false`` 只决定 ``[plugins.<id>]`` **没有显
   列在里面的插件不再迁移，之后删掉 ``enabled`` 就按 manifest 默认值停用。
 - 回执里没有的插件：表里没有 ``enabled`` 时写入 ``enabled = true``（保持升级前的
   行为），已有的显式 ``enabled`` 原样保留；然后补回执。
-- 新安装的配置复制自 ``config/examples/config.example.toml``，模板自带完整回执，
+- 新安装的配置复制自 ``config.example.toml``，模板自带完整回执，
   因此新用户直接得到 manifest 的默认值（停用）。
 
 以后再有内置插件改成默认停用，把它的 ID 追加到 ``DEFAULT_DISABLED_PLUGINS``
@@ -30,7 +30,7 @@ from agent.config_migration_writer import save_migrated_config
 logger = logging.getLogger(__name__)
 
 # manifest 声明 default_enabled: false 的内置插件，按改为默认停用的先后追加。
-DEFAULT_DISABLED_PLUGINS: tuple[str, ...] = ("browser_use", "computer_use")
+DEFAULT_DISABLED_PLUGINS: tuple[str, ...] = ("browser_use", "computer_use", "novelai")
 RECEIPT_KEY = "plugin_default_disabled"
 
 

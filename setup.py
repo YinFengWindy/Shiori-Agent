@@ -35,9 +35,9 @@ class BuildRuntime(build_py):
             dirs_exist_ok=True,
             ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
         )
-        template = destination / "config/examples/config.example.toml"
+        template = destination / "config.example.toml"
         template.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(ROOT / "config/examples/config.example.toml", template)
+        shutil.copyfile(ROOT / "config.example.toml", template)
         shutil.copyfile(
             ROOT / "apps/desktop/renderer/src/chat/common_emojis.json",
             destination / "common_emojis.json",

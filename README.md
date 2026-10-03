@@ -23,28 +23,29 @@ Shiori 以角色为中心组织人设、记忆、会话、素材与关系。你�
 
 角色也可以通过 Telegram、QQ 和飞书与你相处。不同入口延续同一份角色身份与状态；群聊、未绑定身份的私聊会保留各自的上下文。
 
-## 当前界面
-
-以下截图来自主分支的实际桌面界面（2026-10-03），使用隔离的示例角色、对话与剧情数据；配图来自仓库公开素材。正式发布版本见 [Release](https://github.com/YinFengWindy/Shiori-Agent/releases/latest)。
-
-**日常聊天与角色状态**
-
-![聊天界面，右侧展示角色立绘、心情和当下想法](./assets/readme/chat.png)
+## 界面
 
 <table>
   <tr>
-    <th>角色资料与设定</th>
-    <th>故事入口</th>
+    <th>和角色聊天</th>
+    <th>编辑角色资料与设定</th>
   </tr>
   <tr>
+    <td><img src="./assets/readme/chat.png" alt="聊天界面，右侧展示角色立绘、心情和当下想法" width="100%" /></td>
     <td><img src="./assets/readme/role-settings.png" alt="角色详情页的资料、记忆、能力与账号分区" width="100%" /></td>
-    <td><img src="./assets/readme/story-menu.png" alt="故事主菜单，可新建剧情、载入存档或查看 CG" width="100%" /></td>
   </tr>
 </table>
 
-**在故事里继续相处**
-
-![故事场景，展示当前日期、场景、角色对白和行动输入框](./assets/readme/story-scene.png)
+<table>
+  <tr>
+    <th>故事入口</th>
+    <th>故事化场景</th>
+  </tr>
+  <tr>
+    <td><img src="./assets/readme/story-menu.png" alt="故事主菜单，可新建剧情、载入存档或查看 CG" width="100%" /></td>
+    <td><img src="./assets/readme/story-scene.png" alt="故事场景，展示当前日期、场景、角色对白和行动输入框" width="100%" /></td>
+  </tr>
+</table>
 
 ## 快速开始
 

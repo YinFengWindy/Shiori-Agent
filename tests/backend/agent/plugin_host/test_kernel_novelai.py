@@ -117,12 +117,18 @@ def test_plugin_registers_tool_and_rpc_and_both_disappear_on_unload(
     assert kernel.tool_hooks == []
 
 
+@pytest.mark.parametrize(
+    "plugin_configs",
+    [{}, {"novelai": {"enabled": False, "token": "novel-token"}}],
+    ids=["manifest-default", "explicitly-disabled"],
+)
 def test_host_disabled_plugin_registers_no_generation_capabilities(
     tmp_path: Path,
+    plugin_configs: dict[str, dict[str, Any]],
 ) -> None:
     services = _services(
         tmp_path,
-        plugin_configs={"novelai": {"enabled": False, "token": "novel-token"}},
+        plugin_configs=plugin_configs,
     )
     kernel = _load_novelai_plugin(services=services)
 

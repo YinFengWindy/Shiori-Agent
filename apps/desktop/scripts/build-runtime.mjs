@@ -129,7 +129,7 @@ const args = [
   "--add-data",
   `${join(repositoryRoot, "apps", "desktop", "renderer", "src", "chat", "common_emojis.json")}${dataSeparator}.`,
   "--add-data",
-  `${join(repositoryRoot, "config", "examples", "config.example.toml")}${dataSeparator}config/examples`,
+  `${join(repositoryRoot, "config.example.toml")}${dataSeparator}.`,
   ...pluginModules.flatMap((name) => ["--hidden-import", name]),
   ...hostModules.flatMap((name) => ["--hidden-import", name]),
   join(backendRoot, "main.py"),

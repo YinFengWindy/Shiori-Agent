@@ -7,12 +7,11 @@ from shiori_sdk.testing.bridge import plugin_bridge_request
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("enabled_line", ["", "enabled = true\n"])
 async def test_novelai_config_round_trip_preserves_host_enablement(
-    plugin_runtime, enabled_line
+    plugin_runtime,
 ):
     """Saving NovelAI settings must not recreate the duplicate enable switch."""
-    config_text = "\n[plugins.novelai]\n" + enabled_line + 'token = "test-token"\n'
+    config_text = '\n[plugins.novelai]\nenabled = true\ntoken = "test-token"\n'
     async with plugin_runtime(("novelai",), config_text) as (service, path):
         before = await plugin_bridge_request(
             service, "plugin.config.get", {"plugin_id": "novelai"}
@@ -38,7 +37,7 @@ async def test_novelai_config_round_trip_preserves_host_enablement(
         assert after.payload["values"] == saved.payload["values"]
         assert after.payload["values"]["nsfw_enabled"] is True
         stored = load_config_text(path.read_text(encoding="utf-8")).plugins["novelai"]
-        assert stored.get("enabled", True) is True
+        assert stored["enabled"] is True
 
         listed = await plugin_bridge_request(service, "plugins.list")
         novelai = next(
@@ -46,3 +45,40 @@ async def test_novelai_config_round_trip_preserves_host_enablement(
         )
         assert novelai["enabled"] is True
         assert novelai["state"] == "ACTIVE"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("enabled_line", ["", "enabled = false\n"])
+async def test_disabled_novelai_config_cannot_be_saved_or_enable_the_plugin(
+    plugin_runtime, enabled_line
+):
+    """Disabled plugins keep their stored values without exposing a writable schema."""
+    config_text = "\n[plugins.novelai]\n" + enabled_line + 'token = "test-token"\n'
+    async with plugin_runtime(("novelai",), config_text) as (service, path):
+        original = path.read_bytes()
+        before = await plugin_bridge_request(
+            service, "plugin.config.get", {"plugin_id": "novelai"}
+        )
+        assert before.error is None, before.error
+        assert before.payload["schema"] is None
+        assert before.payload["values"] == {"token": "test-token"}
+
+        saved = await plugin_bridge_request(
+            service,
+            "plugin.config.set",
+            {
+                "plugin_id": "novelai",
+                "operation_id": "save-disabled-novelai",
+                "values": {"token": "changed-token"},
+            },
+        )
+        assert saved.error is not None
+        assert saved.error.code == "plugin_config_unsupported"
+        assert path.read_bytes() == original
+        listed = await plugin_bridge_request(service, "plugins.list")
+        assert listed.error is None, listed.error
+        novelai = next(
+            item for item in listed.payload["plugins"] if item["id"] == "novelai"
+        )
+        assert novelai["enabled"] is False
+        assert novelai["state"] == "DISABLED"

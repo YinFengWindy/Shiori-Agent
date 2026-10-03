@@ -90,7 +90,9 @@ async def test_novelai_toggle_blocks_and_restores_story_without_deleting_data(
     tmp_path, plugin_runtime
 ):
     """Story owns the contract for its NovelAI dependency and persisted archives."""
-    async with plugin_runtime(("novelai", "story")) as (service, _):
+    async with plugin_runtime(
+        ("novelai", "story"), "[plugins.novelai]\nenabled = true\n"
+    ) as (service, _):
         response = await plugin_bridge_request(service, "plugin.story.list")
         assert response.error is None, response.error
         saved = tmp_path / "plugin-data" / "story" / "stories" / "keep.txt"

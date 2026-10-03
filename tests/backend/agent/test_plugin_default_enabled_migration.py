@@ -15,7 +15,7 @@ from agent.plugin_default_enabled_migration import (
 )
 from bootstrap.paths import REPOSITORY_ROOT
 
-_TEMPLATE = REPOSITORY_ROOT / "config" / "examples" / "config.example.toml"
+_TEMPLATE = REPOSITORY_ROOT / "config.example.toml"
 
 
 @pytest.fixture(autouse=True)
@@ -56,8 +56,7 @@ def test_fresh_config_from_the_template_is_not_rewritten(tmp_path: Path) -> None
     config = load_config(path)
 
     assert path.read_text(encoding="utf-8") == before
-    for plugin_id in DEFAULT_DISABLED_PLUGINS:
-        assert "enabled" not in config.plugins.get(plugin_id, {})
+    assert config.plugins == {}
     receipt = _persisted(path)["_migrations"][RECEIPT_KEY]
     assert receipt == list(DEFAULT_DISABLED_PLUGINS)
 
@@ -81,11 +80,15 @@ def test_existing_config_pins_the_plugins_enabled_once(tmp_path: Path) -> None:
     assert path.read_text(encoding="utf-8") == after_first
 
 
-def test_explicit_settings_are_kept_and_other_keys_survive(tmp_path: Path) -> None:
+@pytest.mark.parametrize("novelai_enabled", [True, False])
+def test_explicit_settings_are_kept_and_other_keys_survive(
+    tmp_path: Path, novelai_enabled: bool
+) -> None:
     path = _write(
         tmp_path,
         "\n[plugins.browser_use]\nenabled = false\n"
         '\n[plugins.computer_use]\nsome_setting = "kept"\n'
+        f'\n[plugins.novelai]\nenabled = {str(novelai_enabled).lower()}\ntoken = "kept-token"\n'
         '\n[_migrations]\nplugin_config_json = ["demo"]\n',
     )
 
@@ -96,6 +99,10 @@ def test_explicit_settings_are_kept_and_other_keys_survive(tmp_path: Path) -> No
     assert persisted["plugins"]["computer_use"] == {
         "some_setting": "kept",
         "enabled": True,
+    }
+    assert persisted["plugins"]["novelai"] == {
+        "enabled": novelai_enabled,
+        "token": "kept-token",
     }
     assert persisted["_migrations"] == {
         "plugin_config_json": ["demo"],
@@ -112,4 +119,9 @@ def test_only_plugins_missing_from_the_receipt_are_migrated(tmp_path: Path) -> N
     persisted = _persisted(path)
     assert "browser_use" not in persisted.get("plugins", {})
     assert persisted["plugins"]["computer_use"] == {"enabled": True}
-    assert persisted["_migrations"][RECEIPT_KEY] == ["browser_use", "computer_use"]
+    assert persisted["plugins"]["novelai"] == {"enabled": True}
+    assert persisted["_migrations"][RECEIPT_KEY] == [
+        "browser_use",
+        "computer_use",
+        "novelai",
+    ]

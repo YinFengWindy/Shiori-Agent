@@ -82,7 +82,7 @@
         "to": "runtime"
       },
       {
-        "from": "../../config/examples/config.example.toml",
+        "from": "../../config.example.toml",
         "to": "config.example.toml"
       },
       {

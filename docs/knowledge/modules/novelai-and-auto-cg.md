@@ -24,7 +24,7 @@ related:
 
 手动 `generate_image` 工具和自动 CG 都应复用该服务，避免各自实现请求与错误处理。生成文件与元数据由插件写入 workspace 下的 `plugin-data/novelai/generation/`；运行数据不应随插件停用或包升级删除。
 
-启停只由宿主管理的 `[plugins.novelai].enabled` 决定，插件配置表单与运行时设置不再声明第二个 `enabled`。插件停用后，宿主撤销工具、RPC 与事件订阅。服务仍检查 Token，角色自动 CG 偏好仍独立生效。
+启停由宿主管理：`[plugins.novelai].enabled` 的显式值优先，没有显式值时按 manifest 的 `default_enabled: false` 停用。新安装的宿主配置模板不预置插件业务配置，业务默认值由 `NovelAIConfig` 提供；可在 设置 › 插件 中启用并配置。升级迁移保留既有显式开关与业务参数，对此前缺少显式开关的配置一次性补写 `enabled = true`，保持升级前状态。插件配置表单与运行时设置不再声明第二个 `enabled`。插件停用后，宿主撤销工具、RPC 与事件订阅。服务仍检查 Token，角色自动 CG 偏好仍独立生效。
 
 ## 插件边界（2026-09-11）
 
