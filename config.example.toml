@@ -57,6 +57,8 @@ dev_mode = false
 streaming_enabled = false
 
 [agent.context]
+# 工作摘要成品上限；必须是正整数。
+summary_token_limit = 2000
 trigger_ratio = 0.75
 target_ratio = 0.4
 safety_margin_tokens = 4096

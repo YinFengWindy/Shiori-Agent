@@ -11,7 +11,7 @@ import type {
   SettingsSnapshot,
 } from "./bridge/shared.js";
 import { parseHotkey } from "./voice/hotkey.js";
-import { compactionRetainedTurnsError, desktopSettingsDefaults, modelCapacityError } from "./settingsContract.js";
+import { compactionRetainedTurnsError, desktopSettingsDefaults, modelCapacityError, summaryTokenLimitError } from "./settingsContract.js";
 
 type RuntimeSettingsApplier = (request: RuntimeApplyRequest) => Promise<SaveSettingsResult>;
 
@@ -59,6 +59,12 @@ function renderProactiveStrategies(values: SettingsFormData["proactiveStrategies
   if (values.sceneFollowup !== undefined) lines.push(`scene_followup = ${values.sceneFollowup}`);
   if (values.relationship !== undefined) lines.push(`relationship = ${values.relationship}`);
   return lines.length ? ["[agent.proactive_strategies]", ...lines, ""] : [];
+}
+
+function loadSummaryTokenLimit(value: unknown): number {
+  const error = summaryTokenLimitError(value);
+  if (error) throw new Error(error);
+  return typeof value === "number" ? value : desktopSettingsDefaults.summaryTokenLimit;
 }
 
 function optionalNumber(value: unknown) {
@@ -140,6 +146,7 @@ export function loadSettingsData(contentOverride?: string): SettingsSnapshot {
         streamingEnabled: Boolean(asRecord(asRecord(parsed.desktop).chat).streaming_enabled),
         memoryWindow: Number(agentContext.memory_window ?? 40),
         compactionRetainedTurns: Number(agentContext.compaction_retained_turns ?? desktopSettingsDefaults.compactionRetainedTurns),
+        summaryTokenLimit: loadSummaryTokenLimit(agentContext.summary_token_limit),
         contextTriggerRatio: Number(agentContext.trigger_ratio ?? 0.75),
         contextTargetRatio: Number(agentContext.target_ratio ?? 0.4),
         contextSafetyMarginTokens: Number(agentContext.safety_margin_tokens ?? 4096),
@@ -190,6 +197,7 @@ function renderSettingsToml(formData: SettingsFormData): string {
     "[agent.context]",
     `memory_window = ${formData.advanced.memoryWindow}`,
     `compaction_retained_turns = ${formData.advanced.compactionRetainedTurns ?? desktopSettingsDefaults.compactionRetainedTurns}`,
+    `summary_token_limit = ${formData.advanced.summaryTokenLimit ?? desktopSettingsDefaults.summaryTokenLimit}`,
     `trigger_ratio = ${formData.advanced.contextTriggerRatio ?? 0.75}`,
     `target_ratio = ${formData.advanced.contextTargetRatio ?? 0.4}`,
     `safety_margin_tokens = ${formData.advanced.contextSafetyMarginTokens ?? 4096}`,
@@ -273,6 +281,8 @@ function validateSettings(formData: SettingsFormData): void {
     if (capacityError) throw new Error(capacityError);
     registrationIds.add(registration.id);
   }
+  const summaryError = summaryTokenLimitError(formData.advanced.summaryTokenLimit);
+  if (summaryError) throw new Error(summaryError);
   const retentionError = compactionRetainedTurnsError(formData.advanced.compactionRetainedTurns);
   if (retentionError) throw new Error(retentionError);
   const trigger = formData.advanced.contextTriggerRatio ?? 0.75;

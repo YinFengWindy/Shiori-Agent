@@ -826,3 +826,167 @@ async def test_observation_from_another_binding_at_the_same_generation_is_stale(
     sessions.progress = MaintenanceProgress(ownership="C", generation=1)
     assert controller.latest("role:mira", None) is None
     assert controller.latest("role:mira", None, request=True) is None
+
+
+@pytest.mark.parametrize("reason", ["manual", "auto_threshold"])
+async def test_summary_failures_record_safe_attempts_and_preserve_window(
+    memory_harness, monkeypatch, reason
+):
+    from core.compaction_summary_validation import SUMMARY_FIELDS
+
+    h = memory_harness
+    session = h.manager.get_or_create("cli:oversized-summary")
+    _turn(session)
+    h.manager.save(session)
+    progress = h.manager.maintenance_progress(session)
+    progress.summaries["session"] = "old private state"
+    h.manager._store.write_maintenance_progress(session.key, progress.dump())
+    provider = LLMProvider(
+        api_key="test", model_context_window=100000, default_max_tokens=8000
+    )
+    content = json.dumps(
+        dict.fromkeys(SUMMARY_FIELDS, "private generated state")
+        | {"source_message_ids": [session.messages[0]["id"]]}
+    )
+    create = AsyncMock(
+        return_value=SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(content=content, tool_calls=[]),
+                    finish_reason="stop",
+                )
+            ],
+            usage=SimpleNamespace(completion_tokens=3000),
+        )
+    )
+    monkeypatch.setattr(provider._client.chat.completions, "create", create)
+    observed = []
+    controller = CompactionController(
+        h.manager,
+        h.maintenance,
+        WorkingSummaryWriter(h.manager, provider, "model", 8000),
+        observe=AsyncMock(side_effect=observed.append),
+    )
+    try:
+        with pytest.raises(CompactionFailedError) as error:
+            await controller.ensure(
+                session_key=session.key,
+                view=None,
+                policy=CompactionPolicy(0),
+                message_limit=len(session.messages),
+                budget=_budget(3500),
+                render=AsyncMock(return_value=[]),
+                measure=lambda _: _budget(100),
+                reason=reason,
+            )
+        result = error.value.result
+        assert result.memory_committed and not result.committed
+        assert result.failure_stage == "summary"
+        assert [item.counted_tokens for item in result.summary_diagnostics] == [
+            3000,
+            3000,
+        ]
+        assert [item.rewrite for item in result.summary_diagnostics] == [0, 1]
+        assert history_start(session, None) == 0
+        assert (
+            h.manager.maintenance_progress(session).summaries["session"]
+            == "old private state"
+        )
+        safe = json.dumps(observed[-1].status)
+        assert "private" not in safe and session.messages[0]["id"] not in safe
+        assert "provider_output_upper_bound" in safe
+        assert observed[-1].status["summary_diagnostics"][0]["counted_tokens"] == 3000
+    finally:
+        await provider.aclose()
+
+
+@pytest.mark.parametrize(
+    "reason,limit,retained",
+    [
+        ("manual", 1000, 2),
+        ("manual", 18000, 0),
+        ("auto_threshold", 1000, 2),
+        ("auto_threshold", 6000, 0),
+    ],
+)
+async def test_retention_reserves_configured_summary_allowance(
+    memory_harness, reason, limit, retained
+):
+    h = memory_harness
+    session = h.manager.get_or_create("cli:summary-reservation")
+    for _ in range(4):
+        _turn(session)
+    h.manager.save(session)
+    controller = _controller(h)
+
+    async def render(prepared, summary):
+        return [
+            {"role": "user", "content": "state", "retained": prepared.retained_turns}
+        ]
+
+    def measure(messages):
+        return build_input_budget(
+            model_context_window=20000,
+            output_tokens=200,
+            policy=BudgetPolicy(safety_margin_tokens=20),
+            estimate=InputEstimate([500, 3000, 4000][messages[0]["retained"]], "local"),
+        )
+
+    _, result = await controller.ensure(
+        session_key=session.key,
+        view=None,
+        policy=CompactionPolicy(2, limit),
+        message_limit=len(session.messages),
+        budget=_budget(3500),
+        render=render,
+        measure=measure,
+        reason=reason,
+    )
+    assert result.committed and result.retained_turns == retained
+
+
+async def test_actual_summary_usage_cannot_bypass_final_local_input_budget(
+    memory_harness, monkeypatch
+):
+    from core.compaction_summary_validation import SUMMARY_FIELDS
+
+    h = memory_harness
+    session = h.manager.get_or_create("cli:summary-input-budget")
+    _turn(session)
+    h.manager.save(session)
+    provider = LLMProvider(
+        api_key="test", model_context_window=100000, default_max_tokens=8000
+    )
+    content = json.dumps(
+        dict.fromkeys(SUMMARY_FIELDS, "")
+        | {"tasks": "中" * 2400, "source_message_ids": [session.messages[0]["id"]]},
+        ensure_ascii=False,
+    )
+    create = AsyncMock(
+        return_value=SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(content=content, tool_calls=[]),
+                    finish_reason="stop",
+                )
+            ],
+            usage=SimpleNamespace(completion_tokens=1392),
+        )
+    )
+    monkeypatch.setattr(provider._client.chat.completions, "create", create)
+    controller = CompactionController(
+        h.manager,
+        h.maintenance,
+        WorkingSummaryWriter(h.manager, provider, "model", 8000),
+    )
+    try:
+        with pytest.raises(CompactionFailedError) as error:
+            await _ensure(controller, session, keep=0)
+        assert error.value.result.failure_stage == "budget"
+        assert error.value.result.summary_diagnostics[0].counted_tokens == 1392
+        assert error.value.result.summary_diagnostics[0].local_tokens > 4000
+        assert error.value.result.memory_committed
+        assert history_start(session, None) == 0
+        assert not h.manager.maintenance_progress(session).summaries
+    finally:
+        await provider.aclose()

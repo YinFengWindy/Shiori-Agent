@@ -8,9 +8,13 @@ from typing import Awaitable, Callable, TYPE_CHECKING
 from agent.prompting.input_budget import InputBudget
 from agent.prompting.usage_accounting import current_usage
 from core.compaction_summary import (
-    SUMMARY_TOKEN_LIMIT,
     WorkingSummary,
     WorkingSummaryWriter,
+)
+from core.compaction_summary_validation import (
+    SummaryAttempt,
+    SummaryGenerationError,
+    validate_summary_limit,
 )
 from session.maintenance_progress import window_key
 from session.manager.models import consolidation_cursor
@@ -30,8 +34,10 @@ class CompactionPolicy:
     """Immutable policy captured by one execution; saves affect later executions."""
 
     retained_turns: int = 2
+    summary_token_limit: int = 2000
 
     def __post_init__(self) -> None:
+        validate_summary_limit(self.summary_token_limit)
         if type(self.retained_turns) is not int or self.retained_turns < 0:
             raise ValueError("压缩后保留原文轮数必须是非负整数")
 
@@ -78,6 +84,7 @@ class CompactionResult:
     final_budget: dict | None = None
     generation: int = 0
     ownership: str = ""
+    summary_diagnostics: tuple[SummaryAttempt, ...] = ()
 
     def dump(self) -> dict:
         """Serializable state shared by request traces, desktop, and commands."""
@@ -352,12 +359,7 @@ class CompactionController:
         )
         state = await self._memory(state, prepared)
         state = replace(state, phase="summary")
-        try:
-            summary = await self.writer.generate(prepared)
-        except Exception as exc:
-            raise CompactionFailedError(
-                replace(state, failure_stage="summary", error=str(exc))
-            ) from exc
+        summary, state = await self._summary(state, prepared)
         try:
             messages = await render(prepared, summary.content)
             after = measure(messages)
@@ -374,6 +376,26 @@ class CompactionController:
         )
         return state, summary, messages
 
+    async def _summary(self, state: CompactionResult, prepared: WindowPreparation):
+        """Keep diagnostics with this execution, including failed shortening attempts."""
+        try:
+            summary = await self.writer.generate(prepared)
+        except Exception as exc:
+            diagnostics = (
+                exc.diagnostics if isinstance(exc, SummaryGenerationError) else ()
+            )
+            raise CompactionFailedError(
+                replace(
+                    state,
+                    failure_stage="summary",
+                    error=str(exc),
+                    summary_diagnostics=state.summary_diagnostics + diagnostics,
+                )
+            ) from exc
+        return summary, replace(
+            state, summary_diagnostics=state.summary_diagnostics + summary.diagnostics
+        )
+
     async def _choose_retention(
         self,
         state: CompactionResult,
@@ -389,7 +411,8 @@ class CompactionController:
         """Pick one retention by local estimate, before any memory or summary work.
 
         Each candidate renders without a summary, then adds the summary's token
-        hard limit, whatever the estimator. The first count projected below
+        configured allowance. This is only a projection: the actual summary is
+        rendered and measured before any commit. The first count projected below
         the target wins; otherwise the largest count projected below the hard
         input limit; otherwise the fewest turns, left to the measured result.
         Returns the preparation and whether it retains fewer turns than the first.
@@ -421,7 +444,7 @@ class CompactionController:
                 raise CompactionFailedError(
                     replace(state, failure_stage="validation", error=str(exc))
                 ) from exc
-            tokens = projected.estimate.tokens + SUMMARY_TOKEN_LIMIT
+            tokens = projected.estimate.tokens + policy.summary_token_limit
             candidates.append((prepared, tokens, projected))
             if acceptable(tokens, projected):
                 break
@@ -611,12 +634,8 @@ class CompactionController:
             summarized_stop = state.memory_stop
             state = await self._memory(state, prepared)
             if summarized_stop != prepared.stop or not summary:
-                try:
-                    summary = (await self.writer.generate(prepared)).content
-                except Exception as exc:
-                    raise CompactionFailedError(
-                        replace(state, failure_stage="summary", error=str(exc))
-                    ) from exc
+                generated, state = await self._summary(state, prepared)
+                summary = generated.content
         try:
             messages = await render(summary)
             final = measure(messages)

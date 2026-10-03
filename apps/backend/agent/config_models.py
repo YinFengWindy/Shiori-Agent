@@ -83,6 +83,7 @@ class Config:
     max_iterations: int = 10
     memory_window: int = 40
     compaction_retained_turns: int = 2
+    summary_token_limit: int = 2000
     base_url: str | None = None
     extra_body: dict = field(default_factory=dict)
     proactive: ProactiveConfig = field(default_factory=ProactiveConfig)
@@ -116,7 +117,7 @@ class Config:
     def __post_init__(self) -> None:
         from core.compaction import CompactionPolicy
 
-        CompactionPolicy(self.compaction_retained_turns)
+        CompactionPolicy(self.compaction_retained_turns, self.summary_token_limit)
         if self.model_registrations is not _UNSET_MODEL_REGISTRATIONS:
             return
         self.model_registrations = []

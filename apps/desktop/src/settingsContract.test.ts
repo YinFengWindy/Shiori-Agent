@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { compactionRetainedTurnsError, desktopSettingsDefaults, modelCapacityError, modelCapacityErrors } from "./settingsContract.js";
+import { compactionRetainedTurnsError, desktopSettingsDefaults, modelCapacityError, modelCapacityErrors, summaryTokenLimitError } from "./settingsContract.js";
 
 describe("compactionRetainedTurnsError", () => {
   it("accepts the default, zero and custom whole-turn retention", () => {
@@ -28,5 +28,18 @@ describe("modelCapacityError", () => {
     assert.equal(modelCapacityError({ modelContextWindow: 128000, modelAutoCompactTokenLimit: 0 }), "自动压缩阈值必须是正整数");
     assert.equal(modelCapacityError({ modelContextWindow: 0 }), "上下文窗口必须是正整数");
     assert.deepEqual(modelCapacityErrors({ modelContextWindow: 1.5, modelAutoCompactTokenLimit: 1000 }), { modelContextWindow: "上下文窗口必须是正整数" });
+  });
+});
+
+
+describe("summaryTokenLimitError", () => {
+  it("accepts old settings and positive integer limits", () => {
+    assert.equal(desktopSettingsDefaults.summaryTokenLimit, 2000);
+    for (const value of [undefined, 1, 2000, 4000]) assert.equal(summaryTokenLimitError(value), null);
+  });
+  it("rejects malformed, fractional, unsafe and nonpositive limits", () => {
+    for (const value of [null, "2000", true, 0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, Number.MAX_SAFE_INTEGER + 1]) {
+      assert.equal(summaryTokenLimitError(value), "工作摘要 token 上限必须是正整数");
+    }
   });
 });

@@ -358,3 +358,36 @@ describe("compaction retention settings", () => {
     }
   });
 });
+
+
+describe("working summary budget", () => {
+  it("loads legacy defaults and round trips a custom limit", async () => {
+    configureSettingsConfigPath("unused-summary-config.toml");
+    const draft = loadSettingsData("").formData;
+    assert.equal(draft.advanced.summaryTokenLimit, 2000);
+    draft.advanced.summaryTokenLimit = 4000;
+    let called = false;
+    await saveSettings(draft, async (request) => {
+      called = true;
+      assert.match(request.config_toml, /summary_token_limit = 4000/);
+      const reloaded = loadSettingsData(request.config_toml).formData;
+      assert.equal(reloaded.advanced.summaryTokenLimit, 4000);
+      assert.equal(reloaded.advanced.maxTokens, draft.advanced.maxTokens);
+      return { ok: true };
+    });
+    assert.equal(called, true);
+  });
+  it("rejects invalid persisted values and prevents invalid candidates reaching the backend", async () => {
+    configureSettingsConfigPath("unused-summary-config.toml");
+    for (const literal of ["0", "-1", "1.5", "true", '"2000"']) {
+      assert.throws(() => loadSettingsData(`[agent.context]\nsummary_token_limit = ${literal}`), /正整数/);
+    }
+    for (const limit of [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+      const draft = loadSettingsData("").formData;
+      draft.advanced.summaryTokenLimit = limit;
+      const result = await saveSettings(draft, async () => { throw new Error("must not apply"); });
+      assert.equal(result.ok, false);
+      assert.match(result.error?.message ?? "", /正整数/);
+    }
+  });
+});

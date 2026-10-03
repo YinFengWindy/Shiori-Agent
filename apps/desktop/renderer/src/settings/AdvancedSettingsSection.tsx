@@ -20,7 +20,7 @@ export function AdvancedSettingsSection({
       <SettingsNumberInput
         ariaLabel={field.label}
         unit={field.unit}
-        value={draft.advanced[field.key] ?? (field.key === "compactionRetainedTurns" ? desktopSettingsDefaults.compactionRetainedTurns : 0)}
+        value={draft.advanced[field.key] ?? (field.key === "summaryTokenLimit" ? desktopSettingsDefaults.summaryTokenLimit : field.key === "compactionRetainedTurns" ? desktopSettingsDefaults.compactionRetainedTurns : 0)}
         onChange={(value) => setAdvanced({ [field.key]: value })}
       />
     </Field>

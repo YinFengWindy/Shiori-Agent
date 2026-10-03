@@ -52,7 +52,9 @@ class ContextWindow:
         compact: bool = False,
     ) -> dict:
         """Measure the complete persisted request and optionally force the controller."""
-        policy = CompactionPolicy(self.config.compaction_retained_turns)
+        policy = CompactionPolicy(
+            self.config.compaction_retained_turns, self.config.summary_token_limit
+        )
         request = await prepare_context_window_request(
             sessions=self.sessions,
             session_key=session.key,

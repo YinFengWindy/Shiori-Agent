@@ -63,6 +63,16 @@ async def test_budget_observations_persist_manual_failure_and_exact_context(
                     "failure_stage": "summary",
                     "after_tokens": None,
                     "request_usage": {"last_request": None},
+                    "summary_diagnostics": [
+                        {
+                            "limit": 2000,
+                            "counted_tokens": 3000,
+                            "local_tokens": 800,
+                            "source": "provider_output_upper_bound",
+                            "rewrite": 1,
+                            "outcome": "oversized",
+                        }
+                    ],
                 },
             )
         )
@@ -81,6 +91,16 @@ async def test_budget_observations_persist_manual_failure_and_exact_context(
         assert records[0]["status"]["memory_committed"]
         assert records[0]["status"]["after_tokens"] is None
         assert records[0]["status"]["request_usage"]["last_request"] is None
+        assert records[0]["status"]["summary_diagnostics"] == [
+            {
+                "limit": 2000,
+                "counted_tokens": 3000,
+                "local_tokens": 800,
+                "source": "provider_output_upper_bound",
+                "rewrite": 1,
+                "outcome": "oversized",
+            }
+        ]
         assert reader.recent_context_budgets("missing", "user") == ()
     finally:
         task.cancel()
