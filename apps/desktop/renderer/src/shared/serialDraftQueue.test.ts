@@ -182,3 +182,20 @@ it("flush does not bypass an unknown outcome and retry keeps the original operat
   assert.deepEqual(calls[1], calls[0]);
   assert.equal(calls[2][0], "last"); assert.notEqual(calls[2][1], calls[0][1]);
 });
+
+
+it("can save a previously acknowledged value again after external persistence changes", async () => {
+  const calls: string[] = [];
+  const queue = new SerialDraftQueue<string, string>({
+    isEqual: (a, b) => a === b, clone: (value) => value,
+    attempt: async (value) => { calls.push(value); return { ok: true, result: value }; },
+    onApplied: () => {}, onStatus: () => {},
+  });
+  queue.enqueue("local", "original");
+  assert.equal(queue.hasPendingWork, true);
+  await setImmediate();
+  assert.equal(queue.hasPendingWork, false);
+  queue.enqueue("local", "external");
+  await setImmediate();
+  assert.deepEqual(calls, ["local", "local"]);
+});

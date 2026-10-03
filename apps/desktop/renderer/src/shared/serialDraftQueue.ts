@@ -53,6 +53,11 @@ export class SerialDraftQueue<TDraft, TResult> {
 
   constructor(private readonly options: SerialDraftQueueOptions<TDraft, TResult>) {}
 
+  /** Reports work whose draft or retry identity must survive an external refresh. */
+  get hasPendingWork() {
+    return this.running || this.failed || this.queued !== null;
+  }
+
   /** Clears in-flight bookkeeping; callers reseed any external version state separately. */
   reset(): void {
     this.cancelTimer();
@@ -71,7 +76,7 @@ export class SerialDraftQueue<TDraft, TResult> {
       this.options.onStatus("idle", "");
       return;
     }
-    if (this.options.isEqual(this.attempted, draft)) {
+    if ((this.running || this.failed) && this.options.isEqual(this.attempted, draft)) {
       this.queued = null;
       this.cancelTimer();
       return;
