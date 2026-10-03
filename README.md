@@ -1,199 +1,135 @@
 <div align="center">
-  <img src="./assets/shiori-app-icon.png" alt="Shiori icon" width="96" />
+  <img src="./assets/shiori-app-icon.png" alt="Shiori 图标" width="96" />
   <h1>Shiori</h1>
   <p><strong>让角色拥有自己的生活</strong></p>
-  <p>本地优先的 AI 角色扮演助手。角色有自己的人设和记忆，<br />在桌面、Telegram、QQ 和飞书上都是同一个人。</p>
+  <p>本地优先的 AI 角色扮演助手。<br />从日常聊天、长期记忆到共同经历的故事，让相处延续下去。</p>
   <p>
     <a href="https://github.com/YinFengWindy/Shiori-Agent/releases/latest"><strong>下载 Windows 版</strong></a>
     ·
-    <a href="https://github.com/YinFengWindy/Shiori-Agent/releases">历史版本</a>
+    <a href="https://yinfengwindy.github.io/Shiori-Agent/">官网</a>
+    ·
+    <a href="https://github.com/YinFengWindy/Shiori-Agent/releases">更新记录</a>
     ·
     <a href="https://github.com/YinFengWindy/Shiori-Agent/issues">反馈问题</a>
-    ·
-    <a href="https://github.com/YinFengWindy/Shiori-Agent">源码</a>
   </p>
   <p>
     <img src="https://img.shields.io/badge/platform-Windows%20x64-2563eb?style=flat-square" alt="Windows x64" />
-    <img src="https://img.shields.io/badge/version-v0.3.1-7c3aed?style=flat-square" alt="v0.3.1" />
-    <img src="https://img.shields.io/badge/license-MIT-16a34a?style=flat-square" alt="MIT license" />
+    <a href="https://github.com/YinFengWindy/Shiori-Agent/releases/latest"><img src="https://img.shields.io/github/v/release/YinFengWindy/Shiori-Agent?style=flat-square" alt="最新 Release" /></a>
+    <a href="https://www.npmjs.com/package/@yinfengwindy/shiori-sdk"><img src="https://img.shields.io/npm/v/@yinfengwindy/shiori-sdk?style=flat-square&amp;label=npm%20SDK" alt="npm SDK 版本" /></a>
+    <a href="https://pypi.org/project/shiori-sdk/"><img src="https://img.shields.io/pypi/v/shiori-sdk?style=flat-square&amp;label=PyPI%20SDK" alt="PyPI SDK 版本" /></a>
+    <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-16a34a?style=flat-square" alt="MIT license" /></a>
   </p>
 </div>
 
-## 关于 Shiori
+## 简介
 
-角色不只是一段提示词。Shiori 把角色需要的东西分开存放：人设、记忆、会话、素材和关系各自独立。每个角色只有一段会话，不管从哪个聊天渠道找它，角色还是同一个角色。
+Shiori 以角色为中心组织人设、记忆、会话、素材与关系。你可以创建多个角色，赋予各自的性格和经历，陪它们聊天、安排任务，或走进一段独立的故事。
 
-你可以建任意多个角色，每个角色有自己的性格、经历和相处方式。聊过的内容会沉淀成记忆，角色会在合适的时候主动发消息，也可以接你派的任务，或者陪你走完一段故事模式的剧情。
+角色也可以通过 Telegram、QQ 和飞书与你相处。不同入口延续同一份角色身份与状态；群聊、未绑定身份的私聊会保留各自的上下文。
 
-## 界面
+## 当前界面
 
-<table>
-  <tr>
-    <th>和角色聊天</th>
-    <th>编辑角色资料与设定</th>
-  </tr>
-  <tr>
-    <td><img src="./assets/readme/chat.png" alt="Chat with a role" width="100%" /></td>
-    <td><img src="./assets/readme/role-settings.png" alt="Role settings" width="100%" /></td>
-  </tr>
-</table>
+以下截图来自主分支的实际桌面界面（2026-10-03），使用隔离的示例角色、对话与剧情数据；配图来自仓库公开素材。正式发布版本见 [Release](https://github.com/YinFengWindy/Shiori-Agent/releases/latest)。
+
+**日常聊天与角色状态**
+
+![聊天界面，右侧展示角色立绘、心情和当下想法](./assets/readme/chat.png)
 
 <table>
   <tr>
+    <th>角色资料与设定</th>
     <th>故事入口</th>
-    <th>故事化场景</th>
   </tr>
   <tr>
-    <td><img src="./assets/readme/story-menu.png" alt="Story menu" width="100%" /></td>
-    <td><img src="./assets/readme/story-scene.png" alt="Story scene" width="100%" /></td>
+    <td><img src="./assets/readme/role-settings.png" alt="角色详情页的资料、记忆、能力与账号分区" width="100%" /></td>
+    <td><img src="./assets/readme/story-menu.png" alt="故事主菜单，可新建剧情、载入存档或查看 CG" width="100%" /></td>
   </tr>
 </table>
 
-## 功能
+**在故事里继续相处**
 
-### 角色与对话
+![故事场景，展示当前日期、场景、角色对白和行动输入框](./assets/readme/story-scene.png)
 
-- 创建、编辑、删除和切换角色；头像、立绘、聊天图片和本地素材都按角色分开管理
-- 每个角色只有一段会话，从第一句起的历史完整保留，回复流式输出
-- 近期上下文和长期记忆分两层管理，需要时检索并定期整理
-- 聊天侧栏显示角色当下的心情和想法，每轮回复后跟着更新，关系标签和寂寞值另算
-- 角色会根据关系、场景和上次互动判断要不要主动开口，而不是按固定间隔提醒你
-- 开启「空闲活动」后，角色没有话要说的时候会自己调用技能和工具找点事做
-- 支持工具调用和生命周期拦截
+## 快速开始
 
-### 故事模式
+1. 在 [最新 Release](https://github.com/YinFengWindy/Shiori-Agent/releases/latest) 下载并安装 Windows x64 版。
+2. 首次启动后，跟随「模型 → 角色 → 开始」引导：填写模型服务、API Key 与模型参数，创建第一个角色，再进入聊天。
+3. 需要其他能力时，在「设置 → 插件」启用对应插件；外部聊天账号在角色详情的「账号」中添加。
 
-- 每段故事是一次独立的经历，带角色快照、背景、剧情记录和场景状态
-- 写下你的行动或回应，剧情就跟着往下推进；剧情自动存档，随时从「载入剧情」接着玩
-- 剧情记录按日子和时段整理，随时可以回看
-- 重要节点会自动生成 CG，不满意可以重新生成，所有 CG 都能在「CG 鉴赏」里翻看
+启动时会自动检查更新，也可以在「设置 → 关于」手动检查。Windows 上使用 Agent 的 shell 工具需要安装 PowerShell 7，并确保 `pwsh` 在 PATH 中。
 
-### 桌宠
-
-- 每个角色可以单独启用桌宠，绑定自己的素材包
-- 素材包用 `codex-sprite@1` 格式，支持 ZIP 导入、安全校验和动作映射
-- 透明窗口原生拖拽，记住上次的位置，托盘常驻；拖动时按方向播动作，停下来回到 idle
-- 角色的回复直接在桌宠旁边弹气泡
-
-### 图片生成
-
-- 接入 NovelAI 生成图片，可以用提示词标签控制，生成后直接预览
-- 合适的对话回合会自动出场景 CG
-
-### 多端接入
-
-- 桌面端是主入口；Telegram、QQ（NapCat）、QQBot 和飞书都是可选的渠道插件，在「设置 → 插件」里启用和配置
-- 绑定到角色的渠道和桌面端共用同一份角色状态和同一段会话
-
-### 插件
-
-故事模式、桌宠、NovelAI 生图和各个外部聊天渠道这些功能本身就是插件，跟第三方插件走同一套机制。
-
-- 「设置 → 插件」列出全部插件，可以逐个启用、停用和配置；插件自带的设置表单直接挂在这个 tab 下
-- 插件打成 ZIP 就能装，也能更新和卸载；这三件事都在重启 Shiori 后生效，卸载默认保留插件的数据和配置
-- 工作区里放的插件会被自动发现，加载前需要你手动确认信任，没确认的不会运行
-- 停用一个插件，它的工具、命令、界面入口和后台任务会一起消失
-- 屏幕读取由「24h视奸插件」提供：按需截一次主屏，用角色配置的视觉模型只读分析，截图只在本次分析里用，不做点击和输入
-
-## 开始使用
-
-1. 打开 [最新 Release](https://github.com/YinFengWindy/Shiori-Agent/releases/latest)，下载 Windows x64 安装程序装上。
-2. 第一次启动后，在设置里填上模型服务的 API Key。
-3. 创建一个角色，给它选好模型，就可以开始聊了。
-
-装好之后启动时会自动检查更新。想自己看版本、手动检查或者立刻重启安装，去「设置 → 关于」。
-
-Windows 上使用 Agent 的 shell 工具需要安装 PowerShell 7，并确保 `pwsh` 在 PATH 中；不会自动回退到 cmd 或 Windows PowerShell 5.1。
-
-需要另外配置的服务：
-
-| 服务 | 用来做什么 | 必需 |
+| 服务 | 用途 | 何时需要 |
 | --- | --- | --- |
-| 模型服务 | 角色回复和 Agent 运行 | 是 |
-| Embedding 服务 | 语义记忆检索 | 想用长期记忆时要配 |
-| Telegram / QQ（NapCat）/ QQBot / 飞书 | 从外部聊天软件找角色（对应渠道插件） | 否 |
-| NovelAI | 图片生成和自动场景 CG | 否 |
-| ASR / TTS 服务 | 桌宠语音交互 | 否 |
+| 模型服务 | 角色回复、Agent 任务与故事推进 | 开始对话前配置 |
+| Embedding 服务 | 语义记忆检索 | 使用语义记忆时配置 |
+| Telegram / QQ（NapCat）/ QQBot / 飞书 | 外部聊天渠道 | 启用相应渠道时配置 |
+| NovelAI | 图片生成、故事背景与 CG | 使用生图时配置 |
+| ASR / TTS 服务 | 语音交互 | 使用语音时配置 |
 
-## 插件 SDK
+## 主要能力
 
-SDK 与 Runtime API 当前版本均为 **3.1.0**。前端使用 npm 包 [@yinfengwindy/shiori-sdk](https://www.npmjs.com/package/@yinfengwindy/shiori-sdk)，后端使用 PyPI 包 [shiori-sdk](https://pypi.org/project/shiori-sdk/)（Python 3.12+）。在自己的插件项目中按需安装：
+| 能力 | 可以做什么 |
+| --- | --- |
+| 角色与对话 | 创建或导入角色卡，编辑设定、性格与回复规则；管理头像、心情立绘和素材；保留聊天记录、搜索消息，可开启流式回复。 |
+| 记忆与关系 | 检索和整理长期记忆，在角色页查看记忆时间线；聊天侧栏展示心情、当下想法与关系标签。 |
+| 主动互动与任务 | 角色根据关系和互动情况主动开口；启用空闲活动后可自行使用工具；支持任务与定时安排。 |
+| 故事模式 | 带着角色快照进入独立剧情，用行动推进故事；自动存档、回看记录，在 CG 鉴赏中查看生成的画面。 |
+| 桌宠与语音 | 导入桌宠素材包，让角色停留在桌面并展示回复气泡；可配置语音交互。当前同时启用一个角色的桌宠。 |
+| 多端与角色手机 | 为角色添加渠道账号；在聊天页打开角色的小手机，查看它的账号、联系人和渠道会话。 |
+| 工具与插件 | 按需使用文件、shell、搜索等工具；启用 Browser Use / Computer Use 后可操作浏览器与桌面；屏幕读取插件也可单独做只读分析。 |
+
+故事、桌宠、生图和外部渠道都通过插件提供。「设置 → 插件」支持管理启停、配置和 ZIP 安装；ZIP 安装、更新与卸载在重启后生效，第三方插件首次加载需要确认信任。Browser Use 与 Computer Use 默认停用。插件开发入口见下方 SDK 文档。
+
+### 数据与配置
+
+- 默认工作区：`%USERPROFILE%\.shiori\workspace\`，保存角色、会话、记忆和素材。
+- 主配置：工作区中的 `config.toml`，包含模型服务及部分插件配置；插件私有数据和独立配置通常位于 `plugin-data\<插件 id>\`。
+- 模型请求会发送给你配置的模型服务；启用生图、外部渠道或语音后，相应内容也会发送给对应服务。
+- 手动迁移或修改工作区前，请先退出 Shiori 并备份。
+
+## 开发与 SDK
+
+### 本地开发
+
+环境：Windows x64、Node.js 22+、pnpm 10.33.0、Python 3.12+、PowerShell 7。
+
+```powershell
+py -3.12 -m venv .venv
+.venv\Scripts\python.exe -m pip install -r apps/backend/requirements/development.txt
+pnpm install
+pnpm dev
+```
+
+开发环境使用 [Browser Use](./plugins/browser_use/README.md) / [Computer Use](./plugins/computer_use/README.md) 前，分别运行 `pnpm prepare:browser-use` / `pnpm prepare:computer-use` 准备原生组件。
+
+开发模式的 Python bridge 使用项目 `.venv` 中的解释器。常用检查如下；日常修改按影响范围选择相关测试。
+
+```powershell
+pnpm lint
+pnpm typecheck
+pnpm test --file RoleDetailPage.test.tsx
+.venv\Scripts\black.exe --check .
+.venv\Scripts\ruff.exe check .
+.venv\Scripts\pytest.exe -q tests/backend/core/roles/
+```
+
+桌面单测可重复传入 `--file` 合并筛选，用 `--test-name-pattern` 按名称筛选，或用 `--list` 仅列出文件。需要完整验证时，`pnpm test` 运行宿主与插件单测，`.venv\Scripts\pytest.exe -q` 按仓库配置收集后端、插件和 SDK 测试；`pnpm build` 构建桌面端。
+
+### 插件 SDK
+
+SDK 与 Runtime API 当前版本均为 **3.1.0**。前端包为 [@yinfengwindy/shiori-sdk](https://www.npmjs.com/package/@yinfengwindy/shiori-sdk)，后端包为 [shiori-sdk](https://pypi.org/project/shiori-sdk/)（Python 3.12+）。在独立插件项目中按需安装：
 
 ```sh
 pnpm add -D "@yinfengwindy/shiori-sdk@^3.1.0"
 uv add "shiori-sdk>=3.1.0,<4"
 ```
 
-插件前端构建时将 SDK、React 和 React DOM 保留为 external，由 Shiori 在运行时提供。使用 3.1 API 的插件在 `manifest.yaml` 中声明 `runtime_api: ">=3.1.0 <4.0.0"`。
+插件位于 `plugins/<id>/`：`manifest.yaml` 声明能力与兼容范围，`backend/` 放 Python 后端，`ui/` 放可选 React 界面，`tests/` 放插件测试。前端构建需将 SDK、React 和 React DOM 保留为 external，由 Shiori 在运行时提供。使用 3.1 API 的插件声明 `runtime_api: ">=3.1.0 <4.0.0"`。
 
-安装、React peer 与独立测试配置见 [SDK README](./packages/sdk/README.md)；开发流程见 [插件教程](./docs/_handbook/plugins-tutorial.md)，包结构和兼容要求见 [运行时契约](./docs/_handbook/plugin-runtime-contract.md)。
-
-## 开发
-
-环境要求：Windows x64、Node.js 22+、pnpm 10.33.0、Python 3.12+、PowerShell 7（`pwsh` 可从 PATH 启动）。
-
-```powershell
-py -3.12 -m venv .venv
-.venv\Scripts\python.exe -m pip install -r apps/backend/requirements/production.txt -r apps/backend/requirements/development.txt
-pnpm install
-pnpm dev
-```
-
-开发模式下的 Python bridge 用的是项目 `.venv` 里的解释器，不走系统 PATH。常用检查：
-
-```powershell
-pnpm test
-pnpm lint
-pnpm typecheck
-pnpm build
-.venv\Scripts\pytest.exe -q tests\
-```
-
-局部桌面验证可以按仓库相对路径片段筛选文件，再按测试名称正则筛选用例。重复 `--file` 会合并匹配文件；不传参数仍运行宿主与插件全部单测。`--list` 只列出匹配文件，不执行测试。
-
-```powershell
-pnpm test --file RoleDetailPage.test.tsx
-pnpm test --file plugins/desktop_pet/surface/ --test-name-pattern "reply bubbles"
-pnpm test --file roles/ --file plugins/story/ui/ --list
-```
-
-插件都放在顶层 `plugins/<id>/`，一个目录装完一个插件：
-
-```text
-plugins/<id>/
-├── manifest.yaml   # id、版本、描述、声明用到的 capability
-├── pyproject.toml
-├── backend/        # Python 后端
-├── ui/             # React 前端（可选）
-└── tests/          # 测试跟着插件走
-```
-
-插件在 manifest 里声明要用哪些 capability，内核只注入声明过的那些；注册的事件、工具、渠道、RPC 和后台任务都按可回滚的副作用登记，停用或初始化失败时整体清理。写个 pydantic 配置模型就能自动得到设置页表单，需要复杂界面再写 React 组件。
-
-运行结构：
-
-```text
-桌面端 / 渠道插件（Telegram、QQ、QQBot、飞书）
-            │
-            ▼
-      Agent Runtime
-       ├── 角色与关系
-       ├── 会话与记忆
-       ├── 工具与插件
-       ├── Proactive / Drift
-       └── 图片与语音能力
-            │
-            ▼
-       本地工作区
-```
-
-## 数据存在哪里
-
-- 角色、会话和记忆默认存在本地：`%USERPROFILE%\.shiori\workspace\`。
-- 插件自己的数据和配置存在工作区的 `plugin-data\<插件 id>\`，跟插件安装目录分开，升级应用不会动它。
-- 模型请求会发给你自己配置的模型服务。开了 NovelAI、渠道插件或语音之后，相应的内容也会发到这些服务。
-- 外部渠道、NovelAI、语音和桌宠素材都要单独配置；不配也不影响桌面端本地功能的使用。
-- 要改或者删工作区里的文件，先退出 Shiori，动手之前先备份。
+- [SDK README](./packages/sdk/README.md)：安装、React peer 与独立测试配置。
+- [插件教程](./docs/_handbook/plugins-tutorial.md)：从创建插件到开发界面。
+- [运行时契约](./docs/_handbook/plugin-runtime-contract.md)：包结构、能力边界与版本兼容。
+- [插件测试](./docs/agents/plugin-testing.md)：插件独立运行与宿主集成测试。
 
 ## License
 
