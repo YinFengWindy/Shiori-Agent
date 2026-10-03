@@ -96,7 +96,7 @@ class UserIdentityStore:
             identities = self._read()
             if not self._pairing.consume(text):
                 return None
-            bound_at = self._clock().isoformat()
+            bound_at = self._clock().astimezone(timezone.utc).isoformat()
             account_id = record.id if scope == "account" else ""
             existing = next(
                 (
@@ -119,7 +119,7 @@ class UserIdentityStore:
                     bound_at=bound_at,
                 )
             )
-            identity = _with_chat(identity, chat)
+            identity = _with_chat(identity, chat, context_since=bound_at)
             self._write(
                 [identity if item is existing else item for item in identities]
                 if existing is not None
@@ -134,16 +134,30 @@ class UserIdentityStore:
         self._notify()
         return identity
 
-    def remember_chat(self, identity_id: str, chat: IdentityChat) -> None:
-        """Records a private chat with a bound user; a known chat changes nothing."""
+    def remember_chat(
+        self,
+        identity_id: str,
+        chat: IdentityChat,
+        *,
+        context_since: datetime | None = None,
+    ) -> None:
+        """Records a new chat from its first admitted message, keeping known cuts."""
         with self._lock:
             identities = self._read()
             current = next(
                 (item for item in identities if item.id == identity_id), None
             )
-            if current is None or chat in current.chats:
+            if current is None:
                 return
-            updated = _with_chat(current, chat)
+            updated = _with_chat(
+                current,
+                chat,
+                context_since=(context_since or self._clock())
+                .astimezone(timezone.utc)
+                .isoformat(),
+            )
+            if updated is current:
+                return
             self._write([updated if item is current else item for item in identities])
         self._notify()
 
@@ -205,11 +219,16 @@ class UserIdentityStore:
             listener()
 
 
-def _with_chat(identity: UserIdentity, chat: IdentityChat) -> UserIdentity:
-    """The identity with ``chat`` as its only known chat on that account."""
-    if chat in identity.chats:
+def _with_chat(
+    identity: UserIdentity, chat: IdentityChat, *, context_since: str
+) -> UserIdentity:
+    """Keep a known conversation's cut; a new conversation starts at admission."""
+    known = identity.chat_for(chat.account_id)
+    if known and (known.channel, known.chat_id) == (chat.channel, chat.chat_id):
         return identity
     others = tuple(
         item for item in identity.chats if item.account_id != chat.account_id
     )
-    return replace(identity, chats=(*others, chat))
+    return replace(
+        identity, chats=(*others, replace(chat, context_since=context_since))
+    )

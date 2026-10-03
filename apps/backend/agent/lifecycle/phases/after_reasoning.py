@@ -13,7 +13,11 @@ from agent.core.passive_support import (
     build_session_runtime_metadata,
     update_session_runtime_metadata,
 )
-from session.manager.models import INTERRUPTED_TURN_METADATA_KEY, build_session_message
+from session.manager.models import (
+    CONTEXT_TURN_STARTED_AT,
+    INTERRUPTED_TURN_METADATA_KEY,
+    build_session_message,
+)
 from agent.core.response_parser import parse_response, ParsedResponse
 from shiori_sdk.lifecycle import ResponseMetadata
 from core.roles.reply_state import InvalidRoleReply, RoleReply, reply_state_metadata
@@ -386,6 +390,13 @@ class _AppendMessagesModule:
             raise RuntimeError("AfterReasoning requires TurnState.session")
         session = cast("Session", raw_session)
         owned_messages = frame.slots["reply:messages"]
+        # Replies and embedded tool results stay in their triggering turn even
+        # if an identity is bound while the model is running. Plugins cannot
+        # override this host-owned timestamp through outgoing metadata or slots.
+        for message in owned_messages:
+            message.setdefault("metadata", {})[
+                CONTEXT_TURN_STARTED_AT
+            ] = state.msg.timestamp.isoformat()
         reply = frame.slots.get("reply:state")
         relationship_runtime = getattr(
             self._session_services, "relationship_runtime", None

@@ -348,7 +348,7 @@ def test_user_chat_is_the_remembered_private_chat_of_the_roles_account(
     ).record
     # An account-scoped ID of another role's account never names the user here.
     _bind(store, other, "stranger-id", "account")
-    _bind(
+    identity = _bind(
         store,
         accounts.get(account_id).record,
         "user-7",
@@ -359,7 +359,7 @@ def test_user_chat_is_the_remembered_private_chat_of_the_roles_account(
     resolved = service.user_chat("chat", "mira")
 
     assert resolved.target == AccountTarget("private", "user-7")
-    assert resolved.chat == IdentityChat(account_id, "chat_bot", "dm-7")
+    assert resolved.chat == identity.chat_for(account_id)
 
 
 def test_user_chat_refuses_an_unbound_or_unreached_channel(tmp_path) -> None:

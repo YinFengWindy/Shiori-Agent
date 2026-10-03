@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 from shiori_sdk.accounts.models import AccountRecord, account_for_channel
@@ -42,6 +43,8 @@ class IdentityChat:
     account_id: str
     channel: str
     chat_id: str
+    # Empty only for legacy bindings, whose existing visible history is preserved.
+    context_since: str = ""
 
     def to_dict(self) -> dict[str, str]:
         """The JSON form stored with the binding."""
@@ -49,6 +52,7 @@ class IdentityChat:
             "account_id": self.account_id,
             "channel": self.channel,
             "chat_id": self.chat_id,
+            "context_since": self.context_since,
         }
 
     @classmethod
@@ -60,9 +64,15 @@ class IdentityChat:
             _text(payload, "account_id"),
             _text(payload, "channel"),
             _text(payload, "chat_id"),
+            _text(payload, "context_since") if "context_since" in payload else "",
         )
         if not all((chat.account_id, chat.channel, chat.chat_id)):
             raise ValueError("身份绑定的私聊记录字段不能为空")
+        if (
+            chat.context_since
+            and datetime.fromisoformat(chat.context_since).tzinfo is None
+        ):
+            raise ValueError("身份绑定的上下文起点必须带时区")
         return chat
 
 

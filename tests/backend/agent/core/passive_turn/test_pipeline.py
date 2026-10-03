@@ -590,7 +590,7 @@ async def test_group_turn_history_is_dialog_only_but_members_include_heard(tmp_p
     assert [source.sender_id for source in request.window_sources] == ["72", None]
 
 
-async def test_bound_stranger_dm_rebuilds_user_visibility_after_binding(
+async def test_bound_stranger_dm_only_adds_new_messages_after_binding(
     tmp_path,
 ):
     _bind(tmp_path, "902")
@@ -607,9 +607,16 @@ async def test_bound_stranger_dm_rebuilds_user_visibility_after_binding(
     _bind(tmp_path, "555")
     history = await _model_history(tmp_path, DESKTOP)
 
-    assert _labels(history) == ["desk", "udm", "sdm"]
-    assert sum("sdm-user" in text for text in history) == 1
-    assert sum("sdm-old" in text for text in history) == 2
+    assert _labels(history) == ["desk", "udm"]
+    assert not any("sdm-user" in text or "sdm-old" in text for text in history)
+    # A fresh message from the newly bound private chat is shared next turn.
+    reloaded = manager.get_or_create("role:mira")
+    reloaded.add_message("user", "new-private-message", thread_id=STRANGER_DM)
+    reloaded.add_message("assistant", "new-private-reply", thread_id=STRANGER_DM)
+    manager.save(reloaded)
+    history = await _model_history(tmp_path, DESKTOP)
+    assert any("new-private-message" in text for text in history)
+    assert not any("sdm-user" in text or "sdm-old" in text for text in history)
 
 
 async def test_input_budget_counts_only_the_turn_context(memory_harness, monkeypatch):

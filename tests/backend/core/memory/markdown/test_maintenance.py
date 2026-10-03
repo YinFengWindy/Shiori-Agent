@@ -2,6 +2,7 @@
 
 import asyncio
 import threading
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
@@ -22,6 +23,8 @@ from conversation.context_scope import (
     user_context_view,
 )
 from conversation.service import desktop_thread_id
+from core.identity import IdentityChat, UserIdentityStore
+from shiori_sdk.accounts.models import AccountRecord
 from shiori_sdk.channels.threads import network_thread_id
 from shiori_sdk.memory.events import ConsolidationCommitted
 from core.memory.member_profiles import MemberKey, MemberProfile, MemberProfiles
@@ -1057,3 +1060,66 @@ async def test_phone_edits_made_while_preparing_are_not_overwritten(
     assert environment.read_note("mira", group) == "模型笔记"
     profile = members.read("mira", key)
     assert profile is not None and profile.brief == "模型速记"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("archive_all", [False, True])
+async def test_bound_dm_prefix_is_not_newly_extracted_into_memory(
+    tmp_path: Path,
+    archive_all: bool,
+):
+    qq = AccountRecord(
+        id="qq:101",
+        plugin_id="qq",
+        platform="qq",
+        platform_account_id="101",
+        config_ref="101",
+        role_id="mira",
+    )
+    identities = UserIdentityStore(
+        tmp_path, clock=lambda: datetime.fromisoformat("2026-01-01T00:00:10+00:00")
+    )
+    assert identities.pair(
+        identities.create_pairing_code().code,
+        record=qq,
+        user_id="902",
+        scope="platform",
+        chat=IdentityChat(qq.id, "qq", "902"),
+    )
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("role:mira")
+    session.metadata["role_id"] = "mira"
+    bound = network_thread_id("mira", "qq", "902")
+    for thread, content, timestamp in (
+        (bound, "excluded old DM", "2026-01-01T00:00:09+00:00"),
+        (desktop_thread_id("mira"), "existing desktop", "2026-01-01T00:00:00+00:00"),
+        (bound, "new DM", "2026-01-01T00:00:10+00:00"),
+    ):
+        session.add_message("user", content, thread_id=thread, timestamp=timestamp)
+    manager.save(session)
+    profile = MarkdownMemoryStore(tmp_path / "roles" / "mira")
+    profile.write_long_term("existing long-term memory")
+    existing_memory = profile.read_long_term()
+    provider, event_bus, events, maintenance = _recording_maintenance(tmp_path, manager)
+    try:
+        result = await maintenance.consolidate(
+            ConsolidateRequest(session=session, force=True, archive_all=archive_all)
+        )
+    finally:
+        await event_bus.aclose()
+
+    assert result.trace["mode"] == "markdown"
+    [event] = events
+    for conversation in (
+        event.conversation,
+        *provider.event_prompts,
+        *provider.recent_context_prompts,
+    ):
+        assert "excluded old DM" not in conversation
+        assert "existing desktop" in conversation
+        assert "new DM" in conversation
+    assert provider.recent_context_prompts
+    assert result.consolidated_count == 2
+    assert "excluded old DM" not in profile.read_recent_context()
+    assert profile.read_long_term() == existing_memory
+    assert len(session.messages) == 3

@@ -185,7 +185,9 @@ class ChannelHub:
                 # A private chat with the user is where proactive messages can
                 # reach them through this account.
                 self._identities.remember_chat(
-                    identity.id, self._identity_chat(account, message)
+                    identity.id,
+                    self._identity_chat(account, message),
+                    context_since=message.timestamp,
                 )
         metadata["source"] = "role_account"
         if group and not addressed:

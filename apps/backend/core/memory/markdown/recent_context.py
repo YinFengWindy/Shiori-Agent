@@ -7,7 +7,7 @@ import logging
 import re
 from typing import TYPE_CHECKING
 
-from conversation.context_scope import UserContextThreads, in_user_context
+from conversation.context_scope import ContextView, UserContextThreads
 
 from .contracts import ConsolidationFailure, ConsolidationWindow
 from .formatting import (
@@ -40,12 +40,13 @@ def _user_context_messages(
     """RECENT_CONTEXT 的输入只取用户上下文会话的消息。
 
     RECENT_CONTEXT 会原样注入用户上下文的回合，所以按会话划分，与历史组装同一条
-    规则：外部会话的消息（包括用户本人在群里的发言）都不进入。``user_threads``
+    规则：外部会话的消息与新绑定私聊起点之前的消息都不进入。``user_threads``
     为 None 表示会话没有划分，全部保留。
     """
     if user_threads is None:
         return list(messages)
-    return [message for message in messages if in_user_context(message, user_threads)]
+    view = ContextView(scope="user", user_threads=user_threads)
+    return [message for message in messages if view.includes(message)]
 
 
 def _format_recent_context_messages(

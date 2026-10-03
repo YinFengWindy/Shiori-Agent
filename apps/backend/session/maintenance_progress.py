@@ -14,7 +14,13 @@ if TYPE_CHECKING:
 def ownership_key(threads: UserContextThreads | None) -> str:
     """Stable ownership stamp; binding changes invalidate prepared visibility."""
     return (
-        json.dumps(sorted(threads.bound_chat_thread_ids), ensure_ascii=False)
+        json.dumps(
+            {
+                thread: threads.context_since.get(thread, "")
+                for thread in sorted(threads.bound_chat_thread_ids)
+            },
+            ensure_ascii=False,
+        )
         if threads is not None
         else ""
     )
@@ -140,20 +146,21 @@ class MaintenanceProgress:
     def rebound(self, ownership: str) -> MaintenanceProgress:
         """Adopt a new identity binding as a new generation.
 
-        The unscoped session window, the shared user window and external
-        threads that entered or left the user context lose their window; memory
-        cursors and consumer progress are kept, so the new ownership only
-        applies to later consolidation.
+        New bounded chats preserve the shared user window: their old messages
+        cannot enter it. Removal or a changed boundary invalidates that window.
+        Memory cursors and consumer progress are kept.
         """
-        before = set(json.loads(self.ownership)) if self.ownership else set()
-        after = set(json.loads(ownership)) if ownership else set()
-        progress = self.without_windows(
-            {
-                "session",
-                "user",
-                *("external:" + thread_id for thread_id in before ^ after),
-            }
-        )
+        before = _ownership_boundaries(self.ownership)
+        after = _ownership_boundaries(ownership)
+        changed = {
+            thread
+            for thread in before.keys() | after.keys()
+            if before.get(thread) != after.get(thread)
+        }
+        invalid = {"session", *("external:" + thread for thread in changed)}
+        if any(thread in before or not after.get(thread) for thread in changed):
+            invalid.add("user")
+        progress = self.without_windows(invalid)
         progress.ownership = ownership
         progress.generation += 1
         return progress
@@ -186,6 +193,12 @@ class MaintenanceProgress:
         data = json.loads(raw)
         data.pop("request_owners", None)
         return cls(**data)
+
+
+def _ownership_boundaries(ownership: str) -> dict[str, str]:
+    """Read current boundary stamps and legacy thread-only ownership lists."""
+    payload = json.loads(ownership) if ownership else {}
+    return dict.fromkeys(payload, "") if isinstance(payload, list) else payload
 
 
 def effective_progress(

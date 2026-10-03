@@ -1,6 +1,7 @@
 """Session-owned prefix, scope, generation and version preconditions."""
 
 import pytest
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock
 
 from conversation.context_scope import (
@@ -36,6 +37,74 @@ async def _memory(manager, session):
         context_cursors={"user": len(session.messages)},
     )
     assert await manager.commit_consolidation(request, AsyncMock())
+
+
+async def test_new_binding_keeps_desktop_cut_summary_and_compacts_only_new_dm(tmp_path):
+    manager, session, view = _session(tmp_path)
+    private = network_thread_id("mira", "qq", "owner")
+    for role in ("user", "assistant"):
+        session.add_message(
+            role, "old dm", thread_id=private, timestamp="2026-01-01T00:00:00+00:00"
+        )
+    manager.save(session)
+    prepared = await manager.prepare_window(session.key, view, keep_turns=0)
+    assert prepared is not None
+    await _memory(manager, session)
+    assert await manager.commit_window(
+        prepared, "desktop state", prepared.removed_message_ids
+    )
+    old_cut = history_start(session, view)
+    now = datetime(2026, 1, 2, tzinfo=timezone.utc)
+    identities = UserIdentityStore(tmp_path, clock=lambda: now)
+    record = AccountRecord(
+        id="qq:101",
+        plugin_id="qq",
+        platform="qq",
+        platform_account_id="101",
+        config_ref="101",
+        role_id="mira",
+    )
+    identity = identities.pair(
+        identities.create_pairing_code().code,
+        record=record,
+        user_id="owner",
+        scope="platform",
+        chat=IdentityChat(record.id, "qq", "owner"),
+    )
+    assert identity is not None
+    changed = user_context_view(tmp_path, "mira")
+    progress = manager.maintenance_progress(session)
+    assert history_start(session, changed) == old_cut
+    assert progress.summaries["user"] == "desktop state"
+    assert session.context_cursors["user"] == 8
+    for role in ("user", "assistant"):
+        session.add_message(
+            role, "new dm", thread_id=private, timestamp="2026-01-03T00:00:00+00:00"
+        )
+    manager.save(session)
+    new = await manager.prepare_window(session.key, changed, keep_turns=0)
+    assert new is not None
+    assert new.removed_message_ids == tuple(m["id"] for m in session.messages[-2:])
+    assert len(manager._store.fetch_session_messages(session.key)) == 10
+    # Commit the new ownership, then miss both unbind/rebind events while idle.
+    manager.maintenance_progress(session, persist=True)
+    identities.unbind(identity.id)
+    now = datetime(2026, 1, 4, tzinfo=timezone.utc)
+    assert identities.pair(
+        identities.create_pairing_code().code,
+        record=record,
+        user_id="owner",
+        scope="platform",
+        chat=IdentityChat(record.id, "qq", "owner"),
+    )
+    rebound = user_context_view(tmp_path, "mira")
+    assert history_start(session, rebound) == 0
+    assert not manager.maintenance_progress(session).summaries
+    assert not await manager.commit_window(new, "stale state", new.removed_message_ids)
+    reloaded = SessionManager(tmp_path).get_or_create(session.key)
+    assert not any(
+        "dm" in m["content"] for m in reloaded.get_history(include=rebound.includes)
+    )
 
 
 @pytest.mark.asyncio

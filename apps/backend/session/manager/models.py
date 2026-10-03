@@ -23,6 +23,8 @@ from .helpers import (
 )
 
 INTERRUPTED_TURN_METADATA_KEY = "interrupted_turn"
+# Host-stamped admission time shared by every persisted message in one turn.
+CONTEXT_TURN_STARTED_AT = "context_turn_started_at"
 
 # Decides whether one raw session message is visible to a history read.
 HistoryFilter = Callable[[Mapping[str, Any]], bool]

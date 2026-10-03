@@ -12,6 +12,7 @@ from functools import wraps
 from shiori_sdk.prompting import SYSTEM_CONTEXT_FRAME_MARKER
 from .token_estimate import estimate_tokens
 from .usage_accounting import turn_usage
+from session.maintenance_progress import ownership_key
 
 _context: ContextVar[tuple | None] = ContextVar("input_usage_context", default=None)
 # Each anchor retains a full request copy; keep only the most recently used contexts.
@@ -59,7 +60,7 @@ def turn_usage_context(function):
             key += (
                 view.scope,
                 view.thread_id,
-                tuple(sorted(view.user_threads.bound_chat_thread_ids)),
+                ownership_key(view.user_threads),
             )
         with usage_context(key), turn_usage():
             return await function(self, *args, **kwargs)

@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -6,6 +7,8 @@ import pytest
 from agent.tools.message_lookup import FetchMessagesTool, SearchMessagesTool
 from agent.tools.registry import ToolRegistry
 from conversation.service import desktop_thread_id
+from core.identity import IdentityChat, UserIdentityStore
+from shiori_sdk.accounts.models import AccountRecord
 from shiori_sdk.channels.threads import network_thread_id
 from prompts.agent import build_agent_behavior_rules_prompt
 from session.manager import SessionManager
@@ -550,3 +553,85 @@ async def test_turn_without_a_known_context_never_reads_role_sessions(tmp_path):
         )
         assert found["messages"] == []
         assert [m["id"] for m in fetched["messages"]] == ["desktop:role:mira:0"]
+
+
+@pytest.mark.asyncio
+async def test_bound_chat_search_and_fetch_apply_binding_boundary(tmp_path: Path):
+    qq = AccountRecord(
+        id="qq:101",
+        plugin_id="qq",
+        platform="qq",
+        platform_account_id="101",
+        config_ref="101",
+        role_id="mira",
+    )
+    binding_time = datetime(2026, 1, 1, 0, 0, 10, tzinfo=timezone.utc)
+    identities = UserIdentityStore(tmp_path, clock=lambda: binding_time)
+    identity = identities.pair(
+        identities.create_pairing_code().code,
+        record=qq,
+        user_id="902",
+        scope="platform",
+        chat=IdentityChat(qq.id, "qq", "902"),
+    )
+    assert identity is not None
+    bound_dm = network_thread_id("mira", "qq", "902")
+    store = SessionStore(tmp_path / "sessions.db")
+    store.create_session(key="role:mira", metadata={})
+    # Keep old imported rows ahead of visible rows in search ranking.
+    rows = [
+        (bound_dm, "2026-01-01T00:00:10+00:00"),
+        (bound_dm, "2026-01-01T00:00:09+00:00"),
+        (DESKTOP, "2026-01-01T00:00:00+00:00"),
+        (bound_dm, "2026-01-01T00:00:08+00:00"),
+        (bound_dm, "2026-01-01T00:00:11+00:00"),
+        (bound_dm, "2026-01-01T00:00:07+00:00"),
+    ]
+    for seq, (thread_id, timestamp) in enumerate(rows):
+        store.insert_message(
+            "role:mira",
+            role="user",
+            content="benchmark",
+            ts=timestamp,
+            seq=seq,
+            thread_id=thread_id,
+        )
+    try:
+        search = SearchMessagesTool(store, tmp_path)
+        fetch = FetchMessagesTool(store, tmp_path)
+        for thread_id in (DESKTOP, bound_dm):
+            first = json.loads(
+                await search.execute(query="benchmark", limit=2, **_turn(thread_id))
+            )
+            second = json.loads(
+                await search.execute(
+                    query="benchmark",
+                    limit=2,
+                    offset=first["next_offset"],
+                    **_turn(thread_id),
+                )
+            )
+            assert [item["seq"] for item in first["messages"]] == [4, 2]
+            assert first["count"] == 2
+            assert first["matched_count"] == second["matched_count"] == 3
+            assert first["has_more"] is True
+            assert first["next_offset"] == 2
+            assert [item["seq"] for item in second["messages"]] == [0]
+            assert second["count"] == 1
+            assert second["has_more"] is False
+            assert second["next_offset"] is None
+
+            exact = json.loads(
+                await fetch.execute(ids=["role:mira:1"], **_turn(thread_id))
+            )
+            around = json.loads(
+                await fetch.execute(ids=["role:mira:4"], context=3, **_turn(thread_id))
+            )
+            assert exact["messages"] == []
+            assert [item["seq"] for item in around["messages"]] == [2, 4]
+            assert around["matched_count"] == 1
+
+        raw, total = store.search_message_previews("benchmark", session_key="role:mira")
+        assert len(raw) == total == 6
+    finally:
+        store.close()

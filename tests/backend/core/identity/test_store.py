@@ -91,7 +91,12 @@ def test_bindings_persist_and_unbind_removes_them(tmp_path: Path) -> None:
     assert other.list() == [identity]
     saved = json.loads((tmp_path / "user_identities.json").read_text("utf-8"))
     assert saved["identities"][0]["chats"] == [
-        {"account_id": "qq:101", "channel": "qq", "chat_id": "902"}
+        {
+            "account_id": "qq:101",
+            "channel": "qq",
+            "chat_id": "902",
+            "context_since": identity.bound_at,
+        }
     ]
 
     store.unbind(identity.id)
@@ -133,6 +138,43 @@ def test_remembering_a_known_chat_changes_nothing(tmp_path: Path) -> None:
     store.remember_chat(identity.id, IdentityChat(QQ_B.id, "qq", "902"))
     assert len(changes) == 1
     assert len(store.list()[0].chats) == 2
+
+
+def test_chat_context_boundary_survives_repair_and_moves_only_on_new_binding(tmp_path):
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    store = UserIdentityStore(tmp_path, clock=lambda: now)
+    first = _pair(store, QQ_A, "902", "platform", ("qq", "902"))
+    assert first is not None
+    assert first.chats[0].context_since == now.isoformat()
+    now = datetime(2026, 1, 2, tzinfo=timezone.utc)
+    paired_again = _pair(store, QQ_A, "902", "platform", ("qq", "902"))
+    assert paired_again is not None
+    assert paired_again.chats == first.chats
+    store.remember_chat(first.id, IdentityChat(QQ_A.id, "qq", "902"))
+    received = datetime(2026, 1, 1, 23, 59, tzinfo=timezone.utc)
+    store.remember_chat(
+        first.id, IdentityChat(QQ_B.id, "qq_b", "902"), context_since=received
+    )
+    [reloaded] = UserIdentityStore(tmp_path).list()
+    assert reloaded.chats[0].context_since == first.chats[0].context_since
+    assert reloaded.chats[1].context_since == received.isoformat()
+    store.unbind(first.id)
+    rebound = _pair(store, QQ_A, "902", "platform", ("qq", "902"))
+    assert rebound is not None and rebound.id != first.id
+    assert rebound.chats[0].context_since == now.isoformat()
+
+
+def test_legacy_chat_keeps_unbounded_history_when_repaired(tmp_path):
+    store = UserIdentityStore(tmp_path)
+    identity = _pair(store, QQ_A, "902", "platform", ("qq", "902"))
+    assert identity is not None
+    path = tmp_path / "user_identities.json"
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["identities"][0]["chats"][0].pop("context_since")
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    assert UserIdentityStore(tmp_path).list()[0].chats[0].context_since == ""
+    repaired = _pair(store, QQ_A, "902", "platform", ("qq", "902"))
+    assert repaired is not None and repaired.chats[0].context_since == ""
 
 
 def test_forgetting_an_account_drops_its_bindings_and_chats(tmp_path: Path) -> None:

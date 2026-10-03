@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from pathlib import Path
+from datetime import datetime, timezone
+from dataclasses import replace
 
 import pytest
 
@@ -11,13 +13,15 @@ from conversation.context_scope import (
     history_start,
     in_desktop_view,
     load_user_context_threads,
+    role_context_views,
     turn_context_view,
     user_context_view,
+    user_context_threads,
 )
 from conversation.service import desktop_thread_id
 from shiori_sdk.channels.threads import network_thread_id
 from shiori_sdk.accounts.models import AccountRecord
-from core.identity import IdentityChat, UserIdentityStore
+from core.identity import IdentityChat, UserIdentity, UserIdentityStore
 from session.manager import Session
 from session.maintenance_progress import effective_progress
 
@@ -48,7 +52,7 @@ def _bind(workspace: Path, chat_id: str) -> None:
 
 
 def _visible(view: ContextView, *threads: str) -> list[str]:
-    return [thread for thread in threads if view.includes({"thread_id": thread})]
+    return [thread for thread in threads if view.includes_thread(thread)]
 
 
 def test_threads_split_by_the_current_bindings(tmp_path: Path) -> None:
@@ -82,6 +86,60 @@ def test_binding_moves_a_private_chat_into_the_user_context(tmp_path: Path) -> N
     _bind(tmp_path, "555")
 
     assert turn_context_view(tmp_path, "mira", STRANGER_DM).scope == "user"
+
+
+def test_new_binding_excludes_old_turns_but_preserves_identity_and_memory(tmp_path):
+    bound_at = datetime(2026, 1, 2, tzinfo=timezone.utc)
+    store = UserIdentityStore(tmp_path, clock=lambda: bound_at)
+    assert store.pair(
+        store.create_pairing_code().code,
+        record=QQ,
+        user_id="902",
+        scope="platform",
+        chat=IdentityChat(QQ.id, "qq", "902"),
+    )
+    view = user_context_view(tmp_path, "mira")
+    old = {"thread_id": USER_DM, "timestamp": "2026-01-01T23:59:59+00:00"}
+    first = {"thread_id": USER_DM, "timestamp": "2026-01-02T08:00:00+08:00"}
+    late_reply = {
+        "thread_id": USER_DM,
+        "timestamp": "2026-01-02T01:00:00+00:00",
+        "metadata": {"context_turn_started_at": old["timestamp"]},
+    }
+    assert not view.includes(old)
+    assert not view.includes(late_reply)
+    assert not view.includes({"thread_id": USER_DM})
+    assert view.includes(first)
+    assert view.includes({**old, "thread_id": DESKTOP})
+    assert belongs_to_user(old, view.user_threads)
+    assert not view.category.includes(old)
+    assert not role_context_views(view.user_threads)[0].includes(old)
+    assert not turn_context_view(tmp_path, "mira", GROUP).includes(old)
+
+
+def test_accounts_sharing_a_thread_keep_the_earliest_or_legacy_boundary():
+    identity = UserIdentity(
+        id="identity",
+        plugin_id="qq",
+        user_id="902",
+        scope="platform",
+        account_id="",
+        bound_at="2026-01-01T00:00:00+00:00",
+        chats=(
+            IdentityChat("qq:101", "qq", "902", "2026-01-01T00:00:00+00:00"),
+            IdentityChat("qq:102", "qq", "902", "2026-01-02T00:00:00+00:00"),
+        ),
+    )
+    assert user_context_threads("mira", [identity]).context_since[USER_DM] == (
+        "2026-01-01T00:00:00+00:00"
+    )
+    legacy = replace(
+        identity, chats=(*identity.chats, IdentityChat("qq:103", "qq", "902"))
+    )
+    for chats in (legacy.chats, tuple(reversed(legacy.chats))):
+        threads = user_context_threads("mira", [replace(legacy, chats=chats)])
+        assert threads.context_since[USER_DM] == ""
+        assert threads.includes({"thread_id": USER_DM})
 
 
 def test_legacy_messages_without_a_thread_belong_to_the_user_context(

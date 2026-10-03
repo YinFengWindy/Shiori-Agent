@@ -120,15 +120,15 @@ def _select_consolidation_window(
     messages = session.messages
     total_messages = len(messages)
     scopes: tuple[ContextScope, ...] = tuple(view.scope for view in views)
+    members, pending = _window_candidates(session, views)
     if archive_all:
         return ConsolidationWindow(
-            old_messages=list(messages),
+            old_messages=[messages[index] for index in members],
             keep_count=0,
             consolidate_up_to=total_messages,
             scopes=scopes,
         )
 
-    members, pending = _window_candidates(session, views)
     if not pending:
         return None
 
