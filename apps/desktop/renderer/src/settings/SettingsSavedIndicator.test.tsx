@@ -6,17 +6,18 @@ import type { SettingsSavePhase } from "./settingsPageTypes";
 import { SettingsSavedIndicator } from "./SettingsSavedIndicator";
 import { settingsSavedIndicatorMs } from "./settingsSaveState";
 
-async function mountIndicator() {
+async function mountIndicator(showPending = false) {
   let setPhase!: (phase: SettingsSavePhase) => void;
   function Harness() {
     const [phase, update] = useState<SettingsSavePhase>("idle");
     setPhase = update;
-    return <SettingsSavedIndicator phase={phase} />;
+    return <SettingsSavedIndicator phase={phase} showPending={showPending} />;
   }
   const view = await mountTestComponent(<Harness />, { windowGlobals: mockableWindowTimers });
   const indicator = () => view.container.querySelector('[data-testid="settings-saved-indicator"]')!;
   return {
     view,
+    text: () => indicator().textContent,
     visible: () => indicator().getAttribute("aria-hidden") !== "true",
     phase: async (phase: SettingsSavePhase) => { await act(async () => setPhase(phase)); },
   };
@@ -47,4 +48,22 @@ describe("SettingsSavedIndicator", () => {
       assert.equal(harness.visible(), false);
     } finally { await harness.view.cleanup(); }
   });
+});
+
+
+it("optionally shows unsaved work without leaving the previous saved label visible", async () => {
+  const harness = await mountIndicator(true);
+  try {
+    await harness.phase("saving");
+    assert.equal(harness.visible(), true);
+    assert.equal(harness.text(), "正在保存…");
+    await harness.phase("idle");
+    assert.equal(harness.visible(), true);
+    assert.equal(harness.text(), "已保存");
+    await harness.phase("saving");
+    assert.equal(harness.visible(), true);
+    assert.equal(harness.text(), "正在保存…");
+    await harness.phase("unknown");
+    assert.equal(harness.visible(), false);
+  } finally { await harness.view.cleanup(); }
 });

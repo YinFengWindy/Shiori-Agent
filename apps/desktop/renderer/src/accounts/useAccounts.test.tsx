@@ -40,6 +40,10 @@ test("mounted account views reload when the host pushes an account change", asyn
     assert.match(view.container.textContent ?? "", /在线/);
     await act(async () => emit?.({ id: "x", type: "event", method: "session.updated", payload: {} }));
     assert.equal(calls, 2);
+    connection = "login_required";
+    await act(async () => emit?.({ id: "roster", type: "event", method: "plugins.changed", payload: { plugin_id: "demo" } }));
+    assert.match(view.container.textContent ?? "", /需要登录/);
+    assert.equal(calls, 3);
   } finally { await view.cleanup(); }
   assert.equal(unsubscribed, true);
 });

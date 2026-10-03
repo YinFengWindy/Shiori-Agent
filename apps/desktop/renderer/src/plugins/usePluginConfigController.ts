@@ -50,6 +50,7 @@ export function usePluginConfigController(pluginId: string) {
   const [origin] = useState(() => ({}));
 
   const [queue] = useState(() => new SerialDraftQueue<PluginConfigValues, PluginConfigSaveResult>({
+    debounceMs: 400,
     isEqual: valuesEqual,
     clone: cloneValues,
     attempt: async (values, operationId) => {
@@ -104,7 +105,10 @@ export function usePluginConfigController(pluginId: string) {
     // Reload rather than adopt the values: the snapshot also carries env status.
     if (from !== origin) void load();
   }), [load, origin, pluginId]);
-  useEffect(() => () => { loadRequestIdRef.current += 1; }, []);
+  useEffect(() => () => {
+    loadRequestIdRef.current += 1;
+    queue.flush();
+  }, [queue]);
   useEffect(() => {
     if (snapshot && draft) queue.enqueue(draft, snapshot.values);
   }, [draft, snapshot, queue]);

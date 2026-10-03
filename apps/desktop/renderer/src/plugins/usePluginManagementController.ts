@@ -2,7 +2,7 @@ import { errorFeedback } from "@yinfengwindy/shiori-sdk/host-internal";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPluginBridgeClient, type PluginSummary } from "./pluginBridgeClient";
 import { refreshPluginEnabledState } from "./pluginEnabledStateStore";
-import { pluginRuntimeChanged } from "./pluginRuntimeChanged";
+import { pluginRosterChanged } from "./pluginRuntimeChanged";
 
 /**
  * Loads the plugin roster and lets the caller hot toggle one plugin at a
@@ -39,12 +39,11 @@ export function usePluginManagementController() {
   // this hook's own mutation, so `runMutation`'s post-action `reload()` never
   // sees it — the page would otherwise keep showing a stale "激活中…"/ACTIVE
   // row until the user manually navigates away and back (#262 AC3). Follows
-  // the same `pluginRuntimeChanged` roster-changed signal
-  // `background/main.ts`'s `PluginBackgroundHost` already subscribes to,
-  // rather than inventing a second one.
+  // the roster signal shared with the background host. Readiness alone must
+  // refresh this list without replacing other plugins' runtime contexts.
   useEffect(() => {
     return window.miraDesktop.onEvent((event) => {
-      if (pluginRuntimeChanged(event)) void reload();
+      if (pluginRosterChanged(event)) void reload();
     });
   }, [reload]);
 

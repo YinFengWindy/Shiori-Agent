@@ -190,20 +190,18 @@ class ReloadableDesktopService:
                 if method == "plugins.activation.report":
                     result = await self.plugin_management.report_activation(payload)
                     if result["changed"]:
-                        # Reuses the existing roster-changed broadcast every
-                        # window already listens for (see
-                        # `pluginRuntimeChanged`) rather than inventing a
-                        # second signal: no generation swap happened, but the
-                        # authoritative plugin state did change and every
-                        # window's next `plugins.list()` must see it.
+                        # Renderer readiness changes the roster, not the runtime
+                        # generation. Refresh contributions without invalidating
+                        # unrelated communication contexts or background scopes.
                         await self.publish_event(
                             {
                                 "id": request_id,
                                 "type": "event",
-                                "method": "runtime.applied",
+                                "method": "plugins.changed",
                                 "payload": {
                                     "generation": self.app.generation,
-                                    "changed": True,
+                                    "plugin_id": result["plugin_id"],
+                                    "kind": result["kind"],
                                 },
                             }
                         )

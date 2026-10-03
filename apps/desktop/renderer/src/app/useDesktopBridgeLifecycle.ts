@@ -229,6 +229,11 @@ export function useDesktopBridgeLifecycle({
           return;
         }
 
+        if (event.method === "plugins.changed") {
+          void refreshPluginEnabledState().catch(reportPluginStateError);
+          return;
+        }
+
         if (event.method === "runtime.applied") {
           void refreshPluginEnabledState().catch(reportPluginStateError);
           void callbacks.loadRolesFromBridge().catch((error: unknown) => {

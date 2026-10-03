@@ -87,7 +87,7 @@ test("a context update invalidates an inactive session without rereading the act
   } finally { await view.cleanup(); }
 });
 
-for (const method of ["runtime.applied", "identities.updated", "roles.updated"]) {
+for (const method of ["runtime.applied", "plugins.changed", "identities.updated", "roles.updated"]) {
   test(`${method} discards all cached configurations and obsolete reads`, async () => {
     const view = await setup();
     try {

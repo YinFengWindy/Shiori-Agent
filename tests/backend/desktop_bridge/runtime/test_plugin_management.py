@@ -246,6 +246,9 @@ async def test_activation_report_confirms_ready_and_clears_pending_kinds(
     _stage_plugin_dirs(tmp_path, monkeypatch)
     _declare_renderer_ui(tmp_path, ("ui", "background"))
     service, _, app = await _start_service(tmp_path)
+    events = []
+    service.add_event_listener(events.append)
+    generation = app.generation
     try:
         before = await _request(service, "plugins.list")
         hello = next(row for row in before.payload["plugins"] if row["id"] == "hello")
@@ -289,6 +292,21 @@ async def test_activation_report_confirms_ready_and_clears_pending_kinds(
         )
         assert hello_after["state"] == PluginState.ACTIVE.name
         assert hello_after["pending_renderer_kinds"] == []
+        assert app.generation == generation
+        changed = [event for event in events if event["method"] == "plugins.changed"]
+        assert [event["payload"] for event in changed] == [
+            {"generation": generation, "plugin_id": "hello", "kind": "ui"},
+            {"generation": generation, "plugin_id": "hello", "kind": "background"},
+        ]
+        assert not any(event["method"] == "runtime.applied" for event in events)
+        events.clear()
+        duplicate = await _request(
+            service,
+            "plugins.activation.report",
+            {"plugin_id": "hello", "kind": "ui", "ok": True, "activation_token": token},
+        )
+        assert duplicate.payload["changed"] is False
+        assert not events
     finally:
         await service.aclose()
         await app.shutdown()
@@ -326,7 +344,8 @@ async def test_activation_report_failure_rolls_back_and_republishes_roster(
         )
         assert failed.error is None, failed.error
         assert failed.payload == {"plugin_id": "hello", "kind": "ui", "changed": True}
-        assert any(event["method"] == "runtime.applied" for event in events)
+        assert any(event["method"] == "plugins.changed" for event in events)
+        assert not any(event["method"] == "runtime.applied" for event in events)
 
         after = await _request(service, "plugins.list")
         by_id = {row["id"]: row for row in after.payload["plugins"]}
@@ -369,7 +388,10 @@ async def test_activation_report_ignores_a_stale_or_unknown_plugin(
             "kind": "ui",
             "changed": False,
         }
-        assert not any(event["method"] == "runtime.applied" for event in events)
+        assert not any(
+            event["method"] in {"runtime.applied", "plugins.changed"}
+            for event in events
+        )
 
         after = await _request(service, "plugins.list")
         hello = next(row for row in after.payload["plugins"] if row["id"] == "hello")
@@ -429,7 +451,10 @@ async def test_activation_report_ignores_a_mismatched_activation_token(
             "kind": "ui",
             "changed": False,
         }
-        assert not any(event["method"] == "runtime.applied" for event in events)
+        assert not any(
+            event["method"] in {"runtime.applied", "plugins.changed"}
+            for event in events
+        )
 
         after = await _request(service, "plugins.list")
         hello_after = next(

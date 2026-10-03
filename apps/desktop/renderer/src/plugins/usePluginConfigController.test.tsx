@@ -43,7 +43,8 @@ test("the settings page and the plugin's host.config see each other's saves", as
     const heard: PluginConfigValues[] = [];
     const unsubscribe = config.subscribe((values) => heard.push(values));
     await act(async () => controller.updateDraft((current) => ({ ...current, add_quality_tags: true })));
-    await settle();
+    assert.equal(controller.savePhase, "saving", "the quiet period is still unsaved");
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 420)); });
     unsubscribe();
     assert.deepEqual(heard, [{ nsfw_enabled: true, add_quality_tags: true }]);
   } finally { await view.cleanup(); }

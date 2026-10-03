@@ -21,6 +21,8 @@ export type DraftAttemptOutcome<TResult> =
   | { ok: false; message: string; detail?: string; phase?: "error" | "refresh-error" | "unknown"; resumesAutomatically: boolean };
 
 export type SerialDraftQueueOptions<TDraft, TResult> = {
+  /** Quiet period for merging edits; omitted/zero preserves immediate submission. */
+  debounceMs?: number;
   /** Structural equality used to collapse no-op edits and detect obsolete queued drafts. */
   isEqual: (a: TDraft | null, b: TDraft | null) => boolean;
   /** Deep-clones a draft before it is queued or handed to a caller. */
@@ -41,6 +43,7 @@ export type SerialDraftQueueOptions<TDraft, TResult> = {
  * being copy-pasted per settings domain.
  */
 export class SerialDraftQueue<TDraft, TResult> {
+  private timer: ReturnType<typeof setTimeout> | undefined;
   private running = false;
   private failed = false;
   private paused = false;
@@ -52,6 +55,7 @@ export class SerialDraftQueue<TDraft, TResult> {
 
   /** Clears in-flight bookkeeping; callers reseed any external version state separately. */
   reset(): void {
+    this.cancelTimer();
     this.failed = false;
     this.paused = false;
     this.queued = null;
@@ -63,14 +67,38 @@ export class SerialDraftQueue<TDraft, TResult> {
   enqueue(draft: TDraft, persisted?: TDraft): void {
     if (!this.running && !this.failed && this.options.isEqual(persisted ?? null, draft)) {
       this.queued = null;
+      this.cancelTimer();
+      this.options.onStatus("idle", "");
       return;
     }
     if (this.options.isEqual(this.attempted, draft)) {
       this.queued = null;
+      this.cancelTimer();
       return;
     }
+    if (this.options.isEqual(this.queued, draft)) return;
     this.queued = this.options.clone(draft);
-    if (!this.running && !this.paused) void this.drain();
+    this.cancelTimer();
+    const delay = this.options.debounceMs ?? 0;
+    if (delay > 0) {
+      this.timer = setTimeout(() => { this.timer = undefined; this.submitReady(); }, delay);
+      if (!this.paused && !this.running) this.options.onStatus("saving", "");
+    } else this.submitReady();
+  }
+
+  /** Submits the last pending draft when leaving its editor, preserving failure pauses. */
+  flush(): void {
+    this.cancelTimer();
+    this.submitReady();
+  }
+
+  private cancelTimer() {
+    if (this.timer !== undefined) clearTimeout(this.timer);
+    this.timer = undefined;
+  }
+
+  private submitReady() {
+    if (!this.running && !this.paused && this.timer === undefined && this.queued) void this.drain();
   }
 
   /** Retries the exact failed transaction before processing any newer queued edits. */
@@ -101,14 +129,15 @@ export class SerialDraftQueue<TDraft, TResult> {
       }
       this.paused = false;
       this.options.onApplied(outcome.result, draft);
-      this.options.onStatus("idle", "");
+      // A newer draft is still unsaved even if this transaction succeeded.
+      if (!this.queued) this.options.onStatus("idle", "");
     } catch (error) {
       this.failed = true;
       this.paused = true;
       this.options.onStatus("unknown", "暂时无法确认保存结果，请重试以确认", error instanceof Error ? error.message : String(error));
     } finally {
       this.running = false;
-      if (!this.paused && this.queued) void this.drain();
+      this.submitReady();
     }
   }
 }

@@ -21,7 +21,7 @@ function pluginRow(state: string) {
   };
 }
 
-test("a runtime.applied arrival while mounted refreshes a plugin's row without user action (#262 AC3)", async () => {
+test("a plugins.changed arrival while mounted refreshes a plugin's row without user action (#262 AC3)", async () => {
   resetPluginEnabledStateForTests();
   const listeners = new Set<(event: BridgeEvent) => void>();
   let state = "ACTIVE";
@@ -47,12 +47,12 @@ test("a runtime.applied arrival while mounted refreshes a plugin's row without u
     assert.deepEqual(latest?.plugins?.[0]?.pendingRendererKinds, ["ui"]);
 
     // The backend rolls the plugin back on its own (a UI module that threw
-    // after mount) and broadcasts `runtime.applied` — no toggle, no reload()
+    // after mount) and broadcasts `plugins.changed` — no toggle, no reload()
     // call from this hook's own mutation path.
     state = "FAILED";
     await act(async () => {
       for (const listener of [...listeners]) {
-        listener({ id: "e", type: "event", method: "runtime.applied", payload: { changed: true } });
+        listener({ id: "e", type: "event", method: "plugins.changed", payload: { changed: true } });
       }
       await new Promise((resolve) => setTimeout(resolve, 0));
     });

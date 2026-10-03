@@ -72,11 +72,12 @@ test("an explicit retry can recover from a transient open failure", async () => 
   await client.dispose();
 });
 
-test("a no-op runtime notification keeps subscriptions and pending context alive", async () => {
+test("readiness and a no-op runtime notification keep subscriptions and pending context alive", async () => {
   const fixture = host();
   const client = createPluginCommunicationClient("demo", fixture.options);
   let heard = 0;
   await client.events.on("changed", () => { heard += 1; });
+  fixture.emit("plugins.changed", { generation: 1, plugin_id: "another", kind: "ui" });
   fixture.emit("runtime.applied", { changed: false });
   fixture.emit("plugin.demo.changed");
   assert.equal(heard, 1);

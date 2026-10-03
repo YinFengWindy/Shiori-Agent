@@ -32,7 +32,8 @@ export function useChatContextStatus(roleId: string, sessionKey: string, bridgeR
       if (!pending) readLatest();
     });
     const offEvents = window.miraDesktop.onEvent((event) => {
-      if (["runtime.applied", "identities.updated", "roles.updated"].includes(event.method)) {
+      // Renderer rollback can remove tools without replacing the runtime generation.
+      if (["runtime.applied", "plugins.changed", "identities.updated", "roles.updated"].includes(event.method)) {
         const changedRole = event.method === "roles.updated" ? event.payload.role_id : undefined;
         cache.invalidate(typeof changedRole === "string" ? { roleId: changedRole } : {}, true);
         readLatest();

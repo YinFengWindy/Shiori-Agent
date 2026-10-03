@@ -40,13 +40,13 @@ function entry(pluginId: string, log: string[], onSetup?: (ctx: BackgroundCtx) =
 /** Roster + reconcile signal test double: lets a test flip enabled ids and fire the listener itself. */
 function fakeRoster(initial: string[]) {
   let ids = new Set(initial);
-  const listeners = new Set<() => void>();
+  const listeners = new Set<Parameters<PluginBackgroundHostDeps["subscribeRosterChanged"]>[0]>();
   return {
     setEnabled: (next: string[]) => { ids = new Set(next); },
-    fireRosterChanged: () => { for (const listener of listeners) listener(); },
+    fireRosterChanged: () => { for (const listener of listeners) listener("runtime"); },
     deps: {
       listEnabledPluginIds: () => Promise.resolve(new Set(ids)),
-      subscribeRosterChanged: (listener: () => void) => { listeners.add(listener); return () => listeners.delete(listener); },
+      subscribeRosterChanged: (listener: Parameters<PluginBackgroundHostDeps["subscribeRosterChanged"]>[0]) => { listeners.add(listener); return () => listeners.delete(listener); },
     },
   };
 }
@@ -214,20 +214,89 @@ test("a roster fetch that throws is reported rather than escaping as an unhandle
 test("bridge exit disposes contexts without querying or implicitly restarting the unavailable bridge", async () => {
   const log: string[] = [];
   let reads = 0;
-  let signal: (available?: boolean) => void = () => {};
+  let signal: Parameters<PluginBackgroundHostDeps["subscribeRosterChanged"]>[0] = () => {};
   const host = new PluginBackgroundHost(makeDeps({
     registry: { list: () => [entry("demo", log)] },
     listEnabledPluginIds: async () => { reads += 1; return new Set(["demo"]); },
     subscribeRosterChanged: (listener) => { signal = listener; return () => {}; },
   }, log));
   await host.start();
-  signal(false);
+  signal("unavailable");
   await flushMicrotasks();
   assert.equal(reads, 1);
   assert.deepEqual(host.runningPluginIds(), []);
-  signal(true);
+  signal("runtime");
   await flushMicrotasks();
   assert.equal(reads, 2);
   assert.deepEqual(host.runningPluginIds(), ["demo"]);
   await host.stop();
+});
+
+
+test("a roster update preserves sibling scopes and disposes only inactive plugins", async () => {
+  const log: string[] = [];
+  const roster = fakeRoster(["a", "b"]);
+  let signal: Parameters<PluginBackgroundHostDeps["subscribeRosterChanged"]>[0] = () => {};
+  const host = new PluginBackgroundHost(makeDeps({
+    registry: { list: () => [entry("a", log), entry("b", log)] },
+    ...roster.deps, subscribeRosterChanged: (listener) => { signal = listener; return () => {}; },
+  }, log));
+  await host.start(); log.length = 0;
+  signal("roster"); await flushMicrotasks();
+  assert.deepEqual(log, []);
+  roster.setEnabled(["b"]); signal("roster"); await flushMicrotasks();
+  assert.deepEqual(log, ["a:dispose:noop"]);
+  roster.setEnabled(["a", "b"]); signal("roster"); await flushMicrotasks();
+  assert.deepEqual(log, ["a:dispose:noop", "a:setup"]);
+  await host.stop();
+});
+
+test("publication during initial setup is retained and recovers from a reload rejection", async () => {
+  const log: string[] = [];
+  let signal: Parameters<PluginBackgroundHostDeps["subscribeRosterChanged"]>[0] | undefined;
+  let release!: () => void, entered!: () => void;
+  const started = new Promise<void>((resolve) => { entered = resolve; });
+  let setups = 0;
+  const host = new PluginBackgroundHost(makeDeps({
+    listEnabledPluginIds: async () => new Set(["demo"]),
+    subscribeRosterChanged: (listener) => { signal = listener; return () => { signal = undefined; }; },
+    registry: { list: () => [{ slot: "app.background", pluginId: "demo", setup: async (ctx) => {
+      setups++; ctx.effect("scope", () => {});
+      if (setups === 1) { entered(); await new Promise<void>((resolve) => { release = resolve; }); throw new Error("runtime_reloading"); }
+    } }] },
+  }, log));
+  const starting = host.start(); await started;
+  signal?.("runtime"); release(); await starting; await flushMicrotasks();
+  assert.equal(setups, 2);
+  assert.deepEqual(host.runningPluginIds(), ["demo"]);
+  await host.stop(); assert.equal(signal, undefined);
+});
+
+
+test("successive publications during queued reconciles eventually retain only the latest scope", async () => {
+  const log: string[] = [];
+  const gates: Array<() => void> = [];
+  let signal: Parameters<PluginBackgroundHostDeps["subscribeRosterChanged"]>[0] = () => {};
+  let setups = 0;
+  const host = new PluginBackgroundHost(makeDeps({
+    listEnabledPluginIds: async () => new Set(["demo"]),
+    subscribeRosterChanged: (listener) => { signal = listener; return () => {}; },
+    registry: { list: () => [{ slot: "app.background", pluginId: "demo", setup: async (ctx) => {
+      const generation = ++setups;
+      ctx.effect(String(generation), () => {});
+      if (generation < 3) {
+        await new Promise<void>((resolve) => { gates.push(resolve); });
+        throw new Error("runtime_reloading");
+      }
+    } }] },
+  }, log));
+  const starting = host.start(); await flushMicrotasks();
+  signal("runtime"); gates[0](); await starting; await flushMicrotasks();
+  assert.equal(setups, 2);
+  signal("runtime"); gates[1](); await flushMicrotasks();
+  assert.equal(setups, 3);
+  assert.deepEqual(host.runningPluginIds(), ["demo"]);
+  assert.deepEqual(log, ["demo:dispose:1", "demo:dispose:2"]);
+  await host.stop();
+  assert.deepEqual(log, ["demo:dispose:1", "demo:dispose:2", "demo:dispose:3"]);
 });

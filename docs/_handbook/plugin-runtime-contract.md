@@ -119,7 +119,13 @@ contexts intact. `runtime.applied.changed` means a new runtime generation was
 published, independently of the idempotent RPC response's historical `changed`
 value. Same-generation retries, no-op saves, and role-only writes emit refresh
 events with `changed: false`; retries from retired generations emit no event.
-These refreshes leave communication contexts intact. Background request waits are
+These refreshes leave communication contexts intact. Renderer activation reports
+emit `plugins.changed` with `generation`, `plugin_id`, and `kind` when readiness or
+failure changes the roster. All windows refresh availability, but unchanged ACTIVE
+plugins keep their communication contexts and background scopes. Failed plugins
+still lose their UI, background, and surface resources. Background hosts subscribe
+before their initial asynchronous reconcile, preserving publications during setup.
+Background request waits are
 bounded and do not occupy backend RPC scheduling capacity. Method policies on
 backend calls are unchanged. See [the plugin tutorial](plugins-tutorial.md#桌面-rpc事件与-ui)
 for examples and delivery/error semantics. Packages using these additions must
@@ -200,7 +206,8 @@ only for `desktop`), `plugin_enabled`, `state`, `error` and `status`. `state` is
 activate; `error` keeps the cause) or `plugin_disabled`. A channel may implement
 an optional `status()` returning `{connected, account?, detail?}`; `status` is
 that value for an active channel and `null` otherwise. Changes follow the existing
-`runtime.applied` broadcast; there is no separate channel event.
+`runtime.applied` broadcast for configuration publication and `plugins.changed`
+for renderer activation outcomes; there is no separate channel event.
 
 ## Runtime API 2.3 channel hooks
 
@@ -564,7 +571,7 @@ activation; resulting initialization errors are `FAILED`, not successful partial
 activation. Cross-renderer rollback is implemented by #262: a renderer that fails
 to load an admitted `ui`/`background`/`surface` entry reports it through
 `plugins.activation.report`, which rolls the whole plugin back on the backend
-(`PluginKernel.fail_renderer_entry`) and republishes the roster so every other
+(`PluginKernel.fail_renderer_entry`) and emits `plugins.changed` so every other
 window's next `plugins.list()` tears down its own now-stale contribution. Every
 admitted entry (and `plugins.list()` row) carries an opaque `activation_token`
 minted fresh whenever a plugin's handle becomes `ACTIVE`; a renderer echoes it
@@ -643,7 +650,7 @@ arbitrary filesystem URLs are not exposed through this protocol. CSP admits this
 controlled scheme and the exact import-map hash; production adds neither
 `unsafe-inline` scripts nor `unsafe-eval`.
 
-Initial roster loading, bridge reconnection, `runtime.applied`, and plugin toggles
+Initial roster loading, bridge reconnection, `runtime.applied`, `plugins.changed`, and plugin toggles
 share one serialized refresh path. Disable/removal cleans this window's registry
 entries and CSS. JavaScript module evaluation follows browser caching; replace a
 plugin package and restart the application to load its new code.
@@ -917,3 +924,16 @@ explicit dependencies; desktop-pet integration is tested on the host side.
 QQBot, QQ, Telegram and Feishu consume the public `ChannelPluginContext`/`ChannelContext` and SDK-only testing support. Channel values (accounts, targets, message events, declarations, session keys and message source/quotes) have one SDK definition. `ctx.intake_factory` creates host-owned admission coordination; `avatars` schedules host-owned caching, and `http` provides bounded requests. `processes.popen` exposes the synchronous counterpart to owned async spawn, preserving WindowsJob adoption before execution without moving any OS implementation into the SDK. Platform credentials, clients, reconnect/streaming, NapCat installation and QR/profile policy remain plugin-owned. Actual host construction checks these protocols with pyright.
 
 Channel groups and identity indexes are obtained from granted services (`channels.group`, `session_manager.identity_index`); their runtime and persistence implementations remain host-owned. The SDK only declares these protocols and supplies independent fakes. Channel credential references resolve through granted `config.resolve_reference` at use time while stored credentials retain their original reference. `KeyValueStore.delete` is idempotent.
+
+
+### Schema configuration autosave
+
+The host-generated plugin schema form merges edits after 400 ms without changes.
+Only one complete draft is submitted at a time; later edits replace the pending
+draft and wait for both the current request and their quiet period. Leaving or
+switching the form flushes its last pending draft under the original plugin ID.
+Pending drafts are shown as saving, and reverting to the persisted value cancels
+a save that has not started. Definite/unknown failure pauses and same-operation-ID
+retries remain unchanged. `host.config.save()` retains its awaitable patch protocol
+and is not debounced. Each actual configuration change still uses the full runtime
+generation transaction; this optimization reduces transactions, not their scope.

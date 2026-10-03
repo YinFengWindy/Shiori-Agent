@@ -10,6 +10,8 @@ before(async () => {
   await environment.cleanup();
 });
 
+const settleAutosave = () => act(async () => { await new Promise((resolve) => setTimeout(resolve, 420)); });
+
 describe("PluginSchemaSettingsSection", () => {
   it("renders no schema form for an account-only plugin", async () => {
     const view = await mountTestComponent(null, { windowGlobals: { miraDesktop: {
@@ -66,6 +68,7 @@ describe("PluginSchemaSettingsSection", () => {
       const input = view.container.querySelector("input") as HTMLInputElement;
       assert.ok(input, "expected the App ID input to render");
       await changeInputValue(input, "app-123");
+      await settleAutosave();
 
       assert.ok(calls.some((call) => call.method === "plugin.config.set" && call.payload.values && (call.payload.values as Record<string, unknown>).app_id === "app-123"));
     } finally {
@@ -117,6 +120,7 @@ describe("PluginSchemaSettingsSection", () => {
       // up, and the reloaded server value differs from this local edit.
       nextSetFails = true;
       await changeInputValue(textarea, JSON.stringify({ tags: ["unsaved-local-edit"] }));
+      await settleAutosave();
       assert.match(textarea.value, /unsaved-local-edit/, "the field must still reflect the user's own typing");
 
       stored = { tags: ["reloaded-from-server"] };
@@ -174,9 +178,11 @@ describe("PluginSchemaSettingsSection", () => {
       const input = view.container.querySelector<HTMLInputElement>('input[aria-label="输入允许的用户"]')!;
       await changeInputValue(input, "bob");
       await act(async () => { input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })); });
+      await settleAutosave();
       assert.deepEqual(stored.allow_from, ["alice", "bob"]);
 
       await act(async () => view.container.querySelector<HTMLButtonElement>('button[aria-label="移除 alice"]')!.click());
+      await settleAutosave();
       assert.deepEqual(stored.allow_from, ["bob"]);
     } finally {
       await view.cleanup();
@@ -223,6 +229,7 @@ describe("PluginSchemaSettingsSection", () => {
       assert.equal(input.value, "");
       assert.equal(state.stored.token, "${NOVELAI_TOKEN}", "opening the input alone keeps the reference");
       await changeInputValue(input, "pst-literal");
+      await settleAutosave();
       assert.equal(state.stored.token, "pst-literal");
     } finally {
       await view.cleanup();
@@ -260,4 +267,68 @@ describe("PluginSchemaSettingsSection", () => {
       await view.cleanup();
     }
   });
+});
+
+
+it("coalesces edits and flushes each plugin's own draft when switching or leaving the form", async () => {
+  const writes: Array<{ plugin_id: string; values: Record<string, unknown> }> = [];
+  const view = await mountTestComponent(null, { windowGlobals: { miraDesktop: {
+    invoke: async ({ method, payload }: { method: string; payload: Record<string, unknown> }) => {
+      if (method === "plugin.config.get") return { id: "get", type: "response", method, error: null, payload: {
+        plugin_id: payload.plugin_id, schema: { properties: { text: { type: "string", title: "Text" } } }, values: { text: "saved" }, env_status: {},
+      } };
+      const write = { plugin_id: String(payload.plugin_id), values: payload.values as Record<string, unknown> };
+      writes.push(write);
+      return { id: "set", type: "response", method, error: null, payload: { ...write, env_status: {}, generation: 2 } };
+    },
+  } } });
+  try {
+    await view.render(<PluginSchemaSettingsSection pluginId="first" />);
+    const input = view.container.querySelector<HTMLInputElement>("input")!;
+    await changeInputValue(input, "a"); await changeInputValue(input, "ab"); await changeInputValue(input, "abc");
+    assert.deepEqual(writes, []);
+    await view.render(<PluginSchemaSettingsSection pluginId="second" />);
+    assert.deepEqual(writes, [{ plugin_id: "first", values: { text: "abc" } }]);
+    await changeInputValue(view.container.querySelector<HTMLInputElement>("input")!, "second draft");
+    await view.render(null);
+    assert.deepEqual(writes, [
+      { plugin_id: "first", values: { text: "abc" } },
+      { plugin_id: "second", values: { text: "second draft" } },
+    ]);
+    await settleAutosave(); assert.equal(writes.length, 2, "departure cancels pending timers");
+  } finally { await view.cleanup(); }
+});
+
+
+it("an old in-flight save and its final queued draft cannot overwrite the next plugin's form", async () => {
+  const writes: Array<{ plugin_id: string; values: Record<string, unknown> }> = [];
+  let release!: () => void;
+  const firstSave = new Promise<void>((resolve) => { release = resolve; });
+  const view = await mountTestComponent(null, { windowGlobals: { miraDesktop: {
+    invoke: async ({ method, payload }: { method: string; payload: Record<string, unknown> }) => {
+      if (method === "plugin.config.get") return { id: "get", type: "response", method, error: null, payload: {
+        plugin_id: payload.plugin_id, schema: { properties: { text: { type: "string" } } }, values: { text: "saved" }, env_status: {},
+      } };
+      const write = { plugin_id: String(payload.plugin_id), values: payload.values as Record<string, unknown> };
+      writes.push(write);
+      if (writes.length === 1) await firstSave;
+      return { id: "set", type: "response", method, error: null, payload: { ...write, env_status: {}, generation: 2 } };
+    },
+  } } });
+  try {
+    await view.render(<PluginSchemaSettingsSection pluginId="first" />);
+    await changeInputValue(view.container.querySelector<HTMLInputElement>("input")!, "in flight");
+    await settleAutosave();
+    await changeInputValue(view.container.querySelector<HTMLInputElement>("input")!, "last old draft");
+    await view.render(<PluginSchemaSettingsSection pluginId="second" />);
+    await changeInputValue(view.container.querySelector<HTMLInputElement>("input")!, "new draft");
+    await act(async () => release());
+    assert.equal(view.container.querySelector<HTMLInputElement>("input")!.value, "new draft");
+    await view.render(null);
+    assert.deepEqual(writes, [
+      { plugin_id: "first", values: { text: "in flight" } },
+      { plugin_id: "first", values: { text: "last old draft" } },
+      { plugin_id: "second", values: { text: "new draft" } },
+    ]);
+  } finally { release(); await view.cleanup(); }
 });
