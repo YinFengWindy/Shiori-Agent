@@ -79,6 +79,21 @@ async def test_summary_generation_budget_matches_provider_preflight(
         sent = create.await_args.kwargs
         budget = measure(**preflight.call_args.kwargs)
         assert budget is not None
+        assert sent["response_format"] == {"type": "json_object"}
+        assert preflight.call_args.kwargs["response_format"] == sent["response_format"]
+        assert budget == provider._budget_for_request(sent, calibrate=False)
+        prompt = sent["messages"][0]["content"]
+        template, _ = json.JSONDecoder().raw_decode(prompt[prompt.index("{") :])
+        assert template == {
+            "tasks": "",
+            "constraints": "",
+            "decisions": "",
+            "unfinished": "",
+            "tool_state": "",
+            "entities": "",
+            "source_message_ids": ["<source message ID>"],
+        }
+        assert "Do not wrap" in prompt and "Markdown" in prompt
         assert budget.output_reservation_tokens == sent["max_tokens"] == expected
         assert budget.estimate.tokens <= budget.input_limit_tokens
         assert create.await_count == 1
@@ -154,6 +169,46 @@ def test_valid_old_and_new_provenance_survives_replacement():
     summary = validate_summary(_payload(["old", "new", "old"]), {"old", "new"})
     assert summary.source_ids == ("old", "new")
     assert "keep privacy" in summary.content
+
+
+@pytest.mark.parametrize("content", ["[]", '"summary"', "null", "42"])
+def test_rejects_non_object_with_specific_diagnostic(content):
+    with pytest.raises(ValueError, match="^工作摘要必须为 JSON 对象$"):
+        validate_summary(content, {"old"})
+
+
+@pytest.mark.parametrize(
+    "missing", [("constraints",), ("constraints", "source_message_ids")]
+)
+def test_missing_required_fields_are_not_filled_even_with_extra_metadata(missing):
+    payload = json.loads(_payload(["old"]))
+    for field in missing:
+        del payload[field]
+    payload["private extra field"] = "private model output"
+    with pytest.raises(ValueError) as caught:
+        validate_summary(json.dumps(payload), {"old"})
+    assert str(caught.value) == "工作摘要缺少字段：" + ", ".join(missing)
+
+
+def test_wrapper_is_not_accepted_as_the_summary_object():
+    payload = {"summary": json.loads(_payload(["old"]))}
+    with pytest.raises(ValueError) as caught:
+        validate_summary(json.dumps(payload), {"old"})
+    assert str(caught.value) == (
+        "工作摘要缺少字段：tasks, constraints, decisions, unfinished, tool_state, "
+        "entities, source_message_ids"
+    )
+
+
+def test_extra_metadata_is_ignored_before_storage_and_token_limit_validation():
+    expected = json.loads(_payload(["old", "new", "old"]))
+    payload = expected | {
+        "metadata": {"source_message_ids": ["invented"], "confidence": 0.9},
+        "explanation": "私密的额外说明" * 2000,
+    }
+    summary = validate_summary(json.dumps(payload, ensure_ascii=False), {"old", "new"})
+    assert json.loads(summary.content) == expected
+    assert summary.source_ids == ("old", "new")
 
 
 async def test_summary_request_includes_old_state_and_attachments_without_base64(

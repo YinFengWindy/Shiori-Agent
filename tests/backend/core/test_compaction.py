@@ -365,6 +365,94 @@ async def test_truncated_summary_retry_commits_window_without_repeating_memory(
         await provider.aclose()
 
 
+async def test_invalid_summary_fields_keep_old_window_until_manual_retry(
+    memory_harness, monkeypatch
+):
+    h = memory_harness
+    session = h.manager.get_or_create("cli:invalid-summary-fields")
+    _turn(session)
+    h.manager.save(session)
+    await _ensure(_controller(h), session, keep=0)
+    previous_summary = session.maintenance_progress.summaries["session"]
+    previous_ids = list(session.maintenance_progress.summary_source_ids["session"])
+    _turn(session, "another step")
+    h.manager.save(session)
+    payload = {
+        "tasks": "finish the tea plan and another step",
+        "constraints": "",
+        "decisions": "",
+        "unfinished": "",
+        "tool_state": "",
+        "entities": "",
+        "source_message_ids": [message["id"] for message in session.messages],
+    }
+    invalid_payload = dict(payload)
+    del invalid_payload["constraints"]
+    provider = LLMProvider(
+        api_key="test",
+        provider_name="StepFun",
+        model_context_window=1000000,
+        default_max_tokens=16384,
+    )
+    create = AsyncMock(
+        side_effect=[
+            SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        message=SimpleNamespace(
+                            content=json.dumps(value), tool_calls=[]
+                        ),
+                        finish_reason="stop",
+                    )
+                ],
+                usage=None,
+            )
+            for value in (invalid_payload, payload | {"metadata": {"note": "extra"}})
+        ]
+    )
+    monkeypatch.setattr(provider._client.chat.completions, "create", create)
+    controller = CompactionController(
+        h.manager,
+        h.maintenance,
+        WorkingSummaryWriter(h.manager, provider, "step-5-preview", 16384),
+    )
+
+    async def manual_compaction():
+        return await controller.ensure(
+            session_key=session.key,
+            view=None,
+            policy=CompactionPolicy(0),
+            message_limit=len(session.messages),
+            budget=_budget(3500),
+            render=AsyncMock(return_value=[]),
+            measure=lambda _: _budget(100),
+            reason="manual",
+        )
+
+    try:
+        with pytest.raises(CompactionFailedError) as caught:
+            await manual_compaction()
+        assert caught.value.result.failure_stage == "summary"
+        assert caught.value.result.memory_committed
+        assert caught.value.result.error == "工作摘要缺少字段：constraints"
+        assert create.await_count == 1
+        reloaded = SessionManager(h.manager.workspace).get_or_create(session.key)
+        assert reloaded.last_consolidated == 4
+        assert history_start(reloaded, None) == 2
+        assert reloaded.maintenance_progress.summaries["session"] == previous_summary
+        assert (
+            reloaded.maintenance_progress.summary_source_ids["session"] == previous_ids
+        )
+        memory_calls = len(h.prompts)
+        _, result = await manual_compaction()
+        assert result.committed and history_start(session, None) == 4
+        assert len(h.prompts) == memory_calls
+        assert json.loads(session.maintenance_progress.summaries["session"]) == payload
+        assert create.await_count == 2
+    finally:
+        await provider.aclose()
+
+
 async def test_memory_only_keeps_the_window_and_semantic_consumers(memory_harness):
     h = memory_harness
     session = h.manager.get_or_create("cli:memory-only")
