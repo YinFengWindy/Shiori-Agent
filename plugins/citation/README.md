@@ -17,7 +17,7 @@
 
 ### 1. 提取 cited ID（CitationAfterReasoningModule）
 
-推理完成后，兼容 `reply` 尾部已有的 `§cited:[...]§` 标签：
+推理完成后，兼容 `reply` 尾部已有的 `§cited:[...]§` 标签，以及模型省略末尾 `§` 时的 `§cited:[...]`：
 
 - 若匹配成功，提取 ID 列表，写入 `persist:assistant:cited_memory_ids` slot，并把标签从 reply 中剥除。
 - 若 reply 里没有引用行，fallback 到工具调用链：扫描 `recall_memory` 工具的返回结果，从 JSON 里取出 `cited_item_ids` 或 `items[].id`，作为本轮引用 ID。

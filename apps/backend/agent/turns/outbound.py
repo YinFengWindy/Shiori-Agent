@@ -8,7 +8,8 @@ from typing import Any, Protocol
 from shiori_sdk.messages import OutboundMessage
 from agent.tools.message_push import PENDING_TURN_DELIVERY
 
-_INTERNAL_CITATION_RE = re.compile(r"\s*§cited:\[[^\]]*\]§\s*")
+# Final § is optional because models also emit citations without it.
+_INTERNAL_CITATION_RE = re.compile(r"\s*§cited:\[[^\]]*\]§?\s*")
 
 
 def sanitize_user_visible_content(content: str) -> str:

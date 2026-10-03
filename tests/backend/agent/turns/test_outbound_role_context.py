@@ -31,7 +31,12 @@ async def test_push_outbound_port_passes_role_context() -> None:
 
 
 @pytest.mark.asyncio
-async def test_push_outbound_port_removes_internal_citation_markers() -> None:
+@pytest.mark.parametrize(
+    "marker", ["§cited:[mem-1,mem-2]§", "§cited:[9b615a9c5f29,7e190efce6ff]"]
+)
+async def test_push_outbound_port_removes_internal_citation_markers(
+    marker: str,
+) -> None:
     calls: list[dict[str, object]] = []
 
     class PushTool:
@@ -44,12 +49,36 @@ async def test_push_outbound_port_removes_internal_citation_markers() -> None:
         OutboundDispatch(
             channel="telegram",
             chat_id="123",
-            content="我记得这件事 §cited:[mem-1,mem-2]§",
+            content=f"我记得这件事 {marker}",
         )
     )
 
     assert sent == DeliveryReceipt.sent()
     assert calls[0]["message"] == "我记得这件事"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "marker", ["§cited:[mem-1,mem-2]§", "§cited:[9b615a9c5f29,7e190efce6ff]"]
+)
+async def test_bus_outbound_port_removes_internal_citation_markers(marker: str) -> None:
+    published = []
+
+    class Bus:
+        async def publish_outbound(self, message):
+            published.append(message)
+
+    receipt = await BusOutboundPort(Bus()).dispatch(
+        OutboundDispatch(
+            channel="qqbot",
+            chat_id="c2c:user-1",
+            content=f"我记得这件事 {marker}",
+        )
+    )
+
+    assert receipt == DeliveryReceipt.queued()
+    assert len(published) == 1
+    assert published[0].content == "我记得这件事"
 
 
 @pytest.mark.asyncio
