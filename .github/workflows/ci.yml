@@ -126,6 +126,9 @@ jobs:
       - name: Run unit tests
         run: pnpm test
 
+      - name: Run packaging and daily release tests
+        run: pnpm --filter shiori-desktop run test:package
+
       - name: Run production build
         run: pnpm run build
 

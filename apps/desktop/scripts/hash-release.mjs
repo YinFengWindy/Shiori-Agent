@@ -4,7 +4,8 @@ import { readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { resolveReleaseManifest } from "./release-manifest.mjs";
 
-async function sha256(path) {
+/** Hashes one artifact without loading a potentially large installer into memory. */
+export async function hashReleaseFile(path) {
   const hash = createHash("sha256");
   for await (const chunk of createReadStream(path)) {
     hash.update(chunk);
@@ -21,7 +22,7 @@ export async function writeReleaseChecksums(directory) {
     .sort((left, right) => left.localeCompare(right));
   const lines = [];
   for (const name of files) {
-    lines.push(`${await sha256(join(directory, name))}  ${name}`);
+    lines.push(`${await hashReleaseFile(join(directory, name))}  ${name}`);
   }
   const output = `${lines.join("\n")}\n`;
   await writeFile(join(directory, "SHA256SUMS.txt"), output, { encoding: "utf-8" });
