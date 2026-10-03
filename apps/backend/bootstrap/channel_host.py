@@ -296,7 +296,7 @@ class ChannelHost:
         steps = [("retired_work.drain", ready), ("retired_channels.stop", stop)]
         if complete is not None:
             steps.append(("retired_resources.release", complete))
-        await run_cleanup_steps(*steps)
+        await run_cleanup_steps(*steps, aggregate_errors=True)
 
     async def _stop_channels(self, channels, *, phase: str) -> None:
         errors = []

@@ -487,6 +487,10 @@ async def test_core_stop_preflights_before_teardown_and_force_continues_after_fa
     finally:
         # Drain is shared with transport retirement, so it runs only once and
         # preserves a failure for the process cleanup boundary to report.
-        with pytest.raises(ExceptionGroup, match="Runtime work failed to drain"):
+        with pytest.raises(ExceptionGroup) as caught:
             await app.shutdown()
+        assert (
+            caught.value.subgroup(lambda error: str(error) == "scene close failed")
+            is not None
+        )
         scene_close.assert_awaited_once()

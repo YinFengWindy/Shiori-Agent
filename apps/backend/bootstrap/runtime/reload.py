@@ -187,4 +187,5 @@ class RuntimeReloadMixin:
         await run_cleanup_steps(
             ("runtime_work.drain", retained.drain),
             ("outbound.drain", self.bus.drain_outbound),
+            aggregate_errors=True,
         )

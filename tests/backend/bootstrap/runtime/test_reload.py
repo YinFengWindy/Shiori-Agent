@@ -6,8 +6,34 @@ import pytest
 
 from agent.config_models import Config, ModelRegistration
 from bootstrap.app import AppRuntime, RuntimeFeatures
+from bootstrap.runtime.generations import RuntimeRetention
 from core.common.runtime_scope import bind_runtime
 from shiori_sdk.messages import OutboundMessage
+
+
+@pytest.mark.asyncio
+async def test_retirement_preserves_runtime_work_and_outbound_drain_errors(
+    runtime_channels, monkeypatch
+):
+    app = await runtime_channels.start()
+    retained = RuntimeRetention(app._generation_manager.tracked)
+    work_error = ValueError("runtime work drain failed")
+    outbound_error = OSError("outbound drain failed")
+    try:
+        with monkeypatch.context() as patch:
+            patch.setattr(app.core, "drain", AsyncMock(side_effect=work_error))
+            patch.setattr(
+                app.bus, "drain_outbound", AsyncMock(side_effect=outbound_error)
+            )
+            with pytest.raises(ExceptionGroup) as caught:
+                await app._retire_transports(retained)
+            for expected in (work_error, outbound_error):
+                assert (
+                    caught.value.subgroup(lambda error: error is expected) is not None
+                )
+    finally:
+        await retained.release()
+        await app.shutdown()
 
 
 @pytest.mark.asyncio

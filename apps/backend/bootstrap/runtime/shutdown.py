@@ -38,6 +38,7 @@ class RuntimeShutdownMixin:
                 ("events.close", self._close_events),
                 ("http_resources.aclose", self.http_resources.aclose),
                 ("retired_runtime_cleanup", self._report_cleanup_errors),
+                aggregate_errors=True,
             )
         finally:
             clear_default_shared_http_resources(self.http_resources)
@@ -77,6 +78,7 @@ class RuntimeShutdownMixin:
             await run_cleanup_steps(
                 ("partial_core.stop", lambda: self.core.stop(force=True)),
                 ("partial_memory.close", self.core.memory_runtime.aclose),
+                aggregate_errors=True,
             )
             return
         await self._generation_manager.close_all(force=True)

@@ -22,6 +22,7 @@ class RuntimeChannelHarness:
         self.app = None
 
     def channel(self, accounts):
+        """Creates and records a connection that depends on its live account scope."""
         harness = self
 
         class Connection:

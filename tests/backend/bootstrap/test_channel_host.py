@@ -45,6 +45,30 @@ async def test_stop_all_reports_prior_retirement_failure_without_retrying_stop()
 
 
 @pytest.mark.asyncio
+async def test_retirement_reports_drain_stop_and_release_failures_together():
+    context = SimpleNamespace(push_tool=SimpleNamespace(retire_channel=Mock()))
+    host = ChannelHost(lambda channel: context)
+    channel = connection("one")
+    drain_error = ValueError("accepted work drain failed")
+    stop_error = RuntimeError("offline failed")
+    release_error = OSError("retained resources failed")
+    channel.stop = AsyncMock(side_effect=stop_error)
+    host.add(channel)
+    candidate = ChannelHost(lambda channel: context)
+    ready = AsyncMock(side_effect=drain_error)
+    complete = AsyncMock(side_effect=release_error)
+    await host.handover(candidate, retire_after=ready, retire_complete=complete)
+    await host._retirements.drain()
+    with pytest.raises(ExceptionGroup) as caught:
+        await host.stop_all()
+    for expected in (drain_error, stop_error, release_error):
+        assert caught.value.subgroup(lambda error: error is expected) is not None
+    ready.assert_awaited_once()
+    channel.stop.assert_awaited_once()
+    complete.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_cancelled_stop_waiter_does_not_cancel_retirement_or_lose_completion():
     context = SimpleNamespace(push_tool=SimpleNamespace(retire_channel=Mock()))
     host = ChannelHost(lambda channel: context)

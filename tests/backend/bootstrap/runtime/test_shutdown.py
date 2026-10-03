@@ -112,8 +112,12 @@ async def test_shutdown_propagates_channel_failure_after_closing_other_resources
 ):
     app = await runtime_channels.start()
     runtime_channels.fail_stop = True
-    with pytest.raises(ExceptionGroup, match="Channel cleanup failed"):
+    with pytest.raises(ExceptionGroup) as caught:
         await asyncio.wait_for(app.shutdown(), 3)
+    assert (
+        caught.value.subgroup(lambda error: str(error) == "connection cleanup failed")
+        is not None
+    )
     assert app.http_resources._closed
     assert app.core.event_bus._closed
     assert app._generation_manager.current.drained.is_set()
@@ -141,10 +145,46 @@ async def test_failed_work_drain_still_stops_channel_and_disposes_scopes(
     app = await runtime_channels.start()
     fail = AsyncMock(side_effect=RuntimeError("maintenance failed"))
     monkeypatch.setattr(app.core.memory_runtime.markdown.maintenance, "drain", fail)
-    with pytest.raises(ExceptionGroup, match="Runtime work failed to drain"):
+    with pytest.raises(ExceptionGroup) as caught:
         await asyncio.wait_for(app.shutdown(), 3)
+    assert (
+        caught.value.subgroup(lambda error: str(error) == "maintenance failed")
+        is not None
+    )
     fail.assert_awaited_once()
     assert runtime_channels.events == ["stop"]
+    assert app.core.plugin_manager.loaded_count == 0
+    assert app.core.event_bus._closed
+    assert app.http_resources._closed
+
+
+@pytest.mark.asyncio
+async def test_shutdown_preserves_drain_channel_and_retirement_errors(
+    runtime_channels, monkeypatch
+):
+    app = await runtime_channels.start()
+    drain_error = ValueError("maintenance drain failed")
+    retired_error = OSError("prior retired connection failed")
+    fail_drain = AsyncMock(side_effect=drain_error)
+    monkeypatch.setattr(
+        app.core.memory_runtime.markdown.maintenance, "drain", fail_drain
+    )
+    app.channel_host._retirements.spawn(
+        AsyncMock(side_effect=retired_error)(), name="failed-retirement"
+    )
+    await app.channel_host._retirements.drain()
+    runtime_channels.fail_stop = True
+    with pytest.raises(ExceptionGroup) as caught:
+        await asyncio.wait_for(app.shutdown(), 3)
+    for expected in (drain_error, retired_error):
+        assert caught.value.subgroup(lambda error: error is expected) is not None
+    assert (
+        caught.value.subgroup(lambda error: str(error) == "connection cleanup failed")
+        is not None
+    )
+    fail_drain.assert_awaited_once()
+    assert runtime_channels.channels[0].stop_calls == 1
+    assert app._generation_manager.current.references == 0
     assert app.core.plugin_manager.loaded_count == 0
     assert app.core.event_bus._closed
     assert app.http_resources._closed
