@@ -1,11 +1,15 @@
 # Shiori SDK
 
-`@yinfengwindy/shiori-sdk` and `shiori-sdk` are the TypeScript and Python distributions of the
+[@yinfengwindy/shiori-sdk](https://www.npmjs.com/package/@yinfengwindy/shiori-sdk)
+and [shiori-sdk](https://pypi.org/project/shiori-sdk/) are the TypeScript and Python distributions of the
 same plugin contract. Both are version **3.1.0**, with Runtime API **3.1.0**.
-Release tags `sdk-v<version>` publish the validated npm tarball and Python wheel/sdist.
-Maintainers: see the [publishing guide](https://github.com/YinFengWindy/Shiori-Agent/blob/main/docs/agents/sdk-publishing.md)
-for registry setup, first publication and recovery. A workflow alone does not reserve
-the npm scope or create registry permissions.
+
+Start with the [plugin tutorial](https://github.com/YinFengWindy/Shiori-Agent/blob/main/docs/_handbook/plugins-tutorial.md)
+and [runtime contract](https://github.com/YinFengWindy/Shiori-Agent/blob/main/docs/_handbook/plugin-runtime-contract.md)
+for plugin layout, capability declarations and packaging.
+
+## Compatibility
+
 External plugin manifests declare `runtime_api: ">=3.0.0 <4.0.0"`, or
 `">=3.1.0 <4.0.0"` when they use the 3.1 lifecycle additions (`AfterTurnCtx`,
 `PHASE_SLOTS`, `require_phase_slot`, `LifecycleModule.requires` / `produces`). The host rejects
@@ -19,6 +23,28 @@ rebuild. The host provides only the public package name, without an old-name ali
 
 ## TypeScript
 
+Install the SDK and its React peers as development dependencies in your plugin project:
+
+```sh
+pnpm add -D "@yinfengwindy/shiori-sdk@^3.1.0" "react@^19.2.5" "react-dom@^19.2.5"
+```
+
+Build the plugin UI as ESM, externalizing `@yinfengwindy/shiori-sdk`, `react`,
+`react/jsx-runtime`, `react-dom` and `react-dom/client`. Shiori's import map supplies
+the host instances at runtime; do not bundle a separate SDK or React instance.
+The npm package requires React and React DOM `^19.2.5` for local development.
+The host renderer ABI guarantees `19.2.0`; declare compatible host peers separately
+in the plugin's `manifest.yaml`, alongside its Runtime API range:
+
+```yaml
+runtime_api: ">=3.1.0 <4.0.0"
+peer_dependencies:
+  react: ">=19.2.0 <20.0.0"
+  react-dom: ">=19.2.0 <20.0.0"
+```
+
+The SDK itself is versioned by `runtime_api` and needs no `peer_dependencies` entry.
+
 The main entry exports plugin contracts, components and helpers. `/contract`
 contains React/DOM-free types; `/host-internal` is reserved for host code; `/testing`
 provides independent UI fakes and a DOM harness and is never a runtime peer.
@@ -31,6 +57,22 @@ the same main entry to precompiled plugins. Only the main entry belongs in a
 plugin's production peer imports.
 
 ## Python
+
+Requires Python **3.12+**. Install in your plugin project:
+
+```sh
+uv add "shiori-sdk>=3.1.0,<4"
+```
+
+For independent plugin tests, add the optional testing support and run your suite:
+
+```sh
+uv add --dev "shiori-sdk[testing]>=3.1.0,<4"
+uv run pytest tests
+```
+
+These commands set up your plugin's development environment. The Shiori host
+supplies the SDK and declared host dependencies when it runs the installed plugin.
 
 The wheel contains contracts and pure values, without a dependency on the host.
 The core lifecycle surface includes `PluginRuntimeContext`,
@@ -87,6 +129,10 @@ SDK-only tests never start `AppRuntime`. Real host integration fixtures live in
 private development package is never installed in plugin or SDK isolation.
 
 ## Maintenance and validation
+
+Release tags `sdk-v<version>` publish the validated npm tarball and Python wheel/sdist.
+See the [publishing guide](https://github.com/YinFengWindy/Shiori-Agent/blob/main/docs/agents/sdk-publishing.md)
+for registry setup, first publication and recovery.
 
 `python/shiori_sdk/_version.py` is the version source. Python packaging reads it
 directly. After changing it, run `node scripts/sync_sdk_version.mjs` from the root
