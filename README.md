@@ -1,8 +1,8 @@
 <div align="center">
   <img src="./assets/shiori-app-icon.png" alt="Shiori 图标" width="96" />
   <h1>Shiori</h1>
-  <p><strong>让角色拥有自己的生活</strong></p>
-  <p>本地优先的 AI 角色扮演助手。<br />从日常聊天、长期记忆到共同经历的故事，让相处延续下去。</p>
+  <p><strong>让角色走进日常</strong></p>
+  <p>以角色为核心的Personal Agent。<br />得聊过的往事，会主动找你聊天，也能帮你处理手头的事</p>
   <p>
     <a href="https://github.com/YinFengWindy/Shiori-Agent/releases/latest"><strong>下载 Windows 版</strong></a>
     ·
