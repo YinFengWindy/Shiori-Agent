@@ -1,4 +1,4 @@
-import type { SessionPayload } from "@shiori/sdk";
+import type { SessionPayload } from "@yinfengwindy/shiori-sdk";
 
 export type RoleSessionCache = Record<string, SessionPayload>;
 

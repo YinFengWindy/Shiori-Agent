@@ -1,5 +1,5 @@
 import type React from "react";
-import type { RoleRecord } from "@shiori/sdk";
+import type { RoleRecord } from "@yinfengwindy/shiori-sdk";
 import { resolveImmediateRoleSession } from "../chat/roleSessionCache";
 import { fetchRoleSession } from "./desktopSessionProtocol";
 import type { DesktopSessionStateArgs } from "./desktopSessionTypes";

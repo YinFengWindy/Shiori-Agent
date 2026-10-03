@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { afterEach, before, describe, it } from "node:test";
 import { appearancePrefsStorageKey } from "../shared/appearancePrefs";
 import { confirmPersonaLines, inlineErrorLines, personaSceneLines } from "../shared/mascot/mascotLines";
-import { mountTestComponent } from "@shiori/sdk/testing";
+import { mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import { resetAppearancePrefsCache } from "../shared/useAppearancePrefs";
 
 let HostInlineError: typeof import("./pluginHostUi").HostInlineError;

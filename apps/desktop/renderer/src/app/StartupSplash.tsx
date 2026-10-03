@@ -6,7 +6,7 @@ import { pickMascotLine, startupFailedLine, startupGreetingLines, startupSlowLin
 import { MascotSpeechBubble } from "../shared/mascot/MascotSpeech";
 import { SceneBackdrop } from "../shared/scene/SceneBackdrop";
 import { scenePhaseAt } from "../shared/scene/timeOfDay";
-import { compactButtonSizeClass, cx, primaryButtonSurfaceClass } from "@shiori/sdk";
+import { compactButtonSizeClass, cx, primaryButtonSurfaceClass } from "@yinfengwindy/shiori-sdk";
 import { TitleBar } from "../shell/TitleBar";
 import type { StartupSplashPhase } from "./startupSplashPhase";
 

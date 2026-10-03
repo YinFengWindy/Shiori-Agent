@@ -1,4 +1,4 @@
-import type { SurfaceRoleActivity } from "@shiori/sdk";
+import type { SurfaceRoleActivity } from "@yinfengwindy/shiori-sdk";
 import type { SpriteState } from "./spriteContract";
 
 type PetActivityState = Extract<SpriteState, "failed" | "waiting" | "running" | "review">;

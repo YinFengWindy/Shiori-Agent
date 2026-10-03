@@ -234,7 +234,7 @@
     --duration-panel: 260ms; /* sidebar width; keep app/appState.ts sidebarAnimationDurationMs in sync */
     --duration-motif: 480ms; /* one-shot nav rail motif flourish */
     --duration-enter: 240ms; /* a new chat message arriving */
-    --duration-crossfade: 320ms; /* image swaps: mood portrait, chat background (@shiori/sdk crossfadeLayerState.ts) */
+    --duration-crossfade: 320ms; /* image swaps: mood portrait, chat background (@yinfengwindy/shiori-sdk crossfadeLayerState.ts) */
     --duration-pulse: 600ms; /* one-shot attention pulse (jump-to-message highlight) */
     --duration-stage: 420ms; /* a scene's cast entering (onboarding mascot, dialogue box) */
     --duration-morph: 420ms; /* shared-element view transition (role card <-> detail header), on ease-drawer */
@@ -972,7 +972,7 @@ button[role="combobox"]:focus-visible {
   50% { transform: scale(1.025); }
 }
 
-/* @shiori/sdk CrossfadeLayers: the outgoing layer fades out over the incoming
+/* @yinfengwindy/shiori-sdk CrossfadeLayers: the outgoing layer fades out over the incoming
    one fading in, both softly blurred at the midpoint. */
 .crossfade-in {
   animation: crossfade-in var(--duration-crossfade) var(--ease-in-out-soft) both;

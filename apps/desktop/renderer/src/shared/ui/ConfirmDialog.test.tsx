@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { before, test } from "node:test";
 import { act } from "react";
-import { mountTestComponent } from "@shiori/sdk/testing";
+import { mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 
 let ConfirmDialog: typeof import("./ConfirmDialog").ConfirmDialog;
 before(async () => {

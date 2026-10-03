@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { deferred } from "@shiori/sdk/testing";
+import { deferred } from "@yinfengwindy/shiori-sdk/testing";
 import { DesktopSurfaceHost, surfaceStateChannel, type SurfaceWindowHandle } from "../../src/surface/host";
 import { DesktopVoiceController } from "../../src/voice/controller";
 import { SurfaceVoiceController } from "../../src/voice/surfaceVoice";

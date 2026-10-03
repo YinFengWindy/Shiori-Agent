@@ -1,6 +1,6 @@
 import { GearSixIcon, PuzzlePieceIcon } from "@phosphor-icons/react";
 import { emptyStateLines } from "../shared/mascot/mascotLines";
-import { cx, pressableClass } from "@shiori/sdk";
+import { cx, pressableClass } from "@yinfengwindy/shiori-sdk";
 import { PhoneEmptyState } from "./PhoneEmptyState";
 import { PhoneLoadError } from "./PhoneLoadError";
 import type { PhoneApp } from "./phonePresentation";

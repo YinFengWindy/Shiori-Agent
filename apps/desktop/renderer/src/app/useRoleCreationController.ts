@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { createEmptyNewRoleForm } from "./appState";
-import { useLatestRef } from "@shiori/sdk";
+import { useLatestRef } from "@yinfengwindy/shiori-sdk";
 import { cancelRoleCreation, resetRoleCreationForm, runRoleCreation } from "./roleCreationWorkflow";
 import type { RoleCreationControllerArgs } from "./roleCreationWorkflow";
 import { useRoleCreationDraft } from "../roles/useRoleCreationDraft";

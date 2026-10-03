@@ -1,5 +1,5 @@
 import { getVisibleChatMessages } from "./chatMessageWindow";
-import type { SessionPayload } from "@shiori/sdk";
+import type { SessionPayload } from "@yinfengwindy/shiori-sdk";
 
 export const chatMessagePaginationTopThreshold = 96;
 

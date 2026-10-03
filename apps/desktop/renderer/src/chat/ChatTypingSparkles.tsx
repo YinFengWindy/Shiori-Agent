@@ -1,4 +1,4 @@
-import { brandMotifPaths } from "@shiori/sdk/host-internal";
+import { brandMotifPaths } from "@yinfengwindy/shiori-sdk/host-internal";
 
 /**
  * The 「正在输入…」 mark: three brand sparkles (sky, pink, lavender) hopping

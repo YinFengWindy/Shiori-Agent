@@ -1,6 +1,6 @@
-import { errorFeedback } from "@shiori/sdk/host-internal";
+import { errorFeedback } from "@yinfengwindy/shiori-sdk/host-internal";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { type PluginConfigValues, PluginBridgeError } from "@shiori/sdk";
+import { type PluginConfigValues, PluginBridgeError } from "@yinfengwindy/shiori-sdk";
 import { SerialDraftQueue, type DraftSavePhase } from "../shared/serialDraftQueue";
 import {
   createPluginBridgeClient,

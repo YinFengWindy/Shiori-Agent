@@ -1,4 +1,4 @@
-import { errorFeedback } from "@shiori/sdk/host-internal";
+import { errorFeedback } from "@yinfengwindy/shiori-sdk/host-internal";
 
 /** A role card import failure as the user reads it, with the bridge's own wording kept as detail. */
 export type RoleCardImportErrorView = {

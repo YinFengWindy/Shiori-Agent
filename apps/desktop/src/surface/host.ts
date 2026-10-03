@@ -8,7 +8,7 @@ import type {
   SurfaceExtension,
   SurfaceSpec,
   SurfaceWorkArea,
-} from "@shiori/sdk/contract";
+} from "@yinfengwindy/shiori-sdk/contract";
 import { noSurfaceExtension, type SurfaceBounds, type SurfacePoint } from "./contract.js";
 import {
   clampSurfaceAnchor,

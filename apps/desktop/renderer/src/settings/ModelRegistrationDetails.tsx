@@ -1,6 +1,6 @@
 import { ArrowLeft, Trash } from "@phosphor-icons/react";
 import type { ModelRegistrationFormData } from "../../../src/bridge/shared";
-import { badgeClass, cx } from "@shiori/sdk";
+import { badgeClass, cx } from "@yinfengwindy/shiori-sdk";
 import { ModelRegistrationFields } from "./ModelRegistrationFields";
 import { SettingsSectionCard, settingsIconButtonClass } from "./SettingsFieldPrimitives";
 

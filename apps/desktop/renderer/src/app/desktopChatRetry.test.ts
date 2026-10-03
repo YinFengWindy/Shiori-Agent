@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { BridgeError, type SessionPayload } from "@shiori/sdk";
-import { mountTestComponent } from "@shiori/sdk/testing";
+import { BridgeError, type SessionPayload } from "@yinfengwindy/shiori-sdk";
+import { mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import { createDesktopChatRetry } from "./desktopChatRetry";
 
 test("a rejected retry restores its error row and retains the RPC diagnostic", async () => {

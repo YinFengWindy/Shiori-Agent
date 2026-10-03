@@ -3,8 +3,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { PluginHostServicesProvider } from "@shiori/sdk";
-import { createFakeHostServices } from "@shiori/sdk/testing";
+import { PluginHostServicesProvider } from "@yinfengwindy/shiori-sdk";
+import { createFakeHostServices } from "@yinfengwindy/shiori-sdk/testing";
 import type { StoryPresentationMode } from "./storyPresentationModes";
 import { STORY_PRESENTATION_TRANSITION_SECONDS, StoryWorkspacePresentationView, type StoryCreationPresentationController, type StoryOperationPresentationController, type StoryWorkspacePresentationController } from "./StoryWorkspacePresentationView";
 import { createStoryDetails, createStorySummary, renderStoryMarkup } from "./testFixtures";

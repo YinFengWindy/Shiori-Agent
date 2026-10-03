@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { it } from "node:test";
 import { act } from "react";
 import type { BridgeRequest, ModelRegistrationFormData } from "../../../src/bridge/shared";
-import { mountTestComponent, chooseSelectOption } from "@shiori/sdk/testing";
+import { mountTestComponent, chooseSelectOption } from "@yinfengwindy/shiori-sdk/testing";
 
 const initial: ModelRegistrationFormData = { id: "test", provider: "openai", model: "test-model", baseUrl: "https://example.test", apiKey: "key", effort: "none" };
 

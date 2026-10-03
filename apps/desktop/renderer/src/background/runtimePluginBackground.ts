@@ -1,6 +1,6 @@
 import { loadRuntimePluginModules } from "../plugins/runtimePluginModuleLoader";
 import type { RuntimePluginUi } from "../../../src/plugins/uiContract";
-import type { PluginBackgroundContribution } from "@shiori/sdk";
+import type { PluginBackgroundContribution } from "@yinfengwindy/shiori-sdk";
 import { isPluginBackgroundModule } from "./pluginBackgroundContract";
 import { pluginBackgroundRegistry, type PluginBackgroundRegistry } from "./pluginBackgroundRegistry";
 

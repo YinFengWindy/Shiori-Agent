@@ -1,5 +1,5 @@
 /**
- * `@shiori/sdk/contract`: the SDK's React- and DOM-free contract types,
+ * `@yinfengwindy/shiori-sdk/contract`: the SDK's React- and DOM-free contract types,
  * for host code compiled outside the renderer (the Electron main process and
  * preload, whose TypeScript programs have neither JSX nor the DOM library and
  * so cannot load the main entry's components).

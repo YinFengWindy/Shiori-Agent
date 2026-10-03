@@ -6,7 +6,7 @@ import {
   cx,
   ghostButtonSurfaceClass,
   primaryButtonSurfaceClass,
-} from "@shiori/sdk";
+} from "@yinfengwindy/shiori-sdk";
 import { DesktopExternalLink } from "../shared/DesktopExternalLink";
 import { InlineError } from "../shared/feedback/InlineError";
 import { MascotOnStage } from "../shared/mascot/MascotOnStage";

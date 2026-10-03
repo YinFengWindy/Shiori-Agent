@@ -2,7 +2,7 @@ import * as React from "react";
 import * as ReactDOM from "react-dom";
 import * as ReactDOMClient from "react-dom/client";
 import * as ReactJsx from "react/jsx-runtime";
-import * as PluginSdk from "@shiori/sdk";
+import * as PluginSdk from "@yinfengwindy/shiori-sdk";
 import { pluginUiImportMap } from "../../../src/plugins/uiContract";
 
 // One host instance per `pluginUiPeerExports` key; the served peer wrappers re-export these.
@@ -11,7 +11,7 @@ const peers = Object.freeze({
   "react/jsx-runtime": ReactJsx,
   "react-dom": ReactDOM,
   "react-dom/client": ReactDOMClient,
-  "@shiori/sdk": PluginSdk,
+  "@yinfengwindy/shiori-sdk": PluginSdk,
 });
 const initialized = new WeakSet<Document>();
 

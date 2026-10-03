@@ -1,4 +1,4 @@
-import type { BridgeEvent } from "@shiori/sdk";
+import type { BridgeEvent } from "@yinfengwindy/shiori-sdk";
 import { emptyPetReply, type PetReplyBubble } from "../shared/replyBubble";
 import { readRoleReply } from "./roleReply";
 

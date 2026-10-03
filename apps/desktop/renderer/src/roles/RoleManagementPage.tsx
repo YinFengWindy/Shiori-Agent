@@ -9,7 +9,7 @@ import {
   PetalIcon,
   SparkleIcon,
   type RoleRecord,
-} from "@shiori/sdk";
+} from "@yinfengwindy/shiori-sdk";
 import { RibbonIcon } from "../shared/ui/icons";
 import type { PendingRoleCardAction } from "../shared/types";
 import { RoleCard } from "./RoleCard";

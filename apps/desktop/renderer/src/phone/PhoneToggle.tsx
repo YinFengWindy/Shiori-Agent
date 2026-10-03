@@ -1,5 +1,5 @@
 import { DeviceMobileIcon } from "@phosphor-icons/react";
-import { cx } from "@shiori/sdk";
+import { cx } from "@yinfengwindy/shiori-sdk";
 import { compactIconButtonClass } from "../shared/styles";
 import { Tooltip } from "../shared/ui/Tooltip";
 

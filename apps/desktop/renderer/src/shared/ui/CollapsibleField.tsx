@@ -1,6 +1,6 @@
 import { CaretDown } from "@phosphor-icons/react";
 import { useId, type ReactNode } from "react";
-import { cx, sidebarNavItemClass } from "@shiori/sdk";
+import { cx, sidebarNavItemClass } from "@yinfengwindy/shiori-sdk";
 
 type CollapsibleFieldProps = {
   title: string;

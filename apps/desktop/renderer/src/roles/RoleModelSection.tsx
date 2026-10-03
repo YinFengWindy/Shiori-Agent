@@ -2,7 +2,7 @@ import type { ModelRegistrationFormData } from "../../../src/bridge/shared";
 import { useRoleModelSelection, type RoleModelSelectionChange } from "../chat/useRoleModelSelection";
 import { mascotFeedback as feedback } from "../shared/mascot/mascotFeedback";
 import { modelEffortOptions } from "../shared/modelEffortLabels";
-import { Select, type SelectOption } from "@shiori/sdk";
+import { Select, type SelectOption } from "@yinfengwindy/shiori-sdk";
 import { roleFieldClass, roleFieldLabelClass } from "./roleEditorStyles";
 import { RoleEditorSection } from "./RoleEditorSection";
 

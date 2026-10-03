@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createElement, type ComponentType } from "react";
-import * as PluginSdk from "@shiori/sdk";
-import { mountTestComponent } from "@shiori/sdk/testing";
+import * as PluginSdk from "@yinfengwindy/shiori-sdk";
+import { mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import { pluginHostServicesFor } from "../../renderer/src/plugins/pluginHostServices";
 import { applyPluginUiModules } from "../../renderer/src/plugins/pluginUiModuleContract";
 import { PluginUiRegistry } from "../../renderer/src/plugins/pluginUiRegistry";
@@ -11,15 +11,15 @@ import { pluginUiImportMap } from "../../src/plugins/uiContract";
 import { PluginUiResources } from "../../src/plugins/uiResources";
 
 /**
- * Loads `source` as a precompiled plugin module whose `@shiori/sdk`
+ * Loads `source` as a precompiled plugin module whose `@yinfengwindy/shiori-sdk`
  * import resolves the way the browser's does: through the import map to the
  * main process's served peer wrapper (Node has no import maps). Call inside a
  * mounted window with the peers installed.
  */
 async function importPrecompiledPlugin(source: string) {
-  const wrapperUrl = JSON.parse(pluginUiImportMap).imports["@shiori/sdk"];
+  const wrapperUrl = JSON.parse(pluginUiImportMap).imports["@yinfengwindy/shiori-sdk"];
   const wrapper = await (await new PluginUiResources("unused-workspace").load(wrapperUrl)).text();
-  const precompiled = source.replace('"@shiori/sdk"', JSON.stringify(`data:text/javascript,${encodeURIComponent(wrapper)}`));
+  const precompiled = source.replace('"@yinfengwindy/shiori-sdk"', JSON.stringify(`data:text/javascript,${encodeURIComponent(wrapper)}`));
   // The wrapper reads the realm global the peers were installed on.
   Object.defineProperty(globalThis, "__shioriPluginPeers", { configurable: true, value: Reflect.get(window, "__shioriPluginPeers") });
   try {
@@ -34,7 +34,7 @@ test("a precompiled plugin importing the SDK through the import map receives the
   try {
     initializeRuntimePluginPeers();
     const plugin = await importPrecompiledPlugin([
-      'import { PluginBridgeError } from "@shiori/sdk";',
+      'import { PluginBridgeError } from "@yinfengwindy/shiori-sdk";',
       'export default { pluginId: "external_sdk", PluginBridgeError };',
     ].join("\n"));
     assert.equal(plugin.PluginBridgeError, PluginSdk.PluginBridgeError);
@@ -50,7 +50,7 @@ test("a precompiled plugin's usePluginHostServices reads the services the host m
   try {
     initializeRuntimePluginPeers();
     const plugin = await importPrecompiledPlugin([
-      'import { usePluginHostServices } from "@shiori/sdk";',
+      'import { usePluginHostServices } from "@yinfengwindy/shiori-sdk";',
       "const seen = [];",
       "function Page() { seen.push(usePluginHostServices()); return null; }",
       'export default { pluginId: "external_sdk", navPage: { label: "External", component: Page }, seen };',

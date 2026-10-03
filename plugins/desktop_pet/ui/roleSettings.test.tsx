@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { act } from "react";
-import { createFakePluginClient, mountTestComponent } from "@shiori/sdk/testing";
+import { createFakePluginClient, mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import { DesktopPetRoleSettings, desktopPetRoleSettings } from "./roleSettings";
 
 test("pet toggle edits only its draft and gates enablement on selected packages", async () => {

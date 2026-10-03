@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { transitionPetActivity, type PetActivityTransition } from "./activity";
-import type { SurfaceHandle } from "@shiori/sdk";
+import type { SurfaceHandle } from "@yinfengwindy/shiori-sdk";
 import type { SpriteState } from "./spriteContract";
 
 /** Lets a proactive message complete its Codex waving acknowledgement before waiting. */

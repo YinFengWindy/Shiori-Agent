@@ -5,7 +5,7 @@ import { buildChatImageHistoryKey, isChatImageAsset } from "./chatImageHistory";
 import { normalizeSessionMediaPaths } from "./chatMedia";
 import { toFileUrl } from "../shared/format";
 import { DocumentIcon } from "../shared/icons";
-import { cx } from "@shiori/sdk";
+import { cx } from "@yinfengwindy/shiori-sdk";
 
 /** A file attachment's pill (without its width cap or interaction), shared with the phone's read-only chat. */
 export const chatFileChipClass =

@@ -1,4 +1,4 @@
-import type { ChatToolCallGroup, SessionMessage } from "@shiori/sdk";
+import type { ChatToolCallGroup, SessionMessage } from "@yinfengwindy/shiori-sdk";
 
 export type ChatMessagePresentation = {
   finalThinking: string;

@@ -1,4 +1,4 @@
-import { errorMessage, type PluginHostFeedback, type PluginRpcClient } from "@shiori/sdk";
+import { errorMessage, type PluginHostFeedback, type PluginRpcClient } from "@yinfengwindy/shiori-sdk";
 import { describeGenerationFailure, type GenerationFailure, type NovelAiReadiness } from "./generationFailure";
 import { commitNovelAiState, getNovelAiState } from "./novelAiPageStore";
 import { novelAiGenerationTimeoutMs } from "./rpcPolicy";

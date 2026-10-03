@@ -1,4 +1,4 @@
-import type { PluginUiModule } from "@shiori/sdk";
+import type { PluginUiModule } from "@yinfengwindy/shiori-sdk";
 import { NovelAIPage } from "./NovelAIPage";
 import { NovelAIPageSidebar } from "./NovelAIPageSidebar";
 import { selectBlockedReasonForNovelAiPage } from "./novelAiPageStore";

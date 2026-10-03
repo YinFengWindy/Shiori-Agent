@@ -6,8 +6,8 @@ import {
   type PluginHostServices,
   type PluginRoleAssetsComponentProps,
   type PluginRpcClient,
-} from "@shiori/sdk";
-import { createFakeHostServices, createFakePluginClient, mountTestComponent } from "@shiori/sdk/testing";
+} from "@yinfengwindy/shiori-sdk";
+import { createFakeHostServices, createFakePluginClient, mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import { RolePetPackagesPanel as PetPackagesPanel } from "./RolePetPackagesPanel";
 
 function RolePetPackagesPanel({ pickFiles = async () => [], ...props }: Omit<PluginRoleAssetsComponentProps, "host"> & { pickFiles?: PluginHostServices["pickFiles"] }) {
@@ -280,7 +280,7 @@ it("a backend import failure retains the visible packages and does not refresh s
 
 
 it("a structured pet RPC failure reaches the shared error disclosure with its cause", async () => {
-  const { PluginBridgeError } = await import("@shiori/sdk");
+  const { PluginBridgeError } = await import("@yinfengwindy/shiori-sdk");
   const fake = createFakeHostServices();
   const view = await mountTestComponent(<PluginHostServicesProvider services={fake.host}>
     <PetPackagesPanel roleId="mira" disabled={false} onRoleDataChanged={() => undefined}

@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { PluginNavPageSidebarProps } from "@shiori/sdk";
+import type { PluginNavPageSidebarProps } from "@yinfengwindy/shiori-sdk";
 import type { NavPageEntry } from "../plugins/pluginUiRegistry";
-import { mountTestComponent } from "@shiori/sdk/testing";
+import { mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import type { AppMainView } from "../shared/types";
 import { SidebarTrackContent, type SidebarViewState } from "./SidebarTrackContent";
 

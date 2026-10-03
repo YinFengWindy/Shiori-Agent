@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { RoleRecord } from "@shiori/sdk";
+import type { RoleRecord } from "@yinfengwindy/shiori-sdk";
 import { STORY_MENU_BACKGROUND_URL } from "./storyStaticAssets";
 import {
   chooseRandomStoryMenuAsset,

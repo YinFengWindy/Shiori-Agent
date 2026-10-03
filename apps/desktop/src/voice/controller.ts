@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { VoiceStatePayload } from "@shiori/sdk/contract";
+import type { VoiceStatePayload } from "@yinfengwindy/shiori-sdk/contract";
 import type { BridgeResponse } from "../bridge/shared.js";
 import {
   VOICE_MAX_RECORDING_MS,

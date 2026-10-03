@@ -1,4 +1,4 @@
-import { errorFeedbackText } from "@shiori/sdk/host-internal";
+import { errorFeedbackText } from "@yinfengwindy/shiori-sdk/host-internal";
 import { useState } from "react";
 import { createIdentityClient, type UserIdentity } from "./identityClient";
 

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { toFileUrl } from "../shared/format";
 import { BackIcon } from "../shared/icons";
-import { cx, iconButtonClass, type RoleAssetCategory, type RoleRecord } from "@shiori/sdk";
+import { cx, iconButtonClass, type RoleAssetCategory, type RoleRecord } from "@yinfengwindy/shiori-sdk";
 import type { RoleFormState } from "../shared/types";
 import { confirmPersonaLines } from "../shared/mascot/mascotLines";
 import { ConfirmDialog } from "../shared/ui/ConfirmDialog";

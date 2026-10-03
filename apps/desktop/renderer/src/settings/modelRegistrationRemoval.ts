@@ -1,6 +1,6 @@
-import { BridgeError } from "@shiori/sdk";
+import { BridgeError } from "@yinfengwindy/shiori-sdk";
 import type { ModelRegistrationFormData, PendingRoleModelUpdate } from "../../../src/bridge/shared";
-import type { RoleRecord } from "@shiori/sdk";
+import type { RoleRecord } from "@yinfengwindy/shiori-sdk";
 
 /** What removing one model registration would do, shown to the user before it is applied. */
 export type ModelRegistrationRemovalPlan = {

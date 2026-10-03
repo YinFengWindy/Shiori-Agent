@@ -4,7 +4,7 @@ import { FeedbackDetail } from "./FeedbackDetail";
 import { MascotFaceAvatar } from "../mascot/MascotFigure";
 import { feedbackPersonaCue } from "../mascot/mascotFeedback";
 import { useMascotEnabled } from "../mascot/useMascotEnabled";
-import { cx, type FeedbackTone } from "@shiori/sdk";
+import { cx, type FeedbackTone } from "@yinfengwindy/shiori-sdk";
 import {
   dismissFeedback,
   feedbackDurationMs,

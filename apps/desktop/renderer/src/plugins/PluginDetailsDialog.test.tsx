@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { before, test } from "node:test";
 import { act } from "react";
-import { mountTestComponent } from "@shiori/sdk/testing";
+import { mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import type { PluginSummary } from "./pluginBridgeClient";
 
 let Dialog: typeof import("@base-ui/react/dialog").Dialog;

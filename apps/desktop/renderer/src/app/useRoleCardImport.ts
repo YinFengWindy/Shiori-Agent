@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { NewRoleFormState } from "../shared/types";
-import { useLatestRef, BridgeError } from "@shiori/sdk";
+import { useLatestRef, BridgeError } from "@yinfengwindy/shiori-sdk";
 import { createRoleFormFromImport, idleRoleCardImport, readRoleCardImportPreview } from "./roleCardImportState";
 import type { RoleCardImportState } from "./roleCardImportState";
 import type { FeedbackOptions } from "../shared/feedback/feedbackStore";

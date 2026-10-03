@@ -1,5 +1,5 @@
 import type { ComponentType } from "react";
-import { type AccountSnapshot, accountOnline } from "@shiori/sdk";
+import { type AccountSnapshot, accountOnline } from "@yinfengwindy/shiori-sdk";
 import { accountChannelLabel, accountName } from "../accounts/accountPresentation";
 import { extractChatPreviewText } from "../../../src/shared/chatPreviewText";
 import type { PhoneConversation } from "./phoneClient";

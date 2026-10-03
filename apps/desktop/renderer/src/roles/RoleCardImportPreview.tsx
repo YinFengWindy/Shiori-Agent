@@ -7,7 +7,7 @@ import {
   cx,
   ghostButtonSurfaceClass,
   primaryButtonSurfaceClass,
-} from "@shiori/sdk";
+} from "@yinfengwindy/shiori-sdk";
 import type { RoleCardImportPreview } from "../shared/types";
 import { RoleCardImportAssets } from "./RoleCardImportAssets";
 import { hasUnselectedEmotions } from "./roleCardImportSelectors";

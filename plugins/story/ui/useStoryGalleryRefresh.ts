@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { usePluginHostServices } from "@shiori/sdk";
+import { usePluginHostServices } from "@yinfengwindy/shiori-sdk";
 
 /** Refreshes the open Story gallery when its plugin publishes changed resources. */
 export function useStoryGalleryRefresh(active: boolean, refresh: () => Promise<void>, reportError: (cause: unknown, summary?: string) => void) {

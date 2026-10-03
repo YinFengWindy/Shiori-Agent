@@ -35,7 +35,7 @@ await build({
   outExtension: { ".js": ".mjs" },
   bundle: true, format: "esm", platform: "browser", target: "es2022",
   // Host peers resolve through the renderer import map; never bundle a copy.
-  external: ["react", "react-dom", "react/*", "react-dom/*", "@shiori/sdk"],
+  external: ["react", "react-dom", "react/*", "react-dom/*", "@yinfengwindy/shiori-sdk"],
   define: { __FIXTURE_VERSION__: JSON.stringify(version), __RENDERER_FAILURE__: String(variant === "renderer-failure") },
 });
 const archive = resolve(output, `${name}.zip`);

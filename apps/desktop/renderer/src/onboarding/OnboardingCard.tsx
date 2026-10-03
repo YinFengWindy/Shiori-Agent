@@ -1,6 +1,6 @@
 import type React from "react";
 import { InlineError } from "../shared/feedback/InlineError";
-import { cx } from "@shiori/sdk";
+import { cx } from "@yinfengwindy/shiori-sdk";
 
 /**
  * The floating glass card that holds one step's form over the scene. Only

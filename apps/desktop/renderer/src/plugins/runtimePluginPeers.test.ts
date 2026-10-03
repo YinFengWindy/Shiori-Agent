@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as React from "react";
-import * as PluginSdk from "@shiori/sdk";
-import { mountTestComponent } from "@shiori/sdk/testing";
+import * as PluginSdk from "@yinfengwindy/shiori-sdk";
+import { mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import { initializeRuntimePluginPeers } from "./runtimePluginPeers";
 import { pluginUiImportMap, pluginUiPeerExports } from "../../../src/plugins/uiContract";
 
@@ -29,15 +29,18 @@ test("every peer in the ABI is installed, and the SDK export list matches the ho
   try {
     initializeRuntimePluginPeers();
     const peers = Reflect.get(window, "__shioriPluginPeers");
+    assert.deepEqual(Object.keys(peers).sort(), [
+      "@yinfengwindy/shiori-sdk", "react", "react-dom", "react-dom/client", "react/jsx-runtime",
+    ]);
     assert.deepEqual(Object.keys(peers).sort(), Object.keys(pluginUiPeerExports).sort());
-    assert.equal(peers["@shiori/sdk"], PluginSdk);
-    assert.deepEqual([...pluginUiPeerExports["@shiori/sdk"]].sort(), Object.keys(PluginSdk).sort());
+    assert.equal(peers["@yinfengwindy/shiori-sdk"], PluginSdk);
+    assert.deepEqual([...pluginUiPeerExports["@yinfengwindy/shiori-sdk"]].sort(), Object.keys(PluginSdk).sort());
     const imports = JSON.parse(pluginUiImportMap).imports;
-    assert.equal(imports["@shiori/sdk"], "shiori-plugin://host/@shiori/sdk.mjs");
+    assert.equal(imports["@yinfengwindy/shiori-sdk"], "shiori-plugin://host/@yinfengwindy/shiori-sdk.mjs");
     // The test entry is development-only and never a runtime peer.
-    assert.equal(Object.keys(imports).some((name) => name.startsWith("@shiori/sdk/")), false);
-    const testingExports = Object.keys(await import("@shiori/sdk/testing"));
+    assert.equal(Object.keys(imports).some((name) => name.startsWith("@yinfengwindy/shiori-sdk/")), false);
+    const testingExports = Object.keys(await import("@yinfengwindy/shiori-sdk/testing"));
     assert.ok(testingExports.includes("createFakeHostServices"));
-    assert.deepEqual(testingExports.filter((name) => pluginUiPeerExports["@shiori/sdk"].includes(name)), []);
+    assert.deepEqual(testingExports.filter((name) => pluginUiPeerExports["@yinfengwindy/shiori-sdk"].includes(name)), []);
   } finally { await view.cleanup(); }
 });

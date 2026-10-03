@@ -1,0 +1,141 @@
+name: SDK release
+
+on:
+  push:
+    tags: ["sdk-v*"]
+  # Branch/PR runs exercise the exact release build without registry credentials.
+  workflow_dispatch:
+  pull_request:
+    branches: [main, "codex/**"]
+    paths:
+      - ".github/workflows/sdk-release.yml"
+      - "packages/sdk/**"
+      - "scripts/sdk_release.py"
+      - "scripts/sdk_registry.py"
+      - "scripts/verify_sdk.*"
+      - "scripts/sync_sdk_version.mjs"
+      - "tests/backend/scripts/test_sdk_release.py"
+      - "tests/backend/scripts/test_sdk_registry.py"
+      - "pnpm-lock.yaml"
+      - "LICENSE"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sdk-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      artifact-id: ${{ steps.artifacts.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Require release tags to point to main history
+        if: github.event_name == 'push'
+        run: git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+      - name: Install build and verification tools
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install uv packaging ./packages/sdk
+          pnpm install --frozen-lockfile
+      - name: Build npm tarball and Python sdist, then wheel from sdist
+        run: |
+          node scripts/sync_sdk_version.mjs --check
+          mkdir release-artifacts
+          pnpm --filter @yinfengwindy/shiori-sdk pack --pack-destination "$PWD/release-artifacts"
+          .venv/bin/uv build --sdist --no-create-gitignore --out-dir release-artifacts packages/sdk
+          .venv/bin/uv build --wheel --no-create-gitignore --out-dir release-artifacts release-artifacts/*.tar.gz
+          .venv/bin/python -m scripts.sdk_release seal release-artifacts --ref "$GITHUB_REF" --commit "$GITHUB_SHA"
+      - name: Verify the exact archives outside the repository
+        run: |
+          pnpm run sdk:smoke --tarball "$PWD/"release-artifacts/*.tgz
+          .venv/bin/python -m scripts.verify_sdk --wheel release-artifacts/*.whl
+          .venv/bin/python -m scripts.sdk_release verify release-artifacts --ref "$GITHUB_REF" --commit "$GITHUB_SHA"
+      - name: Retain verified artifacts for publication and failed-job retries
+        id: artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdk-release-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-artifacts/*
+          if-no-files-found: error
+          retention-days: 30
+
+  publish-npm:
+    needs: build
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/sdk-v') && github.repository == 'YinFengWindy/Shiori-Agent'
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ needs.build.outputs.artifact-id }}
+          path: release-artifacts
+          merge-multiple: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+      - name: Set up the OIDC-capable npm CLI and verify downloaded bytes
+        run: |
+          npm install --global npm@11.5.1
+          python -m venv .venv
+          .venv/bin/python -m scripts.sdk_release verify release-artifacts --ref "$GITHUB_REF" --commit "$GITHUB_SHA"
+      - name: Reject conflicting versions or skip identical publication
+        id: pending
+        run: .venv/bin/python -m scripts.sdk_registry npm release-artifacts npm-upload
+      - name: Publish the verified npm tarball
+        if: steps.pending.outputs.pending == 'true'
+        run: npm publish npm-upload/*.tgz --access public --provenance
+
+  publish-pypi:
+    needs: build
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/sdk-v') && github.repository == 'YinFengWindy/Shiori-Agent'
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ needs.build.outputs.artifact-id }}
+          path: release-artifacts
+          merge-multiple: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Verify downloaded bytes
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m scripts.sdk_release verify release-artifacts --ref "$GITHUB_REF" --commit "$GITHUB_SHA"
+      - name: Reject conflicts and stage only missing wheel or sdist
+        id: pending
+        run: .venv/bin/python -m scripts.sdk_registry pypi release-artifacts pypi-upload
+      - name: Publish the verified Python distributions
+        if: steps.pending.outputs.pending == 'true'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: pypi-upload/

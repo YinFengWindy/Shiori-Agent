@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { PluginBackgroundSettled, SurfaceInteractionTarget } from "@shiori/sdk";
-import { deferred } from "@shiori/sdk/testing";
+import type { PluginBackgroundSettled, SurfaceInteractionTarget } from "@yinfengwindy/shiori-sdk";
+import { deferred } from "@yinfengwindy/shiori-sdk/testing";
 import { DesktopPetController, desktopPetSurfaceId, desktopPetAgentMoveDurationMs, type DesktopPetSurfaces } from "./controller";
 import { desktopPetBody, type DesktopPetBinding, type DesktopPetSettings } from "./types";
 

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { SurfaceSpec, SurfaceSettleReason } from "@shiori/sdk/contract";
+import type { SurfaceSpec, SurfaceSettleReason } from "@yinfengwindy/shiori-sdk/contract";
 import type { SurfaceBounds } from "./contract.js";
 import {
   DesktopSurfaceError,

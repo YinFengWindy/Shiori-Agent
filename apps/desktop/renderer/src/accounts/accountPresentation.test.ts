@@ -3,7 +3,7 @@ import { test } from "node:test";
 import {
   accountChannelLabel, accountChannelLine, accountDeletionDescription, accountHeadline, accountName, roleDeletionDescription,
 } from "./accountPresentation";
-import type { AccountSnapshot } from "@shiori/sdk";
+import type { AccountSnapshot } from "@yinfengwindy/shiori-sdk";
 
 const account: AccountSnapshot = {
   id: "a", pluginId: "demo", platform: "demo", platformAccountId: "101", configRef: "demo",

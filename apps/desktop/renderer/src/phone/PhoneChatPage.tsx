@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { DotsThreeIcon } from "@phosphor-icons/react";
-import type { RoleRecord } from "@shiori/sdk";
+import type { RoleRecord } from "@yinfengwindy/shiori-sdk";
 import { compactIconButtonClass } from "../shared/styles";
 import { phoneMemberEntryOf } from "./phoneChatInfo";
 import type { PhoneConversation } from "./phoneClient";

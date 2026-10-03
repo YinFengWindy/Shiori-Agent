@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { formatHourMinute } from "../shared/format";
 import { useMascotEnabled } from "../shared/mascot/useMascotEnabled";
-import { PetalIcon, SparkleIcon } from "@shiori/sdk";
+import { PetalIcon, SparkleIcon } from "@yinfengwindy/shiori-sdk";
 import { RibbonIcon } from "../shared/ui/icons";
 
 /**

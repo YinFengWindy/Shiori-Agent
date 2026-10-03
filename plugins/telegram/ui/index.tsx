@@ -1,5 +1,5 @@
 import { TelegramLogoIcon } from "@phosphor-icons/react";
-import type { PluginUiModule } from "@shiori/sdk";
+import type { PluginUiModule } from "@yinfengwindy/shiori-sdk";
 import { TelegramAccountDetail } from "./TelegramAccountDetail";
 
 /** Telegram Bots are added and managed only from a role's account page. */

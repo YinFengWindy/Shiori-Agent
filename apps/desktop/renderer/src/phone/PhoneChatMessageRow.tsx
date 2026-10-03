@@ -1,6 +1,6 @@
 import { EarIcon, UserIcon } from "@phosphor-icons/react";
 import { RoleAvatar } from "../roles/RoleAvatar";
-import { badgeClass, cx, pressableClass, type RoleRecord } from "@shiori/sdk";
+import { badgeClass, cx, pressableClass, type RoleRecord } from "@yinfengwindy/shiori-sdk";
 import { PhoneAvatarFace } from "./PhoneAvatarFace";
 import { PhoneMessageMedia } from "./PhoneMessageMedia";
 import { PhoneMessageQuote } from "./PhoneMessageQuote";

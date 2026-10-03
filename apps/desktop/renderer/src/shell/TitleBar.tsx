@@ -1,6 +1,6 @@
 import { ArrowsClockwise, CaretLeft, CaretRight, Minus, X } from "@phosphor-icons/react";
 import type { WindowControlAction } from "../../../src/bridge/shared";
-import { compactPressableClass, cx } from "@shiori/sdk";
+import { compactPressableClass, cx } from "@yinfengwindy/shiori-sdk";
 import { Tooltip } from "../shared/ui/Tooltip";
 
 // Window controls (minimize / maximize / close) deliberately get no press

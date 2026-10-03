@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { before, describe, it } from "node:test";
 import { act } from "react";
-import { mountTestComponent } from "@shiori/sdk/testing";
+import { mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import { resetPluginEnabledStateForTests } from "./pluginEnabledStateStore";
 
 let PluginManagementSection: typeof import("./PluginManagementSection").PluginManagementSection;

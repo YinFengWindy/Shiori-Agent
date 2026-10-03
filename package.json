@@ -37,7 +37,7 @@
   },
   "devDependencies": {
     "@phosphor-icons/react": "^2.1.10",
-    "@shiori/sdk": "workspace:*",
+    "@yinfengwindy/shiori-sdk": "workspace:*",
     "@types/node": "26.6.3",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
@@ -49,5 +49,5 @@
     "tsx": "^4.23.1",
     "typescript": "^5.8.0"
   },
-  "//devDependencies": "The react entries above are the host renderer's UI runtime, declared at the workspace root because colocated plugin UI (`plugins/<id>/{ui,surface}/`) is compiled into that renderer's bundle (#174) while living outside `apps/desktop/`. A bare `react` import there — including the `react/jsx-runtime` import that `jsx: react-jsx` emits for every .tsx file — cannot be resolved by walking up from the importing file. Vite's build resolves it from the Vite root regardless, but `tsc` and the `tsx` test runner do not, so plugin UI would ship unchecked and untestable. Keep these ranges identical to apps/desktop/package.json: pnpm then resolves both to one store entry, so there is a single React instance. `@shiori/sdk` (packages/sdk, #440) is declared here for the same reason: plugin UI imports it by name, and only this root link is reachable from plugins/; apps/desktop links the same workspace package for the host."
+  "//devDependencies": "The react entries above are the host renderer's UI runtime, declared at the workspace root because colocated plugin UI (`plugins/<id>/{ui,surface}/`) is compiled into that renderer's bundle (#174) while living outside `apps/desktop/`. A bare `react` import there — including the `react/jsx-runtime` import that `jsx: react-jsx` emits for every .tsx file — cannot be resolved by walking up from the importing file. Vite's build resolves it from the Vite root regardless, but `tsc` and the `tsx` test runner do not, so plugin UI would ship unchecked and untestable. Keep these ranges identical to apps/desktop/package.json: pnpm then resolves both to one store entry, so there is a single React instance. `@yinfengwindy/shiori-sdk` (packages/sdk, #440) is declared here for the same reason: plugin UI imports it by name, and only this root link is reachable from plugins/; apps/desktop links the same workspace package for the host."
 }

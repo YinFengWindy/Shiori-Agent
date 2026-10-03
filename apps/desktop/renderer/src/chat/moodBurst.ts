@@ -1,4 +1,4 @@
-import { brandMotifPaths, type BrandMotif } from "@shiori/sdk/host-internal";
+import { brandMotifPaths, type BrandMotif } from "@yinfengwindy/shiori-sdk/host-internal";
 import type { MoodTone } from "./moodTone";
 
 /**

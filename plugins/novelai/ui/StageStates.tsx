@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Key, WarningCircle } from "@phosphor-icons/react";
-import { PetalIcon, SparkleIcon, compactButtonSizeClass, cx, ghostButtonSurfaceClass, primaryButtonSurfaceClass, usePluginHostServices } from "@shiori/sdk";
+import { PetalIcon, SparkleIcon, compactButtonSizeClass, cx, ghostButtonSurfaceClass, primaryButtonSurfaceClass, usePluginHostServices } from "@yinfengwindy/shiori-sdk";
 import { failurePersona, type GenerationFailure } from "./generationFailure";
 
 /** Nothing generated yet for this role: the brand motif on the glass stage. */

@@ -1,4 +1,4 @@
-import type { SurfaceVoiceGesture, VoiceStatePayload } from "@shiori/sdk/contract";
+import type { SurfaceVoiceGesture, VoiceStatePayload } from "@yinfengwindy/shiori-sdk/contract";
 import type { DesktopSurfaceHost, SurfaceTarget } from "../surface/host.js";
 import type { DesktopVoiceController } from "./controller.js";
 

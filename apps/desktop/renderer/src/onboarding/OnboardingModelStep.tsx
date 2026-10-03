@@ -1,4 +1,4 @@
-import { BridgeError, errorMessage } from "@shiori/sdk";
+import { BridgeError, errorMessage } from "@yinfengwindy/shiori-sdk";
 import { useRef, useState } from "react";
 import { ArrowRight } from "@phosphor-icons/react";
 import { ModelRegistrationFields } from "../settings/ModelRegistrationFields";

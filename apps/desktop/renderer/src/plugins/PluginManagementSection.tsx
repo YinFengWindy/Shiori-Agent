@@ -6,7 +6,7 @@ import {
   compactButtonSizeClass,
   cx,
   ghostButtonSurfaceClass,
-} from "@shiori/sdk";
+} from "@yinfengwindy/shiori-sdk";
 import { InlineError } from "../shared/feedback/InlineError";
 import { usePluginManagementController } from "./usePluginManagementController";
 import { PluginTrustDialog } from "./PluginTrustDialog";

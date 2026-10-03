@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { errorMessage, type HostInlineErrorProps, type PluginRpcClient } from "@shiori/sdk";
+import { errorMessage, type HostInlineErrorProps, type PluginRpcClient } from "@yinfengwindy/shiori-sdk";
 import { napCatPreparing } from "./qqStatusPresentation";
 
 /** One managed instance's preparation, QR login, and connection state. */

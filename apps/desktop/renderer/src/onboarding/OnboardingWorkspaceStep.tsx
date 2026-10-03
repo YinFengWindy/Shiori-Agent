@@ -1,5 +1,5 @@
 import { ArrowRight, User } from "@phosphor-icons/react";
-import { Select, inputClass, type RoleRecord } from "@shiori/sdk";
+import { Select, inputClass, type RoleRecord } from "@yinfengwindy/shiori-sdk";
 import { OnboardingCard } from "./OnboardingCard";
 import { onboardingActionClass } from "./onboardingStyles";
 

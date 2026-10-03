@@ -9,7 +9,7 @@ import {
   type PetPointerSample,
 } from "./interactionContract";
 import type { SpriteState } from "./spriteContract";
-import type { SurfaceHandle } from "@shiori/sdk";
+import type { SurfaceHandle } from "@yinfengwindy/shiori-sdk";
 
 type DragState = {
   pointerId: number;

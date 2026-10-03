@@ -6,7 +6,7 @@
  * in it; the plugin drives it only through these shapes.
  *
  * React- and DOM-free, so the Electron main process and preload share the same
- * definitions through `@shiori/sdk/contract`.
+ * definitions through `@yinfengwindy/shiori-sdk/contract`.
  */
 import type { PluginRpcClient } from "../rpc";
 import type { SurfaceVoice, SurfaceRoleActivity } from "./surfaceInteraction";

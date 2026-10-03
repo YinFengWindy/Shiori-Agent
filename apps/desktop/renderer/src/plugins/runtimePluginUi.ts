@@ -1,6 +1,6 @@
 import { validateRuntimePluginUi } from "./runtimePluginUiValidation";
 import type { RuntimePluginUi } from "../../../src/plugins/uiContract";
-import type { PluginUiModule } from "@shiori/sdk";
+import type { PluginUiModule } from "@yinfengwindy/shiori-sdk";
 import { loadRuntimePluginModules } from "./runtimePluginModuleLoader";
 
 /** Loader boundaries keep module evaluation and CSS cleanup independently testable. */

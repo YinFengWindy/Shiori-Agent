@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { act, useState } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { changeInputValue, chooseSelectOption, mountTestComponent } from "@shiori/sdk/testing";
+import { changeInputValue, chooseSelectOption, mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import { createEmptyRoleForm } from "../app/appState";
 import { resetPluginEnabledStateForTests, setPluginEnabledSnapshot } from "../plugins/pluginEnabledStateStore";
 import { createSettingsDraft } from "../settings/testFixtures";
-import type { RoleRecord } from "@shiori/sdk";
+import type { RoleRecord } from "@yinfengwindy/shiori-sdk";
 import type { RoleFormState } from "../shared/types";
 import { RoleDetailPage } from "./RoleDetailPage";
 

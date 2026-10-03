@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { deferred } from "@shiori/sdk/testing";
-import { type PluginConfigValues, PluginBridgeError } from "@shiori/sdk";
+import { deferred } from "@yinfengwindy/shiori-sdk/testing";
+import { type PluginConfigValues, PluginBridgeError } from "@yinfengwindy/shiori-sdk";
 import type { PluginBridgeClient } from "./pluginBridgeClient";
 import { createPluginConfigChanges } from "./pluginConfigChanges";
 import { createPluginHostConfig } from "./pluginHostConfig";

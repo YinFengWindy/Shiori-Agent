@@ -1,7 +1,7 @@
 import { StoryError } from "./StoryError";
 import { describeStoryFailure } from "./storyFailure";
 import { useEffect, useMemo, useState } from "react";
-import { usePluginHostServices, type PluginNavPageComponentProps, type RoleRecord } from "@shiori/sdk";
+import { usePluginHostServices, type PluginNavPageComponentProps, type RoleRecord } from "@yinfengwindy/shiori-sdk";
 import { createStoryBridgeClient } from "./storyBridgeClient";
 import { useStoryController } from "./useStoryController";
 import { useStoryWorkspacePresentation } from "./useStoryWorkspacePresentation";

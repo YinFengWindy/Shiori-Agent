@@ -38,7 +38,7 @@ describe("onboarding data", () => {
 });
 
 it("keeps a confirmed onboarding save distinct from its failed refresh, with the cause", async () => {
-  const { BridgeError } = await import("@shiori/sdk");
+  const { BridgeError } = await import("@yinfengwindy/shiori-sdk");
   let reads = 0;
   let writes = 0;
   await assert.rejects(registerOnboardingModel({

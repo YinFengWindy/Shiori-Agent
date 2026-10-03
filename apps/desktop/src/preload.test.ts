@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import { runInNewContext } from "node:vm";
 import ts from "typescript";
-import type { BridgeEvent } from "@shiori/sdk/contract";
+import type { BridgeEvent } from "@yinfengwindy/shiori-sdk/contract";
 import type { DesktopApi, LocalAssetTransport } from "./bridge/shared";
 import { PreloadLocalAssetCache } from "./assets/preloadLocalAssetCache";
 import { notificationChannels } from "./notifications/contract";

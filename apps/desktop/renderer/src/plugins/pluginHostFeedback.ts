@@ -1,4 +1,4 @@
-import type { FeedbackTone, PluginFeedbackOptions, PluginHostFeedback, PluginPersona } from "@shiori/sdk";
+import type { FeedbackTone, PluginFeedbackOptions, PluginHostFeedback, PluginPersona } from "@yinfengwindy/shiori-sdk";
 import { showFeedback } from "../shared/feedback/feedbackStore";
 import { feedbackTonePersona } from "../shared/mascot/mascotFeedback";
 

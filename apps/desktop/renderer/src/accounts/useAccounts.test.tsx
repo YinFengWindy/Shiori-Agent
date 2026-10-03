@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { act } from "react";
-import type { BridgeEvent } from "@shiori/sdk";
-import { mountTestComponent } from "@shiori/sdk/testing";
-import { accountStatusView } from "@shiori/sdk/host-internal";
+import type { BridgeEvent } from "@yinfengwindy/shiori-sdk";
+import { mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
+import { accountStatusView } from "@yinfengwindy/shiori-sdk/host-internal";
 import { useAccounts } from "./useAccounts";
 
 test("mounted account views reload when the host pushes an account change", async () => {

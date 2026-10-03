@@ -1,4 +1,4 @@
-import type { PersonaSceneKey } from "@shiori/sdk";
+import type { PersonaSceneKey } from "@yinfengwindy/shiori-sdk";
 import type { MascotExpression } from "./mascotExpressions";
 
 /*

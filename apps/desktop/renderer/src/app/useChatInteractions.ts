@@ -2,7 +2,7 @@ import type React from "react";
 import { findChatMessageElement } from "../chat/chatMessageDom";
 import { prefersReducedMotion } from "../shared/reducedMotion";
 import { copyTextToClipboard } from "../shared/clipboard";
-import { type RoleRecord, type SessionPayload, errorMessage } from "@shiori/sdk";
+import { type RoleRecord, type SessionPayload, errorMessage } from "@yinfengwindy/shiori-sdk";
 import type { AppMainView } from "../shared/types";
 import type { FeedbackReporter } from "../shared/feedback/feedbackStore";
 

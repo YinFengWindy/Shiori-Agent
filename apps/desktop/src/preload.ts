@@ -14,7 +14,7 @@ import { surfaceChannels } from "./surface/ipc.js";
 import { pluginDataChannels } from "./plugins/ipc.js";
 import { trayChannels } from "./tray/ipc.js";
 import { notificationChannels, type NotificationChatTarget } from "./notifications/contract.js";
-import type { SurfaceCreateResult, SurfacePlacement, SurfaceRoleActivity, VoiceStatePayload } from "@shiori/sdk/contract";
+import type { SurfaceCreateResult, SurfacePlacement, SurfaceRoleActivity, VoiceStatePayload } from "@yinfengwindy/shiori-sdk/contract";
 import type {
   BridgeResponse,
   DesktopApi,

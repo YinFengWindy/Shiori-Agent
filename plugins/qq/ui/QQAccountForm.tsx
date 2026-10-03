@@ -1,6 +1,6 @@
 import { ArrowClockwiseIcon, SignOutIcon } from "@phosphor-icons/react";
 import React, { useEffect, useRef } from "react";
-import { accountOnline, compactGhostButtonClass, useLatestRef, type PluginAccountDetailComponentProps } from "@shiori/sdk";
+import { accountOnline, compactGhostButtonClass, useLatestRef, type PluginAccountDetailComponentProps } from "@yinfengwindy/shiori-sdk";
 import type { useQQAccountForm } from "./useQQAccountForm";
 import { useManagedNapCat } from "./useManagedNapCat";
 import { managedLoginOnline, managedQQStatus, napCatDetail, napCatPreparing } from "./qqStatusPresentation";

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
-import type { PluginUiModule } from "@shiori/sdk";
+import type { PluginUiModule } from "@yinfengwindy/shiori-sdk";
 import { applyPluginUiModules } from "./pluginUiModuleContract.js";
 import { pluginUiRegistry } from "./pluginUiRegistry.js";
 import {

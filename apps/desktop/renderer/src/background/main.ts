@@ -1,4 +1,4 @@
-import { errorMessage } from "@shiori/sdk";
+import { errorMessage } from "@yinfengwindy/shiori-sdk";
 import { pluginRuntimeChanged } from "../plugins/pluginRuntimeChanged";
 // Registers every plugin's `background/index.ts` before the host reads the registry.
 import "./pluginBackgroundModules";

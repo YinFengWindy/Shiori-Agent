@@ -2,7 +2,7 @@ import { CaretUp } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { modelEffortLabels } from "../shared/modelEffortLabels";
-import { cx } from "@shiori/sdk";
+import { cx } from "@yinfengwindy/shiori-sdk";
 import { ChatModelMenuPanel } from "./ChatModelMenuPanel";
 import { subscribeChatModelMenuRequests } from "./chatModelMenuRequests";
 import { useChatComposerPopover } from "./useChatComposerPopover";

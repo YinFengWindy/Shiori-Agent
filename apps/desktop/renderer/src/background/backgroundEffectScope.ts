@@ -1,4 +1,4 @@
-import type { BackgroundEffectDispose } from "@shiori/sdk";
+import type { BackgroundEffectDispose } from "@yinfengwindy/shiori-sdk";
 
 /** A registered side effect: a diagnostic label plus the function that undoes it. */
 type Effect = { label: string; dispose: BackgroundEffectDispose };

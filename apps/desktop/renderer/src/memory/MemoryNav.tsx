@@ -1,5 +1,5 @@
 import { ArrowClockwise } from "@phosphor-icons/react";
-import { cx, iconButtonClass } from "@shiori/sdk";
+import { cx, iconButtonClass } from "@yinfengwindy/shiori-sdk";
 import { segmentedTabClass, segmentedTabListClass } from "../shared/styles";
 import { memoryDocumentTabs, type MemoryTab } from "./memoryDocuments";
 

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { before, test } from "node:test";
 import { act } from "react";
-import { changeInputValue, mountTestComponent } from "@shiori/sdk/testing";
+import { changeInputValue, mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import type { PhoneConversation } from "./phoneClient";
 import type { PhoneApp } from "./phonePresentation";
 

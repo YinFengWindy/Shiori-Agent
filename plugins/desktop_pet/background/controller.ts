@@ -1,6 +1,6 @@
 import { ReplyBubbleController } from "./replyBubble";
 import { emptyPetReply, type PetReplyBubble } from "../shared/replyBubble";
-import type { PluginBackgroundSettled, PluginBackgroundSurfaces } from "@shiori/sdk";
+import type { PluginBackgroundSettled, PluginBackgroundSurfaces } from "@yinfengwindy/shiori-sdk";
 import { desktopPetBindingPatch } from "./settings";
 import {
   desktopPetBody,

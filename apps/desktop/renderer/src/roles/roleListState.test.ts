@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { reconcileRoles } from "./roleListState";
-import type { RoleRecord } from "@shiori/sdk";
+import type { RoleRecord } from "@yinfengwindy/shiori-sdk";
 
 function createRole(overrides: Partial<RoleRecord> & Pick<RoleRecord, "id" | "name">): RoleRecord {
   return {

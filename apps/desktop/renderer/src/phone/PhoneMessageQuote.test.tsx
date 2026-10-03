@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { act } from "react";
-import { mountTestComponent } from "@shiori/sdk/testing";
+import { mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import { PhoneMessageQuote } from "./PhoneMessageQuote";
 
 test("a long quote starts clamped and expands on click; its pictures open enlarged", async () => {

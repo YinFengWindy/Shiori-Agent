@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import type { BridgeEvent } from "@shiori/sdk";
+import type { BridgeEvent } from "@yinfengwindy/shiori-sdk";
 import { useBridgeRefreshedValue } from "../shared/useBridgeRefreshedValue";
 import { createIdentityClient, type UserIdentity } from "./identityClient";
 import { identityBindingKeys } from "./identityPresentation";

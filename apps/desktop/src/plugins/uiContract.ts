@@ -41,10 +41,10 @@ export const pluginUiPeerExports: Record<string, string[]> = {
   "react/jsx-runtime": ["Fragment", "jsx", "jsxs"],
   "react-dom": ["createPortal", "flushSync", "preconnect", "prefetchDNS", "preinit", "preinitModule", "preload", "preloadModule", "requestFormReset", "unstable_batchedUpdates", "useFormState", "useFormStatus", "version"],
   "react-dom/client": ["createRoot", "hydrateRoot", "version"],
-  // Only the main entry: `@shiori/sdk/testing` is development-only,
-  // `@shiori/sdk/contract` is type-only and
-  // `@shiori/sdk/host-internal` is host-only (not plugin contract).
-  "@shiori/sdk": [
+  // Only the main entry: `@yinfengwindy/shiori-sdk/testing` is development-only,
+  // `@yinfengwindy/shiori-sdk/contract` is type-only and
+  // `@yinfengwindy/shiori-sdk/host-internal` is host-only (not plugin contract).
+  "@yinfengwindy/shiori-sdk": [
     // Runtime API 2.8.0 (#503).
     "BridgeError", "PluginBridgeError",
     // Runtime API 2.9.0 (#504): helpers and hooks.

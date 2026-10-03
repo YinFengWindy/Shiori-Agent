@@ -6,8 +6,16 @@ build-backend = "setuptools.build_meta"
 name = "shiori-sdk"
 dynamic = ["version"]
 description = "Public Shiori plugin contracts and independent testing support."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.12"
 dependencies = ["httpx>=0.28.1", "json-repair>=0.40.0"]
+
+[project.urls]
+Homepage = "https://github.com/YinFengWindy/Shiori-Agent/tree/main/packages/sdk"
+Repository = "https://github.com/YinFengWindy/Shiori-Agent"
+Issues = "https://github.com/YinFengWindy/Shiori-Agent/issues"
 
 [project.optional-dependencies]
 testing = ["pytest>=9.0", "pytest-asyncio>=1.3", "httpx>=0.28", "PyYAML>=6.0"]

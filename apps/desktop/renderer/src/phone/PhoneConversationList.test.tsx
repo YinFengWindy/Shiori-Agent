@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { mountTestComponent } from "@shiori/sdk/testing";
+import { mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import type { PhoneConversation } from "./phoneClient";
 import { PhoneConversationList } from "./PhoneConversationList";
 

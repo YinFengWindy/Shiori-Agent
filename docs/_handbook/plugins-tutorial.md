@@ -219,7 +219,7 @@ async def setup(ctx):
 主窗口在构建时发现 `plugins/*/ui/index.tsx`，默认导出 `PluginUiModule`：
 
 ```tsx
-import type { PluginUiModule } from "@shiori/sdk";
+import type { PluginUiModule } from "@yinfengwindy/shiori-sdk";
 
 const exampleUi: PluginUiModule = {
   pluginId: "example",
@@ -306,7 +306,7 @@ Story 播放偏好保留为设备 renderer 的 `localStorage["shiori.story-prefe
 
 ## 统一 SDK 3.0
 
-新插件前端使用 `@shiori/sdk`，后端契约使用 `shiori_sdk`，并声明
+新插件前端使用 `@yinfengwindy/shiori-sdk`，后端契约使用 `shiori_sdk`，并声明
 `runtime_api: ">=3.0.0 <4.0.0"`。SDK 主文档位于
 [packages/sdk/README.md](../../packages/sdk/README.md)，包括 wheel/tarball 构建、
 公开协议和 `shiori-sdk[testing]` 的无宿主测试入口。

@@ -1,4 +1,4 @@
-import type { RoleRecord } from "@shiori/sdk";
+import type { RoleRecord } from "@yinfengwindy/shiori-sdk";
 import type { RoleFormState } from "../shared/types";
 
 export const minimaxVoiceEmotionOptions = [

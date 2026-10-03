@@ -14,7 +14,7 @@ for (const id of ["demo", "broken"]) {
   await writeFile(resolve(directory, "lazy.mjs"), `globalThis.pluginUiQaLazyVersion = 1; export default 1;`, "utf8");
   await writeFile(resolve(directory, "index.mjs"), id === "broken" ? "export default syntax is broken" : `
 import React, { useState } from "react";
-import { PluginBridgeError } from "@shiori/sdk";
+import { PluginBridgeError } from "@yinfengwindy/shiori-sdk";
 import { label } from "./chunk.mjs";
 globalThis.pluginUiQaSdkError = PluginBridgeError;
 globalThis.pluginUiQaEvaluations = (globalThis.pluginUiQaEvaluations ?? 0) + 1;

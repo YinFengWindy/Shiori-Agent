@@ -1,7 +1,7 @@
-import { errorFeedback, scrubErrorDetail } from "@shiori/sdk/host-internal";
+import { errorFeedback, scrubErrorDetail } from "@yinfengwindy/shiori-sdk/host-internal";
 import { WarningCircle, X } from "@phosphor-icons/react";
 import { useState } from "react";
-import { type HostInlineErrorProps, type PersonaSceneKey, cx } from "@shiori/sdk";
+import { type HostInlineErrorProps, type PersonaSceneKey, cx } from "@yinfengwindy/shiori-sdk";
 import { MascotFaceAvatar } from "../mascot/MascotFigure";
 import { useMascotCameoAllowed } from "../mascot/MascotOnStage";
 import { MascotSpeechBubble } from "../mascot/MascotSpeech";
@@ -16,7 +16,7 @@ import { FeedbackDetail } from "./FeedbackDetail";
 
 /**
  * Props of the shared in-page error block: the plugin-facing props of
- * `host.ui.InlineError` (owned by `@shiori/sdk`, #440) with the host's
+ * `host.ui.InlineError` (owned by `@yinfengwindy/shiori-sdk`, #440) with the host's
  * own choice of who fronts it.
  */
 export type InlineErrorProps = Omit<HostInlineErrorProps, "persona"> & {

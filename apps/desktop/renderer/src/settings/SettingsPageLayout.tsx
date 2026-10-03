@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { cx } from "@shiori/sdk";
+import { cx } from "@yinfengwindy/shiori-sdk";
 import { SettingsStatusSlotContext } from "./SettingsStatusSlot";
 
 /** Shared surface style for every settings page state. */

@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import type { AppMainView } from "../shared/types";
-import { useLatestRef } from "@shiori/sdk";
+import { useLatestRef } from "@yinfengwindy/shiori-sdk";
 
 /**
  * Whether leaving the current view would drop unsaved role edits. The role

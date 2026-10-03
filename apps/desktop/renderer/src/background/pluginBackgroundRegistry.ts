@@ -1,4 +1,4 @@
-import type { BackgroundCtx } from "@shiori/sdk";
+import type { BackgroundCtx } from "@yinfengwindy/shiori-sdk";
 import { PluginContributionRegistry } from "../plugins/pluginContributionRegistry";
 
 /** One plugin's `app.background` contribution: its always-resident setup function. */

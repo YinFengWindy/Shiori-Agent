@@ -1,7 +1,7 @@
 import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { PluginHostServicesProvider } from "@shiori/sdk";
-import { createFakeHostServices } from "@shiori/sdk/testing";
+import { PluginHostServicesProvider } from "@yinfengwindy/shiori-sdk";
+import { createFakeHostServices } from "@yinfengwindy/shiori-sdk/testing";
 import type { StoryBeat, StoryDetails, StorySummary } from "./types";
 
 /**

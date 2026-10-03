@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { before, describe, it } from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { SettingsFormData } from "../../../src/bridge/shared.js";
-import { mountTestComponent, chooseSelectOption } from "@shiori/sdk/testing";
+import { mountTestComponent, chooseSelectOption } from "@yinfengwindy/shiori-sdk/testing";
 import { createSettingsDraft } from "./testFixtures";
 
 let VoiceInputSettingsSection: typeof import("./VoiceInputSettingsSection").VoiceInputSettingsSection;

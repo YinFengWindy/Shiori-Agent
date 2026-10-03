@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { test } from "node:test";
-import type { BridgeEvent } from "@shiori/sdk/contract";
+import type { BridgeEvent } from "@yinfengwindy/shiori-sdk/contract";
 import { PreloadLocalAssetCache } from "../assets/preloadLocalAssetCache";
 import { createDesktopEventSubscription } from "./desktopEventSubscription";
 

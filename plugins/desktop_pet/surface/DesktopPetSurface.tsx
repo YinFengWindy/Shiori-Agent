@@ -17,7 +17,7 @@ import {
   type PetSurfaceLoad,
 } from "./surfaceState";
 import { emptyPetReply, type PetReplyBubble } from "../shared/replyBubble";
-import type { PluginSurfaceComponentProps, SurfacePlacement, VoiceStatePayload } from "@shiori/sdk";
+import type { PluginSurfaceComponentProps, SurfacePlacement, VoiceStatePayload } from "@yinfengwindy/shiori-sdk";
 
 const defaultVoice: VoiceStatePayload = { status: "idle" };
 const noExtension = { side: "below" as const, size: 0 };

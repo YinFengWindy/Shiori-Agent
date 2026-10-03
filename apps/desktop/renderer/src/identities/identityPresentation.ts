@@ -1,4 +1,4 @@
-import type { AccountSnapshot } from "@shiori/sdk";
+import type { AccountSnapshot } from "@yinfengwindy/shiori-sdk";
 import { accountName } from "../accounts/accountPresentation";
 import type { AccountDetailEntry } from "../plugins/pluginUiRegistry";
 import type { UserIdentity } from "./identityClient";

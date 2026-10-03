@@ -1,5 +1,5 @@
 import { CaretRightIcon, UserIcon } from "@phosphor-icons/react";
-import { cx, pressableClass } from "@shiori/sdk";
+import { cx, pressableClass } from "@yinfengwindy/shiori-sdk";
 import { phoneChatSummaryRows, type PhoneChatInfoSection } from "./phoneChatInfo";
 import type { PhoneConversation } from "./phoneClient";
 import { PhoneInfoEmpty } from "./PhoneInfoEmpty";

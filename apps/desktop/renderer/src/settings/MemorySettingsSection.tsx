@@ -1,4 +1,4 @@
-import { Select, cx } from "@shiori/sdk";
+import { Select, cx } from "@yinfengwindy/shiori-sdk";
 import { SettingsField as Field } from "./SettingsField";
 import {
   SettingsSecretInput,

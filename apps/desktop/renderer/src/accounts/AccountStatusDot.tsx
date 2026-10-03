@@ -1,4 +1,4 @@
-import { cx, type AccountStatusTone, type AccountStatusView } from "@shiori/sdk";
+import { cx, type AccountStatusTone, type AccountStatusView } from "@yinfengwindy/shiori-sdk";
 
 const dotTones: Record<AccountStatusTone, string> = {
   success: "bg-success",

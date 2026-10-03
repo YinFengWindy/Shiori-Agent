@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { lstat, mkdir, open, realpath, rm } from "node:fs/promises";
 import { basename, extname, isAbsolute, join } from "node:path";
 import { isLocalAssetInsideRoot } from "./localAssetPolicy.js";
-import type { NativeFilePickerOptions } from "@shiori/sdk/contract";
+import type { NativeFilePickerOptions } from "@yinfengwindy/shiori-sdk/contract";
 import { maxNativeBatchBytes, maxNativeFileCount, normalizeFilePickerOptions } from "./filePickerContract.js";
 
 /** Copies only files returned by the native dialog, without issuing media grants. */

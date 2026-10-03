@@ -1,5 +1,5 @@
 import type { ipcRenderer } from "electron";
-import type { BridgeEvent } from "@shiori/sdk/contract";
+import type { BridgeEvent } from "@yinfengwindy/shiori-sdk/contract";
 import type { PreloadLocalAssetCache } from "../assets/preloadLocalAssetCache.js";
 import type { DesktopApi, LocalAssetTransport } from "./shared.js";
 

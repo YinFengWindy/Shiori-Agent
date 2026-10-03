@@ -1,6 +1,6 @@
 import type React from "react";
 import type { NewRoleFormState } from "../shared/types";
-import { cx } from "@shiori/sdk";
+import { cx } from "@yinfengwindy/shiori-sdk";
 import { RoleAvatarPicker } from "./RoleAvatarPicker";
 import { RoleCardProfileForm } from "./RoleCardProfileForm";
 import { roleIdentityInputClass } from "./roleEditorStyles";

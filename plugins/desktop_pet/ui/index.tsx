@@ -1,4 +1,4 @@
-import type { PluginUiModule } from "@shiori/sdk";
+import type { PluginUiModule } from "@yinfengwindy/shiori-sdk";
 import { desktopPetRoleSettings } from "./roleSettings";
 import { RolePetPackagesPanel } from "./RolePetPackagesPanel";
 

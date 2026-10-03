@@ -1,6 +1,6 @@
 import { WarningCircle } from "@phosphor-icons/react";
 import { useState, type ReactNode } from "react";
-import { compactButtonSizeClass, cx, ghostButtonSurfaceClass } from "@shiori/sdk";
+import { compactButtonSizeClass, cx, ghostButtonSurfaceClass } from "@yinfengwindy/shiori-sdk";
 import { readEnvReference } from "./jsonSchemaForm";
 
 /**

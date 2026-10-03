@@ -6,7 +6,7 @@ import { ChatToolCalls } from "./ChatToolCalls";
 import { getStoredChatReplyPreview, isInterruptedChatMessage } from "./chatMessageActions";
 import { getChatMessagePresentation } from "./chatMessagePresentation";
 import { parseChatTurnMetrics } from "./chatTurnMetrics";
-import { cx, type SessionMessage } from "@shiori/sdk";
+import { cx, type SessionMessage } from "@yinfengwindy/shiori-sdk";
 import {
   focusResetClass, replyQuoteButtonClass, replyQuoteFrameClass, replyQuoteSenderClass, replyQuoteTextClass,
 } from "../shared/styles";

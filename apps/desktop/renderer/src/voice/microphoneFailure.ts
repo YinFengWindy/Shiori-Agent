@@ -1,4 +1,4 @@
-import { errorMessage } from "@shiori/sdk";
+import { errorMessage } from "@yinfengwindy/shiori-sdk";
 
 /** Converts browser microphone failures while the native exception name is still available. */
 export function microphoneFailure(error: unknown, phase: "devices" | "start" | "stop") {

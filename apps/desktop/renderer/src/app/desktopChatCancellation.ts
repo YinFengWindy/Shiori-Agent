@@ -1,4 +1,4 @@
-import { BridgeError, errorMessage } from "@shiori/sdk";
+import { BridgeError, errorMessage } from "@yinfengwindy/shiori-sdk";
 import type { DesktopSessionStateArgs } from "./desktopSessionTypes";
 import type { useDesktopChatTurns } from "./useDesktopChatTurns";
 import type { createDesktopSessionSnapshot } from "./desktopSessionSnapshot";

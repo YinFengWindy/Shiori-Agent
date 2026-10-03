@@ -1,6 +1,6 @@
 import type { RefObject } from "react";
-import { CrossfadeLayers } from "@shiori/sdk";
-import { cx } from "@shiori/sdk";
+import { CrossfadeLayers } from "@yinfengwindy/shiori-sdk";
+import { cx } from "@yinfengwindy/shiori-sdk";
 
 type ChatSurfaceBackdropProps = {
   url: string;

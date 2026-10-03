@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { act } from "react";
-import { mountTestComponent } from "@shiori/sdk/testing";
+import { mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import { Reveal } from "./Reveal";
 
 test("a hidden block keeps its last content, inert, while it collapses and drops it once collapsed", async () => {

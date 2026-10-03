@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { cx } from "@shiori/sdk";
+import { cx } from "@yinfengwindy/shiori-sdk";
 
 type SegmentedOption = { value: string; label: string; badge?: ReactNode };
 

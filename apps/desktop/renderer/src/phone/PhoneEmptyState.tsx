@@ -1,7 +1,7 @@
 import type { MascotLine } from "../shared/mascot/mascotLines";
 import { MascotEmptyState } from "../shared/mascot/MascotSpeech";
 import { useMascotEnabled } from "../shared/mascot/useMascotEnabled";
-import { PetalIcon } from "@shiori/sdk";
+import { PetalIcon } from "@yinfengwindy/shiori-sdk";
 
 /**
  * An empty phone screen: 吟风 with her `line` while the 看板娘 is on;

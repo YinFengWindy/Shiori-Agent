@@ -1,4 +1,4 @@
-import type { PluginSurfaceModule } from "@shiori/sdk";
+import type { PluginSurfaceModule } from "@yinfengwindy/shiori-sdk";
 import { DesktopPetSurface } from "./DesktopPetSurface";
 // Imported here rather than from the component so the component stays loadable
 // by the plain node:test runner, which has no CSS loader. Vite pulls this into
