@@ -2,6 +2,14 @@
   "name": "@shiori/sdk",
   "version": "3.1.0",
   "description": "Public Shiori plugin contracts, shared UI and independent test support.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/YinFengWindy/Shiori-Agent.git",
+    "directory": "packages/sdk"
+  },
+  "homepage": "https://github.com/YinFengWindy/Shiori-Agent/tree/main/packages/sdk",
+  "bugs": "https://github.com/YinFengWindy/Shiori-Agent/issues",
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
@@ -38,6 +46,8 @@
     "prepack": "pnpm run build"
   },
   "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/",
     "exports": {
       ".": {
         "types": "./dist/index.d.ts",

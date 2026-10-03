@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import os
 import shutil
 import sys
@@ -18,10 +19,18 @@ from scripts.wheelhouse import install_from_wheelhouse
 
 
 def main() -> None:
-    """Builds and tests the non-editable artifact in a repository-external directory."""
+    """Tests an exact wheel (or builds one) outside the repository."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--wheel", type=Path, help="Verify this wheel without rebuilding"
+    )
+    args = parser.parse_args()
     output = Path(tempfile.mkdtemp(prefix="shiori-sdk-wheel-"))
     source = REPOSITORY / "packages/sdk"
-    build_wheel(source, output, output / "build.log")
+    if args.wheel:
+        shutil.copyfile(args.wheel, output / args.wheel.name)
+    else:
+        build_wheel(source, output, output / "build.log")
     venv = output / ".venv"
     run(
         [UV, "venv", "--python", sys.executable, str(venv)],

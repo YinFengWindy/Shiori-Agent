@@ -2,7 +2,10 @@
 
 `@shiori/sdk` and `shiori-sdk` are the TypeScript and Python distributions of the
 same plugin contract. Both are version **3.1.0**, with Runtime API **3.1.0**.
-They are built locally and in CI; this repository does not publish them to npm or PyPI.
+Release tags `sdk-v<version>` publish the validated npm tarball and Python wheel/sdist.
+Maintainers: see the [publishing guide](https://github.com/YinFengWindy/Shiori-Agent/blob/main/docs/agents/sdk-publishing.md)
+for registry setup, first publication and recovery. A workflow alone does not reserve
+the npm scope or create registry permissions.
 External plugin manifests declare `runtime_api: ">=3.0.0 <4.0.0"`, or
 `">=3.1.0 <4.0.0"` when they use the 3.1 lifecycle additions (`AfterTurnCtx`,
 `PHASE_SLOTS`, `require_phase_slot`, `LifecycleModule.requires` / `produces`). The host rejects
