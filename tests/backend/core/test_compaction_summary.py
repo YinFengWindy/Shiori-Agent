@@ -143,7 +143,7 @@ async def test_generation_headroom_keeps_summary_validation(
             error = "超过 2000 token 上限" if outcome == "oversized" else "输出被截断"
             with pytest.raises(ValueError, match=error):
                 await writer.generate(prepared)
-        assert create.await_count == 1
+        assert create.await_count == (2 if outcome == "oversized" else 1)
         assert not manager.maintenance_progress(session).summaries
     finally:
         await provider.aclose()
@@ -207,6 +207,7 @@ def test_extra_metadata_is_ignored_before_storage_and_token_limit_validation():
         "explanation": "私密的额外说明" * 2000,
     }
     summary = validate_summary(json.dumps(payload, ensure_ascii=False), {"old", "new"})
+    expected["source_message_ids"] = ["old", "new"]
     assert json.loads(summary.content) == expected
     assert summary.source_ids == ("old", "new")
 
@@ -410,5 +411,160 @@ async def test_oversized_removed_range_is_folded_in_budgeted_batches(tmp_path):
         assert all("-tail" in sent and f"head-{i}-" in sent for i in range(6))
         assert json.loads(result.content)["tasks"] == f"step {len(requests)}"
         assert result.source_ids == (first_id,)
+    finally:
+        await provider.aclose()
+
+
+@pytest.mark.parametrize(
+    "completion,reasoning,thinking,fallback",
+    [
+        (1392, None, None, ""),
+        (7000, 5608, "private reasoning", ""),
+        (7000, 5608, None, ""),
+        (None, None, None, "missing_completion_usage"),
+        (7000, None, "private reasoning", "missing_reasoning_usage"),
+        (True, None, None, "invalid_completion_usage"),
+    ],
+)
+async def test_real_transport_usage_controls_chinese_summary(
+    tmp_path, monkeypatch, completion, reasoning, thinking, fallback
+):
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("cli:actual-summary")
+    session.add_message("user", "private source")
+    session.add_message("assistant", "noted")
+    manager.save(session)
+    prepared = await manager.prepare_window(session.key, None, keep_turns=0)
+    provider = LLMProvider(
+        api_key="test",
+        provider_name="deepseek",
+        model_context_window=40000,
+        default_max_tokens=16000,
+    )
+    response = _completion(
+        _payload([session.messages[0]["id"]], tasks="中文摘要" * 300)
+    )
+    response.usage = SimpleNamespace(
+        completion_tokens=completion,
+        completion_tokens_details=SimpleNamespace(reasoning_tokens=reasoning),
+    )
+    response.choices[0].message.reasoning_content = thinking
+    create = AsyncMock(return_value=response)
+    monkeypatch.setattr(provider._client.chat.completions, "create", create)
+    try:
+        writer = WorkingSummaryWriter(manager, provider, "explicit", 16000)
+        if fallback:
+            with pytest.raises(ValueError, match="超过 2000 token") as error:
+                await writer.generate(prepared)
+            diagnostics = error.value.diagnostics
+            assert len(diagnostics) == create.await_count == 2
+        else:
+            result = await writer.generate(prepared)
+            diagnostics = result.diagnostics
+            assert create.await_count == 1
+            assert diagnostics[0].counted_tokens == 1392
+        assert diagnostics[0].local_tokens > 2000
+        assert diagnostics[0].fallback_reason == fallback
+        assert "private" not in str(diagnostics)
+    finally:
+        await provider.aclose()
+
+
+@pytest.mark.parametrize("second", ["short", "long", "invalid", "truncated"])
+async def test_complete_oversized_summary_shortens_once_with_budget_feedback(
+    tmp_path, monkeypatch, second
+):
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("cli:shorten")
+    session.add_message("user", "private source")
+    session.add_message("assistant", "noted")
+    manager.save(session)
+    prepared = await manager.prepare_window(session.key, None, keep_turns=0)
+    provider = LLMProvider(
+        api_key="test",
+        provider_name="deepseek",
+        model_context_window=40000,
+        default_max_tokens=16000,
+    )
+    old = _payload([session.messages[0]["id"]], tasks="private state")
+    first = _completion(old)
+    first.usage = SimpleNamespace(completion_tokens=3000)
+    following = _completion(
+        "{}" if second == "invalid" else old,
+        "length" if second == "truncated" else "stop",
+    )
+    following.usage = SimpleNamespace(
+        completion_tokens=3000 if second == "long" else 500
+    )
+    create = AsyncMock(side_effect=[first, following])
+    monkeypatch.setattr(provider._client.chat.completions, "create", create)
+    preflight = Mock(wraps=provider.input_budget)
+    monkeypatch.setattr(provider, "input_budget", preflight)
+    try:
+        writer = WorkingSummaryWriter(manager, provider, "explicit", 16000)
+        if second == "short":
+            diagnostics = (await writer.generate(prepared)).diagnostics
+        else:
+            with pytest.raises(ValueError) as error:
+                await writer.generate(prepared)
+            diagnostics = error.value.diagnostics
+        assert create.await_count == 2
+        assert [item.rewrite for item in diagnostics] == [0, 1]
+        assert diagnostics[0].outcome == "oversized"
+        assert (
+            diagnostics[1].outcome
+            == {
+                "short": "accepted",
+                "long": "oversized",
+                "invalid": "invalid",
+                "truncated": "truncated",
+            }[second]
+        )
+        sent = create.await_args.kwargs
+        feedback = json.loads(sent["messages"][-1]["content"])["budget_feedback"]
+        assert feedback["counted_tokens"] == 3000
+        assert feedback["hard_limit"] == 2000
+        assert feedback["count_source"] == "provider_output_upper_bound"
+        assert preflight.call_args.kwargs["messages"] == sent["messages"]
+        assert (
+            provider._budget_for_request(
+                sent, calibrate=False
+            ).output_reservation_tokens
+            == 4000
+        )
+        assert not manager.maintenance_progress(session).summaries
+    finally:
+        await provider.aclose()
+
+
+async def test_custom_summary_limit_changes_prompt_and_generation_headroom(
+    tmp_path, monkeypatch
+):
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("cli:custom-budget")
+    session.add_message("user", "state")
+    session.add_message("assistant", "done")
+    manager.save(session)
+    prepared = await manager.prepare_window(session.key, None, keep_turns=0)
+    provider = LLMProvider(
+        api_key="test",
+        provider_name="deepseek",
+        model_context_window=40000,
+        default_max_tokens=7000,
+    )
+    response = _completion(_payload([session.messages[0]["id"]]))
+    response.usage = SimpleNamespace(completion_tokens=3500)
+    create = AsyncMock(return_value=response)
+    monkeypatch.setattr(provider._client.chat.completions, "create", create)
+    try:
+        result = await WorkingSummaryWriter(
+            manager, provider, "explicit", 7000, 4000
+        ).generate(prepared)
+        assert result.diagnostics[0].limit == 4000
+        assert create.await_args.kwargs["max_tokens"] == 7000
+        assert (
+            "Target 2000–3600 tokens, hard maximum 4000"
+            in create.await_args.kwargs["messages"][0]["content"]
+        )
     finally:
         await provider.aclose()

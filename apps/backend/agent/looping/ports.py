@@ -37,6 +37,7 @@ class LLMConfig:
     tool_search_enabled: bool = False
     multimodal: bool = True
     compaction_retained_turns: int = 2
+    summary_token_limit: int = 2000
 
 
 @dataclass

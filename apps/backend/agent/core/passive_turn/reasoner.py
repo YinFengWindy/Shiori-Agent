@@ -203,6 +203,7 @@ class DefaultReasoner(
                     llm.provider,
                     llm_config.model,
                     llm_config.max_tokens,
+                    llm_config.summary_token_limit,
                 ),
                 observe=event_bus.observe if event_bus is not None else None,
             )
@@ -346,7 +347,10 @@ class DefaultReasoner(
             self._prompt_render = self._build_prompt_render_phase(self._context)
 
         # The model and policy are execution snapshots, before any history render.
-        policy = CompactionPolicy(self._llm_config.compaction_retained_turns)
+        policy = CompactionPolicy(
+            self._llm_config.compaction_retained_turns,
+            self._llm_config.summary_token_limit,
+        )
         message_limit = len(session.messages)
         snapshot, progress = self._window_snapshot(session, context_view, message_limit)
         window_id = window_key(context_view)
@@ -776,7 +780,10 @@ class DefaultReasoner(
         compaction = self._request_compaction(
             session_key=session.key,
             context_view=None,
-            policy=CompactionPolicy(self._llm_config.compaction_retained_turns),
+            policy=CompactionPolicy(
+                self._llm_config.compaction_retained_turns,
+                self._llm_config.summary_token_limit,
+            ),
             message_limit=message_limit,
             render_input=render_input,
             current_message=current_input(

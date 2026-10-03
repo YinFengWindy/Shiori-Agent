@@ -9,6 +9,7 @@ export const desktopSettingsDefaults = Object.freeze({
   ttsModel: "speech-2.8-turbo",
   ttsVolume: 2.0,
   compactionRetainedTurns: 2,
+  summaryTokenLimit: 2000,
 });
 
 type ModelCapacity = Pick<ModelRegistrationFormData, "modelContextWindow" | "modelAutoCompactTokenLimit">;
@@ -42,4 +43,12 @@ export function compactionRetainedTurnsError(value: unknown) {
   return typeof retainedTurns === "number" && Number.isSafeInteger(retainedTurns) && retainedTurns >= 0
     ? null
     : "压缩后保留原文轮数必须是非负整数";
+}
+
+/** Validates the working-summary limit before draft or persisted settings apply. */
+export function summaryTokenLimitError(value: unknown) {
+  const limit = value === undefined ? desktopSettingsDefaults.summaryTokenLimit : value;
+  return typeof limit === "number" && Number.isSafeInteger(limit) && limit > 0
+    ? null
+    : "工作摘要 token 上限必须是正整数";
 }

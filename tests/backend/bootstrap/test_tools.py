@@ -494,3 +494,33 @@ async def test_core_stop_preflights_before_teardown_and_force_continues_after_fa
             is not None
         )
         scene_close.assert_awaited_once()
+
+
+async def test_summary_budget_reaches_runtime_writer_and_manual_context(
+    tmp_path, monkeypatch
+):
+    from agent.config_models import Config
+    from bootstrap.app import AppRuntime, RuntimeFeatures
+
+    monkeypatch.setattr("bootstrap.tools._resolve_plugin_dirs", lambda _: [])
+    config = Config(
+        provider="",
+        model="",
+        api_key="",
+        model_registrations=[],
+        memory_optimizer_enabled=False,
+        summary_token_limit=4000,
+    )
+    app = AppRuntime(
+        config,
+        tmp_path,
+        features=RuntimeFeatures(enable_message_channels=False, enable_proactive=False),
+    )
+    await app.start()
+    try:
+        loop = app.core.loop
+        assert loop._llm_config.summary_token_limit == 4000
+        assert loop._reasoner._compaction.writer.request.summary_token_limit == 4000
+        assert loop._reasoner.context_window.config.summary_token_limit == 4000
+    finally:
+        await app.shutdown()

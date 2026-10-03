@@ -10,7 +10,7 @@
 
 `agent.context.compaction_retained_turns` 是独立非负整数策略，默认 2；高级设置单位为轮，0 只取消额外保留已完成轮次，当前轮仍受保护。一次执行冻结策略，保存不会立即压缩。优先保留最近 N 个完整已完成轮次，预算不足时依次纳入更早轮次到摘要，最低为 0。工具调用/结果必须闭合；中断、连续输入与内部恢复提示不冒充新完成轮次。只在压缩提交时改变窗口，之后持续追加。`memory_window` 仍是记忆整理的旧消息基数，不参与轮数计算或联动修改。
 
-工作摘要整体重写，独立于 `RECENT_CONTEXT.md`、HISTORY/PENDING、memory2 和关系产物。JSON 包含 tasks、constraints、decisions、unfinished、tool_state、entities、source_message_ids；要求保留旧摘要里仍生效的任务状态。本地保守估算硬校验 2000 token 上限，提示目标 1000–1800；失败、输出截断或来源 ID 无效不发布。待移出消息中的原生工具关联和嵌入工具链均保留，图片以附件引用表述，避免把 Base64 文本送入摘要。摘要自身是有限的 auxiliary 请求，检查实际输入/输出预算，超限明确失败，不递归压缩或截断原始范围。
+工作摘要整体重写，独立于 `RECENT_CONTEXT.md`、HISTORY/PENDING、memory2 和关系产物。JSON 包含 tasks、constraints、decisions、unfinished、tool_state、entities、source_message_ids；要求保留旧摘要里仍生效的任务状态。`agent.context.summary_token_limit` 为正整数，默认 2000，可在高级设置调整；目标为上限的 50%–90%。规范化先删除额外元数据、保序去重来源 ID。优先使用有效上游 completion 用量，扣除明确报告的 reasoning tokens；该数值是规范化成品的上界，并非重新分词后的精确长度。观察到思考但缺少推理明细、用量缺失/非法时采用明确标记的规范化本地估算。若投影删除了额外字段或重复 ID 且上游仍超限，也采用本地成品估算，避免将已丢弃内容计入上限。只对完整、结构及来源有效但超限的摘要最多缩写一次；非法 JSON、字段缺失、来源无效和输出截断直接失败，不发布。每次请求（包括缩写）的生成额度与预检一致：支持关闭思考的 provider 为成品上限的 2 倍且不超过全局 max_tokens，通用推理 provider 保留全局生成额度。候选窗口预留配置额度，最终完整请求仍必须通过实际 render/measure 输入预算检查。待移出消息中的原生工具关联和嵌入工具链均保留，图片以附件引用表述，避免把 Base64 文本送入摘要。摘要自身是有限的 auxiliary 请求，检查实际输入/输出预算，超限明确失败，不递归压缩或截断原始范围。
 
 `sessions.maintenance_progress` 单独保存窗口水位、版本、身份归属和消费者进度，普通消息保存不覆盖它。用户上下文共享 `user` 窗口；外部群与陌生私聊以实际 thread id 各自保存窗口。记忆继续使用 `last_consolidated` / `user_cursor` / `external_cursor`，单独整理记忆不会缩短原文窗口或撤下历史解锁工具。历史、工具和成员来源统一使用 `history_start` 的窗口水位。
 
@@ -34,7 +34,7 @@
 
 验证使用了受控中文、带图、非缓存 usage、流式尾部 usage、动态 context frame、真实提示渲染与会话续接、身份/连接切换及并发迟到响应测试。未调用真实 provider；中文/图片误差和缓存命中效果仍未取得真实数据，不能据测试桩数值宣称已验证。
 
-`CompactionResult` 共用于自动和手动入口，记录模型、容量预算、前后用量与来源、执行/失败阶段、配置/实际保留轮数、窗口范围与版本、记忆游标/版本，以及是否需要前置和是否已经提交记忆。失败结果不会把已提交的记忆误报为回滚。
+`CompactionResult` 共用于自动和手动入口，记录模型、容量预算、前后用量与来源、执行/失败阶段、配置/实际保留轮数、窗口范围与版本、记忆游标/版本，以及是否需要前置和是否已经提交记忆。失败结果不会把已提交的记忆误报为回滚。`summary_diagnostics` 按生成批次与缩写次数保留 completion/reasoning/正文上界、本地规范化估算、采用值与来源、回退原因、配置上限、去重后来源数量和结果；成功与失败均通过 observe 持久化，不包含摘要正文或来源 ID。
 
 桌面 `chat.context.status` 通过 `ContextWindow` 和正式 `CompactionRenderer` / prompt owner 读取持久化窗口，以实际角色模型的 provider 归一化请求和 usage 锚点测量；不执行模型、预检索或普通回合，不包含未发送草稿/附件/引用。圆环分母始终是 `model_context_window`，来源为实际或明确标注的估算；未知保留 null。角色/模型/连接变化使旧读取失效，聊天完成、手动操作完成/失败和运行时更新会刷新。角色工作与独立记忆维护在各自 gate / lock 释放后发布刷新事件，忙碌状态随完成或失败恢复，不轮询、不伪造任务进度。
 

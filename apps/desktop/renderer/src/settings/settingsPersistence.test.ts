@@ -183,3 +183,16 @@ describe("compaction draft validation", () => {
     }
   });
 });
+
+
+it("retains invalid summary budget drafts without saving or refreshing", async () => {
+  const draft = createSettingsFormData();
+  draft.advanced.summaryTokenLimit = 0;
+  const result = await saveSettingsPageData({
+    readSettings: async () => { throw new Error("must not refresh"); },
+    saveSettings: async () => { throw new Error("must not save"); },
+  }, draft);
+  assert.equal(result.saveResult.ok, false);
+  assert.match(result.saveResult.error?.message ?? "", /正整数/);
+  assert.equal(result.nextDraft.advanced.summaryTokenLimit, 0);
+});

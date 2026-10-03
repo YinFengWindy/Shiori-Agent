@@ -24,6 +24,7 @@ from core.common.llm_output_log import summarize_llm_output_for_log
 from agent.prompting.input_budget import BudgetPolicy, InputBudget, build_input_budget
 from agent.prompting.usage_accounting import record_usage, record_failed_usage
 from agent.prompting.token_estimate import estimate_tokens
+from agent.prompting.output_usage import OutputTokenUsage, parse_output_usage
 from agent.prompting.usage_anchor import (
     UsageAnchors,
     InputEstimate,
@@ -89,6 +90,8 @@ class LLMResponse:
     provider_fields: dict[str, Any] = field(default_factory=dict)
     prompt_tokens: int | None = None
     completion_tokens: int | None = None
+    # Strict visible-output counts are separate from billing usage.
+    output_usage: OutputTokenUsage | None = None
     input_budget: InputBudget | None = None
     cache_prompt_tokens: int | None = None
     cache_hit_tokens: int | None = None
@@ -603,6 +606,9 @@ class LLMProvider:
                 completion_tokens=_coerce_int(
                     _get_field(getattr(resp, "usage", None), "completion_tokens")
                 ),
+                output_usage=parse_output_usage(
+                    getattr(resp, "usage", None), has_thinking=bool(thinking)
+                ),
                 input_budget=budget,
                 content=raw,
                 tool_calls=tool_calls,
@@ -667,6 +673,7 @@ class LLMProvider:
         cache_hit_tokens: int | None = None
         total_tokens: int | None = None
         completion_tokens: int | None = None
+        output_usage_payload: Any = None
         finish_reason: str | None = None
         refused = False
 
@@ -688,6 +695,8 @@ class LLMProvider:
                 cache_hit_tokens = hit_tokens
             if chunk_total_tokens is not None:
                 total_tokens = chunk_total_tokens
+            if getattr(chunk, "usage", None) is not None:
+                output_usage_payload = chunk.usage
             chunk_completion = _coerce_int(
                 _get_field(getattr(chunk, "usage", None), "completion_tokens")
             )
@@ -786,6 +795,9 @@ class LLMProvider:
         return LLMResponse(
             prompt_tokens=cache_prompt_tokens,
             completion_tokens=completion_tokens,
+            output_usage=parse_output_usage(
+                output_usage_payload, has_thinking=bool(thinking)
+            ),
             content=raw,
             tool_calls=tool_calls,
             thinking=thinking,

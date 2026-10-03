@@ -1340,3 +1340,49 @@ async def test_tool_choice_change_invalidates_actual_usage_anchor():
             provider.input_budget(**request, tool_choice="auto").estimate.source
             == "local"
         )
+
+
+@pytest.mark.parametrize("stream", [False, True])
+async def test_provider_retains_visible_output_usage_after_reasoning_extraction(
+    monkeypatch, stream
+):
+    usage = SimpleNamespace(
+        completion_tokens=7000,
+        completion_tokens_details=SimpleNamespace(reasoning_tokens=5608),
+    )
+    response = (
+        _FakeStream(
+            [
+                SimpleNamespace(
+                    choices=[
+                        SimpleNamespace(
+                            delta=SimpleNamespace(
+                                content="visible", reasoning_content="private thought"
+                            ),
+                            finish_reason="stop",
+                        )
+                    ]
+                ),
+                SimpleNamespace(choices=[], usage=usage),
+            ]
+        )
+        if stream
+        else _Response(
+            content="visible", reasoning_content="private thought", usage=usage
+        )
+    )
+    fake = _FakeClient([response])
+    monkeypatch.setattr("agent.provider.AsyncOpenAI", lambda **kwargs: fake)
+    provider = LLMProvider(api_key="test")
+    result = await provider.chat(
+        messages=[{"role": "user", "content": "hello"}],
+        model="model",
+        tools=[],
+        max_tokens=8000,
+        on_content_delta=AsyncMock() if stream else None,
+    )
+    assert result.content == "visible"
+    assert result.thinking == "private thought"
+    assert result.output_usage.visible_tokens == 1392
+    assert result.output_usage.reasoning_tokens == 5608
+    assert result.completion_tokens == 7000

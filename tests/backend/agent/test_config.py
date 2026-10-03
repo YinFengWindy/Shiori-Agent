@@ -374,3 +374,22 @@ def test_compaction_retained_turns_defaults_to_two():
     from agent.config import load_config_data
 
     assert load_config_data({}).compaction_retained_turns == 2
+
+
+@pytest.mark.parametrize("value", [0, -1, True, 1.5, "2000", None])
+def test_summary_token_limit_rejects_invalid_configuration(value):
+    from agent.config import load_config_data
+
+    with pytest.raises(ValueError, match="正整数"):
+        load_config_data({"agent": {"context": {"summary_token_limit": value}}})
+
+
+def test_summary_token_limit_defaults_and_loads_independently():
+    from agent.config import load_config_data
+
+    assert load_config_data({}).summary_token_limit == 2000
+    config = load_config_data({"agent": {"context": {"summary_token_limit": 4000}}})
+    assert config.summary_token_limit == 4000
+    assert config.max_tokens == 8192
+    assert config.compaction_retained_turns == 2
+    assert config.context_budget.trigger_ratio == 0.75

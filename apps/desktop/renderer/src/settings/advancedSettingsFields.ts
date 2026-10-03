@@ -43,6 +43,7 @@ export const advancedSettingsGroups: readonly AdvancedSettingsGroup[] = [
   {
     title: "上下文压缩",
     fields: [
+      { kind: "number", key: "summaryTokenLimit", configKey: "summary_token_limit", label: "工作摘要长度上限", unit: "token" },
       { kind: "number", key: "compactionRetainedTurns", configKey: "compaction_retained_turns", label: "压缩后保留原文轮数", unit: "轮" },
       { kind: "number", key: "contextTriggerRatio", configKey: "trigger_ratio", label: "上下文压缩触发比例" },
       { kind: "number", key: "contextTargetRatio", configKey: "target_ratio", label: "上下文压缩目标比例" },
