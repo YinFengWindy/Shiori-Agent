@@ -1,7 +1,8 @@
 """Working summaries validate size/provenance and budget their own request."""
 
 import json
-from unittest.mock import AsyncMock
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -25,6 +26,112 @@ def _payload(ids, **changes):
         },
         ensure_ascii=False,
     )
+
+
+def _completion(content, finish_reason="stop"):
+    return SimpleNamespace(
+        choices=[
+            SimpleNamespace(
+                message=SimpleNamespace(content=content, tool_calls=[]),
+                finish_reason=finish_reason,
+            )
+        ],
+        usage=None,
+    )
+
+
+@pytest.mark.parametrize(
+    "provider_name, configured, expected",
+    [
+        ("StepFun", 16384, 16384),
+        ("deepseek", 16384, 4000),
+        ("StepFun", 1024, 1024),
+        ("deepseek", 1024, 1024),
+    ],
+)
+async def test_summary_generation_budget_matches_provider_preflight(
+    tmp_path, monkeypatch, provider_name, configured, expected
+):
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("cli:summary-generation-budget")
+    session.add_message("user", "continue the plan")
+    session.add_message("assistant", "noted")
+    manager.save(session)
+    prepared = await manager.prepare_window(session.key, None, keep_turns=0)
+    assert prepared is not None
+    provider = LLMProvider(
+        api_key="test",
+        provider_name=provider_name,
+        model_context_window=24000,
+        default_max_tokens=configured,
+        budget_policy=BudgetPolicy(safety_margin_tokens=20),
+    )
+    content = _payload([session.messages[0]["id"]])
+    create = AsyncMock(return_value=_completion(content))
+    monkeypatch.setattr(provider._client.chat.completions, "create", create)
+    measure = provider.input_budget
+    preflight = Mock(wraps=measure)
+    monkeypatch.setattr(provider, "input_budget", preflight)
+    try:
+        result = await WorkingSummaryWriter(
+            manager, provider, "explicit", configured
+        ).generate(prepared)
+        sent = create.await_args.kwargs
+        budget = measure(**preflight.call_args.kwargs)
+        assert budget is not None
+        assert budget.output_reservation_tokens == sent["max_tokens"] == expected
+        assert budget.estimate.tokens <= budget.input_limit_tokens
+        assert create.await_count == 1
+        assert "auxiliary_max_tokens" not in sent and "call_purpose" not in sent
+        if provider_name == "deepseek":
+            assert sent["extra_body"]["thinking"] == {"type": "disabled"}
+        assert json.loads(result.content) == json.loads(content)
+    finally:
+        await provider.aclose()
+
+
+@pytest.mark.parametrize("outcome", ["complete", "oversized", "truncated"])
+async def test_generation_headroom_keeps_summary_validation(
+    tmp_path, monkeypatch, outcome
+):
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("cli:summary-headroom")
+    session.add_message("user", "continue the plan")
+    session.add_message("assistant", "noted")
+    manager.save(session)
+    prepared = await manager.prepare_window(session.key, None, keep_turns=0)
+    assert prepared is not None
+    provider = LLMProvider(
+        api_key="test",
+        provider_name="StepFun",
+        model_context_window=1000000,
+        default_max_tokens=16384,
+    )
+    content = _payload(
+        [session.messages[0]["id"]],
+        tasks="中" * 1000 if outcome == "oversized" else "continue the plan",
+    )
+
+    async def complete(**kwargs):
+        # Reasoning can exhaust 2000 tokens before even a short JSON is complete.
+        truncated = kwargs["max_tokens"] <= 2000 or outcome == "truncated"
+        return _completion(content, "length" if truncated else "stop")
+
+    create = AsyncMock(side_effect=complete)
+    monkeypatch.setattr(provider._client.chat.completions, "create", create)
+    try:
+        writer = WorkingSummaryWriter(manager, provider, "step-5-preview", 16384)
+        if outcome == "complete":
+            summary = await writer.generate(prepared)
+            assert json.loads(summary.content) == json.loads(content)
+        else:
+            error = "超过 2000 token 上限" if outcome == "oversized" else "输出被截断"
+            with pytest.raises(ValueError, match=error):
+                await writer.generate(prepared)
+        assert create.await_count == 1
+        assert not manager.maintenance_progress(session).summaries
+    finally:
+        await provider.aclose()
 
 
 @pytest.mark.parametrize(
