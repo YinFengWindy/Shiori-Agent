@@ -87,7 +87,7 @@ owner 字段填写 GitHub owner。维护者仍需完成下面的外部设置。
    gh run download <run-id> --name sdk-release-<run-id>-<build-attempt> --dir sdk-first-release
    uv run python -m scripts.sdk_release verify sdk-first-release --ref refs/tags/sdk-v3.1.0 --commit <标签提交-SHA>
    npm login
-   npm publish sdk-first-release/yinfengwindy-shiori-sdk-3.1.0.tgz --access public
+   npm publish ./sdk-first-release/yinfengwindy-shiori-sdk-3.1.0.tgz --access public
    ```
 
    手动首次发布使用账号 2FA；本地不加 `--provenance`，后续 GitHub OIDC 发布自动生成
