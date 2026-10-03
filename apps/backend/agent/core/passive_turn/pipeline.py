@@ -282,7 +282,7 @@ class PassiveTurnPipeline:
         *,
         dispatch_outbound: bool = True,
     ) -> OutboundMessage:
-        pushes = TurnPushDrafts(key)
+        pushes = TurnPushDrafts(key, started_at=msg.timestamp)
         state = TurnState(
             msg=msg,
             session_key=key,

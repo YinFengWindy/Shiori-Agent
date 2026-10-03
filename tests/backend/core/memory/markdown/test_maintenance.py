@@ -19,9 +19,11 @@ from shiori_sdk.memory.committed import TurnCommitted
 from agent.core.passive_turn.helpers import get_window_history
 from conversation.context_scope import (
     history_start,
+    load_user_context_threads,
     turn_context_view,
     user_context_view,
 )
+from core.memory.markdown.recent_context_document import stamp_recent_context
 from conversation.service import desktop_thread_id
 from core.identity import IdentityChat, UserIdentityStore
 from shiori_sdk.accounts.models import AccountRecord
@@ -1123,3 +1125,34 @@ async def test_bound_dm_prefix_is_not_newly_extracted_into_memory(
     assert "excluded old DM" not in profile.read_recent_context()
     assert profile.read_long_term() == existing_memory
     assert len(session.messages) == 3
+
+
+async def test_preparation_and_commit_use_the_same_role_recent_document(tmp_path):
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("role:mira")
+    session.metadata["role_id"] = "mira"
+    session.add_message("user", "current desktop", thread_id=desktop_thread_id("mira"))
+    manager.save(session)
+    ownership = load_user_context_threads(tmp_path, "mira")
+    for root, label in (
+        (tmp_path, "global secret"),
+        (tmp_path / "roles" / "other", "other role secret"),
+        (tmp_path / "roles" / "mira", "mira prior topic"),
+    ):
+        MarkdownMemoryStore(root).write_recent_context(
+            stamp_recent_context(
+                f"# 最近发生的事\n\n## 最近聊过的事\n- 最近持续关注：{label}\n",
+                ownership,
+            )
+        )
+    provider, event_bus, _, maintenance = _recording_maintenance(tmp_path, manager)
+    try:
+        result = await maintenance.consolidate(
+            ConsolidateRequest(session=session, force=True)
+        )
+    finally:
+        await event_bus.aclose()
+    assert result.trace["mode"] == "markdown"
+    [prompt] = provider.recent_context_prompts
+    assert "mira prior topic" in prompt
+    assert "global secret" not in prompt and "other role secret" not in prompt

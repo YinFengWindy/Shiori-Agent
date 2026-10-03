@@ -206,6 +206,14 @@ class ContextView:
         return self.scope == "external"
 
     @property
+    def has_message_boundary(self) -> bool:
+        """Whether thread membership alone is insufficient for visible history."""
+        return self.scope == "user" and any(
+            since and self.includes_thread(thread)
+            for thread, since in self.user_threads.context_since.items()
+        )
+
+    @property
     def category(self) -> ContextView:
         """视图所在的整类上下文：外部回合的视图去掉会话限定。
 

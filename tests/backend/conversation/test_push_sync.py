@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from pathlib import Path
+from datetime import datetime, timezone
+import asyncio
 from unittest.mock import AsyncMock
 
 import pytest
@@ -11,6 +13,9 @@ from bus.event_bus import EventBus
 from bus.events_lifecycle import ExternalTextPushed, ProactiveMessageCommitted
 from shiori_sdk.channels.threads import network_thread_id
 from conversation.push_sync import ExternalPushSyncService
+from conversation.context_scope import user_context_view
+from core.identity import IdentityChat, UserIdentityStore
+from shiori_sdk.accounts.models import AccountRecord
 from session.manager import SessionManager
 
 
@@ -122,6 +127,58 @@ def _text_sync(tmp_path: Path):
 
     push_tool.register_channel("qq", text=send_text)
     return session_manager, push_tool, committed, texts
+
+
+@pytest.mark.parametrize("kind", ["text", "image"])
+@pytest.mark.parametrize("failure", [RuntimeError, asyncio.CancelledError])
+async def test_abandoned_push_retains_the_admitted_turn_boundary(
+    tmp_path, kind, failure
+):
+    manager, push, _, _ = _text_sync(tmp_path)
+    push.register_channel(
+        "qq", text=AsyncMock(return_value=None), image=AsyncMock(return_value=None)
+    )
+    old_start = "2026-01-01T00:00:00+00:00"
+    drafts = TurnPushDrafts("role:mira", started_at=datetime.fromisoformat(old_start))
+    with drafts.collect():
+        await push.execute(
+            channel="qq",
+            chat_id="902",
+            role_id="mira",
+            session_key="role:mira",
+            defer_push_session_sync="true",
+            **(
+                {"message": "old turn text"}
+                if kind == "text"
+                else {"image": "scene.png"}
+            ),
+        )
+    # The draft already belongs to the old admitted turn; cleanup must preserve it.
+    assert drafts.messages[0]["metadata"]["context_turn_started_at"] == old_start
+    identities = UserIdentityStore(
+        tmp_path, clock=lambda: datetime(2026, 1, 2, tzinfo=timezone.utc)
+    )
+    record = AccountRecord(
+        id="qq:101",
+        plugin_id="qq",
+        platform="qq",
+        platform_account_id="101",
+        config_ref="101",
+        role_id="mira",
+    )
+    assert identities.pair(
+        identities.create_pairing_code().code,
+        record=record,
+        user_id="902",
+        scope="platform",
+        chat=IdentityChat(record.id, "qq", "902"),
+    )
+    view = user_context_view(tmp_path, "mira")
+    assert not view.includes(drafts.messages[0])
+    await drafts.abandoned(turn_error=failure("turn ended"))
+    [stored] = manager._store.fetch_session_messages("role:mira")
+    assert not view.includes(stored)
+    assert stored["metadata"]["context_turn_started_at"] == old_start
 
 
 @pytest.mark.asyncio

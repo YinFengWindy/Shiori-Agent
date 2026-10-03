@@ -341,6 +341,7 @@ class _MarkdownConsolidationWorker(_RecentContextWorkerMixin):
         user_threads: "UserContextThreads | None" = None,
         views: "tuple[ContextView, ...]" = (),
         *,
+        profile_maint: "MarkdownMemoryStore | None" = None,
         group_environment: "GroupEnvironment",
         member_profiles: "MemberProfiles",
         bound_senders: "BoundUserSenders",
@@ -354,7 +355,7 @@ class _MarkdownConsolidationWorker(_RecentContextWorkerMixin):
         ``bound_senders`` 认出的用户本人不产生成员档案。``views`` 是本次推进游标的
         上下文（见 ``_select_consolidation_window``），非角色会话为空。
         """
-        profile_maint = self._profile_maint
+        profile_maint = profile_maint or self._profile_maint
         # 1. 先决定这次要归档哪一段消息窗口；没有新窗口就直接返回。
         window = _select_consolidation_window(
             session,

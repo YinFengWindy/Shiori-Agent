@@ -8,6 +8,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from agent.memory import MemoryStore
+from conversation.context_scope import load_user_context_threads
+from core.memory.markdown_schema import normalize_memory_document
+from shiori_sdk.files.text import atomic_save_text
+from .recent_context_document import visible_recent_context
 
 if TYPE_CHECKING:
     from agent.provider import LLMProvider
@@ -16,6 +20,13 @@ if TYPE_CHECKING:
 
 
 class MarkdownMemoryStore(MemoryStore):
+    def write_recent_context(self, content: str) -> None:
+        """Publish derived text and its host visibility stamp as one atomic file."""
+        atomic_save_text(
+            self.recent_context_file,
+            normalize_memory_document("RECENT_CONTEXT.md", content),
+        )
+
     def read_recent_history(self, *, max_chars: int = 0) -> str:
         return self.read_history(max_chars=max_chars)
 
@@ -92,10 +103,17 @@ class MarkdownMemoryRuntime:
         session_metadata: dict[str, Any] | None = None,
         role_id: str | None = None,
     ) -> str:
-        return self.resolve_store(
+        store = self.resolve_store(
             session_metadata=session_metadata,
             role_id=role_id,
-        ).read_recent_context()
+        )
+        resolved_role = str(
+            role_id or (session_metadata or {}).get("role_id") or ""
+        ).strip()
+        return visible_recent_context(
+            store.read_recent_context(),
+            load_user_context_threads(self.workspace, resolved_role),
+        )
 
     def read_recent_history(
         self,

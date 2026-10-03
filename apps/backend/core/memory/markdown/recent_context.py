@@ -8,6 +8,7 @@ import re
 from typing import TYPE_CHECKING
 
 from conversation.context_scope import ContextView, UserContextThreads
+from .recent_context_document import stamp_recent_context, visible_recent_context
 
 from .contracts import ConsolidationFailure, ConsolidationWindow
 from .formatting import (
@@ -361,6 +362,7 @@ ongoing_threads 严格限制：
             old_recent_context = str(
                 await asyncio.to_thread(profile_maint.read_recent_context) or ""
             )
+        old_recent_context = visible_recent_context(old_recent_context, user_threads)
         conversation = _format_conversation_for_recent_context(
             compact_source,
             nsfw_memory_enabled=nsfw_memory_enabled,
@@ -430,7 +432,7 @@ ongoing_threads 严格限制：
                 )
         elif old_recent_context.strip():
             compression = self._extract_recent_context_compression(old_recent_context)
-        return _render_recent_context(
+        rendered = _render_recent_context(
             compression=compression,
             compression_until=(
                 compression_until
@@ -447,6 +449,7 @@ ongoing_threads 严格限制：
             ),
             recent_turns=rendered_recent_turns,
         )
+        return stamp_recent_context(rendered, user_threads)
 
     async def refresh_recent_turns(
         self,
@@ -470,6 +473,10 @@ ongoing_threads 严格限制：
             existing_text = str(
                 await asyncio.to_thread(profile.read_recent_context) or ""
             )
+        existing_text = visible_recent_context(existing_text, user_threads)
         updated = _replace_recent_turns_block(existing_text, rendered_recent_turns)
         if hasattr(profile, "write_recent_context"):
-            await asyncio.to_thread(profile.write_recent_context, updated)
+            await asyncio.to_thread(
+                profile.write_recent_context,
+                stamp_recent_context(updated, user_threads),
+            )

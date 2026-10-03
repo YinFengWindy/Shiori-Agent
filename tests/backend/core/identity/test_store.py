@@ -177,6 +177,27 @@ def test_legacy_chat_keeps_unbounded_history_when_repaired(tmp_path):
     assert repaired is not None and repaired.chats[0].context_since == ""
 
 
+def test_returning_to_a_known_chat_preserves_its_boundary_and_updates_delivery(
+    tmp_path,
+):
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    store = UserIdentityStore(tmp_path, clock=lambda: now)
+    first = _pair(store, QQ_A, "902", "platform", ("qq", "A"))
+    assert first is not None
+    now = datetime(2026, 1, 2, tzinfo=timezone.utc)
+    store.remember_chat(first.id, IdentityChat(QQ_A.id, "qq", "B"))
+    [second] = store.list()
+    assert {chat.chat_id for chat in second.chats} == {"A", "B"}
+    assert second.chat_for(QQ_A.id).chat_id == "B"
+    now = datetime(2026, 1, 3, tzinfo=timezone.utc)
+    store.remember_chat(first.id, IdentityChat(QQ_A.id, "qq", "A"))
+    [returned] = UserIdentityStore(tmp_path).list()
+    assert returned.chat_for(QQ_A.id) == first.chats[0]
+    assert {chat.chat_id: chat.context_since for chat in returned.chats} == {
+        chat.chat_id: chat.context_since for chat in second.chats
+    }
+
+
 def test_forgetting_an_account_drops_its_bindings_and_chats(tmp_path: Path) -> None:
     changes: list[None] = []
     store = UserIdentityStore(tmp_path)

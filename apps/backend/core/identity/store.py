@@ -223,12 +223,19 @@ def _with_chat(
     identity: UserIdentity, chat: IdentityChat, *, context_since: str
 ) -> UserIdentity:
     """Keep a known conversation's cut; a new conversation starts at admission."""
-    known = identity.chat_for(chat.account_id)
-    if known and (known.channel, known.chat_id) == (chat.channel, chat.chat_id):
-        return identity
-    others = tuple(
-        item for item in identity.chats if item.account_id != chat.account_id
+    known = next(
+        (
+            item
+            for item in identity.chats
+            if (item.account_id, item.channel, item.chat_id)
+            == (chat.account_id, chat.channel, chat.chat_id)
+        ),
+        None,
     )
+    if known is not None and known is identity.chat_for(chat.account_id):
+        return identity
+    # Revisit only updates delivery order; history boundaries never move.
+    others = tuple(item for item in identity.chats if item is not known)
     return replace(
-        identity, chats=(*others, replace(chat, context_since=context_since))
+        identity, chats=(*others, known or replace(chat, context_since=context_since))
     )

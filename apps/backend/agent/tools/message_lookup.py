@@ -319,7 +319,11 @@ class SearchMessagesTool(Tool):
             offset=offset,
             thread_ids=thread_ids,
             excluded_session_prefix=excluded_prefix,
-            include=scope[1].includes if scope is not None else None,
+            include=(
+                scope[1].includes
+                if scope is not None and scope[1].has_message_boundary
+                else None
+            ),
         )
         terms = [t for t in term.split() if t]
         messages = [_build_search_preview(message, terms) for message in matched]

@@ -861,14 +861,16 @@ def test_first_message_in_new_bound_chat_sets_its_own_context_boundary(tmp_path)
     message.timestamp = datetime(2026, 1, 3, tzinfo=timezone.utc)
     routed = hub.route_account_inbound(message)
     assert routed is not None
-    [chat] = store.identities.list()[0].chats
+    identity = store.identities.list()[0]
+    chat = identity.chat_for(account_id)
+    assert chat is not None
     assert chat.context_since == message.timestamp.isoformat()
     assert user_context_view(tmp_path, "mira").includes(
         {"metadata": routed.metadata, "timestamp": routed.timestamp.isoformat()}
     )
     message.timestamp = datetime(2026, 1, 4, tzinfo=timezone.utc)
     assert hub.route_account_inbound(message) is not None
-    assert store.identities.list()[0].chats == (chat,)
+    assert store.identities.list()[0].chats == identity.chats
 
 
 def test_plugins_cannot_claim_the_user_flag(tmp_path: Path) -> None:

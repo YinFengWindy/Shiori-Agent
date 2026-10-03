@@ -103,11 +103,12 @@ class UserIdentity:
     def chat_for(self, account_id: str) -> IdentityChat | None:
         """The known private chat with the user through account ``account_id``.
 
-        A binding keeps at most one chat per account (the latest), so this is
-        the chat a message to the user through that account belongs to.
+        All known chats retain their visibility boundary; the last registered
+        chat on this account is the current delivery target.
         """
         return next(
-            (chat for chat in self.chats if chat.account_id == account_id), None
+            (chat for chat in reversed(self.chats) if chat.account_id == account_id),
+            None,
         )
 
     def to_dict(self) -> dict[str, Any]:

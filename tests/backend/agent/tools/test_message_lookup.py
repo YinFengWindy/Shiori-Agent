@@ -1,6 +1,7 @@
 import json
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 
@@ -16,6 +17,35 @@ from session.store import SessionStore
 
 DESKTOP = desktop_thread_id("mira")
 GROUP = network_thread_id("mira", "qq", "group:7")
+
+
+@pytest.mark.parametrize("thread", [DESKTOP, GROUP])
+async def test_thread_only_search_decodes_only_the_requested_page(
+    tmp_path, monkeypatch, thread
+):
+    store = SessionStore(tmp_path / "sessions.db")
+    store.create_session(key="role:mira", metadata={})
+    for seq in range(1000):
+        store.insert_message(
+            "role:mira",
+            role="user",
+            content="benchmark",
+            seq=seq,
+            ts="2026-01-01T00:00:00+00:00",
+            thread_id=thread,
+        )
+    decode = Mock(wraps=store._row_to_message)
+    monkeypatch.setattr(store, "_row_to_message", decode)
+    try:
+        page = json.loads(
+            await SearchMessagesTool(store, tmp_path).execute(
+                query="benchmark", limit=10, **_turn(thread)
+            )
+        )
+        assert page["matched_count"] == 1000 and len(page["messages"]) == 10
+        assert decode.call_count == 10
+    finally:
+        store.close()
 
 
 def _setup_session(store: SessionStore, key: str, n_messages: int) -> None:

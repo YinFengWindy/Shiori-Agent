@@ -39,6 +39,42 @@ async def _memory(manager, session):
     assert await manager.commit_consolidation(request, AsyncMock())
 
 
+async def test_revisiting_known_chat_keeps_every_binding_and_desktop_window(tmp_path):
+    manager, session, view = _session(tmp_path)
+    prepared = await manager.prepare_window(session.key, view, keep_turns=0)
+    assert prepared is not None
+    await _memory(manager, session)
+    assert await manager.commit_window(
+        prepared, "desktop state", prepared.removed_message_ids
+    )
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    identities = UserIdentityStore(tmp_path, clock=lambda: now)
+    record = AccountRecord(
+        id="qq:101",
+        plugin_id="qq",
+        platform="qq",
+        platform_account_id="101",
+        config_ref="101",
+        role_id="mira",
+    )
+    identity = identities.pair(
+        identities.create_pairing_code().code,
+        record=record,
+        user_id="owner",
+        scope="platform",
+        chat=IdentityChat(record.id, "qq", "A"),
+    )
+    assert identity is not None
+    manager.maintenance_progress(session, persist=True)
+    for day, chat in ((2, "B"), (3, "A")):
+        now = datetime(2026, 1, day, tzinfo=timezone.utc)
+        identities.remember_chat(identity.id, IdentityChat(record.id, "qq", chat))
+        progress = manager.maintenance_progress(session, persist=True)
+        assert progress.windows["user"] == 6
+        assert progress.summaries["user"] == "desktop state"
+        assert identities.list()[0].chat_for(record.id).chat_id == chat
+
+
 async def test_new_binding_keeps_desktop_cut_summary_and_compacts_only_new_dm(tmp_path):
     manager, session, view = _session(tmp_path)
     private = network_thread_id("mira", "qq", "owner")

@@ -1,6 +1,8 @@
 """Recent-context projections honor the shared history boundary."""
 
 from pathlib import Path
+from dataclasses import replace
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from typing import cast
 from unittest.mock import AsyncMock
@@ -9,10 +11,15 @@ import pytest
 
 from agent.provider import LLMProvider
 from conversation.context_scope import UserContextThreads
+from conversation.context_scope import load_user_context_threads
+from core.identity import IdentityChat, UserIdentityStore
+from shiori_sdk.accounts.models import AccountRecord
 from conversation.service import desktop_thread_id
 from core.memory.markdown.consolidation import _MarkdownConsolidationWorker
 from core.memory.markdown.contracts import ConsolidationWindow
 from core.memory.markdown.runtime import MarkdownMemoryStore
+from core.memory.markdown.recent_context_document import stamp_recent_context
+from core.memory.markdown.recent_context_document import visible_recent_context
 from session.manager import Session
 from shiori_sdk.channels.threads import network_thread_id
 
@@ -91,8 +98,11 @@ async def test_recent_turn_refresh_excludes_old_dm_and_keeps_prior_compression(
     session, threads = _boundary_session()
     worker, memory, provider = _worker(tmp_path)
     memory.write_recent_context(
-        "# 最近发生的事\n\n## 最近聊过的事\nuntil: 2025-01-01\n"
-        "- 最近持续关注：既有压缩记忆\n\n## 最近的对话\n[user] previous recent turn\n"
+        stamp_recent_context(
+            "# 最近发生的事\n\n## 最近聊过的事\nuntil: 2025-01-01\n"
+            "- 最近持续关注：既有压缩记忆\n\n## 最近的对话\n[user] previous recent turn\n",
+            threads,
+        )
     )
 
     await worker.refresh_recent_turns(session=session, user_threads=threads)
@@ -105,3 +115,113 @@ async def test_recent_turn_refresh_excludes_old_dm_and_keeps_prior_compression(
     assert "excluded" not in snapshot
     assert "previous recent turn" not in snapshot
     provider.chat.assert_not_awaited()
+
+
+@pytest.mark.parametrize("operation", ["refresh", "rewrite"])
+async def test_rebound_snapshot_does_not_keep_prior_private_compression(
+    tmp_path, operation
+):
+    session, old_threads = _boundary_session()
+    worker, memory, provider = _worker(tmp_path)
+    provider.chat.return_value.content = '{"active_topics":["old private secret"]}'
+    old_snapshot = await worker._build_recent_context_snapshot(
+        session=session,
+        profile_maint=memory,
+        window=ConsolidationWindow(
+            old_messages=session.messages,
+            keep_count=4,
+            consolidate_up_to=len(session.messages),
+        ),
+        archive_all=False,
+        user_threads=old_threads,
+    )
+    assert isinstance(old_snapshot, str)
+    memory.write_recent_context(old_snapshot)
+    current = replace(
+        old_threads,
+        context_since={
+            thread: "2026-01-04T00:00:00+00:00" for thread in old_threads.context_since
+        },
+    )
+    provider.chat.reset_mock()
+    provider.chat.return_value.content = '{"active_topics":[]}'
+    if operation == "refresh":
+        await worker.refresh_recent_turns(session=session, user_threads=current)
+        assert "old private secret" not in memory.read_recent_context()
+    else:
+        await worker._build_recent_context_snapshot(
+            session=session,
+            profile_maint=memory,
+            window=ConsolidationWindow(
+                old_messages=session.messages,
+                keep_count=4,
+                consolidate_up_to=len(session.messages),
+            ),
+            archive_all=False,
+            user_threads=current,
+        )
+        prompt = provider.chat.await_args.kwargs["messages"][-1]["content"]
+        assert "old private secret" not in prompt
+
+
+async def test_binding_change_during_generation_cannot_relabel_old_inputs(tmp_path):
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    identities = UserIdentityStore(tmp_path, clock=lambda: now)
+    account = AccountRecord(
+        id="qq:101",
+        plugin_id="qq",
+        platform="qq",
+        platform_account_id="101",
+        config_ref="101",
+        role_id="mira",
+    )
+
+    def bind():
+        return identities.pair(
+            identities.create_pairing_code().code,
+            record=account,
+            user_id="902",
+            scope="platform",
+            chat=IdentityChat(account.id, "qq", "902"),
+        )
+
+    identity = bind()
+    assert identity is not None
+    original = load_user_context_threads(tmp_path, "mira")
+    session = Session("role:mira")
+    session.add_message(
+        "user",
+        "old private secret",
+        thread_id=network_thread_id("mira", "qq", "902"),
+        timestamp="2026-01-02T00:00:00+00:00",
+    )
+    worker, memory, provider = _worker(tmp_path)
+
+    async def complete(**kwargs):
+        nonlocal now
+        identities.unbind(identity.id)
+        now = datetime(2026, 1, 4, tzinfo=timezone.utc)
+        assert bind()
+        return SimpleNamespace(content='{"active_topics":["old private secret"]}')
+
+    provider.chat.side_effect = complete
+    snapshot = await worker._build_recent_context_snapshot(
+        session=session,
+        profile_maint=memory,
+        window=ConsolidationWindow(
+            old_messages=session.messages, keep_count=0, consolidate_up_to=1
+        ),
+        archive_all=False,
+        user_threads=original,
+    )
+    assert isinstance(snapshot, str)
+    memory.write_recent_context(snapshot)
+    assert "old private secret" in visible_recent_context(
+        memory.read_recent_context(), original
+    )
+    assert (
+        visible_recent_context(
+            memory.read_recent_context(), load_user_context_threads(tmp_path, "mira")
+        )
+        == ""
+    )

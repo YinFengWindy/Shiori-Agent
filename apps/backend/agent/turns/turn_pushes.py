@@ -13,7 +13,9 @@ import logging
 from collections.abc import Awaitable, Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
+from datetime import datetime
 from typing import Any
+from session.manager.models import CONTEXT_TURN_STARTED_AT
 
 logger = logging.getLogger("agent.turns.turn_pushes")
 
@@ -25,8 +27,9 @@ _current: ContextVar["TurnPushDrafts | None"] = ContextVar(
 class TurnPushDrafts:
     """Collect ordered pushes without exposing them before the turn commits."""
 
-    def __init__(self, session_key: str) -> None:
+    def __init__(self, session_key: str, *, started_at: datetime | None = None) -> None:
         self.session_key = session_key
+        self._started_at = (started_at or datetime.now().astimezone()).isoformat()
         self.messages: list[dict[str, Any]] = []
         self._task = asyncio.current_task()
         self._active = False
@@ -61,6 +64,7 @@ class TurnPushDrafts:
         """
         if not self._active or self._task is not asyncio.current_task():
             raise RuntimeError("推送所属回合已结束")
+        message.setdefault("metadata", {})[CONTEXT_TURN_STARTED_AT] = self._started_at
         self.messages.append(message)
         if after_commit is not None:
             self._effects[owner] = after_commit
