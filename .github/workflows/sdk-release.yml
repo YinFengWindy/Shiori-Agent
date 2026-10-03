@@ -107,7 +107,8 @@ jobs:
         run: .venv/bin/python -m scripts.sdk_registry npm release-artifacts npm-upload
       - name: Publish the verified npm tarball
         if: steps.pending.outputs.pending == 'true'
-        run: npm publish npm-upload/*.tgz --access public --provenance
+        # The ./ prefix keeps npm from interpreting this path as GitHub shorthand.
+        run: npm publish ./npm-upload/*.tgz --access public --provenance
 
   publish-pypi:
     needs: build
