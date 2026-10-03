@@ -19,6 +19,8 @@ from shiori_sdk.tools import ToolResult
 
 from agent.tools.registry import ToolRegistry
 from bus.event_bus import EventBus
+from scripts.browser_acceptance import BrowserAcceptanceEvidence
+from tests.support.browser_acceptance import record_native_daemons
 from tests.support.plugin_kernel import make_kernel
 
 
@@ -75,8 +77,9 @@ def _agent_browser_pids(pids: set[int]) -> set[int]:
     sys.platform != "win32" or not os.environ.get("SHIORI_BROWSER_USE_RUNTIME"),
     reason="explicit fixed Windows runtime acceptance only",
 )
+@pytest.mark.parametrize("scenario", ["complete", "recovery"])
 async def test_fixed_runtime_local_page_multimodal_persistence_and_cancellation(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, caplog, scenario
 ):
     # SHIORI_BROWSER_USE_RUNTIME points at <resources>/native/browser-use; only
     # the host resources capability is redirected, the plugin resolves it itself.
@@ -87,10 +90,12 @@ async def test_fixed_runtime_local_page_multimodal_persistence_and_cancellation(
     )
     metadata = json.loads((native / "native-runtime.json").read_text(encoding="utf-8"))
     assert metadata["agentBrowser"]["version"] == "0.38.1"
-    evidence = Path(
-        os.environ.get("SHIORI_BROWSER_USE_EVIDENCE", str(tmp_path / "evidence"))
+    evidence = BrowserAcceptanceEvidence(
+        Path(os.environ.get("SHIORI_BROWSER_USE_EVIDENCE", str(tmp_path / "evidence")))
+        / scenario,
+        metadata,
     )
-    evidence.mkdir(parents=True, exist_ok=True)
+    record_native_daemons(monkeypatch, evidence)
     requests = []
     html = """<!doctype html><html lang="zh"><meta charset="utf-8"><title>Shiori 浏览器验收</title>
     <style>body{font:24px sans-serif;margin:48px;background:#f6f4ef;color:#202432}input,button{font:inherit;padding:12px;margin:12px}#space{height:1800px}</style>
@@ -115,7 +120,8 @@ async def test_fixed_runtime_local_page_multimodal_persistence_and_cancellation(
     thread = Thread(target=server.serve_forever, daemon=True)
     thread.start()
     url = f"http://127.0.0.1:{server.server_port}"
-    report = {"versions": metadata, "steps": []}
+    report = evidence.report
+    report["scenario"] = scenario
 
     roots = tmp_path / "plugins"
     stage_plugin_package(plugin_directory("browser_use"), roots / "browser_use")
@@ -127,8 +133,6 @@ async def test_fixed_runtime_local_page_multimodal_persistence_and_cancellation(
         workspace=tmp_path / "workspace",
         plugin_configs={"browser_use": {"enabled": True}},
     )
-    await kernel.load_all()
-    assert kernel.loaded_count == 1
     unloaded = False
     baseline = _owned_descendants(set())
 
@@ -138,71 +142,42 @@ async def test_fixed_runtime_local_page_multimodal_persistence_and_cancellation(
         return registered
 
     async def call(name, arguments):
-        result = await tool(name).execute(role_id="mira", **arguments)
-        report["steps"].append(
-            {
-                "tool": name,
-                "text": _text(result),
-                "image_blocks": (
-                    len(result.content_blocks) if isinstance(result, ToolResult) else 0
-                ),
-            }
+        return await evidence.run(
+            name,
+            lambda: tool(name).execute(role_id="mira", **arguments),
+            arguments,
         )
-        return result
 
+    async def unload():
+        errors = await kernel.unload("browser_use")
+        if errors:
+            raise ExceptionGroup("Browser acceptance cleanup failed", errors)
+
+    failure = None
     try:
+        await evidence.run("load", kernel.load_all)
+        assert kernel.loaded_count == 1
         await call("open", {"url": url})
         browser_pids = _agent_browser_pids(_owned_descendants(baseline))
         assert browser_pids
-        snapshot = _text(await call("snapshot", {"interactive": True}))
-        textbox = re.search(r'textbox "姓名" \[ref=(e\d+)\]', snapshot)
-        button = re.search(r'button "保存" \[ref=(e\d+)\]', snapshot)
-        assert textbox and button, snapshot
-        await call("fill", {"selector": "@" + textbox[1], "text": "栞与小风"})
-        await call("click", {"selector": "@" + button[1]})
-        saved = _text(await call("get_text", {"selector": "#result"}))
-        assert "已保存：栞与小风" in saved
-        result = await call("screenshot", {})
-        assert isinstance(result, ToolResult) and result.content_blocks
-        image = result.content_blocks[0]["image_url"]["url"]
-        assert image.startswith("data:image/png;base64,")
-        (evidence / "browser-filled.png").write_bytes(
-            base64.b64decode(image.split(",", 1)[1])
-        )
-        await call("scroll", {"direction": "down", "amount": 700})
-        scrolled = _text(await call("eval", {"script": "window.scrollY > 0"}))
-        assert "true" in scrolled
-        await call("tab_new", {"url": url + "/second"})
-        tabs = _json(await call("tab_list", {}))
-        assert any(tab["url"].endswith("/second") for tab in tabs["data"]["tabs"])
-        lifecycle = tabs["data"]["lifecycle"]
-        assert (
-            not lifecycle["restartedBackground"] and not lifecycle["relaunchedBrowser"]
-        )
-        # A new tab reuses the same owned daemon/MCP processes.
-        assert _agent_browser_pids(_owned_descendants(baseline)) == browser_pids
-        tab_data = tabs["data"]["tabs"]
-        original = next(
-            tab["tabId"] for tab in tab_data if not tab["url"].endswith("/second")
-        )
-        await call("tab_switch", {"tab": original})
-        refreshed = _json(await call("tab_list", {}))["data"]["tabs"]
-        assert next(tab for tab in refreshed if tab["tabId"] == original)["active"]
+        if scenario == "complete":
+            await _exercise_multimodal_page(
+                call, url, evidence.directory, browser_pids, baseline
+            )
         pids = _owned_descendants(baseline)
         await call("close", {})
         assert all(not _alive(pid) for pid in pids)
 
         await call("open", {"url": url})
-        persisted = _text(
-            await call("eval", {"script": "localStorage.getItem('name')"})
-        )
-        assert "栞与小风" in persisted
+        if scenario == "complete":
+            persisted = _text(
+                await call("eval", {"script": "localStorage.getItem('name')"})
+            )
+            assert "栞与小风" in persisted
         owned = _owned_descendants(baseline)
-        pending = asyncio.create_task(tool("wait_ms").execute(role_id="mira", ms=10000))
+        pending = asyncio.create_task(call("wait_ms", {"ms": 10000}))
         await asyncio.sleep(0.2)
-        queued = asyncio.create_task(
-            tool("open").execute(role_id="mira", url=url + "/must-not-run")
-        )
+        queued = asyncio.create_task(call("open", {"url": url + "/must-not-run"}))
         await asyncio.sleep(0.02)
         pending.cancel()
         with pytest.raises(asyncio.CancelledError):
@@ -228,15 +203,66 @@ async def test_fixed_runtime_local_page_multimodal_persistence_and_cancellation(
         last = _owned_descendants(baseline)
         assert last
         unloaded = True
-        await kernel.unload("browser_use")
-        # Plugin unload reaps every process the host spawned for it.
+        await evidence.run("unload", unload)
         assert all(not _alive(pid) for pid in last)
+    except BaseException as error:
+        failure = error
+        raise
     finally:
-        if not unloaded:
-            await kernel.unload("browser_use")
-        server.shutdown()
-        server.server_close()
-        thread.join()
-        (evidence / "acceptance.json").write_text(
-            json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+        try:
+            if not unloaded:
+                unloaded = True
+                await evidence.run("unload", unload)
+        except BaseException as error:
+            # Teardown is recorded separately without replacing the original action.
+            if failure is None:
+                failure = error
+                raise
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join()
+            report["remaining_owned_pids"] = sorted(_owned_descendants(baseline))
+            report["warnings"] = [
+                record.getMessage() for record in caplog.records if record.levelno >= 30
+            ]
+            if failure is None and report["remaining_owned_pids"]:
+                error = AssertionError("Browser acceptance left owned processes alive")
+                evidence.finish(error)
+                raise error
+            evidence.finish(failure)
+
+
+async def _exercise_multimodal_page(call, url, evidence, browser_pids, baseline):
+    snapshot = _text(await call("snapshot", {"interactive": True}))
+    textbox = re.search(r'textbox "姓名" \[ref=(e\d+)\]', snapshot)
+    button = re.search(r'button "保存" \[ref=(e\d+)\]', snapshot)
+    assert textbox and button, snapshot
+    await call("fill", {"selector": "@" + textbox[1], "text": "栞与小风"})
+    await call("click", {"selector": "@" + button[1]})
+    saved = _text(await call("get_text", {"selector": "#result"}))
+    assert "已保存：栞与小风" in saved
+    result = await call("screenshot", {})
+    assert isinstance(result, ToolResult) and result.content_blocks
+    image = result.content_blocks[0]["image_url"]["url"]
+    assert image.startswith("data:image/png;base64,")
+    (evidence / "browser-filled.png").write_bytes(
+        base64.b64decode(image.split(",", 1)[1])
+    )
+    await call("scroll", {"direction": "down", "amount": 700})
+    scrolled = _text(await call("eval", {"script": "window.scrollY > 0"}))
+    assert "true" in scrolled
+    await call("tab_new", {"url": url + "/second"})
+    tabs = _json(await call("tab_list", {}))
+    assert any(tab["url"].endswith("/second") for tab in tabs["data"]["tabs"])
+    lifecycle = tabs["data"]["lifecycle"]
+    assert not lifecycle["restartedBackground"] and not lifecycle["relaunchedBrowser"]
+    # A new tab reuses the same owned daemon/MCP processes.
+    assert _agent_browser_pids(_owned_descendants(baseline)) == browser_pids
+    tab_data = tabs["data"]["tabs"]
+    original = next(
+        tab["tabId"] for tab in tab_data if not tab["url"].endswith("/second")
+    )
+    await call("tab_switch", {"tab": original})
+    refreshed = _json(await call("tab_list", {}))["data"]["tabs"]
+    assert next(tab for tab in refreshed if tab["tabId"] == original)["active"]
