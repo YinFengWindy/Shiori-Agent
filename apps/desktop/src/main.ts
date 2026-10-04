@@ -28,6 +28,10 @@ import { LocalAssetRegistry, localAssetScheme } from "./assets/localAssetRegistr
 import { ensureDesktopRuntimeConfig, resolveDesktopRuntimePaths } from "./runtimePaths.js";
 import { registerDesktopUpdates } from "./updater.js";
 import { createDesktopMessageNotifications } from "./notifications/electron.js";
+import { NotificationActivation } from "./notifications/activation.js";
+import { notificationChannels } from "./notifications/contract.js";
+import { windowsNotificationIdentity } from "./notifications/windowsIdentity.js";
+import { desktopNotificationIcon } from "./paths.js";
 import { createDesktopTray } from "./tray/menu.js";
 import { PluginTrayRegistry } from "./tray/registry.js";
 import { trayChannels } from "./tray/ipc.js";
@@ -54,11 +58,21 @@ import type { LocalAssetTransport, SettingsFormData, SurfaceSettledPayload } fro
 
 // Voice replies are played from a trusted hidden renderer without a DOM user gesture.
 app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
-// Matches electron-builder's appId and the installed Windows shortcut identity.
-if (process.platform === "win32") app.setAppUserModelId("com.yinfengwindy.shiori");
-
 // Select the profile before acquiring its single-instance lock.
 configureUserDataPath();
+const windowsIdentity = process.platform === "win32" ? windowsNotificationIdentity({
+  packaged: app.isPackaged,
+  appPath: app.getAppPath(),
+  userDataPath: app.getPath("userData"),
+  executablePath: process.execPath,
+  iconPath: desktopNotificationIcon,
+}) : null;
+if (windowsIdentity) app.setAppUserModelId(windowsIdentity.appId);
+const notificationActivation = new NotificationActivation(windowsIdentity?.protocol ?? null, () => {
+  const window = showOrCreateDesktopWindow();
+  window.webContents.send(notificationChannels.clicked);
+});
+notificationActivation.handleArguments(process.argv);
 const runtimePaths = resolveDesktopRuntimePaths({
   packaged: app.isPackaged,
   appPath: app.getAppPath(),
@@ -108,7 +122,8 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 function configureUserDataPath(): void {
-  const requestedUserDataDir = process.env.SHIORI_DESKTOP_USER_DATA_DIR;
+  const requestedUserDataDir = app.commandLine.getSwitchValue("shiori-user-data-dir")
+    || process.env.SHIORI_DESKTOP_USER_DATA_DIR;
   if (!requestedUserDataDir) {
     return;
   }
@@ -151,13 +166,13 @@ app.on("child-process-gone", (_event, details) => {
   });
 });
 
-app.on("second-instance", () => {
+app.on("second-instance", (_event, argv) => {
   logDesktopDiagnostic({
     scope: "main",
     event: "app.second-instance",
     payload: {},
   });
-  showOrCreateDesktopWindow();
+  if (!notificationActivation.handleArguments(argv)) notificationActivation.requestWindow();
 });
 
 async function openLocalAttachment(value: string) {
@@ -266,6 +281,7 @@ function showOrCreateDesktopWindow(): BrowserWindow {
 }
 
 void app.whenReady().then(async () => {
+  if (!hasSingleInstanceLock) return;
   ensureDesktopRuntimeConfig(runtimePaths);
   configureSettingsConfigPath(runtimePaths.configPath);
   reloadVoiceSettings();
@@ -411,7 +427,8 @@ void app.whenReady().then(async () => {
   }
   messageNotifications = createDesktopMessageNotifications({
     getWindow: () => desktopWindow,
-    showWindow: showOrCreateDesktopWindow,
+    activation: notificationActivation,
+    windowsIdentity,
   });
   wireBridgeEvents(bridge, localAssets, (event) => {
     messageNotifications?.handleEvent(event);
@@ -454,6 +471,7 @@ void app.whenReady().then(async () => {
     },
   });
   getOrCreateDesktopWindow();
+  notificationActivation.markReady();
   if (trayLifecycleEnabled) {
     desktopTray = createDesktopTray({
       onShowWindow: () => {

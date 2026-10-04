@@ -19,6 +19,9 @@ export const desktopWindowIcon = resolve(
   process.platform === "win32" ? "shiori-app-icon.ico" : "shiori-app-icon.png",
 );
 
+/** PNG artwork supported by Windows toast XML and the notification identity registry. */
+export const desktopNotificationIcon = resolve(packagedAssetsRoot, "shiori-app-icon.png");
+
 /** Absolute path to the icon used by Electron's native drag preview. */
 export const desktopDragFileIcon = resolve(packagedAssetsRoot, "drag-file-icon.png");
 
