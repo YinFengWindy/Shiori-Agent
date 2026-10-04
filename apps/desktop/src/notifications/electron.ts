@@ -1,19 +1,40 @@
-import { ipcMain, Notification, type BrowserWindow } from "electron";
+import { app, ipcMain, Notification, shell, type BrowserWindow } from "electron";
+import { join } from "node:path";
 import { logDesktopDiagnostic } from "../diagnostics.js";
+import { desktopNotificationIcon } from "../paths.js";
 import { DesktopMessageNotifications } from "./controller.js";
-import { NotificationNavigation } from "./navigation.js";
+import type { NotificationActivation } from "./activation.js";
 import { notificationChannels } from "./contract.js";
+import type { WindowsNotificationIdentity } from "./windowsIdentity.js";
+import { registerWindowsNotifications } from "./windowsRegistration.js";
+import { windowsNotificationToast } from "./windowsToast.js";
 
 /** Wires native notifications and private main-window click delivery to Electron. */
 export function createDesktopMessageNotifications(options: {
   getWindow(): BrowserWindow | null;
-  showWindow(): BrowserWindow;
+  activation: NotificationActivation;
+  windowsIdentity: WindowsNotificationIdentity | null;
 }) {
-  const navigation = new NotificationNavigation();
+  const { navigation } = options.activation;
   const active = new Set<Notification>();
   const reportError = (error: unknown) => logDesktopDiagnostic({
     scope: "main", event: "notification.failed", payload: { error },
   });
+  let registrationReady = true;
+  if (options.windowsIdentity) {
+    try {
+      registerWindowsNotifications({
+        identity: options.windowsIdentity,
+        programsPath: join(app.getPath("appData"), "Microsoft", "Windows", "Start Menu", "Programs"),
+        app,
+        shortcuts: shell,
+      });
+    } catch (error) {
+      // A broken OS registration disables notifications without interrupting bridge or chat delivery.
+      registrationReady = false;
+      reportError(error);
+    }
+  }
   ipcMain.handle(notificationChannels.pending, (event) => (
     event.sender === options.getWindow()?.webContents ? navigation.getPending() : null
   ));
@@ -28,11 +49,19 @@ export function createDesktopMessageNotifications(options: {
       return Boolean(window && !window.isDestroyed() && window.isVisible()
         && !window.isMinimized() && window.isFocused());
     },
-    isSupported: () => Notification.isSupported(),
-    show: ({ title, body }, onClick) => {
-      const notification = new Notification({ title, body });
+    isSupported: () => registrationReady && Notification.isSupported(),
+    show: ({ title, body, roleId }, onClick) => {
+      const notification = new Notification({
+        title, body, icon: desktopNotificationIcon,
+        ...options.windowsIdentity ? {
+          toastXml: windowsNotificationToast({
+            protocol: options.windowsIdentity.protocol, roleId, title, body, iconPath: desktopNotificationIcon,
+          }),
+        } : {},
+      });
       active.add(notification);
-      notification.on("click", onClick);
+      // Windows launches the explicit protocol, including when the native Notification object is gone.
+      if (!options.windowsIdentity) notification.on("click", onClick);
       notification.on("close", () => active.delete(notification));
       notification.on("failed", (_event, error) => {
         active.delete(notification);
@@ -45,11 +74,7 @@ export function createDesktopMessageNotifications(options: {
         throw error;
       }
     },
-    openChat: (roleId) => {
-      navigation.select(roleId);
-      const window = options.showWindow();
-      window.webContents.send(notificationChannels.clicked);
-    },
+    openChat: (roleId) => options.activation.openChat(roleId),
     onError: reportError,
   });
   return {

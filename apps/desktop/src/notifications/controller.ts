@@ -5,7 +5,7 @@ import { notificationMessages } from "./message.js";
 export type MessageNotificationHost = {
   isForeground(): boolean;
   isSupported(): boolean;
-  show(message: { title: string; body: string }, onClick: () => void): void;
+  show(message: { roleId: string; title: string; body: string }, onClick: () => void): void;
   openChat(roleId: string): void;
   onError(error: unknown): void;
 };
