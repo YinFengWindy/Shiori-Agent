@@ -25,6 +25,9 @@ def adapt_json(
     card_version = _version(payload, spec)
     name = _first_text(data, "name", "char_name") or "未命名角色"
     description = _first_text(data, "description")
+    extensions = data.get("extensions")
+    shiori = extensions.get("shiori") if isinstance(extensions, dict) else None
+    shiori_description = shiori.get("description") if isinstance(shiori, dict) else None
     personality = _first_text(data, "personality")
     rules = _first_text(data, "system_prompt")
     profile = {
@@ -38,6 +41,8 @@ def adapt_json(
         },
     }
     adapted = ["name", "description", "personality", "system_prompt"]
+    if isinstance(shiori_description, str):
+        adapted.append("extensions.shiori.description -> description")
     if data.get("post_history_instructions"):
         adapted.append("post_history_instructions -> response_constraints")
     discarded = ["character_book"] if "character_book" in data else []
@@ -70,7 +75,9 @@ def adapt_json(
     )
     return RoleCardImportPreview(
         name=name,
-        description=description,
+        description=(
+            shiori_description if isinstance(shiori_description, str) else description
+        ),
         profile=profile,
         assets=tuple(assets),
         report=report,
@@ -139,6 +146,18 @@ def _unsupported_rules(data: dict[str, Any]) -> list[str]:
         "scan_depth",
         "insertion_order",
     ):
-        if data.get(key):
+        value = data.get(key)
+        if key == "extensions" and isinstance(value, dict):
+            value = dict(value)
+            shiori = value.get("shiori")
+            if isinstance(shiori, dict) and isinstance(shiori.get("description"), str):
+                remaining = {
+                    name: item for name, item in shiori.items() if name != "description"
+                }
+                if remaining:
+                    value["shiori"] = remaining
+                else:
+                    value.pop("shiori")
+        if value:
             values.append(key)
     return values

@@ -27,6 +27,7 @@ function setup(overrides: {
   surfaceWindowLabel?: string;
   invoke?: RegisterDesktopIpcOptions["bridge"]["invoke"];
   showOpenDialog?: DesktopIpcHost["showOpenDialog"];
+  showSaveDialog?: DesktopIpcHost["showSaveDialog"];
   pluginUiResources?: PluginUiResources;
 } = {}) {
   const windowCalls: WindowCall[] = [];
@@ -54,6 +55,7 @@ function setup(overrides: {
     },
     windowFromWebContents: (sender: WebContents) => bySender.get(sender)?.asBrowserWindow() ?? null,
     showOpenDialog: overrides.showOpenDialog ?? (async () => ({ canceled: true, filePaths: [] })),
+    showSaveDialog: overrides.showSaveDialog ?? (async () => ({ canceled: true, filePath: "" })),
     openExternal: async (url: string) => { externalOpened.push(url); },
     logDiagnostic: () => undefined,
     openDiagnosticsFolder: async () => { externalOpened.push("diagnostics"); },
@@ -110,6 +112,23 @@ function setup(overrides: {
 }
 
 describe("desktop ipc window boundaries", () => {
+  it("saves role cards only from main windows and blocks overlapping native dialogs", async () => {
+    let finish!: () => void;
+    const waiting = new Promise<void>((resolve) => { finish = resolve; });
+    const owners: BrowserWindow[] = [];
+    const ipc = setup({
+      invoke: async () => ({ id: "read", type: "response", method: "roles.cardExport.read", error: null,
+        payload: { name: "Role", format: "json", data_base64: Buffer.from("{}").toString("base64") } }),
+      showSaveDialog: async (window) => { owners.push(window); await waiting; return { canceled: true, filePath: "" }; },
+    });
+    await assert.rejects(ipc.invokeHandler("desktop:save-role-card", ipc.windows.pet.webContents, "a".repeat(32)), /主窗口/);
+    const pending = ipc.invokeHandler("desktop:save-role-card", ipc.windows.main.webContents, "a".repeat(32));
+    await assert.rejects(ipc.invokeHandler("desktop:save-role-card", ipc.windows.main.webContents, "a".repeat(32)), /正在导出/);
+    finish();
+    assert.deepEqual(await pending, { saved: false });
+    assert.deepEqual(owners, [ipc.windows.main]);
+    assert.deepEqual(await ipc.invokeHandler("desktop:save-role-card", ipc.windows.main.webContents, "a".repeat(32)), { saved: false });
+  });
   it("relaunches the app for the main window but refuses the pet surface", async () => {
     const ipc = setup();
 

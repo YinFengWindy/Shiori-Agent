@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
+import { act } from "react";
+import { mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import type { RoleRecord } from "@yinfengwindy/shiori-sdk";
 import { RoleManagementPage } from "./RoleManagementPage";
 
@@ -27,11 +29,29 @@ function render(roles: RoleRecord[], pending: Parameters<typeof RoleManagementPa
       onDeleteRole={() => undefined}
       onCreateRole={() => undefined}
       onImportRoleCard={() => undefined}
+      onExportRole={() => undefined}
     />,
   );
 }
 
 describe("RoleManagementPage", () => {
+  it("exports the menu's role without opening its details or chat", async () => {
+    const selected: string[] = [];
+    let opened = false;
+    const view = await mountTestComponent(<RoleManagementPage activeRoleId="first" bridgeReady canImportRoleCard
+      pendingCardAction={null} roles={[role("first"), role("second")]}
+      onOpenRoleDetail={() => { opened = true; }} onGoToChat={() => { opened = true; }}
+      onDeleteRole={() => undefined} onCreateRole={() => undefined} onImportRoleCard={() => undefined}
+      onExportRole={(roleId) => selected.push(roleId)} />);
+    try {
+      await act(async () => view.container.querySelector<HTMLButtonElement>('[data-testid="role-card-more-second"]')?.click());
+      const action = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]')).find((item) => item.textContent?.includes("导出角色"));
+      assert.ok(action);
+      await act(async () => action.click());
+      assert.deepEqual(selected, ["second"]);
+      assert.equal(opened, false);
+    } finally { await view.cleanup(); }
+  });
   it("never nests a button inside another button", () => {
     const markup = render([role("rin", { chat_background_abs: "C:/r/bg.png" }), role("kaede")]);
     assert.doesNotMatch(markup, /<button[^>]*>(?:(?!<\/button>).)*<button/);

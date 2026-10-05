@@ -1,4 +1,4 @@
-import { ChatCircleDots, DotsThree, PencilSimple, Trash } from "@phosphor-icons/react";
+import { ChatCircleDots, DotsThree, DownloadSimple, PencilSimple, Trash } from "@phosphor-icons/react";
 import { toFileUrl } from "../shared/format";
 import { SpinnerIcon } from "../shared/icons";
 import { compactPressableClass, cx, ActionMenu, type RoleRecord } from "@yinfengwindy/shiori-sdk";
@@ -15,6 +15,7 @@ type RoleCardProps = {
   onOpen: () => void;
   onGoToChat: () => void;
   onDelete: () => void;
+  onExport: () => void;
 };
 
 /**
@@ -25,7 +26,7 @@ type RoleCardProps = {
  * `data-vt-part` so opening the role morphs them into the detail header
  * (roleViewTransition).
  */
-export function RoleCard({ role, active, bridgeReady, pendingCardAction, onOpen, onGoToChat, onDelete }: RoleCardProps) {
+export function RoleCard({ role, active, bridgeReady, pendingCardAction, onOpen, onGoToChat, onDelete, onExport }: RoleCardProps) {
   const view = selectRoleCardView(role, pendingCardAction);
   const blocked = !bridgeReady || view.pending !== null;
 
@@ -78,6 +79,7 @@ export function RoleCard({ role, active, bridgeReady, pendingCardAction, onOpen,
             items={[
               { id: "chat", label: "去聊天", icon: <ChatCircleDots className="h-4 w-4" />, onSelect: onGoToChat },
               { id: "edit", label: "编辑", icon: <PencilSimple className="h-4 w-4" />, onSelect: onOpen },
+              { id: "export", label: "导出角色", icon: <DownloadSimple className="h-4 w-4" />, onSelect: onExport },
               { id: "delete", label: "删除角色", icon: <Trash className="h-4 w-4" />, danger: true, separated: true, onSelect: onDelete },
             ]}
           >

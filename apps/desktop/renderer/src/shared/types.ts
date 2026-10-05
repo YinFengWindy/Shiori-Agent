@@ -143,7 +143,7 @@ export type RoleImportProvenance = {
 
 /** Editable structured role data shared by card import and role persistence. */
 export type RoleProfileDraft = {
-  character?: { profile?: string; personality?: string; behavior_rules?: string; response_constraints?: string; nickname?: string };
+  character?: Partial<import("../../../src/bridge/roleCardExportContract").RoleCharacterDefinition>;
   import_provenance?: RoleImportProvenance;
 };
 

@@ -26,6 +26,7 @@ const electronHost: DesktopIpcHost = {
   on: (channel, listener) => { ipcMain.on(channel, listener); },
   windowFromWebContents: (sender) => BrowserWindow.fromWebContents(sender),
   showOpenDialog: (options) => dialog.showOpenDialog(options),
+  showSaveDialog: (window, options) => dialog.showSaveDialog(window, options),
   openExternal: (url) => shell.openExternal(url),
   logDiagnostic: logDesktopDiagnostic,
   openDiagnosticsFolder,

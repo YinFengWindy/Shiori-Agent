@@ -11,6 +11,7 @@ from bus.event_bus import EventBus
 from core.roles import RoleStore
 from desktop_bridge.service import DesktopBridgeService
 from desktop_bridge.role_requests import DesktopRoleRequestHandler
+from desktop_bridge.role_card_export_service import DesktopRoleCardExportService
 from session.manager import SessionManager
 from core.memory.group_environment import GroupEnvironment
 
@@ -45,6 +46,37 @@ async def test_role_card_preview_forwards_the_full_payload_to_its_service() -> N
         {"source": "C:/workspace/private_runtime/imports/role-cards/card.json"}
     )
     assert result == {"import_id": "preview-1"}
+
+
+@pytest.mark.asyncio
+async def test_role_card_export_routes_snapshot_lifecycle_without_mutating_roles(
+    tmp_path,
+):
+    store = RoleStore(tmp_path)
+    role = store.create_role(name="目标角色", system_prompt="规则")
+    handler = DesktopRoleRequestHandler(
+        role_service=SimpleNamespace(),
+        role_presenter=SimpleNamespace(),
+        voice_handler=SimpleNamespace(),
+        publish_event=AsyncMock(),
+        card_export_service=DesktopRoleCardExportService(store),
+    )
+    preview = await handler.handle(
+        "roles.cardExport.preview", {"role_id": role.id, "format": "json"}
+    )
+    assert preview["name"] == role.name
+    saved = await handler.handle(
+        "roles.cardExport.read", {"export_id": preview["export_id"]}
+    )
+    assert saved["format"] == "json"
+    await handler.handle(
+        "roles.cardExport.release", {"export_id": preview["export_id"]}
+    )
+    with pytest.raises(ValueError, match="失效"):
+        await handler.handle(
+            "roles.cardExport.read", {"export_id": preview["export_id"]}
+        )
+    assert store.list_roles() == [role]
 
 
 @pytest.mark.asyncio

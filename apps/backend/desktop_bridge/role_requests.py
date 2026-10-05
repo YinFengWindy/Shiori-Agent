@@ -7,6 +7,7 @@ from typing import Any
 from core.roles import RoleAggregateService
 
 from .role_presenter import DesktopRolePresenter
+from .role_card_export_service import DesktopRoleCardExportService
 from .voice.voice_handler import DesktopVoiceHandler
 
 
@@ -25,12 +26,14 @@ class DesktopRoleRequestHandler:
         role_presenter: DesktopRolePresenter,
         voice_handler: DesktopVoiceHandler,
         card_import_service: Any | None = None,
+        card_export_service: DesktopRoleCardExportService | None = None,
         publish_event: Callable[[dict[str, Any]], Awaitable[None]],
     ) -> None:
         self._role_service = role_service
         self._role_presenter = role_presenter
         self._voice_handler = voice_handler
         self._card_import_service = card_import_service
+        self._card_export_service = card_export_service
         self._publish_event = publish_event
 
     async def handle(
@@ -100,6 +103,19 @@ class DesktopRoleRequestHandler:
                     ),
                 }
             return result
+        if method in {
+            "roles.cardExport.preview",
+            "roles.cardExport.read",
+            "roles.cardExport.release",
+        }:
+            if self._card_export_service is None:
+                raise RuntimeError("role card export service unavailable")
+            handlers = {
+                "roles.cardExport.preview": self._card_export_service.preview,
+                "roles.cardExport.read": self._card_export_service.read,
+                "roles.cardExport.release": self._card_export_service.release,
+            }
+            return await handlers[method](payload)
         if method == "roles.update":
             role_id = str(payload.get("role_id") or "")
             previous = self._role_service.repository.get_required(role_id)
