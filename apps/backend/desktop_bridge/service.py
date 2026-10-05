@@ -61,6 +61,7 @@ from desktop_bridge.plugin_requests import DesktopPluginRequestHandler
 from desktop_bridge.request_router import DesktopBridgeRequestRouter
 from desktop_bridge.role_requests import DesktopRoleRequestHandler
 from desktop_bridge.role_card_import_service import DesktopRoleCardImportService
+from desktop_bridge.role_card_export_service import DesktopRoleCardExportService
 from desktop_bridge.role_presenter import DesktopRolePresenter
 from desktop_bridge.role_task_service import RoleTaskService
 from desktop_bridge.session_task_requests import DesktopSessionTaskRequestHandler
@@ -279,6 +280,7 @@ class DesktopBridgeService:
                 role_presenter=self.role_presenter,
                 voice_handler=self.voice_handler,
                 card_import_service=self.role_card_import_service,
+                card_export_service=DesktopRoleCardExportService(role_store),
                 publish_event=self._broadcast_event,
             ),
             sessions_and_tasks=DesktopSessionTaskRequestHandler(

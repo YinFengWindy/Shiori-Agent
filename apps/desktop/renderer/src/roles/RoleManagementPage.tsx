@@ -26,6 +26,7 @@ type RoleManagementPageProps = {
   onDeleteRole: (roleId: string) => void;
   onCreateRole: () => void;
   onImportRoleCard: () => void;
+  onExportRole: (roleId: string) => void;
 };
 
 const emptyActionClass = "inline-flex h-11 items-center gap-2 px-5 text-body font-medium";
@@ -42,6 +43,7 @@ export function RoleManagementPage({
   onDeleteRole,
   onCreateRole,
   onImportRoleCard,
+  onExportRole,
 }: RoleManagementPageProps) {
   const mascotEnabled = useMascotEnabled();
   const emptyActions = (
@@ -75,6 +77,7 @@ export function RoleManagementPage({
                 onOpen={() => onOpenRoleDetail(role.id)}
                 onGoToChat={() => onGoToChat(role.id)}
                 onDelete={() => onDeleteRole(role.id)}
+                onExport={() => onExportRole(role.id)}
               />
             ))}
           </div>

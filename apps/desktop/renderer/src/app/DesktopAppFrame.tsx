@@ -13,6 +13,8 @@ import { RoleAssetsPage } from "../roles/RoleAssetsPage";
 import { RoleCreatePage } from "../roles/RoleCreatePage";
 import { RoleDetailPage } from "../roles/RoleDetailPage";
 import { RoleManagementPage } from "../roles/RoleManagementPage";
+import { RoleCardExportDialog } from "../roles/RoleCardExportDialog";
+import { useRoleCardExport } from "./useRoleCardExport";
 import { RoleSearchDialog } from "../roles/RoleSearchDialog";
 import type { RoleWorkspaceSectionId } from "../roles/RoleWorkspaceSidebar";
 import { SidebarTrackContent, type SidebarViewState } from "./SidebarTrackContent";
@@ -338,6 +340,7 @@ export function DesktopAppFrame({
   const fullscreenPluginActive = activePluginNavPage?.presentation === "fullscreen";
   // Shared by the role sidebar and the empty role grid: an import needs the bridge and no import/create in flight.
   const canImportRoleCard = bridgeReady && !creating && roleCardImport.status === "idle";
+  const roleCardExport = useRoleCardExport();
   const navRailViews = buildNavRailViews({
     onBackToChat,
     onOpenRolesWorkspace,
@@ -515,6 +518,7 @@ export function DesktopAppFrame({
               onDeleteRole={onRequestDeleteRole}
               onCreateRole={() => onOpenRoleWorkspaceSection("role-create")}
               onImportRoleCard={onImportRoleCard}
+              onExportRole={(roleId) => void roleCardExport.open(roleId)}
             />
           ) : null}
           {mainView.kind === "role-create" ? (
@@ -589,6 +593,7 @@ export function DesktopAppFrame({
           ) : null}
         </main>
       </div>
+      <RoleCardExportDialog controller={roleCardExport} />
       <RoleSearchDialog
         open={showSearchDialog}
         query={searchQuery}

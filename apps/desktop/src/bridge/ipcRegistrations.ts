@@ -5,6 +5,8 @@ import type {
   IpcMain,
   OpenDialogOptions,
   OpenDialogReturnValue,
+  SaveDialogOptions,
+  SaveDialogReturnValue,
   WebContents,
 } from "electron";
 import type { logDesktopDiagnostic } from "../diagnostics.js";
@@ -14,6 +16,7 @@ import { activePluginIds } from "../plugins/activePluginIds.js";
 import { importLocalAssets } from "../assets/localAssetImport.js";
 import type { LocalAssetRegistry } from "../assets/localAssetRegistry.js";
 import { pickNativeFiles } from "./nativeFilePicker.js";
+import { saveRoleCardExport } from "./roleCardExportSave.js";
 import { stagePickedFiles } from "../assets/pickedFileStaging.js";
 import { maxLocalAssetBytes } from "../assets/localAssetContract.js";
 import { applyRuntimeSettings, readRuntimeSettings } from "../settingsRuntime.js";
@@ -47,6 +50,8 @@ export type DesktopIpcHost = {
   /** Resolves the window that sent the request, so handlers never act on an arbitrary one. */
   windowFromWebContents(sender: WebContents): BrowserWindow | null;
   showOpenDialog(options: OpenDialogOptions): Promise<OpenDialogReturnValue>;
+  /** Attach the native export destination picker to its requesting window. */
+  showSaveDialog(window: BrowserWindow, options: SaveDialogOptions): Promise<SaveDialogReturnValue>;
   openExternal(url: string): Promise<void>;
   logDiagnostic: typeof logDesktopDiagnostic;
   /** Opens the fixed application log directory; accepts no renderer path. */
@@ -129,6 +134,18 @@ export function registerDesktopIpcHandlers(
   }: RegisterDesktopIpcOptions,
 ): void {
   const applicationSessionId = randomUUID();
+  let savingRoleCard = false;
+  host.handle("desktop:save-role-card", async (event, exportId: unknown) => {
+    const window = host.windowFromWebContents(event.sender);
+    if (!window || isSurfaceWindow(window)) throw new Error("请在主窗口导出角色");
+    if (savingRoleCard) throw new Error("角色卡正在导出");
+    savingRoleCard = true;
+    try {
+      return await saveRoleCardExport(exportId, bridge, (options) => host.showSaveDialog(window, options));
+    } finally {
+      savingRoleCard = false;
+    }
+  });
   const attributePluginCommunication = createPluginCommunicationLifecycle(bridge);
   let pluginListTail = Promise.resolve();
   // Previous `plugins.list` snapshot's admitted-active ids, so a roster that

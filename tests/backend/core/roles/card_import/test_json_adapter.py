@@ -1,6 +1,24 @@
 from core.roles.card_import.json_adapter import adapt_json
 
 
+def test_shiori_intro_is_independent_and_only_recognized_extensions_are_consumed():
+    data = {
+        "name": "Role",
+        "description": "Biography",
+        "extensions": {"shiori": {"description": ""}},
+    }
+    preview = adapt_json({"data": data})
+    assert preview.description == ""
+    assert preview.profile["character"]["profile"] == "Biography"
+    assert "extensions" not in preview.report.unsupported_rules
+    data["extensions"] = {"shiori": {"description": "Intro", "unknown": True}}
+    assert "extensions" in adapt_json({"data": data}).report.unsupported_rules
+    data["extensions"] = {"shiori": {"description": 42}}
+    preview = adapt_json({"data": data})
+    assert preview.description == "Biography"
+    assert "extensions" in preview.report.unsupported_rules
+
+
 def test_import_keeps_constraints_attribution_and_discards_lorebook():
     book = {
         "scan_depth": 7,

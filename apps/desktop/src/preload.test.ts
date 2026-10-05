@@ -55,6 +55,13 @@ test("preload exposes generic staged file selection without granting archive med
   await assert.rejects(failing.pickFiles(options), /copy failed/);
 });
 
+test("preload exposes only the role export snapshot ID to the native save channel", async () => {
+  const calls: unknown[] = [];
+  const api = await loadPreload(async (channel, options) => { calls.push({ channel, options }); return { saved: false }; });
+  assert.deepEqual(await api.saveRoleCardExport("snapshot"), { saved: false });
+  assert.deepEqual(calls, [{ channel: "desktop:save-role-card", options: "snapshot" }]);
+});
+
 test("preload reads and acknowledges retained notification targets and removes click listeners", async () => {
   const calls: unknown[] = [];
   const target = { id: 5, roleId: "mira" };
