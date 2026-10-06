@@ -1399,7 +1399,7 @@ async def test_rejected_provider_and_dependents_never_execute(tmp_path, conflict
         (package / "backend").mkdir(parents=True)
         (package / "manifest.yaml").write_text(
             f"api: 2\nid: {plugin_id}\ncapabilities: []\npackage_contract: 1\n"
-            "version: 1.0.0\nruntime_api: '>=3.0.0 <4.0.0'\n"
+            "version: 1.0.0\nruntime_api: '>=4.0.0 <5.0.0'\n"
             "entry: backend/plugin.py\n" + extra,
             encoding="utf-8",
         )

@@ -1,4 +1,5 @@
 api: 2
+runtime_api: ">=3.1.0 <5.0.0"
 id: plugin_undo
 display_name: 撤销回合
 version: '0.1.0'

@@ -2,6 +2,8 @@ import type { PluginBackgroundContribution } from "@yinfengwindy/shiori-sdk";
 import { readDesktopPetBinding } from "./binding";
 import { DesktopPetController, desktopPetSurfaceId } from "./controller";
 import { normalizeDesktopPetSettings } from "./settings";
+import { PetVoiceController } from "./voice/controller";
+import { defaultVoicePreferences, type VoicePreferences } from "./voice/preferences";
 
 /** Identifies the pet's own item in the host tray menu. */
 export const desktopPetTrayEntryId = "toggle";
@@ -25,6 +27,7 @@ const desktopPetBackground = {
     // which nobody can open: `show` failing is exactly what the user is looking
     // at when they report "点了托盘没反应".
     const reportError = (operation: string, error: unknown) => ctx.reportFailure(operation, error);
+    let voice: PetVoiceController | null = null;
 
     const controller = new DesktopPetController({
       surfaces: ctx.surfaces,
@@ -36,6 +39,7 @@ const desktopPetBackground = {
       ),
       onError: reportError,
       onChanged: () => refreshTrayEntry(),
+      onTargetChanged: (roleId) => voice?.bind(roleId),
     });
 
     /**
@@ -62,6 +66,26 @@ const desktopPetBackground = {
     // Contributed once up front, so the item exists from the moment the plugin
     // is enabled rather than only after the pet's first state change.
     refreshTrayEntry();
+    // Optional speech initialization cannot tear down the pet's visual and text features.
+    try {
+      const preferences = await ctx.rpc.call<VoicePreferences>("voice.preferences.get");
+      voice = new PetVoiceController(ctx, preferences, (state) => controller.publishVoice(state));
+    } catch (error) {
+      reportError("voice.preferences", error);
+      voice = new PetVoiceController(ctx, defaultVoicePreferences, (state) => controller.publishVoice(state));
+    }
+    const activeVoice = voice;
+    ctx.effect("desktop_pet_voice", () => activeVoice.dispose());
+    ctx.surfaces.onMessage(desktopPetSurfaceId, (message) => {
+      if (!message || typeof message !== "object" || !("kind" in message)) return;
+      if (message.kind === "voice.stop") activeVoice.stop();
+      if (message.kind === "voice.gesture" && "gesture" in message) activeVoice.gesture(String(message.gesture));
+    });
+    await ctx.events.on("voice.preferences.changed", (payload) => { void activeVoice.configure(payload as VoicePreferences).catch((error) => reportError("voice.preferences", error)); });
+    await ctx.rpc.handle("voice.devices", () => ctx.native.audio.devices());
+    await ctx.rpc.handle("voice.preferences.validate", (payload) => ctx.native.keys.validate(String(payload.hotkey ?? "")));
+    await ctx.rpc.handle("voice.stop", () => activeVoice.stop());
+    for (const method of ["chat.delta", "chat.done", "chat.error"]) ctx.hostEvents.on(method, (_payload, event) => activeVoice.handle(event));
 
     ctx.effect("desktop_pet_controller", () => controller.terminate());
     ctx.surfaces.onSettled(desktopPetSurfaceId, (settled) => controller.handleSettled(settled));
@@ -75,6 +99,7 @@ const desktopPetBackground = {
     }
     ctx.hostEvents.on("system.lock-state", (payload) => {
       if (typeof payload.locked === "boolean") controller.replies.setLocked(payload.locked);
+      if (typeof payload.locked === "boolean") activeVoice.setLocked(payload.locked);
     });
     await ctx.events.on("bubble.dismissed", () => controller.replies.dismiss());
 

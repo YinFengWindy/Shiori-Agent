@@ -19,7 +19,6 @@ async def test_compact_command_is_intercepted_before_persistence_and_turn_dispat
         chat_service=Mock(),
         start_chat_turn=start,
         session_presenter=Mock(),
-        sanitize_voice_metrics=Mock(),
         context_requests=context,
     )
     response = await handler.handle(
@@ -74,7 +73,6 @@ async def test_send_serializes_returned_user_message_when_session_tail_has_chang
         chat_service=chat_service,
         start_chat_turn=start_chat_turn,
         session_presenter=DesktopSessionPresenter(Mock()),
-        sanitize_voice_metrics=Mock(),
     )
     emit_event = AsyncMock()
 
@@ -128,7 +126,6 @@ def _retry_handler(session: Session, *, busy: bool = False):
         chat_service=chat_service,
         start_chat_turn=start_chat_turn,
         session_presenter=DesktopSessionPresenter(Mock()),
-        sanitize_voice_metrics=Mock(),
     )
     return handler, app_service, start_chat_turn
 
@@ -147,8 +144,8 @@ def _failed_turn_session() -> Session:
             "request_id": "request-failed",
             "reply_to_content": "earlier reply",
             "reply_to_sender": "Mira",
-            "input_method": "voice",
-            "voice_turn_id": "voice-1",
+            "custom_input_kind": "plugin",
+            "plugin_trace": "trace-1",
             "source": "desktop",
         },
     )
@@ -182,8 +179,8 @@ async def test_retry_reruns_the_failed_turn_on_the_persisted_user_message():
     assert kwargs["metadata"]["turn_id"] == "turn-retry"
     assert kwargs["metadata"]["request_id"] == "request-retry"
     assert kwargs["metadata"]["source"] == "desktop"
-    assert "voice_turn_id" not in kwargs["metadata"]
-    assert "input_method" not in kwargs["metadata"]
+    assert kwargs["metadata"]["plugin_trace"] == "trace-1"
+    assert kwargs["metadata"]["custom_input_kind"] == "plugin"
 
 
 @pytest.mark.asyncio

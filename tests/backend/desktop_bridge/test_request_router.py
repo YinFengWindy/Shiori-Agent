@@ -12,7 +12,6 @@ def _router(*, role_result=None):
         roles=SimpleNamespace(handle=AsyncMock(return_value=role_result)),
         sessions_and_tasks=SimpleNamespace(handle=AsyncMock(return_value=None)),
         chat=SimpleNamespace(handle=AsyncMock(return_value=None)),
-        voice=SimpleNamespace(handle=AsyncMock(return_value=None)),
         plugins=DesktopPluginRequestHandler(None),
     )
 
@@ -29,7 +28,6 @@ async def test_request_router_routes_health_without_domain_handlers() -> None:
     )
 
     assert result == {"ok": True}
-    router._voice.handle.assert_not_awaited()
 
 
 @pytest.mark.asyncio

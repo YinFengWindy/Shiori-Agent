@@ -20,20 +20,6 @@ function createSettingsFormData(): SettingsFormData {
       embeddingBaseUrl: "https://embed.example",
       outputDimensionality: "1536",
     },
-    voice: {
-      enabled: true,
-      hotkey: "Ctrl+Space",
-      microphoneDeviceId: "",
-      asrProvider: "tencent",
-      asrBaseUrl: "https://asr.tencentcloudapi.com/",
-      asrSecretId: "secret-id",
-      asrSecretKey: "secret-key",
-      ttsProvider: "minimax",
-      ttsBaseUrl: "https://api.minimaxi.com/v1/t2a_v2",
-      ttsModel: "speech-2.8-turbo",
-      ttsApiKey: "tts-key",
-      ttsVolume: 2,
-    },
     advanced: {
       maxTokens: 4000,
       maxIterations: 10,
@@ -57,7 +43,6 @@ describe("SettingsSectionContent", () => {
     const cases = [
       { sectionId: "models", subsectionId: "catalog", expected: "gpt-agent" },
       { sectionId: "memory", subsectionId: "embedding", expected: "embed-model" },
-      { sectionId: "voice", subsectionId: "provider", expected: "secret-id" },
       { sectionId: "advanced", subsectionId: "general", expected: "max_tokens" },
     ] as const;
 
@@ -116,18 +101,4 @@ describe("SettingsSectionContent", () => {
     ), /about/);
   });
 
-  it("renders the global TTS volume control", () => {
-    const markup = renderToStaticMarkup(
-      <SettingsSectionContent
-        sectionId="voice"
-        subsectionId="provider"
-        draft={draft}
-        updateDraft={updateDraft}
-      />,
-    );
-
-    assert.match(markup, /aria-label="TTS 音量"/);
-    assert.match(markup, /type="range"/);
-    assert.match(markup, /value="2"/);
-  });
 });

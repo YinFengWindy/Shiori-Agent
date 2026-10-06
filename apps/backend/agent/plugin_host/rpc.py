@@ -12,6 +12,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from agent.plugin_host.communication import PluginCommunication
+from agent.plugin_host.services import PluginServiceRegistry
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -40,6 +41,7 @@ class PluginRpcRegistry:
 
     def __init__(self) -> None:
         self._entries: dict[str, _RpcEntry] = {}
+        self.services = PluginServiceRegistry()
         self.communication = PluginCommunication(self)
 
     def register(

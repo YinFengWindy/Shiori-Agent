@@ -42,8 +42,6 @@ class OwnerRouting(Enum):
 
     CURRENT = "current"
     BUSY_CHAT_SESSION = "busy_chat_session"
-    BUSY_VOICE_TURN = "busy_voice_turn"
-    BUSY_VOICE_SYNTHESIS = "busy_voice_synthesis"
 
 
 @dataclass(frozen=True)
@@ -178,12 +176,6 @@ METHOD_POLICIES: dict[str, MethodPolicy] = {
     "session.messagesAround": MethodPolicy(concurrency=Concurrency.READ_ONLY),
     "session.search": MethodPolicy(concurrency=Concurrency.READ_ONLY),
     "session.imageHistory": MethodPolicy(concurrency=Concurrency.READ_ONLY),
-    "voice.synthesize": MethodPolicy(concurrency=Concurrency.INTEGRATION),
-    "voice.synthesize.cancel": MethodPolicy(
-        concurrency=Concurrency.INTEGRATION,
-        admission_exempt=True,
-        owner_routing=OwnerRouting.BUSY_VOICE_SYNTHESIS,
-    ),
     "chat.cancel": MethodPolicy(
         admission_exempt=True,
         owner_routing=OwnerRouting.BUSY_CHAT_SESSION,
@@ -192,10 +184,6 @@ METHOD_POLICIES: dict[str, MethodPolicy] = {
     # they must not queue behind the global mutation lane.
     "chat.context.status": MethodPolicy(concurrency=Concurrency.READ_ONLY),
     "chat.context.compact": MethodPolicy(concurrency=Concurrency.READ_ONLY),
-    "voice.turn.cancel": MethodPolicy(
-        admission_exempt=True,
-        owner_routing=OwnerRouting.BUSY_VOICE_TURN,
-    ),
 }
 
 

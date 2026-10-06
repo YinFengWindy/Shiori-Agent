@@ -500,7 +500,8 @@ async def test_settings_form_route_preserves_latest_plugins_but_raw_apply_can_re
         )
         assert response.error is None
         draft = {
-            "config_toml": _config() + "\n[agent]\nmax_tokens = 4096\n",
+            "config_toml": _config().split("\n[proactive]", 1)[0]
+            + "\n[agent]\nmax_tokens = 4096\n",
             "preserve_plugins": True,
             "operation_id": "form-save",
         }
@@ -617,7 +618,10 @@ async def test_restart_required_refuses_all_hot_write_routes_before_candidate_or
                 ),
                 (
                     "runtime.apply",
-                    {"config_toml": _config("changed"), "preserve_plugins": True},
+                    {
+                        "config_toml": _config("changed").split("\n[proactive]", 1)[0],
+                        "preserve_plugins": True,
+                    },
                 ),
                 (
                     "plugins.setEnabled",

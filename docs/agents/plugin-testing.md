@@ -24,7 +24,7 @@ uv run pytest plugins/example/tests
 - `shiori-host-testing` 提供真实宿主集成能力，只安装在宿主开发环境。
 - 插件 wheel 只包含本包后端、明确打包的 testing helper 与资源。Story→NovelAI、Meme→citation 为公开运行时依赖；status_commands 的 test extra→Observe 是显式测试依赖。没有声明的兄弟插件不会被注入。
 
-公开 SDK 的 npm 包为 `@yinfengwindy/shiori-sdk`，PyPI 包为 `shiori-sdk`；SDK 与 Runtime API 当前版本均为 3.1.0，注册表安装与 testing extra 用法见 [SDK README](../../packages/sdk/README.md)。`shiori-agent`、`shiori-host-testing` 和插件 wheel 仍只构建为本地/CI 产物，不随 SDK 发布到 npm 或 PyPI。
+公开 SDK 的 npm 包为 `@yinfengwindy/shiori-sdk`，PyPI 包为 `shiori-sdk`；SDK 与 Runtime API 当前版本均为 4.0.0，注册表安装与 testing extra 用法见 [SDK README](../../packages/sdk/README.md)。`shiori-agent`、`shiori-host-testing` 和插件 wheel 仍只构建为本地/CI 产物，不随 SDK 发布到 npm 或 PyPI。
 
 ## 插件副本运行
 
@@ -94,6 +94,6 @@ QQ 已在同票完成 SDK-only 安装验证；平台原文来源/引用的纯函
 #590 的桌宠包校验、binding/pets RPC、启用互斥、清理重试与动作限流在插件内使用 SDK fake。实际角色事务/锁、资产迁移凭证与 kernel 装配、停用/重载由宿主集成验证。桌宠安装只依赖 SDK 与 Pillow，最后 44 条 Python 宿主导入豁免已删除。局部开发可使用 `uv run python -m pytest plugins/desktop_pet/tests`；仓库外非 editable 验证用 `uv run python -m scripts.verify_plugin_tests --plugins desktop_pet`。
 
 
-桌宠 renderer 的控制策略移到 `plugins/desktop_pet/background/controller.test.ts`，surface 几何、惯性、ready/hide/reload/window identity 由宿主 `src/surface/host.test.ts` 的中性 fixture 验证。`desktopPetSurfaceController.test.ts` 保留真实 surface/voice/controller 的公开能力装配，验证隐藏与 ASR 期间角色替换的取消行为。原私有 KV 耦合测试随耦合实现一起移除。
+桌宠 renderer 的控制策略移到 `plugins/desktop_pet/background/controller.test.ts`，surface 几何、惯性、ready/hide/reload/window identity 由宿主 `src/surface/host.test.ts` 的中性 fixture 验证。语音编排由桌宠的 SDK-only 测试验证；宿主原生接口测试只验证设备操作、真实窗口/插件归属和资源清理。原私有 KV 耦合测试随耦合实现一起移除。
 
 `pnpm typecheck` 包含 `pnpm typecheck:plugins`；后者使用独立 `plugins/tsconfig.json`，覆盖全部插件入口、共享模块与单测，未引用宿主 `types.d.ts`。`pluginTypecheckBoundary.test.ts` 检查实际编译依赖图并验证宿主 ambient bridge/type 不存在；`pluginHostImportBoundary.test.ts` 包含直接调用、计算属性、解构与类型引用的 ESLint 反例。插件测试也不能通过注入宿主全局对象绕过 SDK。

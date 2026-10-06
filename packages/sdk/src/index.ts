@@ -147,7 +147,7 @@ export type {
 export { PluginHostServicesProvider, usePluginHostServices } from "./hostServicesContext";
 
 // Type-only (#508): the desktop.surface and app.background contribution
-// contracts, the surface payloads the main process shares, and the voice state
+// contracts and the surface payloads the main process shares
 // the host pushes to the pet. `BackgroundCtx.reportFailure` is runtime API 2.11.0.
 export type {
   PluginSurfaceComponentProps,
@@ -172,9 +172,14 @@ export type {
   PluginBackgroundSurfaces,
   PluginBackgroundTray,
 } from "./contract/background";
-export type { VoiceStatePayload, VoiceInputSource } from "./contract/voice";
-export type { SurfaceInteractionTarget, SurfaceVoiceGesture, SurfaceVoice, SurfaceRoleActivity } from "./contract/surfaceInteraction";
+export type { SurfaceInteractionTarget, SurfaceRoleActivity } from "./contract/surfaceInteraction";
 
 // Runtime API 2.16.0: shared visual transitions and sidebar resizing.
 export { CrossfadeLayers } from "./components/CrossfadeLayers";
 export { SidebarResizeHandle } from "./components/SidebarResizeHandle";
+
+export type { PluginNativeApi, PluginNativeContext, NativeAudio, NativeAudioDevice, PluginBackgroundChat } from "./contract/native";
+export type { PluginServiceReference, PluginServiceDescriptor } from "./rpc";
+export type { AsrRequest, AsrResult, TtsRequest, TtsResult } from "./contract/speech";
+
+export type { PluginRoleUiProps, PluginRoleUiContribution } from "./contract/features";

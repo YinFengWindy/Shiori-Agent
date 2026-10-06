@@ -23,7 +23,6 @@ from agent.config_models import (
     WiringConfig,
 )
 from agent.scene_preferences import load_scene_preferences, migrate_scene_preferences
-from agent.voice_config import VoiceAsrConfig, VoiceConfig, VoiceTtsConfig
 from core.common.workspace import resolve_default_workspace
 from proactive_v2.config import ProactiveConfig
 from proactive_v2.config_loader import ProactiveConfigError, load_proactive_config
@@ -94,7 +93,6 @@ def load_config_data(data: dict[str, Any]) -> Config:
 
     proactive_strategies = load_proactive_preferences(data)
     memory = _load_memory_config(data)
-    voice = _load_voice_config(data)
     wiring = _load_wiring_config(data)
     plugins = _load_plugins_config(data)
     model_registrations = _load_model_registrations(data)
@@ -170,7 +168,6 @@ def load_config_data(data: dict[str, Any]) -> Config:
             desktop_chat_cfg.get("streaming_enabled", False)
         ),
         multimodal=bool(llm_main.get("multimodal", True)),
-        voice=voice,
         wiring=wiring,
         plugins=plugins,
         raw_plugin_configs={
@@ -313,38 +310,6 @@ def _migrate_legacy_novelai_config(path: Path, data: dict[str, Any]) -> dict[str
     path.write_text(migrated_text, encoding="utf-8")
     logger.info("已将 [integrations.novelai] 一次性迁移至 [plugins.novelai]")
     return tomllib.loads(migrated_text)
-
-
-def _load_voice_config(data: dict) -> VoiceConfig:
-    voice = _as_dict(data.get("voice"))
-    asr = _as_dict(voice.get("asr"))
-    tts = _as_dict(voice.get("tts"))
-    return VoiceConfig(
-        enabled=bool(voice.get("enabled", False)),
-        hotkey=str(voice.get("hotkey", "Ctrl+Space") or "Ctrl+Space"),
-        microphone_device_id=str(voice.get("microphone_device_id", "") or "").strip(),
-        asr=VoiceAsrConfig(
-            enabled=bool(asr.get("enabled", False)),
-            provider=str(asr.get("provider", "tencent") or "tencent"),
-            base_url=str(
-                asr.get("base_url", "https://asr.tencentcloudapi.com/")
-                or "https://asr.tencentcloudapi.com/"
-            ),
-            secret_id=_resolve(str(asr.get("secret_id", ""))),
-            secret_key=_resolve(str(asr.get("secret_key", ""))),
-        ),
-        tts=VoiceTtsConfig(
-            enabled=bool(tts.get("enabled", False)),
-            provider=str(tts.get("provider", "minimax") or "minimax"),
-            base_url=str(
-                tts.get("base_url", "https://api.minimaxi.com/v1/t2a_v2")
-                or "https://api.minimaxi.com/v1/t2a_v2"
-            ),
-            model=str(tts.get("model", "speech-2.8-turbo") or "speech-2.8-turbo"),
-            api_key=_resolve(str(tts.get("api_key", ""))),
-            volume=float(tts.get("volume", 2.0)),
-        ),
-    )
 
 
 def _load_wiring_config(data: dict) -> WiringConfig:

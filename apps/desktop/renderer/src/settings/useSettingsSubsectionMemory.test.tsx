@@ -42,15 +42,11 @@ describe("useSettingsSubsectionMemory", () => {
     } finally { await view.cleanup(); }
   });
 
-  it("resolve() falls back to the first subtab when the remembered one is filtered out", async () => {
+  it("resolve() falls back to the first subtab when the remembered one is no longer available", async () => {
     const { view, memory } = await mountHarness();
     try {
-      // "voice" has two static subtabs; simulate an isPluginEnabled filter
-      // that would exclude nothing here (no plugin-owned subtabs on
-      // "voice"), and separately prove resolve() still honours a genuinely
-      // invalid remembered id by falling back to the section's first tab.
-      await act(async () => memory().remember("voice", "not-a-real-subtab"));
-      assert.equal(memory().resolve("voice"), "provider");
+      await act(async () => memory().remember("models", "not-a-real-subtab"));
+      assert.equal(memory().resolve("models"), "catalog");
     } finally { await view.cleanup(); }
   });
 });

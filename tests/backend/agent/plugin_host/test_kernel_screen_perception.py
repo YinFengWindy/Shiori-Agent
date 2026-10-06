@@ -14,6 +14,7 @@ from agent.plugin_host import HostServices, PluginKernel
 from agent.tools.registry import ToolRegistry
 from bus.event_bus import EventBus
 from core.roles import RoleStore
+from session.manager import SessionManager
 
 
 async def _kernel(tmp_path, provider):
@@ -41,6 +42,7 @@ async def _kernel(tmp_path, provider):
             event_bus=EventBus(),
             tool_registry=tools,
             role_store=store,
+            session_manager=SessionManager(store.workspace),
             role_runtime_registry=registry,
         ),
     )

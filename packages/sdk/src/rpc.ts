@@ -17,6 +17,12 @@ export type PluginEventHandler = (payload: Record<string, unknown>, event: Bridg
 /** One background method returns a JSON-compatible value or propagates its failure. */
 export type PluginBackgroundHandler = (payload: Record<string, unknown>) => unknown | Promise<unknown>;
 
+/** Stable public service reference, independent of a consumer's static dependencies. */
+export type PluginServiceReference = { plugin_id: string; service_id: string };
+
+/** One currently registered public plugin service. */
+export type PluginServiceDescriptor = PluginServiceReference & { contract: string; label: string; metadata: Record<string, unknown> };
+
 /** A declared peer uses the same local call/event names as the owning plugin. */
 export type PluginPeer = {
   call<T>(name: string, payload?: Record<string, unknown>, options?: { timeoutMs?: number }): Promise<T>;
@@ -30,6 +36,11 @@ export type PluginPeer = {
  * Namespace binding is cooperation, not a sandbox or authentication.
  */
 export type PluginRpcClient = PluginPeer & {
+  /** Discovers and invokes explicitly registered public service methods. */
+  services: {
+    list(contract: string): Promise<{ services: PluginServiceDescriptor[] }>;
+    call<T>(service: PluginServiceReference, name: string, payload?: Record<string, unknown>): Promise<T>;
+  };
   dependency(pluginId: string): Promise<PluginPeer | null>;
   /** Only the background host enables registrations on the injected context. */
   handle(name: string, handler: PluginBackgroundHandler): Promise<void>;

@@ -30,6 +30,7 @@ from agent.plugin_host import HostServices, PluginKernel
 from agent.tools.registry import ToolRegistry
 from bus.event_bus import EventBus
 from core.roles.store import RoleStore
+from session.manager import SessionManager
 
 PLUGIN_ID = "desktop_pet"
 PLUGIN_DIR = plugin_directory(PLUGIN_ID)
@@ -44,6 +45,7 @@ def _services(store: RoleStore) -> HostServices:
         tool_registry=ToolRegistry(),
         workspace=store.workspace,
         role_store=store,
+        session_manager=SessionManager(store.workspace),
     )
 
 

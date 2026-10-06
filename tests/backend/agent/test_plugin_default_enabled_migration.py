@@ -48,7 +48,7 @@ def _persisted(path: Path) -> dict:
 
 
 def test_fresh_config_from_the_template_is_not_rewritten(tmp_path: Path) -> None:
-    """新安装复制模板：模板自带回执，插件不被显式启用。"""
+    """新模板保留回执，不显式启用默认停用的插件。"""
     path = tmp_path / "config.toml"
     shutil.copyfile(_TEMPLATE, path)
     before = path.read_text(encoding="utf-8")

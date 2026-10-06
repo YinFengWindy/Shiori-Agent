@@ -2,7 +2,7 @@
 
 [@yinfengwindy/shiori-sdk](https://www.npmjs.com/package/@yinfengwindy/shiori-sdk)
 and [shiori-sdk](https://pypi.org/project/shiori-sdk/) are the TypeScript and Python distributions of the
-same plugin contract. Both are version **3.1.0**, with Runtime API **3.1.0**.
+same plugin contract. Both are version **4.0.0**, with Runtime API **4.0.0**.
 
 Start with the [plugin tutorial](https://github.com/YinFengWindy/Shiori-Agent/blob/main/docs/_handbook/plugins-tutorial.md)
 and [runtime contract](https://github.com/YinFengWindy/Shiori-Agent/blob/main/docs/_handbook/plugin-runtime-contract.md)
@@ -10,23 +10,21 @@ for plugin layout, capability declarations and packaging.
 
 ## Compatibility
 
-External plugin manifests declare `runtime_api: ">=3.0.0 <4.0.0"`, or
-`">=3.1.0 <4.0.0"` when they use the 3.1 lifecycle additions (`AfterTurnCtx`,
-`PHASE_SLOTS`, `require_phase_slot`, `LifecycleModule.requires` / `produces`). The host rejects
-an incompatible range with an `incompatible_runtime` diagnostic before executing
-the plugin backend. Version 3 requires rebuilding existing renderer imports.
-
-Before the first public release, the npm package moved to the personal scope
-`@yinfengwindy/shiori-sdk`. SDK and Runtime API stay at `3.1.0`; renderer plugins
-built against the earlier internal package name must update their imports and
-rebuild. The host provides only the public package name, without an old-name alias.
+Runtime API 4 is a breaking release: the published 3.1 `SurfaceHandle.voice`
+interface is removed. Speech consumers must move their orchestration into their
+own plugin and use scoped native resources and owned surface messages. Old
+external plugin manifests capped below 4 are rejected before backend execution.
+Desktop pet requires SDK/Runtime API `>=4.0.0 <5.0.0`. Bundled plugins that do not
+use the removed API retain their 3.1 minimum and declare compatibility below 5.
+External authors must audit, rebuild and explicitly widen their own compatibility
+range; installing this host never silently approves an older package.
 
 ## TypeScript
 
 Install the SDK and its React peers as development dependencies in your plugin project:
 
 ```sh
-pnpm add -D "@yinfengwindy/shiori-sdk@^3.1.0" "react@^19.2.5" "react-dom@^19.2.5"
+pnpm add -D "@yinfengwindy/shiori-sdk@^4.0.0" "react@^19.2.5" "react-dom@^19.2.5"
 ```
 
 Build the plugin UI as ESM, externalizing `@yinfengwindy/shiori-sdk`, `react`,
@@ -37,7 +35,7 @@ The host renderer ABI guarantees `19.2.0`; declare compatible host peers separat
 in the plugin's `manifest.yaml`, alongside its Runtime API range:
 
 ```yaml
-runtime_api: ">=3.1.0 <4.0.0"
+runtime_api: ">=4.0.0 <5.0.0"
 peer_dependencies:
   react: ">=19.2.0 <20.0.0"
   react-dom: ">=19.2.0 <20.0.0"
@@ -61,13 +59,13 @@ plugin's production peer imports.
 Requires Python **3.12+**. Install in your plugin project:
 
 ```sh
-uv add "shiori-sdk>=3.1.0,<4"
+uv add "shiori-sdk>=4.0.0,<5"
 ```
 
 For independent plugin tests, add the optional testing support and run your suite:
 
 ```sh
-uv add --dev "shiori-sdk[testing]>=3.1.0,<4"
+uv add --dev "shiori-sdk[testing]>=4.0.0,<5"
 uv run pytest tests
 ```
 
@@ -343,22 +341,46 @@ Declare `processes` for native children. `Processes.popen` is the synchronous co
 ## Surface interaction
 
 A background owner declares `surfaces.setInteraction(surfaceId, { roleId, available })`
-(or `null` to revoke). The host derives admission from that declaration plus its
-existing visibility, readiness and live window identity; private retained state
-and plugin KV never participate. Hidden, destroyed or reloading windows cannot
-admit speech. An unchanged declaration does not reset an active turn.
+for generic role activity projection. Surface events carry real window identity.
+Surface-to-background messages belong to the owning plugin; the host never interprets
+press/release as speech or selects a role's provider.
 
-Every `SurfaceHandle` receives `voice.gesture("press" | "move" | "release" | "cancel")`,
-`voice.onState(listener)` and `onRoleActivity(listener)`. Voice remains host-owned;
-an accepted press pins the role before any awaited recording or ASR. Pointer
-input is attributed by window identity. A global hotkey uses the active available
-owner, otherwise the first available surface in creation order. Another surface
-cannot steal a busy turn. Activity contains only role/session identity, phase and
-notification intent; `null` resets activity on a target change. Plugins own animation
-priority and timing. Reload/crash revokes readiness and stops native drag timers.
+`SurfaceHandle.onRoleActivity(listener)` carries only role/session identity, phase
+and notification intent. Plugins own animation, voice state and scheduling.
+Runtime API 4.0 removes the published 3.1 `SurfaceHandle.voice` business interface.
+Desktop pet uses its own surface messages and scoped native capture, playback and
+key registration instead. The host retains native resources and revokes them when
+their plugin activation or actual renderer window is gone.
 
-`createFakeSurfaceHandle(overrides)` in `/testing` supplies a complete independent
-fixture. `pnpm typecheck:plugins` checks every plugin entry and colocated test in a
-standalone TypeScript program with declared workspace dependencies and no host
-ambient declarations. Boundary tests reject both global bridge calls and host
-ambient type references.
+## Discoverable services and speech contracts (Runtime API 4.0)
+
+Provider backends declare `services` and use `ServiceProviderContext` from
+`shiori_sdk.services`. `ctx.services.register(service_id, contract=..., label=...,
+methods={...}, metadata={...})` publishes explicit JSON methods for exactly the
+plugin instance's lifetime. Metadata is JSON data, not implementation objects.
+Consumers use `client.services.list(contract)` and `client.services.call(reference,
+method, payload)`. Dynamic discovery does not grant private RPC access or require
+a static dependency on every possible provider ID. Calls validate the active
+communication owner, generation and exact registration; unloaded services are not
+silently replaced with another provider.
+
+`shiori_sdk.voice` contains only shared wire values: `shiori.asr.v1` exposes
+`transcribe({audio_base64, format: "wav"}) -> {text}` and `shiori.tts.v1` exposes
+`synthesize({text, role_id, mood}) -> {audio_base64, format}`. The provider owns its
+role configuration and audio generation, including serialization until actual
+inference completes. The SDK has no voice controller, vendor client, voice asset
+lifecycle or default selection. `testing.services.FakeServiceProviderContext`
+provides independent setup tests.
+
+Desktop pet requires SDK 4.0. It owns input gestures, hotkey preferences, microphone
+selection, selected services, chat/reply matching, synthesis queues and manual
+stop. Its backend writes `plugin-data/desktop_pet/voice-preferences.json`; these
+values never enter host `config.toml`, `runtime_config.tts` or role `plugin_data`.
+The host provides generic UI slots and native device/recording/playback/key resources.
+Existing role extension drafts continue their original host role transaction;
+new autonomous role panels use plugin RPC storage and report their own save/dirty
+state without claiming a transaction across host and plugin files.
+
+Tencent/MiniMax integrations and their installation/migration code are removed.
+Existing user files, credentials and remote voice assets are left untouched.
+SenseVoice and GPT-SoVITS implementations are separate follow-up plugin deliveries.

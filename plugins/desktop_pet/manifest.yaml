@@ -2,6 +2,7 @@ api: 2
 id: desktop_pet
 display_name: 桌宠
 version: "0.1.0"
+runtime_api: ">=4.0.0 <5.0.0"
 desc: 桌宠：角色绑定解析、动作工具与透明置顶窗口
 capabilities:
   - workspace
@@ -10,3 +11,4 @@ capabilities:
   - events
   - tools
   - rpc
+  - sessions

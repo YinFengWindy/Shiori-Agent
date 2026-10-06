@@ -42,21 +42,17 @@ import {
 } from "./windowLifecycle.js";
 import { registerDesktopContentSecurityPolicy } from "./windowSecurity.js";
 import { PluginDataStore } from "./plugins/dataStore.js";
-import { SurfaceVoiceController } from "./voice/surfaceVoice.js";
 import { surfaceRoleActivity } from "./surface/roleActivity.js";
 import { startDesktopPresenceReporting } from "./presence/reporter.js";
 import { createVoiceCaptureWindow } from "./voice/window.js";
+import { createNativeRuntime } from "./native/runtime.js";
+import type { PluginNativeSessions } from "./native/sessions.js";
 import { BrowserVoiceRecorder } from "./voice/recorder.js";
-import { DesktopVoiceController } from "./voice/controller.js";
-import { VoiceHotkeyController } from "./voice/hotkey.js";
-import { BrowserVoicePlayback } from "./voice/playback.js";
-import { cancelVoiceTurn, createVoicePlaybackCallbacks, handleVoiceBridgeEvent, selectVoiceTurn } from "./voice/bridgeEvents.js";
-import { applyVoiceAvailability, isVoiceHotkeyAvailable } from "./voice/availability.js";
-import { configureSettingsConfigPath, loadSettingsData } from "./settings.js";
-import type { BridgeEvent, VoiceStatePayload } from "@yinfengwindy/shiori-sdk/contract";
-import type { LocalAssetTransport, SettingsFormData, SurfaceSettledPayload } from "./bridge/shared.js";
+import { configureSettingsConfigPath } from "./settings.js";
+import type { BridgeEvent } from "@yinfengwindy/shiori-sdk/contract";
+import type { LocalAssetTransport, SurfaceSettledPayload } from "./bridge/shared.js";
 
-// Voice replies are played from a trusted hidden renderer without a DOM user gesture.
+// Plugin audio uses a trusted hidden renderer without requiring a DOM gesture.
 app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 // Select the profile before acquiring its single-instance lock.
 configureUserDataPath();
@@ -98,12 +94,8 @@ let desktopTray: ReturnType<typeof createDesktopTray> | null = null;
  */
 const pluginTray = new PluginTrayRegistry();
 let desktopSurfaces: DesktopSurfaceHost | null = null;
-let surfaceVoice: SurfaceVoiceController | null = null;
+let nativeSessions: PluginNativeSessions | null = null;
 let voiceRecorder: BrowserVoiceRecorder | null = null;
-let voiceController: DesktopVoiceController | null = null;
-let voicePlayback: BrowserVoicePlayback | null = null;
-let voiceHotkey: VoiceHotkeyController | null = null;
-let voiceSettings: SettingsFormData["voice"];
 let desktopPresenceReporting: ReturnType<typeof startDesktopPresenceReporting> | null = null;
 let messageNotifications: ReturnType<typeof createDesktopMessageNotifications> | null = null;
 let isQuitting = false;
@@ -216,31 +208,6 @@ function requestAppQuit(): void {
   app.quit();
 }
 
-function publishVoiceState(payload: VoiceStatePayload): void {
-  surfaceVoice?.publish(payload);
-}
-
-function syncVoiceAvailability(cancelCurrentTurn = true): void {
-  const hotkey = voiceHotkey;
-  if (!hotkey) return;
-  const available = isVoiceHotkeyAvailable({
-    voiceEnabled: Boolean(voiceSettings?.enabled),
-    targetAvailable: Boolean(desktopSurfaces?.interactionTargets().length),
-  });
-  applyVoiceAvailability(available, cancelCurrentTurn, {
-    start: () => hotkey.start(),
-    stop: () => hotkey.stop(),
-    stopAfterCurrentPress: () => hotkey.stopAfterCurrentPress(),
-    cancelCurrentTurn: () => voiceController?.cancel(),
-  });
-}
-
-function reloadVoiceSettings(): void {
-  voiceSettings = loadSettingsData().formData.voice;
-  voiceHotkey?.setHotkey(voiceSettings.hotkey);
-  // Applying settings changes admission of new input; existing voice work keeps its owner.
-  syncVoiceAvailability(false);
-}
 
 function shouldHideDesktopWindowOnClose(): boolean {
   return shouldHideDesktopWindowOnClosePolicy({
@@ -284,7 +251,6 @@ void app.whenReady().then(async () => {
   if (!hasSingleInstanceLock) return;
   ensureDesktopRuntimeConfig(runtimePaths);
   configureSettingsConfigPath(runtimePaths.configPath);
-  reloadVoiceSettings();
   process.env.SHIORI_DESKTOP_USER_DATA_DIR = app.getPath("userData");
   // Opaque per-plugin persistence, with one legacy file-location migration.
   const activePluginData = new PluginDataStore({
@@ -317,10 +283,6 @@ void app.whenReady().then(async () => {
   // #181-C the pet's controller lives in `plugins/desktop_pet/background/` and
   // reaches these primitives over IPC like any other plugin would.
   const activeDesktopSurfaces = new DesktopSurfaceHost({
-    onInteractionChanged: () => {
-      surfaceVoice?.revalidate();
-      syncVoiceAvailability();
-    },
     createWindow: (key, spec) => createDesktopSurfaceWindow(key, spec, { openLocalAttachment }),
     workAreaFor: workAreaForSurface,
     displayIdFor: displayIdForSurface,
@@ -345,7 +307,9 @@ void app.whenReady().then(async () => {
     },
   });
   desktopSurfaces = activeDesktopSurfaces;
-  registerDesktopSurfaceIpc(activeDesktopSurfaces);
+  registerDesktopSurfaceIpc(activeDesktopSurfaces, (key, message) => {
+    pluginHostWindow?.webContents.send("desktop:surface-background-message", { ...key, message });
+  });
   // Dedicated hidden window for plugin `app.background` code (#226 item 1).
   // Created once here, after the surface IPC it depends on is registered but
   // before any plugin could possibly need it; destroyed in `before-quit`.
@@ -376,55 +340,11 @@ void app.whenReady().then(async () => {
       // renderer, so leaving them would give the user menu entries that do
       // nothing when clicked.
       pluginTray.clear();
-      syncVoiceAvailability();
+      nativeSessions?.revoke();
     },
   });
-  const activeVoiceController = new DesktopVoiceController({
-    recorder: activeVoiceRecorder,
-    bridge,
-    isEnabled: () => Boolean(
-      voiceSettings?.enabled
-      && activeDesktopSurfaces.interactionTargets().length > 0
-      && !activeVoiceRecorder.isBusy
-    ),
-    microphoneDeviceId: () => voiceSettings?.microphoneDeviceId ?? "",
-    publishState: publishVoiceState,
-    onNewInput: (previousTurnId, nextTurnId) => {
-      void selectVoiceTurn(bridge, activeVoicePlayback, previousTurnId, nextTurnId).catch((error) => {
-        logDesktopDiagnostic({
-          scope: "main",
-          event: "voice-turn.cancel.failed",
-          payload: { error, previousTurnId, nextTurnId },
-        });
-      });
-    },
-    onCancelTurn: (turnId) => {
-      activeVoicePlayback.cancelTurn(turnId);
-      void cancelVoiceTurn(bridge, turnId).catch((error) => {
-        logDesktopDiagnostic({
-          scope: "main",
-          event: "voice-turn.cancel.failed",
-          payload: { error, turnId },
-        });
-      });
-    },
-  });
-  voiceController = activeVoiceController;
-  const activeSurfaceVoice = new SurfaceVoiceController(activeDesktopSurfaces, activeVoiceController);
-  surfaceVoice = activeSurfaceVoice;
-  const activeVoicePlayback = new BrowserVoicePlayback(
-    createVoiceCaptureWindow,
-    createVoicePlaybackCallbacks(activeVoiceController),
-  );
-  voicePlayback = activeVoicePlayback;
-  if (process.platform === "win32") {
-    voiceHotkey = new VoiceHotkeyController({
-      onPress: () => activeSurfaceVoice.startPress(),
-      onRelease: (source) => activeVoiceController.release(source),
-      onCancel: () => activeVoiceController.cancel(),
-    });
-    voiceHotkey.setHotkey(voiceSettings.hotkey);
-  }
+  const sessions = createNativeRuntime(pluginHostWindow, bridge, activeVoiceRecorder);
+  nativeSessions = sessions;
   messageNotifications = createDesktopMessageNotifications({
     getWindow: () => desktopWindow,
     activation: notificationActivation,
@@ -432,9 +352,9 @@ void app.whenReady().then(async () => {
   });
   wireBridgeEvents(bridge, localAssets, (event) => {
     messageNotifications?.handleEvent(event);
+    if (event.method === "bridge.exit" || event.method === "runtime.applied" && event.payload.changed !== false) sessions.revoke();
     const activity = surfaceRoleActivity(event);
     if (activity) activeDesktopSurfaces.publishActivity(activity);
-    if (handleVoiceBridgeEvent(event, activeVoiceController, activeVoicePlayback)) return;
   });
   // The host reports OS availability; plugins own their presentation and behavior.
   powerMonitor.on("lock-screen", () => publishDesktopEvent("system.lock-state", { locked: true }));
@@ -453,16 +373,11 @@ void app.whenReady().then(async () => {
     localAssetImportsRoot,
     openLocalAttachment,
     isSurfaceWindow: (window) => activeDesktopSurfaces.keyForWindowId(window?.id) !== null,
-    surfaceVoice: activeSurfaceVoice,
-    voiceRecorder: activeVoiceRecorder,
-    voiceController: activeVoiceController,
-    voicePlayback: activeVoicePlayback,
-    onVoiceSettingsChanged: reloadVoiceSettings,
     // A plugin that just left the admitted-active roster (disabled, failed,
     // or rolled back by an activation-report failure, #262) must not leave a
     // desktop surface window behind — nothing else in this process is told
     // the plugin stopped, so its window would otherwise sit there forever.
-    onPluginDeactivated: (pluginId) => activeDesktopSurfaces.destroyAllForPlugin(pluginId),
+    onPluginDeactivated: (pluginId) => { sessions.revoke(pluginId); activeDesktopSurfaces.destroyAllForPlugin(pluginId); },
     // Same quit path as the tray (bridge stopped gracefully in before-quit),
     // with the next launch scheduled first.
     relaunchApp: () => {
@@ -538,9 +453,7 @@ app.on("before-quit", (event) => {
   desktopPresenceReporting = null;
   messageNotifications?.dispose();
   messageNotifications = null;
-  voiceHotkey?.stop();
-  voiceController?.dispose();
-  voicePlayback?.dispose();
+  nativeSessions?.revoke();
   voiceRecorder?.dispose();
   if (bridgeShutdownStarted || !bridge.isRunning()) {
     return;

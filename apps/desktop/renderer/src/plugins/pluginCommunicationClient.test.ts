@@ -51,6 +51,49 @@ test("own and declared peer calls/events share local names and isolate namespace
   assert.equal(fixture.listeners.size, 0);
 });
 
+test("public services use the active owner context without a static dependency lookup", async () => {
+  const fixture = host();
+  const client = createPluginCommunicationClient("consumer", fixture.options);
+  await client.services.list("shiori.asr.v1");
+  const request = fixture.calls.at(-1)!;
+  assert.equal(request.method, "plugins.communication.services.list");
+  assert.equal(request.payload.contract, "shiori.asr.v1");
+  assert.equal(request.timeoutMs, 20_000);
+  assert.equal(request.payload.plugin_id, "consumer");
+  assert.equal(request.payload.generation, "g1");
+  assert.equal(typeof request.payload.owner, "string");
+  await client.services.call({ plugin_id: "new-provider", service_id: "asr" }, "transcribe", { audio_base64: "AQ==", format: "wav" });
+  assert.equal(fixture.calls.at(-1)?.method, "plugins.communication.services.call");
+  assert.equal(fixture.calls.at(-1)?.timeoutMs, undefined);
+  assert.deepEqual(fixture.calls.at(-1)?.payload.service, { plugin_id: "new-provider", service_id: "asr" });
+  assert.equal(fixture.calls.some((item) => item.method.endsWith(".resolve")), false);
+  fixture.emit("runtime.applied");
+  await assert.rejects(client.services.list("shiori.asr.v1"));
+});
+
+for (const end of ["dispose", "bridge.exit"] as const) {
+  test(`a pending public service stops delivering when its context ends through ${end}`, async () => {
+    const fixture = host();
+    let complete!: () => void;
+    const gate = new Promise<void>((resolve) => { complete = resolve; });
+    const client = createPluginCommunicationClient("consumer", { ...fixture.options, invoke: async (request) => {
+      if (request.method === "plugins.communication.services.call") await gate;
+      return fixture.options.invoke(request);
+    } });
+    let delivered = false;
+    const pending = client.services.call({ plugin_id: "neutral", service_id: "slow" }, "run").then((result) => { delivered = true; return result; });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    if (end === "dispose") await client.dispose();
+    else fixture.emit("bridge.exit");
+    await assert.rejects(pending, { code: "plugin_unavailable" });
+    assert.equal(fixture.listeners.size, 0);
+    complete();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(delivered, false);
+    assert.equal(fixture.calls.filter((request) => request.method === "plugins.communication.close").length, end === "dispose" ? 1 : 0);
+  });
+}
+
 test("missing peers are nullable, undeclared peers fail explicitly, retained peers cannot cross generations", async () => {
   const fixture = host();
   const client = createPluginCommunicationClient("demo", fixture.options);

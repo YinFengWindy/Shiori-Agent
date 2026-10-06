@@ -106,13 +106,6 @@ export type RoleFormState = {
   moodCatalog: string[];
   defaultMood: string;
   moodIllustrationBindings: Record<string, string>;
-  voiceEnabled: boolean;
-  voiceProvider: string;
-  voiceOwnership: "external" | "shiori_managed";
-  voiceId: string;
-  voiceName: string;
-  voiceSpeed: number;
-  voiceMoodEmotions: Record<string, string>;
 };
 
 /** New role composer form state. */

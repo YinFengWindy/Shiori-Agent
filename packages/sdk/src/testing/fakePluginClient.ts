@@ -12,6 +12,7 @@ function notFaked(name: string) {
  */
 export function createFakePluginClient(overrides: Partial<PluginRpcClient> = {}): PluginRpcClient {
   return {
+    services: { list: notFaked("services.list"), call: notFaked("services.call") },
     call: notFaked("call"),
     events: { on: notFaked("events.on") },
     background: { call: notFaked("background.call") },

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { BackgroundCtx, PluginBackgroundSettled } from "@yinfengwindy/shiori-sdk";
 import { createFakePluginClient } from "@yinfengwindy/shiori-sdk/testing";
+import { defaultVoicePreferences } from "./voice/preferences";
 import petBackground, {
   desktopPetTrayEntryId,
 } from "./index";
@@ -71,7 +72,10 @@ function recorder(overrides: Partial<RecorderState> = {}): Recorder {
     failures,
     state,
     ctx: {
+      native: { audio: { devices: async () => [], startCapture: async () => {}, stopCapture: async () => ({ audio_base64: "", format: "wav" }), cancelCapture: async () => {}, play: async () => {}, stop: async () => {} }, keys: { validate: async () => {}, register: async () => {}, unregister: async () => {} } },
+      chat: { send: async () => ({}), cancel: async () => ({}) },
       surfaces: {
+        onMessage: () => {},
         setInteraction: () => {},
         create: (surfaceId) => {
           surfaceCalls.push(["create", surfaceId]);
@@ -91,7 +95,7 @@ function recorder(overrides: Partial<RecorderState> = {}): Recorder {
         handle: async (name, handler) => { events.set(name, handler); },
         call: <T,>(method: string) => {
           rpcCalls.push(method);
-          return Promise.resolve(state.bindingAnswer() as T);
+          return Promise.resolve((method === "voice.preferences.get" ? defaultVoicePreferences : state.bindingAnswer()) as T);
         },
       }),
       events: { on: async (method, handler) => { events.set(method, (payload) => handler(payload, { id: "test", type: "event", method, payload })); return () => { events.delete(method); }; } },
@@ -126,9 +130,9 @@ test("setup registers every subscription the pet needs, and one reclaiming effec
 
   // Without this effect the surface survives the plugin being disabled, and
   // #181's "停用桌宠插件后 surface 全部回收" quietly stops being true.
-  assert.deepEqual(fake.effects, ["desktop_pet_controller"]);
+  assert.deepEqual(fake.effects, ["desktop_pet_voice", "desktop_pet_controller"]);
   assert.deepEqual([...fake.events.keys()].sort(), [
-        "action", "sync",
+        "action", "sync", "voice.devices", "voice.stop", "voice.preferences.validate", "voice.preferences.changed", "chat.delta", "chat.error",
     "chat.done", "session.updated", "system.lock-state", "bubble.dismissed",
   ].sort());
   assert.deepEqual([...fake.settled.keys()], [desktopPetSurfaceId]);
@@ -140,7 +144,7 @@ test("setup restores a pet that was visible when the app last closed", async () 
   await petBackground.setup(fake.ctx);
   await flush();
 
-  assert.deepEqual(fake.rpcCalls, ["binding.get"]);
+  assert.deepEqual(fake.rpcCalls, ["voice.preferences.get", "binding.get"]);
   assert.ok(fake.surfaceCalls.some(([call]) => call === "create"), "the pet should be on screen");
 });
 
@@ -162,8 +166,8 @@ test("a failed restore is reported, not rethrown, so the contribution stays aliv
   // A thrown `setup` makes `PluginBackgroundHost` dispose the whole scope, and
   // nothing retries it — the pet would stay dead until the app restarted.
   await assert.doesNotReject(petBackground.setup(fake.ctx));
-  assert.deepEqual(fake.effects, ["desktop_pet_controller"]);
-  assert.deepEqual([...fake.events.keys()].length, 6);
+  assert.deepEqual(fake.effects, ["desktop_pet_voice", "desktop_pet_controller"]);
+  assert.deepEqual([...fake.events.keys()].length, 12);
   // Reported to the host's diagnostic log: the plugin-host window is hidden,
   // so a failure that only reached its console would be invisible.
   assert.deepEqual(fake.failures.map(([operation, error]) => [operation, (error as Error).message]), [["restore", "bridge 还没起来"]]);

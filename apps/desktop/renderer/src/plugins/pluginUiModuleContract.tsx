@@ -2,7 +2,7 @@ import type React from "react";
 import { PluginHostServicesProvider, type PluginInjectedProps, type PluginUiModule } from "@yinfengwindy/shiori-sdk";
 import { usePluginRpcClient } from "./usePluginRpcClient";
 import { pluginHostServicesFor } from "./pluginHostServices";
-import { pluginChatImageActionsRegistry, pluginRoleSettingsRegistry } from "./pluginFeatureRegistry";
+import { pluginChatImageActionsRegistry, pluginRoleSettingsRegistry, pluginRoleUiRegistry } from "./pluginFeatureRegistry";
 import { createPluginSchemaSettingsSection } from "./pluginSchemaSettingsSectionFactory";
 import { retiredPluginUiContribution } from "./runtimePluginUiValidation";
 import { pluginUiRegistry } from "./pluginUiRegistry";
@@ -56,6 +56,7 @@ export function applyPluginUiModules(
     }
     const { pluginId, settingsSection, navPage, roleAssets, accountDetail } = uiModule;
     if (uiModule.roleSettings) pluginRoleSettingsRegistry.register({ pluginId, ...uiModule.roleSettings });
+    if (uiModule.roleUi) pluginRoleUiRegistry.register({ pluginId, ...uiModule.roleUi });
     if (uiModule.chatImageActions) pluginChatImageActionsRegistry.register({
       pluginId, Component: uiModule.chatImageActions,
     });

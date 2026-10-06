@@ -2,7 +2,7 @@
 title: 改动影响索引
 kind: 影响分析
 status: 当前有效
-last_verified_commit: 27af068a
+last_verified_commit: 4d894e09
 source_paths:
   - apps/backend/core/
   - apps/backend/agent/
@@ -10,6 +10,10 @@ source_paths:
   - apps/backend/infra/
   - apps/backend/desktop_bridge/
   - apps/desktop/renderer/src/
+  - apps/desktop/src/native/
+  - plugins/desktop_pet/background/voice/
+  - plugins/desktop_pet/backend/voice_preferences.py
+  - packages/sdk/python/shiori_sdk/services.py
 related:
   - ../map.md
 ---
@@ -35,9 +39,13 @@ related:
 | 生命周期 phase | 所有 phase module、记忆、插件、自动 CG、观测 | `BeforeTurn AfterTurn PhaseModule` |
 | MCP | registry、client pool、工具同步、配置、断线清理 | `McpServerRegistry McpClient ToolRegistry` |
 | Bridge API | dispatcher、service、presenter、Electron client、renderer hook | `DesktopBridgeService request_dispatcher DesktopBridgeClient` |
-| ASR / TTS / 声音资产 | 全局与角色 provider、turn 归属、播放队列、取消、指标、ownership 与供应商清理 | `DesktopVoiceController TtsTurnCoordinator VoiceService` |
+| 桌宠语音 / ASR / TTS | 桌宠 background/voice 输入、轮次匹配与队列，私有 preferences RPC/文件，通用 services，原生设备资源与停用清理 | `PetVoiceController PetVoiceInput PetReplyAudio VoicePreferencesStore PluginServiceRegistry` |
+| 插件原生音频 / 按键 | src/native 的真实 sender、通信 owner/generation、单次播放与录音校验，surface 自有消息、重载和退出清理 | `PluginNativeSessions bindNativeDocumentLifecycle startCapture cancelCapture` |
+| 插件私有角色设置 | roleUi self-managed 插槽、scoped client、真实 roleId、独立保存与 dirty/错误；既有 roleSettings 草稿模式保持边界 | `PluginRoleUiSlot PluginRoleUiContribution createRoleUiDirtyLease` |
 | 调度任务 | scheduler、工具、持久化、主动投递、角色删除、桌面表单 | `ScheduleRoleTaskService compute_fire_at` |
 | 单角色剧情 | Story repository、Director、角色/玩家快照、bridge 事件、桌面剧情适配层 | `StorySimulationService StoryRepository StorySimulationHandler stories.beat.committed` |
+
+语音边界及 SDK 4.0 的已发布接口迁移见 [桌宠语音交互](../modules/voice.md) 与 [SDK 兼容说明](../../../packages/sdk/README.md#compatibility)。
 
 ## 判断顺序
 

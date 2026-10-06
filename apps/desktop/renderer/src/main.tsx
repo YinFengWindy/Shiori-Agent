@@ -26,6 +26,7 @@ import { useChatImageState } from "./app/useChatImageState";
 import { useChatInteractions } from "./app/useChatInteractions";
 import { useNavigationHistory } from "./app/useNavigationHistory";
 import { shouldGuardRoleEditorLeave, useLeaveGuard } from "./app/useLeaveGuard";
+import { usePluginRoleUiDirty } from "./plugins/pluginRoleUiDirty";
 import { useRoleManagement } from "./app/useRoleManagement";
 import { useRoleCreationController } from "./app/useRoleCreationController";
 import { useRoleSearch } from "./app/roleSearch";
@@ -525,8 +526,9 @@ function App(): React.ReactElement {
 
   // Every navigation intent below that can leave the role editor goes through
   // `guardLeave`, so unsaved role edits are never dropped silently.
+  const privateRoleDirty = usePluginRoleUiDirty(mainView.kind === "role-detail" ? mainView.roleId : null);
   const leaveGuard = useLeaveGuard({
-    active: shouldGuardRoleEditorLeave(mainView, roleFormDirty),
+    active: shouldGuardRoleEditorLeave(mainView, roleFormDirty || privateRoleDirty),
     onDiscard: () => {
       if (detailRole) updateRoleForm(createRoleFormFromRole(detailRole));
     },
@@ -702,7 +704,7 @@ function App(): React.ReactElement {
         roleForm={roleForm}
         roleFormDirty={roleFormDirty}
         savingRole={savingRole}
-        onOpenAssetsPage={() => void openRoleAssets(detailRoleId)}
+        onOpenAssetsPage={() => privateRoleDirty ? guardLeave(() => void openRoleAssets(detailRoleId)) : void openRoleAssets(detailRoleId)}
         onOpenPluginSettings={(pluginId) => guardLeave(() => openSettingsWorkspace("plugins", { subsectionId: pluginId ?? undefined }))}
         onRoleModelChanged={() => void loadRolesFromBridge()}
         onUpdateRoleForm={updateRoleForm}

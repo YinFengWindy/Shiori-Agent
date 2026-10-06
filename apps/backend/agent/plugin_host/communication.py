@@ -3,12 +3,15 @@
 import asyncio
 import re
 from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from agent.plugin_host.bridge_events import PluginBridgeEvent
 from shiori_sdk.rpc import PluginRpcError
 from agent.plugin_host.renderer_requests import RendererRequests
+
+if TYPE_CHECKING:
+    from agent.plugin_host.rpc import PluginRpcRegistry
 
 
 def communication_name(value: Any) -> str:
@@ -30,7 +33,7 @@ class PluginCommunication:
     not authentication in the shared-process trust model.
     """
 
-    def __init__(self, registry: object) -> None:
+    def __init__(self, registry: "PluginRpcRegistry") -> None:
         self.generation = uuid4().hex
         self._registry = registry
         self._resolve: Callable[[str], tuple[str, ...] | None] = lambda _id: None
@@ -83,6 +86,30 @@ class PluginCommunication:
             if generation == self.generation:
                 self.remove_owner(owner)
             return {}
+        if operation in {"services.list", "services.call", "native.authorize"}:
+            self.authorize(caller, caller, generation)
+            if not owner or self._owners.get(owner) != caller:
+                raise PluginRpcError("plugin_invalid_owner", "插件调用上下文不匹配")
+            if operation == "native.authorize":
+                return {"plugin_id": caller, "generation": self.generation}
+            if operation == "services.list":
+                contract = str(payload.get("contract") or "")
+                return {"services": self._registry.services.list(contract)}
+            service = payload.get("service")
+            arguments = payload.get("payload", {})
+            if not isinstance(service, dict) or not isinstance(arguments, dict):
+                raise PluginRpcError(
+                    "plugin_invalid_request", "插件服务引用和参数必须是对象"
+                )
+            return await self._registry.services.call(
+                str(service.get("plugin_id") or ""),
+                str(service.get("service_id") or ""),
+                communication_name(payload.get("name")),
+                arguments,
+                caller_active=lambda: self._active
+                and self._owners.get(owner) == caller
+                and self._resolve(caller) is not None,
+            )
         target = str(payload.get("target") or caller)
         available = self.authorize(caller, target, generation)
         if operation == "resolve":

@@ -76,12 +76,11 @@ export type VoiceCaptureCommand =
   | "stop"
   | "cancel"
   | { command: "start"; deviceId?: string }
-  | { command: "list-devices" }
-  | { command: "play-test"; audioBase64: string };
+  | { command: "list-devices" };
 
 /** Commands sent from the main process to the hidden voice playback surface. */
 export type VoicePlaybackCommand =
-  | { command: "play"; id: string; audioBase64: string; format: "mp3" }
+  | { command: "play"; id: string; audioBase64: string; format: "mp3" | "wav" }
   | { command: "cancel" };
 
 /** Editable model registration persisted in config.toml. */
@@ -114,24 +113,6 @@ export type SettingsFormData = {
     embeddingApiKey: string;
     embeddingBaseUrl: string;
     outputDimensionality: string;
-  };
-  voice: {
-    enabled: boolean;
-    hotkey: string;
-    microphoneDeviceId: string;
-    /** Preserved provider-level switch from config.toml. */
-    asrEnabled?: boolean;
-    asrProvider: string;
-    asrBaseUrl: string;
-    asrSecretId: string;
-    asrSecretKey: string;
-    /** Preserved provider-level switch from config.toml. */
-    ttsEnabled?: boolean;
-    ttsProvider: string;
-    ttsBaseUrl: string;
-    ttsModel: string;
-    ttsApiKey: string;
-    ttsVolume: number;
   };
   advanced: {
     maxTokens: number;
@@ -253,6 +234,13 @@ export type RendererDiagnosticPayload = {
 export type TrayEntryClickedPayload = import("../tray/ipc.js").TrayEntryClickedPayload;
 
 export type DesktopApi = {
+  /** Native transport is available only to the actual plugin background window. */
+  native: {
+    open(context: import("@yinfengwindy/shiori-sdk/contract").PluginNativeContext): Promise<string>;
+    call<T = void>(token: string, method: string, payload?: Record<string, unknown>): Promise<T>;
+    onKey(listener: (event: { token: string; id: string; phase: "down" | "up" }) => void): () => void;
+  };
+  onSurfaceMessage(listener: (event: { pluginId: string; surfaceId: string; message: unknown }) => void): () => void;
   /** Retains and acknowledges native notification clicks in the main window. */
   notifications: import("../notifications/contract.js").DesktopNotificationsApi;
   /** Reads and controls the Electron application update lifecycle. */
@@ -277,8 +265,6 @@ export type DesktopApi = {
   reportRendererDiagnostic(payload: RendererDiagnosticPayload): void;
   /** Opens the desktop diagnostics directory selected by the main process. */
   openDiagnosticsFolder(): Promise<void>;
-  /** Acknowledges test playback completion from the hidden voice renderer. */
-  voiceTestPlaybackFinished(): void;
   bridgeStatus(): Promise<{ running: boolean; lastError: string | null }>;
   restartBridge(): Promise<{
     ok: boolean;
@@ -289,14 +275,6 @@ export type DesktopApi = {
   relaunchApp(): Promise<boolean>;
   readSettings(): Promise<SettingsSnapshot>;
   saveSettings(formData: SettingsFormData, options?: SettingsSaveOptions): Promise<SaveSettingsResult>;
-  /** Lists input devices exposed by the hidden capture renderer. */
-  listVoiceInputDevices(): Promise<VoiceInputDevice[]>;
-  /** Starts a short local microphone test without sending it to ASR. */
-  startVoiceTest(deviceId?: string): Promise<void>;
-  /** Stops the local microphone test and plays it back locally. */
-  stopVoiceTest(): Promise<void>;
-  /** Cancels an active or still-starting microphone test without playback. */
-  cancelVoiceTest(): Promise<void>;
   /** Controls the custom frameless Electron window chrome. */
   windowControl(action: WindowControlAction): Promise<void>;
   /** Returns the current custom window state used by the frameless title bar. */

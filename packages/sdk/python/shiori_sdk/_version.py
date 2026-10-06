@@ -1,4 +1,4 @@
 """Single version source for both SDK distributions and the runtime contract."""
 
-__version__ = "3.1.0"
+__version__ = "4.0.0"
 RUNTIME_API_VERSION = __version__

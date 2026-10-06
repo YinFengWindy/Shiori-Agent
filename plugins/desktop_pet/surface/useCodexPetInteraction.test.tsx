@@ -20,9 +20,9 @@ function fakeBridges(calls: BridgeCall[]) {
     ready: record("ready"),
     showContextMenu: async () => null,
     activateMainWindow: record("activateMainWindow"),
-    voice: {
-      gesture: (gesture) => record({ press: "startVoicePress", move: "voicePointerMoved", release: "voiceRelease", cancel: "voiceCancel" }[gesture])(),
-      onState: () => () => {},
+    postToBackground: (message) => {
+      const gesture = (message as { gesture: "press" | "move" | "release" | "cancel" }).gesture;
+      record({ press: "startVoicePress", move: "voicePointerMoved", release: "voiceRelease", cancel: "voiceCancel" }[gesture])();
     },
   });
   return { surface };

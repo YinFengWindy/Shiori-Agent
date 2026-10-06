@@ -9,7 +9,7 @@ export function createPluginCommunicationClient(pluginId: string, options: {
   invoke?: DesktopInvoke;
   onEvent?: (listener: (event: BridgeEvent) => void) => () => void;
   background?: boolean;
-} = {}): PluginRpcClient {
+} = {}): PluginRpcClient & { openNativeContext(): Promise<import("@yinfengwindy/shiori-sdk").PluginNativeContext> } {
   const owner = crypto.randomUUID();
   const lifetime = new PluginCommunicationLifetime();
   const subscriptions = new Set<{ target: string; name: string; handler: PluginEventHandler }>();
@@ -37,7 +37,9 @@ export function createPluginCommunicationClient(pluginId: string, options: {
     assertActive();
     const result = await lifetime.wait(invoke<T>(`plugins.communication.${operation}`, {
       ...payload, plugin_id: pluginId, generation: token, owner,
-    }, { timeoutMs: 20_000 }));
+    // Public service completion belongs to its provider. A host deadline would
+    // release the consumer's serial queue while provider work is still running.
+    }, operation === "services.call" ? undefined : { timeoutMs: 20_000 }));
     assertActive();
     if (token !== currentGeneration) throw new PluginBridgeError("插件运行代际已替换", "plugin_unavailable");
     return result;
@@ -107,6 +109,17 @@ export function createPluginCommunicationClient(pluginId: string, options: {
   });
   return {
     ...peer(pluginId),
+    services: {
+      list: (contract: string) => transport<{ services: import("@yinfengwindy/shiori-sdk").PluginServiceDescriptor[] }>("services.list", { contract }),
+      call: <T,>(service: import("@yinfengwindy/shiori-sdk").PluginServiceReference, name: string, payload: Record<string, unknown> = {}) => transport<T>("services.call", { service, name, payload }),
+    },
+    /** Host-only context handoff: the native main-process boundary validates it again. */
+    async openNativeContext() {
+      if (!options.background) throw new PluginBridgeError("仅后台可以使用原生资源", "plugin_invalid_context");
+      const token = await connect();
+      assertActive();
+      return { plugin_id: pluginId, owner, generation: token };
+    },
     async dependency(target) {
       const result = await transport<{ available: boolean }>("resolve", { target });
       return result.available ? peer(target) : null;

@@ -10,6 +10,7 @@ from session.manager import SessionManager
 from agent.plugin_host.capabilities import LifecycleCapability, RpcCapability
 from agent.plugin_host.effects import EffectScope
 from agent.plugin_host.host_service_requirements import provided_service
+from shiori_sdk.services import PluginServices, ServiceProviderContext
 from shiori_sdk.runtime import Dispose
 from agent.plugin_host.manifest import PluginManifest
 from shiori_sdk import PluginRuntimeContext as SdkRuntimeContext
@@ -95,6 +96,7 @@ class PluginSetupContext:
         channels: ChannelsCapability | None = None,
         accounts: AccountsCapability | None = None,
         avatars: AvatarsCapability | None = None,
+        services: PluginServices | None = None,
     ) -> None:
         self.plugin_id = plugin_id
         self.plugin_dir = plugin_dir
@@ -132,6 +134,18 @@ class PluginSetupContext:
         self._channels = channels
         self._accounts = accounts
         self._avatars = avatars
+        self._services = services
+
+    @property
+    def services(self) -> PluginServices:
+        """Return this plugin's explicitly granted public service registration."""
+        if "services" not in self.granted or self._services is None:
+            raise CapabilityNotGranted("Plugin did not request services")
+        return self._services
+
+    def as_service_provider_context(self) -> ServiceProviderContext:
+        """Check the public service setup surface without dynamic attributes."""
+        return self
 
     def as_sdk_context(self) -> SdkRuntimeContext:
         """Checks the setup boundary against this static base, without __getattr__."""

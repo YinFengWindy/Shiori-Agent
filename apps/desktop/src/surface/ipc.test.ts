@@ -60,9 +60,23 @@ function setup() {
     cursorScreenPoint: () => ({ x: 0, y: 0 }),
   });
   const ipc = new FakeIpc();
-  registerSurfaceIpc(ipc, { surfaces, onError: (channel, error) => errors.push({ channel, error }) });
-  return { ipc, surfaces, windows, errors };
+  const messages: unknown[] = [];
+  registerSurfaceIpc(ipc, { surfaces, onError: (channel, error) => errors.push({ channel, error }), onMessage: (owner, message) => messages.push({ owner, message }) });
+  return { ipc, surfaces, windows, errors, messages };
 }
+
+test("surface messages derive the owning plugin from the sending window, ignoring forged payload identity", () => {
+  const { ipc, surfaces, windows, messages } = setup();
+  ipc.invoke(surfaceChannels.create, { pluginId: "actual", surfaceId: "pet", spec, x: 0, y: 0 });
+  ipc.windowId = windows[0].id;
+  const message = { pluginId: "forged", surfaceId: "other", gesture: "press" };
+  ipc.send(surfaceChannels.toBackground, message);
+  assert.deepEqual(messages, [{ owner: { pluginId: "actual", surfaceId: "pet" }, message }]);
+  surfaces.destroy({ pluginId: "actual", surfaceId: "pet" });
+  ipc.send(surfaceChannels.toBackground, message);
+  ipc.windowId = null; ipc.send(surfaceChannels.toBackground, message);
+  assert.equal(messages.length, 1);
+});
 
 const key = { pluginId: "demo", surfaceId: "main" };
 

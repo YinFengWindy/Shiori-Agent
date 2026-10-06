@@ -36,6 +36,7 @@ import { DesktopSurfaceError, type DesktopSurfaceHost, type SurfaceKey } from ".
  */
 
 export const surfaceChannels = {
+  toBackground: "desktop:surface-to-background",
   create: "desktop:surface-create",
   destroy: "desktop:surface-destroy",
   show: "desktop:surface-show",
@@ -67,6 +68,7 @@ export type SurfaceIpcEvent = { readonly sender: unknown };
 
 export type RegisterSurfaceIpcOptions = {
   surfaces: DesktopSurfaceHost;
+  onMessage?: (key: SurfaceKey, message: unknown) => void;
   /** Reports a refused or failed request; failures here never crash the caller. */
   onError?: (channel: string, error: unknown) => void;
 };
@@ -74,6 +76,10 @@ export type RegisterSurfaceIpcOptions = {
 export function registerSurfaceIpc(host: SurfaceIpcHost, options: RegisterSurfaceIpcOptions): void {
   const { surfaces } = options;
   const report = options.onError ?? (() => {});
+  host.on(surfaceChannels.toBackground, (event, message) => {
+    const key = ownSurface(event);
+    if (key) options.onMessage?.(key, message);
+  });
 
   /** Resolves the surface that owns the sending window, for self-directed requests. */
   function ownSurface(event: SurfaceIpcEvent): SurfaceKey | null {

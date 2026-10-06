@@ -45,7 +45,7 @@ export function useCodexPetInteraction(
   function onPointerDown(event: ReactPointerEvent<HTMLDivElement>): void {
     if (event.button !== 0 || !surface) return;
     event.preventDefault();
-    surface.voice.gesture("press");
+    surface.postToBackground({ kind: "voice.gesture", gesture: "press" });
     setNextInteractionState(null);
     lastGestureWasDragRef.current = true;
     dragRef.current = {
@@ -68,7 +68,7 @@ export function useCodexPetInteraction(
     drag.samples = petDragSamplesWith(drag.samples, sample);
     if (!hasPetDragMoved(drag.previousScreenX, drag.previousScreenY, event.screenX, event.screenY)) return;
     drag.hasMoved = true;
-    surface?.voice.gesture("move");
+    surface?.postToBackground({ kind: "voice.gesture", gesture: "move" });
     const nextState = petDragState(drag.previousScreenX, event.screenX);
     drag.previousScreenX = event.screenX;
     drag.previousScreenY = event.screenY;
@@ -85,7 +85,7 @@ export function useCodexPetInteraction(
     // The host already knows where the surface is; only the throw velocity is
     // news, and only when the release was fast enough to be worth a glide.
     surface?.endDrag(release.velocity ?? undefined);
-    surface?.voice.gesture("release");
+    surface?.postToBackground({ kind: "voice.gesture", gesture: "release" });
     setNextInteractionState(petHoverState);
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
   }
@@ -97,7 +97,7 @@ export function useCodexPetInteraction(
     setIsDragging(false);
     lastGestureWasDragRef.current = true;
     surface?.endDrag();
-    surface?.voice.gesture("cancel");
+    surface?.postToBackground({ kind: "voice.gesture", gesture: "cancel" });
     setNextInteractionState(null);
   }
 

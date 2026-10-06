@@ -1,26 +1,9 @@
-import type { SurfaceVoiceController } from "./surfaceVoice.js";
-import { BrowserWindow, ipcMain } from "electron";
-import type { IpcMainInvokeEvent } from "electron";
-import type { DesktopVoiceController } from "./controller.js";
-import { isVoiceInteractionBusy } from "./interactionState.js";
-import type { BrowserVoicePlayback } from "./playback.js";
+import { ipcMain } from "electron";
 import type { BrowserVoiceRecorder } from "./recorder.js";
+import type { NativeAudioPlayer } from "../native/audioPlayer.js";
 
-/** Main-process dependencies needed by the voice-specific IPC boundary. */
-export type RegisterVoiceIpcOptions = {
-  surfaceVoice: Pick<SurfaceVoiceController, "gesture">;
-  voiceRecorder: BrowserVoiceRecorder;
-  voiceController: DesktopVoiceController;
-  voicePlayback: BrowserVoicePlayback;
-};
-
-/** Registers capture, testing, playback, and pet voice IPC handlers. */
-export function registerVoiceIpc({
-  surfaceVoice,
-  voiceRecorder,
-  voiceController,
-  voicePlayback,
-}: RegisterVoiceIpcOptions): void {
+/** Accepts device acknowledgements only through each native resource owner. */
+export function registerAudioRendererIpc(voiceRecorder: BrowserVoiceRecorder, player: NativeAudioPlayer): void {
   ipcMain.on("desktop:voice-capture-ready", (event) => {
     voiceRecorder.handleReady(event.sender);
   });
@@ -41,63 +24,10 @@ export function registerVoiceIpc({
   ipcMain.on("desktop:voice-capture-error", (event, message: unknown) => {
     voiceRecorder.handleError(event.sender, String(message || "麦克风采集失败"));
   });
-  ipcMain.on("desktop:voice-test-playback-finished", (event) => {
-    voiceRecorder.handleTestPlaybackFinished(event.sender);
-  });
   ipcMain.on("desktop:voice-input-devices", (event, devices: unknown) => {
     voiceRecorder.handleInputDevices(event.sender, devices);
   });
 
-  let voiceTestActive = false;
-  let voiceTestStop: Promise<void> | null = null;
-  ipcMain.handle("desktop:voice-input-devices-list", async () => {
-    return await voiceRecorder.listInputDevices();
-  });
-  ipcMain.handle("desktop:voice-test-start", async (_event: IpcMainInvokeEvent, deviceId?: unknown) => {
-    if (voiceTestActive || voiceTestStop || isVoiceInteractionBusy(voiceController.currentState)) {
-      throw new Error("请等待当前语音任务结束后再测试麦克风");
-    }
-    voiceTestActive = true;
-    try {
-      await voiceRecorder.start(typeof deviceId === "string" ? deviceId : "");
-    } catch (error) {
-      voiceTestActive = false;
-      throw error;
-    }
-  });
-  ipcMain.handle("desktop:voice-test-stop", async () => {
-    if (voiceTestStop) return voiceTestStop;
-    if (!voiceTestActive) return;
-    voiceTestActive = false;
-    voiceTestStop = (async () => {
-      let audio: Uint8Array;
-      try { audio = await voiceRecorder.stop(); } catch (error) {
-        throw new Error(`录音处理失败\n${error instanceof Error ? error.message : String(error)}`, { cause: error });
-      }
-      try { await voiceRecorder.playTestAudio(audio); } catch (error) {
-        throw new Error(`录音回放失败\n${error instanceof Error ? error.message : String(error)}`, { cause: error });
-      }
-    })().finally(() => {
-      voiceTestStop = null;
-    });
-    return voiceTestStop;
-  });
-  ipcMain.handle("desktop:voice-test-cancel", async () => {
-    voiceTestActive = false;
-    await voiceRecorder.cancel();
-  });
-  ipcMain.on("desktop:voice-playback-started", (event, id: unknown) => {
-    voicePlayback.handleStarted(event.sender, String(id || ""));
-  });
-  ipcMain.on("desktop:voice-playback-finished", (event, id: unknown) => {
-    voicePlayback.handleFinished(event.sender, String(id || ""));
-  });
-  ipcMain.on("desktop:voice-playback-error", (event, value: unknown) => {
-    const payload = value && typeof value === "object" ? value as { id?: unknown; message?: unknown } : {};
-    voicePlayback.handleError(event.sender, String(payload.id || ""), String(payload.message || "音频播放失败"));
-  });
-  ipcMain.on("desktop:surface-voice-gesture", (event, gesture: unknown) => {
-    if (gesture !== "press" && gesture !== "move" && gesture !== "release" && gesture !== "cancel") return;
-    surfaceVoice.gesture(BrowserWindow.fromWebContents(event.sender)?.id ?? null, gesture);
-  });
+  ipcMain.on("desktop:voice-playback-finished", (event, id: string) => player.finish(event.sender, id));
+  ipcMain.on("desktop:voice-playback-error", (event, value: { id: string; message: string }) => player.finish(event.sender, value.id, value.message));
 }

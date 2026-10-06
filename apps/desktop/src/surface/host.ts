@@ -2,7 +2,6 @@ import type {
   SurfaceMenuItem,
   SurfaceInteractionTarget,
   SurfaceRoleActivity,
-  VoiceStatePayload,
   SurfacePlacement,
   SurfaceSettleReason,
   SurfaceExtension,
@@ -103,7 +102,6 @@ export const surfaceMessageChannel = "desktop:surface-message";
 /** Channel carrying a surface's retained state, replayed whenever it reports ready. */
 export const surfaceStateChannel = "desktop:surface-state";
 /** Host-owned interaction events scoped to one surface. */
-export const surfaceVoiceChannel = "desktop:surface-voice";
 export const surfaceActivityChannel = "desktop:surface-activity";
 
 /** An available target resolved from the host's live window record. */
@@ -321,13 +319,6 @@ export class DesktopSurfaceHost {
       record.visible && record.ready && !record.window.isDestroyed() && record.interaction?.available
         ? [{ key: record.key, windowId: record.window.id, roleId: record.interaction.roleId }]
         : []);
-  }
-
-  /** Deliver voice state only to its owning window, including the final idle on revocation. */
-  publishVoice(windowId: number, state: VoiceStatePayload): void {
-    for (const record of this.surfaces.values()) {
-      if (record.window.id === windowId && !record.window.isDestroyed()) record.window.send(surfaceVoiceChannel, state);
-    }
   }
 
   /** Relay typed activity only to ready, available surfaces bound to this role. */

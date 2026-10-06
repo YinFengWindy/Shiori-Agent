@@ -6,9 +6,12 @@ import { changeInputValue, chooseSelectOption, mountTestComponent } from "@yinfe
 import { createEmptyRoleForm } from "../app/appState";
 import { resetPluginEnabledStateForTests, setPluginEnabledSnapshot } from "../plugins/pluginEnabledStateStore";
 import { createSettingsDraft } from "../settings/testFixtures";
+import type { DesktopApi } from "../../../src/bridge/shared";
 import type { RoleRecord } from "@yinfengwindy/shiori-sdk";
 import type { RoleFormState } from "../shared/types";
 import { RoleDetailPage } from "./RoleDetailPage";
+import { pluginRoleUiRegistry } from "../plugins/pluginFeatureRegistry";
+import type { PluginRoleUiProps } from "@yinfengwindy/shiori-sdk";
 
 type PageProps = Parameters<typeof RoleDetailPage>[0];
 
@@ -71,6 +74,30 @@ const role: RoleRecord = {
 };
 
 describe("RoleDetailPage", () => {
+  it("guards a tab change while a private plugin role editor has unsaved values", async () => {
+    function PrivateEditor({ onDirtyChange }: PluginRoleUiProps) {
+      return <button onClick={() => onDirtyChange(true)}>修改私有设置</button>;
+    }
+    pluginRoleUiRegistry.register({ pluginId: "private_editor", mode: "self-managed", Component: PrivateEditor });
+    setPluginEnabledSnapshot([{ id: "private_editor", enabled: true, state: "ACTIVE" }]);
+    const view = await mountTestComponent(pageElement({ activeRole: role }), { windowGlobals: { miraDesktop: {
+      onEvent: () => () => {},
+      readSettings: async () => ({ formData: createSettingsDraft() }),
+      invoke: async ({ method }: { method: string }) => ({ id: "test", type: "response", method, error: null, payload: { generation: "g", slots: [], registrations: [] } }),
+    } } });
+    const click = async (label: string) => {
+      const button = Array.from(document.querySelectorAll("button")).find((item) => item.textContent === label);
+      assert.ok(button, label); await act(async () => button.click());
+    };
+    try {
+      await click("能力"); await click("修改私有设置"); await click("资料");
+      assert.match(document.body.textContent ?? "", /放弃未保存的修改/);
+      assert.match(view.container.textContent ?? "", /修改私有设置/);
+      await click("取消"); assert.match(view.container.textContent ?? "", /修改私有设置/);
+      await click("资料"); await click("放弃修改");
+      assert.doesNotMatch(view.container.textContent ?? "", /修改私有设置/);
+    } finally { await view.cleanup(); pluginRoleUiRegistry.unregister("private_editor"); resetPluginEnabledStateForTests(); }
+  });
   it("opens on the profile tab with the setting grouped into sections", () => {
     const markup = renderPage({ roleForm: profileForm, roleFormDirty: true });
 
@@ -136,8 +163,12 @@ describe("RoleDetailPage", () => {
   it("saves and resets proactive edits through the shared role draft across tab switches", async () => {
     setPluginEnabledSnapshot([]);
     let saved: RoleFormState | undefined;
+    const desktop: Pick<DesktopApi, "readSettings" | "onEvent"> = {
+      readSettings: async () => ({ configPath: "config.toml", formData: createSettingsDraft() }),
+      onEvent: () => () => undefined,
+    };
     const view = await mountTestComponent(<DraftDetailPage onSave={(form) => { saved = form; }} />, {
-      windowGlobals: { miraDesktop: { readSettings: async () => ({ formData: createSettingsDraft() }) } },
+      windowGlobals: { miraDesktop: desktop },
     });
     const button = (label: string) => {
       const found = Array.from(view.container.querySelectorAll("button")).find((item) => item.textContent === label);
@@ -147,6 +178,7 @@ describe("RoleDetailPage", () => {
     try {
       await act(async () => button("能力").click());
       assert.ok(view.container.querySelector('[data-testid="role-proactive-config"]'));
+      assert.equal(view.container.querySelector('[role="alert"]'), null);
       const toggle = view.container.querySelector<HTMLButtonElement>('[role="switch"][aria-label="主动推送"]');
       assert.ok(toggle);
       await act(async () => toggle.click());

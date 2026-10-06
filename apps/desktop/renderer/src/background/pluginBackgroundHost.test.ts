@@ -8,6 +8,8 @@ import type { PluginBackgroundEntry } from "./pluginBackgroundRegistry";
 /** A fake ctx.effect-capable BackgroundCtx that just records what happened. */
 function fakeCtx(pluginId: string, scope: BackgroundEffectScope, log: string[]): BackgroundCtx {
   return {
+    native: {} as BackgroundCtx["native"],
+    chat: {} as BackgroundCtx["chat"],
     surfaces: {} as BackgroundCtx["surfaces"],
     rpc: {} as BackgroundCtx["rpc"],
     events: { on: async () => () => {} },

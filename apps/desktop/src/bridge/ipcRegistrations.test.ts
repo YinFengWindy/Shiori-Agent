@@ -60,7 +60,6 @@ function setup(overrides: {
     logDiagnostic: () => undefined,
     openDiagnosticsFolder: async () => { externalOpened.push("diagnostics"); },
     dragFileIcon: "drag-icon.png",
-    registerVoiceIpc: () => undefined,
   } as unknown as DesktopIpcHost;
 
   // Since #181-C there is no pet object in this process: the boundary takes a
@@ -85,10 +84,6 @@ function setup(overrides: {
     localAssetImportsRoot: "imports",
     openLocalAttachment: async () => ({ ok: true }),
     isSurfaceWindow,
-    surfaceVoice: { gesture: () => undefined },
-    voiceRecorder: {},
-    voiceController: {},
-    voicePlayback: {},
     relaunchApp: () => { relaunches += 1; },
   } as unknown as RegisterDesktopIpcOptions);
 
@@ -233,7 +228,6 @@ it("notifies onPluginDeactivated for exactly the plugin ids a fresh roster dropp
     openExternal: async () => undefined,
     logDiagnostic: () => undefined,
     dragFileIcon: "drag-icon.png",
-    registerVoiceIpc: () => undefined,
   } as unknown as DesktopIpcHost;
   registerDesktopIpcHandlers(host, {
     bridge: {
@@ -244,10 +238,6 @@ it("notifies onPluginDeactivated for exactly the plugin ids a fresh roster dropp
     localAssetImportsRoot: "imports",
     openLocalAttachment: async () => ({ ok: true }),
     isSurfaceWindow: () => false,
-    surfaceVoice: { gesture: () => undefined },
-    voiceRecorder: {},
-    voiceController: {},
-    voicePlayback: {},
     onPluginDeactivated: (pluginId: string) => deactivated.push(pluginId),
   } as unknown as RegisterDesktopIpcOptions);
   const invokeHandler = handlers.get("desktop:invoke") as (event: unknown, ...args: unknown[]) => unknown;

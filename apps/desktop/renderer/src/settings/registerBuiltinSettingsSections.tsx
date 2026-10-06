@@ -6,7 +6,6 @@ import { AdvancedSettingsSection } from "./AdvancedSettingsSection";
 import { AppearanceSettingsSection } from "./AppearanceSettingsSection";
 import { MemorySettingsSection } from "./MemorySettingsSection";
 import { ModelsSettingsSection } from "./ModelsSettingsSection";
-import { VoiceSettingsSection } from "./VoiceSettingsSection";
 
 /** Wraps the standalone About page so it fits the registry's uniform component shape. */
 function AboutSection() {
@@ -39,15 +38,6 @@ export function registerBuiltinSettingsSections(): void {
       { id: "embedding", label: "向量模型" },
     ],
     Component: MemorySettingsSection,
-  }, "builtin");
-
-  pluginUiRegistry.registerSettingsSection({
-    kind: "editor", slot: "settings.section", id: "voice", label: "语音",
-    subsections: [
-      { id: "provider", label: "语音服务" },
-      { id: "input", label: "语音输入" },
-    ],
-    Component: VoiceSettingsSection,
   }, "builtin");
 
   pluginUiRegistry.registerSettingsSection({

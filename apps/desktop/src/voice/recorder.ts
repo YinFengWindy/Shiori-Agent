@@ -1,27 +1,25 @@
 import type { BrowserWindow, WebContents } from "electron";
 import { encodeVoiceWav } from "./wav.js";
 import { createDeferred, type Deferred } from "./deferred.js";
-import type { VoiceRecorder } from "./controller.js";
 import type { VoiceCaptureCommand, VoiceInputDevice } from "../bridge/shared.js";
 import type { VoiceWindowSurface } from "./window.js";
 
 type VoiceCaptureWindowFactory = () => VoiceWindowSurface;
 
-/** Owns the hidden capture renderer and converts its samples to an ASR WAV. */
-export class BrowserVoiceRecorder implements VoiceRecorder {
+/** Owns the hidden capture renderer and returns normalized 16 kHz mono WAV. */
+export class BrowserVoiceRecorder {
   private window: BrowserWindow | null = null;
   private ready: Promise<void> | null = null;
   private started: Deferred<void> | null = null;
   private stopped: Deferred<Uint8Array> | null = null;
   private devices: Deferred<VoiceInputDevice[]> | null = null;
-  private testPlayback: Deferred<void> | null = null;
   private sampleChunks: Int16Array[] = [];
   private captureGeneration = 0;
   private captureActive = false;
   private stopPromise: Promise<Uint8Array> | null = null;
 
   get isBusy(): boolean {
-    return this.captureActive || this.stopPromise !== null || this.testPlayback !== null;
+    return this.captureActive || this.stopPromise !== null;
   }
 
   constructor(private readonly createWindow: VoiceCaptureWindowFactory) {}
@@ -57,14 +55,17 @@ export class BrowserVoiceRecorder implements VoiceRecorder {
     }
     this.stopped = createDeferred<Uint8Array>();
     const stopped = this.stopped;
+    const generation = this.captureGeneration;
     this.stopPromise = (async () => {
       try {
         this.sendCommand("stop");
         return await stopped.promise;
       } finally {
         if (this.stopped === stopped) this.stopped = null;
-        this.stopPromise = null;
-        this.captureActive = false;
+        if (generation === this.captureGeneration) {
+          this.stopPromise = null;
+          this.captureActive = false;
+        }
       }
     })();
     return this.stopPromise;
@@ -74,44 +75,45 @@ export class BrowserVoiceRecorder implements VoiceRecorder {
     this.captureGeneration += 1;
     const cancellation = new Error("麦克风采集已取消");
     this.started?.reject(cancellation);
-    this.testPlayback?.reject(cancellation);
     this.stopped?.reject(cancellation);
     this.started = null;
     this.stopped = null;
+    this.stopPromise = null;
     this.captureActive = false;
     this.sampleChunks = [];
     if (!this.window || this.window.isDestroyed()) return;
     this.sendCommand("cancel");
+    // A fresh capture gets a fresh sender identity, so late stop/data from this
+    // cancelled document cannot acknowledge or populate the next recording.
+    this.dispose();
   }
 
   /** Enumerates sanitized input devices from the browser-owned media surface. */
-  async listInputDevices(): Promise<VoiceInputDevice[]> {
-    const window = this.ensureWindow();
-    await this.waitUntilReady(window);
-    this.devices = createDeferred<VoiceInputDevice[]>();
-    this.sendCommand({ command: "list-devices" });
-    return await this.devices.promise;
+  listInputDevices(): Promise<VoiceInputDevice[]> {
+    if (this.devices) return this.devices.promise;
+    const result = createDeferred<VoiceInputDevice[]>();
+    const operation: Deferred<VoiceInputDevice[]> = {
+      ...result,
+      promise: result.promise.finally(() => {
+        if (this.devices === operation) this.devices = null;
+      }),
+    };
+    // Reserve the shared operation before window initialization can yield.
+    // Every caller then observes the same load failure or enumeration result.
+    this.devices = operation;
+    void this.requestInputDevices(operation);
+    return operation.promise;
   }
 
-  /** Plays a local test recording without routing playback events to the voice controller. */
-  async playTestAudio(audio: Uint8Array): Promise<void> {
-    const window = this.ensureWindow();
-    await this.waitUntilReady(window);
-    const playback = createDeferred<void>();
-    this.testPlayback = playback;
+  private async requestInputDevices(operation: Deferred<VoiceInputDevice[]>): Promise<void> {
     try {
-      this.sendCommand({ command: "play-test", audioBase64: Buffer.from(audio).toString("base64") });
-      await playback.promise;
-    } finally {
-      if (this.testPlayback === playback) this.testPlayback = null;
+      const window = this.ensureWindow();
+      await this.waitUntilReady(window);
+      if (this.devices !== operation || this.window !== window || window.isDestroyed()) return;
+      this.sendCommand({ command: "list-devices" });
+    } catch (error) {
+      operation.reject(error instanceof Error ? error : new Error(String(error)));
     }
-  }
-
-  /** Acknowledges completed test playback from the authorized capture window. */
-  handleTestPlaybackFinished(sender: WebContents): boolean {
-    if (!this.isCaptureSender(sender)) return false;
-    this.testPlayback?.resolve(undefined);
-    return true;
   }
 
   /** Accepts a readiness signal from the authorized hidden capture renderer. */
@@ -154,7 +156,6 @@ export class BrowserVoiceRecorder implements VoiceRecorder {
     this.started?.reject(error);
     this.stopped?.reject(error);
     this.devices?.reject(error);
-    this.testPlayback?.reject(error);
     this.started = null;
     this.stopped = null;
     this.stopPromise = null;
@@ -182,9 +183,11 @@ export class BrowserVoiceRecorder implements VoiceRecorder {
 
   /** Releases the hidden renderer and every in-flight capture promise. */
   dispose(): void {
+    this.captureGeneration += 1;
+    this.captureActive = false;
+    this.stopPromise = null;
     this.sampleChunks = [];
     this.started?.reject(new Error("麦克风采集已关闭"));
-    this.testPlayback?.reject(new Error("录音回放已关闭"));
     this.stopped?.reject(new Error("麦克风采集已关闭"));
     this.started = null;
     this.stopped = null;
@@ -229,7 +232,6 @@ export class BrowserVoiceRecorder implements VoiceRecorder {
     this.started?.reject(error);
     this.stopped?.reject(error);
     this.devices?.reject(error);
-    this.testPlayback?.reject(error);
     this.started = null;
     this.stopped = null;
     this.devices = null;

@@ -239,8 +239,10 @@ async def test_form_write_derives_after_queued_plugin_change_commits(
             )
         )
         await asyncio.wait_for(entered.wait(), 5)
+        # The ordinary form owns agent/llm/etc.; proactive is an opaque current
+        # table and must be preserved by the transaction rather than drafted.
         payload = {
-            "config_toml": _config(optimizer=True),
+            "config_toml": _config(optimizer=True).split("\n[proactive]", 1)[0],
             "preserve_plugins": True,
             "operation_id": "form",
         }

@@ -20,11 +20,6 @@ import { saveRoleCardExport } from "./roleCardExportSave.js";
 import { stagePickedFiles } from "../assets/pickedFileStaging.js";
 import { maxLocalAssetBytes } from "../assets/localAssetContract.js";
 import { applyRuntimeSettings, readRuntimeSettings } from "../settingsRuntime.js";
-import type { BrowserVoiceRecorder } from "../voice/recorder.js";
-import type { DesktopVoiceController } from "../voice/controller.js";
-import type { BrowserVoicePlayback } from "../voice/playback.js";
-import type { SurfaceVoiceController } from "../voice/surfaceVoice.js";
-import type { registerVoiceIpc } from "../voice/ipc.js";
 import { openExternalLink } from "../externalLinks.js";
 import type {
   LocalAssetOpenRequest,
@@ -57,7 +52,6 @@ export type DesktopIpcHost = {
   /** Opens the fixed application log directory; accepts no renderer path. */
   openDiagnosticsFolder: () => Promise<void>;
   dragFileIcon: string;
-  registerVoiceIpc: typeof registerVoiceIpc;
 };
 
 export type RegisterDesktopIpcOptions = {
@@ -68,7 +62,6 @@ export type RegisterDesktopIpcOptions = {
   localAssetImportsRoot: string;
   openLocalAttachment: (value: string) => Promise<LocalAssetOpenResult>;
   /** Whether a sending window is a live surface, supplied by `main.ts`. */
-  surfaceVoice: Pick<SurfaceVoiceController, "gesture">;
   isSurfaceWindow: (window: { readonly id: number } | null) => boolean;
   /**
    * Notified once per plugin id that just left the admitted-active set
@@ -80,10 +73,6 @@ export type RegisterDesktopIpcOptions = {
    * only unit-tested, never actually called in production).
    */
   onPluginDeactivated?: (pluginId: string) => void;
-  voiceRecorder: BrowserVoiceRecorder;
-  voiceController: DesktopVoiceController;
-  voicePlayback: BrowserVoicePlayback;
-  onVoiceSettingsChanged?: () => void;
   /**
    * Restarts the whole application (quit, then launch again), supplied by
    * `main.ts`. Exposed so changes that only take effect on the next launch
@@ -124,11 +113,6 @@ export function registerDesktopIpcHandlers(
     localAssetImportsRoot,
     openLocalAttachment,
     isSurfaceWindow,
-    surfaceVoice,
-    voiceRecorder,
-    voiceController,
-    voicePlayback,
-    onVoiceSettingsChanged,
     onPluginDeactivated,
     relaunchApp,
   }: RegisterDesktopIpcOptions,
@@ -265,7 +249,6 @@ export function registerDesktopIpcHandlers(
   });
   host.handle("desktop:settings-save", async (_event, formData: SettingsFormData, options?: SettingsSaveOptions) => {
     const result = await applyRuntimeSettings(bridge, formData, options);
-    if (result.ok) onVoiceSettingsChanged?.();
     return result;
   });
   host.handle("desktop:window-control", (event, action: WindowControlAction) => {
@@ -333,7 +316,6 @@ export function registerDesktopIpcHandlers(
   // the generic DesktopSurface channels in `src/surface/ipc.ts`, where the host
   // attributes them by the sending window's identity rather than by a
   // pet-specific check here.
-  host.registerVoiceIpc({ surfaceVoice, voiceRecorder, voiceController, voicePlayback });
   host.handle("desktop:pick-chat-attachments", async (_event, options?: { multiple?: boolean }) => {
     const result = await host.showOpenDialog({
       properties: options?.multiple ? ["openFile", "multiSelections"] : ["openFile"],

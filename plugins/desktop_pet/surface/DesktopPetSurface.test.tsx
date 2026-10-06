@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { act } from "react";
-import type { SurfacePlacement, VoiceStatePayload, SurfaceRoleActivity } from "@yinfengwindy/shiori-sdk";
+import type { SurfacePlacement, SurfaceRoleActivity } from "@yinfengwindy/shiori-sdk";
 import { createFakeSurfaceHandle, createFakePluginClient, mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import { DesktopPetSurface } from "./DesktopPetSurface";
 import { petBubbleGap } from "./bubbleExtension";
@@ -24,10 +24,8 @@ function fakeSurface() {
   const placementListeners: ((value: SurfacePlacement) => void)[] = [];
   const record = (name: string) => (...args: unknown[]) => { calls.push({ name, args }); };
 
-  const voiceListeners = new Set<(value: VoiceStatePayload) => void>();
   const activityListeners = new Set<(value: SurfaceRoleActivity | null) => void>();
   const surface = createFakeSurfaceHandle({
-    voice: { gesture() {}, onState: (listener) => { voiceListeners.add(listener); return () => { voiceListeners.delete(listener); }; } },
     onRoleActivity: (listener) => { activityListeners.add(listener); return () => { activityListeners.delete(listener); }; },
     beginDrag: record("beginDrag"),
     endDrag: record("endDrag"),
@@ -55,7 +53,7 @@ function fakeSurface() {
     calls,
     callNames: () => calls.map((call) => call.name),
     extensions: () => calls.filter((call) => call.name === "setExtension").map((call) => call.args[0]),
-    interactionCounts: () => ({ voice: voiceListeners.size, activity: activityListeners.size }),
+    interactionCounts: () => ({ voice: messageListeners.length, activity: activityListeners.size }),
     listenerCounts: () => ({
       state: stateListeners.length,
       message: messageListeners.length,

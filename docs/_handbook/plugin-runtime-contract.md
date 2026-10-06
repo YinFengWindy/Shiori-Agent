@@ -39,7 +39,7 @@ and renderer declaration keys are rejected. This table defines the v1 fields:
 | `api` | yes | integer `2` |
 | `id` | yes | `[a-z][a-z0-9_-]{0,63}` |
 | `version` | yes | full SemVer 2.0 string, including optional prerelease/build |
-| `runtime_api` | yes | compatibility range; host currently advertises `3.1.0` |
+| `runtime_api` | yes | compatibility range; host currently advertises `4.0.0` |
 | `entry` | yes | explicit package-relative `.py` backend entry |
 | `capabilities` | yes | existing v2 capability-name list, including `[]` |
 | `channels` | no | static channel declarations (Runtime API 2.2); requires the `channels` capability |
@@ -63,7 +63,7 @@ uses that context without importing host internals; public backend import
 portability is completed by #212.
 
 Ranges use whitespace-separated comparators with AND semantics: `=`, `>`, `>=`,
-`<`, `<=`; a bare SemVer means equality. Example: `>=3.0.0 <4.0.0`. Caret, tilde,
+`<`, `<=`; a bare SemVer means equality. Example: `>=4.0.0 <5.0.0`. Caret, tilde,
 wildcard, comma, OR and hyphen ranges are deliberately unsupported and rejected.
 Build metadata does not affect precedence. Prerelease hosts require a comparator
 mentioning a prerelease of that same major/minor/patch tuple.
@@ -93,7 +93,8 @@ version whose additions it uses.
 | `2.15.0` | quoted messages (#555): `infra.channels.reply_context.with_reply_quote` (public as `shiori_sdk.channels.reply_context.with_reply_quote` since 3.0.0) wraps a routed message with the message it quotes (text never truncated, quoted pictures ahead of its own) and records `reply_to_content` / `reply_to_sender_name` / `reply_to_media`; the hub sets `reply_to_sender_is_user` on a routed message whose quoted sender is bound to the user (plugins cannot set it) | #555 |
 | `2.16.0` | SDK `CrossfadeLayers` and `SidebarResizeHandle`; packages importing either require `runtime_api: ">=2.16.0 <3.0.0"`. The host no longer provides NcatBot; external `host_dependencies` declarations requiring it are rejected by the existing missing-dependency check. QQ uses per-account OneBot sockets; `psutil` remains a production dependency. | #576 |
 | `3.0.0` | **breaking**: the unified Shiori SDK. `@shiori/plugin-sdk` becomes `@yinfengwindy/shiori-sdk` (no alias) and shares version and source tree `packages/sdk/` with the Python `shiori-sdk`, which owns plugin-facing Python contracts, lifecycle values and independent test fakes; every 2.x range is rejected with `incompatible_runtime` (see [Runtime API 3.0](#runtime-api-30-unified-shiori-sdk)) | #551 (#585–#591) |
-| `3.1.0` | `shiori_sdk.lifecycle` gains `AfterTurnCtx`, `PHASE_SLOTS` / `require_phase_slot` and `requires` / `produces` on the `LifecycleModule` protocol; packages importing or implementing any of them require `runtime_api: ">=3.1.0 <4.0.0"`. `shiori_sdk.runtime` owns the host's `KNOWN_CAPABILITIES` and manifest `capabilities` validation. `shiori-sdk[testing]`'s `sdk_context` grants only the plugin manifest's (validated) `capabilities` with an isolated temporary `plugin_dir`, and `FakeLifecycle` rejects unknown phase slots like the host. `shiori_sdk.runtime.HostServiceUnavailable` is raised before `setup` when a declared capability's host service is missing, so `workspace` / `session_manager` on the typed contexts are no longer optional. `shiori_sdk.redaction.summarize_llm_output_for_log` moves back to the host (`core.common.llm_output_log`); `redact_secrets` stays in the SDK. The SDK had not been published, so this is not treated as a breaking change | #620, #622, #624 (#619) |
+| `3.1.0` | `shiori_sdk.lifecycle` gains `AfterTurnCtx`, `PHASE_SLOTS` / `require_phase_slot` and `requires` / `produces` on the `LifecycleModule` protocol; packages importing or implementing any of them require `runtime_api: ">=3.1.0 <4.0.0"`. `shiori_sdk.runtime` owns the host's `KNOWN_CAPABILITIES` and manifest `capabilities` validation. `shiori-sdk[testing]`'s `sdk_context` grants only the plugin manifest's (validated) `capabilities` with an isolated temporary `plugin_dir`, and `FakeLifecycle` rejects unknown phase slots like the host. `shiori_sdk.runtime.HostServiceUnavailable` is raised before `setup` when a declared capability's host service is missing, so `workspace` / `session_manager` on the typed contexts are no longer optional. `shiori_sdk.redaction.summarize_llm_output_for_log` moves back to the host (`core.common.llm_output_log`); `redact_secrets` stays in the SDK. Those corrections preceded the first 3.1.0 publication on 2026-10-03 | #620, #622, #624 (#619) |
+| `4.0.0` | **breaking**: removes the published 3.1 `SurfaceHandle.voice` API and host speech business. Adds generic `services` publication/discovery/calls, pure ASR/TTS values, scoped native capture/playback/key capabilities and autonomous role UI. Desktop pet owns preferences and orchestration and requires `>=4.0.0 <5.0.0`. Other bundled plugins retain their 3.1 minimum with an audited `<5.0.0` upper bound. Existing external packages capped below 4 must explicitly migrate and declare compatibility. | #674 |
 
 2.2 and 2.3 first ship together in the release that turns every external
 channel into a plugin (#363): no released host advertises 2.2 alone, and
@@ -129,7 +130,7 @@ Background request waits are
 bounded and do not occupy backend RPC scheduling capacity. Method policies on
 backend calls are unchanged. See [the plugin tutorial](plugins-tutorial.md#桌面-rpc事件与-ui)
 for examples and delivery/error semantics. Packages using these additions must
-require `runtime_api: ">=3.0.0 <4.0.0"`; the existing `client.call` signature and
+require `runtime_api: ">=4.0.0 <5.0.0"`; the existing `client.call` signature and
 Python exported dependency API remain compatible. This is cooperation under the
 existing trust model, not a sandbox; the CSP and resource grants are unchanged.
 
@@ -181,7 +182,7 @@ not declared, when the type declares a prefix the `chat_id` does not carry
 Every role binding stores its `chat_type`. A saved binding on a channel no
 installed plugin declares (its plugin was uninstalled) is shown read-only and
 kept as is, but cannot be added or changed. Packages declaring `channels` must
-require `runtime_api: ">=3.0.0 <4.0.0"`.
+require `runtime_api: ">=4.0.0 <5.0.0"`.
 
 The declaration is static, so the desktop can list a channel while its plugin is
 disabled, untrusted or still missing credentials. The channel name is a data key
@@ -193,7 +194,7 @@ to `FAILED` with diagnostic code `undeclared_channel` (stage `setup`, field
 `channels`). When two plugins declare the same channel name, discovery marks every
 claimant `CONFLICT` (code `duplicate_channel`, field `channels`) and none of them
 activates; candidates that already conflict by plugin ID keep `duplicate_id`.
-Packages using `channels` must require `runtime_api: ">=3.0.0 <4.0.0"`; older
+Packages using `channels` must require `runtime_api: ">=4.0.0 <5.0.0"`; older
 hosts reject the unknown top-level key.
 
 `plugins.list` rows carry the manifest's `capabilities` and `channels`. The
@@ -228,7 +229,7 @@ an absent hook yields the neutral default. Protocols live in
 stream. `MessagePushTool.register_channel(..., description=...)` accepts a short
 identity/`chat_id` format note; the `message_push` tool description lists only
 currently registered, non-retired channels with those notes. Packages using the
-hooks or `description` must require `runtime_api: ">=3.0.0 <4.0.0"`: older hosts
+hooks or `description` must require `runtime_api: ">=4.0.0 <5.0.0"`: older hosts
 ignore the hooks and reject the unknown keyword.
 
 ## Runtime API 2.4 host feedback and inline errors
@@ -283,7 +284,7 @@ function Page({ client, host }: PluginNavPageComponentProps) {
 }
 ```
 
-Packages that use `host` must require `runtime_api: ">=3.0.0 <4.0.0"`; older
+Packages that use `host` must require `runtime_api: ">=4.0.0 <5.0.0"`; older
 hosts do not inject it. The bundled NovelAI studio uses all three: its
 generation failure card and error toasts pick the scene from the backend's
 stable error codes (`novelai_not_configured` → `not_configured`, …), and its
@@ -310,7 +311,7 @@ bundled NovelAI `generate_image` does, while commands, files, desktop, browser,
 outbound messages, schedule changes and memory stay undeclared.
 
 Packages that pass `external_allowed` must require
-`runtime_api: ">=3.0.0 <4.0.0"`; older hosts reject the keyword.
+`runtime_api: ">=4.0.0 <5.0.0"`; older hosts reject the keyword.
 
 This is a behavior change of 2.7.0 hosts: every plugin tool that does not
 declare `external_allowed` is unavailable in restricted external-context turns,
@@ -318,7 +319,7 @@ including tools of existing packages that require an older `runtime_api` and
 therefore cannot declare it. The registration API itself is unchanged for them;
 this is host policy, not an API break. Such packages keep working everywhere
 else, and their tools become available in those turns once they declare
-`external_allowed=True` and require `runtime_api: ">=3.0.0 <4.0.0"`.
+`external_allowed=True` and require `runtime_api: ">=4.0.0 <5.0.0"`.
 
 ## Runtime API 2.8 plugin SDK peer
 
@@ -330,7 +331,7 @@ exactly like `react`; the renderer import map resolves it to a host-served
 wrapper around the **host's own instance**, so `instanceof` checks and shared
 state behave exactly as they do for built-in plugins. The SDK is not a
 `peer_dependencies` entry: it is versioned by the runtime API, so a package using
-it declares `runtime_api: ">=3.0.0 <4.0.0"` (the unified SDK major).
+it declares `runtime_api: ">=4.0.0 <5.0.0"` (the unified SDK major).
 
 The runtime exports are exactly those listed for `@yinfengwindy/shiori-sdk` in the
 renderer peer ABI (`pluginUiPeerExports` in
@@ -355,7 +356,7 @@ API 2.9 moves the shared renderer primitives that plugins use into
 `@yinfengwindy/shiori-sdk`, which now owns their only implementation (the host
 imports them from the SDK too, so host and plugins render the same components
 and class names). A precompiled package that imports any of the exports below
-declares `runtime_api: ">=3.0.0 <4.0.0"`; on a 2.8 host those names are missing
+declares `runtime_api: ">=4.0.0 <5.0.0"`; on a 2.8 host those names are missing
 from the served peer wrapper and the package fails to load.
 
 Runtime exports added in 2.9.0 (all are listed in `pluginUiPeerExports`):
@@ -385,7 +386,7 @@ unchanged; only their source of truth moved.
 
 API 2.10 gives plugins the stateful host capabilities they used to reach through
 host source, as services instead of host stores. A precompiled package that uses
-any of them declares `runtime_api: ">=3.0.0 <4.0.0"`.
+any of them declares `runtime_api: ">=4.0.0 <5.0.0"`.
 
 Runtime exports added in 2.10.0 (listed in `pluginUiPeerExports`):
 
@@ -434,7 +435,7 @@ appearance preferences) stays private; accounts still arrive through the
 ## Runtime API 2.11 background failure reporting and surface/background types
 
 API 2.11 adds one member to the `ctx` a background module's `setup(ctx)`
-receives; a package that calls it declares `runtime_api: ">=3.0.0 <4.0.0"`.
+receives; a package that calls it declares `runtime_api: ">=4.0.0 <5.0.0"`.
 
 - **`ctx.reportFailure(operation, error)`** records a failure the plugin
   handled but a human should still see — a fire-and-forget operation with no
@@ -465,7 +466,6 @@ unchanged (the host uses the same SDK types):
   `PluginBackgroundEvents`, `BackgroundEffectDispose`), plus the surface
   vocabulary they use (`SurfaceSpec`, `SurfaceCreateResult`,
   `PluginBackgroundSettled`, `SurfaceSettleReason`).
-- `VoiceStatePayload`, the host's voice state pushed to the desktop pet.
 
 The React-free ones the host's main process and preload use are also available
 from `@yinfengwindy/shiori-sdk/contract`.
@@ -476,14 +476,10 @@ from `@yinfengwindy/shiori-sdk/contract`.
 an interaction target; `null` revokes it. The declaration is independent of opaque
 retained state and plugin KV. The host combines it with its authoritative window
 visibility/readiness/lifetime, so hiding, closing, reloading or crashing a surface
-revokes voice admission. Repeating the same declaration does not cancel input.
-
-`SurfaceHandle.voice` provides `gesture("press" | "move" | "release" | "cancel")`
-and `onState(listener)`. Gestures are attributed to the sending window. The host
-pins the accepted role before awaited recorder/ASR work, cancels invalidated targets,
-and keeps ASR/TTS implementation private. The global hotkey selects its current
-available owner or the first available surface; a busy owner cannot be stolen by
-another surface. `VoiceInputSource` is `"surface" | "hotkey"`.
+revokes that interaction target. Runtime API 4.0 removes the published 3.1
+`SurfaceHandle.voice` gesture/state API. Speech gestures, input ownership,
+provider selection and playback queues belong to the desktop-pet plugin.
+The host forwards owned surface messages and manages scoped native resources.
 
 `SurfaceHandle.onRoleActivity(listener)` exposes `SurfaceRoleActivity` with
 `roleId`, `sessionKey`, `phase` (`running/review/failed/waiting`) and `notify`.
@@ -492,7 +488,7 @@ plugins clear prior activity and timers. Raw backend event subscription and
 `window.miraDesktop`/`Window["miraDesktop"]` are not plugin surface APIs. Shape
 translation is host-owned; animation state, priority and notification timing stay
 with each plugin. All these types are defined once in the SDK's `surfaceInteraction`
-and `voice` contracts and are available from the main and `/contract` entries.
+contract and are available from the main and `/contract` entries.
 
 ### Test entry
 
@@ -505,7 +501,7 @@ or the import map, and production renderer code must not import it. It provides:
 | `chooseSelectOption(label, optionLabel, index?)` | picks an option of the SDK `Select` through its visible trigger and a real pointer event |
 | `deferred()` | a promise the test settles on demand |
 | `createFakeHostServices(options)` | in-memory `PluginHostServices` whose calls can be asserted: `host` (pass as the prop or to the Provider), `calls` (every service call in order), `feedback` (the toasts), `uiRenders` (the props of each `host.ui` render), `config()` (the stored config), `emit(event)` (delivers a bridge event to `onEvent` listeners) and `accountDetailActionsZone()` (where `host.ui.AccountDetailActions` render). Options answer `listRoles`, `pickImages`, `pickFiles`, the initial `config`, `saveConfig` and `assetUrl` |
-| `createFakeSurfaceHandle(overrides)` | complete injected surface fixture, including voice and role activity, without a host bridge |
+| `createFakeSurfaceHandle(overrides)` | complete injected surface fixture, including owned messages and role activity, without a host bridge |
 | `createFakePluginClient(overrides)` | an injected `client` with no bridge behind it: pass the parts the component uses (usually `call`, answering by local method name); any other request rejects, `dispose` resolves |
 
 The fake `host.ui` components are plain stand-ins: they render the text, buttons,
@@ -520,7 +516,7 @@ settling its DOM detection before the first mount; the desktop unit test loader
 API 2.12 adds the `avatars` capability, the host's cache of the platform
 avatars of a channel's message senders and chats (#514). A plugin declares
 `avatars` in its manifest `capabilities` and, if it is an external package,
-`runtime_api: ">=3.0.0 <4.0.0"`.
+`runtime_api: ">=4.0.0 <5.0.0"`.
 
 An avatar is keyed by `kind` and the message's transport `channel`
 (`InboundMessage.channel`):
@@ -861,14 +857,14 @@ for commands and how to validate its directory/zip from a host environment.
 ## Runtime API 3.0: unified Shiori SDK
 
 `@yinfengwindy/shiori-sdk` and `shiori-sdk` share one version (3.0.0 at introduction, now
-3.1.0) and the source tree `packages/sdk/`. External packages must declare `runtime_api: ">=3.0.0 <4.0.0"`.
+4.0.0) and the source tree `packages/sdk/`. External packages must declare `runtime_api: ">=4.0.0 <5.0.0"`.
 The previous frontend package name has no alias. Existing 2.x ranges are rejected
 with `incompatible_runtime` before backend execution; rebuild renderer peers and
 update the declared range when migrating. The 2.x sections above describe feature
 history; all current examples target the unified 3.x ABI.
 
 Before the first public release, the npm identity was finalized as the personal
-scope `@yinfengwindy/shiori-sdk`. SDK and Runtime API remain `3.1.0` because no
+scope `@yinfengwindy/shiori-sdk`. That rename retained Runtime API `3.1.0` because no
 public version preceded this rename. Renderer plugins built against the earlier
 internal name must update their imports and rebuild; the import map and host peer
 wrappers expose only the public name, without a compatibility alias.

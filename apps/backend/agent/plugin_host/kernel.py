@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any, cast
 from uuid import uuid4
 
+from agent.plugin_host.services import ScopedPluginServices
 from agent.plugin_host.roles import HostRoles
 from agent.plugin_host.models import HostRoleModels
 from agent.plugin_host.sessions import HostPluginSessions
@@ -619,8 +620,16 @@ class PluginKernel:
                 if "avatars" in grants and services.role_store is not None
                 else None
             ),
+            services=(
+                ScopedPluginServices(
+                    self.rpc.services, handle.plugin_id, handle.effects
+                )
+                if "services" in grants
+                else None
+            ),
             publish_api=lambda api: setattr(handle, "instance", api),
         )
+        context.as_service_provider_context()
         context.as_hook_context()
         context.as_command_context()
         context.as_observe_context()
@@ -637,6 +646,7 @@ class PluginKernel:
     ) -> dict[str, Any]:
         services = self._services
         builders: dict[str, Any] = {
+            "services": lambda: None,
             "scene_observations": lambda: None,
             "events": lambda: None,
             "diagnostics": lambda: None,

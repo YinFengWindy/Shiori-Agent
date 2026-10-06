@@ -34,10 +34,11 @@ function fakeHost(calls: string[]) {
 
 test("the plugin owns the menu items, not the host", () => {
   assert.deepEqual(petContextMenuItems.map((item) => item.id), [
+    "stop-audio",
     petMenuMainWindowId,
     petMenuHidePetId,
   ]);
-  assert.deepEqual(petContextMenuItems.map((item) => item.label), ["显示主窗口", "隐藏桌宠"]);
+  assert.deepEqual(petContextMenuItems.map((item) => item.label), ["停止语音", "显示主窗口", "隐藏桌宠"]);
 });
 
 test("choosing the main window entry pulls the main window forward", async () => {

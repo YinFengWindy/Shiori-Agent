@@ -365,20 +365,6 @@ class ReloadableDesktopService:
                 and service.chat_service.is_busy(str(payload.get("session_key") or ""))
             ):
                 return entry
-            if (
-                routing is OwnerRouting.BUSY_VOICE_TURN
-                and service.chat_service.owns_voice_turn(
-                    str(payload.get("voice_turn_id") or "")
-                )
-            ):
-                return entry
-            if (
-                routing is OwnerRouting.BUSY_VOICE_SYNTHESIS
-                and service.voice_handler.owns_synthesis(
-                    str(payload.get("voice_request_id") or "")
-                )
-            ):
-                return entry
         return self._current
 
     def resolve_method_policy(self, method: str) -> MethodPolicy:

@@ -55,6 +55,8 @@ export type DesktopPetControllerOptions = {
    * alternative is this class deciding what its consumer considers a change.
    */
   onChanged?: () => void;
+  /** Sibling controllers retire work immediately when the displayed role changes or hides. */
+  onTargetChanged?: (roleId: string) => void;
 };
 
 /**
@@ -69,8 +71,7 @@ export type DesktopPetControllerOptions = {
  * listeners there could never be reclaimed on disable, so "停用插件后订阅全部
  * 回收" could only be pretended.
  *
- * Voice implementation stays in the host; this controller declares only the
- * current interaction target through the surface capability.
+ * Voice orchestration is a sibling plugin controller; this class owns presentation.
  */
 export class DesktopPetController {
   private readonly surfaces: DesktopPetSurfaces;
@@ -143,6 +144,14 @@ export class DesktopPetController {
   /** The settings as last saved, for callers that need the current binding. */
   get currentSettings(): DesktopPetSettings {
     return this.settings;
+  }
+
+  /** Exposes only the currently displayed role to other controllers in this plugin. */
+  get visibleRoleId() { return this.running ? this.activeRoleId : ""; }
+
+  /** Sends plugin-owned voice state to its own renderer without host speech semantics. */
+  publishVoice(state: import("./voice/types").VoiceStatePayload) {
+    if (this.running) this.surfaces.post(desktopPetSurfaceId, { voice: state });
   }
 
   /**
@@ -295,6 +304,7 @@ export class DesktopPetController {
     }
     if (this.activeRoleId !== binding.roleId) this.revokeInteraction();
     this.activeRoleId = binding.roleId;
+    this.options.onTargetChanged?.(binding.roleId);
     this.activeLoad = { binding, state };
     // Retained, so a renderer that mounts or reloads later still gets it.
     this.pushRetainedState();
@@ -350,6 +360,7 @@ export class DesktopPetController {
   private invalidatePresentation() {
     this.presentationEpoch += 1;
     this.revokeInteraction();
+    this.options.onTargetChanged?.("");
     return this.presentationEpoch;
   }
 
