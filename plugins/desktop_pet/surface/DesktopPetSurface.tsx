@@ -17,7 +17,8 @@ import {
   type PetSurfaceLoad,
 } from "./surfaceState";
 import { emptyPetReply, type PetReplyBubble } from "../shared/replyBubble";
-import type { PluginSurfaceComponentProps, SurfacePlacement, VoiceStatePayload } from "@yinfengwindy/shiori-sdk";
+import type { PluginSurfaceComponentProps, SurfacePlacement } from "@yinfengwindy/shiori-sdk";
+import type { VoiceStatePayload } from "../background/voice/types";
 
 const defaultVoice: VoiceStatePayload = { status: "idle" };
 const noExtension = { side: "below" as const, size: 0 };
@@ -106,6 +107,7 @@ export function DesktopPetSurface({ surface, client }: PluginSurfaceComponentPro
       setReply(next.reply ?? emptyPetReply);
     });
     const offMessage = surface.onMessage((value) => {
+      if (value && typeof value === "object" && "voice" in value) { setVoice(value.voice as VoiceStatePayload); return; }
       const play = readPetSurfaceMessage(value);
       if (!play) return;
       if (play.transient) {
@@ -119,7 +121,6 @@ export function DesktopPetSurface({ surface, client }: PluginSurfaceComponentPro
       placementRef.current = placement;
       syncBubble();
     });
-    const offVoice = surface.voice.onState(setVoice);
     // Tells the host to replay the retained state and the current placement.
     // Without this the pet comes up as an empty transparent rectangle whenever
     // it mounts after its state was set.
@@ -128,7 +129,6 @@ export function DesktopPetSurface({ surface, client }: PluginSurfaceComponentPro
       offState();
       offMessage();
       offPlacement();
-      offVoice();
     };
   }, [surface, syncBubble]);
 

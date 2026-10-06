@@ -8,7 +8,6 @@ from core.roles import RoleAggregateService
 
 from .role_presenter import DesktopRolePresenter
 from .role_card_export_service import DesktopRoleCardExportService
-from .voice.voice_handler import DesktopVoiceHandler
 
 
 class DesktopRoleRequestHandler:
@@ -24,14 +23,12 @@ class DesktopRoleRequestHandler:
         *,
         role_service: RoleAggregateService,
         role_presenter: DesktopRolePresenter,
-        voice_handler: DesktopVoiceHandler,
         card_import_service: Any | None = None,
         card_export_service: DesktopRoleCardExportService | None = None,
         publish_event: Callable[[dict[str, Any]], Awaitable[None]],
     ) -> None:
         self._role_service = role_service
         self._role_presenter = role_presenter
-        self._voice_handler = voice_handler
         self._card_import_service = card_import_service
         self._card_export_service = card_export_service
         self._publish_event = publish_event
@@ -157,10 +154,6 @@ class DesktopRoleRequestHandler:
                 ),
                 plugin_drafts=self._dict_payload(payload, "plugin_drafts"),
             )
-            await self._voice_handler.reconcile_role_update(
-                dict(previous.runtime_config),
-                aggregate.role.runtime_config,
-            )
             await self._publish_event(
                 {
                     "id": "",
@@ -172,7 +165,7 @@ class DesktopRoleRequestHandler:
             return {"role": self._role_presenter.serialize(aggregate.role)}
         if method == "roles.delete":
             role_id = str(payload.get("role_id") or "").strip()
-            role = self._role_service.repository.get_required(role_id)
+            self._role_service.repository.get_required(role_id)
             # The role's accounts go first, through their loaded plugins; a
             # failed cleanup keeps the role so the deletion can be retried.
             deleted_accounts = (
@@ -181,8 +174,6 @@ class DesktopRoleRequestHandler:
                 )
             )
             deleted, session_deleted = self._role_service.delete_role(role_id)
-            if deleted:
-                await self._voice_handler.retire_deleted_role(role.runtime_config)
             return {
                 "deleted": deleted,
                 "session_deleted": session_deleted,

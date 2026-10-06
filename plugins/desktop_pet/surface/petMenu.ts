@@ -14,6 +14,7 @@ export const petMenuMainWindowId = "show-main-window";
 export const petMenuHidePetId = "hide-pet";
 
 export const petContextMenuItems = [
+  { id: "stop-audio", label: "停止语音" },
   { id: petMenuMainWindowId, label: "显示主窗口" },
   { id: petMenuHidePetId, label: "隐藏桌宠" },
 ];
@@ -26,6 +27,7 @@ export const petContextMenuItems = [
  */
 export async function openPetContextMenu(surface: SurfaceHandle, client: PluginRpcClient): Promise<void> {
   const choice = await surface.showContextMenu(petContextMenuItems.map((item) => ({ ...item })));
+  if (choice === "stop-audio") { surface.postToBackground({ kind: "voice.stop" }); return; }
   if (choice === petMenuMainWindowId) {
     surface.activateMainWindow();
     return;

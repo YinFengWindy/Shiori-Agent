@@ -1,7 +1,6 @@
 import { BrowserWindow, dialog, ipcMain, shell, type WebContents } from "electron";
 import { logDesktopDiagnostic, openDiagnosticsFolder } from "../diagnostics.js";
 import { desktopDragFileIcon } from "../paths.js";
-import { registerVoiceIpc } from "../voice/ipc.js";
 import {
   registerSurfaceIpc,
   type SurfaceIpcEvent,
@@ -31,7 +30,6 @@ const electronHost: DesktopIpcHost = {
   logDiagnostic: logDesktopDiagnostic,
   openDiagnosticsFolder,
   dragFileIcon: desktopDragFileIcon,
-  registerVoiceIpc,
 };
 
 /** Binds the DesktopSurface channels to the real Electron main process. */
@@ -73,9 +71,10 @@ export function registerDesktopTrayIpc(registry: PluginTrayRegistry): void {
 }
 
 /** Registers the DesktopSurface capability's channels (#181). */
-export function registerDesktopSurfaceIpc(surfaces: DesktopSurfaceHost): void {
+export function registerDesktopSurfaceIpc(surfaces: DesktopSurfaceHost, onMessage?: import("../surface/ipc.js").RegisterSurfaceIpcOptions["onMessage"]): void {
   registerSurfaceIpc(electronSurfaceHost, {
     surfaces,
+    onMessage,
     onError: (channel, error) => logDesktopDiagnostic({
       scope: "main",
       event: "surface-request-failed",

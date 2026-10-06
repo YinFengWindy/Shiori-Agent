@@ -25,7 +25,7 @@ describe("RoleCapabilitiesPanel", () => {
     const panel = () => <RoleCapabilitiesPanel activeRole={null} bridgeReady roleForm={form} onUpdate={(next) => { form = typeof next === "function" ? next(form) : next; }} />;
     const view = await mountTestComponent(panel(), { windowGlobals: { miraDesktop: { onEvent: () => () => undefined, invoke: async () => ({ error: null, payload: { providers: [] } }), readSettings: async () => ({ formData: createSettingsDraft() }) } } });
     try {
-      assert.deepEqual(Array.from(view.container.querySelectorAll("h2"), (heading) => heading.textContent), ["运行能力", "声音", "主动推送"]);
+      assert.deepEqual(Array.from(view.container.querySelectorAll("h2"), (heading) => heading.textContent), ["运行能力", "主动推送"]);
       const capability = view.container.querySelector('[data-testid="role-proactive-capability"]');
       assert.equal(capability?.closest("section")?.querySelector("h2")?.textContent, "运行能力");
       assert.match(capability?.textContent ?? "", /未启用/);

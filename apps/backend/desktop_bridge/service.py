@@ -67,34 +67,9 @@ from desktop_bridge.role_task_service import RoleTaskService
 from desktop_bridge.session_task_requests import DesktopSessionTaskRequestHandler
 from desktop_bridge.session_presenter import DesktopSessionPresenter
 from desktop_bridge.turn_messages import committed_turn_messages
-from desktop_bridge.voice.voice_handler import DesktopVoiceHandler
-from agent.voice_config import VoiceConfig
-from agent.plugin_host.voice import VoiceProviderRegistry
-from desktop_bridge.voice.voice_service import VoiceService, VoiceServiceError
 from session.manager import Session, SessionManager
 
 logger = logging.getLogger("desktop.bridge")
-
-
-def _sanitize_voice_metrics(value: object) -> dict[str, str | int] | None:
-    if not isinstance(value, dict):
-        return None
-    provider = str(value.get("provider") or "").strip()
-    if not provider:
-        return None
-
-    def _non_negative_int(key: str) -> int:
-        raw = value.get(key)
-        return int(raw) if isinstance(raw, (int, float)) and raw >= 0 else 0
-
-    return {
-        "provider": provider,
-        "request_id": str(value.get("request_id") or "").strip(),
-        "elapsed_ms": _non_negative_int("elapsed_ms"),
-        "audio_duration_ms": _non_negative_int("audio_duration_ms"),
-        "character_count": _non_negative_int("character_count"),
-        "error_code": str(value.get("error_code") or "").strip(),
-    }
 
 
 class DesktopBridgeService:
@@ -115,8 +90,6 @@ class DesktopBridgeService:
         scheduler: Any | None = None,
         subagent_manager: Any | None = None,
         memory_optimizer: Any | None = None,
-        voice_service: VoiceService | None = None,
-        voice_providers: VoiceProviderRegistry | None = None,
         role_runtime_registry: RoleRuntimeRegistry | None = None,
         memory_engine: Any | None = None,
         card_import_service: Any | None = None,
@@ -220,9 +193,6 @@ class DesktopBridgeService:
                 role_store=role_store,
             )
         )
-        self.voice_service = voice_service or VoiceService(
-            getattr(config, "voice", None) or VoiceConfig(), voice_providers
-        )
         self.chat_service = DesktopChatService(
             agent_loop=agent_loop,
             event_bus=event_bus,
@@ -231,21 +201,8 @@ class DesktopBridgeService:
             sync_desktop_session_thread=self._sync_desktop_session_thread,
             emit_payload=self._emit_event,
             emit_session_updated=self._emit_session_updated,
-            tts_service=self.voice_service,
             streaming_enabled=bool(getattr(config, "desktop_streaming_enabled", True)),
         )
-        self.voice_handler = DesktopVoiceHandler(
-            workspace=workspace,
-            voice_service=self.voice_service,
-            active_runtime_configs=(
-                role.runtime_config
-                for role in self.role_service.repository.list_roles()
-            ),
-            cancel_voice_turn=lambda turn_id: self.chat_service.cancel_voice_turn(
-                turn_id
-            ),
-        )
-        self.voice_assets = self.voice_handler.assets
         self.plugin_rpc_registry = plugin_rpc_registry
         self.phone = DesktopPhoneRequestHandler(
             conversations=self.conversation_service,
@@ -280,7 +237,6 @@ class DesktopBridgeService:
             roles=DesktopRoleRequestHandler(
                 role_service=self.role_service,
                 role_presenter=self.role_presenter,
-                voice_handler=self.voice_handler,
                 card_import_service=self.role_card_import_service,
                 card_export_service=DesktopRoleCardExportService(role_store),
                 publish_event=self._broadcast_event,
@@ -300,7 +256,6 @@ class DesktopBridgeService:
                 chat_service=self.chat_service,
                 start_chat_turn=lambda **kwargs: self._start_chat_turn(**kwargs),
                 session_presenter=self.session_presenter,
-                sanitize_voice_metrics=_sanitize_voice_metrics,
                 context_requests=DesktopContextRequests(
                     self.role_service,
                     self.app_service,
@@ -308,7 +263,6 @@ class DesktopBridgeService:
                     self.agent_loop,
                 ),
             ),
-            voice=self.voice_handler,
             plugins=DesktopPluginRequestHandler(plugin_rpc_registry),
         )
         if push_tool is not None and activate_transport:
@@ -512,7 +466,6 @@ class DesktopBridgeService:
             self.plugin_rpc_registry.communication.retire()
         steps = [
             ("desktop.chat.close", self.chat_service.aclose),
-            ("desktop.voice.close", self.voice_handler.aclose),
         ]
         if self.model_resolver is not None and self._owns_model_resolver:
             steps.append(("desktop.models.close", self.model_resolver.aclose))
@@ -542,8 +495,6 @@ class DesktopBridgeService:
 
     def start_background_tasks(self) -> None:
         """Starts bridge-owned background maintenance after an event loop exists."""
-
-        self.voice_handler.start()
 
     def register_desktop_push_channel(self, push_tool: MessagePushTool) -> None:
         """Registers the desktop proactive transport against the bridge event stream."""
@@ -859,27 +810,6 @@ class DesktopBridgeService:
                     fallback="找不到请求的内容，请刷新后重试",
                 ),
                 details={"detail": summarize_exception_for_user(exc)},
-            )
-        except VoiceServiceError as exc:
-            metrics = getattr(exc, "metrics", None)
-            details = {"metrics": metrics.to_dict()} if metrics is not None else {}
-            if metrics is not None:
-                logger.warning(
-                    "voice request failed method=%s provider=%s request_id=%s error_code=%s elapsed_ms=%d audio_duration_ms=%d characters=%d",
-                    method,
-                    metrics.provider,
-                    metrics.request_id,
-                    metrics.error_code,
-                    metrics.elapsed_ms,
-                    metrics.audio_duration_ms,
-                    metrics.character_count,
-                )
-            return self._error(
-                request_id,
-                method,
-                "voice_service_error",
-                str(exc),
-                details=details,
             )
         except ModelConfigurationError as exc:
             return self._error(

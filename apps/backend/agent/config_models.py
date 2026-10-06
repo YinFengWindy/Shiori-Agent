@@ -6,7 +6,6 @@ from typing import Any, Literal
 import uuid
 
 from agent.prompting.input_budget import BudgetPolicy
-from agent.voice_config import VoiceConfig
 from proactive_v2.config import ProactiveConfig, ProactiveStrategiesConfig
 
 
@@ -104,7 +103,6 @@ class Config:
     spawn_enabled: bool = True
     dev_mode: bool = False
     desktop_streaming_enabled: bool = False
-    voice: VoiceConfig = field(default_factory=VoiceConfig)
     wiring: WiringConfig = field(default_factory=WiringConfig)
     scene_observation_enabled: bool = True
     plugins: dict[str, dict[str, Any]] = field(default_factory=dict)

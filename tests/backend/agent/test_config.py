@@ -59,29 +59,6 @@ def test_resolve_reads_unexpanded_value_from_default_workspace(
     assert config._resolve("${API_TOKEN}") == "secret"
 
 
-def test_load_voice_config_reads_global_provider_and_input_settings() -> None:
-    loaded = config._load_voice_config(
-        {
-            "voice": {
-                "enabled": True,
-                "hotkey": "Alt+V",
-                "microphone_device_id": "device-1",
-                "asr": {"secret_id": "id", "secret_key": "key", "model": "ignored"},
-                "tts": {"api_key": "tts-key", "volume": 2.5},
-            }
-        }
-    )
-
-    assert loaded.enabled is True
-    assert loaded.hotkey == "Alt+V"
-    assert loaded.microphone_device_id == "device-1"
-    assert loaded.asr.provider == "tencent"
-    assert not hasattr(loaded.asr, "secret_id")
-    assert not hasattr(loaded.asr, "model")
-    assert loaded.tts.provider == "minimax"
-    assert not hasattr(loaded.tts, "api_key")
-
-
 def test_load_config_rejects_legacy_model_sections(tmp_path: Path) -> None:
     config_path = tmp_path / "config.toml"
     config_path.write_text(
@@ -394,15 +371,3 @@ def test_summary_token_limit_defaults_and_loads_independently():
     assert config.max_tokens == 8192
     assert config.compaction_retained_turns == 2
     assert config.context_budget.trigger_ratio == 0.75
-
-
-def test_raw_candidate_maps_legacy_voice_credentials_without_persisting_or_expanding_raw(
-    monkeypatch,
-):
-    monkeypatch.setenv("VOICE_SECRET", "resolved-secret")
-    loaded = config.load_config_text(
-        '[voice.asr]\nenabled=true\nsecret_key="${VOICE_SECRET}"\n[voice.tts]\nprovider=""\n'
-    )
-    assert loaded.plugins["tencent_asr"]["secret_key"] == "resolved-secret"
-    assert loaded.raw_plugin_configs["tencent_asr"]["secret_key"] == "${VOICE_SECRET}"
-    assert loaded.voice.tts.provider == ""

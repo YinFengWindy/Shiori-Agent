@@ -18,6 +18,9 @@ async def test_setup_registers_scoped_tools_rpc_and_role_participant(tmp_path):
         "pets.remove",
         "pets.select",
         "bubble.dismiss",
+        "voice.preferences.get",
+        "voice.preferences.set",
+        "voice.context.get",
     }
     assert ctx.rpc.concurrency["binding.get"] is Concurrency.READ_ONLY
     assert ctx.rpc.concurrency["pets.import"] is Concurrency.MUTATION

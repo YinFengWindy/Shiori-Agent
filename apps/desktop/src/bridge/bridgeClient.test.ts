@@ -101,7 +101,7 @@ async function withTestDeadline<T>(promise: Promise<T>, timeoutMs = 500): Promis
   }
 }
 
-function createReadyClient(timeoutMs: number | null = 20): {
+function createReadyClient(timeoutMs: number | null | "policy" = 20): {
   client: DesktopBridgeClient;
   mutableClient: MutableBridgeClient;
   child: FakeChild;
@@ -116,7 +116,7 @@ function createReadyClient(timeoutMs: number | null = 20): {
   session.child = child;
   session.startPromise = Promise.resolve();
   mutableClient.session = session;
-  mutableClient.invokeTimeoutMs = () => timeoutMs;
+  if (timeoutMs !== "policy") mutableClient.invokeTimeoutMs = () => timeoutMs;
   mutableClient.attachSessionListeners(session);
   return { client, mutableClient, child, session };
 }
@@ -127,8 +127,7 @@ describe("DesktopBridgeClient", () => {
 
     assert.equal(client.invokeTimeoutMs("health"), 5_000);
     assert.equal(client.invokeTimeoutMs("roles.list"), 30_000);
-    assert.equal(client.invokeTimeoutMs("voice.transcribe"), 30_000);
-    assert.equal(client.invokeTimeoutMs("voice.synthesize"), 30_000);
+    assert.equal(client.invokeTimeoutMs("plugins.communication.services.call"), null);
     assert.equal(client.invokeTimeoutMs("plugin.sample.slow", 300_000), 5 * 60_000);
     assert.equal(
       client.invokeTimeoutMs("plugin.sample.other", 300_000),
@@ -192,6 +191,39 @@ describe("DesktopBridgeClient", () => {
     await new Promise<void>((resolvePromise) => setImmediate(resolvePromise));
     child.emitExit(1);
     assert.equal((await pending).error?.code, "bridge_exit");
+    assert.equal(session.pending.size, 0);
+  });
+
+  it("keeps real service work pending past both former deadlines and cleans up its completed response", async (context) => {
+    const { client, child, session } = createReadyClient("policy");
+    context.mock.timers.enable({ apis: ["setTimeout"] });
+    let completed = false;
+    const pending = client.invoke({ method: "plugins.communication.services.call", payload: { service: { plugin_id: "neutral", service_id: "slow" }, name: "run", payload: {} } });
+    void pending.then(() => { completed = true; });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    for (const elapsed of [20_001, 10_000, 5 * 60_000]) {
+      context.mock.timers.tick(elapsed);
+      await Promise.resolve();
+      assert.equal(completed, false);
+      assert.equal(session.pending.size, 1);
+    }
+    const request = parseRequest(child.stdin.writes[0]);
+    emitResponse(child, { ...request, type: "response", payload: { value: "provider completed" }, error: null });
+    assert.deepEqual((await pending).payload, { value: "provider completed" });
+    assert.equal(session.pending.size, 0);
+  });
+
+  it("releases a long-running service request when the bridge exits and ignores its late response", async (context) => {
+    const { client, child, session } = createReadyClient("policy");
+    context.mock.timers.enable({ apis: ["setTimeout"] });
+    const pending = client.invoke({ method: "plugins.communication.services.call", payload: {} });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    context.mock.timers.tick(60_000);
+    const request = parseRequest(child.stdin.writes[0]);
+    child.emitExit(1);
+    assert.equal((await pending).error?.code, "bridge_exit");
+    assert.equal(session.pending.size, 0);
+    emitResponse(child, { ...request, type: "response", payload: { late: true }, error: null });
     assert.equal(session.pending.size, 0);
   });
 

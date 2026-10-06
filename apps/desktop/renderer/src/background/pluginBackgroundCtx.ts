@@ -11,6 +11,8 @@ import { unavailableLocalAssetUrl } from "../../../src/assets/localAssetContract
 import type { DesktopInvoke } from "../shared/bridgeInvoke";
 import { createPluginCommunicationClient } from "../plugins/pluginCommunicationClient";
 import type { BackgroundEffectScope } from "./backgroundEffectScope";
+import { createPluginNativeClient } from "./pluginNativeClient";
+import { invokeBridgePayload } from "../shared/bridgeInvoke";
 
 /** Subscribes to every tray click this window is told about. */
 export type TrayClickSource = (
@@ -30,9 +32,15 @@ function createPluginBackgroundSurfaces(
   pluginId: string,
   api: DesktopSurfacesApi,
   onSurfaceSettled: SurfaceSettledSource,
+  onSurfaceMessage: DesktopApi["onSurfaceMessage"],
   scope: BackgroundEffectScope,
 ): PluginBackgroundSurfaces {
   return {
+    onMessage(surfaceId, handler) {
+      scope.addEventEffect(`surface-message:${surfaceId}`, onSurfaceMessage((event) => {
+        if (event.pluginId === pluginId && event.surfaceId === surfaceId) handler(event.message);
+      }));
+    },
     setInteraction: (surfaceId, target) => api.setInteraction(pluginId, surfaceId, target),
     create: (surfaceId, spec, anchor) => api.create(pluginId, surfaceId, spec, anchor),
     destroy: (surfaceId) => api.destroy(pluginId, surfaceId),
@@ -163,6 +171,8 @@ export function createBackgroundCtx(options: {
   invoke: DesktopInvoke;
   onEvent: (listener: (event: BridgeEvent) => void) => () => void;
   onSurfaceSettled: SurfaceSettledSource;
+  onSurfaceMessage: DesktopApi["onSurfaceMessage"];
+  native: DesktopApi["native"];
   pluginData: DesktopApi["pluginData"];
   tray: TrayApi;
   onTrayEntryClicked: TrayClickSource;
@@ -178,7 +188,13 @@ export function createBackgroundCtx(options: {
   const rpc = createPluginCommunicationClient(pluginId, { invoke, onEvent, background: true });
   scope.addEventEffect("plugin-communication", () => rpc.dispose());
   return {
-    surfaces: createPluginBackgroundSurfaces(pluginId, surfaces, onSurfaceSettled, scope),
+    surfaces: createPluginBackgroundSurfaces(pluginId, surfaces, onSurfaceSettled, options.onSurfaceMessage, scope),
+    native: createPluginNativeClient(options.native, () => rpc.openNativeContext(), scope),
+    chat: {
+      send: (payload) => { scope.ensureActive("chat.send"); return invokeBridgePayload(invoke, "chat.send", payload); },
+      // Exact-turn cancellation also serves teardown after event admission closes.
+      cancel: (payload) => invokeBridgePayload(invoke, "chat.cancel", payload),
+    },
     rpc,
     events: rpc.events,
     hostEvents: {

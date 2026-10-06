@@ -70,6 +70,8 @@ const host = new PluginBackgroundHost({
       invoke,
       onEvent,
       onSurfaceSettled: window.miraDesktop.onSurfaceSettled,
+      onSurfaceMessage: window.miraDesktop.onSurfaceMessage,
+      native: window.miraDesktop.native,
       pluginData: window.miraDesktop.pluginData,
       tray: window.miraDesktop.tray,
       onTrayEntryClicked: window.miraDesktop.tray.onEntryClicked,

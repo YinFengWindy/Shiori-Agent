@@ -1,5 +1,5 @@
 import type React from "react";
-import { Brain, BookBookmark, IdentificationCardIcon, Info, Microphone, Palette, PuzzlePiece, SlidersHorizontal, type Icon } from "@phosphor-icons/react";
+import { Brain, BookBookmark, IdentificationCardIcon, Info, Palette, PuzzlePiece, SlidersHorizontal, type Icon } from "@phosphor-icons/react";
 import { pluginUiRegistry } from "../plugins/pluginUiRegistry";
 import { SidebarResizeHandle } from "@yinfengwindy/shiori-sdk";
 import {
@@ -19,7 +19,6 @@ registerBuiltinSettingsSections();
 export type BuiltinSettingsSectionId =
   | "models"
   | "memory"
-  | "voice"
   | "appearance"
   | "advanced"
   | "identities"
@@ -57,7 +56,6 @@ export function listSettingsSidebarSections(
 const sectionIcons: Partial<Record<SettingsSectionId, Icon>> = {
   models: Brain,
   memory: BookBookmark,
-  voice: Microphone,
   appearance: Palette,
   advanced: SlidersHorizontal,
   identities: IdentificationCardIcon,

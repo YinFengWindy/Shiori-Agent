@@ -8,7 +8,6 @@ import type { AppMainView } from "../shared/types";
 import type { NavigationEntry } from "./appState";
 import { writeRoleMoodConfigToRuntimeConfig } from "../roles/roleMoodConfig";
 import { buildRoleProactiveConfig } from "../roles/roleFormState";
-import { writeRoleVoiceConfigToRuntimeConfig } from "../roles/roleVoiceConfig";
 import type { FeedbackReporter } from "../shared/feedback/feedbackStore";
 
 type UseRoleManagementArgs = {
@@ -113,14 +112,11 @@ export function useRoleManagement({
         description: nextRoleForm.description,
         system_prompt: nextRoleForm.systemPrompt,
         profile: nextRoleForm.profile,
-        runtime_config: writeRoleVoiceConfigToRuntimeConfig(
-          writeRoleMoodConfigToRuntimeConfig(
-            {
-              ...writePluginRoleSettings(detailRole?.runtime_config ?? {}, nextRoleForm.pluginSettings),
-              nsfw_memory_enabled: nextRoleForm.nsfwMemoryEnabled,
-            },
-            nextRoleForm,
-          ),
+        runtime_config: writeRoleMoodConfigToRuntimeConfig(
+          {
+            ...writePluginRoleSettings(detailRole?.runtime_config ?? {}, nextRoleForm.pluginSettings),
+            nsfw_memory_enabled: nextRoleForm.nsfwMemoryEnabled,
+          },
           nextRoleForm,
         ),
         proactive: buildRoleProactiveConfig(detailRole, nextRoleForm),

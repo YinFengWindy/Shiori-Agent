@@ -4,7 +4,8 @@ import { spriteActionDurationMs, spriteCell, spriteFramePosition, spritePlayback
 import { useCodexPetInteraction } from "./useCodexPetInteraction";
 import { noPetBubble, type PetBubblePlacement } from "./bubbleExtension";
 import type { PetReplyBubble } from "../shared/replyBubble";
-import type { SurfaceHandle, VoiceStatePayload } from "@yinfengwindy/shiori-sdk";
+import type { SurfaceHandle } from "@yinfengwindy/shiori-sdk";
+import type { VoiceStatePayload } from "../background/voice/types";
 
 type CodexSpritePetRendererProps = {
   /** Opens the owning plugin menu through its injected communication client. */

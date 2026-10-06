@@ -16,7 +16,7 @@ describe("onboarding data", () => {
     let snapshot = { ...loadSettingsData("[llm]\n"), generation: 3 };
     const existing = { ...registration, id: "existing" };
     snapshot.formData.models.registrations = [existing];
-    const voice = structuredClone(snapshot.formData.voice);
+    const memory = structuredClone(snapshot.formData.memory);
     const api = {
       readSettings: async () => snapshot,
       saveSettings: async (draft: typeof snapshot.formData, options?: { expectedGeneration?: number }) => {
@@ -28,7 +28,7 @@ describe("onboarding data", () => {
     await registerOnboardingModel(api, registration);
     await registerOnboardingModel(api, registration);
     assert.deepEqual(snapshot.formData.models.registrations.map((item) => item.id), ["existing", "first"]);
-    assert.deepEqual(snapshot.formData.voice, voice);
+    assert.deepEqual(snapshot.formData.memory, memory);
   });
   it("surfaces a rejected settings transaction", async () => {
     await assert.rejects(registerOnboardingModel({ readSettings: async () => loadSettingsData("[llm]\n"),

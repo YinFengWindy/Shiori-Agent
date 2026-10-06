@@ -32,26 +32,23 @@ export class VoicePlaybackRenderer {
   private source: AudioBufferSourceNode | null = null;
   private playbackId = "";
   private ignoreEnd = false;
+  private generation = 0;
 
   handleCommand(command: VoicePlaybackCommand): void {
     if (command.command === "cancel") {
       this.cancel();
       return;
     }
-    void this.play(command.id, command.audioBase64, true);
+    void this.play(command.id, command.audioBase64);
   }
 
-  /** Plays a microphone test without reporting queue lifecycle events. */
-  playTestAudio(audioBase64: string): void {
-    void this.play("voice-test", audioBase64, false);
-  }
-
-  private async play(id: string, audioBase64: string, reportPlayback: boolean): Promise<void> {
+  private async play(id: string, audioBase64: string): Promise<void> {
+    this.cancel();
+    const generation = this.generation;
     try {
-      this.cancel();
       this.context ??= new AudioContext();
       const audio = await this.context.decodeAudioData(decodeBase64(audioBase64));
-      if (!this.context) return;
+      if (!this.context || generation !== this.generation) return;
       const sourceNode = this.context.createBufferSource();
       sourceNode.buffer = audio;
       sourceNode.connect(this.context.destination);
@@ -62,24 +59,22 @@ export class VoicePlaybackRenderer {
         if (this.ignoreEnd || this.source !== sourceNode || this.playbackId !== id) return;
         this.source = null;
         this.playbackId = "";
-        if (reportPlayback) window.miraDesktop.voicePlaybackFinished(id);
-        else window.miraDesktop.voiceTestPlaybackFinished();
+        window.miraDesktop.voicePlaybackFinished(id);
       };
       await ensurePlaybackContextRunning(this.context);
+      if (generation !== this.generation) return;
       sourceNode.start();
-      if (reportPlayback) window.miraDesktop.voicePlaybackStarted(id);
+      window.miraDesktop.voicePlaybackStarted(id);
     } catch (error) {
+      if (generation !== this.generation) return;
       this.source = null;
       this.playbackId = "";
-      if (reportPlayback) {
-        window.miraDesktop.voicePlaybackError(id, error instanceof Error ? error.message : "音频播放失败");
-      } else {
-        window.miraDesktop.voiceCaptureError(error instanceof Error ? error.message : "试听播放失败");
-      }
+      window.miraDesktop.voicePlaybackError(id, error instanceof Error ? error.message : "音频播放失败");
     }
   }
 
   private cancel(): void {
+    this.generation += 1;
     this.ignoreEnd = true;
     try {
       this.source?.stop();

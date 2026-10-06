@@ -5,6 +5,7 @@
  */
 import type { BridgeEvent, PluginRpcClient } from "../rpc";
 import type { SurfaceInteractionTarget } from "./surfaceInteraction";
+import type { PluginNativeApi, PluginBackgroundChat } from "./native";
 import type {
   SurfaceCreateResult,
   SurfacePlacement,
@@ -25,6 +26,8 @@ export type PluginBackgroundSettled = {
  * plugin id, so a background module never passes its own id around by hand.
  */
 export type PluginBackgroundSurfaces = {
+  /** Receives self-directed messages from an actual window owned by this plugin. */
+  onMessage(surfaceId: string, handler: (message: unknown) => void): void;
   /** Declare the surface's current role and availability; null revokes interaction immediately. */
   setInteraction(surfaceId: string, target: SurfaceInteractionTarget | null): void;
   create(
@@ -112,6 +115,8 @@ export type BackgroundEffectDispose = () => void | Promise<void>;
  * reach is listed here. A capability lands when a real plugin needs it.
  */
 export type BackgroundCtx = {
+  native: PluginNativeApi;
+  chat: PluginBackgroundChat;
   surfaces: PluginBackgroundSurfaces;
   rpc: PluginRpcClient;
   events: PluginRpcClient["events"];

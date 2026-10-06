@@ -163,3 +163,104 @@ async def test_delayed_departed_document_disconnect_preserves_successor_routing(
 def test_local_names_cannot_escape_the_injected_namespace(name):
     with pytest.raises(PluginRpcError):
         communication_name(name)
+
+
+@pytest.mark.asyncio
+async def test_dynamic_services_require_current_owner_and_do_not_require_static_peers():
+    from agent.plugin_host.effects import EffectScope
+
+    registry = PluginRpcRegistry()
+    active = {"consumer": (), "neutral_provider": ()}
+    comm = registry.communication
+    comm.configure(active.get, EventBus())
+    caller = await context(comm)
+    scope = EffectScope("neutral_provider")
+
+    async def recognize(payload):
+        return {"text": payload["audio_base64"]}
+
+    registry.services.register(
+        "neutral_provider",
+        "recognizer",
+        contract="shiori.asr.v1",
+        label="Neutral",
+        methods={"transcribe": recognize},
+        metadata={},
+        scope=scope,
+    )
+    listing = await comm.handle(
+        "services.list", {**caller, "contract": "shiori.asr.v1"}
+    )
+    assert listing["services"][0]["plugin_id"] == "neutral_provider"
+    request = {
+        **caller,
+        "service": {"plugin_id": "neutral_provider", "service_id": "recognizer"},
+        "name": "transcribe",
+        "payload": {"audio_base64": "recording"},
+    }
+    assert await comm.handle("services.call", request) == {"text": "recording"}
+    assert await comm.handle("native.authorize", caller) == {
+        "plugin_id": "consumer",
+        "generation": comm.generation,
+    }
+    for operation in ("services.call", "native.authorize"):
+        with pytest.raises(PluginRpcError, match="上下文"):
+            await comm.handle(operation, {**request, "plugin_id": "neutral_provider"})
+    await scope.dispose_all()
+    with pytest.raises(PluginRpcError, match="不可用"):
+        await comm.handle("services.call", request)
+    await comm.handle("close", caller)
+    with pytest.raises(PluginRpcError, match="上下文"):
+        await comm.handle("services.list", {**caller, "contract": "shiori.asr.v1"})
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("retire", ["context", "generation"])
+async def test_service_call_finishes_provider_work_but_rejects_retired_caller_result(
+    retire,
+):
+    from agent.plugin_host.effects import EffectScope
+
+    registry = PluginRpcRegistry()
+    comm = registry.communication
+    comm.configure({"consumer": (), "provider": ()}.get, EventBus())
+    caller = await context(comm)
+    started, finish = asyncio.Event(), asyncio.Event()
+    completed = []
+
+    async def slow(_payload):
+        started.set()
+        await finish.wait()
+        completed.append(True)
+        return {"result": "late"}
+
+    registry.services.register(
+        "provider",
+        "slow",
+        contract="neutral.v1",
+        label="Slow",
+        methods={"run": slow},
+        metadata={},
+        scope=EffectScope("provider"),
+    )
+    pending = asyncio.create_task(
+        comm.handle(
+            "services.call",
+            {
+                **caller,
+                "service": {"plugin_id": "provider", "service_id": "slow"},
+                "name": "run",
+                "payload": {},
+            },
+        )
+    )
+    await started.wait()
+    if retire == "generation":
+        comm.retire()
+    else:
+        await comm.handle("close", caller)
+    assert not pending.done()
+    finish.set()
+    with pytest.raises(PluginRpcError, match="停用"):
+        await pending
+    assert completed == [True]

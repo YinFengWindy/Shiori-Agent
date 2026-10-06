@@ -16,7 +16,7 @@ await writeFile(resolve(packageRoot, "manifest.yaml"), `api: 2
 package_contract: 1
 id: manual_trust_qa
 version: 1.0.0
-runtime_api: '>=3.0.0 <4.0.0'
+runtime_api: '>=4.0.0 <5.0.0'
 entry: backend/plugin.py
 capabilities: [rpc]
 peer_dependencies: {react: '>=19.2.0 <20.0.0', react-dom: '>=19.2.0 <20.0.0'}

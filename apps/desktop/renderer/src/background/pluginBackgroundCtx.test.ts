@@ -101,6 +101,8 @@ function makeCtx(overrides: Partial<Parameters<typeof createBackgroundCtx>[0]> =
     invoke: failingInvoke,
     onEvent: () => () => {},
     onSurfaceSettled: () => () => {},
+    onSurfaceMessage: () => () => {},
+    native: { open: async () => "native", call: async <T,>() => undefined as T, onKey: () => () => {} },
     pluginData: fakePluginData(),
     tray: fakeTray().api,
     onTrayEntryClicked: () => () => {},

@@ -18,37 +18,6 @@ registrations = []
 # model_auto_compact_token_limit = 96000 # 可选，须小于窗口；不填按 agent.context.trigger_ratio 计算
 
 # =============================================================================
-# 可选：桌宠语音交互
-# 密钥可以直接填写，也可以使用 ${ENV_VAR}。
-# =============================================================================
-
-[voice]
-enabled = false
-hotkey = "Ctrl+Space"
-microphone_device_id = ""
-
-[voice.asr]
-enabled = false
-provider = "tencent"
-
-[voice.tts]
-enabled = false
-provider = "minimax"
-
-[plugins.tencent_asr]
-enabled = true
-base_url = "https://asr.tencentcloudapi.com/"
-secret_id = ""
-secret_key = ""
-
-[plugins.minimax_tts]
-enabled = true
-base_url = "https://api.minimaxi.com/v1/t2a_v2"
-model = "speech-2.8-turbo"
-api_key = ""
-volume = 2.0
-
-# =============================================================================
 # Agent 行为
 # =============================================================================
 

@@ -18,7 +18,7 @@ def _change(package, **values):
 def test_valid_package_separates_identity_version_and_runtime(contract_package):
     result = validate_package(contract_package)
     assert result.manifest.version == "1.2.3"
-    assert result.runtime_api == ">=3.0.0 <4.0.0"
+    assert result.runtime_api == ">=4.0.0 <5.0.0"
     assert [entry.kind for entry in result.renderer] == ["ui", "background", "surface"]
 
 
@@ -26,6 +26,7 @@ def test_valid_package_separates_identity_version_and_runtime(contract_package):
     "values, code, field",
     [
         ({"runtime_api": ">=2.0.0 <3.0.0"}, "incompatible_runtime", "runtime_api"),
+        ({"runtime_api": ">=3.0.0 <4.0.0"}, "incompatible_runtime", "runtime_api"),
         ({"version": "1.2"}, "invalid_version", "version"),
         ({"package_contract": True}, "unsupported_contract", "package_contract"),
         ({"package_contract": 2}, "unsupported_contract", "package_contract"),
@@ -125,7 +126,7 @@ def test_external_package_may_declare_channels(contract_package):
     _change(
         contract_package,
         capabilities=["channels"],
-        runtime_api=">=3.0.0 <4.0.0",
+        runtime_api=">=4.0.0 <5.0.0",
         channels=[
             {
                 "name": "demo_chat",
@@ -153,4 +154,43 @@ def test_external_channel_declaration_errors_block_the_package(contract_package)
 
 
 def test_host_advertises_runtime_api_with_shared_visual_components():
-    assert HostRuntimeContract().runtime_api == "3.2.0"
+    assert HostRuntimeContract().runtime_api == "4.0.0"
+
+
+def test_explicit_cross_major_compatibility_is_accepted(contract_package):
+    _change(contract_package, runtime_api=">=3.1.0 <5.0.0")
+    assert validate_package(contract_package).runtime_api == ">=3.1.0 <5.0.0"
+
+
+def test_repository_plugin_declarations_admit_the_installed_sdk():
+    import tomllib
+    from packaging.requirements import Requirement
+    from bootstrap.paths import plugin_roots
+    from agent.plugin_host.manifest import load_manifest
+    from agent.plugin_host.package_schema import compatible_range
+
+    runtime = HostRuntimeContract().runtime_api
+    for root in plugin_roots():
+        for directory in root.iterdir():
+            if not (directory / "manifest.yaml").is_file():
+                continue
+            manifest = load_manifest(directory)
+            assert manifest is not None
+            declared = manifest.metadata.get("runtime_api")
+            if declared is not None:
+                assert compatible_range(runtime, declared, "runtime_api") == declared
+            project = tomllib.loads(
+                (directory / "pyproject.toml").read_text(encoding="utf-8")
+            )["project"]
+            requirements = [
+                *project["dependencies"],
+                *project.get("optional-dependencies", {}).get("test", []),
+            ]
+            sdk = [
+                Requirement(value)
+                for value in requirements
+                if value.startswith("shiori-sdk")
+            ]
+            assert sdk and all(
+                runtime in requirement.specifier for requirement in sdk
+            ), directory.name

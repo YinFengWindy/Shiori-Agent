@@ -32,7 +32,6 @@ async def test_role_card_preview_forwards_the_full_payload_to_its_service() -> N
     handler = DesktopRoleRequestHandler(
         role_service=SimpleNamespace(),
         role_presenter=SimpleNamespace(),
-        voice_handler=SimpleNamespace(),
         card_import_service=card_import,
         publish_event=AsyncMock(),
     )
@@ -57,7 +56,6 @@ async def test_role_card_export_routes_snapshot_lifecycle_without_mutating_roles
     handler = DesktopRoleRequestHandler(
         role_service=SimpleNamespace(),
         role_presenter=SimpleNamespace(),
-        voice_handler=SimpleNamespace(),
         publish_event=AsyncMock(),
         card_export_service=DesktopRoleCardExportService(store),
     )
@@ -132,6 +130,9 @@ async def test_role_create_persists_structured_profile(tmp_path: Path) -> None:
         "character": profile["character"],
     }
 
+    published = []
+    service.add_event_listener(published.append)
+
     update = await service.handle(
         {
             "id": "update-role-knowledge",
@@ -150,6 +151,11 @@ async def test_role_create_persists_structured_profile(tmp_path: Path) -> None:
     )
 
     assert update.error is None
+    assert any(
+        event["method"] == "roles.updated"
+        and event["payload"]["role_id"] == persisted.id
+        for event in published
+    )
     assert update.payload["role"]["profile"]["character"] == profile["character"]
     assert "knowledge_base" not in update.payload["role"]["profile"]
 
@@ -185,7 +191,6 @@ async def test_the_core_bridge_no_longer_answers_pet_package_methods() -> None:
     handler = DesktopRoleRequestHandler(
         role_service=SimpleNamespace(),
         role_presenter=SimpleNamespace(),
-        voice_handler=SimpleNamespace(),
         card_import_service=SimpleNamespace(),
         publish_event=AsyncMock(),
     )

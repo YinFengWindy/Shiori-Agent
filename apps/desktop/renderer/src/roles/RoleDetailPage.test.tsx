@@ -10,6 +10,8 @@ import type { DesktopApi } from "../../../src/bridge/shared";
 import type { RoleRecord } from "@yinfengwindy/shiori-sdk";
 import type { RoleFormState } from "../shared/types";
 import { RoleDetailPage } from "./RoleDetailPage";
+import { pluginRoleUiRegistry } from "../plugins/pluginFeatureRegistry";
+import type { PluginRoleUiProps } from "@yinfengwindy/shiori-sdk";
 
 type PageProps = Parameters<typeof RoleDetailPage>[0];
 
@@ -72,6 +74,30 @@ const role: RoleRecord = {
 };
 
 describe("RoleDetailPage", () => {
+  it("guards a tab change while a private plugin role editor has unsaved values", async () => {
+    function PrivateEditor({ onDirtyChange }: PluginRoleUiProps) {
+      return <button onClick={() => onDirtyChange(true)}>修改私有设置</button>;
+    }
+    pluginRoleUiRegistry.register({ pluginId: "private_editor", mode: "self-managed", Component: PrivateEditor });
+    setPluginEnabledSnapshot([{ id: "private_editor", enabled: true, state: "ACTIVE" }]);
+    const view = await mountTestComponent(pageElement({ activeRole: role }), { windowGlobals: { miraDesktop: {
+      onEvent: () => () => {},
+      readSettings: async () => ({ formData: createSettingsDraft() }),
+      invoke: async ({ method }: { method: string }) => ({ id: "test", type: "response", method, error: null, payload: { generation: "g", slots: [], registrations: [] } }),
+    } } });
+    const click = async (label: string) => {
+      const button = Array.from(document.querySelectorAll("button")).find((item) => item.textContent === label);
+      assert.ok(button, label); await act(async () => button.click());
+    };
+    try {
+      await click("能力"); await click("修改私有设置"); await click("资料");
+      assert.match(document.body.textContent ?? "", /放弃未保存的修改/);
+      assert.match(view.container.textContent ?? "", /修改私有设置/);
+      await click("取消"); assert.match(view.container.textContent ?? "", /修改私有设置/);
+      await click("资料"); await click("放弃修改");
+      assert.doesNotMatch(view.container.textContent ?? "", /修改私有设置/);
+    } finally { await view.cleanup(); pluginRoleUiRegistry.unregister("private_editor"); resetPluginEnabledStateForTests(); }
+  });
   it("opens on the profile tab with the setting grouped into sections", () => {
     const markup = renderPage({ roleForm: profileForm, roleFormDirty: true });
 
@@ -137,12 +163,8 @@ describe("RoleDetailPage", () => {
   it("saves and resets proactive edits through the shared role draft across tab switches", async () => {
     setPluginEnabledSnapshot([]);
     let saved: RoleFormState | undefined;
-    const desktop: Pick<DesktopApi, "readSettings" | "invoke" | "onEvent"> = {
+    const desktop: Pick<DesktopApi, "readSettings" | "onEvent"> = {
       readSettings: async () => ({ configPath: "config.toml", formData: createSettingsDraft() }),
-      invoke: async ({ method }) => {
-        assert.equal(method, "voice.providers");
-        return { id: "voice-providers", type: "response", method, error: null, payload: { providers: [] } };
-      },
       onEvent: () => () => undefined,
     };
     const view = await mountTestComponent(<DraftDetailPage onSave={(form) => { saved = form; }} />, {

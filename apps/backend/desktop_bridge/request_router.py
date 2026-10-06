@@ -14,7 +14,6 @@ from .phone_requests import DesktopPhoneRequestHandler
 from .plugin_requests import DesktopPluginRequestHandler
 from .role_requests import DesktopRoleRequestHandler
 from .session_task_requests import DesktopSessionTaskRequestHandler
-from .voice.voice_handler import DesktopVoiceHandler
 
 EventEmitter = Callable[[dict[str, Any]], Awaitable[None] | None]
 
@@ -28,7 +27,6 @@ class DesktopBridgeRequestRouter:
         roles: DesktopRoleRequestHandler,
         sessions_and_tasks: DesktopSessionTaskRequestHandler,
         chat: DesktopChatRequestHandler,
-        voice: DesktopVoiceHandler,
         plugins: DesktopPluginRequestHandler,
         accounts: DesktopAccountRequestHandler | None = None,
         identities: DesktopIdentityRequestHandler | None = None,
@@ -39,7 +37,6 @@ class DesktopBridgeRequestRouter:
         self._roles = roles
         self._sessions_and_tasks = sessions_and_tasks
         self._chat = chat
-        self._voice = voice
         self._plugins = plugins
         self._accounts = accounts
         self._identities = identities
@@ -83,9 +80,6 @@ class DesktopBridgeRequestRouter:
             listening_result = await self._phone_listening.handle(method, payload)
             if listening_result is not None:
                 return listening_result
-        voice_result = await self._voice.handle(method, payload)
-        if voice_result is not None:
-            return voice_result
         result = await self._roles.handle(method, payload)
         if result is not None:
             return result

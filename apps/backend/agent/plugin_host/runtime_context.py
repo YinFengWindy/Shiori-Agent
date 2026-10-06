@@ -10,7 +10,7 @@ from session.manager import SessionManager
 from agent.plugin_host.capabilities import LifecycleCapability, RpcCapability
 from agent.plugin_host.effects import EffectScope
 from agent.plugin_host.host_service_requirements import provided_service
-from shiori_sdk.voice import VoiceCapability, VoicePluginContext
+from shiori_sdk.services import PluginServices, ServiceProviderContext
 from shiori_sdk.runtime import Dispose
 from agent.plugin_host.manifest import PluginManifest
 from shiori_sdk import PluginRuntimeContext as SdkRuntimeContext
@@ -96,7 +96,7 @@ class PluginSetupContext:
         channels: ChannelsCapability | None = None,
         accounts: AccountsCapability | None = None,
         avatars: AvatarsCapability | None = None,
-        voice: VoiceCapability | None = None,
+        services: PluginServices | None = None,
     ) -> None:
         self.plugin_id = plugin_id
         self.plugin_dir = plugin_dir
@@ -134,17 +134,17 @@ class PluginSetupContext:
         self._channels = channels
         self._accounts = accounts
         self._avatars = avatars
-        self._voice = voice
+        self._services = services
 
     @property
-    def voice(self) -> VoiceCapability:
-        """Return this plugin's explicitly granted scoped voice slots."""
-        if "voice" not in self.granted or self._voice is None:
-            raise CapabilityNotGranted("Plugin did not request voice")
-        return self._voice
+    def services(self) -> PluginServices:
+        """Return this plugin's explicitly granted public service registration."""
+        if "services" not in self.granted or self._services is None:
+            raise CapabilityNotGranted("Plugin did not request services")
+        return self._services
 
-    def as_voice_context(self) -> VoicePluginContext:
-        """Check the public voice setup surface without dynamic attributes."""
+    def as_service_provider_context(self) -> ServiceProviderContext:
+        """Check the public service setup surface without dynamic attributes."""
         return self
 
     def as_sdk_context(self) -> SdkRuntimeContext:

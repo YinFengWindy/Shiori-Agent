@@ -11,7 +11,7 @@ export function createFakeSurfaceHandle(overrides: Partial<SurfaceHandle> = {}):
     onMessage: () => () => {},
     onState: () => () => {},
     onRoleActivity: () => () => {},
-    voice: { gesture() {}, onState: () => () => {} },
+    postToBackground() {},
     ready() {},
     showContextMenu: async () => null,
     activateMainWindow() {},

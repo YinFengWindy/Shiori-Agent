@@ -14,7 +14,6 @@ from agent.plugin_host.package_contract import validate_package
 from agent.plugin_host.package_paths import contained_file
 from agent.plugin_host.package_fingerprint import inspect_package_content
 from agent.plugin_host.trust_store import PluginTrustStore
-from bootstrap.plugin_distribution import is_bundled_plugin_source
 
 logger = logging.getLogger(__name__)
 
@@ -44,8 +43,6 @@ def discover_plugins(
         source = "workspace" if root in external else "builtin"
         for child in sorted(root.iterdir()):
             if not child.is_dir():
-                continue
-            if source == "builtin" and is_bundled_plugin_source(child):
                 continue
             record = _read_candidate(
                 child, root, source, namespace, strict, host, trust

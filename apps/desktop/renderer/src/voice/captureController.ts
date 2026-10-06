@@ -115,13 +115,14 @@ export class VoiceCaptureRenderer {
     this.source?.disconnect();
     this.mutedSink?.disconnect();
     this.stream?.getTracks().forEach((track) => track.stop());
-    if (this.context) await this.context.close().catch(() => undefined);
+    const context = this.context;
     this.processor = null;
     this.source = null;
     this.mutedSink = null;
     this.context = null;
     this.stream = null;
     this.chunks = [];
+    if (context) await context.close().catch(() => undefined);
   }
 
   private collectPcm16(): Int16Array {

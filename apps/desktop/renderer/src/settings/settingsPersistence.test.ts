@@ -25,13 +25,6 @@ function createSettingsFormData(
       embeddingBaseUrl: "",
       outputDimensionality: "",
     },
-    voice: {
-      enabled: false,
-      hotkey: "Ctrl+Space",
-      microphoneDeviceId: "",
-      asrProvider: "tencent",
-      ttsProvider: "minimax",
-    },
     advanced: {
       maxTokens: 4000,
       maxIterations: 10,

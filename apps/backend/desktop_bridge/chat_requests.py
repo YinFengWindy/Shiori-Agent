@@ -15,20 +15,6 @@ from shiori_sdk.commands import normalize_command
 
 EventEmitter = Callable[[dict[str, Any]], Awaitable[None] | None]
 
-# Metadata that belongs to the original spoken input and must not re-arm voice
-# playback or ASR bookkeeping when the turn is retried.
-_VOICE_METADATA_KEYS = frozenset(
-    {
-        "input_method",
-        "voice_turn_id",
-        "asr_metrics",
-        "asr_provider",
-        "asr_request_id",
-        "asr_duration_ms",
-        "audio_duration_ms",
-    }
-)
-
 
 class DesktopChatRequestHandler:
     """Owns desktop chat request normalization and turn dispatch."""
@@ -41,7 +27,6 @@ class DesktopChatRequestHandler:
         chat_service: DesktopChatService,
         start_chat_turn: Callable[..., None],
         session_presenter: DesktopSessionPresenter,
-        sanitize_voice_metrics: Callable[[object], dict[str, str | int] | None],
         context_requests: DesktopContextRequests | None = None,
     ) -> None:
         self._role_service = role_service
@@ -49,7 +34,6 @@ class DesktopChatRequestHandler:
         self._chat_service = chat_service
         self._start_chat_turn = start_chat_turn
         self._session_presenter = session_presenter
-        self._sanitize_voice_metrics = sanitize_voice_metrics
         self._context_requests = context_requests
 
     async def handle(
@@ -148,12 +132,7 @@ class DesktopChatRequestHandler:
             if isinstance(raw_media, list)
             else []
         )
-        metadata: dict[str, object] = {
-            key: value
-            for key, value in stored_metadata.items()
-            # A retry is typed, not spoken: the original voice turn is over.
-            if key not in _VOICE_METADATA_KEYS
-        }
+        metadata: dict[str, object] = dict(stored_metadata)
         metadata.update(
             {"request_id": request_id, "delivery_key": request_id, "turn_id": turn_id}
         )
@@ -274,22 +253,6 @@ class DesktopChatRequestHandler:
         turn_id = str(payload.get("turn_id") or client_message_id or request_id).strip()
         if turn_id:
             metadata["turn_id"] = turn_id
-        if str(payload.get("input_method") or "").strip() == "voice":
-            metadata["input_method"] = "voice"
-            voice_turn_id = str(payload.get("voice_turn_id") or "").strip()
-            if voice_turn_id:
-                metadata["voice_turn_id"] = voice_turn_id
-            asr_metrics = self._sanitize_voice_metrics(payload.get("asr_metrics"))
-            if asr_metrics is not None:
-                metadata["asr_metrics"] = asr_metrics
-            for key in ("asr_provider", "asr_request_id"):
-                value = str(payload.get(key) or "").strip()
-                if value:
-                    metadata[key] = value
-            for key in ("asr_duration_ms", "audio_duration_ms"):
-                value = payload.get(key)
-                if isinstance(value, (int, float)) and value >= 0:
-                    metadata[key] = value
         reply_to_message_id = str(payload.get("reply_to_message_id") or "").strip()
         if reply_to_message_id:
             metadata["reply_to_message_id"] = reply_to_message_id

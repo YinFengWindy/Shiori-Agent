@@ -48,7 +48,7 @@ async def test_read_only_request_runs_while_mutation_lane_is_busy() -> None:
     async def _health() -> None:
         health_completed.set()
 
-    dispatcher.submit({"method": "voice.synthesize"}, _mutation)
+    dispatcher.submit({"method": "models.test"}, _mutation)
     await mutation_started.wait()
     dispatcher.submit({"method": "health"}, _health)
 
@@ -71,7 +71,7 @@ async def test_control_mutation_runs_while_integration_lane_is_busy() -> None:
     async def _cancel() -> None:
         cancel_completed.set()
 
-    dispatcher.submit({"method": "voice.synthesize"}, _generate)
+    dispatcher.submit({"method": "models.test"}, _generate)
     await generation_started.wait()
     dispatcher.submit({"method": "chat.cancel"}, _cancel)
 
@@ -98,8 +98,8 @@ async def test_regeneration_uses_the_bounded_integration_lane() -> None:
         await release.wait()
         active -= 1
 
-    dispatcher.submit({"method": "voice.synthesize"}, _regenerate)
-    dispatcher.submit({"method": "voice.synthesize"}, _regenerate)
+    dispatcher.submit({"method": "models.test"}, _regenerate)
+    dispatcher.submit({"method": "models.test"}, _regenerate)
 
     await asyncio.wait_for(both_started.wait(), timeout=0.2)
     release.set()

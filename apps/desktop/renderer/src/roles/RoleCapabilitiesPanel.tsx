@@ -1,4 +1,5 @@
 import { PluginRoleSettingsSlot } from "../plugins/PluginRoleSettingsSlot";
+import { PluginRoleUiSlot } from "../plugins/PluginRoleUiSlot";
 import { BellRinging, Brain } from "@phosphor-icons/react";
 import {
   SettingsToggleCard,
@@ -7,14 +8,10 @@ import {
   roleToggleStatus,
 } from "@yinfengwindy/shiori-sdk";
 import type { RoleFormState } from "../shared/types";
-import { globalVoiceOutputEnabled } from "./roleCapabilityStatus";
 import { RoleEditorSection } from "./RoleEditorSection";
 import { roleProactiveDefaults } from "./roleProactiveDefaults";
 import { RoleProactiveSettingsPanel } from "./RoleProactiveSettingsPanel";
-import { RoleVoiceSettingsPanel } from "./RoleVoiceSettingsPanel";
 import { useSettingsSnapshot } from "./useSettingsSnapshot";
-import { useVoiceProviders } from "../voice/useVoiceProviders";
-import { InlineError } from "../shared/feedback/InlineError";
 
 type RoleCapabilitiesPanelProps = {
   activeRole: RoleRecord | null;
@@ -26,7 +23,6 @@ type RoleCapabilitiesPanelProps = {
 /** Groups runtime-facing role capabilities away from the core profile fields. */
 export function RoleCapabilitiesPanel({ activeRole, bridgeReady, roleForm, onUpdate }: RoleCapabilitiesPanelProps) {
   const settings = useSettingsSnapshot();
-  const voice = useVoiceProviders(bridgeReady);
   const proactiveEnabled = Boolean(roleForm.proactiveEnabled ?? roleProactiveDefaults.enabled);
 
   return (
@@ -50,10 +46,7 @@ export function RoleCapabilitiesPanel({ activeRole, bridgeReady, roleForm, onUpd
             onChange={(pluginSettings) => onUpdate((current) => ({ ...current, pluginSettings }))} />
         </div>
       </RoleEditorSection>
-      <RoleEditorSection title="声音">
-        {voice.error ? <InlineError persona={false} message={voice.error} /> : null}
-        <RoleVoiceSettingsPanel roleForm={roleForm} globalVoiceEnabled={globalVoiceOutputEnabled(settings)} providers={voice.loading ? null : voice.providers} onUpdate={onUpdate} />
-      </RoleEditorSection>
+      <PluginRoleUiSlot role={activeRole ? { id: activeRole.id, name: activeRole.name, moodCatalog: roleForm.moodCatalog } : null} disabled={!bridgeReady} />
       <RoleProactiveSettingsPanel devMode={settings?.advanced.devMode === true} roleForm={roleForm} onUpdate={onUpdate} />
     </div>
   );

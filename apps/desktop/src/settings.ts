@@ -10,7 +10,6 @@ import type {
   SettingsSaveOptions,
   SettingsSnapshot,
 } from "./bridge/shared.js";
-import { parseHotkey } from "./voice/hotkey.js";
 import { compactionRetainedTurnsError, desktopSettingsDefaults, modelCapacityError, summaryTokenLimitError } from "./settingsContract.js";
 
 type RuntimeSettingsApplier = (request: RuntimeApplyRequest) => Promise<SaveSettingsResult>;
@@ -102,9 +101,6 @@ export function loadSettingsData(contentOverride?: string): SettingsSnapshot {
   const agentTools = asRecord(agent.tools);
   const agentMaintenance = asRecord(agent.maintenance);
   const proactiveStrategies = asRecord(agent.proactive_strategies);
-  const voice = asRecord(parsed.voice);
-  const voiceAsr = asRecord(voice.asr);
-  const voiceTts = asRecord(voice.tts);
   return {
     configPath: configuredPath,
     formData: {
@@ -122,15 +118,6 @@ export function loadSettingsData(contentOverride?: string): SettingsSnapshot {
           embedding.output_dimensionality == null
             ? ""
             : String(embedding.output_dimensionality),
-      },
-      voice: {
-        enabled: Boolean(voice.enabled),
-        hotkey: String(voice.hotkey ?? "Ctrl+Space"),
-        microphoneDeviceId: String(voice.microphone_device_id ?? ""),
-        asrEnabled: Boolean(voiceAsr.enabled ?? voice.enabled),
-        asrProvider: String(voiceAsr.provider ?? desktopSettingsDefaults.asrProvider),
-        ttsEnabled: Boolean(voiceTts.enabled ?? voice.enabled),
-        ttsProvider: String(voiceTts.provider ?? desktopSettingsDefaults.ttsProvider),
       },
       advanced: {
         maxTokens: Number(agent.max_tokens ?? 8192),
@@ -227,20 +214,6 @@ function renderSettingsToml(formData: SettingsFormData): string {
       ? `output_dimensionality = ${Number(outputDimensionality)}`
       : "",
     "",
-    "[voice]",
-    `enabled = ${formData.voice.enabled ? "true" : "false"}`,
-    `hotkey = ${quote(formData.voice.hotkey.trim())}`,
-    `microphone_device_id = ${quote(formData.voice.microphoneDeviceId.trim())}`,
-    "",
-    "[voice.asr]",
-    `provider = ${quote(formData.voice.asrProvider.trim())}`,
-    `enabled = ${(formData.voice.asrEnabled ?? formData.voice.enabled) ? "true" : "false"}`,
-    "",
-    "[voice.tts]",
-    `provider = ${quote(formData.voice.ttsProvider.trim())}`,
-    `enabled = ${(formData.voice.ttsEnabled ?? formData.voice.enabled) ? "true" : "false"}`,
-    "",
-    "",
   ]
     .filter((line, index, array) => {
       if (line !== "") return true;
@@ -287,9 +260,6 @@ function validateSettings(formData: SettingsFormData): void {
     if (!Number.isInteger(value) || value <= 0) {
       throw new Error("embedding output_dimensionality 必须是正整数");
     }
-  }
-  if (formData.voice.enabled && !parseHotkey(formData.voice.hotkey)) {
-    throw new Error("语音快捷键格式无效");
   }
 }
 

@@ -4,7 +4,6 @@ import { localAssetScheme } from "./assets/localAssetContract.js";
 import { createDesktopEventSubscription } from "./bridge/desktopEventSubscription.js";
 import {
   surfaceMessageChannel,
-  surfaceVoiceChannel,
   surfaceActivityChannel,
   surfacePositionChannel,
   surfaceSettledChannel,
@@ -14,7 +13,7 @@ import { surfaceChannels } from "./surface/ipc.js";
 import { pluginDataChannels } from "./plugins/ipc.js";
 import { trayChannels } from "./tray/ipc.js";
 import { notificationChannels, type NotificationChatTarget } from "./notifications/contract.js";
-import type { SurfaceCreateResult, SurfacePlacement, SurfaceRoleActivity, VoiceStatePayload } from "@yinfengwindy/shiori-sdk/contract";
+import type { SurfaceCreateResult, SurfacePlacement, SurfaceRoleActivity } from "@yinfengwindy/shiori-sdk/contract";
 import type {
   BridgeResponse,
   DesktopApi,
@@ -102,6 +101,20 @@ window.addEventListener("click", (event) => {
 });
 
 const api: DesktopApi = {
+  native: {
+    open: (context) => ipcRenderer.invoke("desktop:native-open", context),
+    call: (token, method, payload = {}) => ipcRenderer.invoke("desktop:native-call", { token, method, payload }),
+    onKey(listener) {
+      const wrapped = (_event: unknown, value: { token: string; id: string; phase: "down" | "up" }) => listener(value);
+      ipcRenderer.on("desktop:native-key", wrapped);
+      return () => ipcRenderer.off("desktop:native-key", wrapped);
+    },
+  },
+  onSurfaceMessage(listener) {
+    const wrapped = (_event: unknown, value: { pluginId: string; surfaceId: string; message: unknown }) => listener(value);
+    ipcRenderer.on("desktop:surface-background-message", wrapped);
+    return () => ipcRenderer.off("desktop:surface-background-message", wrapped);
+  },
   notifications: {
     getPending: () => ipcRenderer.invoke(notificationChannels.pending) as Promise<NotificationChatTarget | null>,
     acknowledge: (id) => ipcRenderer.invoke(notificationChannels.acknowledge, id) as Promise<void>,
@@ -159,9 +172,6 @@ const api: DesktopApi = {
   openDiagnosticsFolder() {
     return ipcRenderer.invoke("desktop:diagnostics-open-folder");
   },
-  voiceTestPlaybackFinished() {
-    ipcRenderer.send("desktop:voice-test-playback-finished");
-  },
   reportRendererDiagnostic(payload: RendererDiagnosticPayload) {
     ipcRenderer.send("desktop:renderer-diagnostic", payload);
   },
@@ -179,18 +189,6 @@ const api: DesktopApi = {
   },
   saveSettings(formData, options) {
     return ipcRenderer.invoke("desktop:settings-save", formData, options) as Promise<import("./bridge/shared.js").SaveSettingsResult>;
-  },
-  listVoiceInputDevices() {
-    return ipcRenderer.invoke("desktop:voice-input-devices-list") as Promise<VoiceInputDevice[]>;
-  },
-  startVoiceTest(deviceId) {
-    return ipcRenderer.invoke("desktop:voice-test-start", deviceId);
-  },
-  stopVoiceTest() {
-    return ipcRenderer.invoke("desktop:voice-test-stop");
-  },
-  cancelVoiceTest() {
-    return ipcRenderer.invoke("desktop:voice-test-cancel");
   },
   windowControl(action: WindowControlAction) {
     return ipcRenderer.invoke("desktop:window-control", action) as Promise<void>;
@@ -237,14 +235,7 @@ const api: DesktopApi = {
     },
   },
   surface: {
-    voice: {
-      gesture(gesture) { ipcRenderer.send("desktop:surface-voice-gesture", gesture); },
-      onState(listener) {
-        const wrapped = (_event: unknown, value: VoiceStatePayload) => listener(value);
-        ipcRenderer.on(surfaceVoiceChannel, wrapped);
-        return () => ipcRenderer.off(surfaceVoiceChannel, wrapped);
-      },
-    },
+    postToBackground(message) { ipcRenderer.send(surfaceChannels.toBackground, message); },
     onRoleActivity(listener) {
       const wrapped = (_event: unknown, value: SurfaceRoleActivity | null) => listener(value);
       ipcRenderer.on(surfaceActivityChannel, wrapped);
@@ -336,8 +327,7 @@ const api: DesktopApi = {
         listener({ command: "start", deviceId: typeof command.deviceId === "string" ? command.deviceId : undefined });
       } else if (command.command === "list-devices") {
         listener({ command: "list-devices" });
-      } else if (command.command === "play-test" && typeof command.audioBase64 === "string") {
-        listener({ command: "play-test", audioBase64: command.audioBase64 });
+
       }
     };
     ipcRenderer.on("desktop:voice-capture-command", wrapped);
@@ -366,8 +356,8 @@ const api: DesktopApi = {
         listener({ command: "cancel" });
         return;
       }
-      if (command.command === "play" && typeof command.id === "string" && typeof command.audioBase64 === "string" && command.format === "mp3") {
-        listener({ command: "play", id: command.id, audioBase64: command.audioBase64, format: "mp3" });
+      if (command.command === "play" && typeof command.id === "string" && typeof command.audioBase64 === "string" && (command.format === "mp3" || command.format === "wav")) {
+        listener({ command: "play", id: command.id, audioBase64: command.audioBase64, format: command.format });
       }
     };
     ipcRenderer.on("desktop:voice-playback-command", wrapped);

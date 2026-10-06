@@ -160,7 +160,6 @@ async def test_router_serves_models_test_without_domain_handlers(monkeypatch) ->
         roles=None,  # type: ignore[arg-type]
         sessions_and_tasks=None,  # type: ignore[arg-type]
         chat=None,  # type: ignore[arg-type]
-        voice=None,  # type: ignore[arg-type]
         plugins=None,  # type: ignore[arg-type]
     )
 

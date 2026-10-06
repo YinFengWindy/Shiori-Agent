@@ -59,6 +59,11 @@ export function validateRuntimePluginUi(value: unknown, pluginId: string) {
     label(detail.label, "accountDetail");
   }
   if (module.chatImageActions !== undefined) component(module.chatImageActions, "chatImageActions");
+  if (module.roleUi !== undefined) {
+    const editor = object(module.roleUi);
+    if (editor.mode !== "self-managed" || "pluginId" in editor) throw new Error("Invalid roleUi mode or identity");
+    component(editor.Component, "roleUi");
+  }
   if (module.roleSettings !== undefined) {
     const settings = object(module.roleSettings);
     component(settings.Component, "roleSettings");

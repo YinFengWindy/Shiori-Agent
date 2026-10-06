@@ -23,7 +23,6 @@ from agent.config_models import (
     WiringConfig,
 )
 from agent.scene_preferences import load_scene_preferences, migrate_scene_preferences
-from agent.voice_config import VoiceAsrConfig, VoiceConfig, VoiceTtsConfig
 from core.common.workspace import resolve_default_workspace
 from proactive_v2.config import ProactiveConfig
 from proactive_v2.config_loader import ProactiveConfigError, load_proactive_config
@@ -48,9 +47,6 @@ def load_config(
     """
     resolved_path = Path(path)
     data = _load_config_data(resolved_path)
-    from agent.voice_config_migration import migrate_voice_config
-
-    data = migrate_voice_config(resolved_path, data)
     data = _migrate_legacy_novelai_config(resolved_path, data)
     from agent.proactive_preferences import migrate_proactive_preferences
 
@@ -80,9 +76,6 @@ def load_config(
 
 def load_config_data(data: dict[str, Any]) -> Config:
     """Builds a configuration from parsed TOML, including environment resolution."""
-    from agent.voice_config_migration import voice_plugin_config
-
-    data = voice_plugin_config(data)
     _reject_removed_runtime_config(data)
 
     llm = _as_dict(data.get("llm"))
@@ -100,7 +93,6 @@ def load_config_data(data: dict[str, Any]) -> Config:
 
     proactive_strategies = load_proactive_preferences(data)
     memory = _load_memory_config(data)
-    voice = _load_voice_config(data)
     wiring = _load_wiring_config(data)
     plugins = _load_plugins_config(data)
     model_registrations = _load_model_registrations(data)
@@ -176,7 +168,6 @@ def load_config_data(data: dict[str, Any]) -> Config:
             desktop_chat_cfg.get("streaming_enabled", False)
         ),
         multimodal=bool(llm_main.get("multimodal", True)),
-        voice=voice,
         wiring=wiring,
         plugins=plugins,
         raw_plugin_configs={
@@ -319,25 +310,6 @@ def _migrate_legacy_novelai_config(path: Path, data: dict[str, Any]) -> dict[str
     path.write_text(migrated_text, encoding="utf-8")
     logger.info("已将 [integrations.novelai] 一次性迁移至 [plugins.novelai]")
     return tomllib.loads(migrated_text)
-
-
-def _load_voice_config(data: dict) -> VoiceConfig:
-    voice = _as_dict(data.get("voice"))
-    asr = _as_dict(voice.get("asr"))
-    tts = _as_dict(voice.get("tts"))
-    return VoiceConfig(
-        enabled=bool(voice.get("enabled", False)),
-        hotkey=str(voice.get("hotkey", "Ctrl+Space") or "Ctrl+Space"),
-        microphone_device_id=str(voice.get("microphone_device_id", "") or "").strip(),
-        asr=VoiceAsrConfig(
-            enabled=bool(asr.get("enabled", False)),
-            provider=str(asr.get("provider", "tencent")).strip(),
-        ),
-        tts=VoiceTtsConfig(
-            enabled=bool(tts.get("enabled", False)),
-            provider=str(tts.get("provider", "minimax")).strip(),
-        ),
-    )
 
 
 def _load_wiring_config(data: dict) -> WiringConfig:

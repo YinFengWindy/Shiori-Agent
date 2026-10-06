@@ -144,7 +144,7 @@ def test_settings_form_save_then_raw_removal_cannot_revive_legacy_json(
     _write(sources[1], {"secret": "legacy"})
     load_config(path, workspace=workspace)
     derive = settings_form_write(
-        {"config_toml": "max_tokens = 100\n", "preserve_plugins": True}
+        {"config_toml": "[agent]\nmax_tokens = 100\n", "preserve_plugins": True}
     )
     assert derive is not None
     ordinary = derive.build_config_toml(path.read_text(encoding="utf-8"))
@@ -346,7 +346,7 @@ def test_discovery_admission_defers_import_but_finishes_committed_receipt(
     )
     (external / "manifest.yaml").write_text(
         "api: 2\npackage_contract: 1\nid: demo\nversion: 1.0.0\n"
-        "runtime_api: '>=3.0.0 <4.0.0'\nentry: backend/plugin.py\ncapabilities: []\n",
+        "runtime_api: '>=4.0.0 <5.0.0'\nentry: backend/plugin.py\ncapabilities: []\n",
         encoding="utf-8",
     )
     if admission == "BLOCKED":
@@ -477,7 +477,7 @@ def test_committed_receipt_survives_conflict_settings_save_and_table_deletion(
     monkeypatch.setattr(Path, "unlink", readonly)
     load_config(path, workspace=workspace)
     derive = settings_form_write(
-        {"config_toml": "max_tokens = 100\n", "preserve_plugins": True}
+        {"config_toml": "[agent]\nmax_tokens = 100\n", "preserve_plugins": True}
     )
     assert derive is not None
     path.write_text(

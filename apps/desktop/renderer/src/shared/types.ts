@@ -84,15 +84,6 @@ export type SessionImageHistoryMessage = {
   media: unknown[];
 };
 
-/** Provider-scoped role voice values retained when another provider is selected. */
-export type RoleVoiceProviderSettings = {
-  ownership: "external" | "shiori_managed";
-  voiceId: string;
-  voiceName: string;
-  speed: number;
-  moodTtsEmotions: Record<string, string>;
-};
-
 export type RoleFormState = {
   name: string;
   description: string;
@@ -115,15 +106,6 @@ export type RoleFormState = {
   moodCatalog: string[];
   defaultMood: string;
   moodIllustrationBindings: Record<string, string>;
-  voiceEnabled: boolean;
-  voiceProvider: string;
-  voiceOwnership: "external" | "shiori_managed";
-  voiceId: string;
-  voiceName: string;
-  voiceSpeed: number;
-  voiceMoodEmotions: Record<string, string>;
-  /** Saved drafts for every voice provider, including inactive providers. */
-  voiceProviderSettings?: Record<string, RoleVoiceProviderSettings>;
 };
 
 /** New role composer form state. */

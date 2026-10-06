@@ -67,21 +67,3 @@ def test_rejects_symlink_members(tmp_path):
     with pytest.raises(PackageContractError) as caught:
         validate_package_zip(archive)
     assert caught.value.diagnostic.code == "unsupported_member"
-
-
-@pytest.mark.parametrize("plugin_id", ["tencent_asr", "minimax_tts"])
-def test_cloud_voice_plugins_are_valid_independently_installable_zips(
-    tmp_path, plugin_id
-):
-    from bootstrap.paths import plugin_roots
-
-    root = plugin_roots()[0] / plugin_id
-    archive = tmp_path / f"{plugin_id}.zip"
-    with ZipFile(archive, "w") as output:
-        output.write(root / "manifest.yaml", "manifest.yaml")
-        for source in (root / "backend").glob("*.py"):
-            output.write(source, f"backend/{source.name}")
-    package = validate_package_zip(archive)
-    assert package.manifest.id == plugin_id
-    assert package.manifest.capabilities == ("voice", "config")
-    assert package.runtime_api == ">=3.2.0 <4.0.0"

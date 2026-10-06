@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 from .rpc import DesktopPetRpcHandlers
 from .tool import DesktopPetActionTool
 from .bubbles import register_bubble_rpc
+from .voice_rpc import register_voice_preferences, register_voice_context
 
 if TYPE_CHECKING:
     from shiori_sdk.plugin_services import ServicePluginContext as PluginRuntimeContext
@@ -45,6 +46,8 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
         role_store=role_store, workspace=ctx.workspace, storage=ctx.storage
     )
     register_bubble_rpc(ctx.rpc)
+    register_voice_preferences(ctx.rpc, ctx.workspace)
+    register_voice_context(ctx.rpc, ctx.roles, ctx.sessions)
     ctx.rpc.register(
         "binding.get", handlers.binding_get, concurrency=Concurrency.READ_ONLY
     )

@@ -24,6 +24,7 @@ def test_form_preserves_plugin_values_and_retains_ordinary_candidate_semantics(p
     assert result == {
         "agent": {"max_tokens": 200},
         "plugins": tomllib.loads(current)["plugins"],
+        "voice": {"enabled": True},
     }
     assert derive.fingerprint_payload["config_toml"] == candidate
 
@@ -60,6 +61,7 @@ def test_raw_apply_keeps_full_document_ownership():
         {"preserve_plugins": True, "config_toml": "not valid TOML"},
         {"preserve_plugins": True, "config_toml": "[plugins.demo]\nenabled = true\n"},
         {"preserve_plugins": True, "config_toml": "[_migrations]\nreceipt = []\n"},
+        {"preserve_plugins": True, "config_toml": "[legacy]\nvalue = 42\n"},
     ],
 )
 def test_ambiguous_or_invalid_form_draft_is_rejected(payload):
@@ -67,12 +69,19 @@ def test_ambiguous_or_invalid_form_draft_is_rejected(payload):
         settings_form_write(payload)
 
 
-def test_form_preserves_credentials_before_first_startup_migration():
-    current = '[voice.tts]\napi_key = "${MINIMAX_KEY}"\nmodel = "saved"\n[voice.asr]\nsecret_key = "${TENCENT_KEY}"\n'
-    candidate = '[voice.tts]\nenabled = true\nprovider = "other"\n'
-    derive = settings_form_write({"config_toml": candidate, "preserve_plugins": True})
+@pytest.mark.parametrize(
+    "opaque",
+    [
+        '\n[legacy]\nitems = [{ "quoted.key" = { "space key" = [1, 2] } }, 1]\n',
+        '\n[voice.asr]\nsecret_key = "${OLD_SECRET}"\n[voice.tts]\napi_key = "kept"\n',
+    ],
+)
+def test_form_preserves_unknown_tables_without_interpreting_them(opaque):
+    current = "[agent]\nmax_tokens = 100\n[memory]\nenabled = true\n" + opaque
+    draft = "[agent]\nmax_tokens = 200\n"
+    derive = settings_form_write({"config_toml": draft, "preserve_plugins": True})
     assert derive is not None
-    document = tomllib.loads(derive.build_config_toml(current))
-    assert document["plugins"]["minimax_tts"]["api_key"] == "${MINIMAX_KEY}"
-    assert document["plugins"]["tencent_asr"]["secret_key"] == "${TENCENT_KEY}"
-    assert document["voice"]["tts"]["provider"] == "other"
+    assert tomllib.loads(derive.build_config_toml(current)) == {
+        "agent": {"max_tokens": 200},
+        **tomllib.loads(opaque),
+    }

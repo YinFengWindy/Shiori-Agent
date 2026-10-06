@@ -1577,7 +1577,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "shiori-agent", specifier = "==0.1.0" },
-    { name = "shiori-sdk", extras = ["testing"], specifier = "==3.2.0" },
+    { name = "shiori-sdk", extras = ["testing"], specifier = "==4.0.0" },
 ]
 
 [[package]]
@@ -1598,8 +1598,8 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "json-repair", specifier = ">=0.40.0" },
     { name = "numpy", specifier = ">=2.0.0" },
-    { name = "shiori-sdk", specifier = ">=3.1.0,<4" },
-    { name = "shiori-sdk", extras = ["testing"], marker = "extra == 'test'", specifier = ">=3.1.0,<4" },
+    { name = "shiori-sdk", specifier = ">=3.1.0,<5" },
+    { name = "shiori-sdk", extras = ["testing"], marker = "extra == 'test'", specifier = ">=3.1.0,<5" },
     { name = "sqlite-vec", specifier = ">=0.1.6" },
     { name = "tzdata", marker = "sys_platform == 'win32'", specifier = ">=2025.2" },
 ]

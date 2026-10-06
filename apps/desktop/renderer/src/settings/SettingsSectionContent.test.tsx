@@ -20,13 +20,6 @@ function createSettingsFormData(): SettingsFormData {
       embeddingBaseUrl: "https://embed.example",
       outputDimensionality: "1536",
     },
-    voice: {
-      enabled: true,
-      hotkey: "Ctrl+Space",
-      microphoneDeviceId: "",
-      asrProvider: "tencent",
-      ttsProvider: "minimax",
-    },
     advanced: {
       maxTokens: 4000,
       maxIterations: 10,
@@ -50,7 +43,6 @@ describe("SettingsSectionContent", () => {
     const cases = [
       { sectionId: "models", subsectionId: "catalog", expected: "gpt-agent" },
       { sectionId: "memory", subsectionId: "embedding", expected: "embed-model" },
-      { sectionId: "voice", subsectionId: "provider", expected: "语音识别服务商" },
       { sectionId: "advanced", subsectionId: "general", expected: "max_tokens" },
     ] as const;
 
@@ -109,17 +101,4 @@ describe("SettingsSectionContent", () => {
     ), /about/);
   });
 
-  it("renders provider selectors without plugin-owned credentials", () => {
-    const markup = renderToStaticMarkup(
-      <SettingsSectionContent
-        sectionId="voice"
-        subsectionId="provider"
-        draft={draft}
-        updateDraft={updateDraft}
-      />,
-    );
-
-    assert.match(markup, /aria-label="语音合成服务商"/);
-    assert.doesNotMatch(markup, /SecretId|SecretKey|API Key|语音合成模型|TTS 音量/);
-  });
 });

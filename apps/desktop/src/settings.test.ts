@@ -4,7 +4,6 @@ import { describe, it } from "node:test";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { configureSettingsConfigPath, loadSettingsData, saveSettings } from "./settings.js";
-import { desktopSettingsDefaults } from "./settingsContract.js";
 
 describe("desktop settings config path", () => {
   it("requires the runtime path contract instead of falling back to the repository root", () => {
@@ -22,15 +21,6 @@ describe("desktop settings config path", () => {
       const snapshot = loadSettingsData();
 
       assert.equal(snapshot.configPath, configPath);
-      assert.deepEqual(snapshot.formData.voice, {
-        enabled: false,
-        hotkey: "Ctrl+Space",
-        microphoneDeviceId: "",
-        asrEnabled: false,
-        asrProvider: desktopSettingsDefaults.asrProvider,
-        ttsEnabled: false,
-        ttsProvider: desktopSettingsDefaults.ttsProvider,
-      });
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
@@ -87,22 +77,6 @@ describe("desktop settings config path", () => {
   });
 });
 
-describe("plugin voice provider settings", () => {
-  it("persists arbitrary provider selections without owning vendor credentials", async () => {
-    configureSettingsConfigPath(join(tmpdir(), "unused-provider-config.toml"));
-    const draft = loadSettingsData('[voice]\nenabled = true\n[voice.asr]\nprovider = "local-asr"\nsecret_id = "old-secret"\n[voice.tts]\nprovider = "local-tts"\napi_key = "old-key"\nvolume = 3.0\n').formData;
-    assert.deepEqual(draft.voice, { enabled: true, hotkey: "Ctrl+Space", microphoneDeviceId: "", asrEnabled: true, asrProvider: "local-asr", ttsEnabled: true, ttsProvider: "local-tts" });
-    const result = await saveSettings(draft, async (request) => {
-      assert.match(request.config_toml, /provider = "local-asr"/);
-      assert.match(request.config_toml, /provider = "local-tts"/);
-      assert.doesNotMatch(request.config_toml, /old-secret|old-key|secret_id|secret_key|volume =/);
-      assert.equal(request.preserve_plugins, true);
-      assert.deepEqual(loadSettingsData(request.config_toml).formData.voice, draft.voice);
-      return { ok: true, generation: 2, changed: true };
-    });
-    assert.equal(result.ok, true);
-  });
-});
 
 
 describe("core proactive strategy settings round-trip", () => {

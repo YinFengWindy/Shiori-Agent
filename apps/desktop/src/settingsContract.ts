@@ -2,8 +2,6 @@ import type { ModelRegistrationFormData } from "./bridge/shared.js";
 
 /** Defaults shared by the desktop settings reader and writer. */
 export const desktopSettingsDefaults = Object.freeze({
-  asrProvider: "tencent",
-  ttsProvider: "minimax",
   compactionRetainedTurns: 2,
   summaryTokenLimit: 2000,
 });

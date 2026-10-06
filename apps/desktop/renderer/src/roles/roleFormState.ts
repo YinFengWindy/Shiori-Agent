@@ -2,7 +2,6 @@ import { readPluginRoleSettings, pluginRoleSettingsDirty } from "../plugins/plug
 import type { RoleRecord } from "@yinfengwindy/shiori-sdk";
 import type { RoleFormState } from "../shared/types";
 import { readRoleMoodConfig, roleMoodConfigEqual } from "./roleMoodConfig";
-import { readRoleVoiceConfig, roleVoiceConfigEqual } from "./roleVoiceConfig";
 import {
   buildRoleProactiveConfig as buildProactiveConfig,
   readRoleProactiveForm,
@@ -20,7 +19,6 @@ export function buildRoleProactiveConfig(
 /** Builds the editable role form state from a persisted role snapshot. */
 export function createRoleFormFromRole(role: RoleRecord): RoleFormState {
   const moodConfig = readRoleMoodConfig(role);
-  const voiceConfig = readRoleVoiceConfig(role);
   return {
     name: role.name,
     description: role.description,
@@ -35,21 +33,12 @@ export function createRoleFormFromRole(role: RoleRecord): RoleFormState {
     moodCatalog: moodConfig.moodCatalog,
     defaultMood: moodConfig.defaultMood,
     moodIllustrationBindings: moodConfig.moodIllustrationBindings,
-    voiceEnabled: voiceConfig.enabled,
-    voiceProvider: voiceConfig.provider,
-    voiceOwnership: voiceConfig.ownership,
-    voiceId: voiceConfig.voiceId,
-    voiceName: voiceConfig.voiceName,
-    voiceSpeed: voiceConfig.speed,
-    voiceMoodEmotions: voiceConfig.moodTtsEmotions,
-    voiceProviderSettings: voiceConfig.providerSettings,
   };
 }
 
 /** Checks whether the editable role form has diverged from the persisted role snapshot. */
 export function isRoleFormDirty(roleForm: RoleFormState, role: RoleRecord | null): boolean {
   const persistedMoodConfig = readRoleMoodConfig(role);
-  const persistedVoiceConfig = readRoleVoiceConfig(role);
   return Boolean(
     role
       && (
@@ -61,7 +50,6 @@ export function isRoleFormDirty(roleForm: RoleFormState, role: RoleRecord | null
         || pluginRoleSettingsDirty(roleForm.pluginSettings, role.runtime_config, role.plugin_state)
         || !roleProactiveConfigEqual(roleForm, role)
         || !roleMoodConfigEqual(roleForm, persistedMoodConfig)
-        || !roleVoiceConfigEqual(roleForm, persistedVoiceConfig)
         || Boolean(roleForm.avatarSource)
         || roleForm.illustrationSources.length > 0
         || roleForm.removedIllustrations.length > 0
