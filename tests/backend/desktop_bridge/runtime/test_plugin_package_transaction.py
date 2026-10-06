@@ -7,6 +7,7 @@ import tomllib
 import pytest
 
 from agent.plugin_host.package_fingerprint import inspect_package_content
+from agent.plugin_host.discovery import discover_plugins
 from agent.plugin_host.trust_store import PluginTrustStore
 from core.roles.store import RoleStore
 from desktop_bridge.runtime.plugin_package_transaction import (
@@ -17,6 +18,69 @@ from desktop_bridge.runtime.plugin_package_transaction import (
 def _restart(env, monkeypatch, session):
     monkeypatch.setenv("SHIORI_DESKTOP_APPLICATION_SESSION_ID", session)
     apply_pending_plugin_operations(env.workspace, env.config)
+
+
+@pytest.mark.asyncio
+async def test_external_source_remains_absent_across_package_install_update_and_uninstall(
+    plugin_package_env, monkeypatch
+):
+    env = plugin_package_env
+    source = env.builtins / "demo"
+    source.mkdir()
+    source_manifest = source / "manifest.yaml"
+    # The checked-out source declares its future renderer, without built artifacts.
+    source_manifest.write_text(
+        "api: 2\npackage_contract: 1\nid: demo\ndistribution: external\n"
+        "capabilities: [rpc]\nrenderer:\n  ui: {entry: renderer/ui.mjs, css: []}\n",
+        encoding="utf-8",
+    )
+    original_source = source_manifest.read_bytes()
+
+    def inspect():
+        root = env.workspace / "plugins"
+        return discover_plugins(
+            [env.builtins, root],
+            external_roots=[root],
+            namespace="test",
+            strict=True,
+            host=None,
+            trust=PluginTrustStore(env.workspace),
+        )
+
+    assert inspect() == []
+    env.confirm()
+    assert inspect() == []
+    _restart(env, monkeypatch, "session-b")
+    [installed] = inspect()
+    assert installed.plugin_dir == env.target
+    assert installed.source == "workspace" and installed.admission is None
+    assert installed.manifest.version == "1.0.0"
+    data = env.workspace / "plugin-data/demo/kv.json"
+    data.parent.mkdir(parents=True)
+    data.write_text('{"note":"keep"}', encoding="utf-8")
+
+    env.confirm("2.0.0", str(env.target))
+    assert inspect()[0].manifest.version == "1.0.0"
+    _restart(env, monkeypatch, "session-c")
+    [updated] = inspect()
+    assert updated.manifest.version == "2.0.0"
+    assert updated.source == "workspace" and updated.admission is None
+    assert data.read_text(encoding="utf-8") == '{"note":"keep"}'
+
+    await env.packages.uninstall(
+        {
+            "candidate_id": str(env.target),
+            "delete_data": False,
+            "operation_id": "remove",
+        }
+    )
+    _restart(env, monkeypatch, "session-d")
+    assert not env.target.exists()
+    assert inspect() == []
+    _restart(env, monkeypatch, "session-e")
+    assert inspect() == []
+    assert data.read_text(encoding="utf-8") == '{"note":"keep"}'
+    assert source_manifest.read_bytes() == original_source
 
 
 def test_restart_reclaims_extraction_interrupted_before_preview_journal(

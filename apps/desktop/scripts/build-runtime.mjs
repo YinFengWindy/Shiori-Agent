@@ -1,13 +1,16 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { cp, mkdir, rm } from "node:fs/promises";
-import { basename, delimiter, join, relative, resolve, sep } from "node:path";
+import { mkdir, rm } from "node:fs/promises";
+import { join, resolve } from "node:path";
 import { prepareBrowserRuntime } from "./browser-runtime.mjs";
 import { prepareComputerRuntime } from "./computer-runtime.mjs";
 import { resolveReleaseManifest } from "./release-manifest.mjs";
+import { stageBuiltinPlugins } from "./runtime-plugin-staging.mjs";
+import { createRuntimePyinstallerArgs } from "./runtime-pyinstaller.mjs";
 import {
   collectHostBackendModules,
   collectPluginBackendModules,
+  collectSdkRuntimeModules,
   collectTopLevelPythonPackageRoots,
 } from "./runtime-plugin-modules.mjs";
 
@@ -53,21 +56,7 @@ const stagingRoot = resolve(workRoot, "plugins-staging");
 await mkdir(stagingRoot, { recursive: true });
 const stagedPluginsDir = join(stagingRoot, "plugins");
 const pluginsSourceDir = join(repositoryRoot, "plugins");
-await cp(pluginsSourceDir, stagedPluginsDir, {
-  recursive: true,
-  filter: (source) => {
-    if (basename(source) === "__pycache__") return false;
-    // Only drop the plugin-level `plugins/<id>/tests/` directory (and its
-    // contents), matched by path depth from the plugins root. A basename-only
-    // check would also exclude `plugins/<id>/backend/**/tests` or future
-    // `ui/**/tests` directories that are not pytest fixtures.
-    const relativePath = relative(pluginsSourceDir, source);
-    if (relativePath === "") return true;
-    const segments = relativePath.split(sep);
-    if (segments.length >= 2 && segments[1] === "tests") return false;
-    return true;
-  },
-});
+await stageBuiltinPlugins(pluginsSourceDir, stagedPluginsDir);
 
 // Namespace directories have no __init__.py, so collect-submodules("plugins")
 // misses their backends. Analyze actual backend modules to retain transitive
@@ -80,6 +69,9 @@ const pluginModules = await collectPluginBackendModules(stagedPluginsDir);
 // plugin, so static analysis never reached it either). Enumerate host modules
 // directly instead of depending on --collect-submodules for these roots.
 const hostModules = await collectHostBackendModules(backendRoot, HOST_PACKAGE_ROOTS);
+// External plugins are installed after shipping; their SDK imports cannot be
+// inferred from the builtin dependency graph. Include every runtime SDK module.
+const sdkModules = await collectSdkRuntimeModules(join(repositoryRoot, "packages/sdk/python/shiori_sdk"));
 
 // Build-time completeness assertion (root list): fail loudly if a new
 // top-level package shows up under apps/backend that nobody added to
@@ -95,61 +87,10 @@ if (untrackedPackageRoots.length > 0) {
   );
 }
 
-const dataSeparator = delimiter;
-const args = [
-  "-m",
-  "PyInstaller",
-  "--noconfirm",
-  "--clean",
-  "--onedir",
-  "--name",
-  "shiori-runtime",
-  "--distpath",
-  runtimeRoot,
-  "--workpath",
-  workRoot,
-  "--specpath",
-  workRoot,
-  "--paths",
-  backendRoot,
-  "--paths",
-  stagingRoot,
-  // External package admission reads the host distribution's direct runtime
-  // requirements without importing them. Preserve that inventory in frozen runs.
-  "--recursive-copy-metadata",
-  "shiori-agent",
-  "--add-data",
-  `${stagedPluginsDir}${dataSeparator}plugins`,
-  "--add-data",
-  `${browserRuntime}${dataSeparator}native/browser-use`,
-  "--add-data",
-  `${computerRuntime}${dataSeparator}native/computer-use`,
-  "--add-data",
-  `${join(backendRoot, "skills")}${dataSeparator}skills`,
-  "--add-data",
-  `${join(repositoryRoot, "apps", "desktop", "renderer", "src", "chat", "common_emojis.json")}${dataSeparator}.`,
-  "--add-data",
-  `${join(repositoryRoot, "config.example.toml")}${dataSeparator}.`,
-  ...pluginModules.flatMap((name) => ["--hidden-import", name]),
-  ...hostModules.flatMap((name) => ["--hidden-import", name]),
-  join(backendRoot, "main.py"),
-];
-
-// Build-time completeness assertion (disk -> args): fail loudly, before
-// PyInstaller even starts, if a tracked host module somehow did not make it
-// into the hidden-import argument list. Checks the actual constructed `args`
-// array rather than re-deriving the same set, so it also catches future bugs
-// in how `args` gets assembled (filtering, dedup, reordering), not just a
-// missing collector call.
-const hiddenImportValues = new Set(
-  args.filter((value, index) => index > 0 && args[index - 1] === "--hidden-import"),
-);
-const missingHostModules = hostModules.filter((name) => !hiddenImportValues.has(name));
-if (missingHostModules.length > 0) {
-  throw new Error(
-    `以下宿主模块未出现在 PyInstaller 的 --hidden-import 参数中，构建终止：${missingHostModules.join(", ")}`,
-  );
-}
+const args = createRuntimePyinstallerArgs({
+  runtimeRoot, workRoot, backendRoot, stagingRoot, stagedPluginsDir,
+  browserRuntime, computerRuntime, repositoryRoot, pluginModules, hostModules, sdkModules,
+});
 
 const child = spawn(python, args, { cwd: backendRoot, stdio: "inherit" });
 child.once("error", (error) => {

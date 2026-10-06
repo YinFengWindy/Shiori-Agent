@@ -8,18 +8,25 @@ import { join } from "node:path";
  * pkgutil.iter_modules 会静默跳过这类目录，导致 PyInstaller 的
  * --collect-submodules 漏掉其中所有模块（见 #315）。
  */
-async function collectPythonModules(directory, prefix) {
+async function collectPythonModules(directory, prefix, excluded = new Set()) {
   const modules = [];
   const entries = await readdir(directory, { withFileTypes: true });
   for (const entry of entries) {
+    const qualifiedName = [...prefix, entry.name].join(".");
+    if (excluded.has(qualifiedName)) continue;
     if (entry.isDirectory() && entry.name !== "__pycache__") {
-      modules.push(...(await collectPythonModules(join(directory, entry.name), [...prefix, entry.name])));
+      modules.push(...(await collectPythonModules(join(directory, entry.name), [...prefix, entry.name], excluded)));
     } else if (entry.isFile() && entry.name.endsWith(".py")) {
       const name = entry.name.slice(0, -3);
       modules.push((name === "__init__" ? prefix : [...prefix, name]).join("."));
     }
   }
   return modules;
+}
+
+/** Collects the shipped SDK independently of installed plugins, including namespace directories. */
+export async function collectSdkRuntimeModules(sdkPackageRoot) {
+  return (await collectPythonModules(sdkPackageRoot, ["shiori_sdk"], new Set(["shiori_sdk.testing"]))).sort();
 }
 
 /** Finds Python analysis roots in staged backends, including namespace packages. */

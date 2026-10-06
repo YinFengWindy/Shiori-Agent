@@ -1,8 +1,12 @@
 """Directory identity, source classification and static admission regressions."""
 
+import shutil
+
 import pytest
 
 from agent.plugin_host.discovery import discover_plugins
+from agent.plugin_host.manifest import ManifestError
+from agent.plugin_host.trust_store import PluginTrustStore
 
 
 def _discover(roots, external=()):
@@ -11,9 +15,102 @@ def _discover(roots, external=()):
     )
 
 
-def test_same_basename_different_ids_are_both_visible(contract_package, tmp_path):
-    import shutil
+def test_external_source_is_absent_before_renderer_artifacts_are_built(
+    contract_package,
+):
+    path = contract_package / "manifest.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8") + "distribution: external\n", encoding="utf-8"
+    )
+    (contract_package / "renderer/ui.mjs").unlink()
+    assert _discover([contract_package.parent]) == []
 
+
+@pytest.mark.parametrize("distribution", [None, "builtin", "external"])
+def test_external_source_leaves_workspace_copy_subject_to_exact_content_trust(
+    contract_package, tmp_path, monkeypatch, distribution
+):
+    source = tmp_path / "host" / contract_package.name
+    shutil.copytree(contract_package, source)
+    source_manifest = source / "manifest.yaml"
+    source_manifest.write_text(
+        source_manifest.read_text(encoding="utf-8") + "distribution: external\n",
+        encoding="utf-8",
+    )
+    (source / "renderer/ui.mjs").unlink()
+    if distribution is not None:
+        path = contract_package / "manifest.yaml"
+        path.write_text(
+            path.read_text(encoding="utf-8") + f"distribution: {distribution}\n",
+            encoding="utf-8",
+        )
+    monkeypatch.setenv("SHIORI_DESKTOP_APPLICATION_SESSION_ID", "current-session")
+    trust = PluginTrustStore(tmp_path)
+
+    def inspect():
+        return discover_plugins(
+            [source.parent, contract_package.parent],
+            external_roots=[contract_package.parent],
+            namespace="test",
+            strict=True,
+            host=None,
+            trust=trust,
+        )
+
+    [record] = inspect()
+    assert record.plugin_dir == contract_package
+    assert record.source == "workspace"
+    assert record.admission.state == "UNTRUSTED"
+    assert record.admission.code == "trust_required"
+    assert record.fingerprint
+    trust.approve(
+        contract_package, record.fingerprint, approved_session="previous-session"
+    )
+    [approved] = inspect()
+    assert approved.admission is None
+    entry = contract_package / "backend/plugin.py"
+    entry.write_text(
+        entry.read_text(encoding="utf-8") + "# changed\n", encoding="utf-8"
+    )
+    [changed] = inspect()
+    assert changed.admission.state == "UNTRUSTED"
+
+
+@pytest.mark.parametrize("external", [False, True])
+def test_invalid_distribution_is_rejected_for_both_root_classes(
+    contract_package, external
+):
+    path = contract_package / "manifest.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8") + "distribution: other\n", encoding="utf-8"
+    )
+    if external:
+        [record] = _discover([contract_package.parent], [contract_package.parent])
+        assert record.admission.state == "BLOCKED"
+        assert record.admission.code == "invalid_manifest"
+        assert "distribution" in record.admission.reason
+    else:
+        with pytest.raises(ManifestError, match="distribution"):
+            _discover([contract_package.parent])
+
+
+@pytest.mark.parametrize("distribution", ["builtin", "external"])
+def test_workspace_distribution_does_not_skip_renderer_validation(
+    contract_package, distribution
+):
+    path = contract_package / "manifest.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8") + f"distribution: {distribution}\n",
+        encoding="utf-8",
+    )
+    (contract_package / "renderer/ui.mjs").unlink()
+    [record] = _discover([contract_package.parent], [contract_package.parent])
+    assert record.source == "workspace"
+    assert record.admission.state == "BLOCKED"
+    assert record.admission.code == "missing_file"
+
+
+def test_same_basename_different_ids_are_both_visible(contract_package, tmp_path):
     builtin = tmp_path / "host" / contract_package.name
     shutil.copytree(contract_package, builtin)
     path = builtin / "manifest.yaml"
@@ -31,13 +128,18 @@ def test_same_basename_different_ids_are_both_visible(contract_package, tmp_path
 
 
 @pytest.mark.parametrize("same_root", [False, True])
+@pytest.mark.parametrize("distribution", [None, "external"])
 def test_duplicate_ids_conflict_regardless_of_names_or_source(
-    contract_package, tmp_path, same_root
+    contract_package, tmp_path, same_root, distribution
 ):
-    import shutil
-
     other_root = tmp_path if same_root else tmp_path / "host"
     shutil.copytree(contract_package, other_root / "different-name")
+    if distribution is not None:
+        path = contract_package / "manifest.yaml"
+        path.write_text(
+            path.read_text(encoding="utf-8") + f"distribution: {distribution}\n",
+            encoding="utf-8",
+        )
     records = _discover([other_root, tmp_path], [tmp_path])
     assert len(records) == 2
     assert len({record.candidate_id for record in records}) == 2

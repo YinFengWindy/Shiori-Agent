@@ -77,6 +77,8 @@ Shiori 以角色为中心组织人设、记忆、会话、素材与关系。你�
 
 故事、桌宠、生图和外部渠道都通过插件提供。「设置 → 插件」支持管理启停、配置和 ZIP 安装；ZIP 安装、更新与卸载在重启后生效，第三方插件首次加载需要确认信任。Browser Use 与 Computer Use 默认停用。插件开发入口见下方 SDK 文档。
 
+[SenseVoiceSmall ASR](./plugins/sensevoice_asr/README.md) 与 [GPT-SoVITS TTS](./plugins/gpt_sovits_tts/README.md) 是独立安装的本地语音 provider，标记为 `distribution: external`，不会随仓库源码自动成为内置插件。两者可独立配置和测试，也可供桌宠选择；推理服务需另行准备。
+
 ### 数据与配置
 
 - 默认工作区：`%USERPROFILE%\.shiori\workspace\`，保存角色、会话、记忆和素材。
@@ -114,11 +116,11 @@ pnpm test --file RoleDetailPage.test.tsx
 
 ### 插件 SDK
 
-SDK 与 Runtime API 当前版本均为 **4.0.0**。前端包为 [@yinfengwindy/shiori-sdk](https://www.npmjs.com/package/@yinfengwindy/shiori-sdk)，后端包为 [shiori-sdk](https://pypi.org/project/shiori-sdk/)（Python 3.12+）。在独立插件项目中按需安装：
+SDK 与 Runtime API 当前版本均为 **4.1.0**。前端包为 [@yinfengwindy/shiori-sdk](https://www.npmjs.com/package/@yinfengwindy/shiori-sdk)，后端包为 [shiori-sdk](https://pypi.org/project/shiori-sdk/)（Python 3.12+）。在独立插件项目中按需安装：
 
 ```sh
-pnpm add -D "@yinfengwindy/shiori-sdk@^4.0.0"
-uv add "shiori-sdk>=4.0.0,<5"
+pnpm add -D "@yinfengwindy/shiori-sdk@^4.1.0"
+uv add "shiori-sdk>=4.1.0,<5"
 ```
 
 插件位于 `plugins/<id>/`：`manifest.yaml` 声明能力与兼容范围，`backend/` 放 Python 后端，`ui/` 放可选 React 界面，`tests/` 放插件测试。前端构建需将 SDK、React 和 React DOM 保留为 external，由 Shiori 在运行时提供。桌宠与新原生接口要求 `runtime_api: ">=4.0.0 <5.0.0"`；未使用已移除接口的插件经过兼容验证后，可保留 3.1 最低版本并将上界扩至 `<5.0.0`。

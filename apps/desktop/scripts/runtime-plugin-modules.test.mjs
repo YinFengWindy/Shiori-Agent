@@ -6,8 +6,21 @@ import test from "node:test";
 import {
   collectHostBackendModules,
   collectPluginBackendModules,
+  collectSdkRuntimeModules,
   collectTopLevelPythonPackageRoots,
 } from "./runtime-plugin-modules.mjs";
+
+test("runtime SDK collection includes future namespace helpers and excludes testing and caches", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "shiori-sdk-runtime-modules-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  for (const path of ["__init__.py", "files/audio.py", "files/staging.py", "local_http.py", "future/nested/helper.py", "testing/__init__.py", "testing/fakes.py", "files/__pycache__/old.py"]) {
+    await mkdir(dirname(join(root, path)), { recursive: true });
+    await writeFile(join(root, path), "", "utf8");
+  }
+  assert.deepEqual(await collectSdkRuntimeModules(root), [
+    "shiori_sdk", "shiori_sdk.files.audio", "shiori_sdk.files.staging", "shiori_sdk.future.nested.helper", "shiori_sdk.local_http",
+  ]);
+});
 
 test("collectPluginBackendModules discovers namespace backends and nested packages", async () => {
   const directory = await mkdtemp(join(tmpdir(), "shiori-runtime-modules-"));
