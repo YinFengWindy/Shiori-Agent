@@ -48,7 +48,7 @@ def _persisted(path: Path) -> dict:
 
 
 def test_fresh_config_from_the_template_is_not_rewritten(tmp_path: Path) -> None:
-    """新安装复制模板：模板自带回执，插件不被显式启用。"""
+    """新模板保留语音插件配置与回执，不显式启用默认停用的插件。"""
     path = tmp_path / "config.toml"
     shutil.copyfile(_TEMPLATE, path)
     before = path.read_text(encoding="utf-8")
@@ -56,7 +56,11 @@ def test_fresh_config_from_the_template_is_not_rewritten(tmp_path: Path) -> None
     config = load_config(path)
 
     assert path.read_text(encoding="utf-8") == before
-    assert config.plugins == {}
+    assert set(config.plugins) == {"tencent_asr", "minimax_tts"}
+    assert config.plugins["tencent_asr"]["enabled"] is True
+    assert config.plugins["minimax_tts"]["enabled"] is True
+    for plugin_id in DEFAULT_DISABLED_PLUGINS:
+        assert plugin_id not in config.plugins
     receipt = _persisted(path)["_migrations"][RECEIPT_KEY]
     assert receipt == list(DEFAULT_DISABLED_PLUGINS)
 
