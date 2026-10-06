@@ -6,6 +6,7 @@ import { changeInputValue, chooseSelectOption, mountTestComponent } from "@yinfe
 import { createEmptyRoleForm } from "../app/appState";
 import { resetPluginEnabledStateForTests, setPluginEnabledSnapshot } from "../plugins/pluginEnabledStateStore";
 import { createSettingsDraft } from "../settings/testFixtures";
+import type { DesktopApi } from "../../../src/bridge/shared";
 import type { RoleRecord } from "@yinfengwindy/shiori-sdk";
 import type { RoleFormState } from "../shared/types";
 import { RoleDetailPage } from "./RoleDetailPage";
@@ -136,8 +137,16 @@ describe("RoleDetailPage", () => {
   it("saves and resets proactive edits through the shared role draft across tab switches", async () => {
     setPluginEnabledSnapshot([]);
     let saved: RoleFormState | undefined;
+    const desktop: Pick<DesktopApi, "readSettings" | "invoke" | "onEvent"> = {
+      readSettings: async () => ({ configPath: "config.toml", formData: createSettingsDraft() }),
+      invoke: async ({ method }) => {
+        assert.equal(method, "voice.providers");
+        return { id: "voice-providers", type: "response", method, error: null, payload: { providers: [] } };
+      },
+      onEvent: () => () => undefined,
+    };
     const view = await mountTestComponent(<DraftDetailPage onSave={(form) => { saved = form; }} />, {
-      windowGlobals: { miraDesktop: { readSettings: async () => ({ formData: createSettingsDraft() }) } },
+      windowGlobals: { miraDesktop: desktop },
     });
     const button = (label: string) => {
       const found = Array.from(view.container.querySelectorAll("button")).find((item) => item.textContent === label);
@@ -147,6 +156,7 @@ describe("RoleDetailPage", () => {
     try {
       await act(async () => button("能力").click());
       assert.ok(view.container.querySelector('[data-testid="role-proactive-config"]'));
+      assert.equal(view.container.querySelector('[role="alert"]'), null);
       const toggle = view.container.querySelector<HTMLButtonElement>('[role="switch"][aria-label="主动推送"]');
       assert.ok(toggle);
       await act(async () => toggle.click());
