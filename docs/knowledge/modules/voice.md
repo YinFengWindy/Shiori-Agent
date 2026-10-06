@@ -2,7 +2,7 @@
 title: 语音 Provider 与桌宠交互
 kind: 领域说明
 status: 当前有效
-last_verified_commit: b42c7d18
+last_verified_commit: 2659818b
 source_paths:
   - plugins/desktop_pet/background/voice/
   - plugins/desktop_pet/backend/voice_preferences.py
