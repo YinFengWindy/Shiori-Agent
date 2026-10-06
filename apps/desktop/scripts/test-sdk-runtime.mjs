@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { collectSdkRuntimeModules } from "./runtime-plugin-modules.mjs";
 import { assertRuntimeHiddenImports } from "./runtime-pyinstaller.mjs";
+import { preparePyinstallerInvocation } from "./pyinstaller-invocation.mjs";
 
 const repository = fileURLToPath(new URL("../../../", import.meta.url));
 const { values } = parseArgs({ options: { output: { type: "string" } } });
@@ -54,7 +55,9 @@ async function run(executable, arguments_, log, env = process.env) {
 }
 
 console.log(`Freezing ${modules.length} runtime SDK modules. Evidence: ${output}`);
-await run(python, args, "freeze.log");
+// Exercise the production argument transport with the actual PyInstaller entry point.
+const invocation = await preparePyinstallerInvocation(args, join(output, "invocation"));
+await run(python, invocation.pythonArgs, "freeze.log");
 const env = { ...process.env };
 // The executable must satisfy dynamic imports from its own archive, not source.
 delete env.PYTHONPATH;

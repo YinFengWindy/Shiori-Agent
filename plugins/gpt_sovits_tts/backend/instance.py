@@ -1,13 +1,13 @@
 """OS-backed ownership and durable uncertainty shared across plugin generations."""
 
 import asyncio
-import errno
-import os
 from contextlib import AsyncExitStack, asynccontextmanager, contextmanager
 from pathlib import Path
 from uuid import uuid4
 
 from shiori_sdk.files.json import atomic_save_json, load_json
+from shiori_sdk.files.lease import LeaseBusy, exclusive_file_lease
+from shiori_sdk.managed.paths import native_path
 
 
 class InstanceBusy(RuntimeError):
@@ -31,39 +31,13 @@ class InstanceState:
     @contextmanager
     def lease(self):
         """Acquire nonblocking ownership; a live owner cannot be reset by reconnect."""
-        self.root.mkdir(parents=True, exist_ok=True)
-        with (self.root / "instance.lock").open("a+b") as handle:
-            if os.fstat(handle.fileno()).st_size == 0:
-                handle.write(b"0")
-                handle.flush()
-            handle.seek(0)
-            try:
-                if os.name == "nt":
-                    import msvcrt
-
-                    msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
-                else:
-                    import fcntl
-
-                    fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except OSError as error:
-                if error.errno in {errno.EACCES, errno.EAGAIN, errno.EDEADLK}:
-                    raise InstanceBusy(
-                        "上一请求仍在等待服务响应，实例由其他活动任务占用"
-                    ) from error
-                raise
-            try:
+        try:
+            with exclusive_file_lease(self.root / "instance.lock"):
                 yield
-            finally:
-                handle.seek(0)
-                if os.name == "nt":
-                    import msvcrt
-
-                    msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
-                else:
-                    import fcntl
-
-                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+        except LeaseBusy as error:
+            raise InstanceBusy(
+                "上一请求仍在等待服务响应，实例由其他活动任务占用"
+            ) from error
 
     def status(self) -> dict[str, object]:
         """Distinguish a known live operation from a marker left after a lost owner."""
@@ -91,11 +65,17 @@ class InstanceState:
                     await asyncio.sleep(0.05)
             yield
 
-    def begin(self, url: str) -> str:
+    def begin(self, url: str, managed: dict[str, str] | None = None) -> str:
         """Publish one unique operation while holding the instance lease."""
         operation = uuid4().hex
         atomic_save_json(
-            self.marker, {"operation": operation, "url": url, "state": "in_flight"}
+            self.marker,
+            {
+                "operation": operation,
+                "url": url,
+                "state": "in_flight",
+                **({"managed": managed} if managed else {}),
+            },
         )
         return operation
 
@@ -112,3 +92,24 @@ class InstanceState:
     def recover(self) -> None:
         """Clear uncertainty only under an exclusive lease after explicit restart."""
         self.marker.unlink(missing_ok=True)
+
+    def recover_owned(
+        self, *, url: str | None = None, runtime: str | None = None
+    ) -> None:
+        """Called under both ownership proofs; external records are never auto-cleared."""
+        record = load_json(self.marker, None)
+        if not isinstance(record, dict):
+            return
+        managed = record.get("managed")
+        if not isinstance(managed, dict) or not isinstance(
+            managed.get("generation"), str
+        ):
+            return
+        owned_root = managed.get("runtime")
+        same_root = (
+            isinstance(owned_root, str)
+            and runtime is not None
+            and native_path(Path(owned_root)) == native_path(Path(runtime))
+        )
+        if (url is not None and record.get("url") == url) or same_root:
+            self.recover()

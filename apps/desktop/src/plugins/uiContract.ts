@@ -63,6 +63,8 @@ export const pluginUiPeerExports: Record<string, string[]> = {
     "CrossfadeLayers", "SidebarResizeHandle",
     // Runtime API 4.1.0: shared private document lifecycle.
     "usePrivateDraft",
+    // Runtime API 4.2.0: generic private runtime controls.
+    "ManagedRuntimePanel", "useManagedRuntime",
   ],
 };
 
