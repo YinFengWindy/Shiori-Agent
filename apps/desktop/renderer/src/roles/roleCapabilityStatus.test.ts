@@ -4,10 +4,13 @@ import type { SettingsFormData } from "../../../src/bridge/shared";
 import { globalVoiceOutputEnabled, roleVoiceStatus } from "./roleCapabilityStatus";
 
 function voiceSettings(voice: Partial<SettingsFormData["voice"]>): Pick<SettingsFormData, "voice"> {
-  return { voice: { enabled: false, hotkey: "", microphoneDeviceId: "", asrProvider: "", asrBaseUrl: "", asrSecretId: "", asrSecretKey: "", ttsProvider: "", ttsBaseUrl: "", ttsModel: "", ttsApiKey: "", ttsVolume: 1, ...voice } };
+  return { voice: { enabled: false, hotkey: "", microphoneDeviceId: "", asrProvider: "", ttsProvider: "", ...voice } };
 }
 
 describe("roleVoiceStatus", () => {
+  it("reports a missing plugin without losing the selected voice", () => {
+    assert.deepEqual(roleVoiceStatus({ roleEnabled: true, voiceId: "saved-voice", globalEnabled: true, providerAvailable: false }), { label: "服务商不可用", tone: "attention" });
+  });
   it("does not claim 已启用 while no voice is chosen and global voice is off", () => {
     const status = roleVoiceStatus({ roleEnabled: true, voiceId: "", globalEnabled: false });
     assert.equal(status.label, "全局语音已关闭");

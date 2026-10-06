@@ -32,7 +32,7 @@ from core.roles import RoleStore
 from core.roles.errors import RoleNotFoundError
 from core.roles.services import RoleAggregateService
 from desktop_bridge.service import DesktopBridgeService
-from desktop_bridge.voice.voice_service import (
+from shiori_sdk.voice import (
     VoiceOperationMetrics,
     VoiceServiceError,
     VoiceTranscriptionResult,

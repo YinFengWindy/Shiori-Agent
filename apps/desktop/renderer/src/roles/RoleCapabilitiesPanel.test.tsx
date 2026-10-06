@@ -23,7 +23,7 @@ describe("RoleCapabilitiesPanel", () => {
     const initialForm = { ...createEmptyRoleForm(), proactiveProfile: "quiet", proactiveAgentMaxSteps: 42, proactiveDriftMaxSteps: 9, proactiveDriftMinIntervalHours: 4 };
     let form: RoleFormState = initialForm;
     const panel = () => <RoleCapabilitiesPanel activeRole={null} bridgeReady roleForm={form} onUpdate={(next) => { form = typeof next === "function" ? next(form) : next; }} />;
-    const view = await mountTestComponent(panel(), { windowGlobals: { miraDesktop: { readSettings: async () => ({ formData: createSettingsDraft() }) } } });
+    const view = await mountTestComponent(panel(), { windowGlobals: { miraDesktop: { onEvent: () => () => undefined, invoke: async () => ({ error: null, payload: { providers: [] } }), readSettings: async () => ({ formData: createSettingsDraft() }) } } });
     try {
       assert.deepEqual(Array.from(view.container.querySelectorAll("h2"), (heading) => heading.textContent), ["运行能力", "声音", "主动推送"]);
       const capability = view.container.querySelector('[data-testid="role-proactive-capability"]');
@@ -57,7 +57,7 @@ describe("RoleCapabilitiesPanel", () => {
       settings.advanced.devMode = devMode;
       const view = await mountTestComponent(
         <RoleCapabilitiesPanel activeRole={null} bridgeReady roleForm={createEmptyRoleForm()} onUpdate={() => undefined} />,
-        { windowGlobals: { miraDesktop: { readSettings: async () => ({ formData: settings }) } } },
+        { windowGlobals: { miraDesktop: { onEvent: () => () => undefined, invoke: async () => ({ error: null, payload: { providers: [] } }), readSettings: async () => ({ formData: settings }) } } },
       );
       try {
         const picker = view.container.querySelector<HTMLButtonElement>('[role="combobox"][aria-label="推送策略"]');

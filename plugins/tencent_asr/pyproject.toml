@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=80", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "shiori-plugin-tencent-asr"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = ["shiori-sdk>=3.2.0,<4", "pydantic>=2.11.7"]
+
+[project.optional-dependencies]
+test = ["shiori-sdk[testing]>=3.2.0,<4"]
+
+[tool.setuptools]
+include-package-data = false
+packages = ["plugins.tencent_asr", "plugins.tencent_asr.backend"]
+package-dir = {"plugins.tencent_asr" = "."}
+
+[tool.setuptools.package-data]
+"plugins.tencent_asr" = ["manifest.yaml", "TESTING.md", "backend/**/*.json", "backend/**/*.yaml", "backend/**/*.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-W error --import-mode=importlib"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+required_plugins = ["pytest-asyncio", "shiori-sdk"]

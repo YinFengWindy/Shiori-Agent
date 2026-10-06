@@ -69,6 +69,7 @@ from desktop_bridge.session_presenter import DesktopSessionPresenter
 from desktop_bridge.turn_messages import committed_turn_messages
 from desktop_bridge.voice.voice_handler import DesktopVoiceHandler
 from agent.voice_config import VoiceConfig
+from agent.plugin_host.voice import VoiceProviderRegistry
 from desktop_bridge.voice.voice_service import VoiceService, VoiceServiceError
 from session.manager import Session, SessionManager
 
@@ -115,6 +116,7 @@ class DesktopBridgeService:
         subagent_manager: Any | None = None,
         memory_optimizer: Any | None = None,
         voice_service: VoiceService | None = None,
+        voice_providers: VoiceProviderRegistry | None = None,
         role_runtime_registry: RoleRuntimeRegistry | None = None,
         memory_engine: Any | None = None,
         card_import_service: Any | None = None,
@@ -219,7 +221,7 @@ class DesktopBridgeService:
             )
         )
         self.voice_service = voice_service or VoiceService(
-            getattr(config, "voice", None) or VoiceConfig()
+            getattr(config, "voice", None) or VoiceConfig(), voice_providers
         )
         self.chat_service = DesktopChatService(
             agent_loop=agent_loop,

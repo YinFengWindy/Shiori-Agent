@@ -2,7 +2,7 @@
 
 [@yinfengwindy/shiori-sdk](https://www.npmjs.com/package/@yinfengwindy/shiori-sdk)
 and [shiori-sdk](https://pypi.org/project/shiori-sdk/) are the TypeScript and Python distributions of the
-same plugin contract. Both are version **3.1.0**, with Runtime API **3.1.0**.
+same plugin contract. Both are version **3.2.0**, with Runtime API **3.2.0**.
 
 Start with the [plugin tutorial](https://github.com/YinFengWindy/Shiori-Agent/blob/main/docs/_handbook/plugins-tutorial.md)
 and [runtime contract](https://github.com/YinFengWindy/Shiori-Agent/blob/main/docs/_handbook/plugin-runtime-contract.md)
@@ -17,7 +17,7 @@ an incompatible range with an `incompatible_runtime` diagnostic before executing
 the plugin backend. Version 3 requires rebuilding existing renderer imports.
 
 Before the first public release, the npm package moved to the personal scope
-`@yinfengwindy/shiori-sdk`. SDK and Runtime API stay at `3.1.0`; renderer plugins
+`@yinfengwindy/shiori-sdk`. SDK and Runtime API share version `3.2.0`; renderer plugins
 built against the earlier internal package name must update their imports and
 rebuild. The host provides only the public package name, without an old-name alias.
 
@@ -26,7 +26,7 @@ rebuild. The host provides only the public package name, without an old-name ali
 Install the SDK and its React peers as development dependencies in your plugin project:
 
 ```sh
-pnpm add -D "@yinfengwindy/shiori-sdk@^3.1.0" "react@^19.2.5" "react-dom@^19.2.5"
+pnpm add -D "@yinfengwindy/shiori-sdk@^3.2.0" "react@^19.2.5" "react-dom@^19.2.5"
 ```
 
 Build the plugin UI as ESM, externalizing `@yinfengwindy/shiori-sdk`, `react`,
@@ -61,13 +61,13 @@ plugin's production peer imports.
 Requires Python **3.12+**. Install in your plugin project:
 
 ```sh
-uv add "shiori-sdk>=3.1.0,<4"
+uv add "shiori-sdk>=3.2.0,<4"
 ```
 
 For independent plugin tests, add the optional testing support and run your suite:
 
 ```sh
-uv add --dev "shiori-sdk[testing]>=3.1.0,<4"
+uv add --dev "shiori-sdk[testing]>=3.2.0,<4"
 uv run pytest tests
 ```
 
@@ -362,3 +362,20 @@ fixture. `pnpm typecheck:plugins` checks every plugin entry and colocated test i
 standalone TypeScript program with declared workspace dependencies and no host
 ambient declarations. Boundary tests reject both global bridge calls and host
 ambient type references.
+
+
+## Voice provider slots (Runtime API 3.2)
+
+Plugins declare `voice` and `config`, and require `runtime_api: ">=3.2.0 <4.0.0"`.
+`shiori_sdk.voice.VoicePluginContext` supplies `ctx.voice.register_asr(provider)`
+and `ctx.voice.register_tts(provider)`; contributions are revoked on unload.
+The host retains capture, hotkeys, selection, turn cancellation and playback.
+Each provider declares stable identity, emotion choices and optional cloning support.
+`VoiceSynthesisResult` carries encoded bytes, the actual format and diagnostics;
+previews and role replies use the same synthesis entry.
+`ctx.voice.http` provides host-owned bounded synchronous JSON, stream, upload and
+binary transport for speech workers. Providers retain signing, vendor request
+formats and preview-URL policy. `testing.voice.FakeVoiceContext` and `FakeVoiceHttp`
+exercise setup and requests without importing the host or opening a real network.
+Tencent ASR and MiniMax TTS are independent packages; credentials live in their
+respective plugin config tables. Missing selections fail without provider fallback.

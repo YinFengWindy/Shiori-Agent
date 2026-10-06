@@ -18,7 +18,9 @@ async def test_world_voice_synthesis_cancel_reaches_provider_event(tmp_path) -> 
         def delete_managed_voice(self, **_kwargs) -> None:
             return None
 
-        def synthesize(self, _text, *, voice_id, speed, emotion, cancel_event):
+        def stream_synthesize_result(
+            self, _text, *, voice_id, speed, emotion, provider, cancel_event
+        ):
             del voice_id, speed, emotion
             started.set()
             if cancel_event.wait(timeout=1):

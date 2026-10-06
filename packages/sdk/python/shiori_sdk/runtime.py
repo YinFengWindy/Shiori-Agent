@@ -37,6 +37,7 @@ class HostServiceUnavailable(RuntimeError):
 # manifest 只能声明这里列出的宿主能力；宿主 manifest 解析与 SDK 测试替身共用这一份。
 KNOWN_CAPABILITIES = frozenset(
     {
+        "voice",
         "tools",
         "lifecycle",
         "tool_hooks",

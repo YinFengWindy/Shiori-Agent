@@ -129,15 +129,8 @@ export function loadSettingsData(contentOverride?: string): SettingsSnapshot {
         microphoneDeviceId: String(voice.microphone_device_id ?? ""),
         asrEnabled: Boolean(voiceAsr.enabled ?? voice.enabled),
         asrProvider: String(voiceAsr.provider ?? desktopSettingsDefaults.asrProvider),
-        asrBaseUrl: String(voiceAsr.base_url ?? desktopSettingsDefaults.asrBaseUrl),
-        asrSecretId: String(voiceAsr.secret_id ?? ""),
-        asrSecretKey: String(voiceAsr.secret_key ?? ""),
         ttsEnabled: Boolean(voiceTts.enabled ?? voice.enabled),
         ttsProvider: String(voiceTts.provider ?? desktopSettingsDefaults.ttsProvider),
-        ttsBaseUrl: String(voiceTts.base_url ?? desktopSettingsDefaults.ttsBaseUrl),
-        ttsModel: String(voiceTts.model ?? desktopSettingsDefaults.ttsModel),
-        ttsApiKey: String(voiceTts.api_key ?? ""),
-        ttsVolume: Number(voiceTts.volume ?? desktopSettingsDefaults.ttsVolume),
       },
       advanced: {
         maxTokens: Number(agent.max_tokens ?? 8192),
@@ -241,18 +234,11 @@ function renderSettingsToml(formData: SettingsFormData): string {
     "",
     "[voice.asr]",
     `provider = ${quote(formData.voice.asrProvider.trim())}`,
-    `base_url = ${quote(formData.voice.asrBaseUrl.trim())}`,
     `enabled = ${(formData.voice.asrEnabled ?? formData.voice.enabled) ? "true" : "false"}`,
-    `secret_id = ${quote(formData.voice.asrSecretId)}`,
-    `secret_key = ${quote(formData.voice.asrSecretKey)}`,
     "",
     "[voice.tts]",
     `provider = ${quote(formData.voice.ttsProvider.trim())}`,
-    `base_url = ${quote(formData.voice.ttsBaseUrl.trim())}`,
-    `model = ${quote(formData.voice.ttsModel.trim())}`,
     `enabled = ${(formData.voice.ttsEnabled ?? formData.voice.enabled) ? "true" : "false"}`,
-    `api_key = ${quote(formData.voice.ttsApiKey)}`,
-    `volume = ${formData.voice.ttsVolume}`,
     "",
     "",
   ]
@@ -304,15 +290,6 @@ function validateSettings(formData: SettingsFormData): void {
   }
   if (formData.voice.enabled && !parseHotkey(formData.voice.hotkey)) {
     throw new Error("语音快捷键格式无效");
-  }
-  if (!["tencent"].includes(formData.voice.asrProvider.trim())) {
-    throw new Error("ASR Provider 不受支持");
-  }
-  if (!["minimax"].includes(formData.voice.ttsProvider.trim())) {
-    throw new Error("TTS Provider 不受支持");
-  }
-  if (!Number.isFinite(formData.voice.ttsVolume) || formData.voice.ttsVolume < 0.1 || formData.voice.ttsVolume > 10) {
-    throw new Error("TTS 音量必须在 0.1 到 10.0 之间");
   }
 }
 

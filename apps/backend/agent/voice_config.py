@@ -5,25 +5,18 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class VoiceAsrConfig:
-    """Configuration for the selected cloud speech-to-text provider."""
+    """Host-owned recognition switch and provider selection."""
 
     enabled: bool = False
     provider: str = "tencent"
-    base_url: str = "https://asr.tencentcloudapi.com/"
-    secret_id: str = ""
-    secret_key: str = ""
 
 
 @dataclass(frozen=True)
 class VoiceTtsConfig:
-    """Configuration for the selected cloud text-to-speech provider."""
+    """Host-owned synthesis switch and default provider selection."""
 
     enabled: bool = False
     provider: str = "minimax"
-    base_url: str = "https://api.minimaxi.com/v1/t2a_v2"
-    model: str = "speech-2.8-turbo"
-    api_key: str = ""
-    volume: float = 2.0
 
 
 @dataclass(frozen=True)

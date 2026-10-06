@@ -153,4 +153,4 @@ def test_external_channel_declaration_errors_block_the_package(contract_package)
 
 
 def test_host_advertises_runtime_api_with_shared_visual_components():
-    assert HostRuntimeContract().runtime_api == "3.1.0"
+    assert HostRuntimeContract().runtime_api == "3.2.0"

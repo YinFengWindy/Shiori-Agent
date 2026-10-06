@@ -48,6 +48,9 @@ def load_config(
     """
     resolved_path = Path(path)
     data = _load_config_data(resolved_path)
+    from agent.voice_config_migration import migrate_voice_config
+
+    data = migrate_voice_config(resolved_path, data)
     data = _migrate_legacy_novelai_config(resolved_path, data)
     from agent.proactive_preferences import migrate_proactive_preferences
 
@@ -77,6 +80,9 @@ def load_config(
 
 def load_config_data(data: dict[str, Any]) -> Config:
     """Builds a configuration from parsed TOML, including environment resolution."""
+    from agent.voice_config_migration import voice_plugin_config
+
+    data = voice_plugin_config(data)
     _reject_removed_runtime_config(data)
 
     llm = _as_dict(data.get("llm"))
@@ -325,24 +331,11 @@ def _load_voice_config(data: dict) -> VoiceConfig:
         microphone_device_id=str(voice.get("microphone_device_id", "") or "").strip(),
         asr=VoiceAsrConfig(
             enabled=bool(asr.get("enabled", False)),
-            provider=str(asr.get("provider", "tencent") or "tencent"),
-            base_url=str(
-                asr.get("base_url", "https://asr.tencentcloudapi.com/")
-                or "https://asr.tencentcloudapi.com/"
-            ),
-            secret_id=_resolve(str(asr.get("secret_id", ""))),
-            secret_key=_resolve(str(asr.get("secret_key", ""))),
+            provider=str(asr.get("provider", "tencent")).strip(),
         ),
         tts=VoiceTtsConfig(
             enabled=bool(tts.get("enabled", False)),
-            provider=str(tts.get("provider", "minimax") or "minimax"),
-            base_url=str(
-                tts.get("base_url", "https://api.minimaxi.com/v1/t2a_v2")
-                or "https://api.minimaxi.com/v1/t2a_v2"
-            ),
-            model=str(tts.get("model", "speech-2.8-turbo") or "speech-2.8-turbo"),
-            api_key=_resolve(str(tts.get("api_key", ""))),
-            volume=float(tts.get("volume", 2.0)),
+            provider=str(tts.get("provider", "minimax")).strip(),
         ),
     )
 

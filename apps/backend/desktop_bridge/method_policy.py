@@ -178,6 +178,7 @@ METHOD_POLICIES: dict[str, MethodPolicy] = {
     "session.messagesAround": MethodPolicy(concurrency=Concurrency.READ_ONLY),
     "session.search": MethodPolicy(concurrency=Concurrency.READ_ONLY),
     "session.imageHistory": MethodPolicy(concurrency=Concurrency.READ_ONLY),
+    "voice.providers": MethodPolicy(concurrency=Concurrency.READ_ONLY),
     "voice.synthesize": MethodPolicy(concurrency=Concurrency.INTEGRATION),
     "voice.synthesize.cancel": MethodPolicy(
         concurrency=Concurrency.INTEGRATION,

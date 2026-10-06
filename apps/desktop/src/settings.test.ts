@@ -28,15 +28,8 @@ describe("desktop settings config path", () => {
         microphoneDeviceId: "",
         asrEnabled: false,
         asrProvider: desktopSettingsDefaults.asrProvider,
-        asrBaseUrl: desktopSettingsDefaults.asrBaseUrl,
-        asrSecretId: "",
-        asrSecretKey: "",
         ttsEnabled: false,
         ttsProvider: desktopSettingsDefaults.ttsProvider,
-        ttsBaseUrl: desktopSettingsDefaults.ttsBaseUrl,
-        ttsModel: desktopSettingsDefaults.ttsModel,
-        ttsApiKey: "",
-        ttsVolume: desktopSettingsDefaults.ttsVolume,
       });
     } finally {
       rmSync(directory, { recursive: true, force: true });
@@ -90,6 +83,23 @@ describe("desktop settings config path", () => {
     });
     formData.models.registrations = [{ id: "00000000-0000-4000-a000-000000000001", model: "", provider: "openai", apiKey: "", baseUrl: "", effort: "none" }];
     const result = await saveSettings(formData, async () => ({ ok: true, generation: 3 }));
+    assert.equal(result.ok, true);
+  });
+});
+
+describe("plugin voice provider settings", () => {
+  it("persists arbitrary provider selections without owning vendor credentials", async () => {
+    configureSettingsConfigPath(join(tmpdir(), "unused-provider-config.toml"));
+    const draft = loadSettingsData('[voice]\nenabled = true\n[voice.asr]\nprovider = "local-asr"\nsecret_id = "old-secret"\n[voice.tts]\nprovider = "local-tts"\napi_key = "old-key"\nvolume = 3.0\n').formData;
+    assert.deepEqual(draft.voice, { enabled: true, hotkey: "Ctrl+Space", microphoneDeviceId: "", asrEnabled: true, asrProvider: "local-asr", ttsEnabled: true, ttsProvider: "local-tts" });
+    const result = await saveSettings(draft, async (request) => {
+      assert.match(request.config_toml, /provider = "local-asr"/);
+      assert.match(request.config_toml, /provider = "local-tts"/);
+      assert.doesNotMatch(request.config_toml, /old-secret|old-key|secret_id|secret_key|volume =/);
+      assert.equal(request.preserve_plugins, true);
+      assert.deepEqual(loadSettingsData(request.config_toml).formData.voice, draft.voice);
+      return { ok: true, generation: 2, changed: true };
+    });
     assert.equal(result.ok, true);
   });
 });

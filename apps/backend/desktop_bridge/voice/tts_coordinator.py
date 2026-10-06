@@ -55,14 +55,11 @@ class TtsTurnCoordinator:
     def enabled(self) -> bool:
         """Returns whether this role has a usable voice id for the turn."""
 
-        configured_provider = str(
-            getattr(self._voice_service, "tts_provider", "") or ""
-        ).strip()
         return (
             bool(getattr(self._voice_service, "tts_enabled", True))
             and self._settings.enabled
             and bool(self._settings.voice_id)
-            and self._settings.provider == configured_provider
+            and bool(self._settings.provider)
         )
 
     @property
@@ -146,6 +143,7 @@ class TtsTurnCoordinator:
                     voice_id=self._settings.voice_id,
                     speed=self._settings.speed,
                     emotion=self._settings.emotion,
+                    provider=self._settings.provider,
                     cancel_event=self._cancel_event,
                 )
             except asyncio.CancelledError:
@@ -216,7 +214,7 @@ class TtsTurnCoordinator:
                             "audio_base64": base64.b64encode(result.audio).decode(
                                 "ascii"
                             ),
-                            "format": "mp3",
+                            "format": result.format,
                             "mood": self._settings.mood,
                             "metrics": result.metrics.to_dict(),
                         },

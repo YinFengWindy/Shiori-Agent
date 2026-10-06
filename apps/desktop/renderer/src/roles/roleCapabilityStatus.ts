@@ -16,6 +16,8 @@ type RoleVoiceStatusInput = {
   voiceId: string;
   /** Global voice output; null while unknown, which never blocks the badge. */
   globalEnabled: boolean | null;
+  /** Null while discovery is pending; false for a missing or inactive plugin. */
+  providerAvailable?: boolean | null;
 };
 
 /**
@@ -23,9 +25,10 @@ type RoleVoiceStatusInput = {
  * switch first, then the global voice switch, then a chosen voice. Only when
  * all three hold does it read 已启用.
  */
-export function roleVoiceStatus({ roleEnabled, voiceId, globalEnabled }: RoleVoiceStatusInput): RoleCapabilityStatus {
+export function roleVoiceStatus({ roleEnabled, voiceId, globalEnabled, providerAvailable }: RoleVoiceStatusInput): RoleCapabilityStatus {
   if (!roleEnabled) return { label: "未启用", tone: "off" };
   if (globalEnabled === false) return { label: "全局语音已关闭", tone: "attention" };
+  if (providerAvailable === false) return { label: "服务商不可用", tone: "attention" };
   if (!voiceId.trim()) return { label: "未设置音色", tone: "attention" };
   return { label: "已启用", tone: "on" };
 }

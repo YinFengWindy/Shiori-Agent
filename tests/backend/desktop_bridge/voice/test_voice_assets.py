@@ -96,3 +96,29 @@ def test_corrupt_cleanup_state_fails_fast(tmp_path) -> None:
 
     with pytest.raises(RuntimeError, match="清理状态无法读取"):
         VoiceAssetLifecycle(tmp_path, lambda **_kwargs: None)
+
+
+def test_switching_provider_keeps_saved_managed_voice_until_role_deleted(tmp_path):
+    deleted = []
+    lifecycle = VoiceAssetLifecycle(tmp_path, lambda **asset: deleted.append(asset))
+    managed = {"voice_id": "Shiori_saved", "ownership": "shiori_managed"}
+    before = {"tts": {"provider": "minimax", **managed}}
+    after = {
+        "tts": {
+            "provider": "other",
+            "voice_id": "local",
+            "providers": {"minimax": managed},
+        }
+    }
+    lifecycle.reconcile_role_update(before, after)
+    assert deleted == []
+    lifecycle.recover_orphans([after])
+    assert deleted == []
+    lifecycle.retire_deleted_role(after)
+    assert deleted == [
+        {
+            "provider": "minimax",
+            "voice_id": "Shiori_saved",
+            "ownership": "shiori_managed",
+        }
+    ]

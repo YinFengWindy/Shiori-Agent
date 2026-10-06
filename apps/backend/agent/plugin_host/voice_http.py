@@ -1,82 +1,20 @@
+"""Blocking, bounded HTTP helpers for synchronous speech provider workers."""
+
 from __future__ import annotations
-
 import json
-import ipaddress
-import socket
 import urllib.error
-import urllib.parse
 import urllib.request
+import urllib.parse
 import uuid
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Callable, Iterator
 from typing import Any
+from shiori_sdk.voice import VoiceServiceError
 
-from desktop_bridge.voice.voice_models import VoiceServiceError
-
-JsonRequester = Callable[[str, dict[str, str], bytes], dict[str, Any]]
-StreamRequester = Callable[[str, dict[str, str], bytes], Iterable[bytes]]
-MultipartRequester = Callable[
-    [str, dict[str, str], dict[str, str], str, str, bytes],
-    dict[str, Any],
-]
-BinaryRequester = Callable[[str], bytes]
-
-_ALLOWED_PREVIEW_HOST_SUFFIXES = ("minimaxi.com", "minimax.chat")
 VOICE_HTTP_TIMEOUT_SECONDS = 60
 
 
-def _validate_preview_url(url: str) -> str:
-    parsed = urllib.parse.urlsplit(url)
-    host = (parsed.hostname or "").lower().rstrip(".")
-    if parsed.scheme != "https" or not host or parsed.username or parsed.password:
-        raise VoiceServiceError("语音试听地址无效", error_code="invalid_preview_url")
-    if parsed.port not in (None, 443):
-        raise VoiceServiceError(
-            "语音试听地址端口无效", error_code="invalid_preview_url"
-        )
-    try:
-        addresses = [ipaddress.ip_address(host)]
-    except ValueError:
-        try:
-            addresses = [
-                ipaddress.ip_address(sockaddr[4][0])
-                for sockaddr in socket.getaddrinfo(host, None, type=socket.SOCK_STREAM)
-            ]
-        except (OSError, ValueError) as exc:
-            raise VoiceServiceError(
-                "语音试听地址不可解析", error_code="invalid_preview_url"
-            ) from exc
-        if not addresses:
-            raise VoiceServiceError(
-                "语音试听地址不可解析", error_code="invalid_preview_url"
-            )
-    if any(
-        address.is_private
-        or address.is_loopback
-        or address.is_link_local
-        or address.is_reserved
-        or address.is_unspecified
-        for address in addresses
-    ):
-        raise VoiceServiceError(
-            "语音试听地址不可访问", error_code="invalid_preview_url"
-        )
-    if not any(
-        host == suffix or host.endswith(f".{suffix}")
-        for suffix in _ALLOWED_PREVIEW_HOST_SUFFIXES
-    ):
-        raise VoiceServiceError(
-            "语音试听地址不受信任", error_code="invalid_preview_url"
-        )
-    return urllib.parse.urlunsplit(parsed)
-
-
-class _PreviewRedirectHandler(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        safe_url = _validate_preview_url(urllib.parse.urljoin(req.full_url, newurl))
-        return super().redirect_request(req, fp, code, msg, headers, safe_url)
-
-
 def request_json(url: str, headers: dict[str, str], body: bytes) -> dict[str, Any]:
+    """Posts a bounded JSON request and reports invalid responses consistently."""
     request = urllib.request.Request(url, data=body, headers=headers, method="POST")
     try:
         with urllib.request.urlopen(
@@ -168,21 +106,32 @@ def request_multipart(
     return request_json(url, request_headers, b"".join(chunks))
 
 
-def request_binary(url: str) -> bytes:
-    """Downloads provider-generated preview audio without writing a local file."""
+class VoiceHttp:
+    """Host-owned bounded transport used by registered synchronous speech workers."""
 
-    request = urllib.request.Request(_validate_preview_url(url), method="GET")
-    opener = urllib.request.build_opener(_PreviewRedirectHandler())
-    try:
-        with opener.open(request, timeout=VOICE_HTTP_TIMEOUT_SECONDS) as response:
-            return response.read()
-    except urllib.error.HTTPError as exc:
-        raise VoiceServiceError(
-            f"语音试听 HTTP {exc.code}",
-            error_code=f"http_{exc.code}",
-        ) from exc
-    except urllib.error.URLError as exc:
-        raise VoiceServiceError(
-            f"语音试听网络错误: {exc.reason}",
-            error_code="network_error",
-        ) from exc
+    request_json = staticmethod(request_json)
+    request_stream = staticmethod(request_stream)
+    request_multipart = staticmethod(request_multipart)
+
+    @staticmethod
+    def request_binary(url: str, *, validate_url: Callable[[str], str]) -> bytes:
+        """Revalidates plugin URL policy for the initial download and every redirect."""
+
+        class RedirectHandler(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self, req, fp, code, msg, headers, newurl):
+                safe_url = validate_url(urllib.parse.urljoin(req.full_url, newurl))
+                return super().redirect_request(req, fp, code, msg, headers, safe_url)
+
+        request = urllib.request.Request(validate_url(url), method="GET")
+        opener = urllib.request.build_opener(RedirectHandler())
+        try:
+            with opener.open(request, timeout=VOICE_HTTP_TIMEOUT_SECONDS) as response:
+                return response.read()
+        except urllib.error.HTTPError as exc:
+            raise VoiceServiceError(
+                f"语音试听 HTTP {exc.code}", error_code=f"http_{exc.code}"
+            ) from exc
+        except urllib.error.URLError as exc:
+            raise VoiceServiceError(
+                f"语音试听网络错误: {exc.reason}", error_code="network_error"
+            ) from exc

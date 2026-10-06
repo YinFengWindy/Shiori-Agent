@@ -10,7 +10,7 @@ from desktop_bridge.voice.role_tts_settings import (
     resolve_role_tts_settings,
 )
 from desktop_bridge.voice.tts_coordinator import TtsTurnCoordinator
-from desktop_bridge.voice.voice_service import (
+from shiori_sdk.voice import (
     VoiceOperationMetrics,
     VoiceSynthesisResult,
 )
@@ -24,11 +24,24 @@ class _VoiceService:
         self.error = error
 
     def stream_synthesize_result(
-        self, text: str, *, voice_id: str, speed: float, emotion: str, cancel_event=None
+        self,
+        text: str,
+        *,
+        voice_id: str,
+        speed: float,
+        emotion: str,
+        provider=None,
+        cancel_event=None,
     ) -> VoiceSynthesisResult:
         del cancel_event
         self.calls.append(
-            {"text": text, "voice_id": voice_id, "speed": speed, "emotion": emotion}
+            {
+                "text": text,
+                "voice_id": voice_id,
+                "speed": speed,
+                "emotion": emotion,
+                "provider": provider,
+            }
         )
         if self.error is not None:
             raise self.error
@@ -227,7 +240,7 @@ async def test_disabled_role_voice_does_not_start_provider_work() -> None:
 
 
 @pytest.mark.asyncio
-async def test_role_provider_mismatch_does_not_start_provider_work() -> None:
+async def test_role_provider_selection_is_passed_independently_of_default() -> None:
     service = _VoiceService()
     coordinator = TtsTurnCoordinator(
         voice_service=service,  # type: ignore[arg-type]
@@ -245,7 +258,7 @@ async def test_role_provider_mismatch_does_not_start_provider_work() -> None:
     coordinator.finish()
     await coordinator.wait()
 
-    assert service.calls == []
+    assert service.calls[0]["provider"] == "other"
 
 
 @pytest.mark.asyncio
@@ -283,6 +296,7 @@ async def test_cancel_signals_in_flight_provider_stream() -> None:
             voice_id: str,
             speed: float,
             emotion: str,
+            provider: str,
             cancel_event: threading.Event,
         ) -> VoiceSynthesisResult:
             del voice_id, speed, emotion

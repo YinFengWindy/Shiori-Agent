@@ -20,14 +20,7 @@ const draft = {
     hotkey: "Ctrl+Space",
     microphoneDeviceId: "",
     asrProvider: "tencent",
-    asrBaseUrl: "https://asr.tencentcloudapi.com/",
-    asrSecretId: "secret-id",
-    asrSecretKey: "secret-key",
     ttsProvider: "minimax",
-    ttsBaseUrl: "https://api.minimaxi.com/v1/t2a_v2",
-    ttsModel: "speech-2.8-turbo",
-    ttsApiKey: "tts-key",
-    ttsVolume: 2,
   },
 } satisfies Pick<SettingsFormData, "voice">;
 

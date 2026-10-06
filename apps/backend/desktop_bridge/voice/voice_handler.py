@@ -53,6 +53,8 @@ class DesktopVoiceHandler:
     ) -> dict[str, Any] | None:
         """Handles one voice method, returning its response payload when recognized."""
 
+        if method == "voice.providers":
+            return {"providers": self.voice_service.describe_providers()}
         if method == "voice.turn.cancel":
             voice_turn_id = str(payload.get("voice_turn_id") or "").strip()
             if not voice_turn_id:
@@ -93,20 +95,23 @@ class DesktopVoiceHandler:
             with self._synthesis_lock:
                 self._synthesis_cancel_events[voice_request_id] = cancel_event
             try:
-                audio = await asyncio.to_thread(
-                    self.voice_service.synthesize,
+                result = await asyncio.to_thread(
+                    self.voice_service.stream_synthesize_result,
                     text,
                     voice_id=voice_id,
                     speed=speed,
                     emotion=emotion,
+                    provider=(
+                        str(payload["provider"]) if "provider" in payload else None
+                    ),
                     cancel_event=cancel_event,
                 )
             finally:
                 with self._synthesis_lock:
                     self._synthesis_cancel_events.pop(voice_request_id, None)
             return {
-                "audio_base64": base64.b64encode(audio).decode("ascii"),
-                "format": "mp3",
+                "audio_base64": base64.b64encode(result.audio).decode("ascii"),
+                "format": result.format,
             }
         if method == "voice.clone":
             audio = _decode_audio(payload)
@@ -115,9 +120,10 @@ class DesktopVoiceHandler:
                 self.voice_service.clone_voice,
                 audio,
                 file_name=file_name,
+                provider=str(payload["provider"]) if "provider" in payload else None,
             )
             await asyncio.to_thread(self.assets.track_clone, result)
-            return result
+            return dict(result)
         if method == "voice.clone.abandon":
             provider, voice_id, ownership = _voice_asset_fields(payload)
             abandoned = await asyncio.to_thread(

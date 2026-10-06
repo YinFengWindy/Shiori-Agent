@@ -15,7 +15,7 @@ from shiori_sdk.channel_events import (
 )
 from shiori_sdk.memory.committed import TurnCommitted
 from desktop_bridge.chat_service import ChatTurnBusyError, DesktopChatService
-from desktop_bridge.voice.voice_service import (
+from shiori_sdk.voice import (
     VoiceOperationMetrics,
     VoiceSynthesisResult,
 )
@@ -38,6 +38,7 @@ class _VoiceService:
         voice_id: str,
         speed: float,
         emotion: str,
+        provider: str,
         cancel_event=None,
     ) -> VoiceSynthesisResult:
         del voice_id, speed, emotion, cancel_event

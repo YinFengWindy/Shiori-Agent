@@ -72,6 +72,19 @@ export type VoiceInputDevice = {
   label: string;
 };
 
+/** A plugin-owned speech provider discovered from the current backend runtime. */
+export type VoiceProviderDescriptor = {
+  id: string;
+  label: string;
+  kind: "asr" | "tts";
+  plugin_id: string;
+  available: boolean;
+  capabilities: {
+    emotions: string[];
+    voice_cloning: boolean;
+  };
+};
+
 export type VoiceCaptureCommand =
   | "stop"
   | "cancel"
@@ -122,16 +135,9 @@ export type SettingsFormData = {
     /** Preserved provider-level switch from config.toml. */
     asrEnabled?: boolean;
     asrProvider: string;
-    asrBaseUrl: string;
-    asrSecretId: string;
-    asrSecretKey: string;
     /** Preserved provider-level switch from config.toml. */
     ttsEnabled?: boolean;
     ttsProvider: string;
-    ttsBaseUrl: string;
-    ttsModel: string;
-    ttsApiKey: string;
-    ttsVolume: number;
   };
   advanced: {
     maxTokens: number;

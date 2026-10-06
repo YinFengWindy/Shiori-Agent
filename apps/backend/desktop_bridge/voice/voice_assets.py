@@ -38,6 +38,26 @@ def managed_voice_asset(runtime_config: object) -> ManagedVoiceAsset | None:
     return None
 
 
+def managed_voice_assets(runtime_config: object) -> set[ManagedVoiceAsset]:
+    """Includes saved voices of inactive providers so switching cannot delete them."""
+    config = runtime_config if isinstance(runtime_config, Mapping) else {}
+    raw_tts = config.get("tts")
+    tts = raw_tts if isinstance(raw_tts, Mapping) else {}
+    raw_providers = tts.get("providers")
+    providers = raw_providers if isinstance(raw_providers, Mapping) else {}
+    assets: set[ManagedVoiceAsset] = set()
+    active = managed_voice_asset(runtime_config)
+    if active is not None:
+        assets.add(active)
+    for provider, settings in providers.items():
+        if not isinstance(settings, Mapping):
+            continue
+        asset = managed_voice_asset({"tts": {**settings, "provider": provider}})
+        if asset is not None:
+            assets.add(asset)
+    return assets
+
+
 class VoiceAssetLifecycle:
     """Persists managed-clone cleanup until the provider accepts deletion."""
 
@@ -72,18 +92,17 @@ class VoiceAssetLifecycle:
     ) -> None:
         """Claims a saved clone and retires a replaced managed asset."""
 
-        previous = managed_voice_asset(previous_runtime)
-        current = managed_voice_asset(current_runtime)
-        if current is not None:
-            self._remove(current)
-        if previous is not None and previous != current:
-            self._retire(previous)
+        previous = managed_voice_assets(previous_runtime)
+        current = managed_voice_assets(current_runtime)
+        for asset in current:
+            self._remove(asset)
+        for asset in previous - current:
+            self._retire(asset)
 
     def retire_deleted_role(self, runtime_config: object) -> None:
         """Queues the deleted role's managed clone for durable cleanup."""
 
-        asset = managed_voice_asset(runtime_config)
-        if asset is not None:
+        for asset in managed_voice_assets(runtime_config):
             self._retire(asset)
 
     def abandon_clone(self, *, provider: str, voice_id: str, ownership: str) -> bool:
@@ -103,8 +122,7 @@ class VoiceAssetLifecycle:
         """Drops active references then retries clones left by a prior crashed editor."""
 
         for runtime_config in active_runtime_configs:
-            asset = managed_voice_asset(runtime_config)
-            if asset is not None:
+            for asset in managed_voice_assets(runtime_config):
                 self._remove(asset)
         with self._lock:
             if self._tracked:

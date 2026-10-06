@@ -10,6 +10,7 @@ from session.manager import SessionManager
 from agent.plugin_host.capabilities import LifecycleCapability, RpcCapability
 from agent.plugin_host.effects import EffectScope
 from agent.plugin_host.host_service_requirements import provided_service
+from shiori_sdk.voice import VoiceCapability, VoicePluginContext
 from shiori_sdk.runtime import Dispose
 from agent.plugin_host.manifest import PluginManifest
 from shiori_sdk import PluginRuntimeContext as SdkRuntimeContext
@@ -95,6 +96,7 @@ class PluginSetupContext:
         channels: ChannelsCapability | None = None,
         accounts: AccountsCapability | None = None,
         avatars: AvatarsCapability | None = None,
+        voice: VoiceCapability | None = None,
     ) -> None:
         self.plugin_id = plugin_id
         self.plugin_dir = plugin_dir
@@ -132,6 +134,18 @@ class PluginSetupContext:
         self._channels = channels
         self._accounts = accounts
         self._avatars = avatars
+        self._voice = voice
+
+    @property
+    def voice(self) -> VoiceCapability:
+        """Return this plugin's explicitly granted scoped voice slots."""
+        if "voice" not in self.granted or self._voice is None:
+            raise CapabilityNotGranted("Plugin did not request voice")
+        return self._voice
+
+    def as_voice_context(self) -> VoicePluginContext:
+        """Check the public voice setup surface without dynamic attributes."""
+        return self
 
     def as_sdk_context(self) -> SdkRuntimeContext:
         """Checks the setup boundary against this static base, without __getattr__."""

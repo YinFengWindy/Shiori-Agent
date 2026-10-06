@@ -42,6 +42,7 @@ export function createRoleFormFromRole(role: RoleRecord): RoleFormState {
     voiceName: voiceConfig.voiceName,
     voiceSpeed: voiceConfig.speed,
     voiceMoodEmotions: voiceConfig.moodTtsEmotions,
+    voiceProviderSettings: voiceConfig.providerSettings,
   };
 }
 

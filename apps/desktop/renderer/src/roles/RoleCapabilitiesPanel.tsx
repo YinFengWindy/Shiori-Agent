@@ -13,6 +13,8 @@ import { roleProactiveDefaults } from "./roleProactiveDefaults";
 import { RoleProactiveSettingsPanel } from "./RoleProactiveSettingsPanel";
 import { RoleVoiceSettingsPanel } from "./RoleVoiceSettingsPanel";
 import { useSettingsSnapshot } from "./useSettingsSnapshot";
+import { useVoiceProviders } from "../voice/useVoiceProviders";
+import { InlineError } from "../shared/feedback/InlineError";
 
 type RoleCapabilitiesPanelProps = {
   activeRole: RoleRecord | null;
@@ -24,6 +26,7 @@ type RoleCapabilitiesPanelProps = {
 /** Groups runtime-facing role capabilities away from the core profile fields. */
 export function RoleCapabilitiesPanel({ activeRole, bridgeReady, roleForm, onUpdate }: RoleCapabilitiesPanelProps) {
   const settings = useSettingsSnapshot();
+  const voice = useVoiceProviders(bridgeReady);
   const proactiveEnabled = Boolean(roleForm.proactiveEnabled ?? roleProactiveDefaults.enabled);
 
   return (
@@ -48,7 +51,8 @@ export function RoleCapabilitiesPanel({ activeRole, bridgeReady, roleForm, onUpd
         </div>
       </RoleEditorSection>
       <RoleEditorSection title="声音">
-        <RoleVoiceSettingsPanel roleForm={roleForm} globalVoiceEnabled={globalVoiceOutputEnabled(settings)} onUpdate={onUpdate} />
+        {voice.error ? <InlineError persona={false} message={voice.error} /> : null}
+        <RoleVoiceSettingsPanel roleForm={roleForm} globalVoiceEnabled={globalVoiceOutputEnabled(settings)} providers={voice.loading ? null : voice.providers} onUpdate={onUpdate} />
       </RoleEditorSection>
       <RoleProactiveSettingsPanel devMode={settings?.advanced.devMode === true} roleForm={roleForm} onUpdate={onUpdate} />
     </div>

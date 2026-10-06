@@ -49,7 +49,9 @@ def settings_form_write(payload: dict[str, Any]) -> DerivedWrite | None:
         )
 
     def build(current: str) -> str:
-        document = tomllib.loads(current)
+        from agent.voice_config_migration import voice_plugin_config
+
+        document = voice_plugin_config(tomllib.loads(current))
         owned = {key: document[key] for key in _HOST_OWNED_TABLES if key in document}
         if not owned:
             return candidate

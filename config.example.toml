@@ -30,13 +30,19 @@ microphone_device_id = ""
 [voice.asr]
 enabled = false
 provider = "tencent"
-base_url = "https://asr.tencentcloudapi.com/"
-secret_id = ""
-secret_key = ""
 
 [voice.tts]
 enabled = false
 provider = "minimax"
+
+[plugins.tencent_asr]
+enabled = true
+base_url = "https://asr.tencentcloudapi.com/"
+secret_id = ""
+secret_key = ""
+
+[plugins.minimax_tts]
+enabled = true
 base_url = "https://api.minimaxi.com/v1/t2a_v2"
 model = "speech-2.8-turbo"
 api_key = ""
