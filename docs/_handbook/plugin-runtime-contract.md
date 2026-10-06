@@ -869,7 +869,7 @@ update the declared range when migrating. The 2.x sections above describe featur
 history; all current examples target the unified 3.x ABI.
 
 Before the first public release, the npm identity was finalized as the personal
-scope `@yinfengwindy/shiori-sdk`. SDK and Runtime API remain `3.1.0` because no
+scope `@yinfengwindy/shiori-sdk`. That rename retained Runtime API `3.1.0` because no
 public version preceded this rename. Renderer plugins built against the earlier
 internal name must update their imports and rebuild; the import map and host peer
 wrappers expose only the public name, without a compatibility alias.

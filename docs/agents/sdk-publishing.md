@@ -1,7 +1,7 @@
 # SDK 发布
 
 SDK 使用同一个版本号发布 `@yinfengwindy/shiori-sdk`（npm）与 `shiori-sdk`（PyPI），当前为
-`3.1.0`。版本来源是 `packages/sdk/python/shiori_sdk/_version.py`；修改后运行
+`3.2.0`。版本来源是 `packages/sdk/python/shiori_sdk/_version.py`；修改后运行
 `node scripts/sync_sdk_version.mjs` 同步 npm 元数据。
 
 工作流为 `.github/workflows/sdk-release.yml`：
@@ -71,8 +71,8 @@ owner 字段填写 GitHub owner。维护者仍需完成下面的外部设置。
 2. 在已合入的提交上创建并推送 `sdk-v<version>`。例如当前版本：
 
    ```powershell
-   git tag sdk-v3.1.0 <已验证的-main-提交-SHA>
-   git push origin sdk-v3.1.0
+   git tag sdk-v3.2.0 <已验证的-main-提交-SHA>
+   git push origin sdk-v3.2.0
    ```
 
    这是正式发布操作，需要维护者有意执行；不要挪动或覆盖已发布标签。
@@ -85,9 +85,9 @@ owner 字段填写 GitHub owner。维护者仍需完成下面的外部设置。
 
    ```powershell
    gh run download <run-id> --name sdk-release-<run-id>-<build-attempt> --dir sdk-first-release
-   uv run python -m scripts.sdk_release verify sdk-first-release --ref refs/tags/sdk-v3.1.0 --commit <标签提交-SHA>
+   uv run python -m scripts.sdk_release verify sdk-first-release --ref refs/tags/sdk-v3.2.0 --commit <标签提交-SHA>
    npm login
-   npm publish ./sdk-first-release/yinfengwindy-shiori-sdk-3.1.0.tgz --access public
+   npm publish ./sdk-first-release/yinfengwindy-shiori-sdk-3.2.0.tgz --access public
    ```
 
    手动首次发布使用账号 2FA；本地不加 `--provenance`，后续 GitHub OIDC 发布自动生成
