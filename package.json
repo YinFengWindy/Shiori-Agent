@@ -22,6 +22,7 @@
     "desktop:start": "pnpm --filter shiori-desktop run start:built",
     "desktop:test": "node apps/desktop/scripts/test-unit.mjs",
     "desktop:test:plugin-ui": "node apps/desktop/scripts/test-plugin-ui-build-smoke.mjs",
+    "desktop:test:speech-integration": "tsx apps/desktop/tests/plugin-ui/distributionSpeech.e2e.ts",
     "desktop:test:onboarding": "tsx apps/desktop/tests/onboarding/onboarding.e2e.ts",
     "desktop:test:onboarding:electron": "tsx apps/desktop/tests/onboarding/electron.e2e.ts",
     "desktop:typecheck": "pnpm --filter shiori-desktop run typecheck",

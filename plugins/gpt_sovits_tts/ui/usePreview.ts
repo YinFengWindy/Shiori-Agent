@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { errorMessage, type PluginRpcClient, type TtsResult } from "@yinfengwindy/shiori-sdk";
+import { errorMessage, type PluginHostFeedback, type PluginRpcClient, type TtsResult } from "@yinfengwindy/shiori-sdk";
 import type { PreviewState } from "../shared/contracts";
+import { releasePreview } from "./previewCleanup";
 
 const idle: PreviewState = { id: "", role_id: "", phase: "idle", error: "" };
 
 /** The editor owns synthesis lifetime and hands only current results to background playback. */
-export function usePreview(client: PluginRpcClient, roleId: string | null) {
+export function usePreview(client: PluginRpcClient, roleId: string | null, feedback: PluginHostFeedback) {
   const [state, setState] = useState<PreviewState>(idle);
   const revision = useRef(0);
   const ownedId = useRef<string | null>(null);
@@ -16,9 +17,9 @@ export function usePreview(client: PluginRpcClient, roleId: string | null) {
       revision.current += 1;
       const id = ownedId.current;
       ownedId.current = null;
-      if (id !== null) void client.background.call("preview.stop", { id }).catch(() => undefined);
+      if (id !== null) void releasePreview(client, id, feedback);
     };
-  }, [client, roleId]);
+  }, [client, roleId, feedback]);
   useEffect(() => {
     if (state.phase !== "playing" || !state.id) return;
     const current = revision.current;
@@ -42,7 +43,7 @@ export function usePreview(client: PluginRpcClient, roleId: string | null) {
       const audio = await client.services.call<TtsResult>({ plugin_id: "gpt_sovits_tts", service_id: "tts" }, "synthesize", { role_id: roleId, text, mood });
       if (current !== revision.current) return;
       const next = await client.background.call<PreviewState>("preview.play", { id, role_id: roleId, ...audio });
-      if (current !== revision.current) { await client.background.call("preview.stop", { id: next.id }); return; }
+      if (current !== revision.current) { await releasePreview(client, next.id, feedback); return; }
       ownedId.current = next.id;
       setState(next);
     } catch (cause) {
@@ -50,6 +51,7 @@ export function usePreview(client: PluginRpcClient, roleId: string | null) {
     }
   }
   async function stop() {
+    // Manual stop owns a mounted editor and reports failures inline, unlike release.
     const current = ++revision.current;
     setState(idle);
     const id = ownedId.current;

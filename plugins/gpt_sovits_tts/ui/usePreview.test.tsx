@@ -2,8 +2,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { act } from "react";
 import type { TtsResult } from "@yinfengwindy/shiori-sdk";
-import { createFakePluginClient, deferred, mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
+import { createFakeHostServices, createFakePluginClient, deferred, mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import { usePreview } from "./usePreview";
+const feedback = createFakeHostServices().host.feedback;
 
 test("long preview synthesis uses the public service and only hands current audio to its own background", async (context) => {
   const inference = deferred<TtsResult>(); const calls: unknown[] = [];
@@ -12,7 +13,7 @@ test("long preview synthesis uses the public service and only hands current audi
     background: { call: async <T,>(name: string, payload?: Record<string, unknown>) => { calls.push({ name, payload }); return { id: payload?.id, role_id: "role", phase: "playing", error: "" } as T; } },
   });
   let latest!: ReturnType<typeof usePreview>;
-  function Probe() { latest = usePreview(client, "role"); return null; }
+  function Probe() { latest = usePreview(client, "role", feedback); return null; }
   const view = await mountTestComponent(<Probe />);
   context.mock.timers.enable({ apis: ["setTimeout"] });
   try {
@@ -35,7 +36,7 @@ for (const retire of ["stop", "role", "unmount"] as const) {
       background: { call: async <T,>(name: string) => { commands.push(name); return {} as T; } },
     });
     let latest!: ReturnType<typeof usePreview>;
-    function Probe({ role }: { role: string }) { latest = usePreview(client, role); return null; }
+    function Probe({ role }: { role: string }) { latest = usePreview(client, role, feedback); return null; }
     const view = await mountTestComponent(<Probe role="one" />);
     let cleaned = false;
     try {
@@ -57,12 +58,31 @@ test("public provider failures stay visible and never submit audio to the backgr
     background: { call: async <T,>(name: string) => { commands.push(name); return {} as T; } },
   });
   let latest!: ReturnType<typeof usePreview>;
-  function Probe() { latest = usePreview(client, "role"); return null; }
+  function Probe() { latest = usePreview(client, "role", feedback); return null; }
   const view = await mountTestComponent(<Probe />);
   try {
     await act(async () => latest.start("你好", ""));
     assert.equal(latest.busy, false);
     assert.match(latest.state.error, /inference requires service restart/);
     assert.deepEqual(commands, []);
+  } finally { await view.cleanup(); }
+});
+
+test("manual stop failures remain visible in the mounted editor", async () => {
+  const inference = deferred<TtsResult>();
+  const client = createFakePluginClient({
+    services: { list: async () => ({ services: [] }), call: async <T,>() => await inference.promise as T },
+    background: { call: async () => { throw { message: "native stop rejected" }; } },
+  });
+  let latest!: ReturnType<typeof usePreview>;
+  function Probe() { latest = usePreview(client, "role", feedback); return null; }
+  const view = await mountTestComponent(<Probe />);
+  try {
+    let pending!: Promise<void>;
+    await act(async () => { pending = latest.start("你好", ""); });
+    await act(async () => latest.stop());
+    assert.equal(latest.state.error, "native stop rejected");
+    await act(async () => { inference.resolve({ audio_base64: "late", format: "wav" }); await pending; });
+    assert.equal(latest.state.error, "native stop rejected");
   } finally { await view.cleanup(); }
 });

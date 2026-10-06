@@ -5,6 +5,29 @@ from shiori_sdk.files.json import load_json
 from plugins.gpt_sovits_tts.backend.instance import InstanceBusy, InstanceState
 
 
+def test_health_marker_wire_shape_for_idle_live_and_unknown(tmp_path):
+    instance = InstanceState(tmp_path)
+    assert instance.status() == {
+        "busy": False,
+        "recovery_required": False,
+        "instance": None,
+    }
+    url = "http://127.0.0.1:9880"
+    with instance.lease():
+        operation = instance.begin(url)
+        assert InstanceState(tmp_path).status() == {
+            "busy": True,
+            "recovery_required": False,
+            "instance": {"operation": operation, "url": url, "state": "in_flight"},
+        }
+        instance.finish(operation, unknown=True)
+    assert InstanceState(tmp_path).status() == {
+        "busy": False,
+        "recovery_required": True,
+        "instance": {"operation": operation, "url": url, "state": "unknown"},
+    }
+
+
 def test_distinct_owners_cannot_enter_or_report_live_work_as_unknown(tmp_path):
     old, new = InstanceState(tmp_path), InstanceState(tmp_path)
     with old.lease():

@@ -1,4 +1,4 @@
-import type { BackgroundCtx, NativeAudio } from "@yinfengwindy/shiori-sdk";
+import { errorMessage, type BackgroundCtx, type NativeAudio } from "@yinfengwindy/shiori-sdk";
 import type { PreviewState } from "../shared/contracts";
 
 /** Owns only acknowledged playback; the requesting editor owns synthesis and stale-result checks. */
@@ -44,7 +44,7 @@ export class VoicePreviewController {
       await this.ctx.native.audio.play(audio);
       if (current()) this.state = { ...this.state, phase: "idle" };
     } catch (cause) {
-      if (current()) this.state = { ...this.state, phase: "error", error: cause instanceof Error ? cause.message : String(cause) };
+      if (current()) this.state = { ...this.state, phase: "error", error: errorMessage(cause) };
     }
   }
 }

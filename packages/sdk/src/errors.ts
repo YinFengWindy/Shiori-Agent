@@ -21,6 +21,8 @@ export class BridgeError extends Error {
  * cooperative peers. Plugins match it with `instanceof`, which only works
  * because the host and every plugin see this single class: built-in plugins
  * compile against it and external plugins receive it as a host peer.
+ * A locally disposed communication context reports `plugin_unavailable` with
+ * `details.reason === "context_disposed"`; other unavailable errors do not imply disposal.
  */
 export class PluginBridgeError extends BridgeError {
   constructor(message: string, code: string, details?: Record<string, unknown>) {

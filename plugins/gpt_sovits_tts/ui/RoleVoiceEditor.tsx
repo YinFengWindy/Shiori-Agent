@@ -4,6 +4,8 @@ import type { RoleVoice } from "../shared/contracts";
 import { voiceLanguage, voiceLanguages } from "./languages";
 import { ReferenceField } from "./ReferenceField";
 import { PreviewControls } from "./PreviewControls";
+import { EmotionReferences } from "./EmotionReferences";
+import { updateEmotionReference } from "./emotionReferenceState";
 
 /** Owns private role references, dirty state and explicit save without changing the host role. */
 export function RoleVoiceEditor({ roleId, role, client, disabled, onDirtyChange }: PluginRoleUiProps) {
@@ -11,8 +13,11 @@ export function RoleVoiceEditor({ roleId, role, client, disabled, onDirtyChange 
   const state = usePrivateDraft(client, roleId, {
     load: () => client.call<RoleVoice>("role.get", { role_id: roleId }),
     save: (voice) => client.call<RoleVoice>("role.set", { role_id: roleId, voice }),
-    onDirtyChange,
   });
+  const [pendingNames, setPendingNames] = useState<{ roleId: string | null; dirty: boolean }>({ roleId, dirty: false });
+  const hasPendingNames = pendingNames.roleId === roleId && pendingNames.dirty;
+  const dirty = state.dirty || hasPendingNames;
+  useEffect(() => { onDirtyChange(dirty); }, [dirty, onDirtyChange]);
   const [imports, setImports] = useState<Set<string>>(() => new Set());
   useEffect(() => { setImports(new Set()); }, [roleId]);
   const importing = (key: string, busy: boolean) => setImports((current) => {
@@ -21,7 +26,7 @@ export function RoleVoiceEditor({ roleId, role, client, disabled, onDirtyChange 
     return next;
   });
   const draft = state.draft;
-  const moods = [...new Set([...(role?.moodCatalog ?? []), ...Object.keys(draft?.moods ?? {})])].filter(Boolean);
+  const moods = Object.keys(draft?.moods ?? {});
   const blocked = disabled || state.saving;
   return <section className="grid gap-4">
     <h2 className="text-title font-semibold text-ink">GPT-SoVITS 声音</h2>
@@ -34,19 +39,12 @@ export function RoleVoiceEditor({ roleId, role, client, disabled, onDirtyChange 
         <label className="grid gap-2">语速<input aria-label="语速" className={inputClass} disabled={blocked} type="number" min="0.5" max="2" step="0.1" value={draft.speed} onChange={(event) => state.setDraft({ ...draft, speed: Number(event.target.value) })} /></label>
       </div>
       <ReferenceField title="默认参考" roleId={roleId} client={client} value={draft.default} disabled={blocked} onBusyChange={(busy) => importing("default", busy)} onChange={(value) => state.setDraft((current) => current ? { ...current, default: value } : current)} />
-      <div className="grid gap-3 sm:grid-cols-2">
-        {moods.map((mood) => <ReferenceField key={mood} title={mood} roleId={roleId} client={client} value={draft.moods[mood] ?? null} disabled={blocked} onBusyChange={(busy) => importing(`mood:${mood}`, busy)} onChange={(value) => state.setDraft((current) => {
-          if (!current) return current;
-          const next = { ...current.moods };
-          if (value) next[mood] = value; else delete next[mood];
-          return { ...current, moods: next };
-        })} />)}
-      </div>
+      <EmotionReferences key={`emotions:${roleId}`} roleId={roleId} client={client} moods={draft.moods} suggestions={role?.moodCatalog ?? []} disabled={blocked || imports.size > 0} onBusyChange={(name, busy) => importing(`mood:${name}`, busy)} onPendingChange={(value) => setPendingNames((current) => current.roleId === roleId && current.dirty === value ? current : { roleId, dirty: value })} onChange={(name, value) => state.setDraft((current) => current ? { ...current, moods: updateEmotionReference(current.moods, name, value) } : current)} />
       <div className="flex items-center justify-end gap-3">
-        {state.dirty ? <span className="text-caption text-ink-muted">未保存</span> : null}
-        <button className={ghostButtonClass} disabled={blocked || imports.size > 0 || !state.dirty} onClick={() => void state.save()}>{state.saving ? "保存中…" : "保存声音设置"}</button>
+        {dirty ? <span className="text-caption text-ink-muted">未保存</span> : null}
+        <button className={ghostButtonClass} disabled={blocked || imports.size > 0 || hasPendingNames || !state.dirty} onClick={() => void state.save()}>{state.saving ? "保存中…" : "保存声音设置"}</button>
       </div>
-      <PreviewControls key={roleId} client={client} roleId={roleId} moods={moods} disabled={blocked || imports.size > 0 || state.dirty || !draft.default} />
+      <PreviewControls key={`preview:${roleId}`} client={client} roleId={roleId} moods={moods} disabled={blocked || imports.size > 0 || dirty || !draft.default} />
     </> : null}
   </section>;
 }

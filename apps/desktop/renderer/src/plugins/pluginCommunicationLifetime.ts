@@ -6,7 +6,7 @@ export class PluginCommunicationLifetime {
 
   /** Prevents old contexts from starting new work after disposal or replacement. */
   assertActive() {
-    if (this.abort.signal.aborted) throw new PluginBridgeError("插件通信已处置", "plugin_unavailable");
+    if (this.abort.signal.aborted) throw new PluginBridgeError("插件通信已处置", "plugin_unavailable", { reason: "context_disposed" });
   }
 
   /** Ends local waits; backend cleanup independently cancels renderer rendezvous. */
@@ -17,7 +17,7 @@ export class PluginCommunicationLifetime {
     this.assertActive();
     let rejectDisposed: () => void = () => {};
     const disposed = new Promise<never>((_resolve, reject) => {
-      rejectDisposed = () => reject(new PluginBridgeError("插件通信已处置", "plugin_unavailable"));
+      rejectDisposed = () => reject(new PluginBridgeError("插件通信已处置", "plugin_unavailable", { reason: "context_disposed" }));
       this.abort.signal.addEventListener("abort", rejectDisposed, { once: true });
     });
     try { return await Promise.race([operation, disposed]); }

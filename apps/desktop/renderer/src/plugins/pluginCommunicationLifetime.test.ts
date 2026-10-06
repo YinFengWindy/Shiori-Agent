@@ -6,8 +6,8 @@ test("disposal immediately rejects pending work and rejects late admission", asy
   const lifetime = new PluginCommunicationLifetime();
   const pending = lifetime.wait(new Promise(() => {}));
   lifetime.dispose();
-  await assert.rejects(pending, { code: "plugin_unavailable" });
-  assert.throws(() => lifetime.assertActive(), { code: "plugin_unavailable" });
+  await assert.rejects(pending, { code: "plugin_unavailable", details: { reason: "context_disposed" } });
+  assert.throws(() => lifetime.assertActive(), { code: "plugin_unavailable", details: { reason: "context_disposed" } });
 });
 
 test("completed operations preserve backend errors and results", async () => {

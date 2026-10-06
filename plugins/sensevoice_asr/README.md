@@ -23,6 +23,8 @@ funasr-server --host 127.0.0.1 --port 8000 --model sensevoice --device cpu
 本包不携带、下载或启动推理环境，不把 torch/FunASR 安装进宿主 `.venv`。
 环境准备与真实本机识别、延迟、资源占用验收由 #676 完成。
 当前受控协议测试只证明请求/错误处理，不代表实际声学效果。
+应用级验收另使用实际安装 ZIP、Electron 生产入口、Python bridge 和本机 HTTP 替身，
+以生成 PCM 验证文件与桌宠调用链；真实麦克风识别质量和模型性能仍由 #676 验收。
 
 ## 安装与测试
 

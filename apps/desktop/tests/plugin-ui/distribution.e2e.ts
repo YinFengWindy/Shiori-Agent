@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { _electron } from "playwright";
-import { PackagedApp, eventually } from "./packagedApp";
+import { DevelopmentApp } from "./packagedDevelopmentApp";
 import { Evidence } from "./packagedEvidence";
 import { lifecycle } from "./packagedLifecycle";
 import { buildDistributionFixture } from "./distributionFixture";
@@ -15,31 +14,6 @@ const workspace = resolve(output, "workspace"), profile = resolve(output, "profi
 await mkdir(workspace);
 await mkdir(profile);
 await writeFile(resolve(workspace, "config.toml"), '[llm]\nregistrations = []\n[agent.maintenance]\nmemory_optimizer_enabled = false\n[plugins.desktop_pet]\nenabled = false\n', "utf8");
-
-/** Use the unmodified development entry and real repository Python bridge. */
-class DevelopmentApp extends PackagedApp {
-  async launch() {
-    const env: Record<string, string> = { SHIORI_DESKTOP_WORKSPACE: workspace, SHIORI_DESKTOP_USER_DATA_DIR: profile };
-    for (const [key, value] of Object.entries(process.env)) if (value !== undefined && !(key in env)) env[key] = value;
-    delete env.SHIORI_RENDERER_DEV_SERVER_URL;
-    delete env.ELECTRON_RUN_AS_NODE;
-    await access(this.paths.executable);
-    this.app = await _electron.launch({ executablePath: this.paths.executable, args: [resolve(repository, "apps/desktop")], env, timeout: 45_000 });
-    this.app.process().stderr?.on("data", (chunk: Buffer) => this.processErrors.push(chunk.toString("utf8")));
-    const identity = await this.app.evaluate(({ app }) => ({ packaged: app.isPackaged, appPath: app.getAppPath(), profile: app.getPath("userData") }));
-    assert.equal(identity.packaged, false);
-    assert.equal(identity.appPath, resolve(repository, "apps/desktop"));
-    assert.equal(identity.profile, profile);
-    this.page = await eventually(async () => this.app!.windows().find((page) => page.url().endsWith("/index.html")), Boolean, "production development window");
-    assert.ok(this.page);
-    this.page.setDefaultTimeout(30_000);
-    this.page.on("pageerror", (error) => this.errors.push(error.message));
-    await Promise.race([this.page.locator(".app-frame").waitFor(), this.page.getByRole("button", { name: "跳过", exact: true }).waitFor()]);
-    if (await this.page.getByRole("button", { name: "跳过", exact: true }).isVisible()) await this.page.getByRole("button", { name: "跳过", exact: true }).click();
-    await this.page.locator(".app-frame").waitFor();
-    await this.evidence.add("development-production-entry", identity);
-  }
-}
 
 const evidence = new Evidence(output);
 const app = new DevelopmentApp({ workspace, profile, executable: resolve(repository, "apps/desktop/node_modules/electron/dist/electron.exe") }, evidence, "development");

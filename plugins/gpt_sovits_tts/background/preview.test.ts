@@ -20,6 +20,18 @@ test("play acknowledges before audio finishes and stop immediately retires the a
   assert.deepEqual(played, [{ audio_base64: "actual-audio", format: "wav" }]);
 });
 
+test("playback preserves a structured error's readable message through SDK normalization", async () => {
+  const audio: BackgroundCtx["native"]["audio"] = {
+    devices: async () => [], startCapture: async () => {}, stopCapture: async () => ({ audio_base64: "", format: "wav" }), cancelCapture: async () => {},
+    play: async () => { throw { message: "TypeError: 音频解码失败", details: { detail: "decoder" } }; }, stop: async () => {},
+  };
+  const preview = new VoicePreviewController({ native: { audio, keys: { validate: async () => {}, register: async () => {}, unregister: async () => {} } } });
+  preview.play("job", "role", { audio_base64: "invalid", format: "wav" });
+  await flush();
+  assert.equal(preview.snapshot().phase, "error");
+  assert.equal(preview.snapshot().error, "音频解码失败");
+});
+
 test("an older editor cannot stop newer playback and superseded native startup cannot play late", async () => {
   const stop = deferred<void>(); const played: NativeAudio[] = []; let stops = 0;
   const audio: BackgroundCtx["native"]["audio"] = { devices: async () => [], startCapture: async () => {}, stopCapture: async () => ({ audio_base64: "", format: "wav" }), cancelCapture: async () => {}, play: async (value) => { played.push(value); }, stop: async () => { if (++stops === 1) await stop.promise; } };

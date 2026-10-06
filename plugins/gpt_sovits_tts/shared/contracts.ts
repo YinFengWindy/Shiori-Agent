@@ -11,7 +11,7 @@ export type VoiceReference = { asset: string; prompt_text: string; prompt_lang: 
 export type RoleVoice = { text_lang: VoiceLanguage; speed: number; default: VoiceReference | null; moods: Record<string, VoiceReference> };
 
 /** Reachability does not verify loaded model identity or recover an uncertain inference. */
-export type GptSoVitsHealth = { reachable: boolean; configured_version: "v2ProPlus"; model_verified: false; busy: boolean; recovery_required: boolean; instance: string };
+export type GptSoVitsHealth = { reachable: boolean; configured_version: "v2ProPlus"; model_verified: false; busy: boolean; recovery_required: boolean; instance: { operation: string; url: string; state: "in_flight" | "unknown" } | null };
 
 /** Preview work is identified separately from renderer mount and role identity. */
 export type PreviewState = { id: string; role_id: string; phase: "idle" | "generating" | "playing" | "error"; error: string };

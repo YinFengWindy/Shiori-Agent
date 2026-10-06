@@ -61,6 +61,11 @@ The hook isolates late results by client and document identity, retains edits on
 save errors, and never creates a writable default after a failed read. It manages
 the plugin's draft only and does not participate in the host role transaction.
 
+A disposed scoped client rejects with `PluginBridgeError`, code
+`plugin_unavailable`, and `details.reason: "context_disposed"`. Cleanup may treat
+that exact reason as expected; the same error code without the reason can indicate
+other unavailable services and must not be silently classified as local disposal.
+
 ## Python
 
 Requires Python **3.12+**. Install in your plugin project:
