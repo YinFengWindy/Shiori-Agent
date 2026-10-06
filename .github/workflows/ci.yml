@@ -75,6 +75,21 @@ jobs:
       - name: Build external plugin ZIP and validate it with the real host
         run: node --test scripts/build-plugin.test.mjs
 
+      - name: Verify frozen runtime SDK imports for external plugins
+        timeout-minutes: 5
+        run: node apps/desktop/scripts/test-sdk-runtime.mjs --output "${{ runner.temp }}/sdk-runtime-probe"
+
+      - name: Upload frozen SDK probe evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdk-runtime-probe
+          path: |
+            ${{ runner.temp }}/sdk-runtime-probe/collection.json
+            ${{ runner.temp }}/sdk-runtime-probe/freeze.log
+            ${{ runner.temp }}/sdk-runtime-probe/probe.json
+          if-no-files-found: ignore
+
   plugin-isolation:
     runs-on: ubuntu-latest
     steps:

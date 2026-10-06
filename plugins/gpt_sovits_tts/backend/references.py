@@ -3,10 +3,11 @@
 from collections import Counter
 from contextlib import contextmanager
 from pathlib import Path
+from uuid import uuid4
 
-from shiori_sdk.files.assets import copy_owned_asset
 from shiori_sdk.files.audio import pcm_wav_duration
 from shiori_sdk.files.staging import staged_import_file
+from shiori_sdk.files.text import atomic_save_bytes
 
 from .settings import RoleVoice, VoiceStore
 
@@ -31,10 +32,14 @@ class References:
             max_bytes=32 * 1024 * 1024,
         )
         try:
-            duration = pcm_wav_duration(path.read_bytes(), require_signal=True)
+            audio = path.read_bytes()
+            duration = pcm_wav_duration(audio, require_signal=True)
             if not 3 <= duration <= 10:
                 raise ValueError("参考音频必须为 3–10 秒 PCM WAV")
-            target = copy_owned_asset(path, self.directory)
+            # Every import owns a distinct identity: a previous generation's
+            # pinned copy may be retired while these same bytes are an unsaved draft.
+            target = self.directory / f"{uuid4().hex}.wav"
+            atomic_save_bytes(target, audio)
             self.imported.add(target.name)
             return {"asset": target.name, "duration": duration}
         finally:

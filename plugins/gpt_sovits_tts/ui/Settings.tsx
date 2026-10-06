@@ -1,7 +1,6 @@
 import { useState } from "react";
-import { ghostButtonClass, inputClass, type PluginSettingsSectionComponentProps } from "@yinfengwindy/shiori-sdk";
+import { ghostButtonClass, inputClass, usePrivateDraft, type PluginSettingsSectionComponentProps } from "@yinfengwindy/shiori-sdk";
 import type { GptSoVitsSettings } from "../shared/contracts";
-import { usePrivateDraft } from "./usePrivateDraft";
 import { useServiceHealth } from "./useServiceHealth";
 
 /** Edits provider-owned service paths and distinguishes reachability from model verification. */

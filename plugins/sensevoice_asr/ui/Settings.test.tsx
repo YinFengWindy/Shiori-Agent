@@ -21,3 +21,23 @@ test("ASR settings save privately and retain a rejected URL draft", async () => 
     assert.equal(calls.some((call) => call.service === "config.save"), false);
   } finally { await view.cleanup(); }
 });
+
+test("saving a new ASR endpoint clears the previous service health", async () => {
+  const { host } = createFakeHostServices();
+  const client = createFakePluginClient({ call: async <T,>(method: string, payload?: Record<string, unknown>) => {
+    if (method === "health") return { ready: true, model: "sensevoice", device: "cpu" } as T;
+    if (method === "settings.set") return payload as T;
+    return { url: "http://127.0.0.1:8000", device: "cpu", model: "sensevoice" } as T;
+  } });
+  const view = await mountTestComponent(<SenseVoiceSettingsPage client={client} host={host} subsectionId="sensevoice_asr" onSelectSubsection={() => {}} />);
+  const button = (label: string) => Array.from(view.container.querySelectorAll("button")).find((item) => item.textContent === label)!;
+  try {
+    await act(async () => button("检查连接").click());
+    assert.match(view.container.textContent ?? "", /服务就绪/);
+    await changeInputValue(view.container.querySelector("input")!, "http://127.0.0.1:8001");
+    await act(async () => button("保存").click());
+    assert.equal(view.container.querySelector("input")?.value, "http://127.0.0.1:8001");
+    assert.equal(button("保存").disabled, true);
+    assert.equal(view.container.querySelector('[role="status"]'), null);
+  } finally { await view.cleanup(); }
+});

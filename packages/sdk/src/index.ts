@@ -20,6 +20,8 @@ export type { BridgeEvent, PluginBackgroundHandler, PluginEventHandler, PluginPe
 // Pure helpers and hooks.
 export { errorMessage } from "./errors";
 export { useLatestRef } from "./useLatestRef";
+// Runtime API 4.1.0: plugin-owned document loading, dirty state and explicit save.
+export { usePrivateDraft } from "./hooks/usePrivateDraft";
 export { roleToggleStatus, type RoleCapabilityStatus, type RoleCapabilityTone } from "./roleCapability";
 export {
   accountOnline,

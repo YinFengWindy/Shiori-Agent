@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
-import { ghostButtonClass, inputClass, Select, usePluginHostServices, type PluginRoleUiProps } from "@yinfengwindy/shiori-sdk";
+import { ghostButtonClass, inputClass, Select, usePluginHostServices, usePrivateDraft, type PluginRoleUiProps } from "@yinfengwindy/shiori-sdk";
 import type { RoleVoice } from "../shared/contracts";
-import { usePrivateDraft } from "./usePrivateDraft";
 import { voiceLanguage, voiceLanguages } from "./languages";
 import { ReferenceField } from "./ReferenceField";
 import { PreviewControls } from "./PreviewControls";

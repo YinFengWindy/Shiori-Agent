@@ -27,7 +27,7 @@ const source = JSON.parse(await readFile(join(root, "packages/sdk/package.json")
 await writeFile(join(output, "smoke.mjs"), `
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { BridgeError, errorMessage } from "@yinfengwindy/shiori-sdk";
+import { BridgeError, errorMessage, usePrivateDraft } from "@yinfengwindy/shiori-sdk";
 import * as contract from "@yinfengwindy/shiori-sdk/contract";
 import * as host from "@yinfengwindy/shiori-sdk/host-internal";
 import { deferred, createFakePluginClient, mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
@@ -43,14 +43,22 @@ assert.equal(typeof contract, "object");
 const task = deferred(); task.resolve("ready"); assert.equal(await task.promise, "ready");
 const mounted = await mountTestComponent(createElement("button", null, "standalone"));
 try { assert.match(mounted.container.textContent, /standalone/); } finally { await mounted.cleanup(); }
+const client = createFakePluginClient();
+function PrivateDocument() {
+  const state = usePrivateDraft(client, "settings", { load: async () => ({ value: "private SDK draft" }), save: async (value) => value });
+  return createElement("output", null, state.draft?.value);
+}
+const document = await mountTestComponent(createElement(PrivateDocument));
+try { assert.equal(document.container.textContent, "private SDK draft"); } finally { await document.cleanup(); }
 console.log("Non-editable npm SDK import + DOM testing smoke passed", manifest.version);
 `, "utf8");
 execFileSync(process.execPath, ["smoke.mjs"], { cwd: output, stdio: "inherit" });
 await writeFile(join(output, "consumer.ts"), `
-import { type PluginRpcClient } from "@yinfengwindy/shiori-sdk";
+import { type PluginRpcClient, usePrivateDraft } from "@yinfengwindy/shiori-sdk";
 import { createFakePluginClient } from "@yinfengwindy/shiori-sdk/testing";
 const client: PluginRpcClient = createFakePluginClient();
 void client;
+void usePrivateDraft;
 `, "utf8");
 run(["exec", "tsc", "--noEmit", "--strict", "--target", "ES2022", "--module", "ESNext", "--moduleResolution", "bundler", "consumer.ts"], output);
 console.log(`SDK npm artifact evidence: ${output}`);

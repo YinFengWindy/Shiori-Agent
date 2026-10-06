@@ -54,6 +54,13 @@ tarball with declarations and external React peers. The host import map provides
 the same main entry to precompiled plugins. Only the main entry belongs in a
 plugin's production peer imports.
 
+Runtime API 4.1 also exports `usePrivateDraft(client, identity, operations)` for
+JSON-serializable plugin-owned settings and role documents. Supply `load`, `save`
+and optionally `onDirtyChange`; a null identity disables loading and saving.
+The hook isolates late results by client and document identity, retains edits on
+save errors, and never creates a writable default after a failed read. It manages
+the plugin's draft only and does not participate in the host role transaction.
+
 ## Python
 
 Requires Python **3.12+**. Install in your plugin project:
@@ -71,6 +78,11 @@ uv run pytest tests
 
 These commands set up your plugin's development environment. The Shiori host
 supplies the SDK and declared host dependencies when it runs the installed plugin.
+
+Frozen desktop builds collect all runtime SDK modules, including implicit namespace
+directories such as `files/`, independently of installed or bundled plugins.
+`shiori_sdk.testing` is excluded from the runtime. A frozen executable probe in CI
+verifies dynamic imports without repository paths in its environment.
 
 The wheel contains contracts and pure values, without a dependency on the host.
 The core lifecycle surface includes `PluginRuntimeContext`,

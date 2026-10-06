@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { act } from "react";
-import { createFakePluginClient, deferred, mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
+import { createFakePluginClient, deferred, mountTestComponent } from "../testing/index";
 import { usePrivateDraft } from "./usePrivateDraft";
 
 test("role changes discard late reads and failed saves retain the dirty private draft", async () => {
@@ -24,6 +24,27 @@ test("role changes discard late reads and failed saves retain the dirty private 
     await act(async () => latest.save());
     assert.equal(latest.draft?.value, "edited"); assert.equal(latest.dirty, true);
     assert.equal(dirty.at(-1), true); assert.match(latest.error, /private save failed/);
+  } finally { await view.cleanup(); }
+});
+
+test("replacing the scoped client for the same document ignores the previous client's late read", async () => {
+  const oldRead = deferred<{ value: string }>();
+  const oldClient = createFakePluginClient();
+  const nextClient = createFakePluginClient();
+  let latest!: ReturnType<typeof usePrivateDraft<{ value: string }>>;
+  function Probe({ client }: { client: typeof oldClient }) {
+    latest = usePrivateDraft(client, "settings", {
+      load: () => client === oldClient ? oldRead.promise : Promise.resolve({ value: "new client" }),
+      save: async (value) => value,
+    });
+    return <span>{latest.draft?.value ?? "loading"}</span>;
+  }
+  const view = await mountTestComponent(<Probe client={oldClient} />);
+  try {
+    await view.render(<Probe client={nextClient} />);
+    await act(async () => oldRead.resolve({ value: "old client" }));
+    assert.equal(view.container.textContent, "new client");
+    assert.equal(latest.saved?.value, "new client");
   } finally { await view.cleanup(); }
 });
 

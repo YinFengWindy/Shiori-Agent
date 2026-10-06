@@ -637,6 +637,12 @@ the existing contract, duplicate-ID and exact-content trust checks regardless of
 this field. The declaration never grants trust, overrides a builtin, or installs
 anything automatically.
 
+The frozen host collects the complete SDK runtime independently of these plugin
+sources, including implicit namespace directories such as `shiori_sdk.files`.
+`shiori_sdk.testing` and caches are excluded. The final PyInstaller argument list
+is checked against the SDK collection, and a small frozen probe in CI dynamically
+imports SDK helpers from outside the repository with Python source paths removed.
+
 From the repository root, build an external source package with:
 
 ```powershell

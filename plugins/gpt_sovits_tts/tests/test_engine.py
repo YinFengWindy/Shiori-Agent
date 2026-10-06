@@ -8,10 +8,81 @@ import pytest
 from plugins.gpt_sovits_tts.backend.client import SovitsClient
 from plugins.gpt_sovits_tts.backend.engine import SynthesisEngine
 from plugins.gpt_sovits_tts.backend.references import References
+from plugins.gpt_sovits_tts.backend.rpc import register_rpc
 
 
 def request(text="第一句", mood="Neutral"):
     return {"role_id": "role", "text": text, "mood": mood}
+
+
+async def test_old_engine_completion_keeps_same_audio_reimported_by_new_editor(
+    context, configured, wav_bytes
+):
+    entered, finish = asyncio.Event(), asyncio.Event()
+    old_references = References(configured.store)
+    old_asset = configured.store.read().roles["role"].default.asset
+    original_audio = old_references.path(old_asset).read_bytes()
+    assert not old_references.imported
+
+    async def respond(req):
+        if req.url.path == "/tts":
+            entered.set()
+            await finish.wait()
+            return httpx.Response(200, content=wav_bytes(1))
+        return httpx.Response(200, json={"message": "success"})
+
+    old = SynthesisEngine(
+        configured.store,
+        old_references,
+        SovitsClient(httpx.MockTransport(respond)),
+        context.background,
+        context.roles,
+    )
+    accepted = asyncio.create_task(old.synthesize(request()))
+    await entered.wait()
+    new_references = References(configured.store)
+    new_references.reconcile({"role"}, sweep=True)
+    new = SynthesisEngine(
+        configured.store,
+        new_references,
+        SovitsClient(httpx.MockTransport(respond)),
+        context.background,
+        context.roles,
+    )
+    register_rpc(context, new)
+
+    async def import_audio(content):
+        source = (
+            context.workspace / "private_runtime/imports/gpt_sovits_tts-audio/a.wav"
+        )
+        source.parent.mkdir(parents=True, exist_ok=True)
+        source.write_bytes(content)
+        return await context.rpc.handlers["reference.import"](
+            {"role_id": "role", "source": str(source)}
+        )
+
+    async def save(asset):
+        return await context.rpc.handlers["role.set"](
+            {"role_id": "role", "voice": {"default": {"asset": asset}}}
+        )
+
+    try:
+        replacement = await import_audio(wav_bytes(signal=2))
+        await save(replacement["asset"])
+        reimported = await import_audio(original_audio)
+        finish.set()
+        await accepted
+        # The old generation can retire its committed identity, but not the
+        # same bytes newly imported into another generation's unsaved draft.
+        saved = await save(reimported["asset"])
+        assert saved["default"]["asset"] == reimported["asset"]
+        assert new_references.path(reimported["asset"]).read_bytes() == original_audio
+        assert reimported["asset"] != old_asset
+    finally:
+        finish.set()
+        await accepted
+        await old.close()
+        await new.close()
 
 
 async def test_cancel_does_not_release_instance_or_reference(
