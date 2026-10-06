@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { useEffect } from "react";
-import type { PluginRoleUiProps } from "@yinfengwindy/shiori-sdk";
+import { usePluginHostServices, type NativeFilePickerOptions, type PluginHostServices, type PluginRoleUiProps } from "@yinfengwindy/shiori-sdk";
 import { act } from "react";
 import { mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import { PluginRoleUiSlot } from "./PluginRoleUiSlot";
@@ -31,4 +31,31 @@ test("self-managed role UI gets identity and scoped calls but never enters the h
     await view.render(<PluginRoleUiSlot role={null} disabled={false} />);
     assert.equal(view.container.querySelector("button")?.disabled, true);
   } finally { await view.cleanup(); pluginRoleUiRegistry.unregister("neutral"); resetPluginEnabledStateForTests(); }
+});
+
+test("private role UI receives stable scoped host services for native file selection", async () => {
+  const services: PluginHostServices[] = [];
+  const picks: NativeFilePickerOptions[] = [];
+  const requests: string[] = [];
+  function Editor() {
+    const host = usePluginHostServices();
+    services.push(host);
+    return <button onClick={() => { void host.pickFiles({ namespace: "neutral-picker", maxFileBytes: 1024, filters: [{ name: "Audio", extensions: ["wav"] }] }); }}>选择文件</button>;
+  }
+  pluginRoleUiRegistry.register({ pluginId: "neutral-picker", mode: "self-managed", Component: Editor });
+  setPluginEnabledSnapshot([{ id: "neutral-picker", enabled: true, state: "ACTIVE" }]);
+  const view = await mountTestComponent(<PluginRoleUiSlot role={{ id: "one", name: "One", moodCatalog: [] }} disabled={false} />, { windowGlobals: { miraDesktop: {
+    onEvent: () => () => {},
+    invoke: async ({ method }: { method: string }) => { requests.push(method); return { error: null, payload: { generation: "g" } }; },
+    pickFiles: async (options: NativeFilePickerOptions) => { picks.push(options); return ["/private/selected.wav"]; },
+  } } });
+  try {
+    await act(async () => view.container.querySelector("button")!.click());
+    assert.equal(picks.length, 1);
+    assert.equal(picks[0].namespace, "neutral-picker");
+    await view.render(<PluginRoleUiSlot role={{ id: "two", name: "Two", moodCatalog: [] }} disabled={false} />);
+    assert.ok(services.length >= 2);
+    assert.ok(services.every((host) => host === services[0]));
+    assert.equal(requests.includes("roles.update"), false);
+  } finally { await view.cleanup(); pluginRoleUiRegistry.unregister("neutral-picker"); resetPluginEnabledStateForTests(); }
 });

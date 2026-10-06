@@ -2,7 +2,7 @@
 
 [@yinfengwindy/shiori-sdk](https://www.npmjs.com/package/@yinfengwindy/shiori-sdk)
 and [shiori-sdk](https://pypi.org/project/shiori-sdk/) are the TypeScript and Python distributions of the
-same plugin contract. Both are version **4.0.0**, with Runtime API **4.0.0**.
+same plugin contract. Both are version **4.1.0**, with Runtime API **4.1.0**.
 
 Start with the [plugin tutorial](https://github.com/YinFengWindy/Shiori-Agent/blob/main/docs/_handbook/plugins-tutorial.md)
 and [runtime contract](https://github.com/YinFengWindy/Shiori-Agent/blob/main/docs/_handbook/plugin-runtime-contract.md)
@@ -384,3 +384,9 @@ state without claiming a transaction across host and plugin files.
 Tencent/MiniMax integrations and their installation/migration code are removed.
 Existing user files, credentials and remote voice assets are left untouched.
 SenseVoice and GPT-SoVITS implementations are separate follow-up plugin deliveries.
+
+## 4.1 local-service utilities
+
+`shiori_sdk.files.audio.pcm_wav_duration` validates complete PCM WAV audio, optionally rejecting digital silence. `shiori_sdk.files.staging.staged_import_file` validates a native picker's namespace, extension and byte limit. `shiori_sdk.local_http.loopback_http_url` validates a plain HTTP loopback origin. These utilities do not open a connection or supply inference policy.
+
+A manifest may declare `distribution: external` for repository sources delivered through normal plugin ZIP installation instead of bundled discovery. Omission retains builtin distribution. External installation, trust, update and removal still use the existing workspace plugin lifecycle.

@@ -39,6 +39,86 @@ async def setup(ctx):
 _RPC_DEMO_MANIFEST = "api: 2\nid: rpc_demo\ncapabilities:\n  - rpc\n"
 
 
+@pytest.mark.asyncio
+async def test_external_service_worker_retains_real_runtime_after_consumer_cancel(
+    tmp_path, monkeypatch
+):
+    from agent.plugin_host.package_fingerprint import inspect_package_content
+    from agent.plugin_host.trust_store import PluginTrustStore
+
+    source = _REPOSITORY_ROOT / "tests/fixtures/plugins/retained_service"
+    package = tmp_path / "plugins/retained_service"
+    shutil.copytree(source, package)
+    source_root = tmp_path / "source_plugins"
+    shutil.copytree(source, source_root / "retained_service")
+    monkeypatch.setattr(
+        "bootstrap.tools._resolve_plugin_dirs",
+        lambda workspace: [source_root, workspace / "plugins"],
+    )
+    monkeypatch.setenv("SHIORI_DESKTOP_APPLICATION_SESSION_ID", "runtime-session")
+    PluginTrustStore(tmp_path).approve(
+        package,
+        inspect_package_content(package).fingerprint,
+        approved_session="installation-session",
+    )
+    service, _, app = await _start_service(tmp_path)
+    old = app._generation_manager.current
+    state = app.core.plugin_manager._dependency_api("retained_service")
+    calls = []
+    try:
+        opened = await _request(
+            service,
+            "plugins.communication.open",
+            {"plugin_id": "retained_service", "owner": "worker-test"},
+        )
+        assert opened.error is None, opened.error
+        payload = {
+            "plugin_id": "retained_service",
+            "owner": "worker-test",
+            "generation": opened.payload["generation"],
+            "service": {"plugin_id": "retained_service", "service_id": "worker"},
+            "name": "run",
+            "payload": {},
+        }
+        for expected in (1, 2):
+            call = asyncio.create_task(
+                _request(service, "plugins.communication.services.call", payload)
+            )
+            calls.append(call)
+            async with asyncio.timeout(3):
+                while state["accepted"] < expected:
+                    await asyncio.sleep(0)
+            if expected == 1:
+                assert await asyncio.to_thread(state["started"].wait, 3)
+            call.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await call
+        assert state["active"] == 1 and state["maximum"] == 1
+        disabled = await _request(
+            service,
+            "plugins.setEnabled",
+            {
+                "plugin_id": "retained_service",
+                "enabled": False,
+                "operation_id": "disable-retained-worker",
+            },
+        )
+        assert disabled.error is None, disabled.error
+        assert app.generation > old.generation
+        assert not old.closed and not state["closed"]
+        assert state["active"] == 1 and state["finished"] == 0
+        assert app.core.plugin_manager.rpc.services.list("test.worker.v1") == []
+        state["release"].set()
+        await asyncio.wait_for(old.drained.wait(), 3)
+        assert state["closed"] and state["finished"] == 2
+        assert state["maximum"] == 1
+    finally:
+        state["release"].set()
+        await asyncio.gather(*calls, return_exceptions=True)
+        await service.aclose()
+        await app.shutdown()
+
+
 def _config() -> str:
     return "[llm]\nregistrations = []\n\n[agent.maintenance]\nmemory_optimizer_enabled = false\n"
 

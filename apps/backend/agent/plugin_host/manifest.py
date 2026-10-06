@@ -116,6 +116,8 @@ class PluginManifest:
     # Optional APIs never cause provider activation or dependent teardown.
     optional_dependencies: tuple[str, ...] = ()
     api: int = 2
+    # External source packages are excluded from host-owned roots; this never grants trust.
+    distribution: str = "builtin"
     # False forbids replacing a live instance without restarting the process.
     supports_hot_unload: bool = True
     # 插件管理页分组（PLUGIN_CATEGORIES 之一），解析时已按 capabilities 补全默认值
@@ -181,6 +183,9 @@ def _parse_manifest(
         raise ManifestError(f"插件必须显式声明 api: 2: {manifest_path}")
     api = 2
     plugin_id = str(raw.get("id") or raw.get("name") or directory_name)
+    distribution = raw.get("distribution", "builtin")
+    if not isinstance(distribution, str) or distribution not in ("builtin", "external"):
+        raise ManifestError("distribution 必须是 builtin / external 之一")
     supports_hot_unload = raw.get("supports_hot_unload", True)
     if not isinstance(supports_hot_unload, bool):
         raise ManifestError("supports_hot_unload 必须是布尔值")
@@ -208,6 +213,7 @@ def _parse_manifest(
         dependencies=dependencies,
         optional_dependencies=optional_dependencies,
         api=api,
+        distribution=distribution,
         supports_hot_unload=supports_hot_unload,
         category=_parse_category(raw, capabilities),
         default_enabled=default_enabled,

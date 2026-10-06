@@ -22,6 +22,24 @@ def test_valid_package_separates_identity_version_and_runtime(contract_package):
     assert [entry.kind for entry in result.renderer] == ["ui", "background", "surface"]
 
 
+@pytest.mark.parametrize("distribution", ["builtin", "external"])
+def test_package_accepts_host_supported_display_and_distribution_metadata(
+    contract_package, distribution
+):
+    _change(
+        contract_package,
+        distribution=distribution,
+        display_name="External Demo",
+        category="system",
+        default_enabled=False,
+    )
+    manifest = validate_package(contract_package).manifest
+    assert manifest.distribution == distribution
+    assert manifest.display_name == "External Demo"
+    assert manifest.category == "system"
+    assert manifest.default_enabled is False
+
+
 @pytest.mark.parametrize(
     "values, code, field",
     [
@@ -63,6 +81,9 @@ def test_valid_package_separates_identity_version_and_runtime(contract_package):
             "peer_dependencies.react",
         ),
         ({"unknown": True}, "invalid_manifest", "manifest"),
+        ({"distribution": "unknown"}, "invalid_manifest", "manifest"),
+        ({"category": "unknown"}, "invalid_manifest", "manifest"),
+        ({"default_enabled": "false"}, "invalid_manifest", "manifest"),
     ],
 )
 def test_rejects_manifest_with_structured_diagnostics(
@@ -154,7 +175,9 @@ def test_external_channel_declaration_errors_block_the_package(contract_package)
 
 
 def test_host_advertises_runtime_api_with_shared_visual_components():
-    assert HostRuntimeContract().runtime_api == "4.0.0"
+    from shiori_sdk import RUNTIME_API_VERSION
+
+    assert HostRuntimeContract().runtime_api == RUNTIME_API_VERSION
 
 
 def test_explicit_cross_major_compatibility_is_accepted(contract_package):

@@ -1,0 +1,22 @@
+api: 2
+package_contract: 1
+id: sensevoice_asr
+display_name: SenseVoiceSmall 语音识别
+version: "0.1.0"
+runtime_api: ">=4.1.0 <5.0.0"
+distribution: external
+entry: backend/plugin.py
+host_dependencies:
+  python: [httpx, pydantic]
+peer_dependencies:
+  react: ">=19.2.0 <20.0.0"
+  react-dom: ">=19.2.0 <20.0.0"
+renderer:
+  ui:
+    entry: renderer/ui.mjs
+    css: []
+desc: 本机 CPU SenseVoiceSmall 语音识别 provider
+capabilities:
+  - workspace
+  - services
+  - rpc

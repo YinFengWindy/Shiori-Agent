@@ -1577,7 +1577,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "shiori-agent", specifier = "==0.1.0" },
-    { name = "shiori-sdk", extras = ["testing"], specifier = "==4.0.0" },
+    { name = "shiori-sdk", extras = ["testing"], specifier = "==4.1.0" },
 ]
 
 [[package]]

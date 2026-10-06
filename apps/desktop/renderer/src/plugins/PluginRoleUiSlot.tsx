@@ -1,9 +1,10 @@
 import { pluginRoleUiRegistry } from "./pluginFeatureRegistry";
 import { usePluginEnabledState } from "./usePluginEnabledState";
 import { usePluginRpcClient } from "./usePluginRpcClient";
-import type { PluginRoleUiProps, PluginRoleUiContribution } from "@yinfengwindy/shiori-sdk";
+import { PluginHostServicesProvider, type PluginRoleUiProps, type PluginRoleUiContribution } from "@yinfengwindy/shiori-sdk";
 import { useEffect, useState } from "react";
 import { createRoleUiDirtyLease } from "./pluginRoleUiDirty";
+import { pluginHostServicesFor } from "./pluginHostServices";
 
 /** Mounts independent role editors without exposing mutable host drafts or a save callback. */
 export function PluginRoleUiSlot({ role, disabled }: Pick<PluginRoleUiProps, "role" | "disabled">) {
@@ -17,5 +18,7 @@ function PrivateRoleEditor({ entry, role, disabled }: { entry: PluginRoleUiContr
   const client = usePluginRpcClient(entry.pluginId);
   const [lease] = useState(() => createRoleUiDirtyLease(role?.id ?? ""));
   useEffect(() => { lease.activate(); return () => lease.dispose(); }, [lease]);
-  return <entry.Component roleId={role?.id ?? null} role={role} client={client} disabled={disabled} onDirtyChange={lease.set} />;
+  return <PluginHostServicesProvider services={pluginHostServicesFor(entry.pluginId)}>
+    <entry.Component roleId={role?.id ?? null} role={role} client={client} disabled={disabled} onDirtyChange={lease.set} />
+  </PluginHostServicesProvider>;
 }

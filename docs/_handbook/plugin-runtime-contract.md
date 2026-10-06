@@ -624,6 +624,50 @@ anything or attempt to discover arbitrary dynamic imports. Authors must declare
 the complete external dependency set; capability/dependency declarations are API
 cooperation, not isolation of malicious code.
 
+## External source packages in the repository (#675)
+
+`distribution: external` marks a source package for independent ZIP delivery.
+The default is `builtin`; other values, including explicit null, are invalid.
+Host-owned source roots skip external packages before requiring built renderer
+artifacts. The desktop runtime staging step and Vite's generated UI, background
+and surface imports use the same classification, so external source is absent
+from the shipped host code. Changing the manifest in the dev server invalidates
+those imports and reloads the page. Installed workspace packages always undergo
+the existing contract, duplicate-ID and exact-content trust checks regardless of
+this field. The declaration never grants trust, overrides a builtin, or installs
+anything automatically.
+
+From the repository root, build an external source package with:
+
+```powershell
+node scripts/build-plugin.mjs --plugin plugins/<id> --output artifacts/plugins
+```
+
+The source manifest must declare `api: 2`, `package_contract: 1`, an explicit
+runtime range, version, backend entry and renderer artifacts. Source entries are
+`ui/index.tsx`, `background/index.ts`, and `surface/index.tsx`; each declared kind
+is compiled to its `renderer.<kind>.entry` `.mjs` path. The SDK and React remain
+host peers. Imported CSS generates a sibling stylesheet (for example
+`renderer/ui.css`) that must appear in that entry's `css` list; additional listed
+stylesheets are copied from source. Plugins supply scoped CSS themselves.
+
+The ZIP includes `backend/`, declared assets, README/license/notice files and
+`docs/`. Development environments, hidden files, tests, bytecode and caches are
+excluded. Symlinks are rejected. Archive limits match host admission (4096 files,
+64 MiB uncompressed). The command does not install dependencies or models. Install
+and update through the existing ZIP preview and explicit trust confirmation,
+then restart; disable uses the current runtime transaction. Uninstall retains
+private data unless deletion is explicitly selected and removes package code at
+restart. The repository source stays excluded after removal.
+
+`node apps/desktop/scripts/test-plugin-ui-build-smoke.mjs` proves static exclusion
+using invalid external JavaScript. After `pnpm build:desktop`, run
+`pnpm exec tsx --tsconfig apps/desktop/tests/plugin-ui/packaged.tsconfig.json apps/desktop/tests/plugin-ui/distribution.e2e.ts`
+for the real development Electron/bridge installation, toggle, update, rollback
+and uninstall flow while matching external source remains in the repository.
+This is development-runtime evidence; packaged acceptance remains the separate
+procedure in `packaged-plugin-acceptance.md`.
+
 ## Main-window UI loader (#213)
 
 The desktop main window can consume `renderer.ui` as precompiled ESM and CSS at

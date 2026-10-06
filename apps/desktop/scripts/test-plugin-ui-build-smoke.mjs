@@ -40,6 +40,7 @@ const surfaceMarker = `PLUGIN_SURFACE_BUILD_SMOKE_${suffix}`;
 const backgroundMarker = `PLUGIN_BACKGROUND_BUILD_SMOKE_${suffix}`;
 const pluginId = `plugin_ui_build_smoke_${suffix}`;
 const pluginDir = join(repoRoot, "plugins", pluginId);
+const externalDir = join(repoRoot, "plugins", `${pluginId}_external`);
 const uiDir = join(pluginDir, "ui");
 const surfaceDir = join(pluginDir, "surface");
 const backgroundDir = join(pluginDir, "background");
@@ -62,6 +63,15 @@ async function bundleContainsMarker(dir, needle) {
 
 async function main() {
   await mkdir(uiDir, { recursive: true });
+  await writeFile(join(pluginDir, "manifest.yaml"), `api: 2\nid: ${pluginId}\ncapabilities: []\n`, "utf8");
+  await mkdir(externalDir, { recursive: true });
+  await writeFile(join(externalDir, "manifest.yaml"), `api: 2\nid: ${pluginId}_external\ndistribution: external\ncapabilities: []\n`, "utf8");
+  // A registration-time filter would still parse these invalid modules and fail.
+  // A successful production build proves exclusion from all three dependency graphs.
+  for (const [kind, extension] of [["ui", "tsx"], ["surface", "tsx"], ["background", "ts"]]) {
+    await mkdir(join(externalDir, kind), { recursive: true });
+    await writeFile(join(externalDir, kind, `index.${extension}`), "THIS EXTERNAL SOURCE MUST NEVER BE PARSED !!!", "utf8");
+  }
   await writeFile(
     join(uiDir, "index.tsx"),
     [
@@ -133,7 +143,7 @@ async function main() {
         );
       }
     }
-    console.log(`[plugin-ui-build-smoke] passed: ui, surface and background markers for ${pluginId} found in the built bundle.`);
+    console.log(`[plugin-ui-build-smoke] passed: three built-in entries included; invalid external ui/surface/background source excluded before parsing.`);
   } finally {
     await rm(outDir, { recursive: true, force: true });
   }
@@ -147,4 +157,5 @@ main()
   })
   .finally(async () => {
     await rm(pluginDir, { recursive: true, force: true });
+    await rm(externalDir, { recursive: true, force: true });
   });

@@ -3,6 +3,7 @@ import { dirname, resolve } from "node:path";
 import { defineConfig } from "vite";
 import { resolve as resolvePath } from "node:path";
 import react from "@vitejs/plugin-react";
+import { builtinPluginEntries } from "../scripts/builtin-plugin-entries.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const desktopRoot = resolve(here, "..");
@@ -11,7 +12,7 @@ const repositoryRoot = resolve(desktopRoot, "..", "..");
 export default defineConfig({
   root: here,
   base: "./",
-  plugins: [react()],
+  plugins: [react(), builtinPluginEntries(resolve(repositoryRoot, "plugins"))],
   server: {
     fs: {
       // Plugin UI is compiled in from the top-level plugins/<id>/ui/ tree

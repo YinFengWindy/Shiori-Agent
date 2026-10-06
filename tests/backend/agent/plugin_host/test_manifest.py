@@ -16,6 +16,34 @@ def test_missing_manifest_returns_none(tmp_path: Path):
     assert load_manifest(tmp_path) is None
 
 
+@pytest.mark.parametrize(
+    "declaration,expected",
+    [
+        ("", "builtin"),
+        ("distribution: builtin\n", "builtin"),
+        ("distribution: external\n", "external"),
+    ],
+)
+def test_manifest_declares_distribution_without_changing_default(
+    tmp_path, declaration, expected
+):
+    (tmp_path / "manifest.yaml").write_text(
+        f"api: 2\ncapabilities: []\n{declaration}", encoding="utf-8"
+    )
+    assert load_manifest(tmp_path).distribution == expected
+
+
+@pytest.mark.parametrize(
+    "value", ["unknown", "External", "null", "true", "0", "[external]"]
+)
+def test_manifest_rejects_invalid_distribution(tmp_path, value):
+    (tmp_path / "manifest.yaml").write_text(
+        f"api: 2\ncapabilities: []\ndistribution: {value}\n", encoding="utf-8"
+    )
+    with pytest.raises(ManifestError, match="distribution"):
+        load_manifest(tmp_path)
+
+
 def test_display_name_does_not_replace_stable_plugin_identity(tmp_path):
     (tmp_path / "manifest.yaml").write_text(
         "api: 2\nid: screen_perception\ndisplay_name: 24h视奸插件\ncapabilities: []\n",

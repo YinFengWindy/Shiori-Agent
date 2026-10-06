@@ -224,6 +224,14 @@ def _read_candidate(
     if manifest is None:
         # Old workspace/plugins/<id>/kv.json directories are data, not packages.
         return None
+    if (
+        source == "builtin"
+        and diagnostic is None
+        and manifest.distribution == "external"
+    ):
+        # Source packages may not have compiled renderer artifacts yet. Only an
+        # installed workspace copy enters package validation and trust admission.
+        return None
     if diagnostic is None and (
         source == "workspace" or "package_contract" in manifest.metadata
     ):

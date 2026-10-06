@@ -43,8 +43,8 @@ export class PackagedApp {
     assert.ok(this.page);
     this.page.setDefaultTimeout(30_000);
     this.page.on("pageerror", (error) => this.errors.push(error.message));
-    await Promise.race([this.page.locator(".app-frame").waitFor(), this.page.getByRole("button", { name: "暂时跳过", exact: true }).waitFor()]);
-    if (await this.page.getByRole("button", { name: "暂时跳过", exact: true }).isVisible()) await this.page.getByRole("button", { name: "暂时跳过", exact: true }).click();
+    await Promise.race([this.page.locator(".app-frame").waitFor(), this.page.getByRole("button", { name: "跳过", exact: true }).waitFor()]);
+    if (await this.page.getByRole("button", { name: "跳过", exact: true }).isVisible()) await this.page.getByRole("button", { name: "跳过", exact: true }).click();
     await this.page.locator(".app-frame").waitFor();
     await this.evidence.add("packaged-launch", identity);
   }
@@ -79,14 +79,14 @@ export class PackagedApp {
   }
   /** Open package actions through the production candidate details dialog. */
   async openDetails() {
-    await this.page!.getByRole("button", { name: "external_demo", exact: true }).click();
-    const details = this.page!.getByRole("dialog", { name: "external_demo", exact: true });
+    await this.page!.getByRole("button", { name: "External Demo", exact: true }).click();
+    const details = this.page!.getByRole("dialog", { name: "External Demo", exact: true });
     await details.waitFor();
     return details;
   }
   /** Nested confirmations restore details; dismiss it before acting on the page. */
   async closeDetails() {
-    const details = this.page!.getByRole("dialog", { name: "external_demo", exact: true });
+    const details = this.page!.getByRole("dialog", { name: "External Demo", exact: true });
     await details.getByRole("button", { name: "关闭插件详情", exact: true }).click();
     await details.waitFor({ state: "hidden" });
   }

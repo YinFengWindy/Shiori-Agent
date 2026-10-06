@@ -1,10 +1,11 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { cp, mkdir, rm } from "node:fs/promises";
-import { basename, delimiter, join, relative, resolve, sep } from "node:path";
+import { mkdir, rm } from "node:fs/promises";
+import { delimiter, join, resolve } from "node:path";
 import { prepareBrowserRuntime } from "./browser-runtime.mjs";
 import { prepareComputerRuntime } from "./computer-runtime.mjs";
 import { resolveReleaseManifest } from "./release-manifest.mjs";
+import { stageBuiltinPlugins } from "./runtime-plugin-staging.mjs";
 import {
   collectHostBackendModules,
   collectPluginBackendModules,
@@ -53,21 +54,7 @@ const stagingRoot = resolve(workRoot, "plugins-staging");
 await mkdir(stagingRoot, { recursive: true });
 const stagedPluginsDir = join(stagingRoot, "plugins");
 const pluginsSourceDir = join(repositoryRoot, "plugins");
-await cp(pluginsSourceDir, stagedPluginsDir, {
-  recursive: true,
-  filter: (source) => {
-    if (basename(source) === "__pycache__") return false;
-    // Only drop the plugin-level `plugins/<id>/tests/` directory (and its
-    // contents), matched by path depth from the plugins root. A basename-only
-    // check would also exclude `plugins/<id>/backend/**/tests` or future
-    // `ui/**/tests` directories that are not pytest fixtures.
-    const relativePath = relative(pluginsSourceDir, source);
-    if (relativePath === "") return true;
-    const segments = relativePath.split(sep);
-    if (segments.length >= 2 && segments[1] === "tests") return false;
-    return true;
-  },
-});
+await stageBuiltinPlugins(pluginsSourceDir, stagedPluginsDir);
 
 // Namespace directories have no __init__.py, so collect-submodules("plugins")
 // misses their backends. Analyze actual backend modules to retain transitive

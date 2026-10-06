@@ -37,6 +37,7 @@ const hostInternalMessage = "@yinfengwindy/shiori-sdk/host-internal is host-only
 export default [
   ...desktopEslintConfig([
     "apps/desktop/tests/plugin-ui/packaged*.ts",
+    "apps/desktop/tests/plugin-ui/distribution*.ts",
     "tests/fixtures/external-plugin/src/**/*.ts",
     "tests/fixtures/external-plugin/src/**/*.tsx",
     "apps/desktop/src/**/*.ts",

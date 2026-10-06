@@ -57,6 +57,24 @@ jobs:
       - name: Verify the installed host wheel and runtime resources
         run: .venv/bin/python -m scripts.verify_host_distribution
 
+      - name: Set up pnpm for external plugin artifact validation
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - name: Set up Node.js for external plugin artifact validation
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install plugin build dependencies without lifecycle scripts
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Build external plugin ZIP and validate it with the real host
+        run: node --test scripts/build-plugin.test.mjs
+
   plugin-isolation:
     runs-on: ubuntu-latest
     steps:
@@ -135,12 +153,9 @@ jobs:
       - name: Build static site skeleton
         run: pnpm run build:site
 
-      # The only check that proves the two `import.meta.glob` patterns for
-      # colocated plugin UI (`plugins/<id>/ui/` and `plugins/<id>/surface/`)
-      # actually resolve. `pnpm run build` above cannot: a glob matching
-      # nothing builds perfectly. Load-bearing since #181-B, where the desktop
-      # pet's renderer became the first real `surface/` match — a broken glob
-      # would ship a host with no pet in it and every other gate still green.
+      # Prove the generated virtual modules include builtin UI, surface and
+      # background entries, while excluding external source before parsing.
+      # Invalid external JavaScript must not enter any host dependency graph.
       - name: Run plugin UI build smoke check
         run: pnpm run desktop:test:plugin-ui
 
@@ -184,4 +199,4 @@ jobs:
       - name: Verify owned process, MCP and turn lifecycle
         env:
           PYTHONUTF8: "1"
-        run: .venv/Scripts/pytest.exe -q tests/backend/infra/process tests/backend/agent/mcp tests/backend/agent/tools/test_turn_scope.py tests/backend/agent/plugin_host/test_processes_browser_use.py tests/backend/agent/plugin_host/test_processes_computer_use.py plugins/browser_use/tests plugins/computer_use/tests tests/backend/agent/plugin_host/test_processes.py plugins/qq/tests/test_managed_napcat.py plugins/qq/tests/test_napcat_process_guard.py
+        run: .venv/Scripts/pytest.exe -q tests/backend/infra/process tests/backend/agent/mcp tests/backend/agent/tools/test_turn_scope.py tests/backend/agent/plugin_host/test_processes_browser_use.py tests/backend/agent/plugin_host/test_processes_computer_use.py plugins/browser_use/tests plugins/computer_use/tests tests/backend/agent/plugin_host/test_processes.py plugins/qq/tests/test_managed_napcat.py plugins/qq/tests/test_napcat_process_guard.py plugins/gpt_sovits_tts/tests/test_instance.py plugins/gpt_sovits_tts/tests/test_engine.py

@@ -14,7 +14,7 @@ export async function backendState(app: PackagedApp) {
 export async function activate(app: PackagedApp) {
   await app.settings();
   const rows = await app.roster();
-  if (rows[0]?.state === "DISABLED") await app.page!.getByRole("switch", { name: "启用 external_demo", exact: true }).click();
+  if (rows[0]?.state === "DISABLED") await app.page!.getByRole("switch", { name: "启用 External Demo", exact: true }).click();
   await app.state("ACTIVE");
 }
 
@@ -90,11 +90,11 @@ export async function lifecycle(app: PackagedApp, fixture: string) {
   await app.page!.getByRole("button", { name: "Save retained data", exact: true }).click();
   await eventually(() => backendState(app), (state) => state.saved === "retained-user-value", "saved plugin data");
   await app.settings();
-  await app.page!.getByRole("switch", { name: "启用 external_demo", exact: true }).click();
+  await app.page!.getByRole("switch", { name: "启用 External Demo", exact: true }).click();
   await app.state("DISABLED");
   await assertNoResidue(app);
   await app.screenshot("02-disabled");
-  await app.page!.getByRole("switch", { name: "启用 external_demo", exact: true }).click();
+  await app.page!.getByRole("switch", { name: "启用 External Demo", exact: true }).click();
   await app.state("ACTIVE");
   await exercise(app, "1.0.0");
   await app.settings();
