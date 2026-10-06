@@ -2,14 +2,15 @@
 
 from pathlib import Path
 
-from shiori_sdk.managed.child import private_environment
+from shiori_sdk.managed.paths import environment_path
 from shiori_sdk.managed.controller import ManagedRuntime
 from shiori_sdk.managed.installation import Installation
 from shiori_sdk.managed.service import OwnedService
 from shiori_sdk.plugin_services import ServicePluginContext
 
-from .runtime_manifest import CACHE_VARIABLES, OFFLINE_ENV, REVISION, resources
+from .runtime_manifest import PYTHON_RELATIVE, REVISION, resources
 from .runtime_build import build_runtime
+from .runtime_environment import runtime_environment
 from .settings import Settings, SettingsStore
 
 
@@ -19,9 +20,10 @@ def create_runtime(ctx: ServicePluginContext, store: SettingsStore) -> ManagedRu
     artifacts = resources()
 
     def launch(installation: Path, port: int, token: str):
+        installation = Path(environment_path(installation))
         return (
             [
-                str(installation / "python/python.exe"),
+                str(installation / PYTHON_RELATIVE),
                 "-I",
                 "-X",
                 "utf8",
@@ -30,12 +32,7 @@ def create_runtime(ctx: ServicePluginContext, store: SettingsStore) -> ManagedRu
                 token,
             ],
             installation,
-            private_environment(
-                root,
-                installation / "python",
-                cache_variables=CACHE_VARIABLES,
-                overrides=OFFLINE_ENV,
-            ),
+            runtime_environment(root, installation / "p"),
         )
 
     return ManagedRuntime(

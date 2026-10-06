@@ -3,6 +3,7 @@
 import shutil
 from pathlib import Path
 from shiori_sdk.managed.child import private_environment, run_owned
+from shiori_sdk.managed.paths import environment_path
 from shiori_sdk.plugin_services import ServicePluginContext
 from .runtime_manifest import (
     CACHE_VARIABLES,
@@ -48,14 +49,14 @@ async def build_runtime(staging: Path, ctx: ServicePluginContext, root: Path):
     await run_owned(
         ctx.processes,
         [
-            str(app / "runtime/python.exe"),
+            environment_path(app / "runtime/python.exe"),
             "-I",
             "-X",
             "utf8",
             "-c",
             "import torch; assert torch.cuda.is_available(), 'CUDA is unavailable'; assert torch.cuda.get_device_properties(0).total_memory > 0",
         ],
-        cwd=app,
+        cwd=Path(environment_path(app)),
         env=private_environment(
             root,
             app / "runtime",

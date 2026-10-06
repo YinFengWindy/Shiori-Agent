@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from shiori_sdk.files.json import atomic_save_json, load_json
 from shiori_sdk.files.lease import LeaseBusy, exclusive_file_lease
+from shiori_sdk.managed.paths import native_path
 
 
 class InstanceBusy(RuntimeError):
@@ -104,7 +105,11 @@ class InstanceState:
             managed.get("generation"), str
         ):
             return
-        if (url is not None and record.get("url") == url) or managed.get(
-            "runtime"
-        ) == runtime:
+        owned_root = managed.get("runtime")
+        same_root = (
+            isinstance(owned_root, str)
+            and runtime is not None
+            and native_path(Path(owned_root)) == native_path(Path(runtime))
+        )
+        if (url is not None and record.get("url") == url) or same_root:
             self.recover()

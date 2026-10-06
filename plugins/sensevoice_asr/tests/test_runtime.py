@@ -1,6 +1,7 @@
 """Managed selection is explicit and never borrows an external service endpoint."""
 
 import pytest
+from shiori_sdk.managed.paths import native_path
 
 from plugins.sensevoice_asr.backend.runtime import create_runtime, effective_settings
 from plugins.sensevoice_asr.backend.settings import Settings, SettingsStore
@@ -15,5 +16,5 @@ def test_managed_unavailable_does_not_fall_back_to_external_url(context, tmp_pat
             external.model_copy(update={"connection_mode": "managed"}), runtime
         )
     assert runtime.installation.root.is_relative_to(
-        tmp_path / "plugin-data/sensevoice_asr"
+        native_path(tmp_path / "plugin-data/sensevoice_asr")
     )

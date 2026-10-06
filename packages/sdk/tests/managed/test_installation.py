@@ -2,6 +2,7 @@
 
 import asyncio
 import hashlib
+import json
 import zipfile
 
 import pytest
@@ -52,7 +53,7 @@ async def test_build_failure_and_cancel_preserve_previous_pointer(tmp_path):
     with pytest.raises(asyncio.CancelledError):
         await task
     assert installer.current() == original
-    assert not list((installer.root / "staging").iterdir())
+    assert not list((installer.root / "s").iterdir())
     assert (original / "executable").read_bytes() == b"ready"
 
 
@@ -68,3 +69,21 @@ async def test_import_hash_failure_and_corrupt_receipt_cannot_be_current(tmp_pat
     (original / "complete.json").write_text("{}", encoding="utf-8")
     with pytest.raises(ValueError, match="记录校验"):
         installer.current()
+
+
+async def test_previous_trial_pointer_remains_readable_after_compact_layout(tmp_path):
+    installer, source = package(tmp_path)
+    original = await installer.prepare(build, lambda *_: None, source=source)
+    installer.publish(original)
+    pointer = json.loads(installer.pointer.read_text(encoding="utf-8"))
+    previous = installer.root / "versions" / original.name
+    previous.parent.mkdir()
+    original.rename(previous)
+    del pointer["layout"]
+    installer.pointer.write_text(json.dumps(pointer), encoding="utf-8")
+    assert installer.current() == previous
+    for invalid in ("outside", {"unexpected": "object"}):
+        pointer["layout"] = invalid
+        installer.pointer.write_text(json.dumps(pointer), encoding="utf-8")
+        with pytest.raises(ValueError, match="布局无效"):
+            installer.current()

@@ -68,9 +68,9 @@ TTS 的 `EmotionReferences` 允许在空角色情绪目录下新增私有名称�
 
 ## 插件托管环境
 
-两个 provider 自己保存资源锁、构建/启动策略和环境状态。SenseVoice 固定独立 CPython、完整离线依赖与 SenseVoiceSmall/fsmn-vad 模型，使用 CPU；GPT-SoVITS 固定官方 Windows 完整包与 7zr，显式验证 v2ProPlus/CUDA。资源进入各自 `plugin-data/<id>/runtime/`，不进入宿主 `.venv`，不导入彼此或桌宠代码。
+两个 provider 自己保存资源锁、构建/启动策略和环境状态。SenseVoice 固定独立 CPython、uv 0.12.23、完整离线依赖与 SenseVoiceSmall/fsmn-vad 模型，使用 CPU；GPT-SoVITS 固定官方 Windows 完整包与 7zr，显式验证 v2ProPlus/CUDA。资源进入各自 `plugin-data/<id>/runtime/`，不进入宿主 `.venv`，不导入彼此或桌宠代码。
 
-SDK 4.2 的 `managed/` 只复用固定资源获取、校验、原子版本发布、后台任务和原生进程归属机制。下载以固定大小/SHA-256 校验，断点请求验证 Content-Range；完整离线 ZIP 的所有资源仍逐项校验。准备取消/失败不发布 staging，新版本启动失败保留旧指针。显式 prepare 可以修复损坏的安装记录；start 则明确拒绝损坏记录。
+SDK 4.2 的 `managed/` 只复用固定资源获取、校验、原子版本发布、后台任务和原生进程归属机制。下载以固定大小/SHA-256 校验，断点请求验证 Content-Range；完整离线 ZIP 的所有资源仍逐项校验。准备取消/失败不发布暂存目录，新版本启动失败保留旧指针。私有环境使用紧凑 `s/<id>` / `v/<id>` 布局，版本和资源身份保留在校验记录；受控文件 I/O 支持 Windows 扩展路径，第三方 Python 的运行 prefix 和临时路径保留普通语义。ASR 的固定 uv 使用 offline/no-index/require-hashes 与四个已验证的标准 bdist 目录选项，不修改全局注册表，不把资源移出插件目录。显式 prepare 可以修复损坏的安装记录；start 则明确拒绝损坏记录。
 
 启动在普通后台任务中等待同一私有 service 文件租约，不阻塞插件 setup 或同时加载新旧模型。就绪必须同时满足所属子进程存活和健康令牌匹配，模型加载中的进程不可调用。停用、重载、退出先关闭所属原生进程树并等待退出，再释放租约；异常宿主退出由 Windows Job 清理。用户普通停止试听/朗读仍只废弃结果，绝不提前释放正在推理的 GPU 所有权。
 

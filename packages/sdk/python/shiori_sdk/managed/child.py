@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import BinaryIO
 
 from shiori_sdk.processes import ProcessOwner, Processes
+from .paths import environment_path, native_path
 
 
 def private_environment(
@@ -16,6 +17,7 @@ def private_environment(
     overrides: dict[str, str] | None = None,
 ) -> dict[str, str]:
     """Isolate Python/temp files and provider-selected cache variables from the host."""
+    root, executables = native_path(root), native_path(executables)
     env = {
         key: value
         for key, value in os.environ.items()
@@ -24,12 +26,19 @@ def private_environment(
     temporary = root / "tmp"
     temporary.mkdir(parents=True, exist_ok=True)
     env.update(
-        PATH=str(executables) + os.pathsep + env.get("PATH", ""),
+        PATH=environment_path(executables) + os.pathsep + env.get("PATH", ""),
         PYTHONNOUSERSITE="1",
-        TEMP=str(temporary),
-        TMP=str(temporary),
+        TEMP=environment_path(temporary),
+        TMP=environment_path(temporary),
     )
-    env.update({name: str(root / "cache" / name.lower()) for name in cache_variables})
+    # Third-party archive libraries may append POSIX member names. Extended
+    # namespaces disable Win32 slash normalization and would turn that into Win123.
+    env.update(
+        {
+            name: environment_path(root / "cache" / name.lower())
+            for name in cache_variables
+        }
+    )
     env.update(overrides or {})
     return env
 
@@ -49,6 +58,9 @@ class OwnedChild:
         """Launch a hidden tree with output retained in private plugin data."""
         if self.process is not None:
             raise RuntimeError("进程已启动")
+        # Preserve the caller's executable/cwd spelling. Third-party Python code
+        # may require normal sys.prefix semantics for relative DLL/script paths.
+        log = native_path(log)
         log.parent.mkdir(parents=True, exist_ok=True)
         self.log = log.open("ab")
         try:

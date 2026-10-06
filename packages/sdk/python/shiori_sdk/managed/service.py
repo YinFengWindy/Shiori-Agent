@@ -12,6 +12,7 @@ from shiori_sdk.files.lease import LeaseBusy, exclusive_file_lease
 from shiori_sdk.processes import Processes
 
 from .child import OwnedChild
+from .paths import native_path
 
 type Launch = Callable[[Path, int, str], tuple[list[str], Path, dict[str, str]]]
 
@@ -20,7 +21,7 @@ class OwnedService:
     """Readiness must come from this child token, never an arbitrary occupied port."""
 
     def __init__(self, root: Path, processes: Processes, launch: Launch):
-        self.root, self.launch = root, launch
+        self.root, self.launch = native_path(root), launch
         self.child = OwnedChild(processes)
         self.lease = ExitStack()
         self.url: str | None = None

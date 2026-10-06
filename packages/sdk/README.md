@@ -434,3 +434,13 @@ receives provider-selected import extensions and namespace and never stores
 provider settings in the host. Leaving settings does not cancel preparation.
 Native file staging remains streamed and bounded, with generic 16 GiB per-file
 and 32 GiB per-selection ceilings; plugins still request their own smaller limits.
+
+Controlled filesystem operations use Windows' extended-length namespace for
+drive and UNC paths. Compact `s/<id>` and `v/<id>` directories avoid duplicating
+the revision in every filename; the validated receipt retains version/resource
+identity. Existing trial pointers to `versions/` remain readable.
+Process arguments and working directories preserve the provider's spelling:
+native Python libraries can require ordinary `sys.prefix` paths when they append
+relative components. Third-party `TEMP`/`TMP`, cache and `PATH` values likewise
+retain ordinary syntax at the same private location. This does not alter global
+Windows settings or move data outside the plugin's private root.

@@ -9,20 +9,26 @@
 再次启用插件会启动已有环境。首次默认为外部服务以保留既有配置；选择托管后不会在失败时
 回退到外部地址。停止环境、停用插件与应用退出会回收所属原生进程树。
 
-固定资源包括 Astral CPython 3.12.15（20261003 Windows x64）、FunASR 1.4.16、
+固定资源包括 Astral CPython 3.12.15（20261003 Windows x64）、uv 0.12.23、FunASR 1.4.16、
 PyTorch/torchaudio 2.7.1 CPU、SenseVoiceSmall 与小型 fsmn-vad。本插件的
 `backend/packages.lock.json`、`models.lock.json` 与 `runtime_manifest.py` 保存准确
-版本、URL、大小和 SHA-256。四个固定源码依赖在私有解释器内离线构建；不会安装到宿主环境。
+版本、URL、大小和 SHA-256。固定 uv 以 offline/no-index/require-hashes 安装全部 74 个
+锁定依赖，其中四个源码包通过标准 setuptools backend 离线构建，不修改上游源码。
+构建使用各包独立的短 bdist 目录，避免 Windows 的旧式路径限制；不会安装到宿主环境。
 两个模型均使用绝对本地路径、CPU、关闭更新与远程代码；VAD 保留长录音分段处理。
 WAV 显式转单声道/16kHz；模型识别仍可能误字，不把健康检查当作准确率保证。
 
-完全离线 ZIP 的根目录必须包含 `cpython-3.12.15-windows.tar.gz`，以及
+完全离线 ZIP 的根目录必须包含 `cpython-3.12.15-windows.tar.gz`、
+`uv-0.12.23-windows-x64.zip`，以及
 `packages/<锁定文件名>`、`models/sensevoice/<锁定模型文件>`、`models/fsmn-vad/<锁定文件>`。
 不需要额外 manifest，不要外层目录。清单外的文件不被执行；清单内每项须通过哈希校验。
-普通插件 ZIP 仅包含代码、UI 与锁文件；完整推理资源约 1.36 GB，单独下载或导入。
+普通插件 ZIP 仅包含代码、UI 与锁文件；完整包包含 85 个锁定资源，共 1,373,095,206 字节
+（约 1.37 GB），单独下载或导入。
 
 环境位于 `plugin-data/sensevoice_asr/runtime/`：`downloads/` 缓存支持断点续传，
-`staging/` 保存未完成安装，`versions/` 保存完整版本，`current.json` 原子切换。
+`s/<id>/` 保存未完成安装，`v/<id>/p/` 保存完整 Python 环境，`current.json` 原子切换。
+版本与资源身份保存在校验记录中。`u/`、`t/`、`b/` 分别用于私有安装缓存、临时文件和构建。
+服务保留普通 Python prefix；受控文件操作使用扩展路径，无需修改 Windows 注册表或移动工作区。
 取消、校验失败或新服务启动失败都保留之前的完整版本。准备/启动错误显示在插件 UI，
 详见私有 `prepare.log`、`service.log`。服务必须返回本次进程的令牌才可被调用。
 
