@@ -27,6 +27,7 @@ class Settings(BaseModel):
     """Explicit v2ProPlus weights; relative paths resolve in the external server."""
 
     model_config = ConfigDict(extra="forbid", strict=True)
+    connection_mode: Literal["external", "managed"] = "external"
     url: str = "http://127.0.0.1:9880"
     version: Literal["v2ProPlus"] = "v2ProPlus"
     gpt_weights: str = Field(

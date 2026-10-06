@@ -2,6 +2,7 @@
 
 import asyncio
 import base64
+from collections.abc import Callable
 
 import httpx
 from shiori_sdk.extensions import BackgroundTasks
@@ -10,7 +11,7 @@ from shiori_sdk.roles import Roles
 from .client import SovitsClient
 from .instance import InferenceUncertain, InstanceState
 from .references import References
-from .settings import VoiceStore
+from .settings import Settings, VoiceStore
 
 
 class SynthesisEngine:
@@ -23,6 +24,8 @@ class SynthesisEngine:
         client: SovitsClient,
         background: BackgroundTasks,
         roles: Roles,
+        settings: Callable[[], Settings] | None = None,
+        managed_identity: Callable[[], dict[str, str] | None] | None = None,
     ):
         self.store, self.references, self.client = store, references, client
         self.background, self.roles = background, roles
@@ -30,6 +33,8 @@ class SynthesisEngine:
         self.instance = InstanceState(store.root)
         self.tasks: set[asyncio.Task[dict[str, object]]] = set()
         self.closed = False
+        self.settings = settings or (lambda: self.store.read().settings)
+        self.managed_identity = managed_identity or (lambda: None)
 
     async def synthesize(self, params: dict[str, object]) -> dict[str, object]:
         """A cancelled caller discards audio; the retained runtime task keeps ownership."""
@@ -64,6 +69,7 @@ class SynthesisEngine:
         if not isinstance(mood, str):
             raise ValueError("情绪必须是字符串")
         document = self.store.read()
+        settings = self.settings()
         voice = document.roles.get(role_id)
         if voice is None or voice.default is None:
             raise ValueError("请先保存角色的默认参考音频")
@@ -79,9 +85,9 @@ class SynthesisEngine:
                 "streaming_mode": False,
                 "media_type": "wav",
             }
-            operation = self.instance.begin(document.settings.url)
+            operation = self.instance.begin(settings.url, self.managed_identity())
             try:
-                audio = await self.client.synthesize(document.settings, payload)
+                audio = await self.client.synthesize(settings, payload)
             except (httpx.TransportError, asyncio.CancelledError) as error:
                 # A broken connection cannot prove that GPU work has stopped. Persist quarantine across reloads.
                 self.instance.finish(operation, unknown=True)
@@ -105,10 +111,28 @@ class SynthesisEngine:
             raise RuntimeError("上一请求仍在等待服务响应，请先完成外部服务重启")
         async with self.lock:
             with self.instance.lease():
-                result = await self.client.health(self.store.read().settings)
+                result = await self.client.health(self.settings())
                 self.instance.recover()
                 self.references.collect()
                 return result
+
+    async def managed_stopped(self, url: str) -> None:
+        """Recover only the matching endpoint after its native-owned child has exited."""
+        if self.tasks:
+            await asyncio.gather(*self.tasks, return_exceptions=True)
+        with self.instance.lease():
+            self.instance.recover_owned(url=url)
+            self.references.collect()
+
+    async def recover_managed(self, runtime: str) -> None:
+        """Recover a former owned generation only after its service lease is acquired."""
+        async with self.instance.wait():
+            self.instance.recover_owned(runtime=runtime)
+            if self.instance.marker.exists():
+                raise RuntimeError(
+                    "外部推理状态仍未知；请切回外部服务模式，重启该服务并确认重连"
+                )
+            self.references.collect()
 
     async def close(self) -> None:
         """Drain retained operations before releasing the transport."""

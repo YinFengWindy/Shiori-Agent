@@ -3,6 +3,32 @@
 独立 Shiori TTS provider，通过 SDK `shiori.tts.v1` 发布 `tts/synthesize`。
 角色声音编辑和后台原生试听都属于本插件，不依赖桌宠。
 
+## 插件托管环境（Windows x64 / NVIDIA CUDA）
+
+在本插件设置选择“插件托管”并保存，再下载环境或导入环境包。首次设置默认为外部服务，
+已有外部地址和权重路径保留；托管模式只调用所属进程，不会回退到外部地址。
+环境准备完毕后自动启动，再次启用插件也会启动已有环境。停止环境、停用插件或退出应用
+会回收其原生进程树；普通试听停止仅废弃结果，不终止仍在运行的 GPU 推理。
+
+固定资源为官方 [Windows 整合包](https://huggingface.co/lj1995/GPT-SoVITS-windows-package/tree/3146eac7da3723f60012b8633bdd5d61b7769e2a)
+`GPT-SoVITS-v2pro-20261005.7z`（10,832,887,120 字节）和官方 7zr 26.04。
+准确 SHA-256、内部目录名及必要文件清单由 `backend/runtime_manifest.py` 固定。
+整合包的代码以整包哈希为身份，不宣称与下述外部协议参考提交逐文件一致。
+启动明确指定 v2ProPlus、CUDA、半精度与两组权重，并检查实际设备/版本，CUDA 不可用时报错。
+
+导入官方 `.7z` 时会补齐缺少的固定 7zr 小工具；这不是完全离线入口。完全离线导入使用
+普通 ZIP，根目录包含原名 `GPT-SoVITS-v2pro-20261005.7z` 和 `7zr.exe`，不要外层目录。
+每个资源仍逐一校验固定大小和 SHA-256；ZIP 自身不能修改资源清单。
+普通插件 ZIP 只带接口、UI 与准备脚本，不携带这两个资源或模型。
+
+私有 `runtime/` 下的 `downloads/` 保留可续传资源，`staging/` 只用于未完成安装，
+`versions/` 保存完整版本，`current.json` 在新服务健康验证后原子切换。
+下载取消或失败不发布半成品；启动失败保留旧版本，可点击“启动环境”重新启动它。
+`prepare.log` 和 `service.log` 保存准备/运行错误。下载重试验证 Range 和最终哈希。
+同一私有根的文件租约防止新旧插件代同时启动模型；健康检查还必须匹配本次进程令牌。
+受管推理记录携带所属代身份：正常关闭先 kill/wait 再释放租约，宿主异常退出由 Windows Job
+回收进程；新代取得服务租约和推理租约后才能恢复旧受管记录。外部服务记录不会因此清除。
+
 ## 外部服务
 
 协议固定于官方 GPT-SoVITS commit `b274eae5ee2f1b7e33ea755f60c518a8947aac7f` 的
@@ -44,7 +70,7 @@ runtime lease 直到真正完成；试听停止会立即停止播放并屏蔽晚
 
 ## 安装与验证
 
-要求 SDK / Runtime API 4.1，manifest 为 `distribution: external`。
+要求 SDK / Runtime API 4.2，manifest 为 `distribution: external`。
 使用通用 builder 构建普通 ZIP，从插件页面安装、信任、启用、更新、停用与卸载。
 在仓库根目录构建：
 
@@ -54,8 +80,8 @@ node scripts/build-plugin.mjs --plugin plugins/gpt_sovits_tts --output artifacts
 
 从“设置 → 插件 → 安装插件 ZIP”选择产物，确认信任并安装，重启后启用。
 Python wheel 独立测试命令见[源码仓库 TESTING.md](https://github.com/YinFengWindy/Shiori-Agent/blob/main/plugins/gpt_sovits_tts/TESTING.md)。不安装大型推理依赖到宿主。
-当前协议、队列、取消和文件生命周期通过受控 HTTP 替身验证。未下载模型、未声称
-真实试听通过；角色音色/情绪效果、4060 Laptop 延迟及显存验收由 #676 完成。
+协议、队列、取消、下载完整性及文件/进程所有权通过受控测试验证。真实打包应用的
+安装、模型试听、延迟和资源记录在对应 PR 的验收结果中单独报告。
 
 应用级验收另以实际插件 ZIP、Electron 生产入口和 Python bridge 连接本机 HTTP 替身，
 音频使用生成的 PCM。它验证安装与真实应用接线，不等同于独立插件单测或真实模型效果。

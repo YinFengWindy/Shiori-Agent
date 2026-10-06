@@ -24,6 +24,8 @@ source_paths:
   - apps/desktop/scripts/runtime-plugin-modules.mjs
   - apps/desktop/scripts/runtime-pyinstaller.mjs
   - packages/sdk/src/hooks/usePrivateDraft.ts
+  - packages/sdk/python/shiori_sdk/managed/
+  - packages/sdk/src/managed/
 related:
   - desktop-and-bridge.md
   - roles.md
@@ -46,11 +48,11 @@ related:
 
 SDK 的 `shiori.asr.v1` 定义 `transcribe({audio_base64, format}) -> {text}`；`shiori.tts.v1` 定义 `synthesize({text, role_id, mood}) -> {audio_base64, format}`。SDK 不保存音色、参考素材、选型策略或语音状态机。`sensevoice_asr` 发布 `asr/transcribe`，`gpt_sovits_tts` 发布 `tts/synthesize`；两个插件均可独立安装、配置和测试，不依赖桌宠。
 
-SenseVoiceSmall 使用明确的 CPU / `sensevoice` 配置连接本地 FunASR HTTP 服务，设置页支持 WAV 文件转写。GPT-SoVITS 连接本机 `api_v2.py` 服务，当前支持 v2ProPlus；连接检查仅证明 API 可达，不能验证已加载模型或音质。两者只接受 loopback HTTP 地址，不携带推理环境、模型或大型依赖。环境托管和真实声学验收另行实施。
+SenseVoiceSmall 使用明确的 CPU / `sensevoice` 配置连接本地 FunASR HTTP 服务，设置页支持 WAV 文件转写。GPT-SoVITS 连接本机 `api_v2.py` 服务，当前支持 v2ProPlus；连接检查仅证明 API 可达，不能验证已加载模型或音质。两者只接受 loopback HTTP 地址。用户可明确选择外部服务或插件托管，模式和外部连接设置均由 provider 保存；托管失败不回退到外部地址。普通插件 ZIP 不携带大型环境或模型，固定资源在各插件内单独下载/导入。
 
 GPT-SoVITS 私有 `voices.json` 保存服务设置、默认参考、按角色 mood 映射的参考、语言和语速，`references/` 保存不可变 WAV 副本。每次导入先校验同一份音频字节，再原子写入独立 UUID 文件；同内容的新草稿不会复用旧实例正在回收的身份，旧哈希文件名仍可读取。默认参考须在合成前保存，未映射 mood 使用该角色保存的默认参考。角色编辑器在自管面板里独立保存；试听由 UI 调用同一公共合成服务，只有当前角色/epoch 的结果才交自己的 background 播放。停止不会取消真实推理，迟到结果不得启动播放。
 
-GPT-SoVITS 的实例租约覆盖权重切换、参考文件 pin 和完整 HTTP 响应。连接中断无法确认推理结束时，`inference.json` 保留隔离状态并跨重载拒绝新推理；用户必须先重启外部服务，再在设置中明确确认恢复。正常返回的错误、静音或无效音频也会报错，不自动重试或切换 provider。SDK 4.1 提供通用 WAV 校验、暂存文件和 loopback HTTP 工具，业务锁与恢复策略仍属于 provider。
+GPT-SoVITS 的实例租约覆盖权重切换、参考文件 pin 和完整 HTTP 响应。连接中断无法确认推理结束时，`inference.json` 保留隔离状态并跨重载拒绝新推理；外部服务须由用户重启后明确确认恢复；托管记录包含所属 generation 和私有 runtime 根身份，只有所属原生进程退出且取得同一服务/推理租约后才能自动恢复，不能因此清除外部标记。正常返回的错误、静音或无效音频也会报错，不自动重试或切换 provider。SDK 4.1 提供通用 WAV 校验、暂存文件和 loopback HTTP 工具，业务锁与恢复策略仍属于 provider。
 
 桌宠后端 `VoicePreferencesStore` 自主读写 `plugin-data/desktop_pet/voice-preferences.json`，保存启用状态、快捷键、麦克风和 ASR/TTS 选择；UI 由桌宠 `VoiceSettings.tsx` 注入。新语音数据不进入宿主 `[voice]`、`[plugins.desktop_pet]` 或 `roles.json` 的 `runtime_config.tts` / `plugin_data`。provider 的角色声音配置由 provider 自身私有存储管理。
 
@@ -64,9 +66,19 @@ TTS 的 `EmotionReferences` 允许在空角色情绪目录下新增私有名称�
 
 验证分两层：插件独立测试只依赖 SDK fake 与受控 HTTP；应用级验收安装实际两个 ZIP，通过隔离 Electron 生产入口与 Python bridge 测试独立 UI 及桌宠组合链路。后者可以替换原生输入为生成 PCM、替换本机 ASR/LLM/TTS HTTP 服务，但不伪造聊天事件或绕过真实服务调用。两者都不代表真实模型音质、情绪效果或本机性能通过，真实模型验收由 #676 承担。
 
+## 插件托管环境
+
+两个 provider 自己保存资源锁、构建/启动策略和环境状态。SenseVoice 固定独立 CPython、完整离线依赖与 SenseVoiceSmall/fsmn-vad 模型，使用 CPU；GPT-SoVITS 固定官方 Windows 完整包与 7zr，显式验证 v2ProPlus/CUDA。资源进入各自 `plugin-data/<id>/runtime/`，不进入宿主 `.venv`，不导入彼此或桌宠代码。
+
+SDK 4.2 的 `managed/` 只复用固定资源获取、校验、原子版本发布、后台任务和原生进程归属机制。下载以固定大小/SHA-256 校验，断点请求验证 Content-Range；完整离线 ZIP 的所有资源仍逐项校验。准备取消/失败不发布 staging，新版本启动失败保留旧指针。显式 prepare 可以修复损坏的安装记录；start 则明确拒绝损坏记录。
+
+启动在普通后台任务中等待同一私有 service 文件租约，不阻塞插件 setup 或同时加载新旧模型。就绪必须同时满足所属子进程存活和健康令牌匹配，模型加载中的进程不可调用。停用、重载、退出先关闭所属原生进程树并等待退出，再释放租约；异常宿主退出由 Windows Job 清理。用户普通停止试听/朗读仍只废弃结果，绝不提前释放正在推理的 GPU 所有权。
+
+通用设置控件 `ManagedRuntimePanel` 轮询所属插件的 `runtime.*` RPC，离开页面不取消准备，取消/停止为显式动作。宿主文件选择器仍按流式大小限制暂存，通用上限为单文件 16 GiB / 批次 32 GiB。原生进程、文件选择和必要 UI 插槽之外的模型业务均不进入宿主。
+
 ## 分发与安装
 
-两个 provider 的 manifest 均为 `distribution: external`，要求 SDK / Runtime API 4.1。仓库中的源码不参与内置后端发现、前端 registry 或冻结运行时收集。通用 `scripts/build-plugin.mjs` 将各包构建为独立 ZIP，保留 SDK/React 为宿主提供的 external，并使用已有 ZIP 安装、信任、启用、更新及卸载流程。该分类适用于所有插件，不按 provider id 特判。构建命令与服务准备见 [ASR README](../../../plugins/sensevoice_asr/README.md) 和 [TTS README](../../../plugins/gpt_sovits_tts/README.md)。
+两个 provider 的 manifest 均为 `distribution: external`，要求 SDK / Runtime API 4.2。仓库中的源码不参与内置后端发现、前端 registry 或冻结运行时收集。通用 `scripts/build-plugin.mjs` 将各包构建为独立 ZIP，保留 SDK/React 为宿主提供的 external，并使用已有 ZIP 安装、信任、启用、更新及卸载流程。该分类适用于所有插件，不按 provider id 特判。构建命令与服务准备见 [ASR README](../../../plugins/sensevoice_asr/README.md) 和 [TTS README](../../../plugins/gpt_sovits_tts/README.md)。
 
 冻结宿主同时递归收集 SDK 运行时模块，包括没有 `__init__.py` 的 `files/`，排除 `shiori_sdk.testing` 与缓存；完整 SDK 不依赖当前已安装插件的静态引用。实际 PyInstaller 参数检查 SDK/宿主/内置插件模块是否全部进入 hidden imports。`test-sdk-runtime.mjs` 使用同一 collector 构建小型冻结探针，在仓库外清除 Python 源码路径后动态导入音频、暂存和 loopback HTTP 模块，并确认 testing 不存在。
 

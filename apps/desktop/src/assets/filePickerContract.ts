@@ -1,8 +1,8 @@
 import type { NativeFilePickerOptions } from "@yinfengwindy/shiori-sdk/contract";
 
 /** Hard host ceilings; a plugin may request a smaller per-file limit. */
-export const maxNativeFileBytes = 32 * 1024 * 1024;
-export const maxNativeBatchBytes = 64 * 1024 * 1024;
+export const maxNativeFileBytes = 16 * 1024 ** 3;
+export const maxNativeBatchBytes = 32 * 1024 ** 3;
 export const maxNativeFileCount = 16;
 
 /** Rejects path-bearing or unbounded IPC options before opening a native dialog. */

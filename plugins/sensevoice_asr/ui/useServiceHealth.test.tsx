@@ -12,7 +12,7 @@ test("endpoint changes invalidate a pending check and service errors remain visi
     if (failure) throw { message: "TypeError: CPU model missing" };
     return await pending.promise as T;
   } });
-  const first = { url: "http://127.0.0.1:8000", device: "cpu", model: "sensevoice" } satisfies SenseVoiceSettings;
+  const first = { connection_mode: "external", url: "http://127.0.0.1:8000", device: "cpu", model: "sensevoice" } satisfies SenseVoiceSettings;
   const second = { ...first, url: "http://127.0.0.1:8001" };
   let latest!: ReturnType<typeof useServiceHealth>;
   function Probe({ settings }: { settings: SenseVoiceSettings | null }) { latest = useServiceHealth(client, settings); return null; }

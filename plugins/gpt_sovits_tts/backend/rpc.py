@@ -2,12 +2,15 @@
 
 from shiori_sdk.plugin_services import ServicePluginContext
 from shiori_sdk.rpc import Concurrency
+from shiori_sdk.managed.controller import ManagedRuntime
 
 from .engine import SynthesisEngine
 from .settings import RoleVoice
 
 
-def register_rpc(ctx: ServicePluginContext, engine: SynthesisEngine) -> None:
+def register_rpc(
+    ctx: ServicePluginContext, engine: SynthesisEngine, runtime: ManagedRuntime
+) -> None:
     """Expose the plugin's settings and explicit role-save transaction."""
     store, references = engine.store, engine.references
 
@@ -21,11 +24,19 @@ def register_rpc(ctx: ServicePluginContext, engine: SynthesisEngine) -> None:
         return store.read().settings.model_dump()
 
     async def save(params: dict[str, object]):
-        return store.save_settings(params).model_dump()
+        if engine.lock.locked() or runtime.status()["busy"]:
+            raise RuntimeError("请等待当前推理或环境操作结束后再保存连接设置")
+        previous = store.read().settings.connection_mode
+        result = store.save_settings(params)
+        if previous != result.connection_mode:
+            await runtime.stop()
+            if result.connection_mode == "managed" and runtime.status()["installed"]:
+                runtime.submit("start")
+        return result.model_dump()
 
     async def health(_params: dict[str, object]):
         return {
-            **await engine.client.health(store.read().settings),
+            **await engine.client.health(engine.settings()),
             **engine.instance.status(),
         }
 

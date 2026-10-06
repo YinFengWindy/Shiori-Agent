@@ -7,6 +7,7 @@ import { prepareComputerRuntime } from "./computer-runtime.mjs";
 import { resolveReleaseManifest } from "./release-manifest.mjs";
 import { stageBuiltinPlugins } from "./runtime-plugin-staging.mjs";
 import { createRuntimePyinstallerArgs } from "./runtime-pyinstaller.mjs";
+import { preparePyinstallerInvocation } from "./pyinstaller-invocation.mjs";
 import {
   collectHostBackendModules,
   collectPluginBackendModules,
@@ -92,11 +93,12 @@ const args = createRuntimePyinstallerArgs({
   browserRuntime, computerRuntime, repositoryRoot, pluginModules, hostModules, sdkModules,
 });
 
-const child = spawn(python, args, { cwd: backendRoot, stdio: "inherit" });
-child.once("error", (error) => {
-  throw new Error(`Unable to start PyInstaller with ${python}: ${error.message}`);
+const invocation = await preparePyinstallerInvocation(args, workRoot);
+const child = spawn(python, invocation.pythonArgs, { cwd: backendRoot, stdio: "inherit" });
+const exitCode = await new Promise((resolveExit, reject) => {
+  child.once("error", (error) => reject(new Error(`Unable to start PyInstaller with ${python}: ${error.message}`)));
+  child.once("exit", (code) => resolveExit(code ?? 1));
 });
-const exitCode = await new Promise((resolveExit) => child.once("exit", (code) => resolveExit(code ?? 1)));
 if (exitCode !== 0) {
   throw new Error(`PyInstaller failed with exit code ${exitCode}`);
 }

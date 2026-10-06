@@ -5,6 +5,7 @@ import pytest
 from plugins.gpt_sovits_tts.backend.client import SovitsClient
 from plugins.gpt_sovits_tts.backend.engine import SynthesisEngine
 from plugins.gpt_sovits_tts.backend.rpc import register_rpc
+from plugins.gpt_sovits_tts.backend.runtime import create_runtime
 
 
 async def test_import_is_an_unsaved_draft_until_role_save(
@@ -14,7 +15,7 @@ async def test_import_is_an_unsaved_draft_until_role_save(
     engine = SynthesisEngine(
         references.store, references, client, context.background, context.roles
     )
-    register_rpc(context, engine)
+    register_rpc(context, engine, create_runtime(context, references.store))
     source = tmp_path / "private_runtime/imports/gpt_sovits_tts-audio/clip.wav"
     source.parent.mkdir(parents=True)
     source.write_bytes(wav_bytes())

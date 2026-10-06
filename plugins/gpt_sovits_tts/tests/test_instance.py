@@ -52,3 +52,28 @@ def test_late_completion_never_clears_or_rewrites_replacement_marker(tmp_path, u
     old.finish(previous, unknown=unknown)
     assert load_json(new.marker)["operation"] == current
     assert load_json(new.marker)["state"] == "in_flight"
+
+
+@pytest.mark.parametrize("managed", [False, True])
+def test_crash_recovery_clears_only_this_managed_runtime_identity(tmp_path, managed):
+    instance = InstanceState(tmp_path)
+    root = str(tmp_path / "runtime")
+    identity = {"generation": "old-owner", "runtime": root} if managed else None
+    with instance.lease():
+        operation = instance.begin("http://127.0.0.1:12345", identity)
+        instance.finish(operation, unknown=True)
+    with instance.lease():
+        instance.recover_owned(runtime="another-private-runtime")
+        assert instance.marker.exists()
+        instance.recover_owned(runtime=root)
+    assert instance.marker.exists() is not managed
+
+
+def test_external_marker_is_not_cleared_even_when_its_url_matches_a_stopped_child(
+    tmp_path,
+):
+    instance = InstanceState(tmp_path)
+    with instance.lease():
+        instance.begin("http://127.0.0.1:12345")
+        instance.recover_owned(url="http://127.0.0.1:12345")
+    assert instance.marker.exists()

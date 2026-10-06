@@ -13,6 +13,7 @@ class Settings(BaseModel):
     """The supported deployment is the official FunASR server on CPU."""
 
     model_config = ConfigDict(extra="forbid", strict=True)
+    connection_mode: Literal["external", "managed"] = "external"
     url: str = "http://127.0.0.1:8000"
     device: Literal["cpu"] = "cpu"
     model: Literal["sensevoice"] = "sensevoice"
@@ -23,7 +24,8 @@ class SettingsStore:
     """Atomically load/save validated settings, retaining corrupt files as errors."""
 
     def __init__(self, workspace: Path):
-        self.path = plugin_data_dir(workspace, "sensevoice_asr") / "settings.json"
+        self.root = plugin_data_dir(workspace, "sensevoice_asr")
+        self.path = self.root / "settings.json"
 
     def read(self) -> Settings:
         """Read a detached settings snapshot."""

@@ -2,10 +2,11 @@ api: 2
 package_contract: 1
 id: gpt_sovits_tts
 display_name: GPT-SoVITS 语音合成
-version: "0.1.0"
-runtime_api: ">=4.1.0 <5.0.0"
+version: "0.2.0"
+runtime_api: ">=4.2.0 <5.0.0"
 distribution: external
 entry: backend/plugin.py
+assets: [runtime_assets/server.py]
 host_dependencies:
   python: [httpx, pydantic]
 peer_dependencies:
@@ -26,3 +27,5 @@ capabilities:
   - roles
   - events
   - background
+  - processes
+  - runtime

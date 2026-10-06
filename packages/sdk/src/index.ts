@@ -22,6 +22,9 @@ export { errorMessage } from "./errors";
 export { useLatestRef } from "./useLatestRef";
 // Runtime API 4.1.0: plugin-owned document loading, dirty state and explicit save.
 export { usePrivateDraft } from "./hooks/usePrivateDraft";
+// Runtime API 4.2.0: opt-in UI for plugin-owned fixed environment preparation.
+export { ManagedRuntimePanel } from "./managed/ManagedRuntimePanel";
+export { useManagedRuntime, type ManagedRuntimeStatus } from "./managed/useManagedRuntime";
 export { roleToggleStatus, type RoleCapabilityStatus, type RoleCapabilityTone } from "./roleCapability";
 export {
   accountOnline,

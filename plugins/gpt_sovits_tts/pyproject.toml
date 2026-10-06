@@ -4,12 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "shiori-plugin-gpt-sovits-tts"
-version = "0.1.0"
+version = "0.2.0"
 requires-python = ">=3.12"
-dependencies = ["shiori-sdk>=4.1.0,<5", "httpx>=0.28.1", "pydantic>=2.12.0"]
+dependencies = ["shiori-sdk>=4.2.0,<5", "httpx>=0.28.1", "pydantic>=2.12.0"]
 
 [project.optional-dependencies]
-test = ["shiori-sdk[testing]>=4.1.0,<5"]
+test = ["shiori-sdk[testing]>=4.2.0,<5"]
 
 [tool.setuptools]
 include-package-data = false
@@ -17,7 +17,7 @@ packages = ["plugins.gpt_sovits_tts", "plugins.gpt_sovits_tts.backend"]
 package-dir = {"plugins.gpt_sovits_tts" = "."}
 
 [tool.setuptools.package-data]
-"plugins.gpt_sovits_tts" = ["manifest.yaml", "README.md", "TESTING.md"]
+"plugins.gpt_sovits_tts" = ["manifest.yaml", "README.md", "TESTING.md", "runtime_assets/*.py"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

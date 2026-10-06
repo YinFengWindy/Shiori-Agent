@@ -10,7 +10,7 @@ test("recovery requires explicit restart confirmation and connection status neve
   const requests: Array<{ method: string; payload?: Record<string, unknown> }> = [];
   const client = createFakePluginClient({ call: async <T,>(method: string, payload?: Record<string, unknown>) => {
     requests.push({ method, payload });
-    const settings = { url: "http://127.0.0.1:9880", version: "v2ProPlus", gpt_weights: "voice.ckpt", sovits_weights: "voice.pth" } satisfies GptSoVitsSettings;
+    const settings = { connection_mode: "external", url: "http://127.0.0.1:9880", version: "v2ProPlus", gpt_weights: "voice.ckpt", sovits_weights: "voice.pth" } satisfies GptSoVitsSettings;
     const health = { reachable: true, configured_version: "v2ProPlus", model_verified: false, busy: false, recovery_required: true, instance: { operation: "previous", url: settings.url, state: "unknown" } } satisfies GptSoVitsHealth;
     return (method === "settings.get" ? settings : health) as T;
   } });

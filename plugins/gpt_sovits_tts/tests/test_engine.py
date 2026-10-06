@@ -9,10 +9,34 @@ from plugins.gpt_sovits_tts.backend.client import SovitsClient
 from plugins.gpt_sovits_tts.backend.engine import SynthesisEngine
 from plugins.gpt_sovits_tts.backend.references import References
 from plugins.gpt_sovits_tts.backend.rpc import register_rpc
+from plugins.gpt_sovits_tts.backend.runtime import create_runtime
 
 
 def request(text="第一句", mood="Neutral"):
     return {"role_id": "role", "text": text, "mood": mood}
+
+
+@pytest.mark.parametrize("owned", [True, False])
+async def test_restart_recovers_owned_crash_but_refuses_foreign_inference(
+    context, configured, owned
+):
+    engine = SynthesisEngine(
+        configured.store, configured, SovitsClient(), context.background, context.roles
+    )
+    identity = str(configured.store.root / "runtime")
+    with engine.instance.lease():
+        engine.instance.begin(
+            "http://127.0.0.1:12345",
+            {"generation": "previous", "runtime": identity} if owned else None,
+        )
+    if owned:
+        await engine.recover_managed(identity)
+        assert not engine.instance.marker.exists()
+    else:
+        with pytest.raises(RuntimeError, match="切回外部服务"):
+            await engine.recover_managed(identity)
+        assert engine.instance.marker.exists()
+    await engine.close()
 
 
 async def test_old_engine_completion_keeps_same_audio_reimported_by_new_editor(
@@ -49,7 +73,7 @@ async def test_old_engine_completion_keeps_same_audio_reimported_by_new_editor(
         context.background,
         context.roles,
     )
-    register_rpc(context, new)
+    register_rpc(context, new, create_runtime(context, configured.store))
 
     async def import_audio(content):
         source = (

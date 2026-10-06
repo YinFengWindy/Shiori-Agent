@@ -2,7 +2,7 @@
 
 [@yinfengwindy/shiori-sdk](https://www.npmjs.com/package/@yinfengwindy/shiori-sdk)
 and [shiori-sdk](https://pypi.org/project/shiori-sdk/) are the TypeScript and Python distributions of the
-same plugin contract. Both are version **4.1.0**, with Runtime API **4.1.0**.
+same plugin contract. Both are version **4.2.0**, with Runtime API **4.2.0**.
 
 Start with the [plugin tutorial](https://github.com/YinFengWindy/Shiori-Agent/blob/main/docs/_handbook/plugins-tutorial.md)
 and [runtime contract](https://github.com/YinFengWindy/Shiori-Agent/blob/main/docs/_handbook/plugin-runtime-contract.md)
@@ -407,3 +407,30 @@ SenseVoice and GPT-SoVITS implementations are separate follow-up plugin deliveri
 `shiori_sdk.files.audio.pcm_wav_duration` validates complete PCM WAV audio, optionally rejecting digital silence. `shiori_sdk.files.staging.staged_import_file` validates a native picker's namespace, extension and byte limit. `shiori_sdk.local_http.loopback_http_url` validates a plain HTTP loopback origin. These utilities do not open a connection or supply inference policy.
 
 A manifest may declare `distribution: external` for repository sources delivered through normal plugin ZIP installation instead of bundled discovery. Omission retains builtin distribution. External installation, trust, update and removal still use the existing workspace plugin lifecycle.
+
+## 4.2 private managed environments
+
+`shiori_sdk.managed` contains opt-in generic artifact acquisition, atomic installation,
+owned-process and background-operation helpers. A provider supplies fixed `Artifact`
+records, a private root, build/launch callbacks, and its connection-mode policy.
+SDK helpers contain no model names, vendor recipes, concrete plugin imports or
+consumer orchestration. Process creation still delegates to injected `Processes`.
+
+`Installation` validates sizes/SHA-256, resumes bounded HTTP ranges, supports an
+offline resource ZIP and publishes complete version directories through an atomic
+pointer. `OwnedService` holds a cross-generation file lease, waits for a matching
+child generation token, and admits calls only after readiness. Close kills and
+joins its native tree before releasing the lease. Windows host crashes rely on
+the existing Windows Job ownership contract; no PID is adopted or killed by ID.
+
+`ManagedRuntime` retains background progress/errors, cancellation and explicit
+start/stop. `register_runtime_rpc` wires opt-in `runtime.status`, `prepare`, `start`,
+`stop` and `cancel` endpoints plus plugin drain cleanup. Providers own imported
+file extensions/namespaces, models, private settings and recovery policy. They
+must declare `workspace`, `rpc`, `background`, `processes` and `runtime` capabilities.
+
+The renderer exports `ManagedRuntimePanel` and `useManagedRuntime`; the panel
+receives provider-selected import extensions and namespace and never stores
+provider settings in the host. Leaving settings does not cancel preparation.
+Native file staging remains streamed and bounded, with generic 16 GiB per-file
+and 32 GiB per-selection ceilings; plugins still request their own smaller limits.
