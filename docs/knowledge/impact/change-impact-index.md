@@ -2,7 +2,7 @@
 title: 改动影响索引
 kind: 影响分析
 status: 当前有效
-last_verified_commit: 92cc9c92
+last_verified_commit: b42c7d18
 source_paths:
   - apps/backend/core/
   - apps/backend/agent/
@@ -50,7 +50,8 @@ related:
 | 本地 ASR / TTS provider | SenseVoice CPU 协议与文件转写，GPT-SoVITS 独立导入身份、跨代 pin/回收、实例租约、未知完成隔离，试听迟到结果，共享 WAV/loopback 工具 | `SenseVoiceClient SynthesisEngine References InstanceState VoiceStore usePreview` |
 | 插件分发 / 独立 ZIP | manifest distribution、后端 discovery、三个前端 registry、冻结 runtime staging 与完整 SDK 收集、实际 PyInstaller 参数、公共 builder 与安装信任事务 | `distribution external builtinPluginEntries stageBuiltinPlugins collectSdkRuntimeModules createRuntimePyinstallerArgs buildPlugin` |
 | 插件原生音频 / 按键 | src/native 的真实 sender、通信 owner/generation、单次播放与录音校验，surface 自有消息、重载和退出清理 | `PluginNativeSessions bindNativeDocumentLifecycle startCapture cancelCapture` |
-| 插件私有角色设置 | roleUi self-managed 插槽、scoped client、真实 roleId、独立保存与 dirty/错误；既有 roleSettings 草稿模式保持边界 | `PluginRoleUiSlot PluginRoleUiContribution createRoleUiDirtyLease` |
+| 插件私有角色设置 | roleUi self-managed 插槽、scoped client、真实 roleId、独立保存与 dirty/错误，provider 自有情绪名称和参考；既有 roleSettings 草稿模式保持边界 | `PluginRoleUiSlot PluginRoleUiContribution createRoleUiDirtyLease EmotionReferences` |
+| 插件通信处置错误 | pending wait/late admission 的结构化 reason、插件卸载 best-effort 清理和未预期失败反馈；同 code 不等于已处置 | `PluginCommunicationLifetime context_disposed releasePreview` |
 | 插件私有文档草稿 | SDK hook 的 client/identity 隔离、读取与保存错误、dirty 上报，两 provider 调用者和宿主 peer ABI | `usePrivateDraft pluginUiPeerExports` |
 | 调度任务 | scheduler、工具、持久化、主动投递、角色删除、桌面表单 | `ScheduleRoleTaskService compute_fire_at` |
 | 单角色剧情 | Story repository、Director、角色/玩家快照、bridge 事件、桌面剧情适配层 | `StorySimulationService StoryRepository StorySimulationHandler stories.beat.committed` |

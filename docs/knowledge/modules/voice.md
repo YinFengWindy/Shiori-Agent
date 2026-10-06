@@ -2,7 +2,7 @@
 title: 语音 Provider 与桌宠交互
 kind: 领域说明
 status: 当前有效
-last_verified_commit: 92cc9c92
+last_verified_commit: b42c7d18
 source_paths:
   - plugins/desktop_pet/background/voice/
   - plugins/desktop_pet/backend/voice_preferences.py
@@ -57,6 +57,12 @@ GPT-SoVITS 的实例租约覆盖权重切换、参考文件 pin 和完整 HTTP �
 `PluginRoleUiSlot` 承载 `roleUi` 的 `mode: "self-managed"` 面板，提供只读角色上下文、真实 roleId、所属插件的 scoped client 与 `PluginHostServicesProvider`。插件自主读取、保存及报告 dirty，并通过所属插件的文件选择器导入参考音频；新角色无真实 ID 时不能持久化。该模式不参与宿主角色原子保存，不把跨存储成功或失败包装成单一事务。原有 `roleSettings` 的合法角色草稿模式继续保留。
 
 两 provider 通过 SDK 4.1 的 `usePrivateDraft` 共享私有文档加载、dirty、保存及错误处理。迟到结果按 scoped client 和文档身份隔离；读取失败不生成可保存的空文档，保存失败保留草稿。具体健康检查、音频测试和持久化 RPC 仍由各插件拥有。
+
+TTS 的 `EmotionReferences` 允许在空角色情绪目录下新增私有名称和参考，目录仅提供建议。空白、重复、原型特殊名称和超出 64 个映射的输入被拒绝；未完成导入的名称计入 dirty 并阻止保存或试听。删除和保存都只修改 provider 的 `moods`。预览可选择已配置映射，自动朗读仍按调用者传入的 mood 匹配，未命中使用默认参考。
+
+健康状态的 `instance` 是 `{operation,url,state}` 标记或 `null`，state 为 `in_flight` / `unknown`，不是实例名称字符串。卸载编辑器时试听停止为 best effort，epoch 仍保证迟到合成不播放；仅通信错误中稳定的 `details.reason: context_disposed` 被视为已处置，其他失败通过宿主反馈报告。手动停止失败留在当前编辑器显示。
+
+验证分两层：插件独立测试只依赖 SDK fake 与受控 HTTP；应用级验收安装实际两个 ZIP，通过隔离 Electron 生产入口与 Python bridge 测试独立 UI 及桌宠组合链路。后者可以替换原生输入为生成 PCM、替换本机 ASR/LLM/TTS HTTP 服务，但不伪造聊天事件或绕过真实服务调用。两者都不代表真实模型音质、情绪效果或本机性能通过，真实模型验收由 #676 承担。
 
 ## 分发与安装
 
