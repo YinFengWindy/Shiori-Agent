@@ -128,3 +128,209 @@ async def test_uninstall_does_not_queue_after_failed_resource_cleanup(
         )
     assert env.packages.store.list() == []
     assert env.target.exists()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "plugin_id, kind, provider_id, label",
+    [
+        ("tencent_asr", "asr", "tencent", "腾讯语音识别"),
+        ("minimax_tts", "tts", "minimax", "MiniMax 语音合成"),
+    ],
+)
+async def test_shipped_voice_packages_support_real_update_uninstall_and_reinstall(
+    tmp_path, monkeypatch, plugin_id, kind, provider_id, label
+):
+    import io
+    import json
+    import wave
+    from types import SimpleNamespace
+    from zipfile import ZipFile
+    from agent.config import load_config_data, load_config_text
+    from agent.plugin_host.kernel import HostServices, PluginKernel
+    from bootstrap.tools import _resolve_plugin_dirs
+    from bootstrap.bundled_plugins import ensure_bundled_plugins
+    from bus.event_bus import EventBus
+    from desktop_bridge.runtime.plugin_packages import RuntimePluginPackages
+    from desktop_bridge.runtime.plugin_package_transaction import (
+        apply_pending_plugin_operations,
+    )
+    from desktop_bridge.voice.voice_service import VoiceService
+    from infra.persistence.toml_store import render_toml
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    config_path = workspace / "config.toml"
+    data = {
+        "voice": {"enabled": True, "asr": {"enabled": True}, "tts": {"enabled": True}},
+        "plugins": {
+            "tencent_asr": {
+                "enabled": True,
+                "secret_id": "old-id",
+                "secret_key": "old-secret",
+            },
+            "minimax_tts": {"enabled": True, "api_key": "old-key"},
+        },
+    }
+    config_path.write_text(render_toml(data), encoding="utf-8")
+    config = load_config_data(data)
+    monkeypatch.setenv("SHIORI_DESKTOP_APPLICATION_SESSION_ID", "first-session")
+    roots = _resolve_plugin_dirs(workspace)
+    target = workspace / "plugins" / plugin_id
+
+    def make_kernel():
+        return PluginKernel(
+            roots,
+            external_plugin_dirs=[workspace / "plugins"],
+            services=HostServices(
+                event_bus=EventBus(),
+                workspace=workspace,
+                plugin_configs=load_config_text(
+                    config_path.read_text(encoding="utf-8")
+                ).plugins,
+            ),
+        )
+
+    kernel = make_kernel()
+    current = {"kernel": kernel}
+
+    async def disable(payload, **_kwargs):
+        await current["kernel"].unload(payload["plugin_id"])
+        return {"generation": 2}
+
+    management = SimpleNamespace(
+        _plugin_kernel=lambda: current["kernel"],
+        list=lambda _: {
+            "plugins": [
+                {"candidate_id": row.candidate_id, "enabled": True, "can_toggle": True}
+                for row in current["kernel"].inspect_candidates()
+            ]
+        },
+        set_enabled=disable,
+    )
+    packages = RuntimePluginPackages(management, workspace)
+    imports = workspace / "private_runtime/imports/plugin-packages"
+    imports.mkdir(parents=True)
+    archive = imports / f"{plugin_id}.zip"
+    with ZipFile(archive, "w") as output:
+        for source in target.rglob("*"):
+            if not source.is_file() or "__pycache__" in source.parts:
+                continue
+            content = source.read_text(encoding="utf-8")
+            if source.name == "manifest.yaml":
+                content = content.replace("version: '0.1.0'", "version: '0.2.0'")
+            elif source.name == "client.py":
+                content = content.replace(label, label + "新版")
+            output.writestr(source.relative_to(target).as_posix(), content)
+    updated_archive = archive.read_bytes()
+    try:
+        assert await kernel.load(plugin_id)
+        [record] = [row for row in kernel.discover() if row.manifest.id == plugin_id]
+        assert record.source == "workspace" and record.plugin_dir == target
+        assert record.admission is None
+        assert record.manifest.version == "0.1.0"
+        preview = packages.preview(
+            {"source": str(archive), "candidate_id": str(target)}
+        )
+        assert preview["action"] == "update"
+        assert preview["previous_version"] == "0.1.0"
+        packages.confirm({"token": preview["token"], "trusted": True})
+        apply_pending_plugin_operations(workspace, config_path)
+        assert "version: '0.1.0'" in (target / "manifest.yaml").read_text(
+            encoding="utf-8"
+        )
+        await kernel.terminate_all()
+        monkeypatch.setenv("SHIORI_DESKTOP_APPLICATION_SESSION_ID", "second-session")
+        apply_pending_plugin_operations(workspace, config_path)
+        ensure_bundled_plugins(workspace)
+        kernel = make_kernel()
+        current["kernel"] = kernel
+        assert await kernel.load(plugin_id)
+        [record] = [row for row in kernel.discover() if row.manifest.id == plugin_id]
+        assert record.manifest.version == "0.2.0"
+        provider = (
+            kernel.voice.asr(provider_id)
+            if kind == "asr"
+            else kernel.voice.tts(provider_id)
+        )
+        assert provider.info.label == label + "新版"
+        assert (
+            load_config_text(config_path.read_text(encoding="utf-8")).plugins
+            == config.plugins
+        )
+
+        calls = []
+
+        class Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return None
+
+            def read(self):
+                return b'{"Response":{"Result":"heard","RequestId":"retained"}}'
+
+            def __iter__(self):
+                yield b'data: {"data":{"audio":"0102"}}\n'
+
+        def request(req, *, timeout):
+            calls.append((dict(req.headers), json.loads(req.data)))
+            return Response()
+
+        monkeypatch.setattr("urllib.request.urlopen", request)
+        service = VoiceService(config.voice, kernel.voice)
+        if kind == "asr":
+            buffer = io.BytesIO()
+            with wave.open(buffer, "wb") as writer:
+                writer.setnchannels(1)
+                writer.setsampwidth(2)
+                writer.setframerate(16000)
+                writer.writeframes(b"\0" * 32000)
+            assert service.transcribe(buffer.getvalue()) == "heard"
+            assert "Credential=old-id/" in calls[0][0]["Authorization"]
+        else:
+            assert (
+                service.synthesize(
+                    "old role", voice_id="old-role-voice", speed=1.3, emotion="happy"
+                )
+                == b"\1\2"
+            )
+            assert calls[0][0]["Authorization"] == "Bearer old-key"
+            assert calls[0][1]["voice_setting"]["voice_id"] == "old-role-voice"
+
+        private_data = workspace / "plugin-data" / plugin_id
+        private_data.mkdir(parents=True)
+        (private_data / "old.json").write_text("{}", encoding="utf-8")
+        await packages.uninstall(
+            {"candidate_id": str(target), "delete_data": True, "operation_id": "remove"}
+        )
+        await kernel.terminate_all()
+        monkeypatch.setenv("SHIORI_DESKTOP_APPLICATION_SESSION_ID", "third-session")
+        apply_pending_plugin_operations(workspace, config_path)
+        ensure_bundled_plugins(workspace)
+        assert not target.exists()
+        assert not private_data.exists()
+        assert (
+            workspace
+            / "private_runtime/bundled-plugin-seeds"
+            / plugin_id
+            / "receipt.json"
+        ).is_file()
+        archive.write_bytes(updated_archive)
+        preview = packages.preview({"source": str(archive)})
+        assert preview["action"] == "install"
+        packages.confirm({"token": preview["token"], "trusted": True})
+        monkeypatch.setenv("SHIORI_DESKTOP_APPLICATION_SESSION_ID", "fourth-session")
+        apply_pending_plugin_operations(workspace, config_path)
+        kernel = make_kernel()
+        current["kernel"] = kernel
+        assert await kernel.load(plugin_id)
+        assert (
+            next(
+                row for row in kernel.discover() if row.manifest.id == plugin_id
+            ).manifest.version
+            == "0.2.0"
+        )
+    finally:
+        await kernel.terminate_all()

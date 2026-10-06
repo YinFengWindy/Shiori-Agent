@@ -117,3 +117,32 @@ def test_emotions_are_validated_against_selected_provider_capabilities():
     with pytest.raises(VoiceServiceError, match="不支持情绪"):
         service.synthesize("reply", voice_id="voice", speed=1, emotion="happy")
     assert provider.calls == []
+
+
+def test_role_emotion_id_reaches_case_sensitive_provider_unchanged():
+    from desktop_bridge.voice.role_tts_settings import resolve_role_tts_settings
+
+    service, _, _ = make_service()
+    provider = SpeechProvider("case_sensitive", emotions=("Happy",))
+    service.providers.register("tts", provider, EffectScope("case_sensitive"))
+    settings = resolve_role_tts_settings(
+        {
+            "tts": {
+                "provider": "case_sensitive",
+                "voice_id": "role",
+                "mood_tts_emotions": {"开心": "Happy"},
+            }
+        },
+        "开心",
+    )
+    assert (
+        service.synthesize(
+            "你好",
+            voice_id=settings.voice_id,
+            provider=settings.provider,
+            speed=settings.speed,
+            emotion=settings.emotion,
+        )
+        == "你好".encode()
+    )
+    assert provider.calls[0][1]["emotion"] == "Happy"

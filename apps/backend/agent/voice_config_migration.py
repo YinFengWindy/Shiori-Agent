@@ -23,6 +23,11 @@ def voice_plugin_config(data: dict[str, Any]) -> dict[str, Any]:
             continue
         values = migrated.setdefault("plugins", {}).setdefault(plugin_id, {})
         for key, value in legacy.items():
+            # The old cloud loader used defaults for empty endpoint/model values.
+            # Omitting these overrides preserves that behavior without copying
+            # provider defaults into the host or overwriting existing plugin data.
+            if key in {"base_url", "model"} and not value:
+                continue
             values.setdefault(key, value)
         # Preserve explicit plugin disablement; host ASR/TTS switches stay separate.
         values.setdefault("enabled", True)

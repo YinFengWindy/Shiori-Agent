@@ -349,8 +349,6 @@ _EXPECTED_TOP_LEVEL_PLUGINS = {
     "desktop_pet",
     "feishu",
     "meme",
-    "minimax_tts",
-    "tencent_asr",
     "novelai",
     "story",
     "observe",

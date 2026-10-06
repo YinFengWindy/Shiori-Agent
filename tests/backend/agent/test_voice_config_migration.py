@@ -58,3 +58,30 @@ def test_switching_selection_never_moves_new_plugin_settings_back():
         },
     }
     assert voice_plugin_config(source) == source
+
+
+def test_empty_legacy_cloud_overrides_use_plugin_defaults_and_keep_existing_values():
+    from plugins.tencent_asr.backend.config import TencentAsrConfig
+    from plugins.minimax_tts.backend.config import MiniMaxTtsConfig
+
+    source = {
+        "voice": {
+            "asr": {"base_url": "", "secret_id": "id", "secret_key": "key"},
+            "tts": {"base_url": "", "model": "", "api_key": "key"},
+        }
+    }
+    migrated = voice_plugin_config(source)
+    assert (
+        TencentAsrConfig.model_validate(migrated["plugins"]["tencent_asr"]).base_url
+        == "https://asr.tencentcloudapi.com/"
+    )
+    tts = MiniMaxTtsConfig.model_validate(migrated["plugins"]["minimax_tts"])
+    assert tts.base_url == "https://api.minimaxi.com/v1/t2a_v2"
+    assert tts.model == "speech-2.8-turbo"
+    assert voice_plugin_config(migrated) == migrated
+    source["plugins"] = {
+        "minimax_tts": {"base_url": "https://saved/", "model": "saved"}
+    }
+    preserved = voice_plugin_config(source)["plugins"]["minimax_tts"]
+    assert preserved["base_url"] == "https://saved/"
+    assert preserved["model"] == "saved"

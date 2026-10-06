@@ -35,7 +35,7 @@ def resolve_role_tts_settings(runtime_config: object, mood: object) -> RoleTtsSe
     mood_name = str(mood or "").strip()
     raw_mapping = settings.get("mood_tts_emotions")
     mapping = raw_mapping if isinstance(raw_mapping, dict) else {}
-    candidate = str(mapping.get(mood_name) or "").strip().lower()
+    candidate = str(mapping.get(mood_name) or "").strip()
     # Provider capability validation belongs to VoiceService at call time.
     emotion = candidate
     return RoleTtsSettings(

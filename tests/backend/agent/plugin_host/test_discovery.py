@@ -226,3 +226,26 @@ def test_duplicate_plugin_id_keeps_its_id_conflict_over_shared_channel(tmp_path)
         "duplicate_id",
         "duplicate_id",
     ]
+
+
+def test_installable_source_exclusion_never_hides_other_same_id_candidates(tmp_path):
+    import shutil
+    from bootstrap.plugin_distribution import bundled_plugin_sources
+
+    source = bundled_plugin_sources()["tencent_asr"]
+    manual = tmp_path / "manual" / "tencent_asr"
+    workspace = tmp_path / "workspace" / "tencent_asr"
+    for target in (manual, workspace):
+        shutil.copytree(
+            source,
+            target,
+            ignore=shutil.ignore_patterns(
+                "__pycache__", "tests", "build", "*.egg-info"
+            ),
+        )
+    records = _discover(
+        [source.parent, manual.parent, workspace.parent], [workspace.parent]
+    )
+    candidates = [row for row in records if row.manifest.id == "tencent_asr"]
+    assert {row.plugin_dir for row in candidates} == {manual, workspace}
+    assert all(row.admission.state == "CONFLICT" for row in candidates)

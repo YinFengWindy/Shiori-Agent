@@ -379,3 +379,11 @@ formats and preview-URL policy. `testing.voice.FakeVoiceContext` and `FakeVoiceH
 exercise setup and requests without importing the host or opening a real network.
 Tencent ASR and MiniMax TTS are independent packages; credentials live in their
 respective plugin config tables. Missing selections fail without provider fallback.
+
+The desktop distribution supplies Tencent and MiniMax as installable package
+resources. First startup atomically deploys their verified runtime files to the
+workspace, where ordinary ZIP updates, trust confirmation and uninstall apply.
+The distribution's source directories are not competing builtin candidates.
+A host-owned receipt prevents app upgrades or plugin-data deletion from restoring
+an uninstalled package; an existing workspace package is never overwritten or
+implicitly trusted. A host-only wheel without these optional packages stays valid.

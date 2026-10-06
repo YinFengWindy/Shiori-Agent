@@ -756,6 +756,9 @@ def build_core_runtime(
 
 def _resolve_plugin_dirs(workspace: Path) -> list[Path]:
     """Resolves the top-level `plugins/` directory for dev and frozen runs."""
+    from bootstrap.bundled_plugins import ensure_bundled_plugins
+
+    ensure_bundled_plugins(workspace)
     return [*plugin_roots(), workspace / "plugins"]
 
 

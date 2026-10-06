@@ -8,7 +8,7 @@ from agent.config import load_config_data
 from agent.plugin_host.effects import EffectScope
 from agent.plugin_host.kernel import HostServices, PluginKernel
 from agent.plugin_host.voice import VoiceProviderRegistry, ScopedVoiceCapability
-from bootstrap.paths import plugin_roots
+from bootstrap.tools import _resolve_plugin_dirs
 from bus.event_bus import EventBus
 from desktop_bridge.voice.voice_service import VoiceService
 from shiori_sdk.voice import VoiceProviderInfo, VoiceServiceError
@@ -44,6 +44,7 @@ async def test_old_disposer_cannot_unregister_a_new_instance():
 
 async def test_migrated_cloud_plugins_are_discovered_called_and_independently_unloaded(
     monkeypatch,
+    tmp_path,
 ):
     config = load_config_data(
         {
@@ -77,9 +78,11 @@ async def test_migrated_cloud_plugins_are_discovered_called_and_independently_un
 
     monkeypatch.setattr("urllib.request.urlopen", request)
     kernel = PluginKernel(
-        plugin_roots(),
+        _resolve_plugin_dirs(tmp_path),
+        external_plugin_dirs=[tmp_path / "plugins"],
         services=HostServices(
             event_bus=EventBus(),
+            workspace=tmp_path,
             plugin_configs=config.plugins,
             raw_plugin_configs=config.raw_plugin_configs,
         ),
