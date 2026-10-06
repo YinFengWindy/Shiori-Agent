@@ -30,12 +30,15 @@ class FakeCaptureWindow extends EventEmitter {
 
 function createSurface(window: FakeCaptureWindow) {
   let resolveReady!: () => void;
-  const ready = new Promise<void>((resolve) => {
+  let rejectReady!: (error: Error) => void;
+  const ready = new Promise<void>((resolve, reject) => {
     resolveReady = resolve;
+    rejectReady = reject;
   });
   return {
     createWindow: () => ({ window, ready }) as never,
     resolveReady,
+    rejectReady,
   };
 }
 
@@ -63,6 +66,62 @@ test("accepts the renderer's sanitized audio-input device contract", async () =>
   recorder.handleInputDevices(window.webContents as never, [{ deviceId: "microphone-a", label: "USB Mic" }]);
 
   assert.deepEqual(await devices, [{ deviceId: "microphone-a", label: "USB Mic" }]);
+});
+
+test("concurrent device enumeration shares initialization and resolves both callers from one authorized response", async () => {
+  const window = new FakeCaptureWindow();
+  const surface = createSurface(window);
+  const recorder = new BrowserVoiceRecorder(surface.createWindow);
+  const first = recorder.listInputDevices();
+  const second = recorder.listInputDevices();
+  assert.equal(first, second);
+  surface.resolveReady();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.deepEqual(window.commands, [{ channel: "desktop:voice-capture-command", command: { command: "list-devices" } }]);
+  assert.equal(recorder.handleInputDevices(new FakeCaptureWindow().webContents as never, []), false);
+  const devices = [{ deviceId: "shared-mic", label: "USB Mic" }];
+  recorder.handleInputDevices(window.webContents as never, devices);
+  assert.deepEqual(await Promise.all([first, second]), [devices, devices]);
+});
+
+test("enumeration failure rejects all callers and late cleanup preserves an immediate retry", async () => {
+  const window = new FakeCaptureWindow();
+  const surface = createSurface(window);
+  const recorder = new BrowserVoiceRecorder(surface.createWindow);
+  const failures = Promise.allSettled([recorder.listInputDevices(), recorder.listInputDevices()]);
+  surface.resolveReady();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  recorder.handleError(window.webContents as never, "device enumeration failed");
+  // Retry before the failed operation's finally runs: it must not clear this one.
+  const retried = Promise.all([recorder.listInputDevices(), recorder.listInputDevices()]);
+  for (const failure of await failures) {
+    assert.equal(failure.status, "rejected");
+    if (failure.status === "rejected") assert.match(String(failure.reason), /device enumeration failed/);
+  }
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  const devices = [{ deviceId: "recovered", label: "Recovered mic" }];
+  recorder.handleInputDevices(window.webContents as never, devices);
+  assert.deepEqual(await retried, [devices, devices]);
+  assert.equal(window.commands.length, 2);
+});
+
+test("window initialization failure rejects concurrent enumeration and a new window can retry", async () => {
+  const failedWindow = new FakeCaptureWindow();
+  const failedSurface = createSurface(failedWindow);
+  const nextWindow = new FakeCaptureWindow();
+  const nextSurface = createSurface(nextWindow);
+  let attempts = 0;
+  const recorder = new BrowserVoiceRecorder(() => (++attempts === 1 ? failedSurface : nextSurface).createWindow());
+  const failures = Promise.allSettled([recorder.listInputDevices(), recorder.listInputDevices()]);
+  failedSurface.rejectReady(new Error("load failed"));
+  assert.deepEqual((await failures).map((failure) => failure.status), ["rejected", "rejected"]);
+  assert.deepEqual(failedWindow.commands, []);
+  const retried = recorder.listInputDevices();
+  nextSurface.resolveReady();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  recorder.handleInputDevices(nextWindow.webContents as never, []);
+  assert.deepEqual(await retried, []);
+  assert.equal(attempts, 2);
 });
 
 test("rejects a second capture while the first start is pending", async () => {

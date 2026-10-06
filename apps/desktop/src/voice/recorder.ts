@@ -89,13 +89,31 @@ export class BrowserVoiceRecorder {
   }
 
   /** Enumerates sanitized input devices from the browser-owned media surface. */
-  async listInputDevices(): Promise<VoiceInputDevice[]> {
+  listInputDevices(): Promise<VoiceInputDevice[]> {
     if (this.devices) return this.devices.promise;
-    const window = this.ensureWindow();
-    await this.waitUntilReady(window);
-    this.devices = createDeferred<VoiceInputDevice[]>();
-    this.sendCommand({ command: "list-devices" });
-    return await this.devices.promise;
+    const result = createDeferred<VoiceInputDevice[]>();
+    const operation: Deferred<VoiceInputDevice[]> = {
+      ...result,
+      promise: result.promise.finally(() => {
+        if (this.devices === operation) this.devices = null;
+      }),
+    };
+    // Reserve the shared operation before window initialization can yield.
+    // Every caller then observes the same load failure or enumeration result.
+    this.devices = operation;
+    void this.requestInputDevices(operation);
+    return operation.promise;
+  }
+
+  private async requestInputDevices(operation: Deferred<VoiceInputDevice[]>): Promise<void> {
+    try {
+      const window = this.ensureWindow();
+      await this.waitUntilReady(window);
+      if (this.devices !== operation || this.window !== window || window.isDestroyed()) return;
+      this.sendCommand({ command: "list-devices" });
+    } catch (error) {
+      operation.reject(error instanceof Error ? error : new Error(String(error)));
+    }
   }
 
   /** Accepts a readiness signal from the authorized hidden capture renderer. */

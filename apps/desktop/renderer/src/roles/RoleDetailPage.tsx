@@ -15,6 +15,7 @@ import { RoleAccountsPanel } from "../accounts/RoleAccountsPanel";
 import { usePluginRoleUiDirty } from "../plugins/pluginRoleUiDirty";
 import { useLeaveGuard } from "../app/useLeaveGuard";
 import { ConfirmDialog } from "../shared/ui/ConfirmDialog";
+import { confirmPersonaLines } from "../shared/mascot/mascotLines";
 
 type RoleDetailPageProps = {
   activeRole: RoleRecord | null;
@@ -122,7 +123,7 @@ export function RoleDetailPage({
           {content}
         </div>
       </div>
-      <ConfirmDialog open={tabGuard.confirming} title="放弃未保存的修改？" description="插件设置尚未保存。" confirmLabel="放弃修改" onClose={tabGuard.cancelLeave} onConfirm={tabGuard.confirmLeave} />
+      <ConfirmDialog open={tabGuard.confirming} title="放弃未保存的修改？" description="插件设置尚未保存。" confirmLabel="放弃修改" persona={confirmPersonaLines.discardChanges} onClose={tabGuard.cancelLeave} onConfirm={tabGuard.confirmLeave} />
     </section>
   );
 }
