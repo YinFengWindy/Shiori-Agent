@@ -15,7 +15,8 @@ manifest 的 ``default_enabled: false`` 只决定 ``[plugins.<id>]`` **没有显
   因此新用户直接得到 manifest 的默认值（停用）。
 
 以后再有内置插件改成默认停用，把它的 ID 追加到 ``DEFAULT_DISABLED_PLUGINS``
-并同步写进模板回执即可；已经处理过的插件不会被重复迁移。
+并同步写进模板回执即可；已经处理过的插件不会被重复迁移。成为内置插件时就默认
+停用的插件（``gpt_sovits_tts``、``sensevoice_asr``）从未被缺省启用，不登记。
 """
 
 from __future__ import annotations

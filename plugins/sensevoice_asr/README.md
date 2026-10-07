@@ -22,7 +22,7 @@ WAV 显式转单声道/16kHz；模型识别仍可能误字，不把健康检查�
 `uv-0.12.23-windows-x64.zip`，以及
 `packages/<锁定文件名>`、`models/sensevoice/<锁定模型文件>`、`models/fsmn-vad/<锁定文件>`。
 不需要额外 manifest，不要外层目录。清单外的文件不被执行；清单内每项须通过哈希校验。
-普通插件 ZIP 仅包含代码、UI 与锁文件；完整包包含 85 个锁定资源，共 1,373,095,206 字节
+插件本身仅包含代码、UI 与锁文件；完整包包含 85 个锁定资源，共 1,373,095,206 字节
 （约 1.37 GB），单独下载或导入。
 
 环境位于 `plugin-data/sensevoice_asr/runtime/`：`downloads/` 缓存支持断点续传，
@@ -52,19 +52,11 @@ funasr-server --host 127.0.0.1 --port 8000 --model sensevoice --device cpu
 本包不携带大型推理资源，不把 torch/FunASR 安装进宿主 `.venv`。
 真实打包应用的环境准备、识别、延迟与资源结果在对应 PR 中单独报告。
 当前受控协议测试只证明请求/错误处理，不代表实际声学效果。
-应用级验收另使用实际安装 ZIP、Electron 生产入口、Python bridge 和本机 HTTP 替身，
+应用级验收另使用启用的内置插件、Electron 生产入口、Python bridge 和本机 HTTP 替身，
 以生成 PCM 验证文件与桌宠调用链；真实麦克风识别质量和模型性能仍由 #676 验收。
 
-## 安装与测试
+## 启用与测试
 
-要求 SDK / Runtime API 4.2，manifest 标记 `distribution: external`。
-仓库源码不作为内置插件加载；使用通用 builder 生成 ZIP 后从插件页面安装，
-经普通信任、启用、更新、停用和卸载流程使用。Python wheel 用于独立测试，
-不替代包含前端的安装 ZIP。在仓库根目录构建：
-
-```sh
-node scripts/build-plugin.mjs --plugin plugins/sensevoice_asr --output artifacts/plugins
-```
-
-从“设置 → 插件 → 安装插件 ZIP”选择产物，确认信任并安装，重启后启用。
+要求 SDK / Runtime API 4.2。本插件随应用内置，新配置下默认停用；在“设置 → 插件”
+启用后出现设置页，并可在桌宠语音中选择。Python wheel 仅用于独立测试。
 独立测试命令见[源码仓库 TESTING.md](https://github.com/YinFengWindy/Shiori-Agent/blob/main/plugins/sensevoice_asr/TESTING.md)。
