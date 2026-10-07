@@ -1,45 +1,10 @@
-import type React from "react";
 import { useState } from "react";
 import { Eye, EyeSlash } from "@phosphor-icons/react";
-import { SettingsField } from "./SettingsField";
-import { SettingsToggleCard, cardClass, compactPressableClass, cx } from "@yinfengwindy/shiori-sdk";
+import { compactPressableClass, cx, settingsInputClass } from "@yinfengwindy/shiori-sdk";
 import { parseCompleteSettingsNumber } from "./settingsSectionUtils";
-
-/** Shared compact field styling for editable settings values. */
-export const settingsInputClass = "w-full rounded-md border border-line bg-surface-soft px-2.5 py-2 text-body-sm text-ink transition placeholder:text-ink-faint hover:border-line-strong focus:bg-surface";
 
 /** Shared icon-only action styling for compact settings controls. */
 export const settingsIconButtonClass = cx(compactPressableClass, "grid h-8 w-8 shrink-0 place-items-center rounded-md text-ink-muted hover:bg-surface-hover hover:text-ink");
-
-/** Renders a settings row containing the shared toggle control. */
-export function SettingsToggleField({
-  label,
-  hint,
-  configKey,
-  checked,
-  disabled,
-  onChange,
-}: {
-  label: string;
-  hint?: string;
-  configKey?: string;
-  checked: boolean;
-  disabled?: boolean;
-  onChange: (checked: boolean) => void;
-}) {
-  return (
-    <SettingsField label={label} hint={hint} configKey={configKey}>
-      <div className="flex w-full items-center justify-end">
-        <SettingsToggleCard
-          checked={checked}
-          disabled={disabled}
-          ariaLabel={label}
-          onChange={onChange}
-        />
-      </div>
-    </SettingsField>
-  );
-}
 
 /** Renders a password input whose value can be revealed locally. */
 export function SettingsSecretInput({
@@ -126,20 +91,3 @@ export function SettingsNumberInput({
   );
 }
 
-/** Groups the fields belonging to one settings subsection into a card. */
-export function SettingsSectionCard({ children }: { children: React.ReactNode }) {
-  return <section className={cx(cardClass, "grid px-4 sm:px-5")}>{children}</section>;
-}
-
-/** A titled card: one topic within a settings page that has several. */
-export function SettingsGroup({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="grid gap-2.5" aria-label={title}>
-      <h3 className="m-0 px-1 text-body-sm font-semibold text-ink-secondary">{title}</h3>
-      <div className={cx(cardClass, "grid px-4 sm:px-5")}>{children}</div>
-    </section>
-  );
-}
-
-/** Vertical rhythm between the titled groups of one settings page. */
-export const settingsGroupStackClass = "grid gap-7";

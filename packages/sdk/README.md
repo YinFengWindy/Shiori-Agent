@@ -2,7 +2,7 @@
 
 [@yinfengwindy/shiori-sdk](https://www.npmjs.com/package/@yinfengwindy/shiori-sdk)
 and [shiori-sdk](https://pypi.org/project/shiori-sdk/) are the TypeScript and Python distributions of the
-same plugin contract. Both are version **4.2.0**, with Runtime API **4.2.0**.
+same plugin contract. Both are version **4.3.0**, with Runtime API **4.3.0**.
 
 Start with the [plugin tutorial](https://github.com/YinFengWindy/Shiori-Agent/blob/main/docs/_handbook/plugins-tutorial.md)
 and [runtime contract](https://github.com/YinFengWindy/Shiori-Agent/blob/main/docs/_handbook/plugin-runtime-contract.md)
@@ -60,6 +60,17 @@ and optionally `onDirtyChange`; a null identity disables loading and saving.
 The hook isolates late results by client and document identity, retains edits on
 save errors, and never creates a writable default after a failed read. It manages
 the plugin's draft only and does not participate in the host role transaction.
+
+Runtime API 4.3 adds `usePrivateAutosave(client, identity, { load, save, debounceMs? })`
+for plugin settings pages that save like the host's: `update` saves the latest draft
+once edits pause (400 ms by default), saves never overlap, `stage` plus `commit` serve
+blur/Enter fields, and leaving the page or switching scope submits the last scheduled
+draft. A failed save keeps the draft and pauses until `retry()`; a failed read exposes
+`loadError` and `reload()` and never writes a default. Render its `savePhase` with
+`host.ui.SettingsSavedStatus` for the host's page-corner 「已保存」 mark, and lay the page
+out with the host's `SettingsGroup`, `SettingsSectionCard`, `SettingsField`,
+`SettingsToggleField`, `settingsInputClass` and `settingsGroupStackClass`. Packages
+using any of these require `runtime_api: ">=4.3.0 <5.0.0"`.
 
 A disposed scoped client rejects with `PluginBridgeError`, code
 `plugin_unavailable`, and `details.reason: "context_disposed"`. Cleanup may treat

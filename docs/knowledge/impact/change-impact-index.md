@@ -21,6 +21,8 @@ source_paths:
   - apps/desktop/scripts/runtime-plugin-modules.mjs
   - apps/desktop/scripts/runtime-pyinstaller.mjs
   - packages/sdk/src/hooks/usePrivateDraft.ts
+  - packages/sdk/src/hooks/usePrivateAutosave.ts
+  - packages/sdk/src/serialDraftQueue.ts
 related:
   - ../map.md
 ---
@@ -53,6 +55,7 @@ related:
 | 插件私有角色设置 | roleUi self-managed 插槽、scoped client、真实 roleId、独立保存与 dirty/错误，provider 自有情绪名称和参考；既有 roleSettings 草稿模式保持边界 | `PluginRoleUiSlot PluginRoleUiContribution createRoleUiDirtyLease EmotionReferences` |
 | 插件通信处置错误 | pending wait/late admission 的结构化 reason、插件卸载 best-effort 清理和未预期失败反馈；同 code 不等于已处置 | `PluginCommunicationLifetime context_disposed releasePreview` |
 | 插件私有文档草稿 | SDK hook 的 client/identity 隔离、读取与保存错误、dirty 上报，两 provider 调用者和宿主 peer ABI | `usePrivateDraft pluginUiPeerExports` |
+| 设置自动保存 | SDK 串行草稿队列（宿主设置页、schema 插件配置页与插件私有文档共用）、作用域切换迟到结果、离开时提交、失败暂停与重试，`host.ui.SettingsSavedStatus` 与宿主页角「已保存」一致，SDK 设置页布局组件 | `SerialDraftQueue usePrivateAutosave SettingsSavedStatus SettingsField` |
 | 调度任务 | scheduler、工具、持久化、主动投递、角色删除、桌面表单 | `ScheduleRoleTaskService compute_fire_at` |
 | 单角色剧情 | Story repository、Director、角色/玩家快照、bridge 事件、桌面剧情适配层 | `StorySimulationService StoryRepository StorySimulationHandler stories.beat.committed` |
 

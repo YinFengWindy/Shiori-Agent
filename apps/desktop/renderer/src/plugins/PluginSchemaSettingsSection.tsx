@@ -1,10 +1,8 @@
 import { useId, useState, type ReactNode } from "react";
 import { SettingsDisclosure, SettingsDisclosureToggle } from "../settings/SettingsDisclosure";
-import { SettingsSectionCard } from "../settings/SettingsFieldPrimitives";
 import { SettingsSaveFeedback } from "../settings/SettingsSaveFeedback";
-import { SettingsSavedIndicator } from "../settings/SettingsSavedIndicator";
-import { SettingsStatus } from "../settings/SettingsStatusSlot";
-import { compactButtonSizeClass, cx, ghostButtonSurfaceClass } from "@yinfengwindy/shiori-sdk";
+import { SettingsSavedStatus } from "../settings/SettingsSavedIndicator";
+import { SettingsSectionCard, compactButtonSizeClass, cx, ghostButtonSurfaceClass } from "@yinfengwindy/shiori-sdk";
 import { InlineError } from "../shared/feedback/InlineError";
 import { describePluginConfigFields, partitionPluginConfigFields, type PluginConfigField } from "./jsonSchemaForm";
 import { PluginConfigFieldRow } from "./PluginConfigFieldRow";
@@ -62,7 +60,7 @@ function PluginSchemaSettingsForm({ pluginId }: PluginSchemaSettingsSectionProps
   );
   return (
     <div className="grid gap-7">
-      <SettingsStatus><SettingsSavedIndicator phase={savePhase} showPending /></SettingsStatus>
+      <SettingsSavedStatus phase={savePhase} />
       <SettingsSaveFeedback
         phase={savePhase}
         message={statusMessage} detail={statusDetail}

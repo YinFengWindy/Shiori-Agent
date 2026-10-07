@@ -1,5 +1,6 @@
 import { ArrowClockwise, ArrowSquareOut, Envelope, GithubLogo } from "@phosphor-icons/react";
 import {
+  SettingsGroup,
   badgeClass,
   cardClass,
   compactButtonSizeClass,
@@ -12,7 +13,6 @@ import { InlineError } from "../shared/feedback/InlineError";
 import { MascotOnStage } from "../shared/mascot/MascotOnStage";
 import { useMascotEnabled } from "../shared/mascot/useMascotEnabled";
 import { AboutMascot } from "./AboutMascot";
-import { SettingsGroup } from "./SettingsFieldPrimitives";
 import { useDesktopUpdates } from "./useDesktopUpdates";
 import { updatePresentation } from "./updatePresentation";
 

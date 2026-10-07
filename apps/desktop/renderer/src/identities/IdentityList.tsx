@@ -1,10 +1,9 @@
 import { LinkBreakIcon } from "@phosphor-icons/react";
 import { AccountAvatar } from "../accounts/AccountAvatar";
-import type { AccountSnapshot } from "@yinfengwindy/shiori-sdk";
+import { SettingsGroup, type AccountSnapshot } from "@yinfengwindy/shiori-sdk";
 import type { AccountDetailEntry } from "../plugins/pluginUiRegistry";
 import { formatTimestamp, toFileUrl } from "../shared/format";
 import { compactDangerTextButtonClass } from "../shared/styles";
-import { SettingsGroup } from "../settings/SettingsFieldPrimitives";
 import type { UserIdentity } from "./identityClient";
 import { identityChannel, identityScopeLabel } from "./identityPresentation";
 

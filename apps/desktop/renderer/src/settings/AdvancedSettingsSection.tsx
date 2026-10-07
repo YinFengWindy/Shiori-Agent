@@ -1,6 +1,6 @@
 import { desktopSettingsDefaults } from "../../../src/settingsContract.js";
-import { SettingsField as Field } from "./SettingsField";
-import { SettingsGroup, SettingsNumberInput, SettingsToggleField, settingsGroupStackClass } from "./SettingsFieldPrimitives";
+import { SettingsField as Field, SettingsGroup, SettingsToggleField, settingsGroupStackClass } from "@yinfengwindy/shiori-sdk";
+import { SettingsNumberInput } from "./SettingsFieldPrimitives";
 import { advancedSettingsGroups, type AdvancedSettingsField } from "./advancedSettingsFields";
 import type { SettingsSectionEditorProps } from "./settingsPageTypes";
 

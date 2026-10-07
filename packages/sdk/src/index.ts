@@ -25,6 +25,19 @@ export { usePrivateDraft } from "./hooks/usePrivateDraft";
 // Runtime API 4.2.0: opt-in UI for plugin-owned fixed environment preparation.
 export { ManagedRuntimePanel } from "./managed/ManagedRuntimePanel";
 export { useManagedRuntime, type ManagedRuntimeStatus } from "./managed/useManagedRuntime";
+// Runtime API 4.3.0 (#683): plugin-owned document autosave and the host settings page layout.
+export { usePrivateAutosave, type PrivateAutosaveOptions } from "./hooks/usePrivateAutosave";
+export type { PrivateAutosaveOperations } from "./hooks/privateAutosaveSession";
+export type { DraftSavePhase } from "./serialDraftQueue";
+export {
+  SettingsField,
+  SettingsGroup,
+  SettingsSectionCard,
+  SettingsToggleField,
+  type SettingsFieldProps,
+  type SettingsToggleFieldProps,
+} from "./components/SettingsField";
+export { settingsGroupStackClass, settingsInputClass } from "./styles";
 export { roleToggleStatus, type RoleCapabilityStatus, type RoleCapabilityTone } from "./roleCapability";
 export {
   accountOnline,
@@ -108,6 +121,7 @@ export type {
   AccountStatusCardProps,
   HostConfirmDialogProps,
   HostInlineErrorProps,
+  HostSettingsSavedStatusProps,
   PluginHostUi,
   RevealProps,
 } from "./contract/hostUi";

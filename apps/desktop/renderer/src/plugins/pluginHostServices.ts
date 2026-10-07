@@ -4,6 +4,7 @@ import { AccountStatusCard } from "../accounts/AccountStatusCard";
 import { invokeBridgePayload } from "../shared/bridgeInvoke";
 import { toFileUrl } from "../shared/format";
 import { Reveal } from "../shared/ui/Reveal";
+import { SettingsSavedStatus } from "../settings/SettingsSavedIndicator";
 import { pluginHostFeedback } from "./pluginHostFeedback";
 import { createPluginHostConfig } from "./pluginHostConfig";
 import { HostConfirmDialog, HostInlineError } from "./pluginHostUi";
@@ -20,7 +21,7 @@ const sharedPluginHostServices: Omit<PluginHostServices, "config"> = {
   feedback: pluginHostFeedback,
   ui: {
     InlineError: HostInlineError, ConfirmDialog: HostConfirmDialog,
-    AccountStatusCard, AccountDetailActions, Reveal,
+    AccountStatusCard, AccountDetailActions, Reveal, SettingsSavedStatus,
   },
   // The host's own image resolver, so a plugin's image shows exactly as the host's would.
   assets: { url: (path) => toFileUrl(path) },

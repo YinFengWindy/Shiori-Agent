@@ -1,9 +1,9 @@
 /**
- * Status of one draft's save lifecycle. Owned here (not in a settings-domain
- * module) because `SerialDraftQueue` itself is domain-agnostic — plugin
- * config autosave uses it too — and `shared/` must not depend on any
- * specific domain module. `settings/settingsPageTypes.ts` re-exports this
- * under its historical name, `SettingsSavePhase`, for its own consumers.
+ * Status of one draft's save lifecycle, shared by the host settings pages,
+ * the schema plugin config page and `usePrivateAutosave`, so every autosaved
+ * page drives the same 「已保存」 indicator (`host.ui.SettingsSavedStatus`).
+ * The host's `settings/settingsPageTypes.ts` re-exports it under its
+ * historical name, `SettingsSavePhase`.
  */
 export type DraftSavePhase = "idle" | "saving" | "error" | "refresh-error" | "unknown";
 
@@ -20,6 +20,7 @@ export type DraftAttemptOutcome<TResult> =
   | { ok: true; result: TResult }
   | { ok: false; message: string; detail?: string; phase?: "error" | "refresh-error" | "unknown"; resumesAutomatically: boolean };
 
+/** Behaviour of one `SerialDraftQueue`: equality, cloning, the backend attempt and its callbacks. */
 export type SerialDraftQueueOptions<TDraft, TResult> = {
   /** Quiet period for merging edits; omitted/zero preserves immediate submission. */
   debounceMs?: number;
@@ -31,6 +32,7 @@ export type SerialDraftQueueOptions<TDraft, TResult> = {
   attempt: (draft: TDraft, operationId: string) => Promise<DraftAttemptOutcome<TResult>>;
   /** Called once an attempt succeeds, with the backend result and the draft that produced it. */
   onApplied: (result: TResult, submitted: TDraft) => void;
+  /** Reports every phase change, with the failure message and folded detail when there is one. */
   onStatus: (phase: DraftSavePhase, message: string, detail?: string) => void;
 };
 
@@ -40,7 +42,8 @@ export type SerialDraftQueueOptions<TDraft, TResult> = {
  * id. Extracted so the "call backend -> refresh local state -> surface
  * status" autosave pattern is implemented once and shared by every domain
  * that needs it (see AGENTS.md on not duplicating this flow), rather than
- * being copy-pasted per settings domain.
+ * being copy-pasted per settings domain. Lives in the SDK so the host's
+ * settings autosave and plugins' `usePrivateAutosave` share one queue.
  */
 export class SerialDraftQueue<TDraft, TResult> {
   private timer: ReturnType<typeof setTimeout> | undefined;
