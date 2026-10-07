@@ -70,7 +70,7 @@ test("managed runtime actions wait until a mode change is stored", async (t) => 
   const client = createFakePluginClient({ call: async <T,>(method: string) => {
     if (method === "settings.get") return settings as T;
     if (method === "settings.set") return write.promise as Promise<T>;
-    return { phase: "stopped", revision: "r1", busy: false, installed: false, running: false, received: 0, total: 0, item: "", error: "", reclaimable: 0, staging: false, location: "C:/runtime", required: 0, free: 0, relocatable: true } as T;
+    return { phase: "stopped", revision: "r1", busy: false, installed: false, running: false, received: 0, total: 0, item: "", error: "", reclaimable: 0, staging: false, location: "C:/runtime", customized: false, required: 0, required_import: 0, free: 0, removable: false, relocatable: true } as T;
   } });
   const view = await mountTestComponent(<SenseVoiceSettingsPage client={client} host={host} subsectionId="sensevoice_asr" onSelectSubsection={() => {}} />);
   const button = buttons(view.container);

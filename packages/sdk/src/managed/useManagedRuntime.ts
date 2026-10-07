@@ -11,12 +11,18 @@ export type ManagedRuntimeStatus = {
   reclaimable: number;
   /** Whether unfinished preparation files are left over; never sized (3.1.6). */
   staging: boolean;
-  /** Absolute install root holding downloads, staging and versions (3.1.7). */
+  /** Absolute install root holding downloads, staging and versions; "" while unreadable (3.1.7). */
   location: string;
-  /** Bytes a download preparation needs on the install root's volume (3.1.7). */
+  /** Whether a chosen location replaces the default one (3.1.7). */
+  customized: boolean;
+  /** Bytes the free-space check demands for a download on the install root's volume (3.1.7). */
   required: number;
+  /** Bytes it demands for the provider's import: its single artifact in place, else a ZIP (3.1.7). */
+  required_import: number;
   /** Free bytes on that volume; `null` when it is unavailable (3.1.7). */
   free: number | null;
+  /** Whether anything installed or kept exists, i.e. 「删除环境」 has work (3.1.7). */
+  removable: boolean;
   /** Whether the location can change: nothing installed or kept, no task (3.1.7). */
   relocatable: boolean;
 };
@@ -48,7 +54,7 @@ export function useManagedRuntime(client: PluginRpcClient) {
     void refresh();
     return () => { revision.current += 1; clearTimeout(timer); };
   }, [client]);
-  const call = useCallback(async (method: string, params: Record<string, string>) => {
+  const call = useCallback(async (method: string, params: Record<string, string> = {}) => {
     const current = revision.current;
     setPending(true); setActionError("");
     try {
@@ -62,7 +68,7 @@ export function useManagedRuntime(client: PluginRpcClient) {
   }, [client]);
   /** `source` is the original absolute path of an imported package; it is never copied. */
   const run = useCallback((action: ManagedRuntimeAction, source?: string) => call(`runtime.${action}`, source ? { source } : {}), [call]);
-  /** Install future preparations under a dedicated directory inside `directory` (3.1.7). */
-  const relocate = useCallback((directory: string) => call("runtime.relocate", { directory }), [call]);
+  /** Install under a dedicated directory inside `directory`, or the default without it (3.1.7). */
+  const relocate = useCallback((directory?: string) => call("runtime.relocate", directory ? { directory } : {}), [call]);
   return { status, error: actionError || readError, pending, run, relocate };
 }

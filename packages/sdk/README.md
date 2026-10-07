@@ -494,19 +494,31 @@ so `OwnedService.root` and every service identity stay put. The *install root*
 `Installation(..., scratch=)` names; providers pass it to their build and launch
 callbacks for child temp/cache locations. `runtime.relocate {directory}` (and
 `ManagedRuntime.relocate()`) selects a dedicated `<namespace>` directory inside
-the chosen one, only while nothing is installed or kept, no task runs and the
-target holds no installation entries; the choice persists. `runtime.prepare
-{source}` takes the original absolute path from `host.pickFilePaths`: a regular
-file with an accepted suffix and, for a single artifact, its exact size. Its
-SHA-256 is verified while reading, before any build; the file is never copied,
-moved or deleted, and the build receives it in `build(staging, resources)` as
-`resources[name]` (**breaking**: builds take the verified artifact paths). A ZIP
-bundle's members are extracted into staging. The free-space check uses the
-install root's volume and counts an in-place import as 0 bytes. Status adds
-`location`, `required`, `free` and `relocatable`. Removal deletes only the
-install root's installation entries, plus a chosen dedicated directory once
-empty. `ManagedRuntimePanel` no longer takes `namespace` (**breaking**), shows
-location and space, and offers 「更改位置」 through `host.pickDirectory`.
+an existing directory on a drive letter (UNC and device paths are rejected);
+without `directory` it restores the default. Both need nothing installed or
+kept, no running task and a target without installation entries; the choice
+persists. `current.json` records the install root only for a chosen location,
+so a default installation still follows plugin data when it moves. An
+unreadable `location.json` appears in status `error`; relocating (with no
+pointer) or removing recovers from it. `runtime.prepare {source}` takes the
+original absolute path from `host.pickFilePaths`: a regular file reached without
+any link or junction, with an accepted suffix and, for the provider's
+`ManagedRuntime(..., import_asset=)`, that artifact's exact size. Its SHA-256 is
+verified while reading, before any build; the file is never copied, moved or
+deleted. **Breaking** Python API: builds take `build(staging, resources)` with
+each verified artifact path (`resources[name]`, an in-place import at its
+original path), `acquire_resources` returns that mapping, `acquire_artifact`
+loses `source=` (see `verify_file`), `import_asset` moves from
+`register_runtime_rpc` / `submit` to the `ManagedRuntime` constructor, and
+`register_runtime_rpc` drops `max_bytes`. A ZIP bundle's members are extracted
+into staging. The free-space check uses the install root's volume and counts an
+in-place import as 0 bytes. Status adds `location`, `customized`, `required`
+(download), `required_import` (the provider's import), `free`, `removable` and
+`relocatable`; whatever blocks relocation is `removable`. Removal deletes only
+the install root's installation entries, unlinking links and junctions without
+entering them, plus a chosen dedicated directory once empty.
+`ManagedRuntimePanel` no longer takes `namespace` (**breaking**), shows location
+and space, and offers 「更改位置」 (`host.pickDirectory`) and 「恢复默认」.
 
 Process arguments and working directories preserve the provider's spelling:
 native Python libraries can require ordinary `sys.prefix` paths when they append

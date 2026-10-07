@@ -13,6 +13,7 @@ import logging
 import os
 import re
 import shutil
+import stat
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from pathlib import Path
 from uuid import uuid4
@@ -59,6 +60,28 @@ def free_space(path: Path) -> int | None:
     return None
 
 
+def _delete(path: Path) -> None:
+    """Delete an owned entry; a link or junction is unlinked, never entered.
+
+    ``shutil.rmtree`` refuses a top-level junction, and following one would
+    delete files outside the installation.
+    """
+    try:
+        info = path.lstat()
+    except FileNotFoundError:
+        return
+    directory = stat.S_ISDIR(info.st_mode) or bool(
+        getattr(info, "st_file_attributes", 0) & 0x10  # FILE_ATTRIBUTE_DIRECTORY
+    )
+    if path.is_symlink() or path.is_junction():
+        # Windows removes directory links with rmdir, file links with unlink.
+        (os.rmdir if directory else os.unlink)(path)
+    elif directory:
+        shutil.rmtree(path)
+    else:
+        path.unlink()
+
+
 class Installation:
     """A failed or cancelled preparation never changes the previous usable version.
 
@@ -95,42 +118,71 @@ class Installation:
 
     @property
     def install_root(self) -> Path:
-        """Where installation artifacts live; read from state on every access."""
+        """Where installation artifacts live; read from state on every access.
+
+        An unreadable location record raises ``ValueError``; ``relocate`` and
+        ``remove`` recover from it without reading it.
+        """
         value = load_json(self.location, None)
         if value is None:
             return self.root
         recorded = value.get("root") if isinstance(value, dict) else None
         if not isinstance(recorded, str) or not Path(recorded).is_absolute():
-            raise ValueError("环境安装位置记录无效")
+            raise ValueError("环境安装位置记录无效，请重新选择位置或删除环境")
         return native_path(Path(recorded))
 
+    def customized(self) -> bool:
+        """Whether a chosen location replaces the default state root."""
+        return self.location.exists()
+
     def occupied(self) -> bool:
-        """Whether anything is installed or kept, i.e. a removal has work to do."""
+        """Whether anything is installed or kept, i.e. a removal has work to do.
+
+        Exactly this blocks relocation, so whatever blocks it is removable.
+        """
         root = self.install_root
         return self.pointer.exists() or any(
-            (root / name).exists() for name in self.entries
+            os.path.lexists(root / name) for name in self.entries
         )
 
-    def relocate(self, root: Path) -> None:
-        """Choose a new install root; only when nothing is installed or kept.
+    def relocate(self, root: Path | None) -> None:
+        """Choose a new install root, or the default with ``None``.
 
-        The target must not already hold installation entries, so that a
-        preparation never prunes another installation's versions.
+        Only when nothing is installed or kept. A target must not already hold
+        installation entries, so a preparation never prunes another
+        installation's versions. An unreadable location record is replaced
+        when no pointer exists: nothing recorded there can be found anyway.
         """
-        if not root.is_absolute():
-            raise ValueError("安装位置必须为绝对路径")
-        target = native_path(root)
-        if target.exists() and not target.is_dir():
-            raise ValueError("安装位置不是目录")
+        target = None
+        if root is not None:
+            if not root.is_absolute():
+                raise ValueError("安装位置必须为绝对路径")
+            target = native_path(root)
+            if target.exists() and not target.is_dir():
+                raise ValueError("安装位置不是目录")
         with exclusive_file_lease(self.root / "prepare.lock"):
-            if self.occupied():
+            try:
+                previous: Path | None = self.install_root
+                occupied = self.occupied()
+            except ValueError:
+                previous, occupied = None, self.pointer.exists()
+            if occupied:
                 raise RuntimeError("请先删除环境再更改安装位置")
-            if target == self.root:
+            if target is None:
                 self.location.unlink(missing_ok=True)
-                return
-            if any((target / name).exists() for name in self.entries):
+            elif target != previous and any(
+                os.path.lexists(target / name) for name in self.entries
+            ):
                 raise ValueError("所选位置已有环境文件，请选择其他目录")
-            atomic_save_json(self.location, {"root": environment_path(target)})
+            else:
+                atomic_save_json(self.location, {"root": environment_path(target)})
+            # A dedicated directory this installation created and left empty.
+            if (
+                previous not in (None, self.root, target)
+                and previous.is_dir()
+                and not any(previous.iterdir())
+            ):
+                previous.rmdir()
 
     def current(self) -> Path | None:
         """Resolve only a completed private installation, rejecting corrupt pointers."""
@@ -147,11 +199,15 @@ class Installation:
         layout = value.get("layout", "versions")
         if not isinstance(layout, str) or layout not in {"v", "versions"}:
             raise ValueError("环境安装记录布局无效")
-        # Pointers before 3.1.7 carry no root: they were always in the state root.
-        recorded = value.get("root", environment_path(self.root))
-        if not isinstance(recorded, str) or not Path(recorded).is_absolute():
+        # A default installation records no root and follows the state root
+        # wherever plugin data moves; a chosen location is recorded absolutely.
+        recorded = value.get("root")
+        if recorded is None:
+            root = self.root
+        elif isinstance(recorded, str) and Path(recorded).is_absolute():
+            root = native_path(Path(recorded))
+        else:
             raise ValueError("环境安装记录无效")
-        root = native_path(Path(recorded))
         if root != self.install_root:
             raise ValueError("环境安装位置与记录不一致，请删除环境后重新准备")
         versions = root / layout
@@ -183,18 +239,17 @@ class Installation:
         root = self.install_root
         if path.parent != root / "v":
             raise ValueError("环境版本不属于此插件")
-        atomic_save_json(
-            self.pointer,
-            {
-                "directory": path.name,
-                "layout": "v",
-                "root": environment_path(root),
-                "revision": self.revision,
-                "receipt_sha256": hashlib.sha256(
-                    (path / "complete.json").read_bytes()
-                ).hexdigest(),
-            },
-        )
+        record: dict[str, str] = {
+            "directory": path.name,
+            "layout": "v",
+            "revision": self.revision,
+            "receipt_sha256": hashlib.sha256(
+                (path / "complete.json").read_bytes()
+            ).hexdigest(),
+        }
+        if self.customized():
+            record["root"] = environment_path(root)
+        atomic_save_json(self.pointer, record)
 
     async def prepare(
         self,
@@ -210,9 +265,10 @@ class Installation:
         or the single artifact ``import_asset``. It is read in place and never
         copied, moved or deleted.
         """
+        bundle = is_bundle(source)
         if (
             source is not None
-            and not is_bundle(source)
+            and not bundle
             and import_asset not in {item.name for item in self.artifacts}
         ):
             raise ValueError("环境包格式不受支持")
@@ -220,9 +276,12 @@ class Installation:
             # The location cannot change while this lease is held.
             root = self.install_root
             # Under the lease, any staging left by a killed host is garbage.
-            if (root / "s").exists():
-                shutil.rmtree(root / "s")
-            self._require_space(root, source, import_asset)
+            _delete(root / "s")
+            self._require_space(
+                root,
+                bundle=bundle,
+                imported=None if source is None or bundle else import_asset,
+            )
             generation = uuid4().hex[:12]
             staging = root / "s" / generation
             staging.mkdir(parents=True)
@@ -252,22 +311,22 @@ class Installation:
                 staging.rename(destination)
                 return destination
             finally:
-                if staging.exists():
-                    shutil.rmtree(staging)
+                _delete(staging)
+                # An empty staging parent would otherwise block relocation.
+                if (root / "s").is_dir() and not any((root / "s").iterdir()):
+                    (root / "s").rmdir()
 
-    def _missing_bytes(
-        self, root: Path, source: Path | None, import_asset: str | None
-    ) -> int:
+    def _missing_bytes(self, root: Path, *, bundle: bool, imported: str | None) -> int:
         """Bytes this preparation still writes before building.
 
         A ZIP bundle extracts every member into staging; a single imported
         original is read in place and adds nothing.
         """
-        if is_bundle(source):
+        if bundle:
             return sum(item.size for item in self.artifacts)
         missing = 0
         for item in self.artifacts:
-            if source is not None and item.name == import_asset:
+            if item.name == imported:
                 continue
             cached = root / "downloads" / item.name
             partial = cached.with_name(cached.name + ".part")
@@ -276,18 +335,22 @@ class Installation:
             missing += max(item.size - present, 0)
         return missing
 
-    def required(self) -> int:
-        """Space a download preparation needs now on the install root's volume."""
-        return required_space(
-            self._missing_bytes(self.install_root, None, None), self.installed_size
-        )
+    def required(self, *, imported: str | None = None, bundle: bool = False) -> int:
+        """Space the free-space check demands now on the install root's volume.
 
-    def _require_space(
-        self, root: Path, source: Path | None, import_asset: str | None
-    ) -> None:
+        Without arguments for a download; ``imported`` for that artifact read in
+        place, ``bundle`` for a ZIP import of every artifact.
+        """
+        missing = self._missing_bytes(
+            self.install_root, bundle=bundle, imported=imported
+        )
+        return required_space(missing, self.installed_size)
+
+    def _require_space(self, root: Path, *, bundle: bool, imported: str | None) -> None:
         """Fail before any copy or extraction when the volume cannot hold the result."""
         required = required_space(
-            self._missing_bytes(root, source, import_asset), self.installed_size
+            self._missing_bytes(root, bundle=bundle, imported=imported),
+            self.installed_size,
         )
         root.mkdir(parents=True, exist_ok=True)
         free = shutil.disk_usage(root).free
@@ -309,15 +372,15 @@ class Installation:
                 root = self.install_root
                 current = self.current()
                 for name in ("downloads", "s"):
-                    if (root / name).exists():
-                        shutil.rmtree(root / name)
+                    _delete(root / name)
                 if keep_versions:
                     return
                 for layout in ("v", "versions"):
                     versions = root / layout
-                    for entry in versions.iterdir() if versions.is_dir() else ():
-                        if entry != current:
-                            shutil.rmtree(entry)
+                    if versions.is_dir() and not versions.is_junction():
+                        for entry in versions.iterdir():
+                            if entry != current:
+                                _delete(entry)
         except LeaseBusy:
             _logger.info("另一实例正在准备环境，跳过清理：%s", self.root)
 
@@ -350,16 +413,18 @@ class Installation:
         The caller guarantees that no service runs from this root. State files
         (location, locks, logs, provider configuration) stay in the state root;
         the pointer goes first, so an interrupted removal already reads as not
-        installed. A chosen install root left empty is deleted too.
+        installed. A chosen install root left empty is deleted too. An
+        unreadable location record is reset to the default: the installation it
+        named cannot be found, so only the pointer and default entries go.
         """
         with exclusive_file_lease(self.root / "prepare.lock"):
-            root = self.install_root
             self.pointer.unlink(missing_ok=True)
+            try:
+                root = self.install_root
+            except ValueError:
+                self.location.unlink()
+                root = self.root
             for name in self.entries:
-                entry = root / name
-                if entry.is_dir() and not entry.is_symlink():
-                    shutil.rmtree(entry)
-                elif entry.exists() or entry.is_symlink():
-                    entry.unlink()
+                _delete(root / name)
             if root != self.root and root.is_dir() and not any(root.iterdir()):
                 root.rmdir()

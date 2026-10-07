@@ -6,7 +6,13 @@ from shiori_sdk.managed.service import OwnedService
 from shiori_sdk.plugin_services import ServicePluginContext
 from .runtime_build import build_runtime
 from .runtime_launch import launch_runtime
-from .runtime_manifest import ARTIFACTS, INSTALLED_SIZE, REQUIRED_FILES, REVISION
+from .runtime_manifest import (
+    ARCHIVE,
+    ARTIFACTS,
+    INSTALLED_SIZE,
+    REQUIRED_FILES,
+    REVISION,
+)
 from .settings import Settings, VoiceStore
 
 
@@ -35,6 +41,8 @@ def create_runtime(ctx: ServicePluginContext, store: VoiceStore) -> ManagedRunti
             staging, resources, ctx, root, installation.install_root
         ),
         lambda: store.read().settings.connection_mode,
+        # The official .7z is imported in place; a .zip carries both artifacts.
+        import_asset=ARCHIVE,
     )
 
 

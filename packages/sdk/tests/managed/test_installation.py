@@ -3,6 +3,7 @@
 import asyncio
 import hashlib
 import json
+import os
 import zipfile
 from pathlib import Path
 
@@ -55,7 +56,7 @@ async def test_build_failure_and_cancel_preserve_previous_pointer(tmp_path):
     with pytest.raises(asyncio.CancelledError):
         await task
     assert installer.current() == original
-    assert not list((installer.root / "s").iterdir())
+    assert not (installer.root / "s").exists()
     assert (original / "executable").read_bytes() == b"ready"
 
 
@@ -212,7 +213,7 @@ async def test_original_with_wrong_hash_is_rejected_before_the_build(tmp_path):
             record, lambda *_: None, source=original, import_asset=resource.name
         )
     assert not built and installer.current() is None
-    assert not list((installer.install_root / "s").iterdir())
+    assert not (installer.install_root / "s").exists()
     assert not (installer.install_root / "v").exists()
     assert original.read_bytes() == b"fixed archivX"
 
@@ -263,4 +264,74 @@ async def test_remove_deletes_install_root_entries_and_keeps_state(tmp_path):
         "prepare.log",
         "tts-config.json",
     ]
+    assert installer.current() is None and not installer.occupied()
+
+
+async def test_default_install_survives_moving_plugin_data(tmp_path):
+    installer, source = package(tmp_path)
+    version = await installer.prepare(build, lambda *_: None, source=source)
+    installer.publish(version)
+    moved = tmp_path / "moved" / "runtime"
+    moved.parent.mkdir()
+    installer.root.rename(moved)
+    again = Installation(moved, "revision-1", installer.artifacts)
+    assert again.current() == native_path(moved) / "v" / version.name
+
+
+async def test_failed_import_leaves_nothing_that_blocks_relocation(tmp_path):
+    installer, resource = single(tmp_path)
+    installer.relocate(tmp_path / "chosen")
+    original = tmp_path / "package.7z"
+    original.write_bytes(b"fixed archivX")
+
+    async def unreachable(_staging, _resources):
+        raise AssertionError("build after a failed verification")
+
+    with pytest.raises(ValueError, match="SHA-256"):
+        await installer.prepare(
+            unreachable, lambda *_: None, source=original, import_asset=resource.name
+        )
+    assert not installer.occupied()
+    installer.relocate(tmp_path / "elsewhere")
+    # Whatever a failed build leaves behind both blocks relocation and is removable.
+    (installer.install_root / "tmp").mkdir(parents=True)
+    assert installer.occupied()
+    installer.remove()
+    assert not installer.occupied()
+    installer.relocate(None)
+    assert installer.install_root == installer.root
+
+
+async def test_unreadable_location_can_be_reset_without_reading_it(tmp_path):
+    installer, source = package(tmp_path)
+    installer.root.mkdir(parents=True)
+    installer.location.write_text("{broken", encoding="utf-8")
+    with pytest.raises(ValueError):
+        _ = installer.install_root
+    # Nothing is installed: choosing a location overwrites the broken record.
+    installer.relocate(tmp_path / "chosen")
+    assert installer.install_root == native_path(tmp_path / "chosen")
+    installer.publish(await installer.prepare(build, lambda *_: None, source=source))
+    installer.location.write_text('{"root": "relative"}', encoding="utf-8")
+    with pytest.raises(RuntimeError, match="请先删除环境"):
+        installer.relocate(None)
+    # Removal resets the record; files at the lost location cannot be found.
+    installer.remove()
+    assert installer.install_root == installer.root and not installer.occupied()
+
+
+@pytest.mark.skipif(os.name != "nt", reason="directory junctions are Windows-only")
+async def test_removal_unlinks_junctions_without_entering_them(tmp_path):
+    import _winapi
+
+    installer, source = package(tmp_path)
+    installer.publish(await installer.prepare(build, lambda *_: None, source=source))
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "keep.bin").write_bytes(b"keep")
+    _winapi.CreateJunction(str(outside), str(tmp_path / "runtime" / "cache"))
+    _winapi.CreateJunction(str(outside), str(tmp_path / "runtime" / "v" / "linked"))
+    installer.remove()
+    assert not (tmp_path / "runtime" / "cache").exists()
+    assert (outside / "keep.bin").read_bytes() == b"keep"
     assert installer.current() is None and not installer.occupied()

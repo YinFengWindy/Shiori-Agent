@@ -1,6 +1,8 @@
 """Runtime RPCs admit original imports by path and relocate only an empty install."""
 
 import hashlib
+import os
+from pathlib import Path
 
 import pytest
 
@@ -40,13 +42,13 @@ async def rpc(tmp_path, monkeypatch):
         ctx.background,
         build,
         lambda: "external",
+        import_asset=asset.name,
     )
     register_runtime_rpc(
         ctx,
         runtime,
         namespace="sample-runtime",
         import_suffix=(".7z", ".zip"),
-        import_asset=asset.name,
     )
     yield ctx.rpc.handlers, runtime
     await ctx.aclose()
@@ -110,3 +112,77 @@ async def test_relocate_uses_a_dedicated_directory_and_needs_an_empty_install(
     await runtime.task
     assert not (chosen / "sample-runtime").exists()
     assert (await handlers["runtime.status"]({}))["relocatable"] is True
+
+
+async def test_corrupt_import_keeps_relocation_and_removal_available(rpc, tmp_path):
+    handlers, runtime = rpc
+    (tmp_path / "chosen").mkdir()
+    await handlers["runtime.relocate"]({"directory": str(tmp_path / "chosen")})
+    corrupt = tmp_path / "package.7z"
+    corrupt.write_bytes(DATA[:-1] + b"X")
+    await handlers["runtime.prepare"]({"source": str(corrupt)})
+    await runtime.task
+    status = await handlers["runtime.status"]({})
+    assert "SHA-256" in status["error"]
+    assert status["relocatable"] is True and status["removable"] is False
+    # A failed build's leftovers block relocation, so removal must be offered.
+    (native_path(tmp_path / "chosen/sample-runtime") / "tmp").mkdir()
+    await handlers["runtime.prepare"]({"source": str(corrupt)})
+    await runtime.task
+    status = await handlers["runtime.status"]({})
+    assert status["relocatable"] is False and status["removable"] is True
+    await handlers["runtime.remove"]({})
+    await runtime.task
+    status = await handlers["runtime.status"]({})
+    assert status["relocatable"] is True and status["removable"] is False
+
+
+async def test_unreadable_location_is_reported_and_reset(rpc, tmp_path):
+    handlers, runtime = rpc
+    runtime.installation.root.mkdir(parents=True)
+    runtime.installation.location.write_text("[]", encoding="utf-8")
+    status = await handlers["runtime.status"]({})
+    assert "位置记录无效" in status["error"] and status["location"] == ""
+    assert status["relocatable"] is True and status["removable"] is True
+    status = await handlers["runtime.relocate"]({})
+    assert status["error"] == "" and status["customized"] is False
+    assert native_path(Path(status["location"])) == runtime.installation.root
+
+
+async def test_relocate_accepts_only_local_directories_and_restores_default(
+    rpc, tmp_path
+):
+    handlers, runtime = rpc
+    if os.name == "nt":
+        for remote in (r"\\server\share", r"\\?\C:\Envs", r"\\.\C:\Envs"):
+            with pytest.raises(ValueError, match="本机磁盘"):
+                await handlers["runtime.relocate"]({"directory": remote})
+        # The dedicated directory matches the namespace case-insensitively.
+        (tmp_path / "Sample-Runtime").mkdir()
+        await handlers["runtime.relocate"](
+            {"directory": str(tmp_path / "Sample-Runtime")}
+        )
+        assert runtime.installation.install_root == native_path(
+            tmp_path / "Sample-Runtime"
+        )
+    else:
+        (tmp_path / "chosen").mkdir()
+        await handlers["runtime.relocate"]({"directory": str(tmp_path / "chosen")})
+    assert (await handlers["runtime.status"]({}))["customized"] is True
+    status = await handlers["runtime.relocate"]({})
+    assert status["customized"] is False
+    assert runtime.installation.install_root == runtime.installation.root
+
+
+@pytest.mark.skipif(os.name != "nt", reason="directory junctions are Windows-only")
+async def test_import_through_a_junction_is_rejected(rpc, tmp_path):
+    import _winapi
+
+    handlers, _runtime = rpc
+    (tmp_path / "real").mkdir()
+    (tmp_path / "real" / "package.7z").write_bytes(DATA)
+    _winapi.CreateJunction(str(tmp_path / "real"), str(tmp_path / "linked"))
+    with pytest.raises(ValueError, match="链接"):
+        await handlers["runtime.prepare"](
+            {"source": str(tmp_path / "linked/package.7z")}
+        )

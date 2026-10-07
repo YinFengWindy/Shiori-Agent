@@ -6,18 +6,29 @@ import { useManagedRuntime, type ManagedRuntimeStatus } from "./useManagedRuntim
 
 const phaseLabels = { stopped: "已停止", preparing: "正在准备", starting: "正在启动", removing: "正在删除", ready: "服务就绪", cancelled: "已取消", error: "操作失败" };
 
-function gib(bytes: number) {
-  return `${(bytes / 1024 ** 3).toFixed(1)} GiB`;
+function gib(bytes: number, digits = 1) {
+  return `${(bytes / 1024 ** 3).toFixed(digits)} GiB`;
 }
 
 /** What a removal deletes, with the kept cache size when there is one. */
 function removalDescription(status: ManagedRuntimeStatus | null) {
   const parts = [
     ...(status?.installed ? ["已安装的环境"] : []),
-    status && status.reclaimable > 0 ? `下载缓存（${(status.reclaimable / 1024 ** 3).toFixed(2)} GiB）` : "下载缓存",
+    status && status.reclaimable > 0 ? `下载缓存（${gib(status.reclaimable, 2)}）` : "下载缓存",
     ...(status?.staging ? ["未完成的准备文件"] : []),
   ];
   return `${parts.join("与")}将被删除。`;
+}
+
+/**
+ * The figures the backend's free-space check uses: a download and the provider's import,
+ * then the volume's free space. An installed environment shows only the free space.
+ */
+function spaceSummary(status: ManagedRuntimeStatus) {
+  const free = `剩余 ${status.free === null ? "未知" : gib(status.free)}`;
+  if (status.installed) return { text: free, insufficient: false };
+  const insufficient = status.free !== null && status.free < Math.min(status.required, status.required_import);
+  return { text: `下载需约 ${gib(status.required)} · 导入需约 ${gib(status.required_import)} · ${free}`, insufficient };
 }
 
 /**
@@ -51,7 +62,7 @@ export function ManagedRuntimePanel({ client, host, importExtensions, disabled =
     } catch (cause) { setImportError(errorMessage(cause)); }
     finally { setPicking(false); }
   }
-  const short = status !== null && status.free !== null && status.free < status.required;
+  const space = status ? spaceSummary(status) : null;
   const error = importError || runtime.error || status?.error;
   return <section className="grid gap-3" aria-label="托管推理环境">
     {/* Status and actions share one row: status left, buttons right. */}
@@ -66,20 +77,23 @@ export function ManagedRuntimePanel({ client, host, importExtensions, disabled =
         {status?.installed && !status.running ? <button type="button" className={compactGhostButtonClass} disabled={blocked || status.busy} onClick={() => void runtime.run("start")}>启动环境</button> : null}
         {status?.running ? <button type="button" className={compactGhostButtonClass} disabled={blocked || status.busy} onClick={() => void runtime.run("stop")}>停止环境</button> : null}
         {/* Removal needs a stopped service and no running task; the backend enforces the same rule. */}
-        {status && (status.installed || status.reclaimable > 0 || status.staging) ? <button type="button" className={compactGhostButtonClass} disabled={blocked || status.busy || status.running} onClick={() => setConfirmRemove(true)}>删除环境</button> : null}
+        {status?.removable ? <button type="button" className={compactGhostButtonClass} disabled={blocked || status.busy || status.running} onClick={() => setConfirmRemove(true)}>删除环境</button> : null}
       </div>
     </div>
-    {/* Location, the space a download needs and the free space on that volume. */}
-    {status ? <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+    {/* Location and space; both location actions need nothing installed or kept. */}
+    {status && space ? <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
       <div className="grid min-w-0 gap-0.5 text-caption">
-        <span className="break-all text-ink-secondary" title={status.location}>安装位置：{status.location}</span>
-        <span className={short ? "text-danger-text" : "text-ink-muted"}>需要约 {gib(status.required)} · 剩余 {status.free === null ? "未知" : gib(status.free)}</span>
+        <span className="break-all text-ink-secondary" title={status.location}>安装位置：{status.location || "未知"}</span>
+        <span className={space.insufficient ? "text-danger-text" : "text-ink-muted"}>{space.text}</span>
       </div>
-      <button type="button" className={compactGhostButtonClass} disabled={blocked || !status.relocatable} onClick={() => void changeLocation()}>更改位置</button>
+      <div className="ml-auto flex flex-wrap justify-end gap-2">
+        <button type="button" className={compactGhostButtonClass} disabled={blocked || !status.relocatable} onClick={() => void changeLocation()}>更改位置</button>
+        {status.customized ? <button type="button" className={compactGhostButtonClass} disabled={blocked || !status.relocatable} onClick={() => void runtime.relocate()}>恢复默认</button> : null}
+      </div>
     </div> : null}
     {status?.busy && status.total > 0 ? <div className="grid gap-1">
       <progress className="w-full" max={status.total} value={status.received} aria-label="环境准备进度" />
-      <span className="text-caption text-ink-muted">{status.item} · {(status.received / 1024 ** 3).toFixed(2)} / {(status.total / 1024 ** 3).toFixed(2)} GiB</span>
+      <span className="text-caption text-ink-muted">{status.item} · {(status.received / 1024 ** 3).toFixed(2)} / {gib(status.total, 2)}</span>
     </div> : null}
     {error ? <host.ui.InlineError message={error} /> : null}
     <host.ui.ConfirmDialog open={confirmRemove} destructive persona="destructive" title="删除托管环境" description={removalDescription(status)} confirmLabel="删除环境"
