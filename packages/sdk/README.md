@@ -2,7 +2,10 @@
 
 [@yinfengwindy/shiori-sdk](https://www.npmjs.com/package/@yinfengwindy/shiori-sdk)
 and [shiori-sdk](https://pypi.org/project/shiori-sdk/) are the TypeScript and Python distributions of the
-same plugin contract. Both are version **4.3.0**, with Runtime API **4.3.0**.
+same plugin contract. Both are version **3.1.4**, with Runtime API **3.1.4**.
+3.1.1–3.1.4 are not published yet; npm and PyPI hold 3.1.0. The commands below
+install 3.1.0; APIs added since then need a wheelhouse or workspace build of
+this repository until the next publication.
 
 Start with the [plugin tutorial](https://github.com/YinFengWindy/Shiori-Agent/blob/main/docs/_handbook/plugins-tutorial.md)
 and [runtime contract](https://github.com/YinFengWindy/Shiori-Agent/blob/main/docs/_handbook/plugin-runtime-contract.md)
@@ -10,21 +13,24 @@ for plugin layout, capability declarations and packaging.
 
 ## Compatibility
 
-Runtime API 4 is a breaking release: the published 3.1 `SurfaceHandle.voice`
-interface is removed. Speech consumers must move their orchestration into their
-own plugin and use scoped native resources and owned surface messages. Old
-external plugin manifests capped below 4 are rejected before backend execution.
-Desktop pet requires SDK/Runtime API `>=4.0.0 <5.0.0`. Bundled plugins that do not
-use the removed API retain their 3.1 minimum and declare compatibility below 5.
-External authors must audit, rebuild and explicitly widen their own compatibility
-range; installing this host never silently approves an older package.
+Runtime API 3.1.1 removes the published 3.1.0 `SurfaceHandle.voice`
+interface. Speech consumers must move their orchestration into their own plugin
+and use scoped native resources and owned surface messages, then declare
+`>=3.1.1 <4.0.0`. The host's range check does not reject a `>=3.1.0 <4.0.0`
+package that still uses the removed interface, so external authors must audit
+and rebuild such packages themselves. Desktop pet requires SDK/Runtime API
+`>=3.1.4 <4.0.0`. Bundled plugins that do not use the removed API keep
+`>=3.1.0 <4.0.0`.
+
+Contract changes between publications bump only the patch number; the major and
+minor numbers are decided when the SDK is published.
 
 ## TypeScript
 
 Install the SDK and its React peers as development dependencies in your plugin project:
 
 ```sh
-pnpm add -D "@yinfengwindy/shiori-sdk@^4.0.0" "react@^19.2.5" "react-dom@^19.2.5"
+pnpm add -D "@yinfengwindy/shiori-sdk@^3.1.0" "react@^19.2.5" "react-dom@^19.2.5"
 ```
 
 Build the plugin UI as ESM, externalizing `@yinfengwindy/shiori-sdk`, `react`,
@@ -35,7 +41,7 @@ The host renderer ABI guarantees `19.2.0`; declare compatible host peers separat
 in the plugin's `manifest.yaml`, alongside its Runtime API range:
 
 ```yaml
-runtime_api: ">=4.0.0 <5.0.0"
+runtime_api: ">=3.1.4 <4.0.0"
 peer_dependencies:
   react: ">=19.2.0 <20.0.0"
   react-dom: ">=19.2.0 <20.0.0"
@@ -54,14 +60,14 @@ tarball with declarations and external React peers. The host import map provides
 the same main entry to precompiled plugins. Only the main entry belongs in a
 plugin's production peer imports.
 
-Runtime API 4.1 also exports `usePrivateDraft(client, identity, operations)` for
+Runtime API 3.1.2 also exports `usePrivateDraft(client, identity, operations)` for
 JSON-serializable plugin-owned settings and role documents. Supply `load`, `save`
 and optionally `onDirtyChange`; a null identity disables loading and saving.
 The hook isolates late results by client and document identity, retains edits on
 save errors, and never creates a writable default after a failed read. It manages
 the plugin's draft only and does not participate in the host role transaction.
 
-Runtime API 4.3 adds `usePrivateAutosave(client, identity, { load, save, debounceMs? })`
+Runtime API 3.1.4 adds `usePrivateAutosave(client, identity, { load, save, debounceMs? })`
 for plugin settings pages that save like the host's: `update` saves the latest draft
 once edits pause (400 ms by default), saves never overlap, `commit` saves at once for
 blur/Enter fields (keep their unvalidated text in component state and commit only a
@@ -72,7 +78,7 @@ while a save is in flight and otherwise drops unsaved edits. Render its `savePha
 `host.ui.SettingsSavedStatus` for the host's page-corner 「已保存」 mark, and lay the page
 out with the host's `SettingsGroup`, `SettingsSectionCard`, `SettingsField`,
 `SettingsToggleField`, `settingsInputClass` and `settingsGroupStackClass`. Packages
-using any of these require `runtime_api: ">=4.3.0 <5.0.0"`.
+using any of these require `runtime_api: ">=3.1.4 <4.0.0"`.
 
 A disposed scoped client rejects with `PluginBridgeError`, code
 `plugin_unavailable`, and `details.reason: "context_disposed"`. Cleanup may treat
@@ -84,13 +90,13 @@ other unavailable services and must not be silently classified as local disposal
 Requires Python **3.12+**. Install in your plugin project:
 
 ```sh
-uv add "shiori-sdk>=4.0.0,<5"
+uv add "shiori-sdk>=3.1.0,<4"
 ```
 
 For independent plugin tests, add the optional testing support and run your suite:
 
 ```sh
-uv add --dev "shiori-sdk[testing]>=4.0.0,<5"
+uv add --dev "shiori-sdk[testing]>=3.1.0,<4"
 uv run pytest tests
 ```
 
@@ -377,12 +383,12 @@ press/release as speech or selects a role's provider.
 
 `SurfaceHandle.onRoleActivity(listener)` carries only role/session identity, phase
 and notification intent. Plugins own animation, voice state and scheduling.
-Runtime API 4.0 removes the published 3.1 `SurfaceHandle.voice` business interface.
+Runtime API 3.1.1 removes the published 3.1.0 `SurfaceHandle.voice` business interface.
 Desktop pet uses its own surface messages and scoped native capture, playback and
 key registration instead. The host retains native resources and revokes them when
 their plugin activation or actual renderer window is gone.
 
-## Discoverable services and speech contracts (Runtime API 4.0)
+## Discoverable services and speech contracts (Runtime API 3.1.1)
 
 Provider backends declare `services` and use `ServiceProviderContext` from
 `shiori_sdk.services`. `ctx.services.register(service_id, contract=..., label=...,
@@ -402,7 +408,7 @@ inference completes. The SDK has no voice controller, vendor client, voice asset
 lifecycle or default selection. `testing.services.FakeServiceProviderContext`
 provides independent setup tests.
 
-Desktop pet requires SDK 4.0. It owns input gestures, hotkey preferences, microphone
+Desktop pet requires SDK 3.1.1 or later. It owns input gestures, hotkey preferences, microphone
 selection, selected services, chat/reply matching, synthesis queues and manual
 stop. Its backend writes `plugin-data/desktop_pet/voice-preferences.json`; these
 values never enter host `config.toml`, `runtime_config.tts` or role `plugin_data`.
@@ -415,13 +421,13 @@ Tencent/MiniMax integrations and their installation/migration code are removed.
 Existing user files, credentials and remote voice assets are left untouched.
 SenseVoice and GPT-SoVITS implementations are separate follow-up plugin deliveries.
 
-## 4.1 local-service utilities
+## 3.1.2 local-service utilities
 
 `shiori_sdk.files.audio.pcm_wav_duration` validates complete PCM WAV audio, optionally rejecting digital silence. `shiori_sdk.files.staging.staged_import_file` validates a native picker's namespace, extension and byte limit. `shiori_sdk.local_http.loopback_http_url` validates a plain HTTP loopback origin. These utilities do not open a connection or supply inference policy.
 
 A manifest may declare `distribution: external` for repository sources delivered through normal plugin ZIP installation instead of bundled discovery. Omission retains builtin distribution. External installation, trust, update and removal still use the existing workspace plugin lifecycle.
 
-## 4.2 private managed environments
+## 3.1.3 private managed environments
 
 `shiori_sdk.managed` contains opt-in generic artifact acquisition, atomic installation,
 owned-process and background-operation helpers. A provider supplies fixed `Artifact`

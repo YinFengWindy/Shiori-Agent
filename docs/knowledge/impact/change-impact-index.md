@@ -59,7 +59,7 @@ related:
 | 调度任务 | scheduler、工具、持久化、主动投递、角色删除、桌面表单 | `ScheduleRoleTaskService compute_fire_at` |
 | 单角色剧情 | Story repository、Director、角色/玩家快照、bridge 事件、桌面剧情适配层 | `StorySimulationService StoryRepository StorySimulationHandler stories.beat.committed` |
 
-独立 provider、SDK 4.1 工具与 SDK 4.0 已发布接口迁移见 [语音 Provider 与桌宠交互](../modules/voice.md) 与 [SDK 兼容说明](../../../packages/sdk/README.md#compatibility)。
+独立 provider、SDK 3.1.2 工具与 SDK 3.1.1 已发布接口迁移见 [语音 Provider 与桌宠交互](../modules/voice.md) 与 [SDK 兼容说明](../../../packages/sdk/README.md#compatibility)。
 
 ## 判断顺序
 

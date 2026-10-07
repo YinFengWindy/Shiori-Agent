@@ -61,11 +61,11 @@ export const pluginUiPeerExports: Record<string, string[]> = {
     "PluginHostServicesProvider", "usePluginHostServices",
     // Runtime API 2.16.0 (#576): shared visual components.
     "CrossfadeLayers", "SidebarResizeHandle",
-    // Runtime API 4.1.0: shared private document lifecycle.
+    // Runtime API 3.1.2: shared private document lifecycle.
     "usePrivateDraft",
-    // Runtime API 4.2.0: generic private runtime controls.
+    // Runtime API 3.1.3: generic private runtime controls.
     "ManagedRuntimePanel", "useManagedRuntime",
-    // Runtime API 4.3.0 (#683): private document autosave and the settings page layout.
+    // Runtime API 3.1.4 (#683): private document autosave and the settings page layout.
     "usePrivateAutosave", "SettingsField", "SettingsGroup", "SettingsSectionCard", "SettingsToggleField",
     "settingsGroupStackClass", "settingsInputClass",
   ],

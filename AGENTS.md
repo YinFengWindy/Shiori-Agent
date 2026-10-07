@@ -84,6 +84,7 @@
 ## 仓库特定约束
 
 - Node 依赖统一通过根目录的固定版本 pnpm workspace 管理；只维护 `pnpm-lock.yaml`，不要新增根目录或 `apps/desktop/` 的 `package-lock.json`。
+- 每个修改 SDK / 运行时 API 契约的 PR（新增接口与破坏性变更都算）只把第三位（patch）升一次，破坏性变更在 `docs/_handbook/plugin-runtime-contract.md` 版本表中标注 **breaking**；主版本/次版本仅在发布 SDK 时由维护者决定。版本号以 `packages/sdk/python/shiori_sdk/_version.py` 为唯一来源，并用 `node scripts/sync_sdk_version.mjs` 同步。
 - 在功能分支上，每完成一轮有实际代码改动的答复后即刻小步 commit；`main` 分支上一律不直接提交。
 - 涉及代码变更的功能分支，默认先推送远端并创建 Draft PR；未经用户明确要求，不得直接推送或合并到 `main`。
 - PR 必须关联对应 Issue，并写明变更摘要、实际验证结果和已知阻塞项；相关测试与构建通过且阻塞项清零后，才可转为 Ready 或合并。

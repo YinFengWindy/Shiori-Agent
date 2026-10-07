@@ -346,7 +346,7 @@ def test_discovery_admission_defers_import_but_finishes_committed_receipt(
     )
     (external / "manifest.yaml").write_text(
         "api: 2\npackage_contract: 1\nid: demo\nversion: 1.0.0\n"
-        "runtime_api: '>=4.0.0 <5.0.0'\nentry: backend/plugin.py\ncapabilities: []\n",
+        "runtime_api: '>=3.1.1 <4.0.0'\nentry: backend/plugin.py\ncapabilities: []\n",
         encoding="utf-8",
     )
     if admission == "BLOCKED":

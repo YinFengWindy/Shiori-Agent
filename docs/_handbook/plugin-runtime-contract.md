@@ -39,7 +39,7 @@ and renderer declaration keys are rejected. This table defines the v1 fields:
 | `api` | yes | integer `2` |
 | `id` | yes | `[a-z][a-z0-9_-]{0,63}` |
 | `version` | yes | full SemVer 2.0 string, including optional prerelease/build |
-| `runtime_api` | yes | compatibility range; host currently advertises `4.0.0` |
+| `runtime_api` | yes | compatibility range; host currently advertises `3.1.4` |
 | `entry` | yes | explicit package-relative `.py` backend entry |
 | `capabilities` | yes | existing v2 capability-name list, including `[]` |
 | `channels` | no | static channel declarations (Runtime API 2.2); requires the `channels` capability |
@@ -63,15 +63,22 @@ uses that context without importing host internals; public backend import
 portability is completed by #212.
 
 Ranges use whitespace-separated comparators with AND semantics: `=`, `>`, `>=`,
-`<`, `<=`; a bare SemVer means equality. Example: `>=4.0.0 <5.0.0`. Caret, tilde,
+`<`, `<=`; a bare SemVer means equality. Example: `>=3.0.0 <4.0.0`. Caret, tilde,
 wildcard, comma, OR and hyphen ranges are deliberately unsupported and rejected.
 Build metadata does not affect precedence. Prerelease hosts require a comparator
 mentioning a prerelease of that same major/minor/patch tuple.
 
 ## Runtime API version history
 
-Each minor version only adds opt-in surface; a package declares the lowest
-version whose additions it uses.
+Every PR that changes the SDK / runtime API contract on `main` bumps the patch
+number once. This applies to additions and to breaking changes alike;
+breaking changes are marked **breaking** in the table below. The maintainer picks the major and minor numbers when publishing the
+SDK. A package declares the lowest version whose additions it uses.
+
+The single version source is `packages/sdk/python/shiori_sdk/_version.py`
+(`RUNTIME_API_VERSION = __version__`), synchronized to the other packages by
+`node scripts/sync_sdk_version.mjs`. 3.1.1–3.1.4 are unpublished contract
+changes on `main`; npm and PyPI hold 3.1.0.
 
 | Version | Adds | Introduced by |
 | --- | --- | --- |
@@ -94,8 +101,10 @@ version whose additions it uses.
 | `2.16.0` | SDK `CrossfadeLayers` and `SidebarResizeHandle`; packages importing either require `runtime_api: ">=2.16.0 <3.0.0"`. The host no longer provides NcatBot; external `host_dependencies` declarations requiring it are rejected by the existing missing-dependency check. QQ uses per-account OneBot sockets; `psutil` remains a production dependency. | #576 |
 | `3.0.0` | **breaking**: the unified Shiori SDK. `@shiori/plugin-sdk` becomes `@yinfengwindy/shiori-sdk` (no alias) and shares version and source tree `packages/sdk/` with the Python `shiori-sdk`, which owns plugin-facing Python contracts, lifecycle values and independent test fakes; every 2.x range is rejected with `incompatible_runtime` (see [Runtime API 3.0](#runtime-api-30-unified-shiori-sdk)) | #551 (#585–#591) |
 | `3.1.0` | `shiori_sdk.lifecycle` gains `AfterTurnCtx`, `PHASE_SLOTS` / `require_phase_slot` and `requires` / `produces` on the `LifecycleModule` protocol; packages importing or implementing any of them require `runtime_api: ">=3.1.0 <4.0.0"`. `shiori_sdk.runtime` owns the host's `KNOWN_CAPABILITIES` and manifest `capabilities` validation. `shiori-sdk[testing]`'s `sdk_context` grants only the plugin manifest's (validated) `capabilities` with an isolated temporary `plugin_dir`, and `FakeLifecycle` rejects unknown phase slots like the host. `shiori_sdk.runtime.HostServiceUnavailable` is raised before `setup` when a declared capability's host service is missing, so `workspace` / `session_manager` on the typed contexts are no longer optional. `shiori_sdk.redaction.summarize_llm_output_for_log` moves back to the host (`core.common.llm_output_log`); `redact_secrets` stays in the SDK. Those corrections preceded the first 3.1.0 publication on 2026-10-03 | #620, #622, #624 (#619) |
-| `4.0.0` | **breaking**: removes the published 3.1 `SurfaceHandle.voice` API and host speech business. Adds generic `services` publication/discovery/calls, pure ASR/TTS values, scoped native capture/playback/key capabilities and autonomous role UI. Desktop pet owns preferences and orchestration and requires `>=4.0.0 <5.0.0`. Other bundled plugins retain their 3.1 minimum with an audited `<5.0.0` upper bound. Existing external packages capped below 4 must explicitly migrate and declare compatibility. | #674 |
-| `4.3.0` | SDK `usePrivateAutosave` (plugin-owned document autosave on the host's serial draft queue), the host settings layout (`SettingsField`, `SettingsToggleField`, `SettingsGroup`, `SettingsSectionCard`, `settingsInputClass`, `settingsGroupStackClass`) and `host.ui.SettingsSavedStatus` (the settings page corner 「已保存」 mark); packages using any of them require `runtime_api: ">=4.3.0 <5.0.0"` | #683 (#682) |
+| `3.1.1` | **breaking**: removes the published 3.1.0 `SurfaceHandle.voice` API and host speech business. Adds generic `services` publication/discovery/calls, pure ASR/TTS values, scoped native capture/playback/key capabilities and autonomous role UI. Desktop pet owns preferences and orchestration and requires at least `3.1.1`. Other bundled plugins retain their `>=3.1.0 <4.0.0` range after a compatibility audit. The range check does not reject an external package that still uses the removed API; such a package must migrate and declare `>=3.1.1 <4.0.0`. | #674 (#677) |
+| `3.1.2` | SDK `usePrivateDraft` (plugin-owned document loading, dirty state and explicit save) and the Python local-service utilities `shiori_sdk.files.audio.pcm_wav_duration`, `shiori_sdk.files.staging.staged_import_file` and `shiori_sdk.local_http.loopback_http_url`, and the manifest key `distribution: external` (repository sources delivered through ZIP installation; older hosts reject the unknown key); packages using any of them require `runtime_api: ">=3.1.2 <4.0.0"` | #678 (#675) |
+| `3.1.3` | `shiori_sdk.managed` (fixed artifact acquisition, atomic installation, owned processes and background runtime operations, `register_runtime_rpc`), `shiori_sdk.files.lease` and the renderer `ManagedRuntimePanel` / `useManagedRuntime`; packages using any of them require `runtime_api: ">=3.1.3 <4.0.0"` | #679 (#676) |
+| `3.1.4` | SDK `usePrivateAutosave` (plugin-owned document autosave on the host's serial draft queue), the host settings layout (`SettingsField`, `SettingsToggleField`, `SettingsGroup`, `SettingsSectionCard`, `settingsInputClass`, `settingsGroupStackClass`) and `host.ui.SettingsSavedStatus` (the settings page corner 「已保存」 mark); packages using any of them require `runtime_api: ">=3.1.4 <4.0.0"` | #683 (#682), on `main` via #688 (unpublished) |
 
 2.2 and 2.3 first ship together in the release that turns every external
 channel into a plugin (#363): no released host advertises 2.2 alone, and
@@ -131,7 +140,7 @@ Background request waits are
 bounded and do not occupy backend RPC scheduling capacity. Method policies on
 backend calls are unchanged. See [the plugin tutorial](plugins-tutorial.md#桌面-rpc事件与-ui)
 for examples and delivery/error semantics. Packages using these additions must
-require `runtime_api: ">=4.0.0 <5.0.0"`; the existing `client.call` signature and
+require `runtime_api: ">=3.0.0 <4.0.0"`; the existing `client.call` signature and
 Python exported dependency API remain compatible. This is cooperation under the
 existing trust model, not a sandbox; the CSP and resource grants are unchanged.
 
@@ -183,7 +192,7 @@ not declared, when the type declares a prefix the `chat_id` does not carry
 Every role binding stores its `chat_type`. A saved binding on a channel no
 installed plugin declares (its plugin was uninstalled) is shown read-only and
 kept as is, but cannot be added or changed. Packages declaring `channels` must
-require `runtime_api: ">=4.0.0 <5.0.0"`.
+require `runtime_api: ">=3.0.0 <4.0.0"`.
 
 The declaration is static, so the desktop can list a channel while its plugin is
 disabled, untrusted or still missing credentials. The channel name is a data key
@@ -195,7 +204,7 @@ to `FAILED` with diagnostic code `undeclared_channel` (stage `setup`, field
 `channels`). When two plugins declare the same channel name, discovery marks every
 claimant `CONFLICT` (code `duplicate_channel`, field `channels`) and none of them
 activates; candidates that already conflict by plugin ID keep `duplicate_id`.
-Packages using `channels` must require `runtime_api: ">=4.0.0 <5.0.0"`; older
+Packages using `channels` must require `runtime_api: ">=3.0.0 <4.0.0"`; older
 hosts reject the unknown top-level key.
 
 `plugins.list` rows carry the manifest's `capabilities` and `channels`. The
@@ -230,7 +239,7 @@ an absent hook yields the neutral default. Protocols live in
 stream. `MessagePushTool.register_channel(..., description=...)` accepts a short
 identity/`chat_id` format note; the `message_push` tool description lists only
 currently registered, non-retired channels with those notes. Packages using the
-hooks or `description` must require `runtime_api: ">=4.0.0 <5.0.0"`: older hosts
+hooks or `description` must require `runtime_api: ">=3.0.0 <4.0.0"`: older hosts
 ignore the hooks and reject the unknown keyword.
 
 ## Runtime API 2.4 host feedback and inline errors
@@ -259,7 +268,7 @@ failures read like the host's and can be fronted by the host mascot 吟风:
   `layout?: "row" | "strip" | "card"`, `glyph?` / `glyphTone?: "danger" |
   "accent"` (the plain glyph), `role?: "alert" | "status"`, `onDismiss?`,
   `persona?`, `className?`, `testId?`.
-- `host.ui.SettingsSavedStatus` (runtime API 4.3.0) publishes the host's
+- `host.ui.SettingsSavedStatus` (runtime API 3.1.4) publishes the host's
   「正在保存…」/「已保存」 mark in the settings page corner, exactly as the schema
   plugin config page does. Props: `phase` (`DraftSavePhase`, usually
   `usePrivateAutosave().savePhase`). It renders nothing outside a settings page.
@@ -289,7 +298,7 @@ function Page({ client, host }: PluginNavPageComponentProps) {
 }
 ```
 
-Packages that use `host` must require `runtime_api: ">=4.0.0 <5.0.0"`; older
+Packages that use `host` must require `runtime_api: ">=3.0.0 <4.0.0"`; older
 hosts do not inject it. The bundled NovelAI studio uses all three: its
 generation failure card and error toasts pick the scene from the backend's
 stable error codes (`novelai_not_configured` → `not_configured`, …), and its
@@ -316,7 +325,7 @@ bundled NovelAI `generate_image` does, while commands, files, desktop, browser,
 outbound messages, schedule changes and memory stay undeclared.
 
 Packages that pass `external_allowed` must require
-`runtime_api: ">=4.0.0 <5.0.0"`; older hosts reject the keyword.
+`runtime_api: ">=3.0.0 <4.0.0"`; older hosts reject the keyword.
 
 This is a behavior change of 2.7.0 hosts: every plugin tool that does not
 declare `external_allowed` is unavailable in restricted external-context turns,
@@ -324,7 +333,7 @@ including tools of existing packages that require an older `runtime_api` and
 therefore cannot declare it. The registration API itself is unchanged for them;
 this is host policy, not an API break. Such packages keep working everywhere
 else, and their tools become available in those turns once they declare
-`external_allowed=True` and require `runtime_api: ">=4.0.0 <5.0.0"`.
+`external_allowed=True` and require `runtime_api: ">=3.0.0 <4.0.0"`.
 
 ## Runtime API 2.8 plugin SDK peer
 
@@ -336,7 +345,7 @@ exactly like `react`; the renderer import map resolves it to a host-served
 wrapper around the **host's own instance**, so `instanceof` checks and shared
 state behave exactly as they do for built-in plugins. The SDK is not a
 `peer_dependencies` entry: it is versioned by the runtime API, so a package using
-it declares `runtime_api: ">=4.0.0 <5.0.0"` (the unified SDK major).
+it declares `runtime_api: ">=3.0.0 <4.0.0"` (the unified SDK major).
 
 The runtime exports are exactly those listed for `@yinfengwindy/shiori-sdk` in the
 renderer peer ABI (`pluginUiPeerExports` in
@@ -361,7 +370,7 @@ API 2.9 moves the shared renderer primitives that plugins use into
 `@yinfengwindy/shiori-sdk`, which now owns their only implementation (the host
 imports them from the SDK too, so host and plugins render the same components
 and class names). A precompiled package that imports any of the exports below
-declares `runtime_api: ">=4.0.0 <5.0.0"`; on a 2.8 host those names are missing
+declares `runtime_api: ">=3.0.0 <4.0.0"`; on a 2.8 host those names are missing
 from the served peer wrapper and the package fails to load.
 
 Runtime exports added in 2.9.0 (all are listed in `pluginUiPeerExports`):
@@ -391,7 +400,7 @@ unchanged; only their source of truth moved.
 
 API 2.10 gives plugins the stateful host capabilities they used to reach through
 host source, as services instead of host stores. A precompiled package that uses
-any of them declares `runtime_api: ">=4.0.0 <5.0.0"`.
+any of them declares `runtime_api: ">=3.0.0 <4.0.0"`.
 
 Runtime exports added in 2.10.0 (listed in `pluginUiPeerExports`):
 
@@ -440,7 +449,7 @@ appearance preferences) stays private; accounts still arrive through the
 ## Runtime API 2.11 background failure reporting and surface/background types
 
 API 2.11 adds one member to the `ctx` a background module's `setup(ctx)`
-receives; a package that calls it declares `runtime_api: ">=4.0.0 <5.0.0"`.
+receives; a package that calls it declares `runtime_api: ">=3.0.0 <4.0.0"`.
 
 - **`ctx.reportFailure(operation, error)`** records a failure the plugin
   handled but a human should still see — a fire-and-forget operation with no
@@ -481,7 +490,7 @@ from `@yinfengwindy/shiori-sdk/contract`.
 an interaction target; `null` revokes it. The declaration is independent of opaque
 retained state and plugin KV. The host combines it with its authoritative window
 visibility/readiness/lifetime, so hiding, closing, reloading or crashing a surface
-revokes that interaction target. Runtime API 4.0 removes the published 3.1
+revokes that interaction target. Runtime API 3.1.1 removes the published 3.1.0
 `SurfaceHandle.voice` gesture/state API. Speech gestures, input ownership,
 provider selection and playback queues belong to the desktop-pet plugin.
 The host forwards owned surface messages and manages scoped native resources.
@@ -521,7 +530,7 @@ settling its DOM detection before the first mount; the desktop unit test loader
 API 2.12 adds the `avatars` capability, the host's cache of the platform
 avatars of a channel's message senders and chats (#514). A plugin declares
 `avatars` in its manifest `capabilities` and, if it is an external package,
-`runtime_api: ">=4.0.0 <5.0.0"`.
+`runtime_api: ">=3.0.0 <4.0.0"`.
 
 An avatar is keyed by `kind` and the message's transport `channel`
 (`InboundMessage.channel`):
@@ -912,7 +921,7 @@ for commands and how to validate its directory/zip from a host environment.
 ## Runtime API 3.0: unified Shiori SDK
 
 `@yinfengwindy/shiori-sdk` and `shiori-sdk` share one version (3.0.0 at introduction, now
-4.0.0) and the source tree `packages/sdk/`. External packages must declare `runtime_api: ">=4.0.0 <5.0.0"`.
+3.1.4) and the source tree `packages/sdk/`. External packages must declare `runtime_api: ">=3.0.0 <4.0.0"`.
 The previous frontend package name has no alias. Existing 2.x ranges are rejected
 with `incompatible_runtime` before backend execution; rebuild renderer peers and
 update the declared range when migrating. The 2.x sections above describe feature

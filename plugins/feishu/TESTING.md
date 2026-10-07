@@ -1,6 +1,6 @@
 # 独立运行 Python 测试
 
-将插件复制到 Shiori 仓库外；wheelhouse 只需 `shiori_sdk-4.0.0` wheel。插件显式声明 `shiori-sdk>=4.0.0,<5` 与 lark-oapi、httpx、pydantic；测试依赖 `shiori-sdk[testing]>=4.0.0,<5` 与 Pillow，不安装宿主或旧 testkit。
+将插件复制到 Shiori 仓库外；wheelhouse 只需 `shiori_sdk-3.1.1` wheel。插件显式声明 `shiori-sdk>=3.1.0,<4` 与 lark-oapi、httpx、pydantic；测试依赖 `shiori-sdk[testing]>=3.1.0,<4` 与 Pillow，不安装宿主或旧 testkit。
 
 在插件副本目录执行（将 `/path/to/wheelhouse` 替换为实际绝对路径）：
 

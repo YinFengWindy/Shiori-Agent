@@ -7,13 +7,13 @@ name = "shiori-plugin-telegram"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
-    "shiori-sdk>=3.1.0,<5",
+    "shiori-sdk>=3.1.0,<4",
     "python-telegram-bot>=22.7",
     "telegramify-markdown",
 ]
 
 [project.optional-dependencies]
-test = ["shiori-sdk[testing]>=3.1.0,<5", "Pillow>=11.0"]
+test = ["shiori-sdk[testing]>=3.1.0,<4", "Pillow>=11.0"]
 
 [tool.setuptools]
 include-package-data = false

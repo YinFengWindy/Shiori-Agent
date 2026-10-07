@@ -1,6 +1,6 @@
 # 独立运行 Python 测试
 
-将插件复制到 Shiori 仓库外；wheelhouse 只需 `shiori_sdk-4.0.0` wheel。插件显式声明 python-telegram-bot、telegramify-markdown；测试依赖 SDK testing 与 Pillow，不安装宿主或旧 testkit。
+将插件复制到 Shiori 仓库外；wheelhouse 只需 `shiori_sdk-3.1.1` wheel。插件显式声明 python-telegram-bot、telegramify-markdown；测试依赖 SDK testing 与 Pillow，不安装宿主或旧 testkit。
 
 ```sh
 uv venv .venv --python 3.12
