@@ -1,6 +1,6 @@
 # 独立测试
 
-取得本插件副本和包含 shiori-sdk 4.3 的私有 wheelhouse 后，在副本目录执行：
+取得本插件副本和包含 shiori-sdk 3.1.4 的私有 wheelhouse 后，在副本目录执行：
 
 ```sh
 uv venv .venv --python 3.12

@@ -41,7 +41,7 @@ test("synchronization updates npm and both exact Python pins without changing in
 
 test("an unrecognized host declaration fails before any other metadata is rewritten", async (t) => {
   const { root, files } = await fixture(t, { npm: "3.1.1" });
-  await writeFile(join(root, "setup.py"), 'setup(install_requires=["shiori-sdk>=4.0"])\n', "utf8");
+  await writeFile(join(root, "setup.py"), 'setup(install_requires=["shiori-sdk>=3.1"])\n', "utf8");
   await assert.rejects(syncSdkVersion(root), /Expected exactly one SDK version pin in setup\.py/);
   assert.equal(await readFile(join(root, "packages/sdk/package.json"), "utf8"), files["packages/sdk/package.json"]);
 });

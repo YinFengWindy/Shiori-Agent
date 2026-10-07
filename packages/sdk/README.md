@@ -3,6 +3,9 @@
 [@yinfengwindy/shiori-sdk](https://www.npmjs.com/package/@yinfengwindy/shiori-sdk)
 and [shiori-sdk](https://pypi.org/project/shiori-sdk/) are the TypeScript and Python distributions of the
 same plugin contract. Both are version **3.1.4**, with Runtime API **3.1.4**.
+3.1.1–3.1.4 are not published yet; npm and PyPI hold 3.1.0. The commands below
+install 3.1.0; APIs added since then need a wheelhouse or workspace build of
+this repository until the next publication.
 
 Start with the [plugin tutorial](https://github.com/YinFengWindy/Shiori-Agent/blob/main/docs/_handbook/plugins-tutorial.md)
 and [runtime contract](https://github.com/YinFengWindy/Shiori-Agent/blob/main/docs/_handbook/plugin-runtime-contract.md)
@@ -27,7 +30,7 @@ minor numbers are decided when the SDK is published.
 Install the SDK and its React peers as development dependencies in your plugin project:
 
 ```sh
-pnpm add -D "@yinfengwindy/shiori-sdk@^3.1.4" "react@^19.2.5" "react-dom@^19.2.5"
+pnpm add -D "@yinfengwindy/shiori-sdk@^3.1.0" "react@^19.2.5" "react-dom@^19.2.5"
 ```
 
 Build the plugin UI as ESM, externalizing `@yinfengwindy/shiori-sdk`, `react`,
@@ -87,13 +90,13 @@ other unavailable services and must not be silently classified as local disposal
 Requires Python **3.12+**. Install in your plugin project:
 
 ```sh
-uv add "shiori-sdk>=3.1.4,<4"
+uv add "shiori-sdk>=3.1.0,<4"
 ```
 
 For independent plugin tests, add the optional testing support and run your suite:
 
 ```sh
-uv add --dev "shiori-sdk[testing]>=3.1.4,<4"
+uv add --dev "shiori-sdk[testing]>=3.1.0,<4"
 uv run pytest tests
 ```
 

@@ -45,6 +45,8 @@ def test_package_accepts_host_supported_display_and_distribution_metadata(
     [
         ({"runtime_api": ">=2.0.0 <3.0.0"}, "incompatible_runtime", "runtime_api"),
         ({"runtime_api": ">=99.0.0 <100.0.0"}, "incompatible_runtime", "runtime_api"),
+        # Retracted unpublished 4.x range (#698): the host is back on 3.1.x.
+        ({"runtime_api": ">=4.3.0 <5.0.0"}, "incompatible_runtime", "runtime_api"),
         ({"version": "1.2"}, "invalid_version", "version"),
         ({"package_contract": True}, "unsupported_contract", "package_contract"),
         ({"package_contract": 2}, "unsupported_contract", "package_contract"),
@@ -178,6 +180,17 @@ def test_host_advertises_runtime_api_with_shared_visual_components():
     from shiori_sdk import RUNTIME_API_VERSION
 
     assert HostRuntimeContract().runtime_api == RUNTIME_API_VERSION
+
+
+def test_lower_bound_one_patch_above_the_host_is_rejected(contract_package):
+    # Contract changes bump only the patch, so the next patch must already be gated.
+    major, minor, patch = HostRuntimeContract().runtime_api.split(".")
+    declared = f">={major}.{minor}.{int(patch) + 1} <{int(major) + 1}.0.0"
+    _change(contract_package, runtime_api=declared)
+    with pytest.raises(PackageContractError) as caught:
+        validate_package(contract_package)
+    assert caught.value.diagnostic.code == "incompatible_runtime"
+    assert caught.value.diagnostic.field == "runtime_api"
 
 
 def test_explicit_cross_major_compatibility_is_accepted(contract_package):

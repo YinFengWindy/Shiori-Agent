@@ -116,11 +116,11 @@ pnpm test --file RoleDetailPage.test.tsx
 
 ### 插件 SDK
 
-SDK 与 Runtime API 当前版本均为 **3.1.4**。前端包为 [@yinfengwindy/shiori-sdk](https://www.npmjs.com/package/@yinfengwindy/shiori-sdk)，后端包为 [shiori-sdk](https://pypi.org/project/shiori-sdk/)（Python 3.12+）。在独立插件项目中按需安装：
+SDK 与 Runtime API 当前版本均为 **3.1.4**（3.1.1 起尚未发布，npm 与 PyPI 最新为 3.1.0；更新的接口需用 wheelhouse 或本仓库 workspace 构建）。前端包为 [@yinfengwindy/shiori-sdk](https://www.npmjs.com/package/@yinfengwindy/shiori-sdk)，后端包为 [shiori-sdk](https://pypi.org/project/shiori-sdk/)（Python 3.12+）。在独立插件项目中按需安装：
 
 ```sh
-pnpm add -D "@yinfengwindy/shiori-sdk@^3.1.4"
-uv add "shiori-sdk>=3.1.4,<4"
+pnpm add -D "@yinfengwindy/shiori-sdk@^3.1.0"
+uv add "shiori-sdk>=3.1.0,<4"
 ```
 
 插件位于 `plugins/<id>/`：`manifest.yaml` 声明能力与兼容范围，`backend/` 放 Python 后端，`ui/` 放可选 React 界面，`tests/` 放插件测试。前端构建需将 SDK、React 和 React DOM 保留为 external，由 Shiori 在运行时提供。使用 3.1 API 的插件声明 `runtime_api: ">=3.1.0 <4.0.0"`；用到 3.1.1 起新增接口的插件把下界提高到对应补丁版本，例如桌宠要求 `">=3.1.4 <4.0.0"`。

@@ -1,8 +1,8 @@
 # SDK 发布
 
-SDK 使用同一个版本号发布 `@yinfengwindy/shiori-sdk`（npm）与 `shiori-sdk`（PyPI），当前为
-`3.1.4`。版本来源是 `packages/sdk/python/shiori_sdk/_version.py`；修改后运行
-`node scripts/sync_sdk_version.mjs` 同步 npm 元数据。修改契约的 PR 只升第三位（patch），
+SDK 使用同一个版本号发布 `@yinfengwindy/shiori-sdk`（npm）与 `shiori-sdk`（PyPI），仓库当前为
+`3.1.4`（3.1.1–3.1.4 尚未发布，npm 与 PyPI 最新为 `3.1.0`）。版本来源是 `packages/sdk/python/shiori_sdk/_version.py`；修改后运行
+`node scripts/sync_sdk_version.mjs` 同步 npm 元数据。每个修改契约的 PR 只把第三位（patch）升一次，
 主版本/次版本只在发布时由维护者决定。
 
 工作流为 `.github/workflows/sdk-release.yml`：
@@ -69,7 +69,7 @@ owner 字段填写 GitHub owner。维护者仍需完成下面的外部设置。
    运行 `uv lock` 刷新 `uv.lock` 并确认 `uv sync --dev --locked` 可用，按变更更新 README，
    走 PR/CI 后合入 `main`。版本、功能和许可证校验通过后再打标签。可在 Actions 中手动运行 SDK release
    检查构建流程；这只验证产物，不证明外部账号已配置。
-2. 在已合入的提交上创建并推送 `sdk-v<version>`。例如当前版本：
+2. 在已合入的提交上创建并推送 `sdk-v<version>`。例如发布仓库当前版本：
 
    ```powershell
    git tag sdk-v3.1.4 <已验证的-main-提交-SHA>
