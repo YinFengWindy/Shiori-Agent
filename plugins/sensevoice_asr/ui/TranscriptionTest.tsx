@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { errorMessage, ghostButtonClass, textareaClass, type PluginInjectedProps } from "@yinfengwindy/shiori-sdk";
+import { compactGhostButtonClass, errorMessage, SettingsField, SettingsGroup, settingsInputClass, type PluginInjectedProps } from "@yinfengwindy/shiori-sdk";
 
-/** Tests this ASR provider with an explicitly selected WAV, independently of a desktop pet. */
+/** The 「转写测试」 group: tests this ASR provider with an explicitly selected WAV, independently of a desktop pet. */
 export function TranscriptionTest({ client, host }: PluginInjectedProps) {
   const [busy, setBusy] = useState(false);
   const [text, setText] = useState("");
@@ -23,10 +23,15 @@ export function TranscriptionTest({ client, host }: PluginInjectedProps) {
       if (current === revision.current) setBusy(false);
     }
   }
-  return <section className="grid gap-3">
-    <h3 className="text-body font-medium text-ink">文件转写</h3>
-    <div><button className={ghostButtonClass} disabled={busy} onClick={() => void transcribe()}>{busy ? "识别中…" : "选择 WAV 并转写"}</button></div>
-    {error ? <host.ui.InlineError message={error} /> : null}
-    <textarea aria-label="转写结果" className={textareaClass} value={text} readOnly rows={4} />
-  </section>;
+  return <SettingsGroup title="转写测试">
+    <SettingsField label="WAV 文件">
+      <div className="flex xl:justify-end"><button type="button" className={compactGhostButtonClass} disabled={busy} onClick={() => void transcribe()}>{busy ? "识别中…" : "选择 WAV 并转写"}</button></div>
+    </SettingsField>
+    <SettingsField label="转写结果" layout="stack">
+      <div className="grid gap-3">
+        {error ? <host.ui.InlineError message={error} /> : null}
+        <textarea aria-label="转写结果" className={settingsInputClass} value={text} readOnly rows={4} />
+      </div>
+    </SettingsField>
+  </SettingsGroup>;
 }
