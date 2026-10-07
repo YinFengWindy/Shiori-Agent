@@ -39,7 +39,7 @@ and renderer declaration keys are rejected. This table defines the v1 fields:
 | `api` | yes | integer `2` |
 | `id` | yes | `[a-z][a-z0-9_-]{0,63}` |
 | `version` | yes | full SemVer 2.0 string, including optional prerelease/build |
-| `runtime_api` | yes | compatibility range; host currently advertises `3.1.5` |
+| `runtime_api` | yes | compatibility range; host currently advertises `3.1.6` |
 | `entry` | yes | explicit package-relative `.py` backend entry |
 | `capabilities` | yes | existing v2 capability-name list, including `[]` |
 | `channels` | no | static channel declarations (Runtime API 2.2); requires the `channels` capability |
@@ -77,7 +77,7 @@ SDK. A package declares the lowest version whose additions it uses.
 
 The single version source is `packages/sdk/python/shiori_sdk/_version.py`
 (`RUNTIME_API_VERSION = __version__`), synchronized to the other packages by
-`node scripts/sync_sdk_version.mjs`. 3.1.1–3.1.5 are unpublished contract
+`node scripts/sync_sdk_version.mjs`. 3.1.1–3.1.6 are unpublished contract
 changes on `main`; npm and PyPI hold 3.1.0.
 
 | Version | Adds | Introduced by |
@@ -106,6 +106,7 @@ changes on `main`; npm and PyPI hold 3.1.0.
 | `3.1.3` | `shiori_sdk.managed` (fixed artifact acquisition, atomic installation, owned processes and background runtime operations, `register_runtime_rpc`), `shiori_sdk.files.lease` and the renderer `ManagedRuntimePanel` / `useManagedRuntime`; packages using any of them require `runtime_api: ">=3.1.3 <4.0.0"` | #679 (#676) |
 | `3.1.4` | SDK `usePrivateAutosave` (plugin-owned document autosave on the host's serial draft queue), the host settings layout (`SettingsField`, `SettingsToggleField`, `SettingsGroup`, `SettingsSectionCard`, `settingsInputClass`, `settingsGroupStackClass`) and `host.ui.SettingsSavedStatus` (the settings page corner 「已保存」 mark); packages using any of them require `runtime_api: ">=3.1.4 <4.0.0"` | #683 (#682), on `main` via #688 (unpublished) |
 | `3.1.5` | `host.pickFilePaths` (native file selection returned by original path, no copy) and `host.pickDirectory` (native directory selection that may create one), with the SDK type `NativeFilePathPickerOptions` and both in `createFakeHostServices`; packages using either require `runtime_api: ">=3.1.5 <4.0.0"` (see [Runtime API 3.1.5 native path pickers](#runtime-api-315-native-path-pickers)) | #699 (#697) |
+| `3.1.6` | managed-runtime hygiene: `register_runtime_rpc` adds `runtime.remove` and `ManagedRuntime.remove()` (background deletion of installed versions, pointer, caches and staging, only while no task runs and no service of any generation runs; lock and log files stay; status phase `removing`); a published preparation deletes the download cache and other version directories, while failure or cancellation keeps the cache for resumption; `Installation(..., installed_size=)` declares the bytes of one prepared version, and preparation fails before any copy when the root's volume has less free space than the missing artifact bytes + `installed_size` + max(1 GiB, 5%); `run_owned` / `OwnedChild` decode child output per line (UTF-8, else the Windows ANSI code page) into UTF-8 logs and name the last meaningful line in a failure; `Processes.spawn` accepts `asyncio.subprocess` constants for `stdout` / `stderr`; the renderer `ManagedRuntimePanel` offers 「删除环境」 behind a destructive `host.ui.ConfirmDialog` and `useManagedRuntime` exports `ManagedRuntimeAction`; packages using any of them require `runtime_api: ">=3.1.6 <4.0.0"` | #700 (#697) |
 
 2.2 and 2.3 first ship together in the release that turns every external
 channel into a plugin (#363): no released host advertises 2.2 alone, and
@@ -944,7 +945,7 @@ for commands and how to validate its directory/zip from a host environment.
 ## Runtime API 3.0: unified Shiori SDK
 
 `@yinfengwindy/shiori-sdk` and `shiori-sdk` share one version (3.0.0 at introduction, now
-3.1.5) and the source tree `packages/sdk/`. External packages must declare `runtime_api: ">=3.0.0 <4.0.0"`.
+3.1.6) and the source tree `packages/sdk/`. External packages must declare `runtime_api: ">=3.0.0 <4.0.0"`.
 The previous frontend package name has no alias. Existing 2.x ranges are rejected
 with `incompatible_runtime` before backend execution; rebuild renderer peers and
 update the declared range when migrating. The 2.x sections above describe feature

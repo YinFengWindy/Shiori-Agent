@@ -112,3 +112,64 @@ async def test_prepare_repairs_invalid_current_record_instead_of_blocking_itself
     await runtime.task
     assert runtime.status()["error"] == ""
     assert runtime.installation.current() != controller.previous
+
+
+async def test_success_prunes_cache_and_old_versions_but_failure_keeps_cache(
+    controller, tmp_path
+):
+    runtime, install = controller.runtime, controller.runtime.installation
+    cached = install.root / "downloads" / "fixed.bin"
+    assert cached.is_file() and controller.previous.is_dir()
+    import_copy = tmp_path / "again.zip"
+    import_copy.write_bytes(controller.source.read_bytes())
+    original_build = runtime.build
+
+    async def fail(_path):
+        raise ValueError("build failed")
+
+    runtime.build = fail
+    runtime.submit("prepare", controller.source)
+    await runtime.task
+    assert runtime.status()["error"] == "build failed"
+    assert cached.is_file() and controller.previous.is_dir()
+    runtime.build = original_build
+    runtime.submit("prepare", import_copy)
+    await runtime.task
+    current = install.current()
+    assert runtime.status()["error"] == "" and current != controller.previous
+    assert not (install.root / "downloads").exists()
+    assert list((install.root / "v").iterdir()) == [current]
+
+
+async def test_remove_requires_idle_stopped_runtime_then_deletes_everything(
+    controller,
+):
+    from shiori_sdk.files.lease import exclusive_file_lease
+
+    runtime, install = controller.runtime, controller.runtime.installation
+    (install.root / "prepare.log").write_text("previous run", encoding="utf-8")
+    controller.child.hold = True
+    runtime.submit("start")
+    await controller.child.started.wait()
+    with pytest.raises(RuntimeError, match="其他操作"):
+        runtime.remove()
+    await runtime.cancel()
+    controller.child.child.process = SimpleNamespace(returncode=None)
+    with pytest.raises(RuntimeError, match="请先停止环境"):
+        runtime.remove()
+    controller.child.child.process = None
+    # Another generation's service still holds the service lease.
+    with exclusive_file_lease(install.root / "service.lock"):
+        runtime.remove()
+        await runtime.task
+    assert runtime.status()["error"] == "托管服务正在运行，请先停止环境"
+    assert install.current() == controller.previous
+    runtime.remove()
+    await runtime.task
+    status = runtime.status()
+    assert status["phase"] == "stopped" and status["installed"] is False
+    assert sorted(item.name for item in install.root.iterdir()) == [
+        "prepare.lock",
+        "prepare.log",
+        "service.lock",
+    ]

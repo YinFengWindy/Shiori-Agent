@@ -87,3 +87,30 @@ async def test_previous_trial_pointer_remains_readable_after_compact_layout(tmp_
         installer.pointer.write_text(json.dumps(pointer), encoding="utf-8")
         with pytest.raises(ValueError, match="布局无效"):
             installer.current()
+
+
+async def test_insufficient_space_fails_before_any_copy(tmp_path, monkeypatch):
+    import shiori_sdk.managed.installation as module
+
+    installer, source = package(tmp_path)
+    installer.installed_size = 5 * module.GIB
+    usage = module.shutil.disk_usage(tmp_path)
+    monkeypatch.setattr(
+        module.shutil,
+        "disk_usage",
+        lambda _path: usage._replace(free=6 * module.GIB),
+    )
+    built = []
+
+    async def record(path):
+        built.append(path)
+
+    # 5 GiB installed + 13 artifact bytes + the 1 GiB minimum margin > 6 GiB.
+    with pytest.raises(
+        RuntimeError, match=r"磁盘空间不足：需要约 6\.0 GB，剩余 6\.0 GB"
+    ):
+        await installer.prepare(record, lambda *_: None, source=source)
+    assert not (installer.root / "downloads").exists()
+    assert not built and installer.current() is None
+    installer.installed_size = 4 * module.GIB
+    installer.publish(await installer.prepare(record, lambda *_: None, source=source))

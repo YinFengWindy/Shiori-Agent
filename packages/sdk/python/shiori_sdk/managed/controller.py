@@ -8,7 +8,7 @@ from pathlib import Path
 from shiori_sdk.extensions import BackgroundTasks
 
 from .installation import Installation
-from .service import OwnedService
+from .service import OwnedService, ServiceRunning
 
 
 class ManagedRuntime:
@@ -29,10 +29,13 @@ class ManagedRuntime:
         self.received = self.total = 0
         self.closed = False
 
+    def _running(self) -> bool:
+        process = self.service.child.process
+        return process is not None and process.returncode is None
+
     def status(self) -> dict[str, object]:
         """Return preparation progress and actual owned-process availability."""
-        process = self.service.child.process
-        running = process is not None and process.returncode is None
+        running = self._running()
         installation_error = ""
         try:
             installed = self.installation.current() is not None
@@ -54,8 +57,7 @@ class ManagedRuntime:
         self, action: str, source: Path | None = None, import_asset: str | None = None
     ):
         """Accept one action; observable failures remain in status until the next action."""
-        if self.closed or (self.task is not None and not self.task.done()):
-            raise RuntimeError("环境正在执行其他操作")
+        self._admit()
         if platform.system() != "Windows" or platform.machine().lower() not in {
             "amd64",
             "x86_64",
@@ -67,6 +69,51 @@ class ManagedRuntime:
             self._run(action, source, import_asset), name="managed-runtime"
         )
         return self.status()
+
+    def remove(self):
+        """Delete the installation in the background; only a stopped, idle runtime."""
+        self._admit()
+        if self._running():
+            raise RuntimeError("请先停止环境")
+        self.error, self.phase = "", "removing"
+        self.item, self.received, self.total = "", 0, 0
+        self.task = self.background.spawn(self._remove(), name="managed-runtime")
+        return self.status()
+
+    def _admit(self) -> None:
+        if self.closed or (self.task is not None and not self.task.done()):
+            raise RuntimeError("环境正在执行其他操作")
+
+    async def _remove(self):
+        def remove():
+            # Both leases are taken inside the thread: a cancelled wait cannot
+            # release them while files are still being deleted.
+            with self.service.idle():
+                self.installation.remove()
+
+        try:
+            await asyncio.to_thread(remove)
+            self.phase = "stopped"
+        except asyncio.CancelledError:
+            self.phase = "cancelled"
+            raise
+        except Exception as error:
+            # Background-operation boundary; the settings UI polls this error.
+            self.phase, self.error = "error", str(error)
+
+    def _discard_superseded(self, published: Path) -> None:
+        """Prune caches and versions no service of any generation can still use."""
+        if self._running():
+            self.installation.discard_superseded(
+                keep_versions=self.service.installation != published
+            )
+            return
+        try:
+            with self.service.idle():
+                self.installation.discard_superseded(keep_versions=False)
+        except ServiceRunning:
+            # Another generation's service may run from an older version.
+            self.installation.discard_superseded(keep_versions=True)
 
     async def _run(self, action: str, source: Path | None, import_asset: str | None):
         try:
@@ -84,6 +131,8 @@ class ManagedRuntime:
                 await self.service.start(path)
             if action == "prepare":
                 self.installation.publish(path)
+                # Only a published success drops the cache; failures keep it to resume.
+                await asyncio.to_thread(self._discard_superseded, path)
             self.phase = "ready" if self.service.url else "stopped"
         except asyncio.CancelledError:
             self.phase = "cancelled"

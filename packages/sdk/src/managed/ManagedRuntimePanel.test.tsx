@@ -26,3 +26,29 @@ test("import admits only a native selection and forwards the staged path to the 
     assert.deepEqual(requests.at(-1), { method: "runtime.prepare", payload: { source: "C:/private/imports/fixed.zip" } });
   } finally { await view.cleanup(); }
 });
+
+test("removal needs a stopped runtime and a destructive confirmation", async () => {
+  const requests: string[] = [];
+  const installed: ManagedRuntimeStatus = { phase: "stopped", running: false, installed: true, busy: false, error: "", item: "", received: 0, total: 0, revision: "fixed" };
+  async function mount(status: ManagedRuntimeStatus) {
+    const client = createFakePluginClient({ call: async <T,>(method: string) => { requests.push(method); return status as T; } });
+    const fake = createFakeHostServices();
+    const view = await mountTestComponent(<ManagedRuntimePanel client={client} host={fake.host} namespace="sample-runtime" importExtensions={["zip"]} />);
+    const removeButton = Array.from(view.container.querySelectorAll("button")).find((item) => item.textContent === "删除环境")!;
+    return { view, removeButton, renders: fake.uiRenders };
+  }
+  const running = await mount({ ...installed, phase: "ready", running: true });
+  try { assert.equal(running.removeButton.disabled, true); } finally { await running.view.cleanup(); }
+  const { view, removeButton, renders } = await mount(installed);
+  try {
+    assert.equal(removeButton.disabled, false);
+    await act(async () => removeButton.click());
+    assert.equal(renders.ConfirmDialog.at(-1)?.destructive, true);
+    assert.equal(requests.includes("runtime.remove"), false);
+    const dialog = view.container.querySelector('[role="dialog"]')!;
+    const confirm = Array.from(dialog.querySelectorAll("button")).find((item) => item.textContent === "删除环境")!;
+    await act(async () => confirm.click());
+    assert.equal(requests.at(-1), "runtime.remove");
+    assert.equal(view.container.querySelector('[role="dialog"]'), null);
+  } finally { await view.cleanup(); }
+});

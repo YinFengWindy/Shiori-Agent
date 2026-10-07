@@ -78,7 +78,7 @@ SDK 3.1.3 的 `managed/` 只复用固定资源获取、校验、原子版本发�
 
 ## 分发
 
-两个 provider 是内置插件，要求 SDK / Runtime API 3.1.4，manifest 声明 `default_enabled: false`：新配置下默认停用，在插件页启用后出现各自设置页并可供桌宠选择。它们不在默认停用升级迁移名单中，因为此前从未作为内置插件缺省启用。源码参与内置后端发现、前端 builtin registry（`ui/index.tsx`，TTS 另有 `background/index.ts`）和冻结运行时 staging；`runtime_assets/server.py` 与锁文件随插件目录作为数据打包，经 `Path(__file__)` 解析，只在插件托管环境中执行，不作为宿主 hidden import 收集。服务准备见 [ASR README](../../../plugins/sensevoice_asr/README.md) 和 [TTS README](../../../plugins/gpt_sovits_tts/README.md)。
+两个 provider 是内置插件，要求 SDK / Runtime API 3.1.6，manifest 声明 `default_enabled: false`：新配置下默认停用，在插件页启用后出现各自设置页并可供桌宠选择。它们不在默认停用升级迁移名单中，因为此前从未作为内置插件缺省启用。源码参与内置后端发现、前端 builtin registry（`ui/index.tsx`，TTS 另有 `background/index.ts`）和冻结运行时 staging；`runtime_assets/server.py` 与锁文件随插件目录作为数据打包，经 `Path(__file__)` 解析，只在插件托管环境中执行，不作为宿主 hidden import 收集。服务准备见 [ASR README](../../../plugins/sensevoice_asr/README.md) 和 [TTS README](../../../plugins/gpt_sovits_tts/README.md)。
 
 冻结宿主同时递归收集 SDK 运行时模块，包括没有 `__init__.py` 的 `files/`，排除 `shiori_sdk.testing` 与缓存；完整 SDK 不依赖当前已安装插件的静态引用。实际 PyInstaller 参数检查 SDK/宿主/内置插件模块是否全部进入 hidden imports。`test-sdk-runtime.mjs` 使用同一 collector 构建小型冻结探针，在仓库外清除 Python 源码路径后动态导入音频、暂存和 loopback HTTP 模块，并确认 testing 不存在。
 

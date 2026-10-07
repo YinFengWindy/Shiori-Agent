@@ -38,8 +38,8 @@ class HostProcesses:
         env: dict[str, str],
         cwd: str,
         stdin: int,
-        stdout: BinaryIO,
-        stderr: BinaryIO,
+        stdout: int | BinaryIO,
+        stderr: int | BinaryIO,
     ):
         """Assign child ownership before allowing executable code to run."""
         return await spawn_owned(

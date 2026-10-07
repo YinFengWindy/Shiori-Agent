@@ -70,7 +70,7 @@ runtime lease 直到真正完成；试听停止会立即停止播放并屏蔽晚
 
 ## 启用与验证
 
-要求 SDK / Runtime API 3.1.4。本插件随应用内置，新配置下默认停用；在“设置 → 插件”
+要求 SDK / Runtime API 3.1.6。本插件随应用内置，新配置下默认停用；在“设置 → 插件”
 启用后出现设置页，并可在桌宠语音中选择。
 Python wheel 独立测试命令见[源码仓库 TESTING.md](https://github.com/YinFengWindy/Shiori-Agent/blob/main/plugins/gpt_sovits_tts/TESTING.md)。不安装大型推理依赖到宿主。
 协议、队列、取消、下载完整性及文件/进程所有权通过受控测试验证。真实打包应用的
