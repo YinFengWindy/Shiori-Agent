@@ -71,9 +71,8 @@ mentioning a prerelease of that same major/minor/patch tuple.
 ## Runtime API version history
 
 Every PR that changes the SDK / runtime API contract on `main` bumps the patch
-number once. This applies to additions and, while the change is unpublished,
-to breaking changes; breaking changes are marked **breaking** in the table
-below. The maintainer picks the major and minor numbers when publishing the
+number once. This applies to additions and to breaking changes alike;
+breaking changes are marked **breaking** in the table below. The maintainer picks the major and minor numbers when publishing the
 SDK. A package declares the lowest version whose additions it uses.
 
 The single version source is `packages/sdk/python/shiori_sdk/_version.py`
