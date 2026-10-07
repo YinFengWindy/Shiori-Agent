@@ -4,7 +4,10 @@ import shutil
 
 import pytest
 
-from agent.plugin_host.discovery import discover_plugins
+from agent.plugin_host.discovery import (
+    discover_plugins,
+    find_uninstalled_external_sources,
+)
 from agent.plugin_host.manifest import ManifestError
 from agent.plugin_host.trust_store import PluginTrustStore
 
@@ -15,15 +18,42 @@ def _discover(roots, external=()):
     )
 
 
-def test_external_source_is_absent_before_renderer_artifacts_are_built(
-    contract_package,
-):
+def test_external_source_is_reported_only_outside_discovery(contract_package):
     path = contract_package / "manifest.yaml"
     path.write_text(
         path.read_text(encoding="utf-8") + "distribution: external\n", encoding="utf-8"
     )
+    # Without built renderer artifacts, package validation would reject the source.
     (contract_package / "renderer/ui.mjs").unlink()
     assert _discover([contract_package.parent]) == []
+    [source] = find_uninstalled_external_sources(
+        [contract_package.parent], external_roots=[], discovered=[]
+    )
+    assert source.plugin_dir == contract_package
+    assert source.manifest.id == "external_demo"
+    assert source.diagnostic.code == "external_not_installed"
+    assert source.diagnostic.state == "BLOCKED"
+
+
+def test_installed_copy_suppresses_external_source_report(contract_package, tmp_path):
+    source = tmp_path / "host" / contract_package.name
+    shutil.copytree(contract_package, source)
+    path = source / "manifest.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8") + "distribution: external\n", encoding="utf-8"
+    )
+    roots = [source.parent, contract_package.parent]
+    [installed] = _discover(roots, [contract_package.parent])
+    assert installed.source == "workspace"
+    # Untrusted only; the source copy never makes it a duplicate_id conflict.
+    assert installed.admission.code == "trust_required"
+    assert installed.admission.state == "UNTRUSTED"
+    assert (
+        find_uninstalled_external_sources(
+            roots, external_roots=[contract_package.parent], discovered=[installed]
+        )
+        == []
+    )
 
 
 @pytest.mark.parametrize("distribution", [None, "builtin", "external"])

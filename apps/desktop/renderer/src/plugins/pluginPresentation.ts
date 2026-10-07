@@ -77,6 +77,9 @@ function blockedReason(code: string | undefined): string {
     case "invalid_manifest":
     case "outside_root":
       return "插件包无效";
+    // A repository source declaring `distribution: external` with no installed copy.
+    case "external_not_installed":
+      return "外部插件，需打包为 ZIP 安装";
     default:
       return "插件包没有通过检查";
   }

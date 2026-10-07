@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import shutil
 from pathlib import Path
 
 import pytest
 
 from agent.plugin_host import PluginState
 from agent.plugin_host import HostServices, PluginKernel
+from agent.plugin_host.manifest import group_listening_channels
 from agent.plugin_host.package_fingerprint import inspect_package_content
 from agent.plugin_host.trust_store import PluginTrustStore
 from agent.plugin_host.trusted_imports import TrustedPluginImports
@@ -467,6 +469,50 @@ async def test_missing_or_cyclic_dependency_blocks_setup(tmp_path, dependencies)
     await kernel.load_all()
     assert kernel.states()[0]["state"] == "BLOCKED"
     assert kernel.states()[0]["error"]
+
+
+@pytest.mark.asyncio
+async def test_uninstalled_external_source_is_never_a_kernel_candidate(
+    contract_package, tmp_path
+):
+    dependent = tmp_path / "dependent"
+    shutil.copytree(contract_package, dependent)
+    path = dependent / "manifest.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace("id: external_demo", "id: dependent")
+        + "dependencies: [external_demo]\n",
+        encoding="utf-8",
+    )
+    path = contract_package / "manifest.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "capabilities: []\n",
+            "capabilities: [channels]\ndistribution: external\nchannels:\n"
+            "  - {name: listens, label: L, group_listening: true,"
+            " chat_types: [{type: private, label: P, chat_id_label: ID}]}\n",
+        ),
+        encoding="utf-8",
+    )
+    (contract_package / "backend/plugin.py").write_text(
+        "raise RuntimeError('source copy must not be imported')\n", encoding="utf-8"
+    )
+    kernel = make_kernel([tmp_path], event_bus=EventBus())
+    try:
+        await kernel.load_all()
+        assert [record.manifest.id for record in kernel.discover()] == ["dependent"]
+        [state] = kernel.states()
+        assert state["id"] == "dependent" and state["state"] == "BLOCKED"
+        # Same verdict as discovery-time checks: the source provides nothing.
+        assert state["diagnostic"]["code"] == "missing_dependency"
+        supports = group_listening_channels(
+            record.manifest for record in kernel.discover()
+        )
+        assert not supports("listens")
+        [source] = kernel.uninstalled_external_sources()
+        assert source.plugin_dir == contract_package
+        assert source.diagnostic.code == "external_not_installed"
+    finally:
+        await kernel.terminate_all(force=True)
 
 
 @pytest.mark.asyncio

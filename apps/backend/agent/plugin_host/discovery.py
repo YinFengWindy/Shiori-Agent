@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict
+from dataclasses import dataclass
 from pathlib import Path
 
 from agent.plugin_host.diagnostics import PackageContractError, PluginDiagnostic
@@ -16,6 +17,23 @@ from agent.plugin_host.package_fingerprint import inspect_package_content
 from agent.plugin_host.trust_store import PluginTrustStore
 
 logger = logging.getLogger(__name__)
+
+# Diagnostic code for a host-root ``distribution: external`` source package with
+# no installed copy. The desktop maps the code to its user-facing text.
+EXTERNAL_SOURCE_CODE = "external_not_installed"
+
+
+@dataclass(frozen=True)
+class ExternalSourceDiagnostic:
+    """A display-only report of an uninstalled external source package.
+
+    Deliberately not a ``PluginRecord``: it has no entry, import path, trust or
+    admission, so no load, dependency, channel, trust or package path accepts it.
+    """
+
+    plugin_dir: Path
+    manifest: PluginManifest
+    diagnostic: PluginDiagnostic
 
 
 def discover_plugins(
@@ -69,6 +87,60 @@ def discover_plugins(
     _check_channel_conflicts(records)
     _check_external_dependencies(records, by_id)
     return records
+
+
+def find_uninstalled_external_sources(
+    roots: list[Path],
+    *,
+    external_roots: list[Path],
+    discovered: list[PluginRecord],
+) -> list[ExternalSourceDiagnostic]:
+    """Report host-root ``distribution: external`` sources that no root provides.
+
+    ``discover_plugins`` never returns these sources. Only the plugin list asks
+    for them, so a developer sees why a checked-out source plugin is not loaded.
+    An ID already present in ``discovered`` (e.g. an installed workspace copy) and
+    repeated source copies of one ID produce no further report.
+    """
+    external = {root.absolute() for root in external_roots}
+    claimed = {record.manifest.id for record in discovered}
+    reports: list[ExternalSourceDiagnostic] = []
+    seen: set[Path] = set()
+    for root in roots:
+        root = root.absolute()
+        if root in external or root in seen or not root.is_dir():
+            continue
+        seen.add(root)
+        for child in sorted(root.iterdir()):
+            if not child.is_dir() or not child.resolve().is_relative_to(root.resolve()):
+                continue
+            try:
+                manifest = load_manifest(child)
+            except (ManifestError, PackageContractError):
+                # Invalid manifests are already diagnosed by discover_plugins.
+                continue
+            if (
+                manifest is None
+                or manifest.distribution != "external"
+                or manifest.id in claimed
+            ):
+                continue
+            claimed.add(manifest.id)
+            reports.append(
+                ExternalSourceDiagnostic(
+                    plugin_dir=child,
+                    manifest=manifest,
+                    diagnostic=PluginDiagnostic(
+                        EXTERNAL_SOURCE_CODE,
+                        "discovery",
+                        "distribution",
+                        "distribution: external 源码包未安装到工作区插件目录",
+                        str(child),
+                        "BLOCKED",
+                    ),
+                )
+            )
+    return reports
 
 
 def _check_channel_conflicts(records: list[PluginRecord]) -> None:
@@ -231,6 +303,7 @@ def _read_candidate(
     ):
         # Source packages may not have compiled renderer artifacts yet. Only an
         # installed workspace copy enters package validation and trust admission.
+        # The plugin list reports it via find_uninstalled_external_sources.
         return None
     if diagnostic is None and (
         source == "workspace" or "package_contract" in manifest.metadata

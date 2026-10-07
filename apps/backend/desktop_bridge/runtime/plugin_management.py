@@ -37,7 +37,10 @@ from bootstrap.app import AppRuntime
 from desktop_bridge.runtime.channel_listing import RuntimeChannelListing
 from desktop_bridge.runtime.plugin_trust import RuntimePluginTrust
 from desktop_bridge.runtime.plugin_packages import RuntimePluginPackages
-from desktop_bridge.runtime.plugin_package_listing import with_package_operations
+from desktop_bridge.runtime.plugin_package_listing import (
+    external_source_row,
+    with_package_operations,
+)
 from desktop_bridge.plugin_config_text import merge_plugin_table
 from desktop_bridge.runtime.apply import (
     DerivedWrite,
@@ -137,7 +140,18 @@ class RuntimePluginManagement:
                     is not None,
                 }
             )
-        return {"plugins": with_package_operations(plugins, self.packages.store)}
+        # Only the roster sees uninstalled external sources; they never enter
+        # discovery, so no load, trust, package or channel path can reach them.
+        # Added after package operations: a queued install of the same ID (not
+        # yet in this generation's discovery) already answers the diagnostic.
+        rows = with_package_operations(plugins, self.packages.store)
+        listed = {row["id"] for row in rows}
+        rows.extend(
+            external_source_row(source)
+            for source in kernel.uninstalled_external_sources()
+            if source.manifest.id not in listed
+        )
+        return {"plugins": rows}
 
     async def set_enabled(
         self,

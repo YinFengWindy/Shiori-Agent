@@ -55,7 +55,11 @@ from agent.plugin_host.diagnostics import (
     PluginDiagnostic,
     RendererActivationError,
 )
-from agent.plugin_host.discovery import discover_plugins
+from agent.plugin_host.discovery import (
+    ExternalSourceDiagnostic,
+    discover_plugins,
+    find_uninstalled_external_sources,
+)
 from agent.plugin_host.effects import EffectScope
 from agent.plugin_host.events import ScopedEventBus
 from agent.plugin_host.handle import PluginHandle, PluginRecord, PluginState
@@ -234,6 +238,12 @@ class PluginKernel:
                 if self._services.workspace is not None
                 else None
             ),
+        )
+
+    def uninstalled_external_sources(self) -> list[ExternalSourceDiagnostic]:
+        """Display-only reports for external sources this generation did not discover."""
+        return find_uninstalled_external_sources(
+            self._dirs, external_roots=self._external_dirs, discovered=self.discover()
         )
 
     # ── 加载 ──────────────────────────────────────────────────────────────
