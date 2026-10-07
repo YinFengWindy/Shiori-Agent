@@ -3,6 +3,7 @@
 import asyncio
 import hashlib
 import zipfile
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -223,10 +224,74 @@ async def test_kept_cache_is_reported_and_removable_without_an_installation(
     runtime.build = fail
     runtime.submit("prepare", controller.source)
     await runtime.task
+    # Staging a killed host left behind is reported but never walked or sized.
+    leftover = install.root / "s" / "killed" / "deep"
+    leftover.mkdir(parents=True)
+    (leftover / "partial.bin").write_bytes(b"x" * 4096)
     status = runtime.status()
-    assert status["installed"] is False and status["reclaimable"] == len(b"runtime")
+    assert status["installed"] is False and status["staging"] is True
+    assert status["reclaimable"] == len(b"runtime")
     runtime.remove()
     await runtime.task
-    assert runtime.status()["error"] == ""
-    assert runtime.status()["reclaimable"] == 0
+    status = runtime.status()
+    assert status["error"] == "" and status["reclaimable"] == 0
+    assert status["staging"] is False
     assert not (install.root / "downloads").exists()
+
+
+def test_reclaimable_probe_tolerates_entries_deleted_meanwhile(controller):
+    install = controller.runtime.installation
+    staging = install.root / "s"
+    staging.mkdir(exist_ok=True)
+    original = Path.stat
+
+    def vanishing(path, *args, **kwargs):
+        if path.name == "fixed.bin":
+            raise FileNotFoundError(path)
+        return original(path, *args, **kwargs)
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(Path, "stat", vanishing)
+        assert install.reclaimable() == (0, False)
+
+
+async def test_cancelled_removal_failure_is_recorded_and_still_cancels(
+    controller, monkeypatch
+):
+    import threading
+
+    runtime, install = controller.runtime, controller.runtime.installation
+    entered, release = threading.Event(), threading.Event()
+
+    def failing_remove():
+        entered.set()
+        release.wait(10)
+        raise OSError("file in use")
+
+    monkeypatch.setattr(install, "remove", failing_remove)
+    runtime.remove()
+    try:
+        await asyncio.to_thread(entered.wait, 10)
+        runtime.task.cancel()
+    finally:
+        release.set()
+    await asyncio.gather(runtime.task, return_exceptions=True)
+    assert runtime.task.cancelled()
+    status = runtime.status()
+    assert status["phase"] == "error" and status["error"] == "file in use"
+
+
+async def test_cleanup_failure_after_publication_keeps_the_usable_phase(
+    controller, monkeypatch
+):
+    runtime, install = controller.runtime, controller.runtime.installation
+
+    def locked(**_kwargs):
+        raise OSError("locked")
+
+    monkeypatch.setattr(install, "discard_superseded", locked)
+    runtime.submit("prepare", controller.source)
+    await runtime.task
+    assert runtime.phase == "ready"
+    assert runtime.status()["error"] == "清理旧版本或下载缓存失败：locked"
+    assert install.current() != controller.previous

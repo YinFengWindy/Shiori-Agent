@@ -211,15 +211,27 @@ class Installation:
         except LeaseBusy:
             _logger.info("另一实例正在准备环境，跳过清理：%s", self.root)
 
-    def reclaimable_bytes(self) -> int:
-        """Bytes of kept downloads and staging, e.g. after a failed preparation."""
+    def reclaimable(self) -> tuple[int, bool]:
+        """Kept download bytes and whether unfinished staging is left over.
+
+        Cheap enough for a polled status: one stat per known artifact (and its
+        ``.part``), and staging is only probed for any entry, never walked.
+        Entries deleted concurrently are simply absent.
+        """
         total = 0
-        for name in ("downloads", "s"):
-            for directory, _dirs, files in os.walk(self.root / name):
-                total += sum(
-                    os.lstat(os.path.join(directory, file)).st_size for file in files
-                )
-        return total
+        for item in self.artifacts:
+            cached = self.root / "downloads" / item.name
+            for path in (cached, cached.with_name(cached.name + ".part")):
+                try:
+                    total += path.stat().st_size
+                except OSError:
+                    continue
+        try:
+            with os.scandir(self.root / "s") as entries:
+                staged = any(True for _entry in entries)
+        except OSError:
+            staged = False
+        return total, staged
 
     def remove(self) -> None:
         """Delete every installed version, the pointer, caches and staging.

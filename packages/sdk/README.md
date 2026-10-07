@@ -464,7 +464,8 @@ installed versions, the pointer, caches and staging in the background, also
 when nothing is installed but a failed or cancelled preparation kept its
 download cache; it is refused while a task runs or a service of any generation
 holds the service lease, and keeps only lock and log files. Status reports
-`reclaimable`, the bytes of kept downloads and staging. A published preparation
+`reclaimable` (bytes of kept downloads, one stat per artifact) and `staging`
+(unfinished preparation files left over, never walked). A published preparation
 deletes the download cache and every other version directory (older ones stay
 while a service may still run from them); failure or cancellation keeps the
 cache so a retry resumes. Removal and post-publication cleanup run in a thread

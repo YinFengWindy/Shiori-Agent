@@ -15,23 +15,28 @@ from .service import OwnedService, ServiceRunning
 _TRANSIENT = frozenset({"preparing", "starting", "removing"})
 
 
-async def _join_thread[T](function: Callable[[], T]) -> tuple[T, bool]:
+async def _join_thread(
+    function: Callable[[], None],
+) -> tuple[Exception | None, bool]:
     """Run filesystem work in a thread that cancellation cannot abandon.
 
     A cancelled wait would leave the thread deleting files while holding the
-    leases. The work is shielded and joined; the result is returned together
+    leases. The work is shielded and joined; its failure is returned together
     with whether cancellation was requested meanwhile, so the caller records
-    the real outcome before re-raising it.
+    the real outcome and then still re-raises the cancellation.
     """
     work = asyncio.ensure_future(asyncio.to_thread(function))
     cancelled = False
     while True:
         try:
-            return await asyncio.shield(work), cancelled
+            await asyncio.shield(work)
+            return None, cancelled
         except asyncio.CancelledError:
             if work.done() and work.cancelled():
                 raise
             cancelled = True
+        except Exception as error:
+            return error, cancelled
 
 
 class ManagedRuntime:
@@ -51,8 +56,8 @@ class ManagedRuntime:
         self.phase, self.error, self.item = "stopped", "", ""
         self.received = self.total = 0
         self.closed = False
-        # Bytes of kept downloads/staging, measured when no task is running.
-        self._reclaimable: int | None = None
+        # Kept download bytes and leftover staging, measured when no task runs.
+        self._reclaimable: tuple[int, bool] | None = None
 
     def _running(self) -> bool:
         process = self.service.child.process
@@ -75,7 +80,8 @@ class ManagedRuntime:
         if busy:
             self._reclaimable = None
         elif self._reclaimable is None:
-            self._reclaimable = self.installation.reclaimable_bytes()
+            self._reclaimable = self.installation.reclaimable()
+        reclaimable, staging = self._reclaimable or (0, False)
         return {
             "phase": phase,
             "error": self.error or installation_error,
@@ -87,7 +93,8 @@ class ManagedRuntime:
             "busy": busy,
             "revision": self.installation.revision,
             # Kept downloads/staging a removal frees, also without an installation.
-            "reclaimable": self._reclaimable or 0,
+            "reclaimable": reclaimable,
+            "staging": staging,
         }
 
     def submit(
@@ -128,14 +135,13 @@ class ManagedRuntime:
             with self.service.idle():
                 self.installation.remove()
 
-        try:
-            _result, cancelled = await _join_thread(remove)
-        except Exception as error:
-            # Background-operation boundary; the settings UI polls this error.
+        error, cancelled = await _join_thread(remove)
+        # Record the real outcome, even when cancellation arrived meanwhile;
+        # this is the background-operation boundary the settings UI polls.
+        if error is not None:
             self.phase, self.error = "error", str(error)
-            return
-        # The removal completed even when cancellation arrived meanwhile.
-        self.phase = "stopped"
+        else:
+            self.phase = "stopped"
         if cancelled:
             raise asyncio.CancelledError
 
@@ -172,9 +178,12 @@ class ManagedRuntime:
                 self.installation.publish(path)
                 published = True
                 # Only a published success drops the cache; failures keep it to resume.
-                _result, cancelled = await _join_thread(
+                error, cancelled = await _join_thread(
                     lambda: self._discard_superseded(path)
                 )
+                if error is not None:
+                    # The published version stays usable; only cleanup failed.
+                    self.error = f"清理旧版本或下载缓存失败：{error}"
                 if cancelled:
                     raise asyncio.CancelledError
             self.phase = "ready" if self.service.url else "stopped"
