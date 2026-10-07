@@ -29,11 +29,12 @@ export function builtinPluginEntries(pluginsRoot) {
       if (!ids.some((candidate) => id === `\0${candidate}`)) return;
       const kind = id.slice(id.lastIndexOf("/") + 1);
       const result = await builtinPluginEntrySource(pluginsRoot, kind);
-      this.addWatchFile(pluginsRoot);
       for (const path of result.paths) this.addWatchFile(path);
       return result.code;
     },
     configureServer(server) {
+      // Watch inventory changes here: addWatchFile would make Vite resolve this
+      // directory as an import of the virtual module during client transforms.
       server.watcher.add(pluginsRoot);
       const changed = (path, includeEntries = false) => {
         const parts = relative(resolve(pluginsRoot), resolve(path)).replaceAll("\\", "/").split("/");

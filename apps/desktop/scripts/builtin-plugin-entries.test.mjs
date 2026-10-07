@@ -25,11 +25,13 @@ test("all three registries import only builtins and react to development manifes
     assert.ok(!entry.code.includes("separate"));
   }
   const watcher = new EventEmitter();
-  watcher.add = () => {};
+  const watched = [];
+  watcher.add = (path) => watched.push(path);
   const invalidated = [], sent = [];
   const server = { watcher, httpServer: new EventEmitter(), moduleGraph: { getModuleById: (id) => id, invalidateModule: (id) => invalidated.push(id) }, ws: { send: (event) => sent.push(event) } };
   const plugin = builtinPluginEntries(root);
   plugin.configureServer(server);
+  assert.deepEqual(watched, [root], "inventory changes are watched without importing the directory");
   await writeFile(join(root, "bundled/manifest.yaml"), "distribution: external\n", "utf8");
   watcher.emit("change", join(root, "bundled/manifest.yaml"));
   assert.equal(invalidated.length, 3);
@@ -41,18 +43,35 @@ test("all three registries import only builtins and react to development manifes
   assert.equal(watcher.listenerCount("change"), 0);
 });
 
-test("the real Vite development loader excludes external entries", async (t) => {
+test("the Vite client and SSR loaders resolve all registries and exclude external entries", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "plugin-entries-dev-"));
   t.after(() => rm(root, { recursive: true, force: true }));
+  const rendererRoot = join(root, "renderer");
+  await mkdir(rendererRoot);
   for (const id of ["bundled", "separate"]) {
-    await mkdir(join(root, "plugins", id, "ui"), { recursive: true });
+    await mkdir(join(root, "plugins", id), { recursive: true });
     await writeFile(join(root, "plugins", id, "manifest.yaml"), `distribution: ${id === "bundled" ? "builtin" : "external"}\n`, "utf8");
-    await writeFile(join(root, "plugins", id, "ui/index.tsx"), id === "bundled" ? "export default {marker:'development'};" : "INVALID EXTERNAL JAVASCRIPT !!!", "utf8");
+    for (const [kind, extension] of [["ui", "tsx"], ["background", "ts"], ["surface", "tsx"]]) {
+      await mkdir(join(root, "plugins", id, kind));
+      await writeFile(join(root, "plugins", id, kind, `index.${extension}`), id === "bundled" ? `export default {marker:'${kind}'};` : "INVALID EXTERNAL JAVASCRIPT !!!", "utf8");
+    }
   }
-  const server = await createServer({ root, configFile: false, logLevel: "error", plugins: [builtinPluginEntries(join(root, "plugins"))], server: { middlewareMode: true }, optimizeDeps: { noDiscovery: true, include: [] } });
+  const server = await createServer({ root: rendererRoot, configFile: false, logLevel: "silent", plugins: [builtinPluginEntries(join(root, "plugins"))], server: { middlewareMode: true, preTransformRequests: false, fs: { allow: [root] } }, optimizeDeps: { noDiscovery: true, include: [] } });
   try {
-    const imported = await server.ssrLoadModule("virtual:shiori-builtin-plugins/ui");
-    assert.equal(Object.keys(imported.default).length, 1);
-    assert.equal(Object.values(imported.default)[0].default.marker, "development");
+    for (const kind of ["ui", "background", "surface"]) {
+      await t.test(kind, async () => {
+        const id = `virtual:shiori-builtin-plugins/${kind}`;
+        await writeFile(join(rendererRoot, `${kind}.ts`), `export { default } from ${JSON.stringify(id)};`, "utf8");
+        // Browser imports register the virtual module before its load hook runs.
+        // A direct virtual request alone misses addWatchFile import-analysis failures.
+        await server.transformRequest(`/${kind}.ts`);
+        const transformed = await server.transformRequest(id);
+        assert.ok(transformed.code.includes("/plugins/bundled/"));
+        assert.ok(!transformed.code.includes("separate"));
+        const imported = await server.ssrLoadModule(id);
+        assert.equal(Object.keys(imported.default).length, 1);
+        assert.equal(Object.values(imported.default)[0].default.marker, kind);
+      });
+    }
   } finally { await server.close(); }
 });
