@@ -21,8 +21,13 @@
 每个资源仍逐一校验固定大小和 SHA-256；ZIP 自身不能修改资源清单。
 插件本身只带接口、UI 与准备脚本，不携带这两个资源或模型。
 
-私有 `runtime/` 下的 `downloads/` 保留可续传资源，`s/<id>/` 只用于未完成安装，
-`v/<id>/` 保存完整版本，`current.json` 在新服务健康验证后原子切换。
+导入环境包按原路径读取：校验大小与 SHA-256 后直接从原文件解压，不复制、不删除原文件。
+
+安装位置默认是私有 `runtime/`；面板「更改位置」「恢复默认」可在未安装且无缓存时改到本机其他目录
+（在其中建立 `gpt_sovits_tts-runtime/`）。安装位置下的 `downloads/` 保留可续传资源，
+`s/<id>/` 只用于未完成安装，`v/<id>/` 保存完整版本，`tmp/`、`cache/` 是子进程临时与模型缓存。
+`current.json`、`location.json`、锁、日志与 `tts-config.json` 始终留在私有 `runtime/`，
+`current.json` 在新服务健康验证后原子切换。
 下载取消或失败不发布半成品；启动失败保留旧版本，可点击“启动环境”重新启动它。
 `prepare.log` 和 `service.log` 保存准备/运行错误。下载重试验证 Range 和最终哈希。
 同一私有根的文件租约防止新旧插件代同时启动模型；健康检查还必须匹配本次进程令牌。
@@ -70,7 +75,7 @@ runtime lease 直到真正完成；试听停止会立即停止播放并屏蔽晚
 
 ## 启用与验证
 
-要求 SDK / Runtime API 3.1.6。本插件随应用内置，新配置下默认停用；在“设置 → 插件”
+要求 SDK / Runtime API 3.1.7。本插件随应用内置，新配置下默认停用；在“设置 → 插件”
 启用后出现设置页，并可在桌宠语音中选择。
 Python wheel 独立测试命令见[源码仓库 TESTING.md](https://github.com/YinFengWindy/Shiori-Agent/blob/main/plugins/gpt_sovits_tts/TESTING.md)。不安装大型推理依赖到宿主。
 协议、队列、取消、下载完整性及文件/进程所有权通过受控测试验证。真实打包应用的

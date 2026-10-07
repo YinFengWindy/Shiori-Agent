@@ -35,7 +35,7 @@ export function ServiceStatusGroup({ client, host, mode, version, health, disabl
         />
       </SettingsField> : null}
       {mode === "managed" ? <SettingsField label="托管环境" layout="stack">
-        <ManagedRuntimePanel client={client} host={host} namespace="gpt_sovits_tts-runtime" importExtensions={["7z", "zip"]} disabled={disabled} />
+        <ManagedRuntimePanel client={client} host={host} importExtensions={["7z", "zip"]} disabled={disabled} />
       </SettingsField> : null}
     </SettingsGroup>
     <host.ui.ConfirmDialog open={confirmRestart} title="确认外部服务已重启？" description="仅在已手动重启 GPT-SoVITS 服务后继续。" confirmLabel="确认已重启" destructive={false} persona={true} onClose={() => setConfirmRestart(false)} onConfirm={() => { setConfirmRestart(false); void health.check(true); }} />

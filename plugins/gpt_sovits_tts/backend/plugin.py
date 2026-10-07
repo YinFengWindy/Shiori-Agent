@@ -14,7 +14,6 @@ from .references import References
 from .rpc import register_rpc
 from .settings import VoiceStore
 from .runtime import create_runtime, effective_settings
-from .runtime_manifest import ARCHIVE
 
 
 class Context(ServicePluginContext, ServiceProviderContext, Protocol):
@@ -63,7 +62,6 @@ async def setup(ctx: Context) -> None:
         runtime,
         namespace="gpt_sovits_tts-runtime",
         import_suffix=(".7z", ".zip"),
-        import_asset=ARCHIVE,
     )
     register_rpc(ctx, engine, runtime)
     if runtime.mode() == "managed" and runtime.status()["installed"]:

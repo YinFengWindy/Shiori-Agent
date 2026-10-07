@@ -6,23 +6,43 @@ from shiori_sdk.managed.service import OwnedService
 from shiori_sdk.plugin_services import ServicePluginContext
 from .runtime_build import build_runtime
 from .runtime_launch import launch_runtime
-from .runtime_manifest import ARTIFACTS, INSTALLED_SIZE, REQUIRED_FILES, REVISION
+from .runtime_manifest import (
+    ARCHIVE,
+    ARTIFACTS,
+    INSTALLED_SIZE,
+    REQUIRED_FILES,
+    REVISION,
+)
 from .settings import Settings, VoiceStore
 
 
 def create_runtime(ctx: ServicePluginContext, store: VoiceStore) -> ManagedRuntime:
-    """Wire provider-owned policy to generic installation and native process ownership."""
+    """Wire provider-owned policy to generic installation and native process ownership.
+
+    State (pointer, location, locks, logs, ``tts-config.json``) stays in plugin
+    data, so the service identity ``runtime.service.root`` never moves; child
+    temp and model caches follow the chosen install root.
+    """
     root = store.root / "runtime"
+    installation = Installation(
+        root, REVISION, ARTIFACTS, installed_size=INSTALLED_SIZE
+    )
     return ManagedRuntime(
-        Installation(root, REVISION, ARTIFACTS, installed_size=INSTALLED_SIZE),
+        installation,
         OwnedService(
             root,
             ctx.processes,
-            lambda path, port, token: launch_runtime(path, port, token, root),
+            lambda path, port, token: launch_runtime(
+                path, port, token, root, installation.install_root
+            ),
         ),
         ctx.background,
-        lambda staging: build_runtime(staging, ctx, root),
+        lambda staging, resources: build_runtime(
+            staging, resources, ctx, root, installation.install_root
+        ),
         lambda: store.read().settings.connection_mode,
+        # The official .7z is imported in place; a .zip carries both artifacts.
+        import_asset=ARCHIVE,
     )
 
 

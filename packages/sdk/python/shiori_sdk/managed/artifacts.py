@@ -33,16 +33,19 @@ async def acquire_artifact(
     destination: Path,
     progress: Callable[[int], None],
     *,
-    source: Path | None = None,
     bundle: zipfile.ZipFile | None = None,
     client: httpx.AsyncClient,
 ) -> None:
-    """Resume verified ranges, retaining interrupted bytes but never publishing them."""
+    """Resume verified ranges, retaining interrupted bytes but never publishing them.
+
+    With ``bundle`` the member of that name is extracted instead, verified the
+    same way; nothing is resumed from a previous attempt.
+    """
     destination.parent.mkdir(parents=True, exist_ok=True)
     partial = destination.with_name(destination.name + ".part")
     digest, received = hashlib.sha256(), 0
     existing = destination if destination.exists() else partial
-    if existing.exists() and source is None and bundle is None:
+    if existing.exists() and bundle is None:
         with existing.open("rb") as previous:
             while chunk := previous.read(1024 * 1024):
                 received += len(chunk)
@@ -68,17 +71,11 @@ async def acquire_artifact(
                 digest.update(chunk)
                 progress(received)
 
-            if source is not None or bundle is not None:
-                if bundle is not None:
-                    info = bundle.getinfo(artifact.name)
-                    if info.file_size != artifact.size or info.is_dir():
-                        raise ValueError(f"导入资源大小不匹配：{artifact.name}")
-                    stream = bundle.open(info)
-                else:
-                    if source is None or source.stat().st_size != artifact.size:
-                        raise ValueError(f"导入资源大小不匹配：{artifact.name}")
-                    stream = source.open("rb")
-                with stream:
+            if bundle is not None:
+                info = bundle.getinfo(artifact.name)
+                if info.file_size != artifact.size or info.is_dir():
+                    raise ValueError(f"导入资源大小不匹配：{artifact.name}")
+                with bundle.open(info) as stream:
                     while chunk := stream.read(1024 * 1024):
                         write(chunk)
                         await asyncio.sleep(0)
@@ -117,3 +114,26 @@ async def acquire_artifact(
         # Interrupted transfers are reusable; invalid content/ranges are not.
         partial.unlink(missing_ok=True)
         raise
+
+
+async def verify_file(
+    artifact: Artifact, source: Path, progress: Callable[[int], None]
+) -> None:
+    """Check a user-selected original file in place; nothing is written anywhere.
+
+    The file stays the user's: it is read once for its size and SHA-256 and
+    then consumed from its original path by the provider's build.
+    """
+    if source.stat().st_size != artifact.size:
+        raise ValueError(f"导入资源大小不匹配：{artifact.name}")
+    digest, received = hashlib.sha256(), 0
+    with source.open("rb") as stream:
+        while chunk := stream.read(1024 * 1024):
+            received += len(chunk)
+            if received > artifact.size:
+                break
+            digest.update(chunk)
+            progress(received)
+            await asyncio.sleep(0)
+    if received != artifact.size or digest.hexdigest() != artifact.sha256:
+        raise ValueError(f"资源 SHA-256 或大小不匹配：{artifact.name}")

@@ -68,7 +68,7 @@ TTS 的 `EmotionReferences` 允许在空角色情绪目录下新增私有名称�
 
 ## 插件托管环境
 
-两个 provider 自己保存资源锁、构建/启动策略和环境状态。SenseVoice 固定独立 CPython、uv 0.12.23、完整离线依赖与 SenseVoiceSmall/fsmn-vad 模型，使用 CPU；GPT-SoVITS 固定官方 Windows 完整包与 7zr，显式验证 v2ProPlus/CUDA。资源进入各自 `plugin-data/<id>/runtime/`，不进入宿主 `.venv`，不导入彼此或桌宠代码。
+两个 provider 自己保存资源锁、构建/启动策略和环境状态。SenseVoice 固定独立 CPython、uv 0.12.23、完整离线依赖与 SenseVoiceSmall/fsmn-vad 模型，使用 CPU；GPT-SoVITS 固定官方 Windows 完整包与 7zr，显式验证 v2ProPlus/CUDA。资源默认进入各自 `plugin-data/<id>/runtime/`，用户可在未安装时改到其他目录（状态、锁和日志仍留在插件数据中）；导入包按原路径校验后直接读取，不复制。不进入宿主 `.venv`，不导入彼此或桌宠代码。
 
 SDK 3.1.3 的 `managed/` 只复用固定资源获取、校验、原子版本发布、后台任务和原生进程归属机制。下载以固定大小/SHA-256 校验，断点请求验证 Content-Range；完整离线 ZIP 的所有资源仍逐项校验。准备取消/失败不发布暂存目录，新版本启动失败保留旧指针。私有环境使用紧凑 `s/<id>` / `v/<id>` 布局，版本和资源身份保留在校验记录；受控文件 I/O 支持 Windows 扩展路径，第三方 Python 的运行 prefix 和临时路径保留普通语义。ASR 的固定 uv 使用 offline/no-index/require-hashes 与四个已验证的标准 bdist 目录选项，不修改全局注册表，不把资源移出插件目录。显式 prepare 可以修复损坏的安装记录；start 则明确拒绝损坏记录。
 
@@ -78,7 +78,7 @@ SDK 3.1.3 的 `managed/` 只复用固定资源获取、校验、原子版本发�
 
 ## 分发
 
-两个 provider 是内置插件，要求 SDK / Runtime API 3.1.6，manifest 声明 `default_enabled: false`：新配置下默认停用，在插件页启用后出现各自设置页并可供桌宠选择。它们不在默认停用升级迁移名单中，因为此前从未作为内置插件缺省启用。源码参与内置后端发现、前端 builtin registry（`ui/index.tsx`，TTS 另有 `background/index.ts`）和冻结运行时 staging；`runtime_assets/server.py` 与锁文件随插件目录作为数据打包，经 `Path(__file__)` 解析，只在插件托管环境中执行，不作为宿主 hidden import 收集。服务准备见 [ASR README](../../../plugins/sensevoice_asr/README.md) 和 [TTS README](../../../plugins/gpt_sovits_tts/README.md)。
+两个 provider 是内置插件，要求 SDK / Runtime API 3.1.7，manifest 声明 `default_enabled: false`：新配置下默认停用，在插件页启用后出现各自设置页并可供桌宠选择。它们不在默认停用升级迁移名单中，因为此前从未作为内置插件缺省启用。源码参与内置后端发现、前端 builtin registry（`ui/index.tsx`，TTS 另有 `background/index.ts`）和冻结运行时 staging；`runtime_assets/server.py` 与锁文件随插件目录作为数据打包，经 `Path(__file__)` 解析，只在插件托管环境中执行，不作为宿主 hidden import 收集。服务准备见 [ASR README](../../../plugins/sensevoice_asr/README.md) 和 [TTS README](../../../plugins/gpt_sovits_tts/README.md)。
 
 冻结宿主同时递归收集 SDK 运行时模块，包括没有 `__init__.py` 的 `files/`，排除 `shiori_sdk.testing` 与缓存；完整 SDK 不依赖当前已安装插件的静态引用。实际 PyInstaller 参数检查 SDK/宿主/内置插件模块是否全部进入 hidden imports。`test-sdk-runtime.mjs` 使用同一 collector 构建小型冻结探针，在仓库外清除 Python 源码路径后动态导入音频、暂存和 loopback HTTP 模块，并确认 testing 不存在。
 
