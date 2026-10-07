@@ -4,7 +4,7 @@ import { act } from "react";
 import { createFakePluginClient, deferred, mountTestComponent } from "../testing/index";
 import { useManagedRuntime, type ManagedRuntimeStatus } from "./useManagedRuntime";
 
-const ready: ManagedRuntimeStatus = { phase: "ready", running: true, installed: true, busy: false, error: "", item: "", received: 0, total: 0, revision: "fixed" };
+const ready: ManagedRuntimeStatus = { phase: "ready", running: true, installed: true, busy: false, error: "", item: "", received: 0, total: 0, revision: "fixed", reclaimable: 0 };
 
 test("background preparation is polled and unmounting never cancels its backend ownership", async (context) => {
   context.mock.timers.enable({ apis: ["setTimeout"] });

@@ -1,8 +1,10 @@
 """A plugin-owned child tree, always released through the injected native owner."""
 
 import asyncio
+import codecs
 import locale
 import os
+import re
 from collections import deque
 from pathlib import Path
 from typing import TextIO
@@ -10,8 +12,11 @@ from typing import TextIO
 from shiori_sdk.processes import ProcessOwner, Processes
 from .paths import environment_path, native_path
 
-# A child that never ends a line (progress redraws) is flushed in bounded pieces.
+_CHUNK = 64 * 1024
+# A child that never ends a line is flushed in bounded pieces of decoded text.
 _LINE_LIMIT = 64 * 1024
+# A bare carriage return (progress redraw) also ends a line.
+_LINE_BREAK = re.compile("\r\n|\r|\n")
 _TAIL_LINES = 8
 _JOIN_TIMEOUT = 5.0
 
@@ -55,17 +60,39 @@ def _system_encoding() -> str:
     return "mbcs" if os.name == "nt" else locale.getpreferredencoding(False)
 
 
-def decode_output(line: bytes) -> str:
-    """Decode one output line: UTF-8 children first, then the system code page.
+class OutputDecoder:
+    """Incrementally decode one child's output: UTF-8, else the system code page.
 
     Python children run with ``-X utf8`` and uv always writes UTF-8, while native
-    tools such as 7-Zip write the system code page (GBK on Chinese Windows).
-    Deciding per line keeps both readable in one UTF-8 log.
+    tools such as 7-Zip write the system code page (GBK on Chinese Windows). A
+    child switches to the code page at its first invalid UTF-8 byte. Both
+    decoders are incremental, so a character split across reads stays intact.
     """
-    try:
-        return line.decode("utf-8")
-    except UnicodeDecodeError:
-        return line.decode(_system_encoding(), errors="replace")
+
+    def __init__(self):
+        self.utf8 = codecs.getincrementaldecoder("utf-8")()
+        self.fallback: codecs.IncrementalDecoder | None = None
+
+    def decode(self, data: bytes, final: bool = False) -> str:
+        """Return the text completed by ``data``; ``final`` flushes partial bytes."""
+        if self.fallback is None:
+            buffered, _flag = self.utf8.getstate()
+            try:
+                return self.utf8.decode(data, final)
+            except UnicodeDecodeError:
+                self.fallback = codecs.getincrementaldecoder(_system_encoding())(
+                    errors="replace"
+                )
+                data = buffered + data
+        return self.fallback.decode(data, final)
+
+
+def failure_message(summary: str, reason: str, log: Path) -> str:
+    """One failure line: what failed, the child's last meaningful output, the log."""
+    location = environment_path(log)
+    if reason:
+        return f"{summary}：{reason}。详见 {location}"
+    return f"{summary}，详见 {location}"
 
 
 class OwnedChild:
@@ -109,30 +136,40 @@ class OwnedChild:
 
     async def _pump(self, stream: asyncio.StreamReader, log: TextIO) -> None:
         """Drain the pipe until EOF; a failing log write must never block the child."""
-        writable, pending = True, b""
+        writable, pending, decoder = True, "", OutputDecoder()
 
-        def emit(lines: list[bytes]) -> None:
+        def emit(lines: list[str]) -> None:
             nonlocal writable
-            text = [decode_output(line.rstrip(b"\r")) for line in lines]
-            self.tail.extend(item.strip() for item in text if item.strip())
+            self.tail.extend(item.strip() for item in lines if item.strip())
             if not writable:
                 return
             try:
-                log.write("".join(item + "\n" for item in text))
+                log.write("".join(item + "\n" for item in lines))
                 log.flush()
             except OSError:
                 # A full disk also fails the log. Keep draining so the child can
                 # exit; its failure is still reported from the retained tail.
                 writable = False
 
-        while chunk := await stream.read(_LINE_LIMIT):
-            *lines, pending = (pending + chunk).split(b"\n")
+        while chunk := await stream.read(_CHUNK):
+            text = pending + decoder.decode(chunk)
+            # A trailing CR may be the first half of CRLF; decide on the next read.
+            held = "\r" if text.endswith("\r") else ""
+            *lines, pending = _LINE_BREAK.split(text[: len(text) - len(held)])
+            pending += held
             if len(pending) >= _LINE_LIMIT:
                 lines.append(pending)
-                pending = b""
+                pending = ""
             emit(lines)
-        if pending:
-            emit([pending])
+        pending += decoder.decode(b"", final=True)
+        if pending.rstrip("\r"):
+            emit([pending.rstrip("\r")])
+
+    async def exit_reason(self) -> str:
+        """After the child exited, wait briefly for its last output and name it."""
+        if self.pump is not None:
+            await asyncio.wait({self.pump}, timeout=_JOIN_TIMEOUT)
+        return self.failure_reason()
 
     def failure_reason(self) -> str:
         """The last meaningful output line, joined with a preceding ``...:`` header."""
@@ -194,10 +231,6 @@ async def run_owned(
     finally:
         await child.close()
     if code:
-        reason = child.failure_reason()
-        location = environment_path(log)
         raise RuntimeError(
-            f"环境准备命令失败（{code}）：{reason}。详见 {location}"
-            if reason
-            else f"环境准备命令失败（{code}），详见 {location}"
+            failure_message(f"环境准备命令失败（{code}）", child.failure_reason(), log)
         )

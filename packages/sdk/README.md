@@ -460,22 +460,30 @@ the revision in every filename; the validated receipt retains version/resource
 identity. Existing trial pointers to `versions/` remain readable.
 
 Runtime API 3.1.6 adds environment hygiene. `ManagedRuntime.remove()` deletes
-installed versions, the pointer, caches and staging in the background; it is
-refused while a task runs or a service of any generation holds the service
-lease, and keeps only lock and log files. A published preparation deletes the
-download cache and every other version directory (older ones stay while a
-service may still run from them); failure or cancellation keeps the cache so a
-retry resumes. `Installation(..., installed_size=)` declares the bytes of one
+installed versions, the pointer, caches and staging in the background, also
+when nothing is installed but a failed or cancelled preparation kept its
+download cache; it is refused while a task runs or a service of any generation
+holds the service lease, and keeps only lock and log files. Status reports
+`reclaimable`, the bytes of kept downloads and staging. A published preparation
+deletes the download cache and every other version directory (older ones stay
+while a service may still run from them); failure or cancellation keeps the
+cache so a retry resumes. Removal and post-publication cleanup run in a thread
+that cancellation does not abandon: `cancel()` / `stop()` / `close()` return
+only after it has finished and released its leases, and status reports the
+actual outcome. `Installation(..., installed_size=)` declares the bytes of one
 prepared version; before any copy, preparation requires free space on the
 root's volume of at least the missing artifact bytes (imports count in full) +
 `installed_size` + max(1 GiB, 5% of both), and otherwise fails with
-「磁盘空间不足：需要约 X GB，剩余 Y GB（位置）」. Child output is piped and decoded
-per line, UTF-8 first and otherwise the Windows ANSI code page (native tools
-such as 7-Zip), into UTF-8 `prepare.log` / `service.log`; a failed preparation
-command names its last meaningful line. `Processes.spawn` therefore accepts
-`asyncio.subprocess` constants for `stdout` / `stderr`. `ManagedRuntimePanel`
-shows 「删除环境」 for an installed, stopped runtime behind a destructive
+「磁盘空间不足：需要约 X GiB，剩余 Y GiB（位置）」. Child output is piped and
+decoded incrementally per child, UTF-8 until the first invalid byte and the
+Windows ANSI code page from then on (native tools such as 7-Zip), into UTF-8
+`prepare.log` / `service.log`; CR, LF and CRLF all end a line. A failed
+preparation command or an early service exit names its last meaningful line.
+`Processes.spawn` therefore accepts `asyncio.subprocess` constants for
+`stdout` / `stderr`. `ManagedRuntimePanel` shows 「删除环境」 for a stopped,
+idle runtime that is installed or keeps a cache, behind a destructive
 `host.ui.ConfirmDialog`.
+
 Process arguments and working directories preserve the provider's spelling:
 native Python libraries can require ordinary `sys.prefix` paths when they append
 relative components. Third-party `TEMP`/`TMP`, cache and `PATH` values likewise

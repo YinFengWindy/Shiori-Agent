@@ -107,7 +107,7 @@ async def test_insufficient_space_fails_before_any_copy(tmp_path, monkeypatch):
 
     # 5 GiB installed + 13 artifact bytes + the 1 GiB minimum margin > 6 GiB.
     with pytest.raises(
-        RuntimeError, match=r"磁盘空间不足：需要约 6\.0 GB，剩余 6\.0 GB"
+        RuntimeError, match=r"磁盘空间不足：需要约 6\.0 GiB，剩余 6\.0 GiB"
     ):
         await installer.prepare(record, lambda *_: None, source=source)
     assert not (installer.root / "downloads").exists()

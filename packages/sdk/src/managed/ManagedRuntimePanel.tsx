@@ -2,9 +2,15 @@ import { useState } from "react";
 import type { PluginSettingsSectionComponentProps } from "../contract/uiModule";
 import { errorMessage } from "../errors";
 import { compactGhostButtonClass } from "../styles";
-import { useManagedRuntime } from "./useManagedRuntime";
+import { useManagedRuntime, type ManagedRuntimeStatus } from "./useManagedRuntime";
 
 const phaseLabels = { stopped: "已停止", preparing: "正在准备", starting: "正在启动", removing: "正在删除", ready: "服务就绪", cancelled: "已取消", error: "操作失败" };
+
+/** What a removal deletes, with the kept cache size when there is one. */
+function removalDescription(status: ManagedRuntimeStatus | null) {
+  const cache = status && status.reclaimable > 0 ? `（下载缓存 ${(status.reclaimable / 1024 ** 3).toFixed(2)} GiB）` : "";
+  return status?.installed ? `已安装的环境和下载缓存${cache}将被删除。` : `下载缓存${cache}将被删除。`;
+}
 
 /** Generic controls for a plugin-owned fixed runtime; the provider supplies its import contract. */
 export function ManagedRuntimePanel({ client, host, namespace, importExtensions, disabled = false }: Pick<PluginSettingsSectionComponentProps, "client" | "host"> & {
@@ -39,7 +45,7 @@ export function ManagedRuntimePanel({ client, host, namespace, importExtensions,
         {status?.installed && !status.running ? <button type="button" className={compactGhostButtonClass} disabled={blocked || status.busy} onClick={() => void runtime.run("start")}>启动环境</button> : null}
         {status?.running ? <button type="button" className={compactGhostButtonClass} disabled={blocked || status.busy} onClick={() => void runtime.run("stop")}>停止环境</button> : null}
         {/* Removal needs a stopped service and no running task; the backend enforces the same rule. */}
-        {status?.installed ? <button type="button" className={compactGhostButtonClass} disabled={blocked || status.busy || status.running} onClick={() => setConfirmRemove(true)}>删除环境</button> : null}
+        {status && (status.installed || status.reclaimable > 0) ? <button type="button" className={compactGhostButtonClass} disabled={blocked || status.busy || status.running} onClick={() => setConfirmRemove(true)}>删除环境</button> : null}
       </div>
     </div>
     {status?.busy && status.total > 0 ? <div className="grid gap-1">
@@ -47,7 +53,7 @@ export function ManagedRuntimePanel({ client, host, namespace, importExtensions,
       <span className="text-caption text-ink-muted">{status.item} · {(status.received / 1024 ** 3).toFixed(2)} / {(status.total / 1024 ** 3).toFixed(2)} GiB</span>
     </div> : null}
     {error ? <host.ui.InlineError message={error} /> : null}
-    <host.ui.ConfirmDialog open={confirmRemove} destructive persona="destructive" title="删除托管环境" description="已安装的环境和下载缓存将被删除。" confirmLabel="删除环境"
+    <host.ui.ConfirmDialog open={confirmRemove} destructive persona="destructive" title="删除托管环境" description={removalDescription(status)} confirmLabel="删除环境"
       onClose={() => setConfirmRemove(false)} onConfirm={() => { setConfirmRemove(false); void runtime.run("remove"); }} />
   </section>;
 }

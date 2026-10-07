@@ -10,6 +10,29 @@ from shiori_sdk.extensions import BackgroundTasks
 from .installation import Installation
 from .service import OwnedService, ServiceRunning
 
+# Phases that only exist while a task runs; a task cancelled before its first
+# step never reaches its own handler, so status() resolves them afterwards.
+_TRANSIENT = frozenset({"preparing", "starting", "removing"})
+
+
+async def _join_thread[T](function: Callable[[], T]) -> tuple[T, bool]:
+    """Run filesystem work in a thread that cancellation cannot abandon.
+
+    A cancelled wait would leave the thread deleting files while holding the
+    leases. The work is shielded and joined; the result is returned together
+    with whether cancellation was requested meanwhile, so the caller records
+    the real outcome before re-raising it.
+    """
+    work = asyncio.ensure_future(asyncio.to_thread(function))
+    cancelled = False
+    while True:
+        try:
+            return await asyncio.shield(work), cancelled
+        except asyncio.CancelledError:
+            if work.done() and work.cancelled():
+                raise
+            cancelled = True
+
 
 class ManagedRuntime:
     """Expose cancellable progress without tying multi-GB work to an RPC lifetime."""
@@ -28,6 +51,8 @@ class ManagedRuntime:
         self.phase, self.error, self.item = "stopped", "", ""
         self.received = self.total = 0
         self.closed = False
+        # Bytes of kept downloads/staging, measured when no task is running.
+        self._reclaimable: int | None = None
 
     def _running(self) -> bool:
         process = self.service.child.process
@@ -36,21 +61,33 @@ class ManagedRuntime:
     def status(self) -> dict[str, object]:
         """Return preparation progress and actual owned-process availability."""
         running = self._running()
+        busy = self.task is not None and not self.task.done()
         installation_error = ""
         try:
             installed = self.installation.current() is not None
         except ValueError as error:
             installed, installation_error = False, str(error)
+        phase = self.phase
+        if phase == "ready" and not running:
+            phase = "stopped"
+        elif phase in _TRANSIENT and not busy:
+            phase = "cancelled"
+        if busy:
+            self._reclaimable = None
+        elif self._reclaimable is None:
+            self._reclaimable = self.installation.reclaimable_bytes()
         return {
-            "phase": self.phase if self.phase != "ready" or running else "stopped",
+            "phase": phase,
             "error": self.error or installation_error,
             "item": self.item,
             "received": self.received,
             "total": self.total,
             "installed": installed,
             "running": running,
-            "busy": self.task is not None and not self.task.done(),
+            "busy": busy,
             "revision": self.installation.revision,
+            # Kept downloads/staging a removal frees, also without an installation.
+            "reclaimable": self._reclaimable or 0,
         }
 
     def submit(
@@ -63,7 +100,7 @@ class ManagedRuntime:
             "x86_64",
         }:
             raise RuntimeError("此托管环境仅支持 Windows x64")
-        self.error = ""
+        self.error, self._reclaimable = "", None
         self.phase = "preparing" if action == "prepare" else "starting"
         self.task = self.background.spawn(
             self._run(action, source, import_asset), name="managed-runtime"
@@ -75,7 +112,7 @@ class ManagedRuntime:
         self._admit()
         if self._running():
             raise RuntimeError("请先停止环境")
-        self.error, self.phase = "", "removing"
+        self.error, self.phase, self._reclaimable = "", "removing", None
         self.item, self.received, self.total = "", 0, 0
         self.task = self.background.spawn(self._remove(), name="managed-runtime")
         return self.status()
@@ -92,14 +129,15 @@ class ManagedRuntime:
                 self.installation.remove()
 
         try:
-            await asyncio.to_thread(remove)
-            self.phase = "stopped"
-        except asyncio.CancelledError:
-            self.phase = "cancelled"
-            raise
+            _result, cancelled = await _join_thread(remove)
         except Exception as error:
             # Background-operation boundary; the settings UI polls this error.
             self.phase, self.error = "error", str(error)
+            return
+        # The removal completed even when cancellation arrived meanwhile.
+        self.phase = "stopped"
+        if cancelled:
+            raise asyncio.CancelledError
 
     def _discard_superseded(self, published: Path) -> None:
         """Prune caches and versions no service of any generation can still use."""
@@ -116,6 +154,7 @@ class ManagedRuntime:
             self.installation.discard_superseded(keep_versions=True)
 
     async def _run(self, action: str, source: Path | None, import_asset: str | None):
+        published = False
         try:
             if action == "prepare":
                 path = await self.installation.prepare(
@@ -131,11 +170,21 @@ class ManagedRuntime:
                 await self.service.start(path)
             if action == "prepare":
                 self.installation.publish(path)
+                published = True
                 # Only a published success drops the cache; failures keep it to resume.
-                await asyncio.to_thread(self._discard_superseded, path)
+                _result, cancelled = await _join_thread(
+                    lambda: self._discard_superseded(path)
+                )
+                if cancelled:
+                    raise asyncio.CancelledError
             self.phase = "ready" if self.service.url else "stopped"
         except asyncio.CancelledError:
-            self.phase = "cancelled"
+            # A published version stays usable; only unfinished work is cancelled.
+            self.phase = (
+                ("ready" if self.service.url else "stopped")
+                if published
+                else "cancelled"
+            )
             raise
         except Exception as error:
             # This is the background-operation boundary; the settings UI polls this error.
@@ -148,7 +197,7 @@ class ManagedRuntime:
         self.item, self.received, self.total = item, received, total
 
     async def cancel(self) -> None:
-        """Cancel preparation and wait until all staging writes and subprocesses end."""
+        """Cancel the task and wait until its writes, deletions and subprocesses end."""
         if self.task is not None and not self.task.done():
             self.task.cancel()
             await asyncio.gather(self.task, return_exceptions=True)

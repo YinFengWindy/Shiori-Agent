@@ -1,5 +1,7 @@
 """Immutable version directories and an atomically published current pointer."""
 
+import logging
+import os
 import shutil
 import hashlib
 import re
@@ -14,6 +16,7 @@ from .artifacts import Artifact
 from .acquisition import acquire_resources
 from .paths import environment_path, native_path
 
+_logger = logging.getLogger(__name__)
 GIB = 1024**3
 # Reserve 5% of the estimate, at least 1 GiB, for logs, child temp/cache files
 # and filesystem overhead that a fixed artifact list cannot enumerate.
@@ -181,8 +184,8 @@ class Installation:
         free = shutil.disk_usage(self.root).free
         if free < required:
             raise RuntimeError(
-                f"磁盘空间不足：需要约 {required / GIB:.1f} GB，"
-                f"剩余 {free / GIB:.1f} GB（{environment_path(self.root)}）"
+                f"磁盘空间不足：需要约 {required / GIB:.1f} GiB，"
+                f"剩余 {free / GIB:.1f} GiB（{environment_path(self.root)}）"
             )
 
     def discard_superseded(self, *, keep_versions: bool) -> None:
@@ -206,7 +209,17 @@ class Installation:
                         if entry != current:
                             shutil.rmtree(entry)
         except LeaseBusy:
-            return
+            _logger.info("另一实例正在准备环境，跳过清理：%s", self.root)
+
+    def reclaimable_bytes(self) -> int:
+        """Bytes of kept downloads and staging, e.g. after a failed preparation."""
+        total = 0
+        for name in ("downloads", "s"):
+            for directory, _dirs, files in os.walk(self.root / name):
+                total += sum(
+                    os.lstat(os.path.join(directory, file)).st_size for file in files
+                )
+        return total
 
     def remove(self) -> None:
         """Delete every installed version, the pointer, caches and staging.

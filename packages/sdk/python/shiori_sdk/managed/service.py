@@ -11,7 +11,7 @@ import httpx
 from shiori_sdk.files.lease import LeaseBusy, exclusive_file_lease
 from shiori_sdk.processes import Processes
 
-from .child import OwnedChild
+from .child import OwnedChild, failure_message
 from .paths import native_path
 
 type Launch = Callable[[Path, int, str], tuple[list[str], Path, dict[str, str]]]
@@ -73,8 +73,13 @@ class OwnedService:
                     while True:
                         process = self.child.process
                         if process is None or process.returncode is not None:
+                            code = process.returncode if process else None
                             raise RuntimeError(
-                                f"托管服务提前退出，详见 {self.root / 'service.log'}"
+                                failure_message(
+                                    f"托管服务提前退出（{code}）",
+                                    await self.child.exit_reason(),
+                                    self.root / "service.log",
+                                )
                             )
                         try:
                             response = await client.get(self.url + "/shiori-runtime")

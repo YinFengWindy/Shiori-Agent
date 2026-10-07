@@ -173,3 +173,60 @@ async def test_remove_requires_idle_stopped_runtime_then_deletes_everything(
         "prepare.log",
         "service.lock",
     ]
+
+
+async def test_cancelled_removal_joins_its_thread_and_reports_the_outcome(
+    controller, monkeypatch
+):
+    import threading
+
+    from shiori_sdk.files.lease import exclusive_file_lease
+
+    runtime, install = controller.runtime, controller.runtime.installation
+    entered, release = threading.Event(), threading.Event()
+    remove = install.remove
+
+    def blocked_remove():
+        entered.set()
+        release.wait(10)
+        remove()
+
+    monkeypatch.setattr(install, "remove", blocked_remove)
+    runtime.remove()
+    try:
+        await asyncio.to_thread(entered.wait, 10)
+        cancelling = asyncio.create_task(runtime.cancel())
+        await asyncio.sleep(0.05)
+        # Cancellation waits: the thread still deletes under both leases.
+        assert not cancelling.done()
+        assert runtime.status()["busy"] is True
+    finally:
+        release.set()
+    await cancelling
+    status = runtime.status()
+    assert status["busy"] is False and status["installed"] is False
+    assert status["phase"] == "stopped"
+    with exclusive_file_lease(install.root / "prepare.lock"):
+        pass
+
+
+async def test_kept_cache_is_reported_and_removable_without_an_installation(
+    controller, tmp_path
+):
+    runtime, install = controller.runtime, controller.runtime.installation
+    runtime.remove()
+    await runtime.task
+
+    async def fail(_path):
+        raise ValueError("build failed")
+
+    runtime.build = fail
+    runtime.submit("prepare", controller.source)
+    await runtime.task
+    status = runtime.status()
+    assert status["installed"] is False and status["reclaimable"] == len(b"runtime")
+    runtime.remove()
+    await runtime.task
+    assert runtime.status()["error"] == ""
+    assert runtime.status()["reclaimable"] == 0
+    assert not (install.root / "downloads").exists()

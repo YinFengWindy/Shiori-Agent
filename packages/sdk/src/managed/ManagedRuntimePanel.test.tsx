@@ -7,7 +7,7 @@ import type { ManagedRuntimeStatus } from "./useManagedRuntime";
 
 test("import admits only a native selection and forwards the staged path to the owning plugin", async () => {
   const requests: Array<{ method: string; payload?: Record<string, unknown> }> = [];
-  const status: ManagedRuntimeStatus = { phase: "stopped", running: false, installed: false, busy: false, error: "", item: "", received: 0, total: 0, revision: "fixed" };
+  const status: ManagedRuntimeStatus = { phase: "stopped", running: false, installed: false, busy: false, error: "", item: "", received: 0, total: 0, revision: "fixed", reclaimable: 0 };
   const client = createFakePluginClient({ call: async <T,>(method: string, payload?: Record<string, unknown>) => {
     requests.push({ method, payload }); return status as T;
   } });
@@ -29,7 +29,7 @@ test("import admits only a native selection and forwards the staged path to the 
 
 test("removal needs a stopped runtime and a destructive confirmation", async () => {
   const requests: string[] = [];
-  const installed: ManagedRuntimeStatus = { phase: "stopped", running: false, installed: true, busy: false, error: "", item: "", received: 0, total: 0, revision: "fixed" };
+  const installed: ManagedRuntimeStatus = { phase: "stopped", running: false, installed: true, busy: false, error: "", item: "", received: 0, total: 0, revision: "fixed", reclaimable: 0 };
   async function mount(status: ManagedRuntimeStatus) {
     const client = createFakePluginClient({ call: async <T,>(method: string) => { requests.push(method); return status as T; } });
     const fake = createFakeHostServices();
@@ -50,5 +50,19 @@ test("removal needs a stopped runtime and a destructive confirmation", async () 
     await act(async () => confirm.click());
     assert.equal(requests.at(-1), "runtime.remove");
     assert.equal(view.container.querySelector('[role="dialog"]'), null);
+  } finally { await view.cleanup(); }
+});
+
+test("a kept download cache can be removed without an installation", async () => {
+  const requests: string[] = [];
+  const status: ManagedRuntimeStatus = { phase: "error", running: false, installed: false, busy: false, error: "", item: "", received: 0, total: 0, revision: "fixed", reclaimable: 10 * 1024 ** 3 };
+  const client = createFakePluginClient({ call: async <T,>(method: string) => { requests.push(method); return status as T; } });
+  const { host, uiRenders } = createFakeHostServices();
+  const view = await mountTestComponent(<ManagedRuntimePanel client={client} host={host} namespace="sample-runtime" importExtensions={["zip"]} />);
+  try {
+    const removeButton = Array.from(view.container.querySelectorAll("button")).find((item) => item.textContent === "删除环境");
+    assert.ok(removeButton && !removeButton.disabled);
+    await act(async () => removeButton.click());
+    assert.match(uiRenders.ConfirmDialog.at(-1)?.description ?? "", /10\.00 GiB/);
   } finally { await view.cleanup(); }
 });

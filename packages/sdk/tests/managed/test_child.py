@@ -101,3 +101,19 @@ async def test_system_code_page_output_is_logged_as_utf8_and_names_the_failure(
     )
     text = log.read_text(encoding="utf-8")
     assert "Cannot set length for output file : 磁盘空间不足。 : s2G.pth\n" in text
+
+
+async def test_pump_keeps_split_characters_and_ends_lines_at_bare_returns(tmp_path):
+    child = OwnedChild(FakeProcesses())
+    stream = asyncio.StreamReader()
+    # One character straddles the 64 KiB read boundary; redraws use bare CR
+    # and a CRLF split across reads still ends a single line.
+    long_line = "a" + "磁" * 30000
+    for data in (long_line.encode() + b"\n", b"10%\r55%\r", b"\n99%\r"):
+        stream.feed_data(data)
+    stream.feed_eof()
+    with (tmp_path / "child.log").open("a", encoding="utf-8") as log:
+        await child._pump(stream, log)
+    lines = (tmp_path / "child.log").read_text(encoding="utf-8").splitlines()
+    assert lines == [long_line, "10%", "55%", "99%"]
+    assert child.failure_reason() == "99%"

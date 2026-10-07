@@ -7,6 +7,8 @@ export type ManagedRuntimeStatus = {
   phase: "stopped" | "preparing" | "starting" | "removing" | "ready" | "cancelled" | "error";
   error: string; item: string; received: number; total: number;
   installed: boolean; running: boolean; busy: boolean; revision: string;
+  /** Bytes of kept downloads/staging a removal frees, also without an installation (3.1.6). */
+  reclaimable: number;
 };
 
 /** A `runtime.*` action; `remove` deletes installed versions and caches (runtime API 3.1.6). */
