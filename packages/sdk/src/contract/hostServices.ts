@@ -1,7 +1,7 @@
 import type { RoleRecord } from "../domain/role";
 import type { BridgeEvent } from "../rpc";
 import type { PluginHostFeedback } from "./feedback";
-import type { NativeFilePickerOptions } from "./filePicker";
+import type { NativeFilePathPickerOptions, NativeFilePickerOptions } from "./filePicker";
 import type { PluginHostUi } from "./hostUi";
 
 /**
@@ -63,6 +63,18 @@ export type PluginHostServices = {
   pickImages: (options: { multiple: boolean }) => Promise<string[]>;
   /** Native user selection plus bounded private staging, without a media grant. */
   pickFiles: (options: NativeFilePickerOptions) => Promise<string[]>;
+  /**
+   * Native user selection returned by original absolute path, without copying
+   * (runtime API 3.1.5). The host checks extension and `maxFileBytes` at pick
+   * time; the file may change or disappear later, so the plugin verifies it on
+   * use. Resolves to `[]` when the user cancels.
+   */
+  pickFilePaths: (options: NativeFilePathPickerOptions) => Promise<string[]>;
+  /**
+   * Native directory selection that may create a new directory (runtime API
+   * 3.1.5); resolves to its absolute path, or `null` when the user cancels.
+   */
+  pickDirectory: () => Promise<string | null>;
   /** Toasts in the host queue; `persona` (true or a scene key) lets 吟风 front one (runtime API 2.4.0). */
   feedback: PluginHostFeedback;
   /** Host components (runtime API 2.4.0). */

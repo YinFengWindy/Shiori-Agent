@@ -1,6 +1,6 @@
 import type { RoleRecord } from "../domain/role";
 import type { FeedbackTone, PluginFeedbackOptions, PluginHostFeedback } from "../contract/feedback";
-import type { NativeFilePickerOptions } from "../contract/filePicker";
+import type { NativeFilePathPickerOptions, NativeFilePickerOptions } from "../contract/filePicker";
 import type { PluginConfigValues, PluginHostServices } from "../contract/hostServices";
 import type { BridgeEvent } from "../rpc";
 import { createFakeHostUi } from "./fakeHostUi";
@@ -11,6 +11,8 @@ export type FakeHostCall =
   | { service: "listRoles" }
   | { service: "pickImages"; options: { multiple: boolean } }
   | { service: "pickFiles"; options: NativeFilePickerOptions }
+  | { service: "pickFilePaths"; options: NativeFilePathPickerOptions }
+  | { service: "pickDirectory" }
   | { service: "feedback"; tone: FeedbackTone; message: string; options?: PluginFeedbackOptions }
   | { service: "config.get" }
   | { service: "config.save"; patch: PluginConfigValues }
@@ -27,6 +29,10 @@ export type FakeHostServicesOptions = {
   pickImages?: PluginHostServices["pickImages"];
   /** `pickFiles`; default the user picks nothing. */
   pickFiles?: PluginHostServices["pickFiles"];
+  /** `pickFilePaths`; default the user picks nothing. */
+  pickFilePaths?: PluginHostServices["pickFilePaths"];
+  /** `pickDirectory`; default the user cancels (`null`). */
+  pickDirectory?: PluginHostServices["pickDirectory"];
   /** The plugin's stored config before the test; default empty. */
   config?: PluginConfigValues;
   /**
@@ -74,6 +80,14 @@ export function createFakeHostServices(options: FakeHostServicesOptions = {}) {
     pickFiles(pickOptions) {
       calls.push({ service: "pickFiles", options: pickOptions });
       return options.pickFiles ? options.pickFiles(pickOptions) : Promise.resolve([]);
+    },
+    pickFilePaths(pickOptions) {
+      calls.push({ service: "pickFilePaths", options: pickOptions });
+      return options.pickFilePaths ? options.pickFilePaths(pickOptions) : Promise.resolve([]);
+    },
+    pickDirectory() {
+      calls.push({ service: "pickDirectory" });
+      return options.pickDirectory ? options.pickDirectory() : Promise.resolve(null);
     },
     feedback,
     ui,

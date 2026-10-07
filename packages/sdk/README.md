@@ -2,8 +2,8 @@
 
 [@yinfengwindy/shiori-sdk](https://www.npmjs.com/package/@yinfengwindy/shiori-sdk)
 and [shiori-sdk](https://pypi.org/project/shiori-sdk/) are the TypeScript and Python distributions of the
-same plugin contract. Both are version **3.1.4**, with Runtime API **3.1.4**.
-3.1.1–3.1.4 are not published yet; npm and PyPI hold 3.1.0. The commands below
+same plugin contract. Both are version **3.1.5**, with Runtime API **3.1.5**.
+3.1.1–3.1.5 are not published yet; npm and PyPI hold 3.1.0. The commands below
 install 3.1.0; APIs added since then need a wheelhouse or workspace build of
 this repository until the next publication.
 
@@ -79,6 +79,13 @@ while a save is in flight and otherwise drops unsaved edits. Render its `savePha
 out with the host's `SettingsGroup`, `SettingsSectionCard`, `SettingsField`,
 `SettingsToggleField`, `settingsInputClass` and `settingsGroupStackClass`. Packages
 using any of these require `runtime_api: ">=3.1.4 <4.0.0"`.
+
+Runtime API 3.1.5 adds two native pickers to the injected host services:
+`host.pickFilePaths({ filters, multiple?, maxFileBytes })` returns the selected
+files' original absolute paths without copying them (unlike `host.pickFiles`,
+which copies into private import staging), and `host.pickDirectory()` returns a
+selected or newly created directory, or `null` on cancel. Packages using either
+require `runtime_api: ">=3.1.5 <4.0.0"`.
 
 A disposed scoped client rejects with `PluginBridgeError`, code
 `plugin_unavailable`, and `details.reason: "context_disposed"`. Cleanup may treat

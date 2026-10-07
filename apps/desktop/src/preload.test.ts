@@ -55,6 +55,21 @@ test("preload exposes generic staged file selection without granting archive med
   await assert.rejects(failing.pickFiles(options), /copy failed/);
 });
 
+test("preload forwards original-path and directory picks without granting media URLs", async () => {
+  const calls: unknown[] = [];
+  let result: unknown = ["D:/packs/runtime.7z"];
+  const api = await loadPreload(async (channel, options) => { calls.push({ channel, options }); return result; });
+  const options = { maxFileBytes: 1024, filters: [{ name: "Archives", extensions: ["7z"] }] };
+  assert.deepEqual(await api.pickFilePaths(options), ["D:/packs/runtime.7z"]);
+  assert.equal(api.localAssetUrl("D:/packs/runtime.7z"), api.localAssetUrl("D:/never-granted.png"));
+  result = null;
+  assert.equal(await api.pickDirectory(), null);
+  assert.deepEqual(calls, [
+    { channel: "desktop:pick-file-paths", options },
+    { channel: "desktop:pick-directory", options: undefined },
+  ]);
+});
+
 test("preload exposes only the role export snapshot ID to the native save channel", async () => {
   const calls: unknown[] = [];
   const api = await loadPreload(async (channel, options) => { calls.push({ channel, options }); return { saved: false }; });

@@ -125,7 +125,7 @@ export type {
   PluginHostUi,
   RevealProps,
 } from "./contract/hostUi";
-export type { NativeFilePickerOptions } from "./contract/filePicker";
+export type { NativeFilePathPickerOptions, NativeFilePickerOptions } from "./contract/filePicker";
 export type {
   PluginConfigValues,
   PluginHostAssets,

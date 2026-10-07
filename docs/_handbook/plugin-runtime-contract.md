@@ -39,7 +39,7 @@ and renderer declaration keys are rejected. This table defines the v1 fields:
 | `api` | yes | integer `2` |
 | `id` | yes | `[a-z][a-z0-9_-]{0,63}` |
 | `version` | yes | full SemVer 2.0 string, including optional prerelease/build |
-| `runtime_api` | yes | compatibility range; host currently advertises `3.1.4` |
+| `runtime_api` | yes | compatibility range; host currently advertises `3.1.5` |
 | `entry` | yes | explicit package-relative `.py` backend entry |
 | `capabilities` | yes | existing v2 capability-name list, including `[]` |
 | `channels` | no | static channel declarations (Runtime API 2.2); requires the `channels` capability |
@@ -77,7 +77,7 @@ SDK. A package declares the lowest version whose additions it uses.
 
 The single version source is `packages/sdk/python/shiori_sdk/_version.py`
 (`RUNTIME_API_VERSION = __version__`), synchronized to the other packages by
-`node scripts/sync_sdk_version.mjs`. 3.1.1–3.1.4 are unpublished contract
+`node scripts/sync_sdk_version.mjs`. 3.1.1–3.1.5 are unpublished contract
 changes on `main`; npm and PyPI hold 3.1.0.
 
 | Version | Adds | Introduced by |
@@ -105,6 +105,7 @@ changes on `main`; npm and PyPI hold 3.1.0.
 | `3.1.2` | SDK `usePrivateDraft` (plugin-owned document loading, dirty state and explicit save) and the Python local-service utilities `shiori_sdk.files.audio.pcm_wav_duration`, `shiori_sdk.files.staging.staged_import_file` and `shiori_sdk.local_http.loopback_http_url`, and the manifest key `distribution: external` (repository sources delivered through ZIP installation; older hosts reject the unknown key); packages using any of them require `runtime_api: ">=3.1.2 <4.0.0"` | #678 (#675) |
 | `3.1.3` | `shiori_sdk.managed` (fixed artifact acquisition, atomic installation, owned processes and background runtime operations, `register_runtime_rpc`), `shiori_sdk.files.lease` and the renderer `ManagedRuntimePanel` / `useManagedRuntime`; packages using any of them require `runtime_api: ">=3.1.3 <4.0.0"` | #679 (#676) |
 | `3.1.4` | SDK `usePrivateAutosave` (plugin-owned document autosave on the host's serial draft queue), the host settings layout (`SettingsField`, `SettingsToggleField`, `SettingsGroup`, `SettingsSectionCard`, `settingsInputClass`, `settingsGroupStackClass`) and `host.ui.SettingsSavedStatus` (the settings page corner 「已保存」 mark); packages using any of them require `runtime_api: ">=3.1.4 <4.0.0"` | #683 (#682), on `main` via #688 (unpublished) |
+| `3.1.5` | `host.pickFilePaths` (native file selection returned by original path, no copy) and `host.pickDirectory` (native directory selection that may create one), with the SDK type `NativeFilePathPickerOptions` and both in `createFakeHostServices`; packages using either require `runtime_api: ">=3.1.5 <4.0.0"` (see [Runtime API 3.1.5 native path pickers](#runtime-api-315-native-path-pickers)) | #699 (#697) |
 
 2.2 and 2.3 first ship together in the release that turns every external
 channel into a plugin (#363): no released host advertises 2.2 alone, and
@@ -446,6 +447,28 @@ The host store behind any of this (plugin enablement, feedback queue, registries
 appearance preferences) stays private; accounts still arrive through the
 `account.detail` props and `host.ui`.
 
+## Runtime API 3.1.5 native path pickers
+
+Besides the copying `host.pickFiles`, which is unchanged, the injected host
+services offer two native dialogs that hand back what the user chose:
+
+- **`host.pickFilePaths({ filters, multiple?, maxFileBytes })`** resolves to the
+  selected files' original absolute paths. It applies `pickFiles`' selection
+  policy (the same option validation and host ceilings, at most 16 files with
+  `multiple`, extensions from `filters`, regular files only, each at most
+  `maxFileBytes` by size on disk) but takes no `namespace`: nothing is read,
+  copied into `private_runtime/imports` or granted as a media URL. The file is
+  only checked at pick time and may change or disappear afterwards, so the
+  plugin verifies it (size, hash, format) when it uses it. Cancel resolves to `[]`.
+- **`host.pickDirectory()`** opens a directory dialog in which the user may also
+  create a directory, and resolves to its absolute path, or `null` on cancel.
+
+Neither widens the security boundary: plugins already run with the host's
+privileges (see the top of this contract), and a returned path grants no host
+resource — the plugin reaches it through its own backend code exactly as it
+could any path. Their channels (`desktop:pick-file-paths`,
+`desktop:pick-directory`) accept no path from the renderer.
+
 ## Runtime API 2.11 background failure reporting and surface/background types
 
 API 2.11 adds one member to the `ctx` a background module's `setup(ctx)`
@@ -514,7 +537,7 @@ or the import map, and production renderer code must not import it. It provides:
 | `mountTestComponent(node, { windowGlobals })`, `changeInputValue`, `mockableWindowTimers` | a happy-dom DOM harness: each mount installs a fresh window as the global DOM and `cleanup()` restores the previous globals |
 | `chooseSelectOption(label, optionLabel, index?)` | picks an option of the SDK `Select` through its visible trigger and a real pointer event |
 | `deferred()` | a promise the test settles on demand |
-| `createFakeHostServices(options)` | in-memory `PluginHostServices` whose calls can be asserted: `host` (pass as the prop or to the Provider), `calls` (every service call in order), `feedback` (the toasts), `uiRenders` (the props of each `host.ui` render), `config()` (the stored config), `emit(event)` (delivers a bridge event to `onEvent` listeners) and `accountDetailActionsZone()` (where `host.ui.AccountDetailActions` render). Options answer `listRoles`, `pickImages`, `pickFiles`, the initial `config`, `saveConfig` and `assetUrl` |
+| `createFakeHostServices(options)` | in-memory `PluginHostServices` whose calls can be asserted: `host` (pass as the prop or to the Provider), `calls` (every service call in order), `feedback` (the toasts), `uiRenders` (the props of each `host.ui` render), `config()` (the stored config), `emit(event)` (delivers a bridge event to `onEvent` listeners) and `accountDetailActionsZone()` (where `host.ui.AccountDetailActions` render). Options answer `listRoles`, `pickImages`, `pickFiles`, `pickFilePaths` (default `[]`), `pickDirectory` (default `null`), the initial `config`, `saveConfig` and `assetUrl` |
 | `createFakeSurfaceHandle(overrides)` | complete injected surface fixture, including owned messages and role activity, without a host bridge |
 | `createFakePluginClient(overrides)` | an injected `client` with no bridge behind it: pass the parts the component uses (usually `call`, answering by local method name); any other request rejects, `dispose` resolves |
 
@@ -921,7 +944,7 @@ for commands and how to validate its directory/zip from a host environment.
 ## Runtime API 3.0: unified Shiori SDK
 
 `@yinfengwindy/shiori-sdk` and `shiori-sdk` share one version (3.0.0 at introduction, now
-3.1.4) and the source tree `packages/sdk/`. External packages must declare `runtime_api: ">=3.0.0 <4.0.0"`.
+3.1.5) and the source tree `packages/sdk/`. External packages must declare `runtime_api: ">=3.0.0 <4.0.0"`.
 The previous frontend package name has no alias. Existing 2.x ranges are rejected
 with `incompatible_runtime` before backend execution; rebuild renderer peers and
 update the declared range when migrating. The 2.x sections above describe feature

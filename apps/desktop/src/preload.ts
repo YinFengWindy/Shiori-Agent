@@ -163,6 +163,12 @@ const api: DesktopApi = {
   pickFiles(options) {
     return ipcRenderer.invoke("desktop:pick-files", options) as Promise<string[]>;
   },
+  pickFilePaths(options) {
+    return ipcRenderer.invoke("desktop:pick-file-paths", options) as Promise<string[]>;
+  },
+  pickDirectory() {
+    return ipcRenderer.invoke("desktop:pick-directory") as Promise<string | null>;
+  },
   localAssetUrl(path) {
     return localAssets.resolve(path);
   },
