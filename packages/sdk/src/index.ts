@@ -22,9 +22,9 @@ export { errorMessage } from "./errors";
 export { useLatestRef } from "./useLatestRef";
 // Runtime API 3.1.2: plugin-owned document loading, dirty state and explicit save.
 export { usePrivateDraft } from "./hooks/usePrivateDraft";
-// Runtime API 3.1.3: opt-in UI for plugin-owned fixed environment preparation.
+// Runtime API 3.1.3: opt-in UI for plugin-owned fixed environment preparation; 3.1.6 adds removal.
 export { ManagedRuntimePanel } from "./managed/ManagedRuntimePanel";
-export { useManagedRuntime, type ManagedRuntimeStatus } from "./managed/useManagedRuntime";
+export { useManagedRuntime, type ManagedRuntimeAction, type ManagedRuntimeStatus } from "./managed/useManagedRuntime";
 // Runtime API 3.1.4 (#683): plugin-owned document autosave and the host settings page layout.
 export { usePrivateAutosave, type PrivateAutosaveOptions } from "./hooks/usePrivateAutosave";
 export type { PrivateAutosaveOperations } from "./hooks/privateAutosaveSession";

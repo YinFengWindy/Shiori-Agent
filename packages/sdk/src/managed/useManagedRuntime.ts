@@ -4,10 +4,17 @@ import { errorMessage } from "../errors";
 
 /** State returned by the SDK's opt-in private runtime RPC controller. */
 export type ManagedRuntimeStatus = {
-  phase: "stopped" | "preparing" | "starting" | "ready" | "cancelled" | "error";
+  phase: "stopped" | "preparing" | "starting" | "removing" | "ready" | "cancelled" | "error";
   error: string; item: string; received: number; total: number;
   installed: boolean; running: boolean; busy: boolean; revision: string;
+  /** Bytes of kept downloads a removal frees, also without an installation (3.1.6). */
+  reclaimable: number;
+  /** Whether unfinished preparation files are left over; never sized (3.1.6). */
+  staging: boolean;
 };
+
+/** A `runtime.*` action; `remove` deletes installed versions and caches (runtime API 3.1.6). */
+export type ManagedRuntimeAction = "prepare" | "start" | "stop" | "cancel" | "remove";
 
 /** Polls background work; unmounting only discards UI results and does not cancel installation. */
 export function useManagedRuntime(client: PluginRpcClient) {
@@ -33,7 +40,7 @@ export function useManagedRuntime(client: PluginRpcClient) {
     void refresh();
     return () => { revision.current += 1; clearTimeout(timer); };
   }, [client]);
-  const run = useCallback(async (action: "prepare" | "start" | "stop" | "cancel", source?: string) => {
+  const run = useCallback(async (action: ManagedRuntimeAction, source?: string) => {
     const current = revision.current;
     setPending(true); setActionError("");
     try {

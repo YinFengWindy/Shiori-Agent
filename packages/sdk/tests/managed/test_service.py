@@ -120,3 +120,28 @@ async def test_live_child_is_not_callable_until_owned_health_is_ready(
     await starting
     assert instance.require_url().startswith("http://127.0.0.1:")
     await instance.close()
+
+
+async def test_early_exit_names_the_last_output_line(tmp_path, monkeypatch):
+    class Child:
+        def __init__(self, _processes):
+            self.process = None
+
+        async def start(self, _command, **_kwargs):
+            self.process = SimpleNamespace(returncode=3)
+
+        async def exit_reason(self):
+            return "ModuleNotFoundError: No module named 'torch'"
+
+        async def close(self):
+            self.process = None
+
+    monkeypatch.setattr(service, "OwnedChild", Child)
+    owned = service.OwnedService(
+        tmp_path, FakeProcesses(), lambda path, port, token: ([], path, {})
+    )
+    with pytest.raises(RuntimeError) as failure:
+        await owned.start(tmp_path)
+    assert str(failure.value).startswith(
+        "托管服务提前退出（3）：ModuleNotFoundError: No module named 'torch'。详见 "
+    )

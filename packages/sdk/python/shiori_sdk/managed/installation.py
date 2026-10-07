@@ -1,5 +1,7 @@
 """Immutable version directories and an atomically published current pointer."""
 
+import logging
+import os
 import shutil
 import hashlib
 import re
@@ -8,22 +10,53 @@ from pathlib import Path
 from uuid import uuid4
 
 from shiori_sdk.files.json import atomic_save_json, load_json
-from shiori_sdk.files.lease import exclusive_file_lease
+from shiori_sdk.files.lease import LeaseBusy, exclusive_file_lease
 
 from .artifacts import Artifact
 from .acquisition import acquire_resources
-from .paths import native_path
+from .paths import environment_path, native_path
+
+_logger = logging.getLogger(__name__)
+GIB = 1024**3
+# Reserve 5% of the estimate, at least 1 GiB, for logs, child temp/cache files
+# and filesystem overhead that a fixed artifact list cannot enumerate.
+SPACE_MARGIN_RATIO = 0.05
+SPACE_MARGIN_MIN = GIB
+# Removal keeps only lock and log files: other generations may hold the locks,
+# and the logs explain a removal or a previous failure.
+_RETAINED = frozenset({"prepare.lock", "service.lock", "prepare.log", "service.log"})
+
+
+def required_space(missing: int, installed_size: int) -> int:
+    """Bytes a preparation may add at its peak: missing artifacts, result and margin."""
+    estimate = missing + installed_size
+    return estimate + max(SPACE_MARGIN_MIN, int(estimate * SPACE_MARGIN_RATIO))
 
 
 class Installation:
-    """A failed or cancelled preparation never changes the previous usable version."""
+    """A failed or cancelled preparation never changes the previous usable version.
 
-    def __init__(self, root: Path, revision: str, artifacts: Sequence[Artifact]):
+    ``installed_size`` is the provider-declared size in bytes of one prepared
+    version (extracted archives, built environment); together with the missing
+    artifact bytes it bounds the free-space check made before any copy.
+    """
+
+    def __init__(
+        self,
+        root: Path,
+        revision: str,
+        artifacts: Sequence[Artifact],
+        *,
+        installed_size: int = 0,
+    ):
+        if installed_size < 0:
+            raise ValueError("安装大小不能为负数")
         self.root, self.revision, self.artifacts = (
             native_path(root),
             revision,
             tuple(artifacts),
         )
+        self.installed_size = installed_size
         self.pointer = self.root / "current.json"
 
     def current(self) -> Path | None:
@@ -91,6 +124,10 @@ class Installation:
     ) -> Path:
         """Acquire fixed resources, build privately and rename a complete generation."""
         with exclusive_file_lease(self.root / "prepare.lock"):
+            # Under the lease, any staging left by a killed host is garbage.
+            if (self.root / "s").exists():
+                shutil.rmtree(self.root / "s")
+            self._require_space(source, import_asset)
             generation = uuid4().hex[:12]
             staging = self.root / "s" / generation
             staging.mkdir(parents=True)
@@ -122,3 +159,93 @@ class Installation:
             finally:
                 if staging.exists():
                     shutil.rmtree(staging)
+
+    def _missing_bytes(self, source: Path | None, import_asset: str | None) -> int:
+        """Bytes still to be written into the download cache by this preparation."""
+        bundled = source is not None and source.suffix.lower() == ".zip"
+        missing = 0
+        for item in self.artifacts:
+            if bundled or (source is not None and item.name == import_asset):
+                # Imports are always copied in full, replacing any cached bytes.
+                missing += item.size
+                continue
+            cached = self.root / "downloads" / item.name
+            partial = cached.with_name(cached.name + ".part")
+            existing = cached if cached.is_file() else partial
+            present = existing.stat().st_size if existing.is_file() else 0
+            missing += max(item.size - present, 0)
+        return missing
+
+    def _require_space(self, source: Path | None, import_asset: str | None) -> None:
+        """Fail before any copy or extraction when the volume cannot hold the result."""
+        required = required_space(
+            self._missing_bytes(source, import_asset), self.installed_size
+        )
+        free = shutil.disk_usage(self.root).free
+        if free < required:
+            raise RuntimeError(
+                f"磁盘空间不足：需要约 {required / GIB:.1f} GiB，"
+                f"剩余 {free / GIB:.1f} GiB（{environment_path(self.root)}）"
+            )
+
+    def discard_superseded(self, *, keep_versions: bool) -> None:
+        """After publication, drop the download cache, staging and other versions.
+
+        ``keep_versions`` retains every version directory while a service that
+        may run from an older one is still alive. A preparation in progress in
+        another generation owns the cache; it prunes after its own publication.
+        """
+        try:
+            with exclusive_file_lease(self.root / "prepare.lock"):
+                current = self.current()
+                for name in ("downloads", "s"):
+                    if (self.root / name).exists():
+                        shutil.rmtree(self.root / name)
+                if keep_versions:
+                    return
+                for layout in ("v", "versions"):
+                    versions = self.root / layout
+                    for entry in versions.iterdir() if versions.is_dir() else ():
+                        if entry != current:
+                            shutil.rmtree(entry)
+        except LeaseBusy:
+            _logger.info("另一实例正在准备环境，跳过清理：%s", self.root)
+
+    def reclaimable(self) -> tuple[int, bool]:
+        """Kept download bytes and whether unfinished staging is left over.
+
+        Cheap enough for a polled status: one stat per known artifact (and its
+        ``.part``), and staging is only probed for any entry, never walked.
+        Entries deleted concurrently are simply absent.
+        """
+        total = 0
+        for item in self.artifacts:
+            cached = self.root / "downloads" / item.name
+            for path in (cached, cached.with_name(cached.name + ".part")):
+                try:
+                    total += path.stat().st_size
+                except OSError:
+                    continue
+        try:
+            with os.scandir(self.root / "s") as entries:
+                staged = any(True for _entry in entries)
+        except OSError:
+            staged = False
+        return total, staged
+
+    def remove(self) -> None:
+        """Delete every installed version, the pointer, caches and staging.
+
+        The caller guarantees that no service runs from this root. Lock and log
+        files stay; the pointer goes first, so an interrupted removal already
+        reads as not installed.
+        """
+        with exclusive_file_lease(self.root / "prepare.lock"):
+            self.pointer.unlink(missing_ok=True)
+            for entry in self.root.iterdir():
+                if entry.name in _RETAINED:
+                    continue
+                if entry.is_dir() and not entry.is_symlink():
+                    shutil.rmtree(entry)
+                else:
+                    entry.unlink()

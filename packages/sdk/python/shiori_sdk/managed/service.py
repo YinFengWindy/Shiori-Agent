@@ -3,7 +3,7 @@
 import asyncio
 import socket
 from collections.abc import Awaitable, Callable
-from contextlib import ExitStack
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
 from uuid import uuid4
 
@@ -11,10 +11,14 @@ import httpx
 from shiori_sdk.files.lease import LeaseBusy, exclusive_file_lease
 from shiori_sdk.processes import Processes
 
-from .child import OwnedChild
+from .child import OwnedChild, failure_message
 from .paths import native_path
 
 type Launch = Callable[[Path, int, str], tuple[list[str], Path, dict[str, str]]]
+
+
+class ServiceRunning(RuntimeError):
+    """A service of this or another generation still runs from this root."""
 
 
 class OwnedService:
@@ -26,6 +30,8 @@ class OwnedService:
         self.lease = ExitStack()
         self.url: str | None = None
         self.token: str | None = None
+        # The version directory the owned child runs from, while it is owned.
+        self.installation: Path | None = None
         self.ready = False
         self.on_stopped: Callable[[str], Awaitable[None]] | None = None
         self.before_start: Callable[[], Awaitable[None]] | None = None
@@ -58,6 +64,7 @@ class OwnedService:
             self.token = token
             command, cwd, env = self.launch(installation, port, token)
             self.url = f"http://127.0.0.1:{port}"
+            self.installation = installation
             await self.child.start(
                 command, cwd=cwd, env=env, log=self.root / "service.log"
             )
@@ -66,8 +73,13 @@ class OwnedService:
                     while True:
                         process = self.child.process
                         if process is None or process.returncode is not None:
+                            code = process.returncode if process else None
                             raise RuntimeError(
-                                f"托管服务提前退出，详见 {self.root / 'service.log'}"
+                                failure_message(
+                                    f"托管服务提前退出（{code}）",
+                                    await self.child.exit_reason(),
+                                    self.root / "service.log",
+                                )
                             )
                         try:
                             response = await client.get(self.url + "/shiori-runtime")
@@ -109,4 +121,17 @@ class OwnedService:
             if self.child.process is None:
                 self.url = None
                 self.token = None
+                self.installation = None
                 self.lease.close()
+
+    @contextmanager
+    def idle(self):
+        """Hold the service lease so that no generation runs a service meanwhile."""
+        if self.child.process is not None:
+            raise ServiceRunning("托管服务正在运行，请先停止环境")
+        with ExitStack() as stack:
+            try:
+                stack.enter_context(exclusive_file_lease(self.root / "service.lock"))
+            except LeaseBusy as error:
+                raise ServiceRunning("托管服务正在运行，请先停止环境") from error
+            yield

@@ -18,6 +18,11 @@ PYTHON_ARCHIVE = "cpython-3.12.15-windows.tar.gz"
 PYTHON_RELATIVE = "p/python.exe"
 UV_ARCHIVE = "uv-0.12.23-windows-x64.zip"
 SOURCE_PACKAGES = ("antlr4-python3-runtime", "crcmod", "jieba", "oss2")
+# Bytes of one prepared version. Measured from the locks: unpacked wheels
+# 1,740,387,379 + source package trees 41,042,772 + Python 63,230,869 + models
+# 938,413,143 = 2,783,074,163; rounded up for bytecode caches written by the
+# import check and per-file cluster slack.
+INSTALLED_SIZE = 3_200_000_000
 PYTHON = Artifact(
     PYTHON_ARCHIVE,
     "https://github.com/astral-sh/python-build-standalone/releases/download/20261003/cpython-3.12.15%2B20261003-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",

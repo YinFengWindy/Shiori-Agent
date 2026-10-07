@@ -53,12 +53,16 @@ def register_runtime_rpc(
         await runtime.cancel()
         return runtime.status()
 
+    async def remove(_params: dict[str, object]):
+        return runtime.remove()
+
     ctx.rpc.register("runtime.status", status, concurrency=Concurrency.READ_ONLY)
     for name, handler in [
         ("prepare", prepare),
         ("start", start),
         ("stop", stop),
         ("cancel", cancel),
+        ("remove", remove),
     ]:
         ctx.rpc.register(
             "runtime." + name, handler, concurrency=Concurrency.INTEGRATION

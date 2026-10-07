@@ -2,8 +2,8 @@
 
 [@yinfengwindy/shiori-sdk](https://www.npmjs.com/package/@yinfengwindy/shiori-sdk)
 and [shiori-sdk](https://pypi.org/project/shiori-sdk/) are the TypeScript and Python distributions of the
-same plugin contract. Both are version **3.1.5**, with Runtime API **3.1.5**.
-3.1.1–3.1.5 are not published yet; npm and PyPI hold 3.1.0. The commands below
+same plugin contract. Both are version **3.1.6**, with Runtime API **3.1.6**.
+3.1.1–3.1.6 are not published yet; npm and PyPI hold 3.1.0. The commands below
 install 3.1.0; APIs added since then need a wheelhouse or workspace build of
 this repository until the next publication.
 
@@ -79,13 +79,6 @@ while a save is in flight and otherwise drops unsaved edits. Render its `savePha
 out with the host's `SettingsGroup`, `SettingsSectionCard`, `SettingsField`,
 `SettingsToggleField`, `settingsInputClass` and `settingsGroupStackClass`. Packages
 using any of these require `runtime_api: ">=3.1.4 <4.0.0"`.
-
-Runtime API 3.1.5 adds two native pickers to the injected host services:
-`host.pickFilePaths({ filters, multiple?, maxFileBytes })` returns the selected
-files' original absolute paths without copying them (unlike `host.pickFiles`,
-which copies into private import staging), and `host.pickDirectory()` returns a
-selected or newly created directory, or `null` on cancel. Packages using either
-require `runtime_api: ">=3.1.5 <4.0.0"`.
 
 A disposed scoped client rejects with `PluginBridgeError`, code
 `plugin_unavailable`, and `details.reason: "context_disposed"`. Cleanup may treat
@@ -451,7 +444,7 @@ the existing Windows Job ownership contract; no PID is adopted or killed by ID.
 
 `ManagedRuntime` retains background progress/errors, cancellation and explicit
 start/stop. `register_runtime_rpc` wires opt-in `runtime.status`, `prepare`, `start`,
-`stop` and `cancel` endpoints plus plugin drain cleanup. Providers own imported
+`stop`, `cancel` and (3.1.6) `remove` endpoints plus plugin drain cleanup. Providers own imported
 file extensions/namespaces, models, private settings and recovery policy. They
 must declare `workspace`, `rpc`, `background`, `processes` and `runtime` capabilities.
 
@@ -465,6 +458,33 @@ Controlled filesystem operations use Windows' extended-length namespace for
 drive and UNC paths. Compact `s/<id>` and `v/<id>` directories avoid duplicating
 the revision in every filename; the validated receipt retains version/resource
 identity. Existing trial pointers to `versions/` remain readable.
+
+Runtime API 3.1.6 adds environment hygiene. `ManagedRuntime.remove()` deletes
+installed versions, the pointer, caches and staging in the background, also
+when nothing is installed but a failed or cancelled preparation kept its
+download cache; it is refused while a task runs or a service of any generation
+holds the service lease, and keeps only lock and log files. Status reports
+`reclaimable` (bytes of kept downloads, one stat per artifact) and `staging`
+(unfinished preparation files left over, never walked). A published preparation
+deletes the download cache and every other version directory (older ones stay
+while a service may still run from them); failure or cancellation keeps the
+cache so a retry resumes. Removal and post-publication cleanup run in a thread
+that cancellation does not abandon: `cancel()` / `stop()` / `close()` return
+only after it has finished and released its leases, and status reports the
+actual outcome. `Installation(..., installed_size=)` declares the bytes of one
+prepared version; before any copy, preparation requires free space on the
+root's volume of at least the missing artifact bytes (imports count in full) +
+`installed_size` + max(1 GiB, 5% of both), and otherwise fails with
+「磁盘空间不足：需要约 X GiB，剩余 Y GiB（位置）」. Child output is piped and
+decoded incrementally per child, UTF-8 until the first invalid byte and the
+Windows ANSI code page from then on (native tools such as 7-Zip), into UTF-8
+`prepare.log` / `service.log`; CR, LF and CRLF all end a line. A failed
+preparation command or an early service exit names its last meaningful line.
+`Processes.spawn` therefore accepts `asyncio.subprocess` constants for
+`stdout` / `stderr`. `ManagedRuntimePanel` shows 「删除环境」 for a stopped,
+idle runtime that is installed or keeps a cache, behind a destructive
+`host.ui.ConfirmDialog`.
+
 Process arguments and working directories preserve the provider's spelling:
 native Python libraries can require ordinary `sys.prefix` paths when they append
 relative components. Third-party `TEMP`/`TMP`, cache and `PATH` values likewise

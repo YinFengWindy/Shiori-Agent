@@ -42,9 +42,16 @@ class Processes(Protocol):
         env: dict[str, str],
         cwd: str,
         stdin: int,
-        stdout: BinaryIO,
-        stderr: BinaryIO,
-    ) -> tuple[asyncio.subprocess.Process, ProcessOwner | None]: ...
+        stdout: int | BinaryIO,
+        stderr: int | BinaryIO,
+    ) -> tuple[asyncio.subprocess.Process, ProcessOwner | None]:
+        """Start an asyncio child with host-selected tree ownership before execution.
+
+        ``stdout`` / ``stderr`` take a binary file or an ``asyncio.subprocess``
+        constant (``PIPE``, ``STDOUT``, ``DEVNULL``), exactly as
+        ``asyncio.create_subprocess_exec``; a piped stream must be drained.
+        """
+        ...
 
     def popen(
         self,

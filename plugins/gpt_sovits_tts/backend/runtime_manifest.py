@@ -7,6 +7,9 @@ CACHE_VARIABLES = ("HF_HOME", "TORCH_HOME", "CUDA_CACHE_PATH", "MODELSCOPE_CACHE
 OFFLINE_ENV = {"HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1"}
 ARCHIVE = "GPT-SoVITS-v2pro-20261005.7z"
 PACKAGE_ROOT = "GPT-SoVITS-v2pro-20260620"
+# Bytes of one prepared version: the archive's total unpacked size reported by
+# `7zr l` (the downloads are removed once extraction completes).
+INSTALLED_SIZE = 18_480_162_278
 ARTIFACTS = (
     Artifact(
         ARCHIVE,

@@ -57,6 +57,6 @@ funasr-server --host 127.0.0.1 --port 8000 --model sensevoice --device cpu
 
 ## 启用与测试
 
-要求 SDK / Runtime API 3.1.4。本插件随应用内置，新配置下默认停用；在“设置 → 插件”
+要求 SDK / Runtime API 3.1.6。本插件随应用内置，新配置下默认停用；在“设置 → 插件”
 启用后出现设置页，并可在桌宠语音中选择。Python wheel 仅用于独立测试。
 独立测试命令见[源码仓库 TESTING.md](https://github.com/YinFengWindy/Shiori-Agent/blob/main/plugins/sensevoice_asr/TESTING.md)。

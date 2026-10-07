@@ -1,11 +1,14 @@
 """A failed native termination cannot be mistaken for released process ownership."""
 
+import asyncio
+import sys
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 
-from shiori_sdk.managed.child import OwnedChild
+from shiori_sdk.managed import child as child_module
+from shiori_sdk.managed.child import OwnedChild, run_owned
 from shiori_sdk.managed.paths import native_path
 from shiori_sdk.testing.processes import FakeProcesses
 
@@ -26,7 +29,7 @@ async def test_close_failure_keeps_handles_until_exit_can_be_joined(
     owner = Owner()
     monkeypatch.setattr(child, "process", process)
     child.owner = owner
-    child.log = (tmp_path / "child.log").open("ab")
+    child.log = (tmp_path / "child.log").open("a", encoding="utf-8")
     with pytest.raises(OSError, match="native close failed"):
         await child.close()
     assert child.process is process and child.owner is owner
@@ -44,7 +47,7 @@ async def test_spawn_preserves_callers_interpreter_and_working_directory(
 ):
     processes = FakeProcesses()
     received = {}
-    process = SimpleNamespace(returncode=0, wait=AsyncMock(return_value=0))
+    process = SimpleNamespace(returncode=0, wait=AsyncMock(return_value=0), stdout=None)
 
     async def spawn(*command, **kwargs):
         received.update(command=command, **kwargs)
@@ -64,3 +67,53 @@ async def test_spawn_preserves_callers_interpreter_and_working_directory(
     assert received["command"] == (str(interpreter), "-I", "server.py")
     assert received["cwd"] == str(tmp_path)
     await child.close()
+
+
+async def test_system_code_page_output_is_logged_as_utf8_and_names_the_failure(
+    tmp_path, monkeypatch
+):
+    # The tail 7-Zip wrote on a full disk under Chinese Windows (GBK bytes).
+    full = "磁盘空间不足。".encode("gbk")
+    output = (
+        b"ERROR: Cannot set length for output file : " + full + b" : s2G.pth\r\n"
+        b"\r\nSub items Errors: 1\r\n\r\nSystem ERROR:\r\n" + full + b"\r\n"
+    )
+    processes = FakeProcesses()
+
+    async def spawn(*command, **kwargs):
+        process = await asyncio.create_subprocess_exec(
+            sys.executable,
+            "-c",
+            "import sys; sys.stdout.buffer.write(bytes.fromhex(sys.argv[1])); "
+            "sys.exit(2)",
+            output.hex(),
+            **(kwargs | {"env": None}),
+        )
+        return process, None
+
+    monkeypatch.setattr(processes, "spawn", spawn)
+    monkeypatch.setattr(child_module, "_system_encoding", lambda: "gbk")
+    log = tmp_path / "prepare.log"
+    with pytest.raises(RuntimeError) as failure:
+        await run_owned(processes, ["7zr.exe"], cwd=tmp_path, env={}, log=log)
+    assert str(failure.value).startswith(
+        "环境准备命令失败（2）：System ERROR: 磁盘空间不足。详见 "
+    )
+    text = log.read_text(encoding="utf-8")
+    assert "Cannot set length for output file : 磁盘空间不足。 : s2G.pth\n" in text
+
+
+async def test_pump_keeps_split_characters_and_ends_lines_at_bare_returns(tmp_path):
+    child = OwnedChild(FakeProcesses())
+    stream = asyncio.StreamReader()
+    # One character straddles the 64 KiB read boundary; redraws use bare CR
+    # and a CRLF split across reads still ends a single line.
+    long_line = "a" + "磁" * 30000
+    for data in (long_line.encode() + b"\n", b"10%\r55%\r", b"\n99%\r"):
+        stream.feed_data(data)
+    stream.feed_eof()
+    with (tmp_path / "child.log").open("a", encoding="utf-8") as log:
+        await child._pump(stream, log)
+    lines = (tmp_path / "child.log").read_text(encoding="utf-8").splitlines()
+    assert lines == [long_line, "10%", "55%", "99%"]
+    assert child.failure_reason() == "99%"

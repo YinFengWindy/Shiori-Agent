@@ -3,6 +3,7 @@
 import asyncio
 import hashlib
 import zipfile
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -112,3 +113,185 @@ async def test_prepare_repairs_invalid_current_record_instead_of_blocking_itself
     await runtime.task
     assert runtime.status()["error"] == ""
     assert runtime.installation.current() != controller.previous
+
+
+async def test_success_prunes_cache_and_old_versions_but_failure_keeps_cache(
+    controller, tmp_path
+):
+    runtime, install = controller.runtime, controller.runtime.installation
+    cached = install.root / "downloads" / "fixed.bin"
+    assert cached.is_file() and controller.previous.is_dir()
+    import_copy = tmp_path / "again.zip"
+    import_copy.write_bytes(controller.source.read_bytes())
+    original_build = runtime.build
+
+    async def fail(_path):
+        raise ValueError("build failed")
+
+    runtime.build = fail
+    runtime.submit("prepare", controller.source)
+    await runtime.task
+    assert runtime.status()["error"] == "build failed"
+    assert cached.is_file() and controller.previous.is_dir()
+    runtime.build = original_build
+    runtime.submit("prepare", import_copy)
+    await runtime.task
+    current = install.current()
+    assert runtime.status()["error"] == "" and current != controller.previous
+    assert not (install.root / "downloads").exists()
+    assert list((install.root / "v").iterdir()) == [current]
+
+
+async def test_remove_requires_idle_stopped_runtime_then_deletes_everything(
+    controller,
+):
+    from shiori_sdk.files.lease import exclusive_file_lease
+
+    runtime, install = controller.runtime, controller.runtime.installation
+    (install.root / "prepare.log").write_text("previous run", encoding="utf-8")
+    controller.child.hold = True
+    runtime.submit("start")
+    await controller.child.started.wait()
+    with pytest.raises(RuntimeError, match="其他操作"):
+        runtime.remove()
+    await runtime.cancel()
+    controller.child.child.process = SimpleNamespace(returncode=None)
+    with pytest.raises(RuntimeError, match="请先停止环境"):
+        runtime.remove()
+    controller.child.child.process = None
+    # Another generation's service still holds the service lease.
+    with exclusive_file_lease(install.root / "service.lock"):
+        runtime.remove()
+        await runtime.task
+    assert runtime.status()["error"] == "托管服务正在运行，请先停止环境"
+    assert install.current() == controller.previous
+    runtime.remove()
+    await runtime.task
+    status = runtime.status()
+    assert status["phase"] == "stopped" and status["installed"] is False
+    assert sorted(item.name for item in install.root.iterdir()) == [
+        "prepare.lock",
+        "prepare.log",
+        "service.lock",
+    ]
+
+
+async def test_cancelled_removal_joins_its_thread_and_reports_the_outcome(
+    controller, monkeypatch
+):
+    import threading
+
+    from shiori_sdk.files.lease import exclusive_file_lease
+
+    runtime, install = controller.runtime, controller.runtime.installation
+    entered, release = threading.Event(), threading.Event()
+    remove = install.remove
+
+    def blocked_remove():
+        entered.set()
+        release.wait(10)
+        remove()
+
+    monkeypatch.setattr(install, "remove", blocked_remove)
+    runtime.remove()
+    try:
+        await asyncio.to_thread(entered.wait, 10)
+        cancelling = asyncio.create_task(runtime.cancel())
+        await asyncio.sleep(0.05)
+        # Cancellation waits: the thread still deletes under both leases.
+        assert not cancelling.done()
+        assert runtime.status()["busy"] is True
+    finally:
+        release.set()
+    await cancelling
+    status = runtime.status()
+    assert status["busy"] is False and status["installed"] is False
+    assert status["phase"] == "stopped"
+    with exclusive_file_lease(install.root / "prepare.lock"):
+        pass
+
+
+async def test_kept_cache_is_reported_and_removable_without_an_installation(
+    controller, tmp_path
+):
+    runtime, install = controller.runtime, controller.runtime.installation
+    runtime.remove()
+    await runtime.task
+
+    async def fail(_path):
+        raise ValueError("build failed")
+
+    runtime.build = fail
+    runtime.submit("prepare", controller.source)
+    await runtime.task
+    # Staging a killed host left behind is reported but never walked or sized.
+    leftover = install.root / "s" / "killed" / "deep"
+    leftover.mkdir(parents=True)
+    (leftover / "partial.bin").write_bytes(b"x" * 4096)
+    status = runtime.status()
+    assert status["installed"] is False and status["staging"] is True
+    assert status["reclaimable"] == len(b"runtime")
+    runtime.remove()
+    await runtime.task
+    status = runtime.status()
+    assert status["error"] == "" and status["reclaimable"] == 0
+    assert status["staging"] is False
+    assert not (install.root / "downloads").exists()
+
+
+def test_reclaimable_probe_tolerates_entries_deleted_meanwhile(controller):
+    install = controller.runtime.installation
+    staging = install.root / "s"
+    staging.mkdir(exist_ok=True)
+    original = Path.stat
+
+    def vanishing(path, *args, **kwargs):
+        if path.name == "fixed.bin":
+            raise FileNotFoundError(path)
+        return original(path, *args, **kwargs)
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(Path, "stat", vanishing)
+        assert install.reclaimable() == (0, False)
+
+
+async def test_cancelled_removal_failure_is_recorded_and_still_cancels(
+    controller, monkeypatch
+):
+    import threading
+
+    runtime, install = controller.runtime, controller.runtime.installation
+    entered, release = threading.Event(), threading.Event()
+
+    def failing_remove():
+        entered.set()
+        release.wait(10)
+        raise OSError("file in use")
+
+    monkeypatch.setattr(install, "remove", failing_remove)
+    runtime.remove()
+    try:
+        await asyncio.to_thread(entered.wait, 10)
+        runtime.task.cancel()
+    finally:
+        release.set()
+    await asyncio.gather(runtime.task, return_exceptions=True)
+    assert runtime.task.cancelled()
+    status = runtime.status()
+    assert status["phase"] == "error" and status["error"] == "file in use"
+
+
+async def test_cleanup_failure_after_publication_keeps_the_usable_phase(
+    controller, monkeypatch
+):
+    runtime, install = controller.runtime, controller.runtime.installation
+
+    def locked(**_kwargs):
+        raise OSError("locked")
+
+    monkeypatch.setattr(install, "discard_superseded", locked)
+    runtime.submit("prepare", controller.source)
+    await runtime.task
+    assert runtime.phase == "ready"
+    assert runtime.status()["error"] == "清理旧版本或下载缓存失败：locked"
+    assert install.current() != controller.previous
