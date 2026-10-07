@@ -34,13 +34,13 @@ export async function prepareSpeech(app: SpeechApp, repository: string, output: 
   await page.getByRole("button", { name: "桌宠 设置", exact: true }).click();
   const capture = await eventually(async () => app.app!.windows().find((candidate) => candidate.url().endsWith("/voice.html")), Boolean, "actual capture renderer");
   assert.ok(capture); await installGeneratedMicrophone(capture);
-  await page.getByRole("switch", { name: "桌宠语音", exact: true }).click();
+  // Voice can only be switched on once both providers are chosen; the page autosaves each edit.
   for (const [name, label] of [["语音识别", "SenseVoiceSmall · CPU"], ["语音合成", "GPT-SoVITS · v2ProPlus"]]) {
     await page.getByRole("combobox", { name, exact: true }).click();
     await page.getByRole("option", { name: label, exact: true }).click();
   }
-  await page.getByRole("button", { name: "保存", exact: true }).click();
-  const preferences = await eventually(() => app.pluginCall("desktop_pet", "voice.preferences.get"), (value) => value.enabled === true, "pet preferences saved");
+  await page.getByRole("switch", { name: "桌宠语音", exact: true }).click();
+  const preferences = await eventually(() => app.pluginCall("desktop_pet", "voice.preferences.get"), (value) => value.enabled === true && value.asr !== null && value.tts !== null, "pet preferences autosaved");
   const stored = record(JSON.parse(await readFile(resolve(app.paths.workspace, "plugin-data/desktop_pet/voice-preferences.json"), "utf8")));
   assert.deepEqual(stored, preferences);
   assert.deepEqual(preferences.asr, { plugin_id: "sensevoice_asr", service_id: "asr" });

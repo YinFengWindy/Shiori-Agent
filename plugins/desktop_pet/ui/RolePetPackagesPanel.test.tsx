@@ -75,7 +75,24 @@ it("renders each package as a selectable preview card, with no hardcoded colours
     assert.match(markup, /border-accent/);
     // #160's restyle put every colour behind a token; a literal here would
     // survive typecheck and lint and only show up as a mismatched card.
-    assert.doesNotMatch(markup, /border-primary|text-\[#8B4B4B\]/);
+    assert.doesNotMatch(markup, /border-primary|text-\[#8B4B4B\]|bg-white|var\(--/);
+    // The delete tile is reachable without hovering, and focus keeps its visible ring.
+    assert.doesNotMatch(markup, /opacity-0|focus:outline-none/);
+    assert.match(view.container.querySelector('[aria-label="已选中"]')?.getAttribute("class") ?? "", /text-accent/);
+  } finally { await view.cleanup(); }
+});
+
+it("shows it is loading until the first answer, and an empty library once it arrives empty", async () => {
+  const view = await mountTestComponent(null);
+  let answer: ((value: unknown) => void) | null = null;
+  const client = createFakePluginClient({ call: <T,>() => new Promise<T>((resolve) => { answer = resolve as (value: unknown) => void; }) });
+  try {
+    await view.render(<RolePetPackagesPanel roleId="mira" disabled={false} client={client} onRoleDataChanged={() => undefined} />);
+    assert.ok(view.container.querySelector('[role="status"]'));
+    assert.doesNotMatch(view.container.textContent ?? "", /暂无桌宠素材包/);
+    await act(async () => { answer?.({ selected_package_id: null, packages: [] }); await Promise.resolve(); });
+    assert.equal(view.container.querySelector('[role="status"]'), null);
+    assert.match(view.container.textContent ?? "", /暂无桌宠素材包/);
   } finally { await view.cleanup(); }
 });
 
@@ -153,10 +170,11 @@ it("a failed refresh shows the reason and keeps the rows it already had", async 
 });
 
 
-it("removing a package also tells the host to re-read the role", async () => {
+it("removing a package waits for confirmation, then tells the host to re-read the role", async () => {
   const calls: Call[] = [];
   let roleDataChanged = 0;
   const view = await mountTestComponent(null);
+  const dialogButton = (label: string) => Array.from(view.container.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')).find((button) => button.textContent === label);
   try {
     await view.render(<RolePetPackagesPanel
       roleId="mira" disabled={false}
@@ -168,7 +186,16 @@ it("removing a package also tells the host to re-read the role", async () => {
     const remove = view.container.querySelector<HTMLButtonElement>('[aria-label^="删除桌宠素材"]');
     assert.ok(remove);
     await act(async () => { remove.click(); });
+    assert.match(view.container.querySelector('[role="dialog"]')?.textContent ?? "", /Mira Pet/);
+    // Cancelling deletes nothing.
+    await act(async () => { dialogButton("取消")?.click(); });
+    assert.equal(view.container.querySelector('[role="dialog"]'), null);
+    assert.equal(calls.some((call) => call.method === "pets.remove"), false);
+
+    await act(async () => { remove.click(); });
+    await act(async () => { dialogButton("删除")?.click(); });
     await act(async () => { await Promise.resolve(); });
+    assert.equal(view.container.querySelector('[role="dialog"]'), null);
 
     assert.deepEqual(calls.at(-2), {
       method: "pets.remove",
