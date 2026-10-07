@@ -52,13 +52,13 @@ SenseVoiceSmall 使用明确的 CPU / `sensevoice` 配置连接本地 FunASR HTT
 
 GPT-SoVITS 私有 `voices.json` 保存服务设置、默认参考、按角色 mood 映射的参考、语言和语速，`references/` 保存不可变 WAV 副本。每次导入先校验同一份音频字节，再原子写入独立 UUID 文件；同内容的新草稿不会复用旧实例正在回收的身份，旧哈希文件名仍可读取。默认参考须在合成前保存，未映射 mood 使用该角色保存的默认参考。角色编辑器在自管面板里独立保存；试听由 UI 调用同一公共合成服务，只有当前角色/epoch 的结果才交自己的 background 播放。停止不会取消真实推理，迟到结果不得启动播放。
 
-GPT-SoVITS 的实例租约覆盖权重切换、参考文件 pin 和完整 HTTP 响应。连接中断无法确认推理结束时，`inference.json` 保留隔离状态并跨重载拒绝新推理；外部服务须由用户重启后明确确认恢复；托管记录包含所属 generation 和私有 runtime 根身份，只有所属原生进程退出且取得同一服务/推理租约后才能自动恢复，不能因此清除外部标记。正常返回的错误、静音或无效音频也会报错，不自动重试或切换 provider。SDK 4.1 提供通用 WAV 校验、暂存文件和 loopback HTTP 工具，业务锁与恢复策略仍属于 provider。
+GPT-SoVITS 的实例租约覆盖权重切换、参考文件 pin 和完整 HTTP 响应。连接中断无法确认推理结束时，`inference.json` 保留隔离状态并跨重载拒绝新推理；外部服务须由用户重启后明确确认恢复；托管记录包含所属 generation 和私有 runtime 根身份，只有所属原生进程退出且取得同一服务/推理租约后才能自动恢复，不能因此清除外部标记。正常返回的错误、静音或无效音频也会报错，不自动重试或切换 provider。SDK 3.1.2 提供通用 WAV 校验、暂存文件和 loopback HTTP 工具，业务锁与恢复策略仍属于 provider。
 
 桌宠后端 `VoicePreferencesStore` 自主读写 `plugin-data/desktop_pet/voice-preferences.json`，保存启用状态、快捷键、麦克风和 ASR/TTS 选择；UI 由桌宠 `VoiceSettings.tsx` 注入。新语音数据不进入宿主 `[voice]`、`[plugins.desktop_pet]` 或 `roles.json` 的 `runtime_config.tts` / `plugin_data`。provider 的角色声音配置由 provider 自身私有存储管理。
 
 `PluginRoleUiSlot` 承载 `roleUi` 的 `mode: "self-managed"` 面板，提供只读角色上下文、真实 roleId、所属插件的 scoped client 与 `PluginHostServicesProvider`。插件自主读取、保存及报告 dirty，并通过所属插件的文件选择器导入参考音频；新角色无真实 ID 时不能持久化。该模式不参与宿主角色原子保存，不把跨存储成功或失败包装成单一事务。原有 `roleSettings` 的合法角色草稿模式继续保留。
 
-两 provider 通过 SDK 4.1 的 `usePrivateDraft` 共享私有文档加载、dirty、保存及错误处理。迟到结果按 scoped client 和文档身份隔离；读取失败不生成可保存的空文档，保存失败保留草稿。具体健康检查、音频测试和持久化 RPC 仍由各插件拥有。
+两 provider 通过 SDK 3.1.2 的 `usePrivateDraft` 共享私有文档加载、dirty、保存及错误处理。迟到结果按 scoped client 和文档身份隔离；读取失败不生成可保存的空文档，保存失败保留草稿。具体健康检查、音频测试和持久化 RPC 仍由各插件拥有。
 
 TTS 的 `EmotionReferences` 允许在空角色情绪目录下新增私有名称和参考，目录仅提供建议。空白、重复、原型特殊名称和超出 64 个映射的输入被拒绝；未完成导入的名称计入 dirty 并阻止保存或试听。删除和保存都只修改 provider 的 `moods`。预览可选择已配置映射，自动朗读仍按调用者传入的 mood 匹配，未命中使用默认参考。
 
@@ -70,7 +70,7 @@ TTS 的 `EmotionReferences` 允许在空角色情绪目录下新增私有名称�
 
 两个 provider 自己保存资源锁、构建/启动策略和环境状态。SenseVoice 固定独立 CPython、uv 0.12.23、完整离线依赖与 SenseVoiceSmall/fsmn-vad 模型，使用 CPU；GPT-SoVITS 固定官方 Windows 完整包与 7zr，显式验证 v2ProPlus/CUDA。资源进入各自 `plugin-data/<id>/runtime/`，不进入宿主 `.venv`，不导入彼此或桌宠代码。
 
-SDK 4.2 的 `managed/` 只复用固定资源获取、校验、原子版本发布、后台任务和原生进程归属机制。下载以固定大小/SHA-256 校验，断点请求验证 Content-Range；完整离线 ZIP 的所有资源仍逐项校验。准备取消/失败不发布暂存目录，新版本启动失败保留旧指针。私有环境使用紧凑 `s/<id>` / `v/<id>` 布局，版本和资源身份保留在校验记录；受控文件 I/O 支持 Windows 扩展路径，第三方 Python 的运行 prefix 和临时路径保留普通语义。ASR 的固定 uv 使用 offline/no-index/require-hashes 与四个已验证的标准 bdist 目录选项，不修改全局注册表，不把资源移出插件目录。显式 prepare 可以修复损坏的安装记录；start 则明确拒绝损坏记录。
+SDK 3.1.3 的 `managed/` 只复用固定资源获取、校验、原子版本发布、后台任务和原生进程归属机制。下载以固定大小/SHA-256 校验，断点请求验证 Content-Range；完整离线 ZIP 的所有资源仍逐项校验。准备取消/失败不发布暂存目录，新版本启动失败保留旧指针。私有环境使用紧凑 `s/<id>` / `v/<id>` 布局，版本和资源身份保留在校验记录；受控文件 I/O 支持 Windows 扩展路径，第三方 Python 的运行 prefix 和临时路径保留普通语义。ASR 的固定 uv 使用 offline/no-index/require-hashes 与四个已验证的标准 bdist 目录选项，不修改全局注册表，不把资源移出插件目录。显式 prepare 可以修复损坏的安装记录；start 则明确拒绝损坏记录。
 
 启动在普通后台任务中等待同一私有 service 文件租约，不阻塞插件 setup 或同时加载新旧模型。就绪必须同时满足所属子进程存活和健康令牌匹配，模型加载中的进程不可调用。停用、重载、退出先关闭所属原生进程树并等待退出，再释放租约；异常宿主退出由 Windows Job 清理。用户普通停止试听/朗读仍只废弃结果，绝不提前释放正在推理的 GPU 所有权。
 
@@ -78,7 +78,7 @@ SDK 4.2 的 `managed/` 只复用固定资源获取、校验、原子版本发布
 
 ## 分发
 
-两个 provider 是内置插件，要求 SDK / Runtime API 4.2，manifest 声明 `default_enabled: false`：新配置下默认停用，在插件页启用后出现各自设置页并可供桌宠选择。它们不在默认停用升级迁移名单中，因为此前从未作为内置插件缺省启用。源码参与内置后端发现、前端 builtin registry（`ui/index.tsx`，TTS 另有 `background/index.ts`）和冻结运行时 staging；`runtime_assets/server.py` 与锁文件随插件目录作为数据打包，经 `Path(__file__)` 解析，只在插件托管环境中执行，不作为宿主 hidden import 收集。服务准备见 [ASR README](../../../plugins/sensevoice_asr/README.md) 和 [TTS README](../../../plugins/gpt_sovits_tts/README.md)。
+两个 provider 是内置插件，要求 SDK / Runtime API 3.1.4，manifest 声明 `default_enabled: false`：新配置下默认停用，在插件页启用后出现各自设置页并可供桌宠选择。它们不在默认停用升级迁移名单中，因为此前从未作为内置插件缺省启用。源码参与内置后端发现、前端 builtin registry（`ui/index.tsx`，TTS 另有 `background/index.ts`）和冻结运行时 staging；`runtime_assets/server.py` 与锁文件随插件目录作为数据打包，经 `Path(__file__)` 解析，只在插件托管环境中执行，不作为宿主 hidden import 收集。服务准备见 [ASR README](../../../plugins/sensevoice_asr/README.md) 和 [TTS README](../../../plugins/gpt_sovits_tts/README.md)。
 
 冻结宿主同时递归收集 SDK 运行时模块，包括没有 `__init__.py` 的 `files/`，排除 `shiori_sdk.testing` 与缓存；完整 SDK 不依赖当前已安装插件的静态引用。实际 PyInstaller 参数检查 SDK/宿主/内置插件模块是否全部进入 hidden imports。`test-sdk-runtime.mjs` 使用同一 collector 构建小型冻结探针，在仓库外清除 Python 源码路径后动态导入音频、暂存和 loopback HTTP 模块，并确认 testing 不存在。
 
@@ -90,7 +90,7 @@ SDK 4.2 的 `managed/` 只复用固定资源获取、校验、原子版本发布
 
 ## 兼容性与旧数据
 
-SDK/Runtime API **4.0** 移除了已发布的 `SurfaceHandle.voice`。桌宠要求 4.0；外部包必须明确声明其兼容范围，旧 `<4` 声明不会被静默接受。迁移说明见 [SDK README](../../../packages/sdk/README.md#compatibility)。
+SDK/Runtime API **3.1.1** 移除了 3.1.0 已发布的 `SurfaceHandle.voice`。桌宠要求 3.1.4；宿主的范围检查不会拒绝仍使用该接口的 `>=3.1.0 <4.0.0` 外部包，外部作者须自行迁移并声明 `>=3.1.1 <4.0.0`。迁移说明见 [SDK README](../../../packages/sdk/README.md#compatibility)。
 
 腾讯/MiniMax 实现、宿主语音配置与云音色生命周期已删除。升级不删除既有用户文件、密钥或远端音色；旧配置仅作为普通设置表单不拥有的 opaque 数据保留，不映射为本地参考素材。
 

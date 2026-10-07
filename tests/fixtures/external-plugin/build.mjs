@@ -20,7 +20,7 @@ await rm(packageRoot, { recursive: true, force: true });
 await mkdir(resolve(packageRoot, "backend"), { recursive: true });
 await mkdir(resolve(packageRoot, "assets"), { recursive: true });
 let manifest = (await readFile(resolve(root, "manifest.yaml"), "utf8")).replace(/^version: .+$/m, `version: ${version}`);
-if (variant === "incompatible") manifest = manifest.replace("'>=3.0.0 <4.0.0'", "'>=99.0.0 <100.0.0'");
+if (variant === "incompatible") manifest = manifest.replace(/^runtime_api: .+$/m, "runtime_api: '>=99.0.0 <100.0.0'");
 await writeFile(resolve(packageRoot, "manifest.yaml"), manifest, "utf8");
 if (variant !== "missing-entry") {
   const source = (await readFile(resolve(root, "src/plugin.py"), "utf8")).replaceAll("__FIXTURE_VERSION__", version);

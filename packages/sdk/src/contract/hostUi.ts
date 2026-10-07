@@ -97,7 +97,7 @@ export type AccountDetailActionsProps = { actions: AccountDetailAction[] };
 export type RevealProps = { show: boolean; className?: string; children: ReactNode };
 
 /**
- * Props of `host.ui.SettingsSavedStatus` (runtime API 4.3.0): the save phase
+ * Props of `host.ui.SettingsSavedStatus` (runtime API 3.1.4): the save phase
  * of a plugin settings section that autosaves (`usePrivateAutosave().savePhase`).
  */
 export type HostSettingsSavedStatusProps = { phase: DraftSavePhase };
@@ -116,7 +116,7 @@ export type PluginHostUi = {
   Reveal: ComponentType<RevealProps>;
   /**
    * The host's 「正在保存…」/「已保存」 mark, published in the settings page corner
-   * exactly like the schema plugin config page (runtime API 4.3.0). Renders
+   * exactly like the schema plugin config page (runtime API 3.1.4). Renders
    * nothing outside a settings page; failures stay with the plugin's own error UI.
    */
   SettingsSavedStatus: ComponentType<HostSettingsSavedStatusProps>;

@@ -9,7 +9,7 @@ const preferencesIdentity = "voice.preferences";
 /**
  * 设置 › 插件 › 桌宠. The voice preferences live in the plugin's private
  * backend storage, independently of host settings, and autosave like the
- * host's settings pages (runtime API 4.3.0).
+ * host's settings pages (runtime API 3.1.4).
  */
 export function VoiceSettings({ client, host }: PluginSettingsSectionComponentProps) {
   const preferences = usePrivateAutosave<VoicePreferences>(client, preferencesIdentity, {

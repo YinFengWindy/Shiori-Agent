@@ -1,6 +1,6 @@
 # 独立运行 Python 测试
 
-将本插件目录复制到仓库外，准备包含 `shiori-sdk` 4.0.0 的私有 wheelhouse。
+将本插件目录复制到仓库外，准备包含 `shiori-sdk` 3.1.1 的私有 wheelhouse。
 插件和 SDK 都以普通 wheel 安装；不需要 `shiori-agent`、旧 testkit 或默认记忆插件。
 
 ```sh

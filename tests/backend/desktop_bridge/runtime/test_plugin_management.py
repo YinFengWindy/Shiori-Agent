@@ -943,7 +943,7 @@ async def test_list_preserves_external_contract_rejection(
         entry="backend/plugin.py",
     )
     if missing_provider:
-        raw.update(runtime_api=">=4.0.0 <5.0.0", dependencies=["missing-provider"])
+        raw.update(runtime_api=">=3.1.1 <4.0.0", dependencies=["missing-provider"])
     path.write_text(yaml.safe_dump(raw), encoding="utf-8")
     service, _, app = await _start_service(tmp_path)
     try:
@@ -981,7 +981,7 @@ async def test_workspace_candidates_are_visible_unsafe_and_reload_safe(
         (package / "backend").mkdir(parents=True)
         (package / "manifest.yaml").write_text(
             f"api: 2\nid: {plugin_id}\ncapabilities: []\npackage_contract: 1\n"
-            "version: 1.0.0\nruntime_api: '>=4.0.0 <5.0.0'\nentry: backend/plugin.py\n",
+            "version: 1.0.0\nruntime_api: '>=3.1.1 <4.0.0'\nentry: backend/plugin.py\n",
             encoding="utf-8",
         )
         (package / "backend/plugin.py").write_text(
@@ -1056,7 +1056,7 @@ async def test_workspace_directory_changes_wait_for_application_restart(
         "bootstrap.tools._resolve_plugin_dirs", lambda _: [builtin, external]
     )
 
-    def stage_external(name, plugin_id, *, version="1.0.0", runtime=">=4.0.0 <5.0.0"):
+    def stage_external(name, plugin_id, *, version="1.0.0", runtime=">=3.1.1 <4.0.0"):
         package = external / name
         (package / "backend").mkdir(parents=True, exist_ok=True)
         (package / "manifest.yaml").write_text(
@@ -1209,7 +1209,7 @@ async def test_uninstalled_external_source_lists_as_blocked_and_cannot_be_enable
     marker = tmp_path / "imported"
     (package / "manifest.yaml").write_text(
         "api: 2\nid: external_source\ncapabilities: []\npackage_contract: 1\n"
-        "version: 1.0.0\nruntime_api: '>=4.0.0 <5.0.0'\nentry: backend/plugin.py\n"
+        "version: 1.0.0\nruntime_api: '>=3.1.1 <4.0.0'\nentry: backend/plugin.py\n"
         "distribution: external\n"
         "renderer:\n  ui: {entry: renderer/ui.mjs, css: []}\n",
         encoding="utf-8",
@@ -1270,7 +1270,7 @@ async def test_queued_install_replaces_external_source_row_before_restart(
         output.writestr(
             "manifest.yaml",
             "api: 2\npackage_contract: 1\nid: external_source\nversion: 1.0.0\n"
-            "runtime_api: '>=4.0.0 <5.0.0'\nentry: backend/plugin.py\n"
+            "runtime_api: '>=3.1.1 <4.0.0'\nentry: backend/plugin.py\n"
             "capabilities: []\n",
         )
         output.writestr("backend/plugin.py", "async def setup(ctx):\n    pass\n")
