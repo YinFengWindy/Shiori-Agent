@@ -26,20 +26,23 @@ export function ManagedRuntimePanel({ client, host, namespace, importExtensions,
   }
   const error = importError || runtime.error || status?.error;
   return <section className="grid gap-3" aria-label="托管推理环境">
-    <div className="text-body-sm text-ink-secondary" role="status">
-      {status ? `${phaseLabels[status.phase]} · ${status.revision}` : "正在读取环境状态…"}
+    {/* Status and actions share one row: status left, buttons right. */}
+    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+      <div className="min-w-0 text-body-sm text-ink-secondary" role="status">
+        {status ? `${phaseLabels[status.phase]} · ${status.revision}` : "正在读取环境状态…"}
+      </div>
+      <div className="ml-auto flex flex-wrap justify-end gap-2">
+        <button type="button" className={compactGhostButtonClass} disabled={blocked || !status || status.busy} onClick={() => void runtime.run("prepare")}>下载环境</button>
+        <button type="button" className={compactGhostButtonClass} disabled={blocked || !status || status.busy} onClick={() => void importPackage()}>导入环境包</button>
+        {status?.busy ? <button type="button" className={compactGhostButtonClass} disabled={blocked} onClick={() => void runtime.run("cancel")}>取消准备</button> : null}
+        {status?.installed && !status.running ? <button type="button" className={compactGhostButtonClass} disabled={blocked || status.busy} onClick={() => void runtime.run("start")}>启动环境</button> : null}
+        {status?.running ? <button type="button" className={compactGhostButtonClass} disabled={blocked || status.busy} onClick={() => void runtime.run("stop")}>停止环境</button> : null}
+      </div>
     </div>
     {status?.busy && status.total > 0 ? <div className="grid gap-1">
       <progress className="w-full" max={status.total} value={status.received} aria-label="环境准备进度" />
       <span className="text-caption text-ink-muted">{status.item} · {(status.received / 1024 ** 3).toFixed(2)} / {(status.total / 1024 ** 3).toFixed(2)} GiB</span>
     </div> : null}
     {error ? <host.ui.InlineError message={error} /> : null}
-    <div className="flex flex-wrap justify-end gap-2">
-      <button type="button" className={compactGhostButtonClass} disabled={blocked || !status || status.busy} onClick={() => void runtime.run("prepare")}>下载环境</button>
-      <button type="button" className={compactGhostButtonClass} disabled={blocked || !status || status.busy} onClick={() => void importPackage()}>导入环境包</button>
-      {status?.busy ? <button type="button" className={compactGhostButtonClass} disabled={blocked} onClick={() => void runtime.run("cancel")}>取消准备</button> : null}
-      {status?.installed && !status.running ? <button type="button" className={compactGhostButtonClass} disabled={blocked || status.busy} onClick={() => void runtime.run("start")}>启动环境</button> : null}
-      {status?.running ? <button type="button" className={compactGhostButtonClass} disabled={blocked || status.busy} onClick={() => void runtime.run("stop")}>停止环境</button> : null}
-    </div>
   </section>;
 }
