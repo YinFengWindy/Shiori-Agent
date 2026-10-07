@@ -4,7 +4,47 @@ from __future__ import annotations
 
 from typing import Any
 
+from agent.plugin_host.discovery import ExternalSourceDiagnostic
 from desktop_bridge.runtime.plugin_package_store import PluginPackageStore
+
+
+def external_source_row(source: ExternalSourceDiagnostic) -> dict[str, Any]:
+    """A blocked, non-toggleable roster row for an uninstalled external source.
+
+    It carries no renderer, trust, fingerprint or channel data: nothing may be
+    granted, trusted or routed for a package that only exists as source.
+    """
+    manifest = source.manifest
+    return {
+        "id": manifest.id,
+        "candidate_id": str(source.plugin_dir.absolute()),
+        "source": "builtin",
+        "directory": str(source.plugin_dir),
+        "name": manifest.display_name or source.plugin_dir.name,
+        "version": manifest.version or "",
+        "description": manifest.desc or "",
+        "renderer": {},
+        "content_fingerprint": None,
+        "content_hashes": {},
+        "can_trust": False,
+        "trust_fingerprint": None,
+        "trust_directory": "",
+        "trust_pending_restart": False,
+        "enabled": False,
+        "can_toggle": False,
+        "supports_hot_unload": manifest.supports_hot_unload,
+        "dependencies": list(manifest.dependencies),
+        "capabilities": list(manifest.capabilities),
+        "channels": [],
+        "category": manifest.category,
+        "state": source.diagnostic.state,
+        "error": source.diagnostic.reason,
+        "diagnostic": source.diagnostic.to_dict(),
+        "pending_renderer_kinds": [],
+        "activation_token": "",
+        "account_errors": [],
+        "has_config_schema": False,
+    }
 
 
 def with_package_operations(

@@ -1197,3 +1197,49 @@ async def test_shutdown_drains_after_channel_plugin_reload_and_role_deletion(
     finally:
         await service.aclose()
         await asyncio.wait_for(app.shutdown(), 3)
+
+
+@pytest.mark.asyncio
+async def test_uninstalled_external_source_lists_as_blocked_and_cannot_be_enabled(
+    tmp_path, monkeypatch
+):
+    builtin = tmp_path / "builtin"
+    package = builtin / "external_source"
+    (package / "backend").mkdir(parents=True)
+    marker = tmp_path / "imported"
+    (package / "manifest.yaml").write_text(
+        "api: 2\nid: external_source\ncapabilities: []\npackage_contract: 1\n"
+        "version: 1.0.0\nruntime_api: '>=4.0.0 <5.0.0'\nentry: backend/plugin.py\n"
+        "distribution: external\n"
+        "renderer:\n  ui: {entry: renderer/ui.mjs, css: []}\n",
+        encoding="utf-8",
+    )
+    (package / "backend/plugin.py").write_text(
+        "from pathlib import Path\n"
+        f"Path({str(marker)!r}).write_text('imported', encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "bootstrap.tools._resolve_plugin_dirs",
+        lambda workspace: [builtin, workspace / "plugins"],
+    )
+    service, path, app = await _start_service(tmp_path)
+    try:
+        [row] = (await _request(service, "plugins.list")).payload["plugins"]
+        assert row["id"] == "external_source"
+        assert row["state"] == "BLOCKED"
+        assert row["diagnostic"]["code"] == "external_not_installed"
+        assert row["can_toggle"] is False
+        assert row["renderer"] == {}
+        before = path.read_text(encoding="utf-8")
+        rejected = await _request(
+            service,
+            "plugins.setEnabled",
+            {"plugin_id": "external_source", "enabled": True, "operation_id": "on"},
+        )
+        assert rejected.error.code == "plugin_not_admitted"
+        assert path.read_text(encoding="utf-8") == before
+        assert not marker.exists()
+    finally:
+        await service.aclose()
+        await app.shutdown()

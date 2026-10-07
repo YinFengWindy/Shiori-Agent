@@ -19,7 +19,6 @@ from collections.abc import Callable
 from dataclasses import replace
 from typing import Any
 
-from agent.plugin_host.discovery import is_external_source_placeholder
 from agent.plugin_host.kernel import PluginKernel
 from agent.plugin_host.manifest import (
     ChannelDeclaration,
@@ -62,10 +61,6 @@ class RuntimeChannelListing:
         rows: list[dict[str, Any]] = []
         seen: set[str] = set()
         for record in kernel.discover():
-            # An uninstalled source declares channels nobody can provide; it
-            # must not shadow an installed plugin's channel of the same name.
-            if is_external_source_placeholder(record):
-                continue
             plugin_id = record.manifest.id
             enabled = self._enabled(record.manifest)
             state = states.get(record.candidate_id)

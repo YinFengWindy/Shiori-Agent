@@ -21,7 +21,7 @@ def _restart(env, monkeypatch, session):
 
 
 @pytest.mark.asyncio
-async def test_external_source_diagnostic_never_blocks_install_update_or_uninstall(
+async def test_external_source_remains_absent_across_package_install_update_and_uninstall(
     plugin_package_env, monkeypatch
 ):
     env = plugin_package_env
@@ -47,15 +47,9 @@ async def test_external_source_diagnostic_never_blocks_install_update_or_uninsta
             trust=PluginTrustStore(env.workspace),
         )
 
-    def source_diagnostic():
-        # Only the uninstalled source remains: a diagnostic that owns no ID.
-        [record] = inspect()
-        assert record.plugin_dir == source
-        assert record.admission.code == "external_not_installed"
-
-    source_diagnostic()
+    assert inspect() == []
     env.confirm()
-    source_diagnostic()
+    assert inspect() == []
     _restart(env, monkeypatch, "session-b")
     [installed] = inspect()
     assert installed.plugin_dir == env.target
@@ -82,9 +76,9 @@ async def test_external_source_diagnostic_never_blocks_install_update_or_uninsta
     )
     _restart(env, monkeypatch, "session-d")
     assert not env.target.exists()
-    source_diagnostic()
+    assert inspect() == []
     _restart(env, monkeypatch, "session-e")
-    source_diagnostic()
+    assert inspect() == []
     assert data.read_text(encoding="utf-8") == '{"note":"keep"}'
     assert source_manifest.read_bytes() == original_source
 

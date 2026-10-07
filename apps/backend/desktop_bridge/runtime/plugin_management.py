@@ -37,7 +37,10 @@ from bootstrap.app import AppRuntime
 from desktop_bridge.runtime.channel_listing import RuntimeChannelListing
 from desktop_bridge.runtime.plugin_trust import RuntimePluginTrust
 from desktop_bridge.runtime.plugin_packages import RuntimePluginPackages
-from desktop_bridge.runtime.plugin_package_listing import with_package_operations
+from desktop_bridge.runtime.plugin_package_listing import (
+    external_source_row,
+    with_package_operations,
+)
 from desktop_bridge.plugin_config_text import merge_plugin_table
 from desktop_bridge.runtime.apply import (
     DerivedWrite,
@@ -137,6 +140,12 @@ class RuntimePluginManagement:
                     is not None,
                 }
             )
+        # Only the roster sees uninstalled external sources; they never enter
+        # discovery, so no load, trust, package or channel path can reach them.
+        plugins.extend(
+            external_source_row(source)
+            for source in kernel.uninstalled_external_sources()
+        )
         return {"plugins": with_package_operations(plugins, self.packages.store)}
 
     async def set_enabled(

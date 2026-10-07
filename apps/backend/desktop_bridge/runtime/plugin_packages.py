@@ -8,7 +8,6 @@ import re
 
 from agent.plugin_host.package_archive import extract_package_zip
 from agent.plugin_host.diagnostics import PackageContractError
-from agent.plugin_host.discovery import is_external_source_placeholder
 from agent.plugin_host.package_fingerprint import inspect_package_content
 from desktop_bridge.runtime.apply import RuntimeApplyError
 from desktop_bridge.runtime.plugin_uninstall import schedule_plugin_uninstall
@@ -55,15 +54,10 @@ class RuntimePluginPackages:
             ) from exc
 
     def _records(self):
-        """Current package candidates; uninstalled external sources leave their ID free."""
         kernel = self.management._plugin_kernel()
         if kernel is None:
             raise ValueError("插件运行时不可用")
-        return [
-            record
-            for record in kernel.inspect_candidates()
-            if not is_external_source_placeholder(record)
-        ]
+        return kernel.inspect_candidates()
 
     def _target(self, plugin_id: str, candidate_id: str = ""):
         self.store.assert_available(plugin_id)

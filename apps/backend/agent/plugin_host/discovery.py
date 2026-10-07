@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict
+from dataclasses import dataclass
 from pathlib import Path
 
 from agent.plugin_host.diagnostics import PackageContractError, PluginDiagnostic
@@ -17,20 +18,22 @@ from agent.plugin_host.trust_store import PluginTrustStore
 
 logger = logging.getLogger(__name__)
 
-# Admission code for a host-root source package that ships only as an installable
-# ZIP. Its record is a display-only diagnostic and never a loadable candidate.
+# Diagnostic code for a host-root ``distribution: external`` source package with
+# no installed copy. The desktop maps the code to its user-facing text.
 EXTERNAL_SOURCE_CODE = "external_not_installed"
 
 
-def is_external_source_placeholder(record: PluginRecord) -> bool:
-    """Whether a record only reports an uninstalled ``distribution: external`` source.
+@dataclass(frozen=True)
+class ExternalSourceDiagnostic:
+    """A display-only report of an uninstalled external source package.
 
-    Such records occupy no plugin ID: install/update conflict checks, channel
-    listings and config migration must treat the ID as free.
+    Deliberately not a ``PluginRecord``: it has no entry, import path, trust or
+    admission, so no load, dependency, channel, trust or package path accepts it.
     """
-    return (
-        record.admission is not None and record.admission.code == EXTERNAL_SOURCE_CODE
-    )
+
+    plugin_dir: Path
+    manifest: PluginManifest
+    diagnostic: PluginDiagnostic
 
 
 def discover_plugins(
@@ -46,12 +49,9 @@ def discover_plugins(
 
     Host-owned roots are admitted by classification. Workspace packages additionally
     require persisted approval of their exact content; IDs and enable flags cannot grant it.
-    ``distribution: external`` sources under host roots are never candidates; one
-    non-loadable diagnostic is appended per such ID that no other root provides.
     """
     external = {root.absolute() for root in external_roots}
     records: list[PluginRecord] = []
-    external_sources: list[PluginRecord] = []
     seen: set[Path] = set()
     for root in roots:
         root = root.absolute()
@@ -66,10 +66,6 @@ def discover_plugins(
                 child, root, source, namespace, strict, host, trust
             )
             if record is None:
-                continue
-            if is_external_source_placeholder(record):
-                # Decided only after every root is scanned: an installed copy wins.
-                external_sources.append(record)
                 continue
             records.append(record)
     by_id: dict[str, list[PluginRecord]] = defaultdict(list)
@@ -90,13 +86,61 @@ def discover_plugins(
             )
     _check_channel_conflicts(records)
     _check_external_dependencies(records, by_id)
-    # Appended after all conflict checks so a source copy can never put a real
-    # candidate into CONFLICT; any real record with the same ID suppresses it.
-    for placeholder in external_sources:
-        if placeholder.manifest.id not in by_id:
-            by_id[placeholder.manifest.id].append(placeholder)
-            records.append(placeholder)
     return records
+
+
+def find_uninstalled_external_sources(
+    roots: list[Path],
+    *,
+    external_roots: list[Path],
+    discovered: list[PluginRecord],
+) -> list[ExternalSourceDiagnostic]:
+    """Report host-root ``distribution: external`` sources that no root provides.
+
+    ``discover_plugins`` never returns these sources. Only the plugin list asks
+    for them, so a developer sees why a checked-out source plugin is not loaded.
+    An ID already present in ``discovered`` (e.g. an installed workspace copy) and
+    repeated source copies of one ID produce no further report.
+    """
+    external = {root.absolute() for root in external_roots}
+    claimed = {record.manifest.id for record in discovered}
+    reports: list[ExternalSourceDiagnostic] = []
+    seen: set[Path] = set()
+    for root in roots:
+        root = root.absolute()
+        if root in external or root in seen or not root.is_dir():
+            continue
+        seen.add(root)
+        for child in sorted(root.iterdir()):
+            if not child.is_dir() or not child.resolve().is_relative_to(root.resolve()):
+                continue
+            try:
+                manifest = load_manifest(child)
+            except (ManifestError, PackageContractError):
+                # Invalid manifests are already diagnosed by discover_plugins.
+                continue
+            if (
+                manifest is None
+                or manifest.distribution != "external"
+                or manifest.id in claimed
+            ):
+                continue
+            claimed.add(manifest.id)
+            reports.append(
+                ExternalSourceDiagnostic(
+                    plugin_dir=child,
+                    manifest=manifest,
+                    diagnostic=PluginDiagnostic(
+                        EXTERNAL_SOURCE_CODE,
+                        "discovery",
+                        "distribution",
+                        "distribution: external 源码包未安装到工作区插件目录",
+                        str(child),
+                        "BLOCKED",
+                    ),
+                )
+            )
+    return reports
 
 
 def _check_channel_conflicts(records: list[PluginRecord]) -> None:
@@ -258,24 +302,9 @@ def _read_candidate(
         and manifest.distribution == "external"
     ):
         # Source packages may not have compiled renderer artifacts yet. Only an
-        # installed workspace copy enters package validation and trust admission;
-        # the source itself is reported as a non-loadable diagnostic.
-        return PluginRecord(
-            name=child.name,
-            plugin_dir=child,
-            entry_file=child / manifest.entry,
-            import_path=f"akasic_plugin_{namespace}_{manifest.id}",
-            manifest=manifest,
-            source=source,
-            admission=PluginDiagnostic(
-                EXTERNAL_SOURCE_CODE,
-                "discovery",
-                "distribution",
-                "外部插件，需打包为 ZIP 安装",
-                str(child),
-                "BLOCKED",
-            ),
-        )
+        # installed workspace copy enters package validation and trust admission.
+        # The plugin list reports it via find_uninstalled_external_sources.
+        return None
     if diagnostic is None and (
         source == "workspace" or "package_contract" in manifest.metadata
     ):
