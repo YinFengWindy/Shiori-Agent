@@ -142,11 +142,16 @@ class RuntimePluginManagement:
             )
         # Only the roster sees uninstalled external sources; they never enter
         # discovery, so no load, trust, package or channel path can reach them.
-        plugins.extend(
+        # Added after package operations: a queued install of the same ID (not
+        # yet in this generation's discovery) already answers the diagnostic.
+        rows = with_package_operations(plugins, self.packages.store)
+        listed = {row["id"] for row in rows}
+        rows.extend(
             external_source_row(source)
             for source in kernel.uninstalled_external_sources()
+            if source.manifest.id not in listed
         )
-        return {"plugins": with_package_operations(plugins, self.packages.store)}
+        return {"plugins": rows}
 
     async def set_enabled(
         self,

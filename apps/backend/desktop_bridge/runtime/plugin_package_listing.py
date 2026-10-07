@@ -18,6 +18,7 @@ def external_source_row(source: ExternalSourceDiagnostic) -> dict[str, Any]:
     return {
         "id": manifest.id,
         "candidate_id": str(source.plugin_dir.absolute()),
+        # Root classification (host-owned plugin root), not a loadable builtin.
         "source": "builtin",
         "directory": str(source.plugin_dir),
         "name": manifest.display_name or source.plugin_dir.name,
