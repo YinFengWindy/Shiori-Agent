@@ -8,6 +8,8 @@ export function usePetPackages({ roleId, disabled, client, onRoleDataChanged }: 
   const { pickFiles, assets } = usePluginHostServices();
   const [state, setState] = useState<PetPackages>(noPetPackages);
   const [busy, setBusy] = useState(false);
+  // The role whose first read has answered (rows or an error); until then the panel shows it is loading.
+  const [answeredRole, setAnsweredRole] = useState<string | null>(null);
   const [error, setError] = useState<Pick<HostInlineErrorProps, "message" | "detail"> | null>(null);
 
   const parse = useCallback(
@@ -32,12 +34,14 @@ export function usePetPackages({ roleId, disabled, client, onRoleDataChanged }: 
         if (!alive) return;
         setState(next);
         setError(null);
+        setAnsweredRole(roleId);
       } catch (reason) {
         if (!alive) return;
         // The previous rows are kept: a failed refresh is not evidence that the
         // packages are gone, and blanking the list would make a momentary
         // bridge hiccup look like data loss.
         setError({ message: "桌宠素材包读取失败", detail: errorMessage(reason, { includeDetail: true }) });
+        setAnsweredRole(roleId);
       }
     })();
     return () => { alive = false; };
@@ -67,8 +71,9 @@ export function usePetPackages({ roleId, disabled, client, onRoleDataChanged }: 
     if (source) await mutate("pets.import", { source });
   }), [mutate, pickFiles, run]);
 
-  const onRemove = useCallback((packageId: string) => void run("桌宠素材包删除未完成", () => mutate("pets.remove", { package_id: packageId })), [mutate, run]);
+  /** Resolves once the removal has finished, failed or not (a failure lands in `error`). */
+  const onRemove = useCallback((packageId: string) => run("桌宠素材包删除未完成", () => mutate("pets.remove", { package_id: packageId })), [mutate, run]);
   const onSelect = useCallback((packageId: string) => void run("桌宠素材包切换未完成", () => mutate("pets.select", { package_id: packageId })), [mutate, run]);
 
-  return { state, busy, error, onImport, onRemove, onSelect };
+  return { state, loading: Boolean(roleId) && answeredRole !== roleId, busy, error, onImport, onRemove, onSelect };
 }
