@@ -2,8 +2,8 @@
 
 [@yinfengwindy/shiori-sdk](https://www.npmjs.com/package/@yinfengwindy/shiori-sdk)
 and [shiori-sdk](https://pypi.org/project/shiori-sdk/) are the TypeScript and Python distributions of the
-same plugin contract. Both are version **3.1.6**, with Runtime API **3.1.6**.
-3.1.1–3.1.6 are not published yet; npm and PyPI hold 3.1.0. The commands below
+same plugin contract. Both are version **3.1.7**, with Runtime API **3.1.7**.
+3.1.1–3.1.7 are not published yet; npm and PyPI hold 3.1.0. The commands below
 install 3.1.0; APIs added since then need a wheelhouse or workspace build of
 this repository until the next publication.
 
@@ -444,12 +444,12 @@ the existing Windows Job ownership contract; no PID is adopted or killed by ID.
 
 `ManagedRuntime` retains background progress/errors, cancellation and explicit
 start/stop. `register_runtime_rpc` wires opt-in `runtime.status`, `prepare`, `start`,
-`stop`, `cancel` and (3.1.6) `remove` endpoints plus plugin drain cleanup. Providers own imported
+`stop`, `cancel`, (3.1.6) `remove` and (3.1.7) `relocate` endpoints plus plugin drain cleanup. Providers own imported
 file extensions/namespaces, models, private settings and recovery policy. They
 must declare `workspace`, `rpc`, `background`, `processes` and `runtime` capabilities.
 
 The renderer exports `ManagedRuntimePanel` and `useManagedRuntime`; the panel
-receives provider-selected import extensions and namespace and never stores
+receives provider-selected import extensions and never stores
 provider settings in the host. Leaving settings does not cancel preparation.
 Native file staging remains streamed and bounded, with generic 16 GiB per-file
 and 32 GiB per-selection ceilings; plugins still request their own smaller limits.
@@ -484,6 +484,29 @@ preparation command or an early service exit names its last meaningful line.
 `stdout` / `stderr`. `ManagedRuntimePanel` shows 「删除环境」 for a stopped,
 idle runtime that is installed or keeps a cache, behind a destructive
 `host.ui.ConfirmDialog`.
+
+Runtime API 3.1.7 lets the user choose where an environment is installed and
+imports packages in place. The provider's `root` is the *state root* (plugin
+data); it keeps `current.json`, `location.json`, locks, logs and provider files,
+so `OwnedService.root` and every service identity stay put. The *install root*
+(`Installation.install_root`, by default the state root) holds `downloads/`,
+`s/`, `v/`, the `tmp/` / `cache/` directories of `private_environment` and any
+`Installation(..., scratch=)` names; providers pass it to their build and launch
+callbacks for child temp/cache locations. `runtime.relocate {directory}` (and
+`ManagedRuntime.relocate()`) selects a dedicated `<namespace>` directory inside
+the chosen one, only while nothing is installed or kept, no task runs and the
+target holds no installation entries; the choice persists. `runtime.prepare
+{source}` takes the original absolute path from `host.pickFilePaths`: a regular
+file with an accepted suffix and, for a single artifact, its exact size. Its
+SHA-256 is verified while reading, before any build; the file is never copied,
+moved or deleted, and the build receives it in `build(staging, resources)` as
+`resources[name]` (**breaking**: builds take the verified artifact paths). A ZIP
+bundle's members are extracted into staging. The free-space check uses the
+install root's volume and counts an in-place import as 0 bytes. Status adds
+`location`, `required`, `free` and `relocatable`. Removal deletes only the
+install root's installation entries, plus a chosen dedicated directory once
+empty. `ManagedRuntimePanel` no longer takes `namespace` (**breaking**), shows
+location and space, and offers 「更改位置」 through `host.pickDirectory`.
 
 Process arguments and working directories preserve the provider's spelling:
 native Python libraries can require ordinary `sys.prefix` paths when they append

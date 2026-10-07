@@ -6,6 +6,10 @@ import { useManagedRuntime, type ManagedRuntimeStatus } from "./useManagedRuntim
 
 const phaseLabels = { stopped: "已停止", preparing: "正在准备", starting: "正在启动", removing: "正在删除", ready: "服务就绪", cancelled: "已取消", error: "操作失败" };
 
+function gib(bytes: number) {
+  return `${(bytes / 1024 ** 3).toFixed(1)} GiB`;
+}
+
 /** What a removal deletes, with the kept cache size when there is one. */
 function removalDescription(status: ManagedRuntimeStatus | null) {
   const parts = [
@@ -16,9 +20,13 @@ function removalDescription(status: ManagedRuntimeStatus | null) {
   return `${parts.join("与")}将被删除。`;
 }
 
-/** Generic controls for a plugin-owned fixed runtime; the provider supplies its import contract. */
-export function ManagedRuntimePanel({ client, host, namespace, importExtensions, disabled = false }: Pick<PluginSettingsSectionComponentProps, "client" | "host"> & {
-  namespace: string; importExtensions: string[]; disabled?: boolean;
+/**
+ * Generic controls for a plugin-owned fixed runtime; the provider supplies its import extensions.
+ * Imports are picked by original path (`host.pickFilePaths`) and never copied; the install
+ * location is picked with `host.pickDirectory` and can change only while nothing is installed.
+ */
+export function ManagedRuntimePanel({ client, host, importExtensions, disabled = false }: Pick<PluginSettingsSectionComponentProps, "client" | "host"> & {
+  importExtensions: string[]; disabled?: boolean;
 }) {
   const runtime = useManagedRuntime(client);
   const [importError, setImportError] = useState("");
@@ -29,12 +37,21 @@ export function ManagedRuntimePanel({ client, host, namespace, importExtensions,
   async function importPackage() {
     setPicking(true); setImportError("");
     try {
-      const [source] = await host.pickFiles({ namespace, multiple: false, maxFileBytes: 16 * 1024 ** 3,
+      const [source] = await host.pickFilePaths({ multiple: false, maxFileBytes: 16 * 1024 ** 3,
         filters: [{ name: "环境资源包", extensions: importExtensions }] });
       if (source) await runtime.run("prepare", source);
     } catch (cause) { setImportError(errorMessage(cause)); }
     finally { setPicking(false); }
   }
+  async function changeLocation() {
+    setPicking(true); setImportError("");
+    try {
+      const directory = await host.pickDirectory();
+      if (directory) await runtime.relocate(directory);
+    } catch (cause) { setImportError(errorMessage(cause)); }
+    finally { setPicking(false); }
+  }
+  const short = status !== null && status.free !== null && status.free < status.required;
   const error = importError || runtime.error || status?.error;
   return <section className="grid gap-3" aria-label="托管推理环境">
     {/* Status and actions share one row: status left, buttons right. */}
@@ -52,6 +69,14 @@ export function ManagedRuntimePanel({ client, host, namespace, importExtensions,
         {status && (status.installed || status.reclaimable > 0 || status.staging) ? <button type="button" className={compactGhostButtonClass} disabled={blocked || status.busy || status.running} onClick={() => setConfirmRemove(true)}>删除环境</button> : null}
       </div>
     </div>
+    {/* Location, the space a download needs and the free space on that volume. */}
+    {status ? <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+      <div className="grid min-w-0 gap-0.5 text-caption">
+        <span className="break-all text-ink-secondary" title={status.location}>安装位置：{status.location}</span>
+        <span className={short ? "text-danger-text" : "text-ink-muted"}>需要约 {gib(status.required)} · 剩余 {status.free === null ? "未知" : gib(status.free)}</span>
+      </div>
+      <button type="button" className={compactGhostButtonClass} disabled={blocked || !status.relocatable} onClick={() => void changeLocation()}>更改位置</button>
+    </div> : null}
     {status?.busy && status.total > 0 ? <div className="grid gap-1">
       <progress className="w-full" max={status.total} value={status.received} aria-label="环境准备进度" />
       <span className="text-caption text-ink-muted">{status.item} · {(status.received / 1024 ** 3).toFixed(2)} / {(status.total / 1024 ** 3).toFixed(2)} GiB</span>

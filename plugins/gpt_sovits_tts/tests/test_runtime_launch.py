@@ -10,7 +10,9 @@ from plugins.gpt_sovits_tts.backend.runtime_launch import launch_runtime
 def test_final_runtime_launch_uses_native_model_script_and_executable_paths(tmp_path):
     root = tmp_path / "workspace/plugin-data/gpt_sovits_tts/runtime"
     installation = root / "versions" / ("complete-environment-" * 5)
-    command, cwd, environment = launch_runtime(installation, 12345, "generation", root)
+    command, cwd, environment = launch_runtime(
+        installation, 12345, "generation", root, root
+    )
     app = Path(environment_path(installation)) / "app"
     assert command[0] == str(app / "runtime/python.exe")
     assert str(app / "shiori_server.py") in command

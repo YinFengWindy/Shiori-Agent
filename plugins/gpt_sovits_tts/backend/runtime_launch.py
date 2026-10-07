@@ -7,8 +7,14 @@ from shiori_sdk.managed.paths import environment_path, native_path
 from .runtime_manifest import CACHE_VARIABLES, OFFLINE_ENV, REQUIRED_FILES
 
 
-def launch_runtime(installation: Path, port: int, token: str, root: Path):
-    """Select fixed weights and loopback binding without changing external settings."""
+def launch_runtime(
+    installation: Path, port: int, token: str, root: Path, install_root: Path
+):
+    """Select fixed weights and loopback binding without changing external settings.
+
+    The configuration stays in the state ``root``; child temp/cache files go to
+    ``install_root``.
+    """
     app = native_path(installation) / "app"
     root = native_path(root)
     config = root / "tts-config.json"
@@ -47,7 +53,7 @@ def launch_runtime(installation: Path, port: int, token: str, root: Path):
         ],
         Path(environment_path(app)),
         private_environment(
-            root,
+            install_root,
             app / "runtime",
             cache_variables=CACHE_VARIABLES,
             overrides=OFFLINE_ENV,

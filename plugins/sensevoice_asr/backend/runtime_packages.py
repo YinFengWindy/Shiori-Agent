@@ -18,15 +18,19 @@ async def install_packages(
     staging: Path,
     ctx: ServicePluginContext,
     root: Path,
+    install_root: Path,
     artifacts: tuple[Artifact, ...],
 ):
-    """Build only locked sources with standard backend options and no online resolution."""
+    """Build only locked sources with standard backend options and no online resolution.
+
+    The log stays in the state ``root``; build directories go to ``install_root``.
+    """
     uv = staging / "uv.exe"
     with zipfile.ZipFile(staging / "downloads" / UV_ARCHIVE) as archive:
         with archive.open("uv.exe") as source, uv.open("wb") as destination:
             shutil.copyfileobj(source, destination)
     interpreter = staging / PYTHON_RELATIVE
-    env = runtime_environment(root, interpreter.parent)
+    env = runtime_environment(install_root, interpreter.parent)
     command = [
         environment_path(uv),
         "--no-config",
@@ -40,7 +44,7 @@ async def install_packages(
         "--no-build-isolation",
         "--require-hashes",
     ]
-    bdist = native_path(root / "b")
+    bdist = native_path(install_root / "b")
     if bdist.exists():
         shutil.rmtree(bdist)
     for index, name in enumerate(SOURCE_PACKAGES):

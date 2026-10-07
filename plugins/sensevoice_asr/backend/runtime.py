@@ -10,36 +10,48 @@ from shiori_sdk.plugin_services import ServicePluginContext
 
 from .runtime_manifest import INSTALLED_SIZE, PYTHON_RELATIVE, REVISION, resources
 from .runtime_build import build_runtime
-from .runtime_environment import runtime_environment
+from .runtime_environment import SCRATCH, runtime_environment
 from .settings import Settings, SettingsStore
 
 
 def create_runtime(ctx: ServicePluginContext, store: SettingsStore) -> ManagedRuntime:
-    """Build only inside this provider's private data, using fixed offline packages."""
+    """Build from fixed offline packages; large files follow the chosen install root.
+
+    Pointer, location, locks and logs stay in plugin data (``root``).
+    """
     root = store.root / "runtime"
     artifacts = resources()
+    installation = Installation(
+        root,
+        REVISION,
+        artifacts,
+        installed_size=INSTALLED_SIZE,
+        scratch=SCRATCH,
+    )
 
-    def launch(installation: Path, port: int, token: str):
-        installation = Path(environment_path(installation))
+    def launch(version: Path, port: int, token: str):
+        version = Path(environment_path(version))
         return (
             [
-                str(installation / PYTHON_RELATIVE),
+                str(version / PYTHON_RELATIVE),
                 "-I",
                 "-X",
                 "utf8",
-                str(installation / "server.py"),
+                str(version / "server.py"),
                 str(port),
                 token,
             ],
-            installation,
-            runtime_environment(root, installation / "p"),
+            version,
+            runtime_environment(installation.install_root, version / "p"),
         )
 
     return ManagedRuntime(
-        Installation(root, REVISION, artifacts, installed_size=INSTALLED_SIZE),
+        installation,
         OwnedService(root, ctx.processes, launch),
         ctx.background,
-        lambda staging: build_runtime(staging, ctx, root, artifacts),
+        lambda staging, _resources: build_runtime(
+            staging, ctx, root, installation.install_root, artifacts
+        ),
         lambda: store.read().connection_mode,
     )
 

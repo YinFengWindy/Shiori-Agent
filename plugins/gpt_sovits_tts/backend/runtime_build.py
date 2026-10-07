@@ -1,6 +1,7 @@
 """Provider-specific preparation of the fixed GPT-SoVITS Windows package."""
 
 import shutil
+from collections.abc import Mapping
 from pathlib import Path
 from shiori_sdk.managed.child import private_environment, run_owned
 from shiori_sdk.managed.paths import environment_path
@@ -14,20 +15,32 @@ from .runtime_manifest import (
 )
 
 
-async def build_runtime(staging: Path, ctx: ServicePluginContext, root: Path):
-    """Extract only a verified archive and check its private CUDA interpreter."""
+async def build_runtime(
+    staging: Path,
+    resources: Mapping[str, Path],
+    ctx: ServicePluginContext,
+    root: Path,
+    install_root: Path,
+):
+    """Extract only a verified archive and check its private CUDA interpreter.
+
+    The archive is read where it is: in the download cache link, or the
+    user's imported original, which is never copied. Logs stay in the state
+    ``root``; child temp/cache files go to ``install_root``.
+    """
+    tool = resources["7zr.exe"]
     env = private_environment(
-        root,
-        staging / "downloads",
+        install_root,
+        tool.parent,
         cache_variables=CACHE_VARIABLES,
         overrides=OFFLINE_ENV,
     )
     await run_owned(
         ctx.processes,
         [
-            str(staging / "downloads/7zr.exe"),
+            str(tool),
             "x",
-            str(staging / "downloads" / ARCHIVE),
+            str(resources[ARCHIVE]),
             "-o" + str(staging / "unpacked"),
             "-y",
         ],
@@ -58,12 +71,13 @@ async def build_runtime(staging: Path, ctx: ServicePluginContext, root: Path):
         ],
         cwd=Path(environment_path(app)),
         env=private_environment(
-            root,
+            install_root,
             app / "runtime",
             cache_variables=CACHE_VARIABLES,
             overrides=OFFLINE_ENV,
         ),
         log=root / "prepare.log",
     )
-    # The verified source package is not needed after its completed extraction.
+    # The staged sources (7zr.exe always, the archive unless imported in place)
+    # are not needed after the completed extraction.
     shutil.rmtree(staging / "downloads")

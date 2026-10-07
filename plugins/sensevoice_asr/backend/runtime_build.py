@@ -16,17 +16,22 @@ async def build_runtime(
     staging: Path,
     ctx: ServicePluginContext,
     root: Path,
+    install_root: Path,
     artifacts: tuple[Artifact, ...],
 ):
-    """Build from fixed local resources with package resolution and network disabled."""
+    """Build from fixed local resources with package resolution and network disabled.
+
+    Every resource is staged (downloaded or extracted from the bundle). Logs
+    stay in the state ``root``; child temp/cache files go to ``install_root``.
+    """
     with tarfile.open(staging / "downloads" / PYTHON_ARCHIVE) as archive:
         archive.extractall(staging, filter="data")
     (staging / "python").rename(staging / "p")
     interpreter = staging / PYTHON_RELATIVE
     if not interpreter.is_file():
         raise ValueError("独立 Python 包缺少 python.exe")
-    await install_packages(staging, ctx, root, artifacts)
-    env = runtime_environment(root, interpreter.parent)
+    await install_packages(staging, ctx, root, install_root, artifacts)
+    env = runtime_environment(install_root, interpreter.parent)
     shutil.move(staging / "downloads/models/sensevoice", staging / "model")
     shutil.move(staging / "downloads/models/fsmn-vad", staging / "vad")
     shutil.copyfile(

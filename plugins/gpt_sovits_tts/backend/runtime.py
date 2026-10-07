@@ -11,17 +11,29 @@ from .settings import Settings, VoiceStore
 
 
 def create_runtime(ctx: ServicePluginContext, store: VoiceStore) -> ManagedRuntime:
-    """Wire provider-owned policy to generic installation and native process ownership."""
+    """Wire provider-owned policy to generic installation and native process ownership.
+
+    State (pointer, location, locks, logs, ``tts-config.json``) stays in plugin
+    data, so the service identity ``runtime.service.root`` never moves; child
+    temp and model caches follow the chosen install root.
+    """
     root = store.root / "runtime"
+    installation = Installation(
+        root, REVISION, ARTIFACTS, installed_size=INSTALLED_SIZE
+    )
     return ManagedRuntime(
-        Installation(root, REVISION, ARTIFACTS, installed_size=INSTALLED_SIZE),
+        installation,
         OwnedService(
             root,
             ctx.processes,
-            lambda path, port, token: launch_runtime(path, port, token, root),
+            lambda path, port, token: launch_runtime(
+                path, port, token, root, installation.install_root
+            ),
         ),
         ctx.background,
-        lambda staging: build_runtime(staging, ctx, root),
+        lambda staging, resources: build_runtime(
+            staging, resources, ctx, root, installation.install_root
+        ),
         lambda: store.read().settings.connection_mode,
     )
 

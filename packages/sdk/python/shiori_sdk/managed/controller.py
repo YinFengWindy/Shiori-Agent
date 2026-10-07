@@ -2,12 +2,13 @@
 
 import asyncio
 import platform
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 from pathlib import Path
 
 from shiori_sdk.extensions import BackgroundTasks
 
-from .installation import Installation
+from .installation import Build, Installation, free_space
+from .paths import environment_path
 from .service import OwnedService, ServiceRunning
 
 # Phases that only exist while a task runs; a task cancelled before its first
@@ -47,7 +48,7 @@ class ManagedRuntime:
         installation: Installation,
         service: OwnedService,
         background: BackgroundTasks,
-        build: Callable[[Path], Awaitable[None]],
+        build: Build,
         mode: Callable[[], str],
     ):
         self.installation, self.service = installation, service
@@ -56,8 +57,11 @@ class ManagedRuntime:
         self.phase, self.error, self.item = "stopped", "", ""
         self.received = self.total = 0
         self.closed = False
-        # Kept download bytes and leftover staging, measured when no task runs.
-        self._reclaimable: tuple[int, bool] | None = None
+        # Kept download bytes, leftover staging, whether a removal has work and
+        # the space a download needs. Measured only while no task runs; a task
+        # marks it stale and status keeps the last measurement meanwhile.
+        self._footprint: tuple[int, bool, bool, int] = (0, False, True, 0)
+        self._stale = True
 
     def _running(self) -> bool:
         process = self.service.child.process
@@ -78,10 +82,16 @@ class ManagedRuntime:
         elif phase in _TRANSIENT and not busy:
             phase = "cancelled"
         if busy:
-            self._reclaimable = None
-        elif self._reclaimable is None:
-            self._reclaimable = self.installation.reclaimable()
-        reclaimable, staging = self._reclaimable or (0, False)
+            self._stale = True
+        elif self._stale:
+            self._footprint = (
+                *self.installation.reclaimable(),
+                self.installation.occupied(),
+                self.installation.required(),
+            )
+            self._stale = False
+        reclaimable, staging, occupied, required = self._footprint
+        location = self.installation.install_root
         return {
             "phase": phase,
             "error": self.error or installation_error,
@@ -95,19 +105,28 @@ class ManagedRuntime:
             # Kept downloads/staging a removal frees, also without an installation.
             "reclaimable": reclaimable,
             "staging": staging,
+            # Install root, the space a download needs and what its volume has.
+            "location": environment_path(location),
+            "required": required,
+            "free": free_space(location),
+            # Changing the location needs nothing installed or kept and no task.
+            "relocatable": not busy and not occupied,
         }
 
     def submit(
         self, action: str, source: Path | None = None, import_asset: str | None = None
     ):
-        """Accept one action; observable failures remain in status until the next action."""
+        """Accept one action; observable failures remain in status until the next action.
+
+        ``source`` is the user's original import file; it is read, never deleted.
+        """
         self._admit()
         if platform.system() != "Windows" or platform.machine().lower() not in {
             "amd64",
             "x86_64",
         }:
             raise RuntimeError("此托管环境仅支持 Windows x64")
-        self.error, self._reclaimable = "", None
+        self.error, self._stale = "", True
         self.phase = "preparing" if action == "prepare" else "starting"
         self.task = self.background.spawn(
             self._run(action, source, import_asset), name="managed-runtime"
@@ -119,9 +138,16 @@ class ManagedRuntime:
         self._admit()
         if self._running():
             raise RuntimeError("请先停止环境")
-        self.error, self.phase, self._reclaimable = "", "removing", None
+        self.error, self.phase, self._stale = "", "removing", True
         self.item, self.received, self.total = "", 0, 0
         self.task = self.background.spawn(self._remove(), name="managed-runtime")
+        return self.status()
+
+    def relocate(self, root: Path):
+        """Install future preparations under ``root``; nothing may be installed or kept."""
+        self._admit()
+        self.installation.relocate(root)
+        self.error, self._stale = "", True
         return self.status()
 
     def _admit(self) -> None:
@@ -198,9 +224,6 @@ class ManagedRuntime:
         except Exception as error:
             # This is the background-operation boundary; the settings UI polls this error.
             self.phase, self.error = "error", str(error)
-        finally:
-            if source is not None:
-                source.unlink(missing_ok=True)
 
     def _progress(self, item: str, received: int, total: int):
         self.item, self.received, self.total = item, received, total

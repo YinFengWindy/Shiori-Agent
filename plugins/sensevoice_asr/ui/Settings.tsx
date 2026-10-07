@@ -41,7 +41,7 @@ export function SenseVoiceSettingsPage({ client, host }: PluginSettingsSectionCo
           </div>
         </SettingsField>
         {draft.connection_mode === "managed" ? <SettingsField label="托管环境" layout="stack">
-          <ManagedRuntimePanel client={client} host={host} namespace="sensevoice_asr-runtime" importExtensions={["zip"]} disabled={unsettled} />
+          <ManagedRuntimePanel client={client} host={host} importExtensions={["zip"]} disabled={unsettled} />
         </SettingsField> : null}
       </SettingsGroup>
     </> : null}
