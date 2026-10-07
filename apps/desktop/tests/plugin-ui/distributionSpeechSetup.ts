@@ -1,22 +1,19 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { buildPlugin } from "../../../../scripts/build-plugin.mjs";
 import { SpeechApp, installGeneratedMicrophone } from "./distributionSpeechApp";
 import { eventually } from "./packagedApp";
 import { record } from "./packagedEvidence";
 
-/** Install real ZIPs, configure provider-owned assets and select the services through the pet UI. */
-export async function prepareSpeech(app: SpeechApp, repository: string, output: string, url: string, assets: { pet: string; reference: string }) {
-  await app.launch(); assert.equal((await app.roster()).length, 0);
+/** Enable the built-in providers, configure provider-owned assets and select the services through the pet UI. */
+export async function prepareSpeech(app: SpeechApp, url: string, assets: { pet: string; reference: string }) {
+  await app.launch();
+  const builtin = await app.roster();
+  // Both providers ship with the application and stay off on a fresh configuration.
+  assert.deepEqual(builtin.map((row) => [row.id, row.state]).sort(), [["gpt_sovits_tts", "DISABLED"], ["sensevoice_asr", "DISABLED"]]);
+  await app.evidence.add("built-in-providers-default-disabled", builtin);
   await app.settings();
-  for (const id of ["sensevoice_asr", "gpt_sovits_tts"]) {
-    const archive = await buildPlugin({ plugin: resolve(repository, "plugins", id), output });
-    await app.install(archive.archive);
-    await app.evidence.add(`installed-${id}`, archive);
-  }
-  await app.restart(); await app.settings();
-  for (const row of await app.roster()) if (row.state === "DISABLED") await app.page!.getByRole("switch", { name: `启用 ${row.display_name}`, exact: true }).click();
+  for (const row of builtin) await app.page!.getByRole("switch", { name: `启用 ${row.display_name}`, exact: true }).click();
   await app.state("ACTIVE");
   await app.pluginCall("sensevoice_asr", "settings.set", { url, device: "cpu", model: "sensevoice" });
   await app.pluginCall("gpt_sovits_tts", "settings.set", { url, version: "v2ProPlus", gpt_weights: "fixture/s1v3.ckpt", sovits_weights: "fixture/s2Gv2ProPlus.pth" });

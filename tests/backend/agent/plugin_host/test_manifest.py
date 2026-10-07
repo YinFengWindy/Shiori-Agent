@@ -404,6 +404,11 @@ def test_manifest_rejects_non_boolean_default_enabled(tmp_path, value):
         load_manifest(tmp_path)
 
 
+# 成为内置插件时就默认停用的插件：升级前从未被缺省启用，不需要升级迁移，
+# 登记进迁移反而会给旧配置写入 enabled = true（#691）。
+_DEFAULT_DISABLED_SINCE_BUILTIN = {"gpt_sovits_tts", "sensevoice_asr"}
+
+
 def test_builtin_default_disabled_plugins_match_the_upgrade_migration():
     """manifest 里默认停用的内置插件必须登记在升级迁移里，否则升级用户会被悄悄停用。"""
     from agent.plugin_default_enabled_migration import DEFAULT_DISABLED_PLUGINS
@@ -415,8 +420,16 @@ def test_builtin_default_disabled_plugins_match_the_upgrade_migration():
         for manifest in manifests
         if manifest and not manifest.default_enabled
     }
-    assert default_disabled == set(DEFAULT_DISABLED_PLUGINS)
-    assert default_disabled == {"browser_use", "computer_use", "novelai"}
+    assert not _DEFAULT_DISABLED_SINCE_BUILTIN & set(DEFAULT_DISABLED_PLUGINS)
+    assert default_disabled - _DEFAULT_DISABLED_SINCE_BUILTIN == set(
+        DEFAULT_DISABLED_PLUGINS
+    )
+    assert default_disabled == {
+        "browser_use",
+        "computer_use",
+        "novelai",
+        *_DEFAULT_DISABLED_SINCE_BUILTIN,
+    }
 
 
 def test_manifest_looks_up_one_channel_session_types(tmp_path):

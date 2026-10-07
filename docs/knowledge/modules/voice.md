@@ -36,7 +36,7 @@ related:
 
 ## 所有权与主链路
 
-桌宠插件拥有语音业务。`background/voice/input.ts` 处理按住说话、按键来源和录音时限；`controller.ts` 协调 ASR、通用聊天与当前轮次；`sentences.ts` 和 `replyAudio.ts` 负责切句、合成与播放队列。插件按当前可见角色绑定输入；关闭语音或未安装 provider 不妨碍显示、拖动和文字气泡。
+桌宠插件拥有语音业务。`background/voice/input.ts` 处理按住说话、按键来源和录音时限；`controller.ts` 协调 ASR、通用聊天与当前轮次；`sentences.ts` 和 `replyAudio.ts` 负责切句、合成与播放队列。插件按当前可见角色绑定输入；关闭语音或未启用 provider 不妨碍显示、拖动和文字气泡。
 
 宿主 `apps/desktop/src/native/` 只负责原生录音、设备枚举、单音频播放停止和全局按键 down/up 注册。隐藏音频 renderer 执行采集与播放。原生资源绑定真实调用窗口、插件通信上下文和活动实例，停用、换代、窗口重载或退出时释放。surface 使用插件自有消息传递手势，宿主不解释“按住说话”或选择 provider。
 
@@ -46,9 +46,9 @@ related:
 
 通用 `PluginServiceRegistry` 只维护插件明确公开的服务方法和生命周期。provider 通过 SDK `services` 能力注册；消费插件按 contract 动态发现，并使用精确 `{plugin_id, service_id}` 引用调用。通信层验证 owner、generation 和注册实例，不自动启用服务，也不跨 provider fallback。
 
-SDK 的 `shiori.asr.v1` 定义 `transcribe({audio_base64, format}) -> {text}`；`shiori.tts.v1` 定义 `synthesize({text, role_id, mood}) -> {audio_base64, format}`。SDK 不保存音色、参考素材、选型策略或语音状态机。`sensevoice_asr` 发布 `asr/transcribe`，`gpt_sovits_tts` 发布 `tts/synthesize`；两个插件均可独立安装、配置和测试，不依赖桌宠。
+SDK 的 `shiori.asr.v1` 定义 `transcribe({audio_base64, format}) -> {text}`；`shiori.tts.v1` 定义 `synthesize({text, role_id, mood}) -> {audio_base64, format}`。SDK 不保存音色、参考素材、选型策略或语音状态机。`sensevoice_asr` 发布 `asr/transcribe`，`gpt_sovits_tts` 发布 `tts/synthesize`；两个插件均可独立配置和测试，不依赖桌宠。
 
-SenseVoiceSmall 使用明确的 CPU / `sensevoice` 配置连接本地 FunASR HTTP 服务，设置页支持 WAV 文件转写。GPT-SoVITS 连接本机 `api_v2.py` 服务，当前支持 v2ProPlus；连接检查仅证明 API 可达，不能验证已加载模型或音质。两者只接受 loopback HTTP 地址。用户可明确选择外部服务或插件托管，模式和外部连接设置均由 provider 保存；托管失败不回退到外部地址。普通插件 ZIP 不携带大型环境或模型，固定资源在各插件内单独下载/导入。
+SenseVoiceSmall 使用明确的 CPU / `sensevoice` 配置连接本地 FunASR HTTP 服务，设置页支持 WAV 文件转写。GPT-SoVITS 连接本机 `api_v2.py` 服务，当前支持 v2ProPlus；连接检查仅证明 API 可达，不能验证已加载模型或音质。两者只接受 loopback HTTP 地址。用户可明确选择外部服务或插件托管，模式和外部连接设置均由 provider 保存；托管失败不回退到外部地址。插件本身不携带大型环境或模型，固定资源在各插件内单独下载/导入。
 
 GPT-SoVITS 私有 `voices.json` 保存服务设置、默认参考、按角色 mood 映射的参考、语言和语速，`references/` 保存不可变 WAV 副本。每次导入先校验同一份音频字节，再原子写入独立 UUID 文件；同内容的新草稿不会复用旧实例正在回收的身份，旧哈希文件名仍可读取。默认参考须在合成前保存，未映射 mood 使用该角色保存的默认参考。角色编辑器在自管面板里独立保存；试听由 UI 调用同一公共合成服务，只有当前角色/epoch 的结果才交自己的 background 播放。停止不会取消真实推理，迟到结果不得启动播放。
 
@@ -64,7 +64,7 @@ TTS 的 `EmotionReferences` 允许在空角色情绪目录下新增私有名称�
 
 健康状态的 `instance` 是 `{operation,url,state}` 标记或 `null`，state 为 `in_flight` / `unknown`，不是实例名称字符串。卸载编辑器时试听停止为 best effort，epoch 仍保证迟到合成不播放；仅通信错误中稳定的 `details.reason: context_disposed` 被视为已处置，其他失败通过宿主反馈报告。手动停止失败留在当前编辑器显示。
 
-验证分两层：插件独立测试只依赖 SDK fake 与受控 HTTP；应用级验收安装实际两个 ZIP，通过隔离 Electron 生产入口与 Python bridge 测试独立 UI 及桌宠组合链路。后者可以替换原生输入为生成 PCM、替换本机 ASR/LLM/TTS HTTP 服务，但不伪造聊天事件或绕过真实服务调用。两者都不代表真实模型音质、情绪效果或本机性能通过，真实模型验收由 #676 承担。
+验证分两层：插件独立测试只依赖 SDK fake 与受控 HTTP；应用级验收在插件页启用两个内置 provider，通过隔离 Electron 生产入口与 Python bridge 测试独立 UI 及桌宠组合链路。后者可以替换原生输入为生成 PCM、替换本机 ASR/LLM/TTS HTTP 服务，但不伪造聊天事件或绕过真实服务调用。两者都不代表真实模型音质、情绪效果或本机性能通过，真实模型验收由 #676 承担。
 
 ## 插件托管环境
 
@@ -76,9 +76,9 @@ SDK 4.2 的 `managed/` 只复用固定资源获取、校验、原子版本发布
 
 通用设置控件 `ManagedRuntimePanel` 轮询所属插件的 `runtime.*` RPC，离开页面不取消准备，取消/停止为显式动作。宿主文件选择器仍按流式大小限制暂存，通用上限为单文件 16 GiB / 批次 32 GiB。原生进程、文件选择和必要 UI 插槽之外的模型业务均不进入宿主。
 
-## 分发与安装
+## 分发
 
-两个 provider 的 manifest 均为 `distribution: external`，要求 SDK / Runtime API 4.2。仓库中的源码不参与内置后端发现、前端 registry 或冻结运行时收集。通用 `scripts/build-plugin.mjs` 将各包构建为独立 ZIP，保留 SDK/React 为宿主提供的 external，并使用已有 ZIP 安装、信任、启用、更新及卸载流程。该分类适用于所有插件，不按 provider id 特判。构建命令与服务准备见 [ASR README](../../../plugins/sensevoice_asr/README.md) 和 [TTS README](../../../plugins/gpt_sovits_tts/README.md)。
+两个 provider 是内置插件，要求 SDK / Runtime API 4.2，manifest 声明 `default_enabled: false`：新配置下默认停用，在插件页启用后出现各自设置页并可供桌宠选择。它们不在默认停用升级迁移名单中，因为此前从未作为内置插件缺省启用。源码参与内置后端发现、前端 builtin registry（`ui/index.tsx`，TTS 另有 `background/index.ts`）和冻结运行时 staging；`runtime_assets/server.py` 与锁文件随插件目录作为数据打包，经 `Path(__file__)` 解析，只在插件托管环境中执行，不作为宿主 hidden import 收集。服务准备见 [ASR README](../../../plugins/sensevoice_asr/README.md) 和 [TTS README](../../../plugins/gpt_sovits_tts/README.md)。
 
 冻结宿主同时递归收集 SDK 运行时模块，包括没有 `__init__.py` 的 `files/`，排除 `shiori_sdk.testing` 与缓存；完整 SDK 不依赖当前已安装插件的静态引用。实际 PyInstaller 参数检查 SDK/宿主/内置插件模块是否全部进入 hidden imports。`test-sdk-runtime.mjs` 使用同一 collector 构建小型冻结探针，在仓库外清除 Python 源码路径后动态导入音频、暂存和 loopback HTTP 模块，并确认 testing 不存在。
 
@@ -99,6 +99,6 @@ SDK/Runtime API **4.0** 移除了已发布的 `SurfaceHandle.voice`。桌宠要�
 - 输入、朗读与中断：先检查桌宠 `background/voice/` 和 SDK-only 测试，再查原生资源接口的调用者归属与撤销。
 - 动态 provider：检查通用 services 注册、通信 owner/generation、明确公开的方法及 provider 自己的协议；不要向宿主增加供应商分支。
 - 本地服务：检查 provider HTTP 客户端、实例租约与隔离状态、私有参考文件生命周期及共享 WAV/loopback 工具；协议替身通过不等于真实模型音质通过。
-- 外部包分发：同时检查后端 discovery、前端 builtin entries、冻结运行时 staging 与通用 ZIP builder，不能把源码存在等同于内置插件。
+- 内置分发：同时检查后端 discovery、前端 builtin entries 与冻结运行时 staging；托管环境资源须作为数据随包且不进入宿主 hidden imports。
 - 设置与角色面板：检查插件私有 RPC/文件、`VoiceSettings`、`PluginRoleUiSlot` 的身份与 dirty 生命周期；不把新数据写回角色草稿。
 - 音频与按键：检查 `src/native/`、隐藏音频 renderer、真实 sender 验证及停用/重载清理，保留 WAV 和播放输入校验。

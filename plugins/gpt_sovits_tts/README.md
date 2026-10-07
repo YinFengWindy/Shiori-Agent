@@ -19,7 +19,7 @@
 导入官方 `.7z` 时会补齐缺少的固定 7zr 小工具；这不是完全离线入口。完全离线导入使用
 普通 ZIP，根目录包含原名 `GPT-SoVITS-v2pro-20261005.7z` 和 `7zr.exe`，不要外层目录。
 每个资源仍逐一校验固定大小和 SHA-256；ZIP 自身不能修改资源清单。
-普通插件 ZIP 只带接口、UI 与准备脚本，不携带这两个资源或模型。
+插件本身只带接口、UI 与准备脚本，不携带这两个资源或模型。
 
 私有 `runtime/` 下的 `downloads/` 保留可续传资源，`s/<id>/` 只用于未完成安装，
 `v/<id>/` 保存完整版本，`current.json` 在新服务健康验证后原子切换。
@@ -68,20 +68,13 @@ runtime lease 直到真正完成；试听停止会立即停止播放并屏蔽晚
 在下次加载时清理。未保存导入素材保留到下次加载，完成状态未知时保留所有可能被
 服务读取的素材。新配置不进入宿主配置或 roles.json。
 
-## 安装与验证
+## 启用与验证
 
-要求 SDK / Runtime API 4.2，manifest 为 `distribution: external`。
-使用通用 builder 构建普通 ZIP，从插件页面安装、信任、启用、更新、停用与卸载。
-在仓库根目录构建：
-
-```sh
-node scripts/build-plugin.mjs --plugin plugins/gpt_sovits_tts --output artifacts/plugins
-```
-
-从“设置 → 插件 → 安装插件 ZIP”选择产物，确认信任并安装，重启后启用。
+要求 SDK / Runtime API 4.2。本插件随应用内置，新配置下默认停用；在“设置 → 插件”
+启用后出现设置页，并可在桌宠语音中选择。
 Python wheel 独立测试命令见[源码仓库 TESTING.md](https://github.com/YinFengWindy/Shiori-Agent/blob/main/plugins/gpt_sovits_tts/TESTING.md)。不安装大型推理依赖到宿主。
 协议、队列、取消、下载完整性及文件/进程所有权通过受控测试验证。真实打包应用的
-安装、模型试听、延迟和资源记录在对应 PR 的验收结果中单独报告。
+模型试听、延迟和资源记录在对应 PR 的验收结果中单独报告。
 
-应用级验收另以实际插件 ZIP、Electron 生产入口和 Python bridge 连接本机 HTTP 替身，
-音频使用生成的 PCM。它验证安装与真实应用接线，不等同于独立插件单测或真实模型效果。
+应用级验收另以启用的内置插件、Electron 生产入口和 Python bridge 连接本机 HTTP 替身，
+音频使用生成的 PCM。它验证启用与真实应用接线，不等同于独立插件单测或真实模型效果。

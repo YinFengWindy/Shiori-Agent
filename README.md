@@ -77,7 +77,7 @@ Shiori 以角色为中心组织人设、记忆、会话、素材与关系。你�
 
 故事、桌宠、生图和外部渠道都通过插件提供。「设置 → 插件」支持管理启停、配置和 ZIP 安装；ZIP 安装、更新与卸载在重启后生效，第三方插件首次加载需要确认信任。Browser Use 与 Computer Use 默认停用。插件开发入口见下方 SDK 文档。
 
-[SenseVoiceSmall ASR](./plugins/sensevoice_asr/README.md) 与 [GPT-SoVITS TTS](./plugins/gpt_sovits_tts/README.md) 是独立安装的本地语音 provider，标记为 `distribution: external`，不会随仓库源码自动成为内置插件。两者可独立配置和测试，也可供桌宠选择；推理服务需另行准备。
+[SenseVoiceSmall ASR](./plugins/sensevoice_asr/README.md) 与 [GPT-SoVITS TTS](./plugins/gpt_sovits_tts/README.md) 是随应用内置的本地语音 provider，默认停用，在「设置 → 插件」启用后可独立配置和测试，也可供桌宠选择；推理服务需另行准备或由插件托管。
 
 ### 数据与配置
 

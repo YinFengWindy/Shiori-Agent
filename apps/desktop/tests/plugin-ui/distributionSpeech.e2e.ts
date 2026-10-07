@@ -21,7 +21,7 @@ const app = new SpeechApp({ workspace, profile, executable }, new Evidence(outpu
 const started = async () => (await app.nativeEvents()).filter((event) => event.kind === "playback-started");
 const completed = async () => (await app.chatEvents()).filter((event) => event.method === "chat.done");
 try {
-  const pet = await prepareSpeech(app, repository, output, url, await speechAssets(repository, output));
+  const pet = await prepareSpeech(app, url, await speechAssets(repository, output));
   await app.speak(pet);
   await eventually(completed, (events) => events.length === 1, "first real chat turn committed");
   const first = await eventually(started, (events) => events.length === 1, "real native playback started");
@@ -69,7 +69,7 @@ try {
   await app.screenshot("desktop-pet-composed-speech", pet);
   const responseAudio = server.audioResponses.map(({ index, audioBase64, at }) => ({ index, at, sha256: createHash("sha256").update(Buffer.from(audioBase64, "base64")).digest("hex") }));
   await app.evidence.add("cancelled-result-discarded-and-new-turn-serialized", { requests: server.requests, responseAudio, events, history, native: await app.nativeEvents(), commands: await commands() });
-  await app.evidence.add("complete", { realModel: false, realLlm: false, realMicrophone: false, frozenRuntime: false, desktopPetEnabled: true, actualPluginZipInstall: true, actualNativeCaptureAndPlayback: true, input: "generated WebAudio MediaStream", services: "loopback HTTP protocol doubles; real ASR/TTS plugin implementations and chat dispatcher", errors: app.errors });
+  await app.evidence.add("complete", { realModel: false, realLlm: false, realMicrophone: false, frozenRuntime: false, desktopPetEnabled: true, builtinPluginsEnabled: true, actualNativeCaptureAndPlayback: true, input: "generated WebAudio MediaStream", services: "loopback HTTP protocol doubles; real ASR/TTS plugin implementations and chat dispatcher", errors: app.errors });
 } catch (error) {
   if (app.page) { await writeFile(resolve(output, "failure-dom.txt"), await app.page.locator("body").innerText(), "utf8"); await app.screenshot("failure"); }
   await writeFile(resolve(output, "failure.txt"), error instanceof Error ? error.stack ?? error.message : String(error), "utf8");
