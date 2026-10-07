@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test, type TestContext } from "node:test";
-import { act } from "react";
+import { act, useState } from "react";
 import { createFakePluginClient, deferred, mountTestComponent } from "../testing/index";
 import type { PluginRpcClient } from "../rpc";
 import { usePrivateAutosave, type PrivateAutosaveOptions } from "./usePrivateAutosave";
@@ -10,13 +10,15 @@ type Autosave = ReturnType<typeof usePrivateAutosave<Doc>>;
 
 /** Mounts the hook for one scope; `options(identity)` supplies that scope's operations. */
 async function mountAutosave(options: (identity: string) => PrivateAutosaveOptions<Doc>, identity = "settings", client: PluginRpcClient = createFakePluginClient()) {
-  const probe = { latest: undefined as unknown as Autosave };
-  function Probe({ scope }: { scope: string }) {
+  const probe = { latest: undefined as unknown as Autosave, setScope: undefined as unknown as (scope: string) => void };
+  function Probe() {
+    const [scope, setScope] = useState(identity);
+    probe.setScope = setScope;
     probe.latest = usePrivateAutosave(client, scope, options(scope));
     return null;
   }
-  const view = await mountTestComponent(<Probe scope={identity} />);
-  return { probe, view, switchTo: (scope: string) => view.render(<Probe scope={scope} />) };
+  const view = await mountTestComponent(<Probe />);
+  return { probe, view, switchTo: (scope: string) => act(async () => probe.setScope(scope)) };
 }
 
 const edit = (value: string) => () => ({ value });
@@ -72,7 +74,7 @@ test("switching scope submits the last draft to its own scope and discards that 
   assert.deepEqual(saves, [["old", "old edit"], ["next", "next edit"]]);
 });
 
-test("a failed save keeps the draft and pauses autosave until retry, which then saves the newer edit", async (t) => {
+test("a failed save keeps the draft and pauses autosave; an edit made meanwhile is kept and saved after retry resubmits the failed draft", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   const saves: string[] = []; let fail = true;
   const { probe, view } = await mountAutosave(() => ({
@@ -89,6 +91,8 @@ test("a failed save keeps the draft and pauses autosave until retry, which then 
     await act(async () => probe.latest.update(edit("second")));
     await tick(t, 400);
     assert.deepEqual(saves, ["first"], "autosave stays paused after a failure");
+    assert.equal(probe.latest.draft?.value, "second", "the paused edit is kept");
+    assert.equal(probe.latest.savePhase, "error");
 
     fail = false;
     await act(async () => probe.latest.retry());
@@ -121,7 +125,7 @@ test("a failed read never saves a default and reload reads the document again", 
   assert.deepEqual(saves, []);
 });
 
-test("a staged blur/Enter edit is saved only by commit, at once, and never on departure", async (t) => {
+test("commit saves a blur/Enter value at once without waiting for the quiet period", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   const saves: string[] = [];
   const { probe, view } = await mountAutosave(() => ({
@@ -129,14 +133,60 @@ test("a staged blur/Enter edit is saved only by commit, at once, and never on de
     save: async (doc) => { saves.push(doc.value); return doc; },
   }));
   try {
-    await act(async () => probe.latest.stage(edit("Alt+Space")));
+    await act(async () => probe.latest.commit(edit("Alt+Space")));
+    assert.deepEqual(saves, ["Alt+Space"]);
+    assert.equal(probe.latest.saved?.value, "Alt+Space");
+    await tick(t, 1000);
+    assert.deepEqual(saves, ["Alt+Space"]);
+  } finally { await view.cleanup(); }
+});
+
+test("reload drops the edit scheduled in the quiet period, so no stale save lands after the new read", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const saves: string[] = []; let reads = 0;
+  const { probe, view } = await mountAutosave(() => ({
+    load: async () => { reads += 1; return { value: `read ${reads}` }; },
+    save: async (doc) => { saves.push(doc.value); return doc; },
+  }));
+  try {
+    await act(async () => probe.latest.update(edit("stale")));
+    await tick(t, 200);
+    await act(async () => probe.latest.reload());
     await tick(t, 1000);
     assert.deepEqual(saves, []);
-    assert.equal(probe.latest.draft?.value, "Alt+Space");
-    await act(async () => probe.latest.commit());
-    assert.deepEqual(saves, ["Alt+Space"], "commit does not wait for the quiet period");
-
-    await act(async () => probe.latest.stage(edit("not-a-key")));
+    assert.equal(probe.latest.draft?.value, "read 2");
+    assert.equal(probe.latest.savePhase, "idle");
   } finally { await view.cleanup(); }
-  assert.deepEqual(saves, ["Alt+Space"]);
+  assert.deepEqual(saves, []);
+});
+
+test("reload does nothing while a save is in flight", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  let reads = 0; const write = deferred<Doc>();
+  const { probe, view } = await mountAutosave(() => ({
+    load: async () => { reads += 1; return { value: "stored" }; },
+    save: () => write.promise,
+  }));
+  try {
+    await act(async () => probe.latest.commit(edit("edited")));
+    await act(async () => probe.latest.reload());
+    assert.equal(reads, 1);
+    await act(async () => write.resolve({ value: "edited" }));
+    assert.equal(probe.latest.saved?.value, "edited");
+  } finally { await view.cleanup(); }
+});
+
+test("a scope change in the same update as a reload still submits the old scope's scheduled edit", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const saves: Array<[string, string]> = [];
+  const { probe, view } = await mountAutosave((scope) => ({
+    load: async () => ({ value: `${scope} stored` }),
+    save: async (doc) => { saves.push([scope, doc.value]); return doc; },
+  }), "old");
+  try {
+    await act(async () => probe.latest.update(edit("old edit")));
+    await act(async () => { probe.latest.reload(); probe.setScope("next"); });
+    assert.deepEqual(saves, [["old", "old edit"]]);
+    assert.equal(probe.latest.draft?.value, "next stored");
+  } finally { await view.cleanup(); }
 });

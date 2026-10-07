@@ -8,13 +8,10 @@
 export type DraftSavePhase = "idle" | "saving" | "error" | "refresh-error" | "unknown";
 
 /**
- * Outcome of one submission attempt against the backend. `resumesAutomatically`
- * names what it actually controls: whether the *next* edit the user makes is
- * enough to try again on its own (true), or whether nothing but an explicit
- * `retry()` (or a reload) will submit anything further (false). The
- * previous name, `retryable`, was backwards in practice — a `retryable:
- * false` outcome is exactly the one that can *only* move forward through
- * `retry()`; the `true` case never needs it at all.
+ * Outcome of one submission attempt against the backend. On failure,
+ * `resumesAutomatically` says whether the next edit submits again on its own
+ * (true), or whether nothing further is submitted until an explicit `retry()`
+ * or a reload (false).
  */
 export type DraftAttemptOutcome<TResult> =
   | { ok: true; result: TResult }

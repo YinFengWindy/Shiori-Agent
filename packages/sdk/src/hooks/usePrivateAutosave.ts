@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import type { PluginRpcClient } from "../rpc";
+import { useLatestRef } from "../useLatestRef";
 import {
   PrivateAutosaveSession,
   emptyPrivateAutosaveState,
@@ -22,15 +23,20 @@ type ScopedState<T extends object> = PrivateAutosaveState<T> & { session: Privat
  *
  * - `update(change)` edits the draft and saves the latest draft once edits pause
  *   (`debounceMs`); saves never overlap, and an edit made during a save is saved after it.
- * - `stage(change)` edits without scheduling a save, for a field that only takes
- *   effect on blur/Enter; `commit(change?)` then saves the draft at once. A staged
- *   edit is never saved on its own when the editor leaves.
+ * - `commit(change?)` saves at once, for a field that takes effect on blur/Enter.
+ *   Keep such a field's unvalidated text in component state and pass the
+ *   validated value to `commit`; the draft is one document, so anything written
+ *   to it is saved with the next save.
  * - Unmounting or changing `client`/`identity` submits the last scheduled draft
  *   to the scope it was edited in; late results of an earlier scope are discarded.
- * - A failed save keeps the draft, pauses autosave (`savePhase` "error",
- *   `saveError`) until `retry()`, which resubmits it and then any newer edit.
- * - A failed read leaves `draft` null with `loadError` and never saves a default;
- *   `reload()` reads again, dropping unsaved edits and any pending save.
+ * - A failed save keeps the draft and pauses autosave (`savePhase` "error",
+ *   `saveError`); edits made meanwhile are kept. `retry()` resubmits the failed
+ *   draft, then the newest edit.
+ * - A failed read leaves `draft` null with `loadError` and never saves a default.
+ *   `reload()` is meant for that state: it reads again. Once the document has
+ *   loaded it also drops unsaved edits and the scheduled save, and it does
+ *   nothing while a save is in flight, since that read could return the
+ *   document from before the save.
  *
  * `savePhase` drives `host.ui.SettingsSavedStatus`. Use `usePrivateDraft` instead
  * where the user saves explicitly.
@@ -39,47 +45,54 @@ export function usePrivateAutosave<T extends object>(client: PluginRpcClient, id
   const [state, setState] = useState<ScopedState<T>>({ ...emptyPrivateAutosaveState, session: null });
   const [reloads, setReloads] = useState(0);
   const sessionRef = useRef<PrivateAutosaveSession<T> | null>(null);
-  const optionsRef = useRef(options);
+  // The session the last cleanup retired, until the next run decides its pending work.
+  const retiringRef = useRef<PrivateAutosaveSession<T> | null>(null);
+  const latest = useLatestRef(options);
 
-  useEffect(() => {
-    optionsRef.current = options;
-    const session = sessionRef.current;
-    if (session?.client === client && session.identity === identity) session.setOperations(options);
-  });
-
-  useEffect(() => {
+  // A layout effect: its cleanup runs before `latest` adopts the next scope's
+  // operations, so a retired session keeps writing through its own.
+  useLayoutEffect(() => {
+    const retiring = retiringRef.current;
+    retiringRef.current = null;
+    if (retiring) {
+      // Only `reload` re-runs this effect for the same scope, and it drops pending
+      // work; a scope change (even together with a reload) submits it.
+      if (retiring.client === client && retiring.identity === identity) retiring.discard();
+      else retiring.end();
+    }
     if (identity === null) {
       setState({ ...emptyPrivateAutosaveState, session: null });
       return undefined;
     }
-    const { debounceMs = privateAutosaveDebounceMs } = optionsRef.current;
-    const session: PrivateAutosaveSession<T> = new PrivateAutosaveSession<T>(client, identity, optionsRef.current, (patch) => {
+    const session: PrivateAutosaveSession<T> = new PrivateAutosaveSession<T>(client, identity, latest, (patch) => {
       setState((current) => current.session === session ? { ...current, ...patch } : current);
-    }, debounceMs);
+    }, latest.current.debounceMs ?? privateAutosaveDebounceMs);
     sessionRef.current = session;
     setState({ ...emptyPrivateAutosaveState, session });
     session.load();
     return () => {
       if (sessionRef.current === session) sessionRef.current = null;
-      // A reload abandons the old session's pending work; departure submits it.
-      session.end(!session.reloading);
+      session.retire();
+      retiringRef.current = session;
     };
-  }, [client, identity, reloads]);
+  }, [client, identity, reloads, latest]);
+  // Declared after the session effect, so on unmount it runs after that cleanup.
+  useLayoutEffect(() => () => {
+    retiringRef.current?.end();
+    retiringRef.current = null;
+  }, []);
 
   const [actions] = useState(() => ({
     /** Edits the draft and saves it once edits pause. */
-    update: (change: (current: T) => T) => sessionRef.current?.edit(change, "debounced"),
-    /** Edits the draft without scheduling a save (blur/Enter fields). */
-    stage: (change: (current: T) => T) => sessionRef.current?.edit(change, "none"),
+    update: (change: (current: T) => T) => sessionRef.current?.update(change),
     /** Optionally edits, then saves the draft at once. */
-    commit: (change?: (current: T) => T) => sessionRef.current?.edit(change, "now"),
-    /** Resubmits a failed save. */
+    commit: (change?: (current: T) => T) => sessionRef.current?.commit(change),
+    /** Resubmits a failed save, then the newest edit. */
     retry: () => sessionRef.current?.retry(),
-    /** Reads the document again, discarding unsaved edits. */
+    /** Reads the document again after a failed read; see the hook's notes. */
     reload: () => {
       const session = sessionRef.current;
-      if (!session) return;
-      session.reloading = true;
+      if (!session || session.isSaving) return;
       setReloads((count) => count + 1);
     },
   }));

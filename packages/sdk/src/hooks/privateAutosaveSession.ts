@@ -38,15 +38,16 @@ function documentsEqual<T>(a: T | null, b: T | null) {
 
 /**
  * One scope's document lifecycle behind `usePrivateAutosave`: the load, the
- * edited draft, and the shared `SerialDraftQueue` that saves it. Once ended,
- * a session publishes nothing more, so late reads and saves of a previous
- * scope can never reach the next one; its operations are frozen at the last
- * render of its own scope, so a final flush still writes to that scope.
+ * edited draft, and the shared `SerialDraftQueue` that saves it. Once ended
+ * or discarded, a session publishes nothing more, so late reads and saves of
+ * a previous scope can never reach the next one. Retiring freezes its
+ * operations, so a final flush still writes to its own scope.
  */
 export class PrivateAutosaveSession<T extends object> {
-  /** Set when the user asked to read again: this session ends without submitting pending work. */
-  reloading = false;
   private active = true;
+  private discarded = false;
+  private frozen: PrivateAutosaveOperations<T> | null = null;
+  private saving = 0;
   private draft: T | null = null;
   private saved: T | null = null;
   private readonly queue: SerialDraftQueue<T, T>;
@@ -54,7 +55,8 @@ export class PrivateAutosaveSession<T extends object> {
   constructor(
     readonly client: PluginRpcClient,
     readonly identity: string,
-    private operations: PrivateAutosaveOperations<T>,
+    /** The latest render's operations, read while this scope is current. */
+    private readonly latest: { readonly current: PrivateAutosaveOperations<T> },
     private readonly publish: (patch: Partial<PrivateAutosaveState<T>>) => void,
     debounceMs: number,
   ) {
@@ -63,11 +65,16 @@ export class PrivateAutosaveSession<T extends object> {
       isEqual: documentsEqual,
       clone: cloneDocument,
       attempt: async (value) => {
+        // A discarded session must never write, even if the queue still drains.
+        if (this.discarded) return { ok: false, resumesAutomatically: false, message: "" };
+        this.saving += 1;
         try {
-          return { ok: true, result: await this.operations.save(value) };
+          return { ok: true, result: await this.operations().save(value) };
         } catch (cause) {
           // Any failed write keeps the draft and waits for an explicit retry.
           return { ok: false, resumesAutomatically: false, message: errorMessage(cause) };
+        } finally {
+          this.saving -= 1;
         }
       },
       onApplied: (stored, submitted) => {
@@ -81,15 +88,19 @@ export class PrivateAutosaveSession<T extends object> {
     });
   }
 
-  /** Follows the latest render's operations while this scope is still current. */
-  setOperations(operations: PrivateAutosaveOperations<T>) {
-    if (this.active) this.operations = operations;
+  private operations() {
+    return this.frozen ?? this.latest.current;
+  }
+
+  /** Whether a write is in flight; a re-read now could return the pre-save document. */
+  get isSaving() {
+    return this.saving > 0;
   }
 
   /** Reads the document; a failure leaves no draft, so nothing can be saved over it. */
   load() {
     this.publish({ loading: true, loadError: "" });
-    this.operations.load().then((value) => {
+    this.operations().load().then((value) => {
       if (!this.active) return;
       this.draft = cloneDocument(value);
       this.saved = cloneDocument(value);
@@ -99,29 +110,54 @@ export class PrivateAutosaveSession<T extends object> {
     });
   }
 
-  /** Replaces the draft; `save` schedules it after the quiet period or submits it at once. */
-  edit(change: ((current: T) => T) | undefined, save: "none" | "debounced" | "now") {
+  /** Applies one edit to the loaded draft; nothing happens before a successful read. */
+  private apply(change: (current: T) => T) {
     if (!this.active || this.draft === null) return;
-    if (change) {
-      const next = change(cloneDocument(this.draft));
-      if (!documentsEqual(next, this.draft)) {
-        this.draft = next;
-        this.publish({ draft: next });
-      }
+    const next = change(cloneDocument(this.draft));
+    if (!documentsEqual(next, this.draft)) {
+      this.draft = next;
+      this.publish({ draft: next });
     }
-    if (save === "none") return;
+  }
+
+  /** Edits the draft and saves the latest draft once edits pause. */
+  update(change: (current: T) => T) {
+    this.apply(change);
+    if (this.active && this.draft) this.queue.enqueue(this.draft, this.saved ?? undefined);
+  }
+
+  /** Optionally edits the draft, then submits it without waiting for the quiet period. */
+  commit(change?: (current: T) => T) {
+    if (change) this.apply(change);
+    if (!this.active || !this.draft) return;
     this.queue.enqueue(this.draft, this.saved ?? undefined);
-    if (save === "now") this.queue.flush();
+    this.queue.flush();
   }
 
   /** Resubmits the failed save, then any edit made since. */
   retry() {
-    this.queue.retry();
+    if (this.active) this.queue.retry();
   }
 
-  /** Stops publishing; `flush` submits the last pending draft to this scope first. */
-  end(flush: boolean) {
+  /**
+   * Stops publishing and accepting edits, freezing the operations of this
+   * scope; pending work waits for `end` or `discard`.
+   */
+  retire() {
     this.active = false;
-    if (flush) this.queue.flush();
+    this.frozen ??= this.latest.current;
+  }
+
+  /** Leaves the scope: submits the last scheduled draft through its own operations. */
+  end() {
+    this.retire();
+    if (!this.discarded) this.queue.flush();
+  }
+
+  /** Abandons the scope without writing: cancels the scheduled draft and any later save. */
+  discard() {
+    this.retire();
+    this.discarded = true;
+    this.queue.reset();
   }
 }

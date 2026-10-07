@@ -63,10 +63,12 @@ the plugin's draft only and does not participate in the host role transaction.
 
 Runtime API 4.3 adds `usePrivateAutosave(client, identity, { load, save, debounceMs? })`
 for plugin settings pages that save like the host's: `update` saves the latest draft
-once edits pause (400 ms by default), saves never overlap, `stage` plus `commit` serve
-blur/Enter fields, and leaving the page or switching scope submits the last scheduled
-draft. A failed save keeps the draft and pauses until `retry()`; a failed read exposes
-`loadError` and `reload()` and never writes a default. Render its `savePhase` with
+once edits pause (400 ms by default), saves never overlap, `commit` saves at once for
+blur/Enter fields (keep their unvalidated text in component state and commit only a
+valid value), and leaving the page or switching scope submits the last scheduled draft.
+A failed save keeps the draft and later edits and pauses until `retry()`; a failed read
+exposes `loadError` and `reload()` and never writes a default. `reload()` does nothing
+while a save is in flight and otherwise drops unsaved edits. Render its `savePhase` with
 `host.ui.SettingsSavedStatus` for the host's page-corner 「已保存」 mark, and lay the page
 out with the host's `SettingsGroup`, `SettingsSectionCard`, `SettingsField`,
 `SettingsToggleField`, `settingsInputClass` and `settingsGroupStackClass`. Packages
