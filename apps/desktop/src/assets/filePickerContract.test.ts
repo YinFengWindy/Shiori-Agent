@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { maxNativeFileBytes, normalizeFilePickerOptions } from "./filePickerContract";
+import { maxNativeFileBytes, normalizeFilePathPickerOptions, normalizeFilePickerOptions } from "./filePickerContract";
 
 const valid = { namespace: "sample-packages", maxFileBytes: 1024, filters: [{ name: "Packages", extensions: ["ZIP"] }] };
 
@@ -14,4 +14,12 @@ test("normalizes constrained file filters without accepting path-bearing IPC fie
     { filters: [] }, { filters: [{ name: "All", extensions: ["*"] }] },
     { filters: [{ name: "Bad", extensions: ["../zip"] }] },
   ]) assert.throws(() => normalizeFilePickerOptions({ ...valid, ...patch }), /无效|不支持/);
+});
+
+test("original-path options share the policy but carry no staging namespace", () => {
+  const { namespace, ...pathOptions } = valid;
+  assert.deepEqual(normalizeFilePathPickerOptions(pathOptions), { ...pathOptions, filters: [{ name: "Packages", extensions: ["zip"] }], multiple: false });
+  assert.throws(() => normalizeFilePathPickerOptions({ ...pathOptions, namespace }), /不支持/);
+  assert.throws(() => normalizeFilePathPickerOptions({ ...pathOptions, properties: ["openDirectory"] }), /不支持/);
+  assert.throws(() => normalizeFilePathPickerOptions({ ...pathOptions, maxFileBytes: maxNativeFileBytes + 1 }), /无效/);
 });

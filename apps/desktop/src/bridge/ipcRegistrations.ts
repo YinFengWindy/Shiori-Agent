@@ -15,7 +15,7 @@ import type { PluginUiResources } from "../plugins/uiResources.js";
 import { activePluginIds } from "../plugins/activePluginIds.js";
 import { importLocalAssets } from "../assets/localAssetImport.js";
 import type { LocalAssetRegistry } from "../assets/localAssetRegistry.js";
-import { pickNativeFiles } from "./nativeFilePicker.js";
+import { pickNativeDirectory, pickNativeFilePaths, pickNativeFiles } from "./nativeFilePicker.js";
 import { saveRoleCardExport } from "./roleCardExportSave.js";
 import { stagePickedFiles } from "../assets/pickedFileStaging.js";
 import { maxLocalAssetBytes } from "../assets/localAssetContract.js";
@@ -333,6 +333,11 @@ export function registerDesktopIpcHandlers(
   });
   host.handle("desktop:pick-files", (_event, options: unknown) =>
     pickNativeFiles(options, localAssetImportsRoot, (dialogOptions) => host.showOpenDialog(dialogOptions)));
+  // Original-path and directory picks hand back what the user chose without
+  // copying it into the imports root or granting it as media.
+  host.handle("desktop:pick-file-paths", (_event, options: unknown) =>
+    pickNativeFilePaths(options, (dialogOptions) => host.showOpenDialog(dialogOptions)));
+  host.handle("desktop:pick-directory", () => pickNativeDirectory((dialogOptions) => host.showOpenDialog(dialogOptions)));
   host.handle("desktop:open-attachment", async (_event, request: LocalAssetOpenRequest) => {
     const value = String(request?.url || request?.path || "").trim();
     return await openLocalAttachment(value);

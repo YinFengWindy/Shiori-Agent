@@ -8,7 +8,7 @@
  * map. It carries only the types that host code actually uses; plugins import
  * the same types from the main entry.
  */
-export type { NativeFilePickerOptions } from "./contract/filePicker";
+export type { NativeFilePathPickerOptions, NativeFilePickerOptions } from "./contract/filePicker";
 export type { BridgeEvent } from "./rpc";
 export type {
   SurfaceCreateResult,

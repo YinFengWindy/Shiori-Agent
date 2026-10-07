@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { access, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, it } from "node:test";
 import type { BrowserWindow, WebContents } from "electron";
 import { PluginUiResources } from "../plugins/uiResources.js";
@@ -29,6 +32,7 @@ function setup(overrides: {
   showOpenDialog?: DesktopIpcHost["showOpenDialog"];
   showSaveDialog?: DesktopIpcHost["showSaveDialog"];
   pluginUiResources?: PluginUiResources;
+  localAssetImportsRoot?: string;
 } = {}) {
   const windowCalls: WindowCall[] = [];
   const externalOpened: string[] = [];
@@ -81,7 +85,7 @@ function setup(overrides: {
       grantPath: () => null,
       resolveReference: () => null,
     },
-    localAssetImportsRoot: "imports",
+    localAssetImportsRoot: overrides.localAssetImportsRoot ?? "imports",
     openLocalAttachment: async () => ({ ok: true }),
     isSurfaceWindow,
     relaunchApp: () => { relaunches += 1; },
@@ -323,6 +327,27 @@ it("generic picker IPC forwards validated dialog options and returns cancellatio
   assert.deepEqual(dialogs, [{ properties: ["openFile", "multiSelections"], filters: options.filters }]);
   await assert.rejects(ipc.invokeHandler("desktop:pick-files", ipc.windows.main.webContents, { ...options, source: "/secret.zip" }), /不支持/);
   assert.equal(dialogs.length, 1);
+});
+
+it("original-path and directory picker IPC return the user's choice without staging it under the imports root", async () => {
+  const root = await mkdtemp(join(tmpdir(), "shiori-ipc-paths-"));
+  try {
+    const source = join(root, "runtime.7z"); await writeFile(source, "archive", "utf8");
+    const imports = join(root, "imports");
+    let answer = { canceled: false, filePaths: [source] };
+    const ipc = setup({ localAssetImportsRoot: imports, showOpenDialog: async () => answer });
+    const options = { maxFileBytes: 32, filters: [{ name: "Archives", extensions: ["7z"] }] };
+    const sender = ipc.windows.main.webContents;
+    assert.deepEqual(await ipc.invokeHandler("desktop:pick-file-paths", sender, options), [source]);
+    await assert.rejects(access(imports), { code: "ENOENT" });
+    await assert.rejects(ipc.invokeHandler("desktop:pick-file-paths", sender, { ...options, extensions: ["exe"] }), /不支持/);
+    await assert.rejects(ipc.invokeHandler("desktop:pick-file-paths", sender, { ...options, filters: [{ name: "Text", extensions: ["txt"] }] }), /类型不受支持/);
+    answer = { canceled: false, filePaths: [root] };
+    assert.equal(await ipc.invokeHandler("desktop:pick-directory", sender), root);
+    answer = { canceled: true, filePaths: [] };
+    assert.deepEqual(await ipc.invokeHandler("desktop:pick-file-paths", sender, options), []);
+    assert.equal(await ipc.invokeHandler("desktop:pick-directory", sender), null);
+  } finally { await rm(root, { recursive: true, force: true }); }
 });
 
 it("log-folder IPC only calls the fixed host action and ignores arbitrary paths", async () => {

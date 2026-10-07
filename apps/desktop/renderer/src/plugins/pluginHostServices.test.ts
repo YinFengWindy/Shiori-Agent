@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
 import { unavailableLocalAssetUrl } from "../../../src/assets/localAssetContract";
-import type { NativeFilePickerOptions } from "@yinfengwindy/shiori-sdk";
+import type { NativeFilePathPickerOptions, NativeFilePickerOptions } from "@yinfengwindy/shiori-sdk";
 import { toFileUrl } from "../shared/format";
 import { pluginHostServicesFor } from "./pluginHostServices";
 
@@ -31,6 +31,23 @@ test("the host service forwards generic native selection and preserves staging f
   assert.deepEqual(calls, [options]);
   failed = true;
   await assert.rejects(host.pickFiles(options), /staging failed/);
+});
+
+test("the host service forwards original-path and directory picks, cancellation included", async () => {
+  const options: NativeFilePathPickerOptions = { maxFileBytes: 8, filters: [{ name: "Archive", extensions: ["7z"] }] };
+  const calls: unknown[] = [];
+  let cancelled = false;
+  installDesktopApi({
+    pickFilePaths: async (request: NativeFilePathPickerOptions) => { calls.push(request); return cancelled ? [] : ["D:/packs/runtime.7z"]; },
+    pickDirectory: async () => { calls.push("directory"); return cancelled ? null : "D:/runtime"; },
+  });
+  const host = pluginHostServicesFor("sample");
+  assert.deepEqual(await host.pickFilePaths(options), ["D:/packs/runtime.7z"]);
+  assert.equal(await host.pickDirectory(), "D:/runtime");
+  cancelled = true;
+  assert.deepEqual(await host.pickFilePaths(options), []);
+  assert.equal(await host.pickDirectory(), null);
+  assert.deepEqual(calls, [options, "directory", options, "directory"]);
 });
 
 test("host.assets.url resolves a path exactly as the host's toFileUrl, placeholder included", () => {

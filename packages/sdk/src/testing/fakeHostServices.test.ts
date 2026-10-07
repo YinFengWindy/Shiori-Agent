@@ -19,6 +19,18 @@ test("the fake host records every call in order and keeps the plugin's config in
   assert.deepEqual(heard, [{ nsfw_enabled: true }]);
 });
 
+test("the fake host answers original-path and directory picks as a cancelled dialog unless replaced", async () => {
+  const options = { maxFileBytes: 1, filters: [{ name: "Archives", extensions: ["7z"] }] };
+  const cancelled = createFakeHostServices();
+  assert.deepEqual(await cancelled.host.pickFilePaths(options), []);
+  assert.equal(await cancelled.host.pickDirectory(), null);
+
+  const picked = createFakeHostServices({ pickFilePaths: async () => ["D:/packs/a.7z"], pickDirectory: async () => "D:/runtime" });
+  assert.deepEqual(await picked.host.pickFilePaths(options), ["D:/packs/a.7z"]);
+  assert.equal(await picked.host.pickDirectory(), "D:/runtime");
+  assert.deepEqual(picked.calls, [{ service: "pickFilePaths", options }, { service: "pickDirectory" }]);
+});
+
 test("a replaced save can fail, leaving the stored config and subscribers untouched", async () => {
   const fake = createFakeHostServices({ config: { preset: 0 }, saveConfig: async () => { throw new Error("preset 必须是整数"); } });
   const heard: PluginConfigValues[] = [];

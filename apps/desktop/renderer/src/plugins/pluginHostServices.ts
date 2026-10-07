@@ -18,6 +18,8 @@ const sharedPluginHostServices: Omit<PluginHostServices, "config"> = {
   },
   pickImages: (options) => window.miraDesktop.pickImages(options),
   pickFiles: (options) => window.miraDesktop.pickFiles(options),
+  pickFilePaths: (options) => window.miraDesktop.pickFilePaths(options),
+  pickDirectory: () => window.miraDesktop.pickDirectory(),
   feedback: pluginHostFeedback,
   ui: {
     InlineError: HostInlineError, ConfirmDialog: HostConfirmDialog,

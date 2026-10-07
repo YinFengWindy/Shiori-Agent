@@ -1,5 +1,6 @@
 import type {
   BridgeEvent,
+  NativeFilePathPickerOptions,
   NativeFilePickerOptions,
   PluginBackgroundSettled,
   SurfaceCreateResult,
@@ -259,6 +260,10 @@ export type DesktopApi = {
   openExternal(url: string): Promise<ExternalLinkOpenResult>;
   /** Stages a native file selection without treating arbitrary formats as media. */
   pickFiles(options: NativeFilePickerOptions): Promise<string[]>;
+  /** Returns a native file selection by original path, without copying or a media grant. */
+  pickFilePaths(options: NativeFilePathPickerOptions): Promise<string[]>;
+  /** Returns a natively selected or created directory, or `null` when cancelled. */
+  pickDirectory(): Promise<string | null>;
   /** Resolves a previously transported local path to its opaque asset URL. */
   localAssetUrl(path: string): string;
   startAttachmentDrag(request: StartAttachmentDragRequest): void;
