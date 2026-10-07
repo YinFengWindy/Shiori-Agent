@@ -21,7 +21,7 @@ export function ServiceStatusGroup({ client, host, mode, version, health, disabl
     <SettingsGroup title="服务状态">
       <SettingsField label="配置版本"><div className={cx("xl:text-right", valueClass)}>{status?.configured_version ?? version}</div></SettingsField>
       <SettingsField label="连接状态">
-        <div className="flex flex-wrap items-center gap-3 xl:justify-end">
+        <div className="flex flex-wrap items-center justify-end gap-3">
           {status ? <span role="status" className={valueClass}>{status.reachable ? "服务可达" : "服务不可达"} · {status.busy ? "正在推理" : "空闲"}</span> : null}
           <button type="button" className={compactGhostButtonClass} disabled={disabled || health.busy} onClick={() => void health.check()}>检查连接</button>
         </div>

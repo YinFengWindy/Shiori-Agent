@@ -4,10 +4,10 @@ import { compactPressableClass, cx, iconButtonClass, PetalIcon, UploadIcon, useP
 import type { PetPackageRow } from "./petPackages";
 import { usePetPackages } from "./usePetPackages";
 
-/** The 28px bordered delete tile on a package card; always shown, so keyboard and touch users reach it. */
+/** The 24px bordered delete tile on a package card; always shown, so keyboard and touch users reach it. */
 const removeButtonClass = cx(
   compactPressableClass,
-  "grid h-7 w-7 place-items-center rounded-md border border-line-soft bg-surface text-ink-secondary shadow-soft hover:border-danger/40 hover:bg-danger-soft hover:text-danger-text disabled:cursor-default disabled:opacity-50",
+  "grid h-6 w-6 place-items-center rounded-md border border-line-soft bg-surface text-ink-secondary shadow-soft hover:border-danger/40 hover:bg-danger-soft hover:text-danger-text disabled:cursor-default disabled:opacity-50",
 );
 
 type PetPackageCardProps = {
@@ -23,7 +23,7 @@ function PetPackageCard({ item, selected, locked, onSelect, onRemove }: PetPacka
   return (
     <div className={cx("relative overflow-hidden rounded-md border bg-surface", selected ? "border-accent shadow-soft" : "border-line-soft")}>
       <button
-        className="grid w-full gap-2 p-2 text-left transition-colors hover:bg-surface-hover disabled:cursor-default"
+        className="grid w-full gap-1.5 p-1.5 text-left transition-colors hover:bg-surface-hover disabled:cursor-default"
         type="button"
         disabled={locked}
         aria-pressed={selected}
@@ -34,10 +34,10 @@ function PetPackageCard({ item, selected, locked, onSelect, onRemove }: PetPacka
         </span>
         <span className="min-w-0 truncate text-caption text-ink">{item.displayName}</span>
       </button>
-      <button className={cx(removeButtonClass, "absolute right-2 top-2")} type="button" aria-label={`删除桌宠素材 ${item.displayName}`} disabled={locked} onClick={onRemove}>
-        <TrashIcon className="h-4 w-4" weight="bold" />
+      <button className={cx(removeButtonClass, "absolute right-1 top-1")} type="button" aria-label={`删除桌宠素材 ${item.displayName}`} disabled={locked} onClick={onRemove}>
+        <TrashIcon className="h-3.5 w-3.5" weight="bold" />
       </button>
-      {selected ? <CheckCircleIcon className="absolute left-2 top-2 h-5 w-5 text-accent" weight="fill" aria-label="已选中" /> : null}
+      {selected ? <CheckCircleIcon className="absolute left-1 top-1 h-4 w-4 text-accent" weight="fill" aria-label="已选中" /> : null}
     </div>
   );
 }
@@ -77,7 +77,7 @@ export function RolePetPackagesPanel({ roleId, disabled, client, onRoleDataChang
           暂无桌宠素材包
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(96px,1fr))] gap-2.5">
           {state.packages.map((item) => (
             <PetPackageCard
               key={item.id}

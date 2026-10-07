@@ -25,7 +25,7 @@ export function TranscriptionTest({ client, host }: PluginInjectedProps) {
   }
   return <SettingsGroup title="转写测试">
     <SettingsField label="WAV 文件">
-      <div className="flex xl:justify-end"><button type="button" className={compactGhostButtonClass} disabled={busy} onClick={() => void transcribe()}>{busy ? "识别中…" : "选择 WAV 并转写"}</button></div>
+      <div className="flex justify-end"><button type="button" className={compactGhostButtonClass} disabled={busy} onClick={() => void transcribe()}>{busy ? "识别中…" : "选择 WAV 并转写"}</button></div>
     </SettingsField>
     <SettingsField label="转写结果" layout="stack">
       <div className="grid gap-3">
