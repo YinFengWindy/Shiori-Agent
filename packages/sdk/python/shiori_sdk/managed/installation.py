@@ -160,6 +160,9 @@ class Installation:
             target = native_path(root)
             if target.exists() and not target.is_dir():
                 raise ValueError("安装位置不是目录")
+            if target == self.root:
+                # The state root is the default: reset, so pointers stay relative.
+                target = None
         with exclusive_file_lease(self.root / "prepare.lock"):
             try:
                 previous: Path | None = self.install_root
@@ -377,7 +380,11 @@ class Installation:
                     return
                 for layout in ("v", "versions"):
                     versions = root / layout
-                    if versions.is_dir() and not versions.is_junction():
+                    if (
+                        versions.is_dir()
+                        and not versions.is_symlink()
+                        and not versions.is_junction()
+                    ):
                         for entry in versions.iterdir():
                             if entry != current:
                                 _delete(entry)

@@ -87,6 +87,7 @@ test("removal needs a stopped runtime and a destructive confirmation", async () 
     assert.equal(removeButton.disabled, false);
     await act(async () => removeButton.click());
     assert.equal(renders.ConfirmDialog.at(-1)?.destructive, true);
+    assert.equal(renders.ConfirmDialog.at(-1)?.description, "已安装的环境将被删除。");
     assert.equal(requests.includes("runtime.remove"), false);
     const dialog = view.container.querySelector('[role="dialog"]')!;
     const confirm = Array.from(dialog.querySelectorAll("button")).find((item) => item.textContent === "删除环境")!;
@@ -107,5 +108,17 @@ test("a kept download cache can be removed without an installation", async () =>
     assert.ok(removeButton && !removeButton.disabled);
     await act(async () => removeButton.click());
     assert.match(uiRenders.ConfirmDialog.at(-1)?.description ?? "", /10\.00 GiB/);
+  } finally { await view.cleanup(); }
+});
+
+test("leftover temp and cache files alone are described as such", async () => {
+  const status: ManagedRuntimeStatus = { phase: "error", running: false, installed: false, busy: false, error: "", item: "", received: 0, total: 0, revision: "fixed", ...footprint, removable: true, relocatable: false };
+  const client = createFakePluginClient({ call: async <T,>() => status as T });
+  const { host, uiRenders } = createFakeHostServices();
+  const view = await mountTestComponent(<ManagedRuntimePanel client={client} host={host} importExtensions={["zip"]} />);
+  try {
+    const removeButton = Array.from(view.container.querySelectorAll("button")).find((item) => item.textContent === "删除环境")!;
+    await act(async () => removeButton.click());
+    assert.equal(uiRenders.ConfirmDialog.at(-1)?.description, "未完成的准备文件与缓存将被删除。");
   } finally { await view.cleanup(); }
 });

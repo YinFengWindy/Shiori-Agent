@@ -10,14 +10,14 @@ function gib(bytes: number, digits = 1) {
   return `${(bytes / 1024 ** 3).toFixed(digits)} GiB`;
 }
 
-/** What a removal deletes, with the kept cache size when there is one. */
+/** What a removal deletes, with the kept cache size when there is one; else the leftover temp/cache files. */
 function removalDescription(status: ManagedRuntimeStatus | null) {
   const parts = [
     ...(status?.installed ? ["已安装的环境"] : []),
-    status && status.reclaimable > 0 ? `下载缓存（${gib(status.reclaimable, 2)}）` : "下载缓存",
+    ...(status && status.reclaimable > 0 ? [`下载缓存（${gib(status.reclaimable, 2)}）`] : []),
     ...(status?.staging ? ["未完成的准备文件"] : []),
   ];
-  return `${parts.join("与")}将被删除。`;
+  return `${(parts.length ? parts : ["未完成的准备文件与缓存"]).join("与")}将被删除。`;
 }
 
 /**

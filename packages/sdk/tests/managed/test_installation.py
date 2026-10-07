@@ -335,3 +335,13 @@ async def test_removal_unlinks_junctions_without_entering_them(tmp_path):
     assert not (tmp_path / "runtime" / "cache").exists()
     assert (outside / "keep.bin").read_bytes() == b"keep"
     assert installer.current() is None and not installer.occupied()
+
+
+async def test_relocating_to_the_state_root_is_a_reset(tmp_path):
+    installer, source = package(tmp_path)
+    installer.relocate(tmp_path / "chosen")
+    installer.relocate(tmp_path / "runtime")
+    assert not installer.customized()
+    installer.publish(await installer.prepare(build, lambda *_: None, source=source))
+    pointer = json.loads(installer.pointer.read_text(encoding="utf-8"))
+    assert "root" not in pointer and not installer.location.exists()

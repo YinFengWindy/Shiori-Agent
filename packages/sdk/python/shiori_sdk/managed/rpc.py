@@ -19,7 +19,7 @@ def _linked(path: Path) -> bool:
     )
 
 
-def local_directory(value: object) -> Path:
+def _local_directory(value: object) -> Path:
     """An existing directory on a drive letter: no UNC or device-namespace path.
 
     Network shares and device namespaces are not install targets: a share can
@@ -100,7 +100,7 @@ def register_runtime_rpc(
     async def relocate(params: dict[str, object]):
         if params.get("directory") is None:
             return runtime.relocate(None)
-        chosen = local_directory(params["directory"])
+        chosen = _local_directory(params["directory"])
         # Choosing the dedicated directory itself does not nest another one.
         same = os.path.normcase(chosen.name) == os.path.normcase(namespace)
         return runtime.relocate(chosen if same else chosen / namespace)
