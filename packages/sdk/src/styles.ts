@@ -23,6 +23,12 @@ export const sidebarNavItemClass =
 export const inputClass =
   "w-full rounded-md border border-line bg-surface px-3.5 py-2.5 text-body text-ink transition placeholder:text-ink-faint hover:border-line-strong";
 
+/** Shared compact field styling for editable values in a settings row (`SettingsField`). */
+export const settingsInputClass = "w-full rounded-md border border-line bg-surface-soft px-2.5 py-2 text-body-sm text-ink transition placeholder:text-ink-faint hover:border-line-strong focus:bg-surface";
+
+/** Vertical rhythm between the titled groups (`SettingsGroup`) of one settings page. */
+export const settingsGroupStackClass = "grid gap-7";
+
 /** Shared textarea styling for role prompt fields. */
 export const textareaClass = cx(inputClass, "min-h-24 resize-y");
 

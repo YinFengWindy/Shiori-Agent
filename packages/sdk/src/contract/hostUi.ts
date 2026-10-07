@@ -7,6 +7,7 @@ import type { ComponentType, ReactNode } from "react";
 import type { Dialog } from "@base-ui/react/dialog";
 import type { Icon } from "@phosphor-icons/react";
 import type { AccountPendingAction, AccountSnapshot, AccountStatusView } from "../account/account";
+import type { DraftSavePhase } from "../serialDraftQueue";
 import type { PluginPersona } from "./feedback";
 
 /** Props of `host.ui.InlineError`, the host's in-page error block. */
@@ -95,6 +96,12 @@ export type AccountDetailActionsProps = { actions: AccountDetailAction[] };
 /** Props of `host.ui.Reveal`: fade + height show/hide; `className` styles the content box. */
 export type RevealProps = { show: boolean; className?: string; children: ReactNode };
 
+/**
+ * Props of `host.ui.SettingsSavedStatus` (runtime API 4.3.0): the save phase
+ * of a plugin settings section that autosaves (`usePrivateAutosave().savePhase`).
+ */
+export type HostSettingsSavedStatusProps = { phase: DraftSavePhase };
+
 /** Host components a plugin UI may render (runtime API 2.4.0; the account pieces serve `account.detail`). */
 export type PluginHostUi = {
   /** The host's in-page error block; `persona` (true or a scene key) lets 吟风 front it. */
@@ -107,4 +114,10 @@ export type PluginHostUi = {
   AccountDetailActions: ComponentType<AccountDetailActionsProps>;
   /** Fade + height show/hide for a block that comes and goes with state (QR code, progress). */
   Reveal: ComponentType<RevealProps>;
+  /**
+   * The host's 「正在保存…」/「已保存」 mark, published in the settings page corner
+   * exactly like the schema plugin config page (runtime API 4.3.0). Renders
+   * nothing outside a settings page; failures stay with the plugin's own error UI.
+   */
+  SettingsSavedStatus: ComponentType<HostSettingsSavedStatusProps>;
 };

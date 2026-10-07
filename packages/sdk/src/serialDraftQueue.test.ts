@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { setImmediate } from "node:timers/promises";
-import { SerialDraftQueue } from "./serialDraftQueue.js";
+import { SerialDraftQueue } from "./serialDraftQueue";
 
 describe("SerialDraftQueue", () => {
   it("coalesces edits made while a submission is in flight", async () => {

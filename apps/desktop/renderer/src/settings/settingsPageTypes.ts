@@ -1,4 +1,4 @@
-import type { DraftSavePhase } from "../shared/serialDraftQueue";
+import type { DraftSavePhase } from "@yinfengwindy/shiori-sdk";
 import type { SettingsFormData } from "../shared/types";
 
 /** Historical name for `DraftSavePhase`, kept for this domain's existing consumers. */

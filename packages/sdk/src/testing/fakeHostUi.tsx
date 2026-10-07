@@ -6,6 +6,7 @@ import type {
   AccountStatusCardProps,
   HostConfirmDialogProps,
   HostInlineErrorProps,
+  HostSettingsSavedStatusProps,
   PluginHostUi,
   RevealProps,
 } from "../contract/hostUi";
@@ -22,10 +23,13 @@ export type FakeHostUiRenders = { [Name in keyof PluginHostUi]: Array<ComponentP
  * its props. The account status card uses the host's own status wording.
  * `AccountDetailActions` lands in a separate element, like the host's
  * account dialog danger zone, not inside the plugin's own markup.
+ * `SettingsSavedStatus` renders in place as a `status` element carrying its
+ * phase (`data-save-phase`); it shows 「正在保存…」 while saving and leaves the
+ * host's timed 「已保存」 confirmation to `renders`.
  */
 export function createFakeHostUi() {
   const renders: FakeHostUiRenders = {
-    InlineError: [], ConfirmDialog: [], AccountStatusCard: [], AccountDetailActions: [], Reveal: [],
+    InlineError: [], ConfirmDialog: [], AccountStatusCard: [], AccountDetailActions: [], Reveal: [], SettingsSavedStatus: [],
   };
   let actionsZone: HTMLElement | null = null;
 
@@ -95,6 +99,11 @@ export function createFakeHostUi() {
     return props.show ? <div className={props.className}>{props.children}</div> : null;
   }
 
-  const ui: PluginHostUi = { InlineError, ConfirmDialog, AccountStatusCard, AccountDetailActions, Reveal };
+  function SettingsSavedStatus(props: HostSettingsSavedStatusProps) {
+    renders.SettingsSavedStatus.push(props);
+    return <span role="status" data-save-phase={props.phase}>{props.phase === "saving" ? "正在保存…" : ""}</span>;
+  }
+
+  const ui: PluginHostUi = { InlineError, ConfirmDialog, AccountStatusCard, AccountDetailActions, Reveal, SettingsSavedStatus };
   return { ui, renders, accountDetailActionsZone };
 }

@@ -65,6 +65,9 @@ export const pluginUiPeerExports: Record<string, string[]> = {
     "usePrivateDraft",
     // Runtime API 4.2.0: generic private runtime controls.
     "ManagedRuntimePanel", "useManagedRuntime",
+    // Runtime API 4.3.0 (#683): private document autosave and the settings page layout.
+    "usePrivateAutosave", "SettingsField", "SettingsGroup", "SettingsSectionCard", "SettingsToggleField",
+    "settingsGroupStackClass", "settingsInputClass",
   ],
 };
 

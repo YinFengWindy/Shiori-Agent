@@ -3,7 +3,8 @@ import { describe, it } from "node:test";
 import { act, useState } from "react";
 import { mockableWindowTimers, mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import type { SettingsSavePhase } from "./settingsPageTypes";
-import { SettingsSavedIndicator } from "./SettingsSavedIndicator";
+import { SettingsPageLayout } from "./SettingsPageLayout";
+import { SettingsSavedIndicator, SettingsSavedStatus } from "./SettingsSavedIndicator";
 import { settingsSavedIndicatorMs } from "./settingsSaveState";
 
 async function mountIndicator(showPending = false) {
@@ -66,4 +67,13 @@ it("optionally shows unsaved work without leaving the previous saved label visib
     await harness.phase("unknown");
     assert.equal(harness.visible(), false);
   } finally { await harness.view.cleanup(); }
+});
+
+it("a page that owns its autosave (host.ui.SettingsSavedStatus) reports in the settings page corner, not in its own markup", async () => {
+  const view = await mountTestComponent(<SettingsPageLayout><div data-testid="plugin-page"><SettingsSavedStatus phase="saving" /></div></SettingsPageLayout>);
+  try {
+    const indicator = view.container.querySelector('[data-testid="settings-saved-indicator"]');
+    assert.equal(indicator?.textContent, "正在保存…");
+    assert.equal(view.container.querySelector('[data-testid="plugin-page"]')?.contains(indicator), false);
+  } finally { await view.cleanup(); }
 });

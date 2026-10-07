@@ -4,26 +4,16 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { act } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import {
-  SettingsSecretInput,
-  SettingsToggleField,
-} from "./SettingsFieldPrimitives.js";
+import { SettingsSecretInput } from "./SettingsFieldPrimitives.js";
 
 describe("SettingsFieldPrimitives", () => {
-  it("renders secrets hidden and toggles with accessible state", () => {
+  it("renders secrets hidden", () => {
     const secretMarkup = renderToStaticMarkup(
       <SettingsSecretInput value="secret-value" onChange={() => undefined} />,
-    );
-    const toggleMarkup = renderToStaticMarkup(
-      <SettingsToggleField label="启用功能" checked onChange={() => undefined} />,
     );
 
     assert.match(secretMarkup, /type="password"/);
     assert.match(secretMarkup, /value="secret-value"/);
-    assert.match(toggleMarkup, /role="switch"/);
-    assert.match(toggleMarkup, /aria-checked="true"/);
-    assert.match(toggleMarkup, /aria-label="启用功能"/);
-    assert.doesNotMatch(toggleMarkup, /已启用|未启用/);
   });
 });
 

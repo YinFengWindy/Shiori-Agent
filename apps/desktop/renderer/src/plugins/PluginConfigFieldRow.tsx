@@ -1,13 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { SettingsField } from "../settings/SettingsField";
 import {
   SettingsNumberInput,
   SettingsSecretInput,
-  SettingsToggleField,
   settingsIconButtonClass,
-  settingsInputClass,
 } from "../settings/SettingsFieldPrimitives";
-import { cx, textareaClass, Select } from "@yinfengwindy/shiori-sdk";
+import { SettingsField, SettingsToggleField, cx, settingsInputClass, textareaClass, Select } from "@yinfengwindy/shiori-sdk";
 import { StringListInput } from "../shared/ui/StringListInput";
 import { readStringList, type PluginConfigField } from "./jsonSchemaForm";
 import { PluginEnvReferenceInput } from "./PluginEnvReferenceInput";

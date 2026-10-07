@@ -8,11 +8,13 @@ import { resetAppearancePrefsCache } from "../shared/useAppearancePrefs";
 let HostInlineError: typeof import("./pluginHostUi").HostInlineError;
 let HostConfirmDialog: typeof import("./pluginHostUi").HostConfirmDialog;
 let pluginHostServicesFor: typeof import("./pluginHostServices").pluginHostServicesFor;
+let SettingsSavedStatus: typeof import("../settings/SettingsSavedIndicator").SettingsSavedStatus;
 before(async () => {
   // Base UI's dialog needs a DOM before it is imported (so do the host services, which import it).
   const view = await mountTestComponent(null);
   ({ HostInlineError, HostConfirmDialog } = await import("./pluginHostUi"));
   ({ pluginHostServicesFor } = await import("./pluginHostServices"));
+  ({ SettingsSavedStatus } = await import("../settings/SettingsSavedIndicator"));
   await view.cleanup();
 });
 
@@ -33,9 +35,11 @@ describe("plugin host UI (runtime API 2.4.0)", () => {
     const { ui } = pluginHostServicesFor("demo");
     assert.equal(ui.InlineError, HostInlineError);
     assert.equal(ui.ConfirmDialog, HostConfirmDialog);
+    // The same corner 「已保存」 mark as the schema plugin config page.
+    assert.equal(ui.SettingsSavedStatus, SettingsSavedStatus);
     // The shared account detail pieces every channel's account.detail renders.
     assert.deepEqual(Object.keys(ui).sort(),
-      ["AccountDetailActions", "AccountStatusCard", "ConfirmDialog", "InlineError", "Reveal"]);
+      ["AccountDetailActions", "AccountStatusCard", "ConfirmDialog", "InlineError", "Reveal", "SettingsSavedStatus"]);
   });
 
   it("gives plugins the host inline error: plain by default, generic on true, the scene's line on a key", async () => {

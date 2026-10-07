@@ -1,10 +1,9 @@
 import { useState } from "react";
-import { Select } from "@yinfengwindy/shiori-sdk";
+import { Select, SettingsField, settingsInputClass } from "@yinfengwindy/shiori-sdk";
 import type { ModelRegistrationFormData } from "../../../src/bridge/shared";
 import { modelEffortOptions } from "../shared/modelEffortLabels";
-import { SettingsField } from "./SettingsField";
 import type { ModelConnectionTestOutcome } from "./modelConnectionTest";
-import { SettingsSecretInput, settingsInputClass } from "./SettingsFieldPrimitives";
+import { SettingsSecretInput } from "./SettingsFieldPrimitives";
 import { ModelConnectionTestAction } from "./ModelConnectionTestAction";
 import { modelCapacityErrors } from "../../../src/settingsContract.js";
 import { InlineError } from "../shared/feedback/InlineError";

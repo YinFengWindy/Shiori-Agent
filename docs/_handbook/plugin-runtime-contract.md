@@ -95,6 +95,7 @@ version whose additions it uses.
 | `3.0.0` | **breaking**: the unified Shiori SDK. `@shiori/plugin-sdk` becomes `@yinfengwindy/shiori-sdk` (no alias) and shares version and source tree `packages/sdk/` with the Python `shiori-sdk`, which owns plugin-facing Python contracts, lifecycle values and independent test fakes; every 2.x range is rejected with `incompatible_runtime` (see [Runtime API 3.0](#runtime-api-30-unified-shiori-sdk)) | #551 (#585–#591) |
 | `3.1.0` | `shiori_sdk.lifecycle` gains `AfterTurnCtx`, `PHASE_SLOTS` / `require_phase_slot` and `requires` / `produces` on the `LifecycleModule` protocol; packages importing or implementing any of them require `runtime_api: ">=3.1.0 <4.0.0"`. `shiori_sdk.runtime` owns the host's `KNOWN_CAPABILITIES` and manifest `capabilities` validation. `shiori-sdk[testing]`'s `sdk_context` grants only the plugin manifest's (validated) `capabilities` with an isolated temporary `plugin_dir`, and `FakeLifecycle` rejects unknown phase slots like the host. `shiori_sdk.runtime.HostServiceUnavailable` is raised before `setup` when a declared capability's host service is missing, so `workspace` / `session_manager` on the typed contexts are no longer optional. `shiori_sdk.redaction.summarize_llm_output_for_log` moves back to the host (`core.common.llm_output_log`); `redact_secrets` stays in the SDK. Those corrections preceded the first 3.1.0 publication on 2026-10-03 | #620, #622, #624 (#619) |
 | `4.0.0` | **breaking**: removes the published 3.1 `SurfaceHandle.voice` API and host speech business. Adds generic `services` publication/discovery/calls, pure ASR/TTS values, scoped native capture/playback/key capabilities and autonomous role UI. Desktop pet owns preferences and orchestration and requires `>=4.0.0 <5.0.0`. Other bundled plugins retain their 3.1 minimum with an audited `<5.0.0` upper bound. Existing external packages capped below 4 must explicitly migrate and declare compatibility. | #674 |
+| `4.3.0` | SDK `usePrivateAutosave` (plugin-owned document autosave on the host's serial draft queue), the host settings layout (`SettingsField`, `SettingsToggleField`, `SettingsGroup`, `SettingsSectionCard`, `settingsInputClass`, `settingsGroupStackClass`) and `host.ui.SettingsSavedStatus` (the settings page corner 「已保存」 mark); packages using any of them require `runtime_api: ">=4.3.0 <5.0.0"` | #683 (#682) |
 
 2.2 and 2.3 first ship together in the release that turns every external
 channel into a plugin (#363): no released host advertises 2.2 alone, and
@@ -258,6 +259,10 @@ failures read like the host's and can be fronted by the host mascot 吟风:
   `layout?: "row" | "strip" | "card"`, `glyph?` / `glyphTone?: "danger" |
   "accent"` (the plain glyph), `role?: "alert" | "status"`, `onDismiss?`,
   `persona?`, `className?`, `testId?`.
+- `host.ui.SettingsSavedStatus` (runtime API 4.3.0) publishes the host's
+  「正在保存…」/「已保存」 mark in the settings page corner, exactly as the schema
+  plugin config page does. Props: `phase` (`DraftSavePhase`, usually
+  `usePrivateAutosave().savePhase`). It renders nothing outside a settings page.
 
 `persona` is `boolean | "generic" | PersonaSceneKey` and defaults to `false`: a
 plugin opts in per call. `true` / `"generic"` select the surface's own generic

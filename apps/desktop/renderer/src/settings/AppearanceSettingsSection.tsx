@@ -1,6 +1,6 @@
 import { useReducedMotion } from "motion/react";
 import { updateAppearancePrefs, useAppearancePrefs } from "../shared/useAppearancePrefs";
-import { SettingsGroup, SettingsToggleField, settingsGroupStackClass } from "./SettingsFieldPrimitives";
+import { SettingsGroup, SettingsToggleField, settingsGroupStackClass } from "@yinfengwindy/shiori-sdk";
 import type { SettingsSectionEditorProps } from "./settingsPageTypes";
 
 /**

@@ -1,11 +1,5 @@
-import { Select, cx } from "@yinfengwindy/shiori-sdk";
-import { SettingsField as Field } from "./SettingsField";
-import {
-  SettingsSecretInput,
-  SettingsSectionCard,
-  SettingsToggleField,
-  settingsInputClass,
-} from "./SettingsFieldPrimitives";
+import { SettingsField as Field, SettingsSectionCard, SettingsToggleField, Select, cx, settingsInputClass } from "@yinfengwindy/shiori-sdk";
+import { SettingsSecretInput } from "./SettingsFieldPrimitives";
 import type { SettingsSectionEditorProps } from "./settingsPageTypes";
 import { getMemoryEngineOptions } from "./settingsSectionUtils";
 
