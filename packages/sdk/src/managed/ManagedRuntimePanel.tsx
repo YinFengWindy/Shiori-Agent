@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { PluginSettingsSectionComponentProps } from "../contract/uiModule";
 import { errorMessage } from "../errors";
-import { ghostButtonClass } from "../styles";
+import { compactGhostButtonClass } from "../styles";
 import { useManagedRuntime } from "./useManagedRuntime";
 
 const phaseLabels = { stopped: "已停止", preparing: "正在准备", starting: "正在启动", ready: "服务就绪", cancelled: "已取消", error: "操作失败" };
@@ -34,12 +34,12 @@ export function ManagedRuntimePanel({ client, host, namespace, importExtensions,
       <span className="text-caption text-ink-muted">{status.item} · {(status.received / 1024 ** 3).toFixed(2)} / {(status.total / 1024 ** 3).toFixed(2)} GiB</span>
     </div> : null}
     {error ? <host.ui.InlineError message={error} /> : null}
-    <div className="flex flex-wrap gap-2">
-      <button className={ghostButtonClass} disabled={blocked || !status || status.busy} onClick={() => void runtime.run("prepare")}>下载环境</button>
-      <button className={ghostButtonClass} disabled={blocked || !status || status.busy} onClick={() => void importPackage()}>导入环境包</button>
-      {status?.busy ? <button className={ghostButtonClass} disabled={blocked} onClick={() => void runtime.run("cancel")}>取消准备</button> : null}
-      {status?.installed && !status.running ? <button className={ghostButtonClass} disabled={blocked || status.busy} onClick={() => void runtime.run("start")}>启动环境</button> : null}
-      {status?.running ? <button className={ghostButtonClass} disabled={blocked || status.busy} onClick={() => void runtime.run("stop")}>停止环境</button> : null}
+    <div className="flex flex-wrap justify-end gap-2">
+      <button type="button" className={compactGhostButtonClass} disabled={blocked || !status || status.busy} onClick={() => void runtime.run("prepare")}>下载环境</button>
+      <button type="button" className={compactGhostButtonClass} disabled={blocked || !status || status.busy} onClick={() => void importPackage()}>导入环境包</button>
+      {status?.busy ? <button type="button" className={compactGhostButtonClass} disabled={blocked} onClick={() => void runtime.run("cancel")}>取消准备</button> : null}
+      {status?.installed && !status.running ? <button type="button" className={compactGhostButtonClass} disabled={blocked || status.busy} onClick={() => void runtime.run("start")}>启动环境</button> : null}
+      {status?.running ? <button type="button" className={compactGhostButtonClass} disabled={blocked || status.busy} onClick={() => void runtime.run("stop")}>停止环境</button> : null}
     </div>
   </section>;
 }

@@ -35,7 +35,7 @@ export function SenseVoiceSettingsPage({ client, host }: PluginSettingsSectionCo
       <SettingsGroup title="服务状态">
         <SettingsField label="模型"><div className={cx("xl:text-right", valueClass)}>SenseVoiceSmall · CPU</div></SettingsField>
         <SettingsField label="连接状态">
-          <div className="flex flex-wrap items-center gap-3 xl:justify-end">
+          <div className="flex flex-wrap items-center justify-end gap-3">
             {connection.health ? <span role="status" className={valueClass}>{connection.health.ready ? "服务就绪" : "服务未就绪"} · {connection.health.model} · {connection.health.device}</span> : null}
             <button type="button" className={compactGhostButtonClass} disabled={unsettled || connection.busy} onClick={() => void connection.check()}>检查连接</button>
           </div>
