@@ -7,7 +7,10 @@ import logging
 from pathlib import Path
 
 from agent.plugin_host.diagnostics import PackageContractError
-from agent.plugin_host.discovery import discover_plugins
+from agent.plugin_host.discovery import (
+    discover_plugins,
+    is_external_source_placeholder,
+)
 from agent.plugin_host.package_contract import validate_package
 from agent.plugin_host.package_fingerprint import inspect_package_content
 from agent.plugin_host.trust_store import PluginTrustStore
@@ -54,8 +57,10 @@ def _check_conflicts(store: PluginPackageStore, operation: PackageOperation) -> 
         strict=False,
         host=None,
     )
+    # An uninstalled external source is exactly what this install provides.
     if any(
         record.manifest.id == operation.plugin_id
+        and not is_external_source_placeholder(record)
         and (record.source == "builtin" or record.plugin_dir != target)
         for record in records
     ):

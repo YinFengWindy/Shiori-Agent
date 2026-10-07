@@ -15,15 +15,20 @@ def _discover(roots, external=()):
     )
 
 
-def test_external_source_is_absent_before_renderer_artifacts_are_built(
+def test_uninstalled_external_source_is_a_non_loadable_diagnostic(
     contract_package,
 ):
     path = contract_package / "manifest.yaml"
     path.write_text(
         path.read_text(encoding="utf-8") + "distribution: external\n", encoding="utf-8"
     )
+    # Without built renderer artifacts, package validation would reject the source.
     (contract_package / "renderer/ui.mjs").unlink()
-    assert _discover([contract_package.parent]) == []
+    [record] = _discover([contract_package.parent])
+    assert record.plugin_dir == contract_package
+    assert record.admission.code == "external_not_installed"
+    assert record.admission.state == "BLOCKED"
+    assert record.fingerprint is None
 
 
 @pytest.mark.parametrize("distribution", [None, "builtin", "external"])

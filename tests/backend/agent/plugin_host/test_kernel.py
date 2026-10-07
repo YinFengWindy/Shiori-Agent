@@ -9,6 +9,7 @@ import pytest
 
 from agent.plugin_host import PluginState
 from agent.plugin_host import HostServices, PluginKernel
+from agent.plugin_host.discovery import is_external_source_placeholder
 from agent.plugin_host.package_fingerprint import inspect_package_content
 from agent.plugin_host.trust_store import PluginTrustStore
 from agent.plugin_host.trusted_imports import TrustedPluginImports
@@ -301,6 +302,29 @@ async def test_invalid_yaml_is_diagnosed_without_blocking_valid_sibling(
 
 
 @pytest.mark.asyncio
+async def test_uninstalled_external_source_is_blocked_and_never_imported(
+    contract_package,
+):
+    path = contract_package / "manifest.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8") + "distribution: external\n", encoding="utf-8"
+    )
+    (contract_package / "backend/plugin.py").write_text(
+        "raise RuntimeError('source copy must not be imported')\n", encoding="utf-8"
+    )
+    kernel = make_kernel([contract_package.parent], event_bus=EventBus())
+    try:
+        await kernel.load_all()
+        assert not await kernel.load("external_demo")
+        [state] = kernel.states()
+        assert state["state"] == "BLOCKED"
+        assert state["diagnostic"]["code"] == "external_not_installed"
+        assert kernel.loaded_count == 0
+    finally:
+        await kernel.terminate_all(force=True)
+
+
+@pytest.mark.asyncio
 async def test_force_cleanup_recovers_effects_after_rollback_is_cancelled(tmp_path):
     package = tmp_path / "waiting"
     (package / "backend").mkdir(parents=True)
@@ -369,10 +393,18 @@ def test_discover_finds_all_top_level_plugins():
     plugins_dir = REPOSITORY_ROOT / "plugins"
     kernel = make_kernel([plugins_dir], event_bus=EventBus())
 
-    records = kernel.discover()
+    discovered = kernel.discover()
+    # External-distribution sources are listed only as install diagnostics.
+    records = [
+        record for record in discovered if not is_external_source_placeholder(record)
+    ]
     names = {record.name for record in records}
 
     assert names == _EXPECTED_TOP_LEVEL_PLUGINS
+    assert {record.name for record in discovered} - names == {
+        "gpt_sovits_tts",
+        "sensevoice_asr",
+    }
     assert (
         next(
             record for record in records if record.name == "desktop_pet"

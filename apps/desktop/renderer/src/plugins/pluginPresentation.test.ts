@@ -44,6 +44,10 @@ describe("pluginPresentation", () => {
       pluginProblem(plugin({ state: "BLOCKED", diagnostic: { code: "missing_dependency", stage: "dependencies", field: "dependencies", reason: "x", path: "", state: "BLOCKED" } })),
       "无法加载：缺少它依赖的插件",
     );
+    assert.equal(
+      pluginProblem(plugin({ state: "BLOCKED", diagnostic: { code: "external_not_installed", stage: "discovery", field: "distribution", reason: "x", path: "", state: "BLOCKED" } })),
+      "无法加载：外部插件，需打包为 ZIP 安装",
+    );
     assert.equal(pluginProblem(plugin({ rendererError: "boom" })), "界面加载失败");
     assert.equal(pluginProblem(plugin({ state: "UNTRUSTED", error: "外部插件尚未获得信任" })), null);
     assert.equal(pluginProblem(plugin({ state: "DISABLED", error: "trust saved", trustPendingRestart: true })), null);

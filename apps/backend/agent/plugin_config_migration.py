@@ -7,7 +7,10 @@ from typing import Any
 
 from agent.plugin_host.plugin_data import migrate_plugin_file, remove_migrated_source
 from shiori_sdk.storage import plugin_data_dir
-from agent.plugin_host.discovery import discover_plugins
+from agent.plugin_host.discovery import (
+    discover_plugins,
+    is_external_source_placeholder,
+)
 from bootstrap.paths import REPOSITORY_ROOT, plugin_roots
 from shiori_sdk.files.json import atomic_save_json
 from shiori_sdk.files.text import atomic_save_text
@@ -20,13 +23,18 @@ _MARKER = "plugin_config.migrated.json"
 def _legacy_sources(workspace: Path) -> dict[str, list[Path]]:
     """Uses installed manifests for identity without executing any plugin code."""
     external_root = workspace / "plugins"
-    records = discover_plugins(
-        [*plugin_roots(), external_root],
-        external_roots=[external_root],
-        namespace="config_migration",
-        strict=False,
-        host=None,
-    )
+    # Uninstalled external sources are not packages and own no plugin ID.
+    records = [
+        record
+        for record in discover_plugins(
+            [*plugin_roots(), external_root],
+            external_roots=[external_root],
+            namespace="config_migration",
+            strict=False,
+            host=None,
+        )
+        if not is_external_source_placeholder(record)
+    ]
     package_directories = {record.plugin_dir.absolute() for record in records}
     canonical_ids = {record.manifest.id for record in records}
     directory_identities: dict[str, set[str]] = {}

@@ -17,6 +17,21 @@ from agent.plugin_host.trust_store import PluginTrustStore
 
 logger = logging.getLogger(__name__)
 
+# Admission code for a host-root source package that ships only as an installable
+# ZIP. Its record is a display-only diagnostic and never a loadable candidate.
+EXTERNAL_SOURCE_CODE = "external_not_installed"
+
+
+def is_external_source_placeholder(record: PluginRecord) -> bool:
+    """Whether a record only reports an uninstalled ``distribution: external`` source.
+
+    Such records occupy no plugin ID: install/update conflict checks, channel
+    listings and config migration must treat the ID as free.
+    """
+    return (
+        record.admission is not None and record.admission.code == EXTERNAL_SOURCE_CODE
+    )
+
 
 def discover_plugins(
     roots: list[Path],
@@ -31,9 +46,12 @@ def discover_plugins(
 
     Host-owned roots are admitted by classification. Workspace packages additionally
     require persisted approval of their exact content; IDs and enable flags cannot grant it.
+    ``distribution: external`` sources under host roots are never candidates; one
+    non-loadable diagnostic is appended per such ID that no other root provides.
     """
     external = {root.absolute() for root in external_roots}
     records: list[PluginRecord] = []
+    external_sources: list[PluginRecord] = []
     seen: set[Path] = set()
     for root in roots:
         root = root.absolute()
@@ -48,6 +66,10 @@ def discover_plugins(
                 child, root, source, namespace, strict, host, trust
             )
             if record is None:
+                continue
+            if is_external_source_placeholder(record):
+                # Decided only after every root is scanned: an installed copy wins.
+                external_sources.append(record)
                 continue
             records.append(record)
     by_id: dict[str, list[PluginRecord]] = defaultdict(list)
@@ -68,6 +90,12 @@ def discover_plugins(
             )
     _check_channel_conflicts(records)
     _check_external_dependencies(records, by_id)
+    # Appended after all conflict checks so a source copy can never put a real
+    # candidate into CONFLICT; any real record with the same ID suppresses it.
+    for placeholder in external_sources:
+        if placeholder.manifest.id not in by_id:
+            by_id[placeholder.manifest.id].append(placeholder)
+            records.append(placeholder)
     return records
 
 
@@ -230,8 +258,24 @@ def _read_candidate(
         and manifest.distribution == "external"
     ):
         # Source packages may not have compiled renderer artifacts yet. Only an
-        # installed workspace copy enters package validation and trust admission.
-        return None
+        # installed workspace copy enters package validation and trust admission;
+        # the source itself is reported as a non-loadable diagnostic.
+        return PluginRecord(
+            name=child.name,
+            plugin_dir=child,
+            entry_file=child / manifest.entry,
+            import_path=f"akasic_plugin_{namespace}_{manifest.id}",
+            manifest=manifest,
+            source=source,
+            admission=PluginDiagnostic(
+                EXTERNAL_SOURCE_CODE,
+                "discovery",
+                "distribution",
+                "外部插件，需打包为 ZIP 安装",
+                str(child),
+                "BLOCKED",
+            ),
+        )
     if diagnostic is None and (
         source == "workspace" or "package_contract" in manifest.metadata
     ):
