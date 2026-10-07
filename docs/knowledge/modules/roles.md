@@ -2,13 +2,18 @@
 title: 角色、关系、心情与素材
 kind: 领域说明
 status: 当前有效
-last_verified_commit: 5ed016f2
+last_verified_commit: bdfdae59
 source_paths:
   - apps/backend/core/roles/store.py
   - apps/backend/core/roles/models.py
   - apps/backend/core/roles/manifest.py
   - apps/backend/core/roles/assets.py
-  - apps/backend/core/roles/binding_policy.py
+  - apps/backend/core/roles/extensions.py
+  - apps/backend/core/roles/migration.py
+  - apps/backend/core/roles/card_import/
+  - apps/backend/core/roles/card_export/
+  - apps/backend/core/accounts/
+  - apps/backend/core/identity/
   - plugins/desktop_pet/backend/pet_state.py
   - plugins/desktop_pet/backend/pet_packages.py
   - apps/backend/core/roles/services.py
@@ -27,9 +32,9 @@ related:
 
 ## 模块边界
 
-`RoleStore` 是兼容 facade：`RoleManifestRepository` 负责版本化 JSON 清单的校验、持久化和进程内锁，`RoleAssetStore` 负责素材文件、路径安全与分类，`RoleBindingPolicy` 负责渠道会话类型和主动推送候选会话不变量（群黑名单只允许出现在群聊绑定上，由绑定模型自身校验），宿主角色数据契约集中在 `models.py`。桌宠插件的 `RolePetStateStore` 负责选择与单启用状态；桌宠和 NovelAI 各自拥有 `roles.json` 的不透明插件命名空间，通过 `RoleExtensions` 和角色字段一起原子保存，宿主业务模型不包含插件字段。`RoleAggregateService` 和相关 service 提供角色聚合业务入口，`RoleRuntimeRegistry` 将持久化角色装配为角色运行时。桌面端、渠道和主动能力应调用这些服务，不应各自读写角色文件。
+`RoleStore` 是兼容 facade：`RoleManifestRepository` 负责版本化 JSON 清单（当前 v9，旧版本与旧字段由 `migration.py` 归一）的校验、持久化和进程内锁，`RoleAssetStore` 负责素材文件、路径安全与分类，宿主角色数据契约集中在 `models.py`。旧的角色渠道绑定与 `RoleBindingPolicy` 已退役：渠道账号记录与凭据归渠道插件，`RoleStore.accounts`（`core/accounts/` 的 `AccountRegistry`）只是已加载插件登记账号的内存索引；`RoleStore.identities`（`core/identity/` 的 `UserIdentityStore`）保存桌面用户在各渠道的已绑定身份，`RoleStore.avatars` 缓存渠道头像。桌宠插件的 `RolePetStateStore` 负责选择与单启用状态；桌宠和 NovelAI 各自拥有 `roles.json` 的不透明插件命名空间，通过 `RoleExtensions` 和角色字段一起原子保存，宿主业务模型不包含插件字段。`RoleAggregateService` 和相关 service 提供角色聚合业务入口，`RoleRuntimeRegistry` 将持久化角色装配为角色运行时。桌面端、渠道和主动能力应调用这些服务，不应各自读写角色文件。
 
-角色能力包含基本设定、渠道绑定、工作区、素材、心情相关配置和运行时关系状态。角色素材既被桌面管理页使用，也可能进入提示词、场景和图片生成流程。
+角色能力包含基本设定、所属渠道账号、工作区、素材、心情相关配置和运行时关系状态。`card_import/` 预览 JSON、PNG、CharX 等角色卡格式（只解析，不直接创建角色或复制素材），`card_export/` 把白名单角色字段导出为 CCv3 文件；桥接层的 `role_card_import_service.py` / `role_card_export_service.py` 负责落地。角色素材既被桌面管理页使用，也可能进入提示词、场景和图片生成流程。
 
 素材页只管理已有素材与手动心情绑定；一键生成差分及其 RPC 已移除。自动场景 CG 偏好由 NovelAI 插件的角色设置扩展管理，停用时隐藏控件并保留配置。
 
@@ -39,8 +44,8 @@ related:
 
 ## 修改影响
 
-- 修改角色 schema：同步检查 `models.py` 序列化、manifest 迁移、桌面共享类型、表单适配、渠道绑定和角色运行时装配。
-- 修改角色删除：检查会话、对话线程、关系状态、记忆、调度任务、工作区和素材清理。
+- 修改角色 schema：同步检查 `models.py` 序列化、manifest 迁移（`migration.py` 的 `CURRENT_MANIFEST_VERSION`）、桌面共享类型、表单适配、角色卡导入导出和角色运行时装配。
+- 修改角色删除：检查会话、对话线程、关系状态、记忆、调度任务、工作区、素材、角色账号（账号删除会同步清理身份绑定）及插件命名空间（插件收到角色删除事件后自行清理）。
 - 修改心情或关系：检查主动触发条件、提示词装配、场景判断和桌面展示。
 - 修改素材分类：检查角色素材页、选择器、图片提示词与本地资源传输。
 - 导入桌宠素材包：`pet.json` 的预览图字段兼容可选；提供 `previewPath` 时仍校验并保存预览图。
@@ -48,5 +53,5 @@ related:
 ## 不变量
 
 - 业务入口显式携带 `role_id`。
-- 角色身份与渠道账号绑定分离；渠道标识不能替代角色主键。
+- 角色身份与渠道账号分离；渠道标识和账号 ID 不能替代角色主键。
 - 运行时派生状态不应反向覆盖角色持久化定义，除非经过 owning service。
