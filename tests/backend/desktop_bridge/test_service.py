@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import nullcontext
 from conversation.listening import GroupListeningControl
 from conversation.service import ConversationService
 from datetime import datetime
@@ -23,7 +24,7 @@ from bus.event_bus import EventBus
 from bus.events_lifecycle import ProactiveMessageCommitted
 from shiori_sdk.role_events import RoleDeleted
 from shiori_sdk.memory.committed import TurnCommitted
-from agent.turns.turn_pushes import current_turn_pushes
+from agent.turns.turn_pushes import TurnPushDrafts, current_turn_pushes
 from conversation.push_sync import ExternalPushSyncService
 from conversation.service import LegacySessionDescriptor
 from shiori_sdk.channels.threads import network_thread_id
@@ -35,6 +36,70 @@ from desktop_bridge.service import DesktopBridgeService
 from session.manager import SessionManager
 from core.memory.group_environment import GroupEnvironment
 from tests.support.scheduler import make_job
+
+
+@pytest.mark.parametrize(
+    "intents", [(False,), (True, False), (False, True), (False, False)]
+)
+@pytest.mark.parametrize("queued", [False, True])
+async def test_desktop_push_intent_survives_direct_and_queued_delivery(
+    tmp_path, intents, queued
+):
+    roles = RoleStore(tmp_path)
+    roles.create_role(role_id="mira", name="Mira", system_prompt="test")
+    sessions = SessionManager(tmp_path)
+    session = sessions.open_role_session("mira", role_name="Mira")
+    bus = EventBus()
+    push = MessagePushTool(event_bus=bus)
+    presence = Mock()
+    relationship = Mock()
+    relationship.enrich_session_metadata.side_effect = lambda metadata: metadata
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=roles,
+        session_manager=sessions,
+        group_listening=GroupListeningControl(
+            ConversationService(sessions), lambda _channel: False
+        ),
+        group_environment=GroupEnvironment(tmp_path, sessions.conversation_store),
+        agent_loop=SimpleNamespace(),
+        event_bus=bus,
+        push_tool=push,
+        presence=presence,
+    )
+    service.app_service.relationship_runtime = relationship
+    emitted = []
+    service.add_event_listener(emitted.append)
+    drafts = TurnPushDrafts(session.key)
+    try:
+        with drafts.collect() if queued else nullcontext():
+            for index, proactive in enumerate(intents):
+                await push.execute(
+                    channel="desktop",
+                    chat_id=session.key,
+                    image=f"cg-{index}.png",
+                    push_proactive=proactive,
+                )
+        if queued:
+            assert session.messages == []
+            assert emitted == []
+            presence.record_proactive_sent.assert_not_called()
+            await sessions.append_messages(
+                session, drafts.messages, pending_messages=True
+            )
+            await drafts.committed()
+            await drafts.committed()
+        else:
+            assert [e["payload"]["message"]["id"] for e in emitted] == [
+                message["id"] for message in session.messages
+            ]
+
+        assert [m["proactive"] for m in session.messages] == list(intents)
+        expected_calls = int(any(intents)) if queued else sum(intents)
+        assert presence.record_proactive_sent.call_count == expected_calls
+        assert relationship.handle_proactive_sent.call_count == expected_calls
+    finally:
+        await service.aclose()
 
 
 @pytest.mark.parametrize("delivery_key", ["", "missing"])
