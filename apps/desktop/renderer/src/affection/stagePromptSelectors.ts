@@ -54,3 +54,11 @@ export function stagePromptRows(stages: readonly AffectionStagePrompt[], texts: 
     return { stage: item.stage, text, overridden: isStagePromptOverride(text, item.default) };
   });
 }
+
+/**
+ * The stage whose field shows: the one picked, else `preferred` (the role's
+ * current stage), else the lowest. Undefined only when there are no rows.
+ */
+export function selectedStagePromptRow(rows: readonly StagePromptRow[], picked: string | null, preferred?: string | null) {
+  return rows.find((row) => row.stage === picked) ?? rows.find((row) => row.stage === preferred) ?? rows[0];
+}

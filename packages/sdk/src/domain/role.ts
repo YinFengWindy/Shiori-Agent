@@ -47,6 +47,12 @@ export type AffectionSummary = {
   value: number;
   stage: AffectionStageName;
   progress: number;
+  /**
+   * The stage floor the value can no longer drop below (the start of the
+   * highest stage reached from 「熟悉」 up); null while there is none.
+   * Runtime API 3.1.16.
+   */
+  floor: number | null;
 };
 
 /** Role data returned by the desktop bridge. */

@@ -162,10 +162,18 @@ class AffectionState:
         return asdict(self)
 
     def summary(self) -> dict[str, Any]:
-        """对外展示的好感摘要：数值、阶段名与阶段内进度（0–1）。"""
+        """对外展示的好感摘要：数值、阶段名、阶段内进度（0–1）与阶段下限。
+
+        ``floor`` 即 ``stage_floor``：好感不会再低于的值，没有下限时为 ``None``。
+        """
         stage = affection_stage(self.value)
         progress = (self.value - stage.lower) / (stage.upper - stage.lower)
-        return {"value": self.value, "stage": stage.name, "progress": progress}
+        return {
+            "value": self.value,
+            "stage": stage.name,
+            "progress": progress,
+            "floor": self.stage_floor,
+        }
 
 
 @dataclass(frozen=True)

@@ -39,40 +39,87 @@ function fakeBridge(initial: Record<string, string>) {
   return { invoke, writes, overrides };
 }
 
-async function mountEditor(invoke: DesktopInvoke) {
-  return mountTestComponent(<AffectionStagePromptEditor invoke={invoke} roleId="mira" />, {
+async function mountEditor(invoke: DesktopInvoke, currentStage: string | null = null) {
+  return mountTestComponent(<AffectionStagePromptEditor invoke={invoke} roleId="mira" currentStage={currentStage} />, {
     windowGlobals: { miraDesktop: { onEvent: () => () => {} } },
   });
 }
 
 const fields = (container: HTMLElement) => Array.from(container.querySelectorAll("textarea"));
+const field = (container: HTMLElement) => {
+  const [only, ...rest] = fields(container);
+  assert.ok(only && rest.length === 0, "exactly one stage field shows");
+  return only;
+};
+const tabs = (container: HTMLElement) => Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
+const selectedTab = (container: HTMLElement) => tabs(container).find((tab) => tab.getAttribute("aria-selected") === "true")?.textContent;
+const customized = (container: HTMLElement) => tabs(container).filter((tab) => tab.querySelector('[data-testid="affection-stage-customized"]')).map((tab) => tab.textContent);
+async function pick(container: HTMLElement, stage: string) {
+  const tab = tabs(container).find((candidate) => candidate.textContent === stage);
+  assert.ok(tab, `no tab for ${stage}`);
+  await act(async () => tab.click());
+}
 const restoreButtons = (container: HTMLElement) => Array.from(container.querySelectorAll("button")).filter((button) => button.textContent === "恢复默认");
 
-it("prefills every stage, saves a run of edits once they pause, and shows them again when reopened", async (t: TestContext) => {
+it("shows one stage at a time, prefilled, saves a run of edits once they pause, and shows them again when reopened", async (t: TestContext) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   const bridge = fakeBridge({ 熟悉: "嘴硬心软。" });
   const view = await mountEditor(bridge.invoke);
   try {
-    assert.deepEqual(fields(view.container).map((field) => field.value), ["客气。", "嘴硬心软。", "随意。", "温柔。", "依恋。"]);
-    assert.equal(restoreButtons(view.container).length, 1);
+    assert.deepEqual(tabs(view.container).map((tab) => tab.textContent), ["陌生", "熟悉", "朋友", "亲密", "挚爱"]);
+    assert.equal(selectedTab(view.container), "陌生");
+    assert.deepEqual(customized(view.container), ["熟悉"]);
+    const shown: string[] = [];
+    for (const stage of Object.keys(defaults)) {
+      await pick(view.container, stage);
+      shown.push(field(view.container).value);
+    }
+    assert.deepEqual(shown, ["客气。", "嘴硬心软。", "随意。", "温柔。", "依恋。"]);
 
-    await changeInputValue(fields(view.container)[0], "冷");
-    await changeInputValue(fields(view.container)[0], "冷淡。");
+    await pick(view.container, "陌生");
+    assert.equal(restoreButtons(view.container).length, 0);
+    await changeInputValue(field(view.container), "冷");
+    await changeInputValue(field(view.container), "冷淡。");
     assert.equal(bridge.writes.length, 0);
     await act(async () => t.mock.timers.tick(400));
     // Only the edited stage is written, so other stages edited elsewhere stay as stored.
     assert.deepEqual(bridge.writes, [{ 陌生: "冷淡。" }]);
     assert.deepEqual(bridge.overrides, { 陌生: "冷淡。", 熟悉: "嘴硬心软。" });
-    assert.equal(restoreButtons(view.container).length, 2);
+    assert.equal(restoreButtons(view.container).length, 1);
+    assert.deepEqual(customized(view.container), ["陌生", "熟悉"]);
   } finally {
     await view.cleanup();
   }
 
   const reopened = await mountEditor(bridge.invoke);
   try {
-    assert.equal(fields(reopened.container)[0].value, "冷淡。");
+    assert.equal(field(reopened.container).value, "冷淡。");
   } finally {
     await reopened.cleanup();
+  }
+});
+
+it("keeps unsaved edits across stage switches and saves every edited stage together", async (t: TestContext) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const bridge = fakeBridge({ 熟悉: "嘴硬心软。" });
+  const view = await mountEditor(bridge.invoke, "熟悉");
+  try {
+    // It opens on the role's current stage.
+    assert.equal(selectedTab(view.container), "熟悉");
+    await changeInputValue(field(view.container), "不服气。");
+    await pick(view.container, "朋友");
+    assert.equal(field(view.container).value, "随意。");
+    await changeInputValue(field(view.container), "打闹。");
+    await pick(view.container, "熟悉");
+    assert.equal(field(view.container).value, "不服气。");
+    assert.equal(bridge.writes.length, 0);
+
+    await act(async () => t.mock.timers.tick(400));
+    assert.deepEqual(bridge.writes, [{ 熟悉: "不服气。", 朋友: "打闹。" }]);
+    await pick(view.container, "朋友");
+    assert.equal(field(view.container).value, "打闹。");
+  } finally {
+    await view.cleanup();
   }
 });
 
@@ -80,10 +127,12 @@ it("restores one stage's default at once and hides its 恢复默认", async () =
   const bridge = fakeBridge({ 熟悉: "嘴硬心软。", 挚爱: "黏人。" });
   const view = await mountEditor(bridge.invoke);
   try {
+    await pick(view.container, "熟悉");
     await act(async () => restoreButtons(view.container)[0].click());
     assert.deepEqual(bridge.writes, [{ 熟悉: null }]);
-    assert.equal(fields(view.container)[1].value, "放松。");
-    assert.equal(restoreButtons(view.container).length, 1);
+    assert.equal(field(view.container).value, "放松。");
+    assert.equal(restoreButtons(view.container).length, 0);
+    assert.deepEqual(customized(view.container), ["挚爱"]);
     assert.deepEqual(bridge.overrides, { 挚爱: "黏人。" });
   } finally {
     await view.cleanup();
@@ -97,13 +146,31 @@ it("keeps a stage changed elsewhere between two saves of another stage", async (
   try {
     // Another editor sets 熟悉 after this one loaded.
     bridge.overrides["熟悉"] = "Y";
-    await changeInputValue(fields(view.container)[0], "冷淡。");
+    await changeInputValue(field(view.container), "冷淡。");
     await act(async () => t.mock.timers.tick(400));
-    await changeInputValue(fields(view.container)[0], "更冷淡。");
+    await changeInputValue(field(view.container), "更冷淡。");
     await act(async () => t.mock.timers.tick(400));
 
     assert.deepEqual(bridge.writes, [{ 陌生: "冷淡。" }, { 陌生: "更冷淡。" }]);
     assert.deepEqual(bridge.overrides, { 熟悉: "Y", 陌生: "更冷淡。" });
+  } finally {
+    await view.cleanup();
+  }
+});
+
+it("stays on a stage edited before the role's current stage is known", async (t: TestContext) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const bridge = fakeBridge({});
+  const view = await mountEditor(bridge.invoke);
+  try {
+    assert.equal(selectedTab(view.container), "陌生");
+    await changeInputValue(field(view.container), "有点拘谨。");
+    // The history answers later with the role's stage; the field being typed in stays.
+    await view.render(<AffectionStagePromptEditor invoke={bridge.invoke} roleId="mira" currentStage="朋友" />);
+    assert.equal(selectedTab(view.container), "陌生");
+    assert.equal(field(view.container).value, "有点拘谨。");
+    await act(async () => t.mock.timers.tick(400));
+    assert.deepEqual(bridge.writes, [{ 陌生: "有点拘谨。" }]);
   } finally {
     await view.cleanup();
   }

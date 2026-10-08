@@ -331,12 +331,12 @@ describe("desktopSelectors", () => {
       sendingSessions: {},
       cancellingSessions: {},
     });
-    const role = createRole({ affection: { value: 45, stage: "朋友", progress: 0.25 } });
+    const role = createRole({ affection: { value: 45, stage: "朋友", progress: 0.25, floor: 40 } });
     const session = createSession();
-    session.metadata = { role_id: "mira", affection: { value: 61, stage: "亲密", progress: 0.05 } };
+    session.metadata = { role_id: "mira", affection: { value: 61, stage: "亲密", progress: 0.05, floor: 60 } };
 
-    assert.deepEqual(build(session, role).affection, { stage: "亲密", percent: 5 });
-    assert.deepEqual(build(null, role).affection, { stage: "朋友", percent: 25 });
+    assert.deepEqual(build(session, role).affection, { stage: "亲密", percent: 80.5 });
+    assert.deepEqual(build(null, role).affection, { stage: "朋友", percent: 72.5 });
     assert.equal(build(null, createRole()).affection, null);
   });
 
