@@ -9,7 +9,10 @@ from agent.looping.core import AgentLoop
 from agent.provider import LLMProvider
 from agent.tool_hooks import ToolHook
 from agent.core.proactive_turn.gates import ProactiveGate
-from agent.core.prompt_block import build_role_user_identities_prompt
+from agent.core.prompt_block import (
+    build_role_affection_prompt,
+    build_role_user_identities_prompt,
+)
 from agent.tools.message_push import MessagePushTool
 from conversation.service import desktop_chat_id, desktop_thread_id
 from core.common.channel_directory import DESKTOP_CHANNEL
@@ -138,9 +141,11 @@ def _build_role_prompt_resolver(
 ):
     """The role prompt of proactive and drift turns, read fresh on each turn.
 
-    It ends with the user's identities on the role's channels, rendered like
-    in passive turns from ``runtime_roles`` (the runtime's shared store, the
-    only one indexing the role's accounts); without bindings it is omitted.
+    After the role definition comes the affection block (#714; proactive
+    messages go to the user, so it is always visible), then the user's
+    identities on the role's channels, rendered like in passive turns from
+    ``runtime_roles`` (the runtime's shared store, the only one indexing the
+    role's accounts). Either is omitted while it has nothing to say.
     """
 
     def resolve() -> str:
@@ -150,8 +155,9 @@ def _build_role_prompt_resolver(
         prompt = RolePromptCompiler().compile(role).content.strip()
         if not prompt:
             raise ValueError(f"role.system_prompt required: {role_id}")
+        affection = build_role_affection_prompt(role_id, runtime_roles)
         identities = build_role_user_identities_prompt(role_id, runtime_roles)
-        return f"{prompt}\n\n{identities}" if identities else prompt
+        return "\n\n".join(part for part in (prompt, affection, identities) if part)
 
     return resolve
 

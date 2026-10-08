@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from core.roles.errors import RoleNotFoundError
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import replace
 import uuid
 from pathlib import Path
@@ -270,6 +270,29 @@ class RoleStore:
                 role.updated_at = now_iso()
                 roles[index] = role
                 self._repository.save_roles(roles, plugin_data=extension_data)
+                return role
+        raise RoleNotFoundError(role_id)
+
+    def update_affection_stage_prompts(
+        self,
+        role_id: str,
+        change: Callable[[dict[str, str]], dict[str, str]],
+    ) -> RoleRecord:
+        """Replaces the role's stage prompt overrides with ``change(current)``.
+
+        Runs under the manifest lock, so concurrent edits of different stages
+        each apply to the latest overrides.
+        """
+        with self._lock:
+            roles = self.list_roles()
+            for role in roles:
+                if role.id != role_id:
+                    continue
+                role.affection_stage_prompts = change(
+                    dict(role.affection_stage_prompts)
+                )
+                role.updated_at = now_iso()
+                self._save_roles(roles)
                 return role
         raise RoleNotFoundError(role_id)
 

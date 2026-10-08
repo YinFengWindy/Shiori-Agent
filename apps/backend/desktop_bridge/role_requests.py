@@ -4,7 +4,11 @@ from collections.abc import Awaitable, Callable
 import inspect
 from typing import TYPE_CHECKING, Any
 
-from core.roles import RoleAggregateService
+from core.roles import RoleAggregateService, RoleRecord
+from core.roles.relationship_runtime.affection_prompts import (
+    apply_stage_prompt_changes,
+    stage_prompts_view,
+)
 
 from .role_presenter import DesktopRolePresenter
 from .role_card_export_service import DesktopRoleCardExportService
@@ -124,6 +128,10 @@ class DesktopRoleRequestHandler:
             return await handlers[method](payload)
         if method == "roles.affection.history":
             return self._affection_history(payload)
+        if method == "roles.affection.stagePrompts.get":
+            return self._stage_prompts(payload)
+        if method == "roles.affection.stagePrompts.set":
+            return self._set_stage_prompts(payload)
         if method == "roles.update":
             role_id = str(payload.get("role_id") or "")
             previous = self._role_service.repository.get_required(role_id)
@@ -219,6 +227,35 @@ class DesktopRoleRequestHandler:
             "total": total,
             "page": page,
             "page_size": page_size,
+        }
+
+    def _stage_prompts(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Each stage's injected guidance, its default and whether it is overridden."""
+        role = self._role_service.repository.get_required(
+            str(payload.get("role_id") or "").strip()
+        )
+        return self._stage_prompts_payload(role)
+
+    def _set_stage_prompts(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Writes the given stages' guidance; ``null``, blank or default text restores the default.
+
+        ``prompts`` maps stage names to text and may name only some stages;
+        the others keep their current guidance. Answers like the read.
+        """
+        changes = payload.get("prompts")
+        if not isinstance(changes, dict):
+            raise ValueError("prompts 必须是以阶段名为键的对象")
+        role = self._role_service.repository.store.update_affection_stage_prompts(
+            str(payload.get("role_id") or "").strip(),
+            lambda current: apply_stage_prompt_changes(current, changes),
+        )
+        return self._stage_prompts_payload(role)
+
+    @staticmethod
+    def _stage_prompts_payload(role: RoleRecord) -> dict[str, Any]:
+        return {
+            "role_id": role.id,
+            "stages": stage_prompts_view(role.affection_stage_prompts),
         }
 
     @staticmethod

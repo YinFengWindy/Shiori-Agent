@@ -55,6 +55,8 @@ _CONTEXT_FRAME_SECTIONS = {
     "member_profiles",
     # 「用户最近在群里说过」（#539）随用户在群里发言变化，单独成块。
     "user_group_speech",
+    # 好感块（#714）每轮随好感变化，不进系统提示词以保缓存前缀。
+    "affection",
     # 本群旁听块（#539）每条群消息都会变，放 context frame 末尾而不进历史。
     "group_listening",
     "retrieved_memory",

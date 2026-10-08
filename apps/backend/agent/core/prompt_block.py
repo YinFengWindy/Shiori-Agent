@@ -22,6 +22,8 @@ from core.memory.markdown_schema import (
     SELF_RELATIONSHIP_SECTION,
     select_memory_sections,
 )
+from core.roles.relationship_runtime.affection_prompts import render_affection_prompt
+from core.roles.relationship_runtime.affection_service import RoleAffectionService
 from prompts.agent import (
     EXTERNAL_TURN_RULES_PROMPT,
     UserChannelIdentity,
@@ -79,6 +81,11 @@ def is_external_turn(ctx: TurnContext) -> bool:
 EXTERNAL_SELF_SECTIONS = (SELF_PERSONA_SECTION, SELF_RELATIONSHIP_SECTION)
 
 
+def self_section_visible(ctx: TurnContext, section: str) -> bool:
+    """SELF.md 的 ``section`` 段在本回合是否可见：用户上下文全部可见，外部回合只看白名单。"""
+    return not is_external_turn(ctx) or section in EXTERNAL_SELF_SECTIONS
+
+
 class PromptBlock(Protocol):
     priority: int
     label: str
@@ -117,7 +124,11 @@ class PromptBlock(Protocol):
 #  43 ExternalTurnRulesPromptBlock→ 外部回合的发言人规则（只在外部回合注入，留在系统提示词）
 #                              来源：prompts/agent.py 的固定文本
 #                              时机：不变；外部回合之间字节稳定，用户上下文回合没有这段
-#  45 RecentContextPromptBlock → roles/<role_id>/memory/RECENT_CONTEXT.md（裁掉 Recent Turns；外部回合不注入）
+#  44 AffectionPromptBlock     → 当前好感值、阶段名与该阶段的语气指引（#714，放 context frame）
+#                              来源：roles/<role_id>/state/affection.json + 角色配置的阶段覆盖
+#                              时机：每轮好感变化或阶段指引被编辑后即变；未初始化时不出现；
+#                              外部回合是否注入跟随 SELF「我们的关系」段的可见规则
+#  45 RecentContextPromptBlock →roles/<role_id>/memory/RECENT_CONTEXT.md（裁掉 Recent Turns；外部回合不注入）
 #                              来源：memory.read_recent_context()（严格要求 role_id）
 #                              时机：近期语境压缩摘要更新时变化；每轮 Recent Turns 刷新不会直接进入这里
 #  46 RecentActivityPromptBlock→ 各外部会话的最近动态（群环境层；外部回合只列其他外部会话）
@@ -329,6 +340,48 @@ class ExternalTurnRulesPromptBlock:
         self, ctx: TurnContext, cached_signature: str | None = None
     ) -> str | None:
         return EXTERNAL_TURN_RULES_PROMPT if is_external_turn(ctx) else None
+
+    def cache_signature(self, ctx: TurnContext) -> str | None:
+        return None
+
+
+def build_role_affection_prompt(role_id: str, roles: "RoleStore") -> str | None:
+    """The affection block of ``role_id``: value, stage and that stage's guidance.
+
+    Shared by every turn kind (passive turns through ``AffectionPromptBlock``,
+    proactive and drift turns through their role prompt). The guidance is the
+    role's override for the current stage, or the default; None while the
+    role's affection is uninitialized.
+    """
+    role = roles.get_role(role_id)
+    if role is None:
+        raise ValueError(f"role not found for affection prompt: {role_id}")
+    state = RoleAffectionService(roles.workspace).read_state(role_id)
+    return render_affection_prompt(state, role.affection_stage_prompts)
+
+
+class AffectionPromptBlock:
+    """The role's affection toward the user and its stage guidance (#714).
+
+    An internal state about the user, so it follows the visibility of SELF's
+    「我们的关系」 section: external turns get it only while that section is
+    one of ``EXTERNAL_SELF_SECTIONS``. Changes every turn, so it goes to the
+    context frame instead of the cached system prompt.
+    """
+
+    priority = 44
+    label = "affection"
+    is_static = False
+
+    def __init__(self, roles: "RoleStore") -> None:
+        self._roles = roles
+
+    def render(
+        self, ctx: TurnContext, cached_signature: str | None = None
+    ) -> str | None:
+        if not ctx.role_id or not self_section_visible(ctx, SELF_RELATIONSHIP_SECTION):
+            return None
+        return build_role_affection_prompt(ctx.role_id, self._roles)
 
     def cache_signature(self, ctx: TurnContext) -> str | None:
         return None
