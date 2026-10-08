@@ -2,7 +2,7 @@
 title: NovelAI 与自动 CG
 kind: 领域说明
 status: 当前有效
-last_verified_commit: 966af779
+last_verified_commit: bdfdae59
 source_paths:
   - apps/backend/core/scene/
   - plugins/novelai/
@@ -10,6 +10,9 @@ source_paths:
   - apps/backend/agent/plugin_host/
   - apps/desktop/renderer/src/plugins/
   - apps/backend/bus/events_lifecycle.py
+  - apps/backend/agent/scene_preferences.py
+  - apps/backend/agent/plugin_default_enabled_migration.py
+  - apps/backend/core/roles/migration.py
 related:
   - roles.md
   - conversations-and-sessions.md
@@ -20,17 +23,17 @@ related:
 
 ## NovelAI 基础能力
 
-`plugins/novelai/backend/` 拥有设置、请求模型、HTTP 客户端、提示词标签、持久化、`NovelAIService.generate()`、生图工具、自动 CG 与 RPC。`plugins/novelai/ui/` 拥有 Image Studio、提示词标签库与历史界面，经 `nav.page` / `settings.section` 注册页面与设置。
+`plugins/novelai/backend/` 拥有设置、请求模型、HTTP 客户端、提示词标签、持久化、`NovelAIService.generate()`、生图工具、自动 CG 与 RPC。`plugins/novelai/ui/` 拥有 Image Studio、提示词标签库与历史界面，UI 模块以 `navPage`（含侧栏）注册生图页面、以 `NovelAIConfig` JSON Schema 自动生成设置表单，并通过 `roleSettings`、`chatImageActions` 挂载角色自动 CG 开关与聊天图片重生成。
 
 手动 `generate_image` 工具和自动 CG 都应复用该服务，避免各自实现请求与错误处理。生成文件与元数据由插件写入 workspace 下的 `plugin-data/novelai/generation/`；运行数据不应随插件停用或包升级删除。
 
-启停由宿主管理：`[plugins.novelai].enabled` 的显式值优先，没有显式值时按 manifest 的 `default_enabled: false` 停用。新安装的宿主配置模板不预置插件业务配置，业务默认值由 `NovelAIConfig` 提供；可在 设置 › 插件 中启用并配置。升级迁移保留既有显式开关与业务参数，对此前缺少显式开关的配置一次性补写 `enabled = true`，保持升级前状态。插件配置表单与运行时设置不再声明第二个 `enabled`。插件停用后，宿主撤销工具、RPC 与事件订阅。服务仍检查 Token，角色自动 CG 偏好仍独立生效。
+启停由宿主管理：`[plugins.novelai].enabled` 的显式值优先，没有显式值时按 manifest 的 `default_enabled: false` 停用。新安装的宿主配置模板不预置插件业务配置，业务默认值由 `NovelAIConfig` 提供；可在 设置 › 插件 中启用并配置。升级迁移保留既有显式开关与业务参数；`plugin_default_enabled_migration.py` 的默认停用名单（`browser_use`、`computer_use`、`novelai`）对此前缺少显式开关的配置一次性补写 `enabled = true`，保持升级前状态。插件配置表单与运行时设置不再声明第二个 `enabled`。插件停用后，宿主撤销工具、RPC 与事件订阅。服务仍检查 Token，角色自动 CG 偏好仍独立生效。
 
 ## 插件边界（2026-09-11）
 
-NovelAI 的业务代码、Logo、设置、聊天图片重生成和角色自动 CG 开关均由 `plugins/novelai/` 持有。宿主通过通用角色设置与聊天图片操作扩展位挂载 UI；插件不可用时撤下对应操作。自动 CG 偏好由插件以 `roles/roles.json` 的 `plugin_data.novelai.<role_id>.auto_scene_cg_enabled` 保存；角色表单只修改插件草稿，点击「保存」时和角色字段共同原子提交，取消编辑不落盘。清单 v5 在投影前原子迁出旧 `runtime_config.auto_scene_cg_enabled`，保留 true/false 并以已有命名空间为准，插件停用时的普通角色编辑也不会丢失偏好。停用或清空插件文件不擦除仍存角色的偏好；插件启用及收到角色删除事件时清理已删角色的记录。长耗时 RPC 由插件显式传入 `timeoutMs`，宿主只验证通用截止时间，不识别供应商或生图方法名。
+NovelAI 的业务代码、Logo、设置、聊天图片重生成和角色自动 CG 开关均由 `plugins/novelai/` 持有。宿主通过通用角色设置与聊天图片操作扩展位挂载 UI；插件不可用时撤下对应操作。自动 CG 偏好由插件以 `roles/roles.json` 的 `plugin_data.novelai.<role_id>.auto_scene_cg_enabled` 保存；角色表单只修改插件草稿，点击「保存」时和角色字段共同原子提交，取消编辑不落盘。角色清单迁移（`core/roles/migration.py`，当前版本 v9；旧客户端在升级后写入旧字段同样会被归一）在投影前原子迁出旧 `runtime_config.auto_scene_cg_enabled`，保留 true/false 并以已有命名空间为准，插件停用时的普通角色编辑也不会丢失偏好。停用或清空插件文件不擦除仍存角色的偏好；插件启用及收到角色删除事件时清理已删角色的记录。长耗时 RPC 由插件显式传入 `timeoutMs`，宿主只验证通用截止时间，不识别供应商或生图方法名。
 
-故事模式归于 `plugins/story/`，manifest 显式声明 `dependencies: [novelai]`，通过 `ctx.dependencies.require("novelai")` 获取 NovelAI 导出的 `GenerateImageTool`。故事的模型与提示词策略属于故事插件。宿主没有通用生图接口，也不装配故事业务；故事页面注册为全屏插件导航，RPC 与事件使用 `plugin.story.*` 命名空间。
+故事模式归于 `plugins/story/`，manifest 显式声明 `dependencies: [novelai]`，通过 `ctx.dependencies.require("novelai")` 获取 NovelAI 以 `ctx.expose()` 导出的 `ImageGenerationAPI`（`plugins/novelai/backend/api.py` 中的 Protocol，由本代 `GenerateImageTool` 实现），类型不符时故事插件 setup 失败。故事的模型与提示词策略属于故事插件。宿主没有通用生图接口，也不装配故事业务；故事页面注册为全屏插件导航，RPC 与事件使用 `plugin.story.*` 命名空间。
 
 插件内核按依赖顺序加载、按反向依赖顺序卸载。缺失、禁用或失败的依赖使故事插件进入 `BLOCKED`，其页面和 RPC 不可用；恢复 NovelAI 后重新装配可恢复故事入口。运行时替换先等待旧插件接受的后台任务完成，桥接事件按所属注册表隔离，避免跨代重复转发。首次启用故事时恢复被中断的持久化任务；已有活跃前代时保留其执行权。
 

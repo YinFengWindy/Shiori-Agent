@@ -42,12 +42,13 @@ Shiori 的视觉是**三层单向依赖**：色阶原语 → 语义 token → Ta
 |---|---|---|---|
 | `--neutral-*` | 345（暖木兰灰） | 50–950 | 文本、边框、中性背景 |
 | `--pink-*` | 356（樱粉） | 50–900 | 品牌强调色、hover/active、选区 |
-| `--blue-*` | 240（粉蓝） | 50–300 | 应用底色渐变、强调渐变的冷端 |
+| `--blue-*` | 240（粉蓝） | 50–300，外加只给文字用的 `--blue-700`（在 blue-100 上 5.3:1） | 应用底色渐变、强调渐变的冷端、`sad` 心情语气的文字 |
 | `--lavender-*` | 302（薰衣草） | 50–700 | 次级强调 |
-| `--success-* / --warning-* / --danger-*` | — | soft / 300 / solid / text 四档 | 状态 |
+| `--success-* / --warning-* / --danger-*` | — | soft（100）/ 300 / solid（600）/ text（700，warning 是 800）四档 | 状态 |
 
 两个特例：`--blue-grad` / `--pink-grad` / `--lavender-grad` 是**渐变专用端点**，比同族色阶更深，
-目的是让白字在整条渐变扫过时都保持 ≥4.5:1（端点 4.78 / 5.20，oklab 中点 4.93 —— 数值见 `styles.css` 里 `--blue-grad` 定义处的注释）。
+目的是让白字在整条渐变扫过时都保持 ≥4.5:1（`--blue-grad` → `--pink-grad` 端点 4.78 / 5.20，oklab 中点 4.93 —— 数值见 `styles.css` 里 `--blue-grad` 定义处的注释；
+`--lavender-grad` 注释里的中点是 4.66:1，目前没有任何渐变引用它）。
 
 ## 第二层：semantic tokens
 
@@ -65,11 +66,16 @@ Shiori 的视觉是**三层单向依赖**：色阶原语 → 语义 token → Ta
 | `--color-text-faint` | 4.2:1 | **仅限 placeholder 与装饰**，不达 AA 正文标准 |
 | `--color-text-accent` | 6.0:1 | 强调文本 |
 | `--color-text-lavender` | 5.8:1 | 次级强调文本 |
+| `--color-text-on-accent` | — | 实心强调面上的白字 |
 
 **边框**：`--color-border-soft` / `--color-border` / `--color-border-strong` / `--color-border-accent`
 **焦点**：`--color-ring`（3.1:1，键盘焦点描边）、`--color-ring-soft`（22% 透明的字段光晕）
+**滚动条**：`--color-scrollbar-thumb`（pink-300，1.6:1）/ `--color-scrollbar-thumb-hover`（pink-500，3.1:1），见下文「滚动条」
+**导航栏母题**：`--color-motif`（pink-500）与 `--color-motif-gradient-start` / `-mid` / `-end`（天蓝 → 粉 → 薰衣草），纯装饰、无文字对比度要求
 **强调**：`--color-accent-solid`（白字 4.6:1）、`-hover`（6.0:1）、`-soft`、`-softer`
 **状态**：每族三件套 `-soft`（背景）/ `-solid`（实心）/ `-text`（文本）
+**心情语气**（`chat/moodTone.ts`）：`--color-mood-{happy,shy,sad,angry,calm}-{soft,text,dot}`，`-text` 的对比度按各自的 `-soft` 标注；
+心情粒子用 `--color-particle-*`（樱瓣、心、水滴、火花、星芒、光晕、阴影），「正在输入…」星芒用 `--color-typing-1/2/3`，都是装饰色
 
 **渐变**：
 
@@ -83,8 +89,14 @@ Shiori 的视觉是**三层单向依赖**：色阶原语 → 语义 token → Ta
 
 **圆角**：`--radius-sm` 8px / `--radius-md` 12px / `--radius-lg` 16px / `--radius-xl` 20px
 **阴影**：`--shadow-soft`（常规抬起）/ `--shadow-panel`（面板）/ `--shadow-pop`（弹出层），全部带粉调
-**动效**：`--duration-fast` 140ms / `--duration-base` 220ms / `--ease-out-soft`
-**字体**：`--font-sans`（正文）/ `--font-display`（标题）
+**动效**：时长 `--duration-*`（完整表见下文「动效」）、缓动 `--ease-out-soft` / `--ease-drawer` / `--ease-in-out-soft` / `--ease-spring`
+**字体**：`--font-sans`（正文）/ `--font-display`（标题，`"Segoe UI Variable Display"` 再接 `--font-sans`）
+
+**组件专属 token**（只在对应组件的样式里用，不进 Tailwind）：
+
+- 看板娘 `--mascot-*`：裁切比例、三种尺寸、立绘阴影、气泡描边、出场上浮距离（定义在 `styles.css`，用在 `shared/mascot/mascot.css`）
+- 小手机 `--phone-*`：机身宽高、边框、机身 / 屏幕圆角（刻意不走 `--radius-*`）、两套机身皮肤、壁纸模糊与色罩、切屏位移、底部横条、机身母题尺寸
+- `--titlebar-height`（30px）：标题栏高度，`tailwind.config.ts` 的 `grid-rows-app` 用它
 
 ## 第三层：Tailwind 语义类
 
@@ -96,11 +108,15 @@ Shiori 的视觉是**三层单向依赖**：色阶原语 → 语义 token → Ta
 | `text-ink` | `-secondary` `-muted` `-faint` | 文本 token |
 | `border-line` | `-soft` `-strong` `-accent` | 边框 token |
 | `*-accent` | `-hover` `-soft` `-softer` `-text` | 强调 token |
-| `*-lavender` | `-soft` `-text` | 次级强调 |
-| `*-success` / `*-warning` / `*-danger` | `-soft` `-text` | 状态 |
+| `*-lavender` | `-soft` `-text`（无后缀是 `--lavender-600`） | 次级强调 |
+| `*-success` / `*-warning` / `*-danger` | `-soft` `-text`（无后缀是 `-solid`） | 状态 |
+| `*-ring` / `*-ring-soft` | — | 焦点 token |
 | `rounded-{sm,md,lg,xl}` | — | 圆角 token（`rounded-full` 走 Tailwind 默认的 9999px） |
 | `shadow-{soft,panel,pop}` | — | 阴影 token |
-| `ease-out-soft` | — | 缓动 token |
+| `ease-out-soft` / `ease-drawer` | — | 缓动 token；无类名的 `transition` 默认用 `--ease-out-soft` |
+| `duration-{fade,fast,quick,base,panel}` | — | 时长 token；无类名的 `transition` 默认用 `--duration-fast`。其余时长只在 CSS 里用 |
+| `scale-96` / `scale-97` | — | 按压反馈的缩放（见 `pressableClass`） |
+| `grid-rows-{app,chat,conversation}` | — | 应用外框、聊天区、对话区的固定行模板 |
 
 **排版阶梯**（中文正文不低于 14px，caption 下限 12px）：
 
@@ -116,39 +132,46 @@ title-sm 16px/600 · title 18px/600 · headline 22px/650 · display 28px/700
 restyle 之前的一批变量名仍然存在，它们都已指回语义层，渲染结果与新写法完全一致，只是命名不表意：
 
 - CSS 变量：`--bg` `--bg-soft` `--chat-bg` `--panel` `--panel-strong` `--text` `--muted` `--accent` `--accent-deep` `--stroke` `--shadow` `--app-bg`
-- Tailwind 类：`bg-bg` `bg-panel` `text-text` `text-muted` `border-stroke` `*-primary` `*-accent-deep`
+- Tailwind 类：`bg-bg` `bg-bg-soft` `bg-panel` `bg-panel-strong` `text-text` `text-muted` `border-stroke` `*-primary` `*-accent-deep`，以及阴影 `shadow-composer`（= `shadow-soft`）/ `shadow-editor`（= `shadow-pop`，这两个目前已无代码引用）
 
 碰到就顺手换成语义写法，但不要为此单开重构。
 
 ## 共享类名（`@yinfengwindy/shiori-sdk` 与 `shared/styles.ts`）
 
-控件外观的唯一来源，**不要在组件里另起一套手写串**。插件也在用的类名（`cx`、`inputClass`、`textareaClass`、`ghostButtonClass`、`iconButtonClass`、`cardClass`、`badgeClass`、`sidebarNavItemClass`、`secondarySidebarSurfaceClass`、`primaryButtonSurfaceClass` / `ghostButtonSurfaceClass`、`compactButtonSizeClass`、`pressableClass` / `compactPressableClass` 等）从 `@yinfengwindy/shiori-sdk` 导入，其余从 `shared/styles.ts` 导入。
+控件外观的唯一来源，**不要在组件里另起一套手写串**。插件也在用的类名（`cx`、`inputClass`、`textareaClass`、`settingsInputClass`、`settingsGroupStackClass`、`ghostButtonClass`、`compactGhostButtonClass`、`iconButtonClass`、`cardClass`、`badgeClass`、`sidebarNavItemClass`、`secondarySidebarSurfaceClass`、`sidebarContentMotionClass`、`primaryButtonSurfaceClass` / `ghostButtonSurfaceClass`、`compactButtonSizeClass`、`pressableClass` / `compactPressableClass`，菜单的 `menuPanelClass` / `menuSeparatorClass`）从 `@yinfengwindy/shiori-sdk` 导入，其余从 `shared/styles.ts` 导入。
+菜单行的 `menuItemClass` / `menuItemSelectedClass` 只给宿主用，从 `@yinfengwindy/shiori-sdk/host-internal` 导入（不属于插件契约）。
 
-| 常量 | 用途 |
-|---|---|
-| `cx(...)` | 零依赖的条件类名拼接 |
-| `inputClass` / `textareaClass` | 聊天输入框以外的所有表单字段 |
-| `primaryButtonClass` | 主操作（渐变面 + ink 文字） |
-| `ghostButtonClass` | 次级操作 |
-| `dangerButtonClass` / `dangerGhostButtonClass` | 破坏性操作的实心版 / 安静版 |
-| `iconButtonClass` | 纯图标方形按钮（返回、重置、工具），统一 `rounded-md` |
-| `primaryButtonSurfaceClass` / `ghostButtonSurfaceClass` / `dangerGhostButtonSurfaceClass` | 不含尺寸的按钮外观，配 `compactButtonSizeClass`（36px 带文字按钮）或自带尺寸使用 |
-| `textButtonSurfaceClass` / `dangerTextButtonSurfaceClass`（`compactTextButtonClass` / `compactDangerTextButtonClass`） | 无边框的文字按钮，给不和主按钮抢视线的底部操作（如账号详情底部的「退出登录」「删除账号」） |
-| `cardClass` | 空状态、诊断行等卡片面 |
-| `badgeClass` | 状态与标签胶囊 |
-| `panelHeadClass` / `panelTitleClass` | 面板头部布局与标题 |
-| `sidebarNavItemClass` | 共享的可悬停行：侧栏导航项，以及内容区里可展开的行（如记忆时间线节点） |
-| `secondarySidebarSurfaceClass` | 次级侧栏背景 |
-| `underlineTabClass(selected)` | 页面一级分区标签（下划线，如角色详情的资料 / 记忆 / 能力 / 账号） |
-| `segmentedTabListClass` / `segmentedTabClass(selected)` | 嵌在一级分区里的二级标签：分段轨道 + 选中项浮起（如素材用途、记忆页视图），视觉上从属于下划线标签 |
-| `bodyTextClass` | 非标题栏内容的小号正文 |
-| `focusResetClass` | 自带状态样式的控件的 focus 复位 |
+| 常量 | 来源 | 用途 |
+|---|---|---|
+| `cx(...)` | SDK | 零依赖的条件类名拼接 |
+| `inputClass` / `textareaClass` | SDK | 聊天输入框以外的所有表单字段 |
+| `settingsInputClass` / `settingsGroupStackClass` | SDK | 设置行里的紧凑字段（`SettingsField`）/ 一个设置页内各 `SettingsGroup` 之间的纵向间距 |
+| `primaryButtonClass` / `compactPrimaryButtonClass` | 宿主 | 主操作（渐变面 + ink 文字）/ 其 36px 紧凑版 |
+| `ghostButtonClass` / `compactGhostButtonClass` | SDK | 次级操作 / 其 36px 紧凑版 |
+| `dangerButtonClass` / `dangerGhostButtonClass`（`compactDangerGhostButtonClass`） | 宿主 | 破坏性操作的实心版 / 安静版 |
+| `iconButtonClass` | SDK | 带边框的 40px 纯图标方形按钮（返回、重置、工具），统一 `rounded-md` |
+| `compactIconButtonClass` | 宿主 | 无边框的 28px 纯图标按钮（关闭、返回、头部开关），给 `iconButtonClass` 嫌太重的地方 |
+| `primaryButtonSurfaceClass` / `ghostButtonSurfaceClass` | SDK | 不含尺寸的按钮外观，配 `compactButtonSizeClass`（SDK，36px 带文字按钮）或自带尺寸使用 |
+| `dangerGhostButtonSurfaceClass` | 宿主 | 同上，安静的破坏性外观 |
+| `textButtonSurfaceClass` / `dangerTextButtonSurfaceClass`（`compactTextButtonClass` / `compactDangerTextButtonClass`） | 宿主 | 无边框的文字按钮，给不和主按钮抢视线的底部操作（如账号详情底部的「退出登录」「删除账号」） |
+| `cardClass` | SDK | 空状态、诊断行等卡片面 |
+| `badgeClass` | SDK | 状态与标签胶囊 |
+| `panelHeadClass` / `panelTitleClass` | 宿主 | 面板头部布局与标题 |
+| `sidebarNavItemClass` | SDK | 共享的可悬停行：侧栏导航项，以及内容区里可展开的行（如记忆时间线节点） |
+| `secondarySidebarSurfaceClass` | SDK | 次级侧栏背景（透明，透出应用底色渐变） |
+| `underlineTabClass(selected)` | 宿主 | 页面一级分区标签（下划线，如角色详情的资料 / 记忆 / 能力 / 账号） |
+| `segmentedTabListClass` / `segmentedTabClass(selected)` | 宿主 | 嵌在一级分区里的二级标签：分段轨道 + 选中项浮起（如素材用途、记忆页视图），视觉上从属于下划线标签 |
+| `replyQuoteFrameClass` / `replyQuoteSenderClass` / `replyQuoteTextClass` / `replyQuoteButtonClass` | 宿主 | 引用消息块（聊天回复引用、小手机引用块）的边框、发送者、正文和可点击版 |
+| `checkboxClass` | 宿主 | 强调色的原生复选框 |
+| `dialogBackdropClass` | 宿主 | 模态对话框背后变暗模糊的遮罩（配 `motion-backdrop`） |
+| `bodyTextClass` | 宿主 | 非标题栏内容的小号正文 |
+| `focusResetClass` | 宿主 | 自带状态样式的控件的 focus 复位 |
 
 需要变体时用 `cx(inputClass, "min-h-24 resize-y")` 这种叠加写法（`textareaClass` 本身就是这么来的），
 不要复制粘贴整串再改。**只叠加不冲突的类**：同一属性的两个工具类（如 `px-[18px]` 和 `px-3.5`）都会落到元素上、由样式表顺序决定谁赢，
 要换尺寸就用上面的 `*SurfaceClass` 自己配尺寸。
 
-溢出菜单（「…」）用 `@yinfengwindy/shiori-sdk` 的 `ActionMenu`（Base UI Menu + `Menu.tsx` 的视觉词汇）。
+溢出菜单（「…」）用 `@yinfengwindy/shiori-sdk` 的 `ActionMenu`（Base UI Menu + SDK `menuStyles.ts` 的视觉词汇；宿主的 `shared/ui/Menu.tsx` 也用同一套）。
 聊天输入框上的弹层（模型菜单、常用表情面板）用 `chat/useChatComposerPopover`：渲染进 body portal、`position: fixed` 定位在按钮上方，
 高度不超过按钮到窗口顶部的空间、放不下就在面板内滚动。输入框卡片是 `overflow: hidden` 且带 `backdrop-filter`（会成为 fixed 后代的包含块），
 在卡片里面绝对定位的弹层一定会被裁掉。手写菜单的方向键 / Home / End 焦点移动用 `Menu.tsx` 的 `moveMenuFocus`。
@@ -160,7 +183,7 @@ restyle 之前的一批变量名仍然存在，它们都已指回语义层，渲
 - `text-gradient-accent` —— 渐变文字（内部用 strong 版，浅色版做文字会看不见）
 - `scrollbar-stable` —— 只做 `scrollbar-gutter: stable`（给滚动条预留车道，内容开始滚动时不左右跳），只用在竖向滚动区；滚动条外观见下一节
 - `scrollbar-native` —— 整棵子树退回系统滚动条，目前只有 story 插件的根用（它不在 restyle 范围内）
-- `story-*` —— story 模块专属的玻璃底与文字可读性描边，**尚未 token 化**，别往其他模块搬
+- `story-*` —— 不在 `styles.css` 里，而在 story 插件自己的 `plugins/story/ui/story.css`：story 模块专属的玻璃底与文字可读性描边，**尚未 token 化**，别往其他模块搬
 
 ## 滚动条
 
@@ -195,7 +218,7 @@ restyle 之前的一批变量名仍然存在，它们都已指回语义层，渲
 
 ## 动效
 
-- 时长 token（Tailwind 里是 `duration-*`）：
+- 时长 token（只有 fade / fast / quick / base / panel 五个有 Tailwind 的 `duration-*` 类，其余只 CSS 用）：
 
   | token | 值 | 用途 |
   |---|---|---|
@@ -204,10 +227,11 @@ restyle 之前的一批变量名仍然存在，它们都已指回语义层，渲
   | `--duration-quick` | 160ms | 按压反馈、菜单/下拉/小弹层、角色详情切 tab |
   | `--duration-base` | 220ms | 对话框、提示、侧栏内容淡入 |
   | `--duration-panel` | 260ms | 侧栏宽度（和 `app/appState.ts` 的 `sidebarAnimationDurationMs` 同步，有测试守着） |
-  | `--duration-motif` | 480ms | 导航栏图标里品牌小元素的一次性小动画 |
-  | `--duration-enter` | 240ms | 聊天新消息入场（只 CSS 用，没有 Tailwind 类） |
-  | `--duration-crossfade` | 320ms | 图片换图的交叉淡入（`shared/CrossfadeLayers`，心情立绘、聊天背景） |
-  | `--duration-pulse` | 600ms | 一次性的提示脉冲（跳转到引用消息的光环） |
+  | `--duration-motif` | 480ms | 导航栏图标里品牌小元素的一次性小动画（只 CSS 用） |
+  | `--duration-enter` | 240ms | 聊天新消息入场（只 CSS 用） |
+  | `--duration-crossfade` | 320ms | 图片换图的交叉淡入（`@yinfengwindy/shiori-sdk` 的 `CrossfadeLayers`，心情立绘、聊天背景；只 CSS 用） |
+  | `--duration-pulse` | 600ms | 一次性的提示脉冲（跳转到引用消息的光环；只 CSS 用） |
+  | `--duration-stage` | 420ms | 场景角色登场：看板娘出场（`.mascot-enter`）、首次引导的立绘与对话框（只 CSS 用） |
   | `--duration-morph` | 420ms | 共享元素视图过渡（角色卡片 ↔ 详情头部），配 `--ease-drawer`（只 CSS 用） |
   | `--duration-page-rise` | 380ms | 视图过渡里新页面的上浮淡入（只 CSS 用） |
   | `--duration-spring` | 700ms | 倾斜卡片离开后的弹簧回正，配 `--ease-spring`（只 CSS 用） |
@@ -219,7 +243,7 @@ restyle 之前的一批变量名仍然存在，它们都已指回语义层，渲
 
 - 弹簧缓动 `--ease-spring`：阻尼弹簧（ζ 0.42、ω 11）采样成 `linear()`，不支持时退回会过冲的 cubic-bezier；只给「松手回弹」这类一次性回正
 - 视图过渡：`shared/viewTransition.ts` 的 `runViewTransition({ update, nameOld, nameNew })` 包一层同文档 View Transition——运行中的过渡先 `skipTransition()` 再开下一段，名字只在上一段 `updateCallbackDone` 之后才分配；过渡期间点到 `<html>` 的点击会先结束过渡再在原处重放。减弱动态效果时不命名任何元素，只剩 140ms 根交叉淡入；没有 API 时直接切换。角色卡片 ↔ 详情用 `roles/roleViewTransition.ts`：元素用 `data-vt-part`（portrait / avatar / name / sub）标记，页面用 `data-role-page`，规则见 styles.css 的 `role-*`
-- 聊天切换角色：`chat/chatRoleSwitchTransition.ts` 的 `openChatRole`（同样走 `runViewTransition`）。列表行（`data-chat-role-row`）的头像和名字（`data-vt-part`）变形进聊天头部，旧头部那一对缩小淡出；背景（`data-chat-backdrop`）新图从 1.05 倍落定、盖在旧图上（新角色没有背景时旧图淡出）；对话区（`data-chat-conversation`）淡出再上浮。头部条和对话区也各自命名，否则背景层会盖住它们；视图过渡的 group 按旧视图的绘制顺序叠放，列表在聊天区之前，所以变形的头像和名字要 `z-index: 1`。规则见 styles.css 的 `chat-*`。同一角色的背景 / 心情立绘换图仍由 `shared/CrossfadeLayers` 负责，它的 `resetKey`（角色）一变就直接换，不和视图过渡打架。只有聊天区在屏且确实换了角色才走过渡；离开守卫仍在最外层
+- 聊天切换角色：`chat/chatRoleSwitchTransition.ts` 的 `openChatRole`（同样走 `runViewTransition`）。列表行（`data-chat-role-row`）的头像和名字（`data-vt-part`）变形进聊天头部，旧头部那一对缩小淡出；背景（`data-chat-backdrop`）新图从 1.05 倍落定、盖在旧图上（新角色没有背景时旧图淡出）；对话区（`data-chat-conversation`）淡出再上浮。头部条和对话区也各自命名，否则背景层会盖住它们；视图过渡的 group 按旧视图的绘制顺序叠放，列表在聊天区之前，所以变形的头像和名字要 `z-index: 1`。规则见 styles.css 的 `chat-*`。同一角色的背景 / 心情立绘换图仍由 `@yinfengwindy/shiori-sdk` 的 `CrossfadeLayers` 负责，它的 `resetKey`（角色）一变就直接换，不和视图过渡打架。只有聊天区在屏且确实换了角色才走过渡；离开守卫仍在最外层
 - 心情变化演出（`chat/ChatStatusSidebar.tsx`）：立绘用 `CrossfadeLayers variant="focus"`；心情胶囊按 `chat/moodTone.ts` 的五种语气（happy / shy / sad / angry / calm，按关键词匹配角色自定义的心情名，认不出的归 calm）换 `--color-mood-*` 配色，并弹一下（生气改为抖动）；再按语气喷一小簇品牌母题粒子（`chat/moodBurst.ts`：樱瓣飘落 / 小心上浮 / 水滴落下并短暂压暗去饱和 / 胶囊迸火花 / 单个星芒闪烁），约 1.2s，同时存活不超过 28 个，结束即移除。粒子关键帧整体用 linear、缓动写在每一段里（整体 ease-out 会把整段飞行挤在头几帧）。只在「看着的时候真的变了」才播：由 `chat/moodChangeCue.ts` 判定——首次加载、切换角色、重新载入都只移动基线，新心情的 `current_mood_updated_at` 必须晚于这个角色进入视野的时刻。颜色 token 见 styles.css 的 `mood tones` 段
 - 星芒打字：「正在输入…」前是三颗品牌星芒（天蓝 / 粉 / 薰衣草，`--color-typing-*`）依次跳动闪烁，组件 `chat/ChatTypingSparkles.tsx`，样式 `.chat-typing-sparkles`
 - 背景呼吸与视差（设置 › 外观，默认开）：`chat/useChatBackdropMotion.ts`。背景立绘极慢地呼吸（`.chat-backdrop-breathe`）；视差由 `chat/backdropParallax.ts` 计算——背景最多反向 12px、对话区同向 3px，帧率无关的 lerp，停稳即停 rAF，不留空转帧。背景层四周多出 12px（`-inset-3`）避免露边。窗口隐藏或失焦时呼吸暂停、视差回中；减弱动态效果时两者都关，设置开关显示为关并锁定。偏好只影响渲染，存在渲染进程 localStorage（`shared/appearancePrefs.ts`，键 `shiori.desktop.appearance`，带版本号），不进 config.toml
@@ -233,7 +257,7 @@ restyle 之前的一批变量名仍然存在，它们都已指回语义层，渲
 - 弹出层：Base UI 的 Select / Dialog 用 `motion-popup` / `motion-dialog` / `motion-backdrop`，进出场都有；
   手写弹层用 `motion-popover-enter` / `motion-dialog-enter` / `motion-fade-enter`（`@starting-style`），
   只做入场，关闭时直接消失，缩放原点用 Tailwind 的 `origin-*` 指定。右键菜单和命令面板（RoleSearchDialog）刻意不加动效
-- 侧栏开合用 `sidebarTrackMotionClass`（轨道宽度）+ `sidebarContentMotionClass`（内容淡入位移）
+- 侧栏开合用 `sidebarTrackMotionClass`（宿主 `shared/styles.ts`，轨道宽度）+ `sidebarContentMotionClass`（`@yinfengwindy/shiori-sdk`，内容淡入位移）
 - 展开/收起用 `grid-template-rows: 0fr → 1fr` 的写法（见 `.chat-thinking-content`），不要用 max-height 猜数值；设置页的折叠区（插件「系统组件」、schema 表单「高级」）用 `settings/SettingsDisclosure` 的 `SettingsDisclosure` + `SettingsDisclosureToggle`（样式 `.disclosure-content`，收起时内容 `inert`）；随状态出现 / 消失的块（账号详情里的二维码、准备进度、响应规则、底部危险区）用 `shared/ui/Reveal`（样式 `.reveal`，收起期间保留最后的内容，收完再卸载；一开始就显示的块不播入场），插件经 `host.ui.Reveal` 使用
 - 减弱动态效果下：`CrossfadeLayers` 的两个变体都只剩透明度淡入淡出（不模糊、不缩放）；心情变化不喷粒子、胶囊不弹，只换颜色；星芒打字静止；聊天背景不呼吸、无视差
 - **`styles.css` 末尾有统一的 `@media (prefers-reduced-motion: reduce)` 块**（这里不写行号，行号会漂）：新增循环动画或较大位移的过渡时，
@@ -251,7 +275,7 @@ restyle 之前的一批变量名仍然存在，它们都已指回语义层，渲
 | `shared/icons.tsx` + `@phosphor-icons/react` | 功能图标（保存、删除、上传、发送、关闭……） | **一律复用，不要自绘。** 2026-09 视觉验收时自绘功能图标被逐一打回 |
 | `shared/ui/icons`（`brand.tsx`）与 `@yinfengwindy/shiori-sdk`（星芒 `SparkleIcon`、樱瓣 `PetalIcon`） | 品牌装饰母题：星芒、恶魔翅膀、蝴蝶结、樱瓣 | 只用于空状态、加载、成就等情绪点缀。几何统一在 `brandMotifPaths`（`@yinfengwindy/shiori-sdk/host-internal`；另含只作粒子用的心形、水滴），心情粒子和打字星芒都从这里取形 |
 
-**导航栏图标**是两者的组合（`shared/ui/icons/navGlyphs.tsx`）：Phosphor **regular** 原图，外轮廓不改，里面嵌**一个**品牌小元素。
+**导航栏图标**是两者的组合（宿主的四个 glyph 在 `shared/ui/icons/navGlyphs.tsx`，组合工具 `withMotif` 与小元素 `navMotifs` 在 SDK 的 `icons/navGlyphs.tsx`）：Phosphor **regular** 原图，外轮廓不改，里面嵌**一个**品牌小元素。
 小元素是独立的 `<g class="nav-glyph-motif">`，平时 `--color-motif`（pink-500），选中时换品牌渐变（渐变 id 每个实例用 `useId` 生成）；
 描边仍走导航栏原来的颜色。悬停、键盘聚焦和变为选中时，只有小元素播一次 `--duration-motif` 的小动画，
 动画写在 `styles.css` 的 `prefers-reduced-motion: no-preference` 里，减弱动态效果时只保留颜色变化。
@@ -265,15 +289,15 @@ restyle 之前的一批变量名仍然存在，它们都已指回语义层，渲
 | 设置 | GearSix | 齿轮孔里的五瓣樱花 | 转 72° |
 | 故事（story 插件） | BookOpenText | 左页的飘带书签 | 书签飘动 |
 
-插件的导航图标契约仍是 `React.ComponentType<{ className?: string }>`，可以直接用上面导出的 glyph，
-或用 `withMotif(Phosphor 图标, 小元素, 动画, 组件名)` 组合自己的。第三方服务有官方标识的插件（如 NovelAI 生图）保留其官方图标，不套品牌小元素。
+插件的导航图标契约仍是 `React.ComponentType<{ className?: string }>`。宿主的 glyph 不在插件契约里，插件用
+`@yinfengwindy/shiori-sdk` 导出的 `withMotif(Phosphor 图标, navMotifs.xxx(...), 动画, 组件名)` 组合自己的（story 插件的 `StoryGlyph` 就是这样）。第三方服务有官方标识的插件（如 NovelAI 生图）保留其官方图标，不套品牌小元素。
 
 新增品牌母题时按 `shared/ui/icons/SPEC.md`：`viewBox="0 0 24 24"`、活动区 20×20、
 线性为主（`fill="none"` + `stroke="currentColor"` + `strokeWidth={1.7}` + 圆头）、
 duotone 副形用 `fill="currentColor"` + `opacity={0.15}`、颜色只用 `currentColor`、
 签名 `({ className = "h-4 w-4" }: IconProps)`、svg 带 `aria-hidden="true"`。
 
-Phosphor 在 `vite.config.ts:25` 被单独拆成 `icons-vendor` chunk，按需引入即可，不必担心体积。
+Phosphor 在 `vite.config.ts` 的 `manualChunks` 里被单独拆成 `icons-vendor` chunk，按需引入即可，不必担心体积。
 
 ## 看板娘（吟风）
 
@@ -310,7 +334,7 @@ Phosphor 在 `vite.config.ts:25` 被单独拆成 `icons-vendor` chunk，按需�
 ## 动手前的检查清单
 
 - [ ] 颜色 / 圆角 / 阴影 / 时长是不是都走了 token 或语义类？有没有漏下的写死值？
-- [ ] 这个控件在 `shared/styles.ts` 里是不是已经有共享类名了？
+- [ ] 这个控件在 `@yinfengwindy/shiori-sdk` 或 `shared/styles.ts` 里是不是已经有共享类名了？
 - [ ] 有没有手写 `focus:*` 覆盖全局焦点样式？
 - [ ] 新增动画有没有在 `prefers-reduced-motion` 块里降级？
 - [ ] 新语义色对有没有标对比度？文本是不是在 AA 之上？
@@ -323,5 +347,5 @@ Phosphor 在 `vite.config.ts:25` 被单独拆成 `icons-vendor` chunk，按需�
   设计上已经预留（`styles.css` 开头 token 分层注释："dark theme later overrides the semantic tier only"），
   但前提是新代码不绕过语义层——每一处写死颜色都是将来暗色主题的一处返工。
 - **`--font-brand` 槽位空着**：MiSans / HarmonyOS Sans SC 还没定，字体栈目前从系统层起步（`styles.css` 的 `--font-sans` 定义）。
-- **legacy 别名仍在服役**：`tailwind.config.ts` 的 legacy 色名和一批老组件还在用。
-- **story 模块自成一套**：`story-*` 工具类里的玻璃底、描边、阴影都是写死值，没有接入 token。
+- **legacy 别名仍在服役**：`tailwind.config.ts` 的 legacy 色名还在，少量代码仍在用（如 `styles.css` 的 body / pre 基层规则、主区域的 `bg-[var(--chat-bg)]`、SDK `SettingsToggleCard` 的 `bg-primary`）。
+- **story 模块自成一套**：`plugins/story/ui/story.css` 里 `story-*` 类的玻璃底、描边、阴影都是写死值，没有接入 token。

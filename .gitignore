@@ -42,6 +42,7 @@ logs/
 /logs
 workspace/
 data/
+!docs/knowledge/data/
 **/.kv.json
 plugins/**/.data/
 /data

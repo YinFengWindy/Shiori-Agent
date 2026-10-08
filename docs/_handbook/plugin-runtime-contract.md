@@ -11,7 +11,7 @@ the existing v2 build/loading path. An external installer or discovery provider
 must call this validator even when the discriminator is absent; omission is not
 a way to accept a legacy external package. Source classification/manual trust
 (#211/#216), external renderer loading (#213), and cross-host activation rollback
-(#262) are separate delivery slices.
+(#262) were delivered separately and are described in the later sections.
 
 ## Package layout and schema
 
@@ -52,6 +52,8 @@ and renderer declaration keys are rejected. This table defines the v1 fields:
 | `dependencies`, `optional_dependencies` | no | existing strong/optional plugin ID lists |
 | `supports_hot_unload` | no | existing boolean, default `true` |
 | `desc`, `author`, `config_model` | no | existing v2 descriptive/configuration metadata |
+| `display_name`, `category`, `default_enabled` | no | same meaning and validation as for bundled plugins (see the plugin tutorial): title, `feature` / `channel` / `system` group, strict boolean default enablement; accepted since Runtime API 3.1.2 (#678), older hosts reject the unknown keys |
+| `distribution` | no | `builtin` (default) or `external`; see [External source packages in the repository](#external-source-packages-in-the-repository-675) |
 
 There is one backend entry in v1. Each renderer kind may declare one entry. Every
 declaration is required; there is no `optional` entry flag. A missing stylesheet,
@@ -105,9 +107,9 @@ changes on `main`; npm and PyPI hold 3.1.0.
 | `3.1.2` | SDK `usePrivateDraft` (plugin-owned document loading, dirty state and explicit save) and the Python local-service utilities `shiori_sdk.files.audio.pcm_wav_duration`, `shiori_sdk.files.staging.staged_import_file` and `shiori_sdk.local_http.loopback_http_url`, and the manifest key `distribution: external` (repository sources delivered through ZIP installation; older hosts reject the unknown key); packages using any of them require `runtime_api: ">=3.1.2 <4.0.0"` | #678 (#675) |
 | `3.1.3` | `shiori_sdk.managed` (fixed artifact acquisition, atomic installation, owned processes and background runtime operations, `register_runtime_rpc`), `shiori_sdk.files.lease` and the renderer `ManagedRuntimePanel` / `useManagedRuntime`; packages using any of them require `runtime_api: ">=3.1.3 <4.0.0"` | #679 (#676) |
 | `3.1.4` | SDK `usePrivateAutosave` (plugin-owned document autosave on the host's serial draft queue), the host settings layout (`SettingsField`, `SettingsToggleField`, `SettingsGroup`, `SettingsSectionCard`, `settingsInputClass`, `settingsGroupStackClass`) and `host.ui.SettingsSavedStatus` (the settings page corner 「已保存」 mark); packages using any of them require `runtime_api: ">=3.1.4 <4.0.0"` | #683 (#682), on `main` via #688 (unpublished) |
-| `3.1.5` | `host.pickFilePaths` (native file selection returned by original path, no copy) and `host.pickDirectory` (native directory selection that may create one), with the SDK type `NativeFilePathPickerOptions` and both in `createFakeHostServices`; packages using either require `runtime_api: ">=3.1.5 <4.0.0"` (see [Runtime API 3.1.5 native path pickers](#runtime-api-315-native-path-pickers)) | #699 (#697) |
-| `3.1.6` | managed-runtime hygiene: `register_runtime_rpc` adds `runtime.remove` and `ManagedRuntime.remove()` (background deletion of installed versions, pointer, caches and staging, also with nothing installed; only while no task runs and no service of any generation runs; lock and log files stay; status phase `removing`); status gains `reclaimable` (bytes of kept downloads) and `staging` (leftover unfinished preparation files); a cleanup failure after publication is reported in `error` while the published version keeps its phase; a published preparation deletes the download cache and other version directories, while failure or cancellation keeps the cache for resumption; removal and that cleanup are joined, not abandoned, on cancellation; `Installation(..., installed_size=)` declares the bytes of one prepared version, and preparation fails before any copy when the root's volume has less free space than the missing artifact bytes + `installed_size` + max(1 GiB, 5%) (reported in GiB); `run_owned` / `OwnedChild` decode each child's output incrementally (UTF-8, else the Windows ANSI code page) into UTF-8 logs, end lines at CR, LF or CRLF and name the last meaningful line in a preparation failure or early service exit; `Processes.spawn` accepts `asyncio.subprocess` constants for `stdout` / `stderr`; the renderer `ManagedRuntimePanel` offers 「删除环境」 behind a destructive `host.ui.ConfirmDialog` and `useManagedRuntime` exports `ManagedRuntimeAction`; packages using any of them require `runtime_api: ">=3.1.6 <4.0.0"` | #700 (#697) |
-| `3.1.7` | **breaking** managed-runtime install location and in-place import: `Installation` separates the state root (plugin data: `current.json`, new `location.json`, locks, logs, provider files) from an `install_root` holding downloads, `s/` staging, `v/` versions and child `tmp/` / `cache/` (plus provider-declared `Installation(..., scratch=)` directories); `Installation.relocate(root | None)` / `ManagedRuntime.relocate()` / RPC `runtime.relocate {directory?}` (a dedicated `<namespace>` directory, matched case-insensitively on Windows, inside an existing directory on a drive letter — UNC and device-namespace (`\\?\`, `\\.\`) paths are rejected; no `directory` restores the default) only while nothing is installed or kept and no task runs, and never into a directory already holding installation entries; the location persists across generations and the service identity (`OwnedService.root`) stays the state root; `current.json` records the absolute install root only for a chosen location (a default installation follows plugin data when it moves); an unreadable `location.json` is reported in status `error` and is replaced by `relocate` while no pointer exists, or reset by removal; `runtime.prepare {source}` takes the user's original absolute path (`host.pickFilePaths`), checks a regular file reached without any link or junction, its suffix and, for a single artifact, its exact size, verifies SHA-256 while reading it before any build, and never copies, moves or deletes it (a ZIP bundle's members are extracted into staging); the free-space check uses the install root's volume and counts an in-place import as 0 bytes; **breaking** Python API: the build callback becomes `build(staging, resources)` with each artifact's verified path; `acquire_resources` returns that name → path mapping; `acquire_artifact` loses `source=` (single originals are checked in place by the new `verify_file`); `ManagedRuntime(..., import_asset=)` replaces `register_runtime_rpc(import_asset=)` and `submit(..., import_asset)`; `register_runtime_rpc` drops `max_bytes`; status gains `location`, `customized`, `required` (download), `required_import` (the provider's import), `free`, `removable` and `relocatable` — exactly what blocks relocation is `removable`; removal deletes only installation entries of the install root (links and junctions are unlinked, never entered), and the chosen dedicated directory once empty, keeping every state-root file; an empty staging parent is removed after each preparation; `ManagedRuntimePanel` drops its `namespace` prop (**breaking**), imports through `host.pickFilePaths`, shows the location with the download / import requirement and free space (only free space once installed), offers 「更改位置」 through `host.pickDirectory` and 「恢复默认」 for a chosen location, and shows 「删除环境」 whenever `removable`; `useManagedRuntime` returns `relocate(directory?)`; packages using any of them require `runtime_api: ">=3.1.7 <4.0.0"` | #701 (#697) |
+| `3.1.5` | `host.pickFilePaths` (native file selection returned by original path, no copy) and `host.pickDirectory` (native directory selection that may create one), with the SDK type `NativeFilePathPickerOptions` and both in `createFakeHostServices`; packages using either require `runtime_api: ">=3.1.5 <4.0.0"` (see [Runtime API 3.1.5 native path pickers](#runtime-api-315-native-path-pickers)) | #699 (#697), on `main` via #703 |
+| `3.1.6` | managed-runtime hygiene: `register_runtime_rpc` adds `runtime.remove` and `ManagedRuntime.remove()` (background deletion of installed versions, pointer, caches and staging, also with nothing installed; only while no task runs and no service of any generation runs; lock and log files stay; status phase `removing`); status gains `reclaimable` (bytes of kept downloads) and `staging` (leftover unfinished preparation files); a cleanup failure after publication is reported in `error` while the published version keeps its phase; a published preparation deletes the download cache and other version directories, while failure or cancellation keeps the cache for resumption; removal and that cleanup are joined, not abandoned, on cancellation; `Installation(..., installed_size=)` declares the bytes of one prepared version, and preparation fails before any copy when the root's volume has less free space than the missing artifact bytes + `installed_size` + max(1 GiB, 5%) (reported in GiB); `run_owned` / `OwnedChild` decode each child's output incrementally (UTF-8, else the Windows ANSI code page) into UTF-8 logs, end lines at CR, LF or CRLF and name the last meaningful line in a preparation failure or early service exit; `Processes.spawn` accepts `asyncio.subprocess` constants for `stdout` / `stderr`; the renderer `ManagedRuntimePanel` offers 「删除环境」 behind a destructive `host.ui.ConfirmDialog` and `useManagedRuntime` exports `ManagedRuntimeAction`; packages using any of them require `runtime_api: ">=3.1.6 <4.0.0"` | #700 (#697), on `main` via #704 |
+| `3.1.7` | **breaking** managed-runtime install location and in-place import: `Installation` separates the state root (plugin data: `current.json`, new `location.json`, locks, logs, provider files) from an `install_root` holding downloads, `s/` staging, `v/` versions and child `tmp/` / `cache/` (plus provider-declared `Installation(..., scratch=)` directories); `Installation.relocate(root | None)` / `ManagedRuntime.relocate()` / RPC `runtime.relocate {directory?}` (a dedicated `<namespace>` directory, matched case-insensitively on Windows, inside an existing directory on a drive letter — UNC and device-namespace (`\\?\`, `\\.\`) paths are rejected; no `directory` restores the default) only while nothing is installed or kept and no task runs, and never into a directory already holding installation entries; the location persists across generations and the service identity (`OwnedService.root`) stays the state root; `current.json` records the absolute install root only for a chosen location (a default installation follows plugin data when it moves); an unreadable `location.json` is reported in status `error` and is replaced by `relocate` while no pointer exists, or reset by removal; `runtime.prepare {source}` takes the user's original absolute path (`host.pickFilePaths`), checks a regular file reached without any link or junction, its suffix and, for a single artifact, its exact size, verifies SHA-256 while reading it before any build, and never copies, moves or deletes it (a ZIP bundle's members are extracted into staging); the free-space check uses the install root's volume and counts an in-place import as 0 bytes; **breaking** Python API: the build callback becomes `build(staging, resources)` with each artifact's verified path; `acquire_resources` returns that name → path mapping; `acquire_artifact` loses `source=` (single originals are checked in place by the new `verify_file`); `ManagedRuntime(..., import_asset=)` replaces `register_runtime_rpc(import_asset=)` and `submit(..., import_asset)`; `register_runtime_rpc` drops `max_bytes`; status gains `location`, `customized`, `required` (download), `required_import` (the provider's import), `free`, `removable` and `relocatable` — exactly what blocks relocation is `removable`; removal deletes only installation entries of the install root (links and junctions are unlinked, never entered), and the chosen dedicated directory once empty, keeping every state-root file; an empty staging parent is removed after each preparation; `ManagedRuntimePanel` drops its `namespace` prop (**breaking**), imports through `host.pickFilePaths`, shows the location with the download / import requirement and free space (only free space once installed), offers 「更改位置」 through `host.pickDirectory` and 「恢复默认」 for a chosen location, and shows 「删除环境」 whenever `removable`; `useManagedRuntime` returns `relocate(directory?)`; packages using any of them require `runtime_api: ">=3.1.7 <4.0.0"` | #701 (#697), on `main` via #705 |
 | `3.1.8` | role affection summary: the renderer domain types gain `AffectionStageName` (`"陌生" \| "熟悉" \| "朋友" \| "亲密" \| "挚爱"`) and `AffectionSummary` (`value` 0–100, `stage`, `progress` 0–1 within the stage); `RoleRecord.affection` and `SessionPayload.metadata.affection` carry it once the role's first conversation has initialized affection and are absent before; packages reading them require `runtime_api: ">=3.1.8 <4.0.0"` | #710 (#708) |
 
 2.2 and 2.3 first ship together in the release that turns every external
@@ -202,12 +204,22 @@ The declaration is static, so the desktop can list a channel while its plugin is
 disabled, untrusted or still missing credentials. The channel name is a data key
 of role bindings and conversation threads and must stay stable across releases.
 
+An entry may also declare an optional `instance_prefix` (a nonempty string that
+starts with `<name>_`, e.g. Telegram's `telegram_`): per-account connections may
+then use generated transport names `<instance_prefix><suffix>`, which share the
+entry's `chat_types` and `group_listening`. `channels.list` adds one row per such
+contributed instance of an enabled, `ACTIVE` plugin.
+
 At runtime `ctx.channels.add(channel)` only accepts a `channel.name` declared by
-the same manifest. Any other name raises during setup, so the plugin rolls back
+the same manifest, a name under a declared `instance_prefix`, or an account
+instance named `<declared name>:<suffix>` whose channel carries a nonempty
+`account_id`. Any other name raises during setup, so the plugin rolls back
 to `FAILED` with diagnostic code `undeclared_channel` (stage `setup`, field
-`channels`). When two plugins declare the same channel name, discovery marks every
-claimant `CONFLICT` (code `duplicate_channel`, field `channels`) and none of them
-activates; candidates that already conflict by plugin ID keep `duplicate_id`.
+`channels`). When two plugins declare the same channel name, or one plugin's
+`instance_prefix` overlaps another plugin's channel name or prefix, discovery
+marks every claimant `CONFLICT` (code `duplicate_channel`, field `channels`) and
+none of them activates; candidates that already conflict by plugin ID keep
+`duplicate_id`.
 Packages using `channels` must require `runtime_api: ">=3.0.0 <4.0.0"`; older
 hosts reject the unknown top-level key.
 
@@ -253,8 +265,8 @@ failures read like the host's and can be fronted by the host mascot 吟风:
 
 - Every bound component (`navPage.component` and `sidebar`, a custom
   `settingsSection.component`, `roleAssets.component`) now receives the host
-  services as a `host` prop next to `client` (`PluginInjectedProps` in
-  `pluginUiModuleContract.tsx`). Bundled source plugins may keep using the
+  services as a `host` prop next to `client` (`PluginInjectedProps`, exported
+  by `@yinfengwindy/shiori-sdk` since 2.9). Bundled source plugins may keep using the
   `usePluginHostServices()` context; a precompiled external package, which
   cannot import the host's React context, uses the prop.
 - `host.feedback.{success,info,warning,error}(message, options?)` queues a
@@ -276,6 +288,15 @@ failures read like the host's and can be fronted by the host mascot 吟风:
   「正在保存…」/「已保存」 mark in the settings page corner, exactly as the schema
   plugin config page does. Props: `phase` (`DraftSavePhase`, usually
   `usePrivateAutosave().savePhase`). It renders nothing outside a settings page.
+- For `account.detail` contributions `host.ui` also offers
+  `AccountStatusCard` (one account's status with its single connect/disconnect
+  button and plugin rows below), `AccountDetailActions` (secondary actions in
+  the account danger zone next to 删除账号) and `Reveal` (fade + height
+  show/hide for rows such as a QR code). The other members of `host` are
+  `onEvent` (every desktop bridge event), `listRoles`, `pickImages`,
+  `pickFiles` (native selection copied into private staging under a
+  `namespace`), the 3.1.5 path pickers, `config` and `assets` (2.10). The SDK's
+  `PluginHostServices` / `PluginHostUi` types are the complete list.
 
 `persona` is `boolean | "generic" | PersonaSceneKey` and defaults to `false`: a
 plugin opts in per call. `true` / `"generic"` select the surface's own generic
@@ -355,8 +376,8 @@ The runtime exports are exactly those listed for `@yinfengwindy/shiori-sdk` in t
 renderer peer ABI (`pluginUiPeerExports` in
 `apps/desktop/src/plugins/uiContract.ts`); at 2.8.0 they are `BridgeError` and
 `PluginBridgeError` (2.9.0 adds the primitives below). Type-only exports (such as `PluginRpcClient`, the type of
-the injected `client`) have no runtime presence. Adding an export is a new
-minor version.
+the injected `client`) have no runtime presence. Adding an export is a contract
+change and bumps the patch version once (see the version history above).
 
 The `@yinfengwindy/shiori-sdk/testing` subpath is development-only test support. It is
 **not** part of the runtime API or the import map; production renderer code must
@@ -450,6 +471,37 @@ The host store behind any of this (plugin enablement, feedback queue, registries
 appearance preferences) stays private; accounts still arrive through the
 `account.detail` props and `host.ui`.
 
+## Runtime API 3.1.1 plugin services, native resources and background chat
+
+These are the additions of the 3.1.1 row; packages using any of them declare
+`runtime_api: ">=3.1.1 <4.0.0"`. The SDK README ("Discoverable services and
+speech contracts") holds the details.
+
+- **Services.** A backend that declares the `services` capability publishes
+  `ctx.services.register(service_id, contract=, label=, methods={...},
+  metadata=)` (`shiori_sdk.services.ServiceProviderContext`): explicit async JSON
+  methods for exactly that plugin instance's lifetime. Renderer code discovers
+  them through the injected `client.services.list(contract)` (descriptors
+  `{plugin_id, service_id, contract, label, metadata}`) and calls one with
+  `client.services.call({plugin_id, service_id}, method, payload)`. Discovery
+  needs no static dependency and grants no access to the provider's private
+  RPCs; a retired provider or caller fails with `plugin_service_unavailable`,
+  an unpublished method with `plugin_service_method_unavailable`, and no other
+  provider is silently substituted. `shiori_sdk.voice` defines only the speech
+  wire values (`shiori.asr.v1` `transcribe`, `shiori.tts.v1` `synthesize`),
+  published by the bundled `sensevoice_asr` and `gpt_sovits_tts` plugins.
+- **Native resources.** The background `ctx.native` offers `audio` (`devices`,
+  `startCapture`, `stopCapture` → 16 kHz mono WAV, `cancelCapture`, `play`,
+  `stop`; no host playback queue) and `keys` (`validate`, `register(id,
+  accelerator, listener)`, `unregister`). They are bound to the background
+  activation and revoked when it or its window ends.
+- **Background chat.** `ctx.chat.send({role_id, content, turn_id, media})` and
+  `ctx.chat.cancel({session_key, turn_id})` start and cancel a turn for a role.
+- **Autonomous role UI.** A `ui` module may contribute
+  `roleUi: { mode: "self-managed", Component }`: a plugin-owned role panel that
+  loads and saves through its own RPC and only reports `onDirtyChange` to the
+  host's navigation guard, never joining the host role save.
+
 ## Runtime API 3.1.5 native path pickers
 
 Besides the copying `host.pickFiles`, which is unchanged, the injected host
@@ -503,8 +555,10 @@ unchanged (the host uses the same SDK types):
 - `app.background`: `PluginBackgroundContribution` (the entry's default
   export), `BackgroundCtx` and its capabilities (`PluginBackgroundSurfaces`,
   `PluginBackgroundStore`, `PluginBackgroundTray`, `PluginBackgroundAssets`,
-  `PluginBackgroundEvents`, `BackgroundEffectDispose`), plus the surface
-  vocabulary they use (`SurfaceSpec`, `SurfaceCreateResult`,
+  `PluginBackgroundEvents`, `BackgroundEffectDispose`; since 3.1.1 also
+  `PluginNativeApi` and `PluginBackgroundChat`, see
+  [Runtime API 3.1.1](#runtime-api-311-plugin-services-native-resources-and-background-chat)),
+  plus the surface vocabulary they use (`SurfaceSpec`, `SurfaceCreateResult`,
   `PluginBackgroundSettled`, `SurfaceSettleReason`).
 
 The React-free ones the host's main process and preload use are also available
@@ -620,7 +674,7 @@ The default exports retain the current contribution ABI:
 
 | Entry | Default export |
 | --- | --- |
-| `ui` | `{ pluginId, navPage?, settingsSection?, roleAssets?, roleSettings?, chatImageActions? }`, matching `PluginUiModule` |
+| `ui` | `{ pluginId, navPage?, settingsSection?, roleAssets?, accountDetail?, roleSettings?, roleUi?, chatImageActions? }`, matching `PluginUiModule` |
 | `background` | `{ pluginId, setup(ctx) }`, matching `PluginBackgroundContribution` |
 | `surface` | `{ pluginId, surface: { component } }`, matching `PluginSurfaceModule` |
 
@@ -675,7 +729,10 @@ from the shipped host code. Changing the manifest in the dev server invalidates
 those imports and reloads the page. Installed workspace packages always undergo
 the existing contract, duplicate-ID and exact-content trust checks regardless of
 this field. The declaration never grants trust, overrides a builtin, or installs
-anything automatically.
+anything automatically. No repository plugin currently declares it: the
+SenseVoice and GPT-SoVITS providers that introduced it became bundled builtin
+plugins (default disabled) in #693; the build smoke and distribution tests below
+generate their own external sources.
 
 The frozen host collects the complete SDK runtime independently of these plugin
 sources, including implicit namespace directories such as `shiori_sdk.files`.
@@ -960,11 +1017,12 @@ internal name must update their imports and rebuild; the import map and host pee
 wrappers expose only the public name, without a compatibility alias.
 
 Python contracts, shared lifecycle values, event handler/effect types and
-independent test fakes belong to `shiori_sdk`. All 20 baseline plugins consume SDK
+independent test fakes belong to `shiori_sdk`. All 22 bundled plugins consume SDK
 contracts and explicitly declared dependencies: browser_use, citation, computer_use,
-context_pressure, default_memory, desktop_pet, feishu, meme, novelai, observe,
-plugin_undo, qq, qqbot, screen_perception, shell_restore, shell_safety,
-status_commands, story, telegram and tool_loop_guard.
+context_pressure, default_memory, desktop_pet, feishu, gpt_sovits_tts, meme,
+novelai, observe, plugin_undo, qq, qqbot, screen_perception, sensevoice_asr,
+shell_restore, shell_safety, status_commands, story, telegram and tool_loop_guard
+(the 20 of #585–#591 plus the two speech providers of #678/#693).
 
 Every plugin's backend, tests and packaged test support are guarded against host
 implementation dependencies without migration exemptions. Repository-external
