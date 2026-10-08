@@ -111,7 +111,8 @@ def role_mood_prompt(moods: tuple[str, ...], *, group: bool = False) -> str:
         "thought 必须是包含“我”的第一人称当下想法，1–2 句，40–70 字。\n"
         "affection_delta 是这轮交流让你对用户的好感变化，"
         f"-{AFFECTION_TURN_DELTA_LIMIT} 到 {AFFECTION_TURN_DELTA_LIMIT} 的整数，"
-        "通常是 0 或 ±1；affection_reason 用一句话说明原因。"
+        "可以为负（让你反感、失望或受伤时），通常是 0 或 ±1；"
+        "affection_reason 用一句话说明原因。"
     )
 
 

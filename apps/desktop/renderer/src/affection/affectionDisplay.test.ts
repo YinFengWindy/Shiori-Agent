@@ -9,6 +9,11 @@ describe("resolveAffectionDisplay", () => {
     assert.deepEqual(resolveAffectionDisplay({ value: 100, stage: "挚爱", progress: 1.4 }), { stage: "挚爱", percent: 100 });
   });
 
+  it("fills negative stages by their own progress, never below an empty bar", () => {
+    assert.deepEqual(resolveAffectionDisplay({ value: -25, stage: "冷淡", progress: 0.5 }), { stage: "冷淡", percent: 50 });
+    assert.deepEqual(resolveAffectionDisplay({ value: -100, stage: "厌恶", progress: -0.2 }), { stage: "厌恶", percent: 0 });
+  });
+
   it("shows nothing before initialization or for malformed summaries", () => {
     assert.equal(resolveAffectionDisplay(null), null);
     assert.equal(resolveAffectionDisplay(undefined), null);

@@ -97,8 +97,9 @@ def test_value_is_capped_at_100_and_requires_initialization(tmp_path):
 
 def test_initial_value_outside_range_is_rejected(tmp_path):
     service = RoleAffectionService(tmp_path)
-    with pytest.raises(ValueError, match="超出范围"):
-        service.initialize("mira", value=101, reason="越界", now=_NOW)
+    for value in (101, -101):
+        with pytest.raises(ValueError, match="超出范围"):
+            service.initialize("mira", value=value, reason="越界", now=_NOW)
     assert service.read_state("mira") is None
     assert service.read_history("mira") == []
 
@@ -274,3 +275,122 @@ def test_state_saved_before_decay_tracking_counts_from_its_last_change(tmp_path)
     assert service.read_state("mira").value == 45
     service.settle_decay("mira", now=_NOW + timedelta(days=4))
     assert service.read_state("mira").value == 44
+
+
+def test_a_stranger_can_drop_into_the_negative_stages(tmp_path):
+    service = RoleAffectionService(tmp_path)
+    service.initialize("mira", value=10, reason="初始", now=_NOW)
+
+    cold = service.apply_delta(
+        "mira", delta=-15, reason="冒犯", source="turn", now=_NOW
+    )
+    assert (cold.value, cold.stage_floor) == (-5, None)
+    assert service.current_summary("mira", now=_NOW)["stage"] == "冷淡"
+
+    service.apply_delta("mira", delta=-45, reason="伤害", source="turn", now=_NOW)
+    assert service.current_summary("mira", now=_NOW)["stage"] == "厌恶"
+    # Negative stages carry no floor: the value moves freely back up and down.
+    assert (
+        service.apply_delta(
+            "mira", delta=-99, reason="触底", source="turn", now=_NOW
+        ).value
+        == -100
+    )
+    assert (
+        service.apply_delta(
+            "mira", delta=3, reason="道歉", source="turn", now=_NOW
+        ).value
+        == -97
+    )
+
+
+def test_a_role_that_reached_familiar_never_drops_below_20(tmp_path):
+    service = RoleAffectionService(tmp_path)
+    service.initialize("mira", value=18, reason="初始", now=_NOW)
+
+    reached = service.apply_delta("mira", delta=3, reason="升", source="turn", now=_NOW)
+    assert (reached.value, reached.stage_floor) == (21, 20)
+    dropped = service.apply_delta(
+        "mira", delta=-30, reason="伤害", source="turn", now=_NOW
+    )
+    assert (dropped.value, dropped.stage_floor) == (20, 20)
+
+
+def _write_state(service: RoleAffectionService, **fields):
+    service.state_path("mira").parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "role_id": "mira",
+        "initialized_at": _NOW.isoformat(),
+        "updated_at": _NOW.isoformat(),
+        "last_user_message_at": _NOW.isoformat(),
+        "decay_settled_at": None,
+    }
+    service.state_path("mira").write_text(
+        json.dumps(payload | fields), encoding="utf-8"
+    )
+
+
+def test_a_legacy_stranger_floor_of_zero_means_no_floor(tmp_path):
+    service = RoleAffectionService(tmp_path)
+    # Before negative affection, every 陌生 role was saved with stage_floor 0.
+    _write_state(service, value=5, stage_floor=0)
+
+    assert service.read_state("mira").stage_floor is None
+    state = service.apply_delta(
+        "mira", delta=-10, reason="冒犯", source="turn", now=_NOW
+    )
+    assert (state.value, state.stage_floor) == (-5, None)
+    assert (
+        json.loads(service.state_path("mira").read_text(encoding="utf-8"))[
+            "stage_floor"
+        ]
+        is None
+    )
+
+
+def test_a_legacy_state_above_stranger_keeps_its_floor(tmp_path):
+    service = RoleAffectionService(tmp_path)
+    _write_state(service, value=95, stage_floor=80)
+
+    state = service.read_state("mira")
+    assert (state.value, state.stage_floor) == (95, 80)
+    assert service.current_summary("mira", now=_NOW)["stage"] == "挚爱"
+
+
+@pytest.mark.parametrize(
+    "value, stage_floor",
+    [
+        (5, 10),  # not a stage lower bound
+        (-60, -100),  # negative stages never carry a floor
+        (-5, -49),
+        (25, None),  # 熟悉 reached, so its floor must be recorded
+        (25, 0),  # legacy 0 means 陌生 only
+        (10, 20),  # below the floor
+        (-101, None),  # out of range
+    ],
+)
+def test_state_with_an_invalid_floor_or_value_is_rejected(tmp_path, value, stage_floor):
+    service = RoleAffectionService(tmp_path)
+    _write_state(service, value=value, stage_floor=stage_floor)
+    with pytest.raises(ValueError):
+        service.read_state("mira")
+
+
+def test_decay_stops_at_zero_without_a_floor(tmp_path):
+    service = RoleAffectionService(tmp_path)
+    service.initialize("mira", value=2, reason="初始", now=_NOW)
+
+    service.settle_decay("mira", now=_NOW + timedelta(days=10))
+
+    assert service.read_state("mira").value == 0
+    assert [entry[2] for entry in _decay_entries(service)] == [1, 0]
+
+
+def test_negative_affection_does_not_decay(tmp_path):
+    service = RoleAffectionService(tmp_path)
+    service.initialize("mira", value=-30, reason="设定里是宿敌", now=_NOW)
+
+    service.settle_decay("mira", now=_NOW + timedelta(days=10))
+
+    assert service.read_state("mira").value == -30
+    assert _decay_entries(service) == []

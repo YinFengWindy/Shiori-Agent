@@ -951,5 +951,5 @@ def test_affection_block_goes_to_the_context_frame_not_the_system_prompt(
         for message in result.messages
         if SYSTEM_CONTEXT_FRAME_MARKER in str(message["content"])
     ]
-    assert "72/100（亲密）" in frame
+    assert "72（亲密，范围 -100 到 100）" in frame
     assert "72/100" not in result.system_prompt

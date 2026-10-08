@@ -40,9 +40,9 @@ export type LonelinessRuntime = {
 };
 
 /** The fixed affection stages, from lowest to highest. */
-export type AffectionStageName = "陌生" | "熟悉" | "朋友" | "亲密" | "挚爱";
+export type AffectionStageName = "厌恶" | "冷淡" | "陌生" | "熟悉" | "朋友" | "亲密" | "挚爱";
 
-/** A role's affection (0–100) with its stage and progress within that stage (0–1). */
+/** A role's affection (-100–100) with its stage and progress within that stage (0–1). */
 export type AffectionSummary = {
   value: number;
   stage: AffectionStageName;

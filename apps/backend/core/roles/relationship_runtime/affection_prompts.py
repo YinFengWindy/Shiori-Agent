@@ -9,16 +9,24 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from .affection import AFFECTION_MAX, AFFECTION_STAGES, AffectionState, affection_stage
+from .affection import (
+    AFFECTION_MAX,
+    AFFECTION_MIN,
+    AFFECTION_STAGES,
+    AffectionState,
+    affection_stage,
+)
 
 DEFAULT_AFFECTION_STAGE_PROMPTS: dict[str, str] = {
+    "厌恶": "对用户反感抵触，语气冷硬、不耐烦，不愿多说，拒绝亲近，必要时直接表达不满。",
+    "冷淡": "对用户冷淡疏远、带着戒备或不满，回应简短，不主动延续话题，也不分享私事。",
     "陌生": "对用户客气有礼、保持距离，少谈私事，不撒娇也不开过界的玩笑。",
     "熟悉": "对用户放松一些，可以闲聊和开轻松的玩笑，但仍有分寸，不过分亲昵。",
     "朋友": "像朋友一样自然随意，愿意分享自己的想法和日常，会关心用户的近况。",
     "亲密": "语气亲近温柔，会表达在意和想念，偶尔撒娇，愿意对用户说心里话。",
     "挚爱": "亲昵依恋，毫不掩饰喜欢和在乎，想一直黏着用户，把用户放在最重要的位置。",
 }
-"""五个阶段的通用默认语气指引，不针对任何具体角色。"""
+"""每个阶段的通用默认语气指引（与阶段同序），不针对任何具体角色。"""
 
 if tuple(DEFAULT_AFFECTION_STAGE_PROMPTS) != tuple(
     stage.name for stage in AFFECTION_STAGES
@@ -85,6 +93,6 @@ def render_affection_prompt(
     stage = affection_stage(state.value).name
     return (
         "## 好感度\n"
-        f"你对用户的好感：{state.value}/{AFFECTION_MAX}（{stage}）\n"
+        f"你对用户的好感：{state.value}（{stage}，范围 {AFFECTION_MIN} 到 {AFFECTION_MAX}）\n"
         f"这个阶段对用户的语气：{effective_stage_prompt(overrides, stage)}"
     )
