@@ -130,10 +130,10 @@ test("setup registers every subscription the pet needs, and one reclaiming effec
 
   // Without this effect the surface survives the plugin being disabled, and
   // #181's "停用桌宠插件后 surface 全部回收" quietly stops being true.
-  assert.deepEqual(fake.effects, ["desktop_pet_voice", "desktop_pet_controller"]);
+  assert.deepEqual(fake.effects, ["desktop_pet_voice", "desktop_pet_live", "desktop_pet_controller"]);
   assert.deepEqual([...fake.events.keys()].sort(), [
         "action", "sync", "voice.devices", "voice.stop", "voice.preferences.validate", "voice.preferences.changed", "chat.delta", "chat.error",
-    "chat.done", "session.updated", "system.lock-state", "bubble.dismissed",
+    "chat.done", "session.updated", "system.lock-state", "bubble.dismissed", "live.reply.show", "live.cancel", "bridge.exit",
   ].sort());
   assert.deepEqual([...fake.settled.keys()], [desktopPetSurfaceId]);
 });
@@ -166,8 +166,8 @@ test("a failed restore is reported, not rethrown, so the contribution stays aliv
   // A thrown `setup` makes `PluginBackgroundHost` dispose the whole scope, and
   // nothing retries it — the pet would stay dead until the app restarted.
   await assert.doesNotReject(petBackground.setup(fake.ctx));
-  assert.deepEqual(fake.effects, ["desktop_pet_voice", "desktop_pet_controller"]);
-  assert.deepEqual([...fake.events.keys()].length, 12);
+  assert.deepEqual(fake.effects, ["desktop_pet_voice", "desktop_pet_live", "desktop_pet_controller"]);
+  assert.deepEqual([...fake.events.keys()].length, 15);
   // Reported to the host's diagnostic log: the plugin-host window is hidden,
   // so a failure that only reached its console would be invisible.
   assert.deepEqual(fake.failures.map(([operation, error]) => [operation, (error as Error).message]), [["restore", "bridge 还没起来"]]);
@@ -208,6 +208,23 @@ test("a role reply reaches the surface as retained state", async () => {
 
   fake.events.get("chat.done")?.({ role_id: "mira", reply: "hi" });
   assert.equal(fake.surfaceCalls.filter(([call]) => call === "setState").length, before + 1);
+});
+
+test("a live reply reaches the surface and its outcome goes back to the backend", async () => {
+  const fake = recorder();
+  await petBackground.setup(fake.ctx);
+  await flush();
+  fake.events.get("sync")?.({ kind: "show" });
+  await flush();
+  const before = fake.surfaceCalls.filter(([call]) => call === "setState").length;
+
+  fake.events.get("live.reply.show")?.({ source: "live", role_id: "mira", reply_id: "r1", run_id: "run", text: "弹幕回复" });
+  await flush();
+  assert.equal(fake.surfaceCalls.filter(([call]) => call === "setState").length, before + 1);
+  assert.equal(fake.rpcCalls.at(-1), "live.reply.outcome");
+  fake.events.get("live.reply.show")?.({ source: "live", role_id: "mira" });
+  await flush();
+  assert.deepEqual(fake.failures.map(([operation]) => operation), ["live.reply"]);
 });
 
 test("a settle for the pet's surface reaches the controller", async () => {

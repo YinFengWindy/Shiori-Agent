@@ -2,7 +2,9 @@ import type { PluginBackgroundContribution } from "@yinfengwindy/shiori-sdk";
 import { readDesktopPetBinding } from "./binding";
 import { DesktopPetController, desktopPetSurfaceId } from "./controller";
 import { normalizeDesktopPetSettings } from "./settings";
+import { registerLiveReplies } from "./live/register";
 import { PetVoiceController } from "./voice/controller";
+import { PetSpeechQueue } from "./voice/speechQueue";
 import { defaultVoicePreferences, type VoicePreferences } from "./voice/preferences";
 
 /** Identifies the pet's own item in the host tray menu. */
@@ -27,7 +29,6 @@ const desktopPetBackground = {
     // which nobody can open: `show` failing is exactly what the user is looking
     // at when they report "点了托盘没反应".
     const reportError = (operation: string, error: unknown) => ctx.reportFailure(operation, error);
-    let voice: PetVoiceController | null = null;
 
     const controller = new DesktopPetController({
       surfaces: ctx.surfaces,
@@ -39,7 +40,6 @@ const desktopPetBackground = {
       ),
       onError: reportError,
       onChanged: () => refreshTrayEntry(),
-      onTargetChanged: (roleId) => voice?.bind(roleId),
     });
 
     /**
@@ -67,15 +67,23 @@ const desktopPetBackground = {
     // is enabled rather than only after the pet's first state change.
     refreshTrayEntry();
     // Optional speech initialization cannot tear down the pet's visual and text features.
+    let preferences = defaultVoicePreferences;
     try {
-      const preferences = await ctx.rpc.call<VoicePreferences>("voice.preferences.get");
-      voice = new PetVoiceController(ctx, preferences, (state) => controller.publishVoice(state));
+      preferences = await ctx.rpc.call<VoicePreferences>("voice.preferences.get");
     } catch (error) {
       reportError("voice.preferences", error);
-      voice = new PetVoiceController(ctx, defaultVoicePreferences, (state) => controller.publishVoice(state));
     }
-    const activeVoice = voice;
+    // One speech line for every reply source, so chat and live speech never overlap.
+    const speech = new PetSpeechQueue(ctx.native.audio);
+    const activeVoice = new PetVoiceController(ctx, preferences, (state) => controller.publishVoice(state), speech);
+    controller.watchTarget((roleId) => activeVoice.bind(roleId));
     ctx.effect("desktop_pet_voice", () => activeVoice.dispose());
+    await registerLiveReplies(ctx, {
+      bubbles: controller.replies,
+      speech,
+      ttsProvider: () => activeVoice.ttsProvider,
+      watchTarget: (listener) => controller.watchTarget(listener),
+    });
     ctx.surfaces.onMessage(desktopPetSurfaceId, (message) => {
       if (!message || typeof message !== "object" || !("kind" in message)) return;
       if (message.kind === "voice.stop") activeVoice.stop();
@@ -86,6 +94,8 @@ const desktopPetBackground = {
     await ctx.rpc.handle("voice.preferences.validate", (payload) => ctx.native.keys.validate(String(payload.hotkey ?? "")));
     await ctx.rpc.handle("voice.stop", () => activeVoice.stop());
     for (const method of ["chat.delta", "chat.done", "chat.error"]) ctx.hostEvents.on(method, (_payload, event) => activeVoice.handle(event));
+    // A dead bridge never finishes the pending chat turn (no chat.done / chat.error), so retire it now.
+    ctx.hostEvents.on("bridge.exit", () => activeVoice.stop("chat"));
 
     ctx.effect("desktop_pet_controller", () => controller.terminate());
     ctx.surfaces.onSettled(desktopPetSurfaceId, (settled) => controller.handleSettled(settled));
