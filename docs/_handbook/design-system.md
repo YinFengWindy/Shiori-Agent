@@ -138,9 +138,9 @@ restyle 之前的一批变量名仍然存在，它们都已指回语义层，渲
 
 ## 共享类名（`@yinfengwindy/shiori-sdk` 与 `shared/styles.ts`）
 
-控件外观的唯一来源，**不要在组件里另起一套手写串**。插件也在用的类名（`cx`、`inputClass`、`textareaClass`、`settingsInputClass`、`settingsGroupStackClass`、`ghostButtonClass`、`compactGhostButtonClass`、`iconButtonClass`、`cardClass`、`badgeClass`、`sidebarNavItemClass`、`secondarySidebarSurfaceClass`、`sidebarContentMotionClass`、`primaryButtonSurfaceClass` / `ghostButtonSurfaceClass`、`compactButtonSizeClass`、`pressableClass` / `compactPressableClass`，菜单的 `menuPanelClass` / `menuSeparatorClass`）从 `@yinfengwindy/shiori-sdk` 导入，其余从 `shared/styles.ts` 导入。
+控件外观的唯一来源，**不要在组件里另起一套手写串**。插件也在用的类名（`cx`、`inputClass`、`textareaClass`、`settingsInputClass`、`settingsGroupStackClass`、`ghostButtonClass`、`compactGhostButtonClass`、`iconButtonClass`、`compactIconButtonClass`、`cardClass`、`badgeClass`、`sidebarNavItemClass`、`secondarySidebarSurfaceClass`、`sidebarContentMotionClass`、`primaryButtonSurfaceClass` / `ghostButtonSurfaceClass`、`compactButtonSizeClass`、`pressableClass` / `compactPressableClass`，菜单的 `menuPanelClass` / `menuSeparatorClass`）从 `@yinfengwindy/shiori-sdk` 导入，其余从 `shared/styles.ts` 导入。
 菜单行的 `menuItemClass` / `menuItemSelectedClass` 只给宿主用，从 `@yinfengwindy/shiori-sdk/host-internal` 导入（不属于插件契约）。
-`compactIconButtonClass`、`dialogBackdropClass` 和对话框外框 `DialogFrame` 也定义在 SDK（SDK 的能力设置对话框要用），只经 `host-internal` 导出、不属于插件契约；宿主代码照旧从 `shared/styles.ts`（两个类名，它从 `host-internal` 转出）或 `host-internal`（`DialogFrame`）导入。带标题、内容可滚动的对话框（插件详情、账号详情、能力卡片的 ⚙ 设置）统一用 `DialogFrame`：居中、`rounded-md`、限高、标题行右侧是 `compactIconButtonClass` 的关闭按钮，正文单独滚动，可带固定底栏；确认弹窗仍用 `ConfirmDialog`。
+`dialogBackdropClass` 和对话框外框 `DialogFrame` 也定义在 SDK（SDK 的能力设置对话框要用），只经 `host-internal` 导出、不属于插件契约；宿主代码照旧从 `shared/styles.ts`（`dialogBackdropClass`，它从 `host-internal` 转出）或 `host-internal`（`DialogFrame`）导入。带标题、内容可滚动的对话框（插件详情、账号详情、能力卡片的 ⚙ 设置）统一用 `DialogFrame`：居中、`rounded-md`、限高、标题行右侧是 `compactIconButtonClass` 的关闭按钮，正文单独滚动，可带固定底栏；确认弹窗仍用 `ConfirmDialog`。
 
 | 常量 | 来源 | 用途 |
 |---|---|---|
@@ -151,7 +151,7 @@ restyle 之前的一批变量名仍然存在，它们都已指回语义层，渲
 | `ghostButtonClass` / `compactGhostButtonClass` | SDK | 次级操作 / 其 36px 紧凑版 |
 | `dangerButtonClass` / `dangerGhostButtonClass`（`compactDangerGhostButtonClass`） | 宿主 | 破坏性操作的实心版 / 安静版 |
 | `iconButtonClass` | SDK | 带边框的 40px 纯图标方形按钮（返回、重置、工具），统一 `rounded-md` |
-| `compactIconButtonClass` | 宿主（定义在 SDK，经 `host-internal`） | 无边框的 28px 纯图标按钮（关闭、返回、头部开关），给 `iconButtonClass` 嫌太重的地方 |
+| `compactIconButtonClass` | SDK（Runtime API 3.1.12 起公开） | 无边框的 28px 纯图标按钮（关闭、返回、头部开关、紧凑列表行的操作），给 `iconButtonClass` 嫌太重的地方 |
 | `primaryButtonSurfaceClass` / `ghostButtonSurfaceClass` | SDK | 不含尺寸的按钮外观，配 `compactButtonSizeClass`（SDK，36px 带文字按钮）或自带尺寸使用 |
 | `dangerGhostButtonSurfaceClass` | 宿主 | 同上，安静的破坏性外观 |
 | `textButtonSurfaceClass` / `dangerTextButtonSurfaceClass`（`compactTextButtonClass` / `compactDangerTextButtonClass`） | 宿主 | 无边框的文字按钮，给不和主按钮抢视线的底部操作（如账号详情底部的「退出登录」「删除账号」） |

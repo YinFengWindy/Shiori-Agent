@@ -33,11 +33,13 @@ async def test_import_is_an_unsaved_draft_until_role_save(
                     "asset": imported["asset"],
                     "prompt_lang": "en",
                     "prompt_text": "hello",
+                    "duration": imported["duration"],
                 }
             },
         }
     )
     assert saved["default"]["prompt_text"] == "hello"
+    assert saved["default"]["duration"] == 3
     assert references.store.read().roles["role"].default.asset == imported["asset"]
     assert context.roles.extensions.values == {}
     with pytest.raises(ValueError, match="不存在"):

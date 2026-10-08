@@ -26,7 +26,7 @@ test("NovelAI CG preference is read from its own snapshot and never written into
 test("NovelAI CG toggle only edits the role draft", async () => {
   const changes: PluginRoleValues[] = [];
   const values = { autoSceneCgEnabled: false };
-  const view = await mountTestComponent(<NovelAiRoleSettings roleId="role-1" client={createFakePluginClient()} values={values} onChange={(next) => changes.push(next)} />);
+  const view = await mountTestComponent(<NovelAiRoleSettings roleId="role-1" client={createFakePluginClient()} moodCatalog={[]} values={values} onChange={(next) => changes.push(next)} />);
   try {
     const toggle = view.container.querySelector<HTMLButtonElement>('[aria-label="自动场景 CG"]');
     assert.equal(toggle?.getAttribute("aria-checked"), "false");

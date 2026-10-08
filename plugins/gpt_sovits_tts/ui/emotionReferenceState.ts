@@ -1,4 +1,4 @@
-import type { VoiceReference } from "../shared/contracts";
+import type { RoleVoice, VoiceReference } from "../shared/contracts";
 
 /** Validates a private mapping name without treating inherited object properties as emotions. */
 export function emotionNameError(raw: string, existing: readonly string[]) {
@@ -15,4 +15,24 @@ export function emotionNameError(raw: string, existing: readonly string[]) {
 export function updateEmotionReference(moods: Record<string, VoiceReference>, name: string, reference: VoiceReference | null) {
   if (reference) return { ...moods, [name]: reference };
   return Object.fromEntries(Object.entries(moods).filter(([key]) => key !== name));
+}
+
+/**
+ * Sets one reference of a role voice. The empty mood is the default reference,
+ * as in the synthesis service, so a validated mood name never collides with it.
+ */
+export function setVoiceReference(voice: RoleVoice, mood: string, reference: VoiceReference | null): RoleVoice {
+  if (mood === "") return { ...voice, default: reference };
+  return { ...voice, moods: updateEmotionReference(voice.moods, mood, reference) };
+}
+
+/** The reference of one mood; the empty mood is the default reference. */
+export function voiceReference(voice: RoleVoice, mood: string) {
+  if (mood === "") return voice.default;
+  return Object.hasOwn(voice.moods, mood) ? voice.moods[mood] : null;
+}
+
+/** Role catalog moods without a reference yet that can be stored under their own name. */
+export function pendingCatalogMoods(catalog: readonly string[], configured: readonly string[]) {
+  return [...new Set(catalog.map((value) => value.trim()))].filter((name) => !emotionNameError(name, configured));
 }

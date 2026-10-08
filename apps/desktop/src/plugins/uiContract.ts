@@ -68,6 +68,8 @@ export const pluginUiPeerExports: Record<string, string[]> = {
     // Runtime API 3.1.4 (#683): private document autosave and the settings page layout.
     "usePrivateAutosave", "SettingsField", "SettingsGroup", "SettingsSectionCard", "SettingsToggleField",
     "settingsGroupStackClass", "settingsInputClass",
+    // Runtime API 3.1.12 (#720): the compact icon-only button.
+    "compactIconButtonClass",
   ],
 };
 

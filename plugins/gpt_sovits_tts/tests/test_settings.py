@@ -23,6 +23,7 @@ def test_private_voice_roundtrip_preserves_two_moods(
     )
     store = VoiceStore(tmp_path)
     assert store.read().roles["role"] == voice
+    assert voice.default is not None and voice.default.duration is None
     assert store.path.is_relative_to(tmp_path / "plugin-data/gpt_sovits_tts")
     assert not (tmp_path / "roles.json").exists()
     with pytest.raises(ValidationError):

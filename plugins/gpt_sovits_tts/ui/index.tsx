@@ -1,11 +1,11 @@
 import type { PluginUiModule } from "@yinfengwindy/shiori-sdk";
 import { GptSoVitsSettingsPage } from "./Settings";
-import { RoleVoiceEditor } from "./RoleVoiceEditor";
+import { gptSoVitsRoleSettings } from "./roleSettings";
 
-/** Independent service settings and private role voice editing. */
+/** Independent service settings and the role voice capability card. */
 const module: PluginUiModule = {
   pluginId: "gpt_sovits_tts",
   settingsSection: { kind: "component", label: "GPT-SoVITS", component: GptSoVitsSettingsPage },
-  roleUi: { mode: "self-managed", Component: RoleVoiceEditor },
+  roleSettings: gptSoVitsRoleSettings,
 };
 export default module;

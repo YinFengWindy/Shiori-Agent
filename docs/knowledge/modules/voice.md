@@ -60,9 +60,9 @@ GPT-SoVITS 的实例租约覆盖权重切换、参考文件 pin 和完整 HTTP �
 
 桌宠后端 `VoicePreferencesStore` 自主读写 `plugin-data/desktop_pet/voice-preferences.json`（RPC `voice.preferences.get` / `voice.preferences.set`），保存启用状态、快捷键、麦克风和 ASR/TTS 选择；UI 由桌宠 `VoiceSettings.tsx` 注入，经 `usePrivateAutosave` 自动保存。新语音数据不进入宿主 `[voice]`、`[plugins.desktop_pet]` 或 `roles.json` 的 `runtime_config.tts` / `plugin_data`。provider 的角色声音配置由 provider 自身私有存储管理。
 
-`PluginRoleUiSlot` 承载 `roleUi` 的 `mode: "self-managed"` 面板，提供只读角色上下文、真实 roleId、所属插件的 scoped client 与 `PluginHostServicesProvider`。插件自主读取、保存及报告 dirty，并通过所属插件的文件选择器导入参考音频；新角色无真实 ID 时不能持久化。该模式不参与宿主角色原子保存，不把跨存储成功或失败包装成单一事务。原有 `roleSettings` 的合法角色草稿模式继续保留。
+`PluginRoleUiSlot` 承载 `roleUi` 的 `mode: "self-managed"` 面板，提供只读角色上下文、真实 roleId、所属插件的 scoped client 与 `PluginHostServicesProvider`。插件自主读取、保存及报告 dirty；新角色无真实 ID 时不能持久化。该模式不参与宿主角色原子保存，不把跨存储成功或失败包装成单一事务。内置插件目前都不再使用它：GPT-SoVITS 的角色声音自 #720 起改为 `roleSettings`（`storage: "plugin"`、`read: () => ({})`，不进角色草稿）贡献「运行能力」里的「GPT-SoVITS 声音」卡片，编辑器在卡片 ⚙ 对话框内，通过所属插件的文件选择器导入参考音频，角色情绪目录经 `PluginRoleSettingsProps.moodCatalog`（Runtime API 3.1.12）传入。
 
-私有文档的加载、dirty、保存及错误处理复用 SDK hook：两个 provider 的插件设置页与桌宠 `VoiceSettings` 使用 SDK 3.1.4 的 `usePrivateAutosave`（在宿主串行草稿队列上自动保存）；GPT-SoVITS 的角色声音编辑器（`RoleVoiceEditor`）使用 SDK 3.1.2 的 `usePrivateDraft`（显式保存）。迟到结果按 scoped client 和文档身份隔离；读取失败不生成可保存的空文档，保存失败保留草稿。具体健康检查、音频测试和持久化 RPC 仍由各插件拥有。
+私有文档的加载、dirty、保存及错误处理复用 SDK hook：两个 provider 的插件设置页与桌宠 `VoiceSettings` 使用 SDK 3.1.4 的 `usePrivateAutosave`（在宿主串行草稿队列上自动保存）；GPT-SoVITS 的角色声音（卡片的 `useRoleVoice`，编辑器 `RoleVoiceEditor`）自 #720 起同样用 `usePrivateAutosave`，切换角色时提交最后改动，试听在有待保存改动时先提交保存。迟到结果按 scoped client 和文档身份隔离；读取失败不生成可保存的空文档，保存失败保留草稿。具体健康检查、音频测试和持久化 RPC 仍由各插件拥有。
 
 TTS 的 `EmotionReferences` 允许在空角色情绪目录下新增私有名称和参考，目录仅提供建议。空白、重复、原型特殊名称和超出 64 个映射的输入被拒绝；未完成导入的名称计入 dirty 并阻止保存或试听。删除和保存都只修改 provider 的 `moods`。预览可选择已配置映射，自动朗读仍按调用者传入的 mood 匹配，未命中使用默认参考。
 
