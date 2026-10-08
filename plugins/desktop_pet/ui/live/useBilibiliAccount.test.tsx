@@ -121,3 +121,44 @@ test("an invalid login keeps its account beside a rescan, and a poll failure is 
     assert.equal(view.container.querySelector("img"), null);
   } finally { await view.cleanup(); }
 });
+
+test("a QR cancelled while its poll is in flight still logs in when that poll succeeds", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const ui = await mountLogin();
+  try {
+    await ui.click("扫码登录");
+    await act(async () => t.mock.timers.tick(loginPollIntervalMs));
+    await ui.click("取消");
+    await act(async () => ui.polls[0].resolve({ state: "success", account: { uid: 9, uname: "已确认" } }));
+    assert.match(ui.text(), /已确认（9）/);
+    assert.ok(ui.button("退出登录"));
+  } finally { await ui.view.cleanup(); }
+});
+
+test("the account is read again on every open, and an older read never undoes a login", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const reads: Array<ReturnType<typeof deferred<unknown>>> = [];
+  const polls: Array<ReturnType<typeof deferred<BilibiliLoginPoll>>> = [];
+  const client = createFakePluginClient({ call: async <T,>(method: string) => {
+    if (method === "bilibili.account.status") { const answer = deferred<unknown>(); reads.push(answer); return await answer.promise as T; }
+    if (method === "bilibili.login.start") return { state: "waiting_scan", qrcode: "data:image/png;base64,q" } as T;
+    const answer = deferred<BilibiliLoginPoll>(); polls.push(answer); return await answer.promise as T;
+  } });
+  const { host } = createFakeHostServices();
+  const render = (open: boolean) => <PluginHostServicesProvider services={host}><Login client={client} open={open} /></PluginHostServicesProvider>;
+  const view = await mountTestComponent(render(true));
+  const text = () => view.container.textContent ?? "";
+  try {
+    await act(async () => reads[0].resolve({ state: "logged_out" }));
+    await act(async () => Array.from(view.container.querySelectorAll("button")).find((item) => item.textContent === "扫码登录")!.click());
+    await view.render(render(false));
+    assert.equal(reads.length, 1, "closing reads nothing");
+    await view.render(render(true));
+    assert.equal(reads.length, 2, "reopening reads the account again");
+    await act(async () => t.mock.timers.tick(loginPollIntervalMs));
+    await act(async () => polls[0].resolve({ state: "success", account: { uid: 3, uname: "新登录" } }));
+    assert.match(text(), /新登录（3）/);
+    await act(async () => reads[1].resolve({ state: "logged_out" }));
+    assert.match(text(), /新登录（3）/, "the read sent before the login does not log it out");
+  } finally { await view.cleanup(); }
+});

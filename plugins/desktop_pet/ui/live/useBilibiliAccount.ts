@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { errorMessage, useLatestRef, type PluginRpcClient } from "@yinfengwindy/shiori-sdk";
 import type { BilibiliAccountStatus, BilibiliLoginPoll, BilibiliLoginStart, BilibiliScanState } from "./liveContracts";
 import { useSerialPoll } from "./useSerialPoll";
@@ -10,10 +10,12 @@ export const loginPollIntervalMs = 2000;
 export type BilibiliQrLogin = { qrcode: string; scan: BilibiliScanState };
 
 /**
- * The pet role's Bilibili login (#722): the stored account, and a QR login
+ * The pet role's Bilibili login (#722): the stored account, re-checked each
+ * time the dialog opens (an expired login shows as such), and a QR login
  * shown in place. The QR is polled one request at a time while `open` and
- * until it is confirmed, expired, cancelled or fails; a late answer for a QR
- * no longer shown changes nothing.
+ * until it is confirmed, expired, cancelled or fails. A late scan progress or
+ * error of a QR no longer shown changes nothing, but a late success still
+ * applies: the backend has stored that login.
  */
 export function useBilibiliAccount(client: PluginRpcClient, roleId: string, open: boolean) {
   const [account, setAccount] = useState<BilibiliAccountStatus | null>(null);
@@ -22,16 +24,25 @@ export function useBilibiliAccount(client: PluginRpcClient, roleId: string, open
   const [busy, setBusy] = useState(false);
   // Read after an awaited poll: is the QR it asked about still the one shown?
   const shownQr = useLatestRef(qr?.qrcode ?? null);
+  // Bumped by every account change (login, logout), so an older status read never undoes it.
+  const accountChanges = useRef(0);
+
+  const changeAccount = (next: BilibiliAccountStatus) => {
+    accountChanges.current += 1;
+    setAccount(next);
+  };
 
   const loadAccount = useCallback(async () => {
+    const since = accountChanges.current;
     setError("");
     try {
-      setAccount(await client.call<BilibiliAccountStatus>("bilibili.account.status", { role_id: roleId }));
+      const next = await client.call<BilibiliAccountStatus>("bilibili.account.status", { role_id: roleId });
+      if (since === accountChanges.current) setAccount(next);
     } catch (cause) {
       setError(errorMessage(cause));
     }
   }, [client, roleId]);
-  useEffect(() => { void loadAccount(); }, [loadAccount]);
+  useEffect(() => { if (open) void loadAccount(); }, [open, loadAccount]);
 
   /** One user action at a time; its failure is shown and changes nothing else. */
   const run = async (action: () => Promise<void>) => {
@@ -50,11 +61,10 @@ export function useBilibiliAccount(client: PluginRpcClient, roleId: string, open
     const asked = shownQr.current;
     try {
       const result = await client.call<BilibiliLoginPoll>("bilibili.login.poll", { role_id: roleId });
-      if (shownQr.current !== asked) return;
       if (result.state === "success") {
-        setQr(null);
-        setAccount({ state: "logged_in", account: result.account });
-      } else {
+        changeAccount({ state: "logged_in", account: result.account });
+        setQr((current) => current?.qrcode === asked ? null : current);
+      } else if (shownQr.current === asked) {
         setQr((current) => current && current.scan !== result.state ? { ...current, scan: result.state } : current);
       }
     } catch (cause) {
@@ -77,11 +87,12 @@ export function useBilibiliAccount(client: PluginRpcClient, roleId: string, open
       const ticket = await client.call<BilibiliLoginStart>("bilibili.login.start", { role_id: roleId });
       setQr({ qrcode: ticket.qrcode, scan: ticket.state });
     }),
-    /** Hides the QR; nothing is sent, the backend key simply expires. */
+    /** Hides the QR; nothing is sent, the backend key simply expires. A poll already in flight may still log in. */
     cancelLogin: () => setQr(null),
     logout: () => run(async () => {
       setQr(null);
-      setAccount(await client.call<BilibiliAccountStatus>("bilibili.account.logout", { role_id: roleId }));
+      // The backend drops the credentials and any pending QR and answers `{ state: "logged_out" }`.
+      changeAccount(await client.call<BilibiliAccountStatus>("bilibili.account.logout", { role_id: roleId }));
     }),
   };
 }

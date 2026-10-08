@@ -6,6 +6,7 @@ import { startBlockedReason } from "./liveStatusView";
 import { useBilibiliAccount } from "./useBilibiliAccount";
 import type { LiveConfigAutosave } from "./useLiveConfig";
 import { useLiveRun } from "./useLiveRun";
+import { useSpeechReady } from "./useSpeechReady";
 
 type LiveCompanionSectionProps = {
   roleId: string;
@@ -28,7 +29,10 @@ export function LiveCompanionSection({ roleId, client, config, petEnabled, open,
   const host = usePluginHostServices();
   const login = useBilibiliAccount(client, roleId, open);
   const run = useLiveRun(client, roleId, open);
-  const blockedReason = startBlockedReason({ petEnabled, account: login.account, roomId: config.saved?.room_id ?? null });
+  const speech = useSpeechReady(client, open);
+  // Settings still loading or unreadable are unknown, not "no room".
+  const roomId = config.saved ? config.saved.room_id : undefined;
+  const blockedReason = startBlockedReason({ petEnabled, roomId, speechReady: speech.ready, account: login.account });
   return <SettingsGroup title="直播陪伴">
     <SettingsField label="B 站账号" layout="stack"><BilibiliLoginPanel login={login} disabled={disabled} /></SettingsField>
     {config.loadError ? <SettingsField label="直播设置" layout="stack">
@@ -37,7 +41,11 @@ export function LiveCompanionSection({ roleId, client, config, petEnabled, open,
     {config.saveError ? <SettingsField label="直播设置" layout="stack">
       <host.ui.InlineError message={config.saveError} actions={<button type="button" className={compactGhostButtonClass} onClick={config.retry}>重试</button>} />
     </SettingsField> : null}
-    {config.draft ? <LiveConfigFields draft={config.draft} update={config.update} disabled={disabled} /> : null}
-    <SettingsField label="运行" layout="stack"><LiveRunPanel run={run} blockedReason={blockedReason} disabled={disabled} /></SettingsField>
+    {config.draft ? <LiveConfigFields draft={config.draft} update={config.update} disabled={disabled} />
+      : config.loadError ? null : <SettingsField label="直播设置" layout="stack"><span className="text-body-sm text-ink-muted">读取中…</span></SettingsField>}
+    <SettingsField label="运行" layout="stack">
+      {speech.error ? <host.ui.InlineError message={speech.error} /> : null}
+      <LiveRunPanel run={run} blockedReason={blockedReason} disabled={disabled} />
+    </SettingsField>
   </SettingsGroup>;
 }

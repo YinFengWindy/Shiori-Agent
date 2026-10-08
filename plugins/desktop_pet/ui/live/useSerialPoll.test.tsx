@@ -32,3 +32,25 @@ test("a slow answer delays the next request instead of overlapping it, and turni
     assert.equal(answers.length, 2, "an answer after turning off schedules nothing");
   } finally { await view.cleanup(); }
 });
+
+test("a loop restarted while a call is in flight waits for that call before its first wait", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const answers: Array<ReturnType<typeof deferred<void>>> = [];
+  const tick = () => { const answer = deferred<void>(); answers.push(answer); return answer.promise; };
+  const view = await mountTestComponent(<Poller active tick={tick} />);
+  try {
+    await act(async () => t.mock.timers.tick(1000));
+    assert.equal(answers.length, 1);
+    // e.g. the dialog closed and reopened within one interval
+    await view.render(<Poller active={false} tick={tick} />);
+    await view.render(<Poller active tick={tick} />);
+    await act(async () => t.mock.timers.tick(5000));
+    assert.equal(answers.length, 1, "the restarted loop never overlaps the call in flight");
+    await act(async () => answers[0].resolve());
+    await act(async () => t.mock.timers.tick(1000));
+    assert.equal(answers.length, 2, "it starts one interval after that call settled");
+    await act(async () => answers[1].resolve());
+    await act(async () => t.mock.timers.tick(1000));
+    assert.equal(answers.length, 3, "and only one loop runs");
+  } finally { await view.cleanup(); }
+});

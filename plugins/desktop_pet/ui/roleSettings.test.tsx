@@ -37,6 +37,7 @@ test("the ⚙ opens a 「桌宠」 dialog with 「直播陪伴」; closing submi
     if (method === "live.config.get") return structuredClone(stored) as T;
     if (method === "live.config.set") { saves.push(payload); stored = { ...stored, room_id: payload?.room_id as number }; return structuredClone(stored) as T; }
     if (method === "bilibili.account.status") return { state: "logged_out" } as T;
+    if (method === "voice.preferences.get") return { enabled: true, hotkey: "", microphone_device_id: "", asr: null, tts: null } as T;
     if (method === "live.status") return { role_id: "role-1", state: "idle", connection: null, room: null, configured_room_id: stored.room_id, run_id: null, queue_length: 0, generating: false, output_pending: false, connection_error: "", reply_error: "", stop_reason: "", counters: {}, recent: [] } as T;
     throw new Error(`unexpected ${method}`);
   } });

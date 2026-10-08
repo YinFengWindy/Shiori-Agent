@@ -21,25 +21,30 @@ export function isRunActive(status: LiveStatus | null) {
   return status?.state === "running" || status?.state === "paused";
 }
 
-/** What the start button needs that the dialog already knows. */
+/** What the start button needs that the dialog already knows; null or undefined means not known yet. */
 export type LiveStartFacts = {
   /** The saved (not drafted) pet switch of the role. */
   petEnabled: boolean;
-  /** Null while the account status is loading or failed to load. */
+  /** The saved room; undefined while the settings load or failed to, null when none is set. */
+  roomId: number | null | undefined;
+  /** Whether the pet speaks replies (`useSpeechReady`); null while it loads or failed to. */
+  speechReady: boolean | null;
+  /** The account status; null while it loads or failed to. */
   account: BilibiliAccountStatus | null;
-  /** The saved room; a typed but unsaved room does not count. */
-  roomId: number | null;
 };
 
 /**
- * Why 开始 is unavailable, checked in the backend's own order (pet, room,
- * login); null when it may be pressed. An unknown account blocks without a
- * reason, since it is still loading or its error is already shown. The TTS
- * check stays with the backend, whose refusal is shown after the attempt.
+ * Why 开始 is unavailable, checked in the backend gate's order (pet, room,
+ * TTS, login); null when it may be pressed. A fact not known yet blocks
+ * without a reason, since it is still loading or its error is already shown;
+ * the backend's own refusal is shown after an attempt.
  */
-export function startBlockedReason({ petEnabled, account, roomId }: LiveStartFacts) {
+export function startBlockedReason({ petEnabled, roomId, speechReady, account }: LiveStartFacts) {
   if (!petEnabled) return "未启用桌宠";
+  if (roomId === undefined) return "";
   if (roomId === null) return "未配置直播间";
+  if (speechReady === null) return "";
+  if (!speechReady) return "未开启桌宠语音";
   if (account === null) return "";
   if (account.state === "logged_out") return "未登录 B 站";
   if (account.state === "invalid") return "B 站登录已失效";

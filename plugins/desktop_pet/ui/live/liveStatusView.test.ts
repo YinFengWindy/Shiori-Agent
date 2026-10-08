@@ -13,13 +13,17 @@ function status(values: Partial<LiveStatus>): LiveStatus {
   };
 }
 
-test("start is blocked in the backend's order, silently while the account is unknown", () => {
-  assert.equal(startBlockedReason({ petEnabled: false, account: loggedIn, roomId: 1 }), "未启用桌宠");
-  assert.equal(startBlockedReason({ petEnabled: true, account: loggedIn, roomId: null }), "未配置直播间");
-  assert.equal(startBlockedReason({ petEnabled: true, account: null, roomId: 1 }), "");
-  assert.equal(startBlockedReason({ petEnabled: true, account: { state: "logged_out" }, roomId: 1 }), "未登录 B 站");
-  assert.equal(startBlockedReason({ petEnabled: true, account: { ...loggedIn, state: "invalid" }, roomId: 1 }), "B 站登录已失效");
-  assert.equal(startBlockedReason({ petEnabled: true, account: loggedIn, roomId: 1 }), null);
+test("start is blocked in the backend gate's order (pet, room, TTS, login), silently while a fact is unknown", () => {
+  const ready = { petEnabled: true, roomId: 1, speechReady: true, account: loggedIn } as const;
+  assert.equal(startBlockedReason({ ...ready, petEnabled: false, roomId: null, speechReady: false }), "未启用桌宠");
+  assert.equal(startBlockedReason({ ...ready, roomId: undefined }), "", "settings still loading are not 'no room'");
+  assert.equal(startBlockedReason({ ...ready, roomId: null, speechReady: false, account: { state: "logged_out" } }), "未配置直播间");
+  assert.equal(startBlockedReason({ ...ready, speechReady: null }), "");
+  assert.equal(startBlockedReason({ ...ready, speechReady: false, account: { state: "logged_out" } }), "未开启桌宠语音");
+  assert.equal(startBlockedReason({ ...ready, account: null }), "");
+  assert.equal(startBlockedReason({ ...ready, account: { state: "logged_out" } }), "未登录 B 站");
+  assert.equal(startBlockedReason({ ...ready, account: { ...loggedIn, state: "invalid" } }), "B 站登录已失效");
+  assert.equal(startBlockedReason(ready), null);
 });
 
 test("a run lists its room, and the saved room too once it differs", () => {
