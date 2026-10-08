@@ -185,6 +185,7 @@ class RoleAggregateService:
         # 新建角色时默认绑定的对话模型；空串表示不自动绑定（存储层仍会显式写入空绑定）。
         self._default_dialogue_registration_id = default_dialogue_registration_id
         self._role_deleted_listeners: list[Callable[[str], None]] = []
+        self._role_deleting_listeners: list[Callable[[str], None]] = []
         if on_role_deleted is not None:
             self.add_role_deleted_listener(on_role_deleted)
 
@@ -201,6 +202,16 @@ class RoleAggregateService:
             self._role_deleted_listeners.remove(listener)
         except ValueError:
             return
+
+    def add_role_deleting_listener(self, listener: Callable[[str], None]) -> None:
+        """Registers required synchronous cleanup before removing a role."""
+        if listener not in self._role_deleting_listeners:
+            self._role_deleting_listeners.append(listener)
+
+    def remove_role_deleting_listener(self, listener: Callable[[str], None]) -> None:
+        """Detaches a previously registered pre-deletion cleanup listener."""
+        if listener in self._role_deleting_listeners:
+            self._role_deleting_listeners.remove(listener)
 
     @classmethod
     def from_runtime(
@@ -311,6 +322,10 @@ class RoleAggregateService:
         clean_role_id = _clean_role_id(role_id)
         if not self._role_deleted_listeners:
             raise RuntimeError("角色删除生命周期监听器未注册")
+        self.repository.get_required(clean_role_id)
+        # Cleanup failures leave the role available for another deletion attempt.
+        for listener in tuple(self._role_deleting_listeners):
+            listener(clean_role_id)
         deleted = self.repository.delete_role(clean_role_id)
         session_deleted = self.sessions.delete(clean_role_id) if deleted else False
         if deleted:

@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from agent.tools.message_push import MessagePushTool
+from agent.scheduler import SchedulerService
 from bootstrap.runtime.events import RuntimeEventBus
 from bootstrap.runtime.generations import RuntimeCandidate
 from core.common.runtime_scope import bind_runtime
@@ -33,6 +34,7 @@ from core.roles.services import RoleAggregateService
 from desktop_bridge.service import DesktopBridgeService
 from session.manager import SessionManager
 from core.memory.group_environment import GroupEnvironment
+from tests.support.scheduler import make_job
 
 
 @pytest.mark.parametrize("delivery_key", ["", "missing"])
@@ -114,7 +116,8 @@ async def test_push_tool_blank_media_cannot_create_empty_desktop_messages(
 
 
 @pytest.mark.asyncio
-async def test_injected_role_service_publishes_role_deleted(tmp_path) -> None:
+@pytest.mark.parametrize("injected", [False, True])
+async def test_injected_role_service_publishes_role_deleted(tmp_path, injected) -> None:
     role_store = RoleStore(tmp_path)
     session_manager = SessionManager(tmp_path)
     role_service = RoleAggregateService.from_runtime(
@@ -130,6 +133,14 @@ async def test_injected_role_service_publishes_role_deleted(tmp_path) -> None:
     event_bus = EventBus()
     deleted_role_ids: list[str] = []
     invalidate_role_memories = Mock(return_value=1)
+    scheduler = SchedulerService(tmp_path / "schedules.json", push_tool=Mock())
+    deleted_jobs = [
+        make_job(role_id="mira", trigger=trigger, name="shared-name")
+        for trigger in ("at", "every")
+    ]
+    other_job = make_job(role_id="luna", name="shared-name")
+    for job in [*deleted_jobs, other_job]:
+        scheduler.add_job(job)
     event_bus.on(RoleDeleted, lambda event: deleted_role_ids.append(event.role_id))
     service = DesktopBridgeService(
         workspace=tmp_path,
@@ -143,7 +154,8 @@ async def test_injected_role_service_publishes_role_deleted(tmp_path) -> None:
         ),
         agent_loop=SimpleNamespace(),
         event_bus=event_bus,
-        role_service=role_service,
+        role_service=role_service if injected else None,
+        scheduler=scheduler,
         memory_engine=SimpleNamespace(
             invalidate_role_memories=invalidate_role_memories,
         ),
@@ -160,6 +172,10 @@ async def test_injected_role_service_publishes_role_deleted(tmp_path) -> None:
     await event_bus.drain()
 
     assert response.error is None
+    assert [job.id for job in scheduler.list_jobs()] == [other_job.id]
+    restored = SchedulerService(tmp_path / "schedules.json", push_tool=Mock())
+    restored.load_and_recover()
+    assert [job.id for job in restored.list_jobs()] == [other_job.id]
     assert deleted_role_ids == ["mira"]
     invalidate_role_memories.assert_called_once_with("mira")
     await service.aclose()

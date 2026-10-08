@@ -288,6 +288,9 @@ def build_registered_tools(
         workspace,
         push_tool,
         agent_loop_provider=agent_loop_provider,
+        role_store=(
+            role_runtime_registry.repository.store if role_runtime_registry else None
+        ),
     )
 
     # ── 第二阶段：注册工具（所有服务已就绪）──────────────────────────────────

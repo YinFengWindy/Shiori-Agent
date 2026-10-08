@@ -23,6 +23,174 @@ def make_service(tmp_path, mock_push, mock_loop, now, tracker=None):
     )
 
 
+async def test_cancelled_recurring_job_cannot_return_after_work_suppresses_cancel(
+    tmp_path, mock_push, mock_loop, fixed_now, monkeypatch
+):
+    svc = make_service(tmp_path, mock_push, mock_loop, fixed_now)
+    job = make_job(trigger="every", fire_at=fixed_now, interval_seconds=60)
+    svc.add_job(job)
+    started = asyncio.Event()
+
+    async def finish_after_cancel(_job):
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            pass
+
+    monkeypatch.setattr(svc, "_execute", finish_after_cancel)
+    await svc._tick()
+    task = svc._active_tasks[job.id]
+    await started.wait()
+    assert svc.cancel_job(job.id)
+    await task
+
+    assert svc.list_jobs() == []
+    assert svc.store.load() == []
+
+
+@pytest.mark.parametrize("started", [False, True])
+async def test_role_cancellation_stops_only_owned_waiting_or_running_jobs(
+    tmp_path, mock_push, mock_loop, fixed_now, monkeypatch, started
+):
+    svc = make_service(tmp_path, mock_push, mock_loop, fixed_now)
+    jobs = [
+        make_job(role_id=role_id, trigger=trigger, fire_at=fixed_now, name="same")
+        for role_id, trigger in (("mira", "at"), ("mira", "every"), ("luna", "every"))
+    ]
+    release = asyncio.Event()
+    executions: list[str] = []
+
+    async def wait_for_release(job):
+        executions.append(job.id)
+        await release.wait()
+
+    monkeypatch.setattr(svc, "_execute", wait_for_release)
+    for job in jobs:
+        svc.add_job(job)
+    await svc._tick()
+    tasks = dict(svc._active_tasks)
+    if started:
+        await asyncio.sleep(0)
+        assert executions == [job.id for job in jobs]
+
+    svc.cancel_role_jobs("mira")
+    assert tasks[jobs[2].id].cancelling() == 0
+    assert [job.id for job in svc.list_jobs()] == [jobs[2].id]
+    assert [job.id for job in svc.store.load()] == [jobs[2].id]
+    release.set()
+    await asyncio.gather(*tasks.values(), return_exceptions=True)
+
+    if not started:
+        assert executions == [jobs[2].id]
+    assert svc._in_flight == set()
+    assert jobs[2].run_count == 1
+    assert [job.id for job in svc.store.load()] == [jobs[2].id]
+
+
+async def test_cancelled_soft_result_is_not_delivered_or_rescheduled(
+    tmp_path, mock_push, mock_loop, fixed_now
+):
+    svc = make_service(tmp_path, mock_push, mock_loop, fixed_now)
+    job = make_job(trigger="every", tier="soft", fire_at=fixed_now, prompt="remind me")
+    svc.add_job(job)
+    started = asyncio.Event()
+
+    async def generate(**_kwargs):
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            return "late result"
+
+    mock_loop.process_direct.side_effect = generate
+    await svc._tick()
+    task = svc._active_tasks[job.id]
+    await started.wait()
+    svc.cancel_role_jobs("mira")
+    await task
+
+    mock_push.execute.assert_not_called()
+    assert svc.list_jobs() == []
+    assert svc.store.load() == []
+
+
+async def test_role_cancellation_save_failure_preserves_jobs_and_execution(
+    tmp_path, mock_push, mock_loop, fixed_now, monkeypatch
+):
+    svc = make_service(tmp_path, mock_push, mock_loop, fixed_now)
+    job = make_job(trigger="every", fire_at=fixed_now)
+    svc.add_job(job)
+    await svc._tick()
+    task = svc._active_tasks[job.id]
+    with monkeypatch.context() as patch:
+        patch.setattr(svc.store, "save", Mock(side_effect=OSError("disk full")))
+        with pytest.raises(OSError, match="disk full"):
+            svc.cancel_role_jobs("mira")
+    assert svc.list_jobs() == [job]
+    assert [stored.id for stored in svc.store.load()] == [job.id]
+    assert svc._active_tasks[job.id] is task
+    assert task.cancelling() == 0
+    await task
+    assert job.run_count == 1
+
+
+def test_recovery_removes_orphans_including_disabled_and_preserves_live_jobs(
+    tmp_path, mock_push, fixed_now
+):
+    svc = SchedulerService(
+        tmp_path / "jobs.json",
+        mock_push,
+        _now_fn=lambda: fixed_now,
+        role_exists=lambda role_id: role_id == "luna",
+    )
+    live = make_job(role_id="luna", fire_at=fixed_now + timedelta(hours=1))
+    disabled_live = make_job(role_id="luna", fire_at=fixed_now - timedelta(days=1))
+    disabled_live.enabled = False
+    orphan = make_job(role_id="mira", trigger="every", fire_at=fixed_now)
+    disabled_orphan = make_job(role_id="deleted", fire_at=fixed_now)
+    disabled_orphan.enabled = False
+    svc.store.save(
+        {job.id: job for job in (live, disabled_live, orphan, disabled_orphan)}
+    )
+
+    svc.load_and_recover()
+
+    assert [job.id for job in svc.list_jobs()] == [live.id, disabled_live.id]
+    assert [job.id for job in svc.store.load()] == [live.id, disabled_live.id]
+    assert svc.list_jobs()[1].enabled is False
+
+
+@pytest.mark.parametrize("failure", ["role-read", "schedule-write"])
+def test_recovery_failure_preserves_previous_memory_and_disk_state(
+    tmp_path, mock_push, fixed_now, monkeypatch, failure
+):
+    role_exists = Mock(side_effect=[True, OSError("role unreadable")])
+    svc = SchedulerService(
+        tmp_path / "jobs.json",
+        mock_push,
+        _now_fn=lambda: fixed_now,
+        role_exists=role_exists,
+    )
+    existing = make_job(role_id="existing", fire_at=fixed_now + timedelta(hours=1))
+    svc.add_job(existing)
+    persisted = [
+        make_job(role_id="luna", fire_at=fixed_now + timedelta(hours=1)),
+        make_job(role_id="mira", fire_at=fixed_now),
+    ]
+    svc.store.save({job.id: job for job in persisted})
+    original_bytes = svc.store.path.read_bytes()
+    if failure == "schedule-write":
+        role_exists.side_effect = [True, False]
+        monkeypatch.setattr(svc.store, "save", Mock(side_effect=OSError("disk full")))
+
+    with pytest.raises(OSError):
+        svc.load_and_recover()
+
+    assert svc.list_jobs() == [existing]
+    assert svc.store.path.read_bytes() == original_bytes
+
+
 # ── Execution: INSTANT ───────────────────────────────────────────
 
 
