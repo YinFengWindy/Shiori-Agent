@@ -1,7 +1,15 @@
 ---
 title: 被动回合流程
 kind: 流程说明
-status: 迁移前基线
+status: 当前有效
+last_verified_commit: bdfdae59
+source_paths:
+  - apps/backend/desktop_bridge/chat_service.py
+  - apps/backend/desktop_bridge/chat_completion.py
+  - apps/backend/bootstrap/runtime/dispatcher.py
+  - apps/backend/agent/looping/core/processing.py
+  - apps/backend/core/roles/role_runtime.py
+  - apps/backend/agent/core/passive_turn/
 related:
   - ../architecture/current-backend.md
 ---
@@ -12,11 +20,14 @@ related:
 flowchart TD
   A[DesktopBridge request] --> B[DesktopChatService]
   B --> C[AgentLoop.process_direct]
+  A2[Channel inbound via bus] --> B2[RuntimeDispatcher]
+  B2 --> C2[AgentLoop.process_inbound]
   C --> D[derive role:{id} session]
+  C2 --> D
   D --> E[RoleRuntimeRegistry.dispatch_passive_turn]
   E --> F[BeforeTurn]
   F --> G[BeforeReasoning]
-  G --> H[Prompt render / tool discovery]
+  G --> H[Prompt render / input budget / tool discovery]
   H --> I[LLM provider]
   I --> J{function call?}
   J -- yes --> K[ToolExecutor + hooks]
@@ -26,6 +37,8 @@ flowchart TD
   M --> N[AfterTurn / TurnCommitted]
   N --> O[Session commit + bridge events]
 ```
+
+`/compact` 命令在进入回合前被拦截（桌面端在 `desktop_bridge/chat_requests.py`，渠道在 `agent/looping/core/context_window.py`），走手动压缩而不是普通回合。
 
 ## 对外事件契约
 

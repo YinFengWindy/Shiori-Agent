@@ -24,7 +24,7 @@ uv run pytest plugins/example/tests
 - `shiori-host-testing` 提供真实宿主集成能力，只安装在宿主开发环境。
 - 插件 wheel 只包含本包后端、明确打包的 testing helper 与资源。Story→NovelAI、Meme→citation 为公开运行时依赖；status_commands 的 test extra→Observe 是显式测试依赖。没有声明的兄弟插件不会被注入。
 
-公开 SDK 的 npm 包为 `@yinfengwindy/shiori-sdk`，PyPI 包为 `shiori-sdk`；SDK 与 Runtime API 当前版本均为 3.1.8（3.1.1 起尚未发布，注册表最新为 3.1.0），注册表安装与 testing extra 用法见 [SDK README](../../packages/sdk/README.md)。`shiori-agent`、`shiori-host-testing` 和插件 wheel 仍只构建为本地/CI 产物，不随 SDK 发布到 npm 或 PyPI。
+公开 SDK 的 npm 包为 `@yinfengwindy/shiori-sdk`，PyPI 包为 `shiori-sdk`；SDK 与 Runtime API 当前版本均为 3.1.9（3.1.1 起尚未发布，注册表最新为 3.1.0），注册表安装与 testing extra 用法见 [SDK README](../../packages/sdk/README.md)。`shiori-agent`、`shiori-host-testing` 和插件 wheel 仍只构建为本地/CI 产物，不随 SDK 发布到 npm 或 PyPI。
 
 ## 插件副本运行
 
@@ -46,7 +46,7 @@ uv 会缓存 `--find-links` 中同名同版本的 wheel，重新构建后不加 
 uv run python -m scripts.verify_plugin_tests --output /absolute/path/outside-repository/plugin-isolation
 ```
 
-输出必须是仓库外的新目录；省略时创建系统临时目录。`--plugins novelai story` 选择目标，省略时发现所有有 Python 测试的插件；`--jobs N` 控制并发，默认 CPU 数。不存在迁移豁免、白名单或宿主安装分支。基准 20 插件为 browser_use、citation、computer_use、context_pressure、default_memory、desktop_pet、feishu、meme、novelai、observe、plugin_undo、qq、qqbot、screen_perception、shell_restore、shell_safety、status_commands、story、telegram、tool_loop_guard；新增插件自动纳入发现。
+输出必须是仓库外的新目录；省略时创建系统临时目录。`--plugins novelai story` 选择目标，省略时发现所有有 Python 测试的插件；`--jobs N` 控制并发，默认 CPU 数。不存在迁移豁免、白名单或宿主安装分支。当前 22 个插件为 browser_use、citation、computer_use、context_pressure、default_memory、desktop_pet、feishu、gpt_sovits_tts、meme、novelai、observe、plugin_undo、qq、qqbot、screen_perception、sensevoice_asr、shell_restore、shell_safety、status_commands、story、telegram、tool_loop_guard；新增插件自动纳入发现（`plugins/` 下 `tests/` 含 `test_*.py` 的目录）。
 
 脚本在仓库外暂存插件并构建普通 wheel，每个目标使用独立 venv，只安装目标 `[test]`、SDK/testing 与显式依赖。所有 `shiori-*` 包（SDK、目标与兄弟插件）以 `--no-index --no-deps` 从本地 wheelhouse 的 wheel 文件安装，闭包中缺少本地 wheel 即失败，不会回退到公网同名包；这一步同时加 `--no-cache --reinstall`，uv 缓存或环境中同名同版本的旧构建不能顶替刚构建的 wheel；其余第三方依赖单独从索引解析，最后以 `uv pip check` 校验整体依赖，来源探针还要求每个 `shiori-*` 分发记录的来源是 wheelhouse 内的 wheel 文件，且已安装文件与该 wheel 内容逐字节一致、不含 wheel 之外的包文件。`verify_sdk`、`verify_host_distribution` 使用同一安装方式。闭包合并运行时和目标 test extra，传递兄弟依赖只启用依赖边显式请求的 extra，marker 按执行解释器求值。不会默认加入 default_memory 或宿主；任何选中的宿主依赖直接失败。静态守护还检查所有未选中的 optional extra。
 
@@ -91,7 +91,7 @@ QQ 已在同票完成 SDK-only 安装验证；平台原文来源/引用的纯函
 
 #589 已完成四渠道。Telegram 以 SDK fake 验证命令菜单、用户名/话题、媒体和流式，飞书保留真实离线 HTTP/WebSocket 线程替身验证；两者的存储/生命周期宿主集成继续由根 CI 执行。SDK wheel 冒烟执行镜像后的纯值测试和新增公共 fake 测试。桌宠的 Python 后端与测试已由 #590 迁入 SDK；全插件隔离与两种 SDK 产物安装由上述 CI 流程持续验证。
 
-#590 的桌宠包校验、binding/pets RPC、启用互斥、清理重试与动作限流在插件内使用 SDK fake。实际角色事务/锁、资产迁移凭证与 kernel 装配、停用/重载由宿主集成验证。桌宠安装只依赖 SDK 与 Pillow，最后 44 条 Python 宿主导入豁免已删除。局部开发可使用 `uv run python -m pytest plugins/desktop_pet/tests`；仓库外非 editable 验证用 `uv run python -m scripts.verify_plugin_tests --plugins desktop_pet`。
+#590 的桌宠包校验、binding/pets RPC、启用互斥、清理重试与动作限流在插件内使用 SDK fake。实际角色事务/锁、资产迁移凭证与 kernel 装配、停用/重载由宿主集成验证。桌宠安装只依赖 SDK、Pillow 与 Pydantic，最后 44 条 Python 宿主导入豁免已删除。局部开发可使用 `uv run python -m pytest plugins/desktop_pet/tests`；仓库外非 editable 验证用 `uv run python -m scripts.verify_plugin_tests --plugins desktop_pet`。
 
 
 桌宠 renderer 的控制策略移到 `plugins/desktop_pet/background/controller.test.ts`，surface 几何、惯性、ready/hide/reload/window identity 由宿主 `src/surface/host.test.ts` 的中性 fixture 验证。语音编排由桌宠的 SDK-only 测试验证；宿主原生接口测试只验证设备操作、真实窗口/插件归属和资源清理。原私有 KV 耦合测试随耦合实现一起移除。

@@ -52,7 +52,8 @@ channels:
 - 声明是静态的：插件停用、未授信或还没有账号时，桌面端也能通过 `channels.list` 列出这个渠道并标注状态。插件加载后再从自己的存储恢复账号。
 - `chat_types` 必须声明（Runtime API 2.5，规则见[运行时契约](plugin-runtime-contract.md#runtime-api-22-channel-declarations)），缺失时宿主拒绝整个 manifest；按类型的 `prefix` 拼出存储的 `chat_id`。
 - `group_listening: true` 表示插件把群里**所有**消息（不只是 @ 或回复账号的）交给 `route_account_inbound`，宿主据此在小手机为这个渠道的群显示「旁听」开关（#538）。声明前先把文本清理成宿主该保存的样子：没有 @ / 回复 / 图片这类平台码，因为旁听记录直接保存路由时的正文；图片只在消息真正触发回合（路由返回消息）后再下载。
-- `ctx.channels.add()` 只接受本 manifest 声明过的名字；两个插件声明同一个名字会同时变成 `CONFLICT`。规则细节见 [渠道声明](plugins-tutorial.md#渠道声明)。
+- 每个账号要用独立渠道名的连接（如 Telegram 每个 Bot）可在渠道项上声明 `instance_prefix`（以 `<name>_` 开头，Telegram 为 `telegram_`），连接名取 `<instance_prefix><后缀>`，共用该项的会话类型。
+- `ctx.channels.add()` 只接受本 manifest 声明过的名字（含 `instance_prefix` 下的实例名）；两个插件声明同一个名字会同时变成 `CONFLICT`。规则细节见 [渠道声明](plugins-tutorial.md#渠道声明)。
 
 ## 2. 账号存储与连接
 
@@ -92,7 +93,7 @@ class DemoChatChannel:
 - **入站闸门**：换代期间宿主先 `pause_intake()`，新连接以 `ctx.intake_paused=True` 启动，发布后再 `resume_intake()`。在 `start(ctx)` 中调用 `ctx.intake_factory(accept, send)` 获取 `shiori_sdk.channels.services.ChannelIntake`：它在暂停时缓冲入站消息，溢出或关闭时回复「渠道配置正在切换」提示，`stop` 时调用 `close()` 排空。
 - **`stop` 的顺序**：先切断新工作的来源（暂停入站、退订事件、断开连接），再取消或等待在途任务，最后注销出站与推送注册。
 
-消息值从 `shiori_sdk.messages` 导入，流式事件从 `shiori_sdk.channel_events` 导入。`ChannelContext` 通过 Protocol 提供本代的宿主服务：`bus`（消息总线）、`session_manager`、`event_bus`、`push_tool`（`message_push` 工具）、`attachment_store`（入站媒体落盘）、`http_resources`、`interrupt_controller`（`/stop`）、`bot_commands`、`log`、`channel_hub`（账号准入与路由）、`intake_paused`。
+消息值从 `shiori_sdk.messages` 导入，流式事件从 `shiori_sdk.channel_events` 导入。`ChannelContext` 通过 Protocol 提供本代的宿主服务：`bus`（消息总线）、`session_manager`、`event_bus`、`push_tool`（`message_push` 工具）、`attachment_store`（入站媒体落盘）、`http_resources`、`interrupt_controller`（`/stop`）、`bot_commands`、`log`、`intake_factory`（见上文入站闸门）、`channel_hub`（账号准入与路由）、`intake_paused`。
 
 ## 4. 入站、会话键与 chat_id 约定
 
@@ -108,7 +109,7 @@ class DemoChatChannel:
 约定：
 
 - **chat_id 是渠道本地的会话标识**，必须稳定。一个渠道有多种会话类型时用前缀区分，例如 QQBot 私聊的 `c2c:<app_id>:<openid>`、QQ（NapCat）群聊的 `gqq:<群号>`。
-- **访问控制由接收账号的响应规则决定**。插件将规则与账号一起保存，入站时交给 `ChannelHub` 判断；黑名单支持发送者 ID 与忽略大小写的渠道别名（如 Telegram 用户名）。`/stop` 等控制命令走同一账号准入。`/chatid`（别名 `/myid`）由渠道插件自己识别并回复会话类型与号码，不进入角色对话。
+- **访问控制由接收账号的响应规则决定**。插件将规则与账号一起保存，入站时交给 `ChannelHub` 判断；黑名单支持发送者 ID 与忽略大小写的渠道别名（如 Telegram 用户名）。`/stop` 等控制命令走同一账号准入。`/chatid`（别名 `/myid`，判定用 `shiori_sdk.channels.chat_types.is_chat_id_command`）由渠道插件在自己的入站处理里（与 `/stop` 同处、交给 `ChannelHub` 准入之前）识别，交给 `shiori_sdk.channels.chat_id_command.answer_chat_id_command(hub, channel=, chat_id=, chat_type=, sender_id=, declarations=, send=)` 按 manifest 声明回复会话类型与号码；它是唯一会在未绑定会话里回复的命令，但被黑名单拦下的发送者不会收到回复。命令不进入角色对话（目前 Telegram、QQBot、飞书接入）。
 - **会话键**：准入后的消息用所属角色的 `role:<role_id>`（路由写进 `session_key_override`）。出站处理和流式状态统一用 `shiori_sdk.channels.session_key.resolve_outbound_session_key(msg, default_channel=self.name)` 计算，与 `TurnStarted` / `StreamDeltaReady` 的 `session_key` 对齐。
 - 用户引用了一条历史消息时，用 `shiori_sdk.channels.reply_context.build_inbound_text_with_reply_context()` 拼进正文，保持各渠道的格式一致。能取到被引用消息原文的渠道，改在 `route_account_inbound` 放行之后调 `with_reply_quote(message, own_id=<接收账号平台 ID>, text=, sender_name=, media=<被引用图片的本地路径>, has_pictures=<被引用消息是否带图>)`（#555，目前只有 QQ）：本回合看到拼好的正文与被引用图片，存下的仍是对方自己的正文与图片，引用进元数据 `reply_to_content` / `reply_to_sender_name` / `reply_to_media`（发送者 ID 仍是路由前上报的 `reply_to_sender_id`），小手机据此显示引用块。「来自 X」由宿主写成：你自己 / 你的用户（宿主按绑定身份标 `reply_to_sender_is_user`，插件不能自己设）/ 昵称（ID …）/ ID …。旁听的群消息不经过这一步。
 
