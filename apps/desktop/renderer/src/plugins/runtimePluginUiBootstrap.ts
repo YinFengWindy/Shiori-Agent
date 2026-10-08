@@ -1,6 +1,6 @@
 import { applyPluginUiModules } from "./pluginUiModuleContract";
 import { pluginUiRegistry } from "./pluginUiRegistry";
-import { pluginChatImageActionsRegistry, pluginRoleSettingsRegistry, pluginRoleUiRegistry } from "./pluginFeatureRegistry";
+import { pluginChatImageActionsRegistry, pluginRoleSettingsRegistry } from "./pluginFeatureRegistry";
 import { createRuntimePluginUiSynchronization } from "./runtimePluginUiSynchronization";
 import { registerPluginUiSynchronization } from "./pluginEnabledStateStore";
 import { importRuntimePluginModule, loadRuntimePluginCss } from "./runtimePluginDomLoader";
@@ -17,7 +17,6 @@ export function initializeRuntimePluginUi() {
     unregister: (pluginId) => {
       pluginUiRegistry.unregisterPlugin(pluginId);
       pluginRoleSettingsRegistry.unregister(pluginId);
-      pluginRoleUiRegistry.unregister(pluginId);
       pluginChatImageActionsRegistry.unregister(pluginId);
     },
     // Tells the backend this window's `ui` entry is ready, clearing it from

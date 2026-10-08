@@ -29,7 +29,7 @@ export function PluginRoleSettingsSlot({ roleId, moodCatalog, drafts, snapshots,
   ));
 }
 
-/** One contribution with its scoped client and host services, like the role UI slot. */
+/** One contribution with its scoped client and host services. */
 function PluginRoleSettingsEntry({ entry, roleId, moodCatalog, values, snapshot, disabled, onChange }: {
   entry: PluginRoleSettingsContribution & { pluginId: string };
   roleId: string | null;

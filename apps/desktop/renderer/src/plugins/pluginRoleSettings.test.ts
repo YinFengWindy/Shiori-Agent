@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { pluginRoleSettingsRegistry, pluginRoleUiRegistry } from "./pluginFeatureRegistry";
+import { pluginRoleSettingsRegistry } from "./pluginFeatureRegistry";
 import { buildPluginRoleDraftUpdates, notifyPluginRoleSaved, pluginRoleSettingsDirty, readPluginRoleSettings, writePluginRoleSettings } from "./pluginRoleSettings";
 
 test("role extensions round trip their keys without replacing another module's values", () => {
@@ -19,19 +19,6 @@ test("role extensions round trip their keys without replacing another module's v
     pluginRoleSettingsRegistry.unregister("sample");
   }
 });
-
-test("self-managed role UI values never participate in host role drafts or runtime writes", () => {
-  pluginRoleUiRegistry.register({ pluginId: "neutral", mode: "self-managed", Component: () => null });
-  try {
-    const privateDraft = { neutral: { private_marker: "only-plugin" } };
-    assert.deepEqual(readPluginRoleSettings({}), {});
-    assert.deepEqual(writePluginRoleSettings({ keep: true }, privateDraft), { keep: true });
-    assert.deepEqual(buildPluginRoleDraftUpdates(privateDraft), {});
-  } finally {
-    pluginRoleUiRegistry.unregister("neutral");
-  }
-});
-
 
 test("independent drafts keep explicit save semantics without touching runtime_config", async () => {
   const { setPluginEnabledSnapshot, resetPluginEnabledStateForTests } = await import("./pluginEnabledStateStore");

@@ -1,5 +1,4 @@
 import { PluginRoleSettingsSlot } from "../plugins/PluginRoleSettingsSlot";
-import { PluginRoleUiSlot } from "../plugins/PluginRoleUiSlot";
 import { BellRinging, Brain } from "@phosphor-icons/react";
 import {
   SettingsToggleCard,
@@ -47,7 +46,6 @@ export function RoleCapabilitiesPanel({ activeRole, bridgeReady, roleForm, onUpd
             onChange={(pluginSettings) => onUpdate((current) => ({ ...current, pluginSettings }))} />
         </div>
       </RoleEditorSection>
-      <PluginRoleUiSlot role={activeRole ? { id: activeRole.id, name: activeRole.name, moodCatalog: roleForm.moodCatalog } : null} disabled={!bridgeReady} />
     </div>
   );
 }

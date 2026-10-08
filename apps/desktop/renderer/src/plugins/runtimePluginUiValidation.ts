@@ -19,15 +19,21 @@ function label(value: unknown, field: string) {
 }
 
 /**
- * Diagnostic for a UI module that still declares `roleMemory`. That
- * contribution never shipped in a released runtime API: the host renders the
- * role memory page itself from the configured memory plugin's RPCs.
+ * Diagnostics for contributions removed from the UI ABI, keyed by field.
+ * Neither shipped in a released runtime API:
+ * - `roleMemory`: the host renders the role memory page itself from the
+ *   configured memory plugin's RPCs.
+ * - `roleUi` (removed in runtime API 3.1.17): no plugin used the self-managed
+ *   role editor once role-scoped settings moved onto `roleSettings` cards.
  */
-const retiredRoleMemory = "roleMemory is retired: the host renders the role memory page from the configured memory plugin's roles.memory.documents / roles.memory.semantic.list / roles.memory.semantic.detail RPCs; remove this contribution";
+const retiredContributions: ReadonlyArray<readonly [field: string, diagnostic: string]> = [
+  ["roleMemory", "roleMemory is retired: the host renders the role memory page from the configured memory plugin's roles.memory.documents / roles.memory.semantic.list / roles.memory.semantic.detail RPCs; remove this contribution"],
+  ["roleUi", "roleUi is retired (runtime API 3.1.17): contribute role-scoped settings as a roleSettings capability card instead; remove this contribution"],
+];
 
-/** The diagnostic when a UI module still declares the retired `roleMemory` contribution, or null. */
+/** The diagnostic when a UI module still declares a retired contribution, or null. */
 export function retiredPluginUiContribution(module: object) {
-  return Object.hasOwn(module, "roleMemory") ? retiredRoleMemory : null;
+  return retiredContributions.find(([field]) => Object.hasOwn(module, field))?.[1] ?? null;
 }
 
 /** Validates the complete UI ABI before mutating any contribution registry. */
@@ -59,11 +65,6 @@ export function validateRuntimePluginUi(value: unknown, pluginId: string) {
     label(detail.label, "accountDetail");
   }
   if (module.chatImageActions !== undefined) component(module.chatImageActions, "chatImageActions");
-  if (module.roleUi !== undefined) {
-    const editor = object(module.roleUi);
-    if (editor.mode !== "self-managed" || "pluginId" in editor) throw new Error("Invalid roleUi mode or identity");
-    component(editor.Component, "roleUi");
-  }
   if (module.roleSettings !== undefined) {
     const settings = object(module.roleSettings);
     component(settings.Component, "roleSettings");

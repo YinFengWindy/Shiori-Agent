@@ -10,8 +10,8 @@ import type { DesktopApi } from "../../../src/bridge/shared";
 import type { RoleRecord } from "@yinfengwindy/shiori-sdk";
 import type { RoleFormState } from "../shared/types";
 import { RoleDetailPage } from "./RoleDetailPage";
-import { pluginRoleUiRegistry } from "../plugins/pluginFeatureRegistry";
-import type { PluginRoleUiProps } from "@yinfengwindy/shiori-sdk";
+import { pluginRoleSettingsRegistry } from "../plugins/pluginFeatureRegistry";
+import type { PluginRoleSettingsProps } from "@yinfengwindy/shiori-sdk";
 
 type PageProps = Parameters<typeof RoleDetailPage>[0];
 
@@ -74,29 +74,44 @@ const role: RoleRecord = {
 };
 
 describe("RoleDetailPage", () => {
-  it("guards a tab change while a private plugin role editor has unsaved values", async () => {
-    function PrivateEditor({ onDirtyChange }: PluginRoleUiProps) {
-      return <button onClick={() => onDirtyChange(true)}>修改私有设置</button>;
+  it("carries role-field and roleSettings drafts across tabs into one save, and resets both", async () => {
+    function SampleCard({ values, onChange }: PluginRoleSettingsProps) {
+      return <button onClick={() => onChange({ ...values, picked: true })}>{values.picked ? "已选" : "未选"}</button>;
     }
-    pluginRoleUiRegistry.register({ pluginId: "private_editor", mode: "self-managed", Component: PrivateEditor });
-    setPluginEnabledSnapshot([{ id: "private_editor", enabled: true, state: "ACTIVE" }]);
-    const view = await mountTestComponent(pageElement({ activeRole: role }), { windowGlobals: { miraDesktop: {
+    pluginRoleSettingsRegistry.register({ pluginId: "sample", Component: SampleCard,
+      read: (runtime) => ({ picked: runtime.sample_picked === true }),
+      write: (runtime, values) => ({ ...runtime, sample_picked: values.picked }),
+    });
+    setPluginEnabledSnapshot([{ id: "sample", enabled: true, state: "ACTIVE" }]);
+    let saved: RoleFormState | undefined;
+    const view = await mountTestComponent(<DraftDetailPage onSave={(form) => { saved = form; }} />, { windowGlobals: { miraDesktop: {
       onEvent: () => () => {},
       readSettings: async () => ({ formData: createSettingsDraft() }),
-      invoke: async ({ method }: { method: string }) => ({ id: "test", type: "response", method, error: null, payload: { generation: "g", slots: [], registrations: [] } }),
     } } });
-    const click = async (label: string) => {
-      const button = Array.from(document.querySelectorAll("button")).find((item) => item.textContent === label);
-      assert.ok(button, label); await act(async () => button.click());
+    const button = (label: string) => {
+      const found = Array.from(view.container.querySelectorAll("button")).find((item) => item.textContent === label);
+      assert.ok(found, `Missing button: ${label}`);
+      return found;
     };
     try {
-      await click("能力"); await click("修改私有设置"); await click("资料");
-      assert.match(document.body.textContent ?? "", /放弃未保存的修改/);
-      assert.match(view.container.textContent ?? "", /修改私有设置/);
-      await click("取消"); assert.match(view.container.textContent ?? "", /修改私有设置/);
-      await click("资料"); await click("放弃修改");
-      assert.doesNotMatch(view.container.textContent ?? "", /修改私有设置/);
-    } finally { await view.cleanup(); pluginRoleUiRegistry.unregister("private_editor"); resetPluginEnabledStateForTests(); }
+      await act(async () => button("执行规则").click());
+      const editor = view.container.querySelector<HTMLTextAreaElement>("textarea[aria-label='执行规则']");
+      assert.ok(editor);
+      await changeInputValue(editor, "新的执行规则");
+      await act(async () => button("能力").click());
+      await act(async () => button("未选").click());
+      // Switching tabs keeps both drafts in the shared role form, without a confirmation.
+      await act(async () => button("资料").click());
+      assert.doesNotMatch(document.body.textContent ?? "", /放弃未保存的修改/);
+      await act(async () => button("保存").click());
+      assert.equal(saved?.systemPrompt, "新的执行规则");
+      assert.deepEqual(saved?.pluginSettings.sample, { picked: true });
+
+      await act(async () => button("重置").click());
+      assert.equal(button("保存").disabled, true);
+      await act(async () => button("能力").click());
+      assert.ok(button("未选"));
+    } finally { await view.cleanup(); pluginRoleSettingsRegistry.unregister("sample"); resetPluginEnabledStateForTests(); }
   });
   it("opens on the profile tab with the setting grouped into sections", () => {
     const markup = renderPage({ roleForm: profileForm, roleFormDirty: true });

@@ -16,7 +16,7 @@ source_paths:
   - apps/backend/agent/plugin_host/communication.py
   - packages/sdk/python/shiori_sdk/voice.py
   - packages/sdk/src/contract/native.ts
-  - apps/desktop/renderer/src/plugins/PluginRoleUiSlot.tsx
+  - apps/desktop/renderer/src/plugins/PluginRoleSettingsSlot.tsx
   - plugins/sensevoice_asr/
   - plugins/gpt_sovits_tts/
   - packages/sdk/python/shiori_sdk/files/audio.py
@@ -25,7 +25,6 @@ source_paths:
   - scripts/plugin-distribution.mjs
   - apps/desktop/scripts/runtime-plugin-modules.mjs
   - apps/desktop/scripts/runtime-pyinstaller.mjs
-  - packages/sdk/src/hooks/usePrivateDraft.ts
   - packages/sdk/src/hooks/usePrivateAutosave.ts
   - apps/desktop/scripts/test-sdk-runtime.mjs
   - packages/sdk/python/shiori_sdk/managed/
@@ -60,7 +59,7 @@ GPT-SoVITS 的实例租约覆盖权重切换、参考文件 pin 和完整 HTTP �
 
 桌宠后端 `VoicePreferencesStore` 自主读写 `plugin-data/desktop_pet/voice-preferences.json`（RPC `voice.preferences.get` / `voice.preferences.set`），保存启用状态、快捷键、麦克风和 ASR/TTS 选择；UI 由桌宠 `VoiceSettings.tsx` 注入，经 `usePrivateAutosave` 自动保存。新语音数据不进入宿主 `[voice]`、`[plugins.desktop_pet]` 或 `roles.json` 的 `runtime_config.tts` / `plugin_data`。provider 的角色声音配置由 provider 自身私有存储管理。
 
-`PluginRoleUiSlot` 承载 `roleUi` 的 `mode: "self-managed"` 面板，提供只读角色上下文、真实 roleId、所属插件的 scoped client 与 `PluginHostServicesProvider`。插件自主读取、保存及报告 dirty；新角色无真实 ID 时不能持久化。该模式不参与宿主角色原子保存，不把跨存储成功或失败包装成单一事务。内置插件目前都不再使用它：GPT-SoVITS 的角色声音自 #720 起改为 `roleSettings`（`storage: "plugin"`、`read: () => ({})`，不进角色草稿）贡献「运行能力」里的「GPT-SoVITS 声音」卡片，编辑器在卡片 ⚙ 对话框内，通过所属插件的文件选择器导入参考音频，角色情绪目录经 `PluginRoleSettingsProps.moodCatalog`（Runtime API 3.1.14）传入。
+GPT-SoVITS 的角色声音自 #720 起由 `roleSettings`（`storage: "plugin"`、`read: () => ({})`，不进角色草稿）贡献「运行能力」里的「GPT-SoVITS 声音」卡片，编辑器在卡片 ⚙ 对话框内，通过所属插件的文件选择器导入参考音频，角色情绪目录经 `PluginRoleSettingsProps.moodCatalog`（Runtime API 3.1.14）传入。`PluginRoleSettingsSlot` 为卡片提供真实 roleId（新角色为 null，不能持久化）、所属插件的 scoped client 与 `PluginHostServicesProvider`；私有文档不参与宿主角色原子保存，不把跨存储成功或失败包装成单一事务。原自管角色面板 `roleUi` 已在 Runtime API 3.1.17（#750）移除。
 
 私有文档的加载、dirty、保存及错误处理复用 SDK hook：两个 provider 的插件设置页与桌宠 `VoiceSettings` 使用 SDK 3.1.4 的 `usePrivateAutosave`（在宿主串行草稿队列上自动保存）；GPT-SoVITS 的角色声音（卡片的 `useRoleVoice`，编辑器 `RoleVoiceEditor`）自 #720 起同样用 `usePrivateAutosave`，关闭卡片对话框（`RoleCapabilityCard.onSettingsOpenChange`，Runtime API 3.1.14）或切换角色时立即提交最后改动，试听在有待保存改动时先提交保存。迟到结果按 scoped client 和文档身份隔离；读取失败不生成可保存的空文档，保存失败保留草稿。具体健康检查、音频测试和持久化 RPC 仍由各插件拥有。
 
@@ -104,5 +103,5 @@ SDK/Runtime API **3.1.1** 移除了 3.1.0 已发布的 `SurfaceHandle.voice`。�
 - 动态 provider：检查通用 services 注册、通信 owner/generation、明确公开的方法及 provider 自己的协议；不要向宿主增加供应商分支。
 - 本地服务：检查 provider HTTP 客户端、实例租约与隔离状态、私有参考文件生命周期及共享 WAV/loopback 工具；协议替身通过不等于真实模型音质通过。
 - 内置分发：同时检查后端 discovery、前端 builtin entries 与冻结运行时 staging；托管环境资源须作为数据随包且不进入宿主 hidden imports。
-- 设置与角色面板：检查插件私有 RPC/文件、`VoiceSettings`、`PluginRoleUiSlot` 的身份与 dirty 生命周期；不把新数据写回角色草稿。
+- 设置与角色面板：检查插件私有 RPC/文件、`VoiceSettings`、`PluginRoleSettingsSlot` 卡片对话框的身份与自动保存生命周期；不把新数据写回角色草稿。
 - 音频与按键：检查 `src/native/`、隐藏音频 renderer、真实 sender 验证及停用/重载清理，保留 WAV 和播放输入校验。

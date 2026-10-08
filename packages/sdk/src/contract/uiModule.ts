@@ -101,7 +101,5 @@ export type PluginUiModule = {
   roleAssets?: PluginRoleAssetsContribution;
   accountDetail?: PluginAccountDetailContribution;
   roleSettings?: PluginRoleSettingsContribution;
-  /** Private plugin storage, independent from the host role draft transaction. */
-  roleUi?: import("./features").PluginRoleUiContribution;
   chatImageActions?: React.ComponentType<PluginChatImageActionProps>;
 };

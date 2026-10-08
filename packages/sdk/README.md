@@ -2,8 +2,8 @@
 
 [@yinfengwindy/shiori-sdk](https://www.npmjs.com/package/@yinfengwindy/shiori-sdk)
 and [shiori-sdk](https://pypi.org/project/shiori-sdk/) are the TypeScript and Python distributions of the
-same plugin contract. Both are version **3.1.16**, with Runtime API **3.1.16**.
-3.1.1–3.1.16 are not published yet; npm and PyPI hold 3.1.0. The commands below
+same plugin contract. Both are version **3.1.17**, with Runtime API **3.1.17**.
+3.1.1–3.1.17 are not published yet; npm and PyPI hold 3.1.0. The commands below
 install 3.1.0; APIs added since then need a wheelhouse or workspace build of
 this repository until the next publication.
 
@@ -59,13 +59,6 @@ Workspace consumers resolve source; `pnpm --filter @yinfengwindy/shiori-sdk pack
 tarball with declarations and external React peers. The host import map provides
 the same main entry to precompiled plugins. Only the main entry belongs in a
 plugin's production peer imports.
-
-Runtime API 3.1.2 also exports `usePrivateDraft(client, identity, operations)` for
-JSON-serializable plugin-owned settings and role documents. Supply `load`, `save`
-and optionally `onDirtyChange`; a null identity disables loading and saving.
-The hook isolates late results by client and document identity, retains edits on
-save errors, and never creates a writable default after a failed read. It manages
-the plugin's draft only and does not participate in the host role transaction.
 
 Runtime API 3.1.4 adds `usePrivateAutosave(client, identity, { load, save, debounceMs? })`
 for plugin settings pages that save like the host's: `update` saves the latest draft

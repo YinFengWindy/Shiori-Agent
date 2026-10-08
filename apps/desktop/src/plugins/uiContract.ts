@@ -61,8 +61,6 @@ export const pluginUiPeerExports: Record<string, string[]> = {
     "PluginHostServicesProvider", "usePluginHostServices",
     // Runtime API 2.16.0 (#576): shared visual components.
     "CrossfadeLayers", "SidebarResizeHandle",
-    // Runtime API 3.1.2: shared private document lifecycle.
-    "usePrivateDraft",
     // Runtime API 3.1.3: generic private runtime controls.
     "ManagedRuntimePanel", "useManagedRuntime",
     // Runtime API 3.1.4 (#683): private document autosave and the settings page layout.

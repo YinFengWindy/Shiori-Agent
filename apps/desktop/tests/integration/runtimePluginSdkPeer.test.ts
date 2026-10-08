@@ -42,6 +42,19 @@ test("a precompiled plugin importing the SDK through the import map receives the
   } finally { await view.cleanup(); }
 });
 
+// Runtime API 3.1.17 (#750): a removed SDK export fails the plugin's link step
+// by name instead of resolving to undefined at call time.
+test("a precompiled plugin importing the removed usePrivateDraft fails to load, naming it", async () => {
+  const view = await mountTestComponent(null);
+  try {
+    initializeRuntimePluginPeers();
+    await assert.rejects(importPrecompiledPlugin([
+      'import { usePrivateDraft } from "@yinfengwindy/shiori-sdk";',
+      'export default { pluginId: "external_sdk", usePrivateDraft };',
+    ].join("\n")), (error: unknown) => error instanceof SyntaxError && /usePrivateDraft/.test(error.message));
+  } finally { await view.cleanup(); }
+});
+
 // Runtime API 2.10.0 (#505): the host mounts every contribution under the
 // SDK's Provider, and a deep component of an external plugin reads that
 // context through its own peer-resolved `usePluginHostServices`.
