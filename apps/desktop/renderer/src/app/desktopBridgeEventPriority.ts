@@ -1,10 +1,11 @@
-const synchronousDesktopBridgeEvents = new Set([
+import { chatTerminalEventMethods } from "@yinfengwindy/shiori-sdk";
+
+const synchronousDesktopBridgeEvents = new Set<string>([
   "bridge.exit",
   "chat.delta",
   "chat.tool.started",
   "chat.tool.completed",
-  "chat.done",
-  "chat.error",
+  ...chatTerminalEventMethods,
   "session.updated",
 ]);
 

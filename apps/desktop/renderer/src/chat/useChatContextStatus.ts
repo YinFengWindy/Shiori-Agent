@@ -1,3 +1,4 @@
+import { isChatTerminalEvent } from "@yinfengwindy/shiori-sdk";
 import { useCallback, useEffect, useEffectEvent, useState, useSyncExternalStore } from "react";
 import { ChatContextCache } from "./chatContextCache";
 import { subscribeChatModelChanges } from "./chatModelChanges";
@@ -44,7 +45,7 @@ export function useChatContextStatus(roleId: string, sessionKey: string, bridgeR
         // DesktopBridgeService's standalone push/proactive commits have no
         // guaranteed context event. Normal turn and metadata updates do.
         onContextChanged(String(event.payload.session_key ?? ""));
-      } else if (event.method === "chat.done" || event.method === "chat.error") {
+      } else if (isChatTerminalEvent(event.method)) {
         void onTurnFinished(String(event.payload.session_key ?? ""));
       }
     });

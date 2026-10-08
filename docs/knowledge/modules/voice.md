@@ -44,7 +44,7 @@ related:
 
 宿主 `apps/desktop/src/native/` 只负责原生录音、设备枚举、单音频播放停止和全局按键 down/up 注册。隐藏音频 renderer（`renderer/src/voice/`，窗口由 `src/voice/window.ts` 创建）执行采集与播放，其回执经 `src/voice/ipc.ts` 交回录音器与播放器。原生资源绑定真实调用窗口、插件通信上下文和活动实例，停用、换代、窗口重载或退出时释放。surface 使用插件自有消息传递手势，宿主不解释“按住说话”或选择 provider。
 
-录音经选定的 ASR 服务识别，再调用现有 `chat.send` 进入角色 Session 和 Agent Loop。宿主聊天只发布 `chat.delta`、`chat.done`、`chat.error` 等通用事件。桌宠按自己生成的 `turn_id`、实际 `session_key` 及事件中存在的角色标识匹配回复，键盘聊天或其他轮次不能启动本轮朗读。`voice.context.get` 是桌宠自己的 RPC，通过已授予的角色/会话接口读取真实 session 与 mood。
+录音经选定的 ASR 服务识别，再调用现有 `chat.send` 进入角色 Session 和 Agent Loop。宿主聊天只发布 `chat.delta`、`chat.done`、`chat.error`、`chat.cancelled` 等通用事件；桌宠收到本轮的 `chat.cancelled` 立即结束朗读并让出语音队列，15 秒无增量的空闲超时只作兜底，超时后同一回复的后续句子作为新任务重新排队。桌宠按自己生成的 `turn_id`、实际 `session_key` 及事件中存在的角色标识匹配回复，键盘聊天或其他轮次不能启动本轮朗读。`voice.context.get` 是桌宠自己的 RPC，通过已授予的角色/会话接口读取真实 session 与 mood。
 
 ## Provider 调用与存储
 

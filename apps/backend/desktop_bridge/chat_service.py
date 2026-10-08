@@ -18,7 +18,16 @@ from shiori_sdk.channel_events import (
 )
 from shiori_sdk.memory.committed import TurnCommitted
 from shiori_sdk.bridge import BridgeEvent
-from desktop_bridge.chat_completion import build_chat_terminal_event
+from desktop_bridge.chat_completion import (
+    build_chat_cancelled_event,
+    build_chat_terminal_event,
+)
+from desktop_bridge.chat_turn_state import (
+    DEFERRED_CHAT_METHODS,
+    DesktopChatTurn,
+    EventEmitter,
+    complete_despite_cancellation,
+)
 from desktop_bridge.turn_messages import committed_turn_messages
 from desktop_bridge.tool_call_preview import truncate_desktop_tool_result
 from session.manager import Session, SessionManager
@@ -29,8 +38,6 @@ from core.roles.model_errors import ModelConfigurationError
 from core.common.runtime_tasks import create_runtime_task
 
 logger = logging.getLogger("desktop.bridge.chat")
-
-EventEmitter = Callable[[dict[str, Any]], Awaitable[None] | None]
 
 
 class SyncDesktopSessionThread(Protocol):
@@ -68,15 +75,6 @@ class ChatTurnCancelResult:
     interrupted_message: dict[str, Any] | None = None
 
 
-@dataclass(frozen=True)
-class _DesktopChatTurn:
-    """Tracks one renderer-owned turn without sharing state across sessions."""
-
-    task: asyncio.Task[None]
-    turn_id: str
-    completed: bool = False
-
-
 class DesktopChatService:
     """Runs desktop chat turns and bridges lifecycle events back to the bridge stream."""
 
@@ -103,7 +101,7 @@ class DesktopChatService:
         self._emit_payload = emit_payload
         self._emit_session_updated = emit_session_updated
         self._streaming_enabled = bool(streaming_enabled)
-        self._tasks_by_session: dict[str, _DesktopChatTurn] = {}
+        self._tasks_by_session: dict[str, DesktopChatTurn] = {}
 
     def is_busy(self, session_key: str) -> bool:
         """Returns whether the session already has an active desktop turn."""
@@ -138,20 +136,10 @@ class DesktopChatService:
                 message="当前会话正在执行另一个回合",
             )
 
-        result, interrupt_state = self._prepare_cancel(
+        # The turn's own runner persists the interrupted reply and publishes it.
+        return self._prepare_cancel(
             normalized_session_key,
-        )
-        self._schedule_interrupted_persistence(
-            session_key=normalized_session_key,
-            turn_id=normalized_turn_id,
-            state=interrupt_state,
-            task=active_turn.task,
-        )
-        return ChatTurnCancelResult(
-            status=result.status,
-            session_key=normalized_session_key,
-            turn_id=normalized_turn_id,
-            message=result.message,
+            normalized_turn_id=normalized_turn_id,
         )
 
     async def cancel_chat_turn_async(
@@ -180,98 +168,27 @@ class DesktopChatService:
                 turn_id=normalized_turn_id,
                 message="当前会话正在执行另一个回合",
             )
-        result, interrupt_state = self._prepare_cancel(
+        result = self._prepare_cancel(
             normalized_session_key,
             normalized_turn_id=normalized_turn_id,
         )
-        if active_turn is not None:
-            await self._await_turn_cleanup(normalized_session_key, active_turn)
-        if result.status == "interrupted" and isinstance(
-            interrupt_state, TurnInterruptState
-        ):
-            interrupted_message = await self._persist_interrupted_turn(
-                session_key=normalized_session_key,
-                turn_id=normalized_turn_id,
-                state=interrupt_state,
+        await self._await_turn_cleanup(normalized_session_key, active_turn)
+        if active_turn.interrupted_message is not None:
+            # The renderer must swap its transient trace for the persisted
+            # message, or the next turn sorts around an id-less bubble.
+            result = replace(
+                result,
+                session=self._session_manager.get_or_create(normalized_session_key),
+                interrupted_message=active_turn.interrupted_message,
             )
-            discard = getattr(self._agent_loop, "discard_interrupt_state", None)
-            if callable(discard):
-                discard(normalized_session_key, interrupt_state)
-            if interrupted_message is not None:
-                # The renderer must swap its transient trace for the persisted
-                # message, or the next turn sorts around an id-less bubble.
-                result = replace(
-                    result,
-                    session=self._session_manager.get_or_create(normalized_session_key),
-                    interrupted_message=interrupted_message,
-                )
         return result
-
-    async def _persist_and_discard_interrupted_turn(
-        self,
-        *,
-        session_key: str,
-        turn_id: str,
-        state: TurnInterruptState,
-    ) -> None:
-        await self._persist_interrupted_turn(
-            session_key=session_key,
-            turn_id=turn_id,
-            state=state,
-        )
-        discard = getattr(self._agent_loop, "discard_interrupt_state", None)
-        if callable(discard):
-            discard(session_key, state)
-
-    def _schedule_interrupted_persistence(
-        self,
-        *,
-        session_key: str,
-        turn_id: str,
-        state: TurnInterruptState | None,
-        task: asyncio.Task[None] | None = None,
-    ) -> None:
-        """Schedules compatibility-path persistence when no async caller can await it."""
-
-        if state is None:
-            return
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            return
-        loop.create_task(
-            self._persist_after_turn_cleanup(
-                session_key=session_key,
-                turn_id=turn_id,
-                state=state,
-                task=task,
-            )
-        )
-
-    async def _persist_after_turn_cleanup(
-        self,
-        *,
-        session_key: str,
-        turn_id: str,
-        state: TurnInterruptState,
-        task: asyncio.Task[None] | None,
-    ) -> None:
-        if task is not None:
-            active_turn = self._tasks_by_session.get(session_key)
-            if active_turn is not None and active_turn.task is task:
-                await self._await_turn_cleanup(session_key, active_turn)
-        await self._persist_and_discard_interrupted_turn(
-            session_key=session_key,
-            turn_id=turn_id,
-            state=state,
-        )
 
     def _prepare_cancel(
         self,
         session_key: str,
         normalized_turn_id: str | None = None,
-    ) -> tuple[ChatTurnCancelResult, TurnInterruptState | None]:
-        """Stops renderer-owned work and returns the immutable interrupt snapshot."""
+    ) -> ChatTurnCancelResult:
+        """Stops renderer-owned work and hands its interrupt snapshot to the turn."""
 
         active_turn = self._tasks_by_session.get(session_key)
         turn_id = normalized_turn_id or (active_turn.turn_id if active_turn else "")
@@ -284,34 +201,47 @@ class DesktopChatService:
         # Keep a naturally completed wrapper alive when AgentLoop reports idle;
         # it still needs to publish its final session update.
         if active_turn is not None and raw_result.status == "interrupted":
-            _ = active_turn.task.cancel()
-        return (
-            ChatTurnCancelResult(
-                status=str(getattr(raw_result, "status", "interrupted")),
-                session_key=session_key,
-                turn_id=turn_id,
-                message=(
-                    raw_result.message
-                    if raw_result.status == "interrupted"
-                    else "已中止当前回合"
-                ),
-            ),
-            (
-                interrupt_state
-                if isinstance(interrupt_state, TurnInterruptState)
-                else None
+            if active_turn.finished:
+                # Already publishing done / error: nothing is left to interrupt.
+                if isinstance(interrupt_state, TurnInterruptState):
+                    self._discard_interrupt_state(session_key, interrupt_state)
+            else:
+                if isinstance(interrupt_state, TurnInterruptState):
+                    active_turn.interrupt_state = interrupt_state
+                _ = active_turn.task.cancel()
+        return ChatTurnCancelResult(
+            status=str(getattr(raw_result, "status", "interrupted")),
+            session_key=session_key,
+            turn_id=turn_id,
+            message=(
+                raw_result.message
+                if raw_result.status == "interrupted"
+                else "已中止当前回合"
             ),
         )
 
     async def _await_turn_cleanup(
         self,
         session_key: str,
-        active_turn: _DesktopChatTurn,
+        active_turn: DesktopChatTurn,
     ) -> None:
         try:
             await active_turn.task
         except asyncio.CancelledError:
             pass
+        # Absorb only the turn's own cancellation. A cancelled caller (shutdown,
+        # a cancelled RPC) must still stop, even when its cancel was forwarded
+        # into the turn and the turn ended quietly.
+        current = asyncio.current_task()
+        if current is not None and current.cancelling():
+            raise asyncio.CancelledError
+        # A turn cancelled before its first step never ran its runner; its
+        # terminal comes from the late finisher, or from here if the task's
+        # done callback has not run yet (the claim makes either one a no-op).
+        if active_turn.late_finisher is not None:
+            await active_turn.late_finisher
+        elif not active_turn.finished:
+            await self._finish_turn(active_turn, cancelled=True)
         self._discard_task(session_key, active_turn.task)
 
     async def _persist_interrupted_turn(
@@ -596,21 +526,23 @@ class DesktopChatService:
         if self.is_busy(session_key):
             raise ChatTurnBusyError(f"会话 {session_key} 已有正在执行的聊天任务")
 
-        terminal_events: list[dict[str, Any]] = []
+        turn = DesktopChatTurn(
+            request_id=request_id,
+            turn_id=turn_id,
+            session_key=session_key,
+            emit_event=emit_event,
+        )
 
-        async def emit_turn_event(payload):
+        async def emit_turn_event(payload: dict[str, Any]) -> None:
             # Completion enables the next send in the renderer. Publish it only
             # after the role turn and persistence have released their ownership.
-            if terminal_events or payload.get("method") in {
-                "chat.done",
-                "chat.error",
-                "session.updated",
-            }:
-                terminal_events.append(payload)
+            if turn.deferred_events or payload.get("method") in DEFERRED_CHAT_METHODS:
+                turn.deferred_events.append(payload)
             else:
                 await self._emit_payload(emit_event, payload)
 
         async def _runner() -> None:
+            cancelled = False
             try:
                 _ = await self.run_chat_turn(
                     request_id=request_id,
@@ -623,37 +555,112 @@ class DesktopChatService:
                     emit_event=emit_turn_event,
                 )
             except asyncio.CancelledError:
-                return
+                cancelled = True
             except Exception:
                 logger.exception("desktop chat turn failed: %s", session_key)
             finally:
-                owner = self._tasks_by_session.get(session_key)
-                if owner is not None and owner.task is asyncio.current_task():
-                    self._tasks_by_session[session_key] = replace(owner, completed=True)
-                for event in terminal_events:
-                    await self._emit_payload(emit_event, event)
+                await self._finish_turn(turn, cancelled=cancelled)
 
-        task = create_runtime_task(_runner(), name=f"desktop-chat:{session_key}")
-        self._tasks_by_session[session_key] = _DesktopChatTurn(
-            task=task,
-            turn_id=turn_id,
-        )
-        task.add_done_callback(
-            lambda completed, key=session_key: self._discard_task(
-                key,
-                completed,
+        turn.task = create_runtime_task(_runner(), name=f"desktop-chat:{session_key}")
+        self._tasks_by_session[session_key] = turn
+        turn.task.add_done_callback(lambda _task: self._on_turn_task_done(turn))
+
+    def _on_turn_task_done(self, turn: DesktopChatTurn) -> None:
+        if not turn.finished:
+            # Cancelled before its first step: the runner never ran, so the
+            # terminal is published by a follow-up task that cleanup awaits.
+            turn.late_finisher = create_runtime_task(
+                self._finish_turn(turn, cancelled=True),
+                name=f"desktop-chat-terminal:{turn.session_key}",
             )
+        self._discard_task(turn.session_key, turn.task)
+
+    async def _finish_turn(self, turn: DesktopChatTurn, *, cancelled: bool) -> None:
+        """Publishes exactly one terminal event for ``turn``, shielded from shutdown.
+
+        A cancelled turn that has not already resolved to chat.done / chat.error
+        first persists its interrupted reply (when a turn-id cancel supplied
+        one), announces it with ``session.updated`` and then ends with
+        ``chat.cancelled``.
+
+        A failed persistence still ends the turn with ``chat.cancelled`` and
+        then propagates.
+        """
+
+        if turn.finished:
+            return
+        turn.finished = True
+        state, turn.interrupt_state = turn.interrupt_state, None
+        try:
+            if cancelled and not turn.has_terminal():
+                try:
+                    if state is not None:
+                        await complete_despite_cancellation(
+                            self._publish_interrupted_turn(turn, state)
+                        )
+                finally:
+                    turn.deferred_events.append(
+                        build_chat_cancelled_event(
+                            request_id=turn.request_id,
+                            turn_id=turn.turn_id,
+                            session_key=turn.session_key,
+                        ).to_dict()
+                    )
+            elif state is not None:
+                self._discard_interrupt_state(turn.session_key, state)
+        finally:
+            turn.completed = True
+            await complete_despite_cancellation(self._flush_deferred_events(turn))
+
+    async def _publish_interrupted_turn(
+        self,
+        turn: DesktopChatTurn,
+        state: TurnInterruptState,
+    ) -> None:
+        """Persists a cancelled reply and queues the session update announcing it."""
+
+        try:
+            turn.interrupted_message = await self._persist_interrupted_turn(
+                session_key=turn.session_key,
+                turn_id=turn.turn_id,
+                state=state,
+            )
+        finally:
+            self._discard_interrupt_state(turn.session_key, state)
+        await self._emit_session_updated(
+            request_id=turn.request_id,
+            session=self._session_manager.get_or_create(turn.session_key),
+            emit_event=turn.deferred_events.append,
+            messages=(
+                [turn.interrupted_message]
+                if turn.interrupted_message is not None
+                else None
+            ),
         )
+
+    def _discard_interrupt_state(
+        self, session_key: str, state: TurnInterruptState
+    ) -> None:
+        discard = getattr(self._agent_loop, "discard_interrupt_state", None)
+        if callable(discard):
+            discard(session_key, state)
+
+    async def _flush_deferred_events(self, turn: DesktopChatTurn) -> None:
+        for event in turn.deferred_events:
+            await self._emit_payload(turn.emit_event, event)
 
     async def aclose(self) -> None:
         """Cancels and awaits every desktop-owned chat turn."""
 
-        tasks = [turn.task for turn in self._tasks_by_session.values()]
-        for task in tasks:
-            if not task.done():
-                _ = task.cancel()
-        if tasks:
-            _ = await asyncio.gather(*tasks, return_exceptions=True)
+        turns = list(self._tasks_by_session.items())
+        for _key, turn in turns:
+            if not turn.task.done():
+                _ = turn.task.cancel()
+        if turns:
+            _ = await asyncio.gather(
+                *(self._await_turn_cleanup(key, turn) for key, turn in turns),
+                return_exceptions=True,
+            )
         self._tasks_by_session.clear()
 
     async def drain(self) -> None:
