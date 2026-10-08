@@ -7,18 +7,18 @@ import { PluginRoleSettingsSlot } from "./PluginRoleSettingsSlot";
 import { pluginRoleSettingsRegistry } from "./pluginFeatureRegistry";
 import { resetPluginEnabledStateForTests, setPluginEnabledSnapshot } from "./pluginEnabledStateStore";
 
-test("role settings get the role id, a scoped client and host services, and remount per role", async () => {
+test("role settings get the role id, its mood catalog, a scoped client and host services, and remount per role", async () => {
   const requests: Array<{ method: string; payload: Record<string, unknown> }> = [];
   const disposed: string[] = [];
-  function Card({ roleId, client }: PluginRoleSettingsProps) {
+  function Card({ roleId, client, moodCatalog }: PluginRoleSettingsProps) {
     const host = usePluginHostServices();
     useEffect(() => () => { disposed.push(roleId ?? "new"); }, [roleId]);
-    return <button data-has-host={String(typeof host.pickFiles === "function")}
+    return <button data-has-host={String(typeof host.pickFiles === "function")} data-moods={moodCatalog.join(",")}
       onClick={() => { void client.call("live.save", { role_id: roleId }); }}>保存</button>;
   }
   pluginRoleSettingsRegistry.register({ pluginId: "neutral-card", storage: "plugin", read: () => ({}), Component: Card });
   setPluginEnabledSnapshot([{ id: "neutral-card", enabled: true, state: "ACTIVE" }]);
-  const slot = (roleId: string) => <PluginRoleSettingsSlot roleId={roleId} drafts={{}} onChange={() => undefined} />;
+  const slot = (roleId: string) => <PluginRoleSettingsSlot roleId={roleId} moodCatalog={["平静", "开心"]} drafts={{}} onChange={() => undefined} />;
   const view = await mountTestComponent(slot("one"), { windowGlobals: { miraDesktop: {
     onEvent: () => () => {},
     invoke: async (request: { method: string; payload: Record<string, unknown> }) => { requests.push(request); return { error: null, payload: { generation: "g" } }; },
@@ -26,6 +26,7 @@ test("role settings get the role id, a scoped client and host services, and remo
   try {
     const button = view.container.querySelector("button")!;
     assert.equal(button.dataset.hasHost, "true");
+    assert.equal(button.dataset.moods, "平静,开心");
     await act(async () => button.click());
     const save = requests.find((request) => request.method === "plugin.neutral-card.live.save");
     assert.equal(save?.payload.role_id, "one");

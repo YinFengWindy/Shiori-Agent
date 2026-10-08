@@ -57,6 +57,7 @@ export {
   cardClass,
   compactButtonSizeClass,
   compactGhostButtonClass,
+  compactIconButtonClass,
   compactPressableClass,
   cx,
   ghostButtonClass,

@@ -7,6 +7,8 @@ import { usePluginRpcClient } from "./usePluginRpcClient";
 
 type SlotProps = {
   roleId: string | null;
+  /** The edited role's draft mood catalog, handed to every card. */
+  moodCatalog: readonly string[];
   drafts: PluginRoleSettingsDraft;
   snapshots?: PluginRoleSettingsDraft;
   disabled?: boolean;
@@ -18,19 +20,20 @@ type SlotProps = {
  * Each card is keyed by role, so plugin-private state in its settings dialog
  * never outlives the role it was opened for.
  */
-export function PluginRoleSettingsSlot({ roleId, drafts, snapshots, disabled, onChange }: SlotProps) {
+export function PluginRoleSettingsSlot({ roleId, moodCatalog, drafts, snapshots, disabled, onChange }: SlotProps) {
   const enabled = usePluginEnabledState();
   return pluginRoleSettingsRegistry.list().filter((entry) => enabled(entry.pluginId)).map((entry) => (
-    <PluginRoleSettingsEntry key={`${entry.pluginId}:${roleId ?? "new"}`} entry={entry} roleId={roleId}
+    <PluginRoleSettingsEntry key={`${entry.pluginId}:${roleId ?? "new"}`} entry={entry} roleId={roleId} moodCatalog={moodCatalog}
       values={drafts[entry.pluginId] ?? entry.read({})} snapshot={snapshots?.[entry.pluginId]} disabled={disabled}
       onChange={(values) => onChange({ ...drafts, [entry.pluginId]: values })} />
   ));
 }
 
 /** One contribution with its scoped client and host services, like the role UI slot. */
-function PluginRoleSettingsEntry({ entry, roleId, values, snapshot, disabled, onChange }: {
+function PluginRoleSettingsEntry({ entry, roleId, moodCatalog, values, snapshot, disabled, onChange }: {
   entry: PluginRoleSettingsContribution & { pluginId: string };
   roleId: string | null;
+  moodCatalog: readonly string[];
   values: PluginRoleValues;
   snapshot?: PluginRoleValues;
   disabled?: boolean;
@@ -38,6 +41,6 @@ function PluginRoleSettingsEntry({ entry, roleId, values, snapshot, disabled, on
 }) {
   const client = usePluginRpcClient(entry.pluginId);
   return <PluginHostServicesProvider services={pluginHostServicesFor(entry.pluginId)}>
-    <entry.Component roleId={roleId} client={client} values={values} snapshot={snapshot} disabled={disabled} onChange={onChange} />
+    <entry.Component roleId={roleId} client={client} moodCatalog={moodCatalog} values={values} snapshot={snapshot} disabled={disabled} onChange={onChange} />
   </PluginHostServicesProvider>;
 }

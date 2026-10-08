@@ -100,7 +100,8 @@ export const dangerButtonClass = cx(
 export const dangerGhostButtonClass = cx(dangerGhostButtonSurfaceClass, "px-[18px] py-3");
 
 // Defined in the SDK, which uses them for its capability settings dialog (#719).
-export { compactIconButtonClass, dialogBackdropClass } from "@yinfengwindy/shiori-sdk/host-internal";
+export { compactIconButtonClass } from "@yinfengwindy/shiori-sdk";
+export { dialogBackdropClass } from "@yinfengwindy/shiori-sdk/host-internal";
 
 /** Shared focus reset for controls that rely on their existing state styling. */
 export const focusResetClass = "focus:outline-none";

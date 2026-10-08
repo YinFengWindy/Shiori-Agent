@@ -9,10 +9,10 @@ test("pet toggle edits only its draft and gates enablement on selected packages"
   const synced: unknown[] = [];
   const view = await mountTestComponent(null);
   try {
-    await view.render(<DesktopPetRoleSettings roleId="role-1" client={createFakePluginClient()} values={{ enabled: false }} snapshot={{ available: false }} onChange={(values) => changes.push(values)} />);
+    await view.render(<DesktopPetRoleSettings roleId="role-1" client={createFakePluginClient()} moodCatalog={[]} values={{ enabled: false }} snapshot={{ available: false }} onChange={(values) => changes.push(values)} />);
     let toggle = view.container.querySelector<HTMLButtonElement>('[aria-label="桌宠"]');
     assert.ok(toggle?.disabled);
-    await view.render(<DesktopPetRoleSettings roleId="role-1" client={createFakePluginClient()} values={{ enabled: false }} snapshot={{ available: true }} onChange={(values) => changes.push(values)} />);
+    await view.render(<DesktopPetRoleSettings roleId="role-1" client={createFakePluginClient()} moodCatalog={[]} values={{ enabled: false }} snapshot={{ available: true }} onChange={(values) => changes.push(values)} />);
     toggle = view.container.querySelector<HTMLButtonElement>('[aria-label="桌宠"]');
     assert.ok(toggle && !toggle.disabled);
     await act(async () => { toggle.click(); });

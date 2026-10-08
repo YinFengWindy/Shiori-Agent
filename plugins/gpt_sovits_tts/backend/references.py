@@ -9,7 +9,7 @@ from shiori_sdk.files.audio import pcm_wav_duration
 from shiori_sdk.files.staging import staged_import_file
 from shiori_sdk.files.text import atomic_save_bytes
 
-from .settings import RoleVoice, VoiceStore
+from .settings import Reference, RoleVoice, VoiceStore
 
 
 class References:
@@ -21,6 +21,8 @@ class References:
         self.pins: Counter[str] = Counter()
         self.imported: set[str] = set()
         self.retired: set[str] = set()
+        # Assets are immutable, so a measured duration never goes stale.
+        self.durations: dict[str, float] = {}
 
     def import_file(self, workspace: Path, source: str) -> dict[str, object]:
         """Validate a 3–10 second signal before adopting a native-picker WAV."""
@@ -41,6 +43,7 @@ class References:
             target = self.directory / f"{uuid4().hex}.wav"
             atomic_save_bytes(target, audio)
             self.imported.add(target.name)
+            self.durations[target.name] = duration
             return {"asset": target.name, "duration": duration}
         finally:
             path.unlink(missing_ok=True)
@@ -55,6 +58,30 @@ class References:
         ):
             raise ValueError("参考音频不存在，请重新导入")
         return path.resolve()
+
+    def duration(self, asset: str) -> float:
+        """The measured seconds of an owned file, read once per asset."""
+        if asset not in self.durations:
+            audio = self.path(asset).read_bytes()
+            self.durations[asset] = pcm_wav_duration(audio, require_signal=True)
+        return self.durations[asset]
+
+    def measured(self, voice: RoleVoice) -> RoleVoice:
+        """Replace every client-supplied duration with the plugin's own measurement."""
+
+        def measure(reference: Reference | None) -> Reference | None:
+            if reference is None:
+                return None
+            return reference.model_copy(
+                update={"duration": self.duration(reference.asset)}
+            )
+
+        return voice.model_copy(
+            update={
+                "default": measure(voice.default),
+                "moods": {name: measure(ref) for name, ref in voice.moods.items()},
+            }
+        )
 
     def validate(self, voice: RoleVoice) -> None:
         """Reject stale asset identities before a private role save."""

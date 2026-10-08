@@ -70,6 +70,8 @@ export const pluginUiPeerExports: Record<string, string[]> = {
     "settingsGroupStackClass", "settingsInputClass",
     // Runtime API 3.1.13 (#734): the events that end a chat turn.
     "chatTerminalEventMethods", "isChatTerminalEvent",
+    // Runtime API 3.1.14 (#720): the compact icon-only button.
+    "compactIconButtonClass",
   ],
 };
 

@@ -9,6 +9,8 @@ type CapabilitySettingsDialogProps = {
   title: string;
   /** The capability's secondary settings; mounted on first open, then kept (see `RoleCapabilityCard.settings`). */
   children: ReactNode;
+  /** Called with each open and close (runtime API 3.1.14), e.g. to commit a pending autosave on close. */
+  onOpenChange?: (open: boolean) => void;
 };
 
 /**
@@ -18,12 +20,12 @@ type CapabilitySettingsDialogProps = {
  * backdrop dismiss it. A long body scrolls inside the dialog while the title
  * row stays put. The dialog never saves or discards anything itself.
  */
-export function CapabilitySettingsDialog({ title, children }: CapabilitySettingsDialogProps) {
+export function CapabilitySettingsDialog({ title, children, onOpenChange }: CapabilitySettingsDialogProps) {
   // Nothing mounts until the first open; after that the content stays mounted
   // (hidden while closed) so its pending autosave or failed-save retry survives a close.
   const [opened, setOpened] = useState(false);
   return (
-    <Dialog.Root onOpenChange={(open) => { if (open) setOpened(true); }}>
+    <Dialog.Root onOpenChange={(open) => { if (open) setOpened(true); onOpenChange?.(open); }}>
       <Dialog.Trigger className={compactIconButtonClass} aria-label={`${title}设置`}>
         <GearSix className="h-4 w-4" weight="bold" aria-hidden="true" />
       </Dialog.Trigger>

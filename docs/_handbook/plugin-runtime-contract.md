@@ -39,7 +39,7 @@ and renderer declaration keys are rejected. This table defines the v1 fields:
 | `api` | yes | integer `2` |
 | `id` | yes | `[a-z][a-z0-9_-]{0,63}` |
 | `version` | yes | full SemVer 2.0 string, including optional prerelease/build |
-| `runtime_api` | yes | compatibility range; host currently advertises `3.1.13` |
+| `runtime_api` | yes | compatibility range; host currently advertises `3.1.14` |
 | `entry` | yes | explicit package-relative `.py` backend entry |
 | `capabilities` | yes | existing v2 capability-name list, including `[]` |
 | `channels` | no | static channel declarations (Runtime API 2.2); requires the `channels` capability |
@@ -79,7 +79,7 @@ SDK. A package declares the lowest version whose additions it uses.
 
 The single version source is `packages/sdk/python/shiori_sdk/_version.py`
 (`RUNTIME_API_VERSION = __version__`), synchronized to the other packages by
-`node scripts/sync_sdk_version.mjs`. 3.1.1–3.1.13 are unpublished contract
+`node scripts/sync_sdk_version.mjs`. 3.1.1–3.1.14 are unpublished contract
 changes on `main`; npm and PyPI hold 3.1.0.
 
 | Version | Adds | Introduced by |
@@ -116,6 +116,7 @@ changes on `main`; npm and PyPI hold 3.1.0.
 | `3.1.11` | `RoleCapabilityCard` takes an optional `settings` node: the card then shows a ⚙ button after its control that opens a centred, medium-width dialog titled by the card's `title`, with a scrolling body; Escape, the backdrop and the close button dismiss it and focus returns to the ⚙. `settings` mounts on the first open and then stays mounted (hidden while closed) as long as the card, so a pending autosave or failed-save retry survives closing; mounting writes nothing. The dialog saves nothing itself: role fields inside still follow the role editor's Save/Reset, plugin-private settings their own autosave. `PluginRoleSettingsProps` gains `roleId` (null for a new role) and `client` (the plugin's scoped RPC client), and `role.settings` components now render under `PluginHostServicesProvider` and remount per role, so a card's dialog can own plugin-private settings with `usePrivateAutosave`. No new peer export; packages using either require `runtime_api: ">=3.1.11 <4.0.0"` | #719 (#718) |
 | `3.1.12` | host/plugin calls to `message_push.execute(...)` accept the optional strict boolean `push_proactive` (default `True`). `False` records supplemental text/images as non-proactive in desktop and external conversations; desktop supplements do not update proactive presence, awaiting-reply state or relationship cooldown. The tool registry takes this field only from host execution context, never model arguments; it is absent from the model schema. A `False` call containing a nonblank `file` is rejected before any payload is sent. Existing calls and legacy senders retain their behavior. NovelAI automatic scene CG opts out of proactive bookkeeping; packages using the flag require `runtime_api: ">=3.1.12 <4.0.0"`. | #740 |
 | `3.1.13` | host event `chat.cancelled` (`{session_key, turn_id}`): a desktop chat turn cancelled by `chat.cancel` or by bridge shutdown now ends with it, so while the bridge connection is open every accepted turn ends with exactly one of `chat.done`, `chat.error` or `chat.cancelled` (subscribe with `ctx.hostEvents.on("chat.cancelled", ...)`); a turn-id cancel first persists the partial reply and announces it with `session.updated`. SDK `chatTerminalEventMethods`, `isChatTerminalEvent` and type `ChatTerminalEventMethod` name that set; packages relying on any of it require `runtime_api: ">=3.1.13 <4.0.0"` | #734 (#292) |
+| `3.1.14` | `PluginRoleSettingsProps` gains `moodCatalog` (the edited role draft's moods, as `PluginRoleUiProps.role.moodCatalog`), so a `role.settings` card can offer per-mood settings; a card may declare `storage: "plugin"` with `read: () => ({})` to own no role draft values at all and keep only plugin-private, autosaved settings in its dialog (as `gpt_sovits_tts` now does instead of `roleUi`). `RoleCapabilityCard` takes an optional `onSettingsOpenChange(open)` (and `CapabilitySettingsDialog` an `onOpenChange`), called on each open and close of the settings dialog; since the content stays mounted while closed, an autosaving plugin commits its last edit on close. `compactIconButtonClass` (the borderless 28px icon-only button) moves from `host-internal` to the main SDK entry and the renderer peer exports. Packages using any of them require `runtime_api: ">=3.1.14 <4.0.0"` | #720 (#718) |
 
 2.2 and 2.3 first ship together in the release that turns every external
 channel into a plugin (#363): no released host advertises 2.2 alone, and
@@ -1044,7 +1045,7 @@ for commands and how to validate its directory/zip from a host environment.
 ## Runtime API 3.0: unified Shiori SDK
 
 `@yinfengwindy/shiori-sdk` and `shiori-sdk` share one version (3.0.0 at introduction, now
-3.1.13) and the source tree `packages/sdk/`. External packages must declare `runtime_api: ">=3.0.0 <4.0.0"`.
+3.1.14) and the source tree `packages/sdk/`. External packages must declare `runtime_api: ">=3.0.0 <4.0.0"`.
 The previous frontend package name has no alias. Existing 2.x ranges are rejected
 with `incompatible_runtime` before backend execution; rebuild renderer peers and
 update the declared range when migrating. The 2.x sections above describe feature
