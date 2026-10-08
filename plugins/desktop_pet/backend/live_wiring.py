@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Coroutine
 from typing import TYPE_CHECKING
 
 from shiori_sdk.role_events import RoleDeleted
@@ -13,10 +12,12 @@ from .bilibili_login import BilibiliLoginService
 from .live_clock import SystemClock
 from .live_config import LiveConfigStore
 from .live_engine import LiveEngine
+from .live_gate import LiveStartGate
 from .live_output import LiveReplyOutput
 from .live_rpc import register_live_rpc
 from .live_session import LiveSessionDeps
 from .pet_state import RolePetStateStore
+from .voice_preferences import VoicePreferencesStore
 
 if TYPE_CHECKING:
     from shiori_sdk.plugin_services import ServicePluginContext
@@ -30,12 +31,16 @@ def setup_live_engine(
     """Build the engine on real Bilibili clients; disable ends its run."""
     api = BilibiliLiveApi()
     configs = LiveConfigStore(ctx.workspace)
-
-    def spawn(work: Coroutine[object, object, None], name: str):
-        return ctx.background.spawn(work, name=name)
-
+    is_pet_role = RolePetStateStore(ctx.roles).is_enabled
     engine = LiveEngine(
         roles=ctx.roles,
+        gate=LiveStartGate(
+            roles=ctx.roles,
+            configs=configs,
+            voice=VoicePreferencesStore(ctx.workspace),
+            is_pet_role=is_pet_role,
+            credentials=login.require_credentials,
+        ),
         configs=configs,
         api=api,
         deps=LiveSessionDeps(
@@ -43,9 +48,9 @@ def setup_live_engine(
             turns=ctx.external_turns,
             output=output,
             credentials=login.require_credentials,
-            still_bound=RolePetStateStore(ctx.roles).is_enabled,
+            still_bound=is_pet_role,
             clock=SystemClock(),
-            spawn=spawn,
+            spawn=ctx.background.spawn,
         ),
     )
     engine.prune_deleted_roles()

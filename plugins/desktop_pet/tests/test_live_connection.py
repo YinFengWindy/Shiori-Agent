@@ -1,10 +1,18 @@
-"""Reconnect backoff is bounded and resets after a successful connection."""
+"""Reconnects: transient failures back off (bounded), rejections and bugs do not retry."""
 
 import asyncio
 
+import pytest
+
 from plugins.desktop_pet.backend.bilibili_credentials import BilibiliCredentials
 from plugins.desktop_pet.backend.bilibili_live_api import LiveRoom
-from plugins.desktop_pet.backend.live_connection import LiveConnection, reconnect_delay
+from plugins.desktop_pet.backend.bilibili_live_packets import LivePacketError
+from plugins.desktop_pet.backend.bilibili_live_stream import LiveAuthRejected
+from plugins.desktop_pet.backend.live_connection import (
+    LiveConnection,
+    LiveConnectionEnded,
+    reconnect_delay,
+)
 from plugins.desktop_pet.backend.live_status import LiveStatus
 
 CREDENTIALS = BilibiliCredentials(
@@ -25,7 +33,7 @@ def test_backoff_doubles_up_to_the_cap():
     ]
 
 
-async def test_failed_attempts_back_off_and_a_connection_resets(clock, danmaku_source):
+async def start(clock, source) -> tuple[LiveConnection, LiveStatus, asyncio.Task]:
     async def credentials():
         return CREDENTIALS
 
@@ -34,30 +42,55 @@ async def test_failed_attempts_back_off_and_a_connection_resets(clock, danmaku_s
         room_id=1001,
         buvid="b",
         credentials=credentials,
-        source=danmaku_source,
+        source=source,
         on_danmaku=lambda message: None,
         status=status,
         clock=clock,
     )
-    danmaku_source.authenticate = False
     task = asyncio.create_task(connection.run())
     await clock.settle()
+    return connection, status, task
 
-    async def fail_and_wait(delay: float) -> None:
-        count = len(danmaku_source.connections)
-        danmaku_source.current.drop(ConnectionError("reset"))
-        await clock.advance(delay - 0.01)
-        assert len(danmaku_source.connections) == count
-        await clock.advance(0.01)
-        assert len(danmaku_source.connections) == count + 1
 
-    await fail_and_wait(1)
-    await fail_and_wait(2)
-    assert status.connection == "reconnecting"
-    assert status.last_error == "弹幕连接中断: reset"
-    danmaku_source.authenticate = True
-    await fail_and_wait(4)
+async def fail_and_wait(clock, source, delay: float) -> None:
+    count = len(source.connections)
+    source.current.drop(ConnectionError("reset"))
+    await clock.advance(delay - 0.01)
+    assert len(source.connections) == count
+    await clock.advance(0.01)
+    assert len(source.connections) == count + 1
+
+
+async def test_quick_drops_keep_backing_off_and_only_a_healthy_link_resets(
+    clock, danmaku_source
+):
+    _, status, task = await start(clock, danmaku_source)
     assert status.connection == "connected"
-    await fail_and_wait(1)
+    # Each connection authenticates and then drops at once: no reset.
+    await fail_and_wait(clock, danmaku_source, 1)
+    await fail_and_wait(clock, danmaku_source, 2)
+    await fail_and_wait(clock, danmaku_source, 4)
+    await clock.advance(30)
+    await fail_and_wait(clock, danmaku_source, 1)
     task.cancel()
     await asyncio.gather(task, return_exceptions=True)
+
+
+async def test_rejection_ends_without_retrying(clock, danmaku_source):
+    _, status, task = await start(clock, danmaku_source)
+    danmaku_source.current.drop(LiveAuthRejected("拒绝"))
+    with pytest.raises(LiveConnectionEnded) as ended:
+        await task
+    assert ended.value.state == "rejected"
+    assert (status.connection, status.connection_error) == ("rejected", "拒绝")
+    await clock.advance(60)
+    assert len(danmaku_source.connections) == 1
+
+
+async def test_protocol_errors_propagate_instead_of_reconnecting(clock, danmaku_source):
+    _, _, task = await start(clock, danmaku_source)
+    danmaku_source.current.drop(LivePacketError("坏包"))
+    with pytest.raises(LivePacketError):
+        await task
+    await clock.advance(60)
+    assert len(danmaku_source.connections) == 1

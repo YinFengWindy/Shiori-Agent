@@ -11,8 +11,8 @@ import pytest
 from plugins.desktop_pet.backend.bilibili_credentials import BilibiliCredentials
 from plugins.desktop_pet.backend.bilibili_danmaku import Danmaku
 from plugins.desktop_pet.backend.bilibili_live_api import BilibiliLiveApi
-from plugins.desktop_pet.backend.bilibili_live_source import (
-    BilibiliDanmakuSource,
+from plugins.desktop_pet.backend.bilibili_live_source import BilibiliDanmakuSource
+from plugins.desktop_pet.backend.bilibili_live_stream import (
     LiveAuthRejected,
     LiveDisconnected,
     LiveIdentityRejected,
@@ -38,11 +38,14 @@ def danmu(message_id: str, uid: int = 7) -> bytes:
 
 
 class ScriptedSocket:
-    def __init__(self, frames: list[bytes]) -> None:
+    def __init__(self, frames: list[bytes], send_error: Exception | None = None):
         self.frames = frames
         self.sent: list[bytes] = []
+        self.send_error = send_error
 
     async def send(self, message: bytes) -> None:
+        if self.sent and self.send_error is not None:
+            raise self.send_error
         self.sent.append(message)
 
     async def recv(self) -> bytes:
@@ -111,3 +114,12 @@ async def test_rejected_auth_and_anonymized_senders_are_distinct_failures(bilibi
     anonymous = ScriptedSocket([packet(8, 1, b'{"code":0}'), danmu("a", uid=0)])
     with pytest.raises(LiveIdentityRejected):
         await source_for(bilibili, anonymous, []).run(1001, CREDENTIALS, "B", Sink())
+
+
+async def test_failed_heartbeat_ends_the_connection_with_its_own_error(bilibili):
+    socket = ScriptedSocket([packet(8, 1, b'{"code":0}')], OSError("broken pipe"))
+    sink = Sink()
+    source = source_for(bilibili, socket, [])
+    with pytest.raises(OSError, match="broken pipe"):
+        await asyncio.wait_for(source.run(1001, CREDENTIALS, "B", sink), 1)
+    assert sink.events == ["connected"]

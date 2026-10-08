@@ -1,31 +1,24 @@
-"""One logged-in Bilibili danmaku stream connection, reported through a sink.
+"""The real logged-in Bilibili danmaku stream connection.
 
 Connection flow (bilibili-API-collect ``docs/live/message_stream.md``,
 blivedm ``clients/ws_base.py``): fetch a fresh token and hosts, open
 ``wss://host:port/sub``, send the auth packet within 5 s, expect auth reply
 ``{"code": 0}``, then send a heartbeat every 30 s (the server drops silent
-clients after about 60 s) while reading command packets. Reconnecting is the
-caller's job: ``run`` returns only by raising.
+clients after about 60 s) while reading command packets. The reader and the
+heartbeat live and die together: the first one to fail ends the connection
+with its own error. Reconnecting is the caller's job.
 """
 
 from __future__ import annotations
 
 import asyncio
-import contextlib
-from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
-from typing import Protocol
 
 from websockets.asyncio.client import connect
 
 from .bilibili_api import BILIBILI_HEADERS
 from .bilibili_credentials import BilibiliCredentials
-from .bilibili_danmaku import (
-    AnonymousDanmaku,
-    Danmaku,
-    DanmakuFormatError,
-    parse_danmaku,
-)
+from .bilibili_danmaku import AnonymousDanmaku, DanmakuFormatError, parse_danmaku
 from .bilibili_live_api import BilibiliLiveApi
 from .bilibili_live_packets import (
     AUTH_PROTOVER,
@@ -35,64 +28,19 @@ from .bilibili_live_packets import (
     decode_frame,
     encode_packet,
 )
+from .bilibili_live_stream import (
+    DanmakuSink,
+    LiveAuthRejected,
+    LiveDisconnected,
+    LiveIdentityRejected,
+    LiveSocket,
+    SocketConnector,
+)
 
 HEARTBEAT_INTERVAL_S = 30.0
 # Heartbeat replies arrive every 30 s, so a longer silence is a dead link.
 RECEIVE_TIMEOUT_S = 45.0
 _MAX_FRAME_BYTES = 4 * 1024 * 1024
-
-
-class LiveDisconnected(ConnectionError):
-    """The stream ended or went silent; reconnecting may recover."""
-
-
-class LiveAuthRejected(ConnectionError):
-    """The server refused the auth packet; a fresh token may recover."""
-
-
-class LiveIdentityRejected(RuntimeError):
-    """Danmaku arrive anonymized: the stream is not using the login identity."""
-
-
-class LiveSocket(Protocol):
-    """The subset of a websocket client connection the stream uses."""
-
-    async def send(self, message: bytes) -> None: ...
-
-    async def recv(self) -> str | bytes: ...
-
-
-type SocketConnector = Callable[[str], AbstractAsyncContextManager[LiveSocket]]
-
-
-class DanmakuSink(Protocol):
-    """Receives what one connection observes, in order."""
-
-    def connected(self) -> None:
-        """The server accepted the auth packet."""
-        ...
-
-    def danmaku(self, message: Danmaku) -> None:
-        """A plain-text viewer danmaku arrived (possibly a replay)."""
-        ...
-
-    def unreadable(self, error: str) -> None:
-        """A ``DANMU_MSG`` could not be read; the connection continues."""
-        ...
-
-
-class DanmakuSource(Protocol):
-    """Runs one connection; injectable so tests drive a controllable source."""
-
-    async def run(
-        self,
-        room_id: int,
-        credentials: BilibiliCredentials,
-        buvid: str,
-        sink: DanmakuSink,
-    ) -> None:
-        """Stream until the connection fails; always ends by raising."""
-        ...
 
 
 def open_websocket(url: str) -> AbstractAsyncContextManager[LiveSocket]:
@@ -142,13 +90,18 @@ class BilibiliDanmakuSource:
         }
         async with self._connector(endpoint.urls[0]) as socket:
             await socket.send(encode_packet(OP_AUTH, auth))
-            heartbeat = asyncio.create_task(self._heartbeat(socket))
+            reader = asyncio.ensure_future(self._read(socket, sink))
+            heartbeat = asyncio.ensure_future(self._heartbeat(socket))
             try:
-                await self._read(socket, sink)
+                await asyncio.wait(
+                    (reader, heartbeat), return_when=asyncio.FIRST_EXCEPTION
+                )
             finally:
+                reader.cancel()
                 heartbeat.cancel()
-                with contextlib.suppress(asyncio.CancelledError):
-                    await heartbeat
+                await asyncio.gather(reader, heartbeat, return_exceptions=True)
+            # Both loops only end by raising; the reader's error is reported first.
+            (heartbeat if reader.cancelled() else reader).result()
 
     async def _heartbeat(self, socket: LiveSocket) -> None:
         while True:

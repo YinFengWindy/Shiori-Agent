@@ -1,9 +1,11 @@
 """``plugin.desktop_pet.live.*`` RPCs: settings, run control and run status.
 
-Every method takes ``role_id``. ``live.config.set`` takes the whole settings
-document (``room_id``, ``reply_interval_seconds``, ``wait_timeout_seconds``)
-and replaces it after validation, matching autosave. Run control returns the
-run status, the same shape ``live.status`` serves.
+Every method takes ``role_id``. ``live.config.set`` changes only the fields it
+is given (``room_id``, ``reply_interval_seconds``, ``wait_timeout_seconds``),
+so autosaving one field never resets another; invalid values fail with a
+Chinese message and change nothing. A new room applies at the next start;
+``live.status`` shows both ``configured_room_id`` and the running ``room``.
+Run control returns the status, in the same shape ``live.status`` serves.
 """
 
 from __future__ import annotations
@@ -16,8 +18,6 @@ from .live_config import LiveConfigStore
 from .live_engine import LiveEngine
 from .rpc import require_role_id
 
-_CONFIG_FIELDS = ("room_id", "reply_interval_seconds", "wait_timeout_seconds")
-
 
 def register_live_rpc(
     rpc: RpcCapability, engine: LiveEngine, configs: LiveConfigStore
@@ -26,14 +26,14 @@ def register_live_rpc(
 
     async def config_get(payload: dict[str, Any]) -> dict[str, Any]:
         role_id = require_role_id(payload)
-        engine.require_role(role_id)
+        engine.gate.require_role(role_id)
         return configs.read(role_id).model_dump(mode="json")
 
     async def config_set(payload: dict[str, Any]) -> dict[str, Any]:
         role_id = require_role_id(payload)
-        engine.require_role(role_id)
-        values = {key: payload[key] for key in _CONFIG_FIELDS if key in payload}
-        config = configs.write(role_id, values)
+        engine.gate.require_role(role_id)
+        changes = {key: value for key, value in payload.items() if key != "role_id"}
+        config = configs.update(role_id, changes)
         engine.apply_config(role_id, config)
         return config.model_dump(mode="json")
 

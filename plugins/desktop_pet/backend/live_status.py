@@ -1,12 +1,16 @@
 """Observable state of one live run, as served by ``live.status``.
 
-Reply records carry ids and per-path results only — never danmaku text or
-sender — so status keeps nothing of messages that were not replied to.
+Errors are *current* conditions, cleared when they recover:
+``connection_error`` clears once the stream is connected again and
+``reply_error`` once a later reply is output without a failed path.
+``stop_reason`` explains a stopped run. Reply records carry ids and per-path
+results only — never danmaku text or sender — so status keeps nothing of
+messages that were not replied to.
 """
 
 from __future__ import annotations
 
-from collections import Counter, OrderedDict
+from collections import OrderedDict
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
@@ -19,8 +23,9 @@ RECENT_REPLY_LIMIT = 10
 
 
 class RunState(StrEnum):
-    """Whether the run processes danmaku."""
+    """Whether the run processes danmaku; ``idle`` means no run exists."""
 
+    IDLE = "idle"
     RUNNING = "running"
     PAUSED = "paused"
     STOPPED = "stopped"
@@ -33,8 +38,24 @@ class ConnectionState(StrEnum):
     CONNECTED = "connected"
     RECONNECTING = "reconnecting"
     CLOSED = "closed"
+    # Bilibili refused the room, the stream or its request.
+    REJECTED = "rejected"
     # The login is missing, rejected, or the stream delivered anonymized senders.
     LOGIN_INVALID = "login_invalid"
+
+
+class LiveCounter(StrEnum):
+    """Per-run counters; every one is always present in a status."""
+
+    RECEIVED = "received"
+    REDELIVERED = "redelivered"
+    DUPLICATES = "duplicates"
+    BUSY = "busy"
+    EXPIRED = "expired"
+    EVICTED = "evicted"
+    REPLIED = "replied"
+    GENERATION_FAILED = "generation_failed"
+    UNREADABLE = "unreadable"
 
 
 @dataclass
@@ -58,6 +79,26 @@ class ReplyRecord:
         }
 
 
+def status_shape(role_id: str, **values: Any) -> dict[str, Any]:
+    """The one ``live.status`` shape; an idle role gets nulls and zeros."""
+    return {
+        "role_id": role_id,
+        "state": RunState.IDLE.value,
+        "connection": None,
+        "room": None,
+        "run_id": None,
+        "queue_length": 0,
+        "generating": False,
+        "output_pending": False,
+        "connection_error": "",
+        "reply_error": "",
+        "stop_reason": "",
+        "counters": {counter.value: 0 for counter in LiveCounter},
+        "recent": [],
+        **values,
+    }
+
+
 class LiveStatus:
     """Mutable run state; the session updates it, ``snapshot`` reads it."""
 
@@ -67,29 +108,35 @@ class LiveStatus:
         self.state = RunState.RUNNING
         self.connection = ConnectionState.CONNECTING
         self.run_id = ""
-        self.last_error = ""
+        self.connection_error = ""
+        self.reply_error = ""
         self.stop_reason = ""
-        self.counters: Counter[str] = Counter()
+        self.counters = {counter: 0 for counter in LiveCounter}
         self._recent: OrderedDict[str, ReplyRecord] = OrderedDict()
 
-    def count(self, name: str, amount: int = 1) -> None:
-        """Add to a named counter (received, duplicates, expired, evicted, ...)."""
-        if amount:
-            self.counters[name] += amount
+    def count(self, counter: LiveCounter, amount: int = 1) -> None:
+        """Add to one counter."""
+        self.counters[counter] += amount
 
-    def fail(self, error: str) -> None:
-        """Remember the latest error for display."""
-        self.last_error = error
+    def connected(self) -> None:
+        """The stream is live again; its error has recovered."""
+        self.connection = ConnectionState.CONNECTED
+        self.connection_error = ""
+
+    def connection_failed(self, state: ConnectionState, error: str) -> None:
+        """The stream failed; ``state`` says whether it is retried."""
+        self.connection = state
+        self.connection_error = error
 
     def generated(self, reply_id: str) -> None:
         """A reply was generated and handed to the pet."""
-        self.count("replied")
+        self.count(LiveCounter.REPLIED)
         self._remember(ReplyRecord(reply_id=reply_id, generation="replied"))
 
     def generation_failed(self, reply_id: str, error: str) -> None:
         """No reply text: nothing is shown or spoken."""
-        self.count("generation_failed")
-        self.fail(error)
+        self.count(LiveCounter.GENERATION_FAILED)
+        self.reply_error = error
         self._remember(ReplyRecord(reply_id, generation="failed", error=error))
 
     def output_finished(self, outcome: LiveReplyOutcome) -> None:
@@ -98,31 +145,40 @@ class LiveStatus:
         if record is None:
             return
         record.bubble, record.speech = outcome.bubble, outcome.speech
-        for channel, result in (("气泡", outcome.bubble), ("语音", outcome.speech)):
-            if result.status == "failed":
-                self.fail(f"{channel}输出失败: {result.error}")
+        paths = (("气泡", outcome.bubble), ("语音", outcome.speech))
+        failures = [
+            f"{name}输出失败: {result.error}"
+            for name, result in paths
+            if result.status == "failed"
+        ]
+        # A cancelled reply proves nothing either way and leaves the error as is.
+        if failures:
+            self.reply_error = "；".join(failures)
+        elif outcome.bubble.status != "cancelled":
+            self.reply_error = ""
 
     def output_lost(self, reply_id: str, error: str) -> None:
         """The reply's outcome did not arrive (in time); its paths stay unknown."""
         record = self._recent.get(reply_id)
         if record is not None:
             record.error = error
-        self.fail(error)
+        self.reply_error = error
 
     def snapshot(self, **live: Any) -> dict[str, Any]:
         """Wire form for ``live.status``; ``live`` adds queue and in-flight facts."""
-        return {
-            "role_id": self.role_id,
-            "state": self.state.value,
-            "connection": self.connection.value,
-            "room": {"room_id": self.room.room_id, "title": self.room.title},
-            "run_id": self.run_id,
-            "last_error": self.last_error,
-            "stop_reason": self.stop_reason,
-            "counters": dict(self.counters),
-            "recent": [record.to_dict() for record in reversed(self._recent.values())],
+        return status_shape(
+            self.role_id,
+            state=self.state.value,
+            connection=self.connection.value,
+            room={"room_id": self.room.room_id, "title": self.room.title},
+            run_id=self.run_id,
+            connection_error=self.connection_error,
+            reply_error=self.reply_error,
+            stop_reason=self.stop_reason,
+            counters={key.value: value for key, value in self.counters.items()},
+            recent=[record.to_dict() for record in reversed(self._recent.values())],
             **live,
-        }
+        )
 
     def _remember(self, record: ReplyRecord) -> None:
         self._recent[record.reply_id] = record

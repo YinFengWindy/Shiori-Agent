@@ -243,3 +243,102 @@ def _enable_pet(roles, role_id: str) -> None:
 def enable_pet():
     """``enable_pet(roles, role_id)``: make ``role_id`` the pet's only enabled role."""
     return _enable_pet
+
+
+class PetOutputDouble:
+    """The real ``LiveReplyOutput`` over a recording RPC; outcomes come back by RPC."""
+
+    def __init__(self, clock: FakeClock, delivered: bool = True) -> None:
+        from shiori_sdk.testing.memory_context import FakeRpc
+
+        from plugins.desktop_pet.backend.live_output import LiveReplyOutput
+
+        class Rpc(FakeRpc):
+            async def emit(self, name, payload):
+                await super().emit(name, payload)
+                return delivered
+
+        self.clock = clock
+        self.rpc = Rpc()
+        self.output = LiveReplyOutput(self.rpc)
+
+    def shows(self) -> list[dict]:
+        return [p for name, p in self.rpc.events if name == "live.reply.show"]
+
+    def cancels(self) -> list[dict]:
+        return [p for name, p in self.rpc.events if name == "live.cancel"]
+
+    async def outcome(
+        self, show: dict, bubble="succeeded", speech="succeeded", error=""
+    ):
+        """Report one shown reply's outcome as the pet background would."""
+
+        def result(status: str) -> dict:
+            return {"status": status, "error": error if status == "failed" else ""}
+
+        await self.rpc.handlers["live.reply.outcome"](
+            {
+                "reply_id": show["reply_id"],
+                "run_id": show["run_id"],
+                "bubble": result(bubble),
+                "speech": result(speech),
+            }
+        )
+        await self.clock.settle()
+
+
+@pytest.fixture
+def pet_output(clock) -> PetOutputDouble:
+    """Pet output whose background receives every show."""
+    return PetOutputDouble(clock)
+
+
+@pytest.fixture
+def lost_pet_output(clock) -> PetOutputDouble:
+    """Pet output with no background to receive anything."""
+    return PetOutputDouble(clock, delivered=False)
+
+
+class TurnAnswers:
+    """Builders for ``FakeExternalTurns`` answers."""
+
+    @staticmethod
+    def replied(text: str):
+        from shiori_sdk.external_turns import ExternalTurnResult
+
+        return ExternalTurnResult(status="replied", reply=text)
+
+    @staticmethod
+    def status(status: str):
+        from shiori_sdk.external_turns import ExternalTurnResult
+
+        return ExternalTurnResult(status=status)  # type: ignore[arg-type]
+
+    @staticmethod
+    def held(gate: asyncio.Event, reply: str, cancelled: list[str]):
+        """An answer that stays in flight until ``gate`` opens."""
+
+        async def answer(message):
+            try:
+                await gate.wait()
+            except asyncio.CancelledError:
+                cancelled.append(message.message_id)
+                raise
+            return TurnAnswers.replied(reply)
+
+        return answer
+
+    @staticmethod
+    def failing(error: Exception):
+        """An answer whose turn raises ``error``."""
+
+        async def answer(message):
+            raise error
+
+        return answer
+
+
+@pytest.fixture
+def answers() -> type[TurnAnswers]:
+    """Builders for scripted external-turn answers."""
+    return TurnAnswers

@@ -25,10 +25,9 @@ from typing import Any
 import httpx
 
 from .bilibili_api import (
-    BILIBILI_HEADERS,
     NAV_URL,
-    REQUEST_TIMEOUT_S,
     BilibiliApiError,
+    bilibili_get,
     response_data,
     response_payload,
 )
@@ -69,7 +68,9 @@ class BilibiliLiveApi:
     async def fetch_room(self, room_id: int) -> LiveRoom:
         """Resolve a room id from the room URL; an unknown room is an error."""
         data = response_data(
-            await self._get(ROOM_INFO_URL, params={"room_id": str(room_id)})
+            await bilibili_get(
+                self._transport, ROOM_INFO_URL, params={"room_id": str(room_id)}
+            )
         )
         real_id, title = data.get("room_id"), data.get("title")
         if not isinstance(real_id, int) or real_id <= 0 or not isinstance(title, str):
@@ -78,7 +79,7 @@ class BilibiliLiveApi:
 
     async def fetch_buvid(self) -> str:
         """Obtain a ``buvid3`` fingerprint cookie from the web homepage."""
-        response = await self._get(HOMEPAGE_URL)
+        response = await bilibili_get(self._transport, HOMEPAGE_URL)
         buvid = response.cookies.get("buvid3")
         if not buvid:
             raise BilibiliApiError("B 站首页未下发 buvid3")
@@ -90,7 +91,9 @@ class BilibiliLiveApi:
         """Fetch a fresh stream token and hosts for a (re)connection."""
         # nav carries the WBI keys whether or not the cookies are logged in;
         # login validity is checked separately before every connection.
-        nav = response_payload(await self._get(NAV_URL, cookies=cookies))
+        nav = response_payload(
+            await bilibili_get(self._transport, NAV_URL, cookies=cookies)
+        )
         wbi = _dict(_dict(nav.get("data")).get("wbi_img"))
         img_url, sub_url = wbi.get("img_url"), wbi.get("sub_url")
         if not isinstance(img_url, str) or not isinstance(sub_url, str):
@@ -101,7 +104,9 @@ class BilibiliLiveApi:
             int(self._now()),
         )
         data = response_data(
-            await self._get(DANMU_INFO_URL, params=params, cookies=cookies)
+            await bilibili_get(
+                self._transport, DANMU_INFO_URL, params=params, cookies=cookies
+            )
         )
         token, hosts = data.get("token"), data.get("host_list")
         if not isinstance(token, str) or not token or not isinstance(hosts, list):
@@ -110,23 +115,6 @@ class BilibiliLiveApi:
         if not urls:
             raise BilibiliApiError("B 站弹幕服务器列表为空")
         return DanmakuEndpoint(urls=urls, token=token)
-
-    async def _get(
-        self,
-        url: str,
-        *,
-        params: dict[str, str] | None = None,
-        cookies: dict[str, str] | None = None,
-    ) -> httpx.Response:
-        async with httpx.AsyncClient(
-            transport=self._transport,
-            headers=BILIBILI_HEADERS,
-            cookies=cookies,
-            timeout=REQUEST_TIMEOUT_S,
-        ) as client:
-            response = await client.get(url, params=params)
-        response.raise_for_status()
-        return response
 
 
 def _dict(value: object) -> dict[str, Any]:

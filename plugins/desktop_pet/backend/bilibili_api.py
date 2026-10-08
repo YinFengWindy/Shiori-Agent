@@ -97,7 +97,7 @@ class BilibiliLoginApi:
 
     async def generate_qrcode(self) -> QrCodeTicket:
         """Request a new login QR code."""
-        data = response_data(await self._get(QRCODE_GENERATE_URL))
+        data = response_data(await bilibili_get(self._transport, QRCODE_GENERATE_URL))
         url, key = data.get("url"), data.get("qrcode_key")
         if not isinstance(url, str) or not url or not isinstance(key, str) or not key:
             raise BilibiliApiError("B 站二维码响应缺少 url 或 qrcode_key")
@@ -105,7 +105,9 @@ class BilibiliLoginApi:
 
     async def poll_qrcode(self, key: str) -> QrPollResult:
         """Read the scan state; a confirmed scan must carry cookies and refresh_token."""
-        response = await self._get(QRCODE_POLL_URL, params={"qrcode_key": key})
+        response = await bilibili_get(
+            self._transport, QRCODE_POLL_URL, params={"qrcode_key": key}
+        )
         data = response_data(response)
         code = data.get("code")
         state = _SCAN_STATES.get(code) if isinstance(code, int) else None
@@ -124,7 +126,7 @@ class BilibiliLoginApi:
 
     async def fetch_account(self, cookies: dict[str, str]) -> BilibiliAccount | None:
         """Return the logged-in account, or ``None`` when the login is invalid."""
-        response = await self._get(NAV_URL, cookies=cookies)
+        response = await bilibili_get(self._transport, NAV_URL, cookies=cookies)
         if response_payload(response).get("code") == _NOT_LOGGED_IN_CODE:
             return None
         data = response_data(response)
@@ -135,24 +137,29 @@ class BilibiliLoginApi:
             raise BilibiliApiError("B 站账号信息缺少 mid 或 uname")
         return BilibiliAccount(uid=uid, uname=uname)
 
-    async def _get(
-        self,
-        url: str,
-        *,
-        params: dict[str, str] | None = None,
-        cookies: dict[str, str] | None = None,
-    ) -> httpx.Response:
-        # One short-lived client per call: login requests are rare and this
-        # leaves no connection pool for the plugin lifecycle to close.
-        async with httpx.AsyncClient(
-            transport=self._transport,
-            headers=BILIBILI_HEADERS,
-            cookies=cookies,
-            timeout=REQUEST_TIMEOUT_S,
-        ) as client:
-            response = await client.get(url, params=params)
-        response.raise_for_status()
-        return response
+
+async def bilibili_get(
+    transport: httpx.AsyncBaseTransport | None,
+    url: str,
+    *,
+    params: dict[str, str] | None = None,
+    cookies: dict[str, str] | None = None,
+) -> httpx.Response:
+    """One GET with the shared headers and timeout; HTTP errors raise.
+
+    One short-lived client per call: these requests are rare and this leaves
+    no connection pool for the plugin lifecycle to close. ``transport`` is the
+    test-injectable transport (``None`` in production).
+    """
+    async with httpx.AsyncClient(
+        transport=transport,
+        headers=BILIBILI_HEADERS,
+        cookies=cookies,
+        timeout=REQUEST_TIMEOUT_S,
+    ) as client:
+        response = await client.get(url, params=params)
+    response.raise_for_status()
+    return response
 
 
 def response_payload(response: httpx.Response) -> dict[str, Any]:

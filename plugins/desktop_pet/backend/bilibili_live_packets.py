@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from typing import Any
 
 _HEADER = struct.Struct(">IHHII")
+# Size of every packet header: length, header size, version, operation, sequence.
 HEADER_SIZE = _HEADER.size
 
 OP_HEARTBEAT = 2
