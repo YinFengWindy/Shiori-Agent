@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 from agent.provider import LLMProvider
 
-from .models import _RELATION_STATE_KEYS
+from .models import RELATION_STATE_KEYS
 
 if TYPE_CHECKING:
     from core.roles.role_runtime import RoleRuntimeRegistry
@@ -65,12 +65,12 @@ _RELATIONSHIP_PROMPT = """\
 主动互动摘要：
 {interaction_summary}
 """
-# relation_state 的字段清单与 JSON 示例都由 models 的 _RELATION_STATE_KEYS 生成，避免两处维护。
+# relation_state 的字段清单与 JSON 示例都由 models 的 RELATION_STATE_KEYS 生成，避免两处维护。
 _RELATIONSHIP_PROMPT = _RELATIONSHIP_PROMPT.replace(
-    "<relation_state_fields>", "、".join(_RELATION_STATE_KEYS)
+    "<relation_state_fields>", "、".join(RELATION_STATE_KEYS)
 ).replace(
     "<relation_state_example>",
-    ",\n".join(f'    "{key}": 0.0' for key in _RELATION_STATE_KEYS),
+    ",\n".join(f'    "{key}": 0.0' for key in RELATION_STATE_KEYS),
 )
 
 

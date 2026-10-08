@@ -15,13 +15,13 @@ from .loneliness import (
 )
 from .loops import LonelinessHeartbeatLoop, RelationshipSnapshotLoop
 from .models import (
+    RELATION_STATE_KEYS,
     RelationshipSnapshot,
     _BEHAVIOR_PROFILE_KEYS,
     _DEFAULT_BEHAVIOR_PROFILE,
     _DEFAULT_RELATION_STATE,
     _FIRST_PERSON_MARKERS,
     _MAX_RELATION_TAGS,
-    _RELATION_STATE_KEYS,
     _clamp,
     _is_first_person_self_view,
     _normalize_behavior_profile,

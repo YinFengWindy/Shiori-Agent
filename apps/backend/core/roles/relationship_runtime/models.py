@@ -8,7 +8,8 @@ from typing import Any
 _FIRST_PERSON_MARKERS = ("我", "自己")
 _MAX_RELATION_TAGS = 4
 
-_RELATION_STATE_KEYS = (
+# 关系快照 relation_state 的全部维度；快照规范化与生成提示词共用这一份。
+RELATION_STATE_KEYS = (
     "dependence",
     "security",
     "initiative_desire",
@@ -103,7 +104,7 @@ def _normalize_relation_state(raw: object) -> dict[str, float]:
             0.0,
             1.0,
         )
-        for key in _RELATION_STATE_KEYS
+        for key in RELATION_STATE_KEYS
     }
 
 
