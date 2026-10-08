@@ -1,9 +1,9 @@
 import React, { useRef } from "react";
 import { CrossfadeLayers } from "@yinfengwindy/shiori-sdk";
 import { cx } from "@yinfengwindy/shiori-sdk";
-import type { AffectionDisplay } from "./affectionDisplay";
+import type { AffectionDisplay } from "../affection/affectionDisplay";
 import { chatSidebarPanelClass } from "./chatSidebarStyles";
-import { StatusMeter } from "./StatusMeter";
+import { StatusMeter } from "../shared/ui/StatusMeter";
 import { moodTone } from "./moodTone";
 import { useMoodChangeCue } from "./useMoodChangeCue";
 import { useMoodChangeMotion } from "./useMoodChangeMotion";

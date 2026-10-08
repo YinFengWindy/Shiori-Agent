@@ -4,7 +4,7 @@ import { RoleTasksPanel } from "./RoleTasksPanel";
 import { toFileUrl } from "../shared/format";
 import type { RoleTask, ScheduleTaskFormData } from "../shared/types";
 import { chatSidebarPanelClass } from "./chatSidebarStyles";
-import type { AffectionDisplay } from "./affectionDisplay";
+import type { AffectionDisplay } from "../affection/affectionDisplay";
 
 export type ChatSidebarMode = "status" | "images" | "tasks";
 

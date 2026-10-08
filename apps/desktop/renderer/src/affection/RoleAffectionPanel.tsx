@@ -1,55 +1,56 @@
-import { cardClass, compactButtonSizeClass, cx, ghostButtonClass, ghostButtonSurfaceClass } from "@yinfengwindy/shiori-sdk";
-import { resolveAffectionDisplay } from "../chat/affectionDisplay";
-import { StatusMeter } from "../chat/StatusMeter";
-import { InlineError } from "../shared/feedback/InlineError";
+import { cardClass, cx, ghostButtonClass } from "@yinfengwindy/shiori-sdk";
+import type { DesktopInvoke } from "../shared/bridgeInvoke";
+import { ReadError, ReadFrame, ReadStatusLine, readStatusText } from "../shared/feedback/ReadStatus";
 import { RibbonIcon } from "../shared/ui/icons";
+import { StatusMeter } from "../shared/ui/StatusMeter";
+import { resolveAffectionDisplay } from "./affectionDisplay";
 import { AffectionHistoryList } from "./AffectionHistoryList";
 import { affectionHistoryRows } from "./affectionSelectors";
 import { useAffectionHistory } from "./useAffectionHistory";
 
-function StatusLine({ text }: { text: string }) {
-  return <p role="status" className="m-0 text-body-sm text-ink-muted">{text}</p>;
-}
-
 /** An uninitialized role: a ribbon mark and one plain fact. */
 function AffectionEmptyState() {
   return <div className="grid justify-items-center gap-3 py-12 text-center" data-testid="role-affection-empty">
-    <span className="grid h-11 w-11 place-items-center rounded-full bg-accent-softer text-accent">
+    <span className="grid h-11 w-11 place-items-center rounded-full bg-accent-softer text-accent-text">
       <RibbonIcon className="h-5 w-5" />
     </span>
     <span className="text-body-sm text-ink-muted">暂无好感度</span>
   </div>;
 }
 
-function AffectionView({ roleId }: { roleId: string }) {
-  const history = useAffectionHistory(roleId);
-  const page = history.history;
-  const error = history.error ? <InlineError
-    message={`读取失败：${history.error}`}
-    actions={<button type="button" className={cx(ghostButtonSurfaceClass, compactButtonSizeClass)} onClick={history.retry}>重试</button>}
-  /> : null;
-  if (!page) return error ?? (history.loading ? <StatusLine text="加载中…" /> : null);
-  const display = resolveAffectionDisplay(page.affection);
-  if (!page.affection || !display) return <AffectionEmptyState />;
+function AffectionView({ invoke, roleId }: { invoke: DesktopInvoke; roleId: string }) {
+  const history = useAffectionHistory(invoke, roleId);
+  const { loaded } = history;
+  const error = history.error ? <ReadError error={history.error} onRetry={history.retry} /> : null;
+  if (!loaded) return error ?? (history.loading ? <ReadStatusLine text={readStatusText.loading} /> : null);
+  const display = resolveAffectionDisplay(loaded.affection);
+  if (!loaded.affection || !display) return <AffectionEmptyState />;
   // Stacked sections; the stage prompt editor (#714) joins below the history.
   return <section className="grid gap-4" aria-label="好感度" data-testid="role-affection-panel">
     <div className={cx(cardClass, "px-5 py-4")}>
-      <StatusMeter label={display.stage} value={page.affection.value} percent={display.percent} heightClass="h-2" testId="role-affection-meter" />
+      <StatusMeter label={display.stage} value={loaded.affection.value} percent={display.percent} heightClass="h-2" testId="role-affection-meter" />
     </div>
-    <section className="grid min-h-48 content-start gap-4 rounded-md border border-line-soft bg-surface px-5 py-4" aria-label="好感变化">
-      <AffectionHistoryList rows={affectionHistoryRows(page.items)} />
+    <ReadFrame label="好感变化">
+      <AffectionHistoryList rows={affectionHistoryRows(loaded.items)} />
       {/* Later batches load and fail under the rows already shown. */}
-      {history.loading && <StatusLine text="加载中…" />}
+      {history.loading && <ReadStatusLine text={readStatusText.loading} />}
       {error}
       {!history.loading && !history.error && history.hasMore && <button type="button" className={cx(ghostButtonClass, "justify-self-center")} onClick={history.loadMore}>加载更多</button>}
-    </section>
+    </ReadFrame>
   </section>;
 }
 
+type RoleAffectionPanelProps = {
+  roleId: string;
+  bridgeReady: boolean;
+  /** The desktop bridge's invoke; defaults to the preload's. */
+  invoke?: DesktopInvoke;
+};
+
 /** Role-detail 「好感度」 tab: current value and stage over the newest-first change history. Read-only. */
-export function RoleAffectionPanel({ roleId, bridgeReady }: { roleId: string; bridgeReady: boolean }) {
-  if (!bridgeReady) return <StatusLine text="连接已断开" />;
-  if (!roleId) return <StatusLine text="请选择角色" />;
+export function RoleAffectionPanel({ roleId, bridgeReady, invoke = window.miraDesktop.invoke }: RoleAffectionPanelProps) {
+  if (!bridgeReady) return <ReadStatusLine text={readStatusText.disconnected} />;
+  if (!roleId) return <ReadStatusLine text={readStatusText.noRole} />;
   // A new role starts fresh, so no batch or pending read carries over.
-  return <AffectionView key={roleId} roleId={roleId} />;
+  return <AffectionView key={roleId} invoke={invoke} roleId={roleId} />;
 }

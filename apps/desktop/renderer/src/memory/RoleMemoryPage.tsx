@@ -4,7 +4,7 @@ import type { MemoryTab, RoleMemoryDocumentsPayload } from "./memoryDocuments";
 import { MemoryNav } from "./MemoryNav";
 import { memoryReadKey, readMemoryDocuments, type MemoryReadContext, type MemoryRpc } from "./memoryReads";
 import { MemoryTimeline } from "./MemoryTimeline";
-import { useMemoryRead } from "./useMemoryRead";
+import { useScopedRead } from "../shared/useScopedRead";
 
 /**
  * The whole role memory page, rendered by the host from the configured
@@ -17,7 +17,7 @@ export function RoleMemoryPage({ client, roleId }: { client: MemoryRpc; roleId: 
   const [refreshKey, setRefreshKey] = useState(0);
   const context: MemoryReadContext = { client, roleId, refreshKey };
   const documentsKey = memoryReadKey(context, "documents");
-  const documents = useMemoryRead<RoleMemoryDocumentsPayload>({
+  const documents = useScopedRead<RoleMemoryDocumentsPayload>({
     scope: documentsKey,
     key: documentsKey,
     read: () => readMemoryDocuments(context),

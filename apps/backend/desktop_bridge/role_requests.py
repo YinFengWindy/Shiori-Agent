@@ -215,7 +215,7 @@ class DesktopRoleRequestHandler:
         return {
             "role_id": role_id,
             "affection": affection.summary(role_id),
-            "items": [entry.to_dict() for entry in entries],
+            "items": [{"id": id_, **entry.to_dict()} for id_, entry in entries],
             "total": total,
             "page": page,
             "page_size": page_size,

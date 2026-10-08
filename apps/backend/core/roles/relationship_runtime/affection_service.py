@@ -73,16 +73,17 @@ class RoleAffectionService:
 
     def history_page(
         self, role_id: str, *, page: int, page_size: int
-    ) -> tuple[list[AffectionHistoryEntry], int]:
-        """Returns one newest-first page of history and the total entry count.
+    ) -> tuple[list[tuple[int, AffectionHistoryEntry]], int]:
+        """Returns one newest-first page of ``(id, entry)`` and the total count.
 
-        ``page`` is 1-based. The JSONL file is read in full on every call; it
+        An entry's id is its 0-based append position, stable because history
+        is append-only. ``page`` is 1-based. The JSONL file is read in full on every call; it
         gains at most one line per turn or decay day, so that stays cheap for
         the history sizes a role accumulates.
         """
         if page < 1 or page_size < 1:
             raise ValueError("page 与 page_size 必须是正整数")
-        newest_first = self.read_history(role_id)[::-1]
+        newest_first = list(enumerate(self.read_history(role_id)))[::-1]
         start = (page - 1) * page_size
         return newest_first[start : start + page_size], len(newest_first)
 

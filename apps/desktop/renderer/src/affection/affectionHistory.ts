@@ -6,6 +6,8 @@ export type AffectionSource = "init" | "turn" | "decay";
 
 /** One affection history entry; the `init` entry has no previous value or delta. */
 export type AffectionHistoryEntry = {
+  /** Stable 0-based position in the role's append-only history. */
+  id: number;
   time: string;
   before: number | null;
   after: number;

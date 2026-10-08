@@ -370,6 +370,7 @@ async def test_affection_history_pages_newest_first_through_the_bridge(
     assert first["affection"] == {"value": 31, "stage": "熟悉", "progress": 11 / 19}
     assert [item["reason"] for item in first["items"]] == ["冷淡", "夸奖"]
     assert first["items"][0] | {"time": ""} == {
+        "id": 2,
         "time": "",
         "before": 32,
         "after": 31,
@@ -377,6 +378,8 @@ async def test_affection_history_pages_newest_first_through_the_bridge(
         "reason": "冷淡",
         "source": "turn",
     }
-    assert [(item["source"], item["after"]) for item in last["items"]] == [("init", 30)]
+    assert [(item["id"], item["source"], item["after"]) for item in last["items"]] == [
+        (0, "init", 30)
+    ]
     assert first["total"] == last["total"] == 3
     await service.aclose()

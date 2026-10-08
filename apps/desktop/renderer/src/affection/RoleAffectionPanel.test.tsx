@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { before, it } from "node:test";
 import { act } from "react";
 import { mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
+import type { DesktopInvoke } from "../shared/bridgeInvoke";
 import type { AffectionHistoryEntry } from "./affectionHistory";
 
 // Base UI binds DOM globals at import time, so the panel loads inside a test window.
@@ -13,20 +14,20 @@ before(async () => {
 });
 
 const turn = (minute: number): AffectionHistoryEntry => ({
-  time: `2026-10-08T12:${String(minute).padStart(2, "0")}:00+08:00`, before: 30 + minute - 1, after: 30 + minute, delta: 1, reason: `第${minute}轮`, source: "turn",
+  id: minute, time: `2026-10-08T12:${String(minute).padStart(2, "0")}:00+08:00`, before: 30 + minute - 1, after: 30 + minute, delta: 1, reason: `第${minute}轮`, source: "turn",
 });
-const init: AffectionHistoryEntry = { time: "2026-10-08T12:00:00+08:00", before: null, after: 30, delta: null, reason: "老朋友", source: "init" };
+const init: AffectionHistoryEntry = { id: 0, time: "2026-10-08T12:00:00+08:00", before: null, after: 30, delta: null, reason: "老朋友", source: "init" };
 // Newest first, as the bridge stores and pages it: 21 turns, then init.
 const history = [...Array.from({ length: 21 }, (_, index) => turn(21 - index)), init];
 
 async function mountPanel(respond: (payload: Record<string, unknown>) => Record<string, unknown>) {
   const calls: Array<Record<string, unknown>> = [];
-  const invoke = async ({ method, payload }: { method: string; payload: Record<string, unknown> }) => {
+  const invoke: DesktopInvoke = async ({ method, payload }) => {
     calls.push({ method, ...payload });
     return { id: "test", type: "response", method, error: null, payload: respond(payload) };
   };
-  const view = await mountTestComponent(<RoleAffectionPanel roleId="mira" bridgeReady />, {
-    windowGlobals: { miraDesktop: { onEvent: () => () => {}, invoke } },
+  const view = await mountTestComponent(<RoleAffectionPanel roleId="mira" bridgeReady invoke={invoke} />, {
+    windowGlobals: { miraDesktop: { onEvent: () => () => {} } },
   });
   return { view, calls };
 }

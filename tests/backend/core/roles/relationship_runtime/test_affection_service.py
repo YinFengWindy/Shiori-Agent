@@ -106,10 +106,11 @@ def test_history_pages_run_newest_first_and_end_at_the_init_entry(tmp_path):
 
     pages = [service.history_page("mira", page=page, page_size=2) for page in (1, 2, 3)]
 
-    assert [[entry.reason for entry in items] for items, _ in pages] == [
-        ["第4轮", "第3轮"],
-        ["第2轮", "第1轮"],
-        ["初始"],
+    # Each entry keeps its 0-based append position as a stable id.
+    assert [[(id_, entry.reason) for id_, entry in items] for items, _ in pages] == [
+        [(4, "第4轮"), (3, "第3轮")],
+        [(2, "第2轮"), (1, "第1轮")],
+        [(0, "初始")],
     ]
     assert {total for _, total in pages} == {5}
     assert service.history_page("mira", page=4, page_size=2) == ([], 5)
