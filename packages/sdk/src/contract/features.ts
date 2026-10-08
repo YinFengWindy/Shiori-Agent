@@ -31,7 +31,7 @@ export type PluginRoleSettingsProps = {
   /** The plugin's scoped RPC client (runtime API 3.1.11), as `PluginRoleUiProps.client`. */
   client: PluginRpcClient;
   /**
-   * The moods of the edited role's draft (runtime API 3.1.12), as
+   * The moods of the edited role's draft (runtime API 3.1.14), as
    * `PluginRoleUiProps.role.moodCatalog`, e.g. to offer per-mood settings.
    */
   moodCatalog: readonly string[];

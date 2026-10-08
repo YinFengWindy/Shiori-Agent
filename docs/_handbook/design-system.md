@@ -151,7 +151,7 @@ restyle 之前的一批变量名仍然存在，它们都已指回语义层，渲
 | `ghostButtonClass` / `compactGhostButtonClass` | SDK | 次级操作 / 其 36px 紧凑版 |
 | `dangerButtonClass` / `dangerGhostButtonClass`（`compactDangerGhostButtonClass`） | 宿主 | 破坏性操作的实心版 / 安静版 |
 | `iconButtonClass` | SDK | 带边框的 40px 纯图标方形按钮（返回、重置、工具），统一 `rounded-md` |
-| `compactIconButtonClass` | SDK（Runtime API 3.1.12 起公开） | 无边框的 28px 纯图标按钮（关闭、返回、头部开关、紧凑列表行的操作），给 `iconButtonClass` 嫌太重的地方 |
+| `compactIconButtonClass` | SDK（Runtime API 3.1.14 起公开） | 无边框的 28px 纯图标按钮（关闭、返回、头部开关、紧凑列表行的操作），给 `iconButtonClass` 嫌太重的地方 |
 | `primaryButtonSurfaceClass` / `ghostButtonSurfaceClass` | SDK | 不含尺寸的按钮外观，配 `compactButtonSizeClass`（SDK，36px 带文字按钮）或自带尺寸使用 |
 | `dangerGhostButtonSurfaceClass` | 宿主 | 同上，安静的破坏性外观 |
 | `textButtonSurfaceClass` / `dangerTextButtonSurfaceClass`（`compactTextButtonClass` / `compactDangerTextButtonClass`） | 宿主 | 无边框的文字按钮，给不和主按钮抢视线的底部操作（如账号详情底部的「退出登录」「删除账号」） |

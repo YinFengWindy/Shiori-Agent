@@ -344,6 +344,37 @@ async def test_push_from_a_turn_no_live_turn_owns_is_stored_in_the_role_session(
     assert [event.session_key for event in committed] == ["role:mira"]
 
 
+@pytest.mark.parametrize("kind", ["text", "image"])
+@pytest.mark.parametrize("in_turn", [False, True])
+async def test_supplemental_push_keeps_its_intent_and_commit_notification(
+    tmp_path, kind, in_turn
+):
+    manager, push, committed, _ = _text_sync(tmp_path)
+    push.register_channel(
+        "qq", text=AsyncMock(return_value=None), image=AsyncMock(return_value=None)
+    )
+    drafts = TurnPushDrafts("role:mira")
+    with drafts.collect():
+        result = await push.execute(
+            channel="qq",
+            chat_id="902",
+            role_id="mira",
+            session_key="role:mira",
+            push_proactive=False,
+            defer_push_session_sync=in_turn,
+            **({"message": "CG"} if kind == "text" else {"image": "cg.png"}),
+        )
+    assert "已发送" in result
+    if in_turn:
+        assert drafts.messages[0]["proactive"] is False
+        assert committed == []
+        # Even an abandoned turn must record the intent of a delivered image.
+        await drafts.abandoned()
+    [stored] = manager._store.fetch_session_messages("role:mira")
+    assert stored["proactive"] is False
+    assert [event.message_id for event in committed] == [stored["id"]]
+
+
 @pytest.mark.asyncio
 async def test_a_failure_to_record_never_fails_the_delivered_send(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch

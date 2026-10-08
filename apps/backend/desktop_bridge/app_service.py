@@ -55,6 +55,7 @@ class DesktopAppService:
         media: list[str] | None = None,
         delivery_key: str = "",
         already_persisted: bool = False,
+        proactive: bool = True,
     ) -> tuple[Session, dict[str, Any]]:
         """Validates pushes and persists only deliveries not owned by a turn commit.
 
@@ -77,12 +78,18 @@ class DesktopAppService:
             )
             if delivered is None:
                 raise ValueError("Desktop push references an uncommitted delivery")
-            return await self._finish_desktop_push(session, role_id=role_id), delivered
+            return (
+                await self._finish_desktop_push(
+                    session, role_id=role_id, proactive=bool(delivered.get("proactive"))
+                ),
+                delivered,
+            )
         existing = self._existing_desktop_push(
             session,
             message=normalized_message,
             media=normalized_media,
             delivery_key=delivery_key,
+            proactive=proactive,
         )
         if existing is not None:
             return session, existing
@@ -93,6 +100,7 @@ class DesktopAppService:
             message=normalized_message,
             media=normalized_media,
             delivery_key=delivery_key,
+            proactive=proactive,
         )
         session.add_message(**draft)
         pushed = session.messages[original_length]
@@ -102,7 +110,12 @@ class DesktopAppService:
             del session.messages[original_length:]
             session.updated_at = original_updated_at
             raise
-        return await self._finish_desktop_push(session, role_id=role_id), pushed
+        return (
+            await self._finish_desktop_push(
+                session, role_id=role_id, proactive=proactive
+            ),
+            pushed,
+        )
 
     def validate_desktop_push_target(self, chat_id: str) -> None:
         """Accept a turn-owned desktop delivery without exposing pending messages."""
@@ -116,13 +129,14 @@ class DesktopAppService:
         message: str = "",
         media: list[str] | None = None,
         delivery_key: str = "",
+        proactive: bool = True,
     ) -> dict[str, Any]:
         """Builds the same private desktop message for immediate and turn commits."""
         return build_session_message(
             "assistant",
             message,
             media=media,
-            proactive=True,
+            proactive=proactive,
             tools_used=["message_push"],
             metadata=self.build_desktop_user_message_metadata(
                 {"delivery_key": delivery_key} if delivery_key else None,
@@ -138,8 +152,13 @@ class DesktopAppService:
             role_id=self.role_id_from_desktop_session_key(session_key),
         )
 
-    async def _finish_desktop_push(self, session: Session, *, role_id: str) -> Session:
+    async def _finish_desktop_push(
+        self, session: Session, *, role_id: str, proactive: bool = True
+    ) -> Session:
         self.sync_desktop_session_thread(session, role_id=role_id)
+        # A late attachment does not ask for a reply or start proactive cooldowns.
+        if not proactive:
+            return session
         return await self._apply_post_persist_runtime_effects(
             session,
             record_presence=(
@@ -276,13 +295,21 @@ class DesktopAppService:
         message: str,
         media: list[str],
         delivery_key: str = "",
+        proactive: bool = True,
     ) -> dict[str, Any] | None:
         if delivery_key:
             return DesktopAppService._delivery_message(session, delivery_key)
         if not session.messages:
             return None
         last_message = session.messages[-1]
-        if last_message.get("role") != "assistant" or not last_message.get("proactive"):
+        if (
+            last_message.get("role") != "assistant"
+            or bool(last_message.get("proactive")) != proactive
+        ):
+            return None
+        # Non-proactive replies can also contain media; only a prior tool push
+        # can be the duplicate of a supplement without a delivery identity.
+        if not proactive and last_message.get("tools_used") != ["message_push"]:
             return None
         if str(last_message.get("content") or "") != message:
             return None

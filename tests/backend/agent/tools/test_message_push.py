@@ -10,6 +10,81 @@ from bus.events_lifecycle import ExternalTextPushed
 from core.common.runtime_scope import bind_runtime
 
 
+@pytest.mark.parametrize("payload", [{"message": "CG"}, {"image": "cg.png"}])
+async def test_supplemental_delivery_forwards_its_intent(payload):
+    tool = MessagePushTool()
+    sender = AsyncMock(return_value=None)
+    tool.register_channel(
+        "desktop", text_with_metadata=sender, image_with_metadata=sender
+    )
+
+    await tool.execute(
+        channel="desktop", chat_id="role:mira", push_proactive=False, **payload
+    )
+
+    assert sender.await_args.args[2]["proactive"] is False
+    assert "push_proactive" not in tool.parameters["properties"]
+
+
+@pytest.mark.parametrize("value", [None, 0, 1, "false", "true"])
+async def test_invalid_push_intent_is_rejected_before_transport(value):
+    tool = MessagePushTool()
+    sender = AsyncMock(return_value=None)
+    tool.register_channel("desktop", image_with_metadata=sender)
+
+    with pytest.raises(ValueError, match="push_proactive.*bool"):
+        await tool.execute(
+            channel="desktop", chat_id="role:mira", image="cg.png", push_proactive=value
+        )
+
+    sender.assert_not_awaited()
+
+
+@pytest.mark.parametrize("host_intent", [None, False, True])
+async def test_model_cannot_supply_or_override_push_intent(host_intent):
+    tool = MessagePushTool()
+    sender = AsyncMock(return_value=None)
+    tool.register_channel("desktop", image_with_metadata=sender)
+    registry = ToolRegistry()
+    registry.register(tool)
+    context = {} if host_intent is None else {"push_proactive": host_intent}
+
+    await registry.execute(
+        "message_push",
+        {
+            "channel": "desktop",
+            "chat_id": "role:mira",
+            "image": "cg.png",
+            "push_proactive": False if host_intent is None else not host_intent,
+        },
+        context=context,
+    )
+
+    assert sender.await_args.args[2].get("proactive", True) is (
+        True if host_intent is None else host_intent
+    )
+
+
+@pytest.mark.parametrize(
+    "extra_payload", [{}, {"message": "caption", "image": "cg.png"}]
+)
+async def test_supplemental_file_is_rejected_before_any_payload_is_sent(extra_payload):
+    tool = MessagePushTool()
+    sender = AsyncMock(return_value=None)
+    tool.register_channel("desktop", text=sender, image=sender, file=sender)
+
+    with pytest.raises(ValueError, match="push_proactive=False.*file"):
+        await tool.execute(
+            channel="desktop",
+            chat_id="role:mira",
+            file="cg.png",
+            push_proactive=False,
+            **extra_payload,
+        )
+
+    sender.assert_not_awaited()
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "payload",

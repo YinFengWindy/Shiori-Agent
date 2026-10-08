@@ -37,7 +37,7 @@ type RoleCapabilityCardProps = {
   settings?: ReactNode;
   /**
    * Called when the settings dialog opens (true) or closes (false) (runtime
-   * API 3.1.12, #720). The content stays mounted while closed, so a plugin
+   * API 3.1.14, #720). The content stays mounted while closed, so a plugin
    * that autosaves uses the close to submit its last edit at once.
    */
   onSettingsOpenChange?: (open: boolean) => void;

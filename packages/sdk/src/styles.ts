@@ -95,7 +95,7 @@ export const badgeClass =
 /**
  * Borderless 28px icon-only button (dismiss, back, header toggles), for
  * places where iconButtonClass's bordered 40px tile would be too heavy.
- * Its icon is h-4 w-4. Public since runtime API 3.1.12 (#720), e.g. for the
+ * Its icon is h-4 w-4. Public since runtime API 3.1.14 (#720), e.g. for the
  * actions of a compact list row; the SDK's capability settings button uses it too.
  */
 export const compactIconButtonClass = cx(

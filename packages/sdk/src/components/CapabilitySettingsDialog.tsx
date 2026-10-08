@@ -9,7 +9,7 @@ type CapabilitySettingsDialogProps = {
   title: string;
   /** The capability's secondary settings; mounted on first open, then kept (see `RoleCapabilityCard.settings`). */
   children: ReactNode;
-  /** Called with each open and close (runtime API 3.1.12), e.g. to commit a pending autosave on close. */
+  /** Called with each open and close (runtime API 3.1.14), e.g. to commit a pending autosave on close. */
   onOpenChange?: (open: boolean) => void;
 };
 
