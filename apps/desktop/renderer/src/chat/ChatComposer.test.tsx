@@ -180,6 +180,40 @@ describe("ChatComposer", () => {
       assert.equal(getChatDraft("role:send-race-other").content, "其他草稿");
     } finally { await view.cleanup(); }
   });
+
+  for (const mode of ["picker", "drop"]) {
+    it(`restores the submitted draft when a pending ${mode} import completes before send failure`, async () => {
+      const role = `import-send-overlap-${mode}`;
+      const request = { content: "待发送正文", attachments: ["/original.png"], replyTarget: {
+        messageId: "source", content: "引用原文", preview: "引用原文", sender: "Mira",
+      } };
+      updateChatDraft(getChatDraftKey(role), () => request);
+      const imported = deferred<string[]>();
+      const sent = deferred<boolean>();
+      const desktop = fakeDesktop();
+      desktop.pickChatAttachments = () => imported.promise;
+      desktop.importChatImages = () => imported.promise;
+      const view = await mountTestComponent(composerElement(role, {
+        onSendMessage: (submitted) => { assert.deepEqual(submitted, request); return sent.promise; },
+      }), { windowGlobals: { miraDesktop: desktop } });
+      try {
+        if (mode === "drop") await dropFiles(view, [new File(["new"], "new.png")]);
+        else await act(async () => { view.container.querySelector<HTMLButtonElement>('[aria-label="添加附件"]')!.click(); });
+        await act(async () => { view.container.querySelector<HTMLButtonElement>('[aria-label="发送消息"]')!.click(); });
+        await view.render(composerElement(`${role}-other`));
+        await changeInputValue(view.container.querySelector("textarea")!, "另一会话草稿");
+        await view.render(null);
+        await act(async () => { imported.resolve(["/original.png", "/new.png"]); });
+        await act(async () => { sent.resolve(false); });
+        await view.render(composerElement(role));
+        assert.equal(view.container.querySelector("textarea")!.value, request.content);
+        assert.ok(view.container.querySelector('[aria-label="取消引用"]'));
+        assert.equal(view.container.querySelectorAll('[data-testid="composer-attachments"] img').length, 2);
+        assert.deepEqual(getChatDraft(getChatDraftKey(role)), { ...request, attachments: ["/original.png", "/new.png"] });
+        assert.equal(getChatDraft(getChatDraftKey(`${role}-other`)).content, "另一会话草稿");
+      } finally { await view.cleanup(); }
+    });
+  }
   it("restores the typed draft after switching roles and leaving the page", async () => {
     const composer = (role: string) => <ChatComposer activeRoleId={role} sessionKey={`role:${role}`} bridgeReady={false}
       sending={false} cancelling={false}

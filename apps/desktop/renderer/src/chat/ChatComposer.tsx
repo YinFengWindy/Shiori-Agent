@@ -4,13 +4,13 @@ import { ChatComposerAttachments } from "./ChatComposerAttachments";
 import { ChatComposerReplyTarget } from "./ChatComposerReplyTarget";
 import { ChatEmojiPicker } from "./ChatEmojiPicker";
 import { getChatComposerLimits } from "./chatComposerLayout";
-import { canSubmitChatMessage, normalizeChatAttachmentPaths } from "./chatComposerState";
+import { canSubmitChatMessage } from "./chatComposerState";
 import { insertEmojiIntoChatDraft } from "./chatEmojiState";
 import { PlusIcon, SendIcon } from "../shared/icons";
 import type { ChatSendRequest } from "../shared/types";
 import { AutosizeTextarea, compactPressableClass, cx, errorMessage } from "@yinfengwindy/shiori-sdk";
 import { mascotFeedback as feedback } from "../shared/mascot/mascotFeedback";
-import { getChatDraftKey, submitChatDraft, updateChatDraft } from "./chatDraftStore";
+import { appendImportedChatAttachments, getChatDraftKey, submitChatDraft, updateChatDraft } from "./chatDraftStore";
 import { useChatDraft } from "./useChatDraft";
 import { ChatModelMenu } from "./ChatModelMenu";
 import { ChatContextRing } from "./ChatContextRing";
@@ -105,9 +105,7 @@ export const ChatComposer = React.memo(function ChatComposer({
       const paths = await importFiles();
       if (!paths.length) return;
       // This closure retains the initiating session even after navigation or unmount.
-      updateChatDraft(draftKey, (current) => ({
-        ...current, attachments: normalizeChatAttachmentPaths([...current.attachments, ...paths]),
-      }));
+      appendImportedChatAttachments(draftKey, paths);
     } catch (error) {
       feedback.error(`附件导入失败：${errorMessage(error)}`);
     }
