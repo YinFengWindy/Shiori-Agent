@@ -74,12 +74,12 @@ class ChatFlowHarness {
   }
 
   done(): void {
-    this.update((current) => current ? finishChatStream(current) : current);
+    this.update((current) => current ? finishChatStream(current, {}, "") : current);
     delete this.sending[KEY];
   }
 
   cancelWithoutAcknowledgement(): void {
-    this.update((current) => current ? finalizeChatCancellation(current, "interrupted") : current);
+    this.update((current) => current ? finalizeChatCancellation(current, "interrupted", "") : current);
     delete this.sending[KEY];
   }
 

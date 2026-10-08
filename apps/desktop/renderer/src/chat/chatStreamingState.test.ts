@@ -147,7 +147,7 @@ describe("chat streaming state", () => {
     });
     const laterReply = { id: "proactive-1", role: "assistant", content: "proactive" };
     const withLaterReply = { ...completed, messages: [...completed.messages, laterReply] };
-    const failed = failChatStream(withLaterReply);
+    const failed = failChatStream(withLaterReply, "");
     const trace = failed.messages[1]!;
 
     assert.equal(trace.streaming, false);
@@ -160,9 +160,9 @@ describe("chat streaming state", () => {
     assert.equal(failed.messages[2], laterReply);
     assert.equal(completed.messages[1]?.streaming, true);
     assert.equal(completed.messages[1]?.tool_chain?.[0]?.calls[0]?.status, "running");
-    assert.equal(failChatStream(failed), failed);
+    assert.equal(failChatStream(failed, ""), failed);
     const empty = session();
-    assert.equal(failChatStream(empty), empty);
+    assert.equal(failChatStream(empty, ""), empty);
   });
 
   it("merges Thinking and content deltas into one transient assistant message", () => {
@@ -185,7 +185,7 @@ describe("chat streaming state", () => {
     const finished = finishChatStream(streaming, {
       total_tokens: 2438,
       thinking_duration_ms: 6200,
-    });
+    }, "");
 
     assert.equal(finished.messages.at(-1)?.streaming, false);
     assert.equal(finished.messages.at(-1)?.metadata?.streamed_reply, true);
@@ -198,7 +198,7 @@ describe("chat streaming state", () => {
 
   it("marks a cancelled transient assistant reply for local trace preservation", () => {
     const streaming = applyChatStreamDelta(session(), "partial answer", "partial thinking");
-    const interrupted = interruptChatStream(streaming);
+    const interrupted = interruptChatStream(streaming, "");
 
     assert.equal(interrupted.messages.at(-1)?.streaming, false);
     assert.deepEqual(interrupted.messages.at(-1)?.metadata, {
@@ -211,7 +211,7 @@ describe("chat streaming state", () => {
 
   it("keeps a naturally completed reply distinct when cancellation reports idle", () => {
     const streaming = applyChatStreamDelta(session(), "complete answer", "complete thinking");
-    const completed = finalizeChatCancellation(streaming, "idle");
+    const completed = finalizeChatCancellation(streaming, "idle", "");
 
     assert.equal(completed.messages.at(-1)?.streaming, false);
     assert.equal(completed.messages.at(-1)?.metadata?.streamed_reply, true);
@@ -220,18 +220,20 @@ describe("chat streaming state", () => {
 
   it("marks the reply interrupted only when cancellation interrupted the active turn", () => {
     const streaming = applyChatStreamDelta(session(), "partial answer", "partial thinking");
-    const interrupted = finalizeChatCancellation(streaming, "interrupted");
+    const interrupted = finalizeChatCancellation(streaming, "interrupted", "");
 
     assert.equal(interrupted.messages.at(-1)?.metadata?.interrupted_reply, true);
   });
 
   it("does not alter an already finished or non-assistant session", () => {
     const original = session();
-    assert.equal(interruptChatStream(original), original);
+    assert.equal(interruptChatStream(original, ""), original);
     const finished = finishChatStream(
       applyChatStreamDelta(original, "complete", "thinking"),
+      {},
+      "",
     );
-    assert.equal(interruptChatStream(finished), finished);
+    assert.equal(interruptChatStream(finished, ""), finished);
   });
 
   it("merges tool lifecycle events by call id into the transient assistant message", () => {
@@ -269,6 +271,8 @@ describe("chat streaming state", () => {
   it("starts a new assistant trace after the previous streamed reply has finished", () => {
     const previousReply = finishChatStream(
       applyChatStreamDelta(session(), "上一轮回复", "上一轮思考"),
+      {},
+      "",
     );
 
     const nextTurn = applyChatToolStarted(previousReply, {

@@ -17,17 +17,17 @@ export function applyChatStreamDelta(
   }), { createIfMissing: true });
 }
 
-/** Completes only the owning turn's transient reply after the bridge emits chat.done. */
+/** Completes a transient reply; terminal callers must supply the event's owning turn identity. */
 export function finishChatStream(
   session: SessionPayload,
   metrics: ChatTurnMetrics = {},
-  turnId = "",
+  turnId: string,
 ): SessionPayload {
   return updateTransientAssistant(session, turnId, (message) => finishAssistantMessage(message, metrics));
 }
 
-/** Ends the failed turn's trace and running tools without changing other replies. */
-export function failChatStream(session: SessionPayload, turnId = ""): SessionPayload {
+/** Ends the required turn's failed trace and running tools without changing other replies. */
+export function failChatStream(session: SessionPayload, turnId: string): SessionPayload {
   return updateTransientAssistant(session, turnId, (message) => ({
     ...finishAssistantMessage(message),
     ...(message.tool_chain ? {
@@ -60,8 +60,8 @@ function finishAssistantMessage(message: SessionMessage, metrics: ChatTurnMetric
   };
 }
 
-/** Marks a cancelled transient assistant reply complete while retaining its local trace for the next turn. */
-export function interruptChatStream(session: SessionPayload, turnId = ""): SessionPayload {
+/** Marks the required turn's transient reply interrupted while retaining its local trace. */
+export function interruptChatStream(session: SessionPayload, turnId: string): SessionPayload {
   return updateTransientAssistant(session, turnId, (message) => ({
     ...message,
     streaming: false,
@@ -73,11 +73,11 @@ export function interruptChatStream(session: SessionPayload, turnId = ""): Sessi
   }));
 }
 
-/** Finishes cancellation according to the backend's final turn state. */
+/** Finishes cancellation using the backend's final state and the required owning turn identity. */
 export function finalizeChatCancellation(
   session: SessionPayload,
   status: "interrupted" | "idle",
-  turnId = "",
+  turnId: string,
 ): SessionPayload {
   return status === "interrupted" ? interruptChatStream(session, turnId) : finishChatStream(session, {}, turnId);
 }
