@@ -8,10 +8,31 @@ Channel 层识别 /stop 命令后，通过 InterruptController.request_interrupt
 from __future__ import annotations
 
 import time
+from collections.abc import Mapping
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Protocol
 
 _DEFAULT_TTL_S = 1800  # 30 分钟
+
+# 插件提交的外部回合（#721）与同一角色的桌面/渠道回合共用角色会话的 session_key，
+# 但不登记为该会话的可中断回合。它的任务内此值为 True：进度回写与中断续跑都据此
+# 跳过，既不写进排队中的桌面/渠道回合状态，也不消费它们留下的中断态。
+_DETACHED_TURN: ContextVar[bool] = ContextVar("detached_turn", default=False)
+
+
+def mark_detached_turn() -> None:
+    """Detaches the current task's turn from session interrupt tracking.
+
+    Call it only at the start of the turn's own task, so the flag never
+    reaches any other turn.
+    """
+    _DETACHED_TURN.set(True)
+
+
+def in_detached_turn() -> bool:
+    """Whether the current task runs a turn detached from interrupt tracking."""
+    return _DETACHED_TURN.get()
 
 
 @dataclass
@@ -32,6 +53,19 @@ class TurnInterruptState:
     @property
     def expired(self) -> bool:
         return (time.monotonic() - self.interrupted_at) > self.ttl_seconds
+
+
+def tracked_turn_state(
+    states: Mapping[str, "TurnInterruptState"], session_key: str
+) -> "TurnInterruptState | None":
+    """The state the current turn reports its progress into, if it is tracked.
+
+    A detached turn has none, even when another turn of the same session is
+    tracked under ``session_key``.
+    """
+    if in_detached_turn():
+        return None
+    return states.get(session_key)
 
 
 @dataclass

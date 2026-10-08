@@ -20,6 +20,7 @@ from agent.tools.registry import ToolRegistry
 from bus.event_bus import EventBus
 import sys
 
+from shiori_sdk.testing.external_turns import FakeExternalTurns
 from shiori_sdk.testing.packages import stage_plugin_package
 from tests.support.plugin_kernel import (
     REPOSITORY_ROOT,
@@ -893,12 +894,54 @@ async def setup(ctx):
 
 
 @pytest.mark.asyncio
+async def test_external_turns_reach_only_a_plugin_that_declares_them(tmp_path: Path):
+    for plugin_id, capabilities in (("submits", "[external_turns]"), ("other", "[]")):
+        plugin_dir = tmp_path / plugin_id
+        (plugin_dir / "backend").mkdir(parents=True)
+        (plugin_dir / "backend" / "plugin.py").write_text(
+            """
+captured = {}
+
+
+async def setup(ctx):
+    try:
+        captured["turns"] = ctx.external_turns
+    except AttributeError as error:
+        captured["denied"] = str(error)
+""",
+            encoding="utf-8",
+        )
+        (plugin_dir / "manifest.yaml").write_text(
+            f"""
+api: 2
+id: {plugin_id}
+capabilities: {capabilities}
+""",
+            encoding="utf-8",
+        )
+    turns = FakeExternalTurns()
+    kernel = PluginKernel(
+        [tmp_path], services=HostServices(event_bus=EventBus(), external_turns=turns)
+    )
+    await kernel.load_all()
+
+    captured = {
+        name.rsplit("_", 1)[-1]: module.captured
+        for name, module in sys.modules.items()
+        if name.startswith("akasic_plugin_") and name.endswith(("_submits", "_other"))
+    }
+    assert captured["submits"] == {"turns": turns}
+    assert "external_turns" in captured["other"]["denied"]
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("capability", "service", "with_workspace"),
     [
         ("roles", "role_store", True),
         ("models", "role_runtime_registry", True),
         ("sessions", "session_manager", True),
+        ("external_turns", "external_turns", True),
         ("memory", "role_store", True),
         ("memory", "workspace", False),
         ("http", "http", True),

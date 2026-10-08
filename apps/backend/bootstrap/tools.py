@@ -623,6 +623,8 @@ def build_core_runtime(
     )
 
     from agent.plugin_host import HostServices, PluginKernel
+    from agent.plugin_host.external_turns import HostExternalTurns
+    from core.channels.role_routing import RoleTurnRouter
 
     plugin_light_provider, plugin_light_model = _resolve_plugin_llm_dependencies(
         config,
@@ -680,6 +682,17 @@ def build_core_runtime(
             relationship_runtime=relationship_runtime,
             legacy_plugin_root=_legacy_plugin_root(),
             role_runtime_registry=role_runtime_registry,
+            external_turns=HostExternalTurns(
+                RoleTurnRouter.from_workspace(
+                    workspace,
+                    session_manager=session_manager,
+                    role_store=role_store,
+                    channel_directory=channel_directory,
+                ),
+                loop.process_external_turn,
+                role_store=role_store,
+                channel_directory=channel_directory,
+            ).as_capability(),
             scene_observations=scene_demand,
             is_reload=shared is not None,
             previously_active_plugins=(

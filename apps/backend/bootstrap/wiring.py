@@ -53,10 +53,11 @@ def wire_turn_lifecycle(
     *,
     active_turn_states: Mapping[str, "TurnInterruptState"],
 ) -> None:
+    from agent.looping.interrupt import tracked_turn_state
     from shiori_sdk.lifecycle import AfterStepCtx
 
     async def _progress_reporter(ctx: AfterStepCtx) -> None:
-        state = active_turn_states.get(ctx.session_key)
+        state = tracked_turn_state(active_turn_states, ctx.session_key)
         if state is None:
             return
         if ctx.partial_reply:

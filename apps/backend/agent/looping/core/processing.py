@@ -11,7 +11,9 @@ from datetime import datetime
 from core.error_context import current_session_key
 from ..interrupt import (
     TurnInterruptState,
+    mark_detached_turn,
 )
+from core.roles.role_runtime import RoleBusyError
 from bus.events import InboundItem
 from shiori_sdk.messages import InboundMessage, OutboundMessage
 from bus.processing import ProcessingState
@@ -292,6 +294,56 @@ class _ProcessingMixin:
             if self._active_tasks.get(key) is task:
                 self._active_tasks.pop(key, None)
                 self._active_turn_states.pop(key, None)
+
+    async def process_external_turn(self, msg: InboundMessage) -> str | None:
+        """Runs a routed plugin-submitted external turn now; None when the role is busy.
+
+        ``msg`` already carries its source thread and full role execution
+        context (``RoleTurnRouter.route``). The turn never waits for the role's
+        turn gate: while any other role work holds or awaits it, nothing runs
+        or is stored and None returns. It bypasses the channel inbound queue,
+        never dispatches outbound and publishes no stream deltas.
+
+        The turn is not the role session's interruptible turn: desktop or
+        channel interrupts never reach it, and it neither reports progress
+        into nor resumes their interrupt state. Cancelling the caller cancels
+        the turn. Returns the final reply text.
+        """
+        registry = self._role_runtime_registry
+        if registry is None:
+            raise RuntimeError("RoleRuntimeRegistry 未配置")
+        context = registry.context_from_metadata(msg.metadata)
+        if context is None or context.work_kind != "passive_turn":
+            raise ValueError("外部回合缺少完整 RoleExecutionContext")
+        msg.metadata["suppress_stream_events"] = True
+        key = msg.session_key
+        started = False
+
+        async def operation() -> OutboundMessage:
+            nonlocal started
+            started = True
+            return await self._process(msg, session_key=key, dispatch_outbound=False)
+
+        async def detached_turn() -> str | None:
+            # Runs in its own task: the flag and the turn's context variables
+            # stay inside it.
+            mark_detached_turn()
+            try:
+                outbound = await registry.dispatch_passive_turn(
+                    context, operation, reject_busy=True
+                )
+            except RoleBusyError:
+                # Only the gate's refusal means busy; a failure inside the
+                # turn propagates.
+                if started:
+                    raise
+                return None
+            return outbound.content
+
+        # Awaiting the task directly forwards the caller's cancellation to it.
+        return await asyncio.create_task(
+            detached_turn(), name=f"agent_loop_external:{key}"
+        )
 
     def _ensure_direct_role_context(
         self,

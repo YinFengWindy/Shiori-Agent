@@ -23,6 +23,7 @@ CAPABILITY_HOST_SERVICES: Mapping[str, tuple[str, ...]] = {
     "memory": ("workspace", "role_store"),
     "session_manager": ("session_manager",),
     "sessions": ("session_manager", "workspace"),
+    "external_turns": ("external_turns",),
     "role_runtime_registry": ("role_runtime_registry",),
     "models": ("role_runtime_registry",),
     "light_provider": ("light_provider",),

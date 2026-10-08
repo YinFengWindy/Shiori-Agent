@@ -7,6 +7,7 @@ from dataclasses import replace
 from ..interrupt import (
     InterruptResult,
     TurnInterruptState,
+    in_detached_turn,
 )
 from bus.events import InboundItem, SpawnCompletionItem
 from shiori_sdk.messages import InboundMessage
@@ -115,7 +116,8 @@ class _InterruptMixin:
             return msg, False
         # Desktop persists the partial assistant trace and exposes the interruption
         # as a separate session context frame; never duplicate it in user content.
-        if msg.channel == "desktop":
+        # A detached external turn never resumes another turn's interruption.
+        if msg.channel == "desktop" or in_detached_turn():
             return msg, False
         interrupted = self._get_interrupt_state(key)
         if interrupted is None:

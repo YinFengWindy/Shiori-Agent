@@ -23,6 +23,10 @@ if TYPE_CHECKING:
 T = TypeVar("T")
 
 
+class RoleBusyError(RuntimeError):
+    """Role work was refused because another operation holds or awaits the turn gate."""
+
+
 def _required(value: str, field: str) -> str:
     clean = str(value or "").strip()
     if not clean:
@@ -101,6 +105,9 @@ class RoleExecutionState:
     """Keeps role arbitration stable across runtime configuration generations."""
 
     turn_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    # Operations that hold or are waiting for ``turn_lock``. Between a release
+    # and the next waiter waking the lock reads unlocked, but a claim remains.
+    claims: int = 0
     active_work: int = 0
     tasks: set[asyncio.Task[object]] = field(default_factory=set)
     closing: bool = False
@@ -153,8 +160,8 @@ class RoleRuntime:
 
     @property
     def busy(self) -> bool:
-        """Whether a role operation owns the shared turn gate, across generations."""
-        return self._execution.turn_lock.locked()
+        """Whether a role operation holds or awaits the shared turn gate, across generations."""
+        return self._execution.claims > 0 or self._execution.turn_lock.locked()
 
     @property
     def models_enabled(self) -> bool:
@@ -201,24 +208,31 @@ class RoleRuntime:
         after release. Only callers that cannot change the conversation (role
         state) or publish their own refresh (manual compaction) pass
         ``notify_context=False``.
+
+        ``reject_busy`` refuses with ``RoleBusyError`` instead of waiting
+        whenever any other operation holds or awaits the gate.
         """
 
         try:
             self._validate_context(context)
             if reject_busy and self.busy:
-                raise RuntimeError("当前角色正在回复或整理上下文，请稍后重试")
-            async with self._execution.turn_lock:
-                self._validate_context(context)
-                self._execution.active_work += 1
-                task = asyncio.current_task()
-                if task is not None:
-                    self._execution.tasks.add(task)
-                try:
-                    return await operation()
-                finally:
+                raise RoleBusyError("当前角色正在回复或整理上下文，请稍后重试")
+            self._execution.claims += 1
+            try:
+                async with self._execution.turn_lock:
+                    self._validate_context(context)
+                    self._execution.active_work += 1
+                    task = asyncio.current_task()
                     if task is not None:
-                        self._execution.tasks.discard(task)
-                    self._execution.active_work -= 1
+                        self._execution.tasks.add(task)
+                    try:
+                        return await operation()
+                    finally:
+                        if task is not None:
+                            self._execution.tasks.discard(task)
+                        self._execution.active_work -= 1
+            finally:
+                self._execution.claims -= 1
         finally:
             # Formal/proactive commits are observed while this gate is held.
             # Publish the refresh only after release, including failed work.
@@ -228,9 +242,17 @@ class RoleRuntime:
                 )
 
     async def run_passive_turn(
-        self, context: RoleExecutionContext, operation: Callable[[], Awaitable[T]]
+        self,
+        context: RoleExecutionContext,
+        operation: Callable[[], Awaitable[T]],
+        *,
+        reject_busy: bool = False,
     ) -> T:
-        """Runs the role's inbound conversation capability."""
+        """Runs the role's inbound conversation capability.
+
+        ``reject_busy`` raises ``RoleBusyError`` rather than queueing behind
+        other role work (plugin-submitted external turns yield to user turns).
+        """
         self._require_work_kind(context, "passive_turn")
 
         async def initialized_turn():
@@ -241,7 +263,9 @@ class RoleRuntime:
             # Restore the accepted turn snapshot before entering the conversation.
             return await operation()
 
-        return await self.execute_thread(context, initialized_turn)
+        return await self.execute_thread(
+            context, initialized_turn, reject_busy=reject_busy
+        )
 
     async def run_proactive_tick(
         self, context: RoleExecutionContext, operation: Callable[[], Awaitable[T]]
@@ -362,11 +386,18 @@ class RoleRuntimeRegistry:
         )
 
     async def dispatch_passive_turn(
-        self, context: RoleExecutionContext, operation: Callable[[], Awaitable[T]]
+        self,
+        context: RoleExecutionContext,
+        operation: Callable[[], Awaitable[T]],
+        *,
+        reject_busy: bool = False,
     ) -> T:
-        """Dispatches the inbound conversation capability for a role."""
+        """Dispatches the inbound conversation capability for a role.
+
+        ``reject_busy``: see ``RoleRuntime.run_passive_turn``.
+        """
         return await (await self.get(context.role_id)).run_passive_turn(
-            context, operation
+            context, operation, reject_busy=reject_busy
         )
 
     async def dispatch_proactive_tick(

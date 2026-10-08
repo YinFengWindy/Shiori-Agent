@@ -39,7 +39,7 @@ and renderer declaration keys are rejected. This table defines the v1 fields:
 | `api` | yes | integer `2` |
 | `id` | yes | `[a-z][a-z0-9_-]{0,63}` |
 | `version` | yes | full SemVer 2.0 string, including optional prerelease/build |
-| `runtime_api` | yes | compatibility range; host currently advertises `3.1.9` |
+| `runtime_api` | yes | compatibility range; host currently advertises `3.1.10` |
 | `entry` | yes | explicit package-relative `.py` backend entry |
 | `capabilities` | yes | existing v2 capability-name list, including `[]` |
 | `channels` | no | static channel declarations (Runtime API 2.2); requires the `channels` capability |
@@ -79,7 +79,7 @@ SDK. A package declares the lowest version whose additions it uses.
 
 The single version source is `packages/sdk/python/shiori_sdk/_version.py`
 (`RUNTIME_API_VERSION = __version__`), synchronized to the other packages by
-`node scripts/sync_sdk_version.mjs`. 3.1.1–3.1.9 are unpublished contract
+`node scripts/sync_sdk_version.mjs`. 3.1.1–3.1.10 are unpublished contract
 changes on `main`; npm and PyPI hold 3.1.0.
 
 | Version | Adds | Introduced by |
@@ -112,6 +112,7 @@ changes on `main`; npm and PyPI hold 3.1.0.
 | `3.1.7` | **breaking** managed-runtime install location and in-place import: `Installation` separates the state root (plugin data: `current.json`, new `location.json`, locks, logs, provider files) from an `install_root` holding downloads, `s/` staging, `v/` versions and child `tmp/` / `cache/` (plus provider-declared `Installation(..., scratch=)` directories); `Installation.relocate(root | None)` / `ManagedRuntime.relocate()` / RPC `runtime.relocate {directory?}` (a dedicated `<namespace>` directory, matched case-insensitively on Windows, inside an existing directory on a drive letter — UNC and device-namespace (`\\?\`, `\\.\`) paths are rejected; no `directory` restores the default) only while nothing is installed or kept and no task runs, and never into a directory already holding installation entries; the location persists across generations and the service identity (`OwnedService.root`) stays the state root; `current.json` records the absolute install root only for a chosen location (a default installation follows plugin data when it moves); an unreadable `location.json` is reported in status `error` and is replaced by `relocate` while no pointer exists, or reset by removal; `runtime.prepare {source}` takes the user's original absolute path (`host.pickFilePaths`), checks a regular file reached without any link or junction, its suffix and, for a single artifact, its exact size, verifies SHA-256 while reading it before any build, and never copies, moves or deletes it (a ZIP bundle's members are extracted into staging); the free-space check uses the install root's volume and counts an in-place import as 0 bytes; **breaking** Python API: the build callback becomes `build(staging, resources)` with each artifact's verified path; `acquire_resources` returns that name → path mapping; `acquire_artifact` loses `source=` (single originals are checked in place by the new `verify_file`); `ManagedRuntime(..., import_asset=)` replaces `register_runtime_rpc(import_asset=)` and `submit(..., import_asset)`; `register_runtime_rpc` drops `max_bytes`; status gains `location`, `customized`, `required` (download), `required_import` (the provider's import), `free`, `removable` and `relocatable` — exactly what blocks relocation is `removable`; removal deletes only installation entries of the install root (links and junctions are unlinked, never entered), and the chosen dedicated directory once empty, keeping every state-root file; an empty staging parent is removed after each preparation; `ManagedRuntimePanel` drops its `namespace` prop (**breaking**), imports through `host.pickFilePaths`, shows the location with the download / import requirement and free space (only free space once installed), offers 「更改位置」 through `host.pickDirectory` and 「恢复默认」 for a chosen location, and shows 「删除环境」 whenever `removable`; `useManagedRuntime` returns `relocate(directory?)`; packages using any of them require `runtime_api: ">=3.1.7 <4.0.0"` | #701 (#697), on `main` via #705 |
 | `3.1.8` | role affection summary: the renderer domain types gain `AffectionStageName` (`"陌生" \| "熟悉" \| "朋友" \| "亲密" \| "挚爱"`) and `AffectionSummary` (`value` 0–100, `stage`, `progress` 0–1 within the stage); `RoleRecord.affection` and `SessionPayload.metadata.affection` carry it once the role's first conversation has initialized affection and are absent before; packages reading them require `runtime_api: ">=3.1.8 <4.0.0"` | #710 (#708) |
 | `3.1.9` | **breaking**: relationship snapshots no longer carry `closeness`; `RelationshipSnapshot.internal_profile.relation_state` becomes the new `RelationState` (`dependence`, `security`, `initiative_desire`, `neglect_sensitivity`, each 0–1) instead of `Record<string, number>`, and a stored snapshot's legacy `closeness` is dropped on read. Loneliness growth and the relationship proactive motive now require affection ≥ 60 (the 「亲密」 stage lower bound) and never trigger while affection is uninitialized. Packages that read `closeness` must use `AffectionSummary` and declare `runtime_api: ">=3.1.9 <4.0.0"` | #715 (#708) |
+| `3.1.10` | the `external_turns` capability: `ctx.external_turns.submit(ExternalTurnMessage(role_id, platform, conversation_id, conversation_title, sender_id, sender_name, message_id, text))` runs one message from a source that is not a channel account as an external-context group turn of the role in the thread of that conversation (the title names it in the phone) and returns `ExternalTurnResult` with status `replied` (and the reply text), `busy` (the role holds or awaits other work; nothing ran or was stored) or `duplicate` (the conversation already holds `message_id`); the turn never queues, never dispatches outbound and is not interruptible through the role session; `platform` may not be `desktop` or a running channel; SDK `shiori_sdk.external_turns` and `shiori_sdk.testing.external_turns.FakeExternalTurns`; packages using it require `runtime_api: ">=3.1.10 <4.0.0"` (see [Runtime API 3.1.10 external turns](#runtime-api-3110-external-turns)) | #721 (#292) |
 
 2.2 and 2.3 first ship together in the release that turns every external
 channel into a plugin (#363): no released host advertises 2.2 alone, and
@@ -360,6 +361,30 @@ therefore cannot declare it. The registration API itself is unchanged for them;
 this is host policy, not an API break. Such packages keep working everywhere
 else, and their tools become available in those turns once they declare
 `external_allowed=True` and require `runtime_api: ">=3.0.0 <4.0.0"`.
+
+## Runtime API 3.1.10 external turns
+
+A plugin that receives messages from a source that is not a channel account
+(the desktop pet's live-stream chat, #292) declares `external_turns` and submits
+each message it wants answered through `ctx.external_turns.submit(...)`. The host
+routes it through the same thread creation, projection and role execution context
+as channel account intake (`core/channels/role_routing.py`), with group-chat
+semantics: the conversation is the role's external thread
+`thread:<role>:<platform>:<conversation_id>`, named by `conversation_title` in the
+phone's conversation list, and the sender (keyed by `platform` + `sender_id` for
+member profiles) is never the bound user, so the turn sees only that thread's
+history and external memory and is limited to the external tool whitelist. The
+message and the reply are stored in that thread and take part in external memory
+consolidation; they never appear in the desktop conversation.
+
+User turns come first. The turn takes the role's turn gate only when no other role
+work holds or awaits it; otherwise `busy` returns at once and nothing is stored.
+It does not pass through the channel inbound queue and never dispatches outbound:
+the plugin owns presenting the returned reply. The turn is not the role session's
+interruptible turn, so desktop or channel interrupts never reach it and it never
+writes into their interrupt state; cancelling the `submit` call cancels it. The
+host checks only that the role exists and that `platform` is neither `desktop` nor
+a running channel; the plugin is trusted to submit for the roles it serves.
 
 ## Runtime API 2.8 plugin SDK peer
 
@@ -1005,7 +1030,7 @@ for commands and how to validate its directory/zip from a host environment.
 ## Runtime API 3.0: unified Shiori SDK
 
 `@yinfengwindy/shiori-sdk` and `shiori-sdk` share one version (3.0.0 at introduction, now
-3.1.9) and the source tree `packages/sdk/`. External packages must declare `runtime_api: ">=3.0.0 <4.0.0"`.
+3.1.10) and the source tree `packages/sdk/`. External packages must declare `runtime_api: ">=3.0.0 <4.0.0"`.
 The previous frontend package name has no alias. Existing 2.x ranges are rejected
 with `incompatible_runtime` before backend execution; rebuild renderer peers and
 update the declared range when migrating. The 2.x sections above describe feature
