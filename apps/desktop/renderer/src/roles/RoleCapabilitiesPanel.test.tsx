@@ -18,14 +18,15 @@ describe("RoleCapabilitiesPanel", () => {
     assert.doesNotMatch(markup, /桌宠/);
   });
 
-  it("groups the proactive switch with runtime capabilities and places its parameters below voice", async () => {
+  it("keeps the proactive switch on its capability card and its parameters in the card's dialog", async () => {
     setPluginEnabledSnapshot([]);
     const initialForm = { ...createEmptyRoleForm(), proactiveProfile: "quiet", proactiveAgentMaxSteps: 42, proactiveDriftMaxSteps: 9, proactiveDriftMinIntervalHours: 4 };
     let form: RoleFormState = initialForm;
     const panel = () => <RoleCapabilitiesPanel activeRole={null} bridgeReady roleForm={form} onUpdate={(next) => { form = typeof next === "function" ? next(form) : next; }} />;
     const view = await mountTestComponent(panel(), { windowGlobals: { miraDesktop: { onEvent: () => () => undefined, invoke: async () => ({ error: null, payload: { providers: [] } }), readSettings: async () => ({ formData: createSettingsDraft() }) } } });
     try {
-      assert.deepEqual(Array.from(view.container.querySelectorAll("h2"), (heading) => heading.textContent), ["运行能力", "主动推送"]);
+      assert.deepEqual(Array.from(view.container.querySelectorAll("h2"), (heading) => heading.textContent), ["运行能力"]);
+      assert.equal(view.container.querySelector('[aria-label="推送策略"]'), null);
       const capability = view.container.querySelector('[data-testid="role-proactive-capability"]');
       assert.equal(capability?.closest("section")?.querySelector("h2")?.textContent, "运行能力");
       assert.match(capability?.textContent ?? "", /未启用/);
@@ -43,7 +44,9 @@ describe("RoleCapabilitiesPanel", () => {
       assert.deepEqual(form, initialForm);
       await view.render(panel());
       assert.equal(toggle.getAttribute("aria-checked"), "false");
-      assert.ok(view.container.querySelector('[aria-label="推送策略"]'), "disabling proactive push keeps its parameters available");
+      await act(async () => capability?.querySelector<HTMLButtonElement>('button[aria-label="主动推送设置"]')?.click());
+      assert.ok(document.querySelector('[role="dialog"] [aria-label="推送策略"]'), "disabling proactive push keeps its parameters available");
+      assert.deepEqual(form, initialForm, "opening the dialog leaves the draft untouched");
     } finally {
       await view.cleanup();
       resetPluginEnabledStateForTests();
@@ -60,7 +63,8 @@ describe("RoleCapabilitiesPanel", () => {
         { windowGlobals: { miraDesktop: { onEvent: () => () => undefined, invoke: async () => ({ error: null, payload: { providers: [] } }), readSettings: async () => ({ formData: settings }) } } },
       );
       try {
-        const picker = view.container.querySelector<HTMLButtonElement>('[role="combobox"][aria-label="推送策略"]');
+        await act(async () => view.container.querySelector<HTMLButtonElement>('button[aria-label="主动推送设置"]')?.click());
+        const picker = document.querySelector<HTMLButtonElement>('[role="combobox"][aria-label="推送策略"]');
         assert.ok(picker);
         await act(async () => picker.click());
         const options = Array.from(document.querySelectorAll('[role="option"]'), (option) => option.textContent);

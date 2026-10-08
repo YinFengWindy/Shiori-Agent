@@ -20,3 +20,7 @@ export { errorFeedback, errorFeedbackText, scrubErrorDetail } from "./errors";
 
 // One serial autosave queue for the host's settings pages and `usePrivateAutosave` (#683).
 export { SerialDraftQueue, type SerialDraftQueueOptions } from "./serialDraftQueue";
+
+// Host dialog chrome, shared with the SDK's capability settings dialog (#719).
+export { compactIconButtonClass, dialogBackdropClass } from "./styles";
+export { DialogFrame } from "./components/DialogFrame";

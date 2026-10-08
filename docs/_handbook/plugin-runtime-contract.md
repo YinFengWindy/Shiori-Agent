@@ -39,7 +39,7 @@ and renderer declaration keys are rejected. This table defines the v1 fields:
 | `api` | yes | integer `2` |
 | `id` | yes | `[a-z][a-z0-9_-]{0,63}` |
 | `version` | yes | full SemVer 2.0 string, including optional prerelease/build |
-| `runtime_api` | yes | compatibility range; host currently advertises `3.1.10` |
+| `runtime_api` | yes | compatibility range; host currently advertises `3.1.11` |
 | `entry` | yes | explicit package-relative `.py` backend entry |
 | `capabilities` | yes | existing v2 capability-name list, including `[]` |
 | `channels` | no | static channel declarations (Runtime API 2.2); requires the `channels` capability |
@@ -79,7 +79,7 @@ SDK. A package declares the lowest version whose additions it uses.
 
 The single version source is `packages/sdk/python/shiori_sdk/_version.py`
 (`RUNTIME_API_VERSION = __version__`), synchronized to the other packages by
-`node scripts/sync_sdk_version.mjs`. 3.1.1–3.1.10 are unpublished contract
+`node scripts/sync_sdk_version.mjs`. 3.1.1–3.1.11 are unpublished contract
 changes on `main`; npm and PyPI hold 3.1.0.
 
 | Version | Adds | Introduced by |
@@ -113,6 +113,7 @@ changes on `main`; npm and PyPI hold 3.1.0.
 | `3.1.8` | role affection summary: the renderer domain types gain `AffectionStageName` (`"陌生" \| "熟悉" \| "朋友" \| "亲密" \| "挚爱"`) and `AffectionSummary` (`value` 0–100, `stage`, `progress` 0–1 within the stage); `RoleRecord.affection` and `SessionPayload.metadata.affection` carry it once the role's first conversation has initialized affection and are absent before; packages reading them require `runtime_api: ">=3.1.8 <4.0.0"` | #710 (#708) |
 | `3.1.9` | **breaking**: relationship snapshots no longer carry `closeness`; `RelationshipSnapshot.internal_profile.relation_state` becomes the new `RelationState` (`dependence`, `security`, `initiative_desire`, `neglect_sensitivity`, each 0–1) instead of `Record<string, number>`, and a stored snapshot's legacy `closeness` is dropped on read. Loneliness growth and the relationship proactive motive now require affection ≥ 60 (the 「亲密」 stage lower bound) and never trigger while affection is uninitialized. Packages that read `closeness` must use `AffectionSummary` and declare `runtime_api: ">=3.1.9 <4.0.0"` | #715 (#708) |
 | `3.1.10` | the `external_turns` capability: `ctx.external_turns.submit(ExternalTurnMessage(role_id, platform, conversation_id, conversation_title, sender_id, sender_name, message_id, text))` runs one message from a source that is not a channel account as an external-context group turn of the role in the thread of that conversation (the title names it in the phone) and returns `ExternalTurnResult` with status `replied` (and the reply text), `busy` (the role holds or awaits other work; nothing ran or was stored) or `duplicate` (the conversation already holds `message_id`); the turn never queues, never dispatches outbound and is not interruptible through the role session; `platform` may not be `desktop` or a running channel; SDK `shiori_sdk.external_turns` and `shiori_sdk.testing.external_turns.FakeExternalTurns`; packages using it require `runtime_api: ">=3.1.10 <4.0.0"` (see [Runtime API 3.1.10 external turns](#runtime-api-3110-external-turns)) | #721 (#292) |
+| `3.1.11` | `RoleCapabilityCard` takes an optional `settings` node: the card then shows a ⚙ button after its control that opens a centred, medium-width dialog titled by the card's `title`, with a scrolling body; Escape, the backdrop and the close button dismiss it and focus returns to the ⚙. `settings` mounts on the first open and then stays mounted (hidden while closed) as long as the card, so a pending autosave or failed-save retry survives closing; mounting writes nothing. The dialog saves nothing itself: role fields inside still follow the role editor's Save/Reset, plugin-private settings their own autosave. `PluginRoleSettingsProps` gains `roleId` (null for a new role) and `client` (the plugin's scoped RPC client), and `role.settings` components now render under `PluginHostServicesProvider` and remount per role, so a card's dialog can own plugin-private settings with `usePrivateAutosave`. No new peer export; packages using either require `runtime_api: ">=3.1.11 <4.0.0"` | #719 (#718) |
 
 2.2 and 2.3 first ship together in the release that turns every external
 channel into a plugin (#363): no released host advertises 2.2 alone, and
@@ -1034,7 +1035,7 @@ for commands and how to validate its directory/zip from a host environment.
 ## Runtime API 3.0: unified Shiori SDK
 
 `@yinfengwindy/shiori-sdk` and `shiori-sdk` share one version (3.0.0 at introduction, now
-3.1.10) and the source tree `packages/sdk/`. External packages must declare `runtime_api: ">=3.0.0 <4.0.0"`.
+3.1.11) and the source tree `packages/sdk/`. External packages must declare `runtime_api: ">=3.0.0 <4.0.0"`.
 The previous frontend package name has no alias. Existing 2.x ranges are rejected
 with `incompatible_runtime` before backend execution; rebuild renderer peers and
 update the declared range when migrating. The 2.x sections above describe feature

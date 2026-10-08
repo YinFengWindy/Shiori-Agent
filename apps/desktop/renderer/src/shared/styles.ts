@@ -1,6 +1,5 @@
 import {
   compactButtonSizeClass,
-  compactPressableClass,
   cx,
   pressableClass,
   primaryButtonSurfaceClass,
@@ -100,15 +99,8 @@ export const dangerButtonClass = cx(
 /** Shared quiet destructive styling for inline delete affordances. */
 export const dangerGhostButtonClass = cx(dangerGhostButtonSurfaceClass, "px-[18px] py-3");
 
-/**
- * Borderless 28px icon-only button (dismiss, back, header toggles), for
- * places where iconButtonClass's bordered 40px tile would be too heavy.
- * Its icon is h-4 w-4.
- */
-export const compactIconButtonClass = cx(
-  compactPressableClass,
-  "grid h-7 w-7 shrink-0 place-items-center rounded-md text-ink-muted hover:bg-surface-hover hover:text-ink",
-);
+// Defined in the SDK, which uses them for its capability settings dialog (#719).
+export { compactIconButtonClass, dialogBackdropClass } from "@yinfengwindy/shiori-sdk/host-internal";
 
 /** Shared focus reset for controls that rely on their existing state styling. */
 export const focusResetClass = "focus:outline-none";
@@ -121,6 +113,3 @@ export const panelTitleClass = "m-0 font-display text-title text-ink";
 
 /** Native checkbox tinted with the accent color. */
 export const checkboxClass = "h-4 w-4 accent-accent";
-
-/** The dimmed, blurred backdrop behind a modal dialog (Base UI `Dialog.Backdrop`), fading with `motion-backdrop`. */
-export const dialogBackdropClass = "confirm-dialog-backdrop motion-backdrop fixed inset-0 z-50 bg-ink/30 backdrop-blur-sm";
