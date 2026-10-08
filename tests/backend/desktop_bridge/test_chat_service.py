@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Awaitable, Callable
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, Mock
@@ -889,13 +890,22 @@ def _cancellable_chat_service(
     finish: bool = False,
     interrupt_state: TurnInterruptState | None = None,
     session: Session | None = None,
+    persist_error: Exception | None = None,
+    turn_cleanup: Callable[[], Awaitable[None]] | None = None,
 ) -> DesktopChatService:
-    """A service whose turn blocks after ``started`` (or ends at once with ``finish``)."""
+    """A service whose turn blocks after ``started`` (or ends at once with ``finish``).
+
+    ``turn_cleanup`` runs when the blocked turn is cancelled.
+    """
 
     async def _process_direct(*_args, **_kwargs) -> None:
         started.set()
         if not finish:
-            await asyncio.Event().wait()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                if turn_cleanup is not None:
+                    await turn_cleanup()
 
     async def _emit_payload(emit_event: Any, payload: dict[str, Any]) -> None:
         await emit_event(payload)
@@ -928,7 +938,7 @@ def _cancellable_chat_service(
         event_bus=EventBus(),
         session_manager=SimpleNamespace(
             get_or_create=Mock(return_value=session or Session("role:role-1")),
-            append_messages=AsyncMock(),
+            append_messages=AsyncMock(side_effect=persist_error),
         ),
         role_id_from_session_key=Mock(return_value=""),
         sync_desktop_session_thread=Mock(),
@@ -1059,3 +1069,57 @@ async def test_external_cancel_publishes_persisted_reply_before_cancelled() -> N
     assert persisted["content"] == "partial answer"
     assert persisted["metadata"]["turn_id"] == "turn-1"
     assert emitted[0]["payload"]["messages"] == [persisted]
+
+
+@pytest.mark.asyncio
+async def test_failed_interrupted_persistence_still_ends_turn_with_cancelled() -> None:
+    started = asyncio.Event()
+    session = Session("role:role-1")
+    state = TurnInterruptState(
+        session_key=session.key,
+        original_user_message="hello",
+        partial_reply="partial answer",
+    )
+    emitted: list[dict[str, Any]] = []
+    service = _cancellable_chat_service(
+        started,
+        interrupt_state=state,
+        session=session,
+        persist_error=RuntimeError("disk full"),
+    )
+    _start_cancellable_turn(service, emitted)
+    await started.wait()
+
+    with pytest.raises(RuntimeError, match="disk full"):
+        _ = await service.cancel_chat_turn_async("role:role-1", "turn-1")
+
+    assert _methods(emitted) == ["chat.cancelled"]
+    await service.aclose()
+
+
+@pytest.mark.asyncio
+async def test_cancelled_cancel_request_propagates_its_own_cancellation() -> None:
+    started = asyncio.Event()
+    cleanup_started = asyncio.Event()
+    release_cleanup = asyncio.Event()
+
+    async def _turn_cleanup() -> None:
+        cleanup_started.set()
+        await release_cleanup.wait()
+
+    emitted: list[dict[str, Any]] = []
+    service = _cancellable_chat_service(started, turn_cleanup=_turn_cleanup)
+    _start_cancellable_turn(service, emitted)
+    await started.wait()
+
+    request = asyncio.create_task(
+        service.cancel_chat_turn_async("role:role-1", "turn-1")
+    )
+    await cleanup_started.wait()
+    _ = request.cancel()
+    release_cleanup.set()
+
+    with pytest.raises(asyncio.CancelledError):
+        await request
+    await service.aclose()
+    assert _methods(emitted) == ["chat.cancelled"]

@@ -229,6 +229,12 @@ class DesktopChatService:
             await active_turn.task
         except asyncio.CancelledError:
             pass
+        # Absorb only the turn's own cancellation. A cancelled caller (shutdown,
+        # a cancelled RPC) must still stop, even when its cancel was forwarded
+        # into the turn and the turn ended quietly.
+        current = asyncio.current_task()
+        if current is not None and current.cancelling():
+            raise asyncio.CancelledError
         # A turn cancelled before its first step never ran its runner; its
         # terminal comes from the late finisher, or from here if the task's
         # done callback has not run yet (the claim makes either one a no-op).
@@ -576,28 +582,35 @@ class DesktopChatService:
         first persists its interrupted reply (when a turn-id cancel supplied
         one), announces it with ``session.updated`` and then ends with
         ``chat.cancelled``.
+
+        A failed persistence still ends the turn with ``chat.cancelled`` and
+        then propagates.
         """
 
         if turn.finished:
             return
         turn.finished = True
         state, turn.interrupt_state = turn.interrupt_state, None
-        if cancelled and not turn.has_terminal():
-            if state is not None:
-                await complete_despite_cancellation(
-                    self._publish_interrupted_turn(turn, state)
-                )
-            turn.deferred_events.append(
-                build_chat_cancelled_event(
-                    request_id=turn.request_id,
-                    turn_id=turn.turn_id,
-                    session_key=turn.session_key,
-                ).to_dict()
-            )
-        elif state is not None:
-            self._discard_interrupt_state(turn.session_key, state)
-        turn.completed = True
-        await complete_despite_cancellation(self._flush_deferred_events(turn))
+        try:
+            if cancelled and not turn.has_terminal():
+                try:
+                    if state is not None:
+                        await complete_despite_cancellation(
+                            self._publish_interrupted_turn(turn, state)
+                        )
+                finally:
+                    turn.deferred_events.append(
+                        build_chat_cancelled_event(
+                            request_id=turn.request_id,
+                            turn_id=turn.turn_id,
+                            session_key=turn.session_key,
+                        ).to_dict()
+                    )
+            elif state is not None:
+                self._discard_interrupt_state(turn.session_key, state)
+        finally:
+            turn.completed = True
+            await complete_despite_cancellation(self._flush_deferred_events(turn))
 
     async def _publish_interrupted_turn(
         self,
