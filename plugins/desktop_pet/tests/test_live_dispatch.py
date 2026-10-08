@@ -1,8 +1,8 @@
 """The reply loop of one generation: pacing, expiry, busy, failures and output."""
 
 import asyncio
+import json
 
-import pytest
 from shiori_sdk.external_turns import ExternalTurnMessage
 from shiori_sdk.testing.external_turns import FakeExternalTurns
 
@@ -185,14 +185,23 @@ async def test_failed_or_empty_generation_shows_nothing_and_a_reply_clears_it(
     await loop.close()
 
 
-async def test_a_rejected_submission_is_a_bug_that_ends_the_loop(
+async def test_any_turn_failure_is_a_generation_failure_not_the_end_of_the_run(
     clock, pet_output, answers
 ):
-    turns = FakeExternalTurns([answers.failing(ValueError("角色不存在"))])
+    # ValueError subclasses raised inside the turn (JSON, validation) included.
+    turns = FakeExternalTurns(
+        [
+            answers.failing(json.JSONDecodeError("bad", "{", 0)),
+            answers.failing(ValueError("校验失败")),
+            answers.replied("好的"),
+        ]
+    )
     loop = Loop(clock, pet_output, turns)
-    await loop.send("id-1")
-    with pytest.raises(ValueError, match="角色不存在"):
-        await loop.task
+    await loop.send("id-1", "id-2", "id-3")
+    assert not loop.task.done()
+    assert loop.counter("generation_failed") == 2
+    assert [show["text"] for show in pet_output.shows()] == ["好的"]
+    await loop.close()
 
 
 async def test_failed_output_paths_are_reported_without_regenerating(
@@ -233,6 +242,7 @@ async def test_reply_of_a_role_that_is_no_longer_the_pet_is_dropped(
     loop = Loop(clock, pet_output, turns)
     loop.bound = False
     await loop.send("id-1")
+    assert turns.submitted == [], "no turn for a role that is no longer the pet"
     assert pet_output.shows() == []
     assert loop.status.snapshot()["reply_error"] == "桌宠角色已切换或停用"
     await loop.close()

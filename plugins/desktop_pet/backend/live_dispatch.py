@@ -94,6 +94,13 @@ class ReplyDispatcher:
 
     async def _reply(self, item: QueuedDanmaku) -> None:
         reply_id, danmaku = uuid.uuid4().hex, item.danmaku
+        if not self._still_bound():
+            # The role must exist and be the pet's role before its turn; the
+            # run then ends through its binding watch.
+            self._status.generation_failed(reply_id, "桌宠角色已切换或停用")
+            return
+        # ``parse_danmaku`` and ``fetch_room`` guarantee every field is
+        # non-blank, so a rejection here is a bug in this plugin.
         message = ExternalTurnMessage(
             role_id=self._role_id,
             platform=LIVE_PLATFORM,
@@ -107,11 +114,10 @@ class ReplyDispatcher:
         self.generating = True
         try:
             result = await self._turns.submit(message)
-        except ValueError:
-            # The contract's ValueError is a rejected submission (unknown role,
-            # reserved platform): a bug or setup error that must end the run.
-            raise
-        except Exception as error:  # the role's turn itself failed to generate
+        except Exception as error:
+            # The role was checked just above and the platform is fixed, so
+            # whatever the host raises is this turn failing to generate a reply;
+            # one bad turn never ends the run.
             logger.exception("live reply generation failed")
             self._status.generation_failed(reply_id, f"回复生成失败: {error}")
             self.pacer.cool_down()

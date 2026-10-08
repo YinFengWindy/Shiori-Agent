@@ -172,6 +172,7 @@ async def test_pause_cancels_turn_and_output_and_resume_takes_only_new_danmaku(
     )
     danmaku_source.current.send("id-3", "暂停时")
     await clock.settle()
+    assert harness.status()["counters"]["dropped_paused"] == 1
 
     harness.session.resume()
     # A replay of earlier danmaku after resume is not new.
@@ -308,3 +309,20 @@ async def test_unreplied_danmaku_leave_no_trace(
     status = json.dumps(harness.status(), ensure_ascii=False)
     assert "秘密弹幕" not in status and "路人" not in status
     assert list(tmp_path.iterdir()) == []
+
+
+async def test_stop_reports_the_end_even_when_cleanup_fails(make, clock, pet_output):
+    harness = make(FakeExternalTurns())
+    await harness.start()
+    original = pet_output.rpc.emit
+
+    async def failing_emit(name, payload):
+        if name == "live.cancel":
+            raise RuntimeError("transport closed")
+        return await original(name, payload)
+
+    pet_output.rpc.emit = failing_emit
+    with pytest.raises(RuntimeError, match="transport closed"):
+        await harness.session.stop("已手动结束")
+    assert harness.ended == [harness.session]
+    assert harness.status()["state"] == "stopped"

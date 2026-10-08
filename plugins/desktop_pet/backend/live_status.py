@@ -48,6 +48,8 @@ class LiveCounter(StrEnum):
     """Per-run counters; every one is always present in a status."""
 
     RECEIVED = "received"
+    # New danmaku that arrived while paused and were dropped unprocessed.
+    DROPPED_PAUSED = "dropped_paused"
     REDELIVERED = "redelivered"
     DUPLICATES = "duplicates"
     BUSY = "busy"

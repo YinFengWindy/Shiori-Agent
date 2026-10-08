@@ -3,10 +3,10 @@
 A source runs one connection and always ends by raising. What it raises
 decides what the run does next (see ``failure_kind``):
 
-- transient — network or transport trouble, or a server-side 5xx: reconnect
-  with backoff;
+- transient — network or transport trouble, a failed websocket handshake,
+  rate limiting (HTTP 429) or a server-side 5xx: reconnect with backoff;
 - rejected — Bilibili refused the room, the stream or its request (business
-  error codes such as -352 risk control, HTTP 4xx, auth reply ≠ 0): the run
+  error codes such as -352 risk control, other HTTP 4xx, auth reply ≠ 0): the run
   ends with that reason instead of retrying forever;
 - login — the login is invalid or the stream delivers anonymized senders: the
   run ends and never degrades to anonymous receiving;
@@ -22,7 +22,7 @@ from enum import StrEnum
 from typing import Protocol
 
 import httpx
-from websockets.exceptions import ConnectionClosed, InvalidStatus
+from websockets.exceptions import ConnectionClosed, InvalidHandshake, InvalidStatus
 
 from .bilibili_api import BilibiliApiError
 from .bilibili_credentials import BilibiliCredentials
@@ -57,15 +57,23 @@ def failure_kind(error: BaseException) -> FailureKind | None:
     if isinstance(error, (LiveAuthRejected, BilibiliApiError)):
         return FailureKind.REJECTED
     if isinstance(error, httpx.HTTPStatusError):
-        server_side = error.response.status_code >= 500
-        return FailureKind.TRANSIENT if server_side else FailureKind.REJECTED
+        return _http_status_kind(error.response.status_code)
     if isinstance(error, InvalidStatus):
-        server_side = error.response.status_code >= 500
-        return FailureKind.TRANSIENT if server_side else FailureKind.REJECTED
-    if isinstance(error, (httpx.TransportError, ConnectionClosed, OSError)):
-        # OSError covers socket errors, TimeoutError and LiveDisconnected.
+        return _http_status_kind(error.response.status_code)
+    if isinstance(
+        error, (httpx.TransportError, ConnectionClosed, InvalidHandshake, OSError)
+    ):
+        # OSError covers socket errors, TimeoutError and LiveDisconnected;
+        # InvalidHandshake covers malformed or interrupted handshakes.
         return FailureKind.TRANSIENT
     return None
+
+
+def _http_status_kind(status: int) -> FailureKind:
+    """5xx and rate limiting are retried; any other 4xx is a refusal."""
+    if status >= 500 or status == 429:
+        return FailureKind.TRANSIENT
+    return FailureKind.REJECTED
 
 
 class LiveSocket(Protocol):

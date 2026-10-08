@@ -2,7 +2,14 @@
 
 import httpx
 import pytest
-from websockets.exceptions import ConnectionClosedError
+from websockets.datastructures import Headers
+from websockets.exceptions import (
+    ConnectionClosedError,
+    InvalidHeader,
+    InvalidMessage,
+    InvalidStatus,
+)
+from websockets.http11 import Response
 
 from plugins.desktop_pet.backend.bilibili_api import BilibiliApiError
 from plugins.desktop_pet.backend.bilibili_danmaku import DanmakuFormatError
@@ -23,6 +30,10 @@ def http_error(status: int) -> httpx.HTTPStatusError:
     return httpx.HTTPStatusError("x", request=request, response=response)
 
 
+def ws_response(status: int) -> Response:
+    return Response(status, "status", Headers())
+
+
 @pytest.mark.parametrize(
     ("error", "kind"),
     [
@@ -32,6 +43,15 @@ def http_error(status: int) -> httpx.HTTPStatusError:
         (httpx.ConnectError("down"), FailureKind.TRANSIENT),
         (http_error(502), FailureKind.TRANSIENT),
         (http_error(412), FailureKind.REJECTED),
+        (http_error(429), FailureKind.TRANSIENT),
+        (InvalidStatus(ws_response(429)), FailureKind.TRANSIENT),
+        (InvalidStatus(ws_response(503)), FailureKind.TRANSIENT),
+        (InvalidStatus(ws_response(403)), FailureKind.REJECTED),
+        (
+            InvalidMessage("did not receive a valid HTTP response"),
+            FailureKind.TRANSIENT,
+        ),
+        (InvalidHeader("Upgrade"), FailureKind.TRANSIENT),
         (BilibiliApiError("code=-352"), FailureKind.REJECTED),
         (LiveAuthRejected("code=-101"), FailureKind.REJECTED),
         (BilibiliLoginRequired("失效"), FailureKind.LOGIN),

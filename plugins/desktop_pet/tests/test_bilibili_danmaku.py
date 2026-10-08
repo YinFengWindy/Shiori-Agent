@@ -58,3 +58,10 @@ def test_missing_message_id_is_a_format_error():
         parse_danmaku(danmu(extra={"dm_type": 0}))
     with pytest.raises(DanmakuFormatError):
         parse_danmaku({"cmd": "DANMU_MSG", "info": []})
+
+
+def test_blank_ids_or_names_are_format_errors_not_turns():
+    with pytest.raises(DanmakuFormatError, match="id_str"):
+        parse_danmaku(danmu(extra={"id_str": "  "}))
+    with pytest.raises(DanmakuFormatError, match="发送者"):
+        parse_danmaku(danmu(uname=" "))

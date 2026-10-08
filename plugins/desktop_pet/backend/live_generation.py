@@ -81,6 +81,7 @@ class LiveGenerations:
     def admit(self, danmaku: Danmaku) -> None:
         """Queue a new danmaku; dropped while no generation runs (paused)."""
         if self._current is None:
+            self._status.count(LiveCounter.DROPPED_PAUSED)
             return
         arrival = QueuedDanmaku(danmaku, self._clock.now())
         self._status.count(LiveCounter.EVICTED, self._queue.push(arrival))

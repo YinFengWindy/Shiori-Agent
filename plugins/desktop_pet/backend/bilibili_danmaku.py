@@ -62,9 +62,9 @@ def parse_danmaku(command: dict[str, Any]) -> Danmaku | None:
         raise DanmakuFormatError(f"弹幕格式无法识别: {error!r}") from error
     if not isinstance(text, str) or not text.strip():
         return None
-    if not isinstance(message_id, str) or not message_id:
+    if not isinstance(message_id, str) or not message_id.strip():
         raise DanmakuFormatError("弹幕缺少 id_str")
-    if not isinstance(uid, int) or not isinstance(uname, str):
+    if not isinstance(uid, int) or not isinstance(uname, str) or not uname.strip():
         raise DanmakuFormatError("弹幕发送者信息无效")
     if uid == 0:
         raise AnonymousDanmaku("弹幕发送者身份被匿名化，B 站登录未生效")

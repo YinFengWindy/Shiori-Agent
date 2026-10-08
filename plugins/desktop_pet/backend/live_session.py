@@ -127,9 +127,12 @@ class LiveSession:
         if self.status.connection not in _TERMINAL_CONNECTION:
             self.status.connection = ConnectionState.CLOSED
         generation = self._generations.detach()
-        await self._tasks.cancel_all()
-        await self._generations.close(generation)
-        self._on_ended(self)
+        try:
+            await self._tasks.cancel_all()
+            await self._generations.close(generation)
+        finally:
+            # The engine must learn the run ended even if cleanup raised.
+            self._on_ended(self)
 
     def apply_config(self, config: LiveConfig) -> None:
         """Take new timing at once; a changed room applies to the next run."""
