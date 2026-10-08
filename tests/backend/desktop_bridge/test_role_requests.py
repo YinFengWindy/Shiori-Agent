@@ -252,6 +252,8 @@ async def test_role_delete_first_deletes_its_accounts_through_their_plugins(
     tmp_path: Path,
 ) -> None:
     from shiori_sdk.accounts.models import AccountDeletionPlan
+    from agent.scheduler import SchedulerService
+    from tests.support.scheduler import make_job
 
     role_store = RoleStore(tmp_path)
     role_store.create_role(role_id="mira", name="Mira", system_prompt="Mira")
@@ -282,6 +284,9 @@ async def test_role_delete_first_deletes_its_accounts_through_their_plugins(
         return AccountDeletionPlan(disconnect, purge)
 
     accounts.set_delete_handler("chat", plan)
+    scheduler = SchedulerService(tmp_path / "schedules.json", push_tool=AsyncMock())
+    job = make_job(role_id="mira")
+    scheduler.add_job(job)
     service = DesktopBridgeService(
         workspace=tmp_path,
         role_store=role_store,
@@ -294,6 +299,7 @@ async def test_role_delete_first_deletes_its_accounts_through_their_plugins(
         ),
         agent_loop=SimpleNamespace(process_direct=AsyncMock()),
         event_bus=EventBus(),
+        scheduler=scheduler,
     )
     request = {"id": "delete", "method": "roles.delete", "payload": {"role_id": "mira"}}
     try:
@@ -304,6 +310,7 @@ async def test_role_delete_first_deletes_its_accounts_through_their_plugins(
         assert "locked" in failed.error.details["detail"]
         assert role_store.get_role("mira") is not None
         assert [row.record.id for row in accounts.list(role_id="mira")] == ["chat:101"]
+        assert scheduler.list_jobs() == [job]
 
         deleted = await service.handle(request, emit_event=AsyncMock())
         assert deleted.error is None
@@ -311,6 +318,56 @@ async def test_role_delete_first_deletes_its_accounts_through_their_plugins(
         assert purged == ["ref-101"]
         assert role_store.get_role("mira") is None
         assert [row.record.id for row in accounts.list()] == ["chat:102"]
+        assert scheduler.list_jobs() == []
+        assert scheduler.store.load() == []
+    finally:
+        await service.aclose()
+
+
+@pytest.mark.asyncio
+async def test_role_delete_schedule_cleanup_failure_is_visible_and_retryable(
+    tmp_path: Path, monkeypatch
+) -> None:
+    from agent.scheduler import SchedulerService
+    from tests.support.scheduler import make_job
+
+    role_store = RoleStore(tmp_path)
+    role_store.create_role(role_id="mira", name="Mira", system_prompt="Mira")
+    scheduler = SchedulerService(tmp_path / "schedules.json", push_tool=AsyncMock())
+    job = make_job(role_id="mira")
+    scheduler.add_job(job)
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=role_store,
+        session_manager=(sessions := SessionManager(tmp_path)),
+        group_listening=GroupListeningControl(
+            ConversationService(sessions), lambda _channel: False
+        ),
+        group_environment=GroupEnvironment(tmp_path, sessions.conversation_store),
+        agent_loop=SimpleNamespace(process_direct=AsyncMock()),
+        event_bus=EventBus(),
+        scheduler=scheduler,
+    )
+    request = {"id": "delete", "method": "roles.delete", "payload": {"role_id": "mira"}}
+
+    def fail_save(_jobs):
+        raise OSError("schedule store locked")
+
+    try:
+        with monkeypatch.context() as patch:
+            patch.setattr(scheduler.store, "save", fail_save)
+            failed = await service.handle(request, emit_event=AsyncMock())
+        assert failed.error is not None
+        assert "schedule store locked" in failed.error.details["detail"]
+        assert role_store.get_role("mira") is not None
+        assert scheduler.list_jobs() == [job]
+        assert [saved.id for saved in scheduler.store.load()] == [job.id]
+
+        deleted = await service.handle(request, emit_event=AsyncMock())
+        assert deleted.error is None
+        assert role_store.get_role("mira") is None
+        assert scheduler.list_jobs() == []
+        assert scheduler.store.load() == []
     finally:
         await service.aclose()
 
