@@ -25,7 +25,6 @@ source_paths:
   - scripts/plugin-distribution.mjs
   - apps/desktop/scripts/runtime-plugin-modules.mjs
   - apps/desktop/scripts/runtime-pyinstaller.mjs
-  - packages/sdk/src/hooks/usePrivateDraft.ts
   - packages/sdk/src/hooks/usePrivateAutosave.ts
   - apps/desktop/scripts/test-sdk-runtime.mjs
   - packages/sdk/python/shiori_sdk/managed/

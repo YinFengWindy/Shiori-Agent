@@ -60,13 +60,6 @@ tarball with declarations and external React peers. The host import map provides
 the same main entry to precompiled plugins. Only the main entry belongs in a
 plugin's production peer imports.
 
-Runtime API 3.1.2 also exports `usePrivateDraft(client, identity, operations)` for
-JSON-serializable plugin-owned settings and role documents. Supply `load`, `save`
-and optionally `onDirtyChange`; a null identity disables loading and saving.
-The hook isolates late results by client and document identity, retains edits on
-save errors, and never creates a writable default after a failed read. It manages
-the plugin's draft only and does not participate in the host role transaction.
-
 Runtime API 3.1.4 adds `usePrivateAutosave(client, identity, { load, save, debounceMs? })`
 for plugin settings pages that save like the host's: `update` saves the latest draft
 once edits pause (400 ms by default), saves never overlap, `commit` saves at once for

@@ -38,8 +38,7 @@ type ScopedState<T extends object> = PrivateAutosaveState<T> & { session: Privat
  *   nothing while a save is in flight, since that read could return the
  *   document from before the save.
  *
- * `savePhase` drives `host.ui.SettingsSavedStatus`. Use `usePrivateDraft` instead
- * where the user saves explicitly.
+ * `savePhase` drives `host.ui.SettingsSavedStatus`.
  */
 export function usePrivateAutosave<T extends object>(client: PluginRpcClient, identity: string | null, options: PrivateAutosaveOptions<T>) {
   const [state, setState] = useState<ScopedState<T>>({ ...emptyPrivateAutosaveState, session: null });

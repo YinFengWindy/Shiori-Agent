@@ -21,7 +21,6 @@ source_paths:
   - scripts/build-plugin.mjs
   - apps/desktop/scripts/runtime-plugin-modules.mjs
   - apps/desktop/scripts/runtime-pyinstaller.mjs
-  - packages/sdk/src/hooks/usePrivateDraft.ts
   - packages/sdk/src/hooks/usePrivateAutosave.ts
   - packages/sdk/src/serialDraftQueue.ts
   - packages/sdk/python/shiori_sdk/managed/
@@ -59,8 +58,7 @@ related:
 | 插件原生音频 / 按键 | src/native 的真实 sender、通信 owner/generation、单次播放与录音校验，surface 自有消息、重载和退出清理 | `PluginNativeSessions bindNativeDocumentLifecycle startCapture cancelCapture` |
 | 插件私有角色设置 | roleSettings 卡片 ⚙ 对话框内的插件私有自动保存（GPT-SoVITS 声音：scoped client、真实 roleId、moodCatalog、provider 自有情绪名称和参考） | `PluginRoleSettingsSlot retiredPluginUiContribution GptSoVitsRoleCard ReferenceList` |
 | 插件通信处置错误 | pending wait/late admission 的结构化 reason、插件卸载 best-effort 清理和未预期失败反馈；同 code 不等于已处置 | `PluginCommunicationLifetime context_disposed releasePreview` |
-| 插件私有文档草稿 | SDK hook 的 client/identity 隔离、读取与保存错误、dirty 上报，两 provider 调用者和宿主 peer ABI | `usePrivateDraft pluginUiPeerExports` |
-| 设置自动保存 | SDK 串行草稿队列（宿主设置页、schema 插件配置页与插件私有文档共用）、作用域切换迟到结果、离开时提交、失败暂停与重试，`host.ui.SettingsSavedStatus` 与宿主页角「已保存」一致，SDK 设置页布局组件 | `SerialDraftQueue usePrivateAutosave SettingsSavedStatus SettingsField` |
+| 设置自动保存 | SDK 串行草稿队列（宿主设置页、schema 插件配置页与插件私有文档共用）、作用域切换迟到结果、离开时提交、失败暂停与重试，`host.ui.SettingsSavedStatus` 与宿主页角「已保存」一致，SDK 设置页布局组件 | `SerialDraftQueue usePrivateAutosave SettingsSavedStatus SettingsField pluginUiPeerExports` |
 | 插件托管环境 | SDK 托管运行时（安装位置、按原路径导入、删除、空间预检、子进程与日志解码）、provider 插件调用者、宿主选文件/选目录能力 | `ManagedRuntime Installation OwnedService OwnedChild useManagedRuntime ManagedRuntimePanel` |
 | 调度任务 | scheduler、工具、持久化、主动投递、角色删除、桌面表单 | `ScheduleRoleTaskService compute_fire_at` |
 | 单角色剧情 | Story repository、Director、角色/玩家快照、bridge 事件、桌面剧情适配层 | `StorySimulationService StoryRepository StorySimulationHandler stories.beat.committed` |

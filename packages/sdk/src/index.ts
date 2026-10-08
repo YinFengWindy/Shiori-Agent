@@ -22,8 +22,6 @@ export { chatTerminalEventMethods, isChatTerminalEvent, type ChatTerminalEventMe
 // Pure helpers and hooks.
 export { errorMessage } from "./errors";
 export { useLatestRef } from "./useLatestRef";
-// Runtime API 3.1.2: plugin-owned document loading, dirty state and explicit save.
-export { usePrivateDraft } from "./hooks/usePrivateDraft";
 // Runtime API 3.1.3: opt-in UI for plugin-owned fixed environment preparation; 3.1.6 adds removal, 3.1.7 install location.
 export { ManagedRuntimePanel } from "./managed/ManagedRuntimePanel";
 export { useManagedRuntime, type ManagedRuntimeAction, type ManagedRuntimeStatus } from "./managed/useManagedRuntime";
