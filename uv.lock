@@ -1501,6 +1501,7 @@ dependencies = [
     { name = "pydantic" },
     { name = "python-telegram-bot" },
     { name = "pyyaml" },
+    { name = "qrcode" },
     { name = "rich" },
     { name = "shiori-plugin-default-memory" },
     { name = "shiori-sdk" },
@@ -1542,6 +1543,7 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.12.0" },
     { name = "python-telegram-bot", specifier = ">=22.7" },
     { name = "pyyaml", specifier = ">=6.0.0" },
+    { name = "qrcode", specifier = ">=8.2" },
     { name = "rich", specifier = ">=14.0.0" },
     { name = "shiori-plugin-default-memory", editable = "plugins/default_memory" },
     { name = "shiori-sdk", editable = "packages/sdk" },
@@ -1577,7 +1579,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "shiori-agent", specifier = "==0.1.0" },
-    { name = "shiori-sdk", extras = ["testing"], specifier = "==3.1.9" },
+    { name = "shiori-sdk", extras = ["testing"], specifier = "==3.1.10" },
 ]
 
 [[package]]

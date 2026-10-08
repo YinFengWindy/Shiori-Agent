@@ -7,6 +7,7 @@ from agent.scheduler import LatencyTracker, SchedulerService
 from agent.tools.message_push import MessagePushTool
 from agent.tools.registry import ToolRegistry
 from agent.tools.schedule import CancelScheduleTool, ListSchedulesTool, ScheduleTool
+from core.roles.store import RoleStore
 from bootstrap.toolsets.protocol import (
     ToolsetDeps,
     ToolsetProvider,
@@ -50,11 +51,15 @@ def build_scheduler(
     push_tool: MessagePushTool,
     *,
     agent_loop_provider: Callable[[], Any] | None = None,
+    role_store: RoleStore | None = None,
 ) -> SchedulerService:
+    """Builds a scheduler that validates persisted owners against the role store."""
+    roles = role_store if role_store is not None else RoleStore(workspace)
     return SchedulerService(
         store_path=workspace / "schedules.json",
         push_tool=push_tool,
         agent_loop=None,
         agent_loop_provider=agent_loop_provider,
         tracker=LatencyTracker(),
+        role_exists=lambda role_id: roles.get_role(role_id) is not None,
     )

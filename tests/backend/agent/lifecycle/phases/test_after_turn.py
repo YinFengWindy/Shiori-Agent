@@ -9,6 +9,7 @@ import pytest
 
 from agent.lifecycle.phases.after_turn import (
     AfterTurnFrame,
+    _ApplyTurnAffectionModule,
     _DispatchOutboundModule,
     _memory_extra,
 )
@@ -22,6 +23,10 @@ from core.accounts import AccountRegistry
 from shiori_sdk.accounts.targets import AccountTarget
 from core.accounts.delivery_ledger import AccountDeliveryLedger
 from core.identity import UserIdentityStore
+from core.roles import RoleRelationshipRuntimeService, RoleStore
+from core.roles.reply_state import AffectionChange
+from proactive_v2.presence import PresenceStore
+from session.manager import SessionManager
 
 
 @pytest.mark.asyncio
@@ -113,3 +118,37 @@ def test_only_the_users_own_group_turn_is_offered_to_memory_extraction(
         assert extra == {}
     else:
         assert extra == {"skip_post_memory": True, "not_user_authored": True}
+
+
+@pytest.mark.asyncio
+async def test_committed_affection_change_is_recorded_and_saved_with_the_session(
+    tmp_path,
+) -> None:
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("role:yin")
+    session.metadata["role_id"] = "yin"
+    relationship = RoleRelationshipRuntimeService(
+        tmp_path,
+        role_store=RoleStore(tmp_path),
+        session_manager=manager,
+        presence=PresenceStore(manager._store),
+    )
+    relationship.affection.initialize("yin", value=50, reason="初识")
+    frame = AfterTurnFrame(
+        input=SimpleNamespace(
+            state=SimpleNamespace(
+                session=session,
+                affection_change=AffectionChange(3, "他一直记得我说过的话。"),
+            )
+        )
+    )
+
+    await _ApplyTurnAffectionModule(relationship).run(frame)
+
+    history = relationship.affection.read_history("yin")
+    assert [(e.delta, e.reason, e.source) for e in history[1:]] == [
+        (3, "他一直记得我说过的话。", "turn")
+    ]
+    # The saved session carries the new summary the sidebar shows.
+    reloaded = SessionManager(tmp_path).get_or_create("role:yin")
+    assert reloaded.metadata["affection"]["value"] == 53

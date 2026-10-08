@@ -7,6 +7,7 @@ import pytest
 
 from agent.core.reply_completion import fetch_role_mood
 from agent.provider import LLMResponse
+from core.roles.reply_state import AffectionChange
 
 
 def mood_payload(mood="平静", thought="我终于放心了。"):
@@ -288,4 +289,32 @@ async def test_mentions_outside_a_valid_group_list_never_cost_the_mood(
         "平静",
         "我放心了。",
         expected,
+    )
+
+
+async def test_fetch_role_mood_carries_the_truncated_affection_change():
+    provider = AsyncMock()
+    provider.chat.return_value = LLMResponse(
+        content=json.dumps(
+            {
+                "mood": "平静",
+                "thought": "我终于放心了。",
+                "affection_delta": 10,
+                "affection_reason": "他记得我的生日。",
+            },
+            ensure_ascii=False,
+        )
+    )
+    reply = await fetch_role_mood(
+        provider=provider,
+        model="m",
+        max_tokens=200,
+        messages=[],
+        content="正文",
+        moods=("平静",),
+    )
+    assert reply is not None
+    assert reply.affection == AffectionChange(3, "他记得我的生日。")
+    assert (
+        "affection_delta" in provider.chat.call_args.kwargs["messages"][-1]["content"]
     )

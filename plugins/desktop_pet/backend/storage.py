@@ -9,11 +9,16 @@ from shiori_sdk.roles import Roles
 PLUGIN_ID = "desktop_pet"
 
 
-def role_asset_directory(workspace: Path, role_id: str) -> Path:
-    """Resolve one role's pet-only directory without entering shared role assets."""
+def safe_role_id(role_id: str) -> str:
+    """Reject role ids that could escape a per-role file or directory name."""
     if not role_id or role_id in {".", ".."} or any(c in role_id for c in "/\\:"):
         raise ValueError("桌宠角色 ID 不安全")
-    return plugin_data_dir(workspace, PLUGIN_ID) / f"pets-{role_id}"
+    return role_id
+
+
+def role_asset_directory(workspace: Path, role_id: str) -> Path:
+    """Resolve one role's pet-only directory without entering shared role assets."""
+    return plugin_data_dir(workspace, PLUGIN_ID) / f"pets-{safe_role_id(role_id)}"
 
 
 def asset_path(workspace: Path, value: str) -> Path:

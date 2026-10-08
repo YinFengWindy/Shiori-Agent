@@ -15,14 +15,16 @@ from agent.lifecycle.phases.after_reasoning import (
     default_after_reasoning_modules,
 )
 from agent.lifecycle.types import AfterReasoningInput, TurnState
+from agent.scheduler import ScheduledJob, SchedulerService
 from bus.event_bus import EventBus
 from shiori_sdk.messages import InboundMessage
 from conversation.context_scope import turn_context_view, user_context_view
+from conversation.service import desktop_thread_id
 from core.identity import IdentityChat, UserIdentityStore
 from shiori_sdk.accounts.models import AccountRecord
 from shiori_sdk.channels.threads import network_thread_id
 from core.roles import RoleRelationshipRuntimeService, RoleStore
-from core.roles.reply_state import InvalidRoleReply, RoleReply
+from core.roles.reply_state import AffectionChange, InvalidRoleReply, RoleReply
 from proactive_v2.presence import PresenceStore
 from session.manager import SessionManager, ConsolidationCommitRequest
 from session.manager.models import whole_session
@@ -584,3 +586,83 @@ async def test_only_the_users_own_group_message_updates_relationship_state(
         assert runtime["loneliness_value"] == 80
         assert runtime["awaiting_reply_after_proactive"] is True
         assert last_user_at is None
+
+
+def affection_setup(tmp_path):
+    """A role session and a formal reply that reports an affection change."""
+    manager = SessionManager(tmp_path)
+    session = role_session(manager)
+    request = turn(
+        session,
+        role_reply=RoleReply(
+            content="你好",
+            mood="平静",
+            thought="我终于放心了。",
+            affection=AffectionChange(3, "他一直记得我说过的话。"),
+        ),
+    )
+    return manager, session, request, phase(manager).run
+
+
+@pytest.mark.parametrize(
+    ("trigger", "counted"),
+    [("desktop_send", True), ("group_member", False), ("scheduled", False)],
+)
+async def test_only_the_users_own_message_changes_affection(tmp_path, trigger, counted):
+    manager, session, request, run = affection_setup(tmp_path)
+    metadata = request.state.msg.metadata
+    if trigger == "desktop_send":
+        # chat.send stores the user message itself, so its turn omits it.
+        thread = desktop_thread_id("yin")
+        metadata.update({"thread_id": thread, "omit_user_turn": True})
+    elif trigger == "group_member":
+        thread = network_thread_id("yin", "qq", "gqq:123")
+        request.state.msg.channel = "qq"
+        request.state.msg.chat_id = "gqq:123"
+        request.state.msg.sender = "456"
+        metadata.update({"chat_type": "group", "thread_id": thread})
+    else:
+        job = ScheduledJob(
+            trigger="after",
+            tier="soft",
+            fire_at=datetime.now(timezone.utc),
+            channel="desktop",
+            chat_id="role:yin",
+            role_id="yin",
+            prompt="提醒喝水",
+        )
+        scheduler = SchedulerService(tmp_path / "jobs.json", push_tool=None)
+        metadata.update(scheduler._job_role_metadata(job), omit_user_turn=True)
+        thread = metadata["thread_id"]
+    request.state.context_view = turn_context_view(tmp_path, "yin", thread)
+
+    await run(request)
+
+    # AfterTurn applies the recorded change once the reply is delivered.
+    assert request.state.affection_change == (
+        AffectionChange(3, "他一直记得我说过的话。") if counted else None
+    )
+
+
+@pytest.mark.parametrize("failure", ["stale", "sql"])
+async def test_a_turn_whose_commit_fails_leaves_affection_unchanged(
+    tmp_path, monkeypatch, failure
+):
+    manager, session, request, run = affection_setup(tmp_path)
+    if failure == "stale":
+        request.turn_result.context_retry["role_reply_previous_updated_at"] = "older"
+        session.metadata["current_mood_updated_at"] = "newer"
+        expected: type[Exception] = ValueError
+    else:
+
+        def failed_write(*args, **kwargs):
+            raise OSError("disk full")
+
+        # Fails inside the session's SQL transaction.
+        monkeypatch.setattr(manager, "_persist_messages", failed_write)
+        expected = OSError
+
+    with pytest.raises(expected):
+        await run(request)
+
+    assert request.state.affection_change is None

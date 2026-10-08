@@ -40,6 +40,7 @@ from shiori_sdk.plugin_services import ServicePluginContext, RuntimeLifecycle
 from shiori_sdk.roles import Roles, SceneObservations
 from shiori_sdk.models import ChatProvider, RoleModels
 from shiori_sdk.sessions import PluginSessions
+from shiori_sdk.external_turns import ExternalTurns
 from shiori_sdk.tools import ToolsCapability as SdkToolsCapability
 from agent.plugin_host.kv import PluginKVStore
 from shiori_sdk.http import HttpClient
@@ -83,6 +84,7 @@ class PluginSetupContext:
         roles: Roles | None = None,
         models: RoleModels | None = None,
         sessions: PluginSessions | None = None,
+        external_turns: ExternalTurns | None = None,
         tools: SdkToolsCapability | None = None,
         kv: PluginKVStore | None = None,
         http: HttpClient | None = None,
@@ -121,6 +123,7 @@ class PluginSetupContext:
         self._roles = roles
         self._models = models
         self._sessions = sessions
+        self._external_turns = external_turns
         self._tools = tools
         self._kv = kv
         self._http = http
@@ -306,6 +309,11 @@ class PluginSetupContext:
     def sessions(self) -> PluginSessions:
         """Return the explicitly granted sessions SDK capability."""
         return self._provided("sessions", self._sessions)
+
+    @property
+    def external_turns(self) -> ExternalTurns:
+        """Return the explicitly granted external-turn submission capability."""
+        return self._provided("external_turns", self._external_turns)
 
     @property
     def tools(self) -> SdkToolsCapability:

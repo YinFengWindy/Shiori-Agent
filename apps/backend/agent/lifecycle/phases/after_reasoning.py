@@ -484,6 +484,12 @@ class _AppendMessagesModule:
         state.committed_message_ids = tuple(
             str(message["id"]) for message in owned_messages if message.get("id")
         )
+        if reply is not None and reply.affection is not None and state.is_user_turn():
+            # Only the user's own message counts (group members and scheduled
+            # jobs do not; proactive replies never pass here), and only once
+            # the reply is committed: a stale or failed commit raised above.
+            # AfterTurn applies it, so bookkeeping cannot block delivery.
+            state.affection_change = reply.affection
         if state.turn_pushes is not None:
             await state.turn_pushes.committed()
         return frame

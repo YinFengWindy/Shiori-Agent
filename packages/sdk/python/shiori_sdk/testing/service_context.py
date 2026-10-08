@@ -11,6 +11,7 @@ from .tools import FakeTools
 from .storage import FakeKV
 from .resources import FakeResources
 from .sessions import FakeSessions
+from .external_turns import FakeExternalTurns
 from .http import FakeHttp
 from .runtime import FakeRuntimeLifecycle
 from .scene_observations import FakeSceneObservations
@@ -31,6 +32,7 @@ class FakeServiceContext(FakeExtensionContext):
         self.roles = FakeRoles(workspace)
         self.models = FakeModels()
         self.sessions = FakeSessions()
+        self.external_turns = FakeExternalTurns()
         self.tools = FakeTools()
         self.kv = FakeKV()
         self.rpc = FakeRpc()

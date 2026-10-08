@@ -154,6 +154,8 @@ class DesktopBridgeService:
             ),
         )
         self.role_service.add_role_deleted_listener(self._role_deleted_listener)
+        self._role_deleting_listener = self._on_role_deleting
+        self.role_service.add_role_deleting_listener(self._role_deleting_listener)
         self.conversation_service = ConversationService(session_manager)
         self.relationship_runtime = relationship_runtime
         self.presence = presence
@@ -409,6 +411,10 @@ class DesktopBridgeService:
     ) -> None:
         self._event_listeners.add(listener)
 
+    def _on_role_deleting(self, role_id: str) -> None:
+        if self.scheduler is not None:
+            self.scheduler.cancel_role_jobs(role_id)
+
     def _on_role_deleted(self, role_id: str) -> None:
         clean_role_id = str(role_id or "").strip()
         if not clean_role_id:
@@ -452,6 +458,7 @@ class DesktopBridgeService:
             self._proactive_message_listener,
         )
         self.role_service.remove_role_deleted_listener(self._role_deleted_listener)
+        self.role_service.remove_role_deleting_listener(self._role_deleting_listener)
         self.role_store.accounts.remove_change_listener(self._account_change_listener)
         self.role_store.identities.remove_change_listener(
             self._identity_change_listener

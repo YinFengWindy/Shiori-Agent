@@ -9,7 +9,11 @@ import pytest
 
 from core.roles.services import RoleRepository
 from core.roles.store import RoleStore
-from core.roles.role_runtime import RoleExecutionContext, RoleRuntimeRegistry
+from core.roles.role_runtime import (
+    RoleBusyError,
+    RoleExecutionContext,
+    RoleRuntimeRegistry,
+)
 from agent.config_models import ModelRegistration
 from core.roles.model_errors import ModelConfigurationError
 from core.roles.model_runtime import RoleModelRuntime
@@ -75,6 +79,41 @@ async def test_rejected_role_work_still_publishes_one_context_refresh(
                     _context(role), AsyncMock(), reject_busy=True
                 )
     assert [event.session_key for event in observed] == ["role:mira"]
+
+
+async def test_role_stays_busy_while_work_waits_for_a_released_gate(tmp_path):
+    """Between a release and the waiter waking the lock reads unlocked (#721).
+
+    A turn that must not queue (``reject_busy``) checks ``busy``, so the
+    role still counts as busy there.
+    """
+    store = RoleStore(tmp_path)
+    role = store.create_role(role_id="mira", name="Mira", system_prompt="test")
+    bus = EventBus()
+    runtime = await RoleRuntimeRegistry(RoleRepository(store), event_bus=bus).get(
+        role.id
+    )
+    # Each operation's refresh runs right after it released the gate, before
+    # any waiter wakes.
+    seen: list[bool] = []
+    bus.on(ContextWindowChanged, lambda _event: seen.append(runtime.busy))
+    release = asyncio.Event()
+
+    async def holding():
+        await release.wait()
+
+    first = asyncio.create_task(runtime.run_passive_turn(_context(role), holding))
+    await asyncio.sleep(0)
+    with pytest.raises(RoleBusyError):
+        await runtime.run_passive_turn(_context(role), AsyncMock(), reject_busy=True)
+    waiting = asyncio.create_task(runtime.run_passive_turn(_context(role), AsyncMock()))
+    await asyncio.sleep(0)
+    release.set()
+    await asyncio.gather(first, waiting)
+
+    # The rejection's own refresh, then the first release with a waiter left,
+    # then the waiter's release.
+    assert seen == [True, True, False]
 
 
 def _context(role, *, thread_id: str = "thread:mira:desktop"):

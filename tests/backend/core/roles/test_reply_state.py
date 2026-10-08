@@ -9,10 +9,12 @@ directly on dict payloads rather than through JSON string parsing.
 import pytest
 
 from core.roles.reply_state import (
+    AffectionChange,
     InvalidRoleReply,
     role_mood_catalog,
     role_mood_prompt,
     validate_role_reply,
+    with_affection_change,
     with_group_mentions,
 )
 
@@ -78,3 +80,43 @@ def test_only_group_replies_carry_mentions_and_a_bad_list_keeps_the_mood(caplog)
     assert "mention_ids" in caplog.text
     assert "mention_ids" in role_mood_prompt(("平静",), group=True)
     assert "mention_ids" not in role_mood_prompt(("平静",))
+
+
+MOOD = {"content": "好", "mood": "平静", "thought": "我放心了。"}
+
+
+@pytest.mark.parametrize(("reported", "applied"), [(10, 3), (-10, -3), (-1, -1)])
+def test_affection_change_is_truncated_to_three(reported, applied):
+    reply = validate_role_reply(MOOD, ("平静",))
+    changed = with_affection_change(
+        reply, {"affection_delta": reported, "affection_reason": " 他记得我。 "}
+    )
+    assert changed.affection == AffectionChange(applied, "他记得我。")
+    assert (changed.mood, changed.thought) == ("平静", "我放心了。")
+
+
+@pytest.mark.parametrize(
+    ("affection", "logged"),
+    [
+        ({}, None),
+        ({"affection_delta": 0, "affection_reason": "没什么变化"}, None),
+        ({"affection_reason": "原因"}, "缺少 affection_delta"),
+        ({"affection_delta": "2", "affection_reason": "原因"}, "affection_delta 无效"),
+        ({"affection_delta": 1.5, "affection_reason": "原因"}, "affection_delta 无效"),
+        ({"affection_delta": True, "affection_reason": "原因"}, "affection_delta 无效"),
+        ({"affection_delta": 2}, "affection_reason"),
+        ({"affection_delta": 2, "affection_reason": "  "}, "affection_reason"),
+    ],
+)
+def test_missing_or_invalid_affection_keeps_the_mood_and_changes_nothing(
+    caplog, affection, logged
+):
+    reply = validate_role_reply(MOOD, ("平静",))
+    with caplog.at_level("WARNING", logger="core.roles.reply_state"):
+        kept = with_affection_change(reply, {**MOOD, **affection})
+    assert kept == reply
+    assert kept.affection is None
+    if logged is None:
+        assert caplog.text == ""
+    else:
+        assert logged in caplog.text
