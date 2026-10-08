@@ -77,6 +77,30 @@ test("a reply that stops streaming releases the speech line after the idle timeo
   assert.equal(statuses.at(-1), "idle");
 });
 
+test("a final push after an idle timeout opens no empty job, and an empty reply settles to idle once", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const p = player(); let synthesized = 0;
+  const rpc = createFakePluginClient({ services: { list: async () => ({ services: [] }), call: async <T,>(_provider: unknown, _method: string, payload?: Record<string, unknown>) => { synthesized += 1; return { audio_base64: String(payload?.text), format: "wav" } as T; } } });
+  const speech = new PetSpeechQueue(p.audio);
+  const statuses: string[] = [];
+  const replies = new PetReplyAudio({ rpc }, speech, (status) => statuses.push(status));
+  replies.begin(); replies.push("第一句。", false, provider, "role", "");
+  await flush(); p.end(); await flush();
+  t.mock.timers.tick(chatReplyIdleMs); await flush();
+  assert.equal(statuses.at(-1), "idle");
+  const settled = statuses.length;
+  replies.push("", true, provider, "role", "");
+  await flush();
+  assert.equal(statuses.length, settled, "no second job and no second idle");
+  const live = speech.enqueue({ source: "live", runId: "run" }, async () => {});
+  await flush();
+  assert.deepEqual(await live, { status: "succeeded" }, "nothing holds the line");
+  replies.begin(); replies.push("", true, provider, "role", "");
+  await flush();
+  assert.deepEqual(statuses.slice(settled), ["idle"]);
+  assert.equal(synthesized, 1);
+});
+
 test("after a synthesis failure the rest of the same reply is skipped and the error stays visible", async () => {
   const p = player(); let calls = 0;
   const rpc = createFakePluginClient({ services: { list: async () => ({ services: [] }), call: async <T,>(): Promise<T> => { calls += 1; throw new Error("合成失败"); } } });

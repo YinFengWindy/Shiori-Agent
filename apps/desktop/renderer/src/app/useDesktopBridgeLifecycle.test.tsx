@@ -219,6 +219,25 @@ describe("useDesktopBridgeLifecycle", () => {
     } finally { await view.cleanup(); }
   });
 
+  it("swaps an externally cancelled stream for its persisted reply before the cancel ends the turn", async () => {
+    const view = await mountLifecycle();
+    try {
+      await view.emit("chat.delta", { content_delta: "partial" });
+      const { messages, ...summary } = view.activeSessionRef.current!;
+      const streamed = messages[1]!;
+      const persisted = {
+        id: "assistant-1", seq: 2, role: "assistant", content: "partial",
+        metadata: { turn_id: "turn-1", interrupted_reply: true },
+      };
+      await view.emit("session.updated", { session: summary, message: persisted, messages: [persisted] });
+      await view.emit("chat.cancelled");
+      const replies = view.activeSessionRef.current!.messages.filter((message) => message.role === "assistant");
+      assert.deepEqual(replies, [{ ...persisted, render_id: streamed.render_id }]);
+      assert.deepEqual(view.feedback.entries, []);
+      assert.deepEqual(view.completions, ["turn-1"]);
+    } finally { await view.cleanup(); }
+  });
+
   it("leaves a self-requested cancellation to the chat.cancel response", async () => {
     const view = await mountLifecycle({ cancelling: true });
     try {

@@ -97,7 +97,7 @@ flowchart TD
   L --> M[Session and bridge events]
 ```
 
-`apps/backend/agent/core/passive_turn/pipeline.py` 的 `PassiveTurnPipeline` 定义 phase 顺序：BeforeTurn、BeforeReasoning、Reasoner（内部执行 BeforeStep/AfterStep 与 PromptRender 模块）、AfterReasoning、AfterTurn。请求超出 `model_context_window` 推导的输入预算时，由 `passive_turn/budgeted_request.py`、`passive_turn/compaction.py` 与 `apps/backend/core/compaction.py` 的 `CompactionController` 处理压缩。Provider 或 reasoner 错误进入用户可见 fallback；AfterReasoning 和 AfterTurn 的权威持久化错误继续向边界冒泡。桌面流事件由 `apps/backend/desktop_bridge/chat_service.py` 发出，包括 `chat.delta`、`chat.tool.started`、`chat.tool.completed`、`chat.done`、`chat.error` 和 `chat.cancelled`；每个已开始的回合恰好以后三者之一结束（按 turn_id 取消或 bridge 关闭时发 `chat.cancelled`）。
+`apps/backend/agent/core/passive_turn/pipeline.py` 的 `PassiveTurnPipeline` 定义 phase 顺序：BeforeTurn、BeforeReasoning、Reasoner（内部执行 BeforeStep/AfterStep 与 PromptRender 模块）、AfterReasoning、AfterTurn。请求超出 `model_context_window` 推导的输入预算时，由 `passive_turn/budgeted_request.py`、`passive_turn/compaction.py` 与 `apps/backend/core/compaction.py` 的 `CompactionController` 处理压缩。Provider 或 reasoner 错误进入用户可见 fallback；AfterReasoning 和 AfterTurn 的权威持久化错误继续向边界冒泡。桌面流事件由 `apps/backend/desktop_bridge/chat_service.py` 发出，包括 `chat.delta`、`chat.tool.started`、`chat.tool.completed`、`chat.done`、`chat.error` 和 `chat.cancelled`；bridge 连接仍在时，每个已受理的回合恰好以后三者之一结束（按 turn_id 取消或 bridge 关闭时发 `chat.cancelled`；按 turn_id 取消会先持久化中断回复并发 `session.updated`）。终止事件的发送受保护，关闭期间的取消不会截断或重复它。
 
 LLM 调用由 `apps/backend/agent/provider.py` 封装，使用官方 `openai` SDK 的 Chat Completions 兼容接口，负责各厂商安全错误、上下文超长错误识别、重试与 usage 记录。
 

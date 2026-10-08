@@ -80,6 +80,11 @@ out with the host's `SettingsGroup`, `SettingsSectionCard`, `SettingsField`,
 `SettingsToggleField`, `settingsInputClass` and `settingsGroupStackClass`. Packages
 using any of these require `runtime_api: ">=3.1.4 <4.0.0"`.
 
+Runtime API 3.1.11 adds the host event `chat.cancelled` (`{session_key, turn_id}`)
+and `chatTerminalEventMethods` / `isChatTerminalEvent`: while the bridge connection
+is open, every accepted chat turn ends with exactly one of `chat.done`, `chat.error`
+and `chat.cancelled`. Packages relying on it require `runtime_api: ">=3.1.11 <4.0.0"`.
+
 A disposed scoped client rejects with `PluginBridgeError`, code
 `plugin_unavailable`, and `details.reason: "context_disposed"`. Cleanup may treat
 that exact reason as expected; the same error code without the reason can indicate

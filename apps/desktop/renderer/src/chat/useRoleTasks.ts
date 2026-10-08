@@ -1,8 +1,8 @@
-import { BridgeError, errorMessage } from "@yinfengwindy/shiori-sdk";
+import { BridgeError, chatTerminalEventMethods, errorMessage } from "@yinfengwindy/shiori-sdk";
 import { useCallback, useEffect, useState } from "react";
 import type { RoleTask, ScheduleTaskFormData } from "../shared/types";
 
-const refreshEventMethods = new Set(["session.updated", "chat.done", "chat.error", "chat.cancelled", "roles.tasks.updated"]);
+const refreshEventMethods = new Set<string>(["session.updated", ...chatTerminalEventMethods, "roles.tasks.updated"]);
 
 /** Owns loading and mutations for tasks belonging to the active role. */
 export function useRoleTasks({ activeRoleId, bridgeReady, enabled }: {

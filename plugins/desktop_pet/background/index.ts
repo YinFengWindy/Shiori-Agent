@@ -1,4 +1,4 @@
-import type { PluginBackgroundContribution } from "@yinfengwindy/shiori-sdk";
+import { chatTerminalEventMethods, type PluginBackgroundContribution } from "@yinfengwindy/shiori-sdk";
 import { readDesktopPetBinding } from "./binding";
 import { DesktopPetController, desktopPetSurfaceId } from "./controller";
 import { normalizeDesktopPetSettings } from "./settings";
@@ -93,7 +93,7 @@ const desktopPetBackground = {
     await ctx.rpc.handle("voice.devices", () => ctx.native.audio.devices());
     await ctx.rpc.handle("voice.preferences.validate", (payload) => ctx.native.keys.validate(String(payload.hotkey ?? "")));
     await ctx.rpc.handle("voice.stop", () => activeVoice.stop());
-    for (const method of ["chat.delta", "chat.done", "chat.error", "chat.cancelled"]) ctx.hostEvents.on(method, (_payload, event) => activeVoice.handle(event));
+    for (const method of ["chat.delta", ...chatTerminalEventMethods]) ctx.hostEvents.on(method, (_payload, event) => activeVoice.handle(event));
     // A dead bridge may not deliver the pending turn's terminal event, so retire it now.
     ctx.hostEvents.on("bridge.exit", () => activeVoice.stop("chat"));
 

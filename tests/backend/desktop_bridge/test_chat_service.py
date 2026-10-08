@@ -883,34 +883,74 @@ async def test_raised_turn_failure_detail_is_scrubbed():
     assert terminal["payload"]["detail"].startswith("RuntimeError: 401")
 
 
-def _cancellable_chat_service(started: asyncio.Event) -> DesktopChatService:
+def _cancellable_chat_service(
+    started: asyncio.Event,
+    *,
+    finish: bool = False,
+    interrupt_state: TurnInterruptState | None = None,
+    session: Session | None = None,
+) -> DesktopChatService:
+    """A service whose turn blocks after ``started`` (or ends at once with ``finish``)."""
+
     async def _process_direct(*_args, **_kwargs) -> None:
         started.set()
-        await asyncio.Event().wait()
+        if not finish:
+            await asyncio.Event().wait()
 
     async def _emit_payload(emit_event: Any, payload: dict[str, Any]) -> None:
         await emit_event(payload)
+
+    async def _emit_session_updated(
+        *,
+        request_id: str,
+        session: Session,
+        emit_event: Any,
+        messages: list[dict[str, Any]] | None = None,
+    ) -> None:
+        _ = emit_event(
+            {
+                "id": request_id,
+                "method": "session.updated",
+                "payload": {"messages": list(messages or [])},
+            }
+        )
 
     return DesktopChatService(
         agent_loop=SimpleNamespace(
             process_direct=_process_direct,
             request_interrupt=Mock(
-                return_value=SimpleNamespace(status="interrupted", message="cancelled")
+                return_value=SimpleNamespace(
+                    status="interrupted", message="cancelled", state=interrupt_state
+                )
             ),
+            discard_interrupt_state=Mock(),
         ),
         event_bus=EventBus(),
-        session_manager=SimpleNamespace(get_or_create=Mock()),
+        session_manager=SimpleNamespace(
+            get_or_create=Mock(return_value=session or Session("role:role-1")),
+            append_messages=AsyncMock(),
+        ),
         role_id_from_session_key=Mock(return_value=""),
         sync_desktop_session_thread=Mock(),
         emit_payload=_emit_payload,
-        emit_session_updated=AsyncMock(),
+        emit_session_updated=_emit_session_updated,
     )
 
 
 def _start_cancellable_turn(
-    service: DesktopChatService, emitted: list[dict[str, Any]]
+    service: DesktopChatService,
+    emitted: list[dict[str, Any]],
+    *,
+    write_gate: asyncio.Event | None = None,
+    writing: asyncio.Event | None = None,
 ) -> None:
+    """Starts turn-1; with ``write_gate`` each bridge write waits for it."""
+
     async def _emit(payload: dict[str, Any]) -> None:
+        if writing is not None:
+            writing.set()
+        if write_gate is not None:
+            await write_gate.wait()
         emitted.append(payload)
 
     service.start_chat_turn(
@@ -925,6 +965,10 @@ def _start_cancellable_turn(
     )
 
 
+def _methods(emitted: list[dict[str, Any]]) -> list[str]:
+    return [event["method"] for event in emitted]
+
+
 @pytest.mark.asyncio
 async def test_cancel_by_turn_id_ends_turn_with_cancelled_event() -> None:
     started = asyncio.Event()
@@ -936,7 +980,7 @@ async def test_cancel_by_turn_id_ends_turn_with_cancelled_event() -> None:
     result = await service.cancel_chat_turn_async("role:role-1", "turn-1")
 
     assert result.status == "interrupted"
-    assert [event["method"] for event in emitted] == ["chat.cancelled"]
+    assert _methods(emitted) == ["chat.cancelled"]
     assert emitted[0]["payload"] == {"session_key": "role:role-1", "turn_id": "turn-1"}
     await service.aclose()
 
@@ -951,5 +995,67 @@ async def test_bridge_close_ends_running_turn_with_cancelled_event() -> None:
 
     await service.aclose()
 
-    assert [event["method"] for event in emitted] == ["chat.cancelled"]
+    assert _methods(emitted) == ["chat.cancelled"]
     assert emitted[0]["payload"]["turn_id"] == "turn-1"
+
+
+@pytest.mark.asyncio
+async def test_bridge_close_before_the_turn_starts_still_ends_it_with_cancelled() -> (
+    None
+):
+    started = asyncio.Event()
+    emitted: list[dict[str, Any]] = []
+    service = _cancellable_chat_service(started)
+    _start_cancellable_turn(service, emitted)
+
+    await service.aclose()
+
+    assert started.is_set() is False
+    assert _methods(emitted) == ["chat.cancelled"]
+
+
+@pytest.mark.asyncio
+async def test_bridge_close_during_terminal_flush_completes_it_without_cancelled() -> (
+    None
+):
+    started = asyncio.Event()
+    write_gate = asyncio.Event()
+    writing = asyncio.Event()
+    emitted: list[dict[str, Any]] = []
+    service = _cancellable_chat_service(started, finish=True)
+    _start_cancellable_turn(service, emitted, write_gate=write_gate, writing=writing)
+    await writing.wait()
+
+    close = asyncio.create_task(service.aclose())
+    await asyncio.sleep(0)
+    write_gate.set()
+    await close
+
+    # The turn had already resolved to chat.error (nothing was committed) and
+    # buffered its terminal; shutdown neither cuts that flush nor adds a cancel.
+    assert _methods(emitted) == ["session.updated", "chat.error"]
+
+
+@pytest.mark.asyncio
+async def test_external_cancel_publishes_persisted_reply_before_cancelled() -> None:
+    started = asyncio.Event()
+    session = Session("role:role-1")
+    state = TurnInterruptState(
+        session_key=session.key,
+        original_user_message="hello",
+        partial_reply="partial answer",
+    )
+    emitted: list[dict[str, Any]] = []
+    service = _cancellable_chat_service(started, interrupt_state=state, session=session)
+    _start_cancellable_turn(service, emitted)
+    await started.wait()
+
+    result = service.cancel_chat_turn("role:role-1", "turn-1")
+    await service.drain()
+
+    assert result.status == "interrupted"
+    assert _methods(emitted) == ["session.updated", "chat.cancelled"]
+    persisted = session.messages[-1]
+    assert persisted["content"] == "partial answer"
+    assert persisted["metadata"]["turn_id"] == "turn-1"
+    assert emitted[0]["payload"]["messages"] == [persisted]

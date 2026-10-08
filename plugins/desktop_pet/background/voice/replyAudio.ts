@@ -31,6 +31,8 @@ export class PetReplyAudio {
   private stream: SentenceStream | null = null;
   /** The reply's speech failed; its remaining deltas are not spoken. */
   private ended = false;
+  /** The reply has opened at least one job; each job reports idle when it ends. */
+  private opened = false;
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
   constructor(
     private readonly ctx: Pick<BackgroundCtx, "rpc">,
@@ -44,6 +46,12 @@ export class PetReplyAudio {
     if (!final) this.text += text;
     const sentences = this.buffer.push(final && !this.text ? text : final ? "" : text, final);
     if (!sentences.length && !final) { this.armIdle(); return; }
+    if (!sentences.length && !this.stream) {
+      // Final with nothing left to say (e.g. after an idle timeout): no empty
+      // job. Only a reply that never spoke still has to settle to idle here.
+      if (!this.opened) this.status("idle");
+      return;
+    }
     const stream = this.stream ?? this.open({ provider, roleId, mood });
     stream.add(sentences, final);
     this.stream = final ? null : stream;
@@ -53,7 +61,7 @@ export class PetReplyAudio {
    * Retires the current reply's state; its job ends at its next read. Stopping
    * audio already playing is the caller's choice of scope on the speech line.
    */
-  reset() { this.epoch += 1; this.buffer = new SpeechSentenceBuffer(); this.text = ""; this.stream?.close(); this.stream = null; this.armIdle(); }
+  reset() { this.epoch += 1; this.buffer = new SpeechSentenceBuffer(); this.text = ""; this.opened = false; this.stream?.close(); this.stream = null; this.armIdle(); }
 
   /** Restarts the stall timer while a reply holds the speech line; any delta counts as activity. */
   private armIdle() {
@@ -72,7 +80,7 @@ export class PetReplyAudio {
   }
 
   private open(voice: ReplyVoice) {
-    const epoch = this.epoch; const stream = new SentenceStream();
+    const epoch = this.epoch; const stream = new SentenceStream(); this.opened = true;
     void this.speech.enqueue(chatOwner, async (job) => {
       const current = () => epoch === this.epoch && job.active;
       try {
