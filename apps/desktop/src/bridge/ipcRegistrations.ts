@@ -1,5 +1,6 @@
 import { createPluginCommunicationLifecycle } from "../plugins/communicationLifecycle.js";
 import { randomUUID } from "node:crypto";
+import { extname, isAbsolute } from "node:path";
 import type {
   BrowserWindow,
   IpcMain,
@@ -330,6 +331,15 @@ export function registerDesktopIpcHandlers(
       return assetTransport([], []);
     }
     return await importPickerSelection(result.filePaths, localAssetImportsRoot, localAssets);
+  });
+  host.handle("desktop:import-chat-images", async (event, paths: unknown) => {
+    const window = host.windowFromWebContents(event.sender);
+    if (!window || isSurfaceWindow(window)) throw new Error("请在主窗口拖入图片");
+    if (!Array.isArray(paths) || !paths.every((path): path is string =>
+      typeof path === "string" && isAbsolute(path) && [".png", ".jpg", ".jpeg", ".webp", ".gif"].includes(extname(path).toLowerCase()))) {
+      throw new Error("仅支持本地 PNG、JPG、JPEG、WebP 和 GIF 图片");
+    }
+    return await importPickerSelection(paths, localAssetImportsRoot, localAssets);
   });
   host.handle("desktop:pick-files", (_event, options: unknown) =>
     pickNativeFiles(options, localAssetImportsRoot, (dialogOptions) => host.showOpenDialog(dialogOptions)));

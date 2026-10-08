@@ -256,6 +256,8 @@ export type DesktopApi = {
   /** Save a previewed role-card snapshot through the native destination picker. */
   saveRoleCardExport(exportId: string): Promise<import("./roleCardExportContract.js").RoleCardExportSaveResult>;
   pickChatAttachments(options?: { multiple?: boolean }): Promise<string[]>;
+  /** Imports actual local image Files through preload; grants previews only after native validation and staging. */
+  importChatImages(files: File[]): Promise<string[]>;
   /** Opens an http, https, or mailto link through the operating system. */
   openExternal(url: string): Promise<ExternalLinkOpenResult>;
   /** Stages a native file selection without treating arbitrary formats as media. */

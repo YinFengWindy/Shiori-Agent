@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
-import { access, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, rm, truncate, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import type { BrowserWindow, WebContents } from "electron";
 import { PluginUiResources } from "../plugins/uiResources.js";
+import { LocalAssetRegistry, maxLocalAssetBytes } from "../assets/localAssetRegistry.js";
+import type { LocalAssetTransport } from "./shared.js";
 import {
   registerDesktopIpcHandlers,
   type DesktopIpcHost,
@@ -33,6 +35,7 @@ function setup(overrides: {
   showSaveDialog?: DesktopIpcHost["showSaveDialog"];
   pluginUiResources?: PluginUiResources;
   localAssetImportsRoot?: string;
+  localAssets?: LocalAssetRegistry;
 } = {}) {
   const windowCalls: WindowCall[] = [];
   const externalOpened: string[] = [];
@@ -80,7 +83,7 @@ function setup(overrides: {
       getLastError: () => null,
       restart: async () => undefined,
     },
-    localAssets: {
+    localAssets: overrides.localAssets ?? {
       grantTrustedPayload: () => [],
       grantPath: () => null,
       resolveReference: () => null,
@@ -111,6 +114,53 @@ function setup(overrides: {
 }
 
 describe("desktop ipc window boundaries", () => {
+  it("imports dropped images into trusted staging and deduplicates picker and drop identities", async () => {
+    const root = await mkdtemp(join(tmpdir(), "shiori-image-drop-"));
+    try {
+      const source = join(root, "photo.png");
+      const imports = join(root, "imports");
+      await writeFile(source, "image-data", "utf8");
+      await mkdir(imports);
+      const localAssets = new LocalAssetRegistry();
+      localAssets.addTrustedRoot(imports);
+      const ipc = setup({ localAssets, localAssetImportsRoot: imports,
+        showOpenDialog: async () => ({ canceled: false, filePaths: [source] }),
+      });
+      const dropped = await ipc.invokeHandler("desktop:import-chat-images", ipc.windows.main.webContents, [source]) as LocalAssetTransport<string[]>;
+      const picked = await ipc.invokeHandler("desktop:pick-chat-attachments", ipc.windows.main.webContents) as LocalAssetTransport<string[]>;
+      assert.deepEqual(dropped, picked);
+      assert.notEqual(dropped.value[0], source);
+      assert.equal(await readFile(dropped.value[0], "utf8"), "image-data");
+      assert.equal(dropped.assets[0].kind, "image");
+      assert.equal(localAssets.resolveReference(dropped.assets[0].url)?.canonicalPath, dropped.value[0]);
+      assert.equal(localAssets.resolveReference(source), null);
+      await rm(source);
+      assert.equal(await readFile(dropped.value[0], "utf8"), "image-data");
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
+
+  it("rejects surface windows, invalid paths, unsupported formats, directories and oversized dropped images", async () => {
+    const root = await mkdtemp(join(tmpdir(), "shiori-rejected-drop-"));
+    try {
+      const imports = join(root, "imports");
+      const ipc = setup({ localAssetImportsRoot: imports });
+      const channel = "desktop:import-chat-images";
+      await assert.rejects(ipc.invokeHandler(channel, ipc.windows.pet.webContents, []), /主窗口/);
+      await assert.rejects(ipc.invokeHandler(channel, {} as WebContents, []), /主窗口/);
+      for (const paths of [null, "photo.png", [42], ["relative.png"], ["https://example.org/photo.png"], [join(root, "note.txt")], [join(root, "sound.wav")]]) {
+        await assert.rejects(ipc.invokeHandler(channel, ipc.windows.main.webContents, paths), /仅支持本地/);
+      }
+      const directory = join(root, "directory.png");
+      await mkdir(directory);
+      for (const path of [directory, join(root, "missing.png")]) {
+        await assert.rejects(ipc.invokeHandler(channel, ipc.windows.main.webContents, [path]), /unsupported local asset/);
+      }
+      const large = join(root, "large.png");
+      await writeFile(large, "");
+      await truncate(large, maxLocalAssetBytes + 1);
+      await assert.rejects(ipc.invokeHandler(channel, ipc.windows.main.webContents, [large]), /size limit/);
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
   it("saves role cards only from main windows and blocks overlapping native dialogs", async () => {
     let finish!: () => void;
     const waiting = new Promise<void>((resolve) => { finish = resolve; });

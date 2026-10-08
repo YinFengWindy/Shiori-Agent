@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, webUtils } from "electron";
 import { PreloadLocalAssetCache } from "./assets/preloadLocalAssetCache.js";
 import { localAssetScheme } from "./assets/localAssetContract.js";
 import { createDesktopEventSubscription } from "./bridge/desktopEventSubscription.js";
@@ -156,6 +156,15 @@ const api: DesktopApi = {
   pickChatAttachments(options) {
     return (ipcRenderer.invoke("desktop:pick-chat-attachments", options) as Promise<LocalAssetTransport<string[]>>)
       .then((transport) => localAssets.consume(transport));
+  },
+  async importChatImages(files) {
+    const paths = files.map((file) => {
+      const path = webUtils.getPathForFile(file);
+      if (!path) throw new Error("请拖入本地图片文件");
+      return path;
+    });
+    const transport = await ipcRenderer.invoke("desktop:import-chat-images", paths) as LocalAssetTransport<string[]>;
+    return localAssets.consume(transport);
   },
   openExternal(url) {
     return ipcRenderer.invoke("desktop:open-external", { url }) as Promise<import("./bridge/shared.js").ExternalLinkOpenResult>;
