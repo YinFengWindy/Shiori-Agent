@@ -85,6 +85,8 @@ export { navMotifs, withMotif, type NavGlyphMotion } from "./icons/navGlyphs";
 
 // Domain types.
 export type {
+  AffectionStageName,
+  AffectionSummary,
   LonelinessRuntime,
   RelationshipSnapshot,
   RoleAssetCategory,

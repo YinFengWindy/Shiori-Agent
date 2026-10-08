@@ -82,6 +82,10 @@ from core.roles import (
     RoleRuntimeRegistry,
 )
 from core.roles.model_runtime import RoleModelRuntime
+from core.roles.relationship_runtime.affection_seed import (
+    LlmAffectionSeedGenerator,
+    RoleAffectionInitializer,
+)
 from core.roles.self_initializer import RoleSelfInitializer
 from core.roles.self_seed import LlmRoleSelfSeedGenerator
 from agent.turns.turn_pushes import current_turn_pushes
@@ -500,7 +504,15 @@ def build_core_runtime(
         role_repository,
         model_resolver=role_model_resolver,
         shared_execution=shared.role_runtime_registry if shared else None,
-        self_initializer=RoleSelfInitializer(role_store, LlmRoleSelfSeedGenerator()),
+        self_initializer=RoleSelfInitializer(
+            role_store,
+            LlmRoleSelfSeedGenerator(),
+            RoleAffectionInitializer(
+                workspace,
+                session_manager=session_manager,
+                generator=LlmAffectionSeedGenerator(),
+            ),
+        ),
         event_bus=event_bus,
     )
     loop_ref: dict[str, AgentLoop] = {}

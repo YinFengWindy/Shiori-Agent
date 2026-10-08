@@ -1,4 +1,6 @@
-"""角色关系快照与寂寞运行时的稳定 facade。"""
+"""角色关系快照、好感度与寂寞运行时的稳定 facade。"""
+
+from .affection_service import RoleAffectionService
 
 from .loneliness import (
     LonelinessRuntimeState,
@@ -9,7 +11,6 @@ from .loneliness import (
     _UNANSWERED_REPLY_WINDOW_HOURS,
     _advance_by_loneliness_ticks,
     _loneliness_tick_count,
-    _now_iso,
     _parse_iso,
 )
 from .loops import LonelinessHeartbeatLoop, RelationshipSnapshotLoop
@@ -20,8 +21,6 @@ from .models import (
     _DEFAULT_RELATION_STATE,
     _FIRST_PERSON_MARKERS,
     _MAX_RELATION_TAGS,
-    _RECENT_MESSAGE_CHAR_LIMIT,
-    _RECENT_MESSAGE_LIMIT,
     _RELATION_STATE_KEYS,
     _clamp,
     _is_first_person_self_view,
@@ -43,5 +42,6 @@ __all__ = [
     "RelationshipSnapshot",
     "RelationshipSnapshotLoop",
     "RelationshipSnapshotOptimizer",
+    "RoleAffectionService",
     "RoleRelationshipRuntimeService",
 ]

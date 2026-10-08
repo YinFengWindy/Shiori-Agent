@@ -5,7 +5,7 @@ from __future__ import annotations
 from core.roles.errors import RoleNotFoundError
 
 import asyncio
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from core.memory.markdown_schema import normalize_memory_document
 
@@ -16,21 +16,38 @@ from .self_seed import LlmRoleSelfSeedGenerator
 from .self_seed_state import resolve_self_seed_state, self_fingerprint
 from .store import RoleStore
 
+if TYPE_CHECKING:
+    from .models import RoleRecord
+    from .relationship_runtime.affection_seed import RoleAffectionInitializer
+
 
 class SelfInitializationError(RuntimeError):
     """A failed seed stops this turn while preserving the role for a later retry."""
 
 
 class RoleSelfInitializer:
-    """Owns seed state, edit protection and persistence; callers hold the role turn lock."""
+    """Owns seed state, edit protection and persistence; callers hold the role turn lock.
 
-    def __init__(self, store: RoleStore, generator: LlmRoleSelfSeedGenerator):
+    Once SELF.md is ready, the same flow seeds the role's initial affection.
+    """
+
+    def __init__(
+        self,
+        store: RoleStore,
+        generator: LlmRoleSelfSeedGenerator,
+        affection: RoleAffectionInitializer,
+    ):
         self._store = store
         self._memory = RoleMemoryService(store.workspace)
         self._generator = generator
+        self._affection = affection
 
     async def ensure_seeded(self, role_id: str, snapshot: RoleModelSnapshot):
-        """Prepares SELF before prompt construction using the role dialogue model."""
+        """Prepares SELF, then affection, before prompt construction.
+
+        Both use the role dialogue model; either failure stops the turn and the
+        next message retries whatever is still missing.
+        """
         if snapshot.role_id != role_id or snapshot.purpose != "chat":
             raise ValueError("SELF.md 初始化需要当前角色的对话模型")
         with self._store.lock:
@@ -40,6 +57,7 @@ class RoleSelfInitializer:
                 role = self._store.update_role(role_id, memory_init_state=state)
         seed = dict(state["self_seed"])
         if seed["status"] != "pending":
+            await self._ensure_affection(role, snapshot)
             return
         seed.update(
             model_registration_id=snapshot.registration_id,
@@ -70,20 +88,35 @@ class RoleSelfInitializer:
                 or current_seed["fingerprint"] != seed["fingerprint"]
             ):
                 self._save_seed(role_id, {**current_seed, "status": "user_edited"})
-                return
-            content = normalize_memory_document("SELF.md", content)
-            temporary = path.with_suffix(".md.tmp")
-            try:
-                _ = temporary.write_text(content, encoding="utf-8")
-                _ = temporary.replace(path)
-            finally:
-                temporary.unlink(missing_ok=True)
-            seed.update(
-                status="generated",
-                generated_at=now_iso(),
-                fingerprint=self_fingerprint(content),
-            )
-            self._save_seed(role_id, seed)
+            else:
+                content = normalize_memory_document("SELF.md", content)
+                temporary = path.with_suffix(".md.tmp")
+                try:
+                    _ = temporary.write_text(content, encoding="utf-8")
+                    _ = temporary.replace(path)
+                finally:
+                    temporary.unlink(missing_ok=True)
+                seed.update(
+                    status="generated",
+                    generated_at=now_iso(),
+                    fingerprint=self_fingerprint(content),
+                )
+                self._save_seed(role_id, seed)
+            ready = self._required_role(role_id)
+        # SELF is ready (generated now or edited meanwhile).
+        await self._ensure_affection(ready, snapshot)
+
+    async def _ensure_affection(
+        self, role: RoleRecord, snapshot: RoleModelSnapshot
+    ) -> None:
+        try:
+            await self._affection.ensure_initialized(role, snapshot)
+        except asyncio.CancelledError:
+            raise
+        except Exception as error:
+            raise SelfInitializationError(
+                "好感度初始化失败，请再次发送消息重试"
+            ) from error
 
     def _required_role(self, role_id: str):
         role = self._store.get_role(role_id)

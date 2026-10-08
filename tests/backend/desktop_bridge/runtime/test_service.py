@@ -11,6 +11,7 @@ from agent.config import load_config_text
 from agent.provider import LLMProvider, LLMResponse
 from bootstrap.app import AppRuntime, RuntimeFeatures
 from core.desktop_presence import DesktopPresence
+from core.roles.relationship_runtime import RoleAffectionService
 from core.roles.store import RoleStore
 from desktop_bridge.runtime.service import ReloadableDesktopService
 from desktop_bridge.runtime.service import _ServiceGeneration
@@ -201,6 +202,8 @@ async def test_empty_boot_register_bind_and_chat_preserves_existing_turn(
         calls.append(model)
         if "首版 SELF.md" in str(kwargs["messages"][0].get("content")):
             seed_calls.append(model)
+        if "初始好感度" in str(kwargs["messages"][0].get("content")):
+            return LLMResponse(content='{"value": 30, "reason": "刚认识"}')
         if hold and model == "first":
             entered.set()
             await finish.wait()
@@ -366,7 +369,7 @@ async def test_first_chat_seed_failure_reports_error_and_next_chat_retries(
     tmp_path, monkeypatch
 ):
     monkeypatch.setattr("bootstrap.tools._resolve_plugin_dirs", lambda workspace: [])
-    seeds, content_replies, mood_replies = [], [], []
+    seeds, affection_seeds, content_replies, mood_replies = [], [], [], []
     fail_seed = True
 
     async def fake_chat(self, **kwargs):
@@ -375,6 +378,9 @@ async def test_first_chat_seed_failure_reports_error_and_next_chat_retries(
             if fail_seed:
                 raise RuntimeError("seed provider unavailable")
             return LLMResponse(content="# 我是谁\n\n我是本地测试角色。")
+        if "初始好感度" in str(kwargs["messages"][0].get("content")):
+            affection_seeds.append(kwargs["model"])
+            return LLMResponse(content='{"value": 30, "reason": "刚认识"}')
         if kwargs.get("response_format") == {"type": "json_object"}:
             # The mood follow-up remains auxiliary through role routing; the
             # resolved provider applies the cap when it can disable thinking.
@@ -449,6 +455,12 @@ async def test_first_chat_seed_failure_reports_error_and_next_chat_retries(
             )
             await asyncio.wait_for(service._current.service.chat_service.drain(), 5)
         assert seeds == ["selected", "selected"]
+        # Affection is seeded once, right after SELF succeeds on the retry.
+        assert affection_seeds == ["selected"]
+        history = RoleAffectionService(tmp_path).read_history(role_id)
+        assert [(item.source, item.after, item.reason) for item in history] == [
+            ("init", 30, "刚认识")
+        ]
         # Each of the two turns (retry, subsequent) produces exactly one
         # content reply and one mood follow-up - not just "at least 2" total,
         # which a single turn making both calls could also satisfy.

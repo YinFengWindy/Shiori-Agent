@@ -10,6 +10,7 @@ import { resolveChatHeaderTitle, resolveVisibleChatSessionKey } from "../chat/ch
 import { resolveCurrentMood, resolveCurrentMoodUpdatedAt, resolveCurrentThought, resolveMoodIllustration, roleSession } from "../roles/roleMoodSelectors";
 import { isRoleFormDirty } from "../roles/roleFormState";
 import { toFileUrl } from "../shared/format";
+import { resolveAffectionDisplay } from "../chat/affectionDisplay";
 import type { LonelinessRuntime, RelationshipSnapshot, RoleRecord, SessionPayload } from "@yinfengwindy/shiori-sdk";
 import type { AppMainView, RoleFormState } from "../shared/types";
 
@@ -97,6 +98,8 @@ export function buildDesktopViewModel({
     ?? null
   );
   const roleSelfView = resolveCurrentThought(currentRoleSession, activeRole);
+  // The session refreshes after every turn; the role payload covers a session not yet loaded.
+  const affection = resolveAffectionDisplay(currentRoleSession?.metadata.affection ?? activeRole?.affection);
   const relationshipTags = Array.isArray(relationshipSnapshot?.relation_tags)
     ? relationshipSnapshot.relation_tags
       .filter((tag): tag is string => typeof tag === "string")
@@ -140,5 +143,6 @@ export function buildDesktopViewModel({
     roleSelfView,
     relationshipTags,
     lonelinessValue,
+    affection,
   };
 }

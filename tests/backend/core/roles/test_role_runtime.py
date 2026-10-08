@@ -19,6 +19,12 @@ from bus.event_bus import EventBus
 from bus.events_context import ContextWindowChanged
 
 
+def _self_initializer(store: RoleStore) -> RoleSelfInitializer:
+    # Affection seeding has its own tests; these cover the role gate around SELF.
+    affection = SimpleNamespace(ensure_initialized=AsyncMock())
+    return RoleSelfInitializer(store, LlmRoleSelfSeedGenerator(), affection)
+
+
 @pytest.mark.parametrize("fails", [False, True])
 async def test_context_refresh_is_published_after_role_gate_release(tmp_path, fails):
     store = RoleStore(tmp_path)
@@ -120,13 +126,13 @@ async def test_first_turn_seeds_once_across_channels_and_runtime_generations(
     registry = RoleRuntimeRegistry(
         repository,
         model_resolver=models,
-        self_initializer=RoleSelfInitializer(store, LlmRoleSelfSeedGenerator()),
+        self_initializer=_self_initializer(store),
     )
     reloaded = RoleRuntimeRegistry(
         repository,
         model_resolver=models,
         shared_execution=registry,
-        self_initializer=RoleSelfInitializer(store, LlmRoleSelfSeedGenerator()),
+        self_initializer=_self_initializer(store),
     )
     entered, release = asyncio.Event(), asyncio.Event()
     order = []
@@ -199,7 +205,7 @@ async def test_unbound_first_turn_stops_before_seed_and_can_retry_after_binding(
     registry = RoleRuntimeRegistry(
         RoleRepository(store),
         model_resolver=models,
-        self_initializer=RoleSelfInitializer(store, LlmRoleSelfSeedGenerator()),
+        self_initializer=_self_initializer(store),
     )
     reply = AsyncMock()
     with pytest.raises(ModelConfigurationError, match="请先绑定"):
@@ -251,7 +257,7 @@ async def test_text_reply_respects_when_its_model_snapshot_is_accepted(
     registry = RoleRuntimeRegistry(
         RoleRepository(store),
         model_resolver=models,
-        self_initializer=RoleSelfInitializer(store, LlmRoleSelfSeedGenerator()),
+        self_initializer=_self_initializer(store),
     )
 
     async def seed(**kwargs):
@@ -316,7 +322,7 @@ async def test_image_reply_preserves_accepted_snapshot_after_initialization(
             for key in ("dialogue", "old-vision", "new-vision")
         ],
     )
-    initializer = RoleSelfInitializer(store, LlmRoleSelfSeedGenerator())
+    initializer = _self_initializer(store)
     registry = RoleRuntimeRegistry(
         RoleRepository(store), model_resolver=models, self_initializer=initializer
     )
