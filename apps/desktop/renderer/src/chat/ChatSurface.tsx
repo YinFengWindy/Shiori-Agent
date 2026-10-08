@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ChatComposer, type ChatComposerDraftRequest } from "./ChatComposer";
+import { ChatComposer } from "./ChatComposer";
+import { getChatDraftKey, updateChatDraft } from "./chatDraftStore";
 import { chatComposerBottomOffsetPx } from "./chatComposerLayout";
 import { ChatEmptyState } from "./ChatEmptyState";
 import { ChatHeader } from "./ChatHeader";
@@ -50,7 +51,7 @@ import {
 } from "@yinfengwindy/shiori-sdk";
 import { sidebarTrackMotionClass } from "../shared/styles";
 import { useWindowActivity } from "../shared/useWindowActivity";
-import type { ChatReplyTarget, ChatSendRequest } from "../shared/types";
+import type { ChatSendRequest } from "../shared/types";
 import type { AffectionDisplay } from "../affection/affectionDisplay";
 
 type ChatSurfaceProps = {
@@ -162,8 +163,7 @@ export function ChatSurface({
   const highlightedMessageKeyRef = useLatestRef(highlightedMessageKey);
   const [chatLatestImageSidebarMounted, setChatLatestImageSidebarMounted] = useState(!chatLatestImageSidebarCollapsed);
   const messageContextMenu = useChatMessageContextMenu();
-  const [composerReplyTarget, setComposerReplyTarget] = useState<ChatReplyTarget | null>(null);
-  const [composerDraftRequest, setComposerDraftRequest] = useState<ChatComposerDraftRequest | null>(null);
+  const draftKey = getChatDraftKey(activeRoleId);
   const [conversationPaneHeight, setConversationPaneHeight] = useState(0);
   const [phoneOpen, setPhoneOpen] = useState(false);
   const hasStatusIllustration = Boolean(moodIllustrationUrl);
@@ -296,11 +296,6 @@ export function ChatSurface({
   }, [panelOpen, sidebarMode]);
 
   useEffect(() => {
-    setComposerReplyTarget(null);
-    setComposerDraftRequest(null);
-  }, [activeRoleId, activeSession?.key]);
-
-  useEffect(() => {
     const currentMessageCount = activeSession?.messages.length ?? 0;
     const previousMessageCount = previousMessageCountRef.current;
     const previousLastMessageContent = previousLastMessageContentRef.current;
@@ -351,10 +346,6 @@ export function ChatSurface({
     onOpenRoleDetail();
   }, [canOpenRoleDetail, onOpenRoleDetail]);
 
-  const handleClearReplyTarget = useCallback(() => {
-    setComposerReplyTarget(null);
-  }, []);
-
   // The list's bottom spacer and the scroll-to-bottom button track the
   // composer's live height (it grows with the draft, quote and attachments);
   // a follower stays pinned to the newest message while it grows.
@@ -372,18 +363,19 @@ export function ChatSurface({
 
   const handleQuoteMessage = useCallback((message: SessionMessage, messageKey: string, sender: string) => {
     const content = getChatMessageReplyContent(message);
-    if (!content) return;
-    setComposerReplyTarget({
+    if (!content || activeSession?.key !== draftKey) return;
+    updateChatDraft(draftKey, (current) => ({ ...current, replyTarget: {
       messageId: messageKey,
       content,
       sender,
       preview: summarizeChatReplyContent(content),
-    });
-  }, []);
+    } }));
+  }, [activeSession?.key, draftKey]);
 
   const handlePickSuggestion = useCallback((text: string) => {
-    setComposerDraftRequest((current) => ({ text, id: (current?.id ?? 0) + 1 }));
-  }, []);
+    updateChatDraft(draftKey, (current) => ({ ...current, content: text }));
+    chatColumnRef.current?.querySelector("textarea")?.focus();
+  }, [draftKey]);
 
   const contextMenuState = messageContextMenu.menu;
   const contextMenuRenderKey = contextMenuState
@@ -470,12 +462,9 @@ export function ChatSurface({
           bridgeReady={bridgeReady}
           sending={sending}
           cancelling={cancelling}
-          replyTarget={composerReplyTarget}
           paneHeight={conversationPaneHeight}
-          draftRequest={composerDraftRequest}
           onSendMessage={onSendMessage}
           onCancelChat={onCancelChat}
-          onClearReplyTarget={handleClearReplyTarget}
           onJumpToMessage={onJumpToMessage}
           onHeightChange={handleComposerHeightChange}
         />

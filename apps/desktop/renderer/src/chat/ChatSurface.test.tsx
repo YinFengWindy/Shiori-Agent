@@ -5,7 +5,7 @@ import { describe, it } from "node:test";
 import React from "react";
 import { act } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
+import { changeInputValue, mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import { ChatSurface } from "./ChatSurface";
 import type { RoleRecord, SessionPayload } from "@yinfengwindy/shiori-sdk";
 
@@ -52,7 +52,7 @@ function chatSurfaceElement(
   activeRole: RoleRecord | null,
   activeRoleId: string,
   options: {
-    activeSession?: SessionPayload;
+    activeSession?: SessionPayload | null;
     currentMood?: string;
     moodIllustrationUrl?: string;
     roleSelfView?: string;
@@ -66,7 +66,7 @@ function chatSurfaceElement(
     <ChatSurface
       activeRole={activeRole}
       activeRoleId={activeRoleId}
-      activeSession={options.activeSession ?? createSession()}
+      activeSession={options.activeSession === undefined ? createSession() : options.activeSession}
       bridgeReady
       chatLatestImagePath=""
       chatLatestImagePosition={0}
@@ -106,6 +106,62 @@ function chatSurfaceElement(
 }
 
 describe("ChatSurface", () => {
+  it("restores text, picked attachments and an actual quoted message after role changes, loading and page unmount", async () => {
+    const role = createRole({ id: "surface-draft" });
+    const session = { ...createSession(), key: "role:surface-draft", messages: [{ id: "quoted-message", role: "assistant", content: "要引用的消息" }] };
+    const otherRole = createRole({ id: "surface-other" });
+    const desktop = {
+      invoke: async () => ({ payload: { roles: [role, otherRole] }, error: null }),
+      readSettings: async () => ({ formData: { models: { registrations: [] } } }),
+      localAssetUrl: (path: string) => `shiori-asset://local/${path}`,
+      onEvent: () => () => undefined,
+      pickChatAttachments: async () => ["/surface.png"],
+    };
+    const element = () => chatSurfaceElement(role, role.id, { activeSession: session });
+    const view = await mountTestComponent(element(), { windowGlobals: { miraDesktop: desktop } });
+    try {
+      await changeInputValue(view.container.querySelector("textarea")!, "完整草稿");
+      await act(async () => { view.container.querySelector<HTMLButtonElement>('[aria-label="添加附件"]')!.click(); });
+      await act(async () => { view.container.querySelector('[data-message-key="quoted-message"]')!.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true })); });
+      await act(async () => { view.container.querySelector<HTMLButtonElement>('[data-testid="message-context-menu-quote"]')!.click(); });
+      assert.ok(view.container.querySelector('[aria-label="取消引用"]'));
+      // The old session can still be present during a role switch; it cannot own the new draft.
+      await view.render(chatSurfaceElement(otherRole, otherRole.id, { activeSession: session }));
+      assert.equal(view.container.querySelector("textarea")!.value, "");
+      assert.equal(view.container.querySelector('[aria-label="取消引用"]'), null);
+      await changeInputValue(view.container.querySelector("textarea")!, "另一角色");
+      await view.render(chatSurfaceElement(role, role.id, { activeSession: null }));
+      assert.equal(view.container.querySelector("textarea")!.value, "完整草稿");
+      await view.render(null);
+      await view.render(element());
+      assert.equal(view.container.querySelector("textarea")!.value, "完整草稿");
+      assert.equal(view.container.querySelectorAll('[data-testid="composer-attachments"] img').length, 1);
+      assert.match(view.container.querySelector('[aria-label="跳转到引用来源消息"]')!.textContent ?? "", /要引用的消息/);
+      await act(async () => { view.container.querySelector<HTMLButtonElement>('[aria-label="取消引用"]')!.click(); });
+      await view.render(null);
+      await view.render(element());
+      assert.equal(view.container.querySelector('[aria-label="取消引用"]'), null);
+    } finally { await view.cleanup(); }
+  });
+
+  it("treats a suggestion as a single edit and does not replay it when returning to the page", async () => {
+    const role = createRole({ id: "suggestion-draft" });
+    const session = { ...createSession(), key: "role:suggestion-draft" };
+    const element = () => chatSurfaceElement(role, role.id, { activeSession: session });
+    const view = await mountTestComponent(element(), { windowGlobals: { miraDesktop: {
+      invoke: async () => ({ payload: { roles: [role] }, error: null }),
+      readSettings: async () => ({ formData: { models: { registrations: [] } } }),
+      localAssetUrl: (path: string) => `shiori-asset://local/${path}`, onEvent: () => () => undefined,
+    } } });
+    try {
+      await act(async () => { view.container.querySelector<HTMLButtonElement>('[data-testid="chat-empty-state"] button')!.click(); });
+      assert.equal(view.container.querySelector("textarea")!.value, "你好呀～");
+      await changeInputValue(view.container.querySelector("textarea")!, "自己修改的内容");
+      await view.render(null);
+      await view.render(element());
+      assert.equal(view.container.querySelector("textarea")!.value, "自己修改的内容");
+    } finally { await view.cleanup(); }
+  });
   it("renders the header avatar as a role-detail button when an active role is present", () => {
     const markup = renderChatSurface(createRole(), "mira");
 

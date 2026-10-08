@@ -30,6 +30,8 @@ related:
 
 `DesktopAppFrame.tsx` 只应装配状态、依赖与视图。bridge lifecycle、会话切换、角色管理、聊天交互、图片状态、UI effect 和导航历史已经按 hook 边界分离，新增行为应进入对应 hook/service，而不是重新堆回入口组件。
 
+聊天草稿由 `chat/chatDraftStore.ts` 在 renderer 内存中按 `role:<id>` 保存文字、待发送附件和引用回复；会话加载、切换角色和离开聊天页不清空草稿，重启不保留。发送乐观清空提交快照，失败仅在草稿未被重新编辑时恢复。附件选择和拖入异步完成后仍更新发起操作的角色草稿。输入框拖入本地图片通过 host-only `DesktopApi.importChatImages(File[])`，preload 使用 Electron `webUtils.getPathForFile`，主进程限制图片格式并复用本地资产大小校验、暂存与预览授权；不会下载网页图片或自动发送。
+
 Windows packaged desktop uses an Electron-builder NSIS bundle with a PyInstaller onedir runtime under `resources/runtime`. The main process resolves packaged resources from `process.resourcesPath`, keeps the workspace and `config.toml` under `%USERPROFILE%\.shiori\workspace`, and starts the sidecar with explicit `bridge`, `--workspace`, and `--config` arguments. Release tags provide the application version and CI emits `SHA256SUMS.txt` alongside the installer; clean Windows installation, upgrade, uninstall, and feature smoke remain release-owner acceptance work.
 
 Windows 自动发版每天北京时间 12:00 检查 main，以 `v0.5.0` 起最近正式版本累计至少 5 个 commit 为门槛；版本按十进位递增，所有校验与上传成功后才公开。固定 SHA、失败草稿恢复和手动发版入口见 [Windows 发版](../../agents/windows-releases.md)。

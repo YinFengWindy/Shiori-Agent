@@ -14,6 +14,7 @@ import { createDesktopEventSubscription } from "./bridge/desktopEventSubscriptio
 async function loadPreload(
   invoke: (channel: string, options: unknown) => Promise<unknown>,
   ipcEvents = new EventEmitter(),
+  getPathForFile: (file: File) => string = () => "",
 ) {
   const source = await readFile(new URL("./preload.ts", import.meta.url), "utf8");
   const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } });
@@ -28,7 +29,7 @@ async function loadPreload(
         off: ipcEvents.off.bind(ipcEvents),
       }, contextBridge: {
         exposeInMainWorld: (_name: string, api: DesktopApi) => { exposed.api = api; },
-      } };
+      }, webUtils: { getPathForFile } };
       if (name === "./assets/preloadLocalAssetCache.js") return { PreloadLocalAssetCache };
       if (name === "./bridge/desktopEventSubscription.js") return { createDesktopEventSubscription };
       if (name === "./notifications/contract.js") return { notificationChannels };
@@ -53,6 +54,34 @@ test("preload exposes generic staged file selection without granting archive med
   assert.deepEqual(await api.pickFiles(options), []);
   const failing = await loadPreload(async () => { throw new Error("copy failed"); });
   await assert.rejects(failing.pickFiles(options), /copy failed/);
+});
+
+test("preload extracts actual File paths and caches only the main process imported image grants", async () => {
+  const file = new File(["image"], "photo.png");
+  const staged = "D:/workspace/imports/photo.png";
+  const url = "shiori-asset://local/photo-token";
+  const calls: { channel: string; options: unknown }[] = [];
+  const api = await loadPreload(async (channel, options) => {
+    calls.push({ channel, options });
+    return { value: [staged], assets: [{ path: staged, url, kind: "image" }] };
+  }, new EventEmitter(), (received) => { assert.equal(received, file); return "D:/original/photo.png"; });
+  assert.deepEqual(await api.importChatImages([file]), [staged]);
+  assert.equal(calls[0].channel, "desktop:import-chat-images");
+  assert.deepEqual(Array.from(calls[0].options as string[]), ["D:/original/photo.png"]);
+  assert.equal(api.localAssetUrl(staged), url);
+  assert.notEqual(api.localAssetUrl("D:/original/photo.png"), url);
+});
+
+test("preload rejects generated or forged Files before IPC and propagates failed imports", async () => {
+  let imports = 0;
+  const generated = await loadPreload(async () => { imports += 1; });
+  await assert.rejects(generated.importChatImages([new File(["data"], "generated.png")]), /本地图片/);
+  const forged = await loadPreload(async () => { imports += 1; }, new EventEmitter(), () => { throw new TypeError("not a File"); });
+  await assert.rejects(forged.importChatImages([{} as File]), /not a File/);
+  assert.equal(imports, 0);
+  const rejected = await loadPreload(async () => { throw new Error("size limit"); }, new EventEmitter(), () => "D:/large.png");
+  await assert.rejects(rejected.importChatImages([new File([], "large.png")]), /size limit/);
+  assert.match(rejected.localAssetUrl("D:/large.png"), /unavailable/);
 });
 
 test("preload forwards original-path and directory picks without granting media URLs", async () => {
