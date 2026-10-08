@@ -4,7 +4,8 @@ import { cancelledResult, failedResult, roleNotShownError, skippedResult, succee
 import { SpeechSentenceBuffer } from "../voice/sentences";
 import type { PetSpeechQueue, SpeechJob } from "../voice/speechQueue";
 import { synthesizeSentence } from "../voice/synthesis";
-import { readLiveReply, readLiveReplyIds, type LiveReply, type LiveReplyIds, type LiveReplyOutcome } from "./contract";
+import { readLiveReply, readLiveReplyIds, type LiveReply, type LiveReplyOutcome } from "./contract";
+import { LiveOutcomeLedger } from "./outcomeLedger";
 import { LiveRunRegistry } from "./runRegistry";
 
 /** What the live presenter needs from the rest of the pet; injected so tests can fake it. */
@@ -19,7 +20,6 @@ export type LiveReplyPresenterDeps = {
   fallbackMs?: number;
 };
 
-type Pending = { ids: LiveReplyIds; reported: boolean };
 type Progress = { bubble: OutputResult; skipped: boolean; spoken: number };
 
 /**
@@ -33,11 +33,12 @@ type Progress = { bubble: OutputResult; skipped: boolean; spoken: number };
  */
 export class LiveReplyPresenter {
   private roleId = "";
-  private disposed = false;
   private readonly runs = new LiveRunRegistry();
-  private readonly pending = new Set<Pending>();
+  private readonly ledger: LiveOutcomeLedger;
 
-  constructor(private readonly deps: LiveReplyPresenterDeps) {}
+  constructor(private readonly deps: LiveReplyPresenterDeps) {
+    this.ledger = new LiveOutcomeLedger(deps.report);
+  }
 
   /** Entry for one `live.reply.show` payload; a malformed one is answered `failed`, then rethrown. */
   async receive(payload: Record<string, unknown>): Promise<void> {
@@ -47,18 +48,13 @@ export class LiveReplyPresenter {
     } catch (error) {
       const ids = readLiveReplyIds(payload);
       const failed = failedResult(errorMessage(error));
-      if (ids) await this.answer({ ids, reported: false }, failed, failed);
+      if (ids) await this.ledger.answer(this.ledger.track(ids), failed, failed);
       throw error;
     }
-    if (this.disposed) return;
-    const pending = { ids: { reply_id: reply.replyId, run_id: reply.runId }, reported: false };
-    this.pending.add(pending);
-    try {
-      const { bubble, speech } = await this.present(reply);
-      await this.answer(pending, bubble, speech);
-    } finally {
-      this.pending.delete(pending);
-    }
+    if (this.ledger.closed) return;
+    const entry = this.ledger.track({ reply_id: reply.replyId, run_id: reply.runId });
+    const { bubble, speech } = await this.present(reply);
+    await this.ledger.answer(entry, bubble, speech);
   }
 
   /** Cancels live replies (of one run when given) and rejects that run's later replies; chat is untouched. */
@@ -80,15 +76,8 @@ export class LiveReplyPresenter {
   /** Plugin disable: answers every outstanding reply `cancelled` first, then never reports again. */
   async dispose(): Promise<void> {
     const cancelling = this.cancel();
-    await Promise.all([...this.pending].map((pending) => this.answer(pending, cancelledResult, cancelledResult)));
-    this.disposed = true;
+    await this.ledger.close();
     await cancelling;
-  }
-
-  private async answer(pending: Pending, bubble: OutputResult, speech: OutputResult) {
-    if (pending.reported || this.disposed) return;
-    pending.reported = true;
-    await this.deps.report({ ...pending.ids, bubble, speech });
   }
 
   private async present(reply: LiveReply): Promise<{ bubble: OutputResult; speech: OutputResult }> {

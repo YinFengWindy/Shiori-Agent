@@ -72,3 +72,15 @@ test("an unscoped cancel is a user stop: every source's queued and playing speec
   assert.deepEqual(p.log, ["play:chat", "stop"]);
   assert.deepEqual([await chat, await live], [{ status: "cancelled" }, { status: "cancelled" }]);
 });
+
+test("a cancelled queued job settles at once instead of waiting behind the head job", async () => {
+  const p = player(); const queue = new PetSpeechQueue(p.audio);
+  const head = queue.enqueue({ source: "chat" }, (job) => job.play(clip("chat")));
+  const queued = queue.enqueue({ source: "live", runId: "run" }, (job) => job.play(clip("live")));
+  await flush();
+  await queue.cancel({ source: "live" });
+  assert.deepEqual(await queued, { status: "cancelled" }, "settled while chat still plays");
+  assert.deepEqual(p.log, ["play:chat"]);
+  p.end(); assert.deepEqual(await head, { status: "succeeded" });
+  await flush(); assert.deepEqual(p.log, ["play:chat", "end"], "the cancelled job never runs");
+});

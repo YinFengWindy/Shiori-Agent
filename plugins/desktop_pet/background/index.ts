@@ -94,6 +94,8 @@ const desktopPetBackground = {
     await ctx.rpc.handle("voice.preferences.validate", (payload) => ctx.native.keys.validate(String(payload.hotkey ?? "")));
     await ctx.rpc.handle("voice.stop", () => activeVoice.stop());
     for (const method of ["chat.delta", "chat.done", "chat.error"]) ctx.hostEvents.on(method, (_payload, event) => activeVoice.handle(event));
+    // A dead bridge never finishes the pending chat turn (no chat.done / chat.error), so retire it now.
+    ctx.hostEvents.on("bridge.exit", () => activeVoice.stop("chat"));
 
     ctx.effect("desktop_pet_controller", () => controller.terminate());
     ctx.surfaces.onSettled(desktopPetSurfaceId, (settled) => controller.handleSettled(settled));

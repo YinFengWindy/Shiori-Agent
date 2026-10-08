@@ -133,7 +133,7 @@ test("setup registers every subscription the pet needs, and one reclaiming effec
   assert.deepEqual(fake.effects, ["desktop_pet_voice", "desktop_pet_live", "desktop_pet_controller"]);
   assert.deepEqual([...fake.events.keys()].sort(), [
         "action", "sync", "voice.devices", "voice.stop", "voice.preferences.validate", "voice.preferences.changed", "chat.delta", "chat.error",
-    "chat.done", "session.updated", "system.lock-state", "bubble.dismissed", "live.reply.show", "live.cancel",
+    "chat.done", "session.updated", "system.lock-state", "bubble.dismissed", "live.reply.show", "live.cancel", "bridge.exit",
   ].sort());
   assert.deepEqual([...fake.settled.keys()], [desktopPetSurfaceId]);
 });
@@ -167,7 +167,7 @@ test("a failed restore is reported, not rethrown, so the contribution stays aliv
   // nothing retries it — the pet would stay dead until the app restarted.
   await assert.doesNotReject(petBackground.setup(fake.ctx));
   assert.deepEqual(fake.effects, ["desktop_pet_voice", "desktop_pet_live", "desktop_pet_controller"]);
-  assert.deepEqual([...fake.events.keys()].length, 14);
+  assert.deepEqual([...fake.events.keys()].length, 15);
   // Reported to the host's diagnostic log: the plugin-host window is hidden,
   // so a failure that only reached its console would be invisible.
   assert.deepEqual(fake.failures.map(([operation, error]) => [operation, (error as Error).message]), [["restore", "bridge 还没起来"]]);

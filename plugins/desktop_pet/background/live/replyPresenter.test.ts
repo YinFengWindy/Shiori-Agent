@@ -4,6 +4,7 @@ import { createFakePluginClient } from "@yinfengwindy/shiori-sdk/testing";
 import type { BackgroundCtx, BridgeEvent, NativeAudio, PluginServiceReference } from "@yinfengwindy/shiori-sdk";
 import type { PetReplyBubble } from "../../shared/replyBubble";
 import { ReplyBubbleController } from "../replyBubble";
+import { chatReplyIdleMs, PetReplyAudio } from "../voice/replyAudio";
 import { PetSpeechQueue } from "../voice/speechQueue";
 import type { LiveReplyOutcome } from "./contract";
 import { LiveReplyPresenter } from "./replyPresenter";
@@ -33,7 +34,7 @@ function fixture() {
   const presenter = new LiveReplyPresenter({ bubbles: bubble, speech, rpc, ttsProvider: () => tts.current, report: async (outcome) => { outcomes.push(outcome); } });
   void presenter.bind("mira");
   const text = () => bubbles.at(-1)?.text;
-  return { log, bubble, speech, presenter, outcomes, synthesized, tts, text, end: () => { finish?.(); } };
+  return { log, rpc, bubble, speech, presenter, outcomes, synthesized, tts, text, end: () => { finish?.(); } };
 }
 
 test("a live reply is shown and spoken, its bubble outlasts the chat expiry until speech ends, and both results are reported", async (t) => {
@@ -77,7 +78,7 @@ test("cancelling live clears only live output, and cancelling chat leaves live a
   assert.deepEqual(f.log, ["play:直播。", "stop", "play:chat-2"]);
   f.end(); assert.deepEqual(await chatSpeech, { status: "succeeded" });
   assert.deepEqual(await chat, { status: "cancelled" });
-  assert.deepEqual(summary(f.outcomes), [["r1", "succeeded", "cancelled"], ["r2", "cancelled", "cancelled"]]);
+  assert.deepEqual(summary(f.outcomes).sort(), [["r1", "succeeded", "cancelled"], ["r2", "cancelled", "cancelled"]]);
 });
 
 test("speech availability is read at each reply's turn: turned off while queued, the reply is not synthesized", async (t) => {
@@ -137,4 +138,21 @@ test("every reply gets one outcome: malformed, user stop, role switch and dispos
   assert.deepEqual(summary(f.outcomes), [
     ["bad", "failed", "failed"], ["r1", "succeeded", "cancelled"], ["r2", "succeeded", "cancelled"], ["r3", "failed", "failed"], ["r4", "cancelled", "cancelled"],
   ]);
+});
+
+test("a chat reply that never finishes frees the line after the idle timeout; a live cancel behind it settles at once", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const f = fixture();
+  const chat = new PetReplyAudio({ rpc: f.rpc }, f.speech, () => {});
+  chat.begin(); chat.push("聊天。", false, provider, "mira", "");
+  await flush(); f.end(); await flush();
+  const cancelled = f.presenter.receive(show("r1", "被取消。", "old"));
+  const live = f.presenter.receive(show("r2", "直播。", "new"));
+  await flush();
+  await f.presenter.cancel("old"); await cancelled;
+  assert.deepEqual(summary(f.outcomes), [["r1", "cancelled", "cancelled"]], "answered while the stalled chat reply still holds the line");
+  t.mock.timers.tick(chatReplyIdleMs); await flush();
+  assert.equal(f.text(), "直播。"); assert.deepEqual(f.log, ["play:聊天。", "play:直播。"]);
+  f.end(); await live;
+  assert.deepEqual(summary(f.outcomes).at(-1), ["r2", "succeeded", "succeeded"]);
 });

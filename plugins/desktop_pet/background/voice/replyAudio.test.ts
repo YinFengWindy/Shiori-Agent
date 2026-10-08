@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createFakePluginClient, deferred } from "@yinfengwindy/shiori-sdk/testing";
 import type { BackgroundCtx, NativeAudio, TtsResult } from "@yinfengwindy/shiori-sdk";
-import { PetReplyAudio } from "./replyAudio";
+import { chatReplyIdleMs, PetReplyAudio } from "./replyAudio";
 import { PetSpeechQueue } from "./speechQueue";
 
 const flush = async () => { for (let i = 0; i < 30; i++) await Promise.resolve(); };
@@ -50,4 +50,38 @@ test("one streamed chat reply holds the speech line, so a live job cannot speak 
   await flush();
   assert.deepEqual(p.calls, ["play:第一句。", "play:第二句。", "play:直播"]);
   p.end(); assert.deepEqual(await live, { status: "succeeded" });
+});
+
+test("a reply that stops streaming releases the speech line after the idle timeout, and later deltas stay silent", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const p = player();
+  const rpc = createFakePluginClient({ services: { list: async () => ({ services: [] }), call: async <T,>(_provider: unknown, _method: string, payload?: Record<string, unknown>) => ({ audio_base64: String(payload?.text), format: "wav" }) as T } });
+  const speech = new PetSpeechQueue(p.audio);
+  const statuses: string[] = [];
+  const replies = new PetReplyAudio({ rpc }, speech, (status) => statuses.push(status));
+  replies.begin(); replies.push("第一句。", false, provider, "role", "");
+  await flush(); p.end(); await flush();
+  const live = speech.enqueue({ source: "live", runId: "run" }, (job) => job.play({ audio_base64: "直播", format: "wav" }));
+  t.mock.timers.tick(chatReplyIdleMs - 1); await flush();
+  assert.deepEqual(p.calls, ["play:第一句。"]);
+  t.mock.timers.tick(1); await flush();
+  assert.deepEqual(p.calls, ["play:第一句。", "play:直播"], "the stalled reply no longer holds the line");
+  p.end(); assert.deepEqual(await live, { status: "succeeded" });
+  replies.push("迟到的一句。", true, provider, "role", "");
+  await flush();
+  assert.deepEqual(p.calls, ["play:第一句。", "play:直播"]);
+  assert.equal(statuses.at(-1), "idle");
+});
+
+test("after a synthesis failure the rest of the same reply is skipped and the error stays visible", async () => {
+  const p = player(); let calls = 0;
+  const rpc = createFakePluginClient({ services: { list: async () => ({ services: [] }), call: async <T,>(): Promise<T> => { calls += 1; throw new Error("合成失败"); } } });
+  const statuses: string[] = [];
+  const replies = new PetReplyAudio({ rpc }, new PetSpeechQueue(p.audio), (status) => statuses.push(status));
+  replies.begin(); replies.push("第一句。", false, provider, "role", "");
+  await flush();
+  replies.push("第二句。", false, provider, "role", ""); replies.push("", true, provider, "role", "");
+  await flush();
+  assert.equal(calls, 1);
+  assert.equal(statuses.at(-1), "error");
 });

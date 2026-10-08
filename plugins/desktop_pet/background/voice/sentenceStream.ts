@@ -27,8 +27,10 @@ export class SentenceStream {
       if (item !== undefined) return item;
       if (this.final) return null;
       await new Promise<void>((resolve) => {
-        this.wake = resolve;
-        signal.addEventListener("abort", () => resolve(), { once: true });
+        // Whichever fires first removes the other, so no listener outlives one wait.
+        const done = () => { signal.removeEventListener("abort", done); this.wake = null; resolve(); };
+        this.wake = done;
+        signal.addEventListener("abort", done, { once: true });
       });
     }
   }

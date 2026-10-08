@@ -17,8 +17,16 @@ export type SpeechScope = { source: PetReplySource; runId?: string };
 
 class Job implements SpeechJob {
   playing = false;
+  started = false;
+  /** Resolves once: when the job finishes running, or at cancellation if it never started. */
+  readonly outcome: Promise<OutputResult>;
+  readonly settle: (result: OutputResult) => void;
   private readonly abort = new AbortController();
-  constructor(readonly owner: ReplyOwner, private readonly audio: BackgroundCtx["native"]["audio"]) {}
+  constructor(readonly owner: ReplyOwner, private readonly audio: BackgroundCtx["native"]["audio"]) {
+    let settle: (result: OutputResult) => void = () => {};
+    this.outcome = new Promise((resolve) => { settle = resolve; });
+    this.settle = settle;
+  }
 
   get active() { return !this.abort.signal.aborted; }
   get signal() { return this.abort.signal; }
@@ -38,7 +46,9 @@ class Job implements SpeechJob {
  * The host player's `stop()` is global, so a scoped cancellation only calls it
  * when the job currently playing is in scope; other sources keep speaking. A
  * cancelled job whose provider call is still in flight keeps its place until
- * that call returns, so a newer job never races an unfinished inference.
+ * that call returns, so a newer job never races an unfinished inference; a
+ * cancelled job that never started settles at once, without waiting for the
+ * jobs ahead of it.
  */
 export class PetSpeechQueue {
   private tail = Promise.resolve();
@@ -51,9 +61,8 @@ export class PetSpeechQueue {
   enqueue(owner: ReplyOwner, work: (job: SpeechJob) => Promise<void>): Promise<OutputResult> {
     const job = new Job(owner, this.audio);
     this.jobs.add(job);
-    const run = this.tail.then(() => this.execute(job, work));
-    this.tail = run.then(() => undefined);
-    return run;
+    this.tail = this.tail.then(() => this.execute(job, work));
+    return job.outcome;
   }
 
   /** Cancels queued and running jobs in `scope` (every job when omitted), leaving others untouched. */
@@ -61,19 +70,25 @@ export class PetSpeechQueue {
     const inScope = (job: Job) => !scope || (job.owner.source === scope.source && (scope.runId === undefined || job.owner.runId === scope.runId));
     const current = this.current;
     const stopPlayback = Boolean(current && inScope(current) && current.playing);
-    for (const job of this.jobs) if (inScope(job)) job.cancel();
+    for (const job of this.jobs) {
+      if (!inScope(job)) continue;
+      job.cancel();
+      if (!job.started) { job.settle(cancelledResult); this.jobs.delete(job); }
+    }
     if (stopPlayback) await this.audio.stop();
   }
 
-  private async execute(job: Job, work: (job: SpeechJob) => Promise<void>): Promise<OutputResult> {
-    if (!job.active) { this.jobs.delete(job); return cancelledResult; }
+  private async execute(job: Job, work: (job: SpeechJob) => Promise<void>): Promise<void> {
+    // Cancelled before its turn: already settled by `cancel`.
+    if (!job.active) return;
+    job.started = true;
     this.current = job;
     try {
       await work(job);
-      return job.active ? succeededResult : cancelledResult;
+      job.settle(job.active ? succeededResult : cancelledResult);
     } catch (error) {
       // A stop interrupting playback is the cancellation itself, not a failure.
-      return job.active ? failedResult(errorMessage(error)) : cancelledResult;
+      job.settle(job.active ? failedResult(errorMessage(error)) : cancelledResult);
     } finally {
       this.current = null;
       this.jobs.delete(job);
