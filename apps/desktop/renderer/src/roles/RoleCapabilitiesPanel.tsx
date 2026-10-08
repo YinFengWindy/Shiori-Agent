@@ -41,13 +41,13 @@ export function RoleCapabilitiesPanel({ activeRole, bridgeReady, roleForm, onUpd
             status={roleToggleStatus(proactiveEnabled)}
             data-testid="role-proactive-capability"
             control={<SettingsToggleCard checked={proactiveEnabled} ariaLabel="主动推送" onChange={(checked) => onUpdate((current) => ({ ...current, proactiveEnabled: checked }))} />}
+            settings={<RoleProactiveSettingsPanel devMode={settings?.advanced.devMode === true} roleForm={roleForm} onUpdate={onUpdate} />}
           />
-          <PluginRoleSettingsSlot drafts={roleForm.pluginSettings} snapshots={activeRole?.plugin_state} disabled={!bridgeReady}
+          <PluginRoleSettingsSlot roleId={activeRole?.id ?? null} drafts={roleForm.pluginSettings} snapshots={activeRole?.plugin_state} disabled={!bridgeReady}
             onChange={(pluginSettings) => onUpdate((current) => ({ ...current, pluginSettings }))} />
         </div>
       </RoleEditorSection>
       <PluginRoleUiSlot role={activeRole ? { id: activeRole.id, name: activeRole.name, moodCatalog: roleForm.moodCatalog } : null} disabled={!bridgeReady} />
-      <RoleProactiveSettingsPanel devMode={settings?.advanced.devMode === true} roleForm={roleForm} onUpdate={onUpdate} />
     </div>
   );
 }

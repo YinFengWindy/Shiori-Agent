@@ -545,7 +545,10 @@ async def test_only_the_users_own_group_message_updates_relationship_state(
             "internal_profile": {"relation_state": {}},
         },
     )
-    relationship.affection.initialize("yin", value=90, reason="测试初始化")
+    seeded_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    relationship.affection.initialize(
+        "yin", value=90, reason="测试初始化", now=seeded_at
+    )
     now = datetime.now().astimezone().isoformat()
     relationship.write_loneliness_runtime(
         "yin",
@@ -578,14 +581,20 @@ async def test_only_the_users_own_group_message_updates_relationship_state(
     runtime = relationship.read_loneliness_runtime("yin")
     assert runtime is not None
     last_user_at = presence.get_last_user_at(session.key)
+    affection = relationship.affection.read_state("yin")
+    assert affection is not None
+    # The affection decay timer restarts only on the user's own message.
+    timer_reset = affection.last_user_message_at != seeded_at.astimezone().isoformat()
     if sender_is_user:
         assert runtime["loneliness_value"] < 80
         assert runtime["awaiting_reply_after_proactive"] is False
         assert last_user_at is not None
+        assert timer_reset
     else:
         assert runtime["loneliness_value"] == 80
         assert runtime["awaiting_reply_after_proactive"] is True
         assert last_user_at is None
+        assert not timer_reset
 
 
 def affection_setup(tmp_path):

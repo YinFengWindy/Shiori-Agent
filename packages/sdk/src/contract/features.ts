@@ -21,6 +21,15 @@ export type PluginRoleUiContribution = { mode: "self-managed"; Component: Compon
 
 /** Props for a plugin-owned section within the role capabilities editor. */
 export type PluginRoleSettingsProps = {
+  /**
+   * The edited role, null while a new one is being created (runtime API
+   * 3.1.11). With `client` and the injected host services it lets the card's
+   * settings dialog own plugin-private, autosaved settings (`usePrivateAutosave`)
+   * beside the role draft in `values`.
+   */
+  roleId: string | null;
+  /** The plugin's scoped RPC client (runtime API 3.1.11), as `PluginRoleUiProps.client`. */
+  client: PluginRpcClient;
   values: PluginRoleValues;
   /** Latest plugin-owned projection, distinct from the editable draft. */
   snapshot?: PluginRoleValues;

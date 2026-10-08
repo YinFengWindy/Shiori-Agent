@@ -103,7 +103,7 @@ class RelationshipSnapshotLoop:
 
 
 class LonelinessHeartbeatLoop:
-    """Periodically refreshes per-role loneliness runtime values."""
+    """Periodically refreshes per-role loneliness and settles affection decay."""
 
     def __init__(
         self,
@@ -125,7 +125,17 @@ class LonelinessHeartbeatLoop:
                 break
             now = datetime.now().astimezone()
             for role in self._role_store.list_roles():
-                self._runtime.recompute_loneliness(role.id, now=now)
+                try:
+                    # Decay can never cross the loneliness threshold (the floor
+                    # keeps 亲密), so the two settle independently.
+                    self._runtime.affection.settle_decay(role.id, now=now)
+                    self._runtime.recompute_loneliness(role.id, now=now)
+                except Exception:
+                    # This loop is the boundary: nobody awaits it, so an error
+                    # raised here would silently stop the heartbeat for every
+                    # role. Log it and move on; the broken role's next read
+                    # still raises. Cancellation is not an Exception.
+                    logger.exception("Relationship heartbeat failed: role=%s", role.id)
 
     def stop(self) -> None:
         self._running = False

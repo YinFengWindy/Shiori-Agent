@@ -15,7 +15,6 @@ test("proactive settings do not expose legacy bound target candidates", () => {
     />,
   );
 
-  assert.match(markup, /主动推送/);
   assert.match(markup, /推送策略/);
   assert.match(markup, /执行参数/);
   assert.match(markup, /aria-expanded="false"/);

@@ -50,7 +50,7 @@ class DesktopRolePresenter:
             if runtime is not None:
                 payload["loneliness_runtime"] = runtime
             # Absent until the role's first turn initializes affection.
-            affection = self._relationship_runtime.affection.summary(role.id)
+            affection = self._relationship_runtime.affection.current_summary(role.id)
             if affection is not None:
                 payload["affection"] = affection
         if self._last_message_for_role is not None:

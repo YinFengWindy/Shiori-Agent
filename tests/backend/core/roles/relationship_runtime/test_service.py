@@ -10,6 +10,7 @@ import pytest
 
 from conversation.service import desktop_thread_id
 from shiori_sdk.channels.threads import network_thread_id
+from core.roles.relationship_runtime import loops as loops_module
 from core.roles import (
     LonelinessHeartbeatLoop,
     RoleRelationshipRuntimeService,
@@ -479,6 +480,50 @@ def test_should_trigger_proactive_requires_intimate_affection(
     assert frozen is not None
     assert frozen["awaiting_reply_after_proactive"] is False
     assert frozen["awaiting_reply_since"] == ""
+
+
+def test_session_affection_summary_settles_overdue_decay(tmp_path: Path):
+    _seed_role(tmp_path)
+    runtime, _, _ = _runtime(tmp_path)
+    seeded_at = datetime.now().astimezone() - timedelta(days=4, hours=1)
+    runtime.affection.initialize("mira", value=45, reason="测试初始化", now=seeded_at)
+
+    metadata = runtime.enrich_session_metadata({"role_id": "mira"})
+
+    # Days 3 and 4 without a user message are settled on read.
+    assert metadata["affection"]["value"] == 43
+
+
+@pytest.mark.asyncio
+async def test_heartbeat_keeps_settling_other_roles_when_one_role_is_broken(
+    tmp_path: Path, monkeypatch, caplog
+):
+    _seed_role(tmp_path, role_id="aria")
+    _seed_role(tmp_path, role_id="mira")
+    runtime, _, _ = _runtime(tmp_path)
+    roles = RoleStore(tmp_path)
+    broken, healthy = (role.id for role in roles.list_roles())
+    runtime.affection.state_path(broken).parent.mkdir(parents=True, exist_ok=True)
+    runtime.affection.state_path(broken).write_text("{}", encoding="utf-8")
+    seeded_at = datetime.now().astimezone() - timedelta(days=3, hours=1)
+    runtime.affection.initialize(healthy, value=45, reason="测试初始化", now=seeded_at)
+    loop = LonelinessHeartbeatLoop(runtime, role_store=roles)
+    ticks = 0
+
+    async def one_tick(_seconds: float) -> None:
+        nonlocal ticks
+        ticks += 1
+        if ticks > 1:
+            loop.stop()
+
+    monkeypatch.setattr(loops_module, "asyncio", SimpleNamespace(sleep=one_tick))
+
+    with caplog.at_level("ERROR", logger=loops_module.__name__):
+        await loop.run()
+
+    state = runtime.affection.read_state(healthy)
+    assert state is not None and state.value == 44
+    assert f"role={broken}" in caplog.text
 
 
 def test_loneliness_heartbeat_loop_defaults_to_ten_minutes(tmp_path: Path):

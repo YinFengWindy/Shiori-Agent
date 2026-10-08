@@ -2,23 +2,28 @@
 
 状态存于 ``<workspace>/roles/<role_id>/state/affection.json``（原子写入，文件存在即已初始化）；
 历史逐行追加到同目录的 ``affection_history.jsonl``，全部保留。
+长时间未联系的衰减不靠定时任务写入，而是在读取摘要、心跳和用户发消息时
+由 ``settle_decay`` 按需补算。
 """
 
 from __future__ import annotations
 
 import json
 import threading
+from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
 
 from shiori_sdk.files.json import atomic_save_json
-from shiori_sdk.values import now_iso
 
 from .affection import (
     AffectionHistoryEntry,
     AffectionState,
     apply_affection_delta,
+    local_now,
+    record_user_message,
+    settle_affection_decay,
 )
 
 _STATE_FILE = "affection.json"
@@ -51,10 +56,41 @@ class RoleAffectionService:
             raise ValueError(f"好感状态文件格式错误: {path}")
         return AffectionState.from_dict(payload)
 
-    def summary(self, role_id: str) -> dict[str, Any] | None:
-        """Returns the display summary, or ``None`` while the role is uninitialized."""
-        state = self.read_state(role_id)
+    def current_summary(
+        self, role_id: str, *, now: datetime | None = None
+    ) -> dict[str, Any] | None:
+        """Settles overdue decay (a write when any is due), then returns the summary.
+
+        ``None`` while the role is uninitialized. This is the only summary
+        accessor, so no display path can show a value with decay still owed.
+        """
+        with _WRITE_LOCK:
+            state = self._settle_locked(role_id, local_now(now))
         return state.summary() if state is not None else None
+
+    def settle_decay(self, role_id: str, *, now: datetime | None = None) -> None:
+        """Applies every decay step due by ``now`` (see ``settle_affection_decay``).
+
+        An uninitialized role has nothing to settle.
+        """
+        with _WRITE_LOCK:
+            self._settle_locked(role_id, local_now(now))
+
+    def record_user_activity(
+        self, role_id: str, *, now: datetime | None = None
+    ) -> None:
+        """Restarts the decay timer for the user's own message.
+
+        Decay already due by ``now`` is settled first, so a long absence still
+        costs its overdue days. Callers pass only messages from the user; an
+        uninitialized role has no timer yet and is left alone.
+        """
+        now_dt = local_now(now)
+        with _WRITE_LOCK:
+            settled = self._settle_locked(role_id, now_dt)
+            if settled is not None:
+                state = record_user_message(settled, at=now_dt.isoformat())
+                self._commit(state, ())
 
     def read_history(self, role_id: str) -> list[AffectionHistoryEntry]:
         """Returns every history entry in append (oldest-first) order."""
@@ -96,13 +132,13 @@ class RoleAffectionService:
         now: datetime | None = None,
     ) -> AffectionState:
         """Creates the initial state and its ``init`` entry; initializing twice is an error."""
-        at = now.astimezone().isoformat() if now else now_iso()
+        at = local_now(now).isoformat()
         with _WRITE_LOCK:
             if self.read_state(role_id) is not None:
                 raise RuntimeError(f"角色好感度已初始化: {role_id}")
             state = AffectionState.initial(role_id, value=value, at=at)
             entry = AffectionHistoryEntry(at, None, state.value, None, reason, "init")
-            self._commit(state, entry)
+            self._commit(state, (entry,))
         return state
 
     def apply_delta(
@@ -117,11 +153,14 @@ class RoleAffectionService:
         """Applies one change through the shared clamp and stage-floor rule.
 
         History records the effective change; a change that the floor or the
-        upper bound reduces to zero writes nothing.
+        upper bound reduces to zero writes nothing. Decay due by ``now`` is
+        settled first under the same lock, so history stays chronological and
+        ``updated_at`` never moves backwards.
         """
-        at = now.astimezone().isoformat() if now else now_iso()
+        now_dt = local_now(now)
+        at = now_dt.isoformat()
         with _WRITE_LOCK:
-            current = self.read_state(role_id)
+            current = self._settle_locked(role_id, now_dt)
             if current is None:
                 raise RuntimeError(f"角色好感度尚未初始化: {role_id}")
             state = apply_affection_delta(current, delta, at=at)
@@ -136,18 +175,34 @@ class RoleAffectionService:
                 reason,
                 source,
             )
-            self._commit(state, entry)
+            self._commit(state, (entry,))
         return state
 
-    def _commit(self, state: AffectionState, entry: AffectionHistoryEntry) -> None:
+    def _settle_locked(self, role_id: str, now: datetime) -> AffectionState | None:
+        current = self.read_state(role_id)
+        if current is None:
+            return None
+        state, entries = settle_affection_decay(current, now=now)
+        if state != current:
+            self._commit(state, entries)
+        return state
+
+    def _commit(
+        self, state: AffectionState, entries: Sequence[AffectionHistoryEntry]
+    ) -> None:
         # State first: a failed state write leaves no entry behind, so a retried
-        # initialization or change cannot record the same event twice.
+        # initialization, change or settlement cannot record the same event twice.
         atomic_save_json(
             self.state_path(state.role_id), state.to_dict(), domain="role.affection"
         )
+        if not entries:
+            return
         history = self.history_path(state.role_id)
         with history.open("a", encoding="utf-8", newline="\n") as stream:
-            stream.write(json.dumps(entry.to_dict(), ensure_ascii=False) + "\n")
+            stream.writelines(
+                json.dumps(entry.to_dict(), ensure_ascii=False) + "\n"
+                for entry in entries
+            )
 
     def _state_root(self, role_id: str) -> Path:
         return self._workspace / "roles" / str(role_id).strip() / "state"

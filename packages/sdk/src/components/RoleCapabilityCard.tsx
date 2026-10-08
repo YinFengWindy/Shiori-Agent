@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { cardClass, cx } from "../styles";
+import { CapabilitySettingsDialog } from "./CapabilitySettingsDialog";
 import type { RoleCapabilityStatus, RoleCapabilityTone } from "../roleCapability";
 
 const toneClass: Record<RoleCapabilityTone, string> = {
@@ -23,6 +24,17 @@ type RoleCapabilityCardProps = {
   status: RoleCapabilityStatus;
   /** The card's switch (or other control), at the right end of the title row. */
   control?: ReactNode;
+  /**
+   * The capability's secondary settings (runtime API 3.1.11, #719). When
+   * given, a ⚙ button after the control opens them in a centred dialog titled
+   * by `title`. They mount on the first open and then stay mounted (hidden
+   * while closed) for as long as the card does, so a plugin's pending
+   * autosave or failed-save retry survives closing the dialog; the role
+   * editor remounts plugin cards per role. Mounting must not write anything:
+   * role fields inside still change only on user edits and follow the role
+   * editor's Save/Reset.
+   */
+  settings?: ReactNode;
   /** Extra rows under the title row, e.g. the voice parameters. */
   children?: ReactNode;
   className?: string;
@@ -32,9 +44,10 @@ type RoleCapabilityCardProps = {
 /**
  * The one card shape for every role capability on the 能力 tab, host-owned
  * (NSFW memory, voice) and plugin-contributed (desktop pet, scene CG) alike:
- * icon, title, a status badge that says whether it really works, and the switch.
+ * icon, title, a status badge that says whether it really works, the switch and,
+ * for capabilities with more to configure, the ⚙ of their settings dialog.
  */
-export function RoleCapabilityCard({ icon, title, status, control, children, className, ...rest }: RoleCapabilityCardProps) {
+export function RoleCapabilityCard({ icon, title, status, control, settings, children, className, ...rest }: RoleCapabilityCardProps) {
   return (
     <div className={cx(cardClass, "grid content-start gap-4 p-5", className)} data-testid={rest["data-testid"]}>
       <div className="flex items-center gap-3">
@@ -46,6 +59,7 @@ export function RoleCapabilityCard({ icon, title, status, control, children, cla
           <RoleCapabilityBadge status={status} />
         </div>
         {control}
+        {settings ? <CapabilitySettingsDialog title={title}>{settings}</CapabilitySettingsDialog> : null}
       </div>
       {children}
     </div>
