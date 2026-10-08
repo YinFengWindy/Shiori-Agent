@@ -29,6 +29,7 @@ from shiori_sdk.memory.committed import TurnCommitted
 
 if TYPE_CHECKING:
     from agent.context import ContextBuilder
+    from core.roles.relationship_runtime import RoleRelationshipRuntimeService
     from session.manager import Session
 
 logger = logging.getLogger(__name__)
@@ -113,9 +114,47 @@ def _memory_extra(state: TurnState) -> dict[str, object]:
     return {}
 
 
+class _ApplyTurnAffectionModule:
+    """Applies the committed reply's affection change before the turn is announced.
+
+    Running ahead of ``TurnCommitted`` lets every session refresh triggered by
+    it carry the new summary.
+    """
+
+    slot = "after_turn.affection"
+    requires = ("after_turn.build_work",)
+
+    def __init__(
+        self, relationship_runtime: RoleRelationshipRuntimeService | None
+    ) -> None:
+        self._relationship_runtime = relationship_runtime
+
+    async def run(self, frame: AfterTurnFrame) -> AfterTurnFrame:
+        state = frame.input.state
+        change = state.affection_change
+        if change is None or self._relationship_runtime is None:
+            return frame
+        session = cast("Session", state.session)
+        try:
+            await self._relationship_runtime.apply_turn_affection(session, change)
+        except Exception:
+            # Boundary: the reply is already committed and goes out regardless;
+            # affection is a side record of it. Raising here would report a
+            # stored reply as failed (desktop shows a retry error), so the
+            # failure is logged with its traceback instead.
+            logger.exception(
+                "好感记账失败，本轮回复照常完成: session=%s role=%s change=%+d",
+                session.key,
+                session.metadata.get("role_id"),
+                change.delta,
+            )
+        return frame
+
+
 class _BuildTurnCommittedModule:
     requires = (
         "after_turn.collect_extras",
+        "after_turn.affection",
         _BUDGET_SLOT,
         _REACT_STATS_SLOT,
         _TOOL_CHAIN_SLOT,
@@ -312,9 +351,11 @@ def default_after_turn_modules(
     context: ContextBuilder,
     history_window: int = 500,
     plugin_modules: AfterTurnModules | None = None,
+    relationship_runtime: RoleRelationshipRuntimeService | None = None,
 ) -> AfterTurnModules:
     builtins: AfterTurnModules = [
         _BuildTurnWorkModule(context, history_window),
+        _ApplyTurnAffectionModule(relationship_runtime),
         _CollectAfterTurnExtraSlotsModule(),
         _BuildTurnCommittedModule(),
         _FanoutTurnCommittedModule(bus),
