@@ -9,6 +9,9 @@ from __future__ import annotations
 import tempfile
 from datetime import datetime
 from pathlib import Path
+from typing import Any
+
+from shiori_sdk.testing.external_turns import FakeExternalTurns
 
 # 预热 agent.core 导入链，避免 agent.lifecycle.types 触发循环导入
 from agent.core.passive_turn import ContextStore as _  # noqa: F401
@@ -16,6 +19,8 @@ from agent.lifecycle.types import BeforeTurnCtx
 from agent.plugin_host import HostServices, PluginKernel
 from agent.tools.registry import ToolRegistry
 from bus.event_bus import EventBus
+from core.roles.store import RoleStore
+from session.manager import SessionManager
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 PLUGIN_FIXTURES = REPOSITORY_ROOT / "tests/fixtures/plugins"
@@ -59,6 +64,25 @@ def make_kernel(
         namespace=namespace,
         strict=strict,
     )
+
+
+def role_host_services(store: RoleStore, **overrides: Any) -> HostServices:
+    """Host services for role-owning plugins such as ``desktop_pet``.
+
+    Mirrors what bootstrap always provides to them: a role store with its
+    workspace and session manager, a tool registry, and ``external_turns``
+    (desktop_pet's live engine declares it; nothing here submits a turn).
+    ``overrides`` replace or add individual services.
+    """
+    services: dict[str, Any] = {
+        "event_bus": EventBus(),
+        "tool_registry": ToolRegistry(),
+        "workspace": store.workspace,
+        "role_store": store,
+        "session_manager": SessionManager(store.workspace),
+        "external_turns": FakeExternalTurns(),
+    }
+    return HostServices(**{**services, **overrides})
 
 
 def before_turn_ctx(**overrides: object) -> BeforeTurnCtx:
