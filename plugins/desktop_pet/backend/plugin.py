@@ -7,6 +7,10 @@ from .rpc import DesktopPetRpcHandlers
 from .tool import DesktopPetActionTool
 from .bubbles import register_bubble_rpc
 from .voice_rpc import register_voice_preferences, register_voice_context
+from .bilibili_api import BilibiliLoginApi
+from .bilibili_credentials import BilibiliCredentialStore
+from .bilibili_login import BilibiliLoginService
+from .bilibili_login_rpc import register_bilibili_login
 
 if TYPE_CHECKING:
     from shiori_sdk.plugin_services import ServicePluginContext as PluginRuntimeContext
@@ -32,6 +36,12 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
         ),
     )
     ctx.events.on(RoleDeleted, reconciler.on_role_deleted)
+    # The live engine (#724) reads credentials through this same service.
+    bilibili_login = BilibiliLoginService(
+        role_store, BilibiliCredentialStore(ctx.workspace), BilibiliLoginApi()
+    )
+    bilibili_login.prune_deleted_roles()
+    ctx.events.on(RoleDeleted, bilibili_login.on_role_deleted)
     ctx.tools.register(
         DesktopPetActionTool(
             role_store=role_store,
@@ -48,6 +58,7 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
     register_bubble_rpc(ctx.rpc)
     register_voice_preferences(ctx.rpc, ctx.workspace)
     register_voice_context(ctx.rpc, ctx.roles, ctx.sessions)
+    register_bilibili_login(ctx.rpc, bilibili_login)
     ctx.rpc.register(
         "binding.get", handlers.binding_get, concurrency=Concurrency.READ_ONLY
     )

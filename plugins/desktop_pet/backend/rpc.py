@@ -41,7 +41,7 @@ class DesktopPetRpcHandlers:
 
     async def pets_import(self, payload: dict[str, Any]) -> dict[str, Any]:
         """``plugin.desktop_pet.pets.import``: validate and install one ZIP."""
-        role_id = _require_role_id(payload)
+        role_id = require_role_id(payload)
         source = str(payload.get("source") or "").strip()
         if not source:
             raise ValueError("缺少桌宠包路径")
@@ -52,19 +52,19 @@ class DesktopPetRpcHandlers:
     async def pets_remove(self, payload: dict[str, Any]) -> dict[str, Any]:
         """``plugin.desktop_pet.pets.remove``: delete one package and its files."""
         self._packages.remove_package(
-            _require_role_id(payload), _require_package_id(payload)
+            require_role_id(payload), _require_package_id(payload)
         )
         return await self.pets_list(payload)
 
     async def pets_select(self, payload: dict[str, Any]) -> dict[str, Any]:
         """``plugin.desktop_pet.pets.select``: choose which package renders."""
         self._packages.select_package(
-            _require_role_id(payload), _require_package_id(payload)
+            require_role_id(payload), _require_package_id(payload)
         )
         return await self.pets_list(payload)
 
     def _require_role(self, payload: dict[str, Any]) -> RolePetState:
-        role_id = _require_role_id(payload)
+        role_id = require_role_id(payload)
         role = self._state.get_role(role_id)
         if role is None:
             raise KeyError(f"role 不存在: {role_id}")
@@ -140,7 +140,8 @@ class DesktopPetRpcHandlers:
         )
 
 
-def _require_role_id(payload: dict[str, Any]) -> str:
+def require_role_id(payload: dict[str, Any]) -> str:
+    """Read the mandatory ``role_id`` shared by every role-scoped pet RPC."""
     role_id = str(payload.get("role_id") or "").strip()
     if not role_id:
         raise ValueError("缺少 role_id")

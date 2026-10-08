@@ -14,6 +14,7 @@ tzlocal>=5.0
 openai>=2.0.0
 Pillow>=11.0.0
 pydantic>=2.12.0
+qrcode>=8.2
 python-telegram-bot>=22.7
 PyYAML>=6.0.0
 rich>=14.0.0
