@@ -2,7 +2,10 @@ import type { PluginBackgroundContribution } from "@yinfengwindy/shiori-sdk";
 import { readDesktopPetBinding } from "./binding";
 import { DesktopPetController, desktopPetSurfaceId } from "./controller";
 import { normalizeDesktopPetSettings } from "./settings";
+import { registerLiveReplies } from "./live/register";
+import type { LiveReplyPresenter } from "./live/replyPresenter";
 import { PetVoiceController } from "./voice/controller";
+import { PetSpeechQueue } from "./voice/speechQueue";
 import { defaultVoicePreferences, type VoicePreferences } from "./voice/preferences";
 
 /** Identifies the pet's own item in the host tray menu. */
@@ -28,6 +31,7 @@ const desktopPetBackground = {
     // at when they report "点了托盘没反应".
     const reportError = (operation: string, error: unknown) => ctx.reportFailure(operation, error);
     let voice: PetVoiceController | null = null;
+    let live: LiveReplyPresenter | null = null;
 
     const controller = new DesktopPetController({
       surfaces: ctx.surfaces,
@@ -39,7 +43,10 @@ const desktopPetBackground = {
       ),
       onError: reportError,
       onChanged: () => refreshTrayEntry(),
-      onTargetChanged: (roleId) => voice?.bind(roleId),
+      onTargetChanged: (roleId) => {
+        voice?.bind(roleId);
+        void live?.bind(roleId).catch((error) => reportError("live.cancel", error));
+      },
     });
 
     /**
@@ -67,15 +74,23 @@ const desktopPetBackground = {
     // is enabled rather than only after the pet's first state change.
     refreshTrayEntry();
     // Optional speech initialization cannot tear down the pet's visual and text features.
+    // One speech line for every reply source, so chat and live speech never overlap.
+    const speech = new PetSpeechQueue(ctx.native.audio);
     try {
       const preferences = await ctx.rpc.call<VoicePreferences>("voice.preferences.get");
-      voice = new PetVoiceController(ctx, preferences, (state) => controller.publishVoice(state));
+      voice = new PetVoiceController(ctx, preferences, (state) => controller.publishVoice(state), speech);
     } catch (error) {
       reportError("voice.preferences", error);
-      voice = new PetVoiceController(ctx, defaultVoicePreferences, (state) => controller.publishVoice(state));
+      voice = new PetVoiceController(ctx, defaultVoicePreferences, (state) => controller.publishVoice(state), speech);
     }
     const activeVoice = voice;
     ctx.effect("desktop_pet_voice", () => activeVoice.dispose());
+    live = await registerLiveReplies(ctx, {
+      bubbles: controller.replies,
+      speech,
+      ttsProvider: () => activeVoice.ttsProvider,
+      visibleRoleId: () => controller.visibleRoleId,
+    });
     ctx.surfaces.onMessage(desktopPetSurfaceId, (message) => {
       if (!message || typeof message !== "object" || !("kind" in message)) return;
       if (message.kind === "voice.stop") activeVoice.stop();

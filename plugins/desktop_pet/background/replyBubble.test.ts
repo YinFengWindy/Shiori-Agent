@@ -65,3 +65,41 @@ test("disable reclaims expiry and late queued callbacks cannot publish", (t) => 
   bubbles.dismiss();
   assert.equal(states.length, count);
 });
+
+test("a held reply outlives the chat expiry and only its owner can end or clear it", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const states: PetReplyBubble[] = [];
+  const bubbles = new ReplyBubbleController((state) => states.push(state));
+  bubbles.bind("mira");
+  const live = { source: "live" as const };
+  assert.equal(bubbles.show(live, "other", "wrong role", null), false);
+  assert.equal(bubbles.show(live, "mira", "直播回复", null), true);
+  t.mock.timers.tick(60_000);
+  assert.equal(states.at(-1)?.text, "直播回复", "held while its speech lasts");
+  bubbles.clear("chat");
+  assert.equal(states.at(-1)?.text, "直播回复", "cancelling chat leaves the live bubble");
+  bubbles.release(live, null);
+  assert.equal(states.at(-1)?.text, "");
+  bubbles.dispose();
+});
+
+test("a newer reply takes the slot, so the older owner's release and clear are no-ops", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const states: PetReplyBubble[] = [];
+  const bubbles = new ReplyBubbleController((state) => states.push(state));
+  bubbles.bind("mira");
+  const live = { source: "live" as const };
+  bubbles.show(live, "mira", "直播回复", null);
+  bubbles.handleEvent(event("mira", "聊天回复"));
+  bubbles.release(live, null);
+  bubbles.clear("live");
+  assert.equal(states.at(-1)?.text, "聊天回复");
+  const failed = { source: "live" as const };
+  bubbles.show(failed, "mira", "朗读失败的回复", null);
+  bubbles.release(failed, 3_000);
+  t.mock.timers.tick(2_999);
+  assert.equal(states.at(-1)?.text, "朗读失败的回复");
+  t.mock.timers.tick(1);
+  assert.equal(states.at(-1)?.text, "", "falls back to a timed expiry");
+  bubbles.dispose();
+});

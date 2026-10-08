@@ -25,6 +25,7 @@ async def test_setup_registers_scoped_tools_rpc_and_role_participant(tmp_path):
         "bilibili.login.poll",
         "bilibili.account.status",
         "bilibili.account.logout",
+        "live.reply.outcome",
     }
     assert ctx.rpc.concurrency["binding.get"] is Concurrency.READ_ONLY
     assert ctx.rpc.concurrency["pets.import"] is Concurrency.MUTATION

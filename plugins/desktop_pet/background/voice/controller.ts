@@ -3,6 +3,7 @@ import type { VoicePreferences } from "./preferences";
 import type { VoiceStatePayload } from "./types";
 import { PetVoiceInput } from "./input";
 import { PetReplyAudio } from "./replyAudio";
+import type { PetSpeechQueue } from "./speechQueue";
 
 type Turn = { role_id: string; session_key: string; mood: string; turn_id: string };
 type PetVoiceContext = Pick<BackgroundCtx, "rpc" | "native" | "chat" | "reportFailure">;
@@ -18,10 +19,10 @@ export class PetVoiceController {
   private keyTail = Promise.resolve();
   private readonly replies: PetReplyAudio;
   private readonly input: PetVoiceInput;
-  constructor(private readonly ctx: PetVoiceContext, preferences: VoicePreferences, private readonly publish: (state: VoiceStatePayload) => void) {
+  constructor(private readonly ctx: PetVoiceContext, preferences: VoicePreferences, private readonly publish: (state: VoiceStatePayload) => void, speech: PetSpeechQueue) {
     this.preferences = preferences;
     const status = (status: VoiceStatePayload["status"], message?: string) => { if (!this.disposed) publish({ status, message }); };
-    this.replies = new PetReplyAudio(ctx, status);
+    this.replies = new PetReplyAudio(ctx, speech, status);
     this.input = new PetVoiceInput(ctx.native.audio, {
       enabled: () => !this.disposed && !this.locked && this.preferences.enabled && Boolean(this.roleId),
       device: () => this.preferences.microphone_device_id, status,
@@ -35,6 +36,8 @@ export class PetVoiceController {
     this.stop(); this.roleId = roleId;
     void this.syncKeys();
   }
+  /** The chosen synthesis service while pet speech is on; null means speech is off. */
+  get ttsProvider() { return this.preferences.enabled ? this.preferences.tts : null; }
   async configure(preferences: VoicePreferences) { this.stop(); this.preferences = preferences; await this.syncKeys(); }
   /** Locking retires pending speech; unlocking admits new input without replay. */
   setLocked(locked: boolean) { this.locked = locked; if (locked) this.stop(); void this.syncKeys(); }

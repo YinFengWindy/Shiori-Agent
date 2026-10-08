@@ -3,6 +3,7 @@ import { test } from "node:test";
 import type { BackgroundCtx, BridgeEvent } from "@yinfengwindy/shiori-sdk";
 import { createFakePluginClient, deferred } from "@yinfengwindy/shiori-sdk/testing";
 import { PetVoiceController } from "./controller";
+import { PetSpeechQueue } from "./speechQueue";
 import type { VoiceStatePayload } from "./types";
 import { defaultVoicePreferences } from "./preferences";
 
@@ -19,7 +20,7 @@ function fixture() {
     native: { audio: { devices: async () => [], startCapture: async () => { calls.push("record"); }, stopCapture: async () => ({ audio_base64: "AQ==", format: "wav" }), cancelCapture: async () => {}, play: async () => { calls.push("play"); }, stop: async () => { calls.push("stop"); } }, keys: { validate: async () => {}, register: async () => {}, unregister: async () => {} } },
     chat: { send: async (request) => { requests.push(request); return {}; }, cancel: async ({ turn_id }) => { calls.push(`cancel:${turn_id}`); return {}; } }, reportFailure: (_operation, error) => { throw error; },
   };
-  const controller = new PetVoiceController(ctx, preferences, (state) => states.push(state));
+  const controller = new PetVoiceController(ctx, preferences, (state) => states.push(state), new PetSpeechQueue(ctx.native.audio));
   const event = (method: string, payload: Record<string, unknown>): BridgeEvent => ({ id: "request", type: "event", method, payload });
   return { controller, ctx, states, calls, requests, preferences, event };
 }
