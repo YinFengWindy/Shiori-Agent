@@ -47,6 +47,10 @@ class DesktopRolePresenter:
                 payload["relationship_snapshot"] = snapshot
             if runtime is not None:
                 payload["loneliness_runtime"] = runtime
+            # Absent until the role's first turn initializes affection.
+            affection = self._relationship_runtime.affection.summary(role.id)
+            if affection is not None:
+                payload["affection"] = affection
         if self._last_message_for_role is not None:
             # Chat list preview: the newest message of the role's single session.
             payload["last_message"] = self._last_message_for_role(role.id)

@@ -10,11 +10,7 @@ from typing import Any, cast
 
 from shiori_sdk.json import load_json_object_loose
 from agent.provider import LLMProvider
-from conversation.context_scope import (
-    UserContextThreads,
-    belongs_to_user,
-    load_user_context_threads,
-)
+from conversation.context_scope import load_user_context_threads
 from core.memory.markdown import resolve_markdown_store
 from session.manager import SessionManager
 
@@ -31,9 +27,9 @@ from .loneliness import (
     _now_iso,
     _parse_iso,
 )
+from .affection_service import RoleAffectionService
+from .interaction import collect_user_recent_messages, render_recent_messages
 from .models import (
-    _RECENT_MESSAGE_CHAR_LIMIT,
-    _RECENT_MESSAGE_LIMIT,
     _clamp,
     _is_first_person_self_view,
     _normalize_behavior_profile,
@@ -64,6 +60,12 @@ class RoleRelationshipRuntimeService(_RelationshipPersistenceMixin):
         self._session_manager = session_manager
         self._presence = presence
         self._scene_followup = SceneFollowupRuntime(workspace)
+        self._affection = RoleAffectionService(workspace)
+
+    @property
+    def affection(self) -> RoleAffectionService:
+        """Returns the per-role affection state and history service."""
+        return self._affection
 
     @property
     def role_store(self) -> RoleStore:
@@ -103,7 +105,7 @@ class RoleRelationshipRuntimeService(_RelationshipPersistenceMixin):
         session = self._session_manager.get_or_create(
             self._session_manager.role_session_key(role_id)
         )
-        recent_messages = self._collect_recent_messages(
+        recent_messages = collect_user_recent_messages(
             session.messages,
             user_threads=load_user_context_threads(self._workspace, role_id),
         )
@@ -137,7 +139,7 @@ class RoleRelationshipRuntimeService(_RelationshipPersistenceMixin):
             role_description=role.description.strip() or "（无）",
             self_text=source["self_text"] or "（空）",
             memory_text=source["memory_text"] or "（空）",
-            recent_messages=self._render_recent_messages(recent_messages),
+            recent_messages=render_recent_messages(recent_messages),
             interaction_summary=source["interaction_summary"],
         )
         response = await provider.chat(
@@ -380,6 +382,9 @@ class RoleRelationshipRuntimeService(_RelationshipPersistenceMixin):
             next_metadata["relationship_snapshot"] = snapshot
         if runtime is not None:
             next_metadata["loneliness_runtime"] = runtime
+        affection = self._affection.summary(role_id)
+        if affection is not None:
+            next_metadata["affection"] = affection
         return next_metadata
 
     def _behavior_profile(self, snapshot: dict[str, Any]) -> dict[str, float | int]:
@@ -546,36 +551,6 @@ class RoleRelationshipRuntimeService(_RelationshipPersistenceMixin):
         except (TypeError, ValueError):
             return 0
 
-    def _collect_recent_messages(
-        self,
-        messages: list[dict[str, Any]],
-        *,
-        user_threads: UserContextThreads,
-    ) -> list[dict[str, str]]:
-        """关系快照的近期互动：只取属于用户本人的消息（见 ``belongs_to_user``）。
-
-        群友与陌生人的发言、角色在外部会话里的回复都不算角色与用户的互动。
-        """
-        pairs: list[dict[str, str]] = []
-        total_chars = 0
-        for message in reversed(messages):
-            role = str(message.get("role") or "").strip()
-            if role not in {"user", "assistant"}:
-                continue
-            if not belongs_to_user(message, user_threads):
-                continue
-            content = str(message.get("content") or "").strip()
-            if not content:
-                continue
-            total_chars += len(content)
-            if total_chars > _RECENT_MESSAGE_CHAR_LIMIT and pairs:
-                break
-            pairs.append({"role": role, "content": content})
-            if len(pairs) >= _RECENT_MESSAGE_LIMIT:
-                break
-        pairs.reverse()
-        return pairs
-
     def _build_interaction_summary(
         self,
         *,
@@ -602,11 +577,3 @@ class RoleRelationshipRuntimeService(_RelationshipPersistenceMixin):
                 f"当前 awaiting_reply_after_proactive: {bool(runtime.get('awaiting_reply_after_proactive'))}"
             )
         return "\n".join(summary_lines)
-
-    def _render_recent_messages(self, recent_messages: list[dict[str, str]]) -> str:
-        if not recent_messages:
-            return "（暂无近期互动）"
-        return "\n".join(
-            f"{'我' if item['role'] == 'assistant' else '你'}：{item['content']}"
-            for item in recent_messages
-        )

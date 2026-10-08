@@ -51,6 +51,7 @@ import {
 import { sidebarTrackMotionClass } from "../shared/styles";
 import { useWindowActivity } from "../shared/useWindowActivity";
 import type { ChatReplyTarget, ChatSendRequest } from "../shared/types";
+import type { AffectionDisplay } from "./affectionDisplay";
 
 type ChatSurfaceProps = {
   activeRole: RoleRecord | null;
@@ -71,6 +72,7 @@ type ChatSurfaceProps = {
   roleSelfView: string;
   relationshipTags: string[];
   lonelinessValue: number;
+  affection: AffectionDisplay | null;
   conversationEndRef: React.RefObject<HTMLDivElement | null>;
   headerTitle: string;
   highlightedMessageKey: string;
@@ -124,6 +126,7 @@ export function ChatSurface({
   roleSelfView,
   relationshipTags,
   lonelinessValue,
+  affection,
   conversationEndRef,
   headerTitle,
   highlightedMessageKey,
@@ -514,6 +517,7 @@ export function ChatSurface({
                 currentMood={currentMood}
                 imagePath={chatLatestImagePath}
                 lonelinessValue={lonelinessValue}
+                affection={affection}
                 mode={sidebarMode}
                 moodIllustrationUrl={moodIllustrationUrl}
                 moodUpdatedAt={moodUpdatedAt}

@@ -4,6 +4,7 @@ import { RoleTasksPanel } from "./RoleTasksPanel";
 import { toFileUrl } from "../shared/format";
 import type { RoleTask, ScheduleTaskFormData } from "../shared/types";
 import { chatSidebarPanelClass } from "./chatSidebarStyles";
+import type { AffectionDisplay } from "./affectionDisplay";
 
 export type ChatSidebarMode = "status" | "images" | "tasks";
 
@@ -13,6 +14,7 @@ type ChatRightSidebarProps = {
   currentMood: string;
   imagePath: string;
   lonelinessValue: number;
+  affection: AffectionDisplay | null;
   mode: ChatSidebarMode;
   moodIllustrationUrl: string;
   moodUpdatedAt: string;
@@ -39,6 +41,7 @@ export const ChatRightSidebar = React.memo(function ChatRightSidebar({
   currentMood,
   imagePath,
   lonelinessValue,
+  affection,
   mode,
   moodIllustrationUrl,
   moodUpdatedAt,
@@ -69,6 +72,7 @@ export const ChatRightSidebar = React.memo(function ChatRightSidebar({
         roleSelfView={roleSelfView}
         relationshipTags={relationshipTags}
         lonelinessValue={lonelinessValue}
+        affection={affection}
         visualsActive={renderHeavyVisuals}
       />
     );

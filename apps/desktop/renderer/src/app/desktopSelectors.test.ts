@@ -23,6 +23,7 @@ function createRole(overrides: Partial<RoleRecord> = {}): RoleRecord {
     asset_category_bindings: {},
     relationship_snapshot: overrides.relationship_snapshot ?? null,
     loneliness_runtime: overrides.loneliness_runtime ?? null,
+    affection: overrides.affection ?? null,
     created_at: overrides.created_at ?? "2026-07-04T12:00:00+08:00",
     updated_at: overrides.updated_at ?? "2026-07-04T12:00:00+08:00",
   };
@@ -307,6 +308,28 @@ describe("desktopSelectors", () => {
     assert.equal(viewModel.roleSelfView, "我最近会不自觉地去想你会不会来找我。");
     assert.deepEqual(viewModel.relationshipTags, ["亲近", "怕被冷落"]);
     assert.equal(viewModel.lonelinessValue, 64);
+  });
+
+  it("derives the affection stage display from the session before the role payload", () => {
+    const build = (activeSession: SessionPayload | null, role: RoleRecord) => buildDesktopViewModel({
+      roles: [role],
+      activeRoleId: "mira",
+      mainView: { kind: "chat" },
+      roleForm: createRoleForm(),
+      activeIllustration: "",
+      activeSession,
+      selectedChatImageKey: "",
+      health: "online",
+      sendingSessions: {},
+      cancellingSessions: {},
+    });
+    const role = createRole({ affection: { value: 45, stage: "朋友", progress: 0.25 } });
+    const session = createSession();
+    session.metadata = { role_id: "mira", affection: { value: 61, stage: "亲密", progress: 0.05 } };
+
+    assert.deepEqual(build(session, role).affection, { stage: "亲密", percent: 5 });
+    assert.deepEqual(build(null, role).affection, { stage: "朋友", percent: 25 });
+    assert.equal(build(null, createRole()).affection, null);
   });
 
   it("falls back to the role payload relationship runtime when the session metadata is empty", () => {

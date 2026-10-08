@@ -1,6 +1,8 @@
 import React, { useRef } from "react";
 import { CrossfadeLayers } from "@yinfengwindy/shiori-sdk";
 import { cx } from "@yinfengwindy/shiori-sdk";
+import type { AffectionDisplay } from "./affectionDisplay";
+import { AffectionStageBar } from "./AffectionStageBar";
 import { chatSidebarPanelClass } from "./chatSidebarStyles";
 import { moodTone } from "./moodTone";
 import { useMoodChangeCue } from "./useMoodChangeCue";
@@ -16,6 +18,8 @@ type ChatStatusSidebarProps = {
   roleSelfView: string;
   relationshipTags: string[];
   lonelinessValue: number;
+  /** Stage and in-stage progress only; absent until affection is initialized. */
+  affection: AffectionDisplay | null;
   visualsActive?: boolean;
 };
 
@@ -28,6 +32,7 @@ export function ChatStatusSidebar({
   roleSelfView,
   relationshipTags,
   lonelinessValue,
+  affection,
   visualsActive = true,
 }: ChatStatusSidebarProps) {
   const normalizedLoneliness = Math.max(0, Math.min(100, Number.isFinite(lonelinessValue) ? lonelinessValue : 0));
@@ -39,7 +44,13 @@ export function ChatStatusSidebar({
   // A hidden window skips the performance; the new mood simply shows on return.
   useMoodChangeMotion({ cue: visualsActive ? cue : null, layerRef, frameRef, pillRef });
   return (
-    <div className={cx(chatSidebarPanelClass, "chat-status-sidebar relative grid-rows-[minmax(0,1fr)_auto_auto_auto_auto] gap-3")}>
+    <div
+      className={cx(
+        chatSidebarPanelClass,
+        "chat-status-sidebar relative gap-3",
+        affection ? "grid-rows-[minmax(0,1fr)_auto_auto_auto_auto_auto]" : "grid-rows-[minmax(0,1fr)_auto_auto_auto_auto]",
+      )}
+    >
       {/* The illustration may shrink to zero; only its own pixels are clipped so text and controls take priority. */}
       <div ref={frameRef} className="chat-status-illustration-frame relative min-h-0 overflow-hidden rounded-md">
         {shouldRenderIllustration ? (
@@ -96,6 +107,7 @@ export function ChatStatusSidebar({
       ) : (
         <div className="text-caption text-ink-muted">关系标签还在生成中</div>
       )}
+      {affection ? <AffectionStageBar affection={affection} /> : null}
       <div>
         <div className="flex items-center justify-between gap-3">
           <div className="text-body font-semibold text-ink-muted">寂寞值</div>

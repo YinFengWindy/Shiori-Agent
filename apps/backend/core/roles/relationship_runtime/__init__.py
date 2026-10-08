@@ -1,4 +1,6 @@
-"""角色关系快照与寂寞运行时的稳定 facade。"""
+"""角色关系快照、好感度与寂寞运行时的稳定 facade。"""
+
+from .affection_service import RoleAffectionService
 
 from .loneliness import (
     LonelinessRuntimeState,
@@ -43,5 +45,6 @@ __all__ = [
     "RelationshipSnapshot",
     "RelationshipSnapshotLoop",
     "RelationshipSnapshotOptimizer",
+    "RoleAffectionService",
     "RoleRelationshipRuntimeService",
 ]

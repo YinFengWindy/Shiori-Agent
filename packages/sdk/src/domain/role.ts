@@ -28,6 +28,16 @@ export type LonelinessRuntime = {
   cooldown_until: string;
 };
 
+/** The fixed affection stages, from lowest to highest. */
+export type AffectionStageName = "陌生" | "熟悉" | "朋友" | "亲密" | "挚爱";
+
+/** A role's affection (0–100) with its stage and progress within that stage (0–1). */
+export type AffectionSummary = {
+  value: number;
+  stage: AffectionStageName;
+  progress: number;
+};
+
 /** Role data returned by the desktop bridge. */
 export type RoleRecord = {
   id: string;
@@ -51,6 +61,8 @@ export type RoleRecord = {
   plugin_state?: Record<string, Record<string, unknown>>;
   relationship_snapshot?: RelationshipSnapshot | null;
   loneliness_runtime?: LonelinessRuntime | null;
+  /** Absent until the role's first conversation initializes affection. */
+  affection?: AffectionSummary | null;
   /** Newest message of the role's session, for the chat-list preview; null when the session is empty. */
   last_message?: RoleLastMessage | null;
   created_at: string;

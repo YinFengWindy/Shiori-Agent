@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from core.roles import RoleStore
+from core.roles import RoleRelationshipRuntimeService, RoleStore
 from desktop_bridge.role_presenter import DesktopRolePresenter
+from proactive_v2.presence import PresenceStore
+from session.manager import SessionManager
 
 
 def test_role_presenter_serializes_desktop_asset_fields(tmp_path) -> None:
@@ -59,3 +61,30 @@ def test_role_presenter_omits_the_preview_without_a_reader(tmp_path) -> None:
     )
 
     assert "last_message" not in DesktopRolePresenter(store).serialize(role)
+
+
+def test_role_presenter_exposes_affection_summary_once_initialized(tmp_path) -> None:
+    store = RoleStore(tmp_path)
+    session_manager = SessionManager(tmp_path)
+    role = store.create_role(
+        role_id="mira", name="Mira", description="", system_prompt="You are Mira."
+    )
+    relationship = RoleRelationshipRuntimeService(
+        tmp_path,
+        role_store=store,
+        session_manager=session_manager,
+        presence=PresenceStore(session_manager._store),
+    )
+    presenter = DesktopRolePresenter(store, relationship)
+
+    assert "affection" not in presenter.serialize(role)
+    assert "affection" not in relationship.enrich_session_metadata({"role_id": "mira"})
+
+    relationship.affection.initialize("mira", value=80, reason="挚友")
+
+    summary = {"value": 80, "stage": "挚爱", "progress": 0.0}
+    assert presenter.serialize(role)["affection"] == summary
+    assert (
+        relationship.enrich_session_metadata({"role_id": "mira"})["affection"]
+        == summary
+    )

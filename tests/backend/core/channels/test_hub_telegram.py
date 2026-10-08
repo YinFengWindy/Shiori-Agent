@@ -149,6 +149,9 @@ class FakeLLMProvider(LLMProvider):
     """The role's model: keeps the real request budgeting, answers without network."""
 
     async def chat(self, *args: Any, **kwargs: Any) -> LLMResponse:
+        # The first turn seeds affection, which only accepts a JSON verdict.
+        if "初始好感度" in str(kwargs["messages"][0]["content"]):
+            return LLMResponse(content='{"value": 20, "reason": "初识"}')
         return LLMResponse(content=REPLY, finish_reason="stop")
 
 

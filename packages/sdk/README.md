@@ -2,8 +2,8 @@
 
 [@yinfengwindy/shiori-sdk](https://www.npmjs.com/package/@yinfengwindy/shiori-sdk)
 and [shiori-sdk](https://pypi.org/project/shiori-sdk/) are the TypeScript and Python distributions of the
-same plugin contract. Both are version **3.1.7**, with Runtime API **3.1.7**.
-3.1.1–3.1.7 are not published yet; npm and PyPI hold 3.1.0. The commands below
+same plugin contract. Both are version **3.1.8**, with Runtime API **3.1.8**.
+3.1.1–3.1.8 are not published yet; npm and PyPI hold 3.1.0. The commands below
 install 3.1.0; APIs added since then need a wheelhouse or workspace build of
 this repository until the next publication.
 

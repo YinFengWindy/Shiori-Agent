@@ -19,6 +19,7 @@ describe("ChatStatusSidebar", () => {
         roleSelfView={thought}
         relationshipTags={["亲近", "安心", "期待见面", "默契"]}
         lonelinessValue={72}
+        affection={null}
       />,
     );
 
@@ -30,12 +31,28 @@ describe("ChatStatusSidebar", () => {
     assert.match(markup, />期待见面</);
     assert.match(markup, />默契</);
     assert.match(markup, />72</);
+    assert.ok(!markup.includes('data-testid="chat-affection"'));
+  });
+
+  it("shows only the affection stage and a thin in-stage bar", () => {
+    const markup = renderToStaticMarkup(
+      <ChatStatusSidebar currentMood="" moodUpdatedAt="" moodScope="rin|role:rin" moodIllustrationUrl="" roleSelfView=""
+        relationshipTags={[]} lonelinessValue={0} affection={{ stage: "亲密", percent: 37.5 }} />,
+    );
+    const start = markup.indexOf('data-testid="chat-affection"');
+    const block = markup.slice(start, markup.indexOf('寂寞值', start));
+
+    assert.ok(start >= 0);
+    assert.match(block, />亲密</);
+    assert.match(block, /width:37.5%/);
+    // The bar width is the only number: no affection value or reason is printed.
+    assert.ok(!/>[^<]*\d[^<]*</.test(block));
   });
 
   it("replaces the complete thought and mood on turn updates and role switches", async () => {
     const renderState = (currentMood: string, roleSelfView: string) => (
       <ChatStatusSidebar currentMood={currentMood} roleSelfView={roleSelfView} moodUpdatedAt="" moodScope="rin|role:rin"
-        moodIllustrationUrl="" relationshipTags={[]} lonelinessValue={37} />
+        moodIllustrationUrl="" relationshipTags={[]} lonelinessValue={37} affection={null} />
     );
     const mounted = await mountTestComponent(renderState("平静", "我在等今天的故事。"));
     try {

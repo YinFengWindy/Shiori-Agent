@@ -1,5 +1,5 @@
 /** Session messages as the desktop bridge returns them (chat image actions receive session updates). */
-import type { LonelinessRuntime, RelationshipSnapshot } from "./role";
+import type { AffectionSummary, LonelinessRuntime, RelationshipSnapshot } from "./role";
 
 /** Single message in a role-bound session. */
 export type SessionMessage = {
@@ -47,6 +47,8 @@ export type SessionPayload = {
     current_thought?: string;
     relationship_snapshot?: RelationshipSnapshot | null;
     loneliness_runtime?: LonelinessRuntime | null;
+    /** Absent until the role's first conversation initializes affection. */
+    affection?: AffectionSummary | null;
   };
   messages: SessionMessage[];
   /** Present for sessions opened through the paginated desktop bridge contract. */
