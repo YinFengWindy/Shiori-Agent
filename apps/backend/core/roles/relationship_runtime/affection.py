@@ -1,12 +1,14 @@
 """好感度的阶段常量与纯状态迁移规则。
 
 所有好感变化都由 ``apply_affection_delta`` 计算：结果夹在 [阶段下限, 100]，
-阶段下限是已达到的最高阶段的起点，只升不降。
+阶段下限是已达到的最高阶段的起点，只升不降。长时间未联系的衰减由
+``settle_affection_decay`` 按需补算。
 """
 
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, replace
+from datetime import datetime, timedelta
 from typing import Any, Literal
 
 AFFECTION_MIN = 0
@@ -15,6 +17,13 @@ AFFECTION_MAX = 100
 AffectionSource = Literal["init", "turn", "decay"]
 """一条好感历史的来源：AI 初始化、单轮对话结算、长时间未联系的衰减。"""
 _SOURCES: frozenset[str] = frozenset({"init", "turn", "decay"})
+
+AFFECTION_DECAY_GRACE = timedelta(days=3)
+"""用户最后一条消息之后，这么久仍没有新消息就扣第一次。"""
+AFFECTION_DECAY_INTERVAL = timedelta(days=1)
+"""第一次之后，每再过这么久扣一次。"""
+AFFECTION_DECAY_STEP = -1
+AFFECTION_DECAY_REASON = "长时间没有联系"
 
 
 @dataclass(frozen=True)
@@ -49,29 +58,55 @@ def affection_stage(value: int) -> AffectionStage:
 
 @dataclass(frozen=True)
 class AffectionState:
-    """一个角色当前的好感状态；文件存在即代表已初始化。"""
+    """一个角色当前的好感状态；文件存在即代表已初始化。
+
+    ``updated_at`` 是好感值最近一次变化的时间。``last_user_message_at`` 是用户本人
+    最近一条消息的时间，衰减从它开始计时；``decay_settled_at`` 是自那以后最近一次
+    已结算衰减的到期时间，尚未结算过为 ``None``。
+    """
 
     role_id: str
     value: int
     stage_floor: int
     initialized_at: str
     updated_at: str
+    last_user_message_at: str
+    decay_settled_at: str | None = None
 
     @classmethod
     def initial(cls, role_id: str, *, value: int, at: str) -> "AffectionState":
-        """以 AI 判断的初始值建立状态，初始阶段下限为初始值所在阶段的起点。"""
+        """以 AI 判断的初始值建立状态，初始阶段下限为初始值所在阶段的起点。
+
+        初始化发生在用户本人发消息的回合里，所以衰减也从这一刻开始计时。
+        """
         stage = affection_stage(value)
-        return cls(role_id, value, stage.lower, at, at)
+        return cls(role_id, value, stage.lower, at, at, at)
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "AffectionState":
-        """严格解析持久化内容；字段缺失或越界直接报错，不做默认值兜底。"""
+        """严格解析持久化内容；字段缺失或越界直接报错，不做默认值兜底。
+
+        唯一的迁移：衰减上线前保存的状态没有两个计时字段。那时好感只在初始化和
+        用户本人的回合里变化，所以 ``updated_at`` 是最接近的用户消息时间，用它
+        开始计时；尚未结算过衰减。
+        """
+        updated_at = _required_time(payload, "updated_at")
         state = cls(
             role_id=_required_text(payload, "role_id"),
             value=_required_int(payload, "value"),
             stage_floor=_required_int(payload, "stage_floor"),
-            initialized_at=_required_text(payload, "initialized_at"),
-            updated_at=_required_text(payload, "updated_at"),
+            initialized_at=_required_time(payload, "initialized_at"),
+            updated_at=updated_at,
+            last_user_message_at=(
+                _required_time(payload, "last_user_message_at")
+                if "last_user_message_at" in payload
+                else updated_at
+            ),
+            decay_settled_at=(
+                _required_time(payload, "decay_settled_at")
+                if payload.get("decay_settled_at") is not None
+                else None
+            ),
         )
         if state.stage_floor not in {stage.lower for stage in AFFECTION_STAGES}:
             raise ValueError(f"好感阶段下限无效: {state.stage_floor}")
@@ -128,6 +163,67 @@ def apply_affection_delta(
     value = max(state.stage_floor, min(AFFECTION_MAX, state.value + delta))
     floor = max(state.stage_floor, affection_stage(value).lower)
     return replace(state, value=value, stage_floor=floor, updated_at=at)
+
+
+def record_user_message(state: AffectionState, *, at: str) -> AffectionState:
+    """用户本人发来消息：衰减从 ``at`` 重新计时。调用方须先结算到 ``at`` 为止的衰减。"""
+    return replace(state, last_user_message_at=at, decay_settled_at=None)
+
+
+def settle_affection_decay(
+    state: AffectionState, *, now: datetime
+) -> tuple[AffectionState, list[AffectionHistoryEntry]]:
+    """补算到 ``now`` 为止所有到期的衰减，返回新状态与要追加的历史。
+
+    第 k 次（k 从 0 起）衰减在用户最后一条消息之后
+    ``AFFECTION_DECAY_GRACE + k * AFFECTION_DECAY_INTERVAL`` 到期，即满 3 天扣第一次，
+    之后每满 1 天再扣一次。每次走 ``apply_affection_delta``，记录时间是它的到期
+    时间，所以一次补算多天和逐日推进得到相同的状态与历史。被阶段下限挡住的
+    一次不写历史，但仍计入已结算，之后不会再补。
+    """
+    if state.decay_settled_at is not None:
+        due = datetime.fromisoformat(state.decay_settled_at) + AFFECTION_DECAY_INTERVAL
+    else:
+        due = datetime.fromisoformat(state.last_user_message_at) + AFFECTION_DECAY_GRACE
+    if due > now:
+        return state, []
+    current = state
+    entries: list[AffectionHistoryEntry] = []
+    while True:
+        at = due.astimezone().isoformat()
+        stepped = apply_affection_delta(current, AFFECTION_DECAY_STEP, at=at)
+        if stepped.value != current.value:
+            entries.append(
+                AffectionHistoryEntry(
+                    at,
+                    current.value,
+                    stepped.value,
+                    stepped.value - current.value,
+                    AFFECTION_DECAY_REASON,
+                    "decay",
+                )
+            )
+            current = stepped
+        if current.value == current.stage_floor:
+            # Only a user message raises the value again, and it restarts the
+            # timer; every remaining due step is absorbed by the floor.
+            due += ((now - due) // AFFECTION_DECAY_INTERVAL) * AFFECTION_DECAY_INTERVAL
+            break
+        if due + AFFECTION_DECAY_INTERVAL > now:
+            break
+        due += AFFECTION_DECAY_INTERVAL
+    return replace(current, decay_settled_at=due.astimezone().isoformat()), entries
+
+
+def _required_time(payload: dict[str, Any], key: str) -> str:
+    value = _required_text(payload, key)
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError as error:
+        raise ValueError(f"好感状态的 {key} 不是有效时间: {value}") from error
+    if parsed.tzinfo is None:
+        raise ValueError(f"好感状态的 {key} 缺少时区: {value}")
+    return value
 
 
 def _required_text(payload: dict[str, Any], key: str, subject: str = "好感状态") -> str:

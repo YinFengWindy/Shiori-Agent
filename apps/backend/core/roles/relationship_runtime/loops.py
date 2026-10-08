@@ -103,7 +103,7 @@ class RelationshipSnapshotLoop:
 
 
 class LonelinessHeartbeatLoop:
-    """Periodically refreshes per-role loneliness runtime values."""
+    """Periodically refreshes per-role loneliness and settles affection decay."""
 
     def __init__(
         self,
@@ -125,6 +125,9 @@ class LonelinessHeartbeatLoop:
                 break
             now = datetime.now().astimezone()
             for role in self._role_store.list_roles():
+                # Decay can never cross the loneliness threshold (the floor
+                # keeps 亲密), so the two settle independently.
+                _ = self._runtime.affection.settle_decay(role.id, now=now)
                 self._runtime.recompute_loneliness(role.id, now=now)
 
     def stop(self) -> None:

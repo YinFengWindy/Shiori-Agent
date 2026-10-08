@@ -211,10 +211,12 @@ class DesktopRoleRequestHandler:
         page = max(1, int(payload.get("page") or 1))
         page_size = int(payload.get("page_size") or _DEFAULT_PAGE_SIZE)
         page_size = max(1, min(_MAX_PAGE_SIZE, page_size))
+        # Settle overdue decay before paging so its entries are on the page.
+        summary = affection.current_summary(role_id)
         entries, total = affection.history_page(role_id, page=page, page_size=page_size)
         return {
             "role_id": role_id,
-            "affection": affection.summary(role_id),
+            "affection": summary,
             "items": [{"id": id_, **entry.to_dict()} for id_, entry in entries],
             "total": total,
             "page": page,

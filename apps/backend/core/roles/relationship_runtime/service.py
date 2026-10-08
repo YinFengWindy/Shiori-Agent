@@ -239,13 +239,16 @@ class RoleRelationshipRuntimeService(_RelationshipPersistenceMixin):
     def handle_user_message(
         self, session_key: str, *, now: datetime | None = None
     ) -> dict[str, Any] | None:
+        """Responds to the user's own message; callers never pass anyone else's."""
         role_id = self._role_id_from_session_key(session_key)
         if not role_id:
             return None
+        now_dt = (now or datetime.now().astimezone()).astimezone()
+        # Affection decay does not depend on the snapshot, so its timer restarts first.
+        _ = self._affection.record_user_activity(role_id, now=now_dt)
         snapshot = self.read_snapshot(role_id)
         if snapshot is None:
             return None
-        now_dt = (now or datetime.now().astimezone()).astimezone()
         current = self.recompute_loneliness(
             role_id, now=now_dt
         ) or self._build_initial_runtime(role_id, now=now_dt)
@@ -403,7 +406,7 @@ class RoleRelationshipRuntimeService(_RelationshipPersistenceMixin):
             next_metadata["relationship_snapshot"] = snapshot
         if runtime is not None:
             next_metadata["loneliness_runtime"] = runtime
-        affection = self._affection.summary(role_id)
+        affection = self._affection.current_summary(role_id)
         if affection is not None:
             next_metadata["affection"] = affection
         return next_metadata

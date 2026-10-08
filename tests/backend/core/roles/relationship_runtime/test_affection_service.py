@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+import json
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -115,3 +116,91 @@ def test_history_pages_run_newest_first_and_end_at_the_init_entry(tmp_path):
     assert {total for _, total in pages} == {5}
     assert service.history_page("mira", page=4, page_size=2) == ([], 5)
     assert service.history_page("nobody", page=1, page_size=2) == ([], 0)
+
+
+def _decay_entries(service: RoleAffectionService):
+    return [
+        (entry.time, entry.before, entry.after, entry.delta, entry.reason)
+        for entry in service.read_history("mira")
+        if entry.source == "decay"
+    ]
+
+
+def _at(delta: timedelta) -> str:
+    return (_NOW + delta).astimezone().isoformat()
+
+
+def test_decay_starts_three_days_after_the_last_user_message(tmp_path):
+    service = RoleAffectionService(tmp_path)
+    service.initialize("mira", value=45, reason="初始", now=_NOW)
+
+    service.settle_decay("mira", now=_NOW + timedelta(days=3, seconds=-1))
+    assert service.read_state("mira").value == 45
+    assert _decay_entries(service) == []
+
+    # One step per full overdue day, each dated at its own due time.
+    service.settle_decay("mira", now=_NOW + timedelta(days=4, hours=23))
+    assert service.read_state("mira").value == 43
+    assert _decay_entries(service) == [
+        (_at(timedelta(days=3)), 45, 44, -1, "长时间没有联系"),
+        (_at(timedelta(days=4)), 44, 43, -1, "长时间没有联系"),
+    ]
+
+
+def test_backfilled_decay_equals_settling_day_by_day_and_stops_at_the_floor(
+    tmp_path,
+):
+    end = _NOW + timedelta(days=9, hours=5)
+    at_once = RoleAffectionService(tmp_path / "once")
+    stepwise = RoleAffectionService(tmp_path / "stepwise")
+    for service in (at_once, stepwise):
+        service.initialize("mira", value=43, reason="初始", now=_NOW)
+
+    at_once.settle_decay("mira", now=end)
+    moment = _NOW
+    while moment <= end:
+        stepwise.settle_decay("mira", now=moment)
+        moment += timedelta(hours=6)
+
+    assert at_once.read_state("mira") == stepwise.read_state("mira")
+    assert at_once.read_history("mira") == stepwise.read_history("mira")
+    # 43 -> 40 on days 3–5; the 朋友 floor absorbs days 6–9 without entries.
+    assert at_once.read_state("mira").value == 40
+    assert [entry[2] for entry in _decay_entries(at_once)] == [42, 41, 40]
+
+
+def test_a_user_message_settles_overdue_decay_then_restarts_the_timer(tmp_path):
+    service = RoleAffectionService(tmp_path)
+    service.initialize("mira", value=45, reason="初始", now=_NOW)
+
+    service.record_user_activity("mira", now=_NOW + timedelta(days=3, hours=1))
+    service.settle_decay("mira", now=_NOW + timedelta(days=6))
+
+    assert service.read_state("mira").value == 44
+    assert _decay_entries(service) == [
+        (_at(timedelta(days=3)), 45, 44, -1, "长时间没有联系")
+    ]
+    service.settle_decay("mira", now=_NOW + timedelta(days=6, hours=1))
+    assert service.read_state("mira").value == 43
+
+
+def test_state_saved_before_decay_tracking_counts_from_its_last_change(tmp_path):
+    service = RoleAffectionService(tmp_path)
+    service.state_path("mira").parent.mkdir(parents=True)
+    service.state_path("mira").write_text(
+        json.dumps(
+            {
+                "role_id": "mira",
+                "value": 45,
+                "stage_floor": 40,
+                "initialized_at": _at(timedelta(0)),
+                "updated_at": _at(timedelta(days=1)),
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    service.settle_decay("mira", now=_NOW + timedelta(days=3, hours=12))
+    assert service.read_state("mira").value == 45
+    service.settle_decay("mira", now=_NOW + timedelta(days=4))
+    assert service.read_state("mira").value == 44

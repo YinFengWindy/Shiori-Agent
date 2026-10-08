@@ -481,6 +481,18 @@ def test_should_trigger_proactive_requires_intimate_affection(
     assert frozen["awaiting_reply_since"] == ""
 
 
+def test_session_affection_summary_settles_overdue_decay(tmp_path: Path):
+    _seed_role(tmp_path)
+    runtime, _, _ = _runtime(tmp_path)
+    seeded_at = datetime.now().astimezone() - timedelta(days=4, hours=1)
+    runtime.affection.initialize("mira", value=45, reason="测试初始化", now=seeded_at)
+
+    metadata = runtime.enrich_session_metadata({"role_id": "mira"})
+
+    # Days 3 and 4 without a user message are settled on read.
+    assert metadata["affection"]["value"] == 43
+
+
 def test_loneliness_heartbeat_loop_defaults_to_ten_minutes(tmp_path: Path):
     _seed_role(tmp_path)
     runtime, _, _ = _runtime(tmp_path)
