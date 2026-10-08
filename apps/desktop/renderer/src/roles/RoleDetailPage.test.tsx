@@ -160,7 +160,7 @@ describe("RoleDetailPage", () => {
     assert.match(saving, /data-testid="save-role-button"[^>]*data-saving="true"[^>]*disabled=""[^>]*>.*保存中…<\/button>/);
   });
 
-  it("saves and resets proactive edits through the shared role draft across tab switches", async () => {
+  it("saves and resets proactive edits made in its settings dialog through the shared role draft", async () => {
     setPluginEnabledSnapshot([]);
     let saved: RoleFormState | undefined;
     const desktop: Pick<DesktopApi, "readSettings" | "onEvent"> = {
@@ -170,53 +170,71 @@ describe("RoleDetailPage", () => {
     const view = await mountTestComponent(<DraftDetailPage onSave={(form) => { saved = form; }} />, {
       windowGlobals: { miraDesktop: desktop },
     });
+    // The dialog renders in a body portal, so look up its controls document-wide.
     const button = (label: string) => {
-      const found = Array.from(view.container.querySelectorAll("button")).find((item) => item.textContent === label);
+      const found = Array.from(document.querySelectorAll("button")).find((item) => item.textContent === label || item.getAttribute("aria-label") === label);
       assert.ok(found, `Missing button: ${label}`);
       return found;
     };
+    const field = (label: string) => Array.from(document.querySelectorAll("label")).find((item) => item.textContent === label)?.querySelector("input");
+    const openDialog = async () => {
+      await act(async () => button("主动推送设置").click());
+      assert.ok(document.querySelector('[role="dialog"] [data-testid="role-proactive-config"]'));
+    };
+    const closeDialog = async () => {
+      await act(async () => button("关闭").click());
+      await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
+      assert.equal(document.querySelector('[role="dialog"]'), null);
+    };
     try {
       await act(async () => button("能力").click());
-      assert.ok(view.container.querySelector('[data-testid="role-proactive-config"]'));
+      assert.equal(view.container.querySelector('[data-testid="role-proactive-config"]'), null, "no standalone 主动推送 section");
       assert.equal(view.container.querySelector('[role="alert"]'), null);
+      // Opening and closing over a stored config writes nothing to the draft.
+      await openDialog();
+      assert.equal(button("保存").disabled, true);
+      await closeDialog();
+      assert.equal(button("保存").disabled, true);
+
       const toggle = view.container.querySelector<HTMLButtonElement>('[role="switch"][aria-label="主动推送"]');
       assert.ok(toggle);
       await act(async () => toggle.click());
+      await openDialog();
       await chooseSelectOption("推送策略", "低打扰");
       await act(async () => button("执行参数").click());
-      const steps = Array.from(view.container.querySelectorAll("label"))
-        .find((label) => label.textContent === "每次推送最大步数")?.querySelector("input");
+      const steps = field("每次推送最大步数");
       assert.ok(steps);
       await changeInputValue(steps, "48");
-      assert.equal(view.container.querySelector('[role="switch"][aria-label="空闲活动"]'), null);
-      const driftSteps = Array.from(view.container.querySelectorAll("label"))
-        .find((label) => label.textContent === "空闲活动最大步数")?.querySelector("input");
-      const driftInterval = Array.from(view.container.querySelectorAll("label"))
-        .find((label) => label.textContent === "空闲活动最小间隔（小时）")?.querySelector("input");
+      assert.equal(document.querySelector('[role="switch"][aria-label="空闲活动"]'), null);
+      const driftSteps = field("空闲活动最大步数");
+      const driftInterval = field("空闲活动最小间隔（小时）");
       assert.ok(driftSteps);
       assert.ok(driftInterval);
       await changeInputValue(driftSteps, "9");
       await changeInputValue(driftInterval, "5");
+      await closeDialog();
       await act(async () => button("资料").click());
       await act(async () => button("保存").click());
       assert.deepEqual(saved, { ...profileForm, proactiveEnabled: true, proactiveProfile: "quiet", proactiveAgentMaxSteps: 48, proactiveDriftMaxSteps: 9, proactiveDriftMinIntervalHours: 5 });
 
       await act(async () => button("能力").click());
       assert.equal(view.container.querySelector('[aria-label="主动推送"]')?.getAttribute("aria-checked"), "true");
-      assert.equal(view.container.querySelector('[aria-label="推送策略"]')?.textContent, "低打扰");
+      await openDialog();
+      assert.equal(document.querySelector('[aria-label="推送策略"]')?.textContent, "低打扰");
       assert.equal(button("执行参数").getAttribute("aria-expanded"), "false");
       await act(async () => button("执行参数").click());
-      assert.equal(Array.from(view.container.querySelectorAll("label"))
-        .find((label) => label.textContent === "每次推送最大步数")?.querySelector("input")?.value, "48");
+      assert.equal(field("每次推送最大步数")?.value, "48");
+      await closeDialog();
 
       await act(async () => button("重置").click());
       assert.equal(button("保存").disabled, true);
       assert.equal(view.container.querySelector('[aria-label="主动推送"]')?.getAttribute("aria-checked"), "false");
-      assert.equal(view.container.querySelector('[aria-label="推送策略"]')?.textContent, "日常");
-      assert.equal(Array.from(view.container.querySelectorAll("label"))
-        .find((label) => label.textContent === "空闲活动最大步数")?.querySelector("input")?.value, String(profileForm.proactiveDriftMaxSteps));
-      assert.equal(Array.from(view.container.querySelectorAll("label"))
-        .find((label) => label.textContent === "空闲活动最小间隔（小时）")?.querySelector("input")?.value, String(profileForm.proactiveDriftMinIntervalHours));
+      await openDialog();
+      assert.equal(document.querySelector('[aria-label="推送策略"]')?.textContent, "日常");
+      await act(async () => button("执行参数").click());
+      assert.equal(field("空闲活动最大步数")?.value, String(profileForm.proactiveDriftMaxSteps));
+      assert.equal(field("空闲活动最小间隔（小时）")?.value, String(profileForm.proactiveDriftMinIntervalHours));
+      await closeDialog();
     } finally {
       await view.cleanup();
       resetPluginEnabledStateForTests();

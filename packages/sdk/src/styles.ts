@@ -91,3 +91,21 @@ export const iconButtonClass = cx(
 /** Soft pill badge for statuses and tags. */
 export const badgeClass =
   "inline-flex items-center gap-1 rounded-full bg-accent-soft px-2.5 py-0.5 text-caption text-accent-text";
+
+/**
+ * Borderless 28px icon-only button (dismiss, back, header toggles), for
+ * places where iconButtonClass's bordered 40px tile would be too heavy.
+ * Its icon is h-4 w-4. Host-only (`host-internal`); the SDK's capability
+ * settings button uses the same one.
+ */
+export const compactIconButtonClass = cx(
+  compactPressableClass,
+  "grid h-7 w-7 shrink-0 place-items-center rounded-md text-ink-muted hover:bg-surface-hover hover:text-ink",
+);
+
+/**
+ * The dimmed, blurred backdrop behind a modal dialog (Base UI `Dialog.Backdrop`),
+ * fading with `motion-backdrop`. Host-only (`host-internal`); shared with the
+ * SDK's capability settings dialog.
+ */
+export const dialogBackdropClass = "confirm-dialog-backdrop motion-backdrop fixed inset-0 z-50 bg-ink/30 backdrop-blur-sm";

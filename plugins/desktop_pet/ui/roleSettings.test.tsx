@@ -22,3 +22,17 @@ test("pet toggle edits only its draft and gates enablement on selected packages"
     assert.deepEqual(synced, [true]);
   } finally { await view.cleanup(); }
 });
+
+test("the pet ⚙ opens its settings dialog without touching the role draft", async () => {
+  const changes: unknown[] = [];
+  const view = await mountTestComponent(<DesktopPetRoleSettings values={{ enabled: true }} snapshot={{ available: true }} onChange={(values) => changes.push(values)} />);
+  try {
+    const gear = view.container.querySelector<HTMLButtonElement>('button[aria-label="桌宠设置"]');
+    assert.ok(gear);
+    await act(async () => gear.click());
+    const dialog = document.querySelector('[role="dialog"]')!;
+    assert.ok(dialog.querySelector('[data-testid="desktop-pet-settings"]'));
+    assert.equal(document.getElementById(dialog.getAttribute("aria-labelledby")!)?.textContent, "桌宠");
+    assert.deepEqual(changes, []);
+  } finally { await view.cleanup(); }
+});
