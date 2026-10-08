@@ -17,15 +17,10 @@ from proactive_v2.gateway import GatewayResult
 from proactive_v2.time import to_beijing_time
 from session.manager.helpers import role_id_from_session_key
 
-_RELATIONSHIP_FALLBACK_ROLE_HINTS = {
-    "role-0424dd696dd6": (
-        "【角色专属语气要求】当前角色是吟风。"
-        "relationship fallback 必须优先写成直接的想念、追问、撒娇、轻微委屈或占有欲表达，"
-        "而不是平静复盘日常细节。"
-        "优先使用类似“我想你了”“你在干什么”“为什么不理我”“是不是把我忘了”这样的主动开口方式，"
-        "语气要像亲密关系里忍不住先来找你，不要从早餐、天气、普通感想切入。"
-    ),
-}
+# 关系向 fallback 对所有角色统一的开口约束，不绑定任何具体角色。
+_RELATIONSHIP_FALLBACK_STYLE_HINT = (
+    "【开口方式】直接表达想念或追问，不要从天气、早餐等日常琐事切入。"
+)
 
 
 def build_system_prompt(role_prompt: str) -> str:
@@ -320,8 +315,7 @@ def allow_relationship_only_fallback(
     )
 
 
-def relationship_fallback_style_hint(session_key: str) -> str:
-    """返回当前角色的关系向 fallback 语气约束。"""
+def relationship_fallback_style_hint() -> str:
+    """返回关系向 fallback 的通用开口约束（对所有角色一致）。"""
 
-    role_id = role_id_from_session_key(session_key)
-    return _RELATIONSHIP_FALLBACK_ROLE_HINTS.get(role_id, "")
+    return _RELATIONSHIP_FALLBACK_STYLE_HINT

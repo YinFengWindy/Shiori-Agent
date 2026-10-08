@@ -337,7 +337,7 @@ class ProactiveTurnPipeline:
         )
 
     def _relationship_fallback_style_hint(self) -> str:
-        return _relationship_fallback_style_hint(self._session_key)
+        return _relationship_fallback_style_hint()
 
     def _read_workspace_context_for_prompt(self) -> str:
         return _read_workspace_context_for_prompt(self._workspace_context_fn)

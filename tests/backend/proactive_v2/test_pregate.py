@@ -338,11 +338,11 @@ async def test_relationship_fallback_takes_priority_over_drift_when_loneliness_g
 
 
 @pytest.mark.asyncio
-async def test_yinfeng_relationship_fallback_includes_direct_longing_style_hint():
+async def test_relationship_fallback_includes_generic_style_hint_for_any_role():
     llm = FakeLLM([("finish_turn", {"decision": "skip", "reason": "no_content"})])
     tick = make_proactive_pipeline(
-        session_key="role:role-0424dd696dd6",
-        target_transport_fn=lambda: ("desktop", "role:role-0424dd696dd6"),
+        session_key="role:role-arbitrary",
+        target_transport_fn=lambda: ("desktop", "role:role-arbitrary"),
         llm_fn=llm,
         rng=FakeRng(value=1.0),
         proactive_gates=relationship_gate_chain(),
@@ -350,11 +350,9 @@ async def test_yinfeng_relationship_fallback_includes_direct_longing_style_hint(
 
     await tick.run()
 
-    kickoff = str(llm.calls[0][2]["content"])
-    reflection = str(llm.calls[1][-1]["content"])
-    assert "当前角色是吟风" in kickoff
-    assert "我想你了" in kickoff
-    assert "为什么不理我" in reflection
+    hint = "直接表达想念或追问，不要从天气、早餐等日常琐事切入"
+    assert hint in str(llm.calls[0][2]["content"])
+    assert hint in str(llm.calls[1][-1]["content"])
 
 
 @pytest.mark.asyncio
