@@ -1,5 +1,6 @@
 import { appendBatch, firstBatch, type LoadedBatches } from "../shared/batchPaging";
-import { formatDate, formatTimestamp, parseTimestamp } from "../shared/format";
+import { formatTimestamp } from "../shared/format";
+import { groupByLocalDate, type LocalDateGroup } from "../shared/localDateGroups";
 import { semanticStatusLabel, type RoleSemanticItem, type RoleSemanticList } from "./roleSemanticMemory";
 
 /** Neutral placeholder for an item without summary text. */
@@ -16,12 +17,7 @@ export function isSuperseded(item: RoleSemanticItem) {
 }
 
 /** One date heading and its items, in list order. */
-export type TimelineGroup = { key: string; label: string; items: RoleSemanticItem[] };
-
-function localDateKey(value: string) {
-  const date = parseTimestamp(value);
-  return date ? `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}` : "";
-}
+export type TimelineGroup = LocalDateGroup<RoleSemanticItem>;
 
 /**
  * Groups items by the local calendar date of their occurrence time, keeping
@@ -29,15 +25,7 @@ function localDateKey(value: string) {
  * "时间未知" group.
  */
 export function groupTimeline(items: readonly RoleSemanticItem[]): TimelineGroup[] {
-  const groups: TimelineGroup[] = [];
-  for (const item of items) {
-    const occurredAt = itemOccurredAt(item);
-    const key = localDateKey(occurredAt);
-    const last = groups.at(-1);
-    if (last?.key === key) last.items.push(item);
-    else groups.push({ key, label: key ? formatDate(occurredAt) : "时间未知", items: [item] });
-  }
-  return groups;
+  return groupByLocalDate(items, itemOccurredAt);
 }
 
 /** The loaded timeline: every batch so far, and whether asking for another is pointless. */

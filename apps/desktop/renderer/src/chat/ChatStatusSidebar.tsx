@@ -18,7 +18,7 @@ type ChatStatusSidebarProps = {
   roleSelfView: string;
   relationshipTags: string[];
   lonelinessValue: number;
-  /** Stage and in-stage progress only; absent until affection is initialized. */
+  /** Stage and its place on the whole -100–100 range only; absent until affection is initialized. */
   affection: AffectionDisplay | null;
   visualsActive?: boolean;
 };
@@ -107,7 +107,7 @@ export function ChatStatusSidebar({
       ) : (
         <div className="text-caption text-ink-muted">关系标签还在生成中</div>
       )}
-      {/* Affection shows only its stage and a thin in-stage bar: no value, no reasons. */}
+      {/* Affection shows only its stage and a thin bar of its place on the whole range: no value, no reasons. */}
       {affection ? (
         <StatusMeter label="好感" value={affection.stage} percent={affection.percent} heightClass="h-1" testId="chat-affection" />
       ) : null}

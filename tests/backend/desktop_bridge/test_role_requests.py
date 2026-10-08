@@ -427,7 +427,12 @@ async def test_affection_history_pages_newest_first_through_the_bridge(
     relationship.affection.apply_delta("mira", delta=-1, reason="冷淡", source="turn")
 
     first, last = await page(1), await page(2)
-    assert first["affection"] == {"value": 31, "stage": "熟悉", "progress": 11 / 19}
+    assert first["affection"] == {
+        "value": 31,
+        "stage": "熟悉",
+        "progress": 11 / 19,
+        "floor": 20,
+    }
     assert [item["reason"] for item in first["items"]] == ["冷淡", "夸奖"]
     assert first["items"][0] | {"time": ""} == {
         "id": 2,

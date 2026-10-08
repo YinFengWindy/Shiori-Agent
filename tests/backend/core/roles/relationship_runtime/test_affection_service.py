@@ -30,6 +30,7 @@ def test_initialize_sets_stage_floor_and_writes_one_init_entry(tmp_path):
         "value": 45,
         "stage": "朋友",
         "progress": pytest.approx(5 / 19),
+        "floor": 40,
     }
     assert _history(service) == [("init", None, 45, None, "设定里是老朋友")]
     with pytest.raises(RuntimeError, match="已初始化"):
@@ -67,6 +68,7 @@ def test_deductions_stop_at_the_floor_of_the_highest_stage_reached(tmp_path):
         "value": 60,
         "stage": "亲密",
         "progress": 0.0,
+        "floor": 60,
     }
 
 
@@ -92,6 +94,7 @@ def test_value_is_capped_at_100_and_requires_initialization(tmp_path):
         "value": 100,
         "stage": "挚爱",
         "progress": 1.0,
+        "floor": 80,
     }
 
 
@@ -285,7 +288,8 @@ def test_a_stranger_can_drop_into_the_negative_stages(tmp_path):
         "mira", delta=-15, reason="冒犯", source="turn", now=_NOW
     )
     assert (cold.value, cold.stage_floor) == (-5, None)
-    assert service.current_summary("mira", now=_NOW)["stage"] == "冷淡"
+    cold_summary = service.current_summary("mira", now=_NOW)
+    assert (cold_summary["stage"], cold_summary["floor"]) == ("冷淡", None)
 
     service.apply_delta("mira", delta=-45, reason="伤害", source="turn", now=_NOW)
     assert service.current_summary("mira", now=_NOW)["stage"] == "厌恶"
