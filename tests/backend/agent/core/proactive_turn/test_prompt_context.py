@@ -8,9 +8,11 @@ from agent.core.proactive_turn.prompt_context import (
     build_runtime_context_message,
     build_system_prompt,
 )
+from agent.core.prompt_block import build_role_affection_prompt
 from bootstrap.proactive import _build_role_prompt_resolver
 from core.identity import IdentityChat
 from core.roles import RoleStore
+from core.roles.relationship_runtime.affection_service import RoleAffectionService
 from conversation.service import ConversationService, LegacySessionDescriptor
 from core.memory.group_environment import GroupEnvironment, GroupEnvironmentUpdate
 from proactive_v2.config import ProactiveConfig
@@ -40,7 +42,9 @@ def test_proactive_context_leaves_out_the_raw_recent_turns() -> None:
     frame = build_runtime_context_message(
         cfg=ProactiveConfig(),
         session_key="role:mira",
-        tool_deps=SimpleNamespace(memory=memory, group_environment=None),
+        tool_deps=SimpleNamespace(
+            memory=memory, group_environment=None, affection_prompt_fn=None
+        ),
         workspace_context_fn=None,
         ctx=AgentTickContext(session_key="role:mira"),
         gateway_result=GatewayResult(),
@@ -111,7 +115,9 @@ def test_proactive_context_injects_recent_activity_of_external_chats(
     frame = build_runtime_context_message(
         cfg=ProactiveConfig(),
         session_key="role:mira",
-        tool_deps=SimpleNamespace(memory=None, group_environment=environment),
+        tool_deps=SimpleNamespace(
+            memory=None, group_environment=environment, affection_prompt_fn=None
+        ),
         workspace_context_fn=None,
         ctx=ctx,
         gateway_result=GatewayResult(),
@@ -119,3 +125,40 @@ def test_proactive_context_injects_recent_activity_of_external_chats(
 
     assert "g1 的最近动态" in frame["content"]
     assert "g2 的最近动态" not in frame["content"]
+
+
+def test_proactive_affection_goes_to_the_context_frame_not_the_system_prompt(
+    tmp_path: Path,
+) -> None:
+    store = RoleStore(tmp_path)
+    store.create_role(name="Mira", role_id="mira", system_prompt="规则")
+    RoleAffectionService(tmp_path).initialize("mira", value=85, reason="初始")
+    store.update_role(
+        "mira",
+        change_affection_stage_prompts=lambda current: {"挚爱": "直接说想他。"},
+    )
+
+    def frame() -> str:
+        return build_runtime_context_message(
+            cfg=ProactiveConfig(),
+            session_key="role:mira",
+            # How ProactiveLoop wires the block for its role.
+            tool_deps=SimpleNamespace(
+                memory=None,
+                group_environment=None,
+                affection_prompt_fn=lambda: build_role_affection_prompt("mira", store),
+            ),
+            workspace_context_fn=None,
+            ctx=AgentTickContext(session_key="role:mira"),
+            gateway_result=GatewayResult(),
+        )["content"]
+
+    assert "85/100（挚爱）" in frame() and "直接说想他。" in frame()
+    # The system prompt stays a stable prefix across affection changes.
+    resolve = _build_role_prompt_resolver(tmp_path, "mira", store)
+    assert "85/100" not in build_system_prompt(resolve())
+
+    RoleAffectionService(tmp_path).apply_delta(
+        "mira", delta=-3, reason="冷淡", source="turn"
+    )
+    assert "82/100（挚爱）" in frame()

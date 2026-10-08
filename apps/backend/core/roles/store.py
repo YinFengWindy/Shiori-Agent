@@ -226,7 +226,16 @@ class RoleStore:
         asset_categories: Sequence[RoleAssetCategory | dict[str, Any]] | None = None,
         asset_category_bindings: dict[str, str] | None = None,
         plugin_drafts: dict[str, Any] | None = None,
+        change_affection_stage_prompts: (
+            Callable[[dict[str, str]], dict[str, str]] | None
+        ) = None,
     ) -> RoleRecord:
+        """Applies the given changes to one role under the manifest lock.
+
+        ``change_affection_stage_prompts`` maps the current stage guidance
+        overrides to the new ones; it runs under the lock, so concurrent
+        writes of different stages each apply to the latest overrides.
+        """
         with self._lock:
             roles = self.list_roles()
             for index, role in enumerate(roles):
@@ -242,6 +251,10 @@ class RoleStore:
                     runtime_config=runtime_config,
                     memory_init_state=memory_init_state,
                 )
+                if change_affection_stage_prompts is not None:
+                    role.affection_stage_prompts = change_affection_stage_prompts(
+                        dict(role.affection_stage_prompts)
+                    )
                 if proactive is not None:
                     normalized = (
                         proactive
@@ -270,29 +283,6 @@ class RoleStore:
                 role.updated_at = now_iso()
                 roles[index] = role
                 self._repository.save_roles(roles, plugin_data=extension_data)
-                return role
-        raise RoleNotFoundError(role_id)
-
-    def update_affection_stage_prompts(
-        self,
-        role_id: str,
-        change: Callable[[dict[str, str]], dict[str, str]],
-    ) -> RoleRecord:
-        """Replaces the role's stage prompt overrides with ``change(current)``.
-
-        Runs under the manifest lock, so concurrent edits of different stages
-        each apply to the latest overrides.
-        """
-        with self._lock:
-            roles = self.list_roles()
-            for role in roles:
-                if role.id != role_id:
-                    continue
-                role.affection_stage_prompts = change(
-                    dict(role.affection_stage_prompts)
-                )
-                role.updated_at = now_iso()
-                self._save_roles(roles)
                 return role
         raise RoleNotFoundError(role_id)
 

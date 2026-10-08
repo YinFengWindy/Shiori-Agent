@@ -20,6 +20,7 @@ from core.memory.user_group_speech import (
 from core.memory.markdown_schema import (
     SELF_PERSONA_SECTION,
     SELF_RELATIONSHIP_SECTION,
+    DOCUMENT_SECTIONS,
     select_memory_sections,
 )
 from core.roles.relationship_runtime.affection_prompts import render_affection_prompt
@@ -128,7 +129,7 @@ class PromptBlock(Protocol):
 #                              来源：roles/<role_id>/state/affection.json + 角色配置的阶段覆盖
 #                              时机：每轮好感变化或阶段指引被编辑后即变；未初始化时不出现；
 #                              外部回合是否注入跟随 SELF「我们的关系」段的可见规则
-#  45 RecentContextPromptBlock →roles/<role_id>/memory/RECENT_CONTEXT.md（裁掉 Recent Turns；外部回合不注入）
+#  45 RecentContextPromptBlock → roles/<role_id>/memory/RECENT_CONTEXT.md（裁掉 Recent Turns；外部回合不注入）
 #                              来源：memory.read_recent_context()（严格要求 role_id）
 #                              时机：近期语境压缩摘要更新时变化；每轮 Recent Turns 刷新不会直接进入这里
 #  46 RecentActivityPromptBlock→ 各外部会话的最近动态（群环境层；外部回合只列其他外部会话）
@@ -218,9 +219,12 @@ class SelfModelPromptBlock:
     ) -> str | None:
         self_content = ctx.memory.read_self()
         if self_content and is_external_turn(ctx):
-            self_content = select_memory_sections(
-                "SELF.md", self_content, EXTERNAL_SELF_SECTIONS
-            )
+            visible = [
+                section
+                for section in DOCUMENT_SECTIONS["SELF.md"]
+                if self_section_visible(ctx, section)
+            ]
+            self_content = select_memory_sections("SELF.md", self_content, visible)
         if not self_content:
             return None
         return f"## 角色自我认知\n\n{self_content}"

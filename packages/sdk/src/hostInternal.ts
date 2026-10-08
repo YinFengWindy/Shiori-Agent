@@ -19,4 +19,4 @@ export {
 export { errorFeedback, errorFeedbackText, scrubErrorDetail } from "./errors";
 
 // One serial autosave queue for the host's settings pages and `usePrivateAutosave` (#683).
-export { SerialDraftQueue, type SerialDraftQueueOptions } from "./serialDraftQueue";
+export { SerialDraftQueue, autosaveDebounceMs, type SerialDraftQueueOptions } from "./serialDraftQueue";

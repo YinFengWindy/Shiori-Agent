@@ -8,6 +8,13 @@
 export type DraftSavePhase = "idle" | "saving" | "error" | "refresh-error" | "unknown";
 
 /**
+ * The quiet period an autosaved editor waits after the last edit before
+ * saving: shared by the host's plugin config page, the 好感度 stage
+ * guidance and `usePrivateAutosave`, so every autosaved field pauses alike.
+ */
+export const autosaveDebounceMs = 400;
+
+/**
  * Outcome of one submission attempt against the backend. On failure,
  * `resumesAutomatically` says whether the next edit submits again on its own
  * (true), or whether nothing further is submitted until an explicit `retry()`

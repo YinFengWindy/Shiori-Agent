@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "node:test";
 import type { AffectionStagePrompt } from "./affectionStagePrompts";
-import { stagePromptRequest, stagePromptRows, stagePromptTexts } from "./stagePromptSelectors";
+import { changedStagePrompts, stagePromptRequest, stagePromptRows, stagePromptTexts } from "./stagePromptSelectors";
 
 const stages: AffectionStagePrompt[] = [
   { stage: "陌生", prompt: "客气。", default: "客气。", overridden: false },
@@ -20,4 +20,10 @@ it("trims an override, so text differing only in surrounding whitespace saves no
     stagePromptRequest(stages, { 陌生: "冷淡。\n", 熟悉: "嘴硬心软。 " }),
     stagePromptRequest(stages, { 陌生: "冷淡。", 熟悉: "嘴硬心软。" }),
   );
+});
+
+it("writes only the stages that differ from what is stored", () => {
+  const saved = stagePromptRequest(stages, stagePromptTexts(stages));
+  assert.deepEqual(changedStagePrompts(stagePromptRequest(stages, { 陌生: "冷淡。", 熟悉: "嘴硬心软。" }), saved), { 陌生: "冷淡。" });
+  assert.deepEqual(changedStagePrompts(stagePromptRequest(stages, { 陌生: "客气。", 熟悉: "" }), saved), { 熟悉: null });
 });

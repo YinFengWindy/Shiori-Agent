@@ -37,6 +37,11 @@ export function stagePromptRequest(stages: readonly AffectionStagePrompt[], text
   }));
 }
 
+/** Only the stages of `request` that differ from the stored `saved` request: what one save writes. */
+export function changedStagePrompts(request: AffectionStagePromptChanges, saved: AffectionStagePromptChanges): AffectionStagePromptChanges {
+  return Object.fromEntries(Object.entries(request).filter(([stage, text]) => text !== (saved[stage] ?? null)));
+}
+
 /** The fields to render, in stage order. */
 export function stagePromptRows(stages: readonly AffectionStagePrompt[], texts: StagePromptTexts): StagePromptRow[] {
   return stages.map((item) => {

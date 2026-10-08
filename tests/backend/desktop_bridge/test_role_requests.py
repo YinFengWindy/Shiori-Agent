@@ -501,6 +501,9 @@ async def test_affection_stage_prompts_write_and_restore_through_the_bridge(
         # Persisted in the role config: a later read still has it.
         assert (await stages())["熟悉"]["prompt"] == "嘴硬心软。"
         assert stored_overrides() == {"熟悉": "嘴硬心软。"}
+        # Only the dedicated methods carry it, not the general role payload.
+        [listed] = (await call("roles.list")).payload["roles"]
+        assert "affection_stage_prompts" not in listed
 
         # Writing the default text, or null, restores the default.
         restored = await stages(

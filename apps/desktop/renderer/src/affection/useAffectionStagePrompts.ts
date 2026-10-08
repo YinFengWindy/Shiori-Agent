@@ -1,4 +1,4 @@
-import { SerialDraftQueue, errorFeedback, errorFeedbackText } from "@yinfengwindy/shiori-sdk/host-internal";
+import { SerialDraftQueue, autosaveDebounceMs, errorFeedback, errorFeedbackText } from "@yinfengwindy/shiori-sdk/host-internal";
 import { useEffect, useState } from "react";
 import { useLatestRef, type DraftSavePhase } from "@yinfengwindy/shiori-sdk";
 import type { DesktopInvoke } from "../shared/bridgeInvoke";
@@ -9,17 +9,15 @@ import {
   type AffectionStagePromptChanges,
   type AffectionStagePrompts,
 } from "./affectionStagePrompts";
-import { stagePromptRequest, stagePromptRows, stagePromptTexts, type StagePromptTexts } from "./stagePromptSelectors";
+import {
+  changedStagePrompts,
+  stagePromptRequest,
+  stagePromptRows,
+  stagePromptTexts,
+  type StagePromptTexts,
+} from "./stagePromptSelectors";
 
-/** Quiet period merging a run of keystrokes into one save, as on the host's other autosaved pages. */
-const autosaveDebounceMs = 400;
-
-type Loaded = {
-  stages: AffectionStagePrompt[];
-  /** The stored overrides, in request form. */
-  saved: AffectionStagePromptChanges;
-  texts: StagePromptTexts;
-};
+type Loaded = { stages: AffectionStagePrompt[]; texts: StagePromptTexts };
 
 const sameRequest = (a: AffectionStagePromptChanges | null, b: AffectionStagePromptChanges | null) =>
   a !== null && b !== null && JSON.stringify(a) === JSON.stringify(b);
@@ -27,11 +25,44 @@ const sameRequest = (a: AffectionStagePromptChanges | null, b: AffectionStagePro
 const savedRequest = (stages: AffectionStagePrompt[]) => stagePromptRequest(stages, stagePromptTexts(stages));
 
 /**
+ * The save queue plus what is stored, in request form. Each attempt writes
+ * only the stages that differ from what is stored at that moment, so edits
+ * made elsewhere to other stages survive.
+ */
+function createStagePromptAutosave(
+  write: (changes: AffectionStagePromptChanges) => Promise<AffectionStagePrompts>,
+  onStatus: (phase: DraftSavePhase, message: string) => void,
+) {
+  let saved: AffectionStagePromptChanges = {};
+  const queue = new SerialDraftQueue<AffectionStagePromptChanges, AffectionStagePrompts>({
+    debounceMs: autosaveDebounceMs,
+    isEqual: sameRequest,
+    clone: (request) => ({ ...request }),
+    attempt: async (request) => {
+      try {
+        return { ok: true, result: await write(changedStagePrompts(request, saved)) };
+      } catch (error) {
+        return { ok: false, resumesAutomatically: false, ...errorFeedback(error, "保存失败") };
+      }
+    },
+    onApplied: (result) => { saved = savedRequest(result.stages); },
+    onStatus,
+  });
+  return {
+    queue,
+    get saved() { return saved; },
+    /** Takes a fresh read as what is stored. */
+    adopt(stages: AffectionStagePrompt[]) { saved = savedRequest(stages); },
+  };
+}
+
+/**
  * Loads a role's stage guidance and autosaves the edited fields through the
  * shared `SerialDraftQueue`: a run of edits saves once they pause, restoring a
- * default saves at once, and unmounting submits the last edit. The fields
- * keep what was typed; a save only refreshes what is stored. The editor is
- * keyed by role, so one hook instance serves one role.
+ * default saves at once, and unmounting submits the last edit. Each save
+ * writes only the stages that differ from what is stored, so edits made
+ * elsewhere to other stages survive. The fields keep what was typed. The
+ * editor is keyed by role, so one hook instance serves one role.
  */
 export function useAffectionStagePrompts(invoke: DesktopInvoke, roleId: string) {
   const [loaded, setLoaded] = useState<Loaded | null>(null);
@@ -40,40 +71,31 @@ export function useAffectionStagePrompts(invoke: DesktopInvoke, roleId: string) 
   const [save, setSave] = useState<{ phase: DraftSavePhase; error: string }>({ phase: "idle", error: "" });
   // The queue outlives renders; its writes go through the latest invoke.
   const target = useLatestRef({ invoke, roleId });
-
-  const [queue] = useState(() => new SerialDraftQueue<AffectionStagePromptChanges, AffectionStagePrompts>({
-    debounceMs: autosaveDebounceMs,
-    isEqual: sameRequest,
-    clone: (request) => ({ ...request }),
-    attempt: async (request) => {
-      try {
-        return { ok: true, result: await writeAffectionStagePrompts(target.current.invoke, target.current.roleId, request) };
-      } catch (error) {
-        return { ok: false, resumesAutomatically: false, ...errorFeedback(error, "保存失败") };
-      }
-    },
-    onApplied: (result) => setLoaded((current) => current && { ...current, stages: result.stages, saved: savedRequest(result.stages) }),
-    onStatus: (phase, message) => setSave({ phase, error: phase === "idle" || phase === "saving" ? "" : message }),
-  }));
+  const [autosave] = useState(() => createStagePromptAutosave(
+    (changes) => writeAffectionStagePrompts(target.current.invoke, target.current.roleId, changes),
+    (phase, message) => setSave({ phase, error: phase === "idle" || phase === "saving" ? "" : message }),
+  ));
+  const { queue } = autosave;
 
   useEffect(() => {
     let cancelled = false;
     readAffectionStagePrompts(invoke, roleId).then((answer) => {
       if (cancelled) return;
-      setLoaded({ stages: answer.stages, saved: savedRequest(answer.stages), texts: stagePromptTexts(answer.stages) });
+      autosave.adopt(answer.stages);
+      setLoaded({ stages: answer.stages, texts: stagePromptTexts(answer.stages) });
       setLoadError("");
     }, (error: unknown) => {
       if (!cancelled) setLoadError(errorFeedbackText(error));
     });
     return () => { cancelled = true; };
-  }, [invoke, roleId, reloads]);
+  }, [autosave, invoke, roleId, reloads]);
   useEffect(() => () => queue.flush(), [queue]);
 
   function edit(stage: string, text: string) {
     if (!loaded) return;
     const texts = { ...loaded.texts, [stage]: text };
     setLoaded({ ...loaded, texts });
-    queue.enqueue(stagePromptRequest(loaded.stages, texts), loaded.saved);
+    queue.enqueue(stagePromptRequest(loaded.stages, texts), autosave.saved);
   }
 
   return {

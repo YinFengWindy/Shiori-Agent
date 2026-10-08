@@ -15,7 +15,7 @@ before(async () => {
 
 const defaults: Record<string, string> = { 陌生: "客气。", 熟悉: "放松。", 朋友: "随意。", 亲密: "温柔。", 挚爱: "依恋。" };
 
-/** A bridge holding one role's overrides, applying writes like the backend. */
+/** A bridge holding one role's overrides: it stores each written text and drops each `null`. */
 function fakeBridge(initial: Record<string, string>) {
   const overrides = { ...initial };
   const writes: AffectionStagePromptChanges[] = [];
@@ -30,8 +30,8 @@ function fakeBridge(initial: Record<string, string>) {
       const prompts = payload.prompts as AffectionStagePromptChanges;
       writes.push(prompts);
       for (const [stage, text] of Object.entries(prompts)) {
-        if (text && text.trim() && text.trim() !== defaults[stage]) overrides[stage] = text.trim();
-        else delete overrides[stage];
+        if (text === null) delete overrides[stage];
+        else overrides[stage] = text;
       }
     }
     return { id: "test", type: "response", method, error: null, payload: answer() };
@@ -60,7 +60,8 @@ it("prefills every stage, saves a run of edits once they pause, and shows them a
     await changeInputValue(fields(view.container)[0], "冷淡。");
     assert.equal(bridge.writes.length, 0);
     await act(async () => t.mock.timers.tick(400));
-    assert.equal(bridge.writes.length, 1);
+    // Only the edited stage is written, so other stages edited elsewhere stay as stored.
+    assert.deepEqual(bridge.writes, [{ 陌生: "冷淡。" }]);
     assert.deepEqual(bridge.overrides, { 陌生: "冷淡。", 熟悉: "嘴硬心软。" });
     assert.equal(restoreButtons(view.container).length, 2);
   } finally {
@@ -80,7 +81,7 @@ it("restores one stage's default at once and hides its 恢复默认", async () =
   const view = await mountEditor(bridge.invoke);
   try {
     await act(async () => restoreButtons(view.container)[0].click());
-    assert.deepEqual(bridge.writes, [{ 陌生: null, 熟悉: null, 朋友: null, 亲密: null, 挚爱: "黏人。" }]);
+    assert.deepEqual(bridge.writes, [{ 熟悉: null }]);
     assert.equal(fields(view.container)[1].value, "放松。");
     assert.equal(restoreButtons(view.container).length, 1);
     assert.deepEqual(bridge.overrides, { 挚爱: "黏人。" });

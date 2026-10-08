@@ -253,8 +253,12 @@ def test_affection_block_injects_the_current_stages_override_or_default(
     assert "38/100（熟悉）" in rendered
     assert DEFAULT_AFFECTION_STAGE_PROMPTS["熟悉"] in rendered
 
-    store.update_affection_stage_prompts(
-        "mira", lambda current: {**current, "熟悉": "叫他笨蛋，嘴硬心软。"}
+    store.update_role(
+        "mira",
+        change_affection_stage_prompts=lambda current: {
+            **current,
+            "熟悉": "叫他笨蛋，嘴硬心软。",
+        },
     )
     rendered = block.render(ctx) or ""
     assert "叫他笨蛋，嘴硬心软。" in rendered

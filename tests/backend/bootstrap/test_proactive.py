@@ -16,10 +16,6 @@ from bootstrap.proactive import (
 from core.desktop_presence import DesktopPresence
 from core.identity import IdentityChat
 from core.roles import RoleStore
-from core.roles.relationship_runtime.affection_prompts import (
-    DEFAULT_AFFECTION_STAGE_PROMPTS,
-)
-from core.roles.relationship_runtime.affection_service import RoleAffectionService
 from agent.core.proactive_turn.gates import (
     ProactiveGateAdapter,
     ProactiveGateContext,
@@ -103,25 +99,6 @@ def test_proactive_role_prompt_compiles_current_profile_without_old_knowledge(
     assert updated.startswith("[role_identity]\nShiori")
     assert "只回复一句" in updated
     assert "常驻知识" not in updated and "小栞" not in updated
-
-
-def test_proactive_role_prompt_carries_the_current_affection_stage_guidance(
-    tmp_path,
-):
-    store = RoleStore(tmp_path)
-    store.create_role(name="Mira", role_id="mira", system_prompt="规则")
-    resolve = _build_role_prompt_resolver(tmp_path, "mira", store)
-    assert "好感" not in resolve()
-
-    RoleAffectionService(tmp_path).initialize("mira", value=85, reason="初始")
-    assert "85/100（挚爱）" in resolve()
-    assert DEFAULT_AFFECTION_STAGE_PROMPTS["挚爱"] in resolve()
-
-    store.update_affection_stage_prompts(
-        "mira", lambda current: {**current, "挚爱": "直接说想他，语气黏人。"}
-    )
-    assert "直接说想他，语气黏人。" in resolve()
-    assert DEFAULT_AFFECTION_STAGE_PROMPTS["挚爱"] not in resolve()
 
 
 def test_build_proactive_runtime_isolates_role_policy_and_state(tmp_path, monkeypatch):

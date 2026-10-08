@@ -5,10 +5,7 @@ import inspect
 from typing import TYPE_CHECKING, Any
 
 from core.roles import RoleAggregateService, RoleRecord
-from core.roles.relationship_runtime.affection_prompts import (
-    apply_stage_prompt_changes,
-    stage_prompts_view,
-)
+from core.roles.relationship_runtime.affection_prompts import stage_prompts_view
 
 from .role_presenter import DesktopRolePresenter
 from .role_card_export_service import DesktopRoleCardExportService
@@ -245,9 +242,8 @@ class DesktopRoleRequestHandler:
         changes = payload.get("prompts")
         if not isinstance(changes, dict):
             raise ValueError("prompts 必须是以阶段名为键的对象")
-        role = self._role_service.repository.store.update_affection_stage_prompts(
-            str(payload.get("role_id") or "").strip(),
-            lambda current: apply_stage_prompt_changes(current, changes),
+        role = self._role_service.update_affection_stage_prompts(
+            str(payload.get("role_id") or "").strip(), changes
         )
         return self._stage_prompts_payload(role)
 
