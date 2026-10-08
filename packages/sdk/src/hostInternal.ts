@@ -23,3 +23,4 @@ export { SerialDraftQueue, type SerialDraftQueueOptions } from "./serialDraftQue
 
 // Host dialog chrome, shared with the SDK's capability settings dialog (#719).
 export { compactIconButtonClass, dialogBackdropClass } from "./styles";
+export { DialogFrame } from "./components/DialogFrame";

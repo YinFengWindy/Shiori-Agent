@@ -1,10 +1,9 @@
 import { Dialog } from "@base-ui/react/dialog";
-import { XIcon } from "@phosphor-icons/react";
 import { useState } from "react";
 import { pluginUiRegistry } from "../plugins/pluginUiRegistry";
 import { usePluginEnabledState } from "../plugins/usePluginEnabledState";
-import { iconButtonClass, accountOnline, type AccountSnapshot } from "@yinfengwindy/shiori-sdk";
-import { dialogBackdropClass } from "../shared/styles";
+import { accountOnline, type AccountSnapshot } from "@yinfengwindy/shiori-sdk";
+import { DialogFrame } from "@yinfengwindy/shiori-sdk/host-internal";
 import { Reveal } from "../shared/ui/Reveal";
 import { accountChannelLabel, accountChannelLine, accountName } from "./accountPresentation";
 import { AccountAvatar } from "./AccountAvatar";
@@ -33,37 +32,23 @@ export function AccountDetailDialog({ account, pluginId, roleId, onClose, onChan
   const [actionsTarget, setActionsTarget] = useState<HTMLElement | null>(null);
 
   return <Dialog.Root open onOpenChange={(open) => { if (!open) onClose(); }}>
-    <Dialog.Portal>
-      <Dialog.Backdrop className={dialogBackdropClass} />
-      <Dialog.Popup className="confirm-dialog motion-dialog fixed left-1/2 top-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-[min(42rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col rounded-md border border-line bg-surface p-6 shadow-panel">
-        <div className="flex items-center justify-between gap-3 border-b border-line-soft pb-4">
-          <div className="flex min-w-0 items-center gap-3">
-            <AccountAvatar avatarUrl={account?.avatarUrl ?? ""} Icon={pluginControls?.Icon} size="lg" />
-            <div className="grid min-w-0 gap-0.5">
-              <Dialog.Title className="truncate font-display text-title font-semibold text-ink">
-                {account ? accountName(account) : `添加 ${platformLabel} 账号`}
-              </Dialog.Title>
-              {account ? <p className="m-0 truncate text-body-sm text-ink-muted">{accountChannelLine(platformLabel, account)}</p> : null}
-            </div>
-          </div>
-          <Dialog.Close className={iconButtonClass} aria-label="关闭账号详情"><XIcon className="h-5 w-5" /></Dialog.Close>
-        </div>
-        <div className="scrollbar-stable min-h-0 overflow-y-auto pb-1 pt-5">
-          {PlatformControls ? <section aria-label="平台设置">
-            <AccountDetailActionsTarget value={actionsTarget}>
-              <PlatformControls account={account} roleId={roleId} onChanged={onChanged} />
-            </AccountDetailActionsTarget>
-          </section> : null}
-          {/* Rules only matter while the account can receive messages. */}
-          <Reveal show={accountOnline(account)} className="pt-6">
-            {account ? <AccountResponseRulesEditor key={account.id} account={account} onChanged={onChanged} /> : null}
-          </Reveal>
-          <Reveal show={Boolean(account)} className="pt-6">
-            {account ? <AccountDangerZone account={account} roleId={roleId} onChanged={onChanged}
-              onDeleted={onClose} onActionsTarget={setActionsTarget} /> : null}
-          </Reveal>
-        </div>
-      </Dialog.Popup>
-    </Dialog.Portal>
+    <DialogFrame wide divided closeLabel="关闭账号详情" bodyClassName="pb-1"
+      leading={<AccountAvatar avatarUrl={account?.avatarUrl ?? ""} Icon={pluginControls?.Icon} size="lg" />}
+      title={account ? accountName(account) : `添加 ${platformLabel} 账号`}
+      subtitle={account ? accountChannelLine(platformLabel, account) : null}>
+      {PlatformControls ? <section aria-label="平台设置">
+        <AccountDetailActionsTarget value={actionsTarget}>
+          <PlatformControls account={account} roleId={roleId} onChanged={onChanged} />
+        </AccountDetailActionsTarget>
+      </section> : null}
+      {/* Rules only matter while the account can receive messages. */}
+      <Reveal show={accountOnline(account)} className="pt-6">
+        {account ? <AccountResponseRulesEditor key={account.id} account={account} onChanged={onChanged} /> : null}
+      </Reveal>
+      <Reveal show={Boolean(account)} className="pt-6">
+        {account ? <AccountDangerZone account={account} roleId={roleId} onChanged={onChanged}
+          onDeleted={onClose} onActionsTarget={setActionsTarget} /> : null}
+      </Reveal>
+    </DialogFrame>
   </Dialog.Root>;
 }

@@ -1,12 +1,13 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Dialog } from "@base-ui/react/dialog";
-import { GearSix, XIcon } from "@phosphor-icons/react";
-import { compactIconButtonClass, dialogBackdropClass, iconButtonClass } from "../styles";
+import { GearSix } from "@phosphor-icons/react";
+import { compactIconButtonClass } from "../styles";
+import { DialogFrame } from "./DialogFrame";
 
 type CapabilitySettingsDialogProps = {
   /** The capability's name: the dialog title and the base of the ⚙ button's accessible name. */
   title: string;
-  /** The capability's secondary settings, mounted only while the dialog is open. */
+  /** The capability's secondary settings; mounted on first open, then kept (see `RoleCapabilityCard.settings`). */
   children: ReactNode;
 };
 
@@ -15,30 +16,20 @@ type CapabilitySettingsDialogProps = {
  * it opens (runtime API 3.1.11, #719). Base UI owns the modal behaviour:
  * focus moves into the dialog and returns to the ⚙ on close, Escape and the
  * backdrop dismiss it. A long body scrolls inside the dialog while the title
- * row stays put. Edits inside follow whatever save rule the caller's fields
- * already have (the role draft, or a plugin's own autosave); the dialog never
- * saves or discards anything itself.
+ * row stays put. The dialog never saves or discards anything itself.
  */
 export function CapabilitySettingsDialog({ title, children }: CapabilitySettingsDialogProps) {
+  // Nothing mounts until the first open; after that the content stays mounted
+  // (hidden while closed) so its pending autosave or failed-save retry survives a close.
+  const [opened, setOpened] = useState(false);
   return (
-    <Dialog.Root>
+    <Dialog.Root onOpenChange={(open) => { if (open) setOpened(true); }}>
       <Dialog.Trigger className={compactIconButtonClass} aria-label={`${title}设置`}>
         <GearSix className="h-4 w-4" weight="bold" aria-hidden="true" />
       </Dialog.Trigger>
-      <Dialog.Portal>
-        <Dialog.Backdrop className={dialogBackdropClass} />
-        <Dialog.Popup className="motion-dialog fixed left-1/2 top-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-[min(40rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col gap-5 rounded-md border border-line bg-surface p-6 shadow-panel">
-          <div className="flex shrink-0 items-start justify-between gap-4">
-            <Dialog.Title className="m-0 min-w-0 break-words font-display text-title font-semibold text-ink">{title}</Dialog.Title>
-            <Dialog.Close className={iconButtonClass} aria-label="关闭">
-              <XIcon className="h-5 w-5" aria-hidden="true" />
-            </Dialog.Close>
-          </div>
-          <div className="scrollbar-stable grid min-h-0 content-start gap-4 overflow-y-auto overscroll-contain" data-capability-settings-body="">
-            {children}
-          </div>
-        </Dialog.Popup>
-      </Dialog.Portal>
+      <DialogFrame title={title} closeLabel="关闭" keepMounted={opened} bodyClassName="grid content-start gap-4">
+        {children}
+      </DialogFrame>
     </Dialog.Root>
   );
 }

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { act } from "react";
 import type { PluginRoleValues } from "@yinfengwindy/shiori-sdk";
-import { mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
+import { createFakePluginClient, mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import { NovelAiRoleSettings, novelAiRoleSettings } from "./roleSettings";
 
 // The role editor's draft bookkeeping (dirty check, explicit Save, dropping a
@@ -26,7 +26,7 @@ test("NovelAI CG preference is read from its own snapshot and never written into
 test("NovelAI CG toggle only edits the role draft", async () => {
   const changes: PluginRoleValues[] = [];
   const values = { autoSceneCgEnabled: false };
-  const view = await mountTestComponent(<NovelAiRoleSettings values={values} onChange={(next) => changes.push(next)} />);
+  const view = await mountTestComponent(<NovelAiRoleSettings roleId="role-1" client={createFakePluginClient()} values={values} onChange={(next) => changes.push(next)} />);
   try {
     const toggle = view.container.querySelector<HTMLButtonElement>('[aria-label="自动场景 CG"]');
     assert.equal(toggle?.getAttribute("aria-checked"), "false");

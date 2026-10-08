@@ -184,7 +184,8 @@ describe("RoleDetailPage", () => {
     const closeDialog = async () => {
       await act(async () => button("关闭").click());
       await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
-      assert.equal(document.querySelector('[role="dialog"]'), null);
+      // Once opened, the dialog stays mounted but hidden.
+      assert.equal(document.querySelector<HTMLElement>('[role="dialog"]')?.hidden, true);
     };
     try {
       await act(async () => button("能力").click());
@@ -231,7 +232,8 @@ describe("RoleDetailPage", () => {
       assert.equal(view.container.querySelector('[aria-label="主动推送"]')?.getAttribute("aria-checked"), "false");
       await openDialog();
       assert.equal(document.querySelector('[aria-label="推送策略"]')?.textContent, "日常");
-      await act(async () => button("执行参数").click());
+      // The dialog stayed mounted on this role, so 执行参数 is still unfolded and shows the reset values.
+      assert.equal(button("执行参数").getAttribute("aria-expanded"), "true");
       assert.equal(field("空闲活动最大步数")?.value, String(profileForm.proactiveDriftMaxSteps));
       assert.equal(field("空闲活动最小间隔（小时）")?.value, String(profileForm.proactiveDriftMinIntervalHours));
       await closeDialog();

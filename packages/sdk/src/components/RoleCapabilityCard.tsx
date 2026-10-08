@@ -27,8 +27,12 @@ type RoleCapabilityCardProps = {
   /**
    * The capability's secondary settings (runtime API 3.1.11, #719). When
    * given, a ⚙ button after the control opens them in a centred dialog titled
-   * by `title`; they mount only while it is open. Pass an empty container to
-   * offer the dialog before it has fields.
+   * by `title`. They mount on the first open and then stay mounted (hidden
+   * while closed) for as long as the card does, so a plugin's pending
+   * autosave or failed-save retry survives closing the dialog; the role
+   * editor remounts plugin cards per role. Mounting must not write anything:
+   * role fields inside still change only on user edits and follow the role
+   * editor's Save/Reset.
    */
   settings?: ReactNode;
   /** Extra rows under the title row, e.g. the voice parameters. */

@@ -7,11 +7,7 @@ import {
   type PluginRoleSettingsProps,
 } from "@yinfengwindy/shiori-sdk";
 
-/**
- * The pet switch edits a draft; only the role editor's Save persists it. The
- * ⚙ opens the pet's settings dialog, an empty frame until #292 adds its
- * 直播陪伴 section (plugin-owned, autosaved) there.
- */
+/** The pet switch edits a draft; only the role editor's Save persists it. */
 export function DesktopPetRoleSettings({ values, snapshot, disabled, onChange }: PluginRoleSettingsProps) {
   const checked = values.enabled === true;
   const unavailable = Boolean(disabled || (!snapshot?.available && !checked));
@@ -22,7 +18,6 @@ export function DesktopPetRoleSettings({ values, snapshot, disabled, onChange }:
       title="桌宠"
       status={roleToggleStatus(checked, unavailableLabel)}
       control={<SettingsToggleCard checked={checked} ariaLabel="桌宠" disabled={unavailable} onChange={(enabled) => onChange({ enabled })} />}
-      settings={<div className="grid gap-4" data-testid="desktop-pet-settings" />}
     />
   );
 }
