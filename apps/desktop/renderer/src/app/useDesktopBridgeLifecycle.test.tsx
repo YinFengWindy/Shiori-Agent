@@ -10,7 +10,7 @@ async function mountLifecycle({ cancelling = false, health = "online", viewKind 
   let listener!: (event: BridgeEvent) => void;
   const activeSessionRef: React.MutableRefObject<SessionPayload | null> = { current: {
     key: "role:mira", created_at: "", updated_at: "", last_consolidated: 0,
-    metadata: {}, messages: [{ id: "user-1", role: "user", content: "hello" }],
+    metadata: {}, messages: [{ id: "user-1", seq: 1, role: "user", content: "hello" }],
   } };
   const completions: string[] = [];
   const statesAtError: SessionPayload[] = [];
@@ -81,6 +81,72 @@ async function mountLifecycle({ cancelling = false, health = "online", viewKind 
 }
 
 describe("useDesktopBridgeLifecycle", () => {
+  for (const doneFirst of [true, false]) for (const deltaAfterPicture of [true, false]) {
+    it(`keeps one reply when a picture arrives ${deltaAfterPicture ? "between deltas" : "after the last delta"} and done is ${doneFirst ? "before" : "after"} persistence`, async () => {
+      const view = await mountLifecycle();
+      try {
+        await view.emit("chat.delta", { content_delta: "（看着你", thinking_delta: "先听完" });
+        await view.emit("chat.tool.started", { iteration: 1, call_id: "call-1", tool_name: "lookup", arguments: {} });
+        const { messages, ...summary } = view.activeSessionRef.current!;
+        const streamed = messages[1]!;
+        const picture = {
+          id: "picture", seq: 2, role: "assistant", content: "", media: ["afternoon.png"],
+          metadata: { proactive: true, turn_id: "turn-1" },
+        };
+        await view.emit("session.updated", { session: summary, message: picture }, "proactive");
+        if (deltaAfterPicture) {
+          await view.emit("chat.delta", { content_delta: "，声音低下来）", thinking_delta: "再回答" });
+          await view.emit("chat.tool.completed", {
+            iteration: 1, call_id: "call-1", tool_name: "lookup", arguments: {},
+            final_arguments: {}, status: "success", result_preview: "found",
+          });
+        }
+        const interleaved = view.activeSessionRef.current!.messages;
+        assert.equal(interleaved.length, 3);
+        assert.equal(interleaved[1]?.render_id, streamed.render_id);
+        assert.equal(interleaved[1]?.content, deltaAfterPicture ? "（看着你，声音低下来）" : "（看着你");
+        assert.equal(interleaved[1]?.reasoning_content, deltaAfterPicture ? "先听完再回答" : "先听完");
+        assert.equal(interleaved[1]?.tool_chain?.[0]?.calls[0]?.status, deltaAfterPicture ? "success" : "running");
+        const committed = {
+          id: "reply", seq: 3, role: "assistant", content: "（看着你，声音低下来）完整回复",
+          reasoning_content: "完整思考",
+          metadata: { turn_id: "turn-1", turn_metrics: { total_tokens: 58627, thinking_duration_ms: 1400 } },
+        };
+        if (doneFirst) {
+          await view.emit("chat.done", { total_tokens: 58000, thinking_duration_ms: 1300 });
+          assert.equal(view.activeSessionRef.current!.messages[1]?.streaming, false);
+          assert.deepEqual(view.activeSessionRef.current!.messages[1]?.metadata?.turn_metrics, {
+            total_tokens: 58000, thinking_duration_ms: 1300,
+          });
+        }
+        await view.emit("session.updated", { session: summary, message: committed });
+        if (!doneFirst) await view.emit("chat.done", { total_tokens: 58000, thinking_duration_ms: 1300 });
+        const final = view.activeSessionRef.current!.messages;
+        assert.deepEqual(final.map((message) => message.id), ["user-1", "picture", "reply"]);
+        assert.deepEqual(final[1], picture);
+        assert.deepEqual(final[2], { ...committed, render_id: streamed.render_id });
+        assert.deepEqual(view.completions, ["turn-1"]);
+      } finally { await view.cleanup(); }
+    });
+  }
+
+  it("ends only the failed turn when other replies surround its trace", async () => {
+    const view = await mountLifecycle();
+    try {
+      await view.emit("chat.delta", { content_delta: "partial" });
+      const current = view.activeSessionRef.current!;
+      const foreign = { role: "assistant", content: "other turn", streaming: true, metadata: { turn_id: "turn-other" } };
+      const picture = { id: "picture", seq: 2, role: "assistant", content: "", media: ["afternoon.png"], metadata: { proactive: true } };
+      view.activeSessionRef.current = { ...current, messages: [...current.messages, foreign, picture] };
+      await view.emit("chat.error", { message: "provider failed" });
+      const beforeError = view.statesAtError[0]!;
+      assert.equal(beforeError.messages[1]?.streaming, false);
+      assert.equal(beforeError.messages[2], foreign);
+      assert.equal(beforeError.messages[3], picture);
+      assert.deepEqual(view.completions, ["turn-1"]);
+    } finally { await view.cleanup(); }
+  });
+
   it("does not allow notification navigation until the startup role has finished opening", async () => {
     let finish!: (result: boolean) => void;
     const initialOpen = new Promise<boolean>((resolve) => { finish = resolve; });
