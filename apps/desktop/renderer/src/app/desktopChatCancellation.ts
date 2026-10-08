@@ -38,7 +38,7 @@ export function createDesktopChatCancellation({
       }
       if (isCurrentChatTurn(sessionKey, turnId)) {
         updateCommittedActiveSession((current) => current?.key === sessionKey
-          ? finalizeChatCancellation(current, status as "interrupted" | "idle")
+          ? finalizeChatCancellation(current, status as "interrupted" | "idle", turnId)
           : current);
         completeChatTurn(sessionKey, turnId);
         // Swap the transient interrupted trace for its persisted form so the
