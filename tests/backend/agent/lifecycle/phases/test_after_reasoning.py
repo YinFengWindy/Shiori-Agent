@@ -542,9 +542,10 @@ async def test_only_the_users_own_group_message_updates_relationship_state(
         "yin",
         {
             "role_self_view": "我在想你。",
-            "internal_profile": {"relation_state": {"closeness": 0.9}},
+            "internal_profile": {"relation_state": {}},
         },
     )
+    relationship.affection.initialize("yin", value=90, reason="测试初始化")
     now = datetime.now().astimezone().isoformat()
     relationship.write_loneliness_runtime(
         "yin",

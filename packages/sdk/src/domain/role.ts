@@ -1,12 +1,23 @@
 /** Role records as the desktop bridge returns them (`roles.list`, `host.listRoles()`). */
 
+/**
+ * The relationship dimensions of a snapshot, each 0–1. Closeness was removed in
+ * Runtime API 3.1.9; the role's affection (`AffectionSummary`) replaces it.
+ */
+export type RelationState = {
+  dependence: number;
+  security: number;
+  initiative_desire: number;
+  neglect_sensitivity: number;
+};
+
 /** A role's generated relationship snapshot (its self view and relation tags). */
 export type RelationshipSnapshot = {
   role_id: string;
   role_self_view: string;
   relation_tags: string[];
   internal_profile: {
-    relation_state: Record<string, number>;
+    relation_state: RelationState;
     behavior_profile: Record<string, number>;
   };
   source_summary: Record<string, unknown>;

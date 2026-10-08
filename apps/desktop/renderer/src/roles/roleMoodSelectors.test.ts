@@ -2,9 +2,17 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { RoleRecord, SessionPayload } from "@yinfengwindy/shiori-sdk";
+import type { RelationState, RoleRecord, SessionPayload } from "@yinfengwindy/shiori-sdk";
 import type { RoleFormState } from "../shared/types";
 import { resolveCurrentMood, resolveCurrentThought, resolveMoodIllustration } from "./roleMoodSelectors";
+
+/** A complete relation state; the values don't matter to these selectors. */
+const RELATION_STATE: RelationState = {
+  dependence: 0.5,
+  security: 0.5,
+  initiative_desire: 0.5,
+  neglect_sensitivity: 0.5,
+};
 
 function createRole(overrides: Partial<RoleRecord> = {}): RoleRecord {
   return {
@@ -58,7 +66,7 @@ describe("roleMoodSelectors", () => {
     const session = createSession({ current_thought: "我终于放心了。" });
     session.metadata.relationship_snapshot = {
       role_id: "mira", role_self_view: "我来自旧快照。", relation_tags: [],
-      internal_profile: { relation_state: {}, behavior_profile: {} }, source_summary: {},
+      internal_profile: { relation_state: RELATION_STATE, behavior_profile: {} }, source_summary: {},
       generated_at: "", last_attempted_at: "", last_error: "",
     };
     assert.equal(resolveCurrentThought(session, createRole()), "我终于放心了。");

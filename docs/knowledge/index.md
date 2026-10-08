@@ -2,7 +2,7 @@
 title: Shiori 项目知识库
 kind: 知识库入口
 status: 当前有效
-last_verified_commit: 27af068a
+last_verified_commit: bdfdae59
 source_paths:
   - apps/backend/main.py
   - apps/backend/bootstrap/
@@ -10,9 +10,12 @@ source_paths:
   - apps/backend/agent/
   - apps/backend/proactive_v2/
   - apps/backend/desktop_bridge/
+  - plugins/
+  - packages/sdk/
 related:
   - map.md
   - architecture/overview.md
+  - architecture/current-backend.md
   - impact/change-impact-index.md
 ---
 
@@ -20,10 +23,14 @@ related:
 
 这里记录 Shiori 当前已经实现的能力、模块所有权、关键数据流和修改影响。它面向维护者和 Agent，目标是先定位，再理解，再安全修改。
 
+后端是 Python（`apps/backend/`），桌面端是 Electron + React（`apps/desktop/`）；插件位于仓库顶层 `plugins/<id>/`（`manifest.yaml` + `backend/`、`ui/`、`surface/`、`background/` 子目录），外部渠道全部以插件形式提供；插件 SDK 位于 `packages/sdk/`（Python 包 `shiori_sdk` 与 npm 包 `@yinfengwindy/shiori-sdk`）。
+
 ## 导航
 
 - [能力地图](map.md)：按业务能力找到 owning module。
 - [总体架构](architecture/overview.md)：理解启动、消息、Agent 和持久化主链路。
+- [当前后端架构](architecture/current-backend.md)：Python 后端的装配、运行时换代、RoleRuntime、插件内核与关闭顺序。
+- [被动回合流程](flows/passive-turn.md)、[启动与关闭流程](flows/startup-and-shutdown.md)：两条关键时序。
 - [改动影响索引](impact/change-impact-index.md)：从准备修改的对象反查联动模块。
 
 ## 完整验收问题矩阵
@@ -32,15 +39,15 @@ related:
 | --- | --- | --- |
 | 角色、关系、心情、素材 | [角色领域](modules/roles.md) | 角色由谁持久化；关系和寂寞如何推进；素材如何影响提示词和图片 |
 | 会话与对话 | [会话与对话](modules/conversations-and-sessions.md) | Session 与 Conversation 的边界；消息如何投影和同步 |
-| 记忆 | [记忆系统](modules/memory.md) | 检索、注入、写入和整理在哪里；多套实现如何分工 |
+| 记忆 | [记忆系统](modules/memory.md) | 检索、注入、写入和整理在哪里；宿主 Markdown 记忆与 `default_memory` 插件引擎如何分工 |
 | 主动行为 | [主动行为与 Drift](modules/proactive-and-drift.md) | tick 如何触发；presence、裁定和投递如何连接 |
 | Drift | [主动行为与 Drift](modules/proactive-and-drift.md) | Drift 状态如何持久化；与普通被动回合有何区别 |
 | NovelAI 与自动 CG | [NovelAI 与自动 CG](modules/novelai-and-auto-cg.md) | 自动 CG 何时触发；冷却、去重、重试、消息回写如何工作 |
-| 渠道 | [渠道系统](modules/channels.md) | Telegram、QQ 和统一 Channel 合约如何连接消息总线 |
+| 渠道 | [渠道系统](modules/channels.md) | Telegram、QQ、QQ Bot、飞书等渠道插件和统一 Channel 合约如何连接消息总线 |
 | Agent、工具、插件、MCP | [Agent 生命周期与工具](modules/agent-lifecycle-and-tools.md) | 一个回合经历哪些 phase；工具怎样注册、搜索、执行和拦截 |
 | 桌面端与桥接 | [桌面端与桥接](modules/desktop-and-bridge.md) | Electron、React 和 Python 服务如何通信；状态由谁装配 |
 | Story 模拟 | [桌面端与桥接](modules/desktop-and-bridge.md) | Story 数据库、桥接命令和桌面剧情界面如何连接 |
-| 桌宠语音 | [桌宠语音交互](modules/voice.md) | ASR 如何进入现有 Loop；TTS turn、中断、声音资产和指标由谁管理 |
+| 桌宠语音 | [语音 Provider 与桌宠交互](modules/voice.md) | ASR 如何进入现有 Loop；TTS turn、中断、声音资产和指标由谁管理 |
 | 调度与角色任务 | [调度与任务](modules/scheduling.md) | 定时任务如何创建、触发和展示；角色任务如何执行 |
 | 本地数据与迁移 | [本地工作区数据](data/local-workspace.md) | 哪些数据是权威数据；删除、迁移和备份要注意什么 |
 

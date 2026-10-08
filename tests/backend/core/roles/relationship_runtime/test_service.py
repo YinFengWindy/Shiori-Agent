@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -47,6 +48,12 @@ def _seed_role(tmp_path: Path, *, role_id: str = "mira") -> None:
     )
 
 
+def _init_affection(
+    runtime: RoleRelationshipRuntimeService, value: int, *, role_id: str = "mira"
+) -> None:
+    runtime.affection.initialize(role_id, value=value, reason="测试初始化")
+
+
 def _snapshot_payload(*, role_id: str = "mira") -> dict:
     return {
         "role_id": role_id,
@@ -54,7 +61,6 @@ def _snapshot_payload(*, role_id: str = "mira") -> dict:
         "relation_tags": ["亲近", "等你主动"],
         "internal_profile": {
             "relation_state": {
-                "closeness": 0.75,
                 "dependence": 0.62,
                 "security": 0.35,
                 "initiative_desire": 0.7,
@@ -96,6 +102,23 @@ def test_snapshot_rejects_non_first_person_self_view(tmp_path: Path):
                 "role_self_view": "她最近越来越在意用户会不会主动。",
             },
         )
+
+
+def test_legacy_snapshot_file_with_closeness_loads_without_it(tmp_path: Path):
+    _seed_role(tmp_path)
+    runtime, _, _ = _runtime(tmp_path)
+    legacy = _snapshot_payload()
+    legacy["internal_profile"]["relation_state"]["closeness"] = 0.9
+    path = runtime.snapshot_path("mira")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(legacy, ensure_ascii=False), encoding="utf-8")
+
+    snapshot = runtime.read_snapshot("mira")
+
+    assert snapshot is not None
+    relation_state = snapshot["internal_profile"]["relation_state"]
+    assert "closeness" not in relation_state
+    assert relation_state["dependence"] == 0.62
 
 
 def test_user_message_clears_unanswered_state_and_reduces_loneliness(tmp_path: Path):
@@ -160,6 +183,7 @@ def test_current_loneliness_runtime_grows_once_per_complete_ten_minute_tick(
     _seed_role(tmp_path)
     runtime, _, _ = _runtime(tmp_path)
     runtime.write_snapshot("mira", _snapshot_payload())
+    _init_affection(runtime, 75)
     runtime.write_loneliness_runtime(
         "mira",
         {
@@ -210,6 +234,7 @@ def test_current_loneliness_runtime_adds_unanswered_growth_per_tick(tmp_path: Pa
     _seed_role(tmp_path)
     runtime, _, _ = _runtime(tmp_path)
     runtime.write_snapshot("mira", _snapshot_payload())
+    _init_affection(runtime, 75)
     runtime.write_loneliness_runtime(
         "mira",
         {
@@ -237,14 +262,15 @@ def test_current_loneliness_runtime_adds_unanswered_growth_per_tick(tmp_path: Pa
     ) == _utc(2026, 7, 6, 0, 20)
 
 
-def test_non_close_roles_do_not_accumulate_loneliness_and_clear_awaiting_state(
-    tmp_path: Path,
+@pytest.mark.parametrize("affection", [None, 59])
+def test_roles_below_intimate_affection_do_not_accumulate_loneliness(
+    tmp_path: Path, affection: int | None
 ):
     _seed_role(tmp_path)
     runtime, _, _ = _runtime(tmp_path)
-    payload = _snapshot_payload()
-    payload["internal_profile"]["relation_state"]["closeness"] = 0.69
-    runtime.write_snapshot("mira", payload)
+    runtime.write_snapshot("mira", _snapshot_payload())
+    if affection is not None:
+        _init_affection(runtime, affection)
     runtime.write_loneliness_runtime(
         "mira",
         {
@@ -272,6 +298,32 @@ def test_non_close_roles_do_not_accumulate_loneliness_and_clear_awaiting_state(
     assert datetime.fromisoformat(updated["last_calculated_at"]).astimezone(
         timezone.utc
     ) == _utc(2026, 7, 6, 1, 0)
+
+
+def test_intimate_stage_lower_bound_accumulates_loneliness(tmp_path: Path):
+    _seed_role(tmp_path)
+    runtime, _, _ = _runtime(tmp_path)
+    runtime.write_snapshot("mira", _snapshot_payload())
+    _init_affection(runtime, 60)
+    runtime.write_loneliness_runtime(
+        "mira",
+        {
+            "role_id": "mira",
+            "loneliness_value": 22,
+            "last_calculated_at": "2026-07-06T00:00:00+00:00",
+            "last_user_at": "",
+            "last_proactive_at": "",
+            "awaiting_reply_after_proactive": False,
+            "awaiting_reply_since": "",
+            "last_triggered_at": "",
+            "cooldown_until": "",
+        },
+    )
+
+    updated = runtime.current_loneliness_runtime("mira", now=_utc(2026, 7, 6, 0, 10))
+
+    assert updated is not None
+    assert updated["loneliness_value"] == 24
 
 
 def test_proactive_sent_marks_unanswered_and_sets_cooldown(tmp_path: Path):
@@ -303,6 +355,7 @@ def test_should_trigger_proactive_respects_threshold(tmp_path: Path):
     _seed_role(tmp_path)
     runtime, session_manager, _ = _runtime(tmp_path)
     runtime.write_snapshot("mira", _snapshot_payload())
+    _init_affection(runtime, 75)
     runtime.write_loneliness_runtime(
         "mira",
         {
@@ -331,6 +384,7 @@ def test_should_trigger_proactive_reports_active_cooldown(tmp_path: Path):
     _seed_role(tmp_path)
     runtime, session_manager, _ = _runtime(tmp_path)
     runtime.write_snapshot("mira", _snapshot_payload())
+    _init_affection(runtime, 75)
     runtime.write_loneliness_runtime(
         "mira",
         {
@@ -365,6 +419,7 @@ def test_should_trigger_proactive_accepts_positional_now_argument(tmp_path: Path
     _seed_role(tmp_path)
     runtime, session_manager, _ = _runtime(tmp_path)
     runtime.write_snapshot("mira", _snapshot_payload())
+    _init_affection(runtime, 75)
     runtime.write_loneliness_runtime(
         "mira",
         {
@@ -389,12 +444,15 @@ def test_should_trigger_proactive_accepts_positional_now_argument(tmp_path: Path
     assert meta["reason"] == "threshold"
 
 
-def test_should_trigger_proactive_requires_closeness_threshold(tmp_path: Path):
+@pytest.mark.parametrize("affection", [None, 59])
+def test_should_trigger_proactive_requires_intimate_affection(
+    tmp_path: Path, affection: int | None
+):
     _seed_role(tmp_path)
     runtime, session_manager, _ = _runtime(tmp_path)
-    payload = _snapshot_payload()
-    payload["internal_profile"]["relation_state"]["closeness"] = 0.69
-    runtime.write_snapshot("mira", payload)
+    runtime.write_snapshot("mira", _snapshot_payload())
+    if affection is not None:
+        _init_affection(runtime, affection)
     runtime.write_loneliness_runtime(
         "mira",
         {
@@ -416,7 +474,7 @@ def test_should_trigger_proactive_requires_closeness_threshold(tmp_path: Path):
     )
 
     assert should_trigger is False
-    assert meta["reason"] == "not_close_enough"
+    assert meta["reason"] == "affection_below_intimate"
     frozen = runtime.read_loneliness_runtime("mira")
     assert frozen is not None
     assert frozen["awaiting_reply_after_proactive"] is False
@@ -466,6 +524,7 @@ async def test_generate_snapshot_via_llm_accepts_prompt_json_example(tmp_path: P
     assert snapshot["role_self_view"] == "我会留意你有没有来找我。"
     assert snapshot["relation_tags"] == ["亲近"]
     assert snapshot["last_source_message_count"] == 2
+    assert "closeness" not in snapshot["internal_profile"]["relation_state"]
 
 
 @pytest.mark.asyncio

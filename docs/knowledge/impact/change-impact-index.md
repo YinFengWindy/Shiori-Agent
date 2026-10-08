@@ -2,10 +2,11 @@
 title: 改动影响索引
 kind: 影响分析
 status: 当前有效
-last_verified_commit: b42c7d18
+last_verified_commit: bdfdae59
 source_paths:
   - apps/backend/core/
   - apps/backend/agent/
+  - apps/backend/bootstrap/runtime/
   - apps/backend/proactive_v2/
   - apps/backend/infra/
   - apps/backend/desktop_bridge/
@@ -23,6 +24,8 @@ source_paths:
   - packages/sdk/src/hooks/usePrivateDraft.ts
   - packages/sdk/src/hooks/usePrivateAutosave.ts
   - packages/sdk/src/serialDraftQueue.ts
+  - packages/sdk/python/shiori_sdk/managed/
+  - packages/sdk/src/managed/
 related:
   - ../map.md
 ---
@@ -38,7 +41,9 @@ related:
 | 角色素材 | 资源存储、桌面素材页、提示词、NovelAI、自动 CG | `RoleAssetsPage LocalAssetRegistry NovelAI` |
 | 会话键 / 线程 | 渠道标识、Session、Conversation、群聊记忆、桌面缓存 | `session_key SessionManager ConversationService` |
 | 消息模型 / 附件 | bus、投影、渠道格式化、桌面 presenter、记忆采样、自动 CG | `InboundMessage OutboundMessage projector media` |
-| 记忆 schema / 检索 | engine、store、索引、过滤、注入、工具、后台写入 | `MemoryEngine MemoryQuery MemoryRetrievalPipeline` |
+| 记忆 schema / 检索 | SDK 记忆契约、`default_memory` engine、store、索引、过滤、注入、工具、后台写入 | `MemoryEngine MemoryQuery MemoryRuntime MemoryRetrievalPipeline` |
+| 上下文预算 / 压缩 | 模型注册 `model_context_window`、输入预算、`CompactionController`、手动 `/compact`、上下文窗口展示、记忆整理 | `CompactionController RequestCompaction build_input_budget model_context_window ContextWindowChanged` |
+| 运行时换代 / 设置发布 | CoreRuntime 构建与回滚、引用计数代、任务租约、渠道交接、后台任务交接、关闭顺序 | `GenerationManager RuntimeLease RuntimeDispatcher RuntimeBackground ChannelHost prepare_core_runtime` |
 | Proactive 门控 | sensor、presence、关系、state、Agent tick、投递 | `ProactiveLoop AgentTickFactory ProactiveStateStore` |
 | Drift | drift state、pipeline、tools、主动互斥、恢复 | `DriftStateStore DriftTurnPipeline` |
 | 自动 CG | phase hook、scene decision、cooldown、scene key、NovelAI、消息同步 | `AutoCgController AutoCgPolicy SceneDecision` |
@@ -56,6 +61,7 @@ related:
 | 插件通信处置错误 | pending wait/late admission 的结构化 reason、插件卸载 best-effort 清理和未预期失败反馈；同 code 不等于已处置 | `PluginCommunicationLifetime context_disposed releasePreview` |
 | 插件私有文档草稿 | SDK hook 的 client/identity 隔离、读取与保存错误、dirty 上报，两 provider 调用者和宿主 peer ABI | `usePrivateDraft pluginUiPeerExports` |
 | 设置自动保存 | SDK 串行草稿队列（宿主设置页、schema 插件配置页与插件私有文档共用）、作用域切换迟到结果、离开时提交、失败暂停与重试，`host.ui.SettingsSavedStatus` 与宿主页角「已保存」一致，SDK 设置页布局组件 | `SerialDraftQueue usePrivateAutosave SettingsSavedStatus SettingsField` |
+| 插件托管环境 | SDK 托管运行时（安装位置、按原路径导入、删除、空间预检、子进程与日志解码）、provider 插件调用者、宿主选文件/选目录能力 | `ManagedRuntime Installation OwnedService OwnedChild useManagedRuntime ManagedRuntimePanel` |
 | 调度任务 | scheduler、工具、持久化、主动投递、角色删除、桌面表单 | `ScheduleRoleTaskService compute_fire_at` |
 | 单角色剧情 | Story repository、Director、角色/玩家快照、bridge 事件、桌面剧情适配层 | `StorySimulationService StoryRepository StorySimulationHandler stories.beat.committed` |
 

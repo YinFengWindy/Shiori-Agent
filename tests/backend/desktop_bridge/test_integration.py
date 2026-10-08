@@ -585,7 +585,6 @@ async def test_desktop_bridge_chat_send_updates_presence_and_loneliness_runtime(
             "relation_tags": ["亲近", "等你主动"],
             "internal_profile": {
                 "relation_state": {
-                    "closeness": 0.9,
                     "dependence": 0.7,
                     "security": 0.8,
                     "initiative_desire": 0.6,
@@ -1672,9 +1671,7 @@ async def test_desktop_bridge_recomputes_loneliness_runtime_for_roles_and_sessio
             "role_self_view": "我最近会忍不住去想你。",
             "relation_tags": ["亲近", "等你主动"],
             "internal_profile": {
-                "relation_state": {
-                    "closeness": 0.8,
-                },
+                "relation_state": {},
                 "behavior_profile": {},
             },
             "source_summary": {},
@@ -1683,6 +1680,7 @@ async def test_desktop_bridge_recomputes_loneliness_runtime_for_roles_and_sessio
             "last_error": "",
         },
     )
+    relationship_runtime.affection.initialize(role.id, value=80, reason="测试初始化")
     stale_runtime_at = datetime.now(timezone.utc) - timedelta(minutes=21)
     relationship_runtime.write_loneliness_runtime(
         role.id,
