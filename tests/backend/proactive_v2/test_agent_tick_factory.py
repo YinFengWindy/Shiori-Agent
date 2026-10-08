@@ -224,14 +224,16 @@ def test_agent_tick_factory_feeds_the_affection_block_to_proactive_and_drift(
     deps.cfg.role_id = "mira"
     deps.cfg.drift_enabled = True
     deps.state_store = SimpleNamespace(workspace_dir=tmp_path)
-    deps.affection_prompt_fn = lambda: "## 好感度\n你对用户的好感：70/100（亲密）"
+    deps.affection_prompt_fn = (
+        lambda: "## 好感度\n你对用户的好感：70（亲密，范围 -100 到 100）"
+    )
     tick = AgentTickFactory(deps).build()
 
     frame = tick._build_runtime_context_message(
         AgentTickContext(session_key="role:mira"), GatewayResult()
     )
 
-    assert "70/100（亲密）" in frame["content"]
+    assert "70（亲密，范围 -100 到 100）" in frame["content"]
     assert "70/100" not in tick._build_system_prompt()
     drift = tick._drift_pipeline
     assert drift is not None

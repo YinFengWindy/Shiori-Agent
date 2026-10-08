@@ -10,6 +10,13 @@ def test_seed_accepts_an_integer_value_with_a_reason():
     assert (seed.value, seed.reason) == (0, "刚认识")
 
 
+@pytest.mark.parametrize("value", [-100, -1, 100])
+def test_seed_accepts_the_whole_range_including_hostility(value):
+    assert (
+        parse_affection_seed(f'{{"value": {value}, "reason": "设定"}}').value == value
+    )
+
+
 @pytest.mark.parametrize(
     "reply",
     [
@@ -17,7 +24,8 @@ def test_seed_accepts_an_integer_value_with_a_reason():
         '{"value": "60", "reason": "字符串"}',
         '{"value": 60.5, "reason": "小数"}',
         '{"value": true, "reason": "布尔"}',
-        '{"value": -1, "reason": "越界"}',
+        '{"value": -101, "reason": "越界"}',
+        '{"value": 101, "reason": "越界"}',
         '{"value": 60, "reason": "  "}',
         '{"value": 60}',
     ],

@@ -42,6 +42,8 @@ related:
 
 `apps/backend/core/roles/relationship_runtime/` 负责关系快照、持久化、寂寞计算和维护循环。关系快照只含依赖、安全感、主动意愿、被冷落敏感度 4 个维度，不再有 closeness（旧快照文件中的该字段读取时忽略）；寂寞增长与关系主动动机的门槛是好感 ≥ 60（「亲密」阶段起点），好感未初始化时不增长也不触发。`SceneFollowupRuntime` 负责场景追问状态。它们为 Proactive、Drift 和自动 CG 提供上下文，但不直接拥有 Agent 回合。
 
+好感度（`relationship_runtime/affection.py`，状态存于角色 `state/affection.json`）范围 -100–100，分厌恶、冷淡、陌生、熟悉、朋友、亲密、挚爱 7 个固定阶段。达到过「熟悉」及以上后，阶段下限是到过的最高阶段起点、只升不降；此前没有下限（`stage_floor` 为 `null`，#749 之前的旧状态文件存的 `0` 读取时按同义处理），陌生角色被扣分可以降为负数。长时间未联系的衰减最多降到 max(阶段下限, 0)，好感 ≤ 0 时不衰减。
+
 ## 修改影响
 
 - 修改角色 schema：同步检查 `models.py` 序列化、manifest 迁移（`migration.py` 的 `CURRENT_MANIFEST_VERSION`）、桌面共享类型、表单适配、角色卡导入导出和角色运行时装配。
