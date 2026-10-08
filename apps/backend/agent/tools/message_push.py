@@ -47,6 +47,7 @@ class MessagePushTool(Tool):
             "session_key",
             "push_delivery_key",
             "push_message_already_persisted",
+            "push_proactive",
             "defer_push_session_sync",
             "_pending_turn_delivery",
         }
@@ -193,7 +194,12 @@ class MessagePushTool(Tool):
         )
 
     async def execute(self, **kwargs: Any) -> str:
-        """Sends nonblank payload fields and reports validation or transport errors."""
+        """Sends nonblank payloads; host-only ``push_proactive=False`` marks supplements.
+
+        The optional intent must be a bool. Omitting it keeps proactive delivery;
+        model arguments cannot set it through the tool registry. Supplemental
+        delivery supports text and images; files retain their legacy send path.
+        """
         return (await self.push(**kwargs)).text
 
     async def push(self, **kwargs: Any) -> PushOutcome:
@@ -214,6 +220,9 @@ class MessagePushTool(Tool):
         return lease is not None and channel in lease.channel_names
 
     async def _execute_send(self, **kwargs: Any) -> PushOutcome:
+        proactive = kwargs.get("push_proactive", True)
+        if not isinstance(proactive, bool):
+            raise ValueError("push_proactive must be a bool")
         channel: str = kwargs["channel"]
         if channel in self._retired_channels and not self._has_retired_transport(
             channel
@@ -223,6 +232,8 @@ class MessagePushTool(Tool):
         message = _nonblank_payload(kwargs.get("message"))
         file = _nonblank_payload(kwargs.get("file"))
         image = _nonblank_payload(kwargs.get("image"))
+        if not proactive and file:
+            raise ValueError("push_proactive=False does not support file payloads")
         role_id = str(kwargs.get("role_id") or "").strip()
         session_key = str(kwargs.get("session_key") or "").strip()
         pending_commit = kwargs.get("_pending_turn_delivery") is PENDING_TURN_DELIVERY
@@ -232,6 +243,7 @@ class MessagePushTool(Tool):
                 kwargs.get("push_message_already_persisted")
             ),
             **({"pending_commit": True} if pending_commit else {}),
+            **({"proactive": False} if not proactive else {}),
         }
 
         if not message and not file and not image:
@@ -372,6 +384,7 @@ class MessagePushTool(Tool):
                     delivery_key=str(delivery_metadata["delivery_key"]),
                     in_turn=_is_truthy(kwargs.get("defer_push_session_sync")),
                     external_message_id=text_message_id or "",
+                    proactive=proactive,
                 )
             )
 
@@ -387,6 +400,7 @@ class MessagePushTool(Tool):
                     already_persisted=_is_truthy(
                         kwargs.get("push_message_already_persisted")
                     ),
+                    proactive=proactive,
                 )
             )
 

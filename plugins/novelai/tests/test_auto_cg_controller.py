@@ -212,6 +212,7 @@ async def test_controller_retries_generation_once_and_pushes_one_image(
 
     assert generate_tool.calls == 2
     assert push_tool.execute.await_args.kwargs["image"] == "first.png"
+    assert push_tool.execute.await_args.kwargs["push_proactive"] is False
     assert policy.cooldown_remaining("role:mira") > 0
 
 

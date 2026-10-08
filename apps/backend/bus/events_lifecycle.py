@@ -93,6 +93,8 @@ class ExternalImagePushed:
     image: str
     attach_to_turn: bool = False
     already_persisted: bool = False
+    # Supplemental media is delivered and recorded without starting a proactive turn.
+    proactive: bool = True
 
 
 @dataclass(frozen=True)
@@ -124,3 +126,4 @@ class ExternalTextPushed:
     tool: str = "message_push"
     media: tuple[str, ...] = ()
     message_metadata: dict[str, Any] = field(default_factory=_empty_metadata)
+    proactive: bool = True

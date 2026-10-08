@@ -160,7 +160,7 @@ class ExternalPushSyncService:
             "assistant",
             content,
             media=media,
-            proactive=True,
+            proactive=event.proactive,
             tools_used=[tool],
             thread_id=thread.id,
             sender_role="assistant",

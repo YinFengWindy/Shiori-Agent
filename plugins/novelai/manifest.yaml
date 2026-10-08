@@ -1,5 +1,5 @@
 api: 2
-runtime_api: ">=3.1.0 <4.0.0"
+runtime_api: ">=3.1.12 <4.0.0"
 id: novelai
 display_name: NovelAI 生图
 version: '0.1.0'
