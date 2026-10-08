@@ -7,7 +7,7 @@ from .loneliness import (
     _LONELINESS_TICK_MINUTES,
     _NIGHT_SUPPRESSION_END_HOUR,
     _NIGHT_SUPPRESSION_START_HOUR,
-    _PROACTIVE_CLOSENESS_THRESHOLD,
+    _PROACTIVE_AFFECTION_THRESHOLD,
     _UNANSWERED_REPLY_WINDOW_HOURS,
     _advance_by_loneliness_ticks,
     _loneliness_tick_count,

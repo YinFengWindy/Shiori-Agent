@@ -58,7 +58,11 @@ describe("roleMoodSelectors", () => {
     const session = createSession({ current_thought: "我终于放心了。" });
     session.metadata.relationship_snapshot = {
       role_id: "mira", role_self_view: "我来自旧快照。", relation_tags: [],
-      internal_profile: { relation_state: {}, behavior_profile: {} }, source_summary: {},
+      internal_profile: {
+        relation_state: { dependence: 0.5, security: 0.5, initiative_desire: 0.5, neglect_sensitivity: 0.5 },
+        behavior_profile: {},
+      },
+      source_summary: {},
       generated_at: "", last_attempted_at: "", last_error: "",
     };
     assert.equal(resolveCurrentThought(session, createRole()), "我终于放心了。");

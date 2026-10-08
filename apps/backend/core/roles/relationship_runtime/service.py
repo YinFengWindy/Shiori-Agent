@@ -20,7 +20,7 @@ from ..store import RoleStore
 from .loneliness import (
     _NIGHT_SUPPRESSION_END_HOUR,
     _NIGHT_SUPPRESSION_START_HOUR,
-    _PROACTIVE_CLOSENESS_THRESHOLD,
+    _PROACTIVE_AFFECTION_THRESHOLD,
     _UNANSWERED_REPLY_WINDOW_HOURS,
     _advance_by_loneliness_ticks,
     _loneliness_tick_count,
@@ -209,7 +209,7 @@ class RoleRelationshipRuntimeService(_RelationshipPersistenceMixin):
         current = self.read_loneliness_runtime(role_id) or self._build_initial_runtime(
             role_id, now=now_dt
         )
-        if not self._is_loneliness_growth_enabled(snapshot):
+        if not self._is_loneliness_growth_enabled(role_id):
             self._clear_awaiting_reply_state(current)
             current["last_calculated_at"] = _now_iso(now_dt)
             return self._write_runtime_with_presence(role_id, current)
@@ -343,7 +343,7 @@ class RoleRelationshipRuntimeService(_RelationshipPersistenceMixin):
         runtime = self.recompute_loneliness(role_id, now=now)
         if runtime is None:
             return False, {"reason": "no_runtime"}
-        if not self._is_loneliness_growth_enabled(snapshot):
+        if not self._is_loneliness_growth_enabled(role_id):
             return False, {"reason": "not_close_enough"}
         now_dt = (now or datetime.now().astimezone()).astimezone()
         effective_value = float(runtime["loneliness_value"])
@@ -399,11 +399,10 @@ class RoleRelationshipRuntimeService(_RelationshipPersistenceMixin):
         )
         return _normalize_relation_state((internal or {}).get("relation_state"))
 
-    def _is_loneliness_growth_enabled(self, snapshot: dict[str, Any]) -> bool:
-        return (
-            float(self._relation_state(snapshot)["closeness"])
-            >= _PROACTIVE_CLOSENESS_THRESHOLD
-        )
+    def _is_loneliness_growth_enabled(self, role_id: str) -> bool:
+        """好感达到「亲密」阶段起点才累积寂寞；未初始化的好感视为未达门槛。"""
+        state = self._affection.read_state(role_id)
+        return state is not None and state.value >= _PROACTIVE_AFFECTION_THRESHOLD
 
     @staticmethod
     def _clear_awaiting_reply_state(runtime: dict[str, Any]) -> None:

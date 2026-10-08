@@ -105,7 +105,7 @@ async def test_real_relationship_failure_keeps_window_pending_until_consumer_ret
 
     provider.chat.side_effect = None
     provider.chat.return_value = SimpleNamespace(
-        content='{"role_self_view":"我想继续和你聊茶。","relation_tags":["亲近"],"relation_state":{"closeness":0.7},"behavior_profile":{}}'
+        content='{"role_self_view":"我想继续和你聊茶。","relation_tags":["亲近"],"relation_state":{"dependence":0.7},"behavior_profile":{}}'
     )
     retried = await h.maintenance.ensure_memory_for_window(prepared)
     assert retried.trace["memory_covered"]

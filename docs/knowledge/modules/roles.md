@@ -35,7 +35,7 @@ related:
 
 ## 关系与场景
 
-`apps/backend/core/roles/relationship_runtime/` 负责关系快照、持久化、寂寞计算和维护循环。`SceneFollowupRuntime` 负责场景追问状态。它们为 Proactive、Drift 和自动 CG 提供上下文，但不直接拥有 Agent 回合。
+`apps/backend/core/roles/relationship_runtime/` 负责关系快照、持久化、寂寞计算和维护循环。关系快照只含依赖、安全感、主动意愿、被冷落敏感度 4 个维度，不再有 closeness（旧快照文件中的该字段读取时忽略）；寂寞增长与关系主动动机的门槛是好感 ≥ 60（「亲密」阶段起点），好感未初始化时不增长也不触发。`SceneFollowupRuntime` 负责场景追问状态。它们为 Proactive、Drift 和自动 CG 提供上下文，但不直接拥有 Agent 回合。
 
 ## 修改影响
 

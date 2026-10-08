@@ -22,7 +22,7 @@ _RELATIONSHIP_PROMPT = """\
 硬规则：
 - `role_self_view` 必须是角色第一人称内心想法，必须使用“我”来表达，不能写成旁白或上帝视角。
 - `relation_tags` 只能给 1 到 4 个短标签。
-- `relation_state` 只能包含以下字段：closeness、dependence、security、initiative_desire、neglect_sensitivity。
+- `relation_state` 只能包含以下字段：dependence、security、initiative_desire、neglect_sensitivity。
 - `relation_state` 每个字段都必须是 0 到 1 的数字。
 - `behavior_profile` 只能包含以下字段：loneliness_growth_base、loneliness_growth_when_unanswered、trigger_threshold、post_trigger_cooldown_minutes、night_suppression。
 - `trigger_threshold` 使用 0 到 100 的数值。
@@ -34,7 +34,6 @@ _RELATIONSHIP_PROMPT = """\
   "role_self_view": "第一人称想法",
   "relation_tags": ["标签1", "标签2"],
   "relation_state": {{
-    "closeness": 0.0,
     "dependence": 0.0,
     "security": 0.0,
     "initiative_desire": 0.0,

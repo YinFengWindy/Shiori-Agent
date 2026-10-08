@@ -9,7 +9,6 @@ _FIRST_PERSON_MARKERS = ("我", "自己")
 _MAX_RELATION_TAGS = 4
 
 _RELATION_STATE_KEYS = (
-    "closeness",
     "dependence",
     "security",
     "initiative_desire",
@@ -23,7 +22,6 @@ _BEHAVIOR_PROFILE_KEYS = (
     "night_suppression",
 )
 _DEFAULT_RELATION_STATE = {
-    "closeness": 0.5,
     "dependence": 0.45,
     "security": 0.5,
     "initiative_desire": 0.5,

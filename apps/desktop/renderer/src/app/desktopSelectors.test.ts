@@ -271,7 +271,7 @@ describe("desktopSelectors", () => {
         role_self_view: "我最近会不自觉地去想你会不会来找我。",
         relation_tags: ["亲近", "怕被冷落"],
         internal_profile: {
-          relation_state: {},
+          relation_state: { dependence: 0.5, security: 0.5, initiative_desire: 0.5, neglect_sensitivity: 0.5 },
           behavior_profile: {},
         },
         source_summary: {},
@@ -339,7 +339,7 @@ describe("desktopSelectors", () => {
         role_self_view: "我还是会留意你有没有想起我。",
         relation_tags: ["嘴硬", "等你主动"],
         internal_profile: {
-          relation_state: {},
+          relation_state: { dependence: 0.5, security: 0.5, initiative_desire: 0.5, neglect_sensitivity: 0.5 },
           behavior_profile: {},
         },
         source_summary: {},
