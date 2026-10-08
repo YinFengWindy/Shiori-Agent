@@ -15,14 +15,16 @@ from agent.lifecycle.phases.after_reasoning import (
     default_after_reasoning_modules,
 )
 from agent.lifecycle.types import AfterReasoningInput, TurnState
+from agent.scheduler import ScheduledJob, SchedulerService
 from bus.event_bus import EventBus
 from shiori_sdk.messages import InboundMessage
 from conversation.context_scope import turn_context_view, user_context_view
+from conversation.service import desktop_thread_id
 from core.identity import IdentityChat, UserIdentityStore
 from shiori_sdk.accounts.models import AccountRecord
 from shiori_sdk.channels.threads import network_thread_id
 from core.roles import RoleRelationshipRuntimeService, RoleStore
-from core.roles.reply_state import InvalidRoleReply, RoleReply
+from core.roles.reply_state import AffectionChange, InvalidRoleReply, RoleReply
 from proactive_v2.presence import PresenceStore
 from session.manager import SessionManager, ConsolidationCommitRequest
 from session.manager.models import whole_session
@@ -585,11 +587,8 @@ async def test_only_the_users_own_group_message_updates_relationship_state(
         assert last_user_at is None
 
 
-@pytest.mark.parametrize(
-    ("trigger", "counted"),
-    [("desktop", True), ("group_member", False), ("scheduled", False)],
-)
-async def test_only_the_users_own_message_changes_affection(tmp_path, trigger, counted):
+def affection_setup(tmp_path):
+    """A role session whose affection starts at 50, plus a phase that sees it."""
     manager = SessionManager(tmp_path)
     session = role_session(manager)
     relationship = RoleRelationshipRuntimeService(
@@ -605,35 +604,87 @@ async def test_only_the_users_own_message_changes_affection(tmp_path, trigger, c
             content="你好",
             mood="平静",
             thought="我终于放心了。",
-            affection_delta=3,
-            affection_reason="他一直记得我说过的话。",
+            affection=AffectionChange(3, "他一直记得我说过的话。"),
         ),
     )
-    if trigger == "group_member":
-        group = network_thread_id("yin", "qq", "gqq:123")
-        request.state.context_view = turn_context_view(tmp_path, "yin", group)
-        request.state.msg.channel = "qq"
-        request.state.msg.chat_id = "gqq:123"
-        request.state.msg.sender = "456"
-        request.state.msg.metadata.update({"chat_type": "group", "thread_id": group})
-    elif trigger == "scheduled":
-        request.state.msg.metadata["omit_user_turn"] = True
     services = SimpleNamespace(
         session_manager=manager, presence=None, relationship_runtime=relationship
     )
-
-    await Phase(
+    run = Phase(
         default_after_reasoning_modules(EventBus(), services),
         frame_factory=AfterReasoningFrame,
-    ).run(request)
+    ).run
+    return manager, session, relationship, request, run
+
+
+@pytest.mark.parametrize(
+    ("trigger", "counted"),
+    [("desktop_send", True), ("group_member", False), ("scheduled", False)],
+)
+async def test_only_the_users_own_message_changes_affection(tmp_path, trigger, counted):
+    manager, session, relationship, request, run = affection_setup(tmp_path)
+    metadata = request.state.msg.metadata
+    if trigger == "desktop_send":
+        # chat.send stores the user message itself, so its turn omits it.
+        thread = desktop_thread_id("yin")
+        metadata.update({"thread_id": thread, "omit_user_turn": True})
+    elif trigger == "group_member":
+        thread = network_thread_id("yin", "qq", "gqq:123")
+        request.state.msg.channel = "qq"
+        request.state.msg.chat_id = "gqq:123"
+        request.state.msg.sender = "456"
+        metadata.update({"chat_type": "group", "thread_id": thread})
+    else:
+        job = ScheduledJob(
+            trigger="after",
+            tier="soft",
+            fire_at=datetime.now(timezone.utc),
+            channel="desktop",
+            chat_id="role:yin",
+            role_id="yin",
+            prompt="提醒喝水",
+        )
+        scheduler = SchedulerService(tmp_path / "jobs.json", push_tool=None)
+        metadata.update(scheduler._job_role_metadata(job), omit_user_turn=True)
+        thread = metadata["thread_id"]
+    request.state.context_view = turn_context_view(tmp_path, "yin", thread)
+
+    await run(request)
 
     history = relationship.affection.read_history("yin")
+    reloaded = SessionManager(tmp_path).get_or_create(session.key)
     if counted:
         assert [(e.delta, e.reason, e.source) for e in history[1:]] == [
             (3, "他一直记得我说过的话。", "turn")
         ]
-        # The committed session metadata already carries the sidebar summary.
-        assert manager.get_or_create(session.key).metadata["affection"]["value"] == 53
+        # The saved session carries the new summary the sidebar shows.
+        assert reloaded.metadata["affection"]["value"] == 53
     else:
         assert len(history) == 1
-        assert manager.get_or_create(session.key).metadata["affection"]["value"] == 50
+        assert reloaded.metadata["affection"]["value"] == 50
+
+
+@pytest.mark.parametrize("failure", ["stale", "sql"])
+async def test_a_turn_whose_commit_fails_leaves_affection_unchanged(
+    tmp_path, monkeypatch, failure
+):
+    manager, session, relationship, request, run = affection_setup(tmp_path)
+    if failure == "stale":
+        request.turn_result.context_retry["role_reply_previous_updated_at"] = "older"
+        session.metadata["current_mood_updated_at"] = "newer"
+        expected: type[Exception] = ValueError
+    else:
+
+        def failed_write(*args, **kwargs):
+            raise OSError("disk full")
+
+        # Fails inside the session's SQL transaction.
+        monkeypatch.setattr(manager, "_persist_messages", failed_write)
+        expected = OSError
+
+    with pytest.raises(expected):
+        await run(request)
+
+    state = relationship.affection.read_state("yin")
+    assert state is not None and state.value == 50
+    assert len(relationship.affection.read_history("yin")) == 1

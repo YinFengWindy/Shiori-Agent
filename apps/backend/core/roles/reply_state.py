@@ -23,17 +23,23 @@ class RoleReply:
 
     ``mention_ids`` are extra group members the role chose to mention in a
     group reply (set only by ``with_group_mentions``); empty elsewhere.
-    ``affection_delta`` and ``affection_reason`` are the post-reply affection
-    change the mood call reported (set only by ``with_affection_change``);
-    a delta of 0 means affection stays unchanged.
+    ``affection`` is the post-reply affection change the mood call reported
+    (set only by ``with_affection_change``); ``None`` means no change.
     """
 
     content: str
     mood: str
     thought: str
     mention_ids: tuple[str, ...] = ()
-    affection_delta: int = 0
-    affection_reason: str = ""
+    affection: AffectionChange | None = None
+
+
+@dataclass(frozen=True)
+class AffectionChange:
+    """One turn's affection change: a non-zero delta within the turn limit and why."""
+
+    delta: int
+    reason: str
 
 
 @dataclass(frozen=True)
@@ -152,7 +158,9 @@ def with_affection_change(reply: RoleReply, payload: dict[str, Any]) -> RoleRepl
     keeps the validated mood and thought and leaves affection unchanged.
     """
     delta, reason = payload.get("affection_delta"), payload.get("affection_reason")
-    if delta is None and reason is None:
+    if delta is None:
+        if reason is not None:
+            logger.warning("心情输出缺少 affection_delta，好感不变")
         return reply
     # bool is an int subclass; a JSON true/false is not a delta.
     if isinstance(delta, bool) or not isinstance(delta, int):
@@ -164,11 +172,8 @@ def with_affection_change(reply: RoleReply, payload: dict[str, Any]) -> RoleRepl
         logger.warning("心情输出缺少有效 affection_reason，好感不变: %r", reason)
         return reply
     limit = AFFECTION_TURN_DELTA_LIMIT
-    return replace(
-        reply,
-        affection_delta=max(-limit, min(limit, delta)),
-        affection_reason=reason.strip(),
-    )
+    change = AffectionChange(max(-limit, min(limit, delta)), reason.strip())
+    return replace(reply, affection=change)
 
 
 def reply_state_metadata(reply: RoleReply, *, updated_at: str) -> dict[str, str]:

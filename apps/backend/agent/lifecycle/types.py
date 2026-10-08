@@ -75,11 +75,14 @@ class TurnState:
         )
 
     def is_user_turn(self) -> bool:
-        """本回合是否由用户本人刚发来的消息触发。
+        """本回合是否由用户本人发来的消息触发。
 
-        计划任务等不落用户消息的回合（``omit_user_turn``）没有用户来信，不算。
+        计划任务回合（``role_work_kind`` 为 ``scheduled_job``，与回合分派用的是同一
+        标记）的来信是任务提示词，不是用户刚说的话，所以不算；其余按
+        ``is_user_authored`` 判定。``omit_user_turn`` 只表示用户消息已另行落库
+        （桌面发送就是这样），不能用来区分来信是谁。
         """
-        if (self.msg.metadata or {}).get("omit_user_turn"):
+        if (self.msg.metadata or {}).get("role_work_kind") == "scheduled_job":
             return False
         return self.is_user_authored()
 

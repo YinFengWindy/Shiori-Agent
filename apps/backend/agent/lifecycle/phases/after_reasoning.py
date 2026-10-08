@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import logging
-from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, TypeAlias, cast
 
 from shiori_sdk.channels.message_source import (
@@ -30,7 +29,7 @@ from agent.lifecycle.phase import (
     collect_prefixed_slots,
     topo_sort_modules,
 )
-from agent.lifecycle.types import AfterReasoningInput, AfterReasoningResult, TurnState
+from agent.lifecycle.types import AfterReasoningInput, AfterReasoningResult
 from shiori_sdk.lifecycle import AfterReasoningCtx
 from bus.event_bus import EventBus
 from shiori_sdk.messages import OutboundMessage
@@ -38,6 +37,7 @@ from shiori_sdk.messages import OutboundMessage
 if TYPE_CHECKING:
     from agent.looping.ports import LLMConfig, LLMServices
     from agent.looping.ports import SessionServices
+    from core.roles.relationship_runtime import RoleRelationshipRuntimeService
     from session.manager import Session
 
 logger = logging.getLogger(__name__)
@@ -399,7 +399,7 @@ class _AppendMessagesModule:
                 CONTEXT_TURN_STARTED_AT
             ] = state.msg.timestamp.isoformat()
         reply = frame.slots.get("reply:state")
-        relationship_runtime = getattr(
+        relationship_runtime: RoleRelationshipRuntimeService | None = getattr(
             self._session_services, "relationship_runtime", None
         )
         state_kwargs = (
@@ -435,8 +435,10 @@ class _AppendMessagesModule:
                 },
                 "pending_messages": True,
                 "removed_metadata_keys": (INTERRUPTED_TURN_METADATA_KEY,),
-                "metadata_enricher": _formal_reply_enricher(
-                    relationship_runtime, state, reply
+                "metadata_enricher": (
+                    relationship_runtime.enrich_session_metadata
+                    if relationship_runtime is not None
+                    else None
                 ),
                 "expected_mood_updated_at": str(
                     frame.input.turn_result.context_retry.get(
@@ -483,6 +485,18 @@ class _AppendMessagesModule:
         state.committed_message_ids = tuple(
             str(message["id"]) for message in owned_messages if message.get("id")
         )
+        if (
+            reply is not None
+            and reply.affection is not None
+            and relationship_runtime is not None
+            and state.is_user_turn()
+        ):
+            # Only the user's own message counts (group members and scheduled
+            # jobs do not; proactive replies never pass here), and only after
+            # the reply is committed: a stale or failed commit raised above.
+            await relationship_runtime.apply_turn_affection(
+                cast("Session", state.session), reply.affection
+            )
         if state.turn_pushes is not None:
             await state.turn_pushes.committed()
         return frame
@@ -554,40 +568,6 @@ def default_after_reasoning_modules(
         AfterReasoningModules,
         topo_sort_modules(builtins + list(plugin_modules or [])),
     )
-
-
-def _formal_reply_enricher(
-    relationship_runtime: Any | None, state: TurnState, reply: RoleReply
-) -> Callable[[dict[str, Any]], dict[str, Any]] | None:
-    """Session metadata enricher for a formal reply's commit.
-
-    When the user's own message triggered the turn and the mood call reported
-    an affection change, the enricher applies it first. Enrichment runs inside
-    the session commit after the stale-turn check, so a discarded turn never
-    changes affection and the committed metadata already carries the updated
-    summary the sidebar reads. Group members' messages, scheduled turns and
-    proactive replies (which never come through here) leave affection alone.
-    """
-    if relationship_runtime is None:
-        return None
-    enrich = relationship_runtime.enrich_session_metadata
-    if not reply.affection_delta or not state.is_user_turn():
-        return enrich
-
-    def apply_and_enrich(metadata: dict[str, Any]) -> dict[str, Any]:
-        role_id = str(metadata.get("role_id") or "").strip()
-        if role_id:
-            # The role's passive turn seeds affection before it starts, so an
-            # uninitialized state here is a defect and fails the commit.
-            relationship_runtime.affection.apply_delta(
-                role_id,
-                delta=reply.affection_delta,
-                reason=reply.affection_reason,
-                source="turn",
-            )
-        return enrich(metadata)
-
-    return apply_and_enrich
 
 
 def _collect_persist_assistant_slots(slots: dict[str, object]) -> dict[str, object]:

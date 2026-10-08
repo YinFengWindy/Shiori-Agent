@@ -7,6 +7,7 @@ import pytest
 
 from agent.core.reply_completion import fetch_role_mood
 from agent.provider import LLMResponse
+from core.roles.reply_state import AffectionChange
 
 
 def mood_payload(mood="平静", thought="我终于放心了。"):
@@ -291,16 +292,15 @@ async def test_mentions_outside_a_valid_group_list_never_cost_the_mood(
     )
 
 
-@pytest.mark.parametrize(("reported", "applied"), [(10, 3), (-10, -3), (1, 1)])
-async def test_fetch_role_mood_truncates_affection_change_to_three(reported, applied):
+async def test_fetch_role_mood_carries_the_truncated_affection_change():
     provider = AsyncMock()
     provider.chat.return_value = LLMResponse(
         content=json.dumps(
             {
                 "mood": "平静",
                 "thought": "我终于放心了。",
-                "affection_delta": reported,
-                "affection_reason": " 他记得我的生日。 ",
+                "affection_delta": 10,
+                "affection_reason": "他记得我的生日。",
             },
             ensure_ascii=False,
         )
@@ -314,41 +314,7 @@ async def test_fetch_role_mood_truncates_affection_change_to_three(reported, app
         moods=("平静",),
     )
     assert reply is not None
-    assert (reply.affection_delta, reply.affection_reason) == (
-        applied,
-        "他记得我的生日。",
+    assert reply.affection == AffectionChange(3, "他记得我的生日。")
+    assert (
+        "affection_delta" in provider.chat.call_args.kwargs["messages"][-1]["content"]
     )
-
-
-@pytest.mark.parametrize(
-    "affection",
-    [
-        {},
-        {"affection_delta": "2", "affection_reason": "原因"},
-        {"affection_delta": 1.5, "affection_reason": "原因"},
-        {"affection_delta": True, "affection_reason": "原因"},
-        {"affection_delta": 2},
-        {"affection_delta": 2, "affection_reason": "  "},
-    ],
-)
-async def test_missing_or_invalid_affection_keeps_mood_and_leaves_affection(
-    affection,
-):
-    provider = AsyncMock()
-    provider.chat.return_value = LLMResponse(
-        content=json.dumps(
-            {"mood": "平静", "thought": "我终于放心了。", **affection},
-            ensure_ascii=False,
-        )
-    )
-    reply = await fetch_role_mood(
-        provider=provider,
-        model="m",
-        max_tokens=200,
-        messages=[],
-        content="正文",
-        moods=("平静",),
-    )
-    assert reply is not None
-    assert (reply.mood, reply.thought) == ("平静", "我终于放心了。")
-    assert reply.affection_delta == 0

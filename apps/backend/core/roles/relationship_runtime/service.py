@@ -12,8 +12,9 @@ from shiori_sdk.json import load_json_object_loose
 from agent.provider import LLMProvider
 from conversation.context_scope import load_user_context_threads
 from core.memory.markdown import resolve_markdown_store
-from session.manager import SessionManager
+from session.manager import Session, SessionManager
 
+from ..reply_state import AffectionChange
 from ..scene_followup_runtime import SceneFollowupRuntime
 from shiori_sdk.role_events import SceneTransition
 from ..store import RoleStore
@@ -370,6 +371,26 @@ class RoleRelationshipRuntimeService(_RelationshipPersistenceMixin):
             "effective_loneliness_value": round(effective_value, 2),
             "trigger_threshold": threshold,
         }
+
+    async def apply_turn_affection(
+        self, session: Session, change: AffectionChange
+    ) -> None:
+        """Applies one committed turn's affection change and refreshes ``session``.
+
+        Callers invoke this only after the formal reply that reported ``change``
+        has been committed. The role's passive turn seeds affection before it
+        starts, so an uninitialized role here is a defect and raises. The saved
+        session metadata then carries the new summary; the desktop additionally
+        re-enriches every session it serializes.
+        """
+        role_id = self._role_id_from_session(session)
+        if not role_id:
+            raise ValueError(f"好感变化只属于角色会话: {session.key}")
+        _ = self._affection.apply_delta(
+            role_id, delta=change.delta, reason=change.reason, source="turn"
+        )
+        session.metadata = self.enrich_session_metadata(session.metadata)
+        await self._session_manager.save_async(session)
 
     def enrich_session_metadata(self, metadata: dict[str, Any]) -> dict[str, Any]:
         next_metadata = dict(metadata or {})
