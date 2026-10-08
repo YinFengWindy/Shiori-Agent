@@ -157,3 +157,21 @@ it("keeps a stage changed elsewhere between two saves of another stage", async (
     await view.cleanup();
   }
 });
+
+it("stays on a stage edited before the role's current stage is known", async (t: TestContext) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const bridge = fakeBridge({});
+  const view = await mountEditor(bridge.invoke);
+  try {
+    assert.equal(selectedTab(view.container), "陌生");
+    await changeInputValue(field(view.container), "有点拘谨。");
+    // The history answers later with the role's stage; the field being typed in stays.
+    await view.render(<AffectionStagePromptEditor invoke={bridge.invoke} roleId="mira" currentStage="朋友" />);
+    assert.equal(selectedTab(view.container), "陌生");
+    assert.equal(field(view.container).value, "有点拘谨。");
+    await act(async () => t.mock.timers.tick(400));
+    assert.deepEqual(bridge.writes, [{ 陌生: "有点拘谨。" }]);
+  } finally {
+    await view.cleanup();
+  }
+});

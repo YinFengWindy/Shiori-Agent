@@ -52,7 +52,11 @@ function StagePromptField({ row, idPrefix, onEdit, onRestore }: {
 type AffectionStagePromptEditorProps = {
   invoke: DesktopInvoke;
   roleId: string;
-  /** The role's current stage, shown until another is picked; null before initialization, which shows 「陌生」. */
+  /**
+   * The role's current stage, followed until a tab is clicked or a field edited (then the
+   * selection stays put, so a late answer never swaps a field being typed in); null before
+   * initialization or while unknown, which shows 「陌生」.
+   */
   currentStage?: string | null;
 };
 
@@ -76,7 +80,8 @@ export function AffectionStagePromptEditor({ invoke, roleId, currentStage = null
     {!prompts.loadError && prompts.rows && row && <>
       <StageTabs rows={prompts.rows} selected={row.stage} idPrefix={idPrefix} onSelect={setPicked} />
       <StagePromptField key={row.stage} row={row} idPrefix={idPrefix}
-        onEdit={(text) => prompts.edit(row.stage, text)} onRestore={() => prompts.restore(row.stage)} />
+        onEdit={(text) => { setPicked(row.stage); prompts.edit(row.stage, text); }}
+        onRestore={() => { setPicked(row.stage); prompts.restore(row.stage); }} />
     </>}
   </AffectionCard>;
 }
