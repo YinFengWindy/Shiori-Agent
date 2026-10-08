@@ -31,7 +31,7 @@ _AFFECTION_SEED_PROMPT = """\
 判断规则：
 - 以角色设定和 SELF.md 中 `## 我们的关系` 描述的关系基调为主要依据
 - 设定里本来就亲密的关系可以从较高阶段开始；没有依据时不要虚构亲密
-{evidence_rule}
+- 如有长期记忆或近期互动，它们是真实发生过的关系证据，应一并考虑；为空时只按设定判断
 
 只输出 JSON：{{"value": 整数, "reason": "一句话说明为什么是这个值"}}
 
@@ -46,12 +46,7 @@ _AFFECTION_SEED_PROMPT = """\
 
 SELF.md：
 {self_text}
-{history_sections}"""
 
-_ESTABLISHED_RULE = "- 已有的长期记忆和近期互动是真实发生过的关系证据，应一并考虑"
-_NEW_ROLE_RULE = "- 你们还没有真实互动，只按设定判断"
-
-_HISTORY_SECTIONS = """
 MEMORY.md：
 {memory_text}
 
@@ -70,11 +65,11 @@ class AffectionSeed:
 
 @dataclass(frozen=True)
 class AffectionSeedSource:
-    """初始化依据：已有角色额外带上长期记忆与近期互动。"""
+    """初始化依据；新角色的长期记忆与近期互动只是默认内容或为空。"""
 
     self_text: str
-    memory_text: str | None = None
-    recent_messages: str | None = None
+    memory_text: str
+    recent_messages: str
 
 
 class LlmAffectionSeedGenerator:
@@ -87,7 +82,6 @@ class LlmAffectionSeedGenerator:
         snapshot: RoleModelSnapshot,
     ) -> AffectionSeed:
         """Returns the seed, raising on provider failure or any invalid response."""
-        established = source.memory_text is not None
         prompt = _AFFECTION_SEED_PROMPT.format(
             minimum=AFFECTION_MIN,
             maximum=AFFECTION_MAX,
@@ -95,19 +89,12 @@ class LlmAffectionSeedGenerator:
                 f"- {stage.name} {stage.lower}–{stage.upper}"
                 for stage in AFFECTION_STAGES
             ),
-            evidence_rule=_ESTABLISHED_RULE if established else _NEW_ROLE_RULE,
             role_name=role.name or role.id,
             role_description=role.description.strip() or "（无）",
             role_prompt=RolePromptCompiler().compile(role).content,
             self_text=source.self_text.strip() or "（空）",
-            history_sections=(
-                _HISTORY_SECTIONS.format(
-                    memory_text=(source.memory_text or "").strip() or "（空）",
-                    recent_messages=source.recent_messages,
-                )
-                if established
-                else ""
-            ),
+            memory_text=source.memory_text.strip() or "（空）",
+            recent_messages=source.recent_messages,
         )
         response = await snapshot.provider.chat(
             messages=[
@@ -157,26 +144,23 @@ class RoleAffectionInitializer:
         role: RoleRecord,
         snapshot: RoleModelSnapshot,
         *,
-        established: bool,
         now: datetime | None = None,
     ) -> None:
         """Seeds affection when missing; failures propagate and leave it uninitialized.
 
-        ``established`` marks a role whose SELF.md was ready before this turn, so
-        its long-term memory and recent conversation are evidence as well.
+        Every attempt sees the same evidence: profile, SELF.md, MEMORY.md and the
+        user's own recent conversation, whatever path led to SELF being ready.
         """
         if self._affection.read_state(role.id) is not None:
             return
-        source = self._seed_source(role.id, established=established)
+        source = self._seed_source(role.id)
         seed = await self._generator.agenerate(role, source, snapshot)
         self._affection.initialize(
             role.id, value=seed.value, reason=seed.reason, now=now
         )
 
-    def _seed_source(self, role_id: str, *, established: bool) -> AffectionSeedSource:
+    def _seed_source(self, role_id: str) -> AffectionSeedSource:
         store = resolve_markdown_store(workspace=self._workspace, role_id=role_id)
-        if not established:
-            return AffectionSeedSource(self_text=store.read_self())
         session = self._session_manager.get_or_create(
             self._session_manager.role_session_key(role_id)
         )

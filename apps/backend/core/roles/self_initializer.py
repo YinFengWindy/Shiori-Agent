@@ -57,8 +57,7 @@ class RoleSelfInitializer:
                 role = self._store.update_role(role_id, memory_init_state=state)
         seed = dict(state["self_seed"])
         if seed["status"] != "pending":
-            # SELF was ready before this turn: memory and conversation also count.
-            await self._ensure_affection(role, snapshot, established=True)
+            await self._ensure_affection(role, snapshot)
             return
         seed.update(
             model_registration_id=snapshot.registration_id,
@@ -104,16 +103,14 @@ class RoleSelfInitializer:
                 )
                 self._save_seed(role_id, seed)
             ready = self._required_role(role_id)
-        # SELF is ready (generated now or edited meanwhile): seed from the profile.
-        await self._ensure_affection(ready, snapshot, established=False)
+        # SELF is ready (generated now or edited meanwhile).
+        await self._ensure_affection(ready, snapshot)
 
     async def _ensure_affection(
-        self, role: RoleRecord, snapshot: RoleModelSnapshot, *, established: bool
+        self, role: RoleRecord, snapshot: RoleModelSnapshot
     ) -> None:
         try:
-            await self._affection.ensure_initialized(
-                role, snapshot, established=established
-            )
+            await self._affection.ensure_initialized(role, snapshot)
         except asyncio.CancelledError:
             raise
         except Exception as error:

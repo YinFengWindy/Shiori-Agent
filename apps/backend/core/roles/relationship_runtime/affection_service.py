@@ -19,7 +19,7 @@ from .affection import (
     AffectionState,
     apply_affection_delta,
 )
-from .loneliness import _now_iso
+from .loneliness import now_iso
 
 _STATE_FILE = "affection.json"
 _HISTORY_FILE = "affection_history.jsonl"
@@ -61,11 +61,15 @@ class RoleAffectionService:
         path = self.history_path(role_id)
         if not path.exists():
             return []
-        return [
-            AffectionHistoryEntry(**json.loads(line))
-            for line in path.read_text(encoding="utf-8").splitlines()
-            if line.strip()
-        ]
+        entries: list[AffectionHistoryEntry] = []
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines()):
+            if not line.strip():
+                continue
+            payload = json.loads(line)
+            if not isinstance(payload, dict):
+                raise ValueError(f"好感历史第 {number + 1} 行格式错误: {path}")
+            entries.append(AffectionHistoryEntry.from_dict(payload))
+        return entries
 
     def initialize(
         self,
@@ -76,7 +80,7 @@ class RoleAffectionService:
         now: datetime | None = None,
     ) -> AffectionState:
         """Creates the initial state and its ``init`` entry; initializing twice is an error."""
-        at = _now_iso(now)
+        at = now_iso(now)
         with _WRITE_LOCK:
             if self.read_state(role_id) is not None:
                 raise RuntimeError(f"角色好感度已初始化: {role_id}")
@@ -99,7 +103,7 @@ class RoleAffectionService:
         History records the effective change; a change that the floor or the
         upper bound reduces to zero writes nothing.
         """
-        at = _now_iso(now)
+        at = now_iso(now)
         with _WRITE_LOCK:
             current = self.read_state(role_id)
             if current is None:
@@ -120,14 +124,14 @@ class RoleAffectionService:
         return state
 
     def _commit(self, state: AffectionState, entry: AffectionHistoryEntry) -> None:
-        # History goes first so a persisted value always has the entry explaining it.
-        history = self.history_path(state.role_id)
-        history.parent.mkdir(parents=True, exist_ok=True)
-        with history.open("a", encoding="utf-8", newline="\n") as stream:
-            stream.write(json.dumps(entry.to_dict(), ensure_ascii=False) + "\n")
+        # State first: a failed state write leaves no entry behind, so a retried
+        # initialization or change cannot record the same event twice.
         atomic_save_json(
             self.state_path(state.role_id), state.to_dict(), domain="role.affection"
         )
+        history = self.history_path(state.role_id)
+        with history.open("a", encoding="utf-8", newline="\n") as stream:
+            stream.write(json.dumps(entry.to_dict(), ensure_ascii=False) + "\n")
 
     def _state_root(self, role_id: str) -> Path:
         return self._workspace / "roles" / str(role_id).strip() / "state"

@@ -6,7 +6,10 @@ from typing import Any
 
 from conversation.context_scope import UserContextThreads, belongs_to_user
 
-from .models import _RECENT_MESSAGE_CHAR_LIMIT, _RECENT_MESSAGE_LIMIT
+RECENT_MESSAGE_LIMIT = 12
+"""近期互动最多保留的消息条数。"""
+RECENT_MESSAGE_CHAR_LIMIT = 6000
+"""近期互动最多保留的总字数（至少保留最新一条）。"""
 
 
 def collect_user_recent_messages(
@@ -31,10 +34,10 @@ def collect_user_recent_messages(
         if not content:
             continue
         total_chars += len(content)
-        if total_chars > _RECENT_MESSAGE_CHAR_LIMIT and pairs:
+        if total_chars > RECENT_MESSAGE_CHAR_LIMIT and pairs:
             break
         pairs.append({"role": role, "content": content})
-        if len(pairs) >= _RECENT_MESSAGE_LIMIT:
+        if len(pairs) >= RECENT_MESSAGE_LIMIT:
             break
     pairs.reverse()
     return pairs

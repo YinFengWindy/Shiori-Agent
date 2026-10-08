@@ -217,18 +217,20 @@ async def test_new_role_seeds_affection_from_profile_after_self(tmp_path):
     assert affection.summary("mira")["stage"] == "亲密"
     [entry] = affection.read_history("mira")
     assert (entry.source, entry.after, entry.reason) == ("init", 62, "从小一起长大")
-    assert "生成内容" in prompts[0] and "MEMORY.md" not in prompts[0]
+    assert "生成内容" in prompts[0]
 
 
 @pytest.mark.asyncio
-async def test_existing_role_seeds_affection_from_memory_and_conversation(tmp_path):
+@pytest.mark.parametrize("self_ready", [True, False])
+async def test_affection_seed_always_sees_memory_and_conversation(tmp_path, self_ready):
     store, session_manager = RoleStore(tmp_path), SessionManager(tmp_path)
     aggregate = RoleAggregateService.from_runtime(
         workspace=tmp_path, role_store=store, session_manager=session_manager
     ).create_role(name="Mira", role_id="mira", system_prompt="诚实")
-    (aggregate.memory_root / "SELF.md").write_text(
-        "# 我是谁\n\n早就写好的自我\n", encoding="utf-8"
-    )
+    if self_ready:
+        (aggregate.memory_root / "SELF.md").write_text(
+            "# 我是谁\n\n早就写好的自我\n", encoding="utf-8"
+        )
     (aggregate.memory_root / "MEMORY.md").write_text(
         "# 长期记忆\n\n一起看过海\n", encoding="utf-8"
     )
@@ -245,9 +247,9 @@ async def test_existing_role_seeds_affection_from_memory_and_conversation(tmp_pa
         "mira", RoleModelSnapshot("m", provider, "model", "none", role_id="mira")
     )
 
-    # SELF was already present, so only affection asks the model.
-    provider.chat.assert_awaited_once()
-    assert "早就写好的自我" in prompts[0]
+    # Whether SELF was ready before or generated in this turn, history counts.
+    assert provider.chat.await_count == (1 if self_ready else 2)
+    assert ("早就写好的自我" if self_ready else "生成内容") in prompts[0]
     assert "一起看过海" in prompts[0] and "今天也来找你了" in prompts[0]
     assert RoleAffectionService(tmp_path).summary("mira")["value"] == 35
 

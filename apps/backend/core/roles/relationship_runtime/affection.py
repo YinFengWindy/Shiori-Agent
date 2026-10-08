@@ -14,6 +14,7 @@ AFFECTION_MAX = 100
 
 AffectionSource = Literal["init", "turn", "decay"]
 """一条好感历史的来源：AI 初始化、单轮对话结算、长时间未联系的衰减。"""
+_SOURCES: frozenset[str] = frozenset({"init", "turn", "decay"})
 
 
 @dataclass(frozen=True)
@@ -97,6 +98,21 @@ class AffectionHistoryEntry:
     reason: str
     source: AffectionSource
 
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> "AffectionHistoryEntry":
+        """严格解析一行历史；字段类型或来源不合法直接报错。"""
+        source = payload.get("source")
+        if source not in _SOURCES:
+            raise ValueError(f"好感历史来源无效: {source}")
+        return cls(
+            time=_required_text(payload, "time"),
+            before=_optional_int(payload, "before"),
+            after=_required_int(payload, "after"),
+            delta=_optional_int(payload, "delta"),
+            reason=_required_text(payload, "reason"),
+            source=source,
+        )
+
     def to_dict(self) -> dict[str, Any]:
         """返回写入 JSONL 的一行 JSON 对象。"""
         return asdict(self)
@@ -123,3 +139,9 @@ def _required_int(payload: dict[str, Any], key: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
         raise ValueError(f"好感状态的 {key} 必须是整数")
     return value
+
+
+def _optional_int(payload: dict[str, Any], key: str) -> int | None:
+    if key not in payload:
+        raise ValueError(f"好感状态缺少 {key}")
+    return None if payload[key] is None else _required_int(payload, key)

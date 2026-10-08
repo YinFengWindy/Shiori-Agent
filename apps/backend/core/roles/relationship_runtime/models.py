@@ -7,8 +7,6 @@ from typing import Any
 
 _FIRST_PERSON_MARKERS = ("我", "自己")
 _MAX_RELATION_TAGS = 4
-_RECENT_MESSAGE_LIMIT = 12
-_RECENT_MESSAGE_CHAR_LIMIT = 6000
 
 _RELATION_STATE_KEYS = (
     "closeness",

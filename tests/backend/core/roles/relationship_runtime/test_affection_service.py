@@ -78,3 +78,21 @@ def test_initial_value_outside_range_is_rejected(tmp_path):
         service.initialize("mira", value=101, reason="越界", now=_NOW)
     assert service.read_state("mira") is None
     assert service.read_history("mira") == []
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        '{"time": "t", "before": 1, "after": 2, "delta": 1, "reason": "r", "source": "gift"}',
+        '{"time": "t", "before": 1, "after": "2", "delta": 1, "reason": "r", "source": "turn"}',
+        '{"time": "t", "after": 2, "delta": 1, "reason": "r", "source": "turn"}',
+        "[1, 2]",
+    ],
+)
+def test_history_rejects_malformed_entries(tmp_path, line):
+    service = RoleAffectionService(tmp_path)
+    service.initialize("mira", value=10, reason="初始", now=_NOW)
+    with service.history_path("mira").open("a", encoding="utf-8") as stream:
+        stream.write(line + "\n")
+    with pytest.raises(ValueError):
+        service.read_history("mira")
