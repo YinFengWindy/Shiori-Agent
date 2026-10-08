@@ -51,7 +51,7 @@ import {
 import { sidebarTrackMotionClass } from "../shared/styles";
 import { useWindowActivity } from "../shared/useWindowActivity";
 import type { ChatReplyTarget, ChatSendRequest } from "../shared/types";
-import type { AffectionDisplay } from "./affectionDisplay";
+import type { AffectionDisplay } from "../affection/affectionDisplay";
 
 type ChatSurfaceProps = {
   activeRole: RoleRecord | null;

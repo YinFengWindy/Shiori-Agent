@@ -2,13 +2,13 @@ import assert from "node:assert/strict";
 import { it } from "node:test";
 import { act } from "react";
 import { deferred, mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
-import { useMemoryRead } from "./useMemoryRead";
+import { useScopedRead } from "./useScopedRead";
 
 type Batch = { items: string[] };
 
 function Probe({ scope, page, read }: { scope: string; page: number; read: (key: string) => Promise<Batch> }) {
   const key = `${scope}#${page}`;
-  const state = useMemoryRead<Batch>({ scope, key, read: () => read(key), merge: (previous, next) => ({ items: [...previous.items, ...next.items] }) });
+  const state = useScopedRead<Batch>({ scope, key, read: () => read(key), merge: (previous, next) => ({ items: [...previous.items, ...next.items] }) });
   return <p>{[state.loading ? "loading" : "idle", state.error, state.value?.items.join(",") ?? "none"].join("|")}</p>;
 }
 

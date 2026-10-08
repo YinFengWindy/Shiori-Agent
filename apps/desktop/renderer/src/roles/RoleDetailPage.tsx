@@ -10,6 +10,7 @@ import { selectRoleDetailSaveState } from "./roleDetailSaveState";
 import type { RoleDetailTabId } from "./RoleDetailTabs";
 import { RoleDetailToolbar } from "./RoleDetailToolbar";
 import { RoleMemoryPanel } from "../memory/RoleMemoryPanel";
+import { RoleAffectionPanel } from "../affection/RoleAffectionPanel";
 import { RoleProfilePanel } from "./RoleProfilePanel";
 import { RoleAccountsPanel } from "../accounts/RoleAccountsPanel";
 import { usePluginRoleUiDirty } from "../plugins/pluginRoleUiDirty";
@@ -92,6 +93,8 @@ export function RoleDetailPage({
     activeRoleId ? <RoleAccountsPanel roleId={activeRoleId} /> : null
   ) : activeTab === "memory" ? (
     <RoleMemoryPanel roleId={activeRoleId} bridgeReady={bridgeReady} />
+  ) : activeTab === "affection" ? (
+    <RoleAffectionPanel roleId={activeRoleId} bridgeReady={bridgeReady} />
   ) : (
     <RoleCapabilitiesPanel activeRole={activeRole} bridgeReady={bridgeReady} roleForm={roleForm} onUpdate={updateRoleForm} />
   );

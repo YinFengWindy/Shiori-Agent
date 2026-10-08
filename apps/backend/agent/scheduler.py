@@ -271,6 +271,7 @@ class SchedulerService:
         agent_loop_provider: Callable[[], Any] | None = None,
         tracker: LatencyTracker | None = None,
         _now_fn: Callable[[], datetime] | None = None,
+        role_exists: Callable[[str], bool] | None = None,
     ) -> None:
         self.store = JobStore(store_path)
         self.push_tool = push_tool
@@ -278,6 +279,7 @@ class SchedulerService:
         self._agent_loop_provider = agent_loop_provider
         self.tracker = tracker or LatencyTracker()
         self._now = _now_fn or (lambda: datetime.now(timezone.utc))
+        self._role_exists = role_exists
         self._jobs: dict[str, ScheduledJob] = {}
         self._in_flight: set[str] = set()
         self._active_tasks: dict[str, asyncio.Task[None]] = {}
@@ -395,12 +397,28 @@ class SchedulerService:
     def cancel_job(self, job_id: str) -> bool:
         if job_id not in self._jobs:
             return False
-        next_jobs = {key: job for key, job in self._jobs.items() if key != job_id}
-        self._replace_jobs(next_jobs)
-        active_task = self._active_tasks.pop(job_id, None)
-        if active_task is not None:
-            active_task.cancel()
+        self._cancel_jobs({job_id})
         return True
+
+    def cancel_role_jobs(self, role_id: str) -> None:
+        """Removes one role's schedules durably before cancelling its running work."""
+        clean_role_id = self._require_role_id(role_id)
+        self._cancel_jobs(
+            {jid for jid, job in self._jobs.items() if job.role_id == clean_role_id}
+        )
+
+    def _cancel_jobs(self, job_ids: set[str]) -> None:
+        if not job_ids:
+            return
+        self._replace_jobs(
+            {jid: job for jid, job in self._jobs.items() if jid not in job_ids}
+        )
+        for job_id in job_ids:
+            active_task = self._active_tasks.pop(job_id, None)
+            if active_task is not None:
+                active_task.cancel()
+            # A task cancelled before its first step never reaches its finally.
+            self._in_flight.discard(job_id)
 
     def is_job_active(self, job_id: str) -> bool:
         """Returns whether a scheduled job currently has running work."""
@@ -409,29 +427,26 @@ class SchedulerService:
 
     def cancel_job_by_name(self, name: str) -> list[str]:
         cancelled = [jid for jid, j in self._jobs.items() if j.name == name]
-        if cancelled:
-            cancelled_ids = set(cancelled)
-            self._replace_jobs(
-                {
-                    job_id: job
-                    for job_id, job in self._jobs.items()
-                    if job_id not in cancelled_ids
-                }
-            )
+        self._cancel_jobs(set(cancelled))
         return cancelled
 
     def list_jobs(self) -> list[ScheduledJob]:
         return list(self._jobs.values())
 
     def load_and_recover(self) -> None:
-        """启动时加载持久化 jobs，处理 misfire。"""
+        """启动时清理孤儿任务并处理 misfire，成功后才发布恢复状态。"""
         now = self._now()
         jobs = self.store.load()
-        count_loaded = 0
+        recovered: dict[str, ScheduledJob] = {}
         jobs_changed = False
 
         for job in jobs:
+            # Repository failures propagate; only a confirmed missing role is orphaned.
+            if self._role_exists is not None and not self._role_exists(job.role_id):
+                jobs_changed = True
+                continue
             if not job.enabled:
+                recovered[job.id] = job
                 continue
 
             if job.fire_at.tzinfo is None:
@@ -450,12 +465,10 @@ class SchedulerService:
                     # 推进到下一个未来时间
                     job.fire_at = self._advance_every(job, now)
                     jobs_changed = True
-                    self._jobs[job.id] = job
-                    count_loaded += 1
+                    recovered[job.id] = job
                 elif age <= self.GRACE_SECONDS:
                     # 在宽限期内，保留（下次 tick 会执行）
-                    self._jobs[job.id] = job
-                    count_loaded += 1
+                    recovered[job.id] = job
                 else:
                     logger.info(
                         f"Job {job.id[:8]} ({job.name or 'unnamed'}) expired "
@@ -463,12 +476,13 @@ class SchedulerService:
                     )
                     jobs_changed = True
             else:
-                self._jobs[job.id] = job
-                count_loaded += 1
+                recovered[job.id] = job
 
         if jobs_changed:
-            self.store.save(self._jobs)
-        logger.info(f"SchedulerService recovered {count_loaded} jobs")
+            self._replace_jobs(recovered)
+        else:
+            self._jobs = recovered
+        logger.info("SchedulerService recovered %s jobs", len(recovered))
 
     def _build_job(
         self,
@@ -578,6 +592,8 @@ class SchedulerService:
     async def _execute_and_reschedule(self, job: ScheduledJob) -> None:
         cancelled = False
         try:
+            if self._jobs.get(job.id) is not job:
+                return
             await self._execute(job)
             job.run_count += 1
         except asyncio.CancelledError:
@@ -588,7 +604,8 @@ class SchedulerService:
             logger.error(f"Job {job.id[:8]} execution failed: {e}", exc_info=True)
         finally:
             self._in_flight.discard(job.id)
-            if cancelled:
+            # Work can suppress cancellation; never let its completion revive a job.
+            if cancelled or self._jobs.get(job.id) is not job:
                 return
             now = self._now()
             if job.trigger == "every":
@@ -643,6 +660,8 @@ class SchedulerService:
                 ],
                 metadata=self._job_role_metadata(job),
             )
+            if self._jobs.get(job.id) is not job:
+                return
             elapsed = time.monotonic() - t0
             self.tracker.record(elapsed)
             logger.info(

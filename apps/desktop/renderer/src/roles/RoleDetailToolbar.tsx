@@ -2,7 +2,7 @@ import { BackIcon } from "../shared/icons";
 import { cx, iconButtonClass } from "@yinfengwindy/shiori-sdk";
 import { RoleDetailActions } from "./RoleDetailActions";
 import type { RoleDetailSaveState } from "./roleDetailSaveState";
-import { RoleDetailTabs, type RoleDetailTabId } from "./RoleDetailTabs";
+import { RoleDetailTabs, roleDetailTabEditsDraft, type RoleDetailTabId } from "./RoleDetailTabs";
 
 type RoleDetailToolbarProps = {
   activeTab: RoleDetailTabId;
@@ -33,7 +33,7 @@ export function RoleDetailToolbar({ activeTab, canGoToChat, saveState, onBack, o
         <RoleDetailTabs activeTab={activeTab} onChange={onChangeTab} />
       </div>
       <div className="self-center">
-        <RoleDetailActions canGoToChat={canGoToChat} showEditorActions={activeTab !== "memory"} saveState={saveState} onGoToChat={onGoToChat} onReset={onReset} onSave={onSave} />
+        <RoleDetailActions canGoToChat={canGoToChat} showEditorActions={roleDetailTabEditsDraft(activeTab)} saveState={saveState} onGoToChat={onGoToChat} onReset={onReset} onSave={onSave} />
       </div>
     </div>
   );

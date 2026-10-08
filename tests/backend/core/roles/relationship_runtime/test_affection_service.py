@@ -96,3 +96,22 @@ def test_history_rejects_malformed_entries(tmp_path, line):
         stream.write(line + "\n")
     with pytest.raises(ValueError):
         service.read_history("mira")
+
+
+def test_history_pages_run_newest_first_and_end_at_the_init_entry(tmp_path):
+    service = RoleAffectionService(tmp_path)
+    service.initialize("mira", value=30, reason="初始", now=_NOW)
+    for step in range(1, 5):
+        service.apply_delta("mira", delta=1, reason=f"第{step}轮", source="turn")
+
+    pages = [service.history_page("mira", page=page, page_size=2) for page in (1, 2, 3)]
+
+    # Each entry keeps its 0-based append position as a stable id.
+    assert [[(id_, entry.reason) for id_, entry in items] for items, _ in pages] == [
+        [(4, "第4轮"), (3, "第3轮")],
+        [(2, "第2轮"), (1, "第1轮")],
+        [(0, "初始")],
+    ]
+    assert {total for _, total in pages} == {5}
+    assert service.history_page("mira", page=4, page_size=2) == ([], 5)
+    assert service.history_page("nobody", page=1, page_size=2) == ([], 0)

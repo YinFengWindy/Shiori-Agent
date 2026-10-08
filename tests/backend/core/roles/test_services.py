@@ -4,7 +4,7 @@ import pytest
 
 from core.roles import RoleAggregateService, RoleStore
 from session.manager import SessionManager
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 
 @pytest.mark.asyncio
@@ -126,6 +126,50 @@ def test_role_deletion_listener_can_be_removed(tmp_path) -> None:
         service.delete_role("mira")
 
     assert deleted_role_ids == []
+
+
+def test_role_cleanup_runs_before_deletion_and_failure_can_be_retried(tmp_path):
+    store = RoleStore(tmp_path)
+    deleted = Mock()
+    service = RoleAggregateService.from_runtime(
+        workspace=tmp_path,
+        role_store=store,
+        session_manager=SessionManager(tmp_path),
+        on_role_deleted=deleted,
+    )
+    service.create_role(role_id="mira", name="Mira", system_prompt="Mira")
+    cleanup = Mock(side_effect=OSError("cleanup failed"))
+    service.add_role_deleting_listener(cleanup)
+
+    with pytest.raises(OSError, match="cleanup failed"):
+        service.delete_role("mira")
+    assert store.get_role("mira") is not None
+    deleted.assert_not_called()
+
+    def assert_role_exists(_role_id):
+        assert store.get_role("mira") is not None
+
+    cleanup.side_effect = assert_role_exists
+    assert service.delete_role("mira") == (True, True)
+    deleted.assert_called_once_with("mira")
+    assert cleanup.call_count == 2
+
+
+def test_removed_role_cleanup_listener_is_not_called(tmp_path):
+    service = RoleAggregateService.from_runtime(
+        workspace=tmp_path,
+        role_store=RoleStore(tmp_path),
+        session_manager=SessionManager(tmp_path),
+        on_role_deleted=Mock(),
+    )
+    service.create_role(role_id="mira", name="Mira", system_prompt="Mira")
+    cleanup = Mock()
+    service.add_role_deleting_listener(cleanup)
+    service.add_role_deleting_listener(cleanup)
+    service.remove_role_deleting_listener(cleanup)
+    service.remove_role_deleting_listener(cleanup)
+    service.delete_role("mira")
+    cleanup.assert_not_called()
 
 
 def test_sync_role_creation_persists_the_structured_profile(tmp_path) -> None:

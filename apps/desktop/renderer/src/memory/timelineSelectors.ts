@@ -1,3 +1,4 @@
+import { appendBatch, firstBatch, type LoadedBatches } from "../shared/batchPaging";
 import { formatDate, formatTimestamp, parseTimestamp } from "../shared/format";
 import { semanticStatusLabel, type RoleSemanticItem, type RoleSemanticList } from "./roleSemanticMemory";
 
@@ -40,32 +41,19 @@ export function groupTimeline(items: readonly RoleSemanticItem[]): TimelineGroup
 }
 
 /** The loaded timeline: every batch so far, and whether asking for another is pointless. */
-export type TimelineBatches = { list: RoleSemanticList; exhausted: boolean };
+export type TimelineBatches = LoadedBatches<RoleSemanticList>;
 
-/**
- * The end is reached when a batch comes back short, adds nothing new, or the
- * loaded items cover the engine's total. Offset paging can still skip or
- * repeat items when memories change between batches; that is an accepted
- * limitation (repeats are dropped by id, refresh starts over).
- */
-function batchesFrom(list: RoleSemanticList, returned: number, fresh: number): TimelineBatches {
-  const exhausted = list.status !== "ready" || fresh === 0 || returned < list.page_size || list.items.length >= list.total;
-  return { list, exhausted };
+/** The first batch of a scope; a disabled engine has nothing more to load. */
+export function firstTimelineBatch(list: RoleSemanticList): TimelineBatches {
+  return list.status === "ready" ? firstBatch(list) : { list, exhausted: true };
 }
 
-/** The first batch of a scope. */
-export function firstTimelineBatch(list: RoleSemanticList) {
-  return batchesFrom(list, list.items.length, list.items.length);
-}
-
-/** Appends the next batch, dropping items an earlier batch already showed. */
-export function appendTimelineBatch(previous: TimelineBatches, next: TimelineBatches) {
+/** Appends the next batch, dropping items an earlier batch already showed (by id). */
+export function appendTimelineBatch(previous: TimelineBatches, next: TimelineBatches): TimelineBatches {
   const { list: before } = previous;
   const { list: batch } = next;
   if (before.status !== "ready" || batch.status !== "ready") return next;
-  const seen = new Set(before.items.map((item) => item.id));
-  const fresh = batch.items.filter((item) => !seen.has(item.id));
-  return batchesFrom({ ...batch, items: [...before.items, ...fresh] }, batch.items.length, fresh.length);
+  return appendBatch({ list: before, exhausted: previous.exhausted }, { list: batch, exhausted: next.exhausted }, (item) => item.id);
 }
 
 const fieldLabels: Record<string, string> = {

@@ -12,7 +12,7 @@ type StatusMeterProps = {
   testId?: string;
 };
 
-/** A labelled status row with a decorative progress track shared by the chat status sidebar. */
+/** A labelled status row with a decorative progress track shared by the chat status sidebar and the role affection tab. */
 export function StatusMeter({ label, value, percent, heightClass, testId }: StatusMeterProps) {
   return (
     <div data-testid={testId}>
