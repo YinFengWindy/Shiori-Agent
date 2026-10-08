@@ -1,5 +1,5 @@
 import type { AsrResult, BackgroundCtx, BridgeEvent, NativeAudio } from "@yinfengwindy/shiori-sdk";
-import type { VoicePreferences } from "./preferences";
+import { speechOn, type VoicePreferences } from "./preferences";
 import type { VoiceStatePayload } from "./types";
 import { PetVoiceInput } from "./input";
 import { PetReplyAudio } from "./replyAudio";
@@ -9,7 +9,6 @@ type Turn = { role_id: string; session_key: string; mood: string; turn_id: strin
 type PetVoiceContext = Pick<BackgroundCtx, "rpc" | "native" | "chat" | "reportFailure">;
 /** `all` is a user stop and silences every source; `chat` retires only this controller's reply. */
 type StopScope = "all" | "chat";
-const speechOn = (preferences: VoicePreferences) => preferences.enabled && Boolean(preferences.tts);
 /** Owns the desktop pet's ASR → chat → TTS interaction and exact turn matching. */
 export class PetVoiceController {
   private roleId = "";
