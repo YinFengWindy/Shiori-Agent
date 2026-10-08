@@ -44,7 +44,7 @@ export function useChatContextStatus(roleId: string, sessionKey: string, bridgeR
         // DesktopBridgeService's standalone push/proactive commits have no
         // guaranteed context event. Normal turn and metadata updates do.
         onContextChanged(String(event.payload.session_key ?? ""));
-      } else if (event.method === "chat.done" || event.method === "chat.error") {
+      } else if (event.method === "chat.done" || event.method === "chat.error" || event.method === "chat.cancelled") {
         void onTurnFinished(String(event.payload.session_key ?? ""));
       }
     });

@@ -5,6 +5,7 @@ const synchronousDesktopBridgeEvents = new Set([
   "chat.tool.completed",
   "chat.done",
   "chat.error",
+  "chat.cancelled",
   "session.updated",
 ]);
 

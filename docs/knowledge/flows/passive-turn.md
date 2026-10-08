@@ -46,6 +46,7 @@ flowchart TD
 - `chat.tool.started` / `chat.tool.completed`：工具调用生命周期。
 - `chat.done`：reply、thinking、tools_used、token usage 和耗时。
 - `chat.error`：统一错误边界。
+- `chat.cancelled`：回合被按 turn_id 取消或 bridge 关闭时的终止事件，只带 session_key 与 turn_id。
 
 ## 异常分支
 

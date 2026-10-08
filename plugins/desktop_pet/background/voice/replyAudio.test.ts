@@ -52,7 +52,7 @@ test("one streamed chat reply holds the speech line, so a live job cannot speak 
   p.end(); assert.deepEqual(await live, { status: "succeeded" });
 });
 
-test("a reply that stops streaming releases the speech line after the idle timeout, and later deltas stay silent", async (t) => {
+test("a reply that stops streaming releases the speech line after the idle timeout, and its later sentences re-queue behind live", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   const p = player();
   const rpc = createFakePluginClient({ services: { list: async () => ({ services: [] }), call: async <T,>(_provider: unknown, _method: string, payload?: Record<string, unknown>) => ({ audio_base64: String(payload?.text), format: "wav" }) as T } });
@@ -66,10 +66,14 @@ test("a reply that stops streaming releases the speech line after the idle timeo
   assert.deepEqual(p.calls, ["play:第一句。"]);
   t.mock.timers.tick(1); await flush();
   assert.deepEqual(p.calls, ["play:第一句。", "play:直播"], "the stalled reply no longer holds the line");
-  p.end(); assert.deepEqual(await live, { status: "succeeded" });
-  replies.push("迟到的一句。", true, provider, "role", "");
+  replies.push("迟到的一句。", false, provider, "role", "");
   await flush();
-  assert.deepEqual(p.calls, ["play:第一句。", "play:直播"]);
+  assert.deepEqual(p.calls, ["play:第一句。", "play:直播"], "the resumed reply waits for live to finish");
+  p.end(); assert.deepEqual(await live, { status: "succeeded" });
+  await flush();
+  assert.deepEqual(p.calls, ["play:第一句。", "play:直播", "play:迟到的一句。"]);
+  p.end(); replies.push("", true, provider, "role", "");
+  await flush();
   assert.equal(statuses.at(-1), "idle");
 });
 

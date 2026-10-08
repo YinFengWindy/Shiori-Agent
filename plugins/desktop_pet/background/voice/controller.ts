@@ -57,6 +57,9 @@ export class PetVoiceController {
     if (!turn || payload.turn_id !== turn.turn_id || payload.session_key !== turn.session_key || (payload.role_id !== undefined && payload.role_id !== turn.role_id)) return;
     const provider = this.preferences.tts;
     if (event.method === "chat.error") { this.stop("chat"); this.publish({ status: "error", message: String(payload.message ?? "角色回复失败") }); return; }
+    // The host already ended the turn, so only its speech is retired: the chat
+    // job leaves the speech line at once and nothing is cancelled again.
+    if (event.method === "chat.cancelled") { this.turn = null; this.retireReply("chat"); this.publish({ status: "idle" }); return; }
     if (!provider) { if (event.method === "chat.done") { this.turn = null; this.publish({ status: "idle" }); } return; }
     if (event.method === "chat.delta") this.replies.push(String(payload.content_delta ?? payload.delta ?? ""), false, provider, turn.role_id, turn.mood);
     if (event.method === "chat.done") { this.replies.push(String(payload.reply ?? ""), true, provider, turn.role_id, turn.mood); this.turn = null; }

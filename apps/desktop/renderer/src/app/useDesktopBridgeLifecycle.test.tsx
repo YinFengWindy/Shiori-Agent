@@ -203,6 +203,34 @@ describe("useDesktopBridgeLifecycle", () => {
     } finally { await view.cleanup(); }
   });
 
+  it("ends a turn cancelled elsewhere as interrupted without any prompt", async () => {
+    const view = await mountLifecycle();
+    try {
+      await view.emit("chat.delta", { content_delta: "partial" });
+      await view.emit("chat.cancelled", { turn_id: "turn-old" });
+      assert.deepEqual(view.completions, []);
+      await view.emit("chat.cancelled");
+      const reply = view.activeSessionRef.current?.messages.at(-1);
+      assert.equal(reply?.streaming, false);
+      assert.equal(reply?.metadata?.interrupted_reply, true);
+      assert.equal(view.activeSessionRef.current?.messages.length, 2, "no error row");
+      assert.deepEqual(view.feedback.entries, []);
+      assert.deepEqual(view.completions, ["turn-1"]);
+    } finally { await view.cleanup(); }
+  });
+
+  it("leaves a self-requested cancellation to the chat.cancel response", async () => {
+    const view = await mountLifecycle({ cancelling: true });
+    try {
+      await view.emit("chat.delta", { content_delta: "partial" });
+      const streaming = view.activeSessionRef.current;
+      await view.emit("chat.cancelled");
+      assert.equal(view.activeSessionRef.current, streaming);
+      assert.deepEqual(view.feedback.entries, []);
+      assert.deepEqual(view.completions, []);
+    } finally { await view.cleanup(); }
+  });
+
   it("counts unread only for a proactive update that carries a desktop message", async () => {
     const view = await mountLifecycle({ viewKind: "settings" });
     try {

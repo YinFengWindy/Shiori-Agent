@@ -5,6 +5,7 @@ import {
   applyChatToolCompleted,
   applyChatToolStarted,
   failChatStream,
+  finalizeChatCancellation,
   finishChatStream,
 } from "../chat/chatStreamingState";
 import { useLatestRef, type RoleRecord, type SessionPayload, errorMessage } from "@yinfengwindy/shiori-sdk";
@@ -280,7 +281,7 @@ export function useDesktopBridgeLifecycle({
 
         const eventSessionKey = String(event.payload.session_key ?? "");
         const eventTurnId = String(event.payload.turn_id ?? "");
-        if (["chat.delta", "chat.tool.started", "chat.tool.completed", "chat.done", "chat.error"].includes(event.method)
+        if (["chat.delta", "chat.tool.started", "chat.tool.completed", "chat.done", "chat.error", "chat.cancelled"].includes(event.method)
           && !callbacks.isCurrentChatTurn(eventSessionKey, eventTurnId)) return;
         if (event.method === "chat.delta") {
           const currentSession = activeSessionRef.current;
@@ -344,6 +345,18 @@ export function useDesktopBridgeLifecycle({
               thinking_duration_ms: event.payload.thinking_duration_ms,
             }));
           });
+          callbacks.completeChatTurn(eventSessionKey, eventTurnId);
+          return;
+        }
+
+        if (event.method === "chat.cancelled") {
+          // A cancel this window requested is reconciled by its chat.cancel response,
+          // which also carries the persisted interrupted reply.
+          if (callbacks.isChatTurnCancelling(eventSessionKey, eventTurnId)) return;
+          // Cancelled elsewhere (another surface or a bridge shutdown): end the trace quietly.
+          callbacks.updateCommittedActiveSession((current) => current?.key === eventSessionKey
+            ? finalizeChatCancellation(current, "interrupted")
+            : current);
           callbacks.completeChatTurn(eventSessionKey, eventTurnId);
           return;
         }

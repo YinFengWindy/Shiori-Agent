@@ -18,7 +18,10 @@ from shiori_sdk.channel_events import (
 )
 from shiori_sdk.memory.committed import TurnCommitted
 from shiori_sdk.bridge import BridgeEvent
-from desktop_bridge.chat_completion import build_chat_terminal_event
+from desktop_bridge.chat_completion import (
+    build_chat_cancelled_event,
+    build_chat_terminal_event,
+)
 from desktop_bridge.turn_messages import committed_turn_messages
 from desktop_bridge.tool_call_preview import truncate_desktop_tool_result
 from session.manager import Session, SessionManager
@@ -31,6 +34,9 @@ from core.common.runtime_tasks import create_runtime_task
 logger = logging.getLogger("desktop.bridge.chat")
 
 EventEmitter = Callable[[dict[str, Any]], Awaitable[None] | None]
+
+# Every started desktop turn ends with exactly one of these events.
+_TERMINAL_CHAT_METHODS = frozenset({"chat.done", "chat.error", "chat.cancelled"})
 
 
 class SyncDesktopSessionThread(Protocol):
@@ -623,6 +629,19 @@ class DesktopChatService:
                     emit_event=emit_turn_event,
                 )
             except asyncio.CancelledError:
+                # A cancelled turn still ends with a terminal event, unless it
+                # already resolved to chat.done / chat.error before the cancel.
+                if not any(
+                    event.get("method") in _TERMINAL_CHAT_METHODS
+                    for event in terminal_events
+                ):
+                    terminal_events.append(
+                        build_chat_cancelled_event(
+                            request_id=request_id,
+                            turn_id=turn_id,
+                            session_key=session_key,
+                        ).to_dict()
+                    )
                 return
             except Exception:
                 logger.exception("desktop chat turn failed: %s", session_key)

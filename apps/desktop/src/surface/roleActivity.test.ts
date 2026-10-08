@@ -13,6 +13,7 @@ test("real chat delta/error envelopes resolve role identity from their session k
   });
   assert.equal(surfaceRoleActivity(event("chat.error", { session_key: "role:mira", error: "failure" }))?.phase, "failed");
   assert.equal(surfaceRoleActivity(event("chat.done", { role_id: "mira", session_key: "role:mira", reply: "hello" }))?.phase, "review");
+  assert.equal(surfaceRoleActivity(event("chat.cancelled", { session_key: "role:mira", turn_id: "turn" }))?.phase, "review");
 });
 
 test("incremental and full session updates preserve proactive notification semantics", () => {

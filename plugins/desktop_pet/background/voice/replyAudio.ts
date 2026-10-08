@@ -9,13 +9,13 @@ const chatOwner: ReplyOwner = { source: "chat" };
 type ReplyVoice = { provider: PluginServiceReference; roleId: string; mood: string };
 
 /**
- * How long a reply being spoken may go without any delta before its speech is
- * treated as finished. The host emits neither `chat.done` nor `chat.error`
- * when a turn is cancelled elsewhere, so without this a stalled reply would
- * hold the shared speech line forever. 15 s is far above the gap between
- * streamed deltas yet short enough that queued live replies are not stale by
- * the time they speak; a reply resuming after it (e.g. a long tool call) goes
- * unspoken rather than blocking every other source.
+ * How long a reply being spoken may go without any delta before it gives up
+ * the shared speech line. Every turn ends with `chat.done`, `chat.error` or
+ * `chat.cancelled`, so this is only a fallback for a reply that stalls (e.g. a
+ * long tool call) and keeps queued live replies from going stale. 15 s is far
+ * above the gap between streamed deltas. A reply resuming after it is not
+ * dropped: its later sentences open a new job at the back of the line, so
+ * they never cut into a live reply mid-job.
  */
 export const chatReplyIdleMs = 15_000;
 
@@ -29,7 +29,7 @@ export class PetReplyAudio {
   private buffer = new SpeechSentenceBuffer();
   private text = "";
   private stream: SentenceStream | null = null;
-  /** The reply's speech ended early (failure or stall); its remaining deltas are not spoken. */
+  /** The reply's speech failed; its remaining deltas are not spoken. */
   private ended = false;
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
   constructor(
@@ -63,9 +63,10 @@ export class PetReplyAudio {
     if (!stream) return;
     this.idleTimer = setTimeout(() => {
       this.idleTimer = null;
-      // Finished like a final push: buffered sentences still speak, later deltas do not.
+      // Finished like a final push: buffered sentences still speak, and a later
+      // sentence of this reply re-queues as a new job behind whatever waited.
       stream.add([], true);
-      this.stream = null; this.ended = true;
+      this.stream = null;
     }, chatReplyIdleMs);
     this.idleTimer.unref?.();
   }
