@@ -589,16 +589,9 @@ async def test_only_the_users_own_group_message_updates_relationship_state(
 
 
 def affection_setup(tmp_path):
-    """A role session whose affection starts at 50, plus a phase that sees it."""
+    """A role session and a formal reply that reports an affection change."""
     manager = SessionManager(tmp_path)
     session = role_session(manager)
-    relationship = RoleRelationshipRuntimeService(
-        tmp_path,
-        role_store=RoleStore(tmp_path),
-        session_manager=manager,
-        presence=PresenceStore(manager._store),
-    )
-    relationship.affection.initialize("yin", value=50, reason="初识")
     request = turn(
         session,
         role_reply=RoleReply(
@@ -608,14 +601,7 @@ def affection_setup(tmp_path):
             affection=AffectionChange(3, "他一直记得我说过的话。"),
         ),
     )
-    services = SimpleNamespace(
-        session_manager=manager, presence=None, relationship_runtime=relationship
-    )
-    run = Phase(
-        default_after_reasoning_modules(EventBus(), services),
-        frame_factory=AfterReasoningFrame,
-    ).run
-    return manager, session, relationship, request, run
+    return manager, session, request, phase(manager).run
 
 
 @pytest.mark.parametrize(
@@ -623,7 +609,7 @@ def affection_setup(tmp_path):
     [("desktop_send", True), ("group_member", False), ("scheduled", False)],
 )
 async def test_only_the_users_own_message_changes_affection(tmp_path, trigger, counted):
-    manager, session, relationship, request, run = affection_setup(tmp_path)
+    manager, session, request, run = affection_setup(tmp_path)
     metadata = request.state.msg.metadata
     if trigger == "desktop_send":
         # chat.send stores the user message itself, so its turn omits it.
@@ -652,24 +638,17 @@ async def test_only_the_users_own_message_changes_affection(tmp_path, trigger, c
 
     await run(request)
 
-    history = relationship.affection.read_history("yin")
-    reloaded = SessionManager(tmp_path).get_or_create(session.key)
-    if counted:
-        assert [(e.delta, e.reason, e.source) for e in history[1:]] == [
-            (3, "他一直记得我说过的话。", "turn")
-        ]
-        # The saved session carries the new summary the sidebar shows.
-        assert reloaded.metadata["affection"]["value"] == 53
-    else:
-        assert len(history) == 1
-        assert reloaded.metadata["affection"]["value"] == 50
+    # AfterTurn applies the recorded change once the reply is delivered.
+    assert request.state.affection_change == (
+        AffectionChange(3, "他一直记得我说过的话。") if counted else None
+    )
 
 
 @pytest.mark.parametrize("failure", ["stale", "sql"])
 async def test_a_turn_whose_commit_fails_leaves_affection_unchanged(
     tmp_path, monkeypatch, failure
 ):
-    manager, session, relationship, request, run = affection_setup(tmp_path)
+    manager, session, request, run = affection_setup(tmp_path)
     if failure == "stale":
         request.turn_result.context_retry["role_reply_previous_updated_at"] = "older"
         session.metadata["current_mood_updated_at"] = "newer"
@@ -686,6 +665,4 @@ async def test_a_turn_whose_commit_fails_leaves_affection_unchanged(
     with pytest.raises(expected):
         await run(request)
 
-    state = relationship.affection.read_state("yin")
-    assert state is not None and state.value == 50
-    assert len(relationship.affection.read_history("yin")) == 1
+    assert request.state.affection_change is None

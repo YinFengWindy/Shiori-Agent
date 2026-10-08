@@ -33,7 +33,7 @@ from shiori_sdk.channels.threads import network_thread_id
 from shiori_sdk.accounts.models import AccountRecord
 from core.identity import IdentityChat, UserIdentityStore
 from core.roles import RoleStore
-from core.roles.reply_state import RoleReply
+from core.roles.reply_state import AffectionChange, RoleReply
 from desktop_bridge.service import DesktopBridgeService
 from session.manager import SessionManager
 from core.memory.group_environment import GroupEnvironment
@@ -77,10 +77,14 @@ async def runtime(tmp_path):
         )
         return str(result.output)
 
-    def pipeline(reasoning):
+    def pipeline(reasoning, *, relationship_runtime=None, outbound_port=None):
         return PassiveTurnPipeline(
             AgentCoreDeps(
-                session=SimpleNamespace(session_manager=manager, presence=None),
+                session=SimpleNamespace(
+                    session_manager=manager,
+                    presence=None,
+                    relationship_runtime=relationship_runtime,
+                ),
                 context_store=SimpleNamespace(
                     prepare=AsyncMock(return_value=ContextBundle())
                 ),
@@ -92,6 +96,7 @@ async def runtime(tmp_path):
                 tools=tools,
                 reasoner=SimpleNamespace(run_turn=reasoning),
                 event_bus=bus,
+                outbound_port=outbound_port,
             )
         )
 
@@ -862,3 +867,42 @@ async def test_a_failure_to_record_abandoned_pushes_never_replaces_the_turns_err
     assert raised.value.__notes__ == ["另有 2 条回合内已送达的推送未能记录"]
     # Both records were attempted after the commit failed.
     assert append.await_count == 3
+
+
+async def test_a_failed_affection_write_never_blocks_the_committed_replys_delivery(
+    runtime,
+):
+    relationship = SimpleNamespace(
+        enrich_session_metadata=lambda metadata: metadata,
+        handle_user_message=Mock(),
+        apply_turn_affection=AsyncMock(side_effect=OSError("affection disk full")),
+    )
+    port = SimpleNamespace(dispatch=AsyncMock())
+
+    async def reasoning(**_kwargs):
+        assert "已排队" in await runtime.call(message="first")
+        result = reply()
+        result.role_reply = RoleReply(
+            content="done",
+            mood="平静",
+            thought="完成了",
+            affection=AffectionChange(1, "他来找我了。"),
+        )
+        result.role_reply_mood_fresh = True
+        return result
+
+    msg = incoming()
+    msg.metadata["sender_is_user"] = True
+    with pytest.raises(OSError, match="affection disk full"):
+        await runtime.pipeline(
+            reasoning, relationship_runtime=relationship, outbound_port=port
+        ).run(msg, runtime.session.key, dispatch_outbound=True)
+
+    relationship.apply_turn_affection.assert_awaited_once()
+    # The reply and its push were delivered, and the push is stored only once.
+    assert [call.args[0].content for call in port.dispatch.await_args_list] == ["done"]
+    assert [row["content"] for row in runtime.emitted[0]["payload"]["messages"]] == [
+        "first"
+    ]
+    stored = runtime.manager._store.fetch_session_messages(runtime.session.key)
+    assert [row["content"] for row in stored] == ["send to desktop", "first", "done"]

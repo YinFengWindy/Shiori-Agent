@@ -37,7 +37,6 @@ from shiori_sdk.messages import OutboundMessage
 if TYPE_CHECKING:
     from agent.looping.ports import LLMConfig, LLMServices
     from agent.looping.ports import SessionServices
-    from core.roles.relationship_runtime import RoleRelationshipRuntimeService
     from session.manager import Session
 
 logger = logging.getLogger(__name__)
@@ -399,7 +398,7 @@ class _AppendMessagesModule:
                 CONTEXT_TURN_STARTED_AT
             ] = state.msg.timestamp.isoformat()
         reply = frame.slots.get("reply:state")
-        relationship_runtime: RoleRelationshipRuntimeService | None = getattr(
+        relationship_runtime = getattr(
             self._session_services, "relationship_runtime", None
         )
         state_kwargs = (
@@ -485,18 +484,12 @@ class _AppendMessagesModule:
         state.committed_message_ids = tuple(
             str(message["id"]) for message in owned_messages if message.get("id")
         )
-        if (
-            reply is not None
-            and reply.affection is not None
-            and relationship_runtime is not None
-            and state.is_user_turn()
-        ):
+        if reply is not None and reply.affection is not None and state.is_user_turn():
             # Only the user's own message counts (group members and scheduled
-            # jobs do not; proactive replies never pass here), and only after
+            # jobs do not; proactive replies never pass here), and only once
             # the reply is committed: a stale or failed commit raised above.
-            await relationship_runtime.apply_turn_affection(
-                cast("Session", state.session), reply.affection
-            )
+            # AfterTurn applies it, so bookkeeping cannot block delivery.
+            state.affection_change = reply.affection
         if state.turn_pushes is not None:
             await state.turn_pushes.committed()
         return frame

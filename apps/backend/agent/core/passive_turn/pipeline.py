@@ -270,6 +270,9 @@ class PassiveTurnPipeline:
                 self._context,
                 self._history_window,
                 plugin_modules=cast("list[Any]", self._after_turn_plugin_modules),
+                relationship_runtime=getattr(
+                    self._session, "relationship_runtime", None
+                ),
             ),
             frame_factory=AfterTurnFrame,
         )
