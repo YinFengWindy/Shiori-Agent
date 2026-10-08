@@ -9,13 +9,13 @@ const chatOwner: ReplyOwner = { source: "chat" };
 type ReplyVoice = { provider: PluginServiceReference; roleId: string; mood: string };
 
 /**
- * How long a reply being spoken may go without any delta before its speech is
- * treated as finished. The host emits neither `chat.done` nor `chat.error`
- * when a turn is cancelled elsewhere, so without this a stalled reply would
- * hold the shared speech line forever. 15 s is far above the gap between
- * streamed deltas yet short enough that queued live replies are not stale by
- * the time they speak; a reply resuming after it (e.g. a long tool call) goes
- * unspoken rather than blocking every other source.
+ * How long a reply being spoken may go without any delta before it gives up
+ * the shared speech line. Every turn ends with `chat.done`, `chat.error` or
+ * `chat.cancelled`, so this is only a fallback for a reply that stalls (e.g. a
+ * long tool call) and keeps queued live replies from going stale. 15 s is far
+ * above the gap between streamed deltas. A reply resuming after it is not
+ * dropped: its later sentences open a new job at the back of the line, so
+ * they never cut into a live reply mid-job.
  */
 export const chatReplyIdleMs = 15_000;
 
@@ -29,8 +29,10 @@ export class PetReplyAudio {
   private buffer = new SpeechSentenceBuffer();
   private text = "";
   private stream: SentenceStream | null = null;
-  /** The reply's speech ended early (failure or stall); its remaining deltas are not spoken. */
+  /** The reply's speech failed; its remaining deltas are not spoken. */
   private ended = false;
+  /** The reply has opened at least one job; each job reports idle when it ends. */
+  private opened = false;
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
   constructor(
     private readonly ctx: Pick<BackgroundCtx, "rpc">,
@@ -44,6 +46,12 @@ export class PetReplyAudio {
     if (!final) this.text += text;
     const sentences = this.buffer.push(final && !this.text ? text : final ? "" : text, final);
     if (!sentences.length && !final) { this.armIdle(); return; }
+    if (!sentences.length && !this.stream) {
+      // Final with nothing left to say (e.g. after an idle timeout): no empty
+      // job. Only a reply that never spoke still has to settle to idle here.
+      if (!this.opened) this.status("idle");
+      return;
+    }
     const stream = this.stream ?? this.open({ provider, roleId, mood });
     stream.add(sentences, final);
     this.stream = final ? null : stream;
@@ -53,7 +61,7 @@ export class PetReplyAudio {
    * Retires the current reply's state; its job ends at its next read. Stopping
    * audio already playing is the caller's choice of scope on the speech line.
    */
-  reset() { this.epoch += 1; this.buffer = new SpeechSentenceBuffer(); this.text = ""; this.stream?.close(); this.stream = null; this.armIdle(); }
+  reset() { this.epoch += 1; this.buffer = new SpeechSentenceBuffer(); this.text = ""; this.opened = false; this.stream?.close(); this.stream = null; this.armIdle(); }
 
   /** Restarts the stall timer while a reply holds the speech line; any delta counts as activity. */
   private armIdle() {
@@ -63,15 +71,16 @@ export class PetReplyAudio {
     if (!stream) return;
     this.idleTimer = setTimeout(() => {
       this.idleTimer = null;
-      // Finished like a final push: buffered sentences still speak, later deltas do not.
+      // Finished like a final push: buffered sentences still speak, and a later
+      // sentence of this reply re-queues as a new job behind whatever waited.
       stream.add([], true);
-      this.stream = null; this.ended = true;
+      this.stream = null;
     }, chatReplyIdleMs);
     this.idleTimer.unref?.();
   }
 
   private open(voice: ReplyVoice) {
-    const epoch = this.epoch; const stream = new SentenceStream();
+    const epoch = this.epoch; const stream = new SentenceStream(); this.opened = true;
     void this.speech.enqueue(chatOwner, async (job) => {
       const current = () => epoch === this.epoch && job.active;
       try {

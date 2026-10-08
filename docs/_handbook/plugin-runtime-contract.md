@@ -39,7 +39,7 @@ and renderer declaration keys are rejected. This table defines the v1 fields:
 | `api` | yes | integer `2` |
 | `id` | yes | `[a-z][a-z0-9_-]{0,63}` |
 | `version` | yes | full SemVer 2.0 string, including optional prerelease/build |
-| `runtime_api` | yes | compatibility range; host currently advertises `3.1.12` |
+| `runtime_api` | yes | compatibility range; host currently advertises `3.1.13` |
 | `entry` | yes | explicit package-relative `.py` backend entry |
 | `capabilities` | yes | existing v2 capability-name list, including `[]` |
 | `channels` | no | static channel declarations (Runtime API 2.2); requires the `channels` capability |
@@ -79,7 +79,7 @@ SDK. A package declares the lowest version whose additions it uses.
 
 The single version source is `packages/sdk/python/shiori_sdk/_version.py`
 (`RUNTIME_API_VERSION = __version__`), synchronized to the other packages by
-`node scripts/sync_sdk_version.mjs`. 3.1.1–3.1.12 are unpublished contract
+`node scripts/sync_sdk_version.mjs`. 3.1.1–3.1.13 are unpublished contract
 changes on `main`; npm and PyPI hold 3.1.0.
 
 | Version | Adds | Introduced by |
@@ -115,6 +115,7 @@ changes on `main`; npm and PyPI hold 3.1.0.
 | `3.1.10` | the `external_turns` capability: `ctx.external_turns.submit(ExternalTurnMessage(role_id, platform, conversation_id, conversation_title, sender_id, sender_name, message_id, text))` runs one message from a source that is not a channel account as an external-context group turn of the role in the thread of that conversation (the title names it in the phone) and returns `ExternalTurnResult` with status `replied` (and the reply text), `busy` (the role holds or awaits other work; nothing ran or was stored) or `duplicate` (the conversation already holds `message_id`); the turn never queues, never dispatches outbound and is not interruptible through the role session; `platform` may not be `desktop` or a running channel; SDK `shiori_sdk.external_turns` and `shiori_sdk.testing.external_turns.FakeExternalTurns`; packages using it require `runtime_api: ">=3.1.10 <4.0.0"` (see [Runtime API 3.1.10 external turns](#runtime-api-3110-external-turns)) | #721 (#292) |
 | `3.1.11` | `RoleCapabilityCard` takes an optional `settings` node: the card then shows a ⚙ button after its control that opens a centred, medium-width dialog titled by the card's `title`, with a scrolling body; Escape, the backdrop and the close button dismiss it and focus returns to the ⚙. `settings` mounts on the first open and then stays mounted (hidden while closed) as long as the card, so a pending autosave or failed-save retry survives closing; mounting writes nothing. The dialog saves nothing itself: role fields inside still follow the role editor's Save/Reset, plugin-private settings their own autosave. `PluginRoleSettingsProps` gains `roleId` (null for a new role) and `client` (the plugin's scoped RPC client), and `role.settings` components now render under `PluginHostServicesProvider` and remount per role, so a card's dialog can own plugin-private settings with `usePrivateAutosave`. No new peer export; packages using either require `runtime_api: ">=3.1.11 <4.0.0"` | #719 (#718) |
 | `3.1.12` | host/plugin calls to `message_push.execute(...)` accept the optional strict boolean `push_proactive` (default `True`). `False` records supplemental text/images as non-proactive in desktop and external conversations; desktop supplements do not update proactive presence, awaiting-reply state or relationship cooldown. The tool registry takes this field only from host execution context, never model arguments; it is absent from the model schema. A `False` call containing a nonblank `file` is rejected before any payload is sent. Existing calls and legacy senders retain their behavior. NovelAI automatic scene CG opts out of proactive bookkeeping; packages using the flag require `runtime_api: ">=3.1.12 <4.0.0"`. | #740 |
+| `3.1.13` | host event `chat.cancelled` (`{session_key, turn_id}`): a desktop chat turn cancelled by `chat.cancel` or by bridge shutdown now ends with it, so while the bridge connection is open every accepted turn ends with exactly one of `chat.done`, `chat.error` or `chat.cancelled` (subscribe with `ctx.hostEvents.on("chat.cancelled", ...)`); a turn-id cancel first persists the partial reply and announces it with `session.updated`. SDK `chatTerminalEventMethods`, `isChatTerminalEvent` and type `ChatTerminalEventMethod` name that set; packages relying on any of it require `runtime_api: ">=3.1.13 <4.0.0"` | #734 (#292) |
 
 2.2 and 2.3 first ship together in the release that turns every external
 channel into a plugin (#363): no released host advertises 2.2 alone, and
@@ -529,6 +530,13 @@ speech contracts") holds the details.
   activation and revoked when it or its window ends.
 - **Background chat.** `ctx.chat.send({role_id, content, turn_id, media})` and
   `ctx.chat.cancel({session_key, turn_id})` start and cancel a turn for a role.
+  Since 3.1.13, while the bridge connection is open, every accepted turn ends
+  with exactly one host event (`chatTerminalEventMethods`): `chat.done`,
+  `chat.error`, or `chat.cancelled` (`{session_key, turn_id}`) when it was
+  cancelled by turn id or by bridge shutdown. A turn-id cancel persists the
+  partial reply and sends its `session.updated` before `chat.cancelled`. A
+  bridge that dies without closing its connection delivers none of them; the
+  renderer then sees `bridge.exit`.
 - **Autonomous role UI.** A `ui` module may contribute
   `roleUi: { mode: "self-managed", Component }`: a plugin-owned role panel that
   loads and saves through its own RPC and only reports `onDirtyChange` to the
@@ -1036,7 +1044,7 @@ for commands and how to validate its directory/zip from a host environment.
 ## Runtime API 3.0: unified Shiori SDK
 
 `@yinfengwindy/shiori-sdk` and `shiori-sdk` share one version (3.0.0 at introduction, now
-3.1.12) and the source tree `packages/sdk/`. External packages must declare `runtime_api: ">=3.0.0 <4.0.0"`.
+3.1.13) and the source tree `packages/sdk/`. External packages must declare `runtime_api: ">=3.0.0 <4.0.0"`.
 The previous frontend package name has no alias. Existing 2.x ranges are rejected
 with `incompatible_runtime` before backend execution; rebuild renderer peers and
 update the declared range when migrating. The 2.x sections above describe feature

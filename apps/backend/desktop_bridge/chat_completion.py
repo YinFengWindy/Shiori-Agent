@@ -46,3 +46,23 @@ def build_chat_terminal_event(
             "thinking_duration_ms": committed.thinking_duration_ms,
         },
     )
+
+
+def build_chat_cancelled_event(
+    *,
+    request_id: str,
+    turn_id: str,
+    session_key: str,
+) -> BridgeEvent:
+    """Ends a turn that was cancelled (by turn_id or bridge shutdown) before finishing.
+
+    `chat.cancelled` is the third terminal event next to `chat.done` and
+    `chat.error`: every started desktop turn ends with exactly one of them.
+    """
+
+    return BridgeEvent(
+        id=request_id,
+        type="event",
+        method="chat.cancelled",
+        payload={"session_key": session_key, "turn_id": turn_id},
+    )

@@ -5,9 +5,10 @@ import {
   applyChatToolCompleted,
   applyChatToolStarted,
   failChatStream,
+  finalizeChatCancellation,
   finishChatStream,
 } from "../chat/chatStreamingState";
-import { useLatestRef, type RoleRecord, type SessionPayload, errorMessage } from "@yinfengwindy/shiori-sdk";
+import { isChatTerminalEvent, useLatestRef, type RoleRecord, type SessionPayload, errorMessage } from "@yinfengwindy/shiori-sdk";
 import { parseChatTurnMetrics } from "../chat/chatTurnMetrics";
 import { getRoleIdFromSession, isProactiveAssistantMessage, type NavigationEntry } from "./appState";
 import { shouldProcessDesktopBridgeEventSynchronously } from "./desktopBridgeEventPriority";
@@ -15,6 +16,9 @@ import { mergeSessionSummaryAndMessage } from "./sessionMessagePagination";
 import { parseSessionMessageUpdatePayload } from "./desktopSessionProtocol";
 import type { AppMainView } from "../shared/types";
 import type { FeedbackReporter } from "../shared/feedback/feedbackStore";
+
+/** Streaming chat events that, like the terminal ones, belong to one renderer turn. */
+const turnScopedChatEventMethods = new Set(["chat.delta", "chat.tool.started", "chat.tool.completed"]);
 
 type UseDesktopBridgeLifecycleArgs = {
   activeRoleId: string;
@@ -280,7 +284,7 @@ export function useDesktopBridgeLifecycle({
 
         const eventSessionKey = String(event.payload.session_key ?? "");
         const eventTurnId = String(event.payload.turn_id ?? "");
-        if (["chat.delta", "chat.tool.started", "chat.tool.completed", "chat.done", "chat.error"].includes(event.method)
+        if ((turnScopedChatEventMethods.has(event.method) || isChatTerminalEvent(event.method))
           && !callbacks.isCurrentChatTurn(eventSessionKey, eventTurnId)) return;
         if (event.method === "chat.delta") {
           const currentSession = activeSessionRef.current;
@@ -344,6 +348,18 @@ export function useDesktopBridgeLifecycle({
               thinking_duration_ms: event.payload.thinking_duration_ms,
             }), eventTurnId);
           });
+          callbacks.completeChatTurn(eventSessionKey, eventTurnId);
+          return;
+        }
+
+        if (event.method === "chat.cancelled") {
+          // A cancel this window requested is reconciled by its chat.cancel response,
+          // which also carries the persisted interrupted reply.
+          if (callbacks.isChatTurnCancelling(eventSessionKey, eventTurnId)) return;
+          // Cancelled elsewhere (another surface or a bridge shutdown): end the trace quietly.
+          callbacks.updateCommittedActiveSession((current) => current?.key === eventSessionKey
+            ? finalizeChatCancellation(current, "interrupted", eventTurnId)
+            : current);
           callbacks.completeChatTurn(eventSessionKey, eventTurnId);
           return;
         }

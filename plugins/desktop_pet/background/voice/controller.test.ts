@@ -89,3 +89,25 @@ test("user stops silence live speech too, while chat-scoped retirement leaves it
   }
   await f.controller.dispose();
 });
+
+test("a cancelled chat turn releases the speech line at once so a queued live reply plays", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] }); const f = fixture(); f.controller.bind("role");
+  f.controller.gesture("press"); t.mock.timers.tick(300); f.controller.gesture("release"); await flush();
+  const turn = { turn_id: f.requests[0].turn_id, session_key: "session:role" };
+  f.controller.handle(f.event("chat.delta", { ...turn, content_delta: "第一句。" }));
+  await flush();
+  const outcomes: string[] = [];
+  void f.speech.enqueue({ source: "live", runId: "run" }, async () => { f.calls.push("live"); }).then((outcome) => outcomes.push(outcome.status));
+  await flush();
+  assert.equal(f.calls.includes("live"), false, "the streaming reply still holds the line");
+  f.controller.handle(f.event("chat.cancelled", turn));
+  await flush();
+  assert.deepEqual(outcomes, ["succeeded"]);
+  assert.ok(f.calls.includes("live"));
+  assert.equal(f.calls.some((call) => call.startsWith("cancel:")), false, "the host already ended the turn");
+  assert.equal(f.states.at(-1)?.status, "idle");
+  f.controller.handle(f.event("chat.delta", { ...turn, content_delta: "迟到。" }));
+  await flush();
+  assert.equal(f.calls.includes("tts:迟到。:开心"), false, "the cancelled turn no longer speaks");
+  await f.controller.dispose();
+});

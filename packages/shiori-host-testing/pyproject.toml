@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "shiori-host-testing"
 version = "0.1.0"
 requires-python = ">=3.12"
-dependencies = ["shiori-agent==0.1.0", "shiori-sdk[testing]==3.1.12"]
+dependencies = ["shiori-agent==0.1.0", "shiori-sdk[testing]==3.1.13"]
 
 [project.entry-points.pytest11]
 shiori_host_testing = "shiori_host_testing.pytest_plugin"

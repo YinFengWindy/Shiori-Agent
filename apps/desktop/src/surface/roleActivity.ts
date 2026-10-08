@@ -13,6 +13,8 @@ export function surfaceRoleActivity(event: BridgeEvent): SurfaceRoleActivity | n
   if (event.method === "chat.delta") return { roleId, sessionKey, phase: "running", notify: false };
   if (event.method === "chat.done") return { roleId, sessionKey, phase: "review", notify: false };
   if (event.method === "chat.error") return { roleId, sessionKey, phase: "failed", notify: false };
+  // A cancelled turn is over like a finished one, not a failure.
+  if (event.method === "chat.cancelled") return { roleId, sessionKey, phase: "review", notify: false };
   if (event.method !== "session.updated") return null;
   const messages = session?.messages;
   const message = object(payload.message) ?? object(Array.isArray(messages) ? messages.at(-1) : null);
