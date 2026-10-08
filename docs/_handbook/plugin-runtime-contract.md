@@ -39,7 +39,7 @@ and renderer declaration keys are rejected. This table defines the v1 fields:
 | `api` | yes | integer `2` |
 | `id` | yes | `[a-z][a-z0-9_-]{0,63}` |
 | `version` | yes | full SemVer 2.0 string, including optional prerelease/build |
-| `runtime_api` | yes | compatibility range; host currently advertises `3.1.14` |
+| `runtime_api` | yes | compatibility range; host currently advertises `3.1.15` |
 | `entry` | yes | explicit package-relative `.py` backend entry |
 | `capabilities` | yes | existing v2 capability-name list, including `[]` |
 | `channels` | no | static channel declarations (Runtime API 2.2); requires the `channels` capability |
@@ -79,7 +79,7 @@ SDK. A package declares the lowest version whose additions it uses.
 
 The single version source is `packages/sdk/python/shiori_sdk/_version.py`
 (`RUNTIME_API_VERSION = __version__`), synchronized to the other packages by
-`node scripts/sync_sdk_version.mjs`. 3.1.1–3.1.14 are unpublished contract
+`node scripts/sync_sdk_version.mjs`. 3.1.1–3.1.15 are unpublished contract
 changes on `main`; npm and PyPI hold 3.1.0.
 
 | Version | Adds | Introduced by |
@@ -117,6 +117,7 @@ changes on `main`; npm and PyPI hold 3.1.0.
 | `3.1.12` | host/plugin calls to `message_push.execute(...)` accept the optional strict boolean `push_proactive` (default `True`). `False` records supplemental text/images as non-proactive in desktop and external conversations; desktop supplements do not update proactive presence, awaiting-reply state or relationship cooldown. The tool registry takes this field only from host execution context, never model arguments; it is absent from the model schema. A `False` call containing a nonblank `file` is rejected before any payload is sent. Existing calls and legacy senders retain their behavior. NovelAI automatic scene CG opts out of proactive bookkeeping; packages using the flag require `runtime_api: ">=3.1.12 <4.0.0"`. | #740 |
 | `3.1.13` | host event `chat.cancelled` (`{session_key, turn_id}`): a desktop chat turn cancelled by `chat.cancel` or by bridge shutdown now ends with it, so while the bridge connection is open every accepted turn ends with exactly one of `chat.done`, `chat.error` or `chat.cancelled` (subscribe with `ctx.hostEvents.on("chat.cancelled", ...)`); a turn-id cancel first persists the partial reply and announces it with `session.updated`. SDK `chatTerminalEventMethods`, `isChatTerminalEvent` and type `ChatTerminalEventMethod` name that set; packages relying on any of it require `runtime_api: ">=3.1.13 <4.0.0"` | #734 (#292) |
 | `3.1.14` | `PluginRoleSettingsProps` gains `moodCatalog` (the edited role draft's moods, as `PluginRoleUiProps.role.moodCatalog`), so a `role.settings` card can offer per-mood settings; a card may declare `storage: "plugin"` with `read: () => ({})` to own no role draft values at all and keep only plugin-private, autosaved settings in its dialog (as `gpt_sovits_tts` now does instead of `roleUi`). `RoleCapabilityCard` takes an optional `onSettingsOpenChange(open)` (and `CapabilitySettingsDialog` an `onOpenChange`), called on each open and close of the settings dialog; since the content stays mounted while closed, an autosaving plugin commits its last edit on close. `compactIconButtonClass` (the borderless 28px icon-only button) moves from `host-internal` to the main SDK entry and the renderer peer exports. Packages using any of them require `runtime_api: ">=3.1.14 <4.0.0"` | #720 (#718) |
+| `3.1.15` | **breaking**: removes the `roleUi` contribution (`mode: "self-managed"`, added in 3.1.1 and never published) together with the SDK types `PluginRoleUiProps` / `PluginRoleUiContribution`; no bundled plugin used it after #720. A `ui` module that still declares `roleUi` fails export validation with a message naming the retired field; role-scoped plugin settings belong on a `roleSettings` card (with `storage: "plugin"` and its dialog's own autosave for plugin-private documents). The role editor's unsaved-changes guard now covers only the host role draft (role fields and `roleSettings` values). No new peer export; the declared range of existing packages is unaffected unless they used `roleUi` | #750 |
 
 2.2 and 2.3 first ship together in the release that turns every external
 channel into a plugin (#363): no released host advertises 2.2 alone, and
@@ -538,10 +539,9 @@ speech contracts") holds the details.
   partial reply and sends its `session.updated` before `chat.cancelled`. A
   bridge that dies without closing its connection delivers none of them; the
   renderer then sees `bridge.exit`.
-- **Autonomous role UI.** A `ui` module may contribute
-  `roleUi: { mode: "self-managed", Component }`: a plugin-owned role panel that
-  loads and saves through its own RPC and only reports `onDirtyChange` to the
-  host's navigation guard, never joining the host role save.
+- **Autonomous role UI.** 3.1.1 also added a `roleUi` contribution for a
+  plugin-owned role panel; it was removed in 3.1.15 (**breaking**, see the
+  version table) in favour of `roleSettings` cards.
 
 ## Runtime API 3.1.5 native path pickers
 
@@ -715,7 +715,7 @@ The default exports retain the current contribution ABI:
 
 | Entry | Default export |
 | --- | --- |
-| `ui` | `{ pluginId, navPage?, settingsSection?, roleAssets?, accountDetail?, roleSettings?, roleUi?, chatImageActions? }`, matching `PluginUiModule` |
+| `ui` | `{ pluginId, navPage?, settingsSection?, roleAssets?, accountDetail?, roleSettings?, chatImageActions? }`, matching `PluginUiModule` |
 | `background` | `{ pluginId, setup(ctx) }`, matching `PluginBackgroundContribution` |
 | `surface` | `{ pluginId, surface: { component } }`, matching `PluginSurfaceModule` |
 
@@ -727,6 +727,11 @@ host renders the whole role memory page itself: a memory plugin provides only
 the `roles.memory.documents`, `roles.memory.semantic.list` and
 `roles.memory.semantic.detail` RPCs, and the page reads the configured memory
 plugin alone.
+
+A `ui` export that declares `roleUi` is rejected the same way (runtime API
+3.1.15). Contribute role-scoped settings as a `roleSettings` card instead; a
+card with `storage: "plugin"` keeps plugin-private documents in its settings
+dialog with `usePrivateAutosave`.
 
 `pluginId` must match the manifest ID. UI and surface components receive the
 existing host-injected props; background setup receives the existing background
@@ -1045,7 +1050,7 @@ for commands and how to validate its directory/zip from a host environment.
 ## Runtime API 3.0: unified Shiori SDK
 
 `@yinfengwindy/shiori-sdk` and `shiori-sdk` share one version (3.0.0 at introduction, now
-3.1.14) and the source tree `packages/sdk/`. External packages must declare `runtime_api: ">=3.0.0 <4.0.0"`.
+3.1.15) and the source tree `packages/sdk/`. External packages must declare `runtime_api: ">=3.0.0 <4.0.0"`.
 The previous frontend package name has no alias. Existing 2.x ranges are rejected
 with `incompatible_runtime` before backend execution; rebuild renderer peers and
 update the declared range when migrating. The 2.x sections above describe feature

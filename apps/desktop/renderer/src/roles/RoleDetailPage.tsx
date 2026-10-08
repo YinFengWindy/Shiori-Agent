@@ -13,10 +13,6 @@ import { RoleMemoryPanel } from "../memory/RoleMemoryPanel";
 import { RoleAffectionPanel } from "../affection/RoleAffectionPanel";
 import { RoleProfilePanel } from "./RoleProfilePanel";
 import { RoleAccountsPanel } from "../accounts/RoleAccountsPanel";
-import { usePluginRoleUiDirty } from "../plugins/pluginRoleUiDirty";
-import { useLeaveGuard } from "../app/useLeaveGuard";
-import { ConfirmDialog } from "../shared/ui/ConfirmDialog";
-import { confirmPersonaLines } from "../shared/mascot/mascotLines";
 
 type RoleDetailPageProps = {
   activeRole: RoleRecord | null;
@@ -65,8 +61,6 @@ export function RoleDetailPage({
   const [activeTab, setActiveTab] = useState<RoleDetailTabId>("profile");
   // The first tab appears with the page; only later switches animate in.
   const [tabSwitched, setTabSwitched] = useState(false);
-  const privateDirty = usePluginRoleUiDirty(activeRole?.id ?? null);
-  const tabGuard = useLeaveGuard({ active: privateDirty, onDiscard: () => {} });
   const saveState = selectRoleDetailSaveState({ dirty: roleFormDirty, saving: savingRole, bridgeReady });
   const cover = activeRole ? resolveRoleCardCover(activeRole) : "";
   const portraitUrl = moodIllustrationUrl || (cover ? toFileUrl(cover) : "");
@@ -116,7 +110,7 @@ export function RoleDetailPage({
           canGoToChat={bridgeReady && Boolean(activeRole)}
           saveState={saveState}
           onBack={onBackToList}
-          onChangeTab={(tab) => tabGuard.guard(() => { setTabSwitched(true); setActiveTab(tab); })}
+          onChangeTab={(tab) => { setTabSwitched(true); setActiveTab(tab); }}
           onGoToChat={onGoToChat}
           onReset={onResetRoleForm}
           onSave={onSaveRole}
@@ -126,7 +120,6 @@ export function RoleDetailPage({
           {content}
         </div>
       </div>
-      <ConfirmDialog open={tabGuard.confirming} title="放弃未保存的修改？" description="插件设置尚未保存。" confirmLabel="放弃修改" persona={confirmPersonaLines.discardChanges} onClose={tabGuard.cancelLeave} onConfirm={tabGuard.confirmLeave} />
     </section>
   );
 }

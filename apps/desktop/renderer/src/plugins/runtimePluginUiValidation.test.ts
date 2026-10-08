@@ -34,3 +34,13 @@ test("a package still declaring the retired roleMemory contribution is rejected 
   assert.match(retiredPluginUiContribution({ roleMemory: undefined }) ?? "", /roleMemory is retired/);
   assert.equal(retiredPluginUiContribution({ navPage: {} }), null);
 });
+
+test("a package still declaring the removed roleUi contribution is rejected with an explicit diagnostic", () => {
+  const Component = () => null;
+  // The once-valid self-managed shape fails too, rather than being silently ignored.
+  assert.throws(
+    () => validateRuntimePluginUi({ pluginId: "demo", navPage: { label: "Demo", component: Component }, roleUi: { mode: "self-managed", Component } }, "demo"),
+    /roleUi is retired.*roleSettings/,
+  );
+  assert.match(retiredPluginUiContribution({ roleUi: undefined }) ?? "", /roleUi is retired/);
+});

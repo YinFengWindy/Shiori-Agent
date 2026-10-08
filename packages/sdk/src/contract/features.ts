@@ -6,19 +6,6 @@ import type { PluginRpcClient } from "../rpc";
 /** One plugin's editable role values; the plugin owns their schema and persistence keys. */
 export type PluginRoleValues = Record<string, unknown>;
 
-/** Read-only role identity for plugin-private editors; saving never joins roles.update. */
-export type PluginRoleUiProps = {
-  roleId: string | null;
-  role: Readonly<{ id: string; name: string; moodCatalog: readonly string[] }> | null;
-  client: PluginRpcClient;
-  disabled: boolean;
-  /** Reports private unsaved edits to the host's navigation guard, never to its save transaction. */
-  onDirtyChange(dirty: boolean): void;
-};
-
-/** A self-managed editor owns its loading, dirty state, errors and explicit save action. */
-export type PluginRoleUiContribution = { mode: "self-managed"; Component: ComponentType<PluginRoleUiProps> };
-
 /** Props for a plugin-owned section within the role capabilities editor. */
 export type PluginRoleSettingsProps = {
   /**
@@ -28,11 +15,11 @@ export type PluginRoleSettingsProps = {
    * beside the role draft in `values`.
    */
   roleId: string | null;
-  /** The plugin's scoped RPC client (runtime API 3.1.11), as `PluginRoleUiProps.client`. */
+  /** The plugin's scoped RPC client (runtime API 3.1.11). */
   client: PluginRpcClient;
   /**
-   * The moods of the edited role's draft (runtime API 3.1.14), as
-   * `PluginRoleUiProps.role.moodCatalog`, e.g. to offer per-mood settings.
+   * The moods of the edited role's draft (runtime API 3.1.14), e.g. to offer
+   * per-mood settings.
    */
   moodCatalog: readonly string[];
   values: PluginRoleValues;

@@ -206,5 +206,3 @@ export { SidebarResizeHandle } from "./components/SidebarResizeHandle";
 export type { PluginNativeApi, PluginNativeContext, NativeAudio, NativeAudioDevice, PluginBackgroundChat } from "./contract/native";
 export type { PluginServiceReference, PluginServiceDescriptor } from "./rpc";
 export type { AsrRequest, AsrResult, TtsRequest, TtsResult } from "./contract/speech";
-
-export type { PluginRoleUiProps, PluginRoleUiContribution } from "./contract/features";
