@@ -217,7 +217,11 @@ async def test_new_role_seeds_affection_from_profile_after_self(tmp_path):
     assert affection.summary("mira")["stage"] == "亲密"
     [entry] = affection.read_history("mira")
     assert (entry.source, entry.after, entry.reason) == ("init", 62, "从小一起长大")
+    # ``prompts`` holds only affection prompts: it sees the SELF just generated,
+    # while the untouched MEMORY.md template counts as no evidence.
     assert "生成内容" in prompts[0]
+    assert "MEMORY.md：\n（空）" in prompts[0]
+    assert "近期互动：\n（暂无近期互动）" in prompts[0]
 
 
 @pytest.mark.asyncio
@@ -249,6 +253,8 @@ async def test_affection_seed_always_sees_memory_and_conversation(tmp_path, self
 
     # Whether SELF was ready before or generated in this turn, history counts.
     assert provider.chat.await_count == (1 if self_ready else 2)
+    # ``prompts`` records only the affection seed prompt, never the SELF call.
+    assert len(prompts) == 1
     assert ("早就写好的自我" if self_ready else "生成内容") in prompts[0]
     assert "一起看过海" in prompts[0] and "今天也来找你了" in prompts[0]
     assert RoleAffectionService(tmp_path).summary("mira")["value"] == 35

@@ -24,7 +24,7 @@ from .loneliness import (
     _UNANSWERED_REPLY_WINDOW_HOURS,
     _advance_by_loneliness_ticks,
     _loneliness_tick_count,
-    now_iso,
+    _now_iso,
     _parse_iso,
 )
 from .affection_service import RoleAffectionService
@@ -90,7 +90,7 @@ class RoleRelationshipRuntimeService(_RelationshipPersistenceMixin):
     ) -> dict[str, Any]:
         now = attempted_at or datetime.now().astimezone()
         existing = self.read_snapshot(role_id) or {}
-        existing["last_attempted_at"] = now_iso(now)
+        existing["last_attempted_at"] = _now_iso(now)
         existing["last_error"] = str(error or "").strip()
         return self.write_snapshot(role_id, existing)
 
@@ -169,8 +169,8 @@ class RoleRelationshipRuntimeService(_RelationshipPersistenceMixin):
                     "memory_sections": ["SELF.md", "MEMORY.md"],
                     "generated_from_window_hours": 72,
                 },
-                "generated_at": now_iso(now_dt),
-                "last_attempted_at": now_iso(now_dt),
+                "generated_at": _now_iso(now_dt),
+                "last_attempted_at": _now_iso(now_dt),
                 "last_source_message_count": session_message_count,
                 "last_error": "",
             },
@@ -211,7 +211,7 @@ class RoleRelationshipRuntimeService(_RelationshipPersistenceMixin):
         )
         if not self._is_loneliness_growth_enabled(snapshot):
             self._clear_awaiting_reply_state(current)
-            current["last_calculated_at"] = now_iso(now_dt)
+            current["last_calculated_at"] = _now_iso(now_dt)
             return self._write_runtime_with_presence(role_id, current)
         value = float(current["loneliness_value"])
         last_calculated = _parse_iso(current.get("last_calculated_at")) or now_dt
@@ -230,7 +230,7 @@ class RoleRelationshipRuntimeService(_RelationshipPersistenceMixin):
                 self._clear_awaiting_reply_state(current)
         current["loneliness_value"] = round(_clamp(value + delta, 0.0, 100.0), 2)
         if tick_count > 0:
-            current["last_calculated_at"] = now_iso(
+            current["last_calculated_at"] = _now_iso(
                 _advance_by_loneliness_ticks(last_calculated, tick_count=tick_count)
             )
         return self._write_runtime_with_presence(role_id, current)
@@ -262,8 +262,8 @@ class RoleRelationshipRuntimeService(_RelationshipPersistenceMixin):
         )
         current["awaiting_reply_after_proactive"] = False
         current["awaiting_reply_since"] = ""
-        current["last_calculated_at"] = now_iso(now_dt)
-        current["last_user_at"] = now_iso(now_dt)
+        current["last_calculated_at"] = _now_iso(now_dt)
+        current["last_user_at"] = _now_iso(now_dt)
         return self.write_loneliness_runtime(role_id, current)
 
     def handle_proactive_sent(
@@ -283,13 +283,13 @@ class RoleRelationshipRuntimeService(_RelationshipPersistenceMixin):
             self._behavior_profile(snapshot)["post_trigger_cooldown_minutes"]
         )
         current["awaiting_reply_after_proactive"] = True
-        current["awaiting_reply_since"] = now_iso(now_dt)
-        current["last_triggered_at"] = now_iso(now_dt)
-        current["last_proactive_at"] = now_iso(now_dt)
-        current["cooldown_until"] = now_iso(
+        current["awaiting_reply_since"] = _now_iso(now_dt)
+        current["last_triggered_at"] = _now_iso(now_dt)
+        current["last_proactive_at"] = _now_iso(now_dt)
+        current["cooldown_until"] = _now_iso(
             now_dt + timedelta(minutes=cooldown_minutes)
         )
-        current["last_calculated_at"] = now_iso(now_dt)
+        current["last_calculated_at"] = _now_iso(now_dt)
         return self.write_loneliness_runtime(role_id, current)
 
     def should_trigger_scene_followup(
@@ -423,12 +423,12 @@ class RoleRelationshipRuntimeService(_RelationshipPersistenceMixin):
             else None
         )
         runtime["last_user_at"] = (
-            now_iso(last_user_at)
+            _now_iso(last_user_at)
             if last_user_at
             else str(runtime.get("last_user_at") or "")
         )
         runtime["last_proactive_at"] = (
-            now_iso(last_proactive_at)
+            _now_iso(last_proactive_at)
             if last_proactive_at
             else str(runtime.get("last_proactive_at") or "")
         )
@@ -449,10 +449,10 @@ class RoleRelationshipRuntimeService(_RelationshipPersistenceMixin):
             payload={
                 "role_id": role_id,
                 "loneliness_value": 0.0,
-                "last_calculated_at": now_iso(now),
-                "last_user_at": now_iso(last_user_at) if last_user_at else "",
+                "last_calculated_at": _now_iso(now),
+                "last_user_at": _now_iso(last_user_at) if last_user_at else "",
                 "last_proactive_at": (
-                    now_iso(last_proactive_at) if last_proactive_at else ""
+                    _now_iso(last_proactive_at) if last_proactive_at else ""
                 ),
                 "awaiting_reply_after_proactive": False,
                 "awaiting_reply_since": "",
@@ -568,8 +568,8 @@ class RoleRelationshipRuntimeService(_RelationshipPersistenceMixin):
         )
         summary_lines = [
             f"最近消息条数: {len(recent_messages)}",
-            f"最近用户消息时间: {now_iso(last_user_at) if last_user_at else '（无）'}",
-            f"最近主动消息时间: {now_iso(last_proactive_at) if last_proactive_at else '（无）'}",
+            f"最近用户消息时间: {_now_iso(last_user_at) if last_user_at else '（无）'}",
+            f"最近主动消息时间: {_now_iso(last_proactive_at) if last_proactive_at else '（无）'}",
         ]
         runtime = self.read_loneliness_runtime(role_id)
         if runtime is not None:

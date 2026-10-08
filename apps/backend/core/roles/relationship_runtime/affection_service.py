@@ -13,13 +13,13 @@ from pathlib import Path
 from typing import Any, Literal
 
 from shiori_sdk.files.json import atomic_save_json
+from shiori_sdk.values import now_iso
 
 from .affection import (
     AffectionHistoryEntry,
     AffectionState,
     apply_affection_delta,
 )
-from .loneliness import now_iso
 
 _STATE_FILE = "affection.json"
 _HISTORY_FILE = "affection_history.jsonl"
@@ -80,7 +80,7 @@ class RoleAffectionService:
         now: datetime | None = None,
     ) -> AffectionState:
         """Creates the initial state and its ``init`` entry; initializing twice is an error."""
-        at = now_iso(now)
+        at = now.astimezone().isoformat() if now else now_iso()
         with _WRITE_LOCK:
             if self.read_state(role_id) is not None:
                 raise RuntimeError(f"角色好感度已初始化: {role_id}")
@@ -103,7 +103,7 @@ class RoleAffectionService:
         History records the effective change; a change that the floor or the
         upper bound reduces to zero writes nothing.
         """
-        at = now_iso(now)
+        at = now.astimezone().isoformat() if now else now_iso()
         with _WRITE_LOCK:
             current = self.read_state(role_id)
             if current is None:

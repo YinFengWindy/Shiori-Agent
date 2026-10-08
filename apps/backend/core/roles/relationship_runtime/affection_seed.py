@@ -8,12 +8,14 @@ from pathlib import Path
 
 from conversation.context_scope import load_user_context_threads
 from core.memory.markdown import resolve_markdown_store
+from core.memory.markdown_schema import DOCUMENT_DEFAULTS
 from session.manager import SessionManager
 from shiori_sdk.json import load_json_object_loose
 
 from ..model_runtime import RoleModelSnapshot
 from ..models import RoleRecord
 from ..role_prompt_compiler import RolePromptCompiler
+from ..self_seed_state import self_fingerprint
 from .affection import AFFECTION_MAX, AFFECTION_MIN, AFFECTION_STAGES
 from .affection_service import RoleAffectionService
 from .interaction import collect_user_recent_messages, render_recent_messages
@@ -168,8 +170,13 @@ class RoleAffectionInitializer:
             session.messages,
             user_threads=load_user_context_threads(self._workspace, role_id),
         )
+        memory = store.read_long_term()
+        # An untouched template is no evidence; render it as empty so the
+        # "judge by profile only" rule applies to brand-new roles.
+        if self_fingerprint(memory) == self_fingerprint(DOCUMENT_DEFAULTS["MEMORY.md"]):
+            memory = ""
         return AffectionSeedSource(
             self_text=store.read_self(),
-            memory_text=store.read_long_term(),
+            memory_text=memory,
             recent_messages=render_recent_messages(recent),
         )

@@ -29,8 +29,7 @@ class LonelinessRuntimeState:
         return asdict(self)
 
 
-def now_iso(now: datetime | None = None) -> str:
-    """Returns ``now`` (default: the current time) as a local-offset ISO string."""
+def _now_iso(now: datetime | None = None) -> str:
     return (now or datetime.now().astimezone()).astimezone().isoformat()
 
 

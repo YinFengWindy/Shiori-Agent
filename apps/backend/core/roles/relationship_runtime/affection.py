@@ -105,11 +105,11 @@ class AffectionHistoryEntry:
         if source not in _SOURCES:
             raise ValueError(f"好感历史来源无效: {source}")
         return cls(
-            time=_required_text(payload, "time"),
-            before=_optional_int(payload, "before"),
-            after=_required_int(payload, "after"),
-            delta=_optional_int(payload, "delta"),
-            reason=_required_text(payload, "reason"),
+            time=_required_text(payload, "time", "好感历史"),
+            before=_optional_int(payload, "before", "好感历史"),
+            after=_required_int(payload, "after", "好感历史"),
+            delta=_optional_int(payload, "delta", "好感历史"),
+            reason=_required_text(payload, "reason", "好感历史"),
             source=source,
         )
 
@@ -127,21 +127,21 @@ def apply_affection_delta(
     return replace(state, value=value, stage_floor=floor, updated_at=at)
 
 
-def _required_text(payload: dict[str, Any], key: str) -> str:
+def _required_text(payload: dict[str, Any], key: str, subject: str = "好感状态") -> str:
     value = payload.get(key)
     if not isinstance(value, str) or not value:
-        raise ValueError(f"好感状态缺少 {key}")
+        raise ValueError(f"{subject}缺少 {key}")
     return value
 
 
-def _required_int(payload: dict[str, Any], key: str) -> int:
+def _required_int(payload: dict[str, Any], key: str, subject: str = "好感状态") -> int:
     value = payload.get(key)
     if isinstance(value, bool) or not isinstance(value, int):
-        raise ValueError(f"好感状态的 {key} 必须是整数")
+        raise ValueError(f"{subject}的 {key} 必须是整数")
     return value
 
 
-def _optional_int(payload: dict[str, Any], key: str) -> int | None:
+def _optional_int(payload: dict[str, Any], key: str, subject: str) -> int | None:
     if key not in payload:
-        raise ValueError(f"好感状态缺少 {key}")
-    return None if payload[key] is None else _required_int(payload, key)
+        raise ValueError(f"{subject}缺少 {key}")
+    return None if payload[key] is None else _required_int(payload, key, subject)
