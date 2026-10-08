@@ -27,12 +27,13 @@ _AFFECTION_SEED_SYSTEM = (
 _AFFECTION_SEED_PROMPT = """\
 请根据以下资料，判断角色此刻对用户的初始好感度。
 
-好感度是 {minimum}–{maximum} 的整数，分为以下阶段：
+好感度是 {minimum} 到 {maximum} 的整数，分为以下阶段：
 {stages}
 
 判断规则：
 - 以角色设定和 SELF.md 中 `## 我们的关系` 描述的关系基调为主要依据
 - 设定里本来就亲密的关系可以从较高阶段开始；没有依据时不要虚构亲密
+- 负值表示角色对用户抱有反感或敌意，例如设定中与用户敌对、有过节；0 附近是没有特别好恶的陌生人；没有依据时不要虚构敌意
 - 如有长期记忆或近期互动，它们是真实发生过的关系证据，应一并考虑；为空时只按设定判断
 
 只输出 JSON：{{"value": 整数, "reason": "一句话说明为什么是这个值"}}
@@ -88,7 +89,7 @@ class LlmAffectionSeedGenerator:
             minimum=AFFECTION_MIN,
             maximum=AFFECTION_MAX,
             stages="\n".join(
-                f"- {stage.name} {stage.lower}–{stage.upper}"
+                f"- {stage.name}：{stage.lower} 到 {stage.upper}"
                 for stage in AFFECTION_STAGES
             ),
             role_name=role.name or role.id,

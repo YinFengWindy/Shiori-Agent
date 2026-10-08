@@ -153,7 +153,7 @@ def test_proactive_affection_goes_to_the_context_frame_not_the_system_prompt(
             gateway_result=GatewayResult(),
         )["content"]
 
-    assert "85/100（挚爱）" in frame() and "直接说想他。" in frame()
+    assert "85（挚爱，范围 -100 到 100）" in frame() and "直接说想他。" in frame()
     # The system prompt stays a stable prefix across affection changes.
     resolve = _build_role_prompt_resolver(tmp_path, "mira", store)
     assert "85/100" not in build_system_prompt(resolve())
@@ -161,4 +161,4 @@ def test_proactive_affection_goes_to_the_context_frame_not_the_system_prompt(
     RoleAffectionService(tmp_path).apply_delta(
         "mira", delta=-3, reason="冷淡", source="turn"
     )
-    assert "82/100（挚爱）" in frame()
+    assert "82（挚爱，范围 -100 到 100）" in frame()

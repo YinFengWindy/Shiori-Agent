@@ -250,7 +250,7 @@ def test_affection_block_injects_the_current_stages_override_or_default(
     affection = RoleAffectionService(tmp_path)
     affection.initialize("mira", value=38, reason="初始")
     rendered = block.render(ctx) or ""
-    assert "38/100（熟悉）" in rendered
+    assert "38（熟悉，范围 -100 到 100）" in rendered
     assert DEFAULT_AFFECTION_STAGE_PROMPTS["熟悉"] in rendered
 
     store.update_role(
@@ -267,7 +267,7 @@ def test_affection_block_injects_the_current_stages_override_or_default(
     # Crossing into the next stage switches to that stage's guidance.
     affection.apply_delta("mira", delta=3, reason="夸奖", source="turn")
     rendered = block.render(ctx) or ""
-    assert "41/100（朋友）" in rendered
+    assert "41（朋友，范围 -100 到 100）" in rendered
     assert DEFAULT_AFFECTION_STAGE_PROMPTS["朋友"] in rendered
     assert "叫他笨蛋" not in rendered
 
