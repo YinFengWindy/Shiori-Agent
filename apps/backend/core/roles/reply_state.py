@@ -9,6 +9,8 @@ from typing import Any
 from shiori_sdk.channels.chat_types import parse_mention_ids
 
 logger = logging.getLogger(__name__)
+# One turn changes affection by at most this much in either direction.
+AFFECTION_TURN_DELTA_LIMIT = 3
 
 
 class InvalidRoleReply(ValueError):
@@ -21,12 +23,17 @@ class RoleReply:
 
     ``mention_ids`` are extra group members the role chose to mention in a
     group reply (set only by ``with_group_mentions``); empty elsewhere.
+    ``affection_delta`` and ``affection_reason`` are the post-reply affection
+    change the mood call reported (set only by ``with_affection_change``);
+    a delta of 0 means affection stays unchanged.
     """
 
     content: str
     mood: str
     thought: str
     mention_ids: tuple[str, ...] = ()
+    affection_delta: int = 0
+    affection_reason: str = ""
 
 
 @dataclass(frozen=True)
@@ -75,10 +82,11 @@ def role_mood_prompt(moods: tuple[str, ...], *, group: bool = False) -> str:
     """Ask, after a reply is already sent, what mood and thought followed it.
 
     Used only by the passive turn's post-reply mood call: content is fixed
-    already, so this only asks for `{mood, thought}`, keeping the reply's own
-    text completely free of JSON formatting constraints. A group reply may
-    also name extra members to mention (`mention_ids`); it is delivered
-    after this call, and the triggering sender is addressed anyway.
+    already, so this only asks for mood, thought and the exchange's affection
+    change, keeping the reply's own text completely free of JSON formatting
+    constraints. A group reply may also name extra members to mention
+    (`mention_ids`); it is delivered after this call, and the triggering
+    sender is addressed anyway.
     """
     mentions = (
         '群聊回复可选再加 "mention_ids":["<成员 ID>"]，列出这条回复要额外 @ 的群成员'
@@ -90,10 +98,14 @@ def role_mood_prompt(moods: tuple[str, ...], *, group: bool = False) -> str:
         "刚才那段回复已经说出口。现在请回顾自己说完这句话时的心情和当下想法，"
         "只输出一个 JSON 对象，不要输出 JSON 之外的解释、markdown 或代码块，"
         "不要重复或改写正文内容。\n"
-        'JSON 结构固定为：{"mood":"<当前心情>","thought":"<当下想法>"}\n'
+        'JSON 结构固定为：{"mood":"<当前心情>","thought":"<当下想法>",'
+        '"affection_delta":<好感变化>,"affection_reason":"<变化原因>"}\n'
         f"{mentions}"
         f"mood 必须从角色心情目录选择：{'、'.join(moods)}。\n"
-        "thought 必须是包含“我”的第一人称当下想法，1–2 句，40–70 字。"
+        "thought 必须是包含“我”的第一人称当下想法，1–2 句，40–70 字。\n"
+        "affection_delta 是这轮交流让你对用户的好感变化，"
+        f"-{AFFECTION_TURN_DELTA_LIMIT} 到 {AFFECTION_TURN_DELTA_LIMIT} 的整数，"
+        "通常是 0 或 ±1；affection_reason 用一句话说明原因。"
     )
 
 
@@ -130,6 +142,33 @@ def with_group_mentions(reply: RoleReply, value: object) -> RoleReply:
         logger.warning("群聊回复的 mention_ids 无效，已忽略: %s; 值=%r", exc, value)
         return reply
     return replace(reply, mention_ids=mention_ids)
+
+
+def with_affection_change(reply: RoleReply, payload: dict[str, Any]) -> RoleReply:
+    """``reply`` plus the affection change the mood output reported.
+
+    The delta is truncated to ``±AFFECTION_TURN_DELTA_LIMIT``. Affection is an
+    optional extra of the mood call: a missing or malformed delta or reason
+    keeps the validated mood and thought and leaves affection unchanged.
+    """
+    delta, reason = payload.get("affection_delta"), payload.get("affection_reason")
+    if delta is None and reason is None:
+        return reply
+    # bool is an int subclass; a JSON true/false is not a delta.
+    if isinstance(delta, bool) or not isinstance(delta, int):
+        logger.warning("心情输出的 affection_delta 无效，好感不变: %r", delta)
+        return reply
+    if delta == 0:
+        return reply
+    if not isinstance(reason, str) or not reason.strip():
+        logger.warning("心情输出缺少有效 affection_reason，好感不变: %r", reason)
+        return reply
+    limit = AFFECTION_TURN_DELTA_LIMIT
+    return replace(
+        reply,
+        affection_delta=max(-limit, min(limit, delta)),
+        affection_reason=reason.strip(),
+    )
 
 
 def reply_state_metadata(reply: RoleReply, *, updated_at: str) -> dict[str, str]:

@@ -583,3 +583,57 @@ async def test_only_the_users_own_group_message_updates_relationship_state(
         assert runtime["loneliness_value"] == 80
         assert runtime["awaiting_reply_after_proactive"] is True
         assert last_user_at is None
+
+
+@pytest.mark.parametrize(
+    ("trigger", "counted"),
+    [("desktop", True), ("group_member", False), ("scheduled", False)],
+)
+async def test_only_the_users_own_message_changes_affection(tmp_path, trigger, counted):
+    manager = SessionManager(tmp_path)
+    session = role_session(manager)
+    relationship = RoleRelationshipRuntimeService(
+        tmp_path,
+        role_store=RoleStore(tmp_path),
+        session_manager=manager,
+        presence=PresenceStore(manager._store),
+    )
+    relationship.affection.initialize("yin", value=50, reason="初识")
+    request = turn(
+        session,
+        role_reply=RoleReply(
+            content="你好",
+            mood="平静",
+            thought="我终于放心了。",
+            affection_delta=3,
+            affection_reason="他一直记得我说过的话。",
+        ),
+    )
+    if trigger == "group_member":
+        group = network_thread_id("yin", "qq", "gqq:123")
+        request.state.context_view = turn_context_view(tmp_path, "yin", group)
+        request.state.msg.channel = "qq"
+        request.state.msg.chat_id = "gqq:123"
+        request.state.msg.sender = "456"
+        request.state.msg.metadata.update({"chat_type": "group", "thread_id": group})
+    elif trigger == "scheduled":
+        request.state.msg.metadata["omit_user_turn"] = True
+    services = SimpleNamespace(
+        session_manager=manager, presence=None, relationship_runtime=relationship
+    )
+
+    await Phase(
+        default_after_reasoning_modules(EventBus(), services),
+        frame_factory=AfterReasoningFrame,
+    ).run(request)
+
+    history = relationship.affection.read_history("yin")
+    if counted:
+        assert [(e.delta, e.reason, e.source) for e in history[1:]] == [
+            (3, "他一直记得我说过的话。", "turn")
+        ]
+        # The committed session metadata already carries the sidebar summary.
+        assert manager.get_or_create(session.key).metadata["affection"]["value"] == 53
+    else:
+        assert len(history) == 1
+        assert manager.get_or_create(session.key).metadata["affection"]["value"] == 50

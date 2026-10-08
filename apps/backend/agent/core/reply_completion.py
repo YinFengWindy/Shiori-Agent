@@ -23,6 +23,7 @@ from core.roles.reply_state import (
     RoleReply,
     role_mood_prompt,
     validate_role_reply,
+    with_affection_change,
     with_group_mentions,
 )
 
@@ -41,6 +42,9 @@ async def fetch_role_mood(
     group: bool = False,
 ) -> RoleReply | None:
     """Return a validated mood/thought that followed `content`, or None.
+
+    The reply also carries the exchange's affection change when the model
+    reported a valid one (see ``with_affection_change``).
 
     `messages` is the exact prefix used to generate `content`; the produced
     content is appended as an assistant turn before asking the mood question,
@@ -128,6 +132,8 @@ async def fetch_role_mood(
             exc_info=True,
         )
         return None
+    # Affection change is an optional extra; a bad value never costs the mood.
+    reply = with_affection_change(reply, payload)
     # Only a group reply may mention members; a bad list never costs the mood.
     return (
         with_group_mentions(reply, payload.get(REPLY_MENTION_IDS_KEY))

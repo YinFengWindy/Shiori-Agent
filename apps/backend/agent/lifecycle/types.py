@@ -74,6 +74,15 @@ class TurnState:
             self.context_view.user_threads,
         )
 
+    def is_user_turn(self) -> bool:
+        """本回合是否由用户本人刚发来的消息触发。
+
+        计划任务等不落用户消息的回合（``omit_user_turn``）没有用户来信，不算。
+        """
+        if (self.msg.metadata or {}).get("omit_user_turn"):
+            return False
+        return self.is_user_authored()
+
 
 @dataclass
 class BeforeTurnCtx:
