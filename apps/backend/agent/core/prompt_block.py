@@ -352,8 +352,9 @@ class ExternalTurnRulesPromptBlock:
 def build_role_affection_prompt(role_id: str, roles: "RoleStore") -> str | None:
     """The affection block of ``role_id``: value, stage and that stage's guidance.
 
-    Shared by every turn kind (passive turns through ``AffectionPromptBlock``,
-    proactive and drift turns through their role prompt). The guidance is the
+    Shared by every turn kind, always in the turn's context frame: passive
+    turns through ``AffectionPromptBlock``, proactive and drift turns through
+    the ``affection_prompt_fn`` that ``ProactiveLoop`` wires. The guidance is the
     role's override for the current stage, or the default; None while the
     role's affection is uninitialized.
     """

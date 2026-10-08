@@ -37,9 +37,14 @@ export function stagePromptRequest(stages: readonly AffectionStagePrompt[], text
   }));
 }
 
-/** Only the stages of `request` that differ from the stored `saved` request: what one save writes. */
-export function changedStagePrompts(request: AffectionStagePromptChanges, saved: AffectionStagePromptChanges): AffectionStagePromptChanges {
-  return Object.fromEntries(Object.entries(request).filter(([stage, text]) => text !== (saved[stage] ?? null)));
+/**
+ * Only the stages of `request` that differ from `baseline`, this editor's own
+ * last known form (what it loaded, then what it last submitted): what one save
+ * writes. Diffing against its own baseline, not the server's answer, keeps
+ * stages changed elsewhere out of the write unless this editor touched them.
+ */
+export function changedStagePrompts(request: AffectionStagePromptChanges, baseline: AffectionStagePromptChanges): AffectionStagePromptChanges {
+  return Object.fromEntries(Object.entries(request).filter(([stage, text]) => text !== (baseline[stage] ?? null)));
 }
 
 /** The fields to render, in stage order. */

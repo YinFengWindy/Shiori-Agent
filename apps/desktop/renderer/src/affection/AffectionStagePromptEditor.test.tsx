@@ -89,3 +89,22 @@ it("restores one stage's default at once and hides its 恢复默认", async () =
     await view.cleanup();
   }
 });
+
+it("keeps a stage changed elsewhere between two saves of another stage", async (t: TestContext) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const bridge = fakeBridge({});
+  const view = await mountEditor(bridge.invoke);
+  try {
+    // Another editor sets 熟悉 after this one loaded.
+    bridge.overrides["熟悉"] = "Y";
+    await changeInputValue(fields(view.container)[0], "冷淡。");
+    await act(async () => t.mock.timers.tick(400));
+    await changeInputValue(fields(view.container)[0], "更冷淡。");
+    await act(async () => t.mock.timers.tick(400));
+
+    assert.deepEqual(bridge.writes, [{ 陌生: "冷淡。" }, { 陌生: "更冷淡。" }]);
+    assert.deepEqual(bridge.overrides, { 熟悉: "Y", 陌生: "更冷淡。" });
+  } finally {
+    await view.cleanup();
+  }
+});

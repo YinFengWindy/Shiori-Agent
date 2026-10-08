@@ -25,9 +25,11 @@ const sameRequest = (a: AffectionStagePromptChanges | null, b: AffectionStagePro
 const savedRequest = (stages: AffectionStagePrompt[]) => stagePromptRequest(stages, stagePromptTexts(stages));
 
 /**
- * The save queue plus what is stored, in request form. Each attempt writes
- * only the stages that differ from what is stored at that moment, so edits
- * made elsewhere to other stages survive.
+ * The save queue plus this editor's baseline in request form: what it loaded,
+ * then what it last submitted successfully. Each attempt writes only the
+ * stages this editor changed since, so stages changed elsewhere survive; the
+ * server's answer never becomes the baseline, since the fields still show
+ * this editor's own texts for those stages.
  */
 function createStagePromptAutosave(
   write: (changes: AffectionStagePromptChanges) => Promise<AffectionStagePrompts>,
@@ -45,13 +47,13 @@ function createStagePromptAutosave(
         return { ok: false, resumesAutomatically: false, ...errorFeedback(error, "保存失败") };
       }
     },
-    onApplied: (result) => { saved = savedRequest(result.stages); },
+    onApplied: (_result, submitted) => { saved = { ...submitted }; },
     onStatus,
   });
   return {
     queue,
     get saved() { return saved; },
-    /** Takes a fresh read as what is stored. */
+    /** Takes a fresh read as the baseline. */
     adopt(stages: AffectionStagePrompt[]) { saved = savedRequest(stages); },
   };
 }
@@ -60,7 +62,7 @@ function createStagePromptAutosave(
  * Loads a role's stage guidance and autosaves the edited fields through the
  * shared `SerialDraftQueue`: a run of edits saves once they pause, restoring a
  * default saves at once, and unmounting submits the last edit. Each save
- * writes only the stages that differ from what is stored, so edits made
+ * writes only the stages this editor changed since its last save, so edits made
  * elsewhere to other stages survive. The fields keep what was typed. The
  * editor is keyed by role, so one hook instance serves one role.
  */
