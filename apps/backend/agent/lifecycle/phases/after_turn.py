@@ -53,7 +53,6 @@ _TURN_COMMITTED_SLOT = "turn:committed"
 _CTX_SLOT = "turn:ctx"
 _EXTRA_PREFIX = "turn:extra:"
 _TELEMETRY_PREFIX = "turn:telemetry:"
-_AFFECTION_ERROR_SLOT = "turn:affection_error"
 
 
 class _BuildTurnWorkModule:
@@ -119,14 +118,11 @@ class _ApplyTurnAffectionModule:
     """Applies the committed reply's affection change before the turn is announced.
 
     Running ahead of ``TurnCommitted`` lets every session refresh triggered by
-    it carry the new summary. Bookkeeping must not undo delivery of a reply
-    that is already stored, so a failure is held here and re-raised by
-    ``_RaiseAffectionErrorModule`` once the reply has been dispatched.
+    it carry the new summary.
     """
 
     slot = "after_turn.affection"
     requires = ("after_turn.build_work",)
-    produces = (_AFFECTION_ERROR_SLOT,)
 
     def __init__(
         self, relationship_runtime: RoleRelationshipRuntimeService | None
@@ -135,29 +131,23 @@ class _ApplyTurnAffectionModule:
 
     async def run(self, frame: AfterTurnFrame) -> AfterTurnFrame:
         state = frame.input.state
-        frame.slots[_AFFECTION_ERROR_SLOT] = None
         change = state.affection_change
         if change is None or self._relationship_runtime is None:
             return frame
+        session = cast("Session", state.session)
         try:
-            await self._relationship_runtime.apply_turn_affection(
-                cast("Session", state.session), change
+            await self._relationship_runtime.apply_turn_affection(session, change)
+        except Exception:
+            # Boundary: the reply is already committed and goes out regardless;
+            # affection is a side record of it. Raising here would report a
+            # stored reply as failed (desktop shows a retry error), so the
+            # failure is logged with its traceback instead.
+            logger.exception(
+                "好感记账失败，本轮回复照常完成: session=%s role=%s change=%+d",
+                session.key,
+                session.metadata.get("role_id"),
+                change.delta,
             )
-        except Exception as exc:
-            frame.slots[_AFFECTION_ERROR_SLOT] = exc
-        return frame
-
-
-class _RaiseAffectionErrorModule:
-    """Surfaces a held affection failure after the reply has been delivered."""
-
-    slot = "after_turn.affection_error"
-    requires = ("after_turn.dispatch", _AFFECTION_ERROR_SLOT)
-
-    async def run(self, frame: AfterTurnFrame) -> AfterTurnFrame:
-        error = frame.slots[_AFFECTION_ERROR_SLOT]
-        if isinstance(error, Exception):
-            raise error
         return frame
 
 
@@ -348,7 +338,7 @@ class _DispatchOutboundModule:
 
 class _ReturnOutboundMessageModule:
     slot = "after_turn.return"
-    requires = ("after_turn.dispatch", "after_turn.affection_error")
+    requires = ("after_turn.dispatch",)
 
     async def run(self, frame: AfterTurnFrame) -> AfterTurnFrame:
         frame.output = frame.input.outbound
@@ -374,7 +364,6 @@ def default_after_turn_modules(
         _CollectAfterTurnTelemetrySlotsModule(),
         _FanoutAfterTurnCtxModule(bus),
         _DispatchOutboundModule(outbound),
-        _RaiseAffectionErrorModule(),
         _ReturnOutboundMessageModule(),
     ]
     return cast(

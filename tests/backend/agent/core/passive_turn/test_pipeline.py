@@ -869,8 +869,9 @@ async def test_a_failure_to_record_abandoned_pushes_never_replaces_the_turns_err
     assert append.await_count == 3
 
 
-async def test_a_failed_affection_write_never_blocks_the_committed_replys_delivery(
-    runtime,
+@pytest.mark.parametrize("dispatch_outbound", [True, False])
+async def test_a_failed_affection_write_is_logged_and_the_turn_still_completes(
+    runtime, caplog, dispatch_outbound
 ):
     relationship = SimpleNamespace(
         enrich_session_metadata=lambda metadata: metadata,
@@ -893,14 +894,19 @@ async def test_a_failed_affection_write_never_blocks_the_committed_replys_delive
 
     msg = incoming()
     msg.metadata["sender_is_user"] = True
-    with pytest.raises(OSError, match="affection disk full"):
-        await runtime.pipeline(
+    # Desktop turns run without dispatch; they too must not report failure.
+    with caplog.at_level("ERROR", logger="agent.lifecycle.phases.after_turn"):
+        result = await runtime.pipeline(
             reasoning, relationship_runtime=relationship, outbound_port=port
-        ).run(msg, runtime.session.key, dispatch_outbound=True)
+        ).run(msg, runtime.session.key, dispatch_outbound=dispatch_outbound)
 
     relationship.apply_turn_affection.assert_awaited_once()
-    # The reply and its push were delivered, and the push is stored only once.
-    assert [call.args[0].content for call in port.dispatch.await_args_list] == ["done"]
+    assert "好感记账失败" in caplog.text and "affection disk full" in caplog.text
+    assert result.content == "done"
+    # The reply and its push were delivered once, and nothing is stored twice.
+    assert [call.args[0].content for call in port.dispatch.await_args_list] == (
+        ["done"] if dispatch_outbound else []
+    )
     assert [row["content"] for row in runtime.emitted[0]["payload"]["messages"]] == [
         "first"
     ]
