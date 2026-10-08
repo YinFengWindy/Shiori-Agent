@@ -1,17 +1,18 @@
-import { cardClass, cx, ghostButtonClass } from "@yinfengwindy/shiori-sdk";
+import { cx, ghostButtonClass } from "@yinfengwindy/shiori-sdk";
 import type { DesktopInvoke } from "../shared/bridgeInvoke";
-import { ReadError, ReadFrame, ReadStatusLine, readStatusText } from "../shared/feedback/ReadStatus";
+import { ReadError, ReadStatusLine, readStatusText } from "../shared/feedback/ReadStatus";
 import { RibbonIcon } from "../shared/ui/icons";
-import { StatusMeter } from "../shared/ui/StatusMeter";
+import { AffectionCard } from "./AffectionCard";
 import { resolveAffectionDisplay } from "./affectionDisplay";
 import { AffectionHistoryList } from "./AffectionHistoryList";
+import { AffectionOverview } from "./AffectionOverview";
+import { affectionHistoryGroups } from "./affectionSelectors";
 import { AffectionStagePromptEditor } from "./AffectionStagePromptEditor";
-import { affectionHistoryRows } from "./affectionSelectors";
 import { useAffectionHistory } from "./useAffectionHistory";
 
 /** An uninitialized role: a ribbon mark and one plain fact. */
 function AffectionEmptyState() {
-  return <div className="grid justify-items-center gap-3 py-12 text-center" data-testid="role-affection-empty">
+  return <div className="grid justify-items-center gap-3 py-8 text-center" data-testid="role-affection-empty">
     <span className="grid h-11 w-11 place-items-center rounded-full bg-accent-softer text-accent-text">
       <RibbonIcon className="h-5 w-5" />
     </span>
@@ -19,25 +20,38 @@ function AffectionEmptyState() {
   </div>;
 }
 
-function AffectionView({ invoke, roleId }: { invoke: DesktopInvoke; roleId: string }) {
-  const history = useAffectionHistory(invoke, roleId);
+type AffectionHistory = ReturnType<typeof useAffectionHistory>;
+
+/** The 「好感」 and 「变化」 cards: the current value over its newest-first history, read-only. */
+function AffectionView({ history }: { history: AffectionHistory }) {
   const { loaded } = history;
   const error = history.error ? <ReadError error={history.error} onRetry={history.retry} /> : null;
-  if (!loaded) return error ?? (history.loading ? <ReadStatusLine text={readStatusText.loading} /> : null);
-  const display = resolveAffectionDisplay(loaded.affection);
-  if (!loaded.affection || !display) return <AffectionEmptyState />;
-  return <section className="grid gap-4" aria-label="好感度" data-testid="role-affection-panel">
-    <div className={cx(cardClass, "px-5 py-4")}>
-      <StatusMeter label={display.stage} value={loaded.affection.value} percent={display.percent} heightClass="h-2" testId="role-affection-meter" />
-    </div>
-    <ReadFrame label="好感变化">
-      <AffectionHistoryList rows={affectionHistoryRows(loaded.items)} />
+  if (!loaded) {
+    return <AffectionCard title="好感">{error ?? (history.loading ? <ReadStatusLine text={readStatusText.loading} /> : null)}</AffectionCard>;
+  }
+  if (!loaded.affection || !resolveAffectionDisplay(loaded.affection)) {
+    return <AffectionCard title="好感"><AffectionEmptyState /></AffectionCard>;
+  }
+  return <div className="grid gap-4" data-testid="role-affection-panel">
+    <AffectionCard title="好感"><AffectionOverview summary={loaded.affection} /></AffectionCard>
+    <AffectionCard title="变化">
+      <AffectionHistoryList groups={affectionHistoryGroups(loaded.items)} />
       {/* Later batches load and fail under the rows already shown. */}
       {history.loading && <ReadStatusLine text={readStatusText.loading} />}
       {error}
       {!history.loading && !history.error && history.hasMore && <button type="button" className={cx(ghostButtonClass, "justify-self-center")} onClick={history.loadMore}>加载更多</button>}
-    </ReadFrame>
-  </section>;
+    </AffectionCard>
+  </div>;
+}
+
+/** One role's tab content; keyed by role, so no batch, pending read or unsaved field carries over. */
+function RoleAffectionContent({ invoke, roleId }: { invoke: DesktopInvoke; roleId: string }) {
+  const history = useAffectionHistory(invoke, roleId);
+  // The stage guidance is editable before initialization too; it opens on the role's current stage.
+  return <div className="grid gap-4">
+    <AffectionView history={history} />
+    <AffectionStagePromptEditor invoke={invoke} roleId={roleId} currentStage={history.loaded?.affection?.stage ?? null} />
+  </div>;
 }
 
 type RoleAffectionPanelProps = {
@@ -47,14 +61,9 @@ type RoleAffectionPanelProps = {
   invoke?: DesktopInvoke;
 };
 
-/** Role-detail 「好感度」 tab: current value and stage over the newest-first change history, then the per-stage guidance. */
+/** Role-detail 「好感度」 tab: 「好感」 (value on the whole range), 「变化」 (history timeline) and 「阶段语气」 cards. */
 export function RoleAffectionPanel({ roleId, bridgeReady, invoke = window.miraDesktop.invoke }: RoleAffectionPanelProps) {
   if (!bridgeReady) return <ReadStatusLine text={readStatusText.disconnected} />;
   if (!roleId) return <ReadStatusLine text={readStatusText.noRole} />;
-  // A new role starts fresh, so no batch, pending read or unsaved field carries over.
-  // The stage guidance sits below the value and history, and is editable before initialization too.
-  return <div className="grid gap-4">
-    <AffectionView key={`history:${roleId}`} invoke={invoke} roleId={roleId} />
-    <AffectionStagePromptEditor key={`prompts:${roleId}`} invoke={invoke} roleId={roleId} />
-  </div>;
+  return <RoleAffectionContent key={roleId} invoke={invoke} roleId={roleId} />;
 }

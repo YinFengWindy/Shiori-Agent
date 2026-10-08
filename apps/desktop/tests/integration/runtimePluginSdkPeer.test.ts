@@ -42,7 +42,7 @@ test("a precompiled plugin importing the SDK through the import map receives the
   } finally { await view.cleanup(); }
 });
 
-// Runtime API 3.1.16 (#750): a removed SDK export fails the plugin's link step
+// Runtime API 3.1.17 (#750): a removed SDK export fails the plugin's link step
 // by name instead of resolving to undefined at call time.
 test("a precompiled plugin importing the removed usePrivateDraft fails to load, naming it", async () => {
   const view = await mountTestComponent(null);

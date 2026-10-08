@@ -39,7 +39,7 @@ and renderer declaration keys are rejected. This table defines the v1 fields:
 | `api` | yes | integer `2` |
 | `id` | yes | `[a-z][a-z0-9_-]{0,63}` |
 | `version` | yes | full SemVer 2.0 string, including optional prerelease/build |
-| `runtime_api` | yes | compatibility range; host currently advertises `3.1.16` |
+| `runtime_api` | yes | compatibility range; host currently advertises `3.1.17` |
 | `entry` | yes | explicit package-relative `.py` backend entry |
 | `capabilities` | yes | existing v2 capability-name list, including `[]` |
 | `channels` | no | static channel declarations (Runtime API 2.2); requires the `channels` capability |
@@ -79,7 +79,7 @@ SDK. A package declares the lowest version whose additions it uses.
 
 The single version source is `packages/sdk/python/shiori_sdk/_version.py`
 (`RUNTIME_API_VERSION = __version__`), synchronized to the other packages by
-`node scripts/sync_sdk_version.mjs`. 3.1.1–3.1.16 are unpublished contract
+`node scripts/sync_sdk_version.mjs`. 3.1.1–3.1.17 are unpublished contract
 changes on `main`; npm and PyPI hold 3.1.0.
 
 | Version | Adds | Introduced by |
@@ -118,7 +118,8 @@ changes on `main`; npm and PyPI hold 3.1.0.
 | `3.1.13` | host event `chat.cancelled` (`{session_key, turn_id}`): a desktop chat turn cancelled by `chat.cancel` or by bridge shutdown now ends with it, so while the bridge connection is open every accepted turn ends with exactly one of `chat.done`, `chat.error` or `chat.cancelled` (subscribe with `ctx.hostEvents.on("chat.cancelled", ...)`); a turn-id cancel first persists the partial reply and announces it with `session.updated`. SDK `chatTerminalEventMethods`, `isChatTerminalEvent` and type `ChatTerminalEventMethod` name that set; packages relying on any of it require `runtime_api: ">=3.1.13 <4.0.0"` | #734 (#292) |
 | `3.1.14` | `PluginRoleSettingsProps` gains `moodCatalog` (the edited role draft's moods, as `PluginRoleUiProps.role.moodCatalog`), so a `role.settings` card can offer per-mood settings; a card may declare `storage: "plugin"` with `read: () => ({})` to own no role draft values at all and keep only plugin-private, autosaved settings in its dialog (as `gpt_sovits_tts` now does instead of `roleUi`). `RoleCapabilityCard` takes an optional `onSettingsOpenChange(open)` (and `CapabilitySettingsDialog` an `onOpenChange`), called on each open and close of the settings dialog; since the content stays mounted while closed, an autosaving plugin commits its last edit on close. `compactIconButtonClass` (the borderless 28px icon-only button) moves from `host-internal` to the main SDK entry and the renderer peer exports. Packages using any of them require `runtime_api: ">=3.1.14 <4.0.0"` | #720 (#718) |
 | `3.1.15` | affection range becomes -100–100: `AffectionStageName` gains the negative stages `"厌恶"` (-100 to -50) and `"冷淡"` (-49 to -1) below the unchanged `"陌生"` 0–19 … `"挚爱"` 80–100, so `AffectionSummary.value` and the stage-guidance list (`roles.affection.stagePrompts.*`, now 7 stages from lowest to highest) may carry them; `progress` stays 0–1 within the stage. The stage floor only applies once 「熟悉」 or above has been reached, so a 「陌生」 role can drop into the negative stages; decay never makes affection negative. Code that switches exhaustively over the stage names must handle the two new ones; packages relying on them require `runtime_api: ">=3.1.15 <4.0.0"` | #749 (#708) |
-| `3.1.16` | **breaking**: removes the `roleUi` contribution (`mode: "self-managed"`, added in 3.1.1 and never published) together with the SDK types `PluginRoleUiProps` / `PluginRoleUiContribution`; no bundled plugin used it after #720. Also removes the SDK hook `usePrivateDraft` (added in 3.1.2, never published, no remaining caller) from the main entry and the renderer peer exports: a precompiled plugin importing it fails to link, and plugin-owned documents use `usePrivateAutosave` instead. A `ui` module that still declares `roleUi` fails export validation with a message naming the retired field; role-scoped plugin settings belong on a `roleSettings` card (with `storage: "plugin"` and its dialog's own autosave for plugin-private documents). The role editor's unsaved-changes guard now covers only the host role draft (role fields and `roleSettings` values). No new peer export; the declared range of existing packages is unaffected unless they used `roleUi` or `usePrivateDraft` | #750 |
+| `3.1.16` | `AffectionSummary` gains `floor` (`number \| null`): the stage floor the value can no longer drop below, the start of the highest stage reached from 「熟悉」 up (20 / 40 / 60 / 80), or `null` while there is none; `RoleRecord.affection`, `SessionPayload.metadata.affection` and the `affection` of `roles.affection.history` carry it. Packages reading it require `runtime_api: ">=3.1.16 <4.0.0"` | #748 |
+| `3.1.17` | **breaking**: removes the `roleUi` contribution (`mode: "self-managed"`, added in 3.1.1 and never published) together with the SDK types `PluginRoleUiProps` / `PluginRoleUiContribution`; no bundled plugin used it after #720. Also removes the SDK hook `usePrivateDraft` (added in 3.1.2, never published, no remaining caller) from the main entry and the renderer peer exports: a precompiled plugin importing it fails to link, and plugin-owned documents use `usePrivateAutosave` instead. A `ui` module that still declares `roleUi` fails export validation with a message naming the retired field; role-scoped plugin settings belong on a `roleSettings` card (with `storage: "plugin"` and its dialog's own autosave for plugin-private documents). The role editor's unsaved-changes guard now covers only the host role draft (role fields and `roleSettings` values). No new peer export; the declared range of existing packages is unaffected unless they used `roleUi` or `usePrivateDraft` | #750 |
 
 2.2 and 2.3 first ship together in the release that turns every external
 channel into a plugin (#363): no released host advertises 2.2 alone, and
@@ -541,7 +542,7 @@ speech contracts") holds the details.
   bridge that dies without closing its connection delivers none of them; the
   renderer then sees `bridge.exit`.
 - **Autonomous role UI.** 3.1.1 also added a `roleUi` contribution for a
-  plugin-owned role panel; it was removed in 3.1.16 (**breaking**, see the
+  plugin-owned role panel; it was removed in 3.1.17 (**breaking**, see the
   version table) in favour of `roleSettings` cards.
 
 ## Runtime API 3.1.5 native path pickers
@@ -730,7 +731,7 @@ the `roles.memory.documents`, `roles.memory.semantic.list` and
 plugin alone.
 
 A `ui` export that declares `roleUi` is rejected the same way (runtime API
-3.1.16). Contribute role-scoped settings as a `roleSettings` card instead; a
+3.1.17). Contribute role-scoped settings as a `roleSettings` card instead; a
 card with `storage: "plugin"` keeps plugin-private documents in its settings
 dialog with `usePrivateAutosave`.
 
@@ -1051,7 +1052,7 @@ for commands and how to validate its directory/zip from a host environment.
 ## Runtime API 3.0: unified Shiori SDK
 
 `@yinfengwindy/shiori-sdk` and `shiori-sdk` share one version (3.0.0 at introduction, now
-3.1.16) and the source tree `packages/sdk/`. External packages must declare `runtime_api: ">=3.0.0 <4.0.0"`.
+3.1.17) and the source tree `packages/sdk/`. External packages must declare `runtime_api: ">=3.0.0 <4.0.0"`.
 The previous frontend package name has no alias. Existing 2.x ranges are rejected
 with `incompatible_runtime` before backend execution; rebuild renderer peers and
 update the declared range when migrating. The 2.x sections above describe feature

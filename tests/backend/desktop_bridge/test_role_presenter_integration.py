@@ -82,7 +82,7 @@ def test_role_presenter_exposes_affection_summary_once_initialized(tmp_path) -> 
 
     relationship.affection.initialize("mira", value=80, reason="挚友")
 
-    summary = {"value": 80, "stage": "挚爱", "progress": 0.0}
+    summary = {"value": 80, "stage": "挚爱", "progress": 0.0, "floor": 80}
     assert presenter.serialize(role)["affection"] == summary
     assert (
         relationship.enrich_session_metadata({"role_id": "mira"})["affection"]

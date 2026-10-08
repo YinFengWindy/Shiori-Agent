@@ -34,17 +34,17 @@ describe("ChatStatusSidebar", () => {
     assert.ok(!markup.includes('data-testid="chat-affection"'));
   });
 
-  it("shows only the affection stage and a thin in-stage bar", () => {
+  it("shows only the affection stage and a thin bar of its place on the whole range", () => {
     const markup = renderToStaticMarkup(
       <ChatStatusSidebar currentMood="" moodUpdatedAt="" moodScope="rin|role:rin" moodIllustrationUrl="" roleSelfView=""
-        relationshipTags={[]} lonelinessValue={0} affection={{ stage: "亲密", percent: 37.5 }} />,
+        relationshipTags={[]} lonelinessValue={0} affection={{ stage: "亲密", percent: 82.5 }} />,
     );
     const start = markup.indexOf('data-testid="chat-affection"');
     const block = markup.slice(start, markup.indexOf('寂寞值', start));
 
     assert.ok(start >= 0);
     assert.match(block, />亲密</);
-    assert.match(block, /width:37.5%/);
+    assert.match(block, /width:82.5%/);
     // The bar width is the only number: no affection value or reason is printed.
     assert.ok(!/>[^<]*\d[^<]*</.test(block));
   });
