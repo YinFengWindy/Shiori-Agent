@@ -11,6 +11,7 @@ from .processes import Processes, Resources, ToolTurn
 from .rpc import RpcCapability
 from .tools import ToolsCapability
 from .sessions import PluginSessions
+from .external_turns import ExternalTurns
 from .tool_hooks import ToolHooksCapability
 from .storage import KeyValueStore
 from pathlib import Path
@@ -43,6 +44,8 @@ class ServicePluginContext(PluginRuntimeContext, Protocol):
     def models(self) -> RoleModels: ...
     @property
     def sessions(self) -> PluginSessions: ...
+    @property
+    def external_turns(self) -> ExternalTurns: ...
     @property
     def tools(self) -> ToolsCapability: ...
     @property

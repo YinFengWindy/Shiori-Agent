@@ -29,6 +29,7 @@ from agent.tools.registry import ToolRegistry
 from core.roles.role_runtime import RoleRuntimeRegistry
 from agent.provider import LLMProvider
 from shiori_sdk.http import HttpClient
+from shiori_sdk.external_turns import ExternalTurns
 from agent.plugin_host.avatars import AvatarsCapability
 from agent.plugin_host.config import PluginConfig
 from agent.plugin_host.storage import PluginStorage
@@ -154,6 +155,8 @@ class HostServices:
     # 一次性迁移；打包形态下该目录不存在，字段为 None 即可。
     legacy_plugin_root: Path | None = None
     role_runtime_registry: RoleRuntimeRegistry | None = None
+    # external_turns capability 的唯一实现，由 bootstrap 以本代 AgentLoop 装配（#721）。
+    external_turns: ExternalTurns | None = None
     scene_observations: SceneObservationDemand = field(
         default_factory=SceneObservationDemand
     )
@@ -564,6 +567,9 @@ class PluginKernel:
                 else None
             ),
             sessions=sessions,
+            external_turns=(
+                services.external_turns if "external_turns" in grants else None
+            ),
             tools=(
                 ToolsCapability(
                     services.tool_registry,
@@ -663,6 +669,7 @@ class PluginKernel:
             "roles": lambda: None,
             "models": lambda: None,
             "sessions": lambda: None,
+            "external_turns": lambda: None,
             "http": lambda: None,
             "resources": lambda: None,
             "processes": lambda: None,

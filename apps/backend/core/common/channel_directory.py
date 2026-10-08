@@ -48,6 +48,10 @@ class ChannelDirectory:
         """Resolves channel names through ``lookup`` from now on."""
         self._lookup = lookup
 
+    def serves(self, channel: str) -> bool:
+        """Whether ``channel`` is the desktop transport or a channel the host runs."""
+        return channel == DESKTOP_CHANNEL or self._lookup(channel) is not None
+
     def supports_stream_events(self, channel: str, chat_id: str) -> bool:
         """Returns whether a turn for this chat should publish stream deltas."""
         if channel == DESKTOP_CHANNEL:

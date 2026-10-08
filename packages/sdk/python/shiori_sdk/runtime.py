@@ -46,6 +46,8 @@ KNOWN_CAPABILITIES = frozenset(
         "accounts",
         # 渠道发送者与群的头像缓存（#514）
         "avatars",
+        # 插件为角色提交外部上下文回合（#721）
+        "external_turns",
         "events",
         "scene_observations",
         "kv",

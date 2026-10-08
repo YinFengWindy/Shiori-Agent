@@ -2,8 +2,8 @@
 
 [@yinfengwindy/shiori-sdk](https://www.npmjs.com/package/@yinfengwindy/shiori-sdk)
 and [shiori-sdk](https://pypi.org/project/shiori-sdk/) are the TypeScript and Python distributions of the
-same plugin contract. Both are version **3.1.9**, with Runtime API **3.1.9**.
-3.1.1–3.1.9 are not published yet; npm and PyPI hold 3.1.0. The commands below
+same plugin contract. Both are version **3.1.10**, with Runtime API **3.1.10**.
+3.1.1–3.1.10 are not published yet; npm and PyPI hold 3.1.0. The commands below
 install 3.1.0; APIs added since then need a wheelhouse or workspace build of
 this repository until the next publication.
 
@@ -325,6 +325,7 @@ access merely because the interface declares a property.
 | `roles` | Detached role snapshots, explicit asset resolution/adoption and opaque role-extension transactions. The host keeps its canonical RoleStore and write lock. |
 | `models` | `async with ctx.models.activate(role_id, "chat" or "vision")` holds the host-selected provider/model snapshot across awaited work. No runtime registry or full Config is exported. |
 | `sessions` | Session metadata, original media provenance, atomic image replacement and its host-owned desktop projection. |
+| `external_turns` | (3.1.10) `await ctx.external_turns.submit(ExternalTurnMessage(...))` runs one message from a non-channel source (platform, conversation id/title, sender id/name, message id, text) as an external-context group turn of a role and returns `ExternalTurnResult` (`replied` with the reply text, `busy`, `duplicate`). It never waits for the role, never dispatches to a channel, and cancelling the call cancels the turn. `testing.external_turns.FakeExternalTurns` answers with queued results. |
 | `http` | `HttpClient` uses the injected external transport and its default retry/budget policy. Memory's bounded `HttpRequester` remains separate. |
 | `background` | `spawn` owns scoped tasks; `spawn_runtime` additionally retains the calling runtime generation until task completion. Both cancel and join outstanding work on unload. |
 | `processes` | Creates explicit MCP sessions and owned child processes through the host's existing McpClient/owned_spawn/WindowsJob implementations. The SDK contains no process implementation. |

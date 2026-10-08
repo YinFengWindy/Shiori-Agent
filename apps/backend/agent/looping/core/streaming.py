@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from shiori_sdk.channel_events import StreamDeltaReady
 
+from ..interrupt import tracked_turn_state
+
 from .helpers import (
     StreamDelta,
     StreamSink,
@@ -98,13 +100,13 @@ class _StreamingMixin:
         return _push
 
     def _append_partial_reply(self, session_key: str, delta: str) -> None:
-        state = self._active_turn_states.get(session_key)
+        state = tracked_turn_state(self._active_turn_states, session_key)
         if state is None or not delta:
             return
         state.partial_reply += delta
 
     def _append_partial_thinking(self, session_key: str, delta: str) -> None:
-        state = self._active_turn_states.get(session_key)
+        state = tracked_turn_state(self._active_turn_states, session_key)
         if state is None or not delta:
             return
         state.partial_thinking = (state.partial_thinking or "") + delta

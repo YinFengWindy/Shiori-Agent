@@ -12,6 +12,8 @@ from bus.event_bus import EventBus
 from shiori_sdk.messages import InboundMessage, OutboundMessage
 from shiori_sdk.channel_events import TurnCancelled
 from shiori_sdk.channels.message_source import MessageSource
+from conversation.service import desktop_thread_id
+from tests.support.external_turns import ROOM, ExternalTurnHost, room_message
 from tests.support.tool_hooks import (
     FinalizeOnCallHook,
     DummyTool,
@@ -219,3 +221,54 @@ async def test_max_iterations_returns_progress_summary_not_template(tmp_path):
 
     assert "最大迭代" not in final
     assert "下一步" in final
+
+
+async def test_desktop_interrupt_never_reaches_an_external_turn(tmp_path):
+    """The external turn is not the role session's interruptible turn (#721)."""
+    host = ExternalTurnHost(tmp_path)
+    # The external turn calls a tool (reporting progress), then waits.
+    host.provider.tool_steps = 1
+    step, finish = asyncio.Event(), asyncio.Event()
+    host.provider.gates.extend([step, finish])
+    external = asyncio.create_task(host.turns.submit(room_message()))
+    await host.provider.started.wait()
+    # A desktop message waits for the role while the external turn runs.
+    desktop = host.desktop_turn("hello")
+    await asyncio.sleep(0)
+    host.provider.started.clear()
+    step.set()
+    await host.provider.started.wait()
+
+    interrupted = host.loop.request_interrupt("role:mira", command="/cancel")
+
+    # Only the waiting desktop turn is interrupted, and its snapshot holds no
+    # progress of the external turn.
+    assert interrupted.status == "interrupted"
+    assert interrupted.state is not None
+    assert interrupted.state.original_user_message == "hello"
+    assert (interrupted.state.partial_reply, interrupted.state.tools_used) == ("", [])
+    with pytest.raises(asyncio.CancelledError):
+        await desktop
+    assert host.loop.request_interrupt("role:mira").status == "idle"
+    finish.set()
+    assert (await external).reply == "reply-2"
+    assert host.stored(ROOM)[-1] == ("assistant", "reply-2")
+
+
+async def test_cancelling_an_external_turn_leaves_the_waiting_desktop_turn(tmp_path):
+    host = ExternalTurnHost(tmp_path)
+    host.provider.gates.append(asyncio.Event())
+    external = asyncio.create_task(host.turns.submit(room_message()))
+    await host.provider.started.wait()
+    desktop = host.desktop_turn("hello")
+    await asyncio.sleep(0)
+
+    external.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await external
+    assert await desktop == "reply-2"
+    assert host.stored(desktop_thread_id("mira"))[-2:] == [
+        ("user", "hello"),
+        ("assistant", "reply-2"),
+    ]

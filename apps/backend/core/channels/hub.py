@@ -17,25 +17,20 @@ from shiori_sdk.accounts.models import (
     account_serves_channel,
     delivered_via_account,
 )
-from conversation.models import ThreadRecord
-from conversation.service import ConversationService, LegacySessionDescriptor
 from shiori_sdk.channels.threads import network_thread_id
 from shiori_sdk.channels.message_source import (
-    GROUP_NAME_KEY,
     REPLY_TO_SENDER_ID_KEY,
     REPLY_TO_SENDER_IS_USER_KEY,
     SENDER_IS_USER_KEY,
-    SENDER_NAME_KEY,
     MessageSource,
     addresses_account,
-    display_name,
 )
 from core.identity import IdentityChat, UserIdentityStore
 from shiori_sdk.channels.identity import IdentityScope
-from shiori_sdk.channels.projection import plugin_metadata, project_inbound
+from shiori_sdk.channels.projection import plugin_metadata
+from core.channels.role_routing import RoleTurnRouter
 from core.roles.services import RoleAggregateService
 from core.roles.store import RoleStore
-from core.roles.role_runtime import RoleExecutionContext
 
 logger = logging.getLogger(__name__)
 
@@ -52,10 +47,14 @@ class ChannelHub:
         identities: UserIdentityStore | None = None,
     ) -> None:
         self._service = service
-        self._channel_directory = channel_directory or ChannelDirectory()
         self._accounts = accounts or service.repository.store.accounts
         self._identities = identities or service.repository.store.identities
-        self._conversation = ConversationService(service.sessions._session_manager)
+        # Thread creation, projection and role context are shared with
+        # plugin-submitted external turns.
+        self._router = RoleTurnRouter(
+            service, channel_directory=channel_directory or ChannelDirectory()
+        )
+        self._conversation = self._router.conversation
 
     @classmethod
     def from_workspace(
@@ -200,7 +199,7 @@ class ChannelHub:
         reply_to = str(metadata.get(REPLY_TO_SENDER_ID_KEY) or "").strip()
         if reply_to and self._identities.match(account.record, reply_to) is not None:
             metadata[REPLY_TO_SENDER_IS_USER_KEY] = True
-        return self._route_for_role(message, role_id, metadata)
+        return self._router.route(message, role_id, metadata)
 
     def _live_owned_account(
         self, account_id: str, channel: str = ""
@@ -244,41 +243,6 @@ class ChannelHub:
             sender_id, sender_alias, account.record.response_rules.blocked_sender_ids
         )
 
-    def _route_for_role(
-        self, message: InboundMessage, role_id: str, metadata: dict[str, Any]
-    ) -> InboundMessage:
-        role = self._service.repository.get_required(role_id)
-        thread = self._conversation.ensure_thread_for_session(
-            LegacySessionDescriptor(
-                session_key=f"{message.channel}:{message.chat_id}",
-                role_id=role_id,
-                channel=message.channel,
-                chat_id=message.chat_id,
-                metadata=metadata,
-            )
-        )
-        self._service.sessions.open_by_role(role)
-        routed = self._project(message, role_id, thread, metadata)
-        external_message_id = str(routed.metadata.get("external_message_id") or "")
-        if external_message_id and self._conversation.has_external_message(
-            thread.id, external_message_id
-        ):
-            routed.metadata["conversation_duplicate"] = True
-        # A replayed duplicate carries no newer name than the original did.
-        if not routed.metadata.get("conversation_duplicate"):
-            self._remember_contact_name(thread, routed.metadata)
-        context = RoleExecutionContext.create(
-            role=role,
-            thread_id=thread.id,
-            transport_channel=message.channel,
-            transport_chat_id=message.chat_id,
-            source=str(routed.metadata["source"]),
-            work_kind="passive_turn",
-            request_id=external_message_id,
-        )
-        routed.metadata.update(context.to_metadata())
-        return routed
-
     def _listen(
         self, message: InboundMessage, role_id: str, metadata: dict[str, Any]
     ) -> InboundMessage | None:
@@ -302,7 +266,7 @@ class ChannelHub:
         )
         if thread is None or thread.archived:
             return None
-        routed = self._project(message, role_id, thread, metadata)
+        routed = self._router.project(message, role_id, thread, metadata)
         heard = self._conversation.listening.hear(
             thread.id,
             sender_id=message.sender,
@@ -312,43 +276,8 @@ class ChannelHub:
             timestamp=message.timestamp,
         )
         if heard is not None:
-            self._remember_contact_name(thread, routed.metadata)
+            self._router.remember_contact_name(thread, routed.metadata)
         return routed if heard is not None and heard.stored else None
-
-    def _project(
-        self,
-        message: InboundMessage,
-        role_id: str,
-        thread: ThreadRecord,
-        metadata: dict[str, Any],
-    ) -> InboundMessage:
-        """``message`` addressed to ``role_id``'s session through ``thread``."""
-        return project_inbound(
-            message,
-            metadata,
-            role_id=role_id,
-            thread_id=thread.id,
-            session_key=self._service.sessions.derive_session_key(role_id),
-            default_chat_type=self._channel_directory.default_chat_type(
-                message.channel
-            ),
-        )
-
-    def _remember_contact_name(
-        self, thread: ThreadRecord, metadata: dict[str, Any]
-    ) -> None:
-        """Names the contact by the group's name, or a private chat's sender's.
-
-        Whichever the plugin reported with this message; none keeps the name.
-        """
-        name_key = (
-            GROUP_NAME_KEY
-            if is_group_chat_type(metadata.get("chat_type"))
-            else SENDER_NAME_KEY
-        )
-        name = display_name(metadata.get(name_key))
-        if name is not None:
-            self._conversation.remember_contact_name(thread, name)
 
     def is_sender_allowed(
         self,
