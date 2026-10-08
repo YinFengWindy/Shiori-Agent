@@ -23,6 +23,8 @@ def test_enabling_one_role_replaces_visibility_and_missing_selection_rejects(tmp
         state.set_enabled(role_id, True)
     assert not state.require_role("first").desktop_pet_enabled
     assert state.require_role("second").desktop_pet_enabled
+    assert (state.is_enabled("first"), state.is_enabled("second")) == (False, True)
+    assert state.is_enabled("missing") is False
     state.replace_packages("second", [])
     assert not state.require_role("second").desktop_pet_enabled
     assert state.require_role("second").selected_pet_package_id is None

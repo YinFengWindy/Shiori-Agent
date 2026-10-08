@@ -31,14 +31,16 @@ NAV_URL = "https://api.bilibili.com/x/web-interface/nav"
 # Cookies a confirmed login must deliver; the live engine needs all of them.
 REQUIRED_LOGIN_COOKIES = ("SESSDATA", "bili_jct", "DedeUserID")
 _NOT_LOGGED_IN_CODE = -101
-_HEADERS = {
+# Browser-like headers; the live danmaku token is also bound to the User-Agent.
+BILIBILI_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
         "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
     ),
     "Referer": "https://www.bilibili.com/",
 }
-_TIMEOUT_S = 10.0
+# Shared by every Bilibili HTTP client of the plugin (login and live room).
+REQUEST_TIMEOUT_S = 10.0
 
 
 class BilibiliApiError(RuntimeError):
@@ -95,7 +97,7 @@ class BilibiliLoginApi:
 
     async def generate_qrcode(self) -> QrCodeTicket:
         """Request a new login QR code."""
-        data = _data(await self._get(QRCODE_GENERATE_URL))
+        data = response_data(await bilibili_get(self._transport, QRCODE_GENERATE_URL))
         url, key = data.get("url"), data.get("qrcode_key")
         if not isinstance(url, str) or not url or not isinstance(key, str) or not key:
             raise BilibiliApiError("B 站二维码响应缺少 url 或 qrcode_key")
@@ -103,8 +105,10 @@ class BilibiliLoginApi:
 
     async def poll_qrcode(self, key: str) -> QrPollResult:
         """Read the scan state; a confirmed scan must carry cookies and refresh_token."""
-        response = await self._get(QRCODE_POLL_URL, params={"qrcode_key": key})
-        data = _data(response)
+        response = await bilibili_get(
+            self._transport, QRCODE_POLL_URL, params={"qrcode_key": key}
+        )
+        data = response_data(response)
         code = data.get("code")
         state = _SCAN_STATES.get(code) if isinstance(code, int) else None
         if state is None:
@@ -122,10 +126,10 @@ class BilibiliLoginApi:
 
     async def fetch_account(self, cookies: dict[str, str]) -> BilibiliAccount | None:
         """Return the logged-in account, or ``None`` when the login is invalid."""
-        response = await self._get(NAV_URL, cookies=cookies)
-        if _payload(response).get("code") == _NOT_LOGGED_IN_CODE:
+        response = await bilibili_get(self._transport, NAV_URL, cookies=cookies)
+        if response_payload(response).get("code") == _NOT_LOGGED_IN_CODE:
             return None
-        data = _data(response)
+        data = response_data(response)
         if data.get("isLogin") is not True:
             return None
         uid, uname = data.get("mid"), data.get("uname")
@@ -133,36 +137,42 @@ class BilibiliLoginApi:
             raise BilibiliApiError("B 站账号信息缺少 mid 或 uname")
         return BilibiliAccount(uid=uid, uname=uname)
 
-    async def _get(
-        self,
-        url: str,
-        *,
-        params: dict[str, str] | None = None,
-        cookies: dict[str, str] | None = None,
-    ) -> httpx.Response:
-        # One short-lived client per call: login requests are rare and this
-        # leaves no connection pool for the plugin lifecycle to close.
-        async with httpx.AsyncClient(
-            transport=self._transport,
-            headers=_HEADERS,
-            cookies=cookies,
-            timeout=_TIMEOUT_S,
-        ) as client:
-            response = await client.get(url, params=params)
-        response.raise_for_status()
-        return response
+
+async def bilibili_get(
+    transport: httpx.AsyncBaseTransport | None,
+    url: str,
+    *,
+    params: dict[str, str] | None = None,
+    cookies: dict[str, str] | None = None,
+) -> httpx.Response:
+    """One GET with the shared headers and timeout; HTTP errors raise.
+
+    One short-lived client per call: these requests are rare and this leaves
+    no connection pool for the plugin lifecycle to close. ``transport`` is the
+    test-injectable transport (``None`` in production).
+    """
+    async with httpx.AsyncClient(
+        transport=transport,
+        headers=BILIBILI_HEADERS,
+        cookies=cookies,
+        timeout=REQUEST_TIMEOUT_S,
+    ) as client:
+        response = await client.get(url, params=params)
+    response.raise_for_status()
+    return response
 
 
-def _payload(response: httpx.Response) -> dict[str, Any]:
+def response_payload(response: httpx.Response) -> dict[str, Any]:
+    """The JSON object of a Bilibili API response."""
     payload = response.json()
     if not isinstance(payload, dict):
         raise BilibiliApiError("B 站响应不是 JSON 对象")
     return payload
 
 
-def _data(response: httpx.Response) -> dict[str, Any]:
+def response_data(response: httpx.Response) -> dict[str, Any]:
     """Unwrap ``data`` from a response whose outer ``code`` must be 0."""
-    payload = _payload(response)
+    payload = response_payload(response)
     if payload.get("code") != 0:
         raise BilibiliApiError(
             f"B 站接口失败 code={payload.get('code')} msg={payload.get('message')}"

@@ -12,6 +12,7 @@ from .bilibili_api import BilibiliLoginApi
 from .bilibili_credentials import BilibiliCredentialStore
 from .bilibili_login import BilibiliLoginService
 from .bilibili_login_rpc import register_bilibili_login
+from .live_wiring import setup_live_engine
 
 if TYPE_CHECKING:
     from shiori_sdk.plugin_services import ServicePluginContext as PluginRuntimeContext
@@ -37,7 +38,7 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
         ),
     )
     ctx.events.on(RoleDeleted, reconciler.on_role_deleted)
-    # The live engine (#724) reads credentials through this same service.
+    # The live engine reads credentials through this same service.
     bilibili_login = BilibiliLoginService(
         role_store, BilibiliCredentialStore(ctx.workspace), BilibiliLoginApi()
     )
@@ -57,11 +58,11 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
         role_store=role_store, workspace=ctx.workspace, storage=ctx.storage
     )
     register_bubble_rpc(ctx.rpc)
-    # The one live-reply output of this setup (it owns the outcome RPC). The
-    # live engine (#724) is constructed here with it, to emit replies and
-    # subscribe to their outcomes; failed outcomes are logged meanwhile.
+    # The one live-reply output of this setup (it owns the outcome RPC); the
+    # live engine emits replies through it and paces on their outcomes.
     live_output = LiveReplyOutput(ctx.rpc)
     ctx.effect("live_outcome_log", live_output.subscribe(log_failed_outcome))
+    setup_live_engine(ctx, bilibili_login, live_output)
     register_voice_preferences(ctx.rpc, ctx.workspace)
     register_voice_context(ctx.rpc, ctx.roles, ctx.sessions)
     register_bilibili_login(ctx.rpc, bilibili_login)

@@ -27,10 +27,8 @@ from shiori_sdk.storage import plugin_data_dir
 from shiori_sdk.testing.packages import plugin_directory, stage_plugin_package
 
 from agent.plugin_host import HostServices, PluginKernel
-from agent.tools.registry import ToolRegistry
-from bus.event_bus import EventBus
 from core.roles.store import RoleStore
-from session.manager import SessionManager
+from tests.support.plugin_kernel import role_host_services
 
 PLUGIN_ID = "desktop_pet"
 PLUGIN_DIR = plugin_directory(PLUGIN_ID)
@@ -40,13 +38,7 @@ IMPORT_STAGING = Path("private_runtime/imports/desktop_pet-pets")
 
 
 def _services(store: RoleStore) -> HostServices:
-    return HostServices(
-        event_bus=EventBus(),
-        tool_registry=ToolRegistry(),
-        workspace=store.workspace,
-        role_store=store,
-        session_manager=SessionManager(store.workspace),
-    )
+    return role_host_services(store)
 
 
 def _load(services: HostServices) -> PluginKernel:

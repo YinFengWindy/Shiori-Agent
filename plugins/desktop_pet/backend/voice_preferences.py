@@ -25,6 +25,11 @@ class VoicePreferences(BaseModel):
     asr: SelectedService | None = None
     tts: SelectedService | None = None
 
+    @property
+    def speech_on(self) -> bool:
+        """Whether the pet speaks replies (mirrors ``speechOn`` in the background)."""
+        return self.enabled and self.tts is not None
+
 
 class VoicePreferencesStore:
     """Read and atomically write only this plugin's private preference file."""

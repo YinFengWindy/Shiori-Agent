@@ -38,3 +38,12 @@ def test_invalid_settings_do_not_replace_saved_preferences(tmp_path):
     store.path.write_text("broken", encoding="utf-8")
     with pytest.raises(json.JSONDecodeError):
         store.read()
+
+
+def test_replies_are_spoken_only_when_enabled_with_a_tts_service(tmp_path):
+    store = VoicePreferencesStore(tmp_path)
+    assert store.read().speech_on is False
+    assert store.write({"enabled": True}).speech_on is False
+    tts = {"plugin_id": "neutral", "service_id": "tts"}
+    assert store.write({"enabled": False, "tts": tts}).speech_on is False
+    assert store.write({"enabled": True, "tts": tts}).speech_on is True
