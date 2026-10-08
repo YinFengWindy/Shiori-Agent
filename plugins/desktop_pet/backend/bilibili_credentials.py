@@ -6,6 +6,7 @@ the renderer never carry the cookies.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -38,8 +39,18 @@ class BilibiliCredentialStore:
         return None if value is None else BilibiliCredentials.model_validate(value)
 
     def write(self, role_id: str, credentials: BilibiliCredentials) -> None:
-        """Replace this role's credentials."""
-        atomic_save_json(self._path(role_id), credentials.model_dump(mode="json"))
+        """Replace this role's credentials, owner-only on POSIX.
+
+        The 0o700 directory also covers the atomic writer's temporary file;
+        Windows keeps the profile directory's inherited ACL.
+        """
+        path = self._path(role_id)
+        if os.name == "posix":
+            self.root.mkdir(parents=True, exist_ok=True)
+            self.root.chmod(0o700)
+        atomic_save_json(path, credentials.model_dump(mode="json"))
+        if os.name == "posix":
+            path.chmod(0o600)
 
     def delete(self, role_id: str) -> None:
         """Forget this role's credentials; idempotent."""

@@ -1,5 +1,7 @@
 """QR login flow, live account status and engine credential access per role."""
 
+import asyncio
+
 import pytest
 from shiori_sdk.role_events import RoleDeleted
 from shiori_sdk.testing.roles import FakeRoles
@@ -83,16 +85,54 @@ async def test_logout_during_poll_discards_the_late_success(tmp_path, bilibili):
     service, _roles, store = _service(tmp_path, bilibili)
     await service.start("role")
     bilibili.scan_code = 0
-    original = bilibili._poll
-
-    def logout_mid_request():
-        service.logout("role")
-        return original()
-
-    bilibili._poll = logout_mid_request
+    bilibili.gate = asyncio.Event()
+    poll = asyncio.create_task(service.poll("role"))
+    await bilibili.wait_held(1)
+    service.logout("role")
+    bilibili.gate.set()
     with pytest.raises(ValueError, match="已被取消"):
+        await poll
+    assert store.read("role") is None
+
+
+async def test_concurrent_polls_both_report_the_single_success(tmp_path, bilibili):
+    service, _roles, store = _service(tmp_path, bilibili)
+    await service.start("role")
+    bilibili.scan_code = 0
+    bilibili.gate = asyncio.Event()
+    polls = [asyncio.create_task(service.poll("role")) for _ in range(2)]
+    await bilibili.wait_held(2)
+    bilibili.gate.set()
+    success = {"state": "success", "account": {"uid": 42, "uname": "主播"}}
+    assert await asyncio.gather(*polls) == [success, success]
+    assert store.read("role") is not None
+
+
+async def test_rejected_confirmation_spends_the_qr_attempt(tmp_path, bilibili):
+    service, _roles, store = _service(tmp_path, bilibili)
+    await service.start("role")
+    bilibili.scan_code = 0
+    bilibili.login_valid = False
+    with pytest.raises(BilibiliLoginRequired, match="校验未通过"):
+        await service.poll("role")
+    with pytest.raises(ValueError, match="没有进行中"):
         await service.poll("role")
     assert store.read("role") is None
+
+
+async def test_role_deleted_while_qr_is_issued_keeps_no_attempt(tmp_path, bilibili):
+    service, roles, _store = _service(tmp_path, bilibili)
+    bilibili.gate = asyncio.Event()
+    bilibili.hold_path = "/qrcode/generate"
+    start = asyncio.create_task(service.start("role"))
+    await bilibili.wait_held(1)
+    roles.values.pop("role")
+    bilibili.gate.set()
+    with pytest.raises(ValueError, match="不存在"):
+        await start
+    roles.create_role(role_id="role", name="Role", system_prompt="Role")
+    with pytest.raises(ValueError, match="没有进行中"):
+        await service.poll("role")
 
 
 async def test_unknown_role_is_rejected_and_deleted_role_loses_login(
@@ -101,6 +141,8 @@ async def test_unknown_role_is_rejected_and_deleted_role_loses_login(
     service, _roles, store = _service(tmp_path, bilibili)
     with pytest.raises(ValueError, match="不存在"):
         await service.start("missing")
+    with pytest.raises(ValueError, match="不存在"):
+        await service.require_credentials("missing")
     await service.start("role")
     bilibili.scan_code = 0
     await service.poll("role")

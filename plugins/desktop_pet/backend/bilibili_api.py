@@ -102,7 +102,7 @@ class BilibiliLoginApi:
         return QrCodeTicket(url=url, key=key)
 
     async def poll_qrcode(self, key: str) -> QrPollResult:
-        """Read the scan state; a confirmed scan must carry the login cookies."""
+        """Read the scan state; a confirmed scan must carry cookies and refresh_token."""
         response = await self._get(QRCODE_POLL_URL, params={"qrcode_key": key})
         data = _data(response)
         code = data.get("code")
@@ -116,11 +116,9 @@ class BilibiliLoginApi:
         if missing:
             raise BilibiliApiError(f"B 站登录成功但缺少 Cookie: {', '.join(missing)}")
         refresh_token = data.get("refresh_token")
-        return QrPollResult(
-            state=state,
-            cookies=cookies,
-            refresh_token=refresh_token if isinstance(refresh_token, str) else "",
-        )
+        if not isinstance(refresh_token, str) or not refresh_token:
+            raise BilibiliApiError("B 站登录成功但缺少 refresh_token")
+        return QrPollResult(state=state, cookies=cookies, refresh_token=refresh_token)
 
     async def fetch_account(self, cookies: dict[str, str]) -> BilibiliAccount | None:
         """Return the logged-in account, or ``None`` when the login is invalid."""
@@ -169,10 +167,6 @@ def _data(response: httpx.Response) -> dict[str, Any]:
         raise BilibiliApiError(
             f"B 站接口失败 code={payload.get('code')} msg={payload.get('message')}"
         )
-    return _data_of(payload)
-
-
-def _data_of(payload: dict[str, Any]) -> dict[str, Any]:
     data = payload.get("data")
     if not isinstance(data, dict):
         raise BilibiliApiError("B 站响应缺少 data")

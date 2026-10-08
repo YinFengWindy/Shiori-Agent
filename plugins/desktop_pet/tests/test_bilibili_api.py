@@ -5,6 +5,7 @@ import pytest
 
 from plugins.desktop_pet.backend.bilibili_api import (
     BilibiliApiError,
+    REQUIRED_LOGIN_COOKIES,
     BilibiliLoginApi,
     QrScanState,
 )
@@ -44,6 +45,20 @@ async def test_confirmed_scan_without_session_cookie_fails():
 
     api = BilibiliLoginApi(httpx.MockTransport(handler))
     with pytest.raises(BilibiliApiError, match="SESSDATA"):
+        await api.poll_qrcode("key")
+
+
+async def test_confirmed_scan_without_refresh_token_fails():
+    def handler(_request: httpx.Request) -> httpx.Response:
+        data = {"code": 0, "url": "", "message": ""}
+        cookies = [
+            ("set-cookie", f"{name}=v; Domain=bilibili.com")
+            for name in REQUIRED_LOGIN_COOKIES
+        ]
+        return httpx.Response(200, headers=cookies, json={"code": 0, "data": data})
+
+    api = BilibiliLoginApi(httpx.MockTransport(handler))
+    with pytest.raises(BilibiliApiError, match="refresh_token"):
         await api.poll_qrcode("key")
 
 

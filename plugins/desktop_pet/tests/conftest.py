@@ -1,5 +1,7 @@
 """Shared Bilibili platform double for the QR-login tests."""
 
+import asyncio
+
 import httpx
 import pytest
 
@@ -21,11 +23,24 @@ class FakeBilibili:
         self.login_valid = True
         self.issued = 0
         self.requests: list[httpx.Request] = []
+        # While set, requests whose path ends with ``hold_path`` wait for the
+        # gate to be released; ``held`` counts the parked requests.
+        self.gate: asyncio.Event | None = None
+        self.hold_path = "/qrcode/poll"
+        self.held = 0
         self.transport = httpx.MockTransport(self._handle)
 
-    def _handle(self, request: httpx.Request) -> httpx.Response:
+    async def wait_held(self, count: int) -> None:
+        """Yield until ``count`` requests are parked at ``gate``."""
+        while self.held < count:
+            await asyncio.sleep(0)
+
+    async def _handle(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
         path = request.url.path
+        if self.gate is not None and path.endswith(self.hold_path):
+            self.held += 1
+            await self.gate.wait()
         if path.endswith("/qrcode/generate"):
             self.issued += 1
             key = f"key-{self.issued}"
