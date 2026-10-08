@@ -36,7 +36,7 @@ import type {
 } from "../shared/types";
 import type { RoleCardImportState } from "./roleCardImportState";
 import { TitleBar } from "../shell/TitleBar";
-import type { AffectionDisplay } from "../chat/affectionDisplay";
+import type { AffectionDisplay } from "../affection/affectionDisplay";
 
 type RightSidebarViewState = {
   collapsed: boolean;

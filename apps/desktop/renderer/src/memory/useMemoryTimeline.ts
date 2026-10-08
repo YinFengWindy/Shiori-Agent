@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
+import { useBatchPaging } from "../shared/batchPaging";
+import { useScopedRead } from "../shared/useScopedRead";
 import { memoryReadKey, readSemanticBatch, type MemoryReadContext } from "./memoryReads";
 import {
   initialSemanticQuery, sameSemanticFilters, sameSemanticQuery,
   type RoleSemanticFilters, type RoleSemanticQuery,
 } from "./roleSemanticMemory";
 import { appendTimelineBatch, firstTimelineBatch, type TimelineBatches } from "./timelineSelectors";
-import { useMemoryRead } from "./useMemoryRead";
 
 /**
  * The filters this role's engine last declared. They outlive the list of one
@@ -31,16 +32,14 @@ function useDeclaredFilters(roleId: string, batches: TimelineBatches | null) {
 export function useMemoryTimeline(context: MemoryReadContext) {
   const [query, setQuery] = useState(initialSemanticQuery);
   const scope = memoryReadKey(context, JSON.stringify(query));
-  // `attempt` gives a retried batch a new read key for the same page.
-  const [paging, setPaging] = useState({ scope, page: 1, attempt: 0 });
+  const paging = useBatchPaging(scope);
   const [expanded, setExpanded] = useState<{ scope: string; ids: string[] }>({ scope, ids: [] });
-  const { page, attempt } = paging.scope === scope ? paging : { page: 1, attempt: 0 };
   const expandedIds = expanded.scope === scope ? expanded.ids : [];
 
-  const batches = useMemoryRead<TimelineBatches>({
+  const batches = useScopedRead<TimelineBatches>({
     scope,
-    key: `${scope}#${page}:${attempt}`,
-    read: async () => firstTimelineBatch(await readSemanticBatch(context, query, page)),
+    key: paging.key,
+    read: async () => firstTimelineBatch(await readSemanticBatch(context, query, paging.page)),
     merge: appendTimelineBatch,
   });
   const filters = useDeclaredFilters(context.roleId, batches.value);
@@ -57,9 +56,9 @@ export function useMemoryTimeline(context: MemoryReadContext) {
     loading: batches.loading,
     error: batches.error,
     hasMore: Boolean(batches.value && !batches.value.exhausted),
-    loadMore: () => setPaging({ scope, page: page + 1, attempt: 0 }),
+    loadMore: paging.loadMore,
     /** Re-requests the batch that failed; earlier batches stay. */
-    retry: () => setPaging({ scope, page, attempt: attempt + 1 }),
+    retry: paging.retry,
     expandedIds,
     toggle: (id: string) => setExpanded({
       scope,

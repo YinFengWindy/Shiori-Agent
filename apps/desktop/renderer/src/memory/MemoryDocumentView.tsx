@@ -1,22 +1,23 @@
 import { ChatMarkdownContent } from "../chat/ChatMarkdownContent";
 import type { RoleMemoryDocumentName, RoleMemoryDocumentsPayload } from "./memoryDocuments";
-import { MemoryFrame, MemoryReadError, MemoryStatusLine, memoryStatusText } from "./MemoryStatus";
-import type { MemoryReadState } from "./useMemoryRead";
+import { ReadFrame, ReadError, ReadStatusLine } from "../shared/feedback/ReadStatus";
+import { memoryStatusText } from "./memoryStatusText";
+import type { ScopedReadState } from "../shared/useScopedRead";
 
 type MemoryDocumentViewProps = {
   name: RoleMemoryDocumentName;
-  documents: MemoryReadState<RoleMemoryDocumentsPayload>;
+  documents: ScopedReadState<RoleMemoryDocumentsPayload>;
 };
 
 /** Read-only Markdown of one memory document, with distinct loading, empty, missing and error states. */
 export function MemoryDocumentView({ name, documents }: MemoryDocumentViewProps) {
   const document = documents.value?.documents.find((item) => item.name === name);
-  return <MemoryFrame label={name}>
-    {documents.loading ? <MemoryStatusLine text={memoryStatusText.loading} />
-      : documents.error ? <MemoryReadError error={documents.error} />
-      : document?.status === "error" ? <MemoryReadError error={document.error} />
-      : !document || document.status === "missing" ? <MemoryStatusLine text={memoryStatusText.documentMissing} />
-      : document.status === "empty" ? <MemoryStatusLine text={memoryStatusText.documentEmpty} />
+  return <ReadFrame label={name}>
+    {documents.loading ? <ReadStatusLine text={memoryStatusText.loading} />
+      : documents.error ? <ReadError error={documents.error} />
+      : document?.status === "error" ? <ReadError error={document.error} />
+      : !document || document.status === "missing" ? <ReadStatusLine text={memoryStatusText.documentMissing} />
+      : document.status === "empty" ? <ReadStatusLine text={memoryStatusText.documentEmpty} />
       : <ChatMarkdownContent content={document.content} />}
-  </MemoryFrame>;
+  </ReadFrame>;
 }

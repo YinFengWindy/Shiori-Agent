@@ -8,10 +8,11 @@ import pytest
 from PIL import Image
 
 from bus.event_bus import EventBus
-from core.roles import RoleStore
+from core.roles import RoleRelationshipRuntimeService, RoleStore
 from desktop_bridge.service import DesktopBridgeService
 from desktop_bridge.role_requests import DesktopRoleRequestHandler
 from desktop_bridge.role_card_export_service import DesktopRoleCardExportService
+from proactive_v2.presence import PresenceStore
 from session.manager import SessionManager
 from core.memory.group_environment import GroupEnvironment
 
@@ -312,3 +313,73 @@ async def test_role_delete_first_deletes_its_accounts_through_their_plugins(
         assert [row.record.id for row in accounts.list()] == ["chat:102"]
     finally:
         await service.aclose()
+
+
+@pytest.mark.asyncio
+async def test_affection_history_pages_newest_first_through_the_bridge(
+    tmp_path: Path,
+) -> None:
+    role_store = RoleStore(tmp_path)
+    sessions = SessionManager(tmp_path)
+    relationship = RoleRelationshipRuntimeService(
+        tmp_path,
+        role_store=role_store,
+        session_manager=sessions,
+        presence=PresenceStore(sessions._store),
+    )
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=role_store,
+        session_manager=sessions,
+        group_listening=GroupListeningControl(
+            ConversationService(sessions), lambda _channel: False
+        ),
+        group_environment=GroupEnvironment(tmp_path, sessions.conversation_store),
+        agent_loop=SimpleNamespace(process_direct=AsyncMock()),
+        event_bus=EventBus(),
+        relationship_runtime=relationship,
+    )
+    role_store.create_role(role_id="mira", name="Mira", system_prompt="规则")
+
+    async def page(number: int) -> dict:
+        response = await service.handle(
+            {
+                "id": f"affection-{number}",
+                "method": "roles.affection.history",
+                "payload": {"role_id": "mira", "page": number, "page_size": 2},
+            },
+            emit_event=lambda _payload: None,
+        )
+        assert response.error is None
+        return response.payload
+
+    assert await page(1) == {
+        "role_id": "mira",
+        "affection": None,
+        "items": [],
+        "total": 0,
+        "page": 1,
+        "page_size": 2,
+    }
+
+    relationship.affection.initialize("mira", value=30, reason="初始")
+    relationship.affection.apply_delta("mira", delta=2, reason="夸奖", source="turn")
+    relationship.affection.apply_delta("mira", delta=-1, reason="冷淡", source="turn")
+
+    first, last = await page(1), await page(2)
+    assert first["affection"] == {"value": 31, "stage": "熟悉", "progress": 11 / 19}
+    assert [item["reason"] for item in first["items"]] == ["冷淡", "夸奖"]
+    assert first["items"][0] | {"time": ""} == {
+        "id": 2,
+        "time": "",
+        "before": 32,
+        "after": 31,
+        "delta": -1,
+        "reason": "冷淡",
+        "source": "turn",
+    }
+    assert [(item["id"], item["source"], item["after"]) for item in last["items"]] == [
+        (0, "init", 30)
+    ]
+    assert first["total"] == last["total"] == 3
+    await service.aclose()

@@ -239,6 +239,7 @@ class DesktopBridgeService:
                 role_presenter=self.role_presenter,
                 card_import_service=self.role_card_import_service,
                 card_export_service=DesktopRoleCardExportService(role_store),
+                relationship_runtime=relationship_runtime,
                 publish_event=self._broadcast_event,
             ),
             sessions_and_tasks=DesktopSessionTaskRequestHandler(

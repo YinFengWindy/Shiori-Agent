@@ -29,16 +29,11 @@ it("appends a batch without repeating items and keeps going while full batches a
   assert.equal(merged.exhausted, false);
 });
 
-it("stops at a short batch, a batch with nothing new, the engine's total, or a disabled engine", () => {
-  const first = firstTimelineBatch(batch(["a", "b"]));
-  assert.equal(first.exhausted, false);
-  assert.equal(firstTimelineBatch(batch(["a"])).exhausted, true);
-  assert.equal(firstTimelineBatch(batch(["a", "b"], 2)).exhausted, true);
-  assert.equal(appendTimelineBatch(first, firstTimelineBatch(batch(["c"], 10, 2))).exhausted, true);
-  const repeated = appendTimelineBatch(first, firstTimelineBatch(batch(["a", "b"], 10, 2)));
-  assert.deepEqual(ids(repeated), ["a", "b"]);
-  assert.equal(repeated.exhausted, true);
-  assert.equal(firstTimelineBatch({ role_id: "mira", status: "disabled", items: [], total: 0 }).exhausted, true);
+it("treats a disabled engine as the end of the timeline", () => {
+  // The shared end rule itself is covered in shared/batchPaging.test.ts.
+  const disabled: RoleSemanticList = { role_id: "mira", status: "disabled", items: [], total: 0 };
+  assert.equal(firstTimelineBatch(disabled).exhausted, true);
+  assert.equal(appendTimelineBatch(firstTimelineBatch(batch(["a", "b"])), firstTimelineBatch(disabled)).list, disabled);
 });
 
 it("lists detail fields with Chinese labels and localized times, known fields first", () => {
