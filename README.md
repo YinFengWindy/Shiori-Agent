@@ -116,7 +116,7 @@ pnpm test --file RoleDetailPage.test.tsx
 
 ### 插件 SDK
 
-SDK 与 Runtime API 当前版本均为 **3.1.11**（3.1.1 起尚未发布，npm 与 PyPI 最新为 3.1.0；更新的接口需用 wheelhouse 或本仓库 workspace 构建）。前端包为 [@yinfengwindy/shiori-sdk](https://www.npmjs.com/package/@yinfengwindy/shiori-sdk)，后端包为 [shiori-sdk](https://pypi.org/project/shiori-sdk/)（Python 3.12+）。在独立插件项目中按需安装：
+SDK 与 Runtime API 当前版本均为 **3.1.12**（3.1.1 起尚未发布，npm 与 PyPI 最新为 3.1.0；更新的接口需用 wheelhouse 或本仓库 workspace 构建）。前端包为 [@yinfengwindy/shiori-sdk](https://www.npmjs.com/package/@yinfengwindy/shiori-sdk)，后端包为 [shiori-sdk](https://pypi.org/project/shiori-sdk/)（Python 3.12+）。在独立插件项目中按需安装：
 
 ```sh
 pnpm add -D "@yinfengwindy/shiori-sdk@^3.1.0"

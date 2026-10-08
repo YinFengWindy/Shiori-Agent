@@ -39,7 +39,7 @@ and renderer declaration keys are rejected. This table defines the v1 fields:
 | `api` | yes | integer `2` |
 | `id` | yes | `[a-z][a-z0-9_-]{0,63}` |
 | `version` | yes | full SemVer 2.0 string, including optional prerelease/build |
-| `runtime_api` | yes | compatibility range; host currently advertises `3.1.11` |
+| `runtime_api` | yes | compatibility range; host currently advertises `3.1.12` |
 | `entry` | yes | explicit package-relative `.py` backend entry |
 | `capabilities` | yes | existing v2 capability-name list, including `[]` |
 | `channels` | no | static channel declarations (Runtime API 2.2); requires the `channels` capability |
@@ -79,7 +79,7 @@ SDK. A package declares the lowest version whose additions it uses.
 
 The single version source is `packages/sdk/python/shiori_sdk/_version.py`
 (`RUNTIME_API_VERSION = __version__`), synchronized to the other packages by
-`node scripts/sync_sdk_version.mjs`. 3.1.1–3.1.11 are unpublished contract
+`node scripts/sync_sdk_version.mjs`. 3.1.1–3.1.12 are unpublished contract
 changes on `main`; npm and PyPI hold 3.1.0.
 
 | Version | Adds | Introduced by |
@@ -529,7 +529,7 @@ speech contracts") holds the details.
   activation and revoked when it or its window ends.
 - **Background chat.** `ctx.chat.send({role_id, content, turn_id, media})` and
   `ctx.chat.cancel({session_key, turn_id})` start and cancel a turn for a role.
-  Since 3.1.11, while the bridge connection is open, every accepted turn ends
+  Since 3.1.12, while the bridge connection is open, every accepted turn ends
   with exactly one host event (`chatTerminalEventMethods`): `chat.done`,
   `chat.error`, or `chat.cancelled` (`{session_key, turn_id}`) when it was
   cancelled by turn id or by bridge shutdown. A turn-id cancel persists the
@@ -1043,7 +1043,7 @@ for commands and how to validate its directory/zip from a host environment.
 ## Runtime API 3.0: unified Shiori SDK
 
 `@yinfengwindy/shiori-sdk` and `shiori-sdk` share one version (3.0.0 at introduction, now
-3.1.11) and the source tree `packages/sdk/`. External packages must declare `runtime_api: ">=3.0.0 <4.0.0"`.
+3.1.12) and the source tree `packages/sdk/`. External packages must declare `runtime_api: ">=3.0.0 <4.0.0"`.
 The previous frontend package name has no alias. Existing 2.x ranges are rejected
 with `incompatible_runtime` before backend execution; rebuild renderer peers and
 update the declared range when migrating. The 2.x sections above describe feature

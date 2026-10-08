@@ -68,7 +68,7 @@ export const pluginUiPeerExports: Record<string, string[]> = {
     // Runtime API 3.1.4 (#683): private document autosave and the settings page layout.
     "usePrivateAutosave", "SettingsField", "SettingsGroup", "SettingsSectionCard", "SettingsToggleField",
     "settingsGroupStackClass", "settingsInputClass",
-    // Runtime API 3.1.11 (#734): the events that end a chat turn.
+    // Runtime API 3.1.12 (#734): the events that end a chat turn.
     "chatTerminalEventMethods", "isChatTerminalEvent",
   ],
 };

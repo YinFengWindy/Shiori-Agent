@@ -1,5 +1,5 @@
 /**
- * Host bridge events that end a chat turn (runtime API 3.1.11): while the
+ * Host bridge events that end a chat turn (runtime API 3.1.12): while the
  * bridge connection is open, every started turn ends with exactly one of them.
  * `chat.cancelled` (`{session_key, turn_id}`) marks a turn cancelled by turn id
  * or by bridge shutdown.

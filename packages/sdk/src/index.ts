@@ -14,7 +14,7 @@
 // Errors and the injected RPC client (runtime API 2.8.0).
 export { BridgeError, PluginBridgeError } from "./errors";
 export type { BridgeEvent, PluginBackgroundHandler, PluginEventHandler, PluginPeer, PluginRpcClient } from "./rpc";
-// Runtime API 3.1.11 (#734): the events that end a chat turn.
+// Runtime API 3.1.12 (#734): the events that end a chat turn.
 export { chatTerminalEventMethods, isChatTerminalEvent, type ChatTerminalEventMethod } from "./chatEvents";
 
 // From here to the 2.10.0 block below: runtime API 2.9.0 (#504).

@@ -2,8 +2,8 @@
 
 [@yinfengwindy/shiori-sdk](https://www.npmjs.com/package/@yinfengwindy/shiori-sdk)
 and [shiori-sdk](https://pypi.org/project/shiori-sdk/) are the TypeScript and Python distributions of the
-same plugin contract. Both are version **3.1.11**, with Runtime API **3.1.11**.
-3.1.1–3.1.11 are not published yet; npm and PyPI hold 3.1.0. The commands below
+same plugin contract. Both are version **3.1.12**, with Runtime API **3.1.12**.
+3.1.1–3.1.12 are not published yet; npm and PyPI hold 3.1.0. The commands below
 install 3.1.0; APIs added since then need a wheelhouse or workspace build of
 this repository until the next publication.
 
@@ -80,10 +80,10 @@ out with the host's `SettingsGroup`, `SettingsSectionCard`, `SettingsField`,
 `SettingsToggleField`, `settingsInputClass` and `settingsGroupStackClass`. Packages
 using any of these require `runtime_api: ">=3.1.4 <4.0.0"`.
 
-Runtime API 3.1.11 adds the host event `chat.cancelled` (`{session_key, turn_id}`)
+Runtime API 3.1.12 adds the host event `chat.cancelled` (`{session_key, turn_id}`)
 and `chatTerminalEventMethods` / `isChatTerminalEvent`: while the bridge connection
 is open, every accepted chat turn ends with exactly one of `chat.done`, `chat.error`
-and `chat.cancelled`. Packages relying on it require `runtime_api: ">=3.1.11 <4.0.0"`.
+and `chat.cancelled`. Packages relying on it require `runtime_api: ">=3.1.12 <4.0.0"`.
 
 A disposed scoped client rejects with `PluginBridgeError`, code
 `plugin_unavailable`, and `details.reason: "context_disposed"`. Cleanup may treat
