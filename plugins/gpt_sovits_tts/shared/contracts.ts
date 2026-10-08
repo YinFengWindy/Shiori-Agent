@@ -4,7 +4,7 @@ export type GptSoVitsSettings = { connection_mode: "external" | "managed"; url: 
 /** Supported api_v2 language identifiers for the selected model generation. */
 export type VoiceLanguage = "auto" | "auto_yue" | "zh" | "en" | "ja" | "ko" | "yue" | "all_zh" | "all_ja" | "all_ko" | "all_yue";
 
-/** A provider-owned audio identifier, its reference transcription and the seconds measured at import (null for older references). */
+/** A provider-owned audio identifier, its reference transcription and the seconds the provider measured (null for older references; a client value is ignored on save). */
 export type VoiceReference = { asset: string; prompt_text: string; prompt_lang: VoiceLanguage; duration?: number | null };
 
 /** Private role voice document; it never enters the host role draft. */

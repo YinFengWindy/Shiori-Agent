@@ -3,6 +3,8 @@
 import pytest
 from shiori_sdk.files.json import atomic_save_json
 
+from plugins.gpt_sovits_tts.backend.references import References
+
 
 @pytest.mark.parametrize("seconds", [2.9, 10.1])
 def test_reference_duration_limits(import_reference, seconds):
@@ -13,6 +15,14 @@ def test_reference_duration_limits(import_reference, seconds):
 def test_reference_silence_rejected(import_reference):
     with pytest.raises(ValueError, match="静音"):
         import_reference(signal=0)
+
+
+def test_older_references_are_measured_from_their_own_file(configured):
+    # A fresh instance has no import-time measurement, like data from before durations.
+    voice = configured.store.read().roles["role"]
+    assert voice.default is not None and voice.default.duration is None
+    measured = References(configured.store).measured(voice)
+    assert measured.default is not None and measured.default.duration == 3
 
 
 def test_replaced_reference_retained_until_pin_ends(configured, import_reference):

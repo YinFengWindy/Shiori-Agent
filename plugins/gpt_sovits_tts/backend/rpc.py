@@ -50,6 +50,7 @@ def register_rpc(
             role_id = require_role(params)
             voice = RoleVoice.model_validate(params.get("voice"))
             references.validate(voice)
+            voice = references.measured(voice)
             references.retire(store.read().roles.get(role_id, RoleVoice()))
             result = store.save_role(role_id, voice.model_dump())
             references.imported.difference_update(

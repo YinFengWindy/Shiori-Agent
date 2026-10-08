@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { RoleVoice } from "../shared/contracts";
-import { emotionNameError, pendingCatalogMoods, setVoiceReference, updateEmotionReference, voiceReference } from "./emotionReferenceState";
+import { customImportBusy, emotionNameError, patchVoiceReference, pendingCatalogMoods, setVoiceReference, updateEmotionReference, voiceReference } from "./emotionReferenceState";
 
 test("private emotion names reject empty, duplicate and prototype keys", () => {
   for (const name of ["", "  ", " happy ", "__proto__", "constructor", "prototype", "toString", "hasOwnProperty", "line\nfeed"]) assert.ok(emotionNameError(name, ["happy"]), name);
@@ -29,4 +29,19 @@ test("the empty mood addresses the default reference and never an inherited mapp
 
 test("catalog moods without audio are offered once, skipping configured and unusable names", () => {
   assert.deepEqual(pendingCatalogMoods([" 开心", "开心", "平静", "constructor", ""], ["平静"]), ["开心"]);
+});
+
+test("a patch keeps the fields it leaves out and creates a reference only with an asset", () => {
+  const voice: RoleVoice = { text_lang: "auto", speed: 1, default: { asset: "a.wav", prompt_text: "参考", prompt_lang: "ja", duration: 4 }, moods: {} };
+  assert.deepEqual(patchVoiceReference(voice, "", { asset: "b.wav", duration: 5 }).default, { asset: "b.wav", prompt_text: "参考", prompt_lang: "ja", duration: 5 });
+  assert.deepEqual(patchVoiceReference(voice, "", { prompt_text: "新" }).default, { ...voice.default, prompt_text: "新" });
+  assert.equal(patchVoiceReference(voice, "开心", { prompt_text: "无音频" }), voice);
+  assert.deepEqual(patchVoiceReference(voice, "开心", { asset: "c.wav" }).moods, { 开心: { asset: "c.wav", prompt_text: "", prompt_lang: "zh" } });
+});
+
+test("only an import outside the listed rows belongs to the custom mood form", () => {
+  assert.equal(customImportBusy(null, ["", "开心"]), false);
+  assert.equal(customImportBusy("开心", ["", "开心"]), false);
+  assert.equal(customImportBusy("", ["", "开心"]), false);
+  assert.equal(customImportBusy("害羞", ["", "开心"]), true);
 });

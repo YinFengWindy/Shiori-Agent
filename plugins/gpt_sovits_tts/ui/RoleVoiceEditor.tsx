@@ -2,6 +2,7 @@ import { compactGhostButtonClass, inputClass, Select, usePluginHostServices, typ
 import { voiceLanguage, voiceLanguages } from "./languages";
 import { PreviewControls } from "./PreviewControls";
 import { ReferenceList } from "./ReferenceList";
+import { SpeedField } from "./SpeedField";
 import type { RoleVoiceAutosave } from "./useRoleVoice";
 import { useSavedPreview } from "./useSavedPreview";
 
@@ -15,8 +16,8 @@ type RoleVoiceEditorProps = {
 
 /**
  * The GPT-SoVITS card's dialog: the role's private voice, autosaved as it is
- * edited. A failed save keeps the draft and offers a retry; the card's
- * autosave also submits the last edit when the role editor switches roles.
+ * edited. A failed save keeps the draft and offers a retry; the card submits
+ * the last edit when the dialog closes or the role editor switches roles.
  */
 export function RoleVoiceEditor({ roleId, client, voice, moodCatalog, disabled }: RoleVoiceEditorProps) {
   const host = usePluginHostServices();
@@ -32,11 +33,10 @@ export function RoleVoiceEditor({ roleId, client, voice, moodCatalog, disabled }
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="grid gap-2">文本语言<Select aria-label="文本语言" className={inputClass} disabled={disabled} value={draft.text_lang} options={voiceLanguages}
           onValueChange={(next) => { const language = voiceLanguage(next); if (language) voice.commit((current) => ({ ...current, text_lang: language })); }} /></label>
-        <label className="grid gap-2">语速<input aria-label="语速" className={inputClass} disabled={disabled} type="number" min="0.5" max="2" step="0.1" defaultValue={draft.speed}
-          onChange={(event) => { const speed = event.target.valueAsNumber; if (speed >= 0.5 && speed <= 2) voice.update((current) => ({ ...current, speed })); }} /></label>
+        <SpeedField value={draft.speed} disabled={disabled} onChange={(speed) => voice.update((current) => ({ ...current, speed }))} />
       </div>
-      <ReferenceList roleId={roleId} client={client} draft={draft} moodCatalog={moodCatalog} disabled={disabled}
-        onUpdate={voice.update} onCommit={voice.commit} onPreview={preview.play} previewDisabled={disabled || preview.busy || preview.blockedReason !== "" || !preview.text.trim()} />
+      <ReferenceList roleId={roleId} client={client} voice={{ ...voice, draft }} moodCatalog={moodCatalog} disabled={disabled}
+        onPreview={preview.play} previewDisabled={disabled || preview.busy || preview.blockedReason !== "" || !preview.text.trim()} />
       <PreviewControls preview={preview} />
     </> : null}
   </>;

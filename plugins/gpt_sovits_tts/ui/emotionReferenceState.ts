@@ -32,6 +32,23 @@ export function voiceReference(voice: RoleVoice, mood: string) {
   return Object.hasOwn(voice.moods, mood) ? voice.moods[mood] : null;
 }
 
+/**
+ * Patches one reference, keeping the fields the patch leaves out (an imported
+ * audio keeps the transcript and language it replaces). A mood without a
+ * reference only gains one from a patch that carries its asset.
+ */
+export function patchVoiceReference(voice: RoleVoice, mood: string, patch: Partial<VoiceReference>) {
+  const previous = voiceReference(voice, mood);
+  const asset = patch.asset ?? previous?.asset;
+  if (asset === undefined) return voice;
+  return setVoiceReference(voice, mood, { prompt_text: "", prompt_lang: "zh", ...previous, ...patch, asset });
+}
+
+/** Whether the import in flight was started by the custom mood form rather than by a listed row. */
+export function customImportBusy(busy: string | null, rowMoods: readonly string[]) {
+  return busy !== null && !rowMoods.includes(busy);
+}
+
 /** Role catalog moods without a reference yet that can be stored under their own name. */
 export function pendingCatalogMoods(catalog: readonly string[], configured: readonly string[]) {
   return [...new Set(catalog.map((value) => value.trim()))].filter((name) => !emotionNameError(name, configured));

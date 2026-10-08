@@ -63,8 +63,9 @@ test("content opened once stays mounted while closed, so its in-progress state s
   } finally { await view.cleanup(); }
 });
 
-test("focus moves into the dialog, Escape closes it and focus returns to the ⚙", async () => {
-  const view = await mountTestComponent(<CapabilitySettingsDialog title="桌宠"><input aria-label="字段" /></CapabilitySettingsDialog>);
+test("focus moves into the dialog, Escape closes it, focus returns to the ⚙ and each open and close is reported", async () => {
+  const changes: boolean[] = [];
+  const view = await mountTestComponent(<CapabilitySettingsDialog title="桌宠" onOpenChange={(open) => changes.push(open)}><input aria-label="字段" /></CapabilitySettingsDialog>);
   try {
     const trigger = view.container.querySelector<HTMLButtonElement>('button[aria-label="桌宠设置"]')!;
     trigger.focus();
@@ -78,6 +79,7 @@ test("focus moves into the dialog, Escape closes it and focus returns to the ⚙
     await settle();
     assert.equal(shown(), false);
     assert.equal(document.activeElement, trigger);
+    assert.deepEqual(changes, [true, false]);
   } finally { await view.cleanup(); }
 });
 

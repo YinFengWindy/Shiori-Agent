@@ -35,6 +35,12 @@ type RoleCapabilityCardProps = {
    * editor's Save/Reset.
    */
   settings?: ReactNode;
+  /**
+   * Called when the settings dialog opens (true) or closes (false) (runtime
+   * API 3.1.12, #720). The content stays mounted while closed, so a plugin
+   * that autosaves uses the close to submit its last edit at once.
+   */
+  onSettingsOpenChange?: (open: boolean) => void;
   /** Extra rows under the title row, e.g. the voice parameters. */
   children?: ReactNode;
   className?: string;
@@ -47,7 +53,7 @@ type RoleCapabilityCardProps = {
  * icon, title, a status badge that says whether it really works, the switch and,
  * for capabilities with more to configure, the ⚙ of their settings dialog.
  */
-export function RoleCapabilityCard({ icon, title, status, control, settings, children, className, ...rest }: RoleCapabilityCardProps) {
+export function RoleCapabilityCard({ icon, title, status, control, settings, onSettingsOpenChange, children, className, ...rest }: RoleCapabilityCardProps) {
   return (
     <div className={cx(cardClass, "grid content-start gap-4 p-5", className)} data-testid={rest["data-testid"]}>
       <div className="flex items-center gap-3">
@@ -59,7 +65,7 @@ export function RoleCapabilityCard({ icon, title, status, control, settings, chi
           <RoleCapabilityBadge status={status} />
         </div>
         {control}
-        {settings ? <CapabilitySettingsDialog title={title}>{settings}</CapabilitySettingsDialog> : null}
+        {settings ? <CapabilitySettingsDialog title={title} onOpenChange={onSettingsOpenChange}>{settings}</CapabilitySettingsDialog> : null}
       </div>
       {children}
     </div>

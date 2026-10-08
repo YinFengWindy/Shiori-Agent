@@ -46,7 +46,7 @@ class Reference(BaseModel):
     asset: str = Field(pattern=r"^[a-f0-9]{32}\.wav$")
     prompt_text: str = Field(default="", max_length=10000)
     prompt_lang: Language = "zh"
-    # Seconds measured at import, shown by the role editor; absent for older references.
+    # Seconds measured by this plugin (never taken from a client); null for older data.
     duration: float | None = Field(default=None, ge=0)
 
 

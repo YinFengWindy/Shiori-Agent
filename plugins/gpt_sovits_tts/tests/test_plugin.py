@@ -14,10 +14,14 @@ async def test_setup_private_rpc_and_role_delete(context, configured, monkeypatc
     assert context.services.entries["tts"]["contract"] == "shiori.tts.v1"
     voice = await context.rpc.handlers["role.get"]({"role_id": "role"})
     assert voice["default"] is not None
-    assert (
-        await context.rpc.handlers["role.set"]({"role_id": "role", "voice": voice})
-        == voice
-    )
+    assert voice["default"]["duration"] is None
+    # Saving an older reference records the duration measured from its own file.
+    assert await context.rpc.handlers["role.set"](
+        {"role_id": "role", "voice": voice}
+    ) == {
+        **voice,
+        "default": {**voice["default"], "duration": 3.0},
+    }
     assert context.roles.extensions.values == {}
     assert context.config.as_dict() == {}
     context.roles.values.pop("role")
