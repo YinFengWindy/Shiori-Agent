@@ -106,8 +106,8 @@ describe("RoleDetailPage", () => {
     assert.doesNotMatch(markup, /知识库/);
     assert.match(markup, /能力/);
     assert.doesNotMatch(markup, /主动推送/);
-    // Tabs read 资料 / 记忆 / 能力 / 账号; accounts live only in their own tab.
-    assert.match(markup, /资料<\/button>.*记忆<\/button>.*能力<\/button>.*账号<\/button>/);
+    // Tabs read 资料 / 记忆 / 好感度 / 能力 / 账号; accounts live only in their own tab.
+    assert.match(markup, /资料<\/button>.*记忆<\/button>.*好感度<\/button>.*能力<\/button>.*账号<\/button>/);
     assert.doesNotMatch(markup, /添加账号/);
     assert.doesNotMatch(markup, /渠道绑定/);
     assert.match(markup, /aria-current="page"[^>]*>.*资料/);
@@ -228,6 +228,27 @@ describe("RoleDetailPage", () => {
     assert.doesNotMatch(renderPage({ activeRole: role }), /data-testid="role-detail-go-to-chat"[^>]*disabled/);
     assert.match(renderPage({ activeRole: role, bridgeReady: false }), /data-testid="role-detail-go-to-chat"[^>]*disabled=""/);
     assert.match(renderPage(), /data-testid="role-detail-go-to-chat"[^>]*disabled=""/);
+  });
+
+  it("opens the read-only 好感度 tab without the draft's 重置 / 保存", async () => {
+    const view = await mountTestComponent(pageElement({ activeRole: role }), { windowGlobals: { miraDesktop: {
+      onEvent: () => () => {},
+      readSettings: async () => ({ formData: createSettingsDraft() }),
+      invoke: async ({ method, payload }: { method: string; payload: Record<string, unknown> }) => ({
+        id: "test", type: "response", method, error: null,
+        payload: method === "roles.affection.history"
+          ? { role_id: payload.role_id, affection: { value: 45, stage: "朋友", progress: 5 / 19 }, items: [], total: 0, page: 1, page_size: 20 }
+          : { generation: "g", slots: [], registrations: [] },
+      }),
+    } } });
+    try {
+      const tab = Array.from(document.querySelectorAll("button")).find((item) => item.textContent === "好感度");
+      assert.ok(tab);
+      await act(async () => tab.click());
+      assert.ok(view.container.querySelector('[data-testid="role-affection-meter"]'));
+      assert.equal(view.container.querySelector('[data-testid="save-role-button"]'), null);
+      assert.equal(view.container.querySelector('[data-testid="reset-role-button"]'), null);
+    } finally { await view.cleanup(); }
   });
 
   it("shows the current mood and a visible 更换形象 action in the character header", () => {

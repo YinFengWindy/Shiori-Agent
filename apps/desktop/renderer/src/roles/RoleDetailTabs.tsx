@@ -1,14 +1,20 @@
 import { underlineTabClass } from "../shared/styles";
 
 /** The role editor's available task sections. */
-export type RoleDetailTabId = "profile" | "memory" | "capabilities" | "accounts";
+export type RoleDetailTabId = "profile" | "memory" | "affection" | "capabilities" | "accounts";
 
 const tabs: Array<{ id: RoleDetailTabId; label: string }> = [
   { id: "profile", label: "资料" },
   { id: "memory", label: "记忆" },
+  { id: "affection", label: "好感度" },
   { id: "capabilities", label: "能力" },
   { id: "accounts", label: "账号" },
 ];
+
+/** Read-only tabs show no 重置 / 保存: nothing on them edits the role draft. */
+export function roleDetailTabEditsDraft(tab: RoleDetailTabId) {
+  return tab !== "memory" && tab !== "affection";
+}
 
 /** Renders the role-editor's task-focused navigation without adding another sidebar. */
 export function RoleDetailTabs({
