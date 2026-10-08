@@ -3,8 +3,16 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { buildDesktopViewModel } from "./desktopSelectors";
-import type { RoleRecord, SessionPayload } from "@yinfengwindy/shiori-sdk";
+import type { RelationState, RoleRecord, SessionPayload } from "@yinfengwindy/shiori-sdk";
 import type { RoleFormState } from "../shared/types";
+
+/** A complete relation state; the values don't matter to these selectors. */
+const RELATION_STATE: RelationState = {
+  dependence: 0.5,
+  security: 0.5,
+  initiative_desire: 0.5,
+  neglect_sensitivity: 0.5,
+};
 
 function createRole(overrides: Partial<RoleRecord> = {}): RoleRecord {
   return {
@@ -271,7 +279,7 @@ describe("desktopSelectors", () => {
         role_self_view: "我最近会不自觉地去想你会不会来找我。",
         relation_tags: ["亲近", "怕被冷落"],
         internal_profile: {
-          relation_state: { dependence: 0.5, security: 0.5, initiative_desire: 0.5, neglect_sensitivity: 0.5 },
+          relation_state: RELATION_STATE,
           behavior_profile: {},
         },
         source_summary: {},
@@ -339,7 +347,7 @@ describe("desktopSelectors", () => {
         role_self_view: "我还是会留意你有没有想起我。",
         relation_tags: ["嘴硬", "等你主动"],
         internal_profile: {
-          relation_state: { dependence: 0.5, security: 0.5, initiative_desire: 0.5, neglect_sensitivity: 0.5 },
+          relation_state: RELATION_STATE,
           behavior_profile: {},
         },
         source_summary: {},

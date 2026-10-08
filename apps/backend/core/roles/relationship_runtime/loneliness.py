@@ -6,16 +6,14 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
 from typing import Any
 
-from .affection import AFFECTION_STAGES
+from .affection import AFFECTION_INTIMATE_STAGE
 
 _UNANSWERED_REPLY_WINDOW_HOURS = 24
 _NIGHT_SUPPRESSION_START_HOUR = 0
 _NIGHT_SUPPRESSION_END_HOUR = 6
 _LONELINESS_TICK_MINUTES = 10
 # 寂寞增长与关系主动动机的好感门槛：「亲密」阶段起点。
-_PROACTIVE_AFFECTION_THRESHOLD = next(
-    stage.lower for stage in AFFECTION_STAGES if stage.name == "亲密"
-)
+_PROACTIVE_AFFECTION_THRESHOLD = AFFECTION_INTIMATE_STAGE.lower
 
 
 @dataclass(frozen=True)

@@ -344,7 +344,7 @@ class RoleRelationshipRuntimeService(_RelationshipPersistenceMixin):
         if runtime is None:
             return False, {"reason": "no_runtime"}
         if not self._is_loneliness_growth_enabled(role_id):
-            return False, {"reason": "not_close_enough"}
+            return False, {"reason": "affection_below_intimate"}
         now_dt = (now or datetime.now().astimezone()).astimezone()
         effective_value = float(runtime["loneliness_value"])
         local_hour = now_dt.hour

@@ -26,11 +26,14 @@ class AffectionStage:
     upper: int
 
 
+AFFECTION_INTIMATE_STAGE = AffectionStage("亲密", 60, 79)
+"""「亲密」阶段；其起点是寂寞增长与关系主动动机的好感门槛。"""
+
 AFFECTION_STAGES: tuple[AffectionStage, ...] = (
     AffectionStage("陌生", 0, 19),
     AffectionStage("熟悉", 20, 39),
     AffectionStage("朋友", 40, 59),
-    AffectionStage("亲密", 60, 79),
+    AFFECTION_INTIMATE_STAGE,
     AffectionStage("挚爱", 80, 100),
 )
 """全局阶段定义，不支持按角色配置。"""

@@ -474,7 +474,7 @@ def test_should_trigger_proactive_requires_intimate_affection(
     )
 
     assert should_trigger is False
-    assert meta["reason"] == "not_close_enough"
+    assert meta["reason"] == "affection_below_intimate"
     frozen = runtime.read_loneliness_runtime("mira")
     assert frozen is not None
     assert frozen["awaiting_reply_after_proactive"] is False
