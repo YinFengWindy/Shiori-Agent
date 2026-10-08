@@ -7,9 +7,14 @@ import { compactIconButtonClass, cx, dialogBackdropClass } from "../styles";
  * The centred popup surface of a titled, scrolling dialog: fixed in the
  * middle of the window, height-capped so the body scrolls, fading and scaling
  * with `motion-dialog`. Width is added by `DialogFrame` (`wide`).
+ *
+ * `[&[hidden]]:hidden`: a kept-mounted popup (`keepMounted`) is closed only by
+ * Base UI's `hidden` attribute, and preflight's `[hidden]` rule loses to the
+ * `flex` utility here at equal specificity; the variant (class + attribute)
+ * wins, so a closed popup really leaves the screen.
  */
 const dialogPopupFrameClass =
-  "confirm-dialog motion-dialog fixed left-1/2 top-1/2 z-50 flex max-h-[calc(100dvh-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col gap-5 rounded-md border border-line bg-surface p-6 shadow-panel";
+  "[&[hidden]]:hidden motion-dialog fixed left-1/2 top-1/2 z-50 flex max-h-[calc(100dvh-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col gap-5 rounded-md border border-line bg-surface p-6 shadow-panel";
 
 type DialogFrameProps = {
   /** Content of `Dialog.Title`. */
