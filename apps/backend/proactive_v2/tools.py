@@ -25,6 +25,8 @@ from proactive_v2.outbound_text import normalize_outbound_text
 from proactive_v2.time import format_beijing_timestamp
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from shiori_sdk.memory.engine import MemoryRetrievalApi
     from core.memory.group_environment import GroupEnvironment
     from core.memory.markdown import MemoryProfileApi
@@ -53,6 +55,8 @@ class ToolDeps:
     shared_tools: Any = None
     # 群环境层（#497）：主动回合注入各外部会话的最近动态。
     group_environment: "GroupEnvironment | None" = None
+    # 好感块（#714）：每轮读取，放进 context frame；未初始化时返回 None。
+    affection_prompt_fn: "Callable[[], str | None] | None" = None
 
 
 # ── Tool Schemas ──────────────────────────────────────────────────────────

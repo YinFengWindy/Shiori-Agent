@@ -65,6 +65,8 @@ class AgentTickDeps:
     proactive_gates: ProactiveGateChain | None = None
     # 群环境层（#497）：主动与发呆回合注入各外部会话的最近动态。
     group_environment: GroupEnvironment | None = None
+    # 好感块（#714）：每轮读取，注入主动与发呆回合的 context frame。
+    affection_prompt_fn: Callable[[], str | None] | None = None
 
 
 class AgentTickFactory:
@@ -225,6 +227,7 @@ class AgentTickFactory:
             max_chars=self._deps.cfg.agent_tick_web_fetch_max_chars,
             shared_tools=self._deps.shared_tools,
             group_environment=self._deps.group_environment,
+            affection_prompt_fn=self._deps.affection_prompt_fn,
         )
 
     def _build_gateway_deps(
@@ -265,6 +268,7 @@ class AgentTickFactory:
                     send_message_fn=self._build_drift_send_message_fn(),
                     max_web_fetch_chars=tool_deps.max_chars,
                     group_environment=self._deps.group_environment,
+                    affection_prompt_fn=self._deps.affection_prompt_fn,
                 ),
                 role_prompt_fn=self._deps.role_prompt_fn,
                 max_steps=getattr(self._deps.cfg, "drift_max_steps", 20),

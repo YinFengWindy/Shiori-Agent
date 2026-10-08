@@ -77,3 +77,14 @@ def test_proactive_target_preview_is_an_app_level_read():
     assert policy.handler is Handler.PROACTIVE_TARGET
     assert policy.admission_exempt
     assert policy.concurrency is Concurrency.READ_ONLY
+
+
+def test_stage_prompt_writes_take_the_mutation_lane():
+    assert (
+        method_policy("roles.affection.stagePrompts.get").concurrency
+        is Concurrency.READ_ONLY
+    )
+    assert (
+        method_policy("roles.affection.stagePrompts.set").concurrency
+        is Concurrency.MUTATION
+    )

@@ -1,6 +1,6 @@
 import { errorMessage } from "../errors";
 import type { PluginRpcClient } from "../rpc";
-import { SerialDraftQueue, type DraftSavePhase } from "../serialDraftQueue";
+import { SerialDraftQueue, autosaveDebounceMs, type DraftSavePhase } from "../serialDraftQueue";
 
 /** How `usePrivateAutosave` reads and writes its one plugin-owned document. */
 export type PrivateAutosaveOperations<T> = {
@@ -25,8 +25,8 @@ export const emptyPrivateAutosaveState: PrivateAutosaveState<never> = {
   draft: null, saved: null, loading: false, loadError: "", savePhase: "idle", saveError: "",
 };
 
-/** The quiet period of `usePrivateAutosave`, matching the host's plugin config autosave. */
-export const privateAutosaveDebounceMs = 400;
+/** The quiet period of `usePrivateAutosave`: the shared autosave quiet period. */
+export const privateAutosaveDebounceMs = autosaveDebounceMs;
 
 function cloneDocument<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;

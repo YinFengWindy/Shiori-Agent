@@ -412,6 +412,7 @@ class DriftTurnPipeline:
                 content=memory_text or "（空）",
                 is_static=False,
             ),
+            *self._affection_sections(),
             PromptSectionRender(
                 name="recent_context",
                 content=recent_context_text or "（空）",
@@ -447,6 +448,14 @@ class DriftTurnPipeline:
                 )
             )
         return build_context_frame_message(build_context_frame_content(sections))
+
+    def _affection_sections(self) -> list[PromptSectionRender]:
+        """The affection block (#714); none while the role's affection is uninitialized."""
+        affection_prompt_fn = self._tool_deps.affection_prompt_fn
+        content = affection_prompt_fn() if affection_prompt_fn else None
+        if not content:
+            return []
+        return [PromptSectionRender(name="affection", content=content, is_static=False)]
 
     def _build_system_prompt(self) -> str:
         identity = str(self._role_prompt_fn() or "").strip()

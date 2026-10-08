@@ -157,6 +157,8 @@ class RoleRecord:
     created_at: str
     updated_at: str
     profile: RoleProfile = field(default_factory=RoleProfile)
+    # 按好感阶段名覆盖的语气指引（#714）；没有覆盖的阶段用默认文案。
+    affection_stage_prompts: dict[str, str] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)
@@ -229,4 +231,18 @@ class RoleRecord:
             created_at=str(payload.get("created_at") or now_iso()),
             updated_at=str(payload.get("updated_at") or now_iso()),
             profile=profile,
+            affection_stage_prompts=_stage_prompts_field(
+                payload.get("affection_stage_prompts")
+            ),
         )
+
+
+def _stage_prompts_field(value: object) -> dict[str, str]:
+    """Keeps the nonblank string overrides; stage names are validated on write."""
+    if not isinstance(value, dict):
+        return {}
+    return {
+        str(stage): prompt
+        for stage, prompt in value.items()
+        if isinstance(prompt, str) and prompt.strip()
+    }

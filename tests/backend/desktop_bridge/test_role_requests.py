@@ -9,6 +9,9 @@ from PIL import Image
 
 from bus.event_bus import EventBus
 from core.roles import RoleRelationshipRuntimeService, RoleStore
+from core.roles.relationship_runtime.affection_prompts import (
+    DEFAULT_AFFECTION_STAGE_PROMPTS,
+)
 from desktop_bridge.service import DesktopBridgeService
 from desktop_bridge.role_requests import DesktopRoleRequestHandler
 from desktop_bridge.role_card_export_service import DesktopRoleCardExportService
@@ -440,3 +443,83 @@ async def test_affection_history_pages_newest_first_through_the_bridge(
     ]
     assert first["total"] == last["total"] == 3
     await service.aclose()
+
+
+@pytest.mark.asyncio
+async def test_affection_stage_prompts_write_and_restore_through_the_bridge(
+    tmp_path: Path,
+) -> None:
+    sessions = SessionManager(tmp_path)
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=RoleStore(tmp_path),
+        session_manager=sessions,
+        group_listening=GroupListeningControl(
+            ConversationService(sessions), lambda _channel: False
+        ),
+        group_environment=GroupEnvironment(tmp_path, sessions.conversation_store),
+        agent_loop=SimpleNamespace(process_direct=AsyncMock()),
+        event_bus=EventBus(),
+    )
+    RoleStore(tmp_path).create_role(role_id="mira", name="Mira", system_prompt="规则")
+
+    async def call(method: str, **payload: object):
+        response = await service.handle(
+            {"id": method, "method": method, "payload": {"role_id": "mira", **payload}},
+            emit_event=lambda _payload: None,
+        )
+        return response
+
+    async def stages(
+        method: str = "roles.affection.stagePrompts.get", **payload: object
+    ):
+        response = await call(method, **payload)
+        assert response.error is None
+        return {item["stage"]: item for item in response.payload["stages"]}
+
+    def stored_overrides() -> dict[str, str]:
+        role = RoleStore(tmp_path).get_role("mira")
+        assert role is not None
+        return role.affection_stage_prompts
+
+    try:
+        initial = await stages()
+        assert list(initial) == list(DEFAULT_AFFECTION_STAGE_PROMPTS)
+        assert all(
+            item["prompt"] == item["default"] == DEFAULT_AFFECTION_STAGE_PROMPTS[stage]
+            and not item["overridden"]
+            for stage, item in initial.items()
+        )
+
+        written = await stages(
+            "roles.affection.stagePrompts.set",
+            prompts={"熟悉": "嘴硬心软。", "朋友": "  "},
+        )
+        assert written["熟悉"]["prompt"] == "嘴硬心软。"
+        assert written["熟悉"]["overridden"]
+        assert not written["朋友"]["overridden"]
+        # Persisted in the role config: a later read still has it.
+        assert (await stages())["熟悉"]["prompt"] == "嘴硬心软。"
+        assert stored_overrides() == {"熟悉": "嘴硬心软。"}
+        # Only the dedicated methods carry it, not the general role payload.
+        [listed] = (await call("roles.list")).payload["roles"]
+        assert "affection_stage_prompts" not in listed
+
+        # Writing the default text, or null, restores the default.
+        restored = await stages(
+            "roles.affection.stagePrompts.set",
+            prompts={"熟悉": DEFAULT_AFFECTION_STAGE_PROMPTS["熟悉"]},
+        )
+        assert restored["熟悉"] == initial["熟悉"]
+        _ = await stages("roles.affection.stagePrompts.set", prompts={"挚爱": "黏人。"})
+        assert not (
+            await stages("roles.affection.stagePrompts.set", prompts={"挚爱": None})
+        )["挚爱"]["overridden"]
+        assert stored_overrides() == {}
+
+        rejected = await call(
+            "roles.affection.stagePrompts.set", prompts={"暧昧": "不存在的阶段"}
+        )
+        assert rejected.error is not None
+    finally:
+        await service.aclose()

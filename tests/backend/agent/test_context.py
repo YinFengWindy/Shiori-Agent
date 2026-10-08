@@ -14,6 +14,7 @@ from core.identity import IdentityChat
 from core.memory.group_environment import GroupEnvironment, GroupEnvironmentUpdate
 from core.memory.member_profiles import MemberKey, MemberProfile, MemberProfiles
 from core.roles import RoleStore
+from core.roles.relationship_runtime.affection_service import RoleAffectionService
 from session.manager import SessionManager
 from session.manager.models import INTERRUPTED_TURN_METADATA_KEY
 from session.manager.models import Session, whole_session
@@ -927,3 +928,28 @@ def test_attachment_tool_hint_removal_keeps_user_lines_and_textless_parts(tmp_pa
     parts = [{"type": "text"}, {"type": "image_url", "image_url": {"url": "x"}}]
     message = {"role": "user", "content": parts}
     assert without_attachment_tool_hints(message) == message
+
+
+def test_affection_block_goes_to_the_context_frame_not_the_system_prompt(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    monkeypatch.setattr("agent.context.SkillsLoader", _EmptySkills)
+    store = RoleStore(tmp_path)
+    store.create_role(role_id="mira", name="Mira", system_prompt="test role")
+    RoleAffectionService(tmp_path).initialize("mira", value=72, reason="初始")
+    builder = ContextBuilder(
+        tmp_path, _EmptyMemory(), runtime_roles=store  # type: ignore[arg-type]
+    )
+
+    result = builder.render(
+        ContextRequest(history=[], current_message="在吗"),
+        session_metadata={"role_id": "mira"},
+    )
+
+    [frame] = [
+        str(message["content"])
+        for message in result.messages
+        if SYSTEM_CONTEXT_FRAME_MARKER in str(message["content"])
+    ]
+    assert "72/100（亲密）" in frame
+    assert "72/100" not in result.system_prompt

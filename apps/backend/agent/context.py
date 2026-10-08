@@ -10,6 +10,7 @@ from shiori_sdk.channels.message_source import MessageSource, with_message_sourc
 from agent.core.types import ContextRenderResult, ContextRequest
 from agent.core.prompt_block import (
     ActiveSkillsPromptBlock,
+    AffectionPromptBlock,
     BehaviorRulesPromptBlock,
     ExternalTurnRulesPromptBlock,
     GroupListeningPromptBlock,
@@ -294,6 +295,7 @@ class ContextBuilder:
                 GroupListeningPromptBlock(),
                 SessionContextPromptBlock(),
                 UserIdentitiesPromptBlock(runtime_roles),
+                AffectionPromptBlock(runtime_roles),
                 ExternalTurnRulesPromptBlock(),
                 ActiveSkillsPromptBlock(),
                 SkillsCatalogPromptBlock(render_fn=build_skills_catalog_prompt),

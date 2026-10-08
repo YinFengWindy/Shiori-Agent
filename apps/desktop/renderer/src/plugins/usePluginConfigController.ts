@@ -1,4 +1,4 @@
-import { SerialDraftQueue, errorFeedback } from "@yinfengwindy/shiori-sdk/host-internal";
+import { SerialDraftQueue, autosaveDebounceMs, errorFeedback } from "@yinfengwindy/shiori-sdk/host-internal";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type DraftSavePhase, type PluginConfigValues, PluginBridgeError } from "@yinfengwindy/shiori-sdk";
 import {
@@ -50,7 +50,7 @@ export function usePluginConfigController(pluginId: string) {
   const [origin] = useState(() => ({}));
 
   const [queue] = useState(() => new SerialDraftQueue<PluginConfigValues, PluginConfigSaveResult>({
-    debounceMs: 400,
+    debounceMs: autosaveDebounceMs,
     isEqual: valuesEqual,
     clone: cloneValues,
     attempt: async (values, operationId) => {
