@@ -24,6 +24,7 @@ import pytest
 from PIL import Image
 from shiori_sdk.role_events import RoleDeleted
 from shiori_sdk.storage import plugin_data_dir
+from shiori_sdk.testing.external_turns import FakeExternalTurns
 from shiori_sdk.testing.packages import plugin_directory, stage_plugin_package
 
 from agent.plugin_host import HostServices, PluginKernel
@@ -46,6 +47,8 @@ def _services(store: RoleStore) -> HostServices:
         workspace=store.workspace,
         role_store=store,
         session_manager=SessionManager(store.workspace),
+        # The live engine declares external_turns; nothing here submits a turn.
+        external_turns=FakeExternalTurns(),
     )
 
 

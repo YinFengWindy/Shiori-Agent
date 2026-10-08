@@ -25,6 +25,11 @@ class RolePetStateStore:
                 role_id, self.roles.extensions.read(PLUGIN_ID).get(role_id, {})
             )
 
+    def is_enabled(self, role_id: str) -> bool:
+        """Whether ``role_id`` exists and is the role the pet shows."""
+        role = self.get_role(role_id)
+        return role is not None and role.desktop_pet_enabled
+
     def list_roles(self) -> list[RolePetState]:
         """Reads one consistent cross-role plugin snapshot."""
         with self.roles.read_scope():
