@@ -182,6 +182,7 @@ class AutoCgController:
             image=image_path,
             role_id=role_id,
             session_key=event.session_key,
+            push_proactive=False,
         )
         if not isinstance(push_result, str) or "图片已发送" not in push_result:
             raise RuntimeError(f"自动场景 CG 补发失败: {push_result}")

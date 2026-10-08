@@ -3,8 +3,12 @@ from typing import Any, cast
 
 from pathlib import Path
 
+import pytest
+
+from agent.core import prompt_block
 from agent.core.prompt_block import (
     ActiveSkillsPromptBlock,
+    AffectionPromptBlock,
     BehaviorRulesPromptBlock,
     IdentityPromptBlock,
     LongTermMemoryPromptBlock,
@@ -18,8 +22,14 @@ from agent.core.prompt_block import (
     UserIdentitiesPromptBlock,
     build_role_user_identities_prompt,
 )
+from conversation.context_scope import ContextScope
 from core.identity import IdentityChat
+from core.memory.markdown_schema import SELF_PERSONA_SECTION
 from core.roles import RoleStore
+from core.roles.relationship_runtime.affection_prompts import (
+    DEFAULT_AFFECTION_STAGE_PROMPTS,
+)
+from core.roles.relationship_runtime.affection_service import RoleAffectionService
 from prompts.agent import build_agent_static_identity_prompt
 
 
@@ -207,3 +217,79 @@ def test_user_identities_block_renders_nothing_without_a_role_or_bindings(
     _pair(store, records[("qq", "mira")], "3174898512", "platform", "3174898512")
     assert block.render(ctx("")) is None
     assert "3174898512" in (block.render(ctx("mira")) or "")
+
+
+class _SelfMemory(_Memory):
+    def read_self(self) -> str:
+        return "## 我的性格与形象\n- 形象条目\n\n## 我们的关系\n- 关系条目\n"
+
+
+def _affection_ctx(tmp_path: Path, scope: ContextScope | None = None) -> TurnContext:
+    return TurnContext(
+        workspace=tmp_path,
+        memory=cast(Any, _SelfMemory()),
+        skills=cast(Any, _Skills()),
+        skill_names=[],
+        channel=None,
+        chat_id=None,
+        retrieved_memory_block="",
+        role_id="mira",
+        context_scope=scope,
+    )
+
+
+def test_affection_block_injects_the_current_stages_override_or_default(
+    tmp_path: Path,
+):
+    store = RoleStore(tmp_path)
+    store.create_role(role_id="mira", name="Mira", system_prompt="规则")
+    block = AffectionPromptBlock(store)
+    ctx = _affection_ctx(tmp_path)
+    assert block.render(ctx) is None
+
+    affection = RoleAffectionService(tmp_path)
+    affection.initialize("mira", value=38, reason="初始")
+    rendered = block.render(ctx) or ""
+    assert "38/100（熟悉）" in rendered
+    assert DEFAULT_AFFECTION_STAGE_PROMPTS["熟悉"] in rendered
+
+    store.update_role(
+        "mira",
+        change_affection_stage_prompts=lambda current: {
+            **current,
+            "熟悉": "叫他笨蛋，嘴硬心软。",
+        },
+    )
+    rendered = block.render(ctx) or ""
+    assert "叫他笨蛋，嘴硬心软。" in rendered
+    assert DEFAULT_AFFECTION_STAGE_PROMPTS["熟悉"] not in rendered
+
+    # Crossing into the next stage switches to that stage's guidance.
+    affection.apply_delta("mira", delta=3, reason="夸奖", source="turn")
+    rendered = block.render(ctx) or ""
+    assert "41/100（朋友）" in rendered
+    assert DEFAULT_AFFECTION_STAGE_PROMPTS["朋友"] in rendered
+    assert "叫他笨蛋" not in rendered
+
+
+def test_affection_block_follows_the_relationship_sections_visibility(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    store = RoleStore(tmp_path)
+    store.create_role(role_id="mira", name="Mira", system_prompt="规则")
+    RoleAffectionService(tmp_path).initialize("mira", value=65, reason="初始")
+    affection, self_model = AffectionPromptBlock(store), SelfModelPromptBlock()
+
+    def visible(scope: ContextScope) -> tuple[bool, bool]:
+        ctx = _affection_ctx(tmp_path, scope)
+        return (
+            "关系条目" in (self_model.render(ctx) or ""),
+            affection.render(ctx) is not None,
+        )
+
+    assert visible("user") == (True, True)
+    assert visible("external") == (True, True)
+    # Hiding 「我们的关系」 from external turns hides the affection block with it.
+    monkeypatch.setattr(prompt_block, "EXTERNAL_SELF_SECTIONS", (SELF_PERSONA_SECTION,))
+    assert visible("external") == (False, False)
+    assert visible("user") == (True, True)

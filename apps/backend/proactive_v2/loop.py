@@ -210,7 +210,12 @@ class ProactiveLoop:
         )
 
     def _build_agent_tick(self):
+        from agent.core.prompt_block import build_role_affection_prompt
         from proactive_v2.agent_tick_factory import AgentTickDeps, AgentTickFactory
+
+        role_store = self._role_store
+        if role_store is None:
+            raise ValueError("role_store required for proactive loop")
 
         # 1. 把 loop 级公共依赖收束成 AgentTickDeps。
         # 2. 交给 factory 组装出 ProactiveTurnPipeline（主动链路顶层抽象）。
@@ -236,6 +241,11 @@ class ProactiveLoop:
                 tool_hooks=self._tool_hooks,
                 proactive_gates=self._proactive_gates,
                 group_environment=self._group_environment,
+                # Proactive and drift turns always address the user (the user
+                # context), so the affection block needs no visibility check.
+                affection_prompt_fn=lambda: build_role_affection_prompt(
+                    self._cfg.role_id, role_store
+                ),
             )
         ).build()
 

@@ -21,6 +21,8 @@ class DesktopRolePresenter:
     def serialize(self, role: Any) -> dict[str, Any]:
         """Returns role fields plus desktop asset and runtime state views."""
         payload = role.to_dict()
+        # Stage guidance has its own bridge method (roles.affection.stagePrompts.*).
+        payload.pop("affection_stage_prompts", None)
         avatar = payload.get("avatar")
         illustrations = payload.get("illustrations") or []
         payload["avatar_abs"] = (

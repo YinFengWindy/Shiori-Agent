@@ -14,41 +14,31 @@ export function applyChatStreamDelta(
     ...message,
     content: message.content + contentDelta,
     reasoning_content: `${message.reasoning_content ?? ""}${thinkingDelta}`,
-  }));
+  }), { createIfMissing: true });
 }
 
-/** Marks the transient assistant message complete after the bridge emits chat.done. */
+/** Completes a transient reply; terminal callers must supply the event's owning turn identity. */
 export function finishChatStream(
   session: SessionPayload,
   metrics: ChatTurnMetrics = {},
+  turnId: string,
 ): SessionPayload {
-  const lastIndex = session.messages.length - 1;
-  const last = session.messages[lastIndex];
-  if (!last || last.role !== "assistant" || !last.streaming) return session;
-  const messages = [...session.messages];
-  messages[lastIndex] = finishAssistantMessage(last, metrics);
-  return { ...session, messages };
+  return updateTransientAssistant(session, turnId, (message) => finishAssistantMessage(message, metrics));
 }
 
-/** Ends failed-turn traces, including rows followed by a persisted proactive reply. */
-export function failChatStream(session: SessionPayload): SessionPayload {
-  let changed = false;
-  const messages = session.messages.map((message) => {
-    if (message.role !== "assistant" || !message.streaming) return message;
-    changed = true;
-    return {
-      ...finishAssistantMessage(message),
-      ...(message.tool_chain ? {
-        tool_chain: message.tool_chain.map((group) => ({
-          ...group,
-          calls: group.calls.map((call) => call.status === "running"
-            ? { ...call, status: "error" }
-            : call),
-        })),
-      } : {}),
-    };
-  });
-  return changed ? { ...session, messages } : session;
+/** Ends the required turn's failed trace and running tools without changing other replies. */
+export function failChatStream(session: SessionPayload, turnId: string): SessionPayload {
+  return updateTransientAssistant(session, turnId, (message) => ({
+    ...finishAssistantMessage(message),
+    ...(message.tool_chain ? {
+      tool_chain: message.tool_chain.map((group) => ({
+        ...group,
+        calls: group.calls.map((call) => call.status === "running"
+          ? { ...call, status: "error" }
+          : call),
+      })),
+    } : {}),
+  }));
 }
 
 function finishAssistantMessage(message: SessionMessage, metrics: ChatTurnMetrics = {}) {
@@ -70,30 +60,26 @@ function finishAssistantMessage(message: SessionMessage, metrics: ChatTurnMetric
   };
 }
 
-/** Marks a cancelled transient assistant reply complete while retaining its local trace for the next turn. */
-export function interruptChatStream(session: SessionPayload): SessionPayload {
-  const lastIndex = session.messages.length - 1;
-  const last = session.messages[lastIndex];
-  if (!last || last.role !== "assistant" || !last.streaming) return session;
-  const messages = [...session.messages];
-  messages[lastIndex] = {
-    ...last,
+/** Marks the required turn's transient reply interrupted while retaining its local trace. */
+export function interruptChatStream(session: SessionPayload, turnId: string): SessionPayload {
+  return updateTransientAssistant(session, turnId, (message) => ({
+    ...message,
     streaming: false,
     metadata: {
-      ...last.metadata,
+      ...message.metadata,
       streamed_reply: true,
       interrupted_reply: true,
     },
-  };
-  return { ...session, messages };
+  }));
 }
 
-/** Finishes cancellation according to the backend's final turn state. */
+/** Finishes cancellation using the backend's final state and the required owning turn identity. */
 export function finalizeChatCancellation(
   session: SessionPayload,
   status: "interrupted" | "idle",
+  turnId: string,
 ): SessionPayload {
-  return status === "interrupted" ? interruptChatStream(session) : finishChatStream(session);
+  return status === "interrupted" ? interruptChatStream(session, turnId) : finishChatStream(session, {}, turnId);
 }
 
 type ToolStartedEvent = {
@@ -149,29 +135,42 @@ function updateTransientAssistantTool(
 ): SessionPayload {
   return updateTransientAssistant(session, event.turnId ?? "", (message) => (
     mergeToolCall(message, event.iteration, toolCall)
-  ));
+  ), { createIfMissing: true });
+}
+
+function findTransientAssistantIndex(messages: readonly SessionMessage[], turnId: string) {
+  const normalizedTurnId = turnId.trim();
+  // Independent deliveries can follow a streaming reply. Its turn identity,
+  // rather than its position, owns subsequent deltas and terminal events.
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index]!;
+    if (message.role === "assistant" && !message.id && message.seq == null && message.streaming === true
+      && String(message.metadata?.turn_id ?? "").trim() === normalizedTurnId) return index;
+  }
+  return -1;
 }
 
 function updateTransientAssistant(
   session: SessionPayload,
   turnId: string,
   update: (message: SessionMessage) => SessionMessage,
+  { createIfMissing = false } = {},
 ): SessionPayload {
+  const index = findTransientAssistantIndex(session.messages, turnId);
+  // Persistence may acknowledge the reply before its terminal event. Completing
+  // that turn must leave the authoritative message and metrics untouched.
+  if (index < 0 && !createIfMissing) return session;
   const messages = [...session.messages];
-  const last = messages[messages.length - 1];
   const normalizedTurnId = turnId.trim();
-  // Text, thinking, and tool-first traces share an identity, but another turn's
-  // unfinished trace must never receive this turn's deltas.
-  const assistant = last?.role === "assistant" && !last.id && last.seq == null && last.streaming === true
-    && String(last.metadata?.turn_id ?? "").trim() === normalizedTurnId
-    ? last
+  const assistant = index >= 0
+    ? messages[index]!
     : ensureChatMessageRenderId({
         role: "assistant", content: "", streaming: true,
         ...(normalizedTurnId ? { metadata: { turn_id: normalizedTurnId } } : {}),
       });
   const nextAssistant = update(assistant);
-  if (assistant === last) {
-    messages[messages.length - 1] = nextAssistant;
+  if (index >= 0) {
+    messages[index] = nextAssistant;
   } else {
     messages.push(nextAssistant);
   }

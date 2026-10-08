@@ -250,7 +250,7 @@ describe("RoleDetailPage", () => {
     assert.match(renderPage(), /data-testid="role-detail-go-to-chat"[^>]*disabled=""/);
   });
 
-  it("opens the read-only 好感度 tab without the draft's 重置 / 保存", async () => {
+  it("opens the 好感度 tab without the draft's 重置 / 保存", async () => {
     const view = await mountTestComponent(pageElement({ activeRole: role }), { windowGlobals: { miraDesktop: {
       onEvent: () => () => {},
       readSettings: async () => ({ formData: createSettingsDraft() }),
@@ -258,7 +258,9 @@ describe("RoleDetailPage", () => {
         id: "test", type: "response", method, error: null,
         payload: method === "roles.affection.history"
           ? { role_id: payload.role_id, affection: { value: 45, stage: "朋友", progress: 5 / 19 }, items: [], total: 0, page: 1, page_size: 20 }
-          : { generation: "g", slots: [], registrations: [] },
+          : method === "roles.affection.stagePrompts.get"
+            ? { role_id: payload.role_id, stages: [] }
+            : { generation: "g", slots: [], registrations: [] },
       }),
     } } });
     try {

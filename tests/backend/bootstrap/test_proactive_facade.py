@@ -145,6 +145,7 @@ def test_agent_tick_prompt_keeps_self_block_with_facade():
                 Any,
                 SimpleNamespace(
                     group_environment=None,
+                    affection_prompt_fn=None,
                     memory=SimpleNamespace(
                         read_long_term_context=lambda: "MEMORY",
                         read_self=lambda: "SELF",
@@ -195,6 +196,7 @@ def test_agent_tick_prompt_binds_role_metadata_for_memory_reads():
                 Any,
                 SimpleNamespace(
                     group_environment=None,
+                    affection_prompt_fn=None,
                     memory=SimpleNamespace(
                         bind_session_metadata=_bind_session_metadata,
                         read_long_term=lambda: "MEMORY",

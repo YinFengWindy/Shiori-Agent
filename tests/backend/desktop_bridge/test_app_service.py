@@ -9,6 +9,97 @@ from desktop_bridge.app_service import DesktopAppService
 from session.manager import SessionManager
 
 
+def _push_service(tmp_path):
+    manager = SessionManager(tmp_path)
+    presence = Mock()
+    relationship = Mock()
+    relationship.enrich_session_metadata.side_effect = lambda metadata: metadata
+    service = DesktopAppService(
+        role_service=SimpleNamespace(),
+        session_manager=manager,
+        conversation_service=ConversationService(manager),
+        presence=presence,
+        relationship_runtime=relationship,
+    )
+    return service, manager, presence, relationship
+
+
+@pytest.mark.parametrize("proactive", [False, True])
+async def test_push_intent_survives_reload_and_deduplication(tmp_path, proactive):
+    service, manager, presence, relationship = _push_service(tmp_path)
+
+    _, first = await service.apply_desktop_push(
+        "role:mira", media=["cg.png"], proactive=proactive
+    )
+    _, duplicate = await service.apply_desktop_push(
+        "role:mira", media=["cg.png"], proactive=proactive
+    )
+
+    assert duplicate is first
+    [stored] = SessionManager(tmp_path).get_or_create("role:mira").messages
+    assert stored["proactive"] is proactive
+    assert stored["media"] == ["cg.png"]
+    assert presence.record_proactive_sent.call_count == int(proactive)
+    assert relationship.handle_proactive_sent.call_count == int(proactive)
+    assert manager.conversation_store.get_thread_by_legacy_session_key("role:mira")
+
+
+@pytest.mark.parametrize("stored_intent", [False, True])
+async def test_persisted_push_uses_its_original_intent(tmp_path, stored_intent):
+    service, manager, presence, relationship = _push_service(tmp_path)
+    session = manager.get_or_create("role:mira")
+    session.add_message(
+        "assistant",
+        "",
+        media=["cg.png"],
+        proactive=stored_intent,
+        metadata={"delivery_key": "original"},
+    )
+    await manager.save_async(session)
+
+    _, delivered = await service.apply_desktop_push(
+        session.key,
+        media=["cg.png"],
+        delivery_key="original",
+        already_persisted=True,
+        proactive=not stored_intent,
+    )
+
+    assert delivered["proactive"] is stored_intent
+    assert len(session.messages) == 1
+    assert presence.record_proactive_sent.call_count == int(stored_intent)
+    assert relationship.handle_proactive_sent.call_count == int(stored_intent)
+
+
+async def test_same_image_with_different_intent_is_not_deduplicated(tmp_path):
+    service, manager, presence, _ = _push_service(tmp_path)
+    for proactive in (False, True):
+        await service.apply_desktop_push(
+            "role:mira", media=["cg.png"], proactive=proactive
+        )
+
+    assert [m["proactive"] for m in manager.get_or_create("role:mira").messages] == [
+        False,
+        True,
+    ]
+    presence.record_proactive_sent.assert_called_once_with("role:mira")
+
+
+async def test_supplemental_push_is_not_deduplicated_against_a_passive_reply(tmp_path):
+    service, manager, _, _ = _push_service(tmp_path)
+    session = manager.get_or_create("role:mira")
+    session.add_message("assistant", "", media=["cg.png"])
+    await manager.save_async(session)
+    passive_message = session.messages[0]
+
+    _, pushed = await service.apply_desktop_push(
+        session.key, media=["cg.png"], proactive=False
+    )
+
+    assert pushed["id"] != passive_message["id"]
+    assert len(session.messages) == 2
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "message,media",

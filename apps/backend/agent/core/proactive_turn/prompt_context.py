@@ -261,8 +261,12 @@ def build_runtime_context_message(
         else ""
     )
 
+    affection_prompt_fn = tool_deps.affection_prompt_fn
+    affection_block = (affection_prompt_fn() if affection_prompt_fn else None) or ""
+
     for name, content in (
         ("self_model", self_content),
+        ("affection", affection_block),
         ("long_term_memory", memory_block),
         ("recent_context", recent_context_block),
         ("recent_activity", recent_activity_block),

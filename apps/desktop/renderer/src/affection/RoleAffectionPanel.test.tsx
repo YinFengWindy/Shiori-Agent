@@ -20,9 +20,13 @@ const init: AffectionHistoryEntry = { id: 0, time: "2026-10-08T12:00:00+08:00", 
 // Newest first, as the bridge stores and pages it: 21 turns, then init.
 const history = [...Array.from({ length: 21 }, (_, index) => turn(21 - index)), init];
 
+// The stage guidance editor below the history reads its own method.
+const stagePrompts = { role_id: "mira", stages: [{ stage: "陌生", prompt: "客气。", default: "客气。", overridden: false }] };
+
 async function mountPanel(respond: (payload: Record<string, unknown>) => Record<string, unknown>) {
   const calls: Array<Record<string, unknown>> = [];
   const invoke: DesktopInvoke = async ({ method, payload }) => {
+    if (method !== "roles.affection.history") return { id: "test", type: "response", method, error: null, payload: stagePrompts };
     calls.push({ method, ...payload });
     return { id: "test", type: "response", method, error: null, payload: respond(payload) };
   };
@@ -34,7 +38,7 @@ async function mountPanel(respond: (payload: Record<string, unknown>) => Record<
 
 const loadMore = (container: HTMLElement) => Array.from(container.querySelectorAll("button")).find((element) => element.textContent === "加载更多");
 
-it("shows the meter and pages the history newest first down to the init entry, without edit controls", async () => {
+it("shows the meter and pages the history newest first down to the init entry, with no control over the value", async () => {
   const { view, calls } = await mountPanel(({ page }) => {
     const start = (Number(page) - 1) * 20;
     return { role_id: "mira", affection: { value: 51, stage: "朋友", progress: 11 / 19 }, items: history.slice(start, start + 20), total: history.length, page, page_size: 20 };
@@ -51,19 +55,22 @@ it("shows the meter and pages the history newest first down to the init entry, w
     assert.deepEqual(changes().slice(-2), ["+1", "30"]);
     assert.match(view.container.textContent ?? "", /老朋友/);
     assert.equal(loadMore(view.container), undefined);
-    // Read-only: no field and no button but paging.
-    assert.equal(view.container.querySelectorAll("input, textarea, select, [contenteditable]").length, 0);
-    assert.equal(view.container.querySelectorAll("button").length, 0);
+    // The value and history are read-only: no field and no button but paging.
+    const history = view.container.querySelector('[data-testid="role-affection-panel"]');
+    assert.ok(history);
+    assert.equal(history.querySelectorAll("input, textarea, select, [contenteditable]").length, 0);
+    assert.equal(history.querySelectorAll("button").length, 0);
   } finally {
     await view.cleanup();
   }
 });
 
-it("shows only the empty state for an uninitialized role", async () => {
+it("shows the empty state for an uninitialized role, with its stage guidance still editable", async () => {
   const { view } = await mountPanel(({ page }) => ({ role_id: "mira", affection: null, items: [], total: 0, page, page_size: 20 }));
   try {
     assert.ok(view.container.querySelector('[data-testid="role-affection-empty"]'));
     assert.equal(view.container.querySelector('[data-testid="role-affection-meter"]'), null);
+    assert.ok(view.container.querySelector('[data-testid="affection-stage-prompts"] textarea'));
   } finally {
     await view.cleanup();
   }

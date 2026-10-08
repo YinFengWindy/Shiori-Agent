@@ -346,7 +346,7 @@ export function useDesktopBridgeLifecycle({
             return finishChatStream(current, parseChatTurnMetrics({
               total_tokens: event.payload.total_tokens,
               thinking_duration_ms: event.payload.thinking_duration_ms,
-            }));
+            }), eventTurnId);
           });
           callbacks.completeChatTurn(eventSessionKey, eventTurnId);
           return;
@@ -358,7 +358,7 @@ export function useDesktopBridgeLifecycle({
           if (callbacks.isChatTurnCancelling(eventSessionKey, eventTurnId)) return;
           // Cancelled elsewhere (another surface or a bridge shutdown): end the trace quietly.
           callbacks.updateCommittedActiveSession((current) => current?.key === eventSessionKey
-            ? finalizeChatCancellation(current, "interrupted")
+            ? finalizeChatCancellation(current, "interrupted", eventTurnId)
             : current);
           callbacks.completeChatTurn(eventSessionKey, eventTurnId);
           return;
@@ -370,7 +370,7 @@ export function useDesktopBridgeLifecycle({
           if (!cancelling && currentSession && eventSessionKey === currentSession.key) {
             callbacks.updateCommittedActiveSession((current) => {
               if (!current || current.key !== eventSessionKey) return current;
-              return failChatStream(current);
+              return failChatStream(current, eventTurnId);
             });
             // Shown inline as an error bubble in the conversation, not as a toast.
             callbacks.appendSessionErrorMessage(

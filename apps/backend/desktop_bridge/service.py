@@ -519,6 +519,7 @@ class DesktopBridgeService:
                 self.app_service.validate_desktop_push_target(chat_id)
                 return
             session_key = self.app_service.normalize_desktop_session_key(chat_id)
+            proactive = (metadata or {}).get("proactive", True) is True
             drafts = current_turn_pushes(session_key)
             if (
                 drafts is not None
@@ -532,10 +533,20 @@ class DesktopBridgeService:
                         message=message,
                         media=media,
                         delivery_key=str(metadata.get("delivery_key") or ""),
+                        proactive=proactive,
                     ),
                     owner=self,
-                    after_commit=lambda: self.app_service.finish_queued_desktop_push(
-                        session_key
+                    # The formal turn already projects all drafts. Only proactive
+                    # ones register this effect, so a later supplement cannot
+                    # replace an earlier proactive callback for the same owner.
+                    after_commit=(
+                        (
+                            lambda: self.app_service.finish_queued_desktop_push(
+                                session_key
+                            )
+                        )
+                        if proactive
+                        else None
                     ),
                 )
                 metadata["queued"] = True
@@ -546,6 +557,7 @@ class DesktopBridgeService:
                 media=media,
                 delivery_key=str((metadata or {}).get("delivery_key") or ""),
                 already_persisted=(metadata or {}).get("already_persisted") is True,
+                proactive=proactive,
             )
             await self._broadcast_session_updated(
                 request_id="proactive", session=session, messages=[pushed]

@@ -12,6 +12,7 @@ from proactive_v2.agent_tick_factory import AgentTickDeps, AgentTickFactory
 from proactive_v2.config import ProactiveConfig
 from proactive_v2.config_loader import load_proactive_config
 from proactive_v2.context import AgentTickContext
+from proactive_v2.gateway import GatewayResult
 from proactive_v2.mcp_sources import McpClientPool
 from bootstrap.proactive import build_proactive_runtime
 from core.desktop_presence import DesktopPresence
@@ -214,3 +215,24 @@ async def test_agent_tick_factory_llm_fn_honors_disable_thinking_without_schemas
     )
 
     assert provider.calls[-1]["disable_thinking"] is True
+
+
+def test_agent_tick_factory_feeds_the_affection_block_to_proactive_and_drift(
+    tmp_path,
+):
+    deps = _build_deps(with_pool=True)
+    deps.cfg.role_id = "mira"
+    deps.cfg.drift_enabled = True
+    deps.state_store = SimpleNamespace(workspace_dir=tmp_path)
+    deps.affection_prompt_fn = lambda: "## 好感度\n你对用户的好感：70/100（亲密）"
+    tick = AgentTickFactory(deps).build()
+
+    frame = tick._build_runtime_context_message(
+        AgentTickContext(session_key="role:mira"), GatewayResult()
+    )
+
+    assert "70/100（亲密）" in frame["content"]
+    assert "70/100" not in tick._build_system_prompt()
+    drift = tick._drift_pipeline
+    assert drift is not None
+    assert drift._tool_deps.affection_prompt_fn is deps.affection_prompt_fn

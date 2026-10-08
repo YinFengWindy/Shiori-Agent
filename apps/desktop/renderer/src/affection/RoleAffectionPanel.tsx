@@ -5,6 +5,7 @@ import { RibbonIcon } from "../shared/ui/icons";
 import { StatusMeter } from "../shared/ui/StatusMeter";
 import { resolveAffectionDisplay } from "./affectionDisplay";
 import { AffectionHistoryList } from "./AffectionHistoryList";
+import { AffectionStagePromptEditor } from "./AffectionStagePromptEditor";
 import { affectionHistoryRows } from "./affectionSelectors";
 import { useAffectionHistory } from "./useAffectionHistory";
 
@@ -25,7 +26,6 @@ function AffectionView({ invoke, roleId }: { invoke: DesktopInvoke; roleId: stri
   if (!loaded) return error ?? (history.loading ? <ReadStatusLine text={readStatusText.loading} /> : null);
   const display = resolveAffectionDisplay(loaded.affection);
   if (!loaded.affection || !display) return <AffectionEmptyState />;
-  // Stacked sections; the stage prompt editor (#714) joins below the history.
   return <section className="grid gap-4" aria-label="好感度" data-testid="role-affection-panel">
     <div className={cx(cardClass, "px-5 py-4")}>
       <StatusMeter label={display.stage} value={loaded.affection.value} percent={display.percent} heightClass="h-2" testId="role-affection-meter" />
@@ -47,10 +47,14 @@ type RoleAffectionPanelProps = {
   invoke?: DesktopInvoke;
 };
 
-/** Role-detail 「好感度」 tab: current value and stage over the newest-first change history. Read-only. */
+/** Role-detail 「好感度」 tab: current value and stage over the newest-first change history, then the per-stage guidance. */
 export function RoleAffectionPanel({ roleId, bridgeReady, invoke = window.miraDesktop.invoke }: RoleAffectionPanelProps) {
   if (!bridgeReady) return <ReadStatusLine text={readStatusText.disconnected} />;
   if (!roleId) return <ReadStatusLine text={readStatusText.noRole} />;
-  // A new role starts fresh, so no batch or pending read carries over.
-  return <AffectionView key={roleId} invoke={invoke} roleId={roleId} />;
+  // A new role starts fresh, so no batch, pending read or unsaved field carries over.
+  // The stage guidance sits below the value and history, and is editable before initialization too.
+  return <div className="grid gap-4">
+    <AffectionView key={`history:${roleId}`} invoke={invoke} roleId={roleId} />
+    <AffectionStagePromptEditor key={`prompts:${roleId}`} invoke={invoke} roleId={roleId} />
+  </div>;
 }

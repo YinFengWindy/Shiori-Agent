@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from core.roles.errors import RoleNotFoundError
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -12,6 +12,7 @@ from session.manager import Session, SessionManager
 from .store import RoleRecord, RoleStore
 from .models import normalize_role_id as _clean_role_id
 from .memory_service import RoleMemoryService as RoleMemoryService
+from .relationship_runtime.affection_prompts import apply_stage_prompt_changes
 
 
 @dataclass(frozen=True)
@@ -317,6 +318,22 @@ class RoleAggregateService:
     async def update_role_async(self, role_id: str, **updates: Any) -> RoleAggregate:
         """异步更新角色，供运行中事件循环内的入口调用。"""
         return self.update_role(role_id, **updates)
+
+    def update_affection_stage_prompts(
+        self, role_id: str, changes: Mapping[str, Any]
+    ) -> RoleRecord:
+        """Writes the named stages' guidance; ``None``, blank or default text restores the default.
+
+        Stages not named keep their current guidance, and the merge happens
+        under the manifest lock, so concurrent writes of different stages
+        both land.
+        """
+        return self.repository.update_role(
+            role_id,
+            change_affection_stage_prompts=lambda current: apply_stage_prompt_changes(
+                current, changes
+            ),
+        )
 
     def delete_role(self, role_id: str) -> tuple[bool, bool]:
         clean_role_id = _clean_role_id(role_id)
