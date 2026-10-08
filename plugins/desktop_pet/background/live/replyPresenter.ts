@@ -1,100 +1,127 @@
-import type { PluginServiceReference, TtsResult } from "@yinfengwindy/shiori-sdk";
-import type { BubbleOwner, ReplyBubbleController } from "../replyBubble";
+import { errorMessage, type BackgroundCtx, type PluginServiceReference } from "@yinfengwindy/shiori-sdk";
+import type { ReplyBubbleController } from "../replyBubble";
+import { cancelledResult, failedResult, roleNotShownError, skippedResult, succeededResult, type OutputResult, type ReplyOwner } from "../replyOutput";
 import { SpeechSentenceBuffer } from "../voice/sentences";
-import type { PetSpeechQueue } from "../voice/speechQueue";
-import type { LiveReply, LiveReplyOutcome, OutputResult } from "./contract";
+import type { PetSpeechQueue, SpeechJob } from "../voice/speechQueue";
+import { synthesizeSentence } from "../voice/synthesis";
+import { readLiveReply, readLiveReplyIds, type LiveReply, type LiveReplyIds, type LiveReplyOutcome } from "./contract";
+import { LiveRunRegistry } from "./runRegistry";
 
 /** What the live presenter needs from the rest of the pet; injected so tests can fake it. */
 export type LiveReplyPresenterDeps = {
-  bubbles: Pick<ReplyBubbleController, "show" | "release" | "clear">;
+  bubbles: Pick<ReplyBubbleController, "show" | "release" | "releaseAfter" | "clear">;
   speech: PetSpeechQueue;
-  /** The chosen synthesis service, or null while pet speech is off. */
+  rpc: Pick<BackgroundCtx["rpc"], "services">;
+  /** The synthesis service while pet speech is on, else null; read at each reply's turn. */
   ttsProvider(): PluginServiceReference | null;
-  synthesize(provider: PluginServiceReference, payload: { text: string; role_id: string; mood: string }): Promise<TtsResult>;
-  /** The role the pet currently shows; empty while hidden. */
-  visibleRoleId(): string;
   report(outcome: LiveReplyOutcome): Promise<unknown>;
   /** How long a reply that could not be heard stays readable. */
   fallbackMs?: number;
 };
 
-const succeeded: OutputResult = { status: "succeeded" };
-const cancelled: OutputResult = { status: "cancelled" };
-const failed = (error: string): OutputResult => ({ status: "failed", error });
+type Pending = { ids: LiveReplyIds; reported: boolean };
+type Progress = { bubble: OutputResult; skipped: boolean; spoken: number };
 
 /**
  * Presents live-source replies: bubble plus speech in the reply role's voice,
- * through the speech line shared with chat so the two never overlap.
+ * on the speech line shared with chat so the two never overlap.
  *
- * A reply's bubble appears when its speech turn starts and is held until that
- * speech ends; without speech it expires after a fallback duration. Live
- * speech never reads a session for mood. Cancellation is live-only.
+ * A reply's bubble appears when its turn on the line starts and is held while
+ * it is spoken; unheard replies stay readable for a fallback duration. Live
+ * speech never reads a session for mood. Every received reply is answered
+ * with exactly one outcome (see `contract.ts`).
  */
 export class LiveReplyPresenter {
-  private disposed = false;
   private roleId = "";
+  private disposed = false;
+  private readonly runs = new LiveRunRegistry();
+  private readonly pending = new Set<Pending>();
 
   constructor(private readonly deps: LiveReplyPresenterDeps) {}
 
-  /** Presents one reply and reports its bubble and speech outcome by reply id. */
-  async show(reply: LiveReply): Promise<void> {
+  /** Entry for one `live.reply.show` payload; a malformed one is answered `failed`, then rethrown. */
+  async receive(payload: Record<string, unknown>): Promise<void> {
+    let reply: LiveReply;
+    try {
+      reply = readLiveReply(payload);
+    } catch (error) {
+      const ids = readLiveReplyIds(payload);
+      const failed = failedResult(errorMessage(error));
+      if (ids) await this.answer({ ids, reported: false }, failed, failed);
+      throw error;
+    }
     if (this.disposed) return;
-    const outcome = await this.present(reply);
-    // A disabled pet's backend scope is gone too; there is no one to report to.
-    if (!this.disposed) await this.deps.report(outcome);
+    const pending = { ids: { reply_id: reply.replyId, run_id: reply.runId }, reported: false };
+    this.pending.add(pending);
+    try {
+      const { bubble, speech } = await this.present(reply);
+      await this.answer(pending, bubble, speech);
+    } finally {
+      this.pending.delete(pending);
+    }
   }
 
-  /** Cancels live speech and bubbles (of one run when given); chat output is untouched. */
+  /** Cancels live replies (of one run when given) and rejects that run's later replies; chat is untouched. */
   async cancel(runId?: string): Promise<void> {
+    this.runs.cancel(runId);
     this.deps.bubbles.clear("live", runId);
-    await this.deps.speech.cancel("live", runId);
+    await this.deps.speech.cancel({ source: "live", runId });
   }
 
-  /** A changed visible role retires every live reply so none speaks in another role's place. */
+  /** The pet's visible role; a change retires every live reply so none speaks for another role. */
   bind(roleId: string): Promise<void> {
     if (roleId === this.roleId) return Promise.resolve();
     this.roleId = roleId;
-    return this.cancel();
+    const cancelling = this.cancel();
+    this.runs.reset();
+    return cancelling;
   }
 
-  /** Plugin disable: retire live work and never report again. */
-  dispose(): Promise<void> {
+  /** Plugin disable: answers every outstanding reply `cancelled` first, then never reports again. */
+  async dispose(): Promise<void> {
+    const cancelling = this.cancel();
+    await Promise.all([...this.pending].map((pending) => this.answer(pending, cancelledResult, cancelledResult)));
     this.disposed = true;
-    return this.cancel();
+    await cancelling;
   }
 
-  private async present(reply: LiveReply): Promise<LiveReplyOutcome> {
-    const ids = { reply_id: reply.replyId, run_id: reply.runId };
-    const owner: BubbleOwner = { source: "live", runId: reply.runId };
-    const fallbackMs = this.deps.fallbackMs ?? 5_000;
-    if (reply.roleId !== this.deps.visibleRoleId()) {
-      const error = failed("桌宠未显示该回复的角色");
-      return { ...ids, bubble: error, speech: error };
-    }
-    const provider = this.deps.ttsProvider();
-    if (!provider) {
-      const shown = this.deps.bubbles.show(owner, reply.roleId, reply.text, fallbackMs);
-      return { ...ids, bubble: shown ? succeeded : failed("桌宠未显示该回复的角色"), speech: failed("桌宠语音未开启") };
-    }
-    let bubble = cancelled;
-    let spoken = 0;
-    const speech = await this.deps.speech.enqueue(owner, async (job) => {
-      // Re-checked at its turn: the pet may have switched roles while this waited.
-      if (reply.roleId !== this.deps.visibleRoleId() || !this.deps.bubbles.show(owner, reply.roleId, reply.text, null)) {
-        bubble = failed("桌宠未显示该回复的角色");
-        throw new Error("桌宠未显示该回复的角色");
-      }
-      bubble = succeeded;
-      for (const sentence of new SpeechSentenceBuffer().push(reply.text, true)) {
-        const audio = await this.deps.synthesize(provider, { text: sentence, role_id: reply.roleId, mood: "" });
-        if (!job.active) return;
-        await job.play(audio);
-        spoken += 1;
-      }
-    });
-    // Heard in full, or cancelled: the bubble ends with the speech. Otherwise keep it readable a while.
-    const heard = speech.status === "succeeded" && spoken > 0;
-    this.deps.bubbles.release(owner, heard || speech.status === "cancelled" ? null : fallbackMs);
-    return { ...ids, bubble, speech };
+  private async answer(pending: Pending, bubble: OutputResult, speech: OutputResult) {
+    if (pending.reported || this.disposed) return;
+    pending.reported = true;
+    await this.deps.report({ ...pending.ids, bubble, speech });
   }
+
+  private async present(reply: LiveReply): Promise<{ bubble: OutputResult; speech: OutputResult }> {
+    if (reply.roleId !== this.roleId) return { bubble: failedResult(roleNotShownError), speech: failedResult(roleNotShownError) };
+    if (this.runs.isCancelled(reply.runId)) return { bubble: cancelledResult, speech: cancelledResult };
+    this.runs.see(reply.runId);
+    const owner: ReplyOwner = { source: "live", runId: reply.runId };
+    const progress: Progress = { bubble: cancelledResult, skipped: false, spoken: 0 };
+    const queued = await this.deps.speech.enqueue(owner, (job) => this.speak(reply, owner, job, progress));
+    const speech = queued.status === "succeeded" && progress.skipped ? skippedResult : queued;
+    // Heard in full or cancelled: the bubble ends with the speech. Unheard: keep it readable a while.
+    if (speech.status === "cancelled" || (speech.status === "succeeded" && progress.spoken > 0)) this.deps.bubbles.release(owner);
+    else if (speech.status !== "skipped") this.deps.bubbles.releaseAfter(owner, this.fallbackMs);
+    return { bubble: progress.bubble, speech };
+  }
+
+  /** Runs at the reply's turn, so the role and speech availability are those of that moment. */
+  private async speak(reply: LiveReply, owner: ReplyOwner, job: SpeechJob, progress: Progress) {
+    const provider = this.deps.ttsProvider();
+    const lifetime = provider ? { kind: "hold" as const } : { kind: "expire" as const, ms: this.fallbackMs };
+    if (reply.roleId !== this.roleId || !this.deps.bubbles.show(owner, reply.roleId, reply.text, lifetime)) {
+      progress.bubble = failedResult(roleNotShownError);
+      throw new Error(roleNotShownError);
+    }
+    progress.bubble = succeededResult;
+    if (!provider) { progress.skipped = true; return; }
+    for (const sentence of new SpeechSentenceBuffer().push(reply.text, true)) {
+      const audio = await synthesizeSentence(this.deps.rpc, provider, { text: sentence, roleId: reply.roleId, mood: "" });
+      if (!job.active) return;
+      await job.play(audio);
+      progress.spoken += 1;
+    }
+  }
+
+  private get fallbackMs() { return this.deps.fallbackMs ?? 5_000; }
 }

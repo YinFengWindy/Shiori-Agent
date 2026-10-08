@@ -55,8 +55,6 @@ export type DesktopPetControllerOptions = {
    * alternative is this class deciding what its consumer considers a change.
    */
   onChanged?: () => void;
-  /** Sibling controllers retire work immediately when the displayed role changes or hides. */
-  onTargetChanged?: (roleId: string) => void;
 };
 
 /**
@@ -82,6 +80,7 @@ export class DesktopPetController {
   private latestReply: PetReplyBubble = emptyPetReply;
   /** Reply lifecycle is owned and reclaimed alongside this plugin controller. */
   readonly replies: ReplyBubbleController;
+  private readonly targetListeners: Array<(roleId: string) => void> = [];
   private running = false;
   /** A hide retires queued/in-flight presentation work without mirroring visibility. */
   private presentationEpoch = 0;
@@ -145,6 +144,13 @@ export class DesktopPetController {
   get currentSettings(): DesktopPetSettings {
     return this.settings;
   }
+
+  /**
+   * Subscribes a sibling controller to the displayed role: called with the role
+   * whenever one is loaded and with "" when the pet hides or tears down, so the
+   * sibling can retire work immediately.
+   */
+  watchTarget(listener: (roleId: string) => void) { this.targetListeners.push(listener); }
 
   /** Exposes only the currently displayed role to other controllers in this plugin. */
   get visibleRoleId() { return this.running ? this.activeRoleId : ""; }
@@ -304,7 +310,7 @@ export class DesktopPetController {
     }
     if (this.activeRoleId !== binding.roleId) this.revokeInteraction();
     this.activeRoleId = binding.roleId;
-    this.options.onTargetChanged?.(binding.roleId);
+    this.notifyTarget(binding.roleId);
     this.activeLoad = { binding, state };
     // Retained, so a renderer that mounts or reloads later still gets it.
     this.pushRetainedState();
@@ -360,8 +366,12 @@ export class DesktopPetController {
   private invalidatePresentation() {
     this.presentationEpoch += 1;
     this.revokeInteraction();
-    this.options.onTargetChanged?.("");
+    this.notifyTarget("");
     return this.presentationEpoch;
+  }
+
+  private notifyTarget(roleId: string) {
+    for (const listener of this.targetListeners) listener(roleId);
   }
 
   private isCurrentPresentation(epoch: number) {

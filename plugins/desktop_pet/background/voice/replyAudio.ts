@@ -1,41 +1,62 @@
-import type { BackgroundCtx, PluginServiceReference, TtsResult } from "@yinfengwindy/shiori-sdk";
+import { errorMessage, type BackgroundCtx, type PluginServiceReference } from "@yinfengwindy/shiori-sdk";
+import type { ReplyOwner } from "../replyOutput";
 import { SpeechSentenceBuffer } from "./sentences";
-import type { PetSpeechQueue, SpeechOwner } from "./speechQueue";
+import { SentenceStream } from "./sentenceStream";
+import type { PetSpeechQueue } from "./speechQueue";
+import { synthesizeSentence } from "./synthesis";
 
-const chatOwner: SpeechOwner = { source: "chat" };
+const chatOwner: ReplyOwner = { source: "chat" };
+type ReplyVoice = { provider: PluginServiceReference; roleId: string; mood: string };
 
-/** Chat-reply sentence buffering and cancellation; playback order belongs to the shared speech queue. */
+/**
+ * Chat-reply speech. One reply is one job on the shared speech line, opened at
+ * its first sentence and finished by its final push, so nothing else speaks
+ * between two sentences of the same reply.
+ */
 export class PetReplyAudio {
   private epoch = 0;
   private buffer = new SpeechSentenceBuffer();
   private text = "";
+  private stream: SentenceStream | null = null;
   constructor(
     private readonly ctx: Pick<BackgroundCtx, "rpc">,
     private readonly speech: PetSpeechQueue,
     private readonly status: (status: "speaking_prepare" | "speaking" | "idle" | "error", message?: string) => void,
   ) {}
-  begin() { this.epoch += 1; this.buffer = new SpeechSentenceBuffer(); this.text = ""; return this.epoch; }
+  /** Starts a new reply, abandoning whatever is left of the previous one. */
+  begin() { this.reset(); return this.epoch; }
   push(text: string, final: boolean, provider: PluginServiceReference, roleId: string, mood: string) {
-    const epoch = this.epoch;
     if (!final) this.text += text;
     const sentences = this.buffer.push(final && !this.text ? text : final ? "" : text, final);
-    for (const sentence of sentences) {
-      void this.speech.enqueue(chatOwner, async (job) => {
-        if (epoch !== this.epoch) return;
-        try {
+    if (!sentences.length && !final) return;
+    const stream = this.stream ?? this.open({ provider, roleId, mood });
+    stream.add(sentences, final);
+    this.stream = final ? null : stream;
+  }
+  /**
+   * Retires the current reply's state; its job ends at its next read. Stopping
+   * audio already playing is the caller's choice of scope on the speech line.
+   */
+  reset() { this.epoch += 1; this.buffer = new SpeechSentenceBuffer(); this.text = ""; this.stream?.close(); this.stream = null; }
+
+  private open(voice: ReplyVoice) {
+    const epoch = this.epoch; const stream = new SentenceStream();
+    void this.speech.enqueue(chatOwner, async (job) => {
+      const current = () => epoch === this.epoch && job.active;
+      try {
+        for (let sentence = await stream.next(job.signal); sentence !== null && current(); sentence = await stream.next(job.signal)) {
           this.status("speaking_prepare");
-          const result = await this.ctx.rpc.services.call<TtsResult>(provider, "synthesize", { text: sentence, role_id: roleId, mood });
-          if (epoch !== this.epoch || !job.active) return;
+          const result = await synthesizeSentence(this.ctx.rpc, voice.provider, { text: sentence, roleId: voice.roleId, mood: voice.mood });
+          if (!current()) return;
           this.status("speaking");
           await job.play(result);
-        } catch (error) {
-          // Retires the rest of this reply so later sentences do not speak past a failure.
-          if (epoch === this.epoch) { this.epoch += 1; this.status("error", error instanceof Error ? error.message : String(error)); }
         }
-      });
-    }
-    if (final) void this.speech.enqueue(chatOwner, async () => { if (epoch === this.epoch) this.status("idle"); });
+        if (current()) this.status("idle");
+      } catch (error) {
+        // Retires the rest of this reply so later sentences do not speak past a failure.
+        if (epoch === this.epoch) { this.reset(); this.status("error", errorMessage(error)); }
+      }
+    });
+    return stream;
   }
-  /** Stops chat speech only; other sources on the shared queue keep speaking. */
-  async stop() { this.epoch += 1; this.buffer = new SpeechSentenceBuffer(); await this.speech.cancel("chat"); }
 }

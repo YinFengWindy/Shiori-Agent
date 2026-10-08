@@ -66,40 +66,67 @@ test("disable reclaims expiry and late queued callbacks cannot publish", (t) => 
   assert.equal(states.length, count);
 });
 
+const hold = { kind: "hold" } as const;
+
 test("a held reply outlives the chat expiry and only its owner can end or clear it", (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   const states: PetReplyBubble[] = [];
   const bubbles = new ReplyBubbleController((state) => states.push(state));
   bubbles.bind("mira");
-  const live = { source: "live" as const };
-  assert.equal(bubbles.show(live, "other", "wrong role", null), false);
-  assert.equal(bubbles.show(live, "mira", "直播回复", null), true);
+  const live = { source: "live" as const, runId: "run" };
+  assert.equal(bubbles.show(live, "other", "wrong role", hold), false);
+  assert.equal(bubbles.show(live, "mira", "直播回复", hold), true);
   t.mock.timers.tick(60_000);
   assert.equal(states.at(-1)?.text, "直播回复", "held while its speech lasts");
   bubbles.clear("chat");
-  assert.equal(states.at(-1)?.text, "直播回复", "cancelling chat leaves the live bubble");
-  bubbles.release(live, null);
+  bubbles.clear("live", "other-run");
+  assert.equal(states.at(-1)?.text, "直播回复", "other sources and runs leave the live bubble");
+  bubbles.release({ source: "live", runId: "run" });
+  assert.equal(states.at(-1)?.text, "直播回复", "only the same owner object can end it");
+  bubbles.release(live);
   assert.equal(states.at(-1)?.text, "");
   bubbles.dispose();
 });
 
-test("a newer reply takes the slot, so the older owner's release and clear are no-ops", (t) => {
+test("a newer reply covers a held one, which returns when the newer one expires or is dismissed", (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   const states: PetReplyBubble[] = [];
   const bubbles = new ReplyBubbleController((state) => states.push(state));
   bubbles.bind("mira");
-  const live = { source: "live" as const };
-  bubbles.show(live, "mira", "直播回复", null);
+  const live = { source: "live" as const, runId: "run" };
+  bubbles.show(live, "mira", "直播回复", hold);
   bubbles.handleEvent(event("mira", "聊天回复"));
-  bubbles.release(live, null);
-  bubbles.clear("live");
   assert.equal(states.at(-1)?.text, "聊天回复");
+  t.mock.timers.tick(5_000);
+  assert.equal(states.at(-1)?.text, "直播回复", "still speaking, so it is shown again");
+  bubbles.handleEvent(event("mira", "又一条"));
+  bubbles.dismiss();
+  assert.equal(states.at(-1)?.text, "直播回复");
+  bubbles.handleEvent(event("mira", "最后一条"));
+  bubbles.release(live);
+  assert.equal(states.at(-1)?.text, "最后一条", "ending the covered reply never clears the newer one");
+  t.mock.timers.tick(5_000);
+  assert.equal(states.at(-1)?.text, "", "nothing held any more");
+  bubbles.dispose();
+});
+
+test("an unheard reply stays readable for its fallback, and dismissing the held reply drops it", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const states: PetReplyBubble[] = [];
+  const bubbles = new ReplyBubbleController((state) => states.push(state));
+  bubbles.bind("mira");
   const failed = { source: "live" as const };
-  bubbles.show(failed, "mira", "朗读失败的回复", null);
-  bubbles.release(failed, 3_000);
+  bubbles.show(failed, "mira", "朗读失败的回复", hold);
+  bubbles.releaseAfter(failed, 3_000);
   t.mock.timers.tick(2_999);
   assert.equal(states.at(-1)?.text, "朗读失败的回复");
   t.mock.timers.tick(1);
-  assert.equal(states.at(-1)?.text, "", "falls back to a timed expiry");
+  assert.equal(states.at(-1)?.text, "");
+  const live = { source: "live" as const };
+  bubbles.show(live, "mira", "直播回复", hold);
+  bubbles.dismiss();
+  bubbles.handleEvent(event("mira", "聊天回复"));
+  t.mock.timers.tick(5_000);
+  assert.equal(states.at(-1)?.text, "", "the user dismissed it, so it does not come back");
   bubbles.dispose();
 });

@@ -20,9 +20,10 @@ function fixture() {
     native: { audio: { devices: async () => [], startCapture: async () => { calls.push("record"); }, stopCapture: async () => ({ audio_base64: "AQ==", format: "wav" }), cancelCapture: async () => {}, play: async () => { calls.push("play"); }, stop: async () => { calls.push("stop"); } }, keys: { validate: async () => {}, register: async () => {}, unregister: async () => {} } },
     chat: { send: async (request) => { requests.push(request); return {}; }, cancel: async ({ turn_id }) => { calls.push(`cancel:${turn_id}`); return {}; } }, reportFailure: (_operation, error) => { throw error; },
   };
-  const controller = new PetVoiceController(ctx, preferences, (state) => states.push(state), new PetSpeechQueue(ctx.native.audio));
+  const speech = new PetSpeechQueue(ctx.native.audio);
+  const controller = new PetVoiceController(ctx, preferences, (state) => states.push(state), speech);
   const event = (method: string, payload: Record<string, unknown>): BridgeEvent => ({ id: "request", type: "event", method, payload });
-  return { controller, ctx, states, calls, requests, preferences, event };
+  return { controller, ctx, speech, states, calls, requests, preferences, event };
 }
 
 test("only the pet's exact session and turn speak; delta/error need no role_id and interruption cancels old chat", async (t) => {
@@ -71,4 +72,20 @@ test("disabling speech while a key registration is pending removes the late regi
   const configured = f.controller.configure({ ...f.preferences, enabled: false });
   registration.resolve(); await configured;
   assert.deepEqual([...keys], []); await f.controller.dispose();
+});
+
+test("user stops silence live speech too, while chat-scoped retirement leaves it alone", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] }); const f = fixture(); f.controller.bind("role"); await flush();
+  const liveJob = () => f.speech.enqueue({ source: "live", runId: "run" }, (job) => new Promise<void>((resolve) => job.signal.addEventListener("abort", () => resolve())));
+  const first = liveJob(); await flush();
+  await f.controller.configure({ ...f.preferences, hotkey: "Ctrl+K" });
+  await flush();
+  const outcomes: string[] = []; void first.then((outcome) => outcomes.push(outcome.status));
+  await flush(); assert.deepEqual(outcomes, [], "a preference change with speech still on keeps live speaking");
+  for (const stop of [() => f.controller.stop(), () => { f.controller.gesture("press"); t.mock.timers.tick(300); }, () => f.controller.setLocked(true), () => { void f.controller.configure({ ...f.preferences, enabled: false }); }]) {
+    f.controller.setLocked(false); await f.controller.configure(f.preferences);
+    const live = liveJob(); await flush();
+    stop(); assert.deepEqual(await live, { status: "cancelled" });
+  }
+  await f.controller.dispose();
 });

@@ -7,6 +7,7 @@ from plugins.desktop_pet.backend.live_output import (
     LiveReplyOutcome,
     LiveReplyOutput,
     OutputResult,
+    log_failed_outcome,
 )
 
 
@@ -30,7 +31,7 @@ async def test_show_and_cancel_emit_the_background_contract():
         ("live.cancel", {"run_id": "run"}),
         ("live.cancel", {}),
     ]
-    assert rpc.concurrency["live.reply.outcome"] is Concurrency.READ_ONLY
+    assert rpc.concurrency["live.reply.outcome"] is Concurrency.MUTATION
     assert rpc.admission_exempt["live.reply.outcome"] is True
 
 
@@ -47,7 +48,7 @@ async def test_outcomes_reach_subscribers_until_they_unsubscribe():
         "reply_id": "r1",
         "run_id": "run",
         "bubble": {"status": "succeeded"},
-        "speech": {"status": "failed", "error": "合成失败"},
+        "speech": {"status": "skipped"},
     }
     assert await rpc.handlers["live.reply.outcome"](payload) == {"ok": True}
     assert received == [
@@ -55,9 +56,10 @@ async def test_outcomes_reach_subscribers_until_they_unsubscribe():
             reply_id="r1",
             run_id="run",
             bubble=OutputResult("succeeded"),
-            speech=OutputResult("failed", "合成失败"),
+            speech=OutputResult("skipped"),
         )
     ]
+    unsubscribe()
     unsubscribe()
     await rpc.handlers["live.reply.outcome"](payload)
     assert len(received) == 1
@@ -79,3 +81,17 @@ async def test_malformed_outcomes_are_rejected():
                 "speech": {"status": "done"},
             }
         )
+
+
+async def test_failed_outcomes_are_logged_per_channel(caplog: pytest.LogCaptureFixture):
+    await log_failed_outcome(
+        LiveReplyOutcome(
+            reply_id="r1",
+            run_id="run",
+            bubble=OutputResult("succeeded"),
+            speech=OutputResult("failed", "合成失败"),
+        )
+    )
+    assert [record.getMessage() for record in caplog.records] == [
+        "live reply r1 (run run) speech failed: 合成失败"
+    ]

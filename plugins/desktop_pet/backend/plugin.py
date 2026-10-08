@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 from .rpc import DesktopPetRpcHandlers
 from .tool import DesktopPetActionTool
 from .bubbles import register_bubble_rpc
-from .live_output import LiveReplyOutput
+from .live_output import LiveReplyOutput, log_failed_outcome
 from .voice_rpc import register_voice_preferences, register_voice_context
 from .bilibili_api import BilibiliLoginApi
 from .bilibili_credentials import BilibiliCredentialStore
@@ -57,9 +57,11 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
         role_store=role_store, workspace=ctx.workspace, storage=ctx.storage
     )
     register_bubble_rpc(ctx.rpc)
-    # Registers the live-reply outcome RPC; the live engine (#724) will hold
-    # this instance to emit replies and subscribe to their outcomes.
-    _ = LiveReplyOutput(ctx.rpc)
+    # The one live-reply output of this setup (it owns the outcome RPC). The
+    # live engine (#724) is constructed here with it, to emit replies and
+    # subscribe to their outcomes; failed outcomes are logged meanwhile.
+    live_output = LiveReplyOutput(ctx.rpc)
+    ctx.effect("live_outcome_log", live_output.subscribe(log_failed_outcome))
     register_voice_preferences(ctx.rpc, ctx.workspace)
     register_voice_context(ctx.rpc, ctx.roles, ctx.sessions)
     register_bilibili_login(ctx.rpc, bilibili_login)

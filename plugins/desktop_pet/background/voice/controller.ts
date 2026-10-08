@@ -7,6 +7,9 @@ import type { PetSpeechQueue } from "./speechQueue";
 
 type Turn = { role_id: string; session_key: string; mood: string; turn_id: string };
 type PetVoiceContext = Pick<BackgroundCtx, "rpc" | "native" | "chat" | "reportFailure">;
+/** `all` is a user stop and silences every source; `chat` retires only this controller's reply. */
+type StopScope = "all" | "chat";
+const speechOn = (preferences: VoicePreferences) => preferences.enabled && Boolean(preferences.tts);
 /** Owns the desktop pet's ASR → chat → TTS interaction and exact turn matching. */
 export class PetVoiceController {
   private roleId = "";
@@ -19,14 +22,15 @@ export class PetVoiceController {
   private keyTail = Promise.resolve();
   private readonly replies: PetReplyAudio;
   private readonly input: PetVoiceInput;
-  constructor(private readonly ctx: PetVoiceContext, preferences: VoicePreferences, private readonly publish: (state: VoiceStatePayload) => void, speech: PetSpeechQueue) {
+  constructor(private readonly ctx: PetVoiceContext, preferences: VoicePreferences, private readonly publish: (state: VoiceStatePayload) => void, private readonly speech: PetSpeechQueue) {
     this.preferences = preferences;
     const status = (status: VoiceStatePayload["status"], message?: string) => { if (!this.disposed) publish({ status, message }); };
     this.replies = new PetReplyAudio(ctx, speech, status);
     this.input = new PetVoiceInput(ctx.native.audio, {
       enabled: () => !this.disposed && !this.locked && this.preferences.enabled && Boolean(this.roleId),
       device: () => this.preferences.microphone_device_id, status,
-      interrupt: () => this.retireReply(),
+      // Starting push-to-talk silences the pet entirely, live speech included.
+      interrupt: () => this.retireReply("all"),
       captured: (audio, epoch) => this.captured(audio, epoch),
     });
   }
@@ -37,8 +41,9 @@ export class PetVoiceController {
     void this.syncKeys();
   }
   /** The chosen synthesis service while pet speech is on; null means speech is off. */
-  get ttsProvider() { return this.preferences.enabled ? this.preferences.tts : null; }
-  async configure(preferences: VoicePreferences) { this.stop(); this.preferences = preferences; await this.syncKeys(); }
+  get ttsProvider() { return speechOn(this.preferences) ? this.preferences.tts : null; }
+  /** Turning speech off silences every source; other preference changes retire only chat. */
+  async configure(preferences: VoicePreferences) { this.stop(speechOn(preferences) ? "chat" : "all"); this.preferences = preferences; await this.syncKeys(); }
   /** Locking retires pending speech; unlocking admits new input without replay. */
   setLocked(locked: boolean) { this.locked = locked; if (locked) this.stop(); void this.syncKeys(); }
   gesture(gesture: string, source = "surface") {
@@ -51,20 +56,21 @@ export class PetVoiceController {
     const turn = this.turn; const payload = event.payload;
     if (!turn || payload.turn_id !== turn.turn_id || payload.session_key !== turn.session_key || (payload.role_id !== undefined && payload.role_id !== turn.role_id)) return;
     const provider = this.preferences.tts;
-    if (event.method === "chat.error") { this.stop(); this.publish({ status: "error", message: String(payload.message ?? "角色回复失败") }); return; }
+    if (event.method === "chat.error") { this.stop("chat"); this.publish({ status: "error", message: String(payload.message ?? "角色回复失败") }); return; }
     if (!provider) { if (event.method === "chat.done") { this.turn = null; this.publish({ status: "idle" }); } return; }
     if (event.method === "chat.delta") this.replies.push(String(payload.content_delta ?? payload.delta ?? ""), false, provider, turn.role_id, turn.mood);
     if (event.method === "chat.done") { this.replies.push(String(payload.reply ?? ""), true, provider, turn.role_id, turn.mood); this.turn = null; }
   }
-  /** Retires current input and output before their outstanding promises can publish again. */
-  stop() {
+  /** Retires current input and output before their outstanding promises can publish again; by default a user stop of every source. */
+  stop(scope: StopScope = "all") {
     this.revision += 1; this.input.cancel();
-    this.retireReply();
+    this.retireReply(scope);
   }
-  private retireReply() {
+  private retireReply(scope: StopScope) {
     const turn = this.turn; this.turn = null;
     if (turn) void this.ctx.chat.cancel({ session_key: turn.session_key, turn_id: turn.turn_id }).catch((error) => this.ctx.reportFailure("voice.cancel", error));
-    void this.replies.stop().catch((error) => this.ctx.reportFailure("voice.stop", error));
+    this.replies.reset();
+    void this.speech.cancel(scope === "all" ? undefined : { source: "chat" }).catch((error) => this.ctx.reportFailure("voice.stop", error));
   }
   async dispose() { this.stop(); this.disposed = true; await this.syncKeys(); }
   private async captured(audio: NativeAudio, epoch: number) {
@@ -80,7 +86,7 @@ export class PetVoiceController {
     const turn = { ...context, turn_id: crypto.randomUUID() };
     this.turn = turn; this.replies.begin(); this.publish({ status: "waiting_reply" });
     try { await this.ctx.chat.send({ role_id: roleId, turn_id: turn.turn_id, content: result.text.trim(), media: [] }); }
-    catch (error) { if (this.turn === turn) this.retireReply(); throw error; }
+    catch (error) { if (this.turn === turn) this.retireReply("chat"); throw error; }
   }
   private syncKeys() {
     const revision = ++this.keyRevision;
