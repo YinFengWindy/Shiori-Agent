@@ -89,6 +89,7 @@ export type {
   AffectionSummary,
   LonelinessRuntime,
   RelationshipSnapshot,
+  RelationState,
   RoleAssetCategory,
   RoleLastMessage,
   RoleProactiveCandidate,

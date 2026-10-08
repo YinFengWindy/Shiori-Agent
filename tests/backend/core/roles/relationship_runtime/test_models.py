@@ -5,10 +5,17 @@ from core.roles.relationship_runtime.models import (
 
 
 def test_relation_state_preserves_legitimate_zero_and_defaults_missing() -> None:
-    state = _normalize_relation_state({"closeness": 0, "security": None})
+    state = _normalize_relation_state({"dependence": 0, "security": None})
 
-    assert state["closeness"] == 0.0
+    assert state["dependence"] == 0.0
     assert state["security"] == 0.5
+
+
+def test_relation_state_ignores_legacy_closeness() -> None:
+    state = _normalize_relation_state({"closeness": 0.9, "security": 0.3})
+
+    assert "closeness" not in state
+    assert state["security"] == 0.3
 
 
 def test_behavior_profile_preserves_legitimate_zero() -> None:
