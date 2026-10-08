@@ -377,8 +377,12 @@ history and external memory and is limited to the external tool whitelist. The
 message and the reply are stored in that thread and take part in external memory
 consolidation; they never appear in the desktop conversation.
 
-User turns come first. The turn takes the role's turn gate only when no other role
-work holds or awaits it; otherwise `busy` returns at once and nothing is stored.
+User turns come first at gate entry. The turn takes the role's turn gate only when
+no other role work holds or awaits it; otherwise `busy` returns at once, and since
+the message is routed only after the gate is taken, no thread, contact name or
+message is created or changed. Once an external turn holds the gate it runs to the
+end: desktop or channel turns arriving meanwhile wait for it like for any other
+role work (external turns are meant to be short, such as a live-chat reply).
 It does not pass through the channel inbound queue and never dispatches outbound:
 the plugin owns presenting the returned reply. The turn is not the role session's
 interruptible turn, so desktop or channel interrupts never reach it and it never

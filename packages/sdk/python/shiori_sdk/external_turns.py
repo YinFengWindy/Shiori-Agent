@@ -10,9 +10,11 @@ the reply are stored in that thread and appear in the phone's conversation
 list under the conversation title. The reply is returned to the plugin and is
 never dispatched to any channel.
 
-User turns come first: a submission never waits for the role. While the role
-is replying or busy with other work, the host returns ``busy`` at once and
-stores nothing. Cancelling the ``submit`` call cancels the turn.
+User turns come first at entry: a submission never waits for the role. While
+the role is replying or busy with other work, the host returns ``busy`` at once
+and stores nothing. Once a submitted turn runs, role work arriving meanwhile
+waits for it, so keep the messages short to answer. Cancelling the ``submit``
+call cancels the turn.
 """
 
 from __future__ import annotations

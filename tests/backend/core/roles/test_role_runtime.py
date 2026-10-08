@@ -93,14 +93,10 @@ async def test_role_stays_busy_while_work_waits_for_a_released_gate(tmp_path):
     runtime = await RoleRuntimeRegistry(RoleRepository(store), event_bus=bus).get(
         role.id
     )
-    # Each operation's refresh runs right after it released the gate.
-    seen: list[tuple[bool, bool]] = []
-    bus.on(
-        ContextWindowChanged,
-        lambda _event: seen.append(
-            (runtime._execution.turn_lock.locked(), runtime.busy)
-        ),
-    )
+    # Each operation's refresh runs right after it released the gate, before
+    # any waiter wakes.
+    seen: list[bool] = []
+    bus.on(ContextWindowChanged, lambda _event: seen.append(runtime.busy))
     release = asyncio.Event()
 
     async def holding():
@@ -108,17 +104,16 @@ async def test_role_stays_busy_while_work_waits_for_a_released_gate(tmp_path):
 
     first = asyncio.create_task(runtime.run_passive_turn(_context(role), holding))
     await asyncio.sleep(0)
+    with pytest.raises(RoleBusyError):
+        await runtime.run_passive_turn(_context(role), AsyncMock(), reject_busy=True)
     waiting = asyncio.create_task(runtime.run_passive_turn(_context(role), AsyncMock()))
     await asyncio.sleep(0)
     release.set()
     await asyncio.gather(first, waiting)
 
-    assert seen == [(False, True), (False, False)]
-    with pytest.raises(RoleBusyError):
-        async with runtime._execution.turn_lock:
-            await runtime.run_passive_turn(
-                _context(role), AsyncMock(), reject_busy=True
-            )
+    # The rejection's own refresh, then the first release with a waiter left,
+    # then the waiter's release.
+    assert seen == [True, True, False]
 
 
 def _context(role, *, thread_id: str = "thread:mira:desktop"):

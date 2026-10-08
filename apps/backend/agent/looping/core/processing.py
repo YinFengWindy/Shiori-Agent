@@ -11,9 +11,13 @@ from datetime import datetime
 from core.error_context import current_session_key
 from ..interrupt import (
     TurnInterruptState,
-    mark_detached_turn,
+    run_turn_task,
 )
-from core.roles.role_runtime import RoleBusyError
+from collections.abc import Callable
+from dataclasses import replace
+
+from core.roles.role_runtime import RoleBusyError, RoleExecutionContext
+from shiori_sdk.external_turns import ExternalTurnResult
 from bus.events import InboundItem
 from shiori_sdk.messages import InboundMessage, OutboundMessage
 from bus.processing import ProcessingState
@@ -47,7 +51,9 @@ class _ProcessingMixin:
         if await self._compact_command(item, key, dispatch_outbound=True) is not None:
             return
         self._active_turn_states[key] = self._build_initial_turn_state(item, key)
-        task = asyncio.create_task(self._process_role_scoped(item, key))
+        task = asyncio.create_task(
+            run_turn_task(lambda: self._process_role_scoped(item, key), detached=False)
+        )
         self._active_tasks[key] = task
         try:
             await task
@@ -279,10 +285,13 @@ class _ProcessingMixin:
             return command.content
         self._active_turn_states[key] = self._build_initial_turn_state(msg, key)
         task = asyncio.create_task(
-            self._process_role_scoped(
-                msg,
-                session_key=key,
-                dispatch_outbound=False,
+            run_turn_task(
+                lambda: self._process_role_scoped(
+                    msg,
+                    session_key=key,
+                    dispatch_outbound=False,
+                ),
+                detached=False,
             ),
             name=f"agent_loop_direct:{key}",
         )
@@ -295,41 +304,52 @@ class _ProcessingMixin:
                 self._active_tasks.pop(key, None)
                 self._active_turn_states.pop(key, None)
 
-    async def process_external_turn(self, msg: InboundMessage) -> str | None:
-        """Runs a routed plugin-submitted external turn now; None when the role is busy.
+    async def process_external_turn(
+        self,
+        context: RoleExecutionContext,
+        admit: Callable[[], InboundMessage | None],
+    ) -> ExternalTurnResult:
+        """Runs a plugin-submitted external turn now, unless the role is busy.
 
-        ``msg`` already carries its source thread and full role execution
-        context (``RoleTurnRouter.route``). The turn never waits for the role's
-        turn gate: while any other role work holds or awaits it, nothing runs
-        or is stored and None returns. It bypasses the channel inbound queue,
-        never dispatches outbound and publishes no stream deltas.
+        ``context`` names the role and the turn's source thread
+        (``RoleTurnRouter.network_turn_context``). The turn never waits for the
+        role's turn gate: while any other role work holds or awaits it,
+        ``busy`` returns and ``admit`` is never called, so nothing is routed
+        or stored. Holding the gate, ``admit`` routes the message
+        (``RoleTurnRouter.route``); None from it (a duplicate) returns
+        ``duplicate``. The turn bypasses the channel inbound queue, never
+        dispatches outbound and publishes no stream deltas.
 
         The turn is not the role session's interruptible turn: desktop or
         channel interrupts never reach it, and it neither reports progress
         into nor resumes their interrupt state. Cancelling the caller cancels
-        the turn. Returns the final reply text.
+        the turn. Once it holds the gate, later role work waits for it.
         """
         registry = self._role_runtime_registry
         if registry is None:
             raise RuntimeError("RoleRuntimeRegistry 未配置")
-        context = registry.context_from_metadata(msg.metadata)
-        if context is None or context.work_kind != "passive_turn":
-            raise ValueError("外部回合缺少完整 RoleExecutionContext")
-        msg.metadata["suppress_stream_events"] = True
-        key = msg.session_key
+        if context.work_kind != "passive_turn":
+            raise ValueError("外部回合必须是 passive_turn")
         started = False
 
-        async def operation() -> OutboundMessage:
+        async def operation() -> ExternalTurnResult:
             nonlocal started
             started = True
-            return await self._process(msg, session_key=key, dispatch_outbound=False)
+            routed = admit()
+            if routed is None:
+                return ExternalTurnResult("duplicate")
+            msg = replace(
+                routed,
+                metadata={**routed.metadata, "suppress_stream_events": True},
+            )
+            outbound = await self._process(
+                msg, session_key=msg.session_key, dispatch_outbound=False
+            )
+            return ExternalTurnResult("replied", outbound.content)
 
-        async def detached_turn() -> str | None:
-            # Runs in its own task: the flag and the turn's context variables
-            # stay inside it.
-            mark_detached_turn()
+        async def detached_turn() -> ExternalTurnResult:
             try:
-                outbound = await registry.dispatch_passive_turn(
+                return await registry.dispatch_passive_turn(
                     context, operation, reject_busy=True
                 )
             except RoleBusyError:
@@ -337,12 +357,13 @@ class _ProcessingMixin:
                 # turn propagates.
                 if started:
                     raise
-                return None
-            return outbound.content
+                return ExternalTurnResult("busy")
 
-        # Awaiting the task directly forwards the caller's cancellation to it.
+        # Its own task keeps the detached flag and the turn's context variables
+        # inside; awaiting it directly forwards the caller's cancellation.
         return await asyncio.create_task(
-            detached_turn(), name=f"agent_loop_external:{key}"
+            run_turn_task(detached_turn, detached=True),
+            name=f"agent_loop_external:{context.role_id}",
         )
 
     def _ensure_direct_role_context(

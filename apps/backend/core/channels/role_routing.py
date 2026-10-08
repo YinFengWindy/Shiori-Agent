@@ -17,6 +17,7 @@ from core.common.channel_directory import ChannelDirectory
 from core.roles.role_runtime import RoleExecutionContext
 from core.roles.services import RoleAggregateService
 from core.roles.store import RoleStore
+from session.manager import SessionManager
 from shiori_sdk.channels.chat_types import is_group_chat_type
 from shiori_sdk.channels.message_source import (
     GROUP_NAME_KEY,
@@ -24,6 +25,7 @@ from shiori_sdk.channels.message_source import (
     display_name,
 )
 from shiori_sdk.channels.projection import project_inbound
+from shiori_sdk.channels.threads import network_thread_id
 from shiori_sdk.messages import InboundMessage
 
 # Turn metadata flag: the thread already holds this platform message ID.
@@ -48,7 +50,7 @@ class RoleTurnRouter:
         cls,
         workspace: Path,
         *,
-        session_manager,
+        session_manager: SessionManager,
         role_store: RoleStore,
         channel_directory: ChannelDirectory,
     ) -> "RoleTurnRouter":
@@ -67,8 +69,35 @@ class RoleTurnRouter:
         """The conversation store the source threads live in."""
         return self._conversation
 
+    def network_turn_context(
+        self, message: InboundMessage, role_id: str, *, source: str
+    ) -> RoleExecutionContext:
+        """The context of a turn of ``role_id`` in the thread of ``message``'s chat.
+
+        Built from the role's current configuration without touching any
+        storage, so a caller can take the role's turn gate before routing
+        (``route(..., context=)``). The thread is the chat's
+        ``network_thread_id``; ``request_id`` is the platform message ID in
+        ``external_message_id``. Raises ``RoleNotFoundError`` for an unknown
+        role.
+        """
+        return RoleExecutionContext.create(
+            role=self._service.repository.get_required(role_id),
+            thread_id=network_thread_id(role_id, message.channel, message.chat_id),
+            transport_channel=message.channel,
+            transport_chat_id=message.chat_id,
+            source=source,
+            work_kind="passive_turn",
+            request_id=str(message.metadata.get("external_message_id") or ""),
+        )
+
     def route(
-        self, message: InboundMessage, role_id: str, metadata: dict[str, Any]
+        self,
+        message: InboundMessage,
+        role_id: str,
+        metadata: dict[str, Any],
+        *,
+        context: RoleExecutionContext | None = None,
     ) -> InboundMessage:
         """``message`` as a turn of ``role_id`` in the thread of its chat.
 
@@ -77,8 +106,10 @@ class RoleTurnRouter:
         contact is renamed by the reported group or sender name. A platform
         message ID the thread already holds marks the turn
         ``CONVERSATION_DUPLICATE_KEY``; the caller decides whether to run it.
-        The returned metadata carries the full ``RoleExecutionContext``.
-        Raises ``RoleNotFoundError`` for an unknown role.
+        The returned metadata carries the full ``RoleExecutionContext``: the
+        given ``context`` (from ``network_turn_context``, which must name the
+        routed thread), else a new one. Raises ``RoleNotFoundError`` for an
+        unknown role.
         """
         role = self._service.repository.get_required(role_id)
         thread = self._conversation.ensure_thread_for_session(
@@ -90,6 +121,10 @@ class RoleTurnRouter:
                 metadata=metadata,
             )
         )
+        if context is not None and (
+            context.role_id != role_id or context.thread_id != thread.id
+        ):
+            raise ValueError("角色回合上下文与路由到的会话不一致")
         self._service.sessions.open_by_role(role)
         routed = self.project(message, role_id, thread, metadata)
         external_message_id = str(routed.metadata.get("external_message_id") or "")
@@ -100,15 +135,16 @@ class RoleTurnRouter:
         # A replayed duplicate carries no newer name than the original did.
         if not routed.metadata.get(CONVERSATION_DUPLICATE_KEY):
             self.remember_contact_name(thread, routed.metadata)
-        context = RoleExecutionContext.create(
-            role=role,
-            thread_id=thread.id,
-            transport_channel=message.channel,
-            transport_chat_id=message.chat_id,
-            source=str(routed.metadata["source"]),
-            work_kind="passive_turn",
-            request_id=external_message_id,
-        )
+        if context is None:
+            context = RoleExecutionContext.create(
+                role=role,
+                thread_id=thread.id,
+                transport_channel=message.channel,
+                transport_chat_id=message.chat_id,
+                source=str(routed.metadata["source"]),
+                work_kind="passive_turn",
+                request_id=external_message_id,
+            )
         routed.metadata.update(context.to_metadata())
         return routed
 
