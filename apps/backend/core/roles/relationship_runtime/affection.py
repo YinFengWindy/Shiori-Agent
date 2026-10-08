@@ -71,7 +71,7 @@ class AffectionState:
     initialized_at: str
     updated_at: str
     last_user_message_at: str
-    decay_settled_at: str | None = None
+    decay_settled_at: str | None
 
     @classmethod
     def initial(cls, role_id: str, *, value: int, at: str) -> "AffectionState":
@@ -80,33 +80,39 @@ class AffectionState:
         初始化发生在用户本人发消息的回合里，所以衰减也从这一刻开始计时。
         """
         stage = affection_stage(value)
-        return cls(role_id, value, stage.lower, at, at, at)
+        return cls(role_id, value, stage.lower, at, at, at, None)
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "AffectionState":
         """严格解析持久化内容；字段缺失或越界直接报错，不做默认值兜底。
 
-        唯一的迁移：衰减上线前保存的状态没有两个计时字段。那时好感只在初始化和
-        用户本人的回合里变化，所以 ``updated_at`` 是最接近的用户消息时间，用它
-        开始计时；尚未结算过衰减。
+        ``last_user_message_at`` 与 ``decay_settled_at`` 都是必填键，后者的值可以是
+        ``null``。唯一的迁移：两个键**都**缺失的是衰减上线前（#710）保存的状态。
+        那时好感只在初始化和用户本人的回合里变化，所以 ``updated_at`` 是最接近的
+        用户消息时间，衰减从它开始计时、尚未结算过（#710 当天才合并，这类状态
+        最多几小时，几乎不会立刻触发衰减）。只缺其中一个键属于损坏，直接报错。
         """
         updated_at = _required_time(payload, "updated_at")
+        timer_keys = {"last_user_message_at", "decay_settled_at"} & payload.keys()
+        if not timer_keys:
+            last_user_message_at, decay_settled_at = updated_at, None
+        elif len(timer_keys) == 2:
+            last_user_message_at = _required_time(payload, "last_user_message_at")
+            decay_settled_at = (
+                None
+                if payload["decay_settled_at"] is None
+                else _required_time(payload, "decay_settled_at")
+            )
+        else:
+            raise ValueError(f"好感状态的衰减计时字段不完整: {sorted(timer_keys)}")
         state = cls(
             role_id=_required_text(payload, "role_id"),
             value=_required_int(payload, "value"),
             stage_floor=_required_int(payload, "stage_floor"),
             initialized_at=_required_time(payload, "initialized_at"),
             updated_at=updated_at,
-            last_user_message_at=(
-                _required_time(payload, "last_user_message_at")
-                if "last_user_message_at" in payload
-                else updated_at
-            ),
-            decay_settled_at=(
-                _required_time(payload, "decay_settled_at")
-                if payload.get("decay_settled_at") is not None
-                else None
-            ),
+            last_user_message_at=last_user_message_at,
+            decay_settled_at=decay_settled_at,
         )
         if state.stage_floor not in {stage.lower for stage in AFFECTION_STAGES}:
             raise ValueError(f"好感阶段下限无效: {state.stage_floor}")
@@ -165,6 +171,11 @@ def apply_affection_delta(
     return replace(state, value=value, stage_floor=floor, updated_at=at)
 
 
+def local_now(now: datetime | None = None) -> datetime:
+    """把可选的 ``now`` 统一成带本地时区的时间；省略时取当前时间。"""
+    return (now or datetime.now()).astimezone()
+
+
 def record_user_message(state: AffectionState, *, at: str) -> AffectionState:
     """用户本人发来消息：衰减从 ``at`` 重新计时。调用方须先结算到 ``at`` 为止的衰减。"""
     return replace(state, last_user_message_at=at, decay_settled_at=None)
@@ -176,8 +187,9 @@ def settle_affection_decay(
     """补算到 ``now`` 为止所有到期的衰减，返回新状态与要追加的历史。
 
     第 k 次（k 从 0 起）衰减在用户最后一条消息之后
-    ``AFFECTION_DECAY_GRACE + k * AFFECTION_DECAY_INTERVAL`` 到期，即满 3 天扣第一次，
-    之后每满 1 天再扣一次。每次走 ``apply_affection_delta``，记录时间是它的到期
+    ``AFFECTION_DECAY_GRACE + k * AFFECTION_DECAY_INTERVAL`` 到期：恰好满 72 小时扣
+    第一次（不是第 4 天），之后从最后一条消息起算、每满 24 小时再扣一次；按绝对
+    时长计，不按日历日。旧状态的计时起点见 ``AffectionState.from_dict``。每次走 ``apply_affection_delta``，记录时间是它的到期
     时间，所以一次补算多天和逐日推进得到相同的状态与历史。被阶段下限挡住的
     一次不写历史，但仍计入已结算，之后不会再补。
     """

@@ -28,6 +28,7 @@ from .loneliness import (
     _now_iso,
     _parse_iso,
 )
+from .affection import local_now
 from .affection_service import RoleAffectionService
 from .interaction import collect_user_recent_messages, render_recent_messages
 from .models import (
@@ -243,9 +244,9 @@ class RoleRelationshipRuntimeService(_RelationshipPersistenceMixin):
         role_id = self._role_id_from_session_key(session_key)
         if not role_id:
             return None
-        now_dt = (now or datetime.now().astimezone()).astimezone()
+        now_dt = local_now(now)
         # Affection decay does not depend on the snapshot, so its timer restarts first.
-        _ = self._affection.record_user_activity(role_id, now=now_dt)
+        self._affection.record_user_activity(role_id, now=now_dt)
         snapshot = self.read_snapshot(role_id)
         if snapshot is None:
             return None

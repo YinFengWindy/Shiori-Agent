@@ -214,7 +214,7 @@ async def test_new_role_seeds_affection_from_profile_after_self(tmp_path):
     )
 
     affection = RoleAffectionService(tmp_path)
-    assert affection.summary("mira")["stage"] == "亲密"
+    assert affection.current_summary("mira")["stage"] == "亲密"
     [entry] = affection.read_history("mira")
     assert (entry.source, entry.after, entry.reason) == ("init", 62, "从小一起长大")
     # ``prompts`` holds only affection prompts: it sees the SELF just generated,
@@ -257,7 +257,7 @@ async def test_affection_seed_always_sees_memory_and_conversation(tmp_path, self
     assert len(prompts) == 1
     assert ("早就写好的自我" if self_ready else "生成内容") in prompts[0]
     assert "一起看过海" in prompts[0] and "今天也来找你了" in prompts[0]
-    assert RoleAffectionService(tmp_path).summary("mira")["value"] == 35
+    assert RoleAffectionService(tmp_path).current_summary("mira")["value"] == 35
 
 
 @pytest.mark.asyncio
@@ -286,6 +286,6 @@ async def test_failed_affection_seed_stops_the_turn_then_retries(tmp_path):
     )
 
     await initializer.ensure_seeded("mira", snapshot)
-    assert affection.summary("mira")["stage"] == "陌生"
+    assert affection.current_summary("mira")["stage"] == "陌生"
     # SELF is not generated again; only affection is retried.
     assert provider.chat.await_count == 3
