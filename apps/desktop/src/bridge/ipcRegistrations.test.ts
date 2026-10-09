@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { access, mkdir, mkdtemp, readFile, rm, truncate, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, realpath, rm, truncate, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
@@ -132,7 +132,7 @@ describe("desktop ipc window boundaries", () => {
       assert.notEqual(dropped.value[0], source);
       assert.equal(await readFile(dropped.value[0], "utf8"), "image-data");
       assert.equal(dropped.assets[0].kind, "image");
-      assert.equal(localAssets.resolveReference(dropped.assets[0].url)?.canonicalPath, dropped.value[0]);
+      assert.equal(localAssets.resolveReference(dropped.assets[0].url)?.canonicalPath, await realpath(dropped.value[0]));
       assert.equal(localAssets.resolveReference(source), null);
       await rm(source);
       assert.equal(await readFile(dropped.value[0], "utf8"), "image-data");
