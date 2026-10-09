@@ -2,7 +2,7 @@
 
 /**
  * The relationship dimensions of a snapshot, each 0–1. Closeness was removed in
- * Runtime API 3.1.9; the role's affection (`AffectionSummary`) replaces it.
+ * Runtime API 3.1.1; the role's affection (`AffectionSummary`) replaces it.
  */
 export type RelationState = {
   dependence: number;
@@ -50,7 +50,7 @@ export type AffectionSummary = {
   /**
    * The stage floor the value can no longer drop below (the start of the
    * highest stage reached from 「熟悉」 up); null while there is none.
-   * Runtime API 3.1.16.
+   * Runtime API 3.1.1.
    */
   floor: number | null;
 };

@@ -26,7 +26,7 @@
 
 插件在入站 `metadata[shiori_sdk.messages.TEXT_ATTACHMENT_TOOL_KEY]` 填自己的工具名，
 宿主便为当前文本附件显示相应读取提示；该键只控制提示，不授予权限。
-上述 API 从 SDK `3.1.18` 开始提供。
+上述 API 从 SDK `3.1.1` 开始提供。
 
 ## 1. 包布局与 manifest
 

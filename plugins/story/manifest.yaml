@@ -2,7 +2,7 @@ api: 2
 runtime_api: ">=3.1.0 <4.0.0"
 id: story
 display_name: 故事模式
-version: '0.1.0'
+version: '0.1.1'
 desc: 视觉小说故事模式、存档与 CG 图库
 dependencies:
   - novelai

@@ -2,7 +2,7 @@ api: 2
 runtime_api: ">=3.1.0 <4.0.0"
 id: meme
 display_name: 表情包
-version: '0.1.0'
+version: '0.1.1'
 desc: 角色表情与 emoji 协议，注入可用表情并关联回复媒体
 capabilities:
   - storage

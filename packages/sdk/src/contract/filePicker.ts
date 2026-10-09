@@ -1,6 +1,6 @@
 /**
  * Renderer-safe options for a native file selection returned by its original
- * path (`host.pickFilePaths`, runtime API 3.1.5): nothing is copied.
+ * path (`host.pickFilePaths`, runtime API 3.1.1): nothing is copied.
  */
 export type NativeFilePathPickerOptions = {
   filters: Array<{ name: string; extensions: string[] }>;

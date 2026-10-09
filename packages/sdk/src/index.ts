@@ -14,7 +14,7 @@
 // Errors and the injected RPC client (runtime API 2.8.0).
 export { BridgeError, PluginBridgeError } from "./errors";
 export type { BridgeEvent, PluginBackgroundHandler, PluginEventHandler, PluginPeer, PluginRpcClient } from "./rpc";
-// Runtime API 3.1.13 (#734): the events that end a chat turn.
+// Runtime API 3.1.1 (#734): the events that end a chat turn.
 export { chatTerminalEventMethods, isChatTerminalEvent, type ChatTerminalEventMethod } from "./chatEvents";
 
 // From here to the 2.10.0 block below: runtime API 2.9.0 (#504).
@@ -22,10 +22,10 @@ export { chatTerminalEventMethods, isChatTerminalEvent, type ChatTerminalEventMe
 // Pure helpers and hooks.
 export { errorMessage } from "./errors";
 export { useLatestRef } from "./useLatestRef";
-// Runtime API 3.1.3: opt-in UI for plugin-owned fixed environment preparation; 3.1.6 adds removal, 3.1.7 install location.
+// Runtime API 3.1.1: opt-in UI for plugin-owned environment preparation, removal and install location.
 export { ManagedRuntimePanel } from "./managed/ManagedRuntimePanel";
 export { useManagedRuntime, type ManagedRuntimeAction, type ManagedRuntimeStatus } from "./managed/useManagedRuntime";
-// Runtime API 3.1.4 (#683): plugin-owned document autosave and the host settings page layout.
+// Runtime API 3.1.1 (#683): plugin-owned document autosave and the host settings page layout.
 export { usePrivateAutosave, type PrivateAutosaveOptions } from "./hooks/usePrivateAutosave";
 export type { PrivateAutosaveOperations } from "./hooks/privateAutosaveSession";
 export type { DraftSavePhase } from "./serialDraftQueue";

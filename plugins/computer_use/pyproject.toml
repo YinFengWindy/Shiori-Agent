@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "shiori-plugin-computer-use"
-version = "0.1.0"
+version = "0.1.1"
 requires-python = ">=3.12"
 dependencies = ["shiori-sdk>=3.1.0,<4", "pydantic>=2.11.7", "pillow>=11.0.0", "psutil>=7.0.0"]
 

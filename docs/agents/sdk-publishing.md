@@ -1,9 +1,19 @@
 # SDK 发布
 
 SDK 使用同一个版本号发布 `@yinfengwindy/shiori-sdk`（npm）与 `shiori-sdk`（PyPI），仓库当前为
-`3.1.17`（3.1.1–3.1.17 尚未发布，npm 与 PyPI 最新为 `3.1.0`）。版本来源是 `packages/sdk/python/shiori_sdk/_version.py`；修改后运行
-`node scripts/sync_sdk_version.mjs` 同步 npm 元数据。每个修改契约的 PR 只把第三位（patch）升一次，
-主版本/次版本只在发布时由维护者决定。
+`3.1.1`（尚未发布到 npm / PyPI，两处注册表最新仍为 `3.1.0`）。此前未发布的
+契约改动统一归入 `3.1.1`。本批包含 `SurfaceHandle.voice` 与 `closeness` 等破坏性变更，
+补丁编号不代表兼容；迁移说明见 [SDK README](../../packages/sdk/README.md#compatibility)。
+
+普通契约 PR 在 [运行时契约](../_handbook/plugin-runtime-contract.md#unreleased) 的 Unreleased 区
+记录变更、breaking 与 PR 溯源，不逐 PR 升号。正式发布 SDK **或包含新契约的桌面版本**前，
+维护者对照上次已发布契约统一定版，同一开发批次只定版一次。桌面包内置的 SDK 也是已分发契约，
+不能因为注册表尚未发布，就继续用已随桌面发出的版本号承载新契约。
+
+版本唯一来源是 `packages/sdk/python/shiori_sdk/_version.py`，SDK 与 Runtime API 同号。
+修改后运行 `node scripts/sync_sdk_version.mjs`，同步 npm 包以及宿主、host-testing 的精确版本约束；
+再统一本批新增接口的插件 `runtime_api` / Python SDK 最低版本，运行 `uv lock` 刷新锁文件。
+同步脚本只传播版本，不负责决定或递增版本。已发布的 `3.1.0` 历史与兼容插件的最低约束保持不变。
 
 工作流为 `.github/workflows/sdk-release.yml`：
 
@@ -72,8 +82,8 @@ owner 字段填写 GitHub owner。维护者仍需完成下面的外部设置。
 2. 在已合入的提交上创建并推送 `sdk-v<version>`。例如发布仓库当前版本：
 
    ```powershell
-   git tag sdk-v3.1.17 <已验证的-main-提交-SHA>
-   git push origin sdk-v3.1.17
+   git tag sdk-v3.1.1 <已验证的-main-提交-SHA>
+   git push origin sdk-v3.1.1
    ```
 
    这是正式发布操作，需要维护者有意执行；不要挪动或覆盖已发布标签。
@@ -86,9 +96,9 @@ owner 字段填写 GitHub owner。维护者仍需完成下面的外部设置。
 
    ```powershell
    gh run download <run-id> --name sdk-release-<run-id>-<build-attempt> --dir sdk-first-release
-   uv run python -m scripts.sdk_release verify sdk-first-release --ref refs/tags/sdk-v3.1.17 --commit <标签提交-SHA>
+   uv run python -m scripts.sdk_release verify sdk-first-release --ref refs/tags/sdk-v3.1.1 --commit <标签提交-SHA>
    npm login
-   npm publish ./sdk-first-release/yinfengwindy-shiori-sdk-3.1.17.tgz --access public
+   npm publish ./sdk-first-release/yinfengwindy-shiori-sdk-3.1.1.tgz --access public
    ```
 
    手动首次发布使用账号 2FA；本地不加 `--provenance`，后续 GitHub OIDC 发布自动生成

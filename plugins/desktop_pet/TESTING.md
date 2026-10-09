@@ -1,6 +1,6 @@
 # 独立运行 Python 测试
 
-复制插件到仓库外，准备包含 `shiori-sdk` 3.1.10 wheel 的私有 wheelhouse；无需安装宿主、testkit 或默认记忆。进入插件副本：
+复制插件到仓库外，准备包含 `shiori-sdk` 3.1.1 wheel 的私有 wheelhouse；无需安装宿主、testkit 或默认记忆。进入插件副本：
 
 ```sh
 uv venv .venv --python 3.12

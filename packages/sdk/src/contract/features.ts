@@ -10,15 +10,15 @@ export type PluginRoleValues = Record<string, unknown>;
 export type PluginRoleSettingsProps = {
   /**
    * The edited role, null while a new one is being created (runtime API
-   * 3.1.11). With `client` and the injected host services it lets the card's
+   * 3.1.1). With `client` and the injected host services it lets the card's
    * settings dialog own plugin-private, autosaved settings (`usePrivateAutosave`)
    * beside the role draft in `values`.
    */
   roleId: string | null;
-  /** The plugin's scoped RPC client (runtime API 3.1.11). */
+  /** The plugin's scoped RPC client (runtime API 3.1.1). */
   client: PluginRpcClient;
   /**
-   * The moods of the edited role's draft (runtime API 3.1.14), e.g. to offer
+   * The moods of the edited role's draft (runtime API 3.1.1), e.g. to offer
    * per-mood settings.
    */
   moodCatalog: readonly string[];

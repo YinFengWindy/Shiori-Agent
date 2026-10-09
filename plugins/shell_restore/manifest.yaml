@@ -3,7 +3,7 @@ runtime_api: ">=3.1.0 <4.0.0"
 id: shell_restore
 display_name: Shell 删除保护
 category: system
-version: 0.1.0
+version: 0.1.1
 desc: 将 shell 工具中的 rm 命令改写为移动到还原目录
 capabilities:
   - tool_hooks

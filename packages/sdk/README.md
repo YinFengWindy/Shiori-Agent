@@ -2,10 +2,12 @@
 
 [@yinfengwindy/shiori-sdk](https://www.npmjs.com/package/@yinfengwindy/shiori-sdk)
 and [shiori-sdk](https://pypi.org/project/shiori-sdk/) are the TypeScript and Python distributions of the
-same plugin contract. Both are version **3.1.17**, with Runtime API **3.1.17**.
-3.1.1–3.1.17 are not published yet; npm and PyPI hold 3.1.0. The commands below
-install 3.1.0; APIs added since then need a wheelhouse or workspace build of
-this repository until the next publication.
+same plugin contract. The current source version is **3.1.1**, with Runtime API
+**3.1.1**. All contract changes since the published 3.1.0 are consolidated into
+this batch. It is not yet
+published to npm or PyPI; both registries still hold **3.1.0**. The commands below
+install that public version. New APIs require a private wheelhouse or workspace
+build of this repository until publication.
 
 Start with the [plugin tutorial](https://github.com/YinFengWindy/Shiori-Agent/blob/main/docs/_handbook/plugins-tutorial.md)
 and [runtime contract](https://github.com/YinFengWindy/Shiori-Agent/blob/main/docs/_handbook/plugin-runtime-contract.md)
@@ -13,17 +15,33 @@ for plugin layout, capability declarations and packaging.
 
 ## Compatibility
 
-Runtime API 3.1.1 removes the published 3.1.0 `SurfaceHandle.voice`
-interface. Speech consumers must move their orchestration into their own plugin
-and use scoped native resources and owned surface messages, then declare
-`>=3.1.1 <4.0.0`. The host's range check does not reject a `>=3.1.0 <4.0.0`
-package that still uses the removed interface, so external authors must audit
-and rebuild such packages themselves. Desktop pet requires SDK/Runtime API
-`>=3.1.4 <4.0.0`. Bundled plugins that do not use the removed API keep
-`>=3.1.0 <4.0.0`.
+**3.1.1 includes breaking changes despite its patch version.** Compared with the
+published 3.1.0:
 
-Contract changes between publications bump only the patch number; the major and
-minor numbers are decided when the SDK is published.
+- `SurfaceHandle.voice` and its voice-state/gesture types are removed. Speech
+  consumers must own their orchestration and use scoped native resources and
+  surface-to-background messages.
+- Relationship snapshots no longer carry `closeness`.
+  `RelationshipSnapshot.internal_profile.relation_state` is the explicit
+  `RelationState` type; consumers of closeness must use `RoleRecord.affection`
+  (`AffectionSummary`) instead.
+
+The host's range check still accepts `>=3.1.0 <4.0.0`, so it does not protect a
+plugin that uses these removed APIs. Affected authors must migrate, rebuild and
+declare `>=3.1.1 <4.0.0`. Plugins using any new API in this batch use that same
+minimum in their manifest and Python SDK dependency. Audited plugins using only
+unchanged APIs may retain `>=3.1.0 <4.0.0`.
+
+The unpublished `roleUi` contribution, `PluginRoleUiProps` /
+`PluginRoleUiContribution` types and `usePrivateDraft` hook were removed before
+this release batch. They are not 3.1.1 APIs. Use `roleSettings` capability cards
+and `usePrivateAutosave` for plugin-owned settings.
+
+Ordinary contract PRs accumulate in the runtime contract's Unreleased section
+without incrementing the version. Before publishing the SDK or a desktop release
+with new contracts, the maintainer assigns one version to the whole batch,
+compared with the last published contract. SDK and runtime versions remain the
+same; a version already shipped in either form is not reused for new contracts.
 
 ## TypeScript
 
@@ -41,7 +59,7 @@ The host renderer ABI guarantees `19.2.0`; declare compatible host peers separat
 in the plugin's `manifest.yaml`, alongside its Runtime API range:
 
 ```yaml
-runtime_api: ">=3.1.4 <4.0.0"
+runtime_api: ">=3.1.1 <4.0.0"
 peer_dependencies:
   react: ">=19.2.0 <20.0.0"
   react-dom: ">=19.2.0 <20.0.0"
@@ -60,7 +78,7 @@ tarball with declarations and external React peers. The host import map provides
 the same main entry to precompiled plugins. Only the main entry belongs in a
 plugin's production peer imports.
 
-Runtime API 3.1.4 adds `usePrivateAutosave(client, identity, { load, save, debounceMs? })`
+Runtime API 3.1.1 adds `usePrivateAutosave(client, identity, { load, save, debounceMs? })`
 for plugin settings pages that save like the host's: `update` saves the latest draft
 once edits pause (400 ms by default), saves never overlap, `commit` saves at once for
 blur/Enter fields (keep their unvalidated text in component state and commit only a
@@ -71,12 +89,12 @@ while a save is in flight and otherwise drops unsaved edits. Render its `savePha
 `host.ui.SettingsSavedStatus` for the host's page-corner 「已保存」 mark, and lay the page
 out with the host's `SettingsGroup`, `SettingsSectionCard`, `SettingsField`,
 `SettingsToggleField`, `settingsInputClass` and `settingsGroupStackClass`. Packages
-using any of these require `runtime_api: ">=3.1.4 <4.0.0"`.
+using any of these require `runtime_api: ">=3.1.1 <4.0.0"`.
 
-Runtime API 3.1.13 adds the host event `chat.cancelled` (`{session_key, turn_id}`)
+Runtime API 3.1.1 adds the host event `chat.cancelled` (`{session_key, turn_id}`)
 and `chatTerminalEventMethods` / `isChatTerminalEvent`: while the bridge connection
 is open, every accepted chat turn ends with exactly one of `chat.done`, `chat.error`
-and `chat.cancelled`. Packages relying on it require `runtime_api: ">=3.1.13 <4.0.0"`.
+and `chat.cancelled`. Packages relying on it require `runtime_api: ">=3.1.1 <4.0.0"`.
 
 A disposed scoped client rejects with `PluginBridgeError`, code
 `plugin_unavailable`, and `details.reason: "context_disposed"`. Cleanup may treat
@@ -323,7 +341,7 @@ access merely because the interface declares a property.
 | `roles` | Detached role snapshots, explicit asset resolution/adoption and opaque role-extension transactions. The host keeps its canonical RoleStore and write lock. |
 | `models` | `async with ctx.models.activate(role_id, "chat" or "vision")` holds the host-selected provider/model snapshot across awaited work. No runtime registry or full Config is exported. |
 | `sessions` | Session metadata, original media provenance, atomic image replacement and its host-owned desktop projection. |
-| `external_turns` | (3.1.10) `await ctx.external_turns.submit(ExternalTurnMessage(...))` runs one message from a non-channel source (platform, conversation id/title, sender id/name, message id, text) as an external-context group turn of a role and returns `ExternalTurnResult` (`replied` with the reply text, `busy`, `duplicate`). It never waits for the role, never dispatches to a channel, and cancelling the call cancels the turn. `testing.external_turns.FakeExternalTurns` answers with queued results. |
+| `external_turns` | (3.1.1) `await ctx.external_turns.submit(ExternalTurnMessage(...))` runs one message from a non-channel source (platform, conversation id/title, sender id/name, message id, text) as an external-context group turn of a role and returns `ExternalTurnResult` (`replied` with the reply text, `busy`, `duplicate`). It never waits for the role, never dispatches to a channel, and cancelling the call cancels the turn. `testing.external_turns.FakeExternalTurns` answers with queued results. |
 | `http` | `HttpClient` uses the injected external transport and its default retry/budget policy. Memory's bounded `HttpRequester` remains separate. |
 | `background` | `spawn` owns scoped tasks; `spawn_runtime` additionally retains the calling runtime generation until task completion. Both cancel and join outstanding work on unload. |
 | `processes` | Creates explicit MCP sessions and owned child processes through the host's existing McpClient/owned_spawn/WindowsJob implementations. The SDK contains no process implementation. |
@@ -413,20 +431,21 @@ stop. Its backend writes `plugin-data/desktop_pet/voice-preferences.json`; these
 values never enter host `config.toml`, `runtime_config.tts` or role `plugin_data`.
 The host provides generic UI slots and native device/recording/playback/key resources.
 Existing role extension drafts continue their original host role transaction;
-new autonomous role panels use plugin RPC storage and report their own save/dirty
-state without claiming a transaction across host and plugin files.
+plugin-private settings use `roleSettings` cards with `storage: "plugin"` and
+`usePrivateAutosave`, without claiming a transaction across host and plugin files.
 
 Tencent/MiniMax integrations and their installation/migration code are removed.
 Existing user files, credentials and remote voice assets are left untouched.
-SenseVoice and GPT-SoVITS implementations are separate follow-up plugin deliveries.
+SenseVoice and GPT-SoVITS are bundled providers with their own plugin versions,
+both disabled by default.
 
-## 3.1.2 local-service utilities
+## 3.1.1 local-service utilities
 
 `shiori_sdk.files.audio.pcm_wav_duration` validates complete PCM WAV audio, optionally rejecting digital silence. `shiori_sdk.files.staging.staged_import_file` validates a native picker's namespace, extension and byte limit. `shiori_sdk.local_http.loopback_http_url` validates a plain HTTP loopback origin. These utilities do not open a connection or supply inference policy.
 
 A manifest may declare `distribution: external` for repository sources delivered through normal plugin ZIP installation instead of bundled discovery. Omission retains builtin distribution. External installation, trust, update and removal still use the existing workspace plugin lifecycle.
 
-## 3.1.3 private managed environments
+## 3.1.1 private managed environments
 
 `shiori_sdk.managed` contains opt-in generic artifact acquisition, atomic installation,
 owned-process and background-operation helpers. A provider supplies fixed `Artifact`
@@ -443,7 +462,7 @@ the existing Windows Job ownership contract; no PID is adopted or killed by ID.
 
 `ManagedRuntime` retains background progress/errors, cancellation and explicit
 start/stop. `register_runtime_rpc` wires opt-in `runtime.status`, `prepare`, `start`,
-`stop`, `cancel`, (3.1.6) `remove` and (3.1.7) `relocate` endpoints plus plugin drain cleanup. Providers own imported
+`stop`, `cancel`, `remove` and `relocate` endpoints plus plugin drain cleanup. Providers own imported
 file extensions/namespaces, models, private settings and recovery policy. They
 must declare `workspace`, `rpc`, `background`, `processes` and `runtime` capabilities.
 
@@ -458,11 +477,12 @@ drive and UNC paths. Compact `s/<id>` and `v/<id>` directories avoid duplicating
 the revision in every filename; the validated receipt retains version/resource
 identity. Existing trial pointers to `versions/` remain readable.
 
-Runtime API 3.1.6 adds environment hygiene. `ManagedRuntime.remove()` deletes
+Runtime API 3.1.1 adds environment hygiene. `ManagedRuntime.remove()` deletes
 installed versions, the pointer, caches and staging in the background, also
 when nothing is installed but a failed or cancelled preparation kept its
 download cache; it is refused while a task runs or a service of any generation
-holds the service lease, and keeps only lock and log files. Status reports
+holds the service lease, and retains state-root files (including locks, logs and
+provider settings). Status reports
 `reclaimable` (bytes of kept downloads, one stat per artifact) and `staging`
 (unfinished preparation files left over, never walked). A published preparation
 deletes the download cache and every other version directory (older ones stay
@@ -472,7 +492,8 @@ that cancellation does not abandon: `cancel()` / `stop()` / `close()` return
 only after it has finished and released its leases, and status reports the
 actual outcome. `Installation(..., installed_size=)` declares the bytes of one
 prepared version; before any copy, preparation requires free space on the
-root's volume of at least the missing artifact bytes (imports count in full) +
+install root's volume of at least the missing artifact bytes (an in-place import
+counts as zero download-copy bytes) +
 `installed_size` + max(1 GiB, 5% of both), and otherwise fails with
 「磁盘空间不足：需要约 X GiB，剩余 Y GiB（位置）」. Child output is piped and
 decoded incrementally per child, UTF-8 until the first invalid byte and the
@@ -484,7 +505,7 @@ preparation command or an early service exit names its last meaningful line.
 idle runtime that is installed or keeps a cache, behind a destructive
 `host.ui.ConfirmDialog`.
 
-Runtime API 3.1.7 lets the user choose where an environment is installed and
+Runtime API 3.1.1 lets the user choose where an environment is installed and
 imports packages in place. The provider's `root` is the *state root* (plugin
 data); it keeps `current.json`, `location.json`, locks, logs and provider files,
 so `OwnedService.root` and every service identity stay put. The *install root*
@@ -504,19 +525,20 @@ original absolute path from `host.pickFilePaths`: a regular file reached without
 any link or junction, with an accepted suffix and, for the provider's
 `ManagedRuntime(..., import_asset=)`, that artifact's exact size. Its SHA-256 is
 verified while reading, before any build; the file is never copied, moved or
-deleted. **Breaking** Python API: builds take `build(staging, resources)` with
+deleted. In the finalized API, builds take `build(staging, resources)` with
 each verified artifact path (`resources[name]`, an in-place import at its
-original path), `acquire_resources` returns that mapping, `acquire_artifact`
-loses `source=` (see `verify_file`), `import_asset` moves from
-`register_runtime_rpc` / `submit` to the `ManagedRuntime` constructor, and
-`register_runtime_rpc` drops `max_bytes`. A ZIP bundle's members are extracted
+original path), `acquire_resources` returns that mapping, and `acquire_artifact`
+does not accept `source=` (see `verify_file`). `import_asset` belongs to the
+`ManagedRuntime` constructor, not `register_runtime_rpc` / `submit`;
+`register_runtime_rpc` has no `max_bytes` parameter. These signatures replace
+unpublished workspace experiments. A ZIP bundle's members are extracted
 into staging. The free-space check uses the install root's volume and counts an
 in-place import as 0 bytes. Status adds `location`, `customized`, `required`
 (download), `required_import` (the provider's import), `free`, `removable` and
 `relocatable`; whatever blocks relocation is `removable`. Removal deletes only
 the install root's installation entries, unlinking links and junctions without
 entering them, plus a chosen dedicated directory once empty.
-`ManagedRuntimePanel` no longer takes `namespace` (**breaking**), shows location
+`ManagedRuntimePanel` has no `namespace` prop, shows location
 and space, and offers 「更改位置」 (`host.pickDirectory`) and 「恢复默认」.
 
 Process arguments and working directories preserve the provider's spelling:

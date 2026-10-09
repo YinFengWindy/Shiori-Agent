@@ -2,7 +2,7 @@ api: 2
 id: sensevoice_asr
 display_name: SenseVoiceSmall 语音识别
 version: "0.2.0"
-runtime_api: ">=3.1.7 <4.0.0"
+runtime_api: ">=3.1.1 <4.0.0"
 entry: backend/plugin.py
 desc: 本机 CPU SenseVoiceSmall 语音识别 provider
 capabilities:

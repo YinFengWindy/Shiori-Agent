@@ -3,7 +3,7 @@ runtime_api: ">=3.1.0 <4.0.0"
 id: citation
 display_name: 记忆引用
 category: system
-version: '0.1.0'
+version: '0.1.1'
 desc: 从工具调用链或遗留引用标记追踪记忆 ID，并清理协议标签
 capabilities:
   - lifecycle
