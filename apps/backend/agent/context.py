@@ -36,6 +36,7 @@ from agent.prompting import (
     build_context_frame_message,
 )
 from shiori_sdk.prompting import PromptSectionRender
+from agent.prompting.attachment_hints import ATTACHMENT_TOOL_HINTS_KEY
 from agent.role_prompt import (
     build_role_cache_prefix_section,
     build_role_system_section,
@@ -60,49 +61,6 @@ logger = logging.getLogger("agent.context")
 _READABLE_TEXT_ATTACHMENT_SUFFIXES = {".md", ".txt"}
 _ATTACHED_FILES_HEADER = "[附加文件]"
 _ATTACHMENT_TOOL_HINT_PREFIX = "- 如需读取内容，请调用 "
-
-
-def without_attachment_tool_hints(message: dict) -> dict:
-    """Copy a user message without attachment lines that require calling a tool.
-
-    Minimal requests send no tools, so the instruction would be unfollowable;
-    the attachment path reference itself is kept.
-    """
-
-    def strip(text: str) -> str:
-        # The generated block is appended after the user's text, so only lines
-        # after its last header are ours; user text keeps look-alike lines.
-        lines = text.split("\n")
-        if _ATTACHED_FILES_HEADER not in lines:
-            return text
-        start = len(lines) - lines[::-1].index(_ATTACHED_FILES_HEADER)
-        return "\n".join(
-            [
-                *lines[:start],
-                *(
-                    line
-                    for line in lines[start:]
-                    if not line.startswith(_ATTACHMENT_TOOL_HINT_PREFIX)
-                ),
-            ]
-        )
-
-    content = message.get("content")
-    if isinstance(content, str):
-        return {**message, "content": strip(content)}
-    if isinstance(content, list):
-        return {
-            **message,
-            "content": [
-                (
-                    {**part, "text": strip(part["text"])}
-                    if part.get("type") == "text" and isinstance(part.get("text"), str)
-                    else part
-                )
-                for part in content
-            ],
-        }
-    return message
 
 
 class MessageEnvelopeBuilder:
@@ -152,20 +110,31 @@ class MessageEnvelopeBuilder:
         messages.extend(history)
         if context_frame.strip():
             messages.append(build_context_frame_message(context_frame))
-        messages.append(
-            {
-                "role": "user",
-                "content": with_message_source(
-                    self._build_user_content(
-                        current_message,
-                        media,
-                        message_timestamp=message_timestamp,
-                        text_attachment_tool=text_attachment_tool,
-                    ),
-                    message_source or MessageSource(channel=channel, chat_id=chat_id),
+        attachment_hints: list[tuple[int, int, str]] = []
+        content = self._build_user_content(
+            current_message,
+            media,
+            message_timestamp=message_timestamp,
+            text_attachment_tool=text_attachment_tool,
+            attachment_hints=attachment_hints,
+        )
+        original_text = content if isinstance(content, str) else content[-1]["text"]
+        content = with_message_source(
+            content,
+            message_source or MessageSource(channel=channel, chat_id=chat_id),
+        )
+        messages.append({"role": "user", "content": content})
+        if attachment_hints:
+            final_text = content if isinstance(content, str) else content[-1]["text"]
+            # Source stamping only changes the prefix before these appended spans.
+            prefix_delta = len(final_text) - len(original_text)
+            messages[-1][ATTACHMENT_TOOL_HINTS_KEY] = {
+                "part": None if isinstance(content, str) else len(content) - 1,
+                "spans": tuple(
+                    (start + prefix_delta, end + prefix_delta, hint)
+                    for start, end, hint in attachment_hints
                 ),
             }
-        )
         return messages
 
     def _build_user_content(
@@ -175,12 +144,15 @@ class MessageEnvelopeBuilder:
         *,
         message_timestamp: datetime | None = None,
         text_attachment_tool: str = "read_file",
+        attachment_hints: list[tuple[int, int, str]] | None = None,
     ) -> str | list[dict[str, Any]]:
         text = self._stamp_current_message(text, message_timestamp=message_timestamp)
         if not media:
             return text
         if not self._multimodal:
-            return self._build_text_with_media_refs(text, media, text_attachment_tool)
+            return self._build_text_with_media_refs(
+                text, media, text_attachment_tool, attachment_hints=attachment_hints
+            )
 
         images = []
         for item in media:
@@ -203,14 +175,19 @@ class MessageEnvelopeBuilder:
             )
 
         text_with_refs = self._append_text_attachment_refs(
-            text, media, text_attachment_tool
+            text, media, text_attachment_tool, attachment_hints=attachment_hints
         )
         if not images:
             return text_with_refs
         return images + [{"type": "text", "text": text_with_refs}]
 
     def _build_text_with_media_refs(
-        self, text: str, media: list[str], text_attachment_tool: str = "read_file"
+        self,
+        text: str,
+        media: list[str],
+        text_attachment_tool: str = "read_file",
+        *,
+        attachment_hints: list[tuple[int, int, str]] | None = None,
     ) -> str:
         refs: list[str] = []
         for item in media:
@@ -225,7 +202,11 @@ class MessageEnvelopeBuilder:
                 continue
             refs.append(f"- 图片路径: {value}")
 
-        lines = [self._append_text_attachment_refs(text, media, text_attachment_tool)]
+        lines = [
+            self._append_text_attachment_refs(
+                text, media, text_attachment_tool, attachment_hints=attachment_hints
+            )
+        ]
         if refs:
             lines.extend(["", "[附加媒体]", *refs])
         if refs:
@@ -235,9 +216,15 @@ class MessageEnvelopeBuilder:
         return "\n".join(lines)
 
     def _append_text_attachment_refs(
-        self, text: str, media: list[str], text_attachment_tool: str = "read_file"
+        self,
+        text: str,
+        media: list[str],
+        text_attachment_tool: str = "read_file",
+        *,
+        attachment_hints: list[tuple[int, int, str]] | None = None,
     ) -> str:
         file_refs: list[str] = []
+        cursor = len(text) + 2 + len(_ATTACHED_FILES_HEADER)
         for item in media:
             value = str(item)
             if value.startswith(("http://", "https://")):
@@ -249,10 +236,14 @@ class MessageEnvelopeBuilder:
             ):
                 continue
             quoted_path = json.dumps(value, ensure_ascii=False)
-            file_refs.append(f"- 文件路径: {value}")
-            file_refs.append(
-                f"{_ATTACHMENT_TOOL_HINT_PREFIX}{text_attachment_tool}(path={quoted_path})"
-            )
+            path_line = f"- 文件路径: {value}"
+            file_refs.append(path_line)
+            cursor += 1 + len(path_line)
+            hint = f"{_ATTACHMENT_TOOL_HINT_PREFIX}{text_attachment_tool}(path={quoted_path})"
+            file_refs.append(hint)
+            if attachment_hints is not None:
+                attachment_hints.append((cursor, cursor + 1 + len(hint), "\n" + hint))
+            cursor += 1 + len(hint)
         if not file_refs:
             return text
         lines = [text, "", _ATTACHED_FILES_HEADER, *file_refs]

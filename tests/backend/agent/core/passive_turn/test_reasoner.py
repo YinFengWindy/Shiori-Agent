@@ -115,6 +115,9 @@ async def test_current_attachments_are_isolated_across_concurrent_and_followup_t
     [
         "normal",
         "minimal",
+        "minimal_recovery",
+        "recovery_degrade",
+        "recovery_degrade_tool",
         "image",
         "too_large",
         "memory_failure",
@@ -175,7 +178,11 @@ async def test_minimal_request_uses_real_prompt_controller_and_transport(
     registry.register(tool, always_on=True)
     provider = LLMProvider(
         api_key="test",
-        model_context_window=100000 if case == "normal" else 20000,
+        model_context_window=(
+            100000
+            if case in {"normal", "recovery_degrade", "recovery_degrade_tool"}
+            else 20000
+        ),
         default_max_tokens=2000,
         budget_policy=BudgetPolicy(safety_margin_tokens=100),
     )
@@ -227,7 +234,20 @@ async def test_minimal_request_uses_real_prompt_controller_and_transport(
                 raise ContextLengthError("real provider limit")
             if case == "provider_error":
                 raise OSError("model connection failed")
-            text = "continue tea plan"
+            if case in {"recovery_degrade", "recovery_degrade_tool"} and len(sent) in {
+                2,
+                3,
+            }:
+                raise ContextLengthError(
+                    "recovery request exceeds actual provider budget"
+                )
+            text = (
+                ""
+                if case
+                in {"minimal_recovery", "recovery_degrade", "recovery_degrade_tool"}
+                and len(sent) == 1
+                else "continue tea plan"
+            )
         calls = (
             [
                 SimpleNamespace(
@@ -235,7 +255,8 @@ async def test_minimal_request_uses_real_prompt_controller_and_transport(
                     function=SimpleNamespace(name="archived_tool", arguments="{}"),
                 )
             ]
-            if case == "unexpected_tool" and sent
+            if (case == "unexpected_tool" and sent)
+            or (case == "recovery_degrade_tool" and len(sent) == 4)
             else []
         )
         return SimpleNamespace(
@@ -251,6 +272,10 @@ async def test_minimal_request_uses_real_prompt_controller_and_transport(
     provider._create_with_retry = transport
     current = "保留当前意图" + ("巨大的输入" * 5000 if case == "too_large" else "")
     media = []
+    if case in {"minimal_recovery", "recovery_degrade", "recovery_degrade_tool"}:
+        attachment = h.manager.workspace / "article.txt"
+        attachment.write_text("synthetic attachment", encoding="utf-8")
+        media = [str(attachment)]
     if case == "image":
         image = h.manager.workspace / "input.png"
         image.write_bytes(b"fake-image" * 20000)
@@ -301,13 +326,22 @@ async def test_minimal_request_uses_real_prompt_controller_and_transport(
             assert len(sent) == 1
             latest = reasoner._compaction.latest(session.key, view)
             assert latest is not None and latest["phase"] != "failed"
-        elif case == "unexpected_tool":
+        elif case in {"unexpected_tool", "recovery_degrade_tool"}:
             with pytest.raises(CompactionFailedError) as caught:
                 await reasoner.run_turn(
                     msg=msg,
                     session=session,
                     retrieved_memory_block="OPTIONAL_RETRIEVAL " * 1500,
+                    extra_hints=["OPTIONAL_HINT call archived_tool " * 3000],
                 )
+            if case == "recovery_degrade_tool":
+                assert len(sent) == 4 and sent[0].get("tools")
+                assert not sent[-1].get("tools")
+                assert "请调用 read_file" not in str(sent[-1]["messages"])
+                assert (
+                    "请根据已有结果直接回复用户" in sent[-1]["messages"][-1]["content"]
+                )
+                assert "尚未取得的信息请明确说明" in sent[-1]["messages"][-1]["content"]
         else:
             result = await reasoner.run_turn(
                 msg=msg,
@@ -338,6 +372,23 @@ async def test_minimal_request_uses_real_prompt_controller_and_transport(
                 assert "工具目录 " * 3 not in text and "OTHER_GROUP_SECRET" not in text
                 outcomes = result.context_retry["compaction"]
                 assert isinstance(outcomes, list) and outcomes[-1]["degraded"]
+                if case in {"minimal_recovery", "recovery_degrade"}:
+                    assert len(sent) == (4 if case == "recovery_degrade" else 2)
+                    assert bool(sent[0].get("tools")) == (case == "recovery_degrade")
+                    assert "请调用 read_file" not in str(final["messages"])
+                    assert (
+                        "请根据已有结果直接回复用户" in final["messages"][-1]["content"]
+                    )
+                    assert (
+                        "尚未取得的信息请明确说明" in final["messages"][-1]["content"]
+                    )
+                    assert any(
+                        str(attachment) in message["content"]
+                        for message in final["messages"]
+                    )
+                    recovery = result.context_retry["reply_recovery"]
+                    assert isinstance(recovery, dict)
+                    assert recovery["outcome"] == "recovered"
                 if case == "image":
                     assert "data:image/png;base64," in text and len(text) > 200000
                 final_fact = events[-1].status
@@ -348,7 +399,9 @@ async def test_minimal_request_uses_real_prompt_controller_and_transport(
                     final_fact["request_usage"]["last_request"]["prompt_tokens"] is None
                 )
                 assert "base64" not in json.dumps(final_fact)
-        assert history_start(session, view) == 0
+        assert history_start(session, view) == (
+            6 if case in {"recovery_degrade", "recovery_degrade_tool"} else 0
+        )
         assert session.messages == original
         tool.execute.assert_not_awaited()
     finally:
@@ -649,6 +702,8 @@ async def test_real_turn_history_append_uses_usage_anchor_with_replaced_context_
         "initial",
         "tool",
         "recovery",
+        "recovery_tool",
+        "recovery_tool_provider_retry",
         "finalize",
         "unfit",
         "safety_after_tool",
@@ -681,6 +736,8 @@ async def test_all_request_boundaries_compact_without_replaying_current_tools(
         "initial": 5000,
         "tool": 3000,
         "recovery": 3000,
+        "recovery_tool": 3000,
+        "recovery_tool_provider_retry": 3000,
         "finalize": 3000,
         "unfit": 3000,
         "safety_after_tool": 3000,
@@ -736,13 +793,14 @@ async def test_all_request_boundaries_compact_without_replaying_current_tools(
         default_max_tokens=200,
         budget_policy=BudgetPolicy(safety_margin_tokens=20),
     )
-    sent, summary_inputs = [], []
+    sent, summary_inputs, summary_boundaries = [], [], []
 
     async def create(kwargs, **unused):
         calls = []
         if "Rewrite the current working state" in kwargs["messages"][0]["content"]:
             data = json.loads(kwargs["messages"][-1]["content"])
             summary_inputs.append(data)
+            summary_boundaries.append(len(sent))
             if boundary == "initial":
                 # A concurrent settings save cannot change this execution's policy.
                 reasoner._llm_config.compaction_retained_turns = 0
@@ -793,13 +851,29 @@ async def test_all_request_boundaries_compact_without_replaying_current_tools(
                 raise OSError("network unavailable")
             elif len(sent) == 2 and boundary == "safety_after_tool":
                 raise ContentSafetyError("current tool output rejected")
-            elif len(sent) == 1 and boundary == "recovery":
+            elif boundary == "recovery_tool_provider_retry" and len(sent) == 2:
+                raise ContextLengthError("recovery provider rejected request")
+            elif len(sent) == 1 and boundary in {
+                "recovery",
+                "recovery_tool",
+                "recovery_tool_provider_retry",
+            }:
                 text = ""
+            elif (len(sent) == 2 and boundary == "recovery_tool") or (
+                len(sent) == 3 and boundary == "recovery_tool_provider_retry"
+            ):
+                text = ""
+                calls = [
+                    SimpleNamespace(
+                        id="current-call",
+                        function=SimpleNamespace(name="side_effect", arguments="{}"),
+                    )
+                ]
             else:
                 text = "continued the original task"
             tokens = (
                 7480
-                if boundary == "recovery" and len(sent) == 1
+                if boundary in {"recovery", "recovery_tool"} and len(sent) == 1
                 else provider._budget_for_request(kwargs).estimate.tokens
             )
         return SimpleNamespace(
@@ -971,7 +1045,14 @@ async def test_all_request_boundaries_compact_without_replaying_current_tools(
         assert "archived_tool" not in [
             schema["function"]["name"] for schema in final.get("tools", [])
         ]
-        if boundary in {"tool", "finalize", "unfit", "safety_after_tool"}:
+        if boundary in {
+            "tool",
+            "finalize",
+            "unfit",
+            "safety_after_tool",
+            "recovery_tool",
+            "recovery_tool_provider_retry",
+        }:
             assert tool.calls == 1
             assert "current-call" in serialized and "y" * 9000 in serialized
         else:
@@ -979,6 +1060,31 @@ async def test_all_request_boundaries_compact_without_replaying_current_tools(
         if boundary == "recovery":
             assert final["messages"][-1]["role"] == "user"
             assert "正式回复" in final["messages"][-1]["content"]
+        if boundary.startswith("recovery_tool"):
+            first_compacted = 2 if boundary == "recovery_tool_provider_retry" else 1
+            assert summary_boundaries[0] == first_compacted
+            assert len(sent) == first_compacted + 2
+            for request in sent[:first_compacted]:
+                assert "archived_tool" in [
+                    schema["function"]["name"] for schema in request["tools"]
+                ]
+                assert "[working_state]" not in str(request["messages"])
+            for request in sent[first_compacted:]:
+                text = json.dumps(request["messages"])
+                assert "[working_state]" in text
+                assert "OLD_TOOL_HISTORY_MUST_NOT_REAPPEAR" not in text
+                assert text.count("current input must survive") == 1
+                assert "archived_tool" not in [
+                    schema["function"]["name"] for schema in request["tools"]
+                ]
+            assert not outcomes[-1]["degraded"]
+            assert (
+                sum(m.get("tool_call_id") == "current-call" for m in final["messages"])
+                == 1
+            )
+            recovery = result.context_retry["reply_recovery"]
+            assert isinstance(recovery, dict)
+            assert recovery["outcome"] == "recovered"
         budget = provider.input_budget(
             messages=final["messages"],
             tools=final.get("tools", []),

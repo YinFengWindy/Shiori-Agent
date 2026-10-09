@@ -87,11 +87,17 @@ async def test_minimal_render_drops_disabled_read_file_instruction(tmp_path):
 
     attachment = tmp_path / "notes.txt"
     attachment.write_text("notes", encoding="utf-8")
-    text = MessageEnvelopeBuilder()._append_text_attachment_refs(
-        "look", [str(attachment)]
-    )
+    current = MessageEnvelopeBuilder().build(
+        history=[],
+        current_message="look",
+        system_prompt="",
+        context_frame="",
+        channel="cli",
+        message_timestamp=None,
+        media=[str(attachment)],
+    )[-1]
+    text = current["content"]
     assert "read_file(" in text
-    current = {"role": "user", "content": text}
     request = PromptRenderInput(
         session_key="cli:minimal",
         channel="cli",

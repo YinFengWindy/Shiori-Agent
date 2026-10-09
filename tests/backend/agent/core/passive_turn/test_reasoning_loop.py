@@ -10,6 +10,7 @@ separate auxiliary call afterward that degrades quietly on failure.
 """
 
 import json
+from copy import deepcopy
 from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import AsyncMock, Mock
@@ -376,7 +377,7 @@ async def test_empty_reply_recovery_does_not_replay_prior_tool_and_keeps_usage_a
     )
     assert tool.calls == 1
     assert provider.chat.await_count == 3
-    assert provider.chat.call_args_list[-1].kwargs["tools"] == []
+    assert _schema_names(provider.chat.call_args_list[-1]) == ["counter"]
     assert (
         sum(
             m["role"] == "tool"
@@ -409,10 +410,91 @@ async def test_empty_explicit_refusal_does_not_retry(response):
 
 
 @pytest.mark.parametrize("recovering", [False, True])
-async def test_explanatory_refusal_text_is_delivered_without_retrying_it(recovering):
+@pytest.mark.parametrize("refusal_signal", ["content_filter", "refused"])
+@pytest.mark.parametrize("explanatory_text", [False, True])
+async def test_explicit_refusal_never_executes_accompanying_tool_calls(
+    recovering, refusal_signal, explanatory_text
+):
+    from agent.provider import LLMProvider
+
+    def raw_response(content, *, refused=False, calls=()):
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content=content,
+                        tool_calls=list(calls),
+                        refusal=(
+                            "request refused"
+                            if refused and refusal_signal == "refused"
+                            else None
+                        ),
+                    ),
+                    finish_reason=(
+                        "content_filter"
+                        if refused and refusal_signal == "content_filter"
+                        else "stop"
+                    ),
+                )
+            ],
+            usage=None,
+        )
+
+    responses = [raw_response("")] if recovering else []
+    responses.extend(
+        [
+            raw_response(
+                "无法帮助处理此请求。" if explanatory_text else "",
+                refused=True,
+                calls=[
+                    SimpleNamespace(
+                        id="refused-call",
+                        function=SimpleNamespace(name="counter", arguments="{}"),
+                    )
+                ],
+            ),
+            raw_response("must not request a follow-up"),
+        ]
+    )
+    provider = LLMProvider(api_key="test", base_url="https://example.test/v1")
+    transport = AsyncMock(side_effect=responses)
+    provider._create_with_retry = transport
+    tool = CounterTool()
+    tools = ToolRegistry()
+    tools.register(tool, always_on=True)
+    try:
+        with pytest.raises(EmptyReplyError) as caught:
+            await make_reasoner(provider, tools).run(
+                [{"role": "user", "content": "检查"}]
+            )
+        facts = caught.value.diagnostics
+        assert facts["outcome"] == "refused"
+        assert facts["retries"] == int(recovering)
+        assert len(facts["attempts"]) == 1 + int(recovering)
+        assert facts["attempts"][-1]["refused"] is True
+        assert facts["attempts"][-1]["tool_count"] == 1
+        assert tool.calls == 0
+        assert transport.await_count == 1 + int(recovering)
+    finally:
+        await provider.aclose()
+
+
+@pytest.mark.parametrize("recovering", [False, True])
+@pytest.mark.parametrize("refusal_signal", ["content_filter", "refused"])
+async def test_explanatory_refusal_text_is_delivered_without_retrying_it(
+    recovering, refusal_signal
+):
     provider = AsyncMock()
     responses = [LLMResponse(content="", thinking="")] if recovering else []
-    responses.append(LLMResponse(content="无法帮助处理此请求。", refused=True))
+    responses.append(
+        LLMResponse(
+            content="无法帮助处理此请求。",
+            refused=refusal_signal == "refused",
+            finish_reason=(
+                "content_filter" if refusal_signal == "content_filter" else "stop"
+            ),
+        )
+    )
     provider.chat.side_effect = responses
     result = await make_reasoner(provider, ToolRegistry()).run(
         [{"role": "user", "content": "你好"}]
@@ -436,7 +518,7 @@ async def test_recovery_request_failure_propagates_without_successful_fallback(e
     assert provider.chat.await_count == 2
 
 
-async def test_recovery_rejects_unexpected_tools_without_execution():
+async def test_recovery_dispatches_a_tool_before_answering():
     provider = AsyncMock()
     tool = CounterTool()
     tools = ToolRegistry()
@@ -444,12 +526,90 @@ async def test_recovery_rejects_unexpected_tools_without_execution():
     provider.chat.side_effect = [
         LLMResponse(content=""),
         LLMResponse(content="工具正文", tool_calls=[ToolCall("c1", "counter", {})]),
+        LLMResponse(content="读取完成"),
     ]
-    with pytest.raises(EmptyReplyError) as caught:
-        await make_reasoner(provider, tools).run([{"role": "user", "content": "你好"}])
-    assert caught.value.diagnostics["outcome"] == "unexpected_tool_calls"
-    assert tool.calls == 0
-    assert provider.chat.await_count == 2
+    result = await make_reasoner(provider, tools).run(
+        [{"role": "user", "content": "你好"}]
+    )
+    assert result.reply == "读取完成"
+    assert result.metadata["reply_recovery"]["outcome"] == "recovered"
+    assert tool.calls == 1
+    assert provider.chat.await_count == 3
+
+
+async def test_empty_reply_recovers_discovery_and_reads_actual_qq_attachment(tmp_path):
+    from agent.tools.filesystem import ReadFileTool
+    from plugins.qq.backend.read_attachment import ReadAttachmentTool
+    from shiori_sdk.tools import TOOL_ATTACHMENT_SCOPE_KEY, ToolAttachmentScope
+
+    evidence = "SYNTHETIC_ARTICLE_EVIDENCE_758: 自尊来自承认脆弱。"
+    attachment = tmp_path / "article.txt"
+    attachment.write_text(evidence, encoding="utf-8")
+    tools = ToolRegistry()
+    tools.register(ReadFileTool())
+    tools.register(ReadAttachmentTool(tools), external_allowed=True)
+    tools.register(ToolSearchTool(tools), always_on=True, external_allowed=True)
+    sent = []
+
+    async def chat(**kwargs):
+        sent.append(deepcopy(kwargs))
+        step = len(sent)
+        if step == 1:
+            return LLMResponse(content="", total_tokens=10)
+        if step == 2:
+            return LLMResponse(
+                content="",
+                tool_calls=[
+                    ToolCall(
+                        "discover", "tool_search", {"query": "select:read_attachment"}
+                    )
+                ],
+                total_tokens=20,
+            )
+        if step == 3:
+            return LLMResponse(
+                content="",
+                tool_calls=[
+                    ToolCall("read", "read_attachment", {"path": str(attachment)})
+                ],
+                total_tokens=30,
+            )
+        result = next(
+            message["content"]
+            for message in kwargs["messages"]
+            if message.get("tool_call_id") == "read"
+        )
+        assert evidence in result
+        return LLMResponse(content="依据附件：" + result, total_tokens=40)
+
+    provider = AsyncMock()
+    provider.chat.side_effect = chat
+    result = await make_reasoner(provider, tools, tool_search_enabled=True).run(
+        [{"role": "user", "content": "请读取文章后回答"}],
+        external_restricted=True,
+        tool_execution_context={
+            TOOL_ATTACHMENT_SCOPE_KEY: ToolAttachmentScope(
+                channel="qq", paths=(str(attachment),)
+            )
+        },
+    )
+    assert evidence in result.reply
+    assert result.metadata["tools_used"] == ["tool_search", "read_attachment"]
+    assert result.metadata["react_stats"]["total_tokens"] == 100
+    diagnostics = result.metadata["reply_recovery"]
+    assert diagnostics["outcome"] == "recovered"
+    assert [attempt["tool_count"] for attempt in diagnostics["attempts"]] == [0, 1]
+    assert [schema["function"]["name"] for schema in sent[1]["tools"]] == [
+        "tool_search"
+    ]
+    assert [schema["function"]["name"] for schema in sent[2]["tools"]] == [
+        "tool_search",
+        "read_attachment",
+    ]
+    assert all(
+        "read_file" not in [s["function"]["name"] for s in call["tools"]]
+        for call in sent
+    )
 
 
 async def test_recovery_budget_check_stops_before_second_request():
@@ -946,8 +1106,10 @@ def _external_registry() -> tuple[ToolRegistry, CounterTool, CounterTool]:
 
 
 @pytest.mark.parametrize("tool_search_enabled", [True, False])
+@pytest.mark.parametrize("recover", [False, True])
 async def test_external_restricted_turn_hides_and_blocks_undeclared_tools(
     tool_search_enabled,
+    recover,
 ):
     """受限回合：未声明工具不进 schema、tool_search 解锁不了、调用被拦并回提示；
     回合中途新注册的未声明工具同样被排除。"""
@@ -962,7 +1124,7 @@ async def test_external_restricted_turn_hides_and_blocks_undeclared_tools(
 
     allowed.execute = allowed_then_register_late
     provider = AsyncMock()
-    provider.chat.side_effect = [
+    provider.chat.side_effect = ([LLMResponse(content="")] if recover else []) + [
         LLMResponse(
             content="",
             tool_calls=[

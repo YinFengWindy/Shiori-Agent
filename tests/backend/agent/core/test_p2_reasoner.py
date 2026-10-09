@@ -956,7 +956,8 @@ def test_empty_content_with_thinking_triggers_retry_and_succeeds():
     assert result.reply == "正式回复"
     assert result.thinking == "新思考"
     retry_call = provider.calls[1]
-    assert retry_call["tools"] == []
+    assert retry_call["tools"] == provider.calls[0]["tools"]
+    assert [tool["function"]["name"] for tool in retry_call["tools"]] == ["dummy"]
     assert len(provider.calls) == 2
 
 
