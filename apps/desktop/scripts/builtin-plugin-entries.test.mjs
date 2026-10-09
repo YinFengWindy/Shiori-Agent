@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -44,7 +44,7 @@ test("all three registries import only builtins and react to development manifes
 });
 
 test("the Vite client and SSR loaders resolve all registries and exclude external entries", async (t) => {
-  const root = await mkdtemp(join(tmpdir(), "plugin-entries-dev-"));
+  const root = await realpath(await mkdtemp(join(tmpdir(), "plugin-entries-dev-")));
   t.after(() => rm(root, { recursive: true, force: true }));
   const rendererRoot = join(root, "renderer");
   await mkdir(rendererRoot);
