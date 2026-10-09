@@ -84,7 +84,7 @@ The single version source remains
 `packages/sdk/python/shiori_sdk/_version.py`
 (`RUNTIME_API_VERSION = __version__`), synchronized by
 `node scripts/sync_sdk_version.mjs`. The current source batch is **3.1.1**,
-not yet published to npm or PyPI; both still hold **3.1.0**. The former unpublished
+published to both npm and PyPI. The former unpublished
 per-PR increments have been consolidated into this one version. Packages using
 any new API in this batch declare `runtime_api: ">=3.1.1 <4.0.0"` and the matching
 Python SDK minimum; audited packages using only unchanged APIs may keep their
@@ -111,14 +111,15 @@ Python SDK minimum; audited packages using only unchanged APIs may keep their
 | `2.16.0` | SDK `CrossfadeLayers` and `SidebarResizeHandle`; packages importing either require `runtime_api: ">=2.16.0 <3.0.0"`. The host no longer provides NcatBot; external `host_dependencies` declarations requiring it are rejected by the existing missing-dependency check. QQ uses per-account OneBot sockets; `psutil` remains a production dependency. | #576 |
 | `3.0.0` | **breaking**: the unified Shiori SDK. `@shiori/plugin-sdk` becomes `@yinfengwindy/shiori-sdk` (no alias) and shares version and source tree `packages/sdk/` with the Python `shiori-sdk`, which owns plugin-facing Python contracts, lifecycle values and independent test fakes; every 2.x range is rejected with `incompatible_runtime` (see [Runtime API 3.0](#runtime-api-30-unified-shiori-sdk)) | #551 (#585–#591) |
 | `3.1.0` | `shiori_sdk.lifecycle` gains `AfterTurnCtx`, `PHASE_SLOTS` / `require_phase_slot` and `requires` / `produces` on the `LifecycleModule` protocol; packages importing or implementing any of them require `runtime_api: ">=3.1.0 <4.0.0"`. `shiori_sdk.runtime` owns the host's `KNOWN_CAPABILITIES` and manifest `capabilities` validation. `shiori-sdk[testing]`'s `sdk_context` grants only the plugin manifest's (validated) `capabilities` with an isolated temporary `plugin_dir`, and `FakeLifecycle` rejects unknown phase slots like the host. `shiori_sdk.runtime.HostServiceUnavailable` is raised before `setup` when a declared capability's host service is missing, so `workspace` / `session_manager` on the typed contexts are no longer optional. `shiori_sdk.redaction.summarize_llm_output_for_log` moves back to the host (`core.common.llm_output_log`); `redact_secrets` stays in the SDK. Those corrections preceded the first 3.1.0 publication on 2026-10-03 | #620, #622, #624 (#619) |
-| `3.1.1` (registry publication pending) | **breaking** relative to published 3.1.0: removes `SurfaceHandle.voice` and its voice types, and replaces relationship `closeness` with affection. The batch also adds plugin services/native resources, local and managed environments, private settings autosave, role capability dialogs, external turns, terminal chat events and scoped attachment tools. See the complete batch below. | #674/#677, #678, #679, #683/#688, #699/#703, #700/#704, #701/#705, #710/#717, #715/#728, #721/#726, #719/#735, #740/#743, #734/#738, #720/#744, #749/#751, #748/#754, #750/#752, #756/#757; consolidated by #762 |
+| `3.1.1` | **breaking** relative to published 3.1.0: removes `SurfaceHandle.voice` and its voice types, and replaces relationship `closeness` with affection. The batch also adds plugin services/native resources, local and managed environments, private settings autosave, role capability dialogs, external turns, terminal chat events and scoped attachment tools. See the complete batch below. | #674/#677, #678, #679, #683/#688, #699/#703, #700/#704, #701/#705, #710/#717, #715/#728, #721/#726, #719/#735, #740/#743, #734/#738, #720/#744, #749/#751, #748/#754, #750/#752, #756/#757; consolidated by #762 |
 
 ### Unreleased
 
-The current source changes are assigned to the 3.1.1 batch below. Record further
-unassigned contract changes here with their PR references instead of incrementing
-the version per PR. When a batch is finalized, move its notes into one versioned
-entry and synchronize the SDK, host pins and affected plugin minimum ranges.
+No unassigned contract changes. The 3.1.1 batch below is already published to
+both npm and PyPI and must not receive new contract changes.
+Record the next batch here with PR references instead of incrementing the version
+per PR. When it is finalized, move its notes into one versioned entry and
+synchronize the SDK, host pins and affected plugin minimum ranges.
 
 ### 3.1.1 release batch
 

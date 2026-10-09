@@ -1,7 +1,7 @@
 # SDK 发布
 
 SDK 使用同一个版本号发布 `@yinfengwindy/shiori-sdk`（npm）与 `shiori-sdk`（PyPI），仓库当前为
-`3.1.1`（尚未发布到 npm / PyPI，两处注册表最新仍为 `3.1.0`）。此前未发布的
+`3.1.1`（npm 与 PyPI 均已发布）。此前未发布的
 契约改动统一归入 `3.1.1`。本批包含 `SurfaceHandle.voice` 与 `closeness` 等破坏性变更，
 补丁编号不代表兼容；迁移说明见 [SDK README](../../packages/sdk/README.md#compatibility)。
 
