@@ -1,14 +1,14 @@
 # 独立运行 Python 测试
 
 本插件只依赖 `shiori-sdk` 和声明的第三方包。把插件目录复制到仓库外，准备含
-`shiori_sdk-3.1.1` 与 `shiori_plugin_default_memory-0.1.0` wheel 的私有 wheelhouse。
+`shiori_sdk-3.1.1` 与 `shiori_plugin_default_memory-0.1.1` wheel 的私有 wheelhouse。
 无需安装 Shiori 宿主、testkit 或宿主测试支持。
 
 在插件副本目录执行（替换 wheelhouse 为实际绝对路径）：
 
 ```sh
 uv venv .venv --python 3.12
-uv pip install --python .venv --find-links /path/to/wheelhouse --refresh-package shiori-sdk --refresh-package shiori-plugin-default-memory "shiori-plugin-default-memory[test]==0.1.0"
+uv pip install --python .venv --find-links /path/to/wheelhouse --refresh-package shiori-sdk --refresh-package shiori-plugin-default-memory "shiori-plugin-default-memory[test]==0.1.1"
 uv run --no-project --python .venv python -m pytest -c pyproject.toml tests
 ```
 

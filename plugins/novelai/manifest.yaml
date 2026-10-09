@@ -1,8 +1,8 @@
 api: 2
-runtime_api: ">=3.1.12 <4.0.0"
+runtime_api: ">=3.1.1 <4.0.0"
 id: novelai
 display_name: NovelAI 生图
-version: '0.1.0'
+version: '0.1.1'
 default_enabled: false
 desc: NovelAI 生图集成——手动生图、提示词标签库、生成历史、消息图片重生成与自动场景 CG
 capabilities:

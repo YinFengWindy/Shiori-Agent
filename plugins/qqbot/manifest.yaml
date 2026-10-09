@@ -2,7 +2,7 @@ api: 2
 runtime_api: ">=3.1.0 <4.0.0"
 id: qqbot
 display_name: QQBot
-version: '0.1.0'
+version: '0.1.1'
 desc: 官方 QQBot 渠道
 capabilities:
   - channels

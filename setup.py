@@ -74,8 +74,8 @@ setup(
     include_package_data=False,
     install_requires=[
         *requirements,
-        "shiori-sdk==3.1.18",
-        "shiori-plugin-default-memory==0.1.0",
+        "shiori-sdk==3.1.1",
+        "shiori-plugin-default-memory==0.1.1",
     ],
     cmdclass={"build_py": BuildRuntime},
 )

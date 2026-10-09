@@ -25,7 +25,7 @@ type RoleCapabilityCardProps = {
   /** The card's switch (or other control), at the right end of the title row. */
   control?: ReactNode;
   /**
-   * The capability's secondary settings (runtime API 3.1.11, #719). When
+   * The capability's secondary settings (runtime API 3.1.1, #719). When
    * given, a ⚙ button after the control opens them in a centred dialog titled
    * by `title`. They mount on the first open and then stay mounted (hidden
    * while closed) for as long as the card does, so a plugin's pending
@@ -37,7 +37,7 @@ type RoleCapabilityCardProps = {
   settings?: ReactNode;
   /**
    * Called when the settings dialog opens (true) or closes (false) (runtime
-   * API 3.1.14, #720). The content stays mounted while closed, so a plugin
+   * API 3.1.1, #720). The content stays mounted while closed, so a plugin
    * that autosaves uses the close to submit its last edit at once.
    */
   onSettingsOpenChange?: (open: boolean) => void;

@@ -183,7 +183,7 @@ def test_host_advertises_runtime_api_with_shared_visual_components():
 
 
 def test_lower_bound_one_patch_above_the_host_is_rejected(contract_package):
-    # Contract changes bump only the patch, so the next patch must already be gated.
+    # A package requiring a future release must be gated, even one patch ahead.
     major, minor, patch = HostRuntimeContract().runtime_api.split(".")
     declared = f">={major}.{minor}.{int(patch) + 1} <{int(major) + 1}.0.0"
     _change(contract_package, runtime_api=declared)
@@ -198,14 +198,17 @@ def test_explicit_cross_major_compatibility_is_accepted(contract_package):
     assert validate_package(contract_package).runtime_api == ">=2.16.0 <4.0.0"
 
 
-def test_repository_plugin_declarations_admit_the_installed_sdk():
+def test_repository_plugin_declarations_admit_the_installed_sdk_and_siblings():
     import tomllib
     from packaging.requirements import Requirement
+    from packaging.utils import canonicalize_name
     from bootstrap.paths import plugin_roots
     from agent.plugin_host.manifest import load_manifest
     from agent.plugin_host.package_schema import compatible_range
 
     runtime = HostRuntimeContract().runtime_api
+    projects: dict[str, str] = {}
+    dependencies: dict[str, list[Requirement]] = {}
     for root in plugin_roots():
         for directory in root.iterdir():
             if not (directory / "manifest.yaml").is_file():
@@ -218,6 +221,9 @@ def test_repository_plugin_declarations_admit_the_installed_sdk():
             project = tomllib.loads(
                 (directory / "pyproject.toml").read_text(encoding="utf-8")
             )["project"]
+            assert manifest.version == project["version"], directory.name
+            name = canonicalize_name(project["name"])
+            projects[name] = project["version"]
             requirements = [
                 *project["dependencies"],
                 *project.get("optional-dependencies", {}).get("test", []),
@@ -230,3 +236,12 @@ def test_repository_plugin_declarations_admit_the_installed_sdk():
             assert sdk and all(
                 runtime in requirement.specifier for requirement in sdk
             ), directory.name
+            dependencies[name] = [Requirement(value) for value in requirements]
+
+    # Real package pins must resolve to the sibling wheels built for this release.
+    for name, requirements in dependencies.items():
+        for requirement in requirements:
+            sibling = canonicalize_name(requirement.name)
+            if sibling.startswith("shiori-plugin-"):
+                assert sibling in projects, (name, requirement)
+                assert projects[sibling] in requirement.specifier, (name, requirement)

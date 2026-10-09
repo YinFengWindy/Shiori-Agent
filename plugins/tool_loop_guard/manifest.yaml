@@ -3,7 +3,7 @@ runtime_api: ">=3.1.0 <4.0.0"
 id: tool_loop_guard
 category: system
 display_name: 工具循环收尾
-version: '0.1.0'
+version: '0.1.1'
 desc: 检测连续重复的工具调用并提前截断
 capabilities:
   - tool_hooks

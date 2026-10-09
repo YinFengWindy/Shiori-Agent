@@ -3,7 +3,7 @@ runtime_api: ">=3.1.0 <4.0.0"
 id: observe
 display_name: 运行遥测
 category: system
-version: 0.1.0
+version: 0.1.1
 desc: 零埋点全链路遥测采集（turn trace / RAG 检索 / 记忆写入 / 全局错误）
 capabilities:
   - workspace

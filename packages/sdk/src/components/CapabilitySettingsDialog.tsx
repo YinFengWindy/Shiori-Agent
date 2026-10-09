@@ -9,13 +9,13 @@ type CapabilitySettingsDialogProps = {
   title: string;
   /** The capability's secondary settings; mounted on first open, then kept (see `RoleCapabilityCard.settings`). */
   children: ReactNode;
-  /** Called with each open and close (runtime API 3.1.14), e.g. to commit a pending autosave on close. */
+  /** Called with each open and close (runtime API 3.1.1), e.g. to commit a pending autosave on close. */
   onOpenChange?: (open: boolean) => void;
 };
 
 /**
  * The ⚙ button of a role capability card and the centred, medium-width dialog
- * it opens (runtime API 3.1.11, #719). Base UI owns the modal behaviour:
+ * it opens (runtime API 3.1.1, #719). Base UI owns the modal behaviour:
  * focus moves into the dialog and returns to the ⚙ on close, Escape and the
  * backdrop dismiss it. A long body scrolls inside the dialog while the title
  * row stays put. The dialog never saves or discards anything itself.

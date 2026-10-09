@@ -2,7 +2,7 @@ api: 2
 runtime_api: ">=3.1.0 <4.0.0"
 id: telegram
 display_name: Telegram
-version: '0.1.0'
+version: '0.1.1'
 desc: Telegram Bot 渠道
 capabilities:
   - channels

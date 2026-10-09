@@ -39,7 +39,7 @@ and renderer declaration keys are rejected. This table defines the v1 fields:
 | `api` | yes | integer `2` |
 | `id` | yes | `[a-z][a-z0-9_-]{0,63}` |
 | `version` | yes | full SemVer 2.0 string, including optional prerelease/build |
-| `runtime_api` | yes | compatibility range; host currently advertises `3.1.18` |
+| `runtime_api` | yes | compatibility range; host currently advertises `3.1.1` |
 | `entry` | yes | explicit package-relative `.py` backend entry |
 | `capabilities` | yes | existing v2 capability-name list, including `[]` |
 | `channels` | no | static channel declarations (Runtime API 2.2); requires the `channels` capability |
@@ -52,7 +52,7 @@ and renderer declaration keys are rejected. This table defines the v1 fields:
 | `dependencies`, `optional_dependencies` | no | existing strong/optional plugin ID lists |
 | `supports_hot_unload` | no | existing boolean, default `true` |
 | `desc`, `author`, `config_model` | no | existing v2 descriptive/configuration metadata |
-| `display_name`, `category`, `default_enabled` | no | same meaning and validation as for bundled plugins (see the plugin tutorial): title, `feature` / `channel` / `system` group, strict boolean default enablement; accepted since Runtime API 3.1.2 (#678), older hosts reject the unknown keys |
+| `display_name`, `category`, `default_enabled` | no | same meaning and validation as for bundled plugins (see the plugin tutorial): title, `feature` / `channel` / `system` group, strict boolean default enablement; accepted since Runtime API 3.1.1 (#678), older hosts reject the unknown keys |
 | `distribution` | no | `builtin` (default) or `external`; see [External source packages in the repository](#external-source-packages-in-the-repository-675) |
 
 There is one backend entry in v1. Each renderer kind may declare one entry. Every
@@ -72,15 +72,23 @@ mentioning a prerelease of that same major/minor/patch tuple.
 
 ## Runtime API version history
 
-Every PR that changes the SDK / runtime API contract on `main` bumps the patch
-number once. This applies to additions and to breaking changes alike;
-breaking changes are marked **breaking** in the table below. The maintainer picks the major and minor numbers when publishing the
-SDK. A package declares the lowest version whose additions it uses.
+Ordinary SDK / runtime contract PRs accumulate in [Unreleased](#unreleased),
+with a description, **breaking** markers where applicable and PR references.
+They do not increment the version individually. Before publishing the SDK or a
+desktop release containing new contracts, the maintainer compares the whole batch
+with the last published contract and assigns its version once. A contract already
+shipped inside a desktop release is published even if the registries still lag;
+its version must not be reused for subsequent contract changes.
 
-The single version source is `packages/sdk/python/shiori_sdk/_version.py`
-(`RUNTIME_API_VERSION = __version__`), synchronized to the other packages by
-`node scripts/sync_sdk_version.mjs`. 3.1.1–3.1.18 are unpublished contract
-changes on `main`; npm and PyPI hold 3.1.0.
+The single version source remains
+`packages/sdk/python/shiori_sdk/_version.py`
+(`RUNTIME_API_VERSION = __version__`), synchronized by
+`node scripts/sync_sdk_version.mjs`. The current source batch is **3.1.1**,
+not yet published to npm or PyPI; both still hold **3.1.0**. The former unpublished
+per-PR increments have been consolidated into this one version. Packages using
+any new API in this batch declare `runtime_api: ">=3.1.1 <4.0.0"` and the matching
+Python SDK minimum; audited packages using only unchanged APIs may keep their
+3.1.0 minimum. **The selected patch number does not imply backward compatibility.**
 
 | Version | Adds | Introduced by |
 | --- | --- | --- |
@@ -103,24 +111,188 @@ changes on `main`; npm and PyPI hold 3.1.0.
 | `2.16.0` | SDK `CrossfadeLayers` and `SidebarResizeHandle`; packages importing either require `runtime_api: ">=2.16.0 <3.0.0"`. The host no longer provides NcatBot; external `host_dependencies` declarations requiring it are rejected by the existing missing-dependency check. QQ uses per-account OneBot sockets; `psutil` remains a production dependency. | #576 |
 | `3.0.0` | **breaking**: the unified Shiori SDK. `@shiori/plugin-sdk` becomes `@yinfengwindy/shiori-sdk` (no alias) and shares version and source tree `packages/sdk/` with the Python `shiori-sdk`, which owns plugin-facing Python contracts, lifecycle values and independent test fakes; every 2.x range is rejected with `incompatible_runtime` (see [Runtime API 3.0](#runtime-api-30-unified-shiori-sdk)) | #551 (#585–#591) |
 | `3.1.0` | `shiori_sdk.lifecycle` gains `AfterTurnCtx`, `PHASE_SLOTS` / `require_phase_slot` and `requires` / `produces` on the `LifecycleModule` protocol; packages importing or implementing any of them require `runtime_api: ">=3.1.0 <4.0.0"`. `shiori_sdk.runtime` owns the host's `KNOWN_CAPABILITIES` and manifest `capabilities` validation. `shiori-sdk[testing]`'s `sdk_context` grants only the plugin manifest's (validated) `capabilities` with an isolated temporary `plugin_dir`, and `FakeLifecycle` rejects unknown phase slots like the host. `shiori_sdk.runtime.HostServiceUnavailable` is raised before `setup` when a declared capability's host service is missing, so `workspace` / `session_manager` on the typed contexts are no longer optional. `shiori_sdk.redaction.summarize_llm_output_for_log` moves back to the host (`core.common.llm_output_log`); `redact_secrets` stays in the SDK. Those corrections preceded the first 3.1.0 publication on 2026-10-03 | #620, #622, #624 (#619) |
-| `3.1.1` | **breaking**: removes the published 3.1.0 `SurfaceHandle.voice` API and host speech business. Adds generic `services` publication/discovery/calls, pure ASR/TTS values, scoped native capture/playback/key capabilities and autonomous role UI. Desktop pet owns preferences and orchestration and requires at least `3.1.1`. Other bundled plugins retain their `>=3.1.0 <4.0.0` range after a compatibility audit. The range check does not reject an external package that still uses the removed API; such a package must migrate and declare `>=3.1.1 <4.0.0`. | #674 (#677) |
-| `3.1.2` | SDK `usePrivateDraft` (plugin-owned document loading, dirty state and explicit save) and the Python local-service utilities `shiori_sdk.files.audio.pcm_wav_duration`, `shiori_sdk.files.staging.staged_import_file` and `shiori_sdk.local_http.loopback_http_url`, and the manifest key `distribution: external` (repository sources delivered through ZIP installation; older hosts reject the unknown key); packages using any of them require `runtime_api: ">=3.1.2 <4.0.0"` | #678 (#675) |
-| `3.1.3` | `shiori_sdk.managed` (fixed artifact acquisition, atomic installation, owned processes and background runtime operations, `register_runtime_rpc`), `shiori_sdk.files.lease` and the renderer `ManagedRuntimePanel` / `useManagedRuntime`; packages using any of them require `runtime_api: ">=3.1.3 <4.0.0"` | #679 (#676) |
-| `3.1.4` | SDK `usePrivateAutosave` (plugin-owned document autosave on the host's serial draft queue), the host settings layout (`SettingsField`, `SettingsToggleField`, `SettingsGroup`, `SettingsSectionCard`, `settingsInputClass`, `settingsGroupStackClass`) and `host.ui.SettingsSavedStatus` (the settings page corner 「已保存」 mark); packages using any of them require `runtime_api: ">=3.1.4 <4.0.0"` | #683 (#682), on `main` via #688 (unpublished) |
-| `3.1.5` | `host.pickFilePaths` (native file selection returned by original path, no copy) and `host.pickDirectory` (native directory selection that may create one), with the SDK type `NativeFilePathPickerOptions` and both in `createFakeHostServices`; packages using either require `runtime_api: ">=3.1.5 <4.0.0"` (see [Runtime API 3.1.5 native path pickers](#runtime-api-315-native-path-pickers)) | #699 (#697), on `main` via #703 |
-| `3.1.6` | managed-runtime hygiene: `register_runtime_rpc` adds `runtime.remove` and `ManagedRuntime.remove()` (background deletion of installed versions, pointer, caches and staging, also with nothing installed; only while no task runs and no service of any generation runs; lock and log files stay; status phase `removing`); status gains `reclaimable` (bytes of kept downloads) and `staging` (leftover unfinished preparation files); a cleanup failure after publication is reported in `error` while the published version keeps its phase; a published preparation deletes the download cache and other version directories, while failure or cancellation keeps the cache for resumption; removal and that cleanup are joined, not abandoned, on cancellation; `Installation(..., installed_size=)` declares the bytes of one prepared version, and preparation fails before any copy when the root's volume has less free space than the missing artifact bytes + `installed_size` + max(1 GiB, 5%) (reported in GiB); `run_owned` / `OwnedChild` decode each child's output incrementally (UTF-8, else the Windows ANSI code page) into UTF-8 logs, end lines at CR, LF or CRLF and name the last meaningful line in a preparation failure or early service exit; `Processes.spawn` accepts `asyncio.subprocess` constants for `stdout` / `stderr`; the renderer `ManagedRuntimePanel` offers 「删除环境」 behind a destructive `host.ui.ConfirmDialog` and `useManagedRuntime` exports `ManagedRuntimeAction`; packages using any of them require `runtime_api: ">=3.1.6 <4.0.0"` | #700 (#697), on `main` via #704 |
-| `3.1.7` | **breaking** managed-runtime install location and in-place import: `Installation` separates the state root (plugin data: `current.json`, new `location.json`, locks, logs, provider files) from an `install_root` holding downloads, `s/` staging, `v/` versions and child `tmp/` / `cache/` (plus provider-declared `Installation(..., scratch=)` directories); `Installation.relocate(root | None)` / `ManagedRuntime.relocate()` / RPC `runtime.relocate {directory?}` (a dedicated `<namespace>` directory, matched case-insensitively on Windows, inside an existing directory on a drive letter — UNC and device-namespace (`\\?\`, `\\.\`) paths are rejected; no `directory` restores the default) only while nothing is installed or kept and no task runs, and never into a directory already holding installation entries; the location persists across generations and the service identity (`OwnedService.root`) stays the state root; `current.json` records the absolute install root only for a chosen location (a default installation follows plugin data when it moves); an unreadable `location.json` is reported in status `error` and is replaced by `relocate` while no pointer exists, or reset by removal; `runtime.prepare {source}` takes the user's original absolute path (`host.pickFilePaths`), checks a regular file reached without any link or junction, its suffix and, for a single artifact, its exact size, verifies SHA-256 while reading it before any build, and never copies, moves or deletes it (a ZIP bundle's members are extracted into staging); the free-space check uses the install root's volume and counts an in-place import as 0 bytes; **breaking** Python API: the build callback becomes `build(staging, resources)` with each artifact's verified path; `acquire_resources` returns that name → path mapping; `acquire_artifact` loses `source=` (single originals are checked in place by the new `verify_file`); `ManagedRuntime(..., import_asset=)` replaces `register_runtime_rpc(import_asset=)` and `submit(..., import_asset)`; `register_runtime_rpc` drops `max_bytes`; status gains `location`, `customized`, `required` (download), `required_import` (the provider's import), `free`, `removable` and `relocatable` — exactly what blocks relocation is `removable`; removal deletes only installation entries of the install root (links and junctions are unlinked, never entered), and the chosen dedicated directory once empty, keeping every state-root file; an empty staging parent is removed after each preparation; `ManagedRuntimePanel` drops its `namespace` prop (**breaking**), imports through `host.pickFilePaths`, shows the location with the download / import requirement and free space (only free space once installed), offers 「更改位置」 through `host.pickDirectory` and 「恢复默认」 for a chosen location, and shows 「删除环境」 whenever `removable`; `useManagedRuntime` returns `relocate(directory?)`; packages using any of them require `runtime_api: ">=3.1.7 <4.0.0"` | #701 (#697), on `main` via #705 |
-| `3.1.8` | role affection summary: the renderer domain types gain `AffectionStageName` (`"陌生" \| "熟悉" \| "朋友" \| "亲密" \| "挚爱"`) and `AffectionSummary` (`value` 0–100, `stage`, `progress` 0–1 within the stage); `RoleRecord.affection` and `SessionPayload.metadata.affection` carry it once the role's first conversation has initialized affection and are absent before; packages reading them require `runtime_api: ">=3.1.8 <4.0.0"` | #710 (#708) |
-| `3.1.9` | **breaking**: relationship snapshots no longer carry `closeness`; `RelationshipSnapshot.internal_profile.relation_state` becomes the new `RelationState` (`dependence`, `security`, `initiative_desire`, `neglect_sensitivity`, each 0–1) instead of `Record<string, number>`, and a stored snapshot's legacy `closeness` is dropped on read. Loneliness growth and the relationship proactive motive now require affection ≥ 60 (the 「亲密」 stage lower bound) and never trigger while affection is uninitialized. Packages that read `closeness` must use `AffectionSummary` and declare `runtime_api: ">=3.1.9 <4.0.0"` | #715 (#708) |
-| `3.1.10` | the `external_turns` capability: `ctx.external_turns.submit(ExternalTurnMessage(role_id, platform, conversation_id, conversation_title, sender_id, sender_name, message_id, text))` runs one message from a source that is not a channel account as an external-context group turn of the role in the thread of that conversation (the title names it in the phone) and returns `ExternalTurnResult` with status `replied` (and the reply text), `busy` (the role holds or awaits other work; nothing ran or was stored) or `duplicate` (the conversation already holds `message_id`); the turn never queues, never dispatches outbound and is not interruptible through the role session; `platform` may not be `desktop` or a running channel; SDK `shiori_sdk.external_turns` and `shiori_sdk.testing.external_turns.FakeExternalTurns`; packages using it require `runtime_api: ">=3.1.10 <4.0.0"` (see [Runtime API 3.1.10 external turns](#runtime-api-3110-external-turns)) | #721 (#292) |
-| `3.1.11` | `RoleCapabilityCard` takes an optional `settings` node: the card then shows a ⚙ button after its control that opens a centred, medium-width dialog titled by the card's `title`, with a scrolling body; Escape, the backdrop and the close button dismiss it and focus returns to the ⚙. `settings` mounts on the first open and then stays mounted (hidden while closed) as long as the card, so a pending autosave or failed-save retry survives closing; mounting writes nothing. The dialog saves nothing itself: role fields inside still follow the role editor's Save/Reset, plugin-private settings their own autosave. `PluginRoleSettingsProps` gains `roleId` (null for a new role) and `client` (the plugin's scoped RPC client), and `role.settings` components now render under `PluginHostServicesProvider` and remount per role, so a card's dialog can own plugin-private settings with `usePrivateAutosave`. No new peer export; packages using either require `runtime_api: ">=3.1.11 <4.0.0"` | #719 (#718) |
-| `3.1.12` | host/plugin calls to `message_push.execute(...)` accept the optional strict boolean `push_proactive` (default `True`). `False` records supplemental text/images as non-proactive in desktop and external conversations; desktop supplements do not update proactive presence, awaiting-reply state or relationship cooldown. The tool registry takes this field only from host execution context, never model arguments; it is absent from the model schema. A `False` call containing a nonblank `file` is rejected before any payload is sent. Existing calls and legacy senders retain their behavior. NovelAI automatic scene CG opts out of proactive bookkeeping; packages using the flag require `runtime_api: ">=3.1.12 <4.0.0"`. | #740 |
-| `3.1.13` | host event `chat.cancelled` (`{session_key, turn_id}`): a desktop chat turn cancelled by `chat.cancel` or by bridge shutdown now ends with it, so while the bridge connection is open every accepted turn ends with exactly one of `chat.done`, `chat.error` or `chat.cancelled` (subscribe with `ctx.hostEvents.on("chat.cancelled", ...)`); a turn-id cancel first persists the partial reply and announces it with `session.updated`. SDK `chatTerminalEventMethods`, `isChatTerminalEvent` and type `ChatTerminalEventMethod` name that set; packages relying on any of it require `runtime_api: ">=3.1.13 <4.0.0"` | #734 (#292) |
-| `3.1.14` | `PluginRoleSettingsProps` gains `moodCatalog` (the edited role draft's moods, as `PluginRoleUiProps.role.moodCatalog`), so a `role.settings` card can offer per-mood settings; a card may declare `storage: "plugin"` with `read: () => ({})` to own no role draft values at all and keep only plugin-private, autosaved settings in its dialog (as `gpt_sovits_tts` now does instead of `roleUi`). `RoleCapabilityCard` takes an optional `onSettingsOpenChange(open)` (and `CapabilitySettingsDialog` an `onOpenChange`), called on each open and close of the settings dialog; since the content stays mounted while closed, an autosaving plugin commits its last edit on close. `compactIconButtonClass` (the borderless 28px icon-only button) moves from `host-internal` to the main SDK entry and the renderer peer exports. Packages using any of them require `runtime_api: ">=3.1.14 <4.0.0"` | #720 (#718) |
-| `3.1.15` | affection range becomes -100–100: `AffectionStageName` gains the negative stages `"厌恶"` (-100 to -50) and `"冷淡"` (-49 to -1) below the unchanged `"陌生"` 0–19 … `"挚爱"` 80–100, so `AffectionSummary.value` and the stage-guidance list (`roles.affection.stagePrompts.*`, now 7 stages from lowest to highest) may carry them; `progress` stays 0–1 within the stage. The stage floor only applies once 「熟悉」 or above has been reached, so a 「陌生」 role can drop into the negative stages; decay never makes affection negative. Code that switches exhaustively over the stage names must handle the two new ones; packages relying on them require `runtime_api: ">=3.1.15 <4.0.0"` | #749 (#708) |
-| `3.1.16` | `AffectionSummary` gains `floor` (`number \| null`): the stage floor the value can no longer drop below, the start of the highest stage reached from 「熟悉」 up (20 / 40 / 60 / 80), or `null` while there is none; `RoleRecord.affection`, `SessionPayload.metadata.affection` and the `affection` of `roles.affection.history` carry it. Packages reading it require `runtime_api: ">=3.1.16 <4.0.0"` | #748 |
-| `3.1.17` | **breaking**: removes the `roleUi` contribution (`mode: "self-managed"`, added in 3.1.1 and never published) together with the SDK types `PluginRoleUiProps` / `PluginRoleUiContribution`; no bundled plugin used it after #720. Also removes the SDK hook `usePrivateDraft` (added in 3.1.2, never published, no remaining caller) from the main entry and the renderer peer exports: a precompiled plugin importing it fails to link, and plugin-owned documents use `usePrivateAutosave` instead. A `ui` module that still declares `roleUi` fails export validation with a message naming the retired field; role-scoped plugin settings belong on a `roleSettings` card (with `storage: "plugin"` and its dialog's own autosave for plugin-private documents). The role editor's unsaved-changes guard now covers only the host role draft (role fields and `roleSettings` values). No new peer export; the declared range of existing packages is unaffected unless they used `roleUi` or `usePrivateDraft` | #750 |
-| `3.1.18` | `ChannelPluginContext.tools` allows channel plugins with the `tools` capability to register scoped tools. `shiori_sdk.tools.ToolAttachmentScope(channel, paths)` and `TOOL_ATTACHMENT_SCOPE_KEY` carry an immutable, host-created snapshot of only the current inbound turn's received and explicitly quoted attachments; only consumers protecting the key with `Tool.context_precedence` receive it and must deny a missing scope, and enforce their own channel and file policies. `shiori_sdk.messages.TEXT_ATTACHMENT_TOOL_KEY` selects a plugin-owned reader hint in inbound metadata without granting access; the default remains `read_file`. `with_reply_quote` distinguishes quoted files from images and retains mixed attachment order. `HttpGet.get` and `ChannelHttp.request` accept `max_response_bytes`; the nonnegative cap checks Content-Length and streamed decoded bytes (including redirect bodies), closes oversized responses without retry, and raises `shiori_sdk.http.ResponseTooLarge` with `max_response_bytes`. Omitting the cap preserves existing behavior; SDK HTTP fakes follow the same contract. Packages using these APIs require `runtime_api: ">=3.1.18 <4.0.0"`. | #756 |
+| `3.1.1` (registry publication pending) | **breaking** relative to published 3.1.0: removes `SurfaceHandle.voice` and its voice types, and replaces relationship `closeness` with affection. The batch also adds plugin services/native resources, local and managed environments, private settings autosave, role capability dialogs, external turns, terminal chat events and scoped attachment tools. See the complete batch below. | #674/#677, #678, #679, #683/#688, #699/#703, #700/#704, #701/#705, #710/#717, #715/#728, #721/#726, #719/#735, #740/#743, #734/#738, #720/#744, #749/#751, #748/#754, #750/#752, #756/#757; consolidated by #762 |
+
+### Unreleased
+
+The current source changes are assigned to the 3.1.1 batch below. Record further
+unassigned contract changes here with their PR references instead of incrementing
+the version per PR. When a batch is finalized, move its notes into one versioned
+entry and synchronize the SDK, host pins and affected plugin minimum ranges.
+
+### 3.1.1 release batch
+
+All APIs in the following themes share the same 3.1.1 minimum. The intermediate
+development increments were never individually published.
+
+#### Published API migrations
+
+**Breaking — surface voice (#674/#677).** The published 3.1.0
+`SurfaceHandle.voice`, `SurfaceVoice`, `SurfaceVoiceGesture`, `VoiceStatePayload`
+and `VoiceInputSource` are removed. The host no longer owns speech orchestration.
+Plugins use their own surface/background messages and scoped native resources;
+desktop pet owns preferences and orchestration. The range checker alone still
+accepts an old `>=3.1.0 <4.0.0` package, so an affected external package must
+migrate, rebuild and require 3.1.1; this is not automatic compatibility.
+
+**Breaking — relationship state (#715/#728).** Relationship snapshots no longer
+carry `closeness`; it is dropped when reading stored snapshots.
+`RelationshipSnapshot.internal_profile.relation_state` uses the explicit
+`RelationState` fields (`dependence`, `security`, `initiative_desire`,
+`neglect_sensitivity`, each 0–1), replacing `Record<string, number>`. Consumers of
+closeness must use the role's `AffectionSummary`. Loneliness growth and the
+relationship proactive motive require initialized affection of at least 60
+(the start of 「亲密」).
+
+#### Services, native resources and local utilities
+
+Generic `services` publication/discovery/calls, pure ASR/TTS wire values, scoped
+native capture/playback/key capabilities and background chat replace host speech
+business (#674/#677); see [plugin services](#runtime-api-311-plugin-services-native-resources-and-background-chat).
+Local utilities are `shiori_sdk.files.audio.pcm_wav_duration`,
+`shiori_sdk.files.staging.staged_import_file` and
+`shiori_sdk.local_http.loopback_http_url` (#678/#675).
+
+External Package Contract v1 accepts `display_name`, `category`,
+`default_enabled` and `distribution: external` (#678): the latter identifies
+repository sources delivered by normal ZIP installation. Older hosts reject the
+new metadata keys.
+
+#### Private managed environments and native pickers
+
+`shiori_sdk.managed` provides fixed artifact acquisition, atomic installation,
+owned processes, background operations and `register_runtime_rpc`;
+`shiori_sdk.files.lease`, `ManagedRuntimePanel` and `useManagedRuntime` complete
+the opt-in backend/renderer boundary (#679/#676). Providers retain model,
+installation and orchestration policy. `host.pickFilePaths` returns the user's
+original file paths without copying; `host.pickDirectory` returns a chosen native
+directory and may create one. `NativeFilePathPickerOptions` and both helpers are
+available in the SDK/fakes (#699/#703).
+
+Environment hygiene (#700/#704) adds `ManagedRuntime.remove()` / `runtime.remove`
+and the `removing` phase. Removal requires no active task or service in any
+generation; it also works without an installed version. Status reports
+`reclaimable` cached download bytes and `staging` leftovers. Successful preparation
+cleans downloads and other versions; failed/cancelled preparation retains its
+cache. Cleanup failures appear in status `error` without undoing publication.
+Removal/cleanup are joined on cancellation. `Installation(..., installed_size=)`
+checks free space before copying: missing artifact bytes + installed bytes +
+max(1 GiB, 5%). `run_owned` / `OwnedChild` incrementally decode UTF-8, otherwise
+Windows ANSI, into UTF-8 logs, split CR/LF/CRLF, and include the last meaningful
+line in preparation/early service failures. `Processes.spawn` accepts asyncio
+subprocess constants for stdout/stderr.
+
+The finalized install-location contract (#701/#705) separates a persistent state
+root (`current.json`, `location.json`, locks, logs, provider files) from
+`install_root` (downloads, `s/`, `v/`, child tmp/cache and provider-declared
+`scratch` directories). `Installation.relocate(root | None)` /
+`ManagedRuntime.relocate()` / `runtime.relocate {directory?}` select a dedicated
+namespace directory inside an existing local drive directory, only while nothing
+is installed/kept and no task runs. UNC/device namespace paths and nonempty target
+installations are rejected; Windows namespace matching is case-insensitive.
+Omitting the directory restores the default. Location survives generations while
+`OwnedService.root` remains the state root. A custom pointer records its absolute
+install root; a default follows moved plugin data. An unreadable location is
+reported in `error`, repairable by relocation without a pointer or by removal.
+Removal unlinks links/junctions without following them, removes only installation
+entries and an empty custom root, and retains every state-root file.
+
+`runtime.prepare {source}` verifies a regular original absolute file without
+links/junctions, its suffix, exact size for a single artifact, and SHA-256 before
+building. It never copies, moves or deletes that original; resource ZIP members
+are extracted to staging. Free space is measured on the install volume; an
+in-place single-file import needs no download-copy bytes. The build callback is
+`build(staging, resources)`, with a name-to-verified-path mapping also returned by
+`acquire_resources`. `verify_file` verifies original single files;
+`acquire_artifact` has no `source` argument. `ManagedRuntime(..., import_asset=)`
+owns import selection; neither `register_runtime_rpc` nor `submit` takes it,
+and `register_runtime_rpc` has no `max_bytes` parameter.
+
+Status includes `location`, `customized`, `required`, `required_import`, `free`,
+`removable` and `relocatable`. `ManagedRuntimePanel` has no `namespace` prop; it
+shows installation location and space, imports with `host.pickFilePaths`, offers
+location/reset controls and confirms destructive removal through the host.
+`useManagedRuntime` exposes `ManagedRuntimeAction` and `relocate(directory?)`.
+These final signatures supersede earlier workspace-only experiments; those
+intermediate managed APIs were never published.
+
+#### Private settings and role capability cards
+
+`usePrivateAutosave`, `SettingsField`, `SettingsToggleField`, `SettingsGroup`,
+`SettingsSectionCard`, `settingsInputClass`, `settingsGroupStackClass` and
+`host.ui.SettingsSavedStatus` provide plugin document autosave and the host
+settings layout (#683/#688).
+
+`RoleCapabilityCard.settings` opens the card's medium-width settings dialog;
+Escape, backdrop and close button dismiss it and return focus to the trigger.
+Its contents mount on first open and stay mounted while closed, preserving
+pending autosave/retry; mounting itself writes nothing. The dialog does not own
+a save transaction. `PluginRoleSettingsProps` supplies `roleId` (null for a new
+role), scoped `client` and `moodCatalog`; role settings render under
+`PluginHostServicesProvider` and remount per role. `storage: "plugin"` with
+`read: () => ({})` keeps private settings out of the host role draft.
+`RoleCapabilityCard.onSettingsOpenChange` /
+`CapabilitySettingsDialog.onOpenChange` let a plugin flush autosave on close.
+`compactIconButtonClass` is exported from the main SDK and renderer peer
+(#719/#735, #720/#744).
+
+The experimental `roleUi` contribution, `PluginRoleUiProps` /
+`PluginRoleUiContribution` and `usePrivateDraft` were removed before publication
+(#750/#752). They are not available in this release batch. A UI declaring
+`roleUi` fails export validation; a precompiled import of `usePrivateDraft` fails
+to link. Migrate workspace builds to `roleSettings` and `usePrivateAutosave`.
+The role editor's unsaved-change guard covers only the host role draft.
+
+#### Affection values
+
+`AffectionSummary` is available on `RoleRecord.affection`, session metadata and
+`roles.affection.history`. It is absent before the first conversation initializes
+affection. `value` is -100–100; `AffectionStageName` has seven stages: 「厌恶」
+(-100 to -50), 「冷淡」 (-49 to -1), 「陌生」 (0–19), 「熟悉」 (20–39),
+「朋友」 (40–59), 「亲密」 (60–79), 「挚爱」 (80–100). `progress` is 0–1
+within the current stage. `floor` is the highest reached stage's start from
+「熟悉」 up (20/40/60/80), or null before any such stage; a 「陌生」 role may
+fall negative, while decay never makes affection negative. Consumers must handle
+all seven stages (#710/#717, #749/#751, #748/#754).
+
+#### External turns, message supplements and terminal chat events
+
+`external_turns` adds `ctx.external_turns.submit(ExternalTurnMessage(...))` and
+`ExternalTurnResult` (`replied` with text, `busy`, `duplicate`) plus
+`FakeExternalTurns`. It runs a non-channel source message as the role's external
+context group turn in that conversation's thread, never queues or sends to a
+channel, and disallows desktop/running-channel platform identities; role-session
+interrupt does not cancel it (#721/#726). See [external turns](#runtime-api-311-external-turns).
+
+`message_push.execute(..., push_proactive=False)` records supplemental text/images
+as non-proactive, without desktop presence/awaiting-reply/relationship cooldown
+updates. The strict boolean defaults to true and comes only from host execution
+context, never model arguments/schema. False with a nonblank `file` is rejected
+before sending; old callers/senders retain behavior (#740/#743).
+
+`chat.cancelled` (`{session_key, turn_id}`) ends desktop turns cancelled by
+`chat.cancel` or bridge shutdown. While connected, each accepted turn has exactly
+one terminal event: `chat.done`, `chat.error` or `chat.cancelled`. A turn-id cancel
+persists partial output and emits `session.updated` first. The SDK exports
+`chatTerminalEventMethods`, `isChatTerminalEvent` and `ChatTerminalEventMethod`
+(#734/#738).
+
+#### Channel attachment tools and bounded HTTP
+
+`ChannelPluginContext.tools` allows channels declaring `tools` to register scoped
+tools. `ToolAttachmentScope(channel, paths)` and `TOOL_ATTACHMENT_SCOPE_KEY`
+carry the host-created immutable snapshot of the current turn's received and
+explicitly quoted attachments. Consumers must protect the key using
+`Tool.context_precedence`, reject missing scope, and enforce channel/file policy.
+`TEXT_ATTACHMENT_TOOL_KEY` selects a plugin-owned inbound reader hint without
+granting access (default: `read_file`). `with_reply_quote` distinguishes quoted
+files from images and preserves mixed attachment order (#756/#757).
+
+`HttpGet.get` / `ChannelHttp.request` accept `max_response_bytes`: a nonnegative
+cap checks Content-Length and streamed decoded bytes, including redirects,
+closes oversized responses without retry and raises `ResponseTooLarge` with
+`max_response_bytes`. Omitting the cap preserves behavior; HTTP fakes implement
+the same contract (#756/#757).
 
 2.2 and 2.3 first ship together in the release that turns every external
 channel into a plugin (#363): no released host advertises 2.2 alone, and
@@ -294,7 +466,7 @@ failures read like the host's and can be fronted by the host mascot 吟风:
   `layout?: "row" | "strip" | "card"`, `glyph?` / `glyphTone?: "danger" |
   "accent"` (the plain glyph), `role?: "alert" | "status"`, `onDismiss?`,
   `persona?`, `className?`, `testId?`.
-- `host.ui.SettingsSavedStatus` (runtime API 3.1.4) publishes the host's
+- `host.ui.SettingsSavedStatus` (runtime API 3.1.1) publishes the host's
   「正在保存…」/「已保存」 mark in the settings page corner, exactly as the schema
   plugin config page does. Props: `phase` (`DraftSavePhase`, usually
   `usePrivateAutosave().savePhase`). It renders nothing outside a settings page.
@@ -305,7 +477,7 @@ failures read like the host's and can be fronted by the host mascot 吟风:
   show/hide for rows such as a QR code). The other members of `host` are
   `onEvent` (every desktop bridge event), `listRoles`, `pickImages`,
   `pickFiles` (native selection copied into private staging under a
-  `namespace`), the 3.1.5 path pickers, `config` and `assets` (2.10). The SDK's
+  `namespace`), the 3.1.1 path pickers, `config` and `assets` (2.10). The SDK's
   `PluginHostServices` / `PluginHostUi` types are the complete list.
 
 `persona` is `boolean | "generic" | PersonaSceneKey` and defaults to `false`: a
@@ -370,7 +542,7 @@ this is host policy, not an API break. Such packages keep working everywhere
 else, and their tools become available in those turns once they declare
 `external_allowed=True` and require `runtime_api: ">=3.0.0 <4.0.0"`.
 
-## Runtime API 3.1.10 external turns
+## Runtime API 3.1.1 external turns
 
 A plugin that receives messages from a source that is not a channel account
 (the desktop pet's live-stream chat, #292) declares `external_turns` and submits
@@ -415,7 +587,8 @@ renderer peer ABI (`pluginUiPeerExports` in
 `apps/desktop/src/plugins/uiContract.ts`); at 2.8.0 they are `BridgeError` and
 `PluginBridgeError` (2.9.0 adds the primitives below). Type-only exports (such as `PluginRpcClient`, the type of
 the injected `client`) have no runtime presence. Adding an export is a contract
-change and bumps the patch version once (see the version history above).
+change recorded under Unreleased and assigned a version with its release batch
+(see the version history above).
 
 The `@yinfengwindy/shiori-sdk/testing` subpath is development-only test support. It is
 **not** part of the runtime API or the import map; production renderer code must
@@ -535,18 +708,18 @@ speech contracts") holds the details.
   activation and revoked when it or its window ends.
 - **Background chat.** `ctx.chat.send({role_id, content, turn_id, media})` and
   `ctx.chat.cancel({session_key, turn_id})` start and cancel a turn for a role.
-  Since 3.1.13, while the bridge connection is open, every accepted turn ends
+  Since 3.1.1, while the bridge connection is open, every accepted turn ends
   with exactly one host event (`chatTerminalEventMethods`): `chat.done`,
   `chat.error`, or `chat.cancelled` (`{session_key, turn_id}`) when it was
   cancelled by turn id or by bridge shutdown. A turn-id cancel persists the
   partial reply and sends its `session.updated` before `chat.cancelled`. A
   bridge that dies without closing its connection delivers none of them; the
   renderer then sees `bridge.exit`.
-- **Autonomous role UI.** 3.1.1 also added a `roleUi` contribution for a
-  plugin-owned role panel; it was removed in 3.1.17 (**breaking**, see the
-  version table) in favour of `roleSettings` cards.
+- **Private role settings.** Use `roleSettings` capability cards and their
+  settings dialog. The experimental `roleUi` contribution was removed before
+  publication and is not part of the 3.1.1 contract.
 
-## Runtime API 3.1.5 native path pickers
+## Runtime API 3.1.1 native path pickers
 
 Besides the copying `host.pickFiles`, which is unchanged, the injected host
 services offer two native dialogs that hand back what the user chose:
@@ -732,7 +905,7 @@ the `roles.memory.documents`, `roles.memory.semantic.list` and
 plugin alone.
 
 A `ui` export that declares `roleUi` is rejected the same way (runtime API
-3.1.17). Contribute role-scoped settings as a `roleSettings` card instead; a
+3.1.1). Contribute role-scoped settings as a `roleSettings` card instead; a
 card with `storage: "plugin"` keeps plugin-private documents in its settings
 dialog with `usePrivateAutosave`.
 
@@ -1053,7 +1226,7 @@ for commands and how to validate its directory/zip from a host environment.
 ## Runtime API 3.0: unified Shiori SDK
 
 `@yinfengwindy/shiori-sdk` and `shiori-sdk` share one version (3.0.0 at introduction, now
-3.1.18) and the source tree `packages/sdk/`. External packages must declare `runtime_api: ">=3.0.0 <4.0.0"`.
+3.1.1) and the source tree `packages/sdk/`. External packages must declare `runtime_api: ">=3.0.0 <4.0.0"`.
 The previous frontend package name has no alias. Existing 2.x ranges are rejected
 with `incompatible_runtime` before backend execution; rebuild renderer peers and
 update the declared range when migrating. The 2.x sections above describe feature

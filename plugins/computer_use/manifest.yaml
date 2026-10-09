@@ -2,7 +2,7 @@ api: 2
 runtime_api: ">=3.1.0 <4.0.0"
 id: computer_use
 display_name: Computer Use
-version: "0.1.0"
+version: "0.1.1"
 desc: Windows 窗口操作与截图
 capabilities:
   - tool_turn

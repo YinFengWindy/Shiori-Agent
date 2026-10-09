@@ -23,12 +23,12 @@ function label(value: unknown, field: string) {
  * Neither shipped in a released runtime API:
  * - `roleMemory`: the host renders the role memory page itself from the
  *   configured memory plugin's RPCs.
- * - `roleUi` (removed in runtime API 3.1.17): no plugin used the self-managed
+ * - `roleUi` (removed in runtime API 3.1.1): no plugin used the self-managed
  *   role editor once role-scoped settings moved onto `roleSettings` cards.
  */
 const retiredContributions: ReadonlyArray<readonly [field: string, diagnostic: string]> = [
   ["roleMemory", "roleMemory is retired: the host renders the role memory page from the configured memory plugin's roles.memory.documents / roles.memory.semantic.list / roles.memory.semantic.detail RPCs; remove this contribution"],
-  ["roleUi", "roleUi is retired (runtime API 3.1.17): contribute role-scoped settings as a roleSettings capability card instead; remove this contribution"],
+  ["roleUi", "roleUi is retired (runtime API 3.1.1): contribute role-scoped settings as a roleSettings capability card instead; remove this contribution"],
 ];
 
 /** The diagnostic when a UI module still declares a retired contribution, or null. */

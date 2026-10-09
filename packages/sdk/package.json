@@ -1,6 +1,6 @@
 {
   "name": "@yinfengwindy/shiori-sdk",
-  "version": "3.1.18",
+  "version": "3.1.1",
   "description": "Public Shiori plugin contracts, shared UI and independent test support.",
   "license": "MIT",
   "repository": {

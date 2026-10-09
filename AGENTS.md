@@ -21,7 +21,8 @@ Shiori 是一个以角色为基底进行角色扮演的 Agent 助手：Python �
 - `main` 上不直接提交。代码改动在功能分支上进行，一个完整、可验证的改动单元完成后 commit。
 - 功能分支默认推送并创建 Draft PR；未经明确要求不推送或合并到 `main`。
 - PR 必须关联 Issue（`YinFengWindy/Shiori-Agent`，见 `docs/agents/issue-tracker.md`），写明变更摘要、实际验证结果和已知阻塞项；测试与构建通过、阻塞项清零后才可转 Ready 或合并。
-- 修改 SDK / 运行时 API 契约（新增接口与破坏性变更都算）的 PR 只把第三位（patch）升一次，破坏性变更在 `docs/_handbook/plugin-runtime-contract.md` 版本表标注 **breaking**；主/次版本由维护者在发布时决定。版本唯一来源 `packages/sdk/python/shiori_sdk/_version.py`，用 `node scripts/sync_sdk_version.mjs` 同步。
+- 普通 SDK / 运行时 API 契约 PR 不逐个升版本，在 `docs/_handbook/plugin-runtime-contract.md` 的 Unreleased 区累积变更与 PR 溯源，破坏性变更标注 **breaking**。正式发布 SDK 或包含新契约的桌面版本前，由维护者对照上次已发布契约统一定版；同一开发批次只定版一次，已发布的版本号不再承载新契约。版本唯一来源 `packages/sdk/python/shiori_sdk/_version.py`（SDK 与 Runtime API 同号），用 `node scripts/sync_sdk_version.mjs` 同步，并统一该批次的插件最低版本约束。
+- 插件自身的 `version` 独立于 SDK 和桌面版本。正式发版前对照上次发布批次，有包内容或兼容声明变化的已有插件只升一次 patch；新插件保留其选定的初始版本，未变插件不升号。`manifest.yaml` 与 `pyproject.toml` 的版本必须一致，同时更新消费方依赖约束和锁文件。
 - `docs/specs/`、`docs/plan/` 不进 git。
 - 搜索前先限定范围，排除 `node_modules`、`dist`、`renderer-dist`、`__pycache__` 与 worktree 副本（`D:/Coding/Shiori.worktrees/`）。
 
