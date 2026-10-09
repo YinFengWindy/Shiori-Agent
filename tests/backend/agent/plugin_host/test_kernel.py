@@ -382,7 +382,7 @@ def test_discover_finds_all_top_level_plugins():
         next(
             record for record in records if record.name == "desktop_pet"
         ).manifest.version
-        == "0.1.0"
+        == "0.1.1"
     )
     # discover() 只报出名字证明不了入口真的存在；record.entry_file 必须是磁盘上
     # 真实存在的文件，否则装配阶段 import 会直接失败（#178 复审 #11）。
