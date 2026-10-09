@@ -1,8 +1,9 @@
 """Bounded provider recovery at one request boundary, never at the tool loop."""
 
 import logging
+from typing import Callable
 
-from agent.context import without_attachment_tool_hints
+from agent.prompting.attachment_hints import prepare_attachment_hints
 from agent.provider import LLMProvider
 from agent.prompting.usage_accounting import current_usage, mark_speaking_request
 from core.compaction import CompactionFailedError
@@ -11,7 +12,13 @@ from .compaction import current_request_compaction
 logger = logging.getLogger("agent.budgeted_request")
 
 
-async def budgeted_chat(provider: LLMProvider, **kwargs):
+async def budgeted_chat(
+    provider: LLMProvider,
+    *,
+    schemas_for_history: Callable[[list[str]], list[dict]] | None = None,
+    prepare_request: Callable[[list[dict], bool], None] | None = None,
+    **kwargs,
+):
     """Send at most three requests: original, ordinary compaction, one minimal.
 
     Only a real provider context rejection retries this exact request boundary.
@@ -20,18 +27,12 @@ async def budgeted_chat(provider: LLMProvider, **kwargs):
     from agent.provider import ContextLengthError, LocalBudgetExceeded
 
     def prepare_messages():
-        # Finalization has no reader tools; a compaction retry may also disable
-        # them or re-render the original attachment instructions. Preserve paths
-        # and user prose while removing only the host-generated reader hints.
-        if not kwargs.get("tools") or kwargs.get("tool_choice") == "none":
-            kwargs["messages"][:] = [
-                (
-                    without_attachment_tool_hints(message)
-                    if message.get("role") == "user"
-                    else message
-                )
-                for message in kwargs["messages"]
-            ]
+        tools_enabled = (
+            bool(kwargs.get("tools")) and kwargs.get("tool_choice") != "none"
+        )
+        prepare_attachment_hints(kwargs["messages"], tools_enabled=tools_enabled)
+        if prepare_request is not None:
+            prepare_request(kwargs["messages"], tools_enabled)
 
     scope = current_request_compaction()
     if scope is None or not isinstance(provider, LLMProvider):
@@ -70,6 +71,7 @@ async def budgeted_chat(provider: LLMProvider, **kwargs):
                     kwargs["model"],
                     kwargs["max_tokens"],
                     kwargs.get("call_purpose", "default"),
+                    schemas_for_history=schemas_for_history,
                     force=True,
                     minimal_only=attempt == 1,
                 )

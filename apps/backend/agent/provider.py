@@ -22,6 +22,7 @@ from openai import AsyncOpenAI
 
 from core.common.llm_output_log import summarize_llm_output_for_log
 from agent.prompting.input_budget import BudgetPolicy, InputBudget, build_input_budget
+from agent.prompting.attachment_hints import ATTACHMENT_TOOL_HINTS_KEY
 from agent.prompting.usage_accounting import record_usage, record_failed_usage
 from agent.prompting.token_estimate import estimate_tokens
 from agent.prompting.output_usage import OutputTokenUsage, parse_output_usage
@@ -1102,6 +1103,7 @@ def _normalize_chat_messages(
     normalized: list[dict] = []
     for msg in messages:
         item = dict(msg)
+        item.pop(ATTACHMENT_TOOL_HINTS_KEY, None)
         role = str(item.get("role", "") or "")
         content = item.get("content")
 

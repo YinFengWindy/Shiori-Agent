@@ -299,6 +299,7 @@ class _PassiveReasoningLoopMixin:
                 max_tokens=self._llm_config.max_tokens,
                 tool_choice="auto",
                 on_content_delta=reply_output.callback,
+                schemas_for_history=schemas_for_history,
             )
             completion = await complete_reply(
                 response,

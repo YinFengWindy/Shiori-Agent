@@ -119,6 +119,54 @@ class _FakeStream:
 
 
 @pytest.mark.parametrize("streaming", [False, True])
+@pytest.mark.parametrize("provider_name", ["deepseek", "dashscope", "generic"])
+async def test_attachment_provenance_is_removed_before_budget_and_transport(
+    tmp_path, monkeypatch, streaming, provider_name
+):
+    from agent.context import MessageEnvelopeBuilder
+    from agent.prompting.attachment_hints import ATTACHMENT_TOOL_HINTS_KEY
+
+    attachment = tmp_path / "notes.txt"
+    attachment.write_text("notes", encoding="utf-8")
+    messages = MessageEnvelopeBuilder().build(
+        history=[],
+        current_message="read this",
+        system_prompt="system",
+        context_frame="",
+        channel="qq",
+        message_timestamp=None,
+        media=[str(attachment)],
+    )
+    assert ATTACHMENT_TOOL_HINTS_KEY in messages[-1]
+    fake = _FakeClient([_FakeStream([]) if streaming else _Response()])
+    monkeypatch.setattr(provider_module, "AsyncOpenAI", lambda **_: fake)
+    provider = LLMProvider(
+        api_key="test",
+        provider_name=provider_name,
+        model_context_window=100000,
+        default_max_tokens=128,
+    )
+    request = dict(messages=messages, tools=[], model="m", max_tokens=128)
+    budget = provider.input_budget(**request)
+    clean = [
+        {
+            key: value
+            for key, value in message.items()
+            if key != ATTACHMENT_TOOL_HINTS_KEY
+        }
+        for message in messages
+    ]
+    assert budget == provider.input_budget(**{**request, "messages": clean})
+    await provider.chat(**request, on_content_delta=AsyncMock() if streaming else None)
+    assert all(
+        ATTACHMENT_TOOL_HINTS_KEY not in message
+        for message in fake.calls[0]["messages"]
+    )
+    assert fake.calls[0]["messages"][-1]["content"] == messages[-1]["content"]
+    assert ATTACHMENT_TOOL_HINTS_KEY in messages[-1]
+
+
+@pytest.mark.parametrize("streaming", [False, True])
 @pytest.mark.parametrize("max_tokens", [None, 128])
 @pytest.mark.parametrize("provider_name", ["deepseek", "dashscope", "generic"])
 async def test_chat_omits_only_explicitly_unbounded_output_budget(

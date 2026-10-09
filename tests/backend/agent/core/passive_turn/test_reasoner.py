@@ -338,6 +338,10 @@ async def test_minimal_request_uses_real_prompt_controller_and_transport(
                 assert len(sent) == 4 and sent[0].get("tools")
                 assert not sent[-1].get("tools")
                 assert "请调用 read_file" not in str(sent[-1]["messages"])
+                assert (
+                    "请根据已有结果直接回复用户" in sent[-1]["messages"][-1]["content"]
+                )
+                assert "尚未取得的信息请明确说明" in sent[-1]["messages"][-1]["content"]
         else:
             result = await reasoner.run_turn(
                 msg=msg,
@@ -372,6 +376,12 @@ async def test_minimal_request_uses_real_prompt_controller_and_transport(
                     assert len(sent) == (4 if case == "recovery_degrade" else 2)
                     assert bool(sent[0].get("tools")) == (case == "recovery_degrade")
                     assert "请调用 read_file" not in str(final["messages"])
+                    assert (
+                        "请根据已有结果直接回复用户" in final["messages"][-1]["content"]
+                    )
+                    assert (
+                        "尚未取得的信息请明确说明" in final["messages"][-1]["content"]
+                    )
                     assert any(
                         str(attachment) in message["content"]
                         for message in final["messages"]
@@ -693,6 +703,7 @@ async def test_real_turn_history_append_uses_usage_anchor_with_replaced_context_
         "tool",
         "recovery",
         "recovery_tool",
+        "recovery_tool_provider_retry",
         "finalize",
         "unfit",
         "safety_after_tool",
@@ -726,6 +737,7 @@ async def test_all_request_boundaries_compact_without_replaying_current_tools(
         "tool": 3000,
         "recovery": 3000,
         "recovery_tool": 3000,
+        "recovery_tool_provider_retry": 3000,
         "finalize": 3000,
         "unfit": 3000,
         "safety_after_tool": 3000,
@@ -839,9 +851,17 @@ async def test_all_request_boundaries_compact_without_replaying_current_tools(
                 raise OSError("network unavailable")
             elif len(sent) == 2 and boundary == "safety_after_tool":
                 raise ContentSafetyError("current tool output rejected")
-            elif len(sent) == 1 and boundary in {"recovery", "recovery_tool"}:
+            elif boundary == "recovery_tool_provider_retry" and len(sent) == 2:
+                raise ContextLengthError("recovery provider rejected request")
+            elif len(sent) == 1 and boundary in {
+                "recovery",
+                "recovery_tool",
+                "recovery_tool_provider_retry",
+            }:
                 text = ""
-            elif len(sent) == 2 and boundary == "recovery_tool":
+            elif (len(sent) == 2 and boundary == "recovery_tool") or (
+                len(sent) == 3 and boundary == "recovery_tool_provider_retry"
+            ):
                 text = ""
                 calls = [
                     SimpleNamespace(
@@ -1031,6 +1051,7 @@ async def test_all_request_boundaries_compact_without_replaying_current_tools(
             "unfit",
             "safety_after_tool",
             "recovery_tool",
+            "recovery_tool_provider_retry",
         }:
             assert tool.calls == 1
             assert "current-call" in serialized and "y" * 9000 in serialized
@@ -1039,10 +1060,16 @@ async def test_all_request_boundaries_compact_without_replaying_current_tools(
         if boundary == "recovery":
             assert final["messages"][-1]["role"] == "user"
             assert "正式回复" in final["messages"][-1]["content"]
-        if boundary == "recovery_tool":
-            assert summary_boundaries[0] == 1
-            assert len(sent) == 3
-            for request in sent[1:]:
+        if boundary.startswith("recovery_tool"):
+            first_compacted = 2 if boundary == "recovery_tool_provider_retry" else 1
+            assert summary_boundaries[0] == first_compacted
+            assert len(sent) == first_compacted + 2
+            for request in sent[:first_compacted]:
+                assert "archived_tool" in [
+                    schema["function"]["name"] for schema in request["tools"]
+                ]
+                assert "[working_state]" not in str(request["messages"])
+            for request in sent[first_compacted:]:
                 text = json.dumps(request["messages"])
                 assert "[working_state]" in text
                 assert "OLD_TOOL_HISTORY_MUST_NOT_REAPPEAR" not in text
@@ -1050,6 +1077,7 @@ async def test_all_request_boundaries_compact_without_replaying_current_tools(
                 assert "archived_tool" not in [
                     schema["function"]["name"] for schema in request["tools"]
                 ]
+            assert not outcomes[-1]["degraded"]
             assert (
                 sum(m.get("tool_call_id") == "current-call" for m in final["messages"])
                 == 1

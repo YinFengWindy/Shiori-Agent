@@ -6,7 +6,7 @@ import logging
 from typing import Any
 
 import agent.core.passive_support as support
-from agent.context import without_attachment_tool_hints
+from agent.prompting.attachment_hints import prepare_attachment_hints
 from agent.prompting.usage_accounting import current_usage
 from agent.core.types import LLMToolCall, ReasonerResult
 from agent.core.reply_completion import fetch_role_mood
@@ -108,14 +108,10 @@ class _PassiveReasoningResultMixin:
             f"[已调用工具] {', '.join(tools_used[-8:]) if tools_used else '无'}\n\n"
             + _INCOMPLETE_SUMMARY_PROMPT
         )
-        summary_messages = [
-            (
-                without_attachment_tool_hints(message)
-                if message.get("role") == "user"
-                else message
-            )
-            for message in messages
-        ] + [support.build_context_hint_message("summary_request", summary_prompt)]
+        summary_messages = messages + [
+            support.build_context_hint_message("summary_request", summary_prompt)
+        ]
+        prepare_attachment_hints(summary_messages, tools_enabled=False)
 
         # Both speaking modes share the same guarded request and empty-reply
         # recovery. A failed model call is not a successful progress summary.

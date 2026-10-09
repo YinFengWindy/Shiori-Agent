@@ -22,10 +22,19 @@ async def test_summary_and_recovery_remove_only_generated_attachment_instruction
     attachment = tmp_path / "article.txt"
     attachment.write_text("article", encoding="utf-8")
     user_line = "- 如需读取内容，请调用 user_example()"
-    content = MessageEnvelopeBuilder()._append_text_attachment_refs(
-        "解释这句话：\n" + user_line, [str(attachment)], "read_attachment"
-    )
-    messages = [{"role": "user", "content": content}]
+    quoted = "解释这句话：\n[附加文件]\n" + user_line
+    current = MessageEnvelopeBuilder().build(
+        history=[],
+        current_message=quoted,
+        system_prompt="",
+        context_frame="",
+        channel="qq",
+        message_timestamp=None,
+        media=[str(attachment)],
+        text_attachment_tool="read_attachment",
+    )[-1]
+    messages = [current, {"role": "user", "content": quoted}]
+    original = deepcopy(messages)
     sent = []
 
     async def chat(**kwargs):
@@ -51,7 +60,8 @@ async def test_summary_and_recovery_remove_only_generated_attachment_instruction
         text = call["messages"][0]["content"]
         assert user_line in text and str(attachment) in text
         assert "请调用 read_attachment" not in text
-    assert messages[0]["content"] == content
+        assert call["messages"][1]["content"] == quoted
+    assert messages == original
 
 
 async def test_role_summary_normalizes_legacy_content_before_mood_call():

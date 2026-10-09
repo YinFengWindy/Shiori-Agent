@@ -89,20 +89,27 @@ async def complete_reply(
         await reject("refused", 0)
     logger.warning("[空回复重试] %s", recovery_state("retrying", 0))
     retry_tools = tools if allow_tool_calls and tools is not None else []
+
+    def prepare_recovery_prompt(request_messages: list[dict], tools_enabled: bool):
+        # Compaction can disable tools on either the preflight or provider retry.
+        # Choose the instruction immediately before each actual request as well.
+        request_messages[-1] = {
+            "role": "user",
+            "content": (
+                "你刚才没有给出回复或工具调用。请继续处理当前任务。"
+                if tools_enabled
+                else "你刚才没有给出正式回复。请根据已有结果直接回复用户，"
+                "尚未取得的信息请明确说明。"
+            ),
+        }
+
     # Recovery instructions are transient; the compacted prefix and live tool
     # exchanges must still be carried back to the dispatching loop below.
     retry_messages = messages + [
         {"role": "assistant", "content": ""},
-        {
-            "role": "user",
-            "content": (
-                "你刚才没有给出回复或工具调用。请继续处理当前任务。"
-                if retry_tools and tool_choice != "none"
-                else "你刚才没有给出正式回复。请根据已有结果直接回复用户，"
-                "尚未取得的信息请明确说明。"
-            ),
-        },
+        {"role": "user", "content": ""},
     ]
+    prepare_recovery_prompt(retry_messages, bool(retry_tools) and tool_choice != "none")
     retry_output = RoleReplyOutput(on_content_delta, enabled=role_reply)
     try:
         await ensure_request_budget(
@@ -124,6 +131,8 @@ async def complete_reply(
                 max_tokens=max_tokens,
                 call_purpose=call_purpose,
                 on_content_delta=retry_output.callback,
+                schemas_for_history=schemas_for_history if allow_tool_calls else None,
+                prepare_request=prepare_recovery_prompt,
             )
         except CompactionFailedError:
             raise
