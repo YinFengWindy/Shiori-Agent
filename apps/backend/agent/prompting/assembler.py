@@ -90,6 +90,7 @@ class PromptAssembler:
         history: list[dict[str, Any]],
         current_message: str,
         media: list[str] | None = None,
+        text_attachment_tool: str = "read_file",
         skill_names: list[str] | None = None,
         channel: str | None = None,
         chat_id: str | None = None,
@@ -168,6 +169,7 @@ class PromptAssembler:
             message_timestamp=message_timestamp,
             message_source=message_source,
             media=media,
+            text_attachment_tool=text_attachment_tool,
         )
         return AssembledTurnInput(
             system_sections=all_sections,

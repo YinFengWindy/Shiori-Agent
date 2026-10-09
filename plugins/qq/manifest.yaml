@@ -1,5 +1,5 @@
 api: 2
-runtime_api: ">=3.1.0 <4.0.0"
+runtime_api: ">=3.1.18 <4.0.0"
 id: qq
 display_name: QQ（NapCat）
 version: '0.1.0'
@@ -12,6 +12,7 @@ capabilities:
   - http
   - workspace
   - rpc
+  - tools
 channels:
   - name: qq
     label: QQ（NapCat）

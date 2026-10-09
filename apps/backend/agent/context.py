@@ -59,7 +59,7 @@ logger = logging.getLogger("agent.context")
 
 _READABLE_TEXT_ATTACHMENT_SUFFIXES = {".md", ".txt"}
 _ATTACHED_FILES_HEADER = "[附加文件]"
-_READ_FILE_HINT_PREFIX = "- 如需读取内容，请调用 read_file("
+_ATTACHMENT_TOOL_HINT_PREFIX = "- 如需读取内容，请调用 "
 
 
 def without_attachment_tool_hints(message: dict) -> dict:
@@ -82,7 +82,7 @@ def without_attachment_tool_hints(message: dict) -> dict:
                 *(
                     line
                     for line in lines[start:]
-                    if not line.startswith(_READ_FILE_HINT_PREFIX)
+                    if not line.startswith(_ATTACHMENT_TOOL_HINT_PREFIX)
                 ),
             ]
         )
@@ -138,6 +138,7 @@ class MessageEnvelopeBuilder:
         media: list[str] | None,
         chat_id: str | None = None,
         message_source: MessageSource | None = None,
+        text_attachment_tool: str = "read_file",
     ) -> list[dict[str, Any]]:
         prompt = system_prompt
         if channel:
@@ -159,6 +160,7 @@ class MessageEnvelopeBuilder:
                         current_message,
                         media,
                         message_timestamp=message_timestamp,
+                        text_attachment_tool=text_attachment_tool,
                     ),
                     message_source or MessageSource(channel=channel, chat_id=chat_id),
                 ),
@@ -172,12 +174,13 @@ class MessageEnvelopeBuilder:
         media: list[str] | None,
         *,
         message_timestamp: datetime | None = None,
+        text_attachment_tool: str = "read_file",
     ) -> str | list[dict[str, Any]]:
         text = self._stamp_current_message(text, message_timestamp=message_timestamp)
         if not media:
             return text
         if not self._multimodal:
-            return self._build_text_with_media_refs(text, media)
+            return self._build_text_with_media_refs(text, media, text_attachment_tool)
 
         images = []
         for item in media:
@@ -199,12 +202,16 @@ class MessageEnvelopeBuilder:
                 }
             )
 
-        text_with_refs = self._append_text_attachment_refs(text, media)
+        text_with_refs = self._append_text_attachment_refs(
+            text, media, text_attachment_tool
+        )
         if not images:
             return text_with_refs
         return images + [{"type": "text", "text": text_with_refs}]
 
-    def _build_text_with_media_refs(self, text: str, media: list[str]) -> str:
+    def _build_text_with_media_refs(
+        self, text: str, media: list[str], text_attachment_tool: str = "read_file"
+    ) -> str:
         refs: list[str] = []
         for item in media:
             value = str(item)
@@ -218,7 +225,7 @@ class MessageEnvelopeBuilder:
                 continue
             refs.append(f"- 图片路径: {value}")
 
-        lines = [self._append_text_attachment_refs(text, media)]
+        lines = [self._append_text_attachment_refs(text, media, text_attachment_tool)]
         if refs:
             lines.extend(["", "[附加媒体]", *refs])
         if refs:
@@ -227,7 +234,9 @@ class MessageEnvelopeBuilder:
             return lines[0]
         return "\n".join(lines)
 
-    def _append_text_attachment_refs(self, text: str, media: list[str]) -> str:
+    def _append_text_attachment_refs(
+        self, text: str, media: list[str], text_attachment_tool: str = "read_file"
+    ) -> str:
         file_refs: list[str] = []
         for item in media:
             value = str(item)
@@ -241,7 +250,9 @@ class MessageEnvelopeBuilder:
                 continue
             quoted_path = json.dumps(value, ensure_ascii=False)
             file_refs.append(f"- 文件路径: {value}")
-            file_refs.append(f"{_READ_FILE_HINT_PREFIX}path={quoted_path})")
+            file_refs.append(
+                f"{_ATTACHMENT_TOOL_HINT_PREFIX}{text_attachment_tool}(path={quoted_path})"
+            )
         if not file_refs:
             return text
         lines = [text, "", _ATTACHED_FILES_HEADER, *file_refs]
@@ -398,6 +409,7 @@ class ContextBuilder:
             history=request.history,
             current_message=request.current_message,
             media=request.media,
+            text_attachment_tool=request.text_attachment_tool,
             skill_names=request.skill_names,
             channel=request.channel,
             chat_id=request.chat_id,
@@ -468,6 +480,7 @@ class ContextBuilder:
             message_timestamp=request.message_timestamp,
             message_source=request.message_source,
             media=request.media,
+            text_attachment_tool=request.text_attachment_tool,
         )
         return ContextRenderResult(
             system_prompt=prompt,

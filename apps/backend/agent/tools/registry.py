@@ -5,7 +5,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, TypedDict, cast
 
-from shiori_sdk.tools import Tool, ToolResult
+from shiori_sdk.tools import TOOL_ATTACHMENT_SCOPE_KEY, Tool, ToolResult
 from agent.tools.external_access import EXTERNAL_TOOL_DENIED, ExternalArgumentLimit
 from agent.tools.search_backend import KeywordSearchBackend, SearchBackend
 
@@ -326,7 +326,12 @@ class ToolRegistry:
             }
             # 由上下文决定的键只取自执行上下文：模型传同名参数不能改写，
             # 上下文里没有时也不能由模型补上。
-            for key in getattr(tool, "context_precedence", frozenset()):
+            protected_keys = getattr(tool, "context_precedence", frozenset())
+            # Only opted-in readers receive this capability. Other tools may
+            # serialize arbitrary kwargs (MCP calls, memory metadata, etc.).
+            if TOOL_ATTACHMENT_SCOPE_KEY not in protected_keys:
+                merged.pop(TOOL_ATTACHMENT_SCOPE_KEY, None)
+            for key in protected_keys:
                 if key in execution_context:
                     merged[key] = execution_context[key]
                 else:

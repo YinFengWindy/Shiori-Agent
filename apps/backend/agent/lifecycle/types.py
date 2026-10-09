@@ -161,6 +161,8 @@ class PromptRenderInput:
     include_current_message: bool = True
     # Host-owned last resort; optional plugin exports cannot re-enable tools.
     minimal_request: bool = False
+    # Channel-owned reader hint; authorization lives in tool execution context.
+    text_attachment_tool: str = "read_file"
 
 
 @dataclass(frozen=True)

@@ -32,6 +32,7 @@ def test_manifest_preserves_historical_channel_name() -> None:
         "http",
         "workspace",
         "rpc",
+        "tools",
     }
     assert manifest.values.get("config_model") is None
     assert [item["name"] for item in manifest.values["channels"]] == ["qq"]
@@ -107,6 +108,8 @@ async def test_plugin_contributes_one_account_channel(tmp_path):
         [channel] = ctx.channels.channels
         assert channel.name == "qq"
         assert channel.configuration_key[0] == "qq-accounts"
+        assert ctx.tools.options["read_attachment"]["external_allowed"] is True
+        assert ctx.tools.tools["read_attachment"].name == "read_attachment"
         await channel.stop()
     finally:
         await ctx.aclose()

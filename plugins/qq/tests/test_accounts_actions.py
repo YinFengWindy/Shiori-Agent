@@ -267,3 +267,50 @@ async def test_replied_message_comes_from_one_napcat_get_msg():
     socket.call.return_value = {"message_id": -35}
     with pytest.raises(OneBotError, match="未返回发送者"):
         await actions.replied_message("account-a", "-35")
+
+
+@pytest.mark.asyncio
+async def test_replied_structured_file_retains_url_and_chat_provenance():
+    socket = AsyncMock()
+    actions = QQAccountActions(lambda account_id: socket, AsyncMock(), _SENDER)
+    socket.call.return_value = {
+        "group_id": 777,
+        "sender": {"user_id": 303},
+        "raw_message": "[文件]",
+        "message": [
+            {
+                "type": "file",
+                "data": {"file": "故事.txt", "file_id": "id", "url": "https://x/file"},
+            }
+        ],
+    }
+    reply = await actions.replied_message("account-a", "35")
+    assert reply.raw_content == "[CQ:file,file=故事.txt,file_id=id,url=https://x/file]"
+    assert reply.chat_id == "gqq:777"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("chat_id", "action", "params"),
+    [
+        (
+            "gqq:777",
+            "get_group_file_url",
+            {"group_id": 777, "file_id": "id", "busid": 102},
+        ),
+        ("902", "get_private_file_url", {"file_id": "id"}),
+    ],
+)
+async def test_file_without_url_resolves_in_its_actual_chat(chat_id, action, params):
+    from plugins.qq.backend.channel.files import QQFile
+
+    socket = AsyncMock()
+    socket.call.return_value = {"url": "https://x/file"}
+    actions = QQAccountActions(lambda _: socket, AsyncMock(), _SENDER)
+    assert (
+        await actions.file_url(
+            "account-a", chat_id, QQFile("故事.txt", file_id="id", busid=102)
+        )
+        == "https://x/file"
+    )
+    socket.call.assert_awaited_once_with(action, params)

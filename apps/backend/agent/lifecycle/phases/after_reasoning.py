@@ -248,9 +248,9 @@ class _PersistUserMessageModule:
             if isinstance(persisted_user_content, str)
             else msg.content
         )
-        # A quoted message's pictures (#555) lead the turn's media for the
+        # A quoted message's attachments lead the turn's media for the
         # model but stay the quote's: the stored message keeps only its own.
-        # They are dropped by position, so a picture the message itself
+        # They are dropped by position, so a file the message itself
         # carries is kept even if it were the same file.
         quoted_media = msg.metadata.get(REPLY_TO_MEDIA_KEY)
         user_media = list(msg.media)[

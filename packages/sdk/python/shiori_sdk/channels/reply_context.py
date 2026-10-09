@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import mimetypes
 
 from shiori_sdk.messages import InboundMessage
 from shiori_sdk.channels.message_source import (
@@ -70,8 +71,8 @@ def with_reply_quote(
 
     The turn sees the quoted ``text`` (never truncated) wrapped around the
     message's own by ``build_inbound_text_with_reply_context``, and the quoted
-    pictures ``media`` (local files) ahead of its own. The session stores
-    only the message's own text and pictures; the quote is kept in metadata
+    attachments ``media`` (local files) ahead of its own. The session stores
+    only the message's own text and attachments; the quote is kept in metadata
     (``REPLY_TO_CONTENT_KEY``, ``REPLY_TO_SENDER_NAME_KEY``,
     ``REPLY_TO_MEDIA_KEY``) beside the quoted sender's ID
     (``REPLY_TO_SENDER_ID_KEY``) the plugin set before routing. ``own_id`` is
@@ -92,12 +93,29 @@ def with_reply_quote(
     }
     if sender_name:
         metadata[REPLY_TO_SENDER_NAME_KEY] = sender_name
-    reply_text = text or QUOTED_IMAGE_PLACEHOLDER
+    image_count = sum(
+        (mimetypes.guess_type(path)[0] or "").startswith("image/") for path in media
+    )
+    file_count = len(media) - image_count
+    placeholder = "[附件]" if image_count and file_count else "[文件]"
+    reply_text = text or (placeholder if file_count else QUOTED_IMAGE_PLACEHOLDER)
     if media:
         metadata[REPLY_TO_MEDIA_KEY] = list(media)
-        # The quoted pictures lead the turn's attachments; say so, or the model
+        # The quoted files lead the turn's attachments; say so, or the model
         # cannot tell them from the message's own.
-        reply_text += f"\n（被回复消息附带 {len(media)} 张图片，即本条附件中的前 {len(media)} 张）"
+        if file_count:
+            counts = ([f"{image_count} 张图片"] if image_count else []) + [
+                f"{file_count} 个文件"
+            ]
+            reply_text += (
+                f"\n（被回复消息附带 {'、'.join(counts)}，"
+                f"即本条附件中的前 {len(media)} 项）"
+            )
+        else:
+            reply_text += (
+                f"\n（被回复消息附带 {len(media)} 张图片，"
+                f"即本条附件中的前 {len(media)} 张）"
+            )
     return replace(
         message,
         content=build_inbound_text_with_reply_context(

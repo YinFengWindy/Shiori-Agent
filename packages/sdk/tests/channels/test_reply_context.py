@@ -77,6 +77,28 @@ def test_pictures_only_quote_stays_when_its_pictures_cannot_be_fetched():
     assert "reply_to_media" not in turn.metadata
 
 
+@pytest.mark.parametrize(
+    "media,expected",
+    [
+        (["文章.txt"], "[文件]\n（被回复消息附带 1 个文件，即本条附件中的前 1 项）"),
+        (
+            ["图.png", "文章.md"],
+            "[附件]\n（被回复消息附带 1 张图片、1 个文件，即本条附件中的前 2 项）",
+        ),
+    ],
+)
+def test_file_quotes_keep_attachment_order_and_do_not_claim_files_are_images(
+    media, expected
+):
+    turn = with_reply_quote(
+        _quoting("303"), own_id="202", text="", sender_name="阿花", media=media
+    )
+    assert expected in turn.content
+    assert turn.media == [*media, "own.png"]
+    assert turn.metadata["reply_to_media"] == media
+    assert turn.metadata["persisted_user_content"] == "这是啥"
+
+
 def test_build_inbound_text_with_reply_context_adds_sender_label():
     text = build_inbound_text_with_reply_context(
         user_text="再展开一点",

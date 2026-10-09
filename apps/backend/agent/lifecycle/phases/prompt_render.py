@@ -103,6 +103,7 @@ class _RenderPromptModule:
                 thread_id=frame.input.thread_id,
                 window_sources=frame.input.window_sources,
                 minimal_request=minimal,
+                text_attachment_tool=frame.input.text_attachment_tool,
             ),
             system_sections_top=[] if minimal else ctx.system_sections_top,
             system_sections_bottom=[] if minimal else ctx.system_sections_bottom,

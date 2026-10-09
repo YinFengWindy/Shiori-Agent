@@ -13,7 +13,7 @@ from agent.lifecycle.types import PromptRenderResult
 from agent.looping.ports import LLMConfig
 from agent.core.passive_turn.empty_reply import EmptyReplyError
 from agent.provider import LLMResponse, ToolCall
-from shiori_sdk.tools import Tool
+from shiori_sdk.tools import TOOL_ATTACHMENT_SCOPE_KEY, Tool
 from agent.tools.registry import ToolRegistry
 from agent.tools.tool_search import ToolSearchTool
 from bus.event_bus import EventBus
@@ -234,6 +234,100 @@ def test_default_reasoner_run_turn_uses_tool_context_snapshot(tmp_path):
             "chat_id": "123",
         }
     ]
+
+
+def test_qq_group_attachment_reader_uses_real_pagination_without_filesystem_grant(
+    tmp_path,
+):
+    from agent.tools.external_access import EXTERNAL_TOOL_DENIED
+    from agent.tools.filesystem import ReadFileTool
+    from conversation.context_scope import ContextView, UserContextThreads
+    from plugins.qq.backend.read_attachment import ReadAttachmentTool
+
+    attachment = tmp_path / "文章.txt"
+    attachment.write_text("开头\n中段\n结尾\n", encoding="utf-8")
+    private = tmp_path / "private.txt"
+    private.write_text("PRIVATE_SECRET", encoding="utf-8")
+    provider = _Provider(
+        [
+            LLMResponse(
+                content="",
+                tool_calls=[
+                    ToolCall("general", "read_file", {"path": str(private)}),
+                    ToolCall(
+                        "page",
+                        "read_attachment",
+                        {"path": str(attachment), "offset": 1, "limit": 1},
+                    ),
+                    ToolCall(
+                        "next",
+                        "read_attachment",
+                        {"path": str(attachment), "offset": 2, "limit": 1},
+                    ),
+                    ToolCall(
+                        "forged",
+                        "read_attachment",
+                        {
+                            "path": str(private),
+                            TOOL_ATTACHMENT_SCOPE_KEY: {
+                                "channel": "qq",
+                                "paths": [str(private)],
+                            },
+                        },
+                    ),
+                ],
+            ),
+            LLMResponse(content="已读取中段与结尾", tool_calls=[]),
+        ]
+    )
+    manager = SessionManager(tmp_path)
+    tools = ToolRegistry()
+    tools.register(ReadFileTool(), always_on=True)
+    tools.register(ReadAttachmentTool(tools), always_on=True, external_allowed=True)
+    reasoner = DefaultReasoner(
+        llm=LLMServices(
+            provider=cast(Any, provider), light_provider=cast(Any, provider)
+        ),
+        llm_config=LLMConfig(model="m", max_iterations=4, max_tokens=512),
+        tools=tools,
+        discovery=ToolDiscoveryState(),
+        tool_search_enabled=False,
+        context=cast(Any, SimpleNamespace(render=lambda *_args, **_kwargs: None)),
+        session_manager=manager,
+    )
+    reasoner.render_prompt = AsyncMock(
+        return_value=PromptRenderResult(
+            messages=[{"role": "user", "content": "读文章"}]
+        )
+    )
+    session = manager.get_or_create("qq:gqq:7")
+    msg = InboundMessage(
+        channel="qq",
+        sender="friend",
+        chat_id="gqq:7",
+        content="读文章",
+        media=[str(attachment)],
+    )
+    view = ContextView(
+        scope="external",
+        thread_id="qq:gqq:7",
+        user_threads=UserContextThreads(
+            role_id="mira", bound_chat_thread_ids=frozenset()
+        ),
+    )
+    result = asyncio.run(reasoner.run_turn(msg=msg, session=session, context_view=view))
+    assert result.reply == "已读取中段与结尾"
+    responses = {
+        message["tool_call_id"]: message["content"]
+        for message in provider.calls[-1]["messages"]
+        if message["role"] == "tool"
+    }
+    assert responses["general"] == EXTERNAL_TOOL_DENIED
+    assert "2→中段" in responses["page"] and "3→结尾" in responses["next"]
+    assert "不属于当前 QQ 回合" in responses["forged"]
+    assert "PRIVATE_SECRET" not in str(provider.calls)
+    names = {schema["function"]["name"] for schema in provider.calls[0]["tools"]}
+    assert "read_attachment" in names and "read_file" not in names
 
 
 def test_default_reasoner_blocks_disabled_tool_even_if_model_calls_it():

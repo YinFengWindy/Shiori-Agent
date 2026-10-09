@@ -145,7 +145,7 @@ class CompactionRenderer:
             )
         )
         if self.current_message is not None:
-            # Tools are disabled here, so drop instructions to call read_file.
+            # Tools are disabled here, so drop attachment-reader instructions.
             replace_current_input(
                 candidate.messages,
                 without_attachment_tool_hints(self.current_message),

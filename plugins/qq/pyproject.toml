@@ -7,14 +7,14 @@ name = "shiori-plugin-qq"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
-    "shiori-sdk>=3.1.0,<4",
+    "shiori-sdk>=3.1.18,<4",
     "httpx>=0.28.1",
     "psutil>=7.0",
     "websockets>=15.0,<16",
 ]
 
 [project.optional-dependencies]
-test = ["shiori-sdk[testing]>=3.1.0,<4", "qrcode>=8.2", "Pillow>=11.0"]
+test = ["shiori-sdk[testing]>=3.1.18,<4", "qrcode>=8.2", "Pillow>=11.0"]
 
 [tool.setuptools]
 include-package-data = false
