@@ -80,6 +80,10 @@ async def complete_reply(
         raise error
 
     if response.tool_calls:
+        # Explanatory refusal text may be delivered, but a refusal never
+        # authorizes accompanying tool calls, even on the initial response.
+        if facts["refused"]:
+            await reject("refused", 0)
         if allow_tool_calls:
             return CompletedReply(response, (response,))
         await reject("unexpected_tool_calls", 0)
@@ -152,6 +156,8 @@ async def complete_reply(
         )
     )
     retry_response.content = normalized
+    if retry_response.tool_calls and attempts[-1]["refused"]:
+        await reject("refused", 1)
     if retry_response.tool_calls and not (
         allow_tool_calls
         and retry_tools

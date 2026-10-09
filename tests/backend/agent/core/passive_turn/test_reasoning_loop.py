@@ -410,10 +410,91 @@ async def test_empty_explicit_refusal_does_not_retry(response):
 
 
 @pytest.mark.parametrize("recovering", [False, True])
-async def test_explanatory_refusal_text_is_delivered_without_retrying_it(recovering):
+@pytest.mark.parametrize("refusal_signal", ["content_filter", "refused"])
+@pytest.mark.parametrize("explanatory_text", [False, True])
+async def test_explicit_refusal_never_executes_accompanying_tool_calls(
+    recovering, refusal_signal, explanatory_text
+):
+    from agent.provider import LLMProvider
+
+    def raw_response(content, *, refused=False, calls=()):
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content=content,
+                        tool_calls=list(calls),
+                        refusal=(
+                            "request refused"
+                            if refused and refusal_signal == "refused"
+                            else None
+                        ),
+                    ),
+                    finish_reason=(
+                        "content_filter"
+                        if refused and refusal_signal == "content_filter"
+                        else "stop"
+                    ),
+                )
+            ],
+            usage=None,
+        )
+
+    responses = [raw_response("")] if recovering else []
+    responses.extend(
+        [
+            raw_response(
+                "无法帮助处理此请求。" if explanatory_text else "",
+                refused=True,
+                calls=[
+                    SimpleNamespace(
+                        id="refused-call",
+                        function=SimpleNamespace(name="counter", arguments="{}"),
+                    )
+                ],
+            ),
+            raw_response("must not request a follow-up"),
+        ]
+    )
+    provider = LLMProvider(api_key="test", base_url="https://example.test/v1")
+    transport = AsyncMock(side_effect=responses)
+    provider._create_with_retry = transport
+    tool = CounterTool()
+    tools = ToolRegistry()
+    tools.register(tool, always_on=True)
+    try:
+        with pytest.raises(EmptyReplyError) as caught:
+            await make_reasoner(provider, tools).run(
+                [{"role": "user", "content": "检查"}]
+            )
+        facts = caught.value.diagnostics
+        assert facts["outcome"] == "refused"
+        assert facts["retries"] == int(recovering)
+        assert len(facts["attempts"]) == 1 + int(recovering)
+        assert facts["attempts"][-1]["refused"] is True
+        assert facts["attempts"][-1]["tool_count"] == 1
+        assert tool.calls == 0
+        assert transport.await_count == 1 + int(recovering)
+    finally:
+        await provider.aclose()
+
+
+@pytest.mark.parametrize("recovering", [False, True])
+@pytest.mark.parametrize("refusal_signal", ["content_filter", "refused"])
+async def test_explanatory_refusal_text_is_delivered_without_retrying_it(
+    recovering, refusal_signal
+):
     provider = AsyncMock()
     responses = [LLMResponse(content="", thinking="")] if recovering else []
-    responses.append(LLMResponse(content="无法帮助处理此请求。", refused=True))
+    responses.append(
+        LLMResponse(
+            content="无法帮助处理此请求。",
+            refused=refusal_signal == "refused",
+            finish_reason=(
+                "content_filter" if refusal_signal == "content_filter" else "stop"
+            ),
+        )
+    )
     provider.chat.side_effect = responses
     result = await make_reasoner(provider, ToolRegistry()).run(
         [{"role": "user", "content": "你好"}]
