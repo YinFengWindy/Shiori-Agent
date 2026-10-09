@@ -1,0 +1,8 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "pnpm install --frozen-lockfile",
+  "buildCommand": "pnpm run build:site",
+  "outputDirectory": "apps/desktop/site-dist",
+  "ignoreCommand": "git diff HEAD^ HEAD --quiet -- apps/desktop/site apps/desktop/renderer apps/desktop/tsconfig.base.json 'plugins/*/ui' apps/desktop/package.json package.json pnpm-lock.yaml pnpm-workspace.yaml vercel.json"
+}
