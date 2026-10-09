@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from shiori_sdk.channels.message_source import MessageSource
+from shiori_sdk.messages import TEXT_ATTACHMENT_TOOL_KEY
+from shiori_sdk.tools import TOOL_ATTACHMENT_SCOPE_KEY, ToolAttachmentScope
 from agent.tools.turn_scope import tool_turn
 from agent.account_delivery.turn_state import account_delivery_scope
 
@@ -393,7 +395,14 @@ class DefaultReasoner(
         external_restricted = external_tools_restricted(
             context_view, MessageSource.from_inbound(msg)
         )
-        tool_execution_context = self._tools.get_context()
+        tool_execution_context: dict[str, Any] = {
+            **self._tools.get_context(),
+            # Only this inbound message grants access, including explicit quotes.
+            # Keep the immutable snapshot local to avoid leaking across turns.
+            TOOL_ATTACHMENT_SCOPE_KEY: ToolAttachmentScope(
+                channel=msg.channel, paths=tuple(msg.media)
+            ),
+        }
         account_delivery_state: dict[str, bool] = {}
         role_metadata = get_session_metadata(session)
         previous_mood_updated_at = str(role_metadata.get("current_mood_updated_at", ""))
@@ -439,6 +448,9 @@ class DefaultReasoner(
                 chat_id=msg.chat_id,
                 content=msg.content,
                 media=msg.media if msg.media else None,
+                text_attachment_tool=str(
+                    msg.metadata.get(TEXT_ATTACHMENT_TOOL_KEY) or "read_file"
+                ),
                 timestamp=msg.timestamp,
                 history=history_for_attempt,
                 skill_names=skill_names,

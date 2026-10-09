@@ -170,20 +170,22 @@ async def test_pre_binding_turn_committed_later_keeps_all_its_messages_out(tmp_p
     )
 
 
-async def test_stored_user_message_keeps_its_own_pictures_not_the_quoted_ones(
+@pytest.mark.parametrize("attachment", ["same.png", "文章.md"])
+async def test_stored_user_message_keeps_its_own_attachments_not_the_quoted_ones(
     tmp_path,
+    attachment,
 ):
     manager = SessionManager(tmp_path)
     session = role_session(manager)
     request = turn(session)
-    # The quoted picture leads the turn's media (#555); the message's own
-    # picture is the same file, and still stays.
-    request.state.msg.media = ["same.png", "same.png"]
-    request.state.msg.metadata["reply_to_media"] = ["same.png"]
+    # Quoted media leads the turn; an identical attachment sent by this
+    # message still stays with the stored message rather than being deduplicated.
+    request.state.msg.media = [attachment, attachment]
+    request.state.msg.metadata["reply_to_media"] = [attachment]
 
     await phase(manager).run(request)
 
-    assert session.messages[0]["media"] == ["same.png"]
+    assert session.messages[0]["media"] == [attachment]
 
 
 @pytest.mark.parametrize("formal_reply", [True, False])

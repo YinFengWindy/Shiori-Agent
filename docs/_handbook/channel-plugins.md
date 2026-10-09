@@ -11,6 +11,23 @@
 | `plugins/qq/` | 按账号管理 OneBot 连接和私有 NapCat 实例，处理扫码登录、重连及进程清理 |
 | `plugins/feishu/` | SDK 自带线程和事件循环时的线程模型、CardKit 流式卡片、`status()` |
 
+## 当前回合附件与插件工具
+
+渠道插件负责解析、下载及解释平台附件。QQ 的 txt/md 读取由 QQ 插件的
+`read_attachment` 工具提供；宿主不注册这个工具，桌面文本附件继续用 `read_file`。
+下载要在账号准入、消息去重和回合触发之后进行，旁听记录只保留文件说明。
+
+声明 `tools` capability 后，渠道插件可通过 `ChannelPluginContext.tools` 注册工具。
+宿主将当前入站消息（包括显式引用）的 `media` 冻结成
+`shiori_sdk.tools.ToolAttachmentScope(channel, paths)`，只在该回合的工具执行上下文
+`TOOL_ATTACHMENT_SCOPE_KEY`（`attachment_scope`）里传入，不放入共享工具状态。
+只有在 `context_precedence` 里声明保护这个键的插件工具才会收到它；缺失时拒绝访问，并检查实际渠道、
+附件成员身份及允许的文件格式；历史记录或模型参数不能扩大范围。
+
+插件在入站 `metadata[shiori_sdk.messages.TEXT_ATTACHMENT_TOOL_KEY]` 填自己的工具名，
+宿主便为当前文本附件显示相应读取提示；该键只控制提示，不授予权限。
+上述 API 从 SDK `3.1.18` 开始提供。
+
 ## 1. 包布局与 manifest
 
 ```text

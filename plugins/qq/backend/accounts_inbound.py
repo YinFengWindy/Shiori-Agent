@@ -14,6 +14,7 @@ from shiori_sdk.channels.message_source import (
 
 from .accounts_actions import qq_number, qq_sender_name
 from .channel.group_filter import at_member_ids
+from .channel.message import message_content
 
 # Metadata flag of a private message that came through a group temporary
 # session (NapCat ``sub_type == "group"``) rather than a real private chat.
@@ -52,8 +53,7 @@ def inbound_message(
         if kind == "private"
         else f"gqq:{qq_number(event.get('group_id'), '群号')}"
     )
-    raw = event.get("raw_message")
-    content = raw if isinstance(raw, str) else str(event.get("message") or "")
+    content = message_content(event)
     metadata: dict[str, object] = {
         "account_id": account_id,
         "platform_account_id": expected_uin,

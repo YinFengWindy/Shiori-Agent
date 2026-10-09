@@ -10,6 +10,7 @@ from shiori_sdk.runtime import PluginRuntimeContext
 from shiori_sdk.storage import KeyValueStore
 from shiori_sdk.processes import Processes
 from shiori_sdk.http import HttpClient
+from shiori_sdk.tools import ToolsCapability
 from .avatars import AvatarsCapability
 from . import Channel
 from .chat_types import ChatTypeDeclaration
@@ -54,3 +55,5 @@ class ChannelPluginContext(PluginRuntimeContext, Protocol):
     def processes(self) -> Processes: ...
     @property
     def http(self) -> HttpClient: ...
+    @property
+    def tools(self) -> ToolsCapability: ...

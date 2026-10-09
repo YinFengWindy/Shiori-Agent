@@ -5,6 +5,23 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
+TOOL_ATTACHMENT_SCOPE_KEY = "attachment_scope"
+"""Protected tool execution keyword carrying the current inbound attachments."""
+
+
+@dataclass(frozen=True)
+class ToolAttachmentScope:
+    """Host snapshot of one turn's channel and received or explicitly quoted files.
+
+    Only tools protecting ``TOOL_ATTACHMENT_SCOPE_KEY`` with
+    ``context_precedence`` receive this value. A missing scope grants no access;
+    message history, model arguments and the shared tools context cannot grant
+    attachment access.
+    """
+
+    channel: str
+    paths: tuple[str, ...]
+
 
 @dataclass
 class ToolResult:

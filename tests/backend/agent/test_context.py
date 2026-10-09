@@ -913,21 +913,57 @@ def test_group_turns_carry_their_listening_as_one_block_next_to_the_message(
     assert not any("本群旁听" in str(message["content"]) for message in user)
 
 
-def test_attachment_tool_hint_removal_keeps_user_lines_and_textless_parts(tmp_path):
+@pytest.mark.parametrize("tool_name", ["read_file", "read_attachment"])
+def test_attachment_tool_hint_removal_keeps_user_lines_and_textless_parts(
+    tmp_path, tool_name
+):
     from agent.context import without_attachment_tool_hints
 
     attachment = tmp_path / "notes.txt"
     attachment.write_text("notes", encoding="utf-8")
-    user_line = "- 如需读取内容，请调用 read_file(path=mine)"
+    user_line = f"- 如需读取内容，请调用 {tool_name}(path=mine)"
     text = MessageEnvelopeBuilder()._append_text_attachment_refs(
-        "look" + chr(10) + user_line, [str(attachment)]
+        "look" + chr(10) + user_line, [str(attachment)], tool_name
     )
     stripped = without_attachment_tool_hints({"role": "user", "content": text})
     assert user_line in stripped["content"] and str(attachment) in stripped["content"]
-    assert stripped["content"].count("read_file(") == 1
+    assert stripped["content"].count(f"{tool_name}(") == 1
     parts = [{"type": "text"}, {"type": "image_url", "image_url": {"url": "x"}}]
     message = {"role": "user", "content": parts}
     assert without_attachment_tool_hints(message) == message
+
+
+@pytest.mark.parametrize("multimodal", [True, False])
+def test_plugin_attachment_hint_keeps_files_out_of_image_blocks(tmp_path, multimodal):
+    file = tmp_path / "文章.md"
+    file.write_text("内容", encoding="utf-8")
+    image = tmp_path / "picture.png"
+    image.write_bytes(b"png")
+    roles = RoleStore(tmp_path)
+    roles.create_role(role_id="mira", name="Mira", system_prompt="role")
+    builder = ContextBuilder(
+        tmp_path,
+        _EmptyMemory(),
+        runtime_roles=roles,
+        multimodal=multimodal,
+    )
+    messages = builder.render(
+        ContextRequest(
+            history=[],
+            current_message="看看文件",
+            channel="qq",
+            media=[str(file), str(image)],
+            text_attachment_tool="read_attachment",
+        ),
+        session_metadata={"role_id": "mira"},
+    ).messages
+    content = messages[-1]["content"]
+    if multimodal:
+        assert len([part for part in content if part["type"] == "image_url"]) == 1
+        content = content[-1]["text"]
+    assert "read_attachment(path=" in content
+    assert "read_file(" not in content
+    assert f"文件路径: {file}" in content
 
 
 def test_affection_block_goes_to_the_context_frame_not_the_system_prompt(

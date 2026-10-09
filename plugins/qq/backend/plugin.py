@@ -21,6 +21,14 @@ async def setup(ctx: "ChannelPluginContext") -> None:
 
     from .accounts_runtime import QQAccountsRuntime
     from .accounts_store import QQAccountsStore
+    from .read_attachment import ReadAttachmentTool
+
+    ctx.tools.register(
+        ReadAttachmentTool(ctx.tools),
+        risk="read-only",
+        search_hint="QQ 附件 txt md 文件正文 引用文件 read_attachment",
+        external_allowed=True,
+    )
 
     runtime = QQAccountsRuntime(
         QQAccountsStore(ctx.workspace),

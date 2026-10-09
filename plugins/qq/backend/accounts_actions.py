@@ -12,6 +12,8 @@ from typing import Any
 from .onebot import OneBotDisconnected, OneBotError, OneBotSocket
 from shiori_sdk.accounts.targets import UncertainDeliveryError
 from shiori_sdk.media import detect_image_mime_from_header
+from .channel.files import QQFile
+from .channel.message import cq_escape as _cq_escape, message_content
 
 _QQ_ID = re.compile(r"^[1-9][0-9]*$")
 # Image types NapCat sends as a QQ picture.
@@ -58,6 +60,8 @@ class RepliedMessage:
     sender_name: str
     # The raw CQ-coded text, pictures and nested reply segments included.
     raw_content: str
+    # When NapCat provides provenance, refuse quotes from a different chat.
+    chat_id: str = ""
 
 
 def qq_chat_target(chat_id: str) -> tuple[str, str]:
@@ -65,16 +69,6 @@ def qq_chat_target(chat_id: str) -> tuple[str, str]:
     if chat_id.startswith("gqq:"):
         return "group", qq_number(chat_id[4:], "群号")
     return "private", qq_number(chat_id, "QQ 号")
-
-
-def _cq_escape(value: str) -> str:
-    """Escapes a CQ code parameter value (OneBot 11 string message format)."""
-    return (
-        value.replace("&", "&amp;")
-        .replace("[", "&#91;")
-        .replace("]", "&#93;")
-        .replace(",", "&#44;")
-    )
 
 
 def qq_image_segment(image: str) -> str:
@@ -237,12 +231,34 @@ class QQAccountActions:
             sender_id = qq_number(sender.get("user_id"), "被回复消息的发送者")
         except ValueError as exc:
             raise OneBotError("NapCat get_msg 未返回有效发送者") from exc
-        raw = data.get("raw_message")
+        group_id = data.get("group_id")
         return RepliedMessage(
             sender_id=sender_id,
             sender_name=qq_sender_name(sender),
-            raw_content=raw if isinstance(raw, str) else "",
+            raw_content=message_content(data),
+            chat_id=f"gqq:{group_id}" if group_id else "",
         )
+
+    async def file_url(self, account_id: str, chat_id: str, file: QQFile) -> str:
+        """Resolve a file without an inline URL through its actual QQ chat."""
+        if not file.file_id:
+            raise ValueError("文件缺少下载地址和文件 ID")
+        kind, target = qq_chat_target(chat_id)
+        if kind == "group":
+            action = "get_group_file_url"
+            params = {
+                "group_id": int(target),
+                "file_id": file.file_id,
+                "busid": file.busid,
+            }
+        else:
+            action = "get_private_file_url"
+            params = {"file_id": file.file_id}
+        data = await self._socket_for(account_id).call(action, params)
+        url = data.get("url") if isinstance(data, dict) else None
+        if not isinstance(url, str) or not url:
+            raise OneBotError(f"NapCat {action} 未返回下载地址")
+        return url
 
     async def send_target(
         self,

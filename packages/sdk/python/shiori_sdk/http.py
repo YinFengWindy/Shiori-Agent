@@ -13,6 +13,14 @@ class RequestBudget:
     total_timeout_s: float
 
 
+class ResponseTooLarge(ValueError):
+    """A download exceeded its declared or decoded response byte limit."""
+
+    def __init__(self, max_response_bytes: int):
+        self.max_response_bytes = max_response_bytes
+        super().__init__(f"HTTP response exceeds {max_response_bytes} bytes")
+
+
 class HttpRequester(Protocol):
     """The bounded HTTP POST operation used by embedding engines."""
 
@@ -38,7 +46,16 @@ class HttpGet(Protocol):
         follow_redirects: bool = False,
         timeout_s: float | None = None,
         budget: RequestBudget | None = None,
-    ) -> httpx.Response: ...
+        max_response_bytes: int | None = None,
+    ) -> httpx.Response:
+        """Read a response, raising ResponseTooLarge above the optional byte cap.
+
+        The cap must be nonnegative and applies to the advertised Content-Length
+        and decoded body as it streams. Rejected responses are closed, not retried.
+        Capped downloads enforce the shared wall-clock budget across redirects
+        and retries, even when body chunks arrive continuously.
+        """
+        ...
 
 
 class HttpClient(HttpGet, Protocol):
@@ -70,7 +87,10 @@ class ChannelHttp(HttpGet, Protocol):
         follow_redirects: bool = False,
         timeout_s: float | None = None,
         budget: RequestBudget | None = None,
-    ) -> httpx.Response: ...
+        max_response_bytes: int | None = None,
+    ) -> httpx.Response:
+        """Issue a request using the same optional response byte cap as get."""
+        ...
 
 
 class HttpResources(Protocol):

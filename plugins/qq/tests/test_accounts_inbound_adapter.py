@@ -337,3 +337,117 @@ async def test_private_reply_that_cannot_be_fetched_passes_without_a_quote(
     assert published.content == "你好"
     assert "reply_to_sender_id" not in published.metadata
     assert "查询失败" in caplog.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("private", [False, True])
+async def test_direct_and_quoted_text_files_join_current_turn_after_admission(
+    tmp_path, private
+):
+    adapter = _adapter()
+    adapter._group_names = QQGroupNames(AsyncMock(return_value="读书会"))
+    adapter._actions = _actions(
+        replied_message=AsyncMock(
+            return_value=RepliedMessage(
+                "303",
+                "阿花",
+                "[CQ:file,name=引用.txt,url=https://x/quote]",
+            )
+        )
+    )
+    bus = FakeMessageBus()
+    http = FakeChannelHttp(
+        lambda request: httpx.Response(
+            200,
+            content=(
+                b"image"
+                if request.url.path == "/own.png"
+                else "中文正文\n续文".encode()
+            ),
+            headers={
+                "content-type": (
+                    "image/png"
+                    if request.url.path.endswith(".png")
+                    else "application/octet-stream"
+                )
+            },
+        )
+    )
+    adapter._ctx = fake_channel_context(
+        tmp_path,
+        bus=bus,
+        http_resources=FakeHttpResources(external_default=http),
+    )
+    message = _private_message("") if private else _group_message(True)
+    message.content = (
+        "[CQ:reply,id=35][CQ:at,qq=202]分析"
+        "[CQ:image,url=https://x/own.png][CQ:file,name=自己的.md,url=https://x/own]"
+    )
+    await adapter._accept_inbound(message)
+    [turn] = bus.inbound
+    assert [Path(path).suffix for path in turn.media] == [".txt", ".png", ".md"]
+    assert Path(turn.media[0]).read_text(encoding="utf-8") == "中文正文\n续文"
+    assert turn.metadata["reply_to_media"] == turn.media[:1]
+    assert turn.metadata["reply_to_content"] == "[文件：引用.txt]"
+    assert turn.metadata["text_attachment_tool"] == "read_attachment"
+    assert "文件" in turn.content and "1 张图片" not in turn.content
+    assert "自己的.md" in turn.metadata["persisted_user_content"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("decision", ["listened", "rejected", "duplicate"])
+async def test_files_are_not_downloaded_for_unadmitted_or_duplicate_messages(
+    tmp_path, decision
+):
+    adapter = _adapter()
+    adapter._group_names = QQGroupNames(AsyncMock(return_value="读书会"))
+    bus = FakeMessageBus()
+    http = FakeChannelHttp(lambda _: httpx.Response(200, content=b"text"))
+    hub = FakeChannelHub(
+        platform_account_id="202", listening=True, allowed=decision != "rejected"
+    )
+    adapter._ctx = fake_channel_context(
+        tmp_path,
+        bus=bus,
+        channel_hub=hub,
+        http_resources=FakeHttpResources(external_default=http),
+    )
+    message = _group_message(decision != "listened")
+    message.metadata["external_message_id"] = "456"
+    message.content = "[CQ:file,name=附件.txt,url=https://x/file]"
+    await adapter._accept_inbound(message)
+    initial = len(http.requests)
+    if decision == "duplicate":
+        assert initial == 1
+        await adapter._accept_inbound(message)
+    else:
+        assert initial == 0 and not bus.inbound
+    assert len(http.requests) == initial
+    assert "附件.txt" in hub.offered[-1].content
+
+
+@pytest.mark.asyncio
+async def test_quoted_file_download_failure_is_visible_and_not_an_attachment(tmp_path):
+    adapter = _adapter()
+    adapter._actions = _actions(
+        replied_message=AsyncMock(
+            return_value=RepliedMessage(
+                "303",
+                "阿花",
+                "[CQ:file,name=引用.txt,url=https://x/quote]",
+            )
+        )
+    )
+    bus = FakeMessageBus()
+    adapter._ctx = fake_channel_context(
+        tmp_path,
+        bus=bus,
+        http_resources=FakeHttpResources(
+            external_default=FakeChannelHttp(lambda _: httpx.Response(404)),
+        ),
+    )
+    await adapter._accept_inbound(_private_message("[CQ:reply,id=35]请阅读"))
+    [turn] = bus.inbound
+    assert (
+        turn.media == [] and "HTTP 404" in turn.content and "未接收正文" in turn.content
+    )

@@ -468,8 +468,13 @@ async def test_rows_name_the_members_a_message_mentions(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "own_file,quoted_file", [("own.png", "quoted.png"), ("own.md", "quoted.txt")]
+)
 async def test_row_carries_the_message_it_quotes_apart_from_its_own(
     tmp_path: Path,
+    own_file: str,
+    quoted_file: str,
 ) -> None:
     manager = SessionManager(tmp_path)
     conversation = ConversationService(manager)
@@ -480,11 +485,11 @@ async def test_row_carries_the_message_it_quotes_apart_from_its_own(
     session.add_message(
         "user",
         "这是啥",
-        media=["own.png"],
+        media=[own_file],
         metadata={
             **metadata,
             "reply_to_content": "看",
-            "reply_to_media": ["quoted.png"],
+            "reply_to_media": [quoted_file],
         },
     )
     manager.save(session)
@@ -500,9 +505,9 @@ async def test_row_carries_the_message_it_quotes_apart_from_its_own(
         "sender_id": "10001",
         "name": "小栞",
         "content": "看",
-        "media": ["quoted.png"],
+        "media": [quoted_file],
     }
-    assert (row["content"], row["media"]) == ("这是啥", ["own.png"])
+    assert (row["content"], row["media"]) == ("这是啥", [own_file])
 
 
 @pytest.mark.asyncio

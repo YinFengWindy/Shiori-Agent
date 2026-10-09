@@ -89,6 +89,7 @@ class ContextRequest:
     window_sources: tuple[MessageSource, ...] = ()
     # Last-resort speaking request; retain identity/permissions and no tool routing.
     minimal_request: bool = False
+    text_attachment_tool: str = "read_file"
 
 
 @dataclass

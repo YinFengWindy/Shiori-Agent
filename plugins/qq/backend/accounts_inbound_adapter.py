@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
-from shiori_sdk.messages import InboundMessage
+from shiori_sdk.messages import InboundMessage, TEXT_ATTACHMENT_TOOL_KEY
 from shiori_sdk.channels.pairing_command import answer_pairing_code
 from shiori_sdk.channels.message_source import GROUP_NAME_KEY, addresses_account
 from shiori_sdk.channels import ChannelContext
@@ -19,6 +19,7 @@ from .accounts_inbound import inbound_message, is_real_private_chat
 from .accounts_reply_quote import with_quote, with_replied_message
 from .accounts_store import QQConnectionConfig
 from .channel.compat import download_to_temp, extract_cq_images
+from .channel.files import QQFile, extract_cq_files, receive_files
 from .channel.group_filter import strip_at_segments, strip_reply_segments
 from .onebot import OneBotSocket
 
@@ -136,11 +137,13 @@ class QQInboundAdapter:
             else message.content
         )
         text, image_urls = extract_cq_images(raw)
+        text, files = extract_cq_files(text)
         # A picture alone reads as 「[图片]」, as other channels write it, so a
         # listened group message keeps a line even though its file is never
         # downloaded.
         message = replace(
-            message, content=text or (IMAGE_PLACEHOLDER if image_urls else "")
+            message,
+            content=text or (IMAGE_PLACEHOLDER if image_urls else ""),
         )
         hub = ctx.channel_hub
         if hub is None:
@@ -184,7 +187,26 @@ class QQInboundAdapter:
                 urls, ctx.http_resources.external_default, ctx.attachment_store
             )
 
-        message = replace(message, media=await download(image_urls))
+        async def download_files(
+            text: str, files: list[QQFile]
+        ) -> tuple[str, list[str]]:
+            return await receive_files(
+                text,
+                files,
+                ctx.http_resources.external_default,
+                ctx.attachment_store,
+                lambda file: self._actions.file_url(
+                    str(message.metadata["account_id"]), message.chat_id, file
+                ),
+            )
+
+        text, file_paths = await download_files(text or message.content, files)
+        message = replace(
+            message,
+            content=text,
+            media=[*await download(image_urls), *file_paths],
+            metadata={**message.metadata, TEXT_ATTACHMENT_TOOL_KEY: "read_attachment"},
+        )
         if replied is not None:
-            message = await with_quote(message, replied, download)
+            message = await with_quote(message, replied, download, download_files)
         await ctx.bus.publish_inbound(message)

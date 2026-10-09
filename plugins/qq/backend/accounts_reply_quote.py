@@ -14,6 +14,7 @@ from shiori_sdk.channels.reply_context import with_reply_quote
 
 from .accounts_actions import RepliedMessage
 from .channel.compat import extract_cq_images
+from .channel.files import QQFile, extract_cq_files
 from .channel.group_filter import (
     reply_message_id,
     strip_at_segments,
@@ -27,6 +28,7 @@ logger = logging.getLogger(__name__)
 RepliedMessageFetch = Callable[[str, str], Awaitable[RepliedMessage]]
 # ``download(urls)`` stores pictures as local attachments and returns their paths.
 ImageDownload = Callable[[list[str]], Awaitable[list[str]]]
+FileDownload = Callable[[str, list[QQFile]], Awaitable[tuple[str, list[str]]]]
 
 
 async def with_replied_message(
@@ -51,6 +53,8 @@ async def with_replied_message(
     account_id = str(message.metadata["account_id"])
     try:
         replied = await fetch(account_id, replied_id)
+        if replied.chat_id and replied.chat_id != message.chat_id:
+            raise OneBotError("被回复消息不属于当前聊天")
     except (OneBotError, TimeoutError, ConnectionClosed) as exc:
         logger.warning(
             "[qq] 账号 %s 被回复消息 %s 查询失败，消息不带回复对象: %s",
@@ -64,9 +68,12 @@ async def with_replied_message(
 
 
 async def with_quote(
-    message: InboundMessage, replied: RepliedMessage, download: ImageDownload
+    message: InboundMessage,
+    replied: RepliedMessage,
+    download: ImageDownload,
+    download_files: FileDownload,
 ) -> InboundMessage:
-    """``message``, routed to a turn, with the text and pictures it quotes (#555).
+    """Attach the quoted text, pictures and supported files of an admitted turn.
 
     The quoted text loses its CQ codes: @ and a nested reply are dropped (a
     quote inside the quote is not followed), pictures are downloaded.
@@ -74,11 +81,13 @@ async def with_quote(
     text, image_urls = extract_cq_images(
         strip_reply_segments(strip_at_segments(replied.raw_content))
     )
+    text, files = extract_cq_files(text)
+    text, file_paths = await download_files(text, files)
     return with_reply_quote(
         message,
         own_id=str(message.metadata["platform_account_id"]),
         text=text,
         sender_name=replied.sender_name,
-        media=await download(image_urls),
+        media=[*await download(image_urls), *file_paths],
         has_pictures=bool(image_urls),
     )

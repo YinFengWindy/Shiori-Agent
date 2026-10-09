@@ -6,6 +6,13 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Protocol
 
+TEXT_ATTACHMENT_TOOL_KEY = "text_attachment_tool"
+"""Inbound metadata key naming the plugin's text attachment reader for this turn.
+
+This controls a model-facing hint only; it does not grant file access. Omitting
+the key retains the desktop ``read_file`` hint.
+"""
+
 
 class MessageLease(Protocol):
     """Opaque admitted-work ownership; only its host may interpret the generation."""

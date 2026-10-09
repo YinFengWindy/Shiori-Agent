@@ -30,6 +30,86 @@ class _ArchivedTool(Tool):
         return "ok"
 
 
+async def test_current_attachments_are_isolated_across_concurrent_and_followup_turns(
+    tmp_path,
+):
+    import asyncio
+
+    from shiori_sdk.messages import TEXT_ATTACHMENT_TOOL_KEY
+    from shiori_sdk.tools import TOOL_ATTACHMENT_SCOPE_KEY, ToolAttachmentScope
+
+    manager = SessionManager(tmp_path)
+    tools = ToolRegistry()
+    tools.set_context(channel="stale", attachment_scope="forged shared context")
+    reasoner = DefaultReasoner(
+        llm=LLMServices(provider=AsyncMock(), light_provider=AsyncMock()),
+        llm_config=LLMConfig(),
+        tools=tools,
+        discovery=ToolDiscoveryState(),
+        tool_search_enabled=False,
+        context=AsyncMock(),
+        session_manager=manager,
+    )
+    messages = [
+        InboundMessage(
+            channel="qq_bot",
+            sender="friend",
+            chat_id=chat_id,
+            content="读取附件",
+            media=[f"{chat_id}.txt"],
+            metadata={
+                TEXT_ATTACHMENT_TOOL_KEY: "read_attachment",
+                TOOL_ATTACHMENT_SCOPE_KEY: {"paths": ["private.txt"]},
+            },
+        )
+        for chat_id in ("first", "second")
+    ]
+    sessions = [manager.get_or_create(msg.session_key) for msg in messages]
+    for session in sessions:
+        session.add_message("user", "旧附件", media=["history.txt"])
+    reasoner.render_prompt = AsyncMock(
+        side_effect=lambda request: PromptRenderResult(
+            messages=[{"role": "user", "content": request.content}]
+        )
+    )
+    observed = []
+    both_running = asyncio.Event()
+
+    async def run(*args, **kwargs):
+        scope = kwargs["tool_execution_context"][TOOL_ATTACHMENT_SCOPE_KEY]
+        observed.append(scope)
+        if len(observed) == 2:
+            both_running.set()
+        await both_running.wait()
+        return ReasonerResult(reply="ok")
+
+    reasoner.run = AsyncMock(side_effect=run)
+    await asyncio.gather(
+        *(
+            reasoner.run_turn(msg=msg, session=session)
+            for msg, session in zip(messages, sessions)
+        )
+    )
+    assert set(observed) == {
+        ToolAttachmentScope(channel="qq_bot", paths=("first.txt",)),
+        ToolAttachmentScope(channel="qq_bot", paths=("second.txt",)),
+    }
+    messages[0].media.append("late.txt")
+    assert all("late.txt" not in scope.paths for scope in observed)
+    assert all(
+        call.args[0].text_attachment_tool == "read_attachment"
+        for call in reasoner.render_prompt.await_args_list
+    )
+    await reasoner.run_turn(
+        msg=InboundMessage(
+            channel="qq_bot", sender="friend", chat_id="first", content="继续"
+        ),
+        session=sessions[0],
+    )
+    assert observed[-1] == ToolAttachmentScope(channel="qq_bot", paths=())
+    assert tools.get_context()[TOOL_ATTACHMENT_SCOPE_KEY] == "forged shared context"
+
+
 @pytest.mark.parametrize(
     "case",
     [

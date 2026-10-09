@@ -3,6 +3,7 @@
 import httpx
 import pytest
 
+from shiori_sdk.http import ResponseTooLarge
 from shiori_sdk.testing.http import FakeChannelHttp, FakeHttp, FakeHttpResources
 
 
@@ -39,3 +40,28 @@ async def test_resources_default_to_profiles_that_refuse_requests() -> None:
     assert resources.external_default is external
     with pytest.raises(AssertionError, match="Unconfigured HTTP GET"):
         await resources.local_service.get("http://127.0.0.1")
+
+
+@pytest.mark.parametrize("request_method", ["get", "request"])
+async def test_fake_download_enforces_optional_response_cap(
+    request_method: str,
+) -> None:
+    http = FakeChannelHttp(lambda _: httpx.Response(200, content=b"12345"))
+
+    with pytest.raises(ResponseTooLarge):
+        if request_method == "get":
+            _ = await http.get("https://x.test", max_response_bytes=4)
+        else:
+            _ = await http.request("GET", "https://x.test", max_response_bytes=4)
+    response = await http.get("https://x.test", max_response_bytes=5)
+
+    assert response.content == b"12345"
+
+
+async def test_fake_download_rejects_advertised_size() -> None:
+    http = FakeHttp(
+        lambda _: httpx.Response(200, headers={"content-length": "20"}, content=b"1")
+    )
+
+    with pytest.raises(ResponseTooLarge):
+        _ = await http.get("https://x.test", max_response_bytes=4)

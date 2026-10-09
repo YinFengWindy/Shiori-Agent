@@ -4,11 +4,12 @@ import asyncio
 import random
 import ssl
 from dataclasses import dataclass, field
+from datetime import timedelta
 from functools import cache
 from typing import Any, Literal
 
 import httpx
-from shiori_sdk.http import RequestBudget
+from shiori_sdk.http import RequestBudget, ResponseTooLarge
 
 HttpProfile = Literal["external_default", "feed_fetcher", "local_service"]
 
@@ -59,7 +60,10 @@ class HttpRequester:
         follow_redirects: bool = False,
         timeout_s: float | None = None,
         budget: RequestBudget | None = None,
+        max_response_bytes: int | None = None,
     ) -> httpx.Response:
+        if max_response_bytes is not None and max_response_bytes < 0:
+            raise ValueError("max_response_bytes must be nonnegative")
         loop = asyncio.get_running_loop()
         deadline = loop.time() + (
             budget.total_timeout_s
@@ -76,9 +80,11 @@ class HttpRequester:
             if remaining <= 0:
                 break
             try:
-                response = await self.client.request(
+                response = await self._request_once(
                     method,
                     url,
+                    max_response_bytes=max_response_bytes,
+                    deadline=deadline,
                     headers=headers,
                     params=params,
                     content=content,
@@ -106,6 +112,81 @@ class HttpRequester:
         if response is None:
             raise httpx.TimeoutException("request budget exhausted")
         return response
+
+    async def _request_once(
+        self,
+        method: str,
+        url: str,
+        *,
+        max_response_bytes: int | None,
+        deadline: float,
+        **kwargs: Any,
+    ) -> httpx.Response:
+        if max_response_bytes is None:
+            return await self.client.request(method, url, **kwargs)
+
+        try:
+            # httpx read timeouts measure inactivity. The shared absolute deadline
+            # also bounds continuously arriving chunks and redirect chains.
+            async with asyncio.timeout_at(deadline):
+                follow_redirects = kwargs.pop("follow_redirects", False)
+                request = self.client.build_request(method, url, **kwargs)
+                history: list[httpx.Response] = []
+                loop = asyncio.get_running_loop()
+                while True:
+                    if len(history) > self.client.max_redirects:
+                        raise httpx.TooManyRedirects(
+                            "Exceeded maximum allowed redirects.", request=request
+                        )
+                    # httpx's automatic redirects buffer intermediate response bodies.
+                    # Follow explicitly so each downloaded body observes the same cap.
+                    started = loop.time()
+                    response = await self.client.send(
+                        request, stream=True, follow_redirects=False
+                    )
+                    response.history = list(history)
+                    buffered = await self._buffer_bounded_response(
+                        response, max_response_bytes
+                    )
+                    buffered.elapsed = timedelta(seconds=loop.time() - started)
+                    if not follow_redirects or buffered.next_request is None:
+                        return buffered
+                    request = buffered.next_request
+                    history.append(buffered)
+        except TimeoutError as exc:
+            raise httpx.TimeoutException("request budget exhausted") from exc
+
+    @staticmethod
+    async def _buffer_bounded_response(
+        response: httpx.Response, max_response_bytes: int
+    ) -> httpx.Response:
+        try:
+            content_length = response.headers.get("content-length", "")
+            if content_length.isdecimal() and int(content_length) > max_response_bytes:
+                raise ResponseTooLarge(max_response_bytes)
+            chunks: list[bytes] = []
+            total_bytes = 0
+            async for chunk in response.aiter_bytes():
+                total_bytes += len(chunk)
+                if total_bytes > max_response_bytes:
+                    raise ResponseTooLarge(max_response_bytes)
+                chunks.append(chunk)
+        finally:
+            await response.aclose()
+
+        # The stream already decoded content encodings. Attach the original
+        # headers only after construction so httpx does not decode it twice.
+        buffered = httpx.Response(
+            response.status_code,
+            content=b"".join(chunks),
+            request=response.request,
+            extensions=response.extensions,
+            history=response.history,
+            default_encoding=response.default_encoding,
+        )
+        buffered.headers = response.headers
+        buffered.next_request = response.next_request
+        return buffered
 
     async def get(self, url: str, **kwargs: Any) -> httpx.Response:
         return await self.request("GET", url, **kwargs)

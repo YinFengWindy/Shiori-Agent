@@ -32,6 +32,7 @@ from .channel_intake import FakeChannelIntake
 from .channel_services import FakeAttachmentStore, FakeMessageBus, FakePushSenders
 from .channel_sessions import FakeChannelSessions
 from .events import FakeEvents
+from .tools import FakeTools
 from .http import FakeHttpResources
 
 
@@ -97,6 +98,7 @@ class FakeChannelPluginContext(FakePluginContext):
         self.processes = FakeProcesses()
         self.http = FakeHttp()
         self.avatars = FakeAvatars()
+        self.tools = FakeTools()
 
     def as_capability(self) -> ChannelPluginContext:
         """Check this composition at the same setup boundary as the host."""
@@ -107,6 +109,7 @@ class FakeChannelPluginContext(FakePluginContext):
         try:
             await super().aclose()
         finally:
+            self.tools.tools.clear()
             await self.avatars.aclose()
 
 
