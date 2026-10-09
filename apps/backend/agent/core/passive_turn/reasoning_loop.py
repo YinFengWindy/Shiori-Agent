@@ -132,7 +132,7 @@ class _PassiveReasoningLoopMixin:
             summary_iteration: int,
         ) -> tuple[str, RoleReply | None, bool]:
             nonlocal react_total_tokens, react_total_tokens_seen, reply_recovery
-            summary, summary_tokens, summary_role_reply, reply_recovery = (
+            summary, summary_tokens, summary_role_reply, summary_recovery = (
                 await self._summarize_incomplete_progress(
                     messages,
                     reason=reason,
@@ -143,6 +143,7 @@ class _PassiveReasoningLoopMixin:
                     **({"reply_moods": reply_moods} if reply_moods is not None else {}),
                 )
             )
+            reply_recovery = summary_recovery or reply_recovery
             if summary_tokens is not None:
                 react_total_tokens_seen = True
                 react_total_tokens += summary_tokens
@@ -312,9 +313,17 @@ class _PassiveReasoningLoopMixin:
                 channel=tool_event_channel,
                 iteration=iteration + 1,
                 allow_tool_calls=not request_tools_disabled(),
+                tools=schemas,
+                tool_choice="auto",
+                schemas_for_history=schemas_for_history,
             )
+            # Recovery/provider retries may compact history and its schemas.
+            # Dispatch against exactly the capabilities sent on the final request.
+            if visible_names is not None:
+                visible_order = [schema["function"]["name"] for schema in schemas]
+                visible_names = set(visible_order)
             response = completion.response
-            reply_recovery = completion.diagnostics
+            reply_recovery = completion.diagnostics or reply_recovery
             if on_content_delta is not None and response.content:
                 streamed = True
             for call in completion.calls:

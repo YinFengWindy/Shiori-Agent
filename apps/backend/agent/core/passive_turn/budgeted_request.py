@@ -2,6 +2,7 @@
 
 import logging
 
+from agent.context import without_attachment_tool_hints
 from agent.provider import LLMProvider
 from agent.prompting.usage_accounting import current_usage, mark_speaking_request
 from core.compaction import CompactionFailedError
@@ -18,10 +19,26 @@ async def budgeted_chat(provider: LLMProvider, **kwargs):
     """
     from agent.provider import ContextLengthError, LocalBudgetExceeded
 
+    def prepare_messages():
+        # Finalization has no reader tools; a compaction retry may also disable
+        # them or re-render the original attachment instructions. Preserve paths
+        # and user prose while removing only the host-generated reader hints.
+        if not kwargs.get("tools") or kwargs.get("tool_choice") == "none":
+            kwargs["messages"][:] = [
+                (
+                    without_attachment_tool_hints(message)
+                    if message.get("role") == "user"
+                    else message
+                )
+                for message in kwargs["messages"]
+            ]
+
     scope = current_request_compaction()
     if scope is None or not isinstance(provider, LLMProvider):
+        prepare_messages()
         return await provider.chat(**kwargs)
     for attempt in range(3):
+        prepare_messages()
         previous_calls = len(current_usage()["calls"])
         try:
             response = await provider.chat(**kwargs)

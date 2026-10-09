@@ -1,6 +1,7 @@
 """Auxiliary budget summaries remain separate from role-facing replies."""
 
 from unittest.mock import AsyncMock
+from copy import deepcopy
 from types import SimpleNamespace
 
 import pytest
@@ -11,6 +12,46 @@ from agent.looping.ports import LLMConfig, LLMServices
 from agent.provider import LLMResponse
 from agent.prompting.usage_accounting import turn_usage
 from agent.tools.registry import ToolRegistry
+
+
+async def test_summary_and_recovery_remove_only_generated_attachment_instructions(
+    tmp_path,
+):
+    from agent.context import MessageEnvelopeBuilder
+
+    attachment = tmp_path / "article.txt"
+    attachment.write_text("article", encoding="utf-8")
+    user_line = "- 如需读取内容，请调用 user_example()"
+    content = MessageEnvelopeBuilder()._append_text_attachment_refs(
+        "解释这句话：\n" + user_line, [str(attachment)], "read_attachment"
+    )
+    messages = [{"role": "user", "content": content}]
+    sent = []
+
+    async def chat(**kwargs):
+        sent.append(deepcopy(kwargs))
+        return LLMResponse(content="" if len(sent) == 1 else "尚未读到文章。")
+
+    provider = AsyncMock()
+    provider.chat.side_effect = chat
+    reasoner = DefaultReasoner(
+        llm=LLMServices(provider=provider, light_provider=provider),
+        llm_config=LLMConfig(),
+        tools=ToolRegistry(),
+        discovery=ToolDiscoveryState(),
+        tool_search_enabled=False,
+    )
+    result = await reasoner._summarize_incomplete_progress(
+        messages, reason="max_iterations", iteration=1, tools_used=[]
+    )
+    assert result[0] == "尚未读到文章。"
+    assert len(sent) == 2
+    for call in sent:
+        assert call["tools"] == []
+        text = call["messages"][0]["content"]
+        assert user_line in text and str(attachment) in text
+        assert "请调用 read_attachment" not in text
+    assert messages[0]["content"] == content
 
 
 async def test_role_summary_normalizes_legacy_content_before_mood_call():
