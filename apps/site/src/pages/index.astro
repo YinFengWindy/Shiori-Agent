@@ -1,7 +1,5 @@
 ---
 import { DownloadSimpleIcon, GithubLogoIcon } from "@phosphor-icons/react";
-import { cx, ghostButtonClass } from "@yinfengwindy/shiori-sdk";
-import { primaryButtonClass } from "../../../desktop/renderer/src/shared/styles";
 import SceneBackdrop from "../components/SceneBackdrop.astro";
 import SiteLayout from "../layouts/SiteLayout.astro";
 import { titleLogoImage, titleSprites } from "../lib/siteAssets";
@@ -13,7 +11,6 @@ import { SITE_LINKS, SITE_NAME, SITE_SLOGAN } from "../lib/siteMeta";
  * narrative, product showcase and blog entry replace it in later tickets (#768).
  */
 const sprite = titleSprites[0];
-const ctaLayoutClass = "inline-flex items-center gap-2 text-body-lg font-medium";
 ---
 
 <SiteLayout title={`${SITE_NAME} · ${SITE_SLOGAN}`}>
@@ -40,11 +37,11 @@ const ctaLayoutClass = "inline-flex items-center gap-2 text-body-lg font-medium"
         </h1>
         <p class="site-hero-slogan font-serif text-headline font-semibold italic">{SITE_SLOGAN}</p>
         <div class="flex flex-wrap justify-center gap-3 sm:justify-start">
-          <a href={SITE_LINKS.releasesLatest} class={cx(primaryButtonClass, ctaLayoutClass)}>
+          <a href={SITE_LINKS.releasesLatest} class="site-cta site-cta-primary font-serif text-body-lg font-semibold italic">
             <DownloadSimpleIcon size={20} weight="bold" aria-hidden="true" />
             下载 Windows 版
           </a>
-          <a href={SITE_LINKS.github} class={cx(ghostButtonClass, ctaLayoutClass)}>
+          <a href={SITE_LINKS.github} class="site-cta site-cta-ghost font-serif text-body-lg font-semibold italic">
             <GithubLogoIcon size={20} aria-hidden="true" />
             GitHub
           </a>
