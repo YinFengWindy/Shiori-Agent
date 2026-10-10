@@ -1,0 +1,30 @@
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
+import react from "@astrojs/react";
+import sitemap from "@astrojs/sitemap";
+import { defineConfig } from "astro/config";
+
+const here = dirname(fileURLToPath(import.meta.url));
+const repositoryRoot = resolve(here, "..", "..");
+
+/**
+ * Shiori public website: fully static output, React only where a component
+ * needs it (islands), and the desktop's design tokens compiled by the
+ * desktop's own Tailwind theme (postcss.config.mjs, tailwind.config.ts).
+ * `site` is the one source of the canonical origin: the layout's canonical /
+ * OG URLs, the sitemap and robots.txt are all derived from it.
+ */
+export default defineConfig({
+  site: "https://www.windchant.online",
+  output: "static",
+  integrations: [react(), sitemap()],
+  vite: {
+    server: {
+      fs: {
+        // styles.css, the scene backgrounds and the title logo are imported
+        // from apps/desktop/renderer, outside this Vite root.
+        allow: [repositoryRoot],
+      },
+    },
+  },
+});

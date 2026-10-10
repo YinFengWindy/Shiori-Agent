@@ -1,0 +1,29 @@
+<!doctype html>
+<!--
+  GitHub Pages copy of the site (https://yinfengwindy.github.io/Shiori-Agent/):
+  only forwards visitors to https://www.windchant.online, keeping the path
+  under /Shiori-Agent/, the query and the hash. Published as both index.html
+  and 404.html by .github/workflows/site-pages.yml, because Pages answers
+  every unknown path with 404.html. Without JS, the <noscript> refresh goes to
+  the new site's root.
+-->
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="robots" content="noindex" />
+    <title>Shiori</title>
+    <link rel="canonical" href="https://www.windchant.online/" />
+    <script>
+      (function () {
+        var base = "/Shiori-Agent";
+        var path = location.pathname;
+        if (path === base || path.indexOf(base + "/") === 0) path = path.slice(base.length);
+        location.replace("https://www.windchant.online" + (path || "/") + location.search + location.hash);
+      })();
+    </script>
+    <noscript><meta http-equiv="refresh" content="0; url=https://www.windchant.online/" /></noscript>
+  </head>
+  <body>
+    <a href="https://www.windchant.online/">https://www.windchant.online/</a>
+  </body>
+</html>

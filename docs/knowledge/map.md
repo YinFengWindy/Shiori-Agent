@@ -13,6 +13,7 @@ source_paths:
   - apps/backend/desktop_bridge/
   - plugins/
   - packages/sdk/
+  - apps/site/
 related:
   - index.md
   - architecture/overview.md
@@ -44,6 +45,7 @@ related:
 | 调度任务 | `apps/backend/agent/scheduler.py`、`apps/backend/agent/tools/schedule.py`、`apps/backend/desktop_bridge/schedule_role_task_service.py`、`apps/backend/desktop_bridge/role_task_service.py` | 主动触发、角色任务、桌面展示 |
 | 桌面桥接 | `apps/backend/desktop_bridge/` | Electron 主进程、React renderer、后端服务 |
 | 桌面界面 | `apps/desktop/src/`、`apps/desktop/renderer/src/` | 角色管理、聊天、设置、图片、任务 |
+| 官网 | `apps/site/`（Astro 静态站，`https://www.windchant.online`；设计 token、Tailwind 主题、场景背景直接引用 `apps/desktop/renderer/`） | Vercel 部署（`vercel.json`）、GitHub Pages 工作流（`.github/workflows/site-pages.yml`） |
 | 单角色剧情 | `plugins/story/backend/`、`plugins/story/ui/`（依赖 NovelAI 插件） | 剧情事实、角色/玩家快照、提交事件、固定故事日期与“清晨/上午/下午/夜晚/深夜”五段时段时钟、桌面剧情界面 |
 | 桌宠语音 | `plugins/desktop_pet/background/voice/`、`plugins/desktop_pet/backend/voice_rpc.py`、`plugins/desktop_pet/backend/voice_preferences.py`、`apps/desktop/src/native/`、`apps/desktop/renderer/src/voice/`；ASR/TTS provider 为 `plugins/sensevoice_asr/`、`plugins/gpt_sovits_tts/` | 录音、ASR、角色 Loop、按句 TTS、播放与中断 |
 

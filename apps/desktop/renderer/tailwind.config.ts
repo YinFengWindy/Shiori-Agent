@@ -4,14 +4,14 @@ import type { Config } from "tailwindcss";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
+/**
+ * Desktop renderer Tailwind theme. The public site (apps/site/tailwind.config.ts)
+ * reuses everything here except `content`, so theme changes reach both.
+ */
 export default {
   content: [
     resolve(here, "index.html"),
     resolve(here, "src/**/*.{ts,tsx}"),
-    // The static site skeleton's own entry HTML lives outside renderer/src
-    // (apps/desktop/site/); its React entry under renderer/src/site/ is
-    // already covered by the glob above.
-    resolve(here, "../site/index.html"),
     // Plugin UI lives outside renderer/ (top-level plugins/<id>/ui/, see
     // issue #174); without this Tailwind never scans it and any class name
     // used only there is silently dropped from the production build.
