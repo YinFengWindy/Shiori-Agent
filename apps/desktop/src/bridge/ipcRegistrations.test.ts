@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { access, mkdir, mkdtemp, readFile, realpath, rm, truncate, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
 import type { BrowserWindow, WebContents } from "electron";
 import { PluginUiResources } from "../plugins/uiResources.js";
@@ -223,6 +223,82 @@ describe("desktop ipc window boundaries", () => {
     const state = await ipc.invokeHandler("desktop:window-state", {} as WebContents);
 
     assert.deepEqual(state, { isMaximized: false, isVisible: false });
+  });
+});
+
+describe("role card picker IPC", () => {
+  for (const extension of ["png", "apng", "json", "charx", "JSON"]) {
+    it(`stages ${extension} role cards without granting the source as media`, async () => {
+      const root = await mkdtemp(join(tmpdir(), "shiori-role-card-picker-"));
+      try {
+        const source = join(root, `character.${extension}`);
+        const imports = join(root, "imports");
+        await writeFile(source, "role-card-data", "utf8");
+        const localAssets = new LocalAssetRegistry();
+        localAssets.addTrustedRoot(imports);
+        const ipc = setup({ localAssets, localAssetImportsRoot: imports,
+          showOpenDialog: async () => ({ canceled: false, filePaths: [source] }),
+        });
+
+        const result = await ipc.invokeHandler("desktop:pick-role-card", ipc.windows.main.webContents) as LocalAssetTransport<string[]>;
+
+        assert.equal(result.value.length, 1);
+        const [staged] = result.value;
+        assert.equal(dirname(staged), join(await realpath(imports), "role-cards"));
+        assert.notEqual(staged, source);
+        assert.deepEqual(result.assets, []);
+        assert.equal(localAssets.resolveReference(source), null);
+        assert.equal(localAssets.resolveReference(staged), null);
+        await rm(source);
+        assert.equal(await readFile(staged, "utf8"), "role-card-data");
+      } finally { await rm(root, { recursive: true, force: true }); }
+    });
+  }
+
+  it("returns an empty transport when the native picker is canceled", async () => {
+    const ipc = setup({
+      showOpenDialog: async () => ({ canceled: true, filePaths: ["ignored.json"] }),
+    });
+    assert.deepEqual(await ipc.invokeHandler("desktop:pick-role-card", ipc.windows.main.webContents), { value: [], assets: [] });
+  });
+
+  it("still rejects unsupported extensions and oversized role cards", async () => {
+    const root = await mkdtemp(join(tmpdir(), "shiori-rejected-role-card-"));
+    try {
+      let source = join(root, "character.txt");
+      await writeFile(source, "role-card-data", "utf8");
+      const ipc = setup({ localAssetImportsRoot: join(root, "imports"),
+        showOpenDialog: async () => ({ canceled: false, filePaths: [source] }),
+      });
+      await assert.rejects(ipc.invokeHandler("desktop:pick-role-card", ipc.windows.main.webContents), /类型不受支持/);
+
+      source = join(root, "large.json");
+      await writeFile(source, "");
+      await truncate(source, maxLocalAssetBytes + 1);
+      await assert.rejects(ipc.invokeHandler("desktop:pick-role-card", ipc.windows.main.webContents), /大小限制/);
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
+
+  it("grants preview images returned by the role card import bridge", async () => {
+    const root = await mkdtemp(join(tmpdir(), "shiori-role-card-preview-"));
+    try {
+      const preview = join(root, "preview.png");
+      await writeFile(preview, "preview-image", "utf8");
+      const localAssets = new LocalAssetRegistry();
+      localAssets.addTrustedRoot(root);
+      const response = { id: "preview", type: "response" as const, method: "roles.cardImport.preview", error: null,
+        payload: { assets: [{ preview_abs: preview }] } };
+      const ipc = setup({ localAssets, invoke: async () => response });
+
+      const result = await ipc.invokeHandler("desktop:invoke", ipc.windows.main.webContents, {
+        method: "roles.cardImport.preview", payload: { source: "character.json" },
+      }) as LocalAssetTransport<typeof response>;
+
+      assert.deepEqual(result.value, response);
+      assert.equal(result.assets.length, 1);
+      assert.equal(result.assets[0].kind, "image");
+      assert.equal(localAssets.resolveReference(result.assets[0].url)?.canonicalPath, await realpath(preview));
+    } finally { await rm(root, { recursive: true, force: true }); }
   });
 });
 

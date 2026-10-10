@@ -305,12 +305,9 @@ export function registerDesktopIpcHandlers(
       namespace: "role-cards", filters: [{ name: "Role cards", extensions: ["png", "apng", "json", "charx"] }],
       maxFileBytes: maxLocalAssetBytes,
     });
-    const assets = stagedPaths.map((path) => {
-      const reference = localAssets.grantPath(path);
-      if (!reference) throw new Error("staged role card is outside the trusted workspace");
-      return reference;
-    });
-    return assetTransport(stagedPaths, assets);
+    // Role card sources are backend parser inputs, including non-media formats.
+    // Preview images receive media grants through the desktop:invoke response.
+    return assetTransport(stagedPaths, []);
   });
   // The pet's ready / bubble-height / drag / open / context-menu channels are
   // gone. Since #181-B the pet is a plugin surface, so those requests arrive on
