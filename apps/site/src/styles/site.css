@@ -110,6 +110,32 @@
   }
 }
 
+/*
+ * Home page loader (#770, components/SiteLoader.astro): a 「栞」 bookmark on
+ * the app's own blue -> lavender -> pink wash, the primary button's
+ * blue-pink pastel inside, edged and lettered with the nav rail motif's
+ * sky -> sakura -> lavender sweep, wearing 吟风's choker bow and the
+ * little-devil wings of her hair ornament (decorative: no contrast target).
+ */
+.site-loader {
+  --site-loader-backdrop: var(--gradient-app);
+  --site-loader-card-start: var(--blue-200);
+  --site-loader-card-end: var(--pink-200);
+  --site-loader-ink-start: var(--color-motif-gradient-start);
+  --site-loader-ink-mid: var(--color-motif-gradient-mid);
+  --site-loader-ink-end: var(--color-motif-gradient-end);
+  --site-loader-bow: var(--color-motif);
+  --site-loader-wing: var(--color-motif-gradient-start);
+
+  /* A hanging bookmark swaying on its cord; the fade out; and the cap: the
+     loader fades on its own this long after it first paints even if the
+     page never reports ready (a very slow line, a failed script). */
+  --site-loader-sway-angle: 4deg;
+  --site-loader-sway: 1.8s;
+  --site-loader-fade: var(--duration-stage);
+  --site-loader-cap: 10s;
+}
+
 /* --------------------------------------------------------------- type -- */
 /* The story mode title type (serif semibold italic), shared by the hero
    slogan, its calls to action and the narrative's lines and name plate. */
@@ -198,6 +224,89 @@
 @media (min-width: 640px) {
   .site-hero-logo {
     width: min(14rem, 22vw);
+  }
+}
+
+/* ------------------------------------------------------------ loader -- */
+/* Covers the first screen until its pictures are decoded (SiteLoader.astro's
+   script sets data-leaving), or until the cap; the script removes it once
+   either fade ends. */
+.site-loader {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 1.5rem;
+  background: var(--site-loader-backdrop);
+  animation: site-loader-timeout var(--site-loader-fade) var(--ease-out-soft) var(--site-loader-cap) both;
+}
+
+/* A second animation name, so the fade starts now instead of the cap's
+   running animation jumping to its end. Clicks and scrolling go through to
+   the page while it fades. */
+.site-loader[data-leaving] {
+  pointer-events: none;
+  animation: site-loader-leave var(--site-loader-fade) var(--ease-out-soft) both;
+}
+
+@keyframes site-loader-timeout {
+  to {
+    opacity: 0;
+    visibility: hidden;
+  }
+}
+
+@keyframes site-loader-leave {
+  to {
+    opacity: 0;
+    visibility: hidden;
+  }
+}
+
+.site-loader-bookmark {
+  display: block;
+  width: clamp(6.5rem, 20vmin, 9rem);
+  height: auto;
+  overflow: visible;
+  filter: drop-shadow(var(--shadow-panel));
+  transform-origin: 50% 12%;
+  animation: site-loader-sway var(--site-loader-sway) var(--ease-in-out-soft) infinite alternate;
+}
+
+@keyframes site-loader-sway {
+  from {
+    rotate: calc(-1 * var(--site-loader-sway-angle));
+  }
+  to {
+    rotate: var(--site-loader-sway-angle);
+  }
+}
+
+.site-loader-card-start { stop-color: var(--site-loader-card-start); }
+.site-loader-card-end { stop-color: var(--site-loader-card-end); }
+.site-loader-ink-start { stop-color: var(--site-loader-ink-start); }
+.site-loader-ink-mid { stop-color: var(--site-loader-ink-mid); }
+.site-loader-ink-end { stop-color: var(--site-loader-ink-end); }
+.site-loader-bow { color: var(--site-loader-bow); }
+.site-loader-wing { color: var(--site-loader-wing); }
+
+.site-loader-glyph {
+  font-family: var(--font-display);
+  font-weight: 600;
+}
+
+/* The desktop's typing sparkles, scaled up like the startup splash's. */
+.site-loader-sparkles .chat-typing-sparkles {
+  transform: scale(2.6);
+}
+
+/* Without scripting nothing would report the page ready: no loader at all.
+   (A browser without the `scripting` feature still gets the cap.) */
+@media (scripting: none) {
+  .site-loader {
+    display: none;
   }
 }
 
@@ -414,7 +523,7 @@ html:has(.site-narrative) {
 }
 
 /* Reduced motion — and no scripting, where nothing would map the scroll to
-   a line — drops the pinned stage: no snapping, every line listed in the
+   a line (and the loader is not shown) — drops the pinned stage: no snapping, every line listed in the
    dialogue box in order, no CG frames, no entrance or caret motion. */
 @media (prefers-reduced-motion: reduce), (scripting: none) {
   html:has(.site-narrative) {
@@ -464,5 +573,11 @@ html:has(.site-narrative) {
 
   .site-narrative-line + .site-narrative-line {
     margin-top: 0.75rem;
+  }
+
+  /* The loader holds still (its sparkles too, in styles.css) and keeps only
+     its opacity fade out. */
+  .site-loader-bookmark {
+    animation: none;
   }
 }

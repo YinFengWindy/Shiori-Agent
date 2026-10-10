@@ -17,6 +17,13 @@ const repositoryRoot = resolve(here, "..", "..");
 export default defineConfig({
   site: "https://www.windchant.online",
   output: "static",
+  build: {
+    // Every page's CSS goes into its HTML: a linked stylesheet in <head>
+    // blocks the first paint, which on a slow connection (400 kbps, sharing
+    // the line with the first screen's pictures) left the page blank for
+    // about 5 s instead of showing the home page loader (#770) at once.
+    inlineStylesheets: "always",
+  },
   integrations: [react(), sitemap()],
   vite: {
     server: {

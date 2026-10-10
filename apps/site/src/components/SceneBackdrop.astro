@@ -7,12 +7,19 @@ import { sceneBackgrounds } from "../lib/siteAssets";
  * the day picture; the script below switches to the visitor's local phase
  * once, on page load, using the desktop's `scenePhaseAt`. Decorative only.
  */
+interface Props {
+  /** Part of the first screen: fetched first, and the home page loader (SiteLoader.astro) waits for it. */
+  firstScreen?: boolean;
+}
+
+const { firstScreen = false } = Astro.props;
 const { day, dusk, night } = sceneBackgrounds;
 ---
 
 <div class="scene-backdrop pointer-events-none absolute inset-0" aria-hidden="true">
   <img
     data-scene-backdrop
+    data-first-screen={firstScreen ? "" : undefined}
     data-dusk={dusk.src}
     data-night={night.src}
     src={day.src}
@@ -20,6 +27,7 @@ const { day, dusk, night } = sceneBackgrounds;
     height={day.height}
     alt=""
     decoding="async"
+    fetchpriority={firstScreen ? "high" : undefined}
     class="scene-backdrop-image h-full w-full object-cover"
   />
   <div class="scene-backdrop-veil absolute inset-0"></div>

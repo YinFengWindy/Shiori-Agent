@@ -1,14 +1,15 @@
 ---
 import DownloadCta from "../components/DownloadCta.astro";
 import NarrativeStage from "../components/NarrativeStage.astro";
+import SiteLoader from "../components/SiteLoader.astro";
 import { SoundToggle } from "../components/SoundToggle";
 import SiteLayout from "../layouts/SiteLayout.astro";
 import { SITE_NAME, SITE_SLOGAN } from "../lib/siteMeta";
 
 /*
- * Home page (#768): the scroll-driven narrative (#771), then everything
- * after it in one free-scrolling block that starts with the download / GitHub
- * calls to action; the product showcase (#772) and the blog entry (#773)
+ * Home page (#768): the loader over the first screen (#770), the
+ * scroll-driven narrative (#771), then everything after it in one
+ * free-scrolling block that starts with the download / GitHub calls to action; the product showcase (#772) and the blog entry (#773)
  * go below the CTA inside that block. The music switch stays in the corner
  * over all of it.
  */
@@ -16,6 +17,7 @@ const ctaId = "download";
 ---
 
 <SiteLayout title={`${SITE_NAME} · ${SITE_SLOGAN}`}>
+  <SiteLoader />
   <main>
     <NarrativeStage skipTargetId={ctaId} />
     <div class="site-after-narrative">

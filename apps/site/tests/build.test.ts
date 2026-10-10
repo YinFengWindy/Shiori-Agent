@@ -85,6 +85,40 @@ describe("home page HTML", () => {
     assert.ok(section?.includes("下载 Windows 版"), `skip target #${target} is not the CTA section`);
   });
 
+  it("paints with no external stylesheet: every CSS rule is inline", () => {
+    assert.doesNotMatch(html, /<link [^>]*rel="stylesheet"/);
+    assert.doesNotMatch(html, /@import/);
+  });
+
+  it("opens the body with the loader, hidden from the accessibility tree, before the page content", () => {
+    const body = html.slice(html.indexOf("<body>") + "<body>".length);
+    assert.match(body, /^<div id="site-loader" class="site-loader" aria-hidden="true">/);
+    assert.ok(body.indexOf("</svg>") < body.indexOf("<main>"), "the loader's bookmark must come before <main>");
+  });
+
+  it("inlines the loader's covering layer, its cap fade and its no-script hiding", () => {
+    const styles = [...html.matchAll(/<style>(.*?)<\/style>/gs)].map((match) => match[1]).join("\n");
+    const layer = [...styles.matchAll(/\.site-loader\{([^}]*)\}/g)].map((match) => match[1]);
+    assert.ok(
+      layer.some((rule) => rule.includes("position:fixed") && /animation:site-loader-timeout [^;]*var\(--site-loader-cap\)/.test(rule)),
+      "no inline .site-loader rule covers the page and fades at the cap",
+    );
+    assert.match(styles, /--site-loader-cap:\d/);
+    assert.match(styles, /@keyframes site-loader-timeout\{to\{[^}]*visibility:hidden/);
+    assert.match(styles, /@media \(scripting:none\)\{\.site-loader\{display:none\}\}/);
+    // Reduced motion: no sway (the sparkles stop in the desktop's own block).
+    assert.match(styles, /@media \(prefers-reduced-motion:reduce\)[^{]*\{[^@]*\.site-loader-bookmark\{animation:none\}/);
+  });
+
+  it("ends the loader from an inline script, not a bundle that may still be downloading", () => {
+    const script = html.match(/<div id="site-loader".*?<script>(.*?)<\/script>/s)?.[1];
+    assert.ok(script, "no inline <script> follows the loader");
+    assert.match(script, /data-first-screen/);
+    assert.match(script, /data-leaving/);
+    assert.match(html, /<img data-scene-backdrop data-first-screen/);
+    assert.match(html, /<img [^>]*data-layer="current" data-first-screen/);
+  });
+
   it("mounts the Vercel Web Analytics component from the shared layout", () => {
     assert.match(html, /<vercel-analytics [^>]*><\/vercel-analytics>/);
   });

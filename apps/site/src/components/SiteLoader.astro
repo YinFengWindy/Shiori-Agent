@@ -1,0 +1,101 @@
+---
+import { brandMotifPaths } from "@yinfengwindy/shiori-sdk/host-internal";
+import { ChatTypingSparkles } from "../../../desktop/renderer/src/chat/ChatTypingSparkles";
+
+/**
+ * The home page loader (#770): a 「栞」 bookmark wearing 吟风's choker bow and
+ * hair-ornament wings, swaying over the app's blue-pink wash, with the
+ * desktop's typing sparkles under it. It covers the first screen while the
+ * scene backdrop and 吟风's first sprite (the images marked
+ * `data-first-screen`) load and decode, then fades out and is removed.
+ *
+ * Painted with the first frame: the markup, this inline script and its
+ * styles (`.site-loader*` in site.css, inlined into the page with the rest of
+ * the CSS, see astro.config.ts) are all part of the HTML. Without scripting
+ * it is never shown, and if the page never reports ready it fades on its own
+ * after `--site-loader-cap`; the script removes it after either fade.
+ * Rendered first in `<body>`, so it paints before the page under it.
+ *
+ * Purely decorative and `aria-hidden`: every word of the page is already in
+ * the document underneath it, readable at once, so a 「加载中」 status would
+ * only be noise for a screen reader.
+ */
+---
+
+<div id="site-loader" class="site-loader" aria-hidden="true">
+  <svg class="site-loader-bookmark" viewBox="0 0 96 168">
+    <defs>
+      <linearGradient id="site-loader-card" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" class="site-loader-card-start"></stop>
+        <stop offset="1" class="site-loader-card-end"></stop>
+      </linearGradient>
+      <linearGradient id="site-loader-ink" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" class="site-loader-ink-start"></stop>
+        <stop offset="0.55" class="site-loader-ink-mid"></stop>
+        <stop offset="1" class="site-loader-ink-end"></stop>
+      </linearGradient>
+    </defs>
+    {/* Wings at the bookmark's shoulders: the brand wing motif, mirrored on the left. */}
+    <g class="site-loader-wing" fill="none">
+      <g transform="translate(68.5 19) scale(1.5)">
+        <path d={brandMotifPaths.wing} fill="currentColor" opacity="0.2"></path>
+        <path d={brandMotifPaths.wing} stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"></path>
+      </g>
+      <g transform="translate(27.5 19) scale(-1.5 1.5)">
+        <path d={brandMotifPaths.wing} fill="currentColor" opacity="0.2"></path>
+        <path d={brandMotifPaths.wing} stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"></path>
+      </g>
+    </g>
+    {/* The bookmark: a rounded card with a swallowtail notch and a punched hole. */}
+    <path
+      d="M28 22 H68 Q78 22 78 32 V158 L48 138 L18 158 V32 Q18 22 28 22 Z"
+      fill="url(#site-loader-card)"
+      stroke="url(#site-loader-ink)"
+      stroke-width="2.4"
+      stroke-linejoin="round"></path>
+    <circle cx="48" cy="40" r="3.6" fill="none" stroke="url(#site-loader-ink)" stroke-width="2"></circle>
+    <text
+      class="site-loader-glyph"
+      x="48"
+      y="92"
+      text-anchor="middle"
+      dominant-baseline="central"
+      font-size="44"
+      fill="url(#site-loader-ink)">栞</text>
+    {/* The choker bow tied on at the top. */}
+    <g class="site-loader-bow" fill="none" transform="translate(27.6 1.6) scale(1.7)">
+      <path d={brandMotifPaths.ribbon} fill="currentColor" opacity="0.25"></path>
+      <path d={brandMotifPaths.ribbonLeft} stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"></path>
+      <path d={brandMotifPaths.ribbonRight} stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"></path>
+      <rect x="10.5" y="10.3" width="3" height="3.4" rx="1.3" stroke="currentColor" stroke-width="1.7"></rect>
+    </g>
+  </svg>
+  <span class="site-loader-sparkles">
+    <ChatTypingSparkles />
+  </span>
+</div>
+
+<script is:inline>
+  (() => {
+    const loader = document.getElementById("site-loader");
+    if (!loader) return;
+    // Either fade (ready, or the CSS cap) ends with the loader leaving the DOM.
+    loader.addEventListener("animationend", (event) => {
+      if (event.target === loader) loader.remove();
+    });
+    // Ready once the first screen's images are decoded. Module scripts (the
+    // scene's time-of-day swap) have run by DOMContentLoaded, so the images
+    // read then are the ones that will show. A broken image counts as ready.
+    const leaveWhenReady = () => {
+      const images = [...document.querySelectorAll("img[data-first-screen]")];
+      Promise.all(images.map((image) => image.decode().catch(() => undefined))).then(() => {
+        loader.setAttribute("data-leaving", "");
+      });
+    };
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", leaveWhenReady, { once: true });
+    } else {
+      leaveWhenReady();
+    }
+  })();
+</script>
