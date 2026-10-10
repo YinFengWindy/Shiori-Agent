@@ -42,29 +42,39 @@ const usedCgKeys = [...new Set(NARRATIVE_LINES.flatMap((line) => (line.cg ? [lin
   data-narrative
 >
   <div class="site-narrative-stage" data-narrative-stage>
-    <SceneBackdrop />
+    <SceneBackdrop firstScreen />
     <div class="site-narrative-figure mascot-stack" aria-hidden="true">
+      {/* The home page loader downloads every sprite itself, from data-src (SiteLoader.astro). */}
       {
         mascotExpressions.map((expression) => {
           const sprite = narrativeExpressionSprites[expression];
           const first = expression === firstLine.expression;
           return (
             <img
-              src={sprite.src}
+              data-src={sprite.src}
               width={sprite.width}
               height={sprite.height}
               alt=""
               draggable="false"
               decoding="async"
-              loading={first ? "eager" : "lazy"}
-              fetchpriority={first ? "high" : "low"}
               class="mascot-layer"
               data-expression={expression}
               data-layer={first ? "current" : "hidden"}
+              data-first-screen
             />
           );
         })
       }
+      <noscript>
+        <img
+          src={narrativeExpressionSprites[firstLine.expression].src}
+          width={narrativeExpressionSprites[firstLine.expression].width}
+          height={narrativeExpressionSprites[firstLine.expression].height}
+          alt=""
+          decoding="async"
+          class="mascot-layer"
+        />
+      </noscript>
     </div>
     <div class="site-narrative-cgs" aria-hidden="true">
       {
@@ -72,13 +82,12 @@ const usedCgKeys = [...new Set(NARRATIVE_LINES.flatMap((line) => (line.cg ? [lin
           const cg = narrativeCgs[key];
           return (
             <img
-              src={cg.image.src}
+              src={firstLine.cg === key ? cg.image.src : undefined}
+              data-src={cg.image.src}
               width={cg.image.width}
               height={cg.image.height}
               alt={cg.alt}
               decoding="async"
-              loading="lazy"
-              fetchpriority="low"
               class="site-narrative-cg"
               data-cg={key}
               data-active={firstLine.cg === key ? "" : undefined}
@@ -149,7 +158,13 @@ const usedCgKeys = [...new Set(NARRATIVE_LINES.flatMap((line) => (line.cg ? [lin
       }
       shownExpression = expression;
     }
-    for (const cg of cgs) cg.toggleAttribute("data-active", cg.dataset.cg === line.dataset.cg);
+    for (const cg of cgs) {
+      const active = cg.dataset.cg === line.dataset.cg;
+      // CGs carry no src until the loader prefetches them (SiteLoader.astro);
+      // a line reached before that loads its own.
+      if (active && !cg.getAttribute("src") && cg.dataset.src) cg.src = cg.dataset.src;
+      cg.toggleAttribute("data-active", active);
+    }
     shownIndex = index;
   }
 

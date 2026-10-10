@@ -9,6 +9,14 @@ import mascotSad from "../../../desktop/renderer/src/shared/assets/mascot/yinfen
 import mascotShy from "../../../desktop/renderer/src/shared/assets/mascot/yinfeng-shy.webp";
 import mascotSmug from "../../../desktop/renderer/src/shared/assets/mascot/yinfeng-smug.webp";
 import mascotSurprised from "../../../desktop/renderer/src/shared/assets/mascot/yinfeng-surprised.webp";
+import mascotConfusedLqip from "../../../desktop/renderer/src/shared/assets/mascot/yinfeng-confused.webp?lqip";
+import mascotLaughLqip from "../../../desktop/renderer/src/shared/assets/mascot/yinfeng-laugh.webp?lqip";
+import mascotNeutralLqip from "../../../desktop/renderer/src/shared/assets/mascot/yinfeng-neutral.webp?lqip";
+import mascotPoutLqip from "../../../desktop/renderer/src/shared/assets/mascot/yinfeng-pout.webp?lqip";
+import mascotSadLqip from "../../../desktop/renderer/src/shared/assets/mascot/yinfeng-sad.webp?lqip";
+import mascotShyLqip from "../../../desktop/renderer/src/shared/assets/mascot/yinfeng-shy.webp?lqip";
+import mascotSmugLqip from "../../../desktop/renderer/src/shared/assets/mascot/yinfeng-smug.webp?lqip";
+import mascotSurprisedLqip from "../../../desktop/renderer/src/shared/assets/mascot/yinfeng-surprised.webp?lqip";
 import sceneDay from "../../../desktop/renderer/src/shared/assets/scene/bg-day.webp";
 import sceneDusk from "../../../desktop/renderer/src/shared/assets/scene/bg-dusk.webp";
 import sceneNight from "../../../desktop/renderer/src/shared/assets/scene/bg-night.webp";
@@ -73,6 +81,52 @@ export const narrativeExpressionSprites: Record<MascotExpression, ImageMetadata>
   sad: mascotSad,
   surprised: mascotSurprised,
 };
+
+/**
+ * The same sprites as tiny inline WebP placeholders (`data:` URIs, built by
+ * lib/imageQueries.ts): the home page loader blurs the first line's one into her
+ * silhouette, so it paints with the first frame.
+ */
+export const narrativeExpressionPlaceholders: Record<MascotExpression, string> = {
+  neutral: mascotNeutralLqip,
+  smug: mascotSmugLqip,
+  laugh: mascotLaughLqip,
+  shy: mascotShyLqip,
+  confused: mascotConfusedLqip,
+  pout: mascotPoutLqip,
+  sad: mascotSadLqip,
+  surprised: mascotSurprisedLqip,
+};
+
+const mascotFileBytes = import.meta.glob<number>("../../../desktop/renderer/src/shared/assets/mascot/yinfeng-*.webp", {
+  query: "?bytes",
+  import: "default",
+  eager: true,
+});
+const sceneFileBytes = import.meta.glob<number>("../../../desktop/renderer/src/shared/assets/scene/bg-*.webp", {
+  query: "?bytes",
+  import: "default",
+  eager: true,
+});
+
+function bytesOf(files: Record<string, number>, name: string): number {
+  const entry = Object.entries(files).find(([path]) => path.endsWith(`/${name}`));
+  if (!entry) throw new Error(`no size for ${name}`);
+  return entry[1];
+}
+
+/**
+ * Size in bytes of every picture the narrative's first screen may wait for
+ * (each time-of-day scene, each expression sprite), by emitted URL: the home
+ * page loader weighs its progress bar by these.
+ */
+export const firstScreenImageBytes: Readonly<Record<string, number>> = Object.fromEntries([
+  ...Object.entries(sceneBackgrounds).map(([phase, image]) => [image.src, bytesOf(sceneFileBytes, `bg-${phase}.webp`)]),
+  ...Object.entries(narrativeExpressionSprites).map(([expression, image]) => [
+    image.src,
+    bytesOf(mascotFileBytes, `yinfeng-${expression}.webp`),
+  ]),
+]);
 
 /** Event CGs framed beside 吟风 while a narrative line plays (keys named by `content/narrative.ts`). */
 export const narrativeCgs: Record<NarrativeCgKey, SiteImage> = {

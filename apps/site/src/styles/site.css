@@ -33,7 +33,8 @@
  * target (the slogan is ≥ 28px semibold). The start was blue-grad 55%
  * (2.6:1) on the old glass panel; 70% keeps the sky blue and clears 3:1.
  */
-.site-narrative {
+.site-narrative,
+.site-loader {
   /* Fill behind the scene picture while it loads. */
   --site-scene-backdrop: var(--lavender-100);
 
@@ -93,12 +94,190 @@
   --site-final-rise: 14px;
 }
 
+/*
+ * Home page loader (#770, components/SiteLoader.astro): 吟风's blurred
+ * silhouette on the app's own blue -> lavender -> pink wash, and a long,
+ * slim progress bar on a milk-glass pill: a faint lavender track filling
+ * with the pastel blue -> pink accent (blue-300 -> pink-300; decorative,
+ * the percentage carries the reading), the percentage beside it in muted
+ * ink (neutral-700 on the near-white pill: about 5.5:1).
+ */
+.site-loader {
+  --site-loader-wash: var(--gradient-app);
+  --site-loader-track: color-mix(in srgb, var(--lavender-200) 55%, transparent);
+  --site-loader-fill: var(--gradient-accent-medium);
+  --site-loader-percent-ink: var(--color-text-muted);
+  /* Milk-glass pill behind the bar, so it reads over her silhouette too. */
+  --site-loader-pill: var(--site-dialogue-fill-start);
+  /* Enough to melt the 20px placeholder (lib/imageQueries.ts) into a silhouette. */
+  --site-loader-silhouette-blur: 14px;
+  /* Share of the first screen decoded, 0-1 (set by the loader's script). */
+  --site-loader-progress: 0;
+}
+
+/* The reveal, on the root: the dialogue box outside the loader takes part.
+   Hold while the bar fills up; then the wash and the bar fade to the scene
+   while the silhouette sharpens into her sprite; once she is in focus the
+   dialogue box rises in with the first line (hold + focus + rise = 860ms;
+   the box rises only after the focus because the loader's silhouette lies
+   above it). The cap: the loader reveals anyway this long
+   after navigation, even if the first screen is not ready (also the delay
+   of the CSS-only fallback fade). */
+:root {
+  --site-loader-hold: var(--duration-base);
+  --site-loader-focus: var(--duration-crossfade);
+  --site-loader-wash-out: var(--duration-stage);
+  --site-loader-rise: var(--duration-crossfade);
+  --site-loader-dialogue-rise: 12px;
+  --site-loader-cap: 10s;
+}
+
 /* --------------------------------------------------------------- type -- */
 /* The story mode title type (serif semibold italic), shared by the
    narrative's lines and name plate, the slogan and the call-to-action
    buttons. */
 .site-story-type {
   @apply font-serif font-semibold italic;
+}
+
+/* ------------------------------------------------------------ loader -- */
+/* The narrative's first shot, laid out by the same rules: the figure is a
+   .site-narrative-figure in a full-viewport layer, exactly where the sticky
+   stage puts the sprite, and the plate frame copies .site-dialogue's box. */
+.site-loader {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  animation: site-loader-timeout var(--site-loader-wash-out) var(--ease-out-soft) var(--site-loader-cap) both;
+}
+
+.site-loader-wash {
+  position: absolute;
+  inset: 0;
+  background: var(--site-loader-wash);
+}
+
+/* Stretched to the box (the 20px placeholder rounds the aspect ratio). */
+.site-loader-silhouette {
+  object-fit: fill;
+  filter: blur(var(--site-loader-silhouette-blur));
+}
+
+/* Bottom centre, in the dialogue box's band: clear of 吟风's face. */
+.site-loader-progress {
+  position: absolute;
+  z-index: 3;
+  inset-inline: 0;
+  bottom: clamp(4rem, 16dvh, 9rem);
+  width: min(32rem, 86vw);
+  margin-inline: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.45rem 0.6rem 0.45rem 1rem;
+  border-radius: 9999px;
+  background: var(--site-loader-pill);
+  border: 1px solid var(--site-glass-border);
+  box-shadow: var(--shadow-soft);
+  backdrop-filter: blur(10px);
+}
+
+.site-loader-track {
+  flex: 1;
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--site-loader-track);
+  overflow: hidden;
+}
+
+/* Real progress (bytes of the first screen, SiteLoader.astro), eased
+   between updates. */
+.site-loader-fill {
+  width: calc(var(--site-loader-progress) * 100%);
+  height: 100%;
+  border-radius: inherit;
+  background-image: var(--site-loader-fill);
+  transition: width var(--duration-base) var(--ease-out-soft);
+}
+
+.site-loader-percent {
+  min-width: 4ch;
+  color: var(--site-loader-percent-ink);
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}
+
+/* Ready (or capped): the reveal. The layer's own animation spans the whole
+   choreography, so its end is when the script removes it. Clicks and
+   scrolling are let through from here on. The bar goes out with the wash,
+   after the hold that lets it reach 100%. */
+.site-loader[data-leaving] {
+  pointer-events: none;
+  animation: site-loader-leave calc(var(--site-loader-hold) + var(--site-loader-focus) + var(--site-loader-rise)) linear both;
+}
+
+.site-loader[data-leaving] .site-loader-wash,
+.site-loader[data-leaving] .site-loader-progress {
+  animation: site-loader-fade var(--site-loader-wash-out) var(--ease-in-out-soft) var(--site-loader-hold) both;
+}
+
+/* The sprite beneath is already decoded: fading the blur off it reads as
+   the silhouette coming into focus. */
+.site-loader[data-leaving] .site-loader-silhouette {
+  animation: site-loader-focus var(--site-loader-focus) var(--ease-in-out-soft) var(--site-loader-hold) both;
+}
+
+/* The dialogue box waits under the loader, then rises in once 吟风 is in
+   focus. */
+html[data-site-loader] .site-dialogue {
+  transition:
+    opacity var(--site-loader-rise) var(--ease-out-soft) calc(var(--site-loader-hold) + var(--site-loader-focus)),
+    translate var(--site-loader-rise) var(--ease-out-soft) calc(var(--site-loader-hold) + var(--site-loader-focus));
+}
+
+html[data-site-loader="loading"] .site-dialogue {
+  opacity: 0;
+  translate: 0 var(--site-loader-dialogue-rise);
+}
+
+@keyframes site-loader-timeout {
+  to {
+    opacity: 0;
+    visibility: hidden;
+  }
+}
+
+@keyframes site-loader-leave {
+  to {
+    visibility: hidden;
+  }
+}
+
+@keyframes site-loader-fade {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes site-loader-focus {
+  to {
+    opacity: 0;
+    filter: blur(0);
+  }
+}
+
+/* Without scripting nothing would report the page ready: no loader at all.
+   (A browser without the `scripting` feature still gets the cap.) */
+@media (scripting: none) {
+  .site-loader {
+    display: none;
+  }
+
+  /* The pictures the loader would have fetched stay empty; their
+     <noscript> copies show instead. */
+  img[data-first-screen] {
+    display: none;
+  }
 }
 
 /* --------------------------------------------------------- narrative -- */
@@ -492,5 +671,26 @@ html:has(.site-narrative) {
 
   .site-narrative-line + .site-narrative-line {
     margin-top: 0.75rem;
+  }
+
+  /* The loader: the bar fills in steps, and with the stage unpinned there
+     is no shot to hand over to in place, so the whole layer fades out
+     (opacity only) and the dialogue box fades in without rising. */
+  .site-loader-fill {
+    transition: none;
+  }
+
+  .site-loader[data-leaving] {
+    animation: site-loader-fade var(--site-loader-wash-out) var(--ease-in-out-soft) both;
+  }
+
+  .site-loader[data-leaving] .site-loader-wash,
+  .site-loader[data-leaving] .site-loader-silhouette,
+  .site-loader[data-leaving] .site-loader-progress {
+    animation: none;
+  }
+
+  html[data-site-loader="loading"] .site-dialogue {
+    translate: none;
   }
 }
