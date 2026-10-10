@@ -1,11 +1,31 @@
 import type { ImageMetadata } from "astro";
+import type { MascotExpression } from "../../../desktop/renderer/src/shared/mascot/mascotExpressions";
 import type { ScenePhase } from "../../../desktop/renderer/src/shared/scene/timeOfDay";
+import mascotConfused from "../../../desktop/renderer/src/shared/assets/mascot/yinfeng-confused.webp";
+import mascotLaugh from "../../../desktop/renderer/src/shared/assets/mascot/yinfeng-laugh.webp";
+import mascotNeutral from "../../../desktop/renderer/src/shared/assets/mascot/yinfeng-neutral.webp";
+import mascotPout from "../../../desktop/renderer/src/shared/assets/mascot/yinfeng-pout.webp";
+import mascotSad from "../../../desktop/renderer/src/shared/assets/mascot/yinfeng-sad.webp";
+import mascotShy from "../../../desktop/renderer/src/shared/assets/mascot/yinfeng-shy.webp";
+import mascotSmug from "../../../desktop/renderer/src/shared/assets/mascot/yinfeng-smug.webp";
+import mascotSurprised from "../../../desktop/renderer/src/shared/assets/mascot/yinfeng-surprised.webp";
 import sceneDay from "../../../desktop/renderer/src/shared/assets/scene/bg-day.webp";
 import sceneDusk from "../../../desktop/renderer/src/shared/assets/scene/bg-dusk.webp";
 import sceneNight from "../../../desktop/renderer/src/shared/assets/scene/bg-night.webp";
 import titleLogo from "../../../desktop/renderer/public/assets/branding/shiori-title-logo.png";
+import cg3 from "../assets/art/cg-3.webp";
+import cg7 from "../assets/art/cg-7.webp";
+import cg8 from "../assets/art/cg-8.webp";
+import cg9 from "../assets/art/cg-9.webp";
+import cg10 from "../assets/art/cg-10.webp";
 import sprite1 from "../assets/art/sprite-1.webp";
+import sprite2 from "../assets/art/sprite-2.webp";
+import sprite3 from "../assets/art/sprite-3.webp";
+import topic1 from "../assets/art/topic-1.webp";
+import topic2 from "../assets/art/topic-2.webp";
+import topic3 from "../assets/art/topic-3.webp";
 import ogCover from "../assets/social/og-cover.jpg";
+import type { NarrativeCgKey } from "../content/narrative";
 
 /** One site image: the build-time image metadata plus its accessible alt text. */
 export interface SiteImage {
@@ -20,12 +40,11 @@ export interface SiteImage {
  * emitted into the build. `tests/assets.test.ts` checks that each
  * `../assets/art/*.webp` import above exists, and owns the WebP
  * size/metadata hygiene of every file in that directory — including the art
- * kept there for the narrative and gallery that come next (#768). The BGM in
- * `../assets/audio/` is likewise kept for later and has no check yet.
+ * kept there for the gallery that comes next (#768).
  *
- * The scene backgrounds and the title logo are the desktop's own files
- * (first-run guide / startup splash, story plugin) and are imported from
- * there instead of being copied.
+ * The scene backgrounds, 吟风's expression sprites and the title logo are
+ * the desktop's own files (first-run guide / startup splash, the app's
+ * mascot, story plugin) and are imported from there instead of being copied.
  */
 
 /** Time-of-day scene backgrounds (decorative; phase boundaries in desktop `timeOfDay.ts`). */
@@ -38,11 +57,44 @@ export const sceneBackgrounds: Record<ScenePhase, ImageMetadata> = {
 /** 「栞 / SHIORI」 title logo. */
 export const titleLogoImage: ImageMetadata = titleLogo;
 
-/** 吟风's cut-out standing sprite (transparent WebP) in the hero, over the scene. */
-export const heroSprite: SiteImage = {
-  image: sprite1,
-  alt: "吟风立绘：黑色哥特连衣裙配过膝袜，背后展开蝙蝠翼，以手掩唇浅笑",
+/**
+ * 吟风's uniform standing sprite in the narrative, one image per expression
+ * (the desktop mascot's set: 826×1213, one shared alpha mask, so a
+ * cross-fade only changes the face). Decorative: her lines are real text.
+ */
+export const narrativeExpressionSprites: Record<MascotExpression, ImageMetadata> = {
+  neutral: mascotNeutral,
+  smug: mascotSmug,
+  laugh: mascotLaugh,
+  shy: mascotShy,
+  confused: mascotConfused,
+  pout: mascotPout,
+  sad: mascotSad,
+  surprised: mascotSurprised,
 };
+
+/** Event CGs framed beside 吟风 while a narrative line plays (keys named by `content/narrative.ts`). */
+export const narrativeCgs: Record<NarrativeCgKey, SiteImage> = {
+  "cg-3": { image: cg3, alt: "CG：趴在粉色电脑桌前兴奋地打字" },
+  "cg-7": { image: cg7, alt: "CG：夜晚街头挽臂同行的温馨场景" },
+  "cg-8": { image: cg8, alt: "CG：夜色中坐在公园长椅上，以手托腮微笑，发间系着蝙蝠翼造型的发绳" },
+  "cg-9": { image: cg9, alt: "CG：倚在夜景窗边，外套披在肩头，回望镜头" },
+  "cg-10": { image: cg10, alt: "CG：从门后探身张望，身后是温暖的暖色房间" },
+  "topic-1": { image: topic1, alt: "吟风配图：倚在洒满阳光的窗边，居家休闲装扮" },
+  "topic-2": { image: topic2, alt: "吟风配图：坐在课桌前看手机，逆光的教室场景" },
+  "topic-3": { image: topic3, alt: "吟风配图：月夜窗边浅笑，黑色晚装缀有蝙蝠翼装饰" },
+};
+
+/**
+ * 吟风's cut-out standing sprites (transparent WebP), one per outfit, beside
+ * the CTA panel. The static HTML shows the first; each visit then picks one
+ * at random.
+ */
+export const ctaSprites: readonly [SiteImage, ...SiteImage[]] = [
+  { image: sprite1, alt: "吟风立绘：黑色哥特连衣裙配过膝袜，背后展开蝙蝠翼，以手掩唇浅笑" },
+  { image: sprite2, alt: "吟风立绘：白色水手服配红格短裙，双手背在身后微微前倾" },
+  { image: sprite3, alt: "吟风立绘：白色露肩上衣配黑色短裙，双手轻提裙摆" },
+];
 
 /**
  * Default social preview (OG / Twitter card): the seaside CG (cg-6)

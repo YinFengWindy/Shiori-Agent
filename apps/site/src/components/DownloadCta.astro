@@ -1,0 +1,85 @@
+---
+import { DownloadSimpleIcon, GithubLogoIcon } from "@phosphor-icons/react";
+import { cx, ghostButtonClass } from "@yinfengwindy/shiori-sdk";
+import { primaryButtonClass } from "../../../desktop/renderer/src/shared/styles";
+import { ctaSprites, titleLogoImage } from "../lib/siteAssets";
+import { SITE_LINKS, SITE_NAME, SITE_SLOGAN } from "../lib/siteMeta";
+import SceneBackdrop from "./SceneBackdrop.astro";
+
+/**
+ * The calls to action after the narrative (#769's hero, #771): one viewport
+ * with the scene, a random outfit of 吟风 and the glass panel holding the
+ * title, the slogan and the download / GitHub links. `id` is the narrative's
+ * skip target.
+ */
+interface Props {
+  id: string;
+}
+
+const { id } = Astro.props;
+const [firstSprite] = ctaSprites;
+const spriteVariants = JSON.stringify(
+  ctaSprites.map(({ image, alt }) => ({ src: image.src, width: image.width, height: image.height, alt })),
+);
+// CTA labels share the slogan's story type (.site-story-type in site.css).
+const ctaLayoutClass = "site-story-type inline-flex items-center gap-2 text-body-lg";
+---
+
+<section id={id} class="site-hero relative isolate h-dvh min-h-[32rem] overflow-hidden">
+  <SceneBackdrop />
+  <img
+    data-cta-sprite
+    data-variants={spriteVariants}
+    src={firstSprite.image.src}
+    width={firstSprite.image.width}
+    height={firstSprite.image.height}
+    alt={firstSprite.alt}
+    loading="lazy"
+    decoding="async"
+    class="site-hero-sprite pointer-events-none absolute"
+  />
+  <div class="relative z-[1] flex h-full flex-col justify-end p-4 sm:justify-center sm:p-[clamp(1.5rem,6vw,6rem)]">
+    <div class="site-hero-panel flex w-full max-w-md flex-col items-center gap-4 p-6 text-center sm:items-start sm:gap-5 sm:p-8 sm:text-left">
+      <h1>
+        <img
+          src={titleLogoImage.src}
+          width={titleLogoImage.width}
+          height={titleLogoImage.height}
+          alt={SITE_NAME}
+          class="site-hero-logo h-auto"
+        />
+      </h1>
+      <p class="site-hero-slogan site-story-type text-headline">{SITE_SLOGAN}</p>
+      <div class="flex flex-wrap justify-center gap-3 sm:justify-start">
+        <a href={SITE_LINKS.releasesLatest} class={cx(primaryButtonClass, ctaLayoutClass)}>
+          <DownloadSimpleIcon size={20} weight="bold" aria-hidden="true" />
+          下载 Windows 版
+        </a>
+        <a href={SITE_LINKS.github} class={cx(ghostButtonClass, ctaLayoutClass)}>
+          <GithubLogoIcon size={20} aria-hidden="true" />
+          GitHub
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+  // One outfit per visit: the static HTML carries the first, the visit
+  // picks any of them uniformly.
+  interface SpriteVariant {
+    src: string;
+    width: number;
+    height: number;
+    alt: string;
+  }
+
+  const sprite = document.querySelector<HTMLImageElement>("img[data-cta-sprite]");
+  if (!sprite?.dataset.variants) throw new Error("CTA sprite is missing data-variants");
+  const variants = JSON.parse(sprite.dataset.variants) as SpriteVariant[];
+  const picked = variants[Math.floor(Math.random() * variants.length)];
+  sprite.width = picked.width;
+  sprite.height = picked.height;
+  sprite.alt = picked.alt;
+  sprite.src = picked.src;
+</script>
