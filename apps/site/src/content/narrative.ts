@@ -21,7 +21,7 @@ export interface NarrativeLine {
 export const NARRATIVE_LINES: readonly NarrativeLine[] = [
   { text: "哎呀，终于来了？让我等了好久呢，笨蛋访客～", expression: "smug" },
   { text: "我是吟风，Shiori 的看板娘。记住了哦，不许忘。", expression: "laugh" },
-  { text: "Shiori 是以角色为核心的 Personal Agent，让角色走进你的日常。", expression: "neutral" },
+  { text: "Shiori 呢，就是会慢慢喜欢上你的 AI 伴侣……比如我。", expression: "neutral" },
   { text: "你可以养好多角色，每个都有自己的人设、性格和经历。", expression: "neutral", cg: "cg-8" },
   { text: "聊过的事都会好好记着，还会整理成长期记忆。别想赖账哦。", expression: "smug", cg: "cg-9" },
   { text: "好感度会随相处慢慢变化，从厌恶到挚爱……就看你表现了。", expression: "shy", cg: "cg-7" },
