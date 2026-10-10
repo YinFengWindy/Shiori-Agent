@@ -8,6 +8,7 @@ Shiori 是一个以角色为基底进行角色扮演的 Agent 助手：Python �
 |---|---|
 | `apps/backend/` | Python 后端：启动装配、Agent 回合、会话、记忆运行时、主动行为、桌面桥接 |
 | `apps/desktop/` | Electron 主进程（`src/`，只提供通用原语，不放插件代码）与 React renderer（`renderer/src/`） |
+| `apps/site/` | 官网与博客：Astro 静态站（`https://www.windchant.online`），设计 token 与 Tailwind 主题直接引用桌面端；`pages-redirect/` 是 GitHub Pages 跳转页 |
 | `plugins/<id>/` | 插件包：`backend/`、`ui/`、`surface/`、`background/`、`manifest.yaml`、`tests/` |
 | `packages/sdk/` | 统一 Shiori SDK（Python `shiori_sdk` + npm `@yinfengwindy/shiori-sdk`） |
 | `docs/knowledge/` | 架构与领域知识：从 `index.md`、`map.md` 开始定位 owning module |
@@ -78,6 +79,7 @@ Shiori 是一个以角色为基底进行角色扮演的 Agent 助手：Python �
 |---|---|
 | TypeScript 源文件 | 同目录并列（`main.ts` / `main.test.ts`）；e2e 放 `apps/desktop/tests/` |
 | `apps/backend/` | `tests/backend/`，目录结构镜像源码 |
+| `apps/site/` | `apps/site/tests/`：构建产物断言（`pnpm run site:test` 先 `astro build` 再跑）与素材检查 |
 | `plugins/<id>/` | `plugins/<id>/tests/`，自包含；测试支持来自 `shiori-sdk[testing]`，不依赖根 conftest（见 `docs/agents/plugin-testing.md`） |
 | `packages/sdk/` | `packages/sdk/tests/`，结构镜像 `python/shiori_sdk/` |
 | 宿主测试 fixture 包 | 包在 `packages/shiori-host-testing/`，测试在 `tests/backend/shiori_host_testing/` |

@@ -1,0 +1,39 @@
+---
+import { sceneBackgrounds } from "../lib/siteAssets";
+
+/**
+ * Full-bleed time-of-day scene behind a page section, styled by the desktop's
+ * `.scene-backdrop*` classes (shared/adv/adv.css). The static HTML carries
+ * the day picture; the script below switches to the visitor's local phase
+ * once, on page load, using the desktop's `scenePhaseAt`. Decorative only.
+ */
+const { day, dusk, night } = sceneBackgrounds;
+---
+
+<div class="scene-backdrop pointer-events-none absolute inset-0" aria-hidden="true">
+  <img
+    data-scene-backdrop
+    data-dusk={dusk.src}
+    data-night={night.src}
+    src={day.src}
+    width={day.width}
+    height={day.height}
+    alt=""
+    decoding="async"
+    class="scene-backdrop-image h-full w-full object-cover"
+  />
+  <div class="scene-backdrop-veil absolute inset-0"></div>
+</div>
+
+<script>
+  import { scenePhaseAt } from "../../../desktop/renderer/src/shared/scene/timeOfDay";
+
+  const phase = scenePhaseAt(new Date());
+  if (phase !== "day") {
+    for (const image of document.querySelectorAll<HTMLImageElement>("img[data-scene-backdrop]")) {
+      const src = image.dataset[phase];
+      if (!src) throw new Error(`scene backdrop is missing data-${phase}`);
+      image.src = src;
+    }
+  }
+</script>

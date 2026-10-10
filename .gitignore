@@ -83,7 +83,8 @@ lme_error_log_*.txt
 /locks/
 /start.sh
 *.log
-apps/desktop/site-dist/
+apps/site/dist/
+apps/site/.astro/
 
 # Python distribution build products
 build/

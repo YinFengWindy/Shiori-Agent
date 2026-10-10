@@ -2,8 +2,8 @@ import { advanceTypewriter, startTypewriter, type TypewriterProgress, type Typew
 import type { MascotLine, OnboardingScene } from "./onboardingScript";
 
 /**
- * Pure state of the guide's dialogue box. Unlike the site's scripted ADV,
- * lines arrive as events: a scene opening says its intro, a form action
+ * Pure state of the guide's dialogue box. Unlike a fixed script, lines
+ * arrive as events: a scene opening says its intro, a form action
  * replaces whatever is showing with 吟风's reaction. The box then waits on
  * the last line (the form is up) instead of ending.
  */

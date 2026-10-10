@@ -13,7 +13,7 @@ import {
 } from "./onboardingDialogue";
 import type { MascotLine } from "./onboardingScript";
 
-/** Typewriter speed: the site's 「普通」 text speed. */
+/** Typewriter speed in milliseconds per character. */
 const MS_PER_CHAR = 45;
 
 /** React driver for the guide's dialogue: a frame loop types the current line unless paused. */

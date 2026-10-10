@@ -44,7 +44,12 @@ export default [
     "apps/desktop/src/**/*.tsx",
     "apps/desktop/renderer/src/**/*.ts",
     "apps/desktop/renderer/src/**/*.tsx",
-    "apps/desktop/site/**/*.ts",
+    // The public site (#769). Its .astro files are checked by `astro check`
+    // (root `pnpm typecheck`), not by ESLint.
+    "apps/site/*.ts",
+    "apps/site/src/**/*.ts",
+    "apps/site/src/**/*.tsx",
+    "apps/site/tests/**/*.ts",
     ...pluginRendererFiles,
   ]),
   {

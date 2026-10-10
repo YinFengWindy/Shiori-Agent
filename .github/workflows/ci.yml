@@ -156,6 +156,8 @@ jobs:
       - name: Run typecheck
         run: pnpm run typecheck
 
+      # Also builds the public site (apps/site) and asserts on its static
+      # output (`pnpm run site:test`), so no separate site build step.
       - name: Run unit tests
         run: pnpm test
 
@@ -164,9 +166,6 @@ jobs:
 
       - name: Run production build
         run: pnpm run build
-
-      - name: Build static site skeleton
-        run: pnpm run build:site
 
       # Prove the generated virtual modules include builtin UI, surface and
       # background entries, while excluding external source before parsing.

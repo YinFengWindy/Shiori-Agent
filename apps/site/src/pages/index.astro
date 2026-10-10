@@ -1,0 +1,55 @@
+---
+import { DownloadSimpleIcon, GithubLogoIcon } from "@phosphor-icons/react";
+import { cx, ghostButtonClass } from "@yinfengwindy/shiori-sdk";
+import { primaryButtonClass } from "../../../desktop/renderer/src/shared/styles";
+import SceneBackdrop from "../components/SceneBackdrop.astro";
+import SiteLayout from "../layouts/SiteLayout.astro";
+import { titleLogoImage, titleSprites } from "../lib/siteAssets";
+import { SITE_LINKS, SITE_NAME, SITE_SLOGAN } from "../lib/siteMeta";
+
+/*
+ * Home page, first cut (#769): one static viewport with the scene, 吟风's
+ * sprite, the title and the download / GitHub calls to action. The scrolling
+ * narrative, product showcase and blog entry replace it in later tickets (#768).
+ */
+const sprite = titleSprites[0];
+const ctaLayoutClass = "inline-flex items-center gap-2 text-body-lg font-medium";
+---
+
+<SiteLayout title={`${SITE_NAME} · ${SITE_SLOGAN}`}>
+  <main class="site-hero relative isolate h-dvh min-h-[32rem] overflow-hidden">
+    <SceneBackdrop />
+    <img
+      src={sprite.image.src}
+      width={sprite.image.width}
+      height={sprite.image.height}
+      alt={sprite.alt}
+      decoding="async"
+      class="site-hero-sprite pointer-events-none absolute"
+    />
+    <div class="relative z-[1] flex h-full flex-col justify-end p-4 sm:justify-center sm:p-[clamp(1.5rem,6vw,6rem)]">
+      <div class="site-hero-panel surface-glass-strong flex w-full max-w-md flex-col items-center gap-4 p-6 text-center sm:items-start sm:gap-5 sm:p-8 sm:text-left">
+        <h1>
+          <img
+            src={titleLogoImage.src}
+            width={titleLogoImage.width}
+            height={titleLogoImage.height}
+            alt={SITE_NAME}
+            class="site-hero-logo h-auto"
+          />
+        </h1>
+        <p class="font-display text-headline text-ink">{SITE_SLOGAN}</p>
+        <div class="flex flex-wrap justify-center gap-3 sm:justify-start">
+          <a href={SITE_LINKS.releasesLatest} class={cx(primaryButtonClass, ctaLayoutClass)}>
+            <DownloadSimpleIcon size={20} weight="bold" aria-hidden="true" />
+            下载 Windows 版
+          </a>
+          <a href={SITE_LINKS.github} class={cx(ghostButtonClass, ctaLayoutClass)}>
+            <GithubLogoIcon size={20} aria-hidden="true" />
+            GitHub
+          </a>
+        </div>
+      </div>
+    </div>
+  </main>
+</SiteLayout>

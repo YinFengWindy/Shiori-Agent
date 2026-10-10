@@ -1,0 +1,52 @@
+/*
+ * Site stylesheet. Design tokens, Tailwind layers and the semantic classes
+ * come from the desktop's styles.css — the single source of the design
+ * system, compiled here with the desktop's Tailwind theme (tailwind.config.ts).
+ * adv.css supplies the time-of-day scene backdrop shared with the desktop's
+ * first-run guide. Only site layout lives below.
+ */
+@import "../../../desktop/renderer/src/styles.css";
+@import "../../../desktop/renderer/src/shared/adv/adv.css";
+
+/* ------------------------------------------------------------- hero -- */
+/* One viewport: scene full-bleed, 吟风 standing on the right (centred
+   behind the panel on narrow screens), title + CTAs on a glass panel. */
+
+.site-hero {
+  color-scheme: light;
+  background: var(--lavender-100);
+}
+
+.site-hero-sprite {
+  z-index: 0;
+  bottom: 0;
+  left: 50%;
+  height: min(88dvh, 64rem);
+  width: auto;
+  max-width: none;
+  transform: translateX(-50%);
+  filter: drop-shadow(var(--shadow-panel));
+}
+
+@media (min-width: 640px) {
+  .site-hero-sprite {
+    left: auto;
+    right: clamp(1rem, 8vw, 9rem);
+    height: min(94dvh, 70rem);
+    transform: none;
+  }
+}
+
+.site-hero-panel {
+  border-radius: var(--radius-xl);
+}
+
+.site-hero-logo {
+  width: min(9rem, 40vw);
+}
+
+@media (min-width: 640px) {
+  .site-hero-logo {
+    width: min(14rem, 22vw);
+  }
+}

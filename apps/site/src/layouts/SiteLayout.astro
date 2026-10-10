@@ -1,0 +1,62 @@
+---
+import Analytics from "@vercel/analytics/astro";
+import { socialPreviewImage } from "../lib/siteAssets";
+import { SITE_DESCRIPTION, SITE_NAME, SITE_THEME_COLOR } from "../lib/siteMeta";
+import "../styles/site.css";
+
+/** Per-page head metadata; everything else is shared by every page. */
+interface Props {
+  /** Full `<title>`, also used as the OG / Twitter title. */
+  title: string;
+  /** Meta / OG description; defaults to the site description. */
+  description?: string;
+}
+
+/**
+ * Shared page shell: `lang="zh-CN"`, title, description, canonical URL,
+ * Open Graph / Twitter card, theme color, icons, the sitemap link and
+ * Vercel Web Analytics. Every URL is absolute on `site` (astro.config.ts),
+ * so crawlers see the canonical origin even on a preview deployment.
+ */
+const { title, description = SITE_DESCRIPTION } = Astro.props;
+if (!Astro.site) throw new Error("astro.config.ts must set `site`: canonical and OG URLs are built from it");
+const canonicalUrl = new URL(Astro.url.pathname, Astro.site).href;
+const ogImageUrl = new URL(socialPreviewImage.image.src, Astro.site).href;
+const sitemapUrl = new URL("sitemap-index.xml", Astro.site).href;
+---
+
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonicalUrl} />
+    <meta name="theme-color" content={SITE_THEME_COLOR} />
+    <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48" />
+    <link rel="icon" type="image/png" href="/icons/favicon-32.png" sizes="32x32" />
+    <link rel="icon" type="image/png" href="/icons/icon-192.png" sizes="192x192" />
+    <link rel="icon" type="image/png" href="/icons/icon-512.png" sizes="512x512" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" sizes="180x180" />
+    <link rel="sitemap" href={sitemapUrl} />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="zh_CN" />
+    <meta property="og:site_name" content={SITE_NAME} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonicalUrl} />
+    <meta property="og:image" content={ogImageUrl} />
+    <meta property="og:image:width" content={String(socialPreviewImage.image.width)} />
+    <meta property="og:image:height" content={String(socialPreviewImage.image.height)} />
+    <meta property="og:image:alt" content={socialPreviewImage.alt} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImageUrl} />
+  </head>
+  <body>
+    <slot />
+    <Analytics />
+  </body>
+</html>

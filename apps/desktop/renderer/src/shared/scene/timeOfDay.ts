@@ -1,4 +1,4 @@
-/** Time-of-day phase that picks the site's scene background. */
+/** Time-of-day phase that picks the scene background (desktop guide / splash, public site). */
 export type ScenePhase = "day" | "dusk" | "night";
 
 /** First hour of each phase, in the visitor's local time. */

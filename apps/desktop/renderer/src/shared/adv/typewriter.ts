@@ -1,7 +1,7 @@
 /**
- * Pure typewriter progress shared by every ADV dialogue (the site's 「开始」
- * screen and the desktop first-run guide). Time only moves through explicit
- * elapsed milliseconds, so reveals are deterministic and unit testable.
+ * Pure typewriter progress of the ADV dialogue box (the desktop first-run
+ * guide). Time only moves through explicit elapsed milliseconds, so reveals
+ * are deterministic and unit testable.
  */
 
 /** How far one line has been typed out. */

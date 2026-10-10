@@ -191,7 +191,7 @@ restyle 之前的一批变量名仍然存在，它们都已指回语义层，渲
 全应用**只有一种滚动条**，由 `styles.css` `@layer base` 里的 `:where(*)` 基层规则统一给出，组件不用加任何类就能拿到：
 细（`scrollbar-width: thin`）、透明轨道、品牌色滑块——平时 `--color-scrollbar-thumb`（pink-300，1.6:1），
 指针停在滚动区上时加深为 `--color-scrollbar-thumb-hover`（pink-500，3.1:1）。竖向和横向（代码块、Markdown 表格、生图历史胶片条、标签栏）是同一套。
-宿主页面和插件界面都走它，官网（`site/`，同样引入 `styles.css`）也一样。
+宿主页面和插件界面都走它，官网（`apps/site/`，同样引入 `styles.css`）也一样。
 
 - **只用标准属性**：Chromium 在元素设置了 `scrollbar-color` / `scrollbar-width` 后会忽略 `::-webkit-scrollbar` 伪元素，
   所以不要再写 `::-webkit-scrollbar*` 规则（以前的 `scrollbar-soft-accent` / `-muted` hover 变体就是这样一直没生效的）。

@@ -1,8 +1,9 @@
 /*
- * Galgame chrome shared by the public site (「开始」 ADV) and the desktop
- * first-run guide: the time-of-day scene backdrop and the glass dialogue box.
- * Imported by both entries (renderer/src/main.tsx, site/main.tsx); components
- * do not import CSS so they stay loadable in node unit tests.
+ * Galgame chrome of the desktop first-run guide and startup splash: the
+ * time-of-day scene backdrop and the glass dialogue box. Imported by the
+ * renderer entry (renderer/src/main.tsx) and by the public site
+ * (apps/site/src/styles/site.css, for the backdrop); components do not import
+ * CSS so they stay loadable in node unit tests.
  */
 
 /* ---------------------------------------------------------------- scene -- */
@@ -103,12 +104,6 @@
 @keyframes adv-next-blink {
   0%, 100% { opacity: 1; transform: translateY(0) rotate(45deg); }
   50% { opacity: 0.35; transform: translateY(3px) rotate(45deg); }
-}
-
-.adv-controls {
-  pointer-events: auto;
-  margin-top: 0.35rem;
-  margin-right: -0.4rem;
 }
 
 @media (prefers-reduced-motion: reduce) {
