@@ -4,5 +4,5 @@
   "installCommand": "pnpm install --frozen-lockfile",
   "buildCommand": "pnpm run build:site",
   "outputDirectory": "apps/site/dist",
-  "ignoreCommand": "git diff HEAD^ HEAD --quiet -- apps/site apps/desktop/renderer/src/styles.css apps/desktop/renderer/src/shared/adv/adv.css apps/desktop/renderer/src/shared/styles.ts apps/desktop/renderer/src/shared/scene apps/desktop/renderer/src/shared/assets/scene apps/desktop/renderer/public/assets/branding apps/desktop/renderer/tailwind.config.ts packages/sdk/src package.json pnpm-lock.yaml pnpm-workspace.yaml vercel.json"
+  "ignoreCommand": "sh apps/site/scripts/vercel-ignore-build.sh"
 }
