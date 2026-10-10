@@ -3,10 +3,86 @@
  * come from the desktop's styles.css — the single source of the design
  * system, compiled here with the desktop's Tailwind theme (tailwind.config.ts).
  * adv.css supplies the time-of-day scene backdrop shared with the desktop's
- * first-run guide. Only site layout lives below.
+ * first-run guide. Only the site's own tokens and layout live below.
  */
 @import "../../../desktop/renderer/src/styles.css";
 @import "../../../desktop/renderer/src/shared/adv/adv.css";
+
+/* ------------------------------------------------------------ tokens -- */
+/*
+ * The hero's palette, scoped to `.site-hero` and built from the app's
+ * primitives (styles.css) the way the desktop's semantic tier is: the
+ * component rules below use only these names, never a primitive.
+ *
+ * Slogan contrast, measured on the rendered hero (Playwright screenshots of
+ * the panel behind the hidden slogan, day / dusk / night scenes; ratios
+ * against the panel's median / darkest-5% pixel):
+ *   wide panel (neutral-50 55% → 22% over the blurred scene)
+ *     gradient start 1.37–1.99 median, 1.08–1.73 darkest
+ *     gradient end   1.67–2.42 median, 1.13–2.11 darkest
+ *   narrow panel (neutral-50 78% → 62%)
+ *     gradient start 1.38–1.84 median, 1.17–1.30 darkest
+ *     gradient end   1.69–2.24 median, 1.42–1.59 darkest
+ * That is below the 3:1 large-text target: the frosted fill lets the scene
+ * through, and even --gradient-accent-strong (blue-grad → pink-grad, turned
+ * down by the owner as too dark) only reaches 2.4–3.7 median. Legibility
+ * comes from the near-white halo (--site-slogan-halo*) outlining each glyph:
+ * against neutral-50 the start reads 2.6:1 and the end 3.2:1.
+ */
+.site-hero {
+  /* Fill behind the scene picture while it loads. */
+  --site-hero-backdrop: var(--lavender-100);
+
+  /* Frosted glass panel: a translucent tint sweeping into a lavender edge.
+     The desktop's surface-glass-strong is 92% white (a solid card on a
+     photo); the hero lets the scene show through. Narrow screens only
+     change the angle and opacities (media block below). */
+  --site-glass-tint: var(--neutral-50);
+  --site-glass-edge-tint: var(--lavender-200);
+  --site-glass-angle: 135deg;
+  --site-glass-start: 55%;
+  --site-glass-mid: 22%;
+  --site-glass-mid-stop: 55%;
+  --site-glass-edge: 28%;
+  --site-glass-border: color-mix(in srgb, var(--neutral-50) 70%, transparent);
+  --site-glass-sheen: color-mix(in srgb, var(--neutral-50) 90%, transparent);
+  --site-glass-rim: color-mix(in srgb, var(--lavender-400) 18%, transparent);
+
+  /* Slogan: the brand's blue-pink accent, between the pastel
+     --gradient-accent and the darker --gradient-accent-strong — a clear sky
+     blue (≈ #61a2cf) into sakura pink (≈ #df5f96); contrast in the note above. */
+  --site-slogan-gradient-start: color-mix(in oklab, var(--blue-300), var(--blue-grad) 55%);
+  --site-slogan-gradient-end: color-mix(in oklab, var(--pink-500), var(--pink-grad) 15%);
+  /* Near-white halo and lip outlining the glyphs on the glass, plus a soft
+     dark-pink glow underneath. */
+  --site-slogan-halo: color-mix(in srgb, var(--neutral-50) 95%, transparent);
+  --site-slogan-halo-edge: color-mix(in srgb, var(--neutral-50) 90%, transparent);
+  --site-slogan-glow: color-mix(in srgb, var(--pink-900) 22%, transparent);
+
+  /* Hero slogan size on wide screens: a site-only display size outside the
+     desktop app's type scale (whose largest step, `display`, is 28px), so
+     the slogan holds its own beside the wide logo. */
+  --site-text-hero: clamp(1.75rem, 1rem + 1.6vw, 2.5rem);
+}
+
+/* On narrow screens the panel sits over 吟风's black dress, which a thin
+   fill turns muddy grey; a denser milk-glass keeps it light. */
+@media (max-width: 639px) {
+  .site-hero {
+    --site-glass-angle: 160deg;
+    --site-glass-start: 78%;
+    --site-glass-mid: 62%;
+    --site-glass-mid-stop: 60%;
+    --site-glass-edge: 55%;
+  }
+}
+
+/* --------------------------------------------------------------- type -- */
+/* The story mode title type (serif semibold italic), shared by the hero
+   slogan and its calls to action. */
+.site-story-type {
+  @apply font-serif font-semibold italic;
+}
 
 /* ------------------------------------------------------------- hero -- */
 /* One viewport: scene full-bleed, 吟风 standing on the right (centred
@@ -14,7 +90,7 @@
 
 .site-hero {
   color-scheme: light;
-  background: var(--lavender-100);
+  background: var(--site-hero-backdrop);
 }
 
 .site-hero-sprite {
@@ -37,69 +113,49 @@
   }
 }
 
-/* Frosted glass over the scene: the desktop's surface-glass-strong is 92%
-   white (a solid card on a photo), so the hero panel gets its own lighter
-   fill, a top-left sheen and a bright rim built from the palette primitives. */
+/* Frosted glass over the scene, with a top-left sheen and a bright rim. */
 .site-hero-panel {
   border-radius: var(--radius-xl);
-  background:
-    linear-gradient(
-      135deg,
-      color-mix(in srgb, var(--neutral-50) 55%, transparent) 0%,
-      color-mix(in srgb, var(--neutral-50) 22%, transparent) 55%,
-      color-mix(in srgb, var(--lavender-200) 28%, transparent) 100%
-    );
-  border: 1px solid color-mix(in srgb, var(--neutral-50) 70%, transparent);
+  background: linear-gradient(
+    var(--site-glass-angle),
+    color-mix(in srgb, var(--site-glass-tint) var(--site-glass-start), transparent) 0%,
+    color-mix(in srgb, var(--site-glass-tint) var(--site-glass-mid), transparent) var(--site-glass-mid-stop),
+    color-mix(in srgb, var(--site-glass-edge-tint) var(--site-glass-edge), transparent) 100%
+  );
+  border: 1px solid var(--site-glass-border);
   box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--neutral-50) 90%, transparent),
-    inset 0 0 0 1px color-mix(in srgb, var(--lavender-400) 18%, transparent),
+    inset 0 1px 0 var(--site-glass-sheen),
+    inset 0 0 0 1px var(--site-glass-rim),
     var(--shadow-panel);
   backdrop-filter: blur(24px) saturate(1.5);
 }
 
-/* Beside the wide desktop logo the app's 22px headline reads as a caption;
-   the hero slogan steps up to a display size there. */
-@media (min-width: 640px) {
-  .site-hero-slogan {
-    font-size: clamp(1.75rem, 1rem + 1.6vw, 2.5rem);
-    line-height: 1.2;
-  }
-}
-
-/* On narrow screens the panel sits over 吟风's black dress, which a thin
-   fill turns muddy grey; a denser milk-glass keeps it light. */
-@media (max-width: 639px) {
-  .site-hero-panel {
-    background:
-      linear-gradient(
-        160deg,
-        color-mix(in srgb, var(--neutral-50) 78%, transparent) 0%,
-        color-mix(in srgb, var(--neutral-50) 62%, transparent) 60%,
-        color-mix(in srgb, var(--lavender-200) 55%, transparent) 100%
-      );
-  }
-}
-
-/* Slogan in the story mode title type (serif semibold italic, from the
-   markup), filled with the brand's blue-pink accent gradient so it matches
-   the CTA buttons; drop-shadow because text-shadow would show through the
+/* Slogan filled with the blue-pink accent gradient so it matches the CTA
+   buttons; drop-shadow because text-shadow would show through the
    transparent, gradient-clipped glyphs. */
 .site-hero-slogan {
   width: fit-content;
-  /* Between the pastel accent and --gradient-accent-strong (too dark on the
-     light glass): a clear sky blue into sakura pink. */
   background-image: linear-gradient(
     135deg in oklab,
-    color-mix(in oklab, var(--blue-300), var(--blue-grad) 55%),
-    color-mix(in oklab, var(--pink-500), var(--pink-grad) 15%)
+    var(--site-slogan-gradient-start),
+    var(--site-slogan-gradient-end)
   );
   background-clip: text;
   -webkit-background-clip: text;
   color: transparent;
   filter:
-    drop-shadow(0 0 1px color-mix(in srgb, var(--neutral-50) 95%, transparent))
-    drop-shadow(0 1px 0 color-mix(in srgb, var(--neutral-50) 90%, transparent))
-    drop-shadow(0 2px 4px color-mix(in srgb, var(--pink-900) 22%, transparent));
+    drop-shadow(0 0 1px var(--site-slogan-halo))
+    drop-shadow(0 1px 0 var(--site-slogan-halo-edge))
+    drop-shadow(0 2px 4px var(--site-slogan-glow));
+}
+
+/* Beside the wide desktop logo the app's 22px headline reads as a caption;
+   the slogan steps up to the hero size there. */
+@media (min-width: 640px) {
+  .site-hero-slogan {
+    font-size: var(--site-text-hero);
+    line-height: 1.2;
+  }
 }
 
 .site-hero-logo {

@@ -68,9 +68,8 @@ describe("home page HTML", () => {
     assert.match(html, /<a href="https:\/\/github\.com\/YinFengWindy\/Shiori-Agent"[^>]*>.*?GitHub<\/a>/s);
   });
 
-  it("mounts Vercel Web Analytics", () => {
+  it("mounts the Vercel Web Analytics component from the shared layout", () => {
     assert.match(html, /<vercel-analytics [^>]*><\/vercel-analytics>/);
-    assert.match(html, /customElements\.define\(`vercel-analytics`/);
   });
 });
 

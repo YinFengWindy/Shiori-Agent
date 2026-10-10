@@ -4,7 +4,7 @@ import { cx, ghostButtonClass } from "@yinfengwindy/shiori-sdk";
 import { primaryButtonClass } from "../../../desktop/renderer/src/shared/styles";
 import SceneBackdrop from "../components/SceneBackdrop.astro";
 import SiteLayout from "../layouts/SiteLayout.astro";
-import { titleLogoImage, titleSprites } from "../lib/siteAssets";
+import { heroSprite, titleLogoImage } from "../lib/siteAssets";
 import { SITE_LINKS, SITE_NAME, SITE_SLOGAN } from "../lib/siteMeta";
 
 /*
@@ -12,19 +12,18 @@ import { SITE_LINKS, SITE_NAME, SITE_SLOGAN } from "../lib/siteMeta";
  * sprite, the title and the download / GitHub calls to action. The scrolling
  * narrative, product showcase and blog entry replace it in later tickets (#768).
  */
-const sprite = titleSprites[0];
-// CTA labels share the slogan's serif semibold italic.
-const ctaLayoutClass = "inline-flex items-center gap-2 font-serif text-body-lg font-semibold italic";
+// CTA labels share the slogan's story type (.site-story-type in site.css).
+const ctaLayoutClass = "site-story-type inline-flex items-center gap-2 text-body-lg";
 ---
 
 <SiteLayout title={`${SITE_NAME} · ${SITE_SLOGAN}`}>
   <main class="site-hero relative isolate h-dvh min-h-[32rem] overflow-hidden">
     <SceneBackdrop />
     <img
-      src={sprite.image.src}
-      width={sprite.image.width}
-      height={sprite.image.height}
-      alt={sprite.alt}
+      src={heroSprite.image.src}
+      width={heroSprite.image.width}
+      height={heroSprite.image.height}
+      alt={heroSprite.alt}
       decoding="async"
       class="site-hero-sprite pointer-events-none absolute"
     />
@@ -39,7 +38,7 @@ const ctaLayoutClass = "inline-flex items-center gap-2 font-serif text-body-lg f
             class="site-hero-logo h-auto"
           />
         </h1>
-        <p class="site-hero-slogan font-serif text-headline font-semibold italic">{SITE_SLOGAN}</p>
+        <p class="site-hero-slogan site-story-type text-headline">{SITE_SLOGAN}</p>
         <div class="flex flex-wrap justify-center gap-3 sm:justify-start">
           <a href={SITE_LINKS.releasesLatest} class={cx(primaryButtonClass, ctaLayoutClass)}>
             <DownloadSimpleIcon size={20} weight="bold" aria-hidden="true" />
