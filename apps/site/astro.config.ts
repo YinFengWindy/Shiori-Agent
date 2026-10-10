@@ -3,6 +3,7 @@ import { dirname, resolve } from "node:path";
 import react from "@astrojs/react";
 import sitemap from "@astrojs/sitemap";
 import { defineConfig } from "astro/config";
+import { lqipPlugin } from "./src/lib/lqip";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = resolve(here, "..", "..");
@@ -26,6 +27,8 @@ export default defineConfig({
   },
   integrations: [react(), sitemap()],
   vite: {
+    // `picture.webp?lqip`: a tiny inline placeholder (the home page loader's silhouette).
+    plugins: [lqipPlugin()],
     server: {
       fs: {
         // styles.css, the scene backgrounds and the title logo are imported

@@ -41,7 +41,8 @@
  * against neutral-50 the start reads 2.6:1 and the end 3.2:1.
  */
 .site-hero,
-.site-narrative {
+.site-narrative,
+.site-loader {
   /* Fill behind the scene picture while it loads. */
   --site-hero-backdrop: var(--lavender-100);
 
@@ -101,7 +102,8 @@
    fill turns muddy grey; a denser milk-glass keeps it light. */
 @media (max-width: 639px) {
   .site-hero,
-  .site-narrative {
+  .site-narrative,
+  .site-loader {
     --site-glass-angle: 160deg;
     --site-glass-start: 78%;
     --site-glass-mid: 62%;
@@ -111,28 +113,35 @@
 }
 
 /*
- * Home page loader (#770, components/SiteLoader.astro): a 「栞」 bookmark on
- * the app's own blue -> lavender -> pink wash, the primary button's
- * blue-pink pastel inside, edged and lettered with the nav rail motif's
- * sky -> sakura -> lavender sweep, wearing 吟风's choker bow and the
- * little-devil wings of her hair ornament (decorative: no contrast target).
+ * Home page loader (#770, components/SiteLoader.astro): 吟风's blurred
+ * silhouette on the app's own blue -> lavender -> pink wash, and the name
+ * plate as its progress bar, empty in the dialogue box's milk glass and
+ * filling with the plate's blue-pink accent (the narrative's tokens above).
  */
 .site-loader {
-  --site-loader-backdrop: var(--gradient-app);
-  --site-loader-card-start: var(--blue-200);
-  --site-loader-card-end: var(--pink-200);
-  --site-loader-ink-start: var(--color-motif-gradient-start);
-  --site-loader-ink-mid: var(--color-motif-gradient-mid);
-  --site-loader-ink-end: var(--color-motif-gradient-end);
-  --site-loader-bow: var(--color-motif);
-  --site-loader-wing: var(--color-motif-gradient-start);
+  --site-loader-wash: var(--gradient-app);
+  --site-loader-plate-empty: var(--site-dialogue-fill-start);
+  --site-loader-plate-fill: var(--site-nameplate-fill);
+  /* Enough to melt the 20px placeholder (lib/lqip.ts) into a silhouette. */
+  --site-loader-silhouette-blur: 14px;
+  /* Share of the first screen decoded, 0-1 (set by the loader's script). */
+  --site-loader-progress: 0;
+}
 
-  /* A hanging bookmark swaying on its cord; the fade out; and the cap: the
-     loader fades on its own this long after it first paints even if the
-     page never reports ready (a very slow line, a failed script). */
-  --site-loader-sway-angle: 4deg;
-  --site-loader-sway: 1.8s;
-  --site-loader-fade: var(--duration-stage);
+/* The reveal, on the root: the dialogue box outside the loader takes part.
+   Hold while the plate fills up; then the wash fades to the scene while the
+   silhouette sharpens into her sprite; once she is in focus the dialogue
+   box rises in and the plate hands over to its own (hold + focus + rise =
+   860ms; the box rises only after the focus because the loader's
+   silhouette lies above it). The cap: the loader reveals anyway this long
+   after navigation, even if the first screen is not ready (also the delay
+   of the CSS-only fallback fade). */
+:root {
+  --site-loader-hold: var(--duration-base);
+  --site-loader-focus: var(--duration-crossfade);
+  --site-loader-wash-out: var(--duration-stage);
+  --site-loader-rise: var(--duration-crossfade);
+  --site-loader-dialogue-rise: 12px;
   --site-loader-cap: 10s;
 }
 
@@ -228,27 +237,89 @@
 }
 
 /* ------------------------------------------------------------ loader -- */
-/* Covers the first screen until its pictures are decoded (SiteLoader.astro's
-   script sets data-leaving), or until the cap; the script removes it once
-   either fade ends. */
+/* The narrative's first shot, laid out by the same rules: the figure is a
+   .site-narrative-figure in a full-viewport layer, exactly where the sticky
+   stage puts the sprite, and the plate frame copies .site-dialogue's box. */
 .site-loader {
   position: fixed;
   inset: 0;
   z-index: 100;
-  display: grid;
-  place-content: center;
-  justify-items: center;
-  gap: 1.5rem;
-  background: var(--site-loader-backdrop);
-  animation: site-loader-timeout var(--site-loader-fade) var(--ease-out-soft) var(--site-loader-cap) both;
+  animation: site-loader-timeout var(--site-loader-wash-out) var(--ease-out-soft) var(--site-loader-cap) both;
 }
 
-/* A second animation name, so the fade starts now instead of the cap's
-   running animation jumping to its end. Clicks and scrolling go through to
-   the page while it fades. */
+.site-loader-wash {
+  position: absolute;
+  inset: 0;
+  background: var(--site-loader-wash);
+}
+
+/* Stretched to the box (the 20px placeholder rounds the aspect ratio). */
+.site-loader-silhouette {
+  object-fit: fill;
+  filter: blur(var(--site-loader-silhouette-blur));
+}
+
+/* Same geometry as .site-dialogue, so the plate sits where its own does. */
+.site-loader-dialogue {
+  position: absolute;
+  z-index: 3;
+  inset-inline: clamp(0.75rem, 4vw, 4rem);
+  bottom: clamp(0.75rem, 4dvh, 2.5rem);
+  max-width: 60rem;
+  min-height: clamp(9rem, 22dvh, 12rem);
+  margin-inline: auto;
+}
+
+/* The plate as a progress bar: the accent fill uncovered from the left. */
+.site-loader .site-loader-plate {
+  isolation: isolate;
+  background: var(--site-loader-plate-empty);
+}
+
+.site-loader-plate::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background-image: var(--site-loader-plate-fill);
+  clip-path: inset(0 calc((1 - var(--site-loader-progress)) * 100%) 0 0);
+  transition: clip-path var(--duration-base) var(--ease-out-soft);
+}
+
+/* Ready (or capped): the reveal. The layer's own animation spans the whole
+   choreography, so its end is when the script removes it. Clicks and
+   scrolling are let through from here on. */
 .site-loader[data-leaving] {
   pointer-events: none;
-  animation: site-loader-leave var(--site-loader-fade) var(--ease-out-soft) both;
+  animation: site-loader-leave calc(var(--site-loader-hold) + var(--site-loader-focus) + var(--site-loader-rise)) linear both;
+}
+
+.site-loader[data-leaving] .site-loader-wash {
+  animation: site-loader-fade var(--site-loader-wash-out) var(--ease-in-out-soft) var(--site-loader-hold) both;
+}
+
+/* The sprite beneath is already decoded: fading the blur off it reads as
+   the silhouette coming into focus. */
+.site-loader[data-leaving] .site-loader-silhouette {
+  animation: site-loader-focus var(--site-loader-focus) var(--ease-in-out-soft) var(--site-loader-hold) both;
+}
+
+.site-loader[data-leaving] .site-loader-plate {
+  animation: site-loader-fade var(--site-loader-rise) var(--ease-in-out-soft) calc(var(--site-loader-hold) + var(--site-loader-focus)) both;
+}
+
+/* The dialogue box waits under the loader, then rises in with the plate's
+   hand-over once 吟风 is in focus. */
+html[data-site-loader] .site-dialogue {
+  transition:
+    opacity var(--site-loader-rise) var(--ease-out-soft) calc(var(--site-loader-hold) + var(--site-loader-focus)),
+    translate var(--site-loader-rise) var(--ease-out-soft) calc(var(--site-loader-hold) + var(--site-loader-focus));
+}
+
+html[data-site-loader="loading"] .site-dialogue {
+  opacity: 0;
+  translate: 0 var(--site-loader-dialogue-rise);
 }
 
 @keyframes site-loader-timeout {
@@ -260,46 +331,21 @@
 
 @keyframes site-loader-leave {
   to {
-    opacity: 0;
     visibility: hidden;
   }
 }
 
-.site-loader-bookmark {
-  display: block;
-  width: clamp(6.5rem, 20vmin, 9rem);
-  height: auto;
-  overflow: visible;
-  filter: drop-shadow(var(--shadow-panel));
-  transform-origin: 50% 12%;
-  animation: site-loader-sway var(--site-loader-sway) var(--ease-in-out-soft) infinite alternate;
-}
-
-@keyframes site-loader-sway {
-  from {
-    rotate: calc(-1 * var(--site-loader-sway-angle));
-  }
+@keyframes site-loader-fade {
   to {
-    rotate: var(--site-loader-sway-angle);
+    opacity: 0;
   }
 }
 
-.site-loader-card-start { stop-color: var(--site-loader-card-start); }
-.site-loader-card-end { stop-color: var(--site-loader-card-end); }
-.site-loader-ink-start { stop-color: var(--site-loader-ink-start); }
-.site-loader-ink-mid { stop-color: var(--site-loader-ink-mid); }
-.site-loader-ink-end { stop-color: var(--site-loader-ink-end); }
-.site-loader-bow { color: var(--site-loader-bow); }
-.site-loader-wing { color: var(--site-loader-wing); }
-
-.site-loader-glyph {
-  font-family: var(--font-display);
-  font-weight: 600;
-}
-
-/* The desktop's typing sparkles, scaled up like the startup splash's. */
-.site-loader-sparkles .chat-typing-sparkles {
-  transform: scale(2.6);
+@keyframes site-loader-focus {
+  to {
+    opacity: 0;
+    filter: blur(0);
+  }
 }
 
 /* Without scripting nothing would report the page ready: no loader at all.
@@ -523,7 +569,7 @@ html:has(.site-narrative) {
 }
 
 /* Reduced motion — and no scripting, where nothing would map the scroll to
-   a line (and the loader is not shown) — drops the pinned stage: no snapping, every line listed in the
+   a line — drops the pinned stage: no snapping, every line listed in the
    dialogue box in order, no CG frames, no entrance or caret motion. */
 @media (prefers-reduced-motion: reduce), (scripting: none) {
   html:has(.site-narrative) {
@@ -575,9 +621,24 @@ html:has(.site-narrative) {
     margin-top: 0.75rem;
   }
 
-  /* The loader holds still (its sparkles too, in styles.css) and keeps only
-     its opacity fade out. */
-  .site-loader-bookmark {
+  /* The loader: the plate fills in steps, and with the stage unpinned
+     there is no shot to hand over to in place, so the whole layer fades
+     out (opacity only) and the dialogue box fades in without rising. */
+  .site-loader-plate::before {
+    transition: none;
+  }
+
+  .site-loader[data-leaving] {
+    animation: site-loader-fade var(--site-loader-wash-out) var(--ease-in-out-soft) both;
+  }
+
+  .site-loader[data-leaving] .site-loader-wash,
+  .site-loader[data-leaving] .site-loader-silhouette,
+  .site-loader[data-leaving] .site-loader-plate {
     animation: none;
+  }
+
+  html[data-site-loader="loading"] .site-dialogue {
+    translate: none;
   }
 }

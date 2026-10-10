@@ -51,12 +51,11 @@ const usedCgKeys = [...new Set(NARRATIVE_LINES.flatMap((line) => (line.cg ? [lin
               alt=""
               draggable="false"
               decoding="async"
-              loading={first ? "eager" : "lazy"}
-              fetchpriority={first ? "high" : "low"}
+              fetchpriority={first ? "high" : undefined}
               class="mascot-layer"
               data-expression={expression}
               data-layer={first ? "current" : "hidden"}
-              data-first-screen={first ? "" : undefined}
+              data-first-screen
             />
           );
         })
@@ -68,13 +67,12 @@ const usedCgKeys = [...new Set(NARRATIVE_LINES.flatMap((line) => (line.cg ? [lin
           const cg = narrativeCgs[key];
           return (
             <img
-              src={cg.image.src}
+              src={firstLine.cg === key ? cg.image.src : undefined}
+              data-src={cg.image.src}
               width={cg.image.width}
               height={cg.image.height}
               alt={cg.alt}
               decoding="async"
-              loading="lazy"
-              fetchpriority="low"
               class="site-narrative-cg"
               data-cg={key}
               data-active={firstLine.cg === key ? "" : undefined}
@@ -146,7 +144,13 @@ const usedCgKeys = [...new Set(NARRATIVE_LINES.flatMap((line) => (line.cg ? [lin
       }
       shownExpression = expression;
     }
-    for (const cg of cgs) cg.toggleAttribute("data-active", cg.dataset.cg === line.dataset.cg);
+    for (const cg of cgs) {
+      const active = cg.dataset.cg === line.dataset.cg;
+      // CGs carry no src until the loader prefetches them (SiteLoader.astro);
+      // a line reached before that loads its own.
+      if (active && !cg.getAttribute("src") && cg.dataset.src) cg.src = cg.dataset.src;
+      cg.toggleAttribute("data-active", active);
+    }
     shownIndex = index;
   }
 
