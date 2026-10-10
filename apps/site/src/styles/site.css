@@ -57,6 +57,15 @@
   backdrop-filter: blur(24px) saturate(1.5);
 }
 
+/* Beside the wide desktop logo the app's 22px headline reads as a caption;
+   the hero slogan steps up to a display size there. */
+@media (min-width: 640px) {
+  .site-hero-slogan {
+    font-size: clamp(1.75rem, 1rem + 1.6vw, 2.5rem);
+    line-height: 1.2;
+  }
+}
+
 /* On narrow screens the panel sits over 吟风's black dress, which a thin
    fill turns muddy grey; a denser milk-glass keeps it light. */
 @media (max-width: 639px) {
