@@ -38,8 +38,8 @@ describe("home page HTML", () => {
 
   it("declares the language and a non-empty title and description", () => {
     assert.match(html, /<html lang="zh-CN">/);
-    assert.match(html, /<title>Shiori · 让角色走进日常<\/title>/);
-    assert.ok(metaContent(html, "name", "description").includes("Personal Agent"));
+    assert.match(html, /<title>Shiori · 会慢慢喜欢上你的 AI 伴侣<\/title>/);
+    assert.ok(metaContent(html, "name", "description").includes("AI 伴侣"));
   });
 
   it("points canonical and og:url at the site root on the production origin", () => {
@@ -49,7 +49,7 @@ describe("home page HTML", () => {
 
   it("carries Open Graph and Twitter card tags with an absolute, emitted image", () => {
     assert.equal(metaContent(html, "property", "og:type"), "website");
-    assert.equal(metaContent(html, "property", "og:title"), "Shiori · 让角色走进日常");
+    assert.equal(metaContent(html, "property", "og:title"), "Shiori · 会慢慢喜欢上你的 AI 伴侣");
     assert.equal(metaContent(html, "property", "og:description"), metaContent(html, "name", "description"));
     const image = metaContent(html, "property", "og:image");
     // JPEG, not WebP: some link previewers cannot render WebP cards.
