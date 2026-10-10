@@ -89,7 +89,6 @@ try {
   await reveal(page, "注册模型");
   await page.getByRole("textbox", { name: "模型", exact: true }).fill("qa-model");
   await page.getByRole("spinbutton", { name: "上下文窗口", exact: true }).fill("128000");
-  await page.getByRole("spinbutton", { name: "模型最大输出", exact: true }).fill("32768");
   await page.getByRole("button", { name: "测试连接" }).click();
   await page.getByRole("status").filter({ hasText: "连接成功" }).waitFor();
   await says(page, "通了通了");
@@ -106,7 +105,6 @@ try {
   await reveal(page, "注册模型");
   await page.getByRole("textbox", { name: "模型", exact: true }).fill("qa-model");
   await page.getByRole("spinbutton", { name: "上下文窗口", exact: true }).fill("128000");
-  await page.getByRole("spinbutton", { name: "模型最大输出", exact: true }).fill("32768");
   await page.getByRole("button", { name: "保存并继续" }).click();
   await reveal(page, "创建角色");
   await state(page, { sessionId: "launch-3", failCreate: true });

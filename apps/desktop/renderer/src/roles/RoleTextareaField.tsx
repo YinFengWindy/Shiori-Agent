@@ -1,6 +1,6 @@
 import { AutosizeTextarea, cx } from "@yinfengwindy/shiori-sdk";
 import type { CSSProperties } from "react";
-import { roleFieldClass, roleFieldLabelClass } from "./roleEditorStyles";
+import { roleTextareaClass, roleFieldLabelClass } from "./roleEditorStyles";
 
 type RoleTextareaFieldProps = {
   /** Visible label; when omitted, `ariaLabel` names the field (e.g. under a section title that already says it). */
@@ -35,7 +35,7 @@ export function RoleTextareaField({
   const field = (
     <AutosizeTextarea
       aria-label={label ? undefined : ariaLabel}
-      className={cx(roleFieldClass, "leading-6", minHeightClass, maxHeight !== undefined && "overflow-y-auto")}
+      className={cx(roleTextareaClass, "leading-6", minHeightClass, maxHeight !== undefined && "overflow-y-auto")}
       style={{ maxHeight }}
       containerClassName={minHeightClass}
       containerStyle={{ maxHeight }}

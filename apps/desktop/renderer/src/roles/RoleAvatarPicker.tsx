@@ -2,6 +2,8 @@ import { errorFeedbackText } from "@yinfengwindy/shiori-sdk/host-internal";
 import { useRef, useState } from "react";
 import { Camera } from "@phosphor-icons/react";
 import { InlineError } from "../shared/feedback/InlineError";
+import { cx } from "@yinfengwindy/shiori-sdk";
+import { roleAvatarClass } from "./roleEditorStyles";
 
 /** Selects and previews an optional avatar before a role is persisted. */
 export function RoleAvatarPicker({ source, disabled, onChange }: {
@@ -31,7 +33,7 @@ export function RoleAvatarPicker({ source, disabled, onChange }: {
     <div className="grid justify-items-center gap-2">
       <button type="button" aria-label={source ? "更换头像" : "上传头像"} title={source ? "更换头像" : "上传头像"}
         disabled={disabled || picking} onClick={() => void pick()}
-        className="group grid h-24 w-24 shrink-0 place-items-center overflow-hidden rounded-full border-4 border-white/90 bg-gradient-accent-soft text-ink-muted shadow-panel transition-colors hover:text-ink disabled:opacity-50">
+        className={cx(roleAvatarClass, "text-ink-muted transition-colors hover:text-ink disabled:opacity-50")}>
         {source
           ? <img src={window.miraDesktop.localAssetUrl(source)} alt="角色头像预览" className="h-full w-full object-cover transition-transform duration-panel ease-out-soft motion-safe:group-hover:scale-105" />
           : <Camera className="h-7 w-7" aria-hidden="true" />}
