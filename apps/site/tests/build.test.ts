@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
+import { NARRATIVE_LINES } from "../src/content/narrative";
 
 /*
  * Assertions on the built site (`astro build` runs first, see the package's
@@ -66,6 +67,22 @@ describe("home page HTML", () => {
     assert.match(html, />让角色走进日常<\/p>/);
     assert.match(html, /<a href="https:\/\/github\.com\/YinFengWindy\/Shiori-Agent\/releases\/latest"[^>]*>.*?下载 Windows 版<\/a>/s);
     assert.match(html, /<a href="https:\/\/github\.com\/YinFengWindy\/Shiori-Agent"[^>]*>.*?GitHub<\/a>/s);
+  });
+
+  it("carries every narrative line as static text, in script order", () => {
+    let from = 0;
+    for (const { text } of NARRATIVE_LINES) {
+      const at = html.indexOf(`>${text}</p>`, from);
+      assert.ok(at >= 0, `narrative line missing or out of order: ${text}`);
+      from = at;
+    }
+  });
+
+  it("links the narrative's skip control to the calls to action", () => {
+    const target = html.match(/<a href="#([^"]+)"[^>]*>\s*跳过/)?.[1];
+    assert.ok(target, "no skip link in the narrative");
+    const section = html.match(new RegExp(`<section id="${target}"[^>]*>(.*?)</section>`, "s"))?.[1];
+    assert.ok(section?.includes("下载 Windows 版"), `skip target #${target} is not the CTA section`);
   });
 
   it("mounts the Vercel Web Analytics component from the shared layout", () => {

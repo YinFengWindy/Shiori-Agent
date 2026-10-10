@@ -3,16 +3,27 @@
  * come from the desktop's styles.css — the single source of the design
  * system, compiled here with the desktop's Tailwind theme (tailwind.config.ts).
  * adv.css supplies the time-of-day scene backdrop shared with the desktop's
- * first-run guide. Only the site's own tokens and layout live below.
+ * first-run guide, mascot.css 吟风's expression stack (the cross-fade between
+ * faces). Only the site's own tokens and layout live below.
  */
 @import "../../../desktop/renderer/src/styles.css";
 @import "../../../desktop/renderer/src/shared/adv/adv.css";
+@import "../../../desktop/renderer/src/shared/mascot/mascot.css";
 
 /* ------------------------------------------------------------ tokens -- */
 /*
- * The hero's palette, scoped to `.site-hero` and built from the app's
- * primitives (styles.css) the way the desktop's semantic tier is: the
- * component rules below use only these names, never a primitive.
+ * The palette of the narrative stage and the CTA hero, scoped to those two
+ * sections and built from the app's primitives (styles.css) the way the
+ * desktop's semantic tier is: the component rules below use only these
+ * names, never a primitive.
+ *
+ * Dialogue contrast (#771), computed for the worst case — the translucent
+ * fill composited over pure black, darker than any scene pixel or 吟风's
+ * dress behind the box — and for the lightest, over white:
+ *   ink (neutral-950) on the fill's start, neutral-50 86%: 10.8:1 … 14.9:1
+ *   ink on the fill's end, lavender-100 84%:                9.8:1 … 14.4:1
+ *   name plate ink on --gradient-accent (blue-150 → pink-150): 13.4:1 / 13.2:1
+ * so the lines clear 4.5:1 whatever the scene shows through.
  *
  * Slogan contrast, measured on the rendered hero (Playwright screenshots of
  * the panel behind the hidden slogan, day / dusk / night scenes; ratios
@@ -29,7 +40,8 @@
  * comes from the near-white halo (--site-slogan-halo*) outlining each glyph:
  * against neutral-50 the start reads 2.6:1 and the end 3.2:1.
  */
-.site-hero {
+.site-hero,
+.site-narrative {
   /* Fill behind the scene picture while it loads. */
   --site-hero-backdrop: var(--lavender-100);
 
@@ -59,6 +71,26 @@
   --site-slogan-halo-edge: color-mix(in srgb, var(--neutral-50) 90%, transparent);
   --site-slogan-glow: color-mix(in srgb, var(--pink-900) 22%, transparent);
 
+  /* Narrative dialogue box: the same frosted glass, filled densely enough
+     for body text (contrast in the note above), with dark ink. */
+  --site-dialogue-fill-start: color-mix(in srgb, var(--neutral-50) 86%, transparent);
+  --site-dialogue-fill-end: color-mix(in srgb, var(--lavender-100) 84%, transparent);
+  --site-dialogue-ink: var(--neutral-950);
+  /* Name plate: the primary button's blue-pink pastel with the same ink. */
+  --site-nameplate-fill: var(--gradient-accent);
+  --site-nameplate-ink: var(--neutral-950);
+  /* "More to come" caret (decorative, beside the text it follows). */
+  --site-dialogue-caret: var(--pink-500);
+  /* Photo-print border around an event CG. */
+  --site-cg-frame: var(--neutral-50);
+
+  /* Narrative line size: a site-only step above the app's body-lg, scaling
+     with the viewport so a line fills the wide dialogue box. */
+  --site-text-dialogue: clamp(1.0625rem, 0.9rem + 0.5vw, 1.375rem);
+  /* Entrance offsets: a new line and a new CG rise this far as they fade in. */
+  --site-line-rise: 6px;
+  --site-cg-rise: 12px;
+
   /* Hero slogan size on wide screens: a site-only display size outside the
      desktop app's type scale (whose largest step, `display`, is 28px), so
      the slogan holds its own beside the wide logo. */
@@ -68,7 +100,8 @@
 /* On narrow screens the panel sits over 吟风's black dress, which a thin
    fill turns muddy grey; a denser milk-glass keeps it light. */
 @media (max-width: 639px) {
-  .site-hero {
+  .site-hero,
+  .site-narrative {
     --site-glass-angle: 160deg;
     --site-glass-start: 78%;
     --site-glass-mid: 62%;
@@ -79,7 +112,7 @@
 
 /* --------------------------------------------------------------- type -- */
 /* The story mode title type (serif semibold italic), shared by the hero
-   slogan and its calls to action. */
+   slogan, its calls to action and the narrative's lines and name plate. */
 .site-story-type {
   @apply font-serif font-semibold italic;
 }
@@ -165,5 +198,271 @@
 @media (min-width: 640px) {
   .site-hero-logo {
     width: min(14rem, 22vw);
+  }
+}
+
+/* --------------------------------------------------------- narrative -- */
+/* The desktop's app shell pins html and body to the window (height 100%,
+   overflow hidden); the site is a scrolling document. */
+html,
+body {
+  height: auto;
+  overflow: visible;
+}
+
+/* One viewport tall per line, with one snap point per line, around a sticky
+   one-viewport stage (lib/narrativeModel.ts maps the scroll to the line).
+   `scroll-snap-stop: always` keeps a fling or a long trackpad swipe from
+   skipping lines. Everything after the narrative is one snap area: when it
+   outgrows the viewport (the showcase and blog to come) it scrolls freely. */
+
+html:has(.site-narrative) {
+  scroll-snap-type: y mandatory;
+}
+
+.site-narrative {
+  color-scheme: light;
+  background: var(--site-hero-backdrop);
+  height: calc(var(--site-narrative-lines) * 100vh);
+  height: calc(var(--site-narrative-lines) * 100dvh);
+}
+
+.site-narrative-stage {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.site-narrative-snaps {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.site-narrative-snap {
+  height: 100vh;
+  height: 100dvh;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+}
+
+.site-after-narrative {
+  scroll-snap-align: start;
+}
+
+/* 吟风 (uniform expression stack) standing at the right edge; on phones she
+   steps further right so the CG frame top-left leaves her face clear. */
+.site-narrative-figure {
+  position: absolute;
+  z-index: 1;
+  bottom: 0;
+  right: -34vw;
+  height: min(74dvh, 52rem);
+  aspect-ratio: 826 / 1213;
+  filter: var(--mascot-drop-shadow);
+  pointer-events: none;
+}
+
+@media (min-width: 640px) {
+  .site-narrative-figure {
+    right: clamp(0rem, 7vw, 8rem);
+    height: min(96dvh, 72rem);
+  }
+}
+
+/* Event CG: a tilted photo print top-left, rising in as it fades. */
+.site-narrative-cgs {
+  position: absolute;
+  z-index: 2;
+  top: clamp(1rem, 5dvh, 3.5rem);
+  left: clamp(1rem, 6vw, 7rem);
+  pointer-events: none;
+}
+
+.site-narrative-cg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: auto;
+  height: auto;
+  max-width: min(56vw, 40rem);
+  max-height: 34dvh;
+  border: 5px solid var(--site-cg-frame);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-panel);
+  rotate: -2deg;
+  opacity: 0;
+  visibility: hidden;
+  translate: 0 var(--site-cg-rise);
+  transition:
+    opacity var(--duration-stage) var(--ease-out-soft),
+    translate var(--duration-stage) var(--ease-out-soft),
+    visibility 0s linear var(--duration-stage);
+}
+
+.site-narrative-cg[data-active] {
+  opacity: 1;
+  visibility: visible;
+  translate: 0 0;
+  transition-delay: 0s;
+}
+
+@media (min-width: 640px) {
+  .site-narrative-cg {
+    max-width: min(40vw, 38rem);
+    max-height: 56dvh;
+  }
+}
+
+/* Galgame dialogue box along the bottom: name plate and skip link riding
+   its top edge, the line inside, a bobbing caret bottom-right. */
+.site-dialogue {
+  position: absolute;
+  z-index: 3;
+  inset-inline: clamp(0.75rem, 4vw, 4rem);
+  bottom: clamp(0.75rem, 4dvh, 2.5rem);
+  max-width: 60rem;
+  min-height: clamp(9rem, 22dvh, 12rem);
+  margin-inline: auto;
+  padding: 2rem clamp(1.1rem, 3vw, 2.25rem) 1.5rem;
+  border-radius: var(--radius-xl);
+  color: var(--site-dialogue-ink);
+  background: linear-gradient(180deg, var(--site-dialogue-fill-start), var(--site-dialogue-fill-end));
+  border: 1px solid var(--site-glass-border);
+  box-shadow:
+    inset 0 1px 0 var(--site-glass-sheen),
+    inset 0 0 0 1px var(--site-glass-rim),
+    var(--shadow-panel);
+  backdrop-filter: blur(24px) saturate(1.5);
+}
+
+.site-dialogue-name {
+  position: absolute;
+  top: -1.15rem;
+  left: clamp(1rem, 3vw, 2rem);
+  padding: 0.2rem 1.25rem;
+  border-radius: var(--radius-md);
+  color: var(--site-nameplate-ink);
+  background-image: var(--site-nameplate-fill);
+  border: 1px solid var(--site-glass-border);
+  box-shadow: var(--shadow-panel);
+  font-size: var(--site-text-dialogue);
+}
+
+.site-dialogue-skip {
+  position: absolute;
+  top: -1.15rem;
+  right: clamp(1rem, 3vw, 2rem);
+}
+
+.site-dialogue-lines {
+  position: relative;
+}
+
+.site-narrative-line {
+  font-size: var(--site-text-dialogue);
+  line-height: 1.75;
+}
+
+/* Lines off stage stay in the document (reading order, search engines) but
+   out of sight. */
+.site-narrative-line:not([data-active]) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.site-narrative-line[data-active] {
+  animation: site-line-in var(--duration-stage) var(--ease-out-soft) both;
+}
+
+@keyframes site-line-in {
+  from {
+    opacity: 0;
+    translate: 0 var(--site-line-rise);
+  }
+}
+
+.site-dialogue-caret {
+  position: absolute;
+  right: clamp(1rem, 3vw, 2rem);
+  bottom: 0.75rem;
+  color: var(--site-dialogue-caret);
+  animation: site-caret-bob var(--duration-spring) var(--ease-in-out-soft) infinite alternate;
+}
+
+@keyframes site-caret-bob {
+  to {
+    translate: 0 4px;
+  }
+}
+
+/* The music switch floats in the top-right corner over every section. */
+.site-sound-toggle {
+  position: fixed;
+  z-index: 10;
+  top: clamp(0.75rem, 2vw, 1.25rem);
+  right: clamp(0.75rem, 2vw, 1.25rem);
+}
+
+/* Reduced motion — and no scripting, where nothing would map the scroll to
+   a line — drops the pinned stage: no snapping, every line listed in the
+   dialogue box in order, no CG frames, no entrance or caret motion. */
+@media (prefers-reduced-motion: reduce), (scripting: none) {
+  html:has(.site-narrative) {
+    scroll-snap-type: none;
+  }
+
+  .site-narrative {
+    height: auto;
+  }
+
+  .site-narrative-snaps,
+  .site-narrative-cgs,
+  .site-dialogue-caret {
+    display: none;
+  }
+
+  .site-narrative-stage {
+    position: relative;
+    height: auto;
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding: 5rem clamp(0.75rem, 4vw, 4rem) clamp(0.75rem, 4dvh, 2.5rem);
+  }
+
+  .site-dialogue {
+    position: relative;
+    inset: auto;
+    width: 100%;
+  }
+
+  .site-narrative-line:not([data-active]) {
+    position: static;
+    width: auto;
+    height: auto;
+    margin: 0;
+    overflow: visible;
+    clip-path: none;
+    white-space: normal;
+  }
+
+  .site-narrative-line[data-active] {
+    animation: none;
+  }
+
+  .site-narrative-line + .site-narrative-line {
+    margin-top: 0.75rem;
   }
 }

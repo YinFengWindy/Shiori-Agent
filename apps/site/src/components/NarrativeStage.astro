@@ -1,0 +1,231 @@
+---
+import { CaretDownIcon, FastForwardIcon } from "@phosphor-icons/react";
+import { compactGhostButtonClass } from "@yinfengwindy/shiori-sdk";
+import {
+  mascotExpressions,
+  mascotName,
+} from "../../../desktop/renderer/src/shared/mascot/mascotExpressions";
+import { NARRATIVE_LINES } from "../content/narrative";
+import { narrativeCgs, narrativeExpressionSprites } from "../lib/siteAssets";
+import SceneBackdrop from "./SceneBackdrop.astro";
+
+/**
+ * The scroll-driven galgame narrative at the top of the home page (#771):
+ * a sticky one-viewport stage (scene, 吟风's expression stack, an event CG
+ * frame, the dialogue box) inside a section one viewport tall per line, with
+ * one scroll-snap point per line. Keyboard, touch and the scrollbar snap
+ * natively; the script below steps the wheel one line per gesture and maps
+ * the scroll position to the line on show (lib/narrativeModel.ts). Every line is static text in reading order;
+ * the ones off stage are visually hidden, not removed. Under reduced motion,
+ * or without scripting, site.css lays the lines out as a plain list instead.
+ */
+interface Props {
+  /** `id` of the section after the narrative: the skip link's target. */
+  skipTargetId: string;
+}
+
+const { skipTargetId } = Astro.props;
+const [firstLine] = NARRATIVE_LINES;
+if (!firstLine) throw new Error("the narrative needs at least one line");
+const usedCgKeys = [...new Set(NARRATIVE_LINES.flatMap((line) => (line.cg ? [line.cg] : [])))];
+---
+
+<section
+  class="site-narrative relative"
+  style={`--site-narrative-lines: ${NARRATIVE_LINES.length}`}
+  aria-label={`${mascotName}的自我介绍`}
+  data-narrative
+>
+  <div class="site-narrative-stage" data-narrative-stage>
+    <SceneBackdrop />
+    <div class="site-narrative-figure mascot-stack" aria-hidden="true">
+      {
+        mascotExpressions.map((expression) => {
+          const sprite = narrativeExpressionSprites[expression];
+          const first = expression === firstLine.expression;
+          return (
+            <img
+              src={sprite.src}
+              width={sprite.width}
+              height={sprite.height}
+              alt=""
+              draggable="false"
+              decoding="async"
+              loading={first ? "eager" : "lazy"}
+              fetchpriority={first ? "high" : "low"}
+              class="mascot-layer"
+              data-expression={expression}
+              data-layer={first ? "current" : "hidden"}
+            />
+          );
+        })
+      }
+    </div>
+    <div class="site-narrative-cgs" aria-hidden="true">
+      {
+        usedCgKeys.map((key) => {
+          const cg = narrativeCgs[key];
+          return (
+            <img
+              src={cg.image.src}
+              width={cg.image.width}
+              height={cg.image.height}
+              alt={cg.alt}
+              decoding="async"
+              loading="lazy"
+              fetchpriority="low"
+              class="site-narrative-cg"
+              data-cg={key}
+              data-active={firstLine.cg === key ? "" : undefined}
+            />
+          );
+        })
+      }
+    </div>
+    <div class="site-dialogue">
+      <p class="site-dialogue-name site-story-type">{mascotName}</p>
+      <div class="site-dialogue-lines">
+        {
+          NARRATIVE_LINES.map((line, index) => (
+            <p
+              class="site-narrative-line site-story-type"
+              data-narrative-line
+              data-expression={line.expression}
+              data-cg={line.cg}
+              data-active={index === 0 ? "" : undefined}
+            >
+              {line.text}
+            </p>
+          ))
+        }
+      </div>
+      <CaretDownIcon size={20} weight="bold" aria-hidden="true" className="site-dialogue-caret" />
+      <a href={`#${skipTargetId}`} class:list={[compactGhostButtonClass, "site-dialogue-skip"]}>
+        跳过
+        <FastForwardIcon size={16} aria-hidden="true" />
+      </a>
+    </div>
+  </div>
+  <div class="site-narrative-snaps" aria-hidden="true">
+    {NARRATIVE_LINES.map(() => <div class="site-narrative-snap"></div>)}
+  </div>
+</section>
+
+<script>
+  import { createWheelGestureGate, narrativeLineAt, narrativeStepTarget } from "../lib/narrativeModel";
+
+  function required<T>(element: T | null, name: string): T {
+    if (!element) throw new Error(`narrative ${name} is missing`);
+    return element;
+  }
+
+  const section = required(document.querySelector<HTMLElement>("[data-narrative]"), "section");
+  const stage = required(section.querySelector<HTMLElement>("[data-narrative-stage]"), "stage");
+  const lines = [...section.querySelectorAll<HTMLElement>("[data-narrative-line]")];
+  const sprites = [...section.querySelectorAll<HTMLImageElement>("img[data-expression]")];
+  const cgs = [...section.querySelectorAll<HTMLImageElement>("img[data-cg]")];
+  // Reduced motion keeps the static list layout (site.css): nothing to drive.
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+  let shownIndex = 0;
+  let shownExpression = lines[0]?.dataset.expression;
+
+  /** Put line `index` on stage: its text, 吟风's face (fading over the last one) and its CG. */
+  function show(index: number) {
+    if (index === shownIndex) return;
+    lines[shownIndex]?.removeAttribute("data-active");
+    const line = lines[index];
+    if (!line) throw new Error(`no narrative line ${index}`);
+    line.setAttribute("data-active", "");
+    const expression = line.dataset.expression;
+    if (expression !== shownExpression) {
+      for (const sprite of sprites) {
+        const key = sprite.dataset.expression;
+        sprite.dataset.layer = key === expression ? "current" : key === shownExpression ? "previous" : "hidden";
+      }
+      shownExpression = expression;
+    }
+    for (const cg of cgs) cg.toggleAttribute("data-active", cg.dataset.cg === line.dataset.cg);
+    shownIndex = index;
+  }
+
+  function currentScroll() {
+    return {
+      offset: -section.getBoundingClientRect().top,
+      viewportHeight: stage.clientHeight,
+      lineCount: lines.length,
+    };
+  }
+
+  let frame = 0;
+  function update() {
+    frame = 0;
+    if (reducedMotion.matches) return;
+    show(narrativeLineAt(currentScroll()));
+  }
+  function scheduleUpdate() {
+    frame ||= requestAnimationFrame(update);
+  }
+
+  // Wheel: one smooth step per gesture (see narrativeModel.ts for why the
+  // wheel cannot be left to CSS snapping). While a step is still scrolling,
+  // the next one starts from its target, so quick notches never drop a line.
+  const PENDING_STEP_MS = 800;
+  const wheelStartsGesture = createWheelGestureGate();
+  let pendingStep: { offset: number; at: number } | null = null;
+
+  function onWheel(event: WheelEvent) {
+    if (reducedMotion.matches || event.ctrlKey || event.deltaY === 0 || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
+    const scroll = currentScroll();
+    const pending = pendingStep && event.timeStamp - pendingStep.at < PENDING_STEP_MS ? pendingStep : null;
+    const from = pending ? { ...scroll, offset: pending.offset } : scroll;
+    const target = narrativeStepTarget(from, event.deltaY > 0 ? 1 : -1);
+    const startsGesture = wheelStartsGesture(event.timeStamp);
+    if (target === null) return;
+    event.preventDefault();
+    if (!startsGesture) return;
+    pendingStep = { offset: target, at: event.timeStamp };
+    window.scrollTo({ top: window.scrollY + target - scroll.offset, behavior: "smooth" });
+  }
+
+  // Touch scrolls natively, but a swipe shorter than half the screen without
+  // much fling would snap back to the same line: once the finger lifts, a
+  // swipe of at least SWIPE_MIN_PX settles one line on from where it began.
+  // Passive — the swipe itself is never blocked.
+  const SWIPE_MIN_PX = 32;
+  let touchStart: { y: number; offset: number } | null = null;
+
+  function onTouchStart(event: TouchEvent) {
+    const touch = event.touches.length === 1 ? event.touches[0] : undefined;
+    touchStart = touch && !reducedMotion.matches ? { y: touch.clientY, offset: currentScroll().offset } : null;
+  }
+
+  function onTouchEnd(event: TouchEvent) {
+    const start = touchStart;
+    touchStart = null;
+    const touch = event.changedTouches[0];
+    if (!start || !touch) return;
+    const swipe = start.y - touch.clientY;
+    if (Math.abs(swipe) < SWIPE_MIN_PX) return;
+    const scroll = currentScroll();
+    const target = narrativeStepTarget({ ...scroll, offset: start.offset }, swipe > 0 ? 1 : -1);
+    if (target === null) return;
+    window.scrollTo({ top: window.scrollY + target - scroll.offset, behavior: "smooth" });
+  }
+
+  window.addEventListener("scroll", scheduleUpdate, { passive: true });
+  window.addEventListener("wheel", onWheel, { passive: false });
+  window.addEventListener("touchstart", onTouchStart, { passive: true });
+  window.addEventListener("touchend", onTouchEnd, { passive: true });
+  window.addEventListener(
+    "touchcancel",
+    () => {
+      touchStart = null;
+    },
+    { passive: true },
+  );
+  window.addEventListener("resize", scheduleUpdate);
+  reducedMotion.addEventListener("change", scheduleUpdate);
+  // A reload or a #hash link can open the page mid-narrative.
+  update();
+</script>
