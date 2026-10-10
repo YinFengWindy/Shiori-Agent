@@ -77,13 +77,20 @@
    transparent, gradient-clipped glyphs. */
 .site-hero-slogan {
   width: fit-content;
-  background-image: var(--gradient-accent-strong);
+  /* Between the pastel accent and --gradient-accent-strong (too dark on the
+     light glass): a clear sky blue into sakura pink. */
+  background-image: linear-gradient(
+    135deg in oklab,
+    color-mix(in oklab, var(--blue-300), var(--blue-grad) 55%),
+    color-mix(in oklab, var(--pink-500), var(--pink-grad) 15%)
+  );
   background-clip: text;
   -webkit-background-clip: text;
   color: transparent;
   filter:
-    drop-shadow(0 1px 0 color-mix(in srgb, var(--neutral-50) 80%, transparent))
-    drop-shadow(0 4px 10px color-mix(in srgb, var(--lavender-400) 35%, transparent));
+    drop-shadow(0 0 1px color-mix(in srgb, var(--neutral-50) 95%, transparent))
+    drop-shadow(0 1px 0 color-mix(in srgb, var(--neutral-50) 90%, transparent))
+    drop-shadow(0 2px 4px color-mix(in srgb, var(--pink-900) 22%, transparent));
 }
 
 .site-hero-logo {
