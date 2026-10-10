@@ -71,6 +71,16 @@
   }
 }
 
+/* Slogan in the story mode title style (serif semibold italic, deep rose
+   with a white rim and soft drop), the look picked for the promo cover. */
+.site-hero-slogan {
+  color: var(--pink-800);
+  -webkit-text-stroke: 0.5px color-mix(in srgb, var(--neutral-50) 55%, transparent);
+  text-shadow:
+    0 1px 0 color-mix(in srgb, var(--neutral-50) 72%, transparent),
+    0 5px 12px color-mix(in srgb, var(--pink-900) 28%, transparent);
+}
+
 .site-hero-logo {
   width: min(9rem, 40vw);
 }
