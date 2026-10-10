@@ -1,0 +1,73 @@
+---
+import { DownloadSimpleIcon, GithubLogoIcon } from "@phosphor-icons/react";
+import { cx, ghostButtonClass } from "@yinfengwindy/shiori-sdk";
+import { primaryButtonClass } from "../../../desktop/renderer/src/shared/styles";
+import { appIconImage } from "../lib/siteAssets";
+import { DOWNLOAD_HEADLINE, SITE_LINKS, SITE_NAME, SITE_SLOGAN } from "../lib/siteMeta";
+
+/**
+ * The calls to action closing the narrative (#771): the app icon as the page
+ * title, 吟风's closing headline with its tagline, and the download / GitHub buttons, straight on the
+ * scene — no panel. The download button's static href is the latest-release
+ * page (no-JS and crawler fallback); the script below swaps in the
+ * installer's direct download once the GitHub API names it.
+ */
+// Button labels share the slogan's story type (.site-story-type in site.css).
+const ctaLayoutClass = "site-story-type inline-flex items-center gap-2 text-body-lg";
+---
+
+<div class="site-download-body">
+  <h1>
+    <img
+      src={appIconImage.src}
+      width={appIconImage.width}
+      height={appIconImage.height}
+      alt={SITE_NAME}
+      loading="lazy"
+      decoding="async"
+      class="site-download-icon"
+    />
+  </h1>
+  <div class="site-download-heading">
+    <p class="site-download-slogan site-story-type">{DOWNLOAD_HEADLINE}</p>
+    <p class="site-download-tagline site-story-type text-title">{SITE_SLOGAN}</p>
+  </div>
+  <div class="flex flex-wrap justify-center gap-3">
+    <a href={SITE_LINKS.releasesLatest} class={cx(primaryButtonClass, ctaLayoutClass)} data-download-installer>
+      <DownloadSimpleIcon size={20} weight="bold" aria-hidden="true" />
+      <span>下载 Windows 版<span data-download-version></span></span>
+    </a>
+    <a href={SITE_LINKS.github} class={cx(ghostButtonClass, ctaLayoutClass)}>
+      <GithubLogoIcon size={20} aria-hidden="true" />
+      GitHub
+    </a>
+  </div>
+</div>
+
+<script>
+  import { pickWindowsInstaller } from "../lib/releaseAsset";
+
+  // Point the download button at the latest installer itself. Assets are
+  // versioned, so only the API knows the file name; it is asked at runtime
+  // because the site is not rebuilt on a release. Any failure (offline,
+  // rate limit, timeout, no installer asset) keeps the release-page href:
+  // the button still works, so nothing is shown to the visitor.
+  const RELEASE_API = "https://api.github.com/repos/YinFengWindy/Shiori-Agent/releases/latest";
+  const TIMEOUT_MS = 6000;
+
+  const button = document.querySelector<HTMLAnchorElement>("a[data-download-installer]");
+  const version = button?.querySelector<HTMLElement>("[data-download-version]");
+  if (!button || !version) throw new Error("download button is missing");
+
+  fetch(RELEASE_API, { headers: { Accept: "application/vnd.github+json" }, signal: AbortSignal.timeout(TIMEOUT_MS) })
+    .then((response) => (response.ok ? response.json() : null))
+    .then((release: unknown) => {
+      const installer = pickWindowsInstaller(release);
+      if (!installer) return;
+      button.href = installer.url;
+      if (installer.version) version.textContent = ` ${installer.version}`;
+    })
+    .catch(() => {
+      // Fallback href stays; see above.
+    });
+</script>

@@ -38,8 +38,8 @@ describe("home page HTML", () => {
 
   it("declares the language and a non-empty title and description", () => {
     assert.match(html, /<html lang="zh-CN">/);
-    assert.match(html, /<title>Shiori · 让角色走进日常<\/title>/);
-    assert.ok(metaContent(html, "name", "description").includes("Personal Agent"));
+    assert.match(html, /<title>Shiori · 会慢慢喜欢上你的 AI 伴侣<\/title>/);
+    assert.ok(metaContent(html, "name", "description").includes("AI 伴侣"));
   });
 
   it("points canonical and og:url at the site root on the production origin", () => {
@@ -49,7 +49,7 @@ describe("home page HTML", () => {
 
   it("carries Open Graph and Twitter card tags with an absolute, emitted image", () => {
     assert.equal(metaContent(html, "property", "og:type"), "website");
-    assert.equal(metaContent(html, "property", "og:title"), "Shiori · 让角色走进日常");
+    assert.equal(metaContent(html, "property", "og:title"), "Shiori · 会慢慢喜欢上你的 AI 伴侣");
     assert.equal(metaContent(html, "property", "og:description"), metaContent(html, "name", "description"));
     const image = metaContent(html, "property", "og:image");
     // JPEG, not WebP: some link previewers cannot render WebP cards.
@@ -62,13 +62,6 @@ describe("home page HTML", () => {
     assert.match(metaContent(html, "name", "theme-color"), /^#[0-9a-f]{6}$/);
   });
 
-  it("renders the title, slogan and both calls to action as static markup", () => {
-    assert.match(html, /<h1><img [^>]*alt="Shiori"/);
-    assert.match(html, />让角色走进日常<\/p>/);
-    assert.match(html, /<a href="https:\/\/github\.com\/YinFengWindy\/Shiori-Agent\/releases\/latest"[^>]*>.*?下载 Windows 版<\/a>/s);
-    assert.match(html, /<a href="https:\/\/github\.com\/YinFengWindy\/Shiori-Agent"[^>]*>.*?GitHub<\/a>/s);
-  });
-
   it("carries every narrative line as static text, in script order", () => {
     let from = 0;
     for (const { text } of NARRATIVE_LINES) {
@@ -78,11 +71,24 @@ describe("home page HTML", () => {
     }
   });
 
-  it("links the narrative's skip control to the calls to action", () => {
-    const target = html.match(/<a href="#([^"]+)"[^>]*>\s*跳过/)?.[1];
-    assert.ok(target, "no skip link in the narrative");
-    const section = html.match(new RegExp(`<section id="${target}"[^>]*>(.*?)</section>`, "s"))?.[1];
-    assert.ok(section?.includes("下载 Windows 版"), `skip target #${target} is not the CTA section`);
+  it("closes the narrative with the download call: icon title, slogan, download and GitHub links", () => {
+    const at = html.indexOf('id="download"');
+    assert.ok(at >= 0, "no #download call in the page");
+    const lastLine = NARRATIVE_LINES.at(-1)?.text ?? "";
+    assert.ok(html.lastIndexOf(`>${lastLine}</p>`) < at, "the download call must follow the narrative lines in reading order");
+    const call = html.slice(at, html.indexOf("site-narrative-snaps", at));
+    const icon = call.match(/<h1><img [^>]*src="([^"]+)"[^>]*alt="Shiori"|<h1><img [^>]*alt="Shiori"[^>]*src="([^"]+)"/);
+    assert.ok(icon, "the title is the app icon with alt Shiori");
+    const iconSrc = icon[1] ?? icon[2];
+    assert.ok(existsSync(resolve(dist, iconSrc.replace(/^\//, ""))), `app icon ${iconSrc} is not in the build output`);
+    assert.match(call, />把我带回家吧，笨蛋。<\/p>/);
+    assert.match(call, />会慢慢喜欢上你的 AI 伴侣<\/p>/);
+    assert.match(call, /<a href="https:\/\/github\.com\/YinFengWindy\/Shiori-Agent\/releases\/latest"[^>]*>.*?下载 Windows 版<span[^>]*><\/span><\/span><\/a>/s);
+    assert.match(call, /<a href="https:\/\/github\.com\/YinFengWindy\/Shiori-Agent"[^>]*>.*?GitHub<\/a>/s);
+  });
+
+  it("has no skip control", () => {
+    assert.doesNotMatch(html, /跳过/);
   });
 
   it("mounts the Vercel Web Analytics component from the shared layout", () => {
