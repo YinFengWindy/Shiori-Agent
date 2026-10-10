@@ -12,10 +12,9 @@
 
 /* ------------------------------------------------------------ tokens -- */
 /*
- * The palette of the narrative stage and the CTA hero, scoped to those two
- * sections and built from the app's primitives (styles.css) the way the
- * desktop's semantic tier is: the component rules below use only these
- * names, never a primitive.
+ * The narrative stage's palette, scoped to `.site-narrative` and built from
+ * the app's primitives (styles.css) the way the desktop's semantic tier is:
+ * the component rules below use only these names, never a primitive.
  *
  * Dialogue contrast (#771), computed for the worst case — the translucent
  * fill composited over pure black, darker than any scene pixel or 吟风's
@@ -25,55 +24,41 @@
  *   name plate ink on --gradient-accent (blue-150 → pink-150): 13.4:1 / 13.2:1
  * so the lines clear 4.5:1 whatever the scene shows through.
  *
- * Slogan contrast, measured on the rendered hero (Playwright screenshots of
- * the panel behind the hidden slogan, day / dusk / night scenes; ratios
- * against the panel's median / darkest-5% pixel):
- *   wide panel (neutral-50 55% → 22% over the blurred scene)
- *     gradient start 1.37–1.99 median, 1.08–1.73 darkest
- *     gradient end   1.67–2.42 median, 1.13–2.11 darkest
- *   narrow panel (neutral-50 78% → 62%)
- *     gradient start 1.38–1.84 median, 1.17–1.30 darkest
- *     gradient end   1.69–2.24 median, 1.42–1.59 darkest
- * That is below the 3:1 large-text target: the frosted fill lets the scene
- * through, and even --gradient-accent-strong (blue-grad → pink-grad, turned
- * down by the owner as too dark) only reaches 2.4–3.7 median. Legibility
- * comes from the near-white halo (--site-slogan-halo*) outlining each glyph:
- * against neutral-50 the start reads 2.6:1 and the end 3.2:1.
+ * Slogan contrast: the download state sets it straight on the scene, with
+ * no panel. Each glyph is outlined by an opaque neutral-50 halo (two tight
+ * drop-shadows) inside a softer white glow, so the colour right around the
+ * strokes is the halo whatever the scene: against neutral-50 the gradient
+ * start (blue-300 → blue-grad 70%, ≈ #4d94c4) reads 3.2:1 and the end
+ * (pink-500 → pink-grad 15%, ≈ #df5f96) 3.2:1, above the 3:1 large-text
+ * target (the slogan is ≥ 28px semibold). The start was blue-grad 55%
+ * (2.6:1) on the old glass panel; 70% keeps the sky blue and clears 3:1.
  */
-.site-hero,
 .site-narrative,
 .site-loader {
   /* Fill behind the scene picture while it loads. */
-  --site-hero-backdrop: var(--lavender-100);
+  --site-scene-backdrop: var(--lavender-100);
 
-  /* Frosted glass panel: a translucent tint sweeping into a lavender edge.
-     The desktop's surface-glass-strong is 92% white (a solid card on a
-     photo); the hero lets the scene show through. Narrow screens only
-     change the angle and opacities (media block below). */
-  --site-glass-tint: var(--neutral-50);
-  --site-glass-edge-tint: var(--lavender-200);
-  --site-glass-angle: 135deg;
-  --site-glass-start: 55%;
-  --site-glass-mid: 22%;
-  --site-glass-mid-stop: 55%;
-  --site-glass-edge: 28%;
+  /* Frosted-glass edge of the dialogue box: border, top sheen, lavender rim. */
   --site-glass-border: color-mix(in srgb, var(--neutral-50) 70%, transparent);
   --site-glass-sheen: color-mix(in srgb, var(--neutral-50) 90%, transparent);
   --site-glass-rim: color-mix(in srgb, var(--lavender-400) 18%, transparent);
 
   /* Slogan: the brand's blue-pink accent, between the pastel
-     --gradient-accent and the darker --gradient-accent-strong — a clear sky
-     blue (≈ #61a2cf) into sakura pink (≈ #df5f96); contrast in the note above. */
-  --site-slogan-gradient-start: color-mix(in oklab, var(--blue-300), var(--blue-grad) 55%);
+     --gradient-accent and the darker --gradient-accent-strong; contrast in
+     the note above. */
+  --site-slogan-gradient-start: color-mix(in oklab, var(--blue-300), var(--blue-grad) 70%);
   --site-slogan-gradient-end: color-mix(in oklab, var(--pink-500), var(--pink-grad) 15%);
-  /* Near-white halo and lip outlining the glyphs on the glass, plus a soft
-     dark-pink glow underneath. */
-  --site-slogan-halo: color-mix(in srgb, var(--neutral-50) 95%, transparent);
-  --site-slogan-halo-edge: color-mix(in srgb, var(--neutral-50) 90%, transparent);
+  /* Opaque near-white halo hugging the glyphs, a wider soft white glow, and
+     a faint dark-pink shadow underneath. */
+  --site-slogan-halo: var(--neutral-50);
+  --site-slogan-glow-soft: color-mix(in srgb, var(--neutral-50) 75%, transparent);
   --site-slogan-glow: color-mix(in srgb, var(--pink-900) 22%, transparent);
+  /* Tagline under the slogan: dark ink (16:1 on neutral-50) inside the same
+     opaque halo, so it reads on any part of the scene. */
+  --site-tagline-ink: var(--neutral-800);
 
-  /* Narrative dialogue box: the same frosted glass, filled densely enough
-     for body text (contrast in the note above), with dark ink. */
+  /* Narrative dialogue box: frosted glass filled densely enough for body
+     text (contrast in the note above), with dark ink. */
   --site-dialogue-fill-start: color-mix(in srgb, var(--neutral-50) 86%, transparent);
   --site-dialogue-fill-end: color-mix(in srgb, var(--lavender-100) 84%, transparent);
   --site-dialogue-ink: var(--neutral-950);
@@ -92,37 +77,35 @@
   --site-line-rise: 6px;
   --site-cg-rise: 12px;
 
-  /* Hero slogan size on wide screens: a site-only display size outside the
-     desktop app's type scale (whose largest step, `display`, is 28px), so
-     the slogan holds its own beside the wide logo. */
-  --site-text-hero: clamp(1.75rem, 1rem + 1.6vw, 2.5rem);
-}
+  /* Slogan size: a site-only display size above the desktop app's type
+     scale (whose largest step, `display`, is 28px). */
+  --site-text-slogan: clamp(1.75rem, 1rem + 1.6vw, 2.5rem);
+  /* App icon heading the download state. */
+  --site-download-icon-size: clamp(7.5rem, 5rem + 6vw, 11rem);
 
-/* On narrow screens the panel sits over 吟风's black dress, which a thin
-   fill turns muddy grey; a denser milk-glass keeps it light. */
-@media (max-width: 639px) {
-  .site-hero,
-  .site-narrative,
-  .site-loader {
-    --site-glass-angle: 160deg;
-    --site-glass-start: 78%;
-    --site-glass-mid: 62%;
-    --site-glass-mid-stop: 60%;
-    --site-glass-edge: 55%;
-  }
+  /* Into the download state: the cast fades out (吟风 drifting aside, the
+     dialogue sinking a little) while the download call fades in, rising,
+     a beat later; stepping back plays it the other way round. */
+  --site-final-out: var(--duration-stage);
+  --site-final-in: var(--duration-backdrop-in);
+  --site-final-in-delay: var(--duration-quick);
+  --site-final-drift: 28px;
+  --site-final-sink: 16px;
+  --site-final-rise: 14px;
 }
 
 /*
  * Home page loader (#770, components/SiteLoader.astro): 吟风's blurred
- * silhouette on the app's own blue -> lavender -> pink wash, and a slim
- * progress bar: a translucent lavender track filling with the slogan's
- * sky -> sakura sweep, the percentage beside it in muted ink.
+ * silhouette on the app's own blue -> lavender -> pink wash, and a long,
+ * slim progress bar on a milk-glass pill: a faint lavender track filling
+ * with the pastel blue -> pink accent (blue-300 -> pink-300; decorative,
+ * the percentage carries the reading), the percentage beside it in muted
+ * ink (neutral-700 on the near-white pill: about 5.5:1).
  */
 .site-loader {
   --site-loader-wash: var(--gradient-app);
-  --site-loader-track: color-mix(in srgb, var(--lavender-300) 40%, transparent);
-  --site-loader-fill-start: var(--site-slogan-gradient-start);
-  --site-loader-fill-end: var(--site-slogan-gradient-end);
+  --site-loader-track: color-mix(in srgb, var(--lavender-200) 55%, transparent);
+  --site-loader-fill: var(--gradient-accent-medium);
   --site-loader-percent-ink: var(--color-text-muted);
   /* Milk-glass pill behind the bar, so it reads over her silhouette too. */
   --site-loader-pill: var(--site-dialogue-fill-start);
@@ -150,94 +133,11 @@
 }
 
 /* --------------------------------------------------------------- type -- */
-/* The story mode title type (serif semibold italic), shared by the hero
-   slogan, its calls to action and the narrative's lines and name plate. */
+/* The story mode title type (serif semibold italic), shared by the
+   narrative's lines and name plate, the slogan and the call-to-action
+   buttons. */
 .site-story-type {
   @apply font-serif font-semibold italic;
-}
-
-/* ------------------------------------------------------------- hero -- */
-/* One viewport: scene full-bleed, 吟风 standing on the right (centred
-   behind the panel on narrow screens), title + CTAs on a glass panel. */
-
-.site-hero {
-  color-scheme: light;
-  background: var(--site-hero-backdrop);
-}
-
-.site-hero-sprite {
-  z-index: 0;
-  bottom: 0;
-  left: 50%;
-  height: min(88dvh, 64rem);
-  width: auto;
-  max-width: none;
-  transform: translateX(-50%);
-  filter: drop-shadow(var(--shadow-panel));
-}
-
-@media (min-width: 640px) {
-  .site-hero-sprite {
-    left: auto;
-    right: clamp(1rem, 8vw, 9rem);
-    height: min(94dvh, 70rem);
-    transform: none;
-  }
-}
-
-/* Frosted glass over the scene, with a top-left sheen and a bright rim. */
-.site-hero-panel {
-  border-radius: var(--radius-xl);
-  background: linear-gradient(
-    var(--site-glass-angle),
-    color-mix(in srgb, var(--site-glass-tint) var(--site-glass-start), transparent) 0%,
-    color-mix(in srgb, var(--site-glass-tint) var(--site-glass-mid), transparent) var(--site-glass-mid-stop),
-    color-mix(in srgb, var(--site-glass-edge-tint) var(--site-glass-edge), transparent) 100%
-  );
-  border: 1px solid var(--site-glass-border);
-  box-shadow:
-    inset 0 1px 0 var(--site-glass-sheen),
-    inset 0 0 0 1px var(--site-glass-rim),
-    var(--shadow-panel);
-  backdrop-filter: blur(24px) saturate(1.5);
-}
-
-/* Slogan filled with the blue-pink accent gradient so it matches the CTA
-   buttons; drop-shadow because text-shadow would show through the
-   transparent, gradient-clipped glyphs. */
-.site-hero-slogan {
-  width: fit-content;
-  background-image: linear-gradient(
-    135deg in oklab,
-    var(--site-slogan-gradient-start),
-    var(--site-slogan-gradient-end)
-  );
-  background-clip: text;
-  -webkit-background-clip: text;
-  color: transparent;
-  filter:
-    drop-shadow(0 0 1px var(--site-slogan-halo))
-    drop-shadow(0 1px 0 var(--site-slogan-halo-edge))
-    drop-shadow(0 2px 4px var(--site-slogan-glow));
-}
-
-/* Beside the wide desktop logo the app's 22px headline reads as a caption;
-   the slogan steps up to the hero size there. */
-@media (min-width: 640px) {
-  .site-hero-slogan {
-    font-size: var(--site-text-hero);
-    line-height: 1.2;
-  }
-}
-
-.site-hero-logo {
-  width: min(9rem, 40vw);
-}
-
-@media (min-width: 640px) {
-  .site-hero-logo {
-    width: min(14rem, 22vw);
-  }
 }
 
 /* ------------------------------------------------------------ loader -- */
@@ -269,7 +169,7 @@
   z-index: 3;
   inset-inline: 0;
   bottom: clamp(4rem, 16dvh, 9rem);
-  width: min(21rem, 78vw);
+  width: min(32rem, 86vw);
   margin-inline: auto;
   display: flex;
   align-items: center;
@@ -296,7 +196,7 @@
   width: calc(var(--site-loader-progress) * 100%);
   height: 100%;
   border-radius: inherit;
-  background-image: linear-gradient(90deg in oklab, var(--site-loader-fill-start), var(--site-loader-fill-end));
+  background-image: var(--site-loader-fill);
   transition: width var(--duration-base) var(--ease-out-soft);
 }
 
@@ -389,11 +289,13 @@ body {
   overflow: visible;
 }
 
-/* One viewport tall per line, with one snap point per line, around a sticky
-   one-viewport stage (lib/narrativeModel.ts maps the scroll to the line).
-   `scroll-snap-stop: always` keeps a fling or a long trackpad swipe from
-   skipping lines. Everything after the narrative is one snap area: when it
-   outgrows the viewport (the showcase and blog to come) it scrolls freely. */
+/* One viewport tall per step — each line, then the download state — with
+   one snap point per step, around a sticky one-viewport stage
+   (lib/narrativeModel.ts maps the scroll to the step). `scroll-snap-stop:
+   always` keeps a fling or a long trackpad swipe from skipping lines.
+   Everything after the narrative is one snap area once it has content: when
+   it outgrows the viewport (the showcase and blog to come) it scrolls
+   freely. While it is empty the page ends with the download state. */
 
 html:has(.site-narrative) {
   scroll-snap-type: y mandatory;
@@ -401,9 +303,9 @@ html:has(.site-narrative) {
 
 .site-narrative {
   color-scheme: light;
-  background: var(--site-hero-backdrop);
-  height: calc(var(--site-narrative-lines) * 100vh);
-  height: calc(var(--site-narrative-lines) * 100dvh);
+  background: var(--site-scene-backdrop);
+  height: calc(var(--site-narrative-steps) * 100vh);
+  height: calc(var(--site-narrative-steps) * 100dvh);
 }
 
 .site-narrative-stage {
@@ -428,7 +330,7 @@ html:has(.site-narrative) {
   scroll-snap-stop: always;
 }
 
-.site-after-narrative {
+.site-after-narrative:not(:empty) {
   scroll-snap-align: start;
 }
 
@@ -443,6 +345,33 @@ html:has(.site-narrative) {
   aspect-ratio: 826 / 1213;
   filter: var(--mascot-drop-shadow);
   pointer-events: none;
+}
+
+/* The cast — 吟风, the CG frame, the dialogue box — fades out into the
+   download state and back in when stepping back, the way in waiting a beat
+   for the download call to clear (delays swap in the data-final rules). */
+.site-narrative-figure,
+.site-narrative-cgs,
+.site-dialogue {
+  transition:
+    opacity var(--site-final-in) var(--ease-out-soft) var(--site-final-in-delay),
+    translate var(--site-final-in) var(--ease-out-soft) var(--site-final-in-delay);
+}
+
+.site-narrative-stage[data-final] :is(.site-narrative-figure, .site-narrative-cgs, .site-dialogue) {
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity var(--site-final-out) var(--ease-in-out-soft),
+    translate var(--site-final-out) var(--ease-in-out-soft);
+}
+
+.site-narrative-stage[data-final] .site-narrative-figure {
+  translate: var(--site-final-drift) 0;
+}
+
+.site-narrative-stage[data-final] .site-dialogue {
+  translate: 0 var(--site-final-sink);
 }
 
 @media (min-width: 640px) {
@@ -496,8 +425,8 @@ html:has(.site-narrative) {
   }
 }
 
-/* Galgame dialogue box along the bottom: name plate and skip link riding
-   its top edge, the line inside, a bobbing caret bottom-right. */
+/* Galgame dialogue box along the bottom: name plate riding its top edge,
+   the line inside, a bobbing caret bottom-right. */
 .site-dialogue {
   position: absolute;
   z-index: 3;
@@ -529,12 +458,6 @@ html:has(.site-narrative) {
   border: 1px solid var(--site-glass-border);
   box-shadow: var(--shadow-panel);
   font-size: var(--site-text-dialogue);
-}
-
-.site-dialogue-skip {
-  position: absolute;
-  top: -1.15rem;
-  right: clamp(1rem, 3vw, 2rem);
 }
 
 .site-dialogue-lines {
@@ -584,6 +507,88 @@ html:has(.site-narrative) {
   }
 }
 
+/* Download state: the app icon upper centre, the slogan, the buttons — on
+   the scene itself, no panel. Out of sight but in the document (reading
+   order, search engines) until the last step; focusing a button there
+   steps to it (NarrativeStage.astro). */
+.site-download {
+  position: absolute;
+  z-index: 4;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: clamp(4.5rem, 17dvh, 11rem) 1rem 2rem;
+  text-align: center;
+  opacity: 0;
+  translate: 0 var(--site-final-rise);
+  pointer-events: none;
+  transition:
+    opacity var(--site-final-out) var(--ease-in-out-soft),
+    translate var(--site-final-out) var(--ease-in-out-soft);
+}
+
+.site-narrative-stage[data-final] .site-download {
+  opacity: 1;
+  translate: 0 0;
+  pointer-events: auto;
+  transition:
+    opacity var(--site-final-in) var(--ease-out-soft) var(--site-final-in-delay),
+    translate var(--site-final-in) var(--ease-out-soft) var(--site-final-in-delay);
+}
+
+.site-download-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(1rem, 3dvh, 1.75rem);
+}
+
+.site-download-icon {
+  width: var(--site-download-icon-size);
+  height: auto;
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-panel);
+}
+
+/* Slogan filled with the blue-pink accent gradient so it matches the
+   buttons, outlined by the halo and glow (contrast in the tokens note);
+   drop-shadow because text-shadow would show through the transparent,
+   gradient-clipped glyphs. */
+.site-download-slogan {
+  width: fit-content;
+  font-size: var(--site-text-slogan);
+  line-height: 1.25;
+  background-image: linear-gradient(
+    135deg in oklab,
+    var(--site-slogan-gradient-start),
+    var(--site-slogan-gradient-end)
+  );
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  filter:
+    drop-shadow(0 0 1px var(--site-slogan-halo))
+    drop-shadow(0 0 1px var(--site-slogan-halo))
+    drop-shadow(0 0 8px var(--site-slogan-glow-soft))
+    drop-shadow(0 2px 4px var(--site-slogan-glow));
+}
+
+.site-download-heading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.site-download-tagline {
+  color: var(--site-tagline-ink);
+  filter:
+    drop-shadow(0 0 1px var(--site-slogan-halo))
+    drop-shadow(0 0 1px var(--site-slogan-halo))
+    drop-shadow(0 0 6px var(--site-slogan-glow-soft));
+}
+
 /* The music switch floats in the top-right corner over every section. */
 .site-sound-toggle {
   position: fixed;
@@ -593,8 +598,9 @@ html:has(.site-narrative) {
 }
 
 /* Reduced motion — and no scripting, where nothing would map the scroll to
-   a line — drops the pinned stage: no snapping, every line listed in the
-   dialogue box in order, no CG frames, no entrance or caret motion. */
+   a step — drops the pinned stage: no snapping, every line listed in the
+   dialogue box in order with the download call below it, no CG frames, no
+   transitions, entrance or caret motion. */
 @media (prefers-reduced-motion: reduce), (scripting: none) {
   html:has(.site-narrative) {
     scroll-snap-type: none;
@@ -625,6 +631,28 @@ html:has(.site-narrative) {
     position: relative;
     inset: auto;
     width: 100%;
+  }
+
+  .site-narrative-figure,
+  .site-dialogue,
+  .site-download {
+    transition: none;
+  }
+
+  /* 吟风 stands behind the list of lines, leaving the slogan below on the
+     bare scene. */
+  .site-narrative-figure {
+    top: 0;
+    bottom: auto;
+  }
+
+  .site-download {
+    position: relative;
+    inset: auto;
+    padding: clamp(2.5rem, 8dvh, 4rem) 0 0;
+    opacity: 1;
+    translate: none;
+    pointer-events: auto;
   }
 
   .site-narrative-line:not([data-active]) {

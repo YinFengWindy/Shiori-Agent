@@ -20,15 +20,11 @@ import mascotSurprisedLqip from "../../../desktop/renderer/src/shared/assets/mas
 import sceneDay from "../../../desktop/renderer/src/shared/assets/scene/bg-day.webp";
 import sceneDusk from "../../../desktop/renderer/src/shared/assets/scene/bg-dusk.webp";
 import sceneNight from "../../../desktop/renderer/src/shared/assets/scene/bg-night.webp";
-import titleLogo from "../../../desktop/renderer/public/assets/branding/shiori-title-logo.png";
 import cg3 from "../assets/art/cg-3.webp";
 import cg7 from "../assets/art/cg-7.webp";
 import cg8 from "../assets/art/cg-8.webp";
 import cg9 from "../assets/art/cg-9.webp";
 import cg10 from "../assets/art/cg-10.webp";
-import sprite1 from "../assets/art/sprite-1.webp";
-import sprite2 from "../assets/art/sprite-2.webp";
-import sprite3 from "../assets/art/sprite-3.webp";
 import topic1 from "../assets/art/topic-1.webp";
 import topic2 from "../assets/art/topic-2.webp";
 import topic3 from "../assets/art/topic-3.webp";
@@ -50,9 +46,9 @@ export interface SiteImage {
  * size/metadata hygiene of every file in that directory — including the art
  * kept there for the gallery that comes next (#768).
  *
- * The scene backgrounds, 吟风's expression sprites and the title logo are
- * the desktop's own files (first-run guide / startup splash, the app's
- * mascot, story plugin) and are imported from there instead of being copied.
+ * The scene backgrounds and 吟风's expression sprites are the desktop's
+ * own files (first-run guide / startup splash, the app's mascot) and are
+ * imported from there instead of being copied.
  */
 
 /** Time-of-day scene backgrounds (decorative; phase boundaries in desktop `timeOfDay.ts`). */
@@ -62,8 +58,13 @@ export const sceneBackgrounds: Record<ScenePhase, ImageMetadata> = {
   night: sceneNight,
 };
 
-/** 「栞 / SHIORI」 title logo. */
-export const titleLogoImage: ImageMetadata = titleLogo;
+/**
+ * The app icon (吟风's portrait) heading the download state: the 512px PNG
+ * the site already serves as its manifest icon (public/icons), sharp at the
+ * ≤ 176 CSS px it is shown at on 2× screens and 91 KB, where the 1024px
+ * repository original is 1.6 MB and the site has no image optimiser.
+ */
+export const appIconImage = { src: "/icons/icon-512.png", width: 512, height: 512 } as const;
 
 /**
  * 吟风's uniform standing sprite in the narrative, one image per expression
@@ -139,16 +140,6 @@ export const narrativeCgs: Record<NarrativeCgKey, SiteImage> = {
   "topic-3": { image: topic3, alt: "吟风配图：月夜窗边浅笑，黑色晚装缀有蝙蝠翼装饰" },
 };
 
-/**
- * 吟风's cut-out standing sprites (transparent WebP), one per outfit, beside
- * the CTA panel. The static HTML shows the first; each visit then picks one
- * at random.
- */
-export const ctaSprites: readonly [SiteImage, ...SiteImage[]] = [
-  { image: sprite1, alt: "吟风立绘：黑色哥特连衣裙配过膝袜，背后展开蝙蝠翼，以手掩唇浅笑" },
-  { image: sprite2, alt: "吟风立绘：白色水手服配红格短裙，双手背在身后微微前倾" },
-  { image: sprite3, alt: "吟风立绘：白色露肩上衣配黑色短裙，双手轻提裙摆" },
-];
 
 /**
  * Default social preview (OG / Twitter card): the seaside CG (cg-6)
