@@ -52,6 +52,9 @@
   --site-slogan-halo: var(--neutral-50);
   --site-slogan-glow-soft: color-mix(in srgb, var(--neutral-50) 75%, transparent);
   --site-slogan-glow: color-mix(in srgb, var(--pink-900) 22%, transparent);
+  /* Tagline under the slogan: dark ink (16:1 on neutral-50) inside the same
+     opaque halo, so it reads on any part of the scene. */
+  --site-tagline-ink: var(--neutral-800);
 
   /* Narrative dialogue box: frosted glass filled densely enough for body
      text (contrast in the note above), with dark ink. */
@@ -390,6 +393,21 @@ html:has(.site-narrative) {
     drop-shadow(0 0 1px var(--site-slogan-halo))
     drop-shadow(0 0 8px var(--site-slogan-glow-soft))
     drop-shadow(0 2px 4px var(--site-slogan-glow));
+}
+
+.site-download-heading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.site-download-tagline {
+  color: var(--site-tagline-ink);
+  filter:
+    drop-shadow(0 0 1px var(--site-slogan-halo))
+    drop-shadow(0 0 1px var(--site-slogan-halo))
+    drop-shadow(0 0 6px var(--site-slogan-glow-soft));
 }
 
 /* The music switch floats in the top-right corner over every section. */

@@ -3,11 +3,11 @@ import { DownloadSimpleIcon, GithubLogoIcon } from "@phosphor-icons/react";
 import { cx, ghostButtonClass } from "@yinfengwindy/shiori-sdk";
 import { primaryButtonClass } from "../../../desktop/renderer/src/shared/styles";
 import { appIconImage } from "../lib/siteAssets";
-import { SITE_LINKS, SITE_NAME, SITE_SLOGAN } from "../lib/siteMeta";
+import { DOWNLOAD_HEADLINE, DOWNLOAD_TAGLINE, SITE_LINKS, SITE_NAME } from "../lib/siteMeta";
 
 /**
  * The calls to action closing the narrative (#771): the app icon as the page
- * title, the slogan, and the download / GitHub buttons, straight on the
+ * title, 吟风's closing headline with its tagline, and the download / GitHub buttons, straight on the
  * scene — no panel. The download button's static href is the latest-release
  * page (no-JS and crawler fallback); the script below swaps in the
  * installer's direct download once the GitHub API names it.
@@ -28,7 +28,10 @@ const ctaLayoutClass = "site-story-type inline-flex items-center gap-2 text-body
       class="site-download-icon"
     />
   </h1>
-  <p class="site-download-slogan site-story-type">{SITE_SLOGAN}</p>
+  <div class="site-download-heading">
+    <p class="site-download-slogan site-story-type">{DOWNLOAD_HEADLINE}</p>
+    <p class="site-download-tagline site-story-type text-title">{DOWNLOAD_TAGLINE}</p>
+  </div>
   <div class="flex flex-wrap justify-center gap-3">
     <a href={SITE_LINKS.releasesLatest} class={cx(primaryButtonClass, ctaLayoutClass)} data-download-installer>
       <DownloadSimpleIcon size={20} weight="bold" aria-hidden="true" />

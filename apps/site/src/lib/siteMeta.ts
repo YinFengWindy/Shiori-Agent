@@ -10,6 +10,10 @@ export const SITE_NAME = "Shiori";
 /** Product slogan (also on the README). */
 export const SITE_SLOGAN = "让角色走进日常";
 
+/** Closing call of the home page, in 吟风's voice, and the line under it. */
+export const DOWNLOAD_HEADLINE = "把我带回家吧，笨蛋。";
+export const DOWNLOAD_TAGLINE = "会慢慢喜欢上你的 AI 伴侣";
+
 /** Default meta / OG description for pages that do not set their own. */
 export const SITE_DESCRIPTION =
   "Shiori 是以角色为核心的 Personal Agent：记得聊过的往事，会主动找你聊天，也能帮你处理手头的事。";

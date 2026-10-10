@@ -81,7 +81,8 @@ describe("home page HTML", () => {
     assert.ok(icon, "the title is the app icon with alt Shiori");
     const iconSrc = icon[1] ?? icon[2];
     assert.ok(existsSync(resolve(dist, iconSrc.replace(/^\//, ""))), `app icon ${iconSrc} is not in the build output`);
-    assert.match(call, />让角色走进日常<\/p>/);
+    assert.match(call, />把我带回家吧，笨蛋。<\/p>/);
+    assert.match(call, />会慢慢喜欢上你的 AI 伴侣<\/p>/);
     assert.match(call, /<a href="https:\/\/github\.com\/YinFengWindy\/Shiori-Agent\/releases\/latest"[^>]*>.*?下载 Windows 版<span[^>]*><\/span><\/span><\/a>/s);
     assert.match(call, /<a href="https:\/\/github\.com\/YinFengWindy\/Shiori-Agent"[^>]*>.*?GitHub<\/a>/s);
   });
