@@ -88,7 +88,7 @@ Shiori 的视觉是**三层单向依赖**：色阶原语 → 语义 token → Ta
 | `--gradient-accent-medium` | 进度条 / 计量条 |
 
 **圆角**：`--radius-sm` 8px / `--radius-md` 12px / `--radius-lg` 16px / `--radius-xl` 20px
-**阴影**：`--shadow-soft`（常规抬起）/ `--shadow-panel`（面板）/ `--shadow-pop`（弹出层），全部带粉调
+**阴影**：`--shadow-shell`（主内容外框轻阴影）/ `--shadow-soft`（常规抬起）/ `--shadow-panel`（面板）/ `--shadow-pop`（弹出层），全部带粉调
 **动效**：时长 `--duration-*`（完整表见下文「动效」）、缓动 `--ease-out-soft` / `--ease-drawer` / `--ease-in-out-soft` / `--ease-spring`
 **字体**：`--font-sans`（正文）/ `--font-display`（标题，`"Segoe UI Variable Display"` 再接 `--font-sans`）
 
@@ -112,7 +112,7 @@ Shiori 的视觉是**三层单向依赖**：色阶原语 → 语义 token → Ta
 | `*-success` / `*-warning` / `*-danger` | `-soft` `-text`（无后缀是 `-solid`） | 状态 |
 | `*-ring` / `*-ring-soft` | — | 焦点 token |
 | `rounded-{sm,md,lg,xl}` | — | 圆角 token（`rounded-full` 走 Tailwind 默认的 9999px） |
-| `shadow-{soft,panel,pop}` | — | 阴影 token |
+| `shadow-{shell,soft,panel,pop}` | — | 阴影 token |
 | `ease-out-soft` / `ease-drawer` | — | 缓动 token；无类名的 `transition` 默认用 `--ease-out-soft` |
 | `duration-{fade,fast,quick,base,panel}` | — | 时长 token；无类名的 `transition` 默认用 `--duration-fast`。其余时长只在 CSS 里用 |
 | `scale-96` / `scale-97` | — | 按压反馈的缩放（见 `pressableClass`） |

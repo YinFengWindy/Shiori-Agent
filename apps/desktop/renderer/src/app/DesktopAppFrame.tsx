@@ -447,7 +447,7 @@ export function DesktopAppFrame({
           />
           </div>
         </div>
-        <main className="chat-pane relative grid min-h-0 grid-cols-[minmax(0,1fr)] overflow-hidden rounded-l-lg border-b border-l border-t border-line-soft bg-[var(--chat-bg)] shadow-soft">
+        <main className="chat-pane relative grid min-h-0 grid-cols-[minmax(0,1fr)] overflow-hidden rounded-l-lg border-b border-l border-t border-line-soft bg-[var(--chat-bg)] shadow-shell">
           {sidebarState.compact && !sidebarState.collapsed ? (
             <button
               className="motion-fade-enter absolute inset-0 z-[19] cursor-default border-0 bg-white/25 p-0"
