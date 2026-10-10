@@ -109,6 +109,7 @@ export default {
         xl: "var(--radius-xl)",
       },
       boxShadow: {
+        shell: "var(--shadow-shell)",
         soft: "var(--shadow-soft)",
         panel: "var(--shadow-panel)",
         pop: "var(--shadow-pop)",
