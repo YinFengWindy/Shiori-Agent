@@ -37,8 +37,38 @@
   }
 }
 
+/* Frosted glass over the scene: the desktop's surface-glass-strong is 92%
+   white (a solid card on a photo), so the hero panel gets its own lighter
+   fill, a top-left sheen and a bright rim built from the palette primitives. */
 .site-hero-panel {
   border-radius: var(--radius-xl);
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--neutral-50) 55%, transparent) 0%,
+      color-mix(in srgb, var(--neutral-50) 22%, transparent) 55%,
+      color-mix(in srgb, var(--lavender-200) 28%, transparent) 100%
+    );
+  border: 1px solid color-mix(in srgb, var(--neutral-50) 70%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--neutral-50) 90%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--lavender-400) 18%, transparent),
+    var(--shadow-panel);
+  backdrop-filter: blur(24px) saturate(1.5);
+}
+
+/* On narrow screens the panel sits over 吟风's black dress, which a thin
+   fill turns muddy grey; a denser milk-glass keeps it light. */
+@media (max-width: 639px) {
+  .site-hero-panel {
+    background:
+      linear-gradient(
+        160deg,
+        color-mix(in srgb, var(--neutral-50) 78%, transparent) 0%,
+        color-mix(in srgb, var(--neutral-50) 62%, transparent) 60%,
+        color-mix(in srgb, var(--lavender-200) 55%, transparent) 100%
+      );
+  }
 }
 
 .site-hero-logo {
