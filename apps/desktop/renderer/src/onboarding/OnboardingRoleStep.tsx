@@ -3,6 +3,7 @@ import { useRef, useState } from "react";
 import { ArrowRight } from "@phosphor-icons/react";
 import { useRoleCreationDraft } from "../roles/useRoleCreationDraft";
 import { RoleCreateFields } from "../roles/RoleCreateFields";
+import { RoleCreateIdentity } from "../roles/RoleCreateIdentity";
 import { RoleImportControls } from "../roles/RoleImportControls";
 import { createRoleFromDraft } from "../roles/roleCreation";
 import { selectRoleCreateState } from "../roles/roleCreateSelectors";
@@ -60,8 +61,8 @@ export function OnboardingRoleStep({ onSaved, onBusyChange, onReact }: {
           {creating ? "正在创建" : createdId ? "继续" : "创建角色"}<ArrowRight className="h-4 w-4" weight="bold" aria-hidden="true" />
         </button>
       )}>
-      <div className="pb-4 pt-2">
-        <RoleCreateFields form={draft.newRoleForm} disabled={busy || Boolean(createdId)} importedAvatar={previewImagePath}
+      <div className="grid gap-7 pb-4 pt-2">
+        <RoleCreateIdentity form={draft.newRoleForm} disabled={busy || Boolean(createdId)} importedAvatar={previewImagePath}
           onUpdateForm={(next) => {
             const before = draft.newRoleFormRef.current.avatarSource;
             draft.updateNewRoleForm(next);
@@ -69,6 +70,7 @@ export function OnboardingRoleStep({ onSaved, onBusyChange, onReact }: {
             const after = draft.newRoleFormRef.current.avatarSource;
             if (after && after !== before) onReact("avatarPicked");
           }} />
+        <RoleCreateFields form={draft.newRoleForm} disabled={busy || Boolean(createdId)} onUpdateForm={draft.updateNewRoleForm} />
       </div>
     </OnboardingCard>
   );

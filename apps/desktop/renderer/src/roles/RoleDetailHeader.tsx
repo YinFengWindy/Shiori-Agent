@@ -8,7 +8,7 @@ import {
   type RoleRecord,
 } from "@yinfengwindy/shiori-sdk";
 import type { RoleFormState } from "../shared/types";
-import { roleIdentityInputClass } from "./roleEditorStyles";
+import { roleAvatarClass, roleDescriptionInputClass, roleIdentityBackdropClass, roleIdentityCardClass, roleIdentityLayoutClass, roleNameInputClass } from "./roleEditorStyles";
 
 type RoleDetailHeaderProps = {
   activeRole: RoleRecord | null;
@@ -41,7 +41,7 @@ export function RoleDetailHeader({
 
   return (
     <header
-      className="relative isolate overflow-hidden rounded-xl border border-white/80 bg-white/70 shadow-soft backdrop-blur-md"
+      className={roleIdentityCardClass}
       data-testid="role-detail-header"
       data-role-detail-header=""
       data-has-portrait={portraitUrl ? "true" : "false"}
@@ -54,12 +54,12 @@ export function RoleDetailHeader({
           alt=""
         />
       ) : (
-        <div className="pointer-events-none absolute inset-y-0 right-0 -z-10 w-1/2 bg-gradient-accent-soft [mask-image:linear-gradient(to_left,rgb(0_0_0)_20%,transparent)]" aria-hidden="true" />
+        <div className={roleIdentityBackdropClass} aria-hidden="true" />
       )}
       <div className="p-6 sm:p-8">
-        <div className="grid items-center gap-6 sm:max-w-[62%] sm:grid-cols-[auto_minmax(0,1fr)]">
+        <div className={cx(roleIdentityLayoutClass, "sm:max-w-[62%]")}>
           <button
-            className="group grid h-28 w-28 place-items-center overflow-hidden rounded-full border-4 border-white/90 bg-gradient-accent-soft shadow-panel"
+            className={roleAvatarClass}
             data-testid="role-detail-avatar"
             data-vt-part="avatar"
             type="button"
@@ -75,7 +75,7 @@ export function RoleDetailHeader({
           <div className="grid min-w-0 gap-1.5">
             <input
               aria-label="角色名称"
-              className={cx(roleIdentityInputClass, "min-w-[6em] max-w-full font-display text-headline text-ink [field-sizing:content] placeholder:text-ink-faint")}
+              className={roleNameInputClass}
               data-testid="edit-role-name"
               data-vt-part="name"
               value={roleForm.name}
@@ -84,7 +84,7 @@ export function RoleDetailHeader({
             />
             <input
               aria-label="角色简介"
-              className={cx(roleIdentityInputClass, "min-w-[8em] max-w-full text-body text-ink-secondary [field-sizing:content] placeholder:text-ink-faint")}
+              className={roleDescriptionInputClass}
               data-testid="edit-role-description"
               data-vt-part="sub"
               value={roleForm.description}

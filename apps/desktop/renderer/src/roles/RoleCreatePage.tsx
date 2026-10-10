@@ -10,8 +10,10 @@ import {
 import type { NewRoleFormState } from "../shared/types";
 import type { RoleCardImportState } from "../app/roleCardImportState";
 import { RoleCreateFields } from "./RoleCreateFields";
+import { RoleCreateIdentity } from "./RoleCreateIdentity";
 import { RoleImportControls } from "./RoleImportControls";
 import { selectRoleCreateState } from "./roleCreateSelectors";
+import { roleEditorToolbarClass, roleIdentityBackdropClass, roleIdentityCardClass } from "./roleEditorStyles";
 
 type RoleCreatePageProps = {
   bridgeReady: boolean;
@@ -31,12 +33,20 @@ export function RoleCreatePage({ bridgeReady, creating, form, onBackToList, onCr
   onUpdateForm, roleCardImport, onPreviewRoleCard, onCancelRoleCardImport }: RoleCreatePageProps) {
   const { formDirty, needsEmotionChoice, previewImagePath } = selectRoleCreateState(form, roleCardImport);
   const canCreate = !creating && bridgeReady && roleCardImport.status !== "previewing" && !needsEmotionChoice;
+  const fieldsDisabled = creating || roleCardImport.status === "previewing";
   return (
     <section className="role-create-page scrollbar-stable relative h-full overflow-y-auto bg-gradient-app bg-fixed" data-testid="role-create-page">
-      <div className="mx-auto flex min-h-full w-full max-w-[1120px] flex-col gap-6 px-5 pb-10 pt-6 sm:px-8">
-        <div className="flex items-center justify-between gap-3">
-          <button className={cx(iconButtonClass, "shadow-soft")} type="button" onClick={onBackToList} disabled={creating} aria-label="返回角色列表" title="返回角色列表"><BackIcon className="h-5 w-5 fill-current" /></button>
-          <div className="flex flex-wrap items-center justify-end gap-2">
+      <div className="relative mx-auto flex min-h-full w-full max-w-[1120px] flex-col px-5 pb-10 pt-6 sm:px-8">
+        <header className={roleIdentityCardClass} data-testid="role-create-header">
+          <div className={roleIdentityBackdropClass} aria-hidden="true" />
+          <div className="p-6 sm:p-8">
+            <RoleCreateIdentity form={form} disabled={fieldsDisabled} importedAvatar={previewImagePath}
+              className="sm:max-w-[62%]" onUpdateForm={onUpdateForm} />
+          </div>
+        </header>
+        <div className={roleEditorToolbarClass} data-testid="role-create-toolbar">
+          <button className={cx(iconButtonClass, "self-center")} type="button" onClick={onBackToList} disabled={creating} aria-label="返回角色列表" title="返回角色列表"><BackIcon className="h-5 w-5 fill-current" /></button>
+          <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2 py-2">
             <RoleImportControls imported={roleCardImport} form={form} disabled={creating || !bridgeReady}
               onImport={onPreviewRoleCard} onCancel={onCancelRoleCardImport} onUpdateForm={onUpdateForm} />
             <button className={cx(ghostButtonSurfaceClass, compactButtonSizeClass)} type="button" onClick={onResetForm} disabled={creating || !formDirty} aria-label="重置新建角色表单">
@@ -50,9 +60,7 @@ export function RoleCreatePage({ bridgeReady, creating, form, onBackToList, onCr
             </button>
           </div>
         </div>
-        <div className="rounded-xl border border-white/80 bg-white/70 p-6 shadow-soft backdrop-blur-md">
-          <RoleCreateFields form={form} disabled={creating || roleCardImport.status === "previewing"} importedAvatar={previewImagePath} onUpdateForm={onUpdateForm} />
-        </div>
+        <RoleCreateFields form={form} disabled={fieldsDisabled} onUpdateForm={onUpdateForm} />
       </div>
     </section>
   );

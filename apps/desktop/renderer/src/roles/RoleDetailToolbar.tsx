@@ -3,6 +3,7 @@ import { cx, iconButtonClass } from "@yinfengwindy/shiori-sdk";
 import { RoleDetailActions } from "./RoleDetailActions";
 import type { RoleDetailSaveState } from "./roleDetailSaveState";
 import { RoleDetailTabs, roleDetailTabEditsDraft, type RoleDetailTabId } from "./RoleDetailTabs";
+import { roleEditorToolbarClass } from "./roleEditorStyles";
 
 type RoleDetailToolbarProps = {
   activeTab: RoleDetailTabId;
@@ -23,7 +24,7 @@ type RoleDetailToolbarProps = {
 export function RoleDetailToolbar({ activeTab, canGoToChat, saveState, onBack, onChangeTab, onGoToChat, onReset, onSave }: RoleDetailToolbarProps) {
   return (
     <div
-      className="sticky top-0 z-20 -mx-5 mb-7 mt-5 flex min-h-[56px] items-stretch gap-4 border-b border-line-soft bg-white/80 px-5 backdrop-blur-md sm:-mx-8 sm:px-8"
+      className={roleEditorToolbarClass}
       data-testid="role-detail-toolbar"
     >
       <button className={cx(iconButtonClass, "self-center")} data-testid="role-detail-back-button" type="button" onClick={onBack} aria-label="返回角色列表">

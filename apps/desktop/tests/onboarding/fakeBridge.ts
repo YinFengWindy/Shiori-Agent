@@ -1,4 +1,5 @@
 import type { SettingsSnapshot } from "../../src/bridge/shared";
+import type { ChatContextStatus } from "../../renderer/src/chat/chatContextState";
 
 /** Message every bridge read/write fails with while the fake is offline. */
 export const fakeBridgeOfflineMessage = "QA 连接桥不可用";
@@ -51,6 +52,12 @@ export function installOnboardingFakeBridge(initial: SettingsSnapshot) {
       page: emptyPage,
     }),
     "session.imageHistory": (payload) => ({ session_key: payload.session_key, messages: [] }),
+    // Onboarding has no conversation context yet; mirror the host's unavailable status shape.
+    "chat.context.status": (payload) => ({
+      session_key: `role:${payload.role_id}`, context_key: "", model: "", model_identity: "",
+      tokens: null, source: null, model_context_window: null, input_limit_tokens: null,
+      can_compact: false, busy: false, reason: "没有可压缩的完整轮次", result: null,
+    } satisfies ChatContextStatus),
     // This fake installs no plugins; the host-owned desktop channel is always listed.
     "plugins.list": () => ({ plugins: [] }),
     "channels.list": () => ({ channels: [{ name: "desktop", label: "桌面端", contact_label: null, chat_types: [],

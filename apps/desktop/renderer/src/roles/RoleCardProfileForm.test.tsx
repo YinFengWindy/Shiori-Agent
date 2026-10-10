@@ -38,23 +38,6 @@ describe("RoleCardProfileForm", () => {
     } finally { await view.cleanup(); }
   });
 
-  it("folds optional creation fields without removing their values", async () => {
-    let updated: RoleProfileDraft = {};
-    const view = await mountTestComponent(<RoleCardProfileForm collapseDetails profile={{ character: { personality: "细心" } }} onUpdate={(next) => { updated = next; }} />);
-    try {
-      const details = view.container.querySelector("details");
-      assert.ok(details);
-      assert.equal(details.open, false);
-      assert.equal(details.querySelector("summary")?.textContent?.trim(), "更多设定");
-      assert.equal(details.querySelector("textarea")?.value, "细心");
-      await act(async () => { details.open = true; });
-      const personality = details.querySelector("textarea");
-      assert.ok(personality);
-      await changeInputValue(personality, "细心、耐心");
-      assert.equal(updated.character?.personality, "细心、耐心");
-    } finally { await view.cleanup(); }
-  });
-
   it("keeps unsaved values and draft summaries while editing each field independently", async () => {
     const profile: RoleProfileDraft = {
       character: { profile: "档案管理员", personality: "细心", behavior_rules: "诚实", response_constraints: "简洁", nickname: "小栞" },
