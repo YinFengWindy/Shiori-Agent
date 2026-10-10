@@ -20,7 +20,8 @@ export interface SiteImage {
  * emitted into the build. `tests/assets.test.ts` checks that each
  * `../assets/art/*.webp` import above exists, and owns the WebP
  * size/metadata hygiene of every file in that directory — including the art
- * and BGM kept there for the narrative and gallery that come next (#768).
+ * kept there for the narrative and gallery that come next (#768). The BGM in
+ * `../assets/audio/` is likewise kept for later and has no check yet.
  *
  * The scene backgrounds and the title logo are the desktop's own files
  * (first-run guide / startup splash, story plugin) and are imported from
