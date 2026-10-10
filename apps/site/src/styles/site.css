@@ -71,57 +71,19 @@
   }
 }
 
-/* Slogan in the story mode title style (serif semibold italic, deep rose
-   with a white rim and soft drop), the look picked for the promo cover. */
+/* Slogan in the story mode title type (serif semibold italic, from the
+   markup), filled with the brand's blue-pink accent gradient so it matches
+   the CTA buttons; drop-shadow because text-shadow would show through the
+   transparent, gradient-clipped glyphs. */
 .site-hero-slogan {
-  color: var(--pink-800);
-  -webkit-text-stroke: 0.5px color-mix(in srgb, var(--neutral-50) 55%, transparent);
-  text-shadow:
-    0 1px 0 color-mix(in srgb, var(--neutral-50) 72%, transparent),
-    0 5px 12px color-mix(in srgb, var(--pink-900) 28%, transparent);
-}
-
-/* Hero calls to action, in the slogan's story-mode palette rather than the
-   desktop's lavender buttons: a deep-rose primary and a rose-tinted glass
-   secondary; labels take the serif semibold italic from the markup. */
-.site-cta {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.75rem 1.25rem;
-  border-radius: var(--radius-md);
-  transition:
-    background-color var(--duration-fast) ease,
-    box-shadow var(--duration-fast) ease,
-    transform var(--duration-fast) ease;
-}
-
-.site-cta:active {
-  transform: translateY(1px);
-}
-
-.site-cta-primary {
-  color: var(--neutral-50);
-  background: linear-gradient(135deg, var(--pink-700), var(--pink-800));
-  border: 1px solid color-mix(in srgb, var(--pink-900) 40%, transparent);
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--neutral-50) 28%, transparent),
-    0 6px 16px color-mix(in srgb, var(--pink-900) 24%, transparent);
-}
-
-.site-cta-primary:hover {
-  background: linear-gradient(135deg, var(--pink-600), var(--pink-700));
-}
-
-.site-cta-ghost {
-  color: var(--pink-800);
-  background: color-mix(in srgb, var(--neutral-50) 55%, transparent);
-  border: 1px solid color-mix(in srgb, var(--pink-700) 35%, transparent);
-}
-
-.site-cta-ghost:hover {
-  background: color-mix(in srgb, var(--pink-100) 75%, transparent);
-  border-color: color-mix(in srgb, var(--pink-700) 55%, transparent);
+  width: fit-content;
+  background-image: var(--gradient-accent-strong);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  filter:
+    drop-shadow(0 1px 0 color-mix(in srgb, var(--neutral-50) 80%, transparent))
+    drop-shadow(0 4px 10px color-mix(in srgb, var(--lavender-400) 35%, transparent));
 }
 
 .site-hero-logo {
