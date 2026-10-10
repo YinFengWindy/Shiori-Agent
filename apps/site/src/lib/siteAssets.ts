@@ -83,7 +83,7 @@ export const narrativeExpressionSprites: Record<MascotExpression, ImageMetadata>
 
 /**
  * The same sprites as tiny inline WebP placeholders (`data:` URIs, built by
- * lib/lqip.ts): the home page loader blurs the first line's one into her
+ * lib/imageQueries.ts): the home page loader blurs the first line's one into her
  * silhouette, so it paints with the first frame.
  */
 export const narrativeExpressionPlaceholders: Record<MascotExpression, string> = {
@@ -96,6 +96,36 @@ export const narrativeExpressionPlaceholders: Record<MascotExpression, string> =
   sad: mascotSadLqip,
   surprised: mascotSurprisedLqip,
 };
+
+const mascotFileBytes = import.meta.glob<number>("../../../desktop/renderer/src/shared/assets/mascot/yinfeng-*.webp", {
+  query: "?bytes",
+  import: "default",
+  eager: true,
+});
+const sceneFileBytes = import.meta.glob<number>("../../../desktop/renderer/src/shared/assets/scene/bg-*.webp", {
+  query: "?bytes",
+  import: "default",
+  eager: true,
+});
+
+function bytesOf(files: Record<string, number>, name: string): number {
+  const entry = Object.entries(files).find(([path]) => path.endsWith(`/${name}`));
+  if (!entry) throw new Error(`no size for ${name}`);
+  return entry[1];
+}
+
+/**
+ * Size in bytes of every picture the narrative's first screen may wait for
+ * (each time-of-day scene, each expression sprite), by emitted URL: the home
+ * page loader weighs its progress bar by these.
+ */
+export const firstScreenImageBytes: Readonly<Record<string, number>> = Object.fromEntries([
+  ...Object.entries(sceneBackgrounds).map(([phase, image]) => [image.src, bytesOf(sceneFileBytes, `bg-${phase}.webp`)]),
+  ...Object.entries(narrativeExpressionSprites).map(([expression, image]) => [
+    image.src,
+    bytesOf(mascotFileBytes, `yinfeng-${expression}.webp`),
+  ]),
+]);
 
 /** Event CGs framed beside 吟风 while a narrative line plays (keys named by `content/narrative.ts`). */
 export const narrativeCgs: Record<NarrativeCgKey, SiteImage> = {

@@ -1,21 +1,26 @@
 ---
-import { mascotName } from "../../../desktop/renderer/src/shared/mascot/mascotExpressions";
 import { NARRATIVE_LINES } from "../content/narrative";
-import { narrativeExpressionPlaceholders, narrativeExpressionSprites } from "../lib/siteAssets";
+import { firstScreenImageBytes, narrativeExpressionPlaceholders, narrativeExpressionSprites } from "../lib/siteAssets";
 
 /**
  * The home page loader (#770), the narrative's opening shot before it is
  * ready: over the app's blue-pink wash, 吟风's blurred silhouette stands
- * exactly where her sprite does (it reuses `.site-narrative-figure`), and
- * the dialogue box's 「吟风」 name plate, in its place, fills with the
- * blue-pink accent as the first screen loads — the current scene backdrop
- * and all eight expression sprites (`img[data-first-screen]`), decoded.
+ * exactly where her sprite does (it reuses `.site-narrative-figure`), and a
+ * slim progress bar with its percentage sits bottom centre.
  *
- * Then, in place: the wash fades to the scene, the silhouette sharpens into
- * her sprite (it fades off the real one beneath it), the dialogue box rises
- * in with the first line and the name plate hands over to its own. 吟风
- * never moves. Afterwards the loader leaves the DOM and the narrative's CGs
- * are fetched in the background, in order of appearance.
+ * The first screen — the current scene backdrop and all eight expression
+ * sprites (`img[data-first-screen]`, which carry `data-src` instead of
+ * `src`) — is downloaded by the script below with `fetch`, so the bar can
+ * count bytes as they arrive (weighted by the sizes in `data-bytes`, known
+ * at build time) and move even on a very slow line. The backdrop and her
+ * current face go first, the other faces after them. Each picture is then
+ * handed to its `<img>` and decoded.
+ *
+ * Then, in place: the bar reaches 100%, the wash and the bar fade to the
+ * scene, the silhouette sharpens into her sprite (it fades off the real one
+ * beneath it) and the dialogue box rises in with the first line. 吟风 never
+ * moves. Afterwards the loader leaves the DOM and the narrative's CGs are
+ * fetched in the background, in order of appearance.
  *
  * Painted with the first frame: the markup, the silhouette (an inline
  * `data:` WebP) and its styles (`.site-loader*` in site.css, inlined with
@@ -23,8 +28,8 @@ import { narrativeExpressionPlaceholders, narrativeExpressionSprites } from "../
  * script is inline. While it shows, wheel / touch / key / click input does
  * not reach the narrative. If the first screen is not ready within
  * `--site-loader-cap` it reveals anyway (the rest keeps loading); without
- * scripting it is never shown, and if the script never runs the CSS fades
- * it at the cap.
+ * scripting it is never shown (the pictures' `<noscript>` copies show), and
+ * if the script never runs the CSS fades it at the cap.
  *
  * `aria-hidden`: every word of the page is already in the document beneath
  * it, readable at once; a 「加载中」 status would only be noise.
@@ -35,7 +40,7 @@ const sprite = narrativeExpressionSprites[firstLine.expression];
 const silhouette = narrativeExpressionPlaceholders[firstLine.expression];
 ---
 
-<div id="site-loader" class="site-loader" aria-hidden="true">
+<div id="site-loader" class="site-loader" aria-hidden="true" data-bytes={JSON.stringify(firstScreenImageBytes)}>
   <div class="site-loader-wash"></div>
   <div class="site-narrative-figure mascot-stack">
     <img
@@ -47,8 +52,9 @@ const silhouette = narrativeExpressionPlaceholders[firstLine.expression];
       class="mascot-layer site-loader-silhouette"
     />
   </div>
-  <div class="site-loader-dialogue">
-    <p class="site-dialogue-name site-story-type site-loader-plate">{mascotName}</p>
+  <div class="site-loader-progress">
+    <div class="site-loader-track"><div class="site-loader-fill"></div></div>
+    <span class="site-loader-percent site-story-type" data-loader-percent>0%</span>
   </div>
 </div>
 
@@ -100,22 +106,60 @@ const silhouette = narrativeExpressionPlaceholders[firstLine.expression];
     const capMs = cap.endsWith("ms") ? parseFloat(cap) : parseFloat(cap) * 1000;
     setTimeout(reveal, Math.max(0, capMs - performance.now()));
 
-    // Progress: decoded first-screen images / all of them (a broken one counts).
-    const track = () => {
-      const images = [...document.querySelectorAll("img[data-first-screen]")];
-      let ready = 0;
-      const settle = () => {
-        ready += 1;
-        loader.style.setProperty("--site-loader-progress", String(ready / images.length));
-        if (ready === images.length) reveal();
-      };
-      if (images.length === 0) reveal();
-      for (const image of images) image.decode().then(settle, settle);
+    const percent = loader.querySelector("[data-loader-percent]");
+    const sizes = JSON.parse(loader.dataset.bytes || "{}");
+    let loaded = 0;
+    let total = 0;
+    const showProgress = () => {
+      const share = total > 0 ? Math.min(1, loaded / total) : 0;
+      loader.style.setProperty("--site-loader-progress", String(share));
+      if (percent) percent.textContent = `${Math.floor(share * 100)}%`;
     };
-    // Module scripts (the scene's time-of-day swap) have run by
-    // DOMContentLoaded, so the images read then are the ones that will show.
-    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", track, { once: true });
-    else track();
+
+    // Download one picture, counting its bytes as they arrive, then hand it
+    // to its <img> and decode it. A failed download leaves the <img> to load
+    // the URL itself; its share is counted once it settles either way.
+    const load = async (image, priority) => {
+      const url = image.dataset.src;
+      const size = sizes[url] || 0;
+      let counted = 0;
+      const count = (bytes) => {
+        const add = Math.min(bytes, size - counted);
+        if (add <= 0) return;
+        counted += add;
+        loaded += add;
+        showProgress();
+      };
+      try {
+        const response = await fetch(url, { priority });
+        if (!response.ok || !response.body) throw new Error(`${url}: ${response.status}`);
+        const reader = response.body.getReader();
+        const chunks = [];
+        for (let chunk = await reader.read(); !chunk.done; chunk = await reader.read()) {
+          chunks.push(chunk.value);
+          count(chunk.value.byteLength);
+        }
+        image.src = URL.createObjectURL(new Blob(chunks, { type: response.headers.get("content-type") || "" }));
+      } catch {
+        image.src = url;
+      }
+      await image.decode().catch(() => undefined);
+      count(size);
+    };
+
+    // The backdrop and her current face first, then the other faces.
+    // Module scripts (the scene's time-of-day swap of data-src) have run by
+    // DOMContentLoaded, so the URLs read then are the ones that will show.
+    const track = async () => {
+      const images = [...document.querySelectorAll("img[data-first-screen][data-src]")];
+      total = images.reduce((sum, image) => sum + (sizes[image.dataset.src] || 0), 0);
+      const first = images.filter((image) => image.hasAttribute("data-scene-backdrop") || image.dataset.layer === "current");
+      await Promise.all(first.map((image) => load(image, "high")));
+      await Promise.all(images.filter((image) => !first.includes(image)).map((image) => load(image, "auto")));
+      reveal();
+    };
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => void track(), { once: true });
+    else void track();
 
     // After the loader: the CGs, one at a time in order of appearance (their
     // DOM order). Reduced motion lists the lines without CGs: none needed.

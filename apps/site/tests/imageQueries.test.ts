@@ -3,7 +3,7 @@ import { dirname, resolve } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import sharp from "sharp";
-import { LQIP_WIDTH, lqipDataUri } from "../src/lib/lqip";
+import { LQIP_WIDTH, lqipDataUri } from "../src/lib/imageQueries";
 
 const sprite = resolve(
   dirname(fileURLToPath(import.meta.url)),

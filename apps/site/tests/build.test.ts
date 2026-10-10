@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -92,8 +92,8 @@ describe("home page HTML", () => {
 
   it("opens the body with the loader, hidden from the accessibility tree, before the page content", () => {
     const body = html.slice(html.indexOf("<body>") + "<body>".length);
-    assert.match(body, /^<div id="site-loader" class="site-loader" aria-hidden="true">/);
-    assert.ok(body.indexOf("site-loader-plate") < body.indexOf("<main>"), "the loader must come before <main>");
+    assert.match(body, /^<div id="site-loader" class="site-loader" aria-hidden="true"/);
+    assert.ok(body.indexOf("site-loader-progress") < body.indexOf("<main>"), "the loader must come before <main>");
   });
 
   it("paints 吟风's silhouette from an inline placeholder, in the narrative figure's box", () => {
@@ -105,18 +105,46 @@ describe("home page HTML", () => {
     assert.ok(src.length <= 2048, `placeholder data URI is ${src.length} characters`);
   });
 
-  it("waits for the scene backdrop and every expression sprite, and leaves the CGs unfetched", () => {
+  it("shows a progress bar with a percentage, starting at 0%", () => {
+    assert.match(
+      html,
+      /<div class="site-loader-progress"><div class="site-loader-track"><div class="site-loader-fill"><\/div><\/div><span [^>]*data-loader-percent[^>]*>0%<\/span><\/div>/,
+    );
+  });
+
+  it("leaves the first screen to the loader: no src on its pictures, a <noscript> copy for each one shown", () => {
     const sprites = [...html.matchAll(/<img [^>]*data-expression="[^"]+"[^>]*>/g)].map((match) => match[0]);
     assert.equal(sprites.length, 8);
     for (const sprite of sprites) {
       assert.match(sprite, /data-first-screen/);
-      assert.doesNotMatch(sprite, /loading="lazy"/);
+      assert.match(sprite, / data-src="\/_astro\/yinfeng-/);
+      assert.doesNotMatch(sprite, / src=/);
     }
-    assert.equal([...html.matchAll(/<img data-scene-backdrop data-first-screen/g)].length, 1, "only the narrative's backdrop is first-screen");
+    const backdrops = [...html.matchAll(/<img data-scene-backdrop data-first-screen[^>]*>/g)].map((match) => match[0]);
+    assert.equal(backdrops.length, 1, "only the narrative's backdrop is first-screen");
+    assert.doesNotMatch(backdrops[0], / src=/);
+    const noscripts = [...html.matchAll(/<noscript><img src="([^"]+)"/g)].map((match) => match[1]);
+    assert.equal(noscripts.length, 2, "the backdrop and the first sprite need a no-script copy");
+    assert.ok(noscripts.some((src) => src.includes("/bg-day.")) && noscripts.some((src) => src.includes("/yinfeng-")));
+    // Nothing else may compete with them for the line at first.
     const cgs = [...html.matchAll(/<img [^>]*class="site-narrative-cg"[^>]*>/g)].map((match) => match[0]);
     assert.ok(cgs.length > 0);
-    // The first line has no CG, so none may start downloading with the page.
     for (const cg of cgs) assert.match(cg, /^<img data-src="[^"]+"/);
+    assert.match(html, /<img data-scene-backdrop data-dusk[^>]* loading="lazy"/);
+  });
+
+  it("knows the exact byte size of every picture the first screen may wait for", () => {
+    const attribute = html.match(/<div id="site-loader"[^>]* data-bytes="([^"]+)"/)?.[1];
+    assert.ok(attribute, "no data-bytes on the loader");
+    const sizes: Record<string, number> = JSON.parse(attribute.replaceAll("&quot;", '"'));
+    const urls = [...html.matchAll(/<img [^>]*data-first-screen[^>]*>/g)].flatMap((match) => {
+      const tag = match[0];
+      return [tag.match(/ data-src="([^"]+)"/)?.[1], tag.match(/ data-dusk="([^"]+)"/)?.[1], tag.match(/ data-night="([^"]+)"/)?.[1]];
+    }).filter((url): url is string => Boolean(url));
+    assert.equal(urls.length, 8 + 3);
+    for (const url of urls) {
+      assert.equal(sizes[url], statSync(resolve(dist, url.slice(1))).size, `size of ${url}`);
+    }
   });
 
   it("inlines the loader's covering layer, its cap fade and its no-script hiding", () => {
@@ -128,15 +156,17 @@ describe("home page HTML", () => {
     );
     assert.match(styles, /--site-loader-cap:\d/);
     assert.match(styles, /@keyframes site-loader-timeout\{to\{[^}]*visibility:hidden/);
-    assert.match(styles, /@media \(scripting:none\)\{\.site-loader\{display:none\}\}/);
-    // Reduced motion: the plate's progress jumps in steps instead of easing.
-    assert.match(styles, /@media \(prefers-reduced-motion:reduce\)[^{]*\{[^@]*\.site-loader-plate:before\{transition:none\}/);
+    assert.match(styles, /@media \(scripting:none\)\{\.site-loader,img\[data-first-screen\]\{display:none\}\}/);
+    assert.match(styles, /\.site-loader-percent\{[^}]*font-variant-numeric:tabular-nums/);
+    // Reduced motion: the bar jumps in steps instead of easing.
+    assert.match(styles, /@media \(prefers-reduced-motion:reduce\)[^{]*\{[^@]*\.site-loader-fill\{transition:none\}/);
   });
 
   it("drives the loader from an inline script, not a bundle that may still be downloading", () => {
     const script = html.match(/<div id="site-loader".*?<script>(.*?)<\/script>/s)?.[1];
     assert.ok(script, "no inline <script> follows the loader");
-    assert.match(script, /img\[data-first-screen\]/);
+    assert.match(script, /img\[data-first-screen\]\[data-src\]/);
+    assert.match(script, /response\.body\.getReader\(\)/);
     assert.match(script, /--site-loader-progress/);
     assert.match(script, /--site-loader-cap/);
     assert.match(script, /data-leaving/);

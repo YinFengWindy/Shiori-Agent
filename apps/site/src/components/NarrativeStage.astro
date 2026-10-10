@@ -39,19 +39,19 @@ const usedCgKeys = [...new Set(NARRATIVE_LINES.flatMap((line) => (line.cg ? [lin
   <div class="site-narrative-stage" data-narrative-stage>
     <SceneBackdrop firstScreen />
     <div class="site-narrative-figure mascot-stack" aria-hidden="true">
+      {/* The home page loader downloads every sprite itself, from data-src (SiteLoader.astro). */}
       {
         mascotExpressions.map((expression) => {
           const sprite = narrativeExpressionSprites[expression];
           const first = expression === firstLine.expression;
           return (
             <img
-              src={sprite.src}
+              data-src={sprite.src}
               width={sprite.width}
               height={sprite.height}
               alt=""
               draggable="false"
               decoding="async"
-              fetchpriority={first ? "high" : undefined}
               class="mascot-layer"
               data-expression={expression}
               data-layer={first ? "current" : "hidden"}
@@ -60,6 +60,16 @@ const usedCgKeys = [...new Set(NARRATIVE_LINES.flatMap((line) => (line.cg ? [lin
           );
         })
       }
+      <noscript>
+        <img
+          src={narrativeExpressionSprites[firstLine.expression].src}
+          width={narrativeExpressionSprites[firstLine.expression].width}
+          height={narrativeExpressionSprites[firstLine.expression].height}
+          alt=""
+          decoding="async"
+          class="mascot-layer"
+        />
+      </noscript>
     </div>
     <div class="site-narrative-cgs" aria-hidden="true">
       {
