@@ -2,12 +2,13 @@
  * Pure scroll ↔ line logic for the home page narrative (#771), with no DOM
  * so it is unit-testable.
  *
- * Layout it models (site.css): the narrative section is `lineCount` viewport
- * heights tall and holds a sticky, one-viewport stage; each line owns one
- * scroll-snap point, `index × viewportHeight` below the section top, and the
- * block after the narrative (the CTA) owns the next one, `lineCount ×
- * viewportHeight`. The stage is pinned while the offset runs from 0 to
- * `(lineCount - 1) × viewportHeight`.
+ * Layout it models (site.css): the narrative section is `lineCount + 1`
+ * viewport heights tall and holds a sticky, one-viewport stage. It has one
+ * step, and one scroll-snap point, per line — step `i` sits
+ * `i × viewportHeight` below the section top — and then one final step,
+ * `lineCount`, the download state on the same stage. The stage is pinned
+ * from offset 0 to `lineCount × viewportHeight`; past that the page
+ * scrolls on to whatever follows the narrative.
  *
  * Keyboard and the scrollbar scroll natively and CSS snapping lands them on
  * a line. The wheel is stepped by script (`narrativeStepTarget`,
@@ -35,31 +36,32 @@ function assertValid({ offset, viewportHeight, lineCount }: NarrativeScroll) {
 }
 
 /**
- * Index of the line shown at `offset`: the nearest snap point, so the line
+ * The step on stage at `offset`: `0 … lineCount - 1` is that line,
+ * `lineCount` the download state. It is the nearest snap point, so the step
  * flips halfway between two points whichever way the page is moving. Before
- * the section it is the first line; past the last point — leaving for the CTA,
- * or coming back up from it — it stays the last line.
+ * the section it is the first line; past the download state's point (the
+ * content after the narrative) it stays the download state.
  */
-export function narrativeLineAt(scroll: NarrativeScroll): number {
+export function narrativeStepAt(scroll: NarrativeScroll): number {
   assertValid(scroll);
   const nearest = Math.round(scroll.offset / scroll.viewportHeight);
-  return Math.min(scroll.lineCount - 1, Math.max(0, nearest));
+  return Math.min(scroll.lineCount, Math.max(0, nearest));
 }
 
 /**
- * The offset to scroll to for one wheel step in `direction` (1 = down to the
- * next line, −1 = back), or `null` where the narrative does not step and the
- * browser should scroll as usual: above the first line, below the CTA's top
- * (the free-scrolling content after it), or with the section out of reach.
- * Stepping down from the last line lands on the CTA; stepping up from the
- * CTA's top lands back on the last line.
+ * The offset to scroll to for one step in `direction` (1 = on to the next
+ * step, −1 = back), or `null` where the narrative does not step and the
+ * browser should scroll as usual: above the first line, onward from the
+ * download state (into the content after the narrative), or with the section
+ * out of reach. Stepping on from the last line lands on the download state;
+ * stepping back from it lands on the last line.
  */
 export function narrativeStepTarget(scroll: NarrativeScroll, direction: 1 | -1): number | null {
   assertValid(scroll);
   const { offset, viewportHeight, lineCount } = scroll;
-  const exitOffset = lineCount * viewportHeight;
+  const finalOffset = lineCount * viewportHeight;
   // Sub-pixel slack: a snapped offset can be fractional on zoomed pages.
-  if (offset < -viewportHeight / 2 || offset > exitOffset + 1) return null;
+  if (offset < -viewportHeight / 2 || offset > finalOffset + 1) return null;
   const target = Math.round(offset / viewportHeight) + direction;
   if (target < 0 || target > lineCount) return null;
   return target * viewportHeight;

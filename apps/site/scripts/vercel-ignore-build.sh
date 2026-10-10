@@ -3,8 +3,8 @@
 # characters, hence this script): exit 0 skips the deploy, exit 1 builds.
 # Lists every input of `pnpm run build:site`: the site package; the desktop
 # files it imports (styles, shared class names, scene assets + timeOfDay,
-# mascot expression sprites + expression list + mascot.css, title logo,
-# Tailwind theme) and the tsconfigs Vite reads to transpile them;
+# mascot expression sprites + expression list + mascot.css, Tailwind theme)
+# and the tsconfigs Vite reads to transpile them;
 # the SDK sources and the package.json whose exports resolve them; and the
 # dependency graph.
 exec git diff HEAD^ HEAD --quiet -- \
@@ -17,7 +17,6 @@ exec git diff HEAD^ HEAD --quiet -- \
   apps/desktop/renderer/src/shared/mascot/mascotExpressions.ts \
   apps/desktop/renderer/src/shared/mascot/mascot.css \
   apps/desktop/renderer/src/shared/assets/mascot \
-  apps/desktop/renderer/public/assets/branding \
   apps/desktop/renderer/tailwind.config.ts \
   apps/desktop/renderer/tsconfig.json \
   apps/desktop/tsconfig.base.json \

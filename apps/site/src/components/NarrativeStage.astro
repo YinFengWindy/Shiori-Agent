@@ -1,40 +1,44 @@
 ---
-import { CaretDownIcon, FastForwardIcon } from "@phosphor-icons/react";
-import { compactGhostButtonClass } from "@yinfengwindy/shiori-sdk";
+import { CaretDownIcon } from "@phosphor-icons/react";
 import {
   mascotExpressions,
   mascotName,
 } from "../../../desktop/renderer/src/shared/mascot/mascotExpressions";
 import { NARRATIVE_LINES } from "../content/narrative";
 import { narrativeCgs, narrativeExpressionSprites } from "../lib/siteAssets";
+import DownloadCall from "./DownloadCall.astro";
 import SceneBackdrop from "./SceneBackdrop.astro";
 
 /**
  * The scroll-driven galgame narrative at the top of the home page (#771):
  * a sticky one-viewport stage (scene, 吟风's expression stack, an event CG
- * frame, the dialogue box) inside a section one viewport tall per line, with
- * one scroll-snap point per line. Keyboard, touch and the scrollbar snap
- * natively; the script below steps the wheel one line per gesture, advances a
- * line on a click or tap on the stage, and maps
- * the scroll position to the line on show (lib/narrativeModel.ts). Every line is static text in reading order;
- * the ones off stage are visually hidden, not removed. Under reduced motion,
- * or without scripting, site.css lays the lines out as a plain list instead.
+ * frame, the dialogue box, and the download call it ends on) inside a
+ * section one viewport tall per step, with one scroll-snap point per step:
+ * one per line, then the download state, where 吟风, the CG and the dialogue
+ * fade out and the download call fades in over the same scene. Keyboard,
+ * touch and the scrollbar snap natively; the script below steps the wheel
+ * one step per gesture, advances a step on a click or tap on the stage, and
+ * maps the scroll position to the step on show (lib/narrativeModel.ts).
+ * Every line is static text in reading order; the ones off stage are
+ * visually hidden, not removed. Under reduced motion, or without scripting,
+ * site.css lays the lines out as a plain list with the download call below.
  */
 interface Props {
-  /** `id` of the section after the narrative: the skip link's target. */
-  skipTargetId: string;
+  /** `id` of the download call (hash links, focus). */
+  downloadId: string;
 }
 
-const { skipTargetId } = Astro.props;
+const { downloadId } = Astro.props;
 const [firstLine] = NARRATIVE_LINES;
 if (!firstLine) throw new Error("the narrative needs at least one line");
+// One step per line, then the download state.
+const stepCount = NARRATIVE_LINES.length + 1;
 const usedCgKeys = [...new Set(NARRATIVE_LINES.flatMap((line) => (line.cg ? [line.cg] : [])))];
 ---
 
 <section
   class="site-narrative relative"
-  style={`--site-narrative-lines: ${NARRATIVE_LINES.length}`}
-  aria-label={`${mascotName}的自我介绍`}
+  style={`--site-narrative-steps: ${stepCount}`}
   data-narrative
 >
   <div class="site-narrative-stage" data-narrative-stage>
@@ -101,19 +105,18 @@ const usedCgKeys = [...new Set(NARRATIVE_LINES.flatMap((line) => (line.cg ? [lin
         }
       </div>
       <CaretDownIcon size={20} weight="bold" aria-hidden="true" className="site-dialogue-caret" />
-      <a href={`#${skipTargetId}`} class:list={[compactGhostButtonClass, "site-dialogue-skip"]}>
-        跳过
-        <FastForwardIcon size={16} aria-hidden="true" />
-      </a>
+    </div>
+    <div id={downloadId} class="site-download" data-narrative-download>
+      <DownloadCall />
     </div>
   </div>
   <div class="site-narrative-snaps" aria-hidden="true">
-    {NARRATIVE_LINES.map(() => <div class="site-narrative-snap"></div>)}
+    {Array.from({ length: stepCount }, () => <div class="site-narrative-snap"></div>)}
   </div>
 </section>
 
 <script>
-  import { createWheelGestureGate, narrativeLineAt, narrativeStepTarget } from "../lib/narrativeModel";
+  import { createWheelGestureGate, narrativeStepAt, narrativeStepTarget } from "../lib/narrativeModel";
 
   function required<T>(element: T | null, name: string): T {
     if (!element) throw new Error(`narrative ${name} is missing`);
@@ -158,11 +161,24 @@ const usedCgKeys = [...new Set(NARRATIVE_LINES.flatMap((line) => (line.cg ? [lin
     };
   }
 
+  /**
+   * Put step `step` on stage: a line, or — one step past the last line — the
+   * download state, which fades the cast out over the last line (kept
+   * underneath, so stepping back fades it straight in again).
+   */
+  function showStep(step: number) {
+    show(Math.min(step, lines.length - 1));
+    stage.toggleAttribute("data-final", step === lines.length);
+  }
+
   let frame = 0;
   function update() {
     frame = 0;
-    if (reducedMotion.matches) return;
-    show(narrativeLineAt(currentScroll()));
+    if (reducedMotion.matches) {
+      stage.removeAttribute("data-final");
+      return;
+    }
+    showStep(narrativeStepAt(currentScroll()));
   }
   function scheduleUpdate() {
     frame ||= requestAnimationFrame(update);
@@ -200,7 +216,7 @@ const usedCgKeys = [...new Set(NARRATIVE_LINES.flatMap((line) => (line.cg ? [lin
   }
 
   // Click / tap anywhere on the stage advances one line, as in a galgame;
-  // the skip link and other controls keep their own action. Taps never fire
+  // the download buttons and other controls keep their own action. Taps never fire
   // after a swipe, so this does not double-step with the touch handler.
   function onStageClick(event: MouseEvent) {
     if (reducedMotion.matches || event.button !== 0) return;
@@ -250,6 +266,29 @@ const usedCgKeys = [...new Set(NARRATIVE_LINES.flatMap((line) => (line.cg ? [lin
   );
   window.addEventListener("resize", scheduleUpdate);
   reducedMotion.addEventListener("change", scheduleUpdate);
+
+  // The download call sits inside the pinned stage, so neither its #hash
+  // nor keyboard focus would bring it on screen by themselves: both go to
+  // the download state.
+  const download = required(stage.querySelector<HTMLElement>("[data-narrative-download]"), "download call");
+  function downloadOffsetFromHere() {
+    const scroll = currentScroll();
+    return { scroll, target: scroll.lineCount * scroll.viewportHeight };
+  }
+  download.addEventListener("focusin", (event) => {
+    const { scroll, target } = downloadOffsetFromHere();
+    const distance = Math.abs(scroll.offset - target);
+    if (reducedMotion.matches || distance < 1) return;
+    // One step away: the usual smooth step. From further back, jump rather
+    // than scroll every remaining line past the reader.
+    if (distance <= scroll.viewportHeight) stepTo(target, scroll.offset, event.timeStamp);
+    else window.scrollTo({ top: window.scrollY + target - scroll.offset, behavior: "instant" });
+  });
+  if (!reducedMotion.matches && window.location.hash === `#${download.id}`) {
+    const { scroll, target } = downloadOffsetFromHere();
+    window.scrollTo({ top: window.scrollY + target - scroll.offset });
+  }
+
   // A reload or a #hash link can open the page mid-narrative.
   update();
 </script>
