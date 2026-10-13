@@ -4,6 +4,7 @@ import { dirname, resolve } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import { NARRATIVE_LINES } from "../src/content/narrative";
+import { SHOWCASE_CLIP_IDS, SHOWCASE_CLIP_MAX_BYTES, SHOWCASE_FEATURES } from "../src/content/showcase";
 
 /*
  * Assertions on the built site (`astro build` runs first, see the package's
@@ -193,6 +194,83 @@ describe("home page HTML", () => {
     assert.match(script, /--site-loader-progress/);
     assert.match(script, /--site-loader-cap/);
     assert.match(script, /data-leaving/);
+  });
+
+  describe("showcase after the narrative (#772)", () => {
+    const start = html.indexOf('<section class="site-showcase"');
+    const end = html.indexOf("</section>", html.indexOf('class="site-photostrip"'));
+    const showcase = html.slice(start, end);
+
+    it("follows the download call, inside the free-scrolling block after the narrative", () => {
+      assert.ok(start > html.indexOf('id="download"'), "the showcase must come after the download call");
+      assert.ok(start > html.indexOf('class="site-after-narrative"'), "the showcase belongs in .site-after-narrative");
+    });
+
+    it("carries every feature title and line as static text, in order", () => {
+      let from = 0;
+      for (const feature of SHOWCASE_FEATURES) {
+        const title = showcase.indexOf(`<h2 class="site-feature-title site-story-type">${feature.title}</h2>`, from);
+        assert.ok(title >= 0, `feature title missing or out of order: ${feature.title}`);
+        assert.ok(showcase.indexOf(`>${feature.line}</p>`, title) >= 0, `feature line missing: ${feature.line}`);
+        from = title;
+      }
+    });
+
+    it("gives every clip a poster, a label, muted looping inline autoplay and nothing to download up front", () => {
+      const videos = [...showcase.matchAll(/<video [^>]*>.*?<\/video>/gs)].map((match) => match[0]);
+      // One block per clip, in the clips' order.
+      assert.deepEqual(SHOWCASE_FEATURES.map((feature) => feature.clip), [...SHOWCASE_CLIP_IDS]);
+      assert.equal(videos.length, SHOWCASE_FEATURES.length);
+      for (const [index, video] of videos.entries()) {
+        const feature = SHOWCASE_FEATURES[index];
+        assert.ok(video.includes(` aria-label="${feature.clipLabel}"`), `${feature.clip} clip has no accessible name`);
+        for (const attribute of [/ autoplay[ >]/, / muted[ >]/, / loop[ >]/, / playsinline[ >]/, / preload="none"/]) {
+          assert.match(video, attribute);
+        }
+        const poster = video.match(/ poster="([^"]+)"/)?.[1];
+        assert.ok(poster, `${feature.clip} clip has no poster`);
+        assert.ok(existsSync(resolve(dist, poster.slice(1))), `poster ${poster} is not in the build output`);
+        // Sources wait in data-src until the clip nears the viewport.
+        assert.doesNotMatch(video, / src=/);
+        const sources = [...video.matchAll(/<source data-src="([^"]+)" type="([^"]+)">/g)].map((match) => [match[1], match[2]]);
+        assert.deepEqual(sources.map(([, type]) => type), ["video/webm", "video/mp4"]);
+        for (const [src] of sources) {
+          const size = statSync(resolve(dist, src.slice(1))).size;
+          assert.ok(size <= SHOWCASE_CLIP_MAX_BYTES, `${src} is ${size} bytes, over the ${SHOWCASE_CLIP_MAX_BYTES}-byte budget`);
+        }
+      }
+    });
+
+    it("shows the photo strip as plain, lazy pictures with alt text, nothing clickable, the loop copy hidden", () => {
+      const strip = showcase.slice(showcase.indexOf('class="site-photostrip"'));
+      assert.doesNotMatch(strip, /<a |<button/);
+      const prints = [...strip.matchAll(/<li class="site-photo"([^>]*)><img ([^>]*)><\/li>/g)].map(([, item, img]) => ({
+        hidden: item.includes('aria-hidden="true"'),
+        lazy: / loading="lazy"/.test(img),
+        // An empty alt is emitted as a bare `alt`.
+        alt: / alt( |$)/.test(img) ? "" : img.match(/ alt="([^"]*)"/)?.[1],
+        src: img.match(/ src="([^"]+)"/)?.[1],
+      }));
+      assert.ok(prints.length > 0 && prints.length % 2 === 0, "the row is listed twice for a seamless loop");
+      const row = prints.slice(0, prints.length / 2);
+      const copy = prints.slice(prints.length / 2);
+      assert.ok(prints.every((print) => print.lazy), "every print loads lazily");
+      for (const print of row) {
+        assert.ok(!print.hidden && print.alt?.startsWith("CG："), `print ${print.src} needs alt text`);
+      }
+      assert.deepEqual(copy.map((print) => print.src), row.map((print) => print.src));
+      assert.ok(copy.every((print) => print.hidden && print.alt === ""), "the loop copy is hidden from assistive tech");
+    });
+  });
+
+  it("ends with a footer linking GitHub, the releases and the MIT license, with the copyright year", () => {
+    const footer = html.match(/<footer class="site-footer">(.*?)<\/footer>/s)?.[1];
+    assert.ok(footer, "no footer");
+    assert.ok(html.indexOf("<footer") > html.indexOf("</main>"), "the footer follows the main content");
+    assert.match(footer, /<a href="https:\/\/github\.com\/YinFengWindy\/Shiori-Agent"[^>]*>.*?GitHub<\/a>/s);
+    assert.match(footer, /<a href="https:\/\/github\.com\/YinFengWindy\/Shiori-Agent\/releases"[^>]*>.*?Release<\/a>/s);
+    assert.match(footer, /<a href="https:\/\/github\.com\/YinFengWindy\/Shiori-Agent\/blob\/main\/LICENSE"[^>]*>.*?MIT 许可<\/a>/s);
+    assert.match(footer, /© \d{4} Shiori/);
   });
 
   it("mounts the Vercel Web Analytics component from the shared layout", () => {

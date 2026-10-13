@@ -13,7 +13,7 @@
  */
 export type CrossfadeVariant = "soft" | "focus";
 
-/** Crossfade lengths; match `--duration-crossfade` / `--duration-mood-focus` in styles.css. */
+/** Crossfade lengths; match `--duration-crossfade` / `--duration-mood-focus` in the host tokens.css. */
 export const crossfadeDurations: Record<CrossfadeVariant, number> = {
   soft: 320,
   focus: 480,

@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { createWheelGestureGate, narrativeStepAt, narrativeStepTarget } from "../src/lib/narrativeModel";
+import {
+  createWheelGestureGate,
+  narrativeClickTarget,
+  narrativeFinalOffset,
+  narrativeStepAt,
+  narrativeStepTarget,
+} from "../src/lib/narrativeModel";
 
 const viewportHeight = 900;
 const lineCount = 5;
@@ -70,11 +76,40 @@ describe("narrativeStepTarget", () => {
     assert.equal(step(4500, -1), 3600);
   });
 
-  it("leaves the browser to scroll above the first line and onward from the download state", () => {
+  it("steps from the download state onto the top of the content after the narrative, and from there back", () => {
+    assert.equal(step(4500, 1), 5400);
+    assert.equal(step(5400, -1), 4500);
+    assert.equal(step(5000, 1), 5400);
+    assert.equal(step(5000, -1), 4500);
+  });
+
+  it("leaves the browser to scroll above the first line and onward from the top of the content after the narrative", () => {
     assert.equal(step(0, -1), null);
-    assert.equal(step(4500, 1), null);
-    assert.equal(step(5200, -1), null);
+    assert.equal(step(5400, 1), null);
+    assert.equal(step(6000, -1), null);
     assert.equal(step(-2000, 1), null);
+  });
+});
+
+describe("narrativeFinalOffset", () => {
+  it("puts the download state one viewport below the last line", () => {
+    assert.equal(narrativeFinalOffset({ viewportHeight, lineCount }), 4500);
+  });
+});
+
+describe("narrativeClickTarget", () => {
+  const click = (offset: number) => narrativeClickTarget({ offset, viewportHeight, lineCount });
+
+  it("steps one line on, and from the last line onto the download state", () => {
+    assert.equal(click(0), 900);
+    assert.equal(click(3600), 4500);
+  });
+
+  it("stays put on the download state and below it, where a wheel step would leave the stage", () => {
+    assert.equal(narrativeStepTarget({ offset: 4500, viewportHeight, lineCount }, 1), 5400);
+    assert.equal(click(4500), null);
+    assert.equal(click(5000), null);
+    assert.equal(click(6000), null);
   });
 });
 

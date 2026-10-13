@@ -110,9 +110,9 @@ describe("appState", () => {
 
 describe("sidebarAnimationDurationMs", () => {
   it("matches the --duration-panel token so the transition class is not dropped mid-animation", () => {
-    const stylesPath = resolve(dirname(fileURLToPath(import.meta.url)), "../styles.css");
-    const token = /--duration-panel:\s*(\d+)ms/.exec(readFileSync(stylesPath, "utf8"));
-    assert.ok(token, "styles.css should define --duration-panel in ms");
+    const tokensPath = resolve(dirname(fileURLToPath(import.meta.url)), "../tokens.css");
+    const token = /--duration-panel:\s*(\d+)ms/.exec(readFileSync(tokensPath, "utf8"));
+    assert.ok(token, "tokens.css should define --duration-panel in ms");
     assert.equal(sidebarAnimationDurationMs, Number(token[1]));
   });
 });

@@ -1,0 +1,277 @@
+/*
+ * Home page after the narrative (#772): the product showcase, the photo
+ * strip and the footer, on the page's own blue -> lavender -> pink wash (the
+ * desktop's body background, --gradient-app). Same rule as site.css: the
+ * component rules below use only the --site-* names defined here, built
+ * from the app's primitives in the desktop's styles.css.
+ *
+ * Feature title contrast: --gradient-accent-strong runs blue-grad -> pink-grad,
+ * 4.9:1 and 5.0:1 on the wash's lightest stop (lavender-50), so the titles
+ * clear 4.5:1 at any size. Lines use --color-text-secondary (8.2:1).
+ */
+.site-showcase,
+.site-footer {
+  /* The mirrored scene at the top: soft enough to read as a reflection. */
+  --site-showcase-scene-blur: 3px;
+  --site-feature-title-fill: var(--gradient-accent-strong);
+  --site-feature-line-ink: var(--color-text-secondary);
+  --site-feature-title-size: clamp(1.75rem, 1.1rem + 2vw, 2.75rem);
+  --site-feature-line-size: clamp(1rem, 0.9rem + 0.35vw, 1.1875rem);
+  /* Soft blue / pink glow behind each clip, so the frame floats on the wash
+     without a card around it. */
+  --site-feature-glow-blue: color-mix(in srgb, var(--blue-300) 45%, transparent);
+  --site-feature-glow-pink: color-mix(in srgb, var(--pink-300) 40%, transparent);
+  --site-feature-glow-blur: 48px;
+  --site-feature-clip-radius: var(--radius-xl);
+  --site-feature-clip-shadow: var(--shadow-panel);
+  /* Hairline round each clip, a little lighter than its edges. */
+  --site-feature-clip-edge: color-mix(in srgb, var(--neutral-50) 70%, transparent);
+  /* A feature rising into place as it scrolls in (browsers with scroll-driven animations). */
+  --site-feature-rise: 32px;
+
+  /* Photo strip: prints with a white border, tilted a little each. */
+  --site-photo-paper: var(--neutral-50);
+  --site-photo-shadow: var(--shadow-panel);
+  --site-photo-height: clamp(9.5rem, 6rem + 12vw, 15rem);
+  --site-photo-border: clamp(6px, 0.6vw, 10px);
+  --site-photo-gap: clamp(1.25rem, 3vw, 2.5rem);
+  /* One full pass of the row; slow enough to look at each print. */
+  --site-photo-loop: 70s;
+
+  --site-footer-ink: var(--color-text-muted);
+  --site-footer-rule: var(--color-border-soft);
+}
+
+/* ---------------------------------------------------------- showcase -- */
+.site-showcase {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  padding-bottom: clamp(3rem, 10dvh, 6rem);
+}
+
+/* The narrative's scene, mirrored so its bottom edge meets the stage's
+   bottom edge above like a reflection, fading out into the wash a viewport
+   down. */
+.site-showcase-scene {
+  position: absolute;
+  z-index: -1;
+  inset: 0 0 auto;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  scale: 1 -1;
+  mask-image: linear-gradient(0deg, black, transparent 70%);
+  -webkit-mask-image: linear-gradient(0deg, black, transparent 70%);
+}
+
+/* Blurred past the clip on every side, so the blur's soft rim stays out of
+   sight and the edge against the stage is crisp. */
+.site-showcase-scene .scene-backdrop {
+  inset: calc(var(--site-showcase-scene-blur) * -3);
+  filter: blur(var(--site-showcase-scene-blur));
+}
+
+.site-showcase-features {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(4rem, 14dvh, 9rem);
+  max-width: 76rem;
+  margin-inline: auto;
+  /* The first block starts below most of the reflection. */
+  padding: clamp(10rem, 48dvh, 28rem) clamp(1.25rem, 5vw, 4rem) clamp(4rem, 12dvh, 7rem);
+}
+
+.site-feature {
+  display: grid;
+  gap: clamp(1.5rem, 4vw, 3rem);
+  align-items: center;
+}
+
+.site-feature-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.site-feature-title {
+  width: fit-content;
+  font-size: var(--site-feature-title-size);
+  line-height: 1.25;
+  background-image: var(--site-feature-title-fill);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+.site-feature-line {
+  max-width: 28em;
+  color: var(--site-feature-line-ink);
+  font-size: var(--site-feature-line-size);
+  line-height: 1.75;
+}
+
+.site-feature-media {
+  position: relative;
+  isolation: isolate;
+}
+
+/* The glow: a blue and a pink blur, offset to opposite corners. */
+.site-feature-media::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 8% -4% -6% 6%;
+  border-radius: var(--site-feature-clip-radius);
+  background:
+    radial-gradient(closest-side at 25% 30%, var(--site-feature-glow-blue), transparent),
+    radial-gradient(closest-side at 75% 70%, var(--site-feature-glow-pink), transparent);
+  filter: blur(var(--site-feature-glow-blur));
+}
+
+.site-feature-video {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 10;
+  border-radius: var(--site-feature-clip-radius);
+  box-shadow:
+    0 0 0 1px var(--site-feature-clip-edge),
+    var(--site-feature-clip-shadow);
+  background: var(--color-bg-soft);
+}
+
+/* Wide screens: text and clip side by side, sides alternating. */
+@media (min-width: 900px) {
+  .site-feature {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  }
+
+  .site-feature:nth-child(even) {
+    grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  }
+
+  .site-feature:nth-child(even) .site-feature-text {
+    order: 2;
+  }
+}
+
+/* Each block rises into place as it scrolls in, where the browser ties
+   animations to scrolling; elsewhere it is simply there. */
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    .site-feature {
+      animation: site-feature-in linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 60%;
+    }
+  }
+}
+
+@keyframes site-feature-in {
+  from {
+    opacity: 0;
+    translate: 0 var(--site-feature-rise);
+  }
+}
+
+/* ------------------------------------------------------- photo strip -- */
+/* Tall enough padding that the prints' shadows fade out inside the clip. */
+.site-photostrip {
+  overflow: hidden;
+  padding-block: 4rem;
+}
+
+/* Two identical halves; each print carries its own right margin, so half
+   the track is exactly one row and -50% lands on the copy's start. */
+.site-photostrip-track {
+  display: flex;
+  width: max-content;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  animation: site-photostrip-drift var(--site-photo-loop) linear infinite;
+}
+
+.site-photostrip:hover .site-photostrip-track {
+  animation-play-state: paused;
+}
+
+@keyframes site-photostrip-drift {
+  to {
+    translate: -50% 0;
+  }
+}
+
+.site-photo {
+  flex: none;
+  margin-right: var(--site-photo-gap);
+  padding: var(--site-photo-border);
+  padding-bottom: calc(var(--site-photo-border) * 3);
+  background: var(--site-photo-paper);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--site-photo-shadow);
+  rotate: -2deg;
+}
+
+/* A loose hand-laid row: the tilt cycles every four prints, which divides
+   the row, so both halves tilt alike and the loop stays seamless. */
+.site-photo:nth-child(4n + 2) {
+  rotate: 1.5deg;
+  translate: 0 0.5rem;
+}
+
+.site-photo:nth-child(4n + 3) {
+  rotate: -1deg;
+  translate: 0 -0.25rem;
+}
+
+.site-photo:nth-child(4n) {
+  rotate: 2.5deg;
+  translate: 0 0.25rem;
+}
+
+.site-photo img {
+  display: block;
+  width: auto;
+  height: var(--site-photo-height);
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* ------------------------------------------------------------ footer -- */
+.site-footer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1.75rem 1rem 2.25rem;
+  border-top: 1px solid var(--site-footer-rule);
+  color: var(--site-footer-ink);
+  scroll-snap-align: end;
+}
+
+.site-footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.25rem 0.75rem;
+}
+
+
+/* Reduced motion: no rising blocks, and the strip stands still — one row
+   (no copy), scrolled sideways by hand. */
+@media (prefers-reduced-motion: reduce) {
+  .site-photostrip {
+    overflow-x: auto;
+    padding-inline: clamp(1.25rem, 5vw, 4rem);
+  }
+
+  .site-photostrip-track {
+    animation: none;
+  }
+
+  .site-photo[data-copy] {
+    display: none;
+  }
+}

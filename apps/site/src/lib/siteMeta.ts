@@ -21,6 +21,8 @@ export const SITE_DESCRIPTION =
 export const SITE_LINKS = {
   github: "https://github.com/YinFengWindy/Shiori-Agent",
   releasesLatest: "https://github.com/YinFengWindy/Shiori-Agent/releases/latest",
+  releases: "https://github.com/YinFengWindy/Shiori-Agent/releases",
+  license: "https://github.com/YinFengWindy/Shiori-Agent/blob/main/LICENSE",
 } as const;
 
 /**

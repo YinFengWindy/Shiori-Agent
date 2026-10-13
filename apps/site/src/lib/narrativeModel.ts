@@ -51,20 +51,46 @@ export function narrativeStepAt(scroll: NarrativeScroll): number {
 /**
  * The offset to scroll to for one step in `direction` (1 = on to the next
  * step, −1 = back), or `null` where the narrative does not step and the
- * browser should scroll as usual: above the first line, onward from the
- * download state (into the content after the narrative), or with the section
- * out of reach. Stepping on from the last line lands on the download state;
- * stepping back from it lands on the last line.
+ * browser should scroll as usual: above the first line, onward from the top
+ * of the content after the narrative (#772, which scrolls freely), or with
+ * the section out of reach. Stepping on from the last line lands on the
+ * download state, and stepping on from that on the top of the content after
+ * it, one viewport below (the section's end); stepping back from either
+ * lands one step back. The step past the download state is scripted too:
+ * with mandatory snapping, Chromium would snap a short wheel scroll from the
+ * download state back onto it.
  */
 export function narrativeStepTarget(scroll: NarrativeScroll, direction: 1 | -1): number | null {
   assertValid(scroll);
-  const { offset, viewportHeight, lineCount } = scroll;
-  const finalOffset = lineCount * viewportHeight;
+  const { offset, viewportHeight } = scroll;
+  const finalOffset = narrativeFinalOffset(scroll);
+  // The top of the content after the narrative: the section's end.
+  const afterOffset = finalOffset + viewportHeight;
   // Sub-pixel slack: a snapped offset can be fractional on zoomed pages.
-  if (offset < -viewportHeight / 2 || offset > finalOffset + 1) return null;
+  if (offset < -viewportHeight / 2 || offset > afterOffset + 1) return null;
+  if (offset > finalOffset + 1) {
+    // Past the download state, up to the top of what follows.
+    if (direction === -1) return finalOffset;
+    return offset < afterOffset - 1 ? afterOffset : null;
+  }
   const target = Math.round(offset / viewportHeight) + direction;
-  if (target < 0 || target > lineCount) return null;
+  if (target < 0) return null;
   return target * viewportHeight;
+}
+
+/** The download state's offset: the narrative's last step, `lineCount` viewports down. */
+export function narrativeFinalOffset({ viewportHeight, lineCount }: Pick<NarrativeScroll, "viewportHeight" | "lineCount">): number {
+  return lineCount * viewportHeight;
+}
+
+/**
+ * Where a click or tap on the stage steps to: one step on, as in a galgame,
+ * but never past the download state (clicks there stay put rather than
+ * scroll the stage away; the wheel and swipes go on). `null`: no step.
+ */
+export function narrativeClickTarget(scroll: NarrativeScroll): number | null {
+  const target = narrativeStepTarget(scroll, 1);
+  return target !== null && target <= narrativeFinalOffset(scroll) ? target : null;
 }
 
 /**

@@ -11,7 +11,7 @@ export const sidebarCollapseThreshold = sidebarMinWidth / 2;
 export const chatLatestImageSidebarMinWidth = 180;
 export const chatLatestImageSidebarMaxWidth = 360;
 export const chatLatestImageSidebarDefaultWidth = 200;
-/** Mirrors `--duration-panel` in styles.css; the host drops the sidebar transition classes shortly after this elapses. */
+/** Mirrors `--duration-panel` in tokens.css; the host drops the sidebar transition classes shortly after this elapses. */
 export const sidebarAnimationDurationMs = 260;
 export const minRoleCardBusyMs = 600;
 

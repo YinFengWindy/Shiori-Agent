@@ -12,7 +12,10 @@ import mascotSurprised from "../../../desktop/renderer/src/shared/assets/mascot/
 import sceneDay from "../../../desktop/renderer/src/shared/assets/scene/bg-day.webp";
 import sceneDusk from "../../../desktop/renderer/src/shared/assets/scene/bg-dusk.webp";
 import sceneNight from "../../../desktop/renderer/src/shared/assets/scene/bg-night.webp";
+import cg2 from "../assets/art/cg-2.webp";
 import cg3 from "../assets/art/cg-3.webp";
+import cg4 from "../assets/art/cg-4.webp";
+import cg5 from "../assets/art/cg-5.webp";
 import cg6 from "../assets/art/cg-6.webp";
 import cg7 from "../assets/art/cg-7.webp";
 import cg8 from "../assets/art/cg-8.webp";
@@ -23,6 +26,7 @@ import topic2 from "../assets/art/topic-2.webp";
 import topic3 from "../assets/art/topic-3.webp";
 import ogCover from "../assets/social/og-cover.jpg";
 import type { NarrativeCgKey } from "../content/narrative";
+import type { ShowcaseClipId } from "../content/showcase";
 
 /** One site image: the build-time image metadata plus its accessible alt text. */
 export interface SiteImage {
@@ -36,8 +40,8 @@ export interface SiteImage {
  * change; only what a page uses is imported, because every imported image is
  * emitted into the build. `tests/assets.test.ts` checks that each
  * `../assets/art/*.webp` import above exists, and owns the WebP
- * size/metadata hygiene of every file in that directory — including the art
- * kept there for the gallery that comes next (#768).
+ * size/metadata hygiene of every file in that directory — including art
+ * no page shows (yet), kept for later use.
  *
  * The scene backgrounds and 吟风's expression sprites are the desktop's
  * own files (first-run guide / startup splash, the app's mascot) and are
@@ -86,9 +90,10 @@ const sceneFileBytes = import.meta.glob<number>("../../../desktop/renderer/src/s
   eager: true,
 });
 
-function bytesOf(files: Record<string, number>, name: string): number {
+/** The entry of an `import.meta.glob` result whose file is named `name`. */
+function globFile<T>(files: Record<string, T>, name: string): T {
   const entry = Object.entries(files).find(([path]) => path.endsWith(`/${name}`));
-  if (!entry) throw new Error(`no size for ${name}`);
+  if (!entry) throw new Error(`no file named ${name}`);
   return entry[1];
 }
 
@@ -98,10 +103,10 @@ function bytesOf(files: Record<string, number>, name: string): number {
  * page loader weighs its progress bar by these.
  */
 export const firstScreenImageBytes: Readonly<Record<string, number>> = Object.fromEntries([
-  ...Object.entries(sceneBackgrounds).map(([phase, image]) => [image.src, bytesOf(sceneFileBytes, `bg-${phase}.webp`)]),
+  ...Object.entries(sceneBackgrounds).map(([phase, image]) => [image.src, globFile(sceneFileBytes, `bg-${phase}.webp`)]),
   ...Object.entries(narrativeExpressionSprites).map(([expression, image]) => [
     image.src,
-    bytesOf(mascotFileBytes, `yinfeng-${expression}.webp`),
+    globFile(mascotFileBytes, `yinfeng-${expression}.webp`),
   ]),
 ]);
 
@@ -134,3 +139,43 @@ export const socialPreviewImage: SiteImage = {
   image: ogCover,
   alt: "CG：晚霞海边的全身立绘，黑色蝙蝠翼连衣裙",
 };
+
+/**
+ * One feature demo clip of the showcase (#772): the VP9 WebM browsers pick
+ * first, the H.264 MP4 for the rest, and the still shown before it plays.
+ * Rendered by apps/site-video (`pnpm run site:video`) and committed: the
+ * site build only copies them.
+ */
+export interface ShowcaseClip {
+  readonly webm: string;
+  readonly mp4: string;
+  readonly poster: ImageMetadata;
+}
+
+const showcaseVideos = import.meta.glob<string>("../assets/showcase/*.{webm,mp4}", { import: "default", eager: true });
+const showcasePosters = import.meta.glob<ImageMetadata>("../assets/showcase/*-poster.jpg", { import: "default", eager: true });
+
+/** A showcase demo clip's files, by its id (`SHOWCASE_CLIP_IDS` in `content/showcase.ts`). */
+export function showcaseClip(id: ShowcaseClipId): ShowcaseClip {
+  return {
+    webm: globFile(showcaseVideos, `${id}.webm`),
+    mp4: globFile(showcaseVideos, `${id}.mp4`),
+    poster: globFile(showcasePosters, `${id}-poster.jpg`),
+  };
+}
+
+/**
+ * The photo strip under the showcase, in strip order. cg-1 (a bedroom
+ * scene, half-buttoned shirt) and cg-9 (bare shoulders under a slipping
+ * jacket) are left out as too suggestive for a public strip.
+ */
+export const galleryPhotos: readonly SiteImage[] = [
+  { image: cg3, alt: "CG：趴在粉色电脑桌前兴奋地打字" },
+  { image: cg6, alt: "CG：晚霞海边的全身立绘，黑色蝙蝠翼连衣裙" },
+  { image: cg7, alt: "CG：夜晚街头挽臂同行的温馨场景" },
+  { image: cg5, alt: "CG：阳光洒落的窗边侧脸特写" },
+  { image: cg8, alt: "CG：夜色中坐在公园长椅上，以手托腮微笑，发间系着蝙蝠翼造型的发绳" },
+  { image: cg4, alt: "CG：窝在沙发上吃甜点的夜晚场景" },
+  { image: cg10, alt: "CG：从门后探身张望，身后是温暖的暖色房间" },
+  { image: cg2, alt: "CG：侧躺在床上，蓝紫色柔光近景" },
+];

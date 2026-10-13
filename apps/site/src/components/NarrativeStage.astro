@@ -125,7 +125,13 @@ const usedCgKeys = [...new Set(NARRATIVE_LINES.flatMap((line) => (line.cg ? [lin
 </section>
 
 <script>
-  import { createWheelGestureGate, narrativeStepAt, narrativeStepTarget } from "../lib/narrativeModel";
+  import {
+    createWheelGestureGate,
+    narrativeClickTarget,
+    narrativeFinalOffset,
+    narrativeStepAt,
+    narrativeStepTarget,
+  } from "../lib/narrativeModel";
 
   function required<T>(element: T | null, name: string): T {
     if (!element) throw new Error(`narrative ${name} is missing`);
@@ -230,14 +236,14 @@ const usedCgKeys = [...new Set(NARRATIVE_LINES.flatMap((line) => (line.cg ? [lin
     stepTo(target, scroll.offset, event.timeStamp);
   }
 
-  // Click / tap anywhere on the stage advances one line, as in a galgame;
+  // Click / tap anywhere on the stage advances one step, as in a galgame;
   // the download buttons and other controls keep their own action. Taps never fire
   // after a swipe, so this does not double-step with the touch handler.
   function onStageClick(event: MouseEvent) {
     if (reducedMotion.matches || event.button !== 0) return;
     if (event.target instanceof Element && event.target.closest("a, button")) return;
     const { scroll, from } = stepOrigin(event.timeStamp);
-    const target = narrativeStepTarget(from, 1);
+    const target = narrativeClickTarget(from);
     if (target === null) return;
     stepTo(target, scroll.offset, event.timeStamp);
   }
@@ -288,7 +294,7 @@ const usedCgKeys = [...new Set(NARRATIVE_LINES.flatMap((line) => (line.cg ? [lin
   const download = required(stage.querySelector<HTMLElement>("[data-narrative-download]"), "download call");
   function downloadOffsetFromHere() {
     const scroll = currentScroll();
-    return { scroll, target: scroll.lineCount * scroll.viewportHeight };
+    return { scroll, target: narrativeFinalOffset(scroll) };
   }
   download.addEventListener("focusin", (event) => {
     const { scroll, target } = downloadOffsetFromHere();

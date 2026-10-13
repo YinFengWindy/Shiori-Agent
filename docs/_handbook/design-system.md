@@ -7,10 +7,10 @@ Shiori 的视觉是**三层单向依赖**：色阶原语 → 语义 token → Ta
 
 ```
 第一层  primitives            --pink-500 / --neutral-800 / --lavender-300
-        （styles.css 顶部，色相命名，组件里禁止直接使用）
+        （tokens.css 前段，色相命名，组件里禁止直接使用）
           ↓
 第二层  semantic tokens       --color-accent-solid / --color-text-muted / --radius-md
-        （styles.css 中段，按用途命名，对比度已逐条校验）
+        （tokens.css 中段，按用途命名，对比度已逐条校验）
           ↓
 第三层  Tailwind 语义类        bg-surface / text-ink-muted / rounded-md / shadow-soft
         共享类名              inputClass / primaryButtonClass / cardClass
@@ -24,7 +24,8 @@ Shiori 的视觉是**三层单向依赖**：色阶原语 → 语义 token → Ta
 
 | 文件 | 内容 |
 |---|---|
-| `apps/desktop/renderer/src/styles.css` | 全部 token 定义、全局 base 规则、工具类、动效 |
+| `apps/desktop/renderer/src/tokens.css` | 全部 token 定义（只有 `:root` 自定义属性；`styles.css` 首行引入，官网的 Remotion 短片 `apps/site-video` 也直接引入） |
+| `apps/desktop/renderer/src/styles.css` | 全局 base 规则、工具类、动效 |
 | `apps/desktop/renderer/tailwind.config.ts` | token → Tailwind 语义类的映射、排版阶梯 |
 | `apps/desktop/renderer/src/shared/styles.ts` | 宿主专用的组件级共享类名常量 |
 | `packages/sdk/src/styles.ts`、`menuStyles.ts`、`components/`、`icons/` | 插件也在用的共享类名、菜单词汇、通用组件与图标的唯一实现（#440）；宿主代码直接从 `@yinfengwindy/shiori-sdk` 导入 |
@@ -47,7 +48,7 @@ Shiori 的视觉是**三层单向依赖**：色阶原语 → 语义 token → Ta
 | `--success-* / --warning-* / --danger-*` | — | soft（100）/ 300 / solid（600）/ text（700，warning 是 800）四档 | 状态 |
 
 两个特例：`--blue-grad` / `--pink-grad` / `--lavender-grad` 是**渐变专用端点**，比同族色阶更深，
-目的是让白字在整条渐变扫过时都保持 ≥4.5:1（`--blue-grad` → `--pink-grad` 端点 4.78 / 5.20，oklab 中点 4.93 —— 数值见 `styles.css` 里 `--blue-grad` 定义处的注释；
+目的是让白字在整条渐变扫过时都保持 ≥4.5:1（`--blue-grad` → `--pink-grad` 端点 4.78 / 5.20，oklab 中点 4.93 —— 数值见 `tokens.css` 里 `--blue-grad` 定义处的注释；
 `--lavender-grad` 注释里的中点是 4.66:1，目前没有任何渐变引用它）。
 
 ## 第二层：semantic tokens
@@ -94,7 +95,7 @@ Shiori 的视觉是**三层单向依赖**：色阶原语 → 语义 token → Ta
 
 **组件专属 token**（只在对应组件的样式里用，不进 Tailwind）：
 
-- 看板娘 `--mascot-*`：裁切比例、三种尺寸、立绘阴影、气泡描边、出场上浮距离（定义在 `styles.css`，用在 `shared/mascot/mascot.css`）
+- 看板娘 `--mascot-*`：裁切比例、三种尺寸、立绘阴影、气泡描边、出场上浮距离（定义在 `tokens.css`，用在 `shared/mascot/mascot.css`）
 - 小手机 `--phone-*`：机身宽高、边框、机身 / 屏幕圆角（刻意不走 `--radius-*`）、两套机身皮肤、壁纸模糊与色罩、切屏位移、底部横条、机身母题尺寸
 - `--titlebar-height`（30px）：标题栏高度，`tailwind.config.ts` 的 `grid-rows-app` 用它
 
@@ -345,8 +346,8 @@ Phosphor 在 `vite.config.ts` 的 `manualChunks` 里被单独拆成 `icons-vendo
 ## 已知遗留
 
 - **暗色主题尚未实现**：`:root` 固定 `color-scheme: light`，全文件无 `prefers-color-scheme` 分支。
-  设计上已经预留（`styles.css` 开头 token 分层注释："dark theme later overrides the semantic tier only"），
+  设计上已经预留（`tokens.css` 开头 token 分层注释："dark theme later overrides the semantic tier only"），
   但前提是新代码不绕过语义层——每一处写死颜色都是将来暗色主题的一处返工。
-- **`--font-brand` 槽位空着**：MiSans / HarmonyOS Sans SC 还没定，字体栈目前从系统层起步（`styles.css` 的 `--font-sans` 定义）。
+- **`--font-brand` 槽位空着**：MiSans / HarmonyOS Sans SC 还没定，字体栈目前从系统层起步（`tokens.css` 的 `--font-sans` 定义）。
 - **legacy 别名仍在服役**：`tailwind.config.ts` 的 legacy 色名还在，少量代码仍在用（如 `styles.css` 的 body / pre 基层规则、主区域的 `bg-[var(--chat-bg)]`、SDK `SettingsToggleCard` 的 `bg-primary`）。
 - **story 模块自成一套**：`plugins/story/ui/story.css` 里 `story-*` 类的玻璃底、描边、阴影都是写死值，没有接入 token。

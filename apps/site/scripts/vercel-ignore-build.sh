@@ -2,7 +2,7 @@
 # Vercel "Ignored Build Step" (vercel.json `ignoreCommand`, capped at 256
 # characters, hence this script): exit 0 skips the deploy, exit 1 builds.
 # Lists every input of `pnpm run build:site`: the site package; the desktop
-# files it imports (styles, shared class names, scene assets + timeOfDay,
+# files it imports (styles + design tokens, shared class names, scene assets + timeOfDay,
 # mascot expression sprites + expression list + mascot.css, Tailwind theme)
 # and the tsconfigs Vite reads to transpile them;
 # the SDK sources and the package.json whose exports resolve them; and the
@@ -10,6 +10,7 @@
 exec git diff HEAD^ HEAD --quiet -- \
   apps/site \
   apps/desktop/renderer/src/styles.css \
+  apps/desktop/renderer/src/tokens.css \
   apps/desktop/renderer/src/shared/adv/adv.css \
   apps/desktop/renderer/src/shared/styles.ts \
   apps/desktop/renderer/src/shared/scene \
