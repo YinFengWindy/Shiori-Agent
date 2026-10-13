@@ -1,0 +1,108 @@
+---
+import { CaretDownIcon } from "@phosphor-icons/react";
+import type { SectionIndexEntry } from "../lib/sectionIndex";
+import "../styles/section-index.css";
+import SectionIndexList from "./SectionIndexList.astro";
+
+/**
+ * The index of a long reading page (#797): a post's table of contents, the
+ * changelog's versions. Plain anchor links, so it works without scripting;
+ * the script marks the section being read (`lib/sectionIndex.ts`).
+ *
+ * A page places it twice inside `.site-section-layout` (section-index.css),
+ * and each copy shows at one width only: `aside` sticks in the right margin
+ * beside the reading column on wide screens, `inline` folds into a
+ * `<details>` under the page's title on narrow ones. Only one is ever
+ * displayed, so assistive technology meets one index.
+ */
+interface Props {
+  /** The index's name: its heading and its navigation label. */
+  title: string;
+  entries: SectionIndexEntry[];
+  variant: "aside" | "inline";
+}
+
+const { title, entries, variant } = Astro.props;
+if (entries.length === 0) throw new Error(`the ${title} index has no entries: leave it out instead`);
+---
+
+{
+  variant === "aside" ? (
+    <nav class="site-section-index site-section-index--aside" aria-label={title} data-section-index>
+      <p class="site-section-index-title">{title}</p>
+      <SectionIndexList entries={entries} />
+    </nav>
+  ) : (
+    <details class="site-section-index site-section-index--inline" data-section-index>
+      <summary class="site-section-index-summary">
+        {title}
+        <CaretDownIcon size={16} aria-hidden="true" className="site-section-index-caret" />
+      </summary>
+      <nav aria-label={title}>
+        <SectionIndexList entries={entries} />
+      </nav>
+    </details>
+  )
+}
+
+<script>
+  import { currentSectionIndex } from "../lib/sectionIndex";
+
+  // Both copies of the index (aside and inline) link the same sections.
+  const links = [...document.querySelectorAll<HTMLAnchorElement>("a[data-section-link]")];
+  const ids = [...new Set(links.map((link) => link.dataset.sectionLink ?? ""))];
+  const targets = ids.map((id) => {
+    const target = document.getElementById(id);
+    if (!target) throw new Error(`section index links to #${id}, which is not on the page`);
+    return target;
+  });
+  const header = document.querySelector<HTMLElement>("[data-site-header]");
+  if (!header) throw new Error("the section index reads the sticky top bar's height");
+
+  // The reading line sits just under the sticky bar, a little below where a
+  // followed link puts its section (scroll-margin-top, reading.css).
+  const line = header.getBoundingClientRect().height + 24;
+  let currentId: string | undefined;
+  let frame = 0;
+
+  function update() {
+    frame = 0;
+    const root = document.documentElement;
+    const index = currentSectionIndex({
+      tops: targets.map((target) => target.getBoundingClientRect().top),
+      line,
+      atEnd: Math.ceil(window.scrollY + window.innerHeight) >= root.scrollHeight - 1,
+      viewportHeight: window.innerHeight,
+    });
+    const id = ids[index];
+    if (id === currentId) return;
+    currentId = id;
+    for (const link of links) {
+      if (link.dataset.sectionLink !== id) {
+        link.removeAttribute("aria-current");
+        continue;
+      }
+      link.setAttribute("aria-current", "location");
+      // Keep the marked entry in sight inside a long sticky index (never the page itself).
+      const list = link.closest<HTMLElement>(".site-section-index--aside");
+      if (list && list.offsetParent !== null) {
+        const top = link.offsetTop;
+        if (top < list.scrollTop || top + link.offsetHeight > list.scrollTop + list.clientHeight) {
+          list.scrollTop = top - list.clientHeight / 2;
+        }
+      }
+    }
+  }
+  const scheduleUpdate = () => {
+    frame ||= requestAnimationFrame(update);
+  };
+
+  // A section changes when a heading crosses the reading line (the observed
+  // area's top edge) and, at the end of the page, when the footer comes fully in.
+  const observer = new IntersectionObserver(scheduleUpdate, { rootMargin: `-${line}px 0px 0px 0px`, threshold: [0, 1] });
+  for (const target of targets) observer.observe(target);
+  const footer = document.querySelector("footer");
+  if (footer) observer.observe(footer);
+  window.addEventListener("resize", scheduleUpdate);
+  update();
+</script>

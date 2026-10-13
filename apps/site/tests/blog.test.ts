@@ -3,7 +3,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
-import { type BuiltSite, ORIGIN, dist, distPathOf, draftsDist, metaContent, sitemapPages } from "./support/builtSite";
+import { type BuiltSite, ORIGIN, breadcrumbsOf, dist, distPathOf, draftsDist, idsOf, metaContent, sectionIndexOf, sitemapPages, topBarHomeHref } from "./support/builtSite";
 
 /*
  * The blog (#773) as built. The production build (dist/) must leave draft
@@ -23,6 +23,8 @@ interface SourcePost {
   readonly draft: boolean;
   /** The post's first paragraph, as written. */
   readonly opening: string;
+  /** How many `##` sections it has. */
+  readonly sections: number;
 }
 
 /** The posts as written in src/content/blog, read straight from their frontmatter. */
@@ -45,6 +47,7 @@ const sourcePosts: SourcePost[] = readdirSync(blogDir)
       date: field("date"),
       draft: /^draft: true$/m.test(frontmatter),
       opening,
+      sections: body.split("\n").filter((line) => line.startsWith("## ")).length,
     };
   });
 
@@ -93,6 +96,23 @@ describe("blog in the production build", () => {
     assert.match(html, /<header class="site-header" data-site-header data-mode="fixed">/);
     assert.match(html, /<a href="\/blog\/"[^>]* aria-current="page">博客<\/a>/);
     if (published.length === 0) assert.match(html, /<p class="site-blog-empty site-story-type">[^<]+<\/p>/);
+  });
+
+  it("leads back home from the list with a 首页 / 博客 breadcrumb and BreadcrumbList data", () => {
+    const html = dist.read("blog/index.html");
+    assert.deepEqual(breadcrumbsOf(html).steps, [
+      { label: "首页", href: "/#download", current: false },
+      { label: "博客", href: undefined, current: true },
+    ]);
+    assert.deepEqual(breadcrumbsOf(html).jsonLd, {
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      itemListElement: [
+        { "@type": "ListItem", position: 1, name: "首页", item: `${ORIGIN}/` },
+        { "@type": "ListItem", position: 2, name: "博客", item: `${ORIGIN}/blog/` },
+      ],
+    });
+    assert.equal(topBarHomeHref(html), "/#download");
   });
 
   it("serves a valid RSS 2.0 feed on the production origin, linked from every page", () => {
@@ -145,6 +165,49 @@ describe("blog posts as rendered (drafts-mode build)", () => {
             image: undefined,
           },
         );
+      });
+
+      it("leads back up with a 首页 / 博客 / post breadcrumb over the title, and BreadcrumbList data", () => {
+        const { steps, jsonLd } = breadcrumbsOf(html);
+        assert.deepEqual(steps, [
+          { label: "首页", href: "/#download", current: false },
+          { label: "博客", href: "/blog/", current: false },
+          { label: post.title, href: undefined, current: true },
+        ]);
+        assert.deepEqual(jsonLd, {
+          "@context": "https://schema.org",
+          "@type": "BreadcrumbList",
+          itemListElement: [
+            { "@type": "ListItem", position: 1, name: "首页", item: `${ORIGIN}/` },
+            { "@type": "ListItem", position: 2, name: "博客", item: `${ORIGIN}/blog/` },
+            { "@type": "ListItem", position: 3, name: post.title, item: postUrl(post) },
+          ],
+        });
+        assert.ok(html.indexOf('aria-label="面包屑"') < html.indexOf("<h1"), "the breadcrumb is not over the title");
+        assert.equal(topBarHomeHref(html), "/#download");
+      });
+
+      it("lists its sections in a table of contents whose links match the headings' ids one to one", () => {
+        const { aside, inline } = sectionIndexOf(html);
+        if (post.sections < 2) {
+          assert.equal(aside, undefined);
+          assert.equal(inline, undefined);
+          return;
+        }
+        assert.ok(aside, "no sticky table of contents");
+        assert.ok(inline, "no folded <details> table of contents");
+        assert.equal(aside.title, "目录");
+        assert.equal(inline.title, "目录");
+        assert.deepEqual(inline.entries, aside.entries);
+        const prose = html.slice(html.indexOf('<div class="site-prose">'), html.indexOf("</article>"));
+        const headings = [...prose.matchAll(/<h2 id="([^"]+)">(.*?)<\/h2>/gs)].map(([, id, text]) => ({ id, label: text.replace(/<[^>]+>/g, "") }));
+        assert.equal(headings.length, post.sections);
+        assert.deepEqual(
+          aside.entries.map(({ id, label }) => ({ id, label })),
+          headings,
+        );
+        const ids = idsOf(html);
+        assert.equal(new Set(ids).size, ids.length, "an id is used twice");
       });
 
       it("shows the title, day, byline and the post itself as static HTML", () => {

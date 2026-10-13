@@ -1,4 +1,5 @@
 ---
+import Breadcrumbs from "../../components/Breadcrumbs.astro";
 import SiteFooter from "../../components/SiteFooter.astro";
 import SiteHeader from "../../components/SiteHeader.astro";
 import SiteLayout from "../../layouts/SiteLayout.astro";
@@ -18,6 +19,7 @@ import "../../styles/blog.css";
 /**
  * The blog's list page (#773): one card per published post, newest first —
  * its cover if it has one, title, day and summary, the whole card one link.
+ * The breadcrumb over the heading leads back home (#797).
  */
 const posts = await getPublishedPosts();
 ---
@@ -26,6 +28,7 @@ const posts = await getPublishedPosts();
   <SiteHeader mode="fixed" current="blog" />
   <main class="site-reading">
     <div class="site-blog-shelf">
+      <Breadcrumbs trail={[{ label: BLOG_TITLE, href: "/blog/" }]} />
       <h1 class="site-reading-heading site-story-type">{BLOG_TITLE}</h1>
       {
         posts.length === 0 ? (

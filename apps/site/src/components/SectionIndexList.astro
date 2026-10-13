@@ -1,0 +1,23 @@
+---
+import type { SectionIndexEntry } from "../lib/sectionIndex";
+
+/** The links of a section index (SectionIndex.astro), shared by its two placements. */
+interface Props {
+  entries: SectionIndexEntry[];
+}
+
+const { entries } = Astro.props;
+---
+
+<ol class="site-section-index-list">
+  {
+    entries.map((entry) => (
+      <li class="site-section-index-item" data-level={entry.level}>
+        <a href={`#${entry.id}`} class="site-section-index-link" data-section-link={entry.id}>
+          {entry.label}
+          {entry.note && <span class="site-section-index-note">{entry.note}</span>}
+        </a>
+      </li>
+    ))
+  }
+</ol>

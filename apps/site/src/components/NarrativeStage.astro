@@ -317,6 +317,20 @@ const usedCgKeys = [...new Set(NARRATIVE_LINES.flatMap((line) => (line.cg ? [lin
     if (distance <= scroll.viewportHeight) stepTo(target, scroll.offset, event.timeStamp);
     else window.scrollTo({ top: window.scrollY + target - scroll.offset, behavior: "instant" });
   });
+  // In-page links to the download call (the top bar's icon and name, #797)
+  // glide to the download state instead of the browser's jump to the pinned
+  // call. Under reduced motion the call sits in the page flow and the
+  // browser's own jump lands on it.
+  document.addEventListener("click", (event) => {
+    if (reducedMotion.matches || event.defaultPrevented || event.button !== 0) return;
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const link = event.target instanceof Element ? event.target.closest("a[href]") : null;
+    if (!(link instanceof HTMLAnchorElement) || link.hash !== `#${download.id}`) return;
+    if (link.origin !== window.location.origin || link.pathname !== window.location.pathname || link.search !== window.location.search) return;
+    event.preventDefault();
+    const { scroll, target } = downloadOffsetFromHere();
+    window.scrollTo({ top: window.scrollY + target - scroll.offset, behavior: "smooth" });
+  });
   if (!reducedMotion.matches && window.location.hash === `#${download.id}`) {
     const { scroll, target } = downloadOffsetFromHere();
     window.scrollTo({ top: window.scrollY + target - scroll.offset });
