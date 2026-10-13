@@ -62,6 +62,13 @@ export const sceneBackgrounds: Record<ScenePhase, ImageMetadata> = {
 export const appIconImage = { src: "/icons/icon-512.png", width: 512, height: 512 } as const;
 
 /**
+ * The app icon in the top bar (#773), shown at 32 CSS px: the 192px
+ * manifest icon (19 KB) is sharp there on 3× screens, a fifth of the 512px
+ * file's weight.
+ */
+export const barIconImage = { src: "/icons/icon-192.png", width: 192, height: 192 } as const;
+
+/**
  * 吟风's uniform standing sprite in the narrative, one image per expression
  * (the desktop mascot's set: 826×1213, one shared alpha mask, so a
  * cross-fade only changes the face). Decorative: her lines are real text.

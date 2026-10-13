@@ -1,0 +1,95 @@
+---
+import { render } from "astro:content";
+import SiteFooter from "../../components/SiteFooter.astro";
+import SiteHeader from "../../components/SiteHeader.astro";
+import SiteLayout from "../../layouts/SiteLayout.astro";
+import {
+  BLOG_AUTHOR,
+  type BlogPost,
+  blogPostPath,
+  formatPostDate,
+  getPublishedPosts,
+  isoPostDate,
+} from "../../lib/blog";
+import { appIconImage } from "../../lib/siteAssets";
+import { SITE_NAME } from "../../lib/siteMeta";
+import "../../styles/blog.css";
+
+/**
+ * One blog post (#773): title, day and byline, the cover if it has one, then
+ * the post on a light reading column over the app's wash. The head carries
+ * the post's own description, `og:type` article with its publication time,
+ * and BlogPosting structured data with 吟风 as the author.
+ */
+export async function getStaticPaths() {
+  const posts = await getPublishedPosts();
+  return posts.map((post) => ({ params: { slug: post.id }, props: { post } }));
+}
+
+interface Props {
+  post: BlogPost;
+}
+
+const { post } = Astro.props;
+const { title, description, date, cover } = post.data;
+const { Content } = await render(post);
+if (!Astro.site) throw new Error("astro.config.ts must set `site`: the post's structured data is built from it");
+const postUrl = new URL(blogPostPath(post), Astro.site).href;
+const published = isoPostDate(date);
+const structuredData = {
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  headline: title,
+  description,
+  datePublished: published,
+  inLanguage: "zh-CN",
+  url: postUrl,
+  mainEntityOfPage: postUrl,
+  author: { "@type": "Person", name: BLOG_AUTHOR },
+  publisher: {
+    "@type": "Organization",
+    name: SITE_NAME,
+    logo: { "@type": "ImageObject", url: new URL(appIconImage.src, Astro.site).href },
+  },
+  ...(cover ? { image: new URL(cover.image.src, Astro.site).href } : {}),
+};
+// `<` escaped so no text in the post can close the script element.
+const structuredDataJson = JSON.stringify(structuredData).replaceAll("<", "\\u003c");
+---
+
+<SiteLayout title={`${title} · ${SITE_NAME}`} description={description} ogType="article">
+  <Fragment slot="meta">
+    <meta property="article:published_time" content={published} />
+    <meta property="article:author" content={BLOG_AUTHOR} />
+    <script type="application/ld+json" set:html={structuredDataJson} />
+  </Fragment>
+  <SiteHeader mode="fixed" current="blog" />
+  <main class="site-blog">
+    <article class="site-post">
+      <header class="site-post-head">
+        <h1 class="site-post-title site-story-type">{title}</h1>
+        <p class="site-post-meta">
+          <time datetime={published}>{formatPostDate(date)}</time>
+          <span aria-hidden="true">·</span>
+          <span>{BLOG_AUTHOR}</span>
+        </p>
+      </header>
+      {
+        cover && (
+          <img
+            src={cover.image.src}
+            width={cover.image.width}
+            height={cover.image.height}
+            alt={cover.alt}
+            decoding="async"
+            class="site-post-cover"
+          />
+        )
+      }
+      <div class="site-post-body">
+        <Content />
+      </div>
+    </article>
+  </main>
+  <SiteFooter />
+</SiteLayout>

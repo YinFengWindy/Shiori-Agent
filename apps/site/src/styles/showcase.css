@@ -1,6 +1,6 @@
 /*
- * Home page after the narrative (#772): the product showcase, the photo
- * strip and the footer, on the page's own blue -> lavender -> pink wash (the
+ * Home page after the narrative (#772): the product showcase and the photo
+ * strip, on the page's own blue -> lavender -> pink wash (the
  * desktop's body background, --gradient-app). Same rule as site.css: the
  * component rules below use only the --site-* names defined here, built
  * from the app's primitives in the desktop's styles.css.
@@ -9,8 +9,7 @@
  * 4.9:1 and 5.0:1 on the wash's lightest stop (lavender-50), so the titles
  * clear 4.5:1 at any size. Lines use --color-text-secondary (8.2:1).
  */
-.site-showcase,
-.site-footer {
+.site-showcase {
   /* The mirrored scene at the top: soft enough to read as a reflection. */
   --site-showcase-scene-blur: 3px;
   --site-feature-title-fill: var(--gradient-accent-strong);
@@ -37,9 +36,6 @@
   --site-photo-gap: clamp(1.25rem, 3vw, 2.5rem);
   /* One full pass of the row; slow enough to look at each print. */
   --site-photo-loop: 70s;
-
-  --site-footer-ink: var(--color-text-muted);
-  --site-footer-rule: var(--color-border-soft);
 }
 
 /* ---------------------------------------------------------- showcase -- */
@@ -240,26 +236,6 @@
   user-select: none;
   -webkit-user-drag: none;
 }
-
-/* ------------------------------------------------------------ footer -- */
-.site-footer {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 1.75rem 1rem 2.25rem;
-  border-top: 1px solid var(--site-footer-rule);
-  color: var(--site-footer-ink);
-  scroll-snap-align: end;
-}
-
-.site-footer-links {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 0.25rem 0.75rem;
-}
-
 
 /* Reduced motion: no rising blocks, and the strip stands still — one row
    (no copy), scrolled sideways by hand. */

@@ -1,0 +1,68 @@
+---
+import SiteFooter from "../../components/SiteFooter.astro";
+import SiteHeader from "../../components/SiteHeader.astro";
+import SiteLayout from "../../layouts/SiteLayout.astro";
+import {
+  BLOG_DESCRIPTION,
+  BLOG_EMPTY_LINE,
+  BLOG_TITLE,
+  blogPostPath,
+  formatPostDate,
+  getPublishedPosts,
+  isoPostDate,
+} from "../../lib/blog";
+import { SITE_NAME } from "../../lib/siteMeta";
+import "../../styles/blog.css";
+
+/**
+ * The blog's list page (#773): one card per published post, newest first —
+ * its cover if it has one, title, day and summary, the whole card one link.
+ */
+const posts = await getPublishedPosts();
+---
+
+<SiteLayout title={`${BLOG_TITLE} · ${SITE_NAME}`} description={BLOG_DESCRIPTION}>
+  <SiteHeader mode="fixed" current="blog" />
+  <main class="site-blog">
+    <div class="site-blog-shelf">
+      <h1 class="site-blog-heading site-story-type">{BLOG_TITLE}</h1>
+      {
+        posts.length === 0 ? (
+          <p class="site-blog-empty site-story-type">{BLOG_EMPTY_LINE}</p>
+        ) : (
+          <ul class="site-blog-list">
+            {posts.map((post) => (
+              <li>
+                <article class="site-post-card">
+                  {post.data.cover && (
+                    <img
+                      src={post.data.cover.image.src}
+                      width={post.data.cover.image.width}
+                      height={post.data.cover.image.height}
+                      alt={post.data.cover.alt}
+                      loading="lazy"
+                      decoding="async"
+                      class="site-post-card-cover"
+                    />
+                  )}
+                  <div class="site-post-card-text">
+                    <h2 class="site-post-card-title">
+                      <a href={blogPostPath(post)} class="site-post-card-link">
+                        {post.data.title}
+                      </a>
+                    </h2>
+                    <time class="site-post-card-date" datetime={isoPostDate(post.data.date)}>
+                      {formatPostDate(post.data.date)}
+                    </time>
+                    <p class="site-post-card-summary">{post.data.description}</p>
+                  </div>
+                </article>
+              </li>
+            ))}
+          </ul>
+        )
+      }
+    </div>
+  </main>
+  <SiteFooter />
+</SiteLayout>

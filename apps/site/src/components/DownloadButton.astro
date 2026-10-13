@@ -1,0 +1,59 @@
+---
+import { DownloadSimpleIcon } from "@phosphor-icons/react";
+import { SITE_LINKS } from "../lib/siteMeta";
+
+/**
+ * The Windows download button, wherever the site shows one (the narrative's
+ * closing call, the top bar). Its static href is the latest-release page
+ * (no-JS and crawler fallback); the script below swaps in the installer's
+ * direct download once the GitHub API names it, and the release tag after
+ * the label. Astro emits a component's script once per page, so a page with
+ * several of these buttons still asks the API once.
+ */
+interface Props {
+  /** Classes of the link: its button surface, size and type. */
+  class: string;
+  /** Size of the download icon, in px. */
+  iconSize: number;
+}
+
+const { class: className, iconSize } = Astro.props;
+---
+
+<a href={SITE_LINKS.releasesLatest} class={className} data-download-installer>
+  <DownloadSimpleIcon size={iconSize} weight="bold" aria-hidden="true" />
+  <span>下载 Windows 版<span data-download-version></span></span>
+</a>
+
+<script>
+  import { pickWindowsInstaller } from "../lib/releaseAsset";
+
+  // Point every download button at the latest installer itself. Assets are
+  // versioned, so only the API knows the file name; it is asked at runtime
+  // because the site is not rebuilt on a release. Any failure (offline,
+  // rate limit, timeout, no installer asset) keeps the release-page href:
+  // the buttons still work, so nothing is shown to the visitor.
+  const RELEASE_API = "https://api.github.com/repos/YinFengWindy/Shiori-Agent/releases/latest";
+  const TIMEOUT_MS = 6000;
+
+  const buttons = [...document.querySelectorAll<HTMLAnchorElement>("a[data-download-installer]")].map((link) => {
+    const version = link.querySelector<HTMLElement>("[data-download-version]");
+    if (!version) throw new Error("download button has no version slot");
+    return { link, version };
+  });
+  if (buttons.length === 0) throw new Error("download button is missing");
+
+  fetch(RELEASE_API, { headers: { Accept: "application/vnd.github+json" }, signal: AbortSignal.timeout(TIMEOUT_MS) })
+    .then((response) => (response.ok ? response.json() : null))
+    .then((release: unknown) => {
+      const installer = pickWindowsInstaller(release);
+      if (!installer) return;
+      for (const { link, version } of buttons) {
+        link.href = installer.url;
+        if (installer.version) version.textContent = ` ${installer.version}`;
+      }
+    })
+    .catch(() => {
+      // Fallback href stays; see above.
+    });
+</script>

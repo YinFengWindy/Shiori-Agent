@@ -5,13 +5,16 @@
   "description": "Shiori public website (https://www.windchant.online), statically generated with Astro.",
   "scripts": {
     "dev": "astro dev",
+    "dev:drafts": "astro dev --mode drafts",
     "build": "astro build",
     "preview": "astro preview",
     "typecheck": "astro check",
-    "test": "astro build && tsx --test \"tests/**/*.test.ts\""
+    "test": "astro build && astro build --mode drafts --outDir dist-drafts && tsx --test \"tests/**/*.test.ts\""
   },
   "dependencies": {
+    "@astrojs/mdx": "8.0.3",
     "@astrojs/react": "7.0.1",
+    "@astrojs/rss": "4.0.19",
     "@astrojs/sitemap": "3.7.4",
     "@phosphor-icons/react": "^2.1.10",
     "@vercel/analytics": "2.0.1",
