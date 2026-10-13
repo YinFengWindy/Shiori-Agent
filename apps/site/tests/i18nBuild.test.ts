@@ -11,11 +11,13 @@ import {
   breadcrumbsOf,
   dist as site,
   distPathOf,
+  hreflangsOf,
   imgTagsOf,
   isRecord,
   jsonLdOf,
   metaContent,
   topBarHomeHref,
+  visibleTextOf,
 } from "./support/builtSite";
 import { runLoaderGate } from "./support/loaderGate";
 import { runLoaderInputGuard } from "./support/loaderInputGuard";
@@ -30,11 +32,6 @@ import { runLoaderInputGuard } from "./support/loaderInputGuard";
 
 const zhHome = site.read("index.html");
 const enHome = site.read("en/index.html");
-
-/** A page's `<link rel="alternate" hreflang>` links, in order. */
-function hreflangsOf(html: string) {
-  return [...html.matchAll(/<link rel="alternate" hreflang="([^"]+)" href="([^"]+)">/g)].map(([, hreflang, href]) => ({ hreflang, href }));
-}
 
 /** Every language switch link of a page: where it leads, what it shows, its name, and whether it is the corner one. */
 function languageSwitchesOf(html: string) {
@@ -53,15 +50,6 @@ function languageSwitchesOf(html: string) {
 /** Text as Astro writes it into an element: `&`, `<`, `>` and quotes escaped. */
 function asHtmlText(text: string) {
   return text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
-}
-
-/** A page's visible text: scripts, styles and tags dropped. */
-function visibleTextOf(html: string) {
-  const body = html.slice(html.indexOf("<body>"));
-  return body
-    .replace(/<script\b.*?<\/script>/gs, " ")
-    .replace(/<style\b.*?<\/style>/gs, " ")
-    .replace(/<[^>]+>/g, " ");
 }
 
 /** Chinese characters. */
@@ -165,8 +153,8 @@ describe("English home page (#806)", () => {
   it("labels the top bar, footer and music switch in English, and leads home to the English download state", () => {
     assert.equal(topBarHomeHref(enHome), "/en/#download");
     assert.match(enHome, /<nav class="site-header-bar" aria-label="Site navigation">/);
-    assert.match(enHome, /<a href="\/blog\/"[^>]*>Blog<\/a>/);
-    assert.match(enHome, /<a href="\/changelog\/"[^>]*>Changelog<\/a>/);
+    assert.match(enHome, /<a href="\/en\/blog\/"[^>]*>Blog<\/a>/);
+    assert.match(enHome, /<a href="\/en\/changelog\/"[^>]*>Changelog<\/a>/);
     // The bar's narrow space has the short download label.
     const bar = enHome.match(/<header class="site-header"[^>]*>(.*?)<\/header>/s)?.[1] ?? "";
     assert.match(bar, /data-download-installer>.*?<span>Download<span data-download-version><\/span><\/span><\/a>/s);
@@ -201,8 +189,8 @@ describe("language pairing (#806)", () => {
     assert.equal(metaContent(zhHome, "property", "og:locale:alternate"), "en_US");
   });
 
-  it("claims no alternate for the pages in Chinese only (the blog and changelog until #807)", () => {
-    for (const page of ["blog/index.html", "changelog/index.html", "blog/ai-companion-vs-chatbot/index.html"]) {
+  it("claims no alternate for a page in Chinese only (a post without its English version, #807)", () => {
+    for (const page of ["blog/affection/index.html"]) {
       const html = site.read(page);
       assert.deepEqual(hreflangsOf(html), [], page);
       assert.doesNotMatch(html, /og:locale:alternate/, page);
@@ -219,7 +207,7 @@ describe("language pairing (#806)", () => {
     for (const home of [`${ORIGIN}/`, `${ORIGIN}/en/`]) {
       assert.deepEqual(urls.find((url) => url.loc === home)?.links, pair, `${home} alternates`);
     }
-    assert.deepEqual(urls.find((url) => url.loc === `${ORIGIN}/blog/`)?.links, []);
+    assert.deepEqual(urls.find((url) => url.loc === `${ORIGIN}/blog/affection/`)?.links, []);
   });
 });
 
@@ -266,11 +254,16 @@ describe("language switch (#806)", () => {
     assert.deepEqual(guard({ type: "click", onPassthrough: false }), blocked);
   });
 
-  it("puts the switch in the top bar of the Chinese-only pages, to the English home page", () => {
-    for (const page of ["blog/index.html", "changelog/index.html", "blog/ai-companion-vs-chatbot/index.html"]) {
-      const html = site.read(page);
-      const switches = languageSwitchesOf(html);
-      assert.deepEqual(switches.map(({ href, text, corner }) => ({ href, text, corner })), [{ href: "/en/", text: "EN", corner: false }], page);
+  it("puts the switch in the top bar of the reading pages, to the same page in English, or the English blog for an untranslated post (#807)", () => {
+    const targets = {
+      "blog/index.html": "/en/blog/",
+      "changelog/index.html": "/en/changelog/",
+      "blog/ai-companion-vs-chatbot/index.html": "/en/blog/ai-companion-vs-chatbot/",
+      "blog/affection/index.html": "/en/blog/",
+    };
+    for (const [page, href] of Object.entries(targets)) {
+      const switches = languageSwitchesOf(site.read(page));
+      assert.deepEqual(switches.map((link) => ({ href: link.href, text: link.text, corner: link.corner })), [{ href, text: "EN", corner: false }], page);
     }
   });
 
@@ -284,13 +277,15 @@ describe("English prompt (#806)", () => {
   const promptOf = (html: string) => html.match(/<aside class="site-lang-prompt"[^>]*>.*?<\/aside>/s)?.[0];
 
   it("ships hidden on every Chinese page, in English, with Switch to the English page and Dismiss", () => {
-    for (const page of ["index.html", "blog/index.html", "changelog/index.html"]) {
+    const targets = { "index.html": "/en/", "blog/index.html": "/en/blog/", "changelog/index.html": "/en/changelog/", "blog/affection/index.html": "/en/blog/" };
+    for (const [page, href] of Object.entries(targets)) {
       const prompt = promptOf(site.read(page));
       assert.ok(prompt, `${page} has no prompt`);
       assert.match(prompt, /^<aside class="site-lang-prompt" lang="en" aria-label="Language" data-lang-prompt data-loader-passthrough hidden>/);
       assert.match(prompt, />View this site in English\?<\/p>/);
       assert.match(prompt, /<button type="button"[^>]*data-lang-prompt-dismiss>Dismiss<\/button>/);
-      assert.match(prompt, /<a href="\/en\/" hreflang="en"[^>]*data-lang-switch data-lang-prompt-switch>Switch<\/a>/);
+      assert.ok(prompt.includes(`<a href="${href}" hreflang="en"`), `${page}'s prompt does not lead to ${href}`);
+      assert.match(prompt, /data-lang-switch data-lang-prompt-switch>Switch<\/a>/);
     }
   });
 

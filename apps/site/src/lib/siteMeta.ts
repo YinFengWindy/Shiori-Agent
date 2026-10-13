@@ -28,13 +28,12 @@ export function homeDownloadHref(locale: Locale): string {
 /**
  * The site's own sections beside the home page, in the languages they
  * exist in (`PageVersions`): the top bar links each in the page's language,
- * or in Chinese while it has no English version (the English blog and
- * changelog come with #807).
+ * or in Chinese where it has no version in it.
  */
 export const SITE_SECTIONS = {
-  blog: { zh: "/blog/" },
-  /** The site's own changelog page, built from the GitHub releases (#792). */
-  changelog: { zh: "/changelog/" },
+  blog: { zh: "/blog/", en: "/en/blog/" },
+  /** The site's own changelog page, built from the GitHub releases (#792), in both languages (#807). */
+  changelog: { zh: "/changelog/", en: "/en/changelog/" },
 } as const satisfies Record<string, PageVersions>;
 
 /** Outbound calls to action. */

@@ -117,11 +117,11 @@ function textOf(html: string) {
 }
 
 /**
- * A page's breadcrumb trail (#797): its steps as shown, and the
+ * A page's breadcrumb trail (#797), in any language: its steps as shown, and the
  * BreadcrumbList structured data inside it. Exactly one trail per page.
  */
 export function breadcrumbsOf(html: string) {
-  const navs = [...html.matchAll(/<nav class="site-breadcrumbs" aria-label="面包屑">(.*?)<\/nav>/gs)];
+  const navs = [...html.matchAll(/<nav class="site-breadcrumbs" aria-label="[^"]+">(.*?)<\/nav>/gs)];
   assert.equal(navs.length, 1, "expected exactly one breadcrumb nav");
   const nav = navs[0][1];
   const steps = [...nav.matchAll(/<li class="site-breadcrumbs-item">(.*?)<\/li>/gs)].map(([, item]) => {
@@ -169,4 +169,18 @@ export function sectionIndexOf(html: string) {
 /** The `id` of every element of an HTML fragment (only `tag` elements, if given), in order. */
 export function idsOf(html: string, tag = "[a-z][a-z0-9-]*") {
   return [...html.matchAll(new RegExp(String.raw`<${tag}\b[^>]*\sid="([^"]+)"`, "g"))].map((match) => match[1]);
+}
+
+/** A page's `<link rel="alternate" hreflang>` links, in order. */
+export function hreflangsOf(html: string) {
+  return [...html.matchAll(/<link rel="alternate" hreflang="([^"]+)" href="([^"]+)">/g)].map(([, hreflang, href]) => ({ hreflang, href }));
+}
+
+/** A page's visible text: scripts, styles and tags dropped. */
+export function visibleTextOf(html: string) {
+  const body = html.slice(html.indexOf("<body>"));
+  return body
+    .replace(/<script\b.*?<\/script>/gs, " ")
+    .replace(/<style\b.*?<\/style>/gs, " ")
+    .replace(/<[^>]+>/g, " ");
 }

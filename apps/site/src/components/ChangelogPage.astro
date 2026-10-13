@@ -1,0 +1,92 @@
+---
+import { pageTitle, siteText } from "../i18n";
+import { LOCALE_INFO, type Locale, languageSwitchHref } from "../i18n/locales";
+import SiteLayout from "../layouts/SiteLayout.astro";
+import { RELEASE_NOTES_LOCALE, formatReleaseDate, loadChangelog } from "../lib/changelog";
+import { SITE_SECTIONS } from "../lib/siteMeta";
+import Breadcrumbs from "./Breadcrumbs.astro";
+import SectionIndex from "./SectionIndex.astro";
+import SiteFooter from "./SiteFooter.astro";
+import SiteHeader from "./SiteHeader.astro";
+import "../styles/reading.css";
+import "../styles/changelog.css";
+
+/**
+ * The changelog (#792) in one language (#807: `/changelog/`,
+ * `/en/changelog/`): every published GitHub release, newest first — the
+ * version, its day, a link to the release on GitHub and its notes — on the
+ * blog's reading columns. Built from the GitHub API at build time
+ * (`lib/changelog.ts`); a release published later reaches the page through
+ * the redeploy workflow (.github/workflows/site-redeploy-on-release.yml).
+ * A breadcrumb leads back home and an index of the versions (each with its
+ * day) jumps to any of them (#797): beside the list on wide screens, folded
+ * under the heading on narrow ones (SectionIndex.astro). Dated by the
+ * newest release (#799).
+ *
+ * The notes are shown as written, in Chinese (`RELEASE_NOTES_LOCALE`): a
+ * page in another language says so under its heading and marks the notes'
+ * language on them.
+ */
+interface Props {
+  locale: Locale;
+}
+
+const { locale } = Astro.props;
+const text = siteText(locale).changelog;
+const versions = SITE_SECTIONS.changelog;
+const languageHref = languageSwitchHref(locale, versions);
+// The notes' own language, where the page is in another one.
+const notesLang = locale === RELEASE_NOTES_LOCALE ? undefined : LOCALE_INFO[RELEASE_NOTES_LOCALE].htmlLang;
+const entries = await loadChangelog();
+const [newest] = entries;
+const versionIndex = entries.map((entry) => ({
+  id: entry.version,
+  label: entry.version,
+  level: 0 as const,
+  note: formatReleaseDate(entry.publishedAt, locale),
+}));
+---
+
+<SiteLayout
+  locale={locale}
+  versions={versions}
+  languageHref={languageHref}
+  title={pageTitle(text.title, locale)}
+  description={text.description}
+  updated={newest?.publishedAt}
+>
+  <SiteHeader locale={locale} mode="fixed" current="changelog" languageHref={languageHref} />
+  <main class="site-reading">
+    <div class="site-section-layout">
+      <div class="site-changelog site-section-layout-main">
+        <header>
+          <Breadcrumbs locale={locale} trail={[{ label: text.title, href: versions[locale] }]} />
+          <h1 class="site-reading-heading site-story-type">{text.title}</h1>
+          {notesLang && <p class="site-reading-meta site-changelog-notes-language">{text.notesLanguage}</p>}
+        </header>
+        <SectionIndex variant="inline" title={text.versions} entries={versionIndex} />
+        {
+          entries.map((entry) => (
+            <article class="site-reading-column site-changelog-release" id={entry.version} aria-labelledby={`${entry.version}-title`}>
+              <header class="site-changelog-head">
+                <h2 class="site-reading-title site-story-type" id={`${entry.version}-title`}>
+                  {entry.version}
+                </h2>
+                <p class="site-reading-meta">
+                  <time datetime={entry.publishedAt.toISOString()}>{formatReleaseDate(entry.publishedAt, locale)}</time>
+                  <span aria-hidden="true">·</span>
+                  <a href={entry.url} rel="noopener" class="site-changelog-source">
+                    {text.viewOnGitHub}
+                  </a>
+                </p>
+              </header>
+              <div class="site-prose" lang={notesLang} set:html={entry.html} />
+            </article>
+          ))
+        }
+      </div>
+      <SectionIndex variant="aside" title={text.versions} entries={versionIndex} />
+    </div>
+  </main>
+  <SiteFooter locale={locale} />
+</SiteLayout>

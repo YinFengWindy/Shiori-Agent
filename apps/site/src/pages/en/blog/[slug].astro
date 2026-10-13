@@ -1,0 +1,15 @@
+---
+import BlogPostPage from "../../../components/BlogPostPage.astro";
+import { type PostPageProps, postStaticPaths } from "../../../lib/blog";
+
+/** A blog post in English, `/en/blog/<slug>/`: the translated posts only (#807; components/BlogPostPage.astro). */
+export function getStaticPaths() {
+  return postStaticPaths("en");
+}
+
+type Props = PostPageProps;
+
+const { post, versions } = Astro.props;
+---
+
+<BlogPostPage locale="en" post={post} versions={versions} />

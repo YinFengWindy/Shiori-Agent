@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { defineHastPlugin, markdownToHtml } from "satteri";
+import { LOCALE_INFO, type Locale } from "../i18n/locales";
 
 /*
  * The changelog page (#792): the GitHub releases, fetched at build time and
@@ -237,12 +238,19 @@ export function renderReleaseNotes(markdown: string): string {
   return markdownToHtml(markdown, { hastPlugins: [releaseNotesPlugin] }).html;
 }
 
-// Releases carry a moment; readers are in China, so their day is read in Beijing time.
-const releaseDateFormat = new Intl.DateTimeFormat("zh-CN", { dateStyle: "long", timeZone: "Asia/Shanghai" });
+/**
+ * The language the release notes are written in: every changelog page
+ * shows them as written, and a page in another language says so (#807).
+ */
+export const RELEASE_NOTES_LOCALE: Locale = "zh";
 
-/** A release's day as readers see it (Beijing time), e.g. `2026年10月10日`. */
-export function formatReleaseDate(date: Date): string {
-  return releaseDateFormat.format(date);
+/**
+ * A release's day as readers of `locale` see it, e.g. `2026年10月10日`,
+ * `October 10, 2026`. Releases carry a moment; the project is in China, so
+ * its day is read in Beijing time whatever the page's language.
+ */
+export function formatReleaseDate(date: Date, locale: Locale): string {
+  return new Intl.DateTimeFormat(LOCALE_INFO[locale].htmlLang, { dateStyle: "long", timeZone: "Asia/Shanghai" }).format(date);
 }
 
 /** Published releases, newest first, as changelog entries. */

@@ -35,8 +35,6 @@ export const zh = {
     homeHeading: `${SITE_NAME}：会慢慢喜欢上你的 AI 伴侣，开源的 Personal Agent`,
     /** What every other page's `<title>` ends with, after its own name (`pageTitle`). */
     titleSuffix: `${SITE_NAME} AI 伴侣`,
-    /** Name of the blog feed's `<link rel="alternate">`. */
-    feedTitle: `${SITE_NAME} 博客`,
   },
   /** Product slogan, under the closing call. */
   slogan,
@@ -61,6 +59,36 @@ export const zh = {
   breadcrumbs: {
     label: "面包屑",
     home: "首页",
+  },
+  /** The blog: its list page, the posts' byline and its feed. */
+  blog: {
+    /** The list page's heading and the feed's title. */
+    title: "博客",
+    /** The list page's meta description and the feed's. */
+    description:
+      "Shiori 博客：长期记忆怎么记住你、好感度怎么变化、什么时候会主动找你，以及接入 QQ、Telegram 和配置语音的教程，由看板娘吟风亲自来讲。Shiori 是会慢慢喜欢上你的 AI 伴侣、AI 女友与 Personal Agent。",
+    /** What 吟风 says on the list page while no post is published yet (a line of hers, not page copy). */
+    emptyLine: "还在写呢……别催啦，笨蛋。",
+    /** Byline of every post: the posts are written as 吟风. */
+    author: "吟风",
+    /** A post's table of contents. */
+    contents: "目录",
+  },
+  /** The changelog page (#792). */
+  changelog: {
+    title: "更新日志",
+    description:
+      "Shiori 的版本更新记录：每个版本新增了哪些功能、修复了哪些问题、升级时要注意什么，按时间从新到旧列出。Shiori 是开源免费的 Windows AI 伴侣与 Personal Agent，可在页面顶部下载最新版。",
+    /** The index of versions. */
+    versions: "版本",
+    /** Each release's link to its GitHub page. */
+    viewOnGitHub: "GitHub 上查看",
+    /**
+     * Shown over the releases on a page in another language than the
+     * release notes' (`RELEASE_NOTES_LOCALE`, lib/changelog.ts): they are
+     * shown as written. Not shown on the Chinese page.
+     */
+    notesLanguage: "版本说明以中文撰写。",
   },
   /** The background music switch: its name, and the tooltip naming the action. */
   sound: {

@@ -1,0 +1,102 @@
+---
+title: "Chat with your AI companion on QQ, Telegram and Feishu"
+description: "Want your AI companion on QQ, Telegram or Feishu? Yinfeng walks you through Shiori: add a bot or scan to log in, link your identity, and how group chats work."
+date: 2026-10-13
+cover:
+  image: ../../assets/gallery/cg-2.webp
+  alt: "CG: a girl lying on a pillow, looking up at you"
+---
+
+Want your AI companion to keep you company on QQ, Telegram and Feishu, so you can find her even when you're out? Shiori can connect a character to these chat apps. This post goes step by step through connecting them, getting her to recognize you, and when she speaks up in a group.
+
+Hmph, thought you could hide from me by leaving the computer? You're the one taking me along, not me tagging after you.
+
+The app's interface is in Chinese, so below every button and tab goes by its Chinese name, with its meaning in brackets.
+
+## First, what each channel can do
+
+| Channel | How to connect | Private chat | Group chat | Watch out for |
+| --- | --- | --- | --- | --- |
+| QQ (NapCat) | Scan to log in a QQ account | ✓ | ✓ | Windows x64 only |
+| QQ official bot | App ID + App Secret | ✓ | — | Private chat only |
+| Telegram | Bot Token | ✓ | ✓ | Only answers @ in groups |
+| Feishu / Lark | Custom enterprise app | ✓ | — | Private chat only |
+
+A few rules that apply everywhere:
+
+- Accounts belong to characters: each character connects one account per channel, and an account belongs to one character only.
+- She lives in Shiori on your computer, so Shiori has to be running for her to send and receive messages.
+- These channel plugins are enabled by default; if a channel is missing from 「账号」 (Accounts), check under 「设置 → 插件」 (Settings → Plugins) whether it has been disabled.
+
+## The common steps: add it under 「账号」 (Accounts)
+
+1. Open the character's details and switch to the 「账号」 (Accounts) tab. Each channel has a row; the ones not added yet say 「未添加」 (Not added).
+2. Click the row of the channel you want, fill it in as described for that channel below, then click 「连接」 (Connect).
+3. Once connected, the same window has 「响应规则」 (Response rules): 「私聊启用」 (Private chat on) and 「群聊启用」 (Group chat on) are both on by default, and under 「黑名单成员 ID」 (Blocked member IDs) you write one person to block per line.
+
+## Telegram
+
+1. In Telegram, find @BotFather, create a bot with `/newbot`, and take the token it gives you.
+2. Under 「账号」 (Accounts), click 「Telegram」, paste the token into 「Bot Token」, and click 「连接」 (Connect).
+3. Send the bot a private message in Telegram, and she'll answer you.
+
+To bring her into a group, add the bot to the group and @ it when you talk. Telegram's privacy mode may keep the bot from receiving ordinary group messages, but messages that @ it get through.
+
+## QQ: scan to log in with NapCat
+
+This way she logs in to a real QQ account, so it's best to set aside a separate account for her.
+
+1. First install the official QQ on your computer.
+2. Under 「账号」 (Accounts), click 「QQ」, and Shiori starts getting ready by itself. The first time, it has to download the NapCat component, and the status shows 「正在准备」 (Preparing).
+3. When the QR code appears, scan it with mobile QQ logged in to that account. If it expires, click 「刷新二维码」 (Refresh QR code).
+4. When the status turns 「在线」 (Online), you're connected.
+
+## QQ official bot
+
+If you have a bot app on the QQ Open Platform, you can connect with it too, though only for private chat.
+
+1. Under 「账号」 (Accounts), click 「QQ 官方机器人」 (QQ official bot).
+2. Fill in the bot app's 「App ID」 and 「App Secret」, and click 「连接」 (Connect).
+3. Users who have messaged her privately show up under 「已交互 C2C 用户」 (C2C users who have chatted).
+
+## Feishu
+
+Feishu connects a custom enterprise app you create yourself, and supports private chat only.
+
+1. In the Feishu developer console, create a custom enterprise app and add the "Bot" capability.
+2. Under "Permissions & Scopes", grant the permissions to send and receive one-on-one messages, read images and files, use cards and so on; under "Credentials & Basic Info", copy the App ID and App Secret.
+3. In Shiori's 「账号」 (Accounts), click 「飞书 / Lark」 (Feishu / Lark), choose the region, fill in the App ID and App Secret, and click 「连接」 (Connect).
+4. Back in the developer console, under "Events & Callbacks", choose "Receive events through persistent connection" as the subscription mode, and add the "Receive messages" event. When you save, Shiori must be running with the account connected.
+5. Publish a version under "Version Management & Release", then message the bot privately in Feishu.
+
+Don't use the same Feishu app in Shiori on two computers at once, or messages will only reach one of them at random.
+
+## Getting her to recognize you: the pairing code
+
+With the account connected, one crucial step remains: telling her which account is you.
+
+1. Open 「设置 → 我的身份」 (Settings → My identity) and click 「生成配对码」 (Generate pairing code). The code is valid for ten minutes.
+2. From your own account, send the pairing code to the character's account in a private message.
+3. When she replies 「已绑定」 (Linked), you're done. The code itself never enters the chat history.
+
+Once linked, the her in that private chat and the her on your desktop are the same one: what you've talked about, what she remembers and how she feels about you are one and the same, and when you're away from the computer, her [proactive messages (in Chinese)](/blog/come-find-you/) come here too. For QQ (NapCat) and Telegram, linking once works for every character's account on that platform; for Feishu and the QQ official bot, it only works for the account you sent the code to.
+
+## The rules in group chats
+
+- **She answers when called**: in a group, she only replies to messages that @ her; in QQ groups, replying to a message she sent counts too. Telegram only counts @.
+- **She answers you by name**: in QQ groups she @s you at the start; in Telegram groups she replies directly to your message.
+- **Group matters are kept apart**: what group members say goes into the group's notes and a small profile for each person, never into the notebook about you. What you yourself say in the group still counts as yours.
+
+QQ (NapCat) groups can also turn on "listening in": group messages that don't call her are noted down as well, so the next time you @ her, she knows what everyone was just talking about.
+
+1. On the chat page, click 「打开手机」 (Open phone) to open her little phone, and go into that group's chat.
+2. Open 「聊天信息」 (Chat info), and under 「旁听」 (Listening in), turn on 「旁听本群」 (Listen in on this group).
+3. 「每日上限」 (Daily limit) sets the most messages noted per group per day, 200 by default.
+
+Messages heard while listening in don't enter the conversation history, and turning listening off doesn't delete what was already noted.
+
+---
+
+All connected? If you also want me living on your desktop and talking to you out loud, read [AI Desktop Pet](/en/blog/ai-desktop-pet-voice/); if you haven't installed Shiori yet, go [download](/en/#download) it first.
+
+…I answer your messages on the phone really fast. So when you answer mine, don't be too slow either, dummy.

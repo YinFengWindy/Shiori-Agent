@@ -1,6 +1,6 @@
 /*
- * Small DOM helpers shared by the site's page scripts. Fail fast: a page
- * script that cannot find what its markup promised throws, naming it.
+ * A small fail-fast helper shared by the site's page scripts: what the
+ * markup promised is on the page, or an error names what is missing.
  */
 
 /** `value` (an element, an attribute), or an error naming what is missing. */

@@ -46,7 +46,7 @@ const text = siteText(locale);
 const versions: PageVersions = { zh: localeHome("zh"), en: localeHome("en") };
 const languageHref = languageSwitchHref(locale, versions);
 const release = await loadLatestRelease();
-const posts = await getPublishedPosts();
+const posts = await getPublishedPosts(locale);
 const updated = latestDate([release.publishedAt, ...posts.map((post) => post.data.date)]);
 const structuredDataJson = inlineJson(
   homeJsonLd({ site: Astro.site, locale, logoPath: appIconImage.src, imagePath: socialPreviewImage.src, release }),
