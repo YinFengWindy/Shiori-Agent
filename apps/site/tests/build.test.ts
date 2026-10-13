@@ -5,7 +5,24 @@ import { describe, it } from "node:test";
 import { GALLERY_PHOTOS, GALLERY_THUMB_HEIGHT, GALLERY_THUMB_MAX_BYTES } from "../src/content/gallery";
 import { NARRATIVE_LINES } from "../src/content/narrative";
 import { SHOWCASE_CLIP_IDS, SHOWCASE_FEATURES, SHOWCASE_STILL_MAX_BYTES } from "../src/content/showcase";
-import { ORIGIN, breadcrumbsOf, dist as site, distPathOf, idsOf, metaContent, sectionIndexOf, sitemapPages, topBarHomeHref } from "./support/builtSite";
+import {
+  ORIGIN,
+  assertDescription,
+  breadcrumbsOf,
+  dist as site,
+  distPathOf,
+  draftsDist,
+  idsOf,
+  imgTagsOf,
+  isRecord,
+  jsonLdOf,
+  metaContent,
+  pictureAt,
+  sectionIndexOf,
+  sitemapEntries,
+  sitemapPages,
+  topBarHomeHref,
+} from "./support/builtSite";
 import { runLoaderGate } from "./support/loaderGate";
 
 /*
@@ -21,10 +38,82 @@ const readDist = site.read;
 describe("home page HTML", () => {
   const html = readDist("index.html");
 
-  it("declares the language and a non-empty title and description", () => {
+  it("declares the language, and a title and description carrying the companion search words (#799)", () => {
     assert.match(html, /<html lang="zh-CN">/);
-    assert.match(html, /<title>Shiori · 会慢慢喜欢上你的 AI 伴侣<\/title>/);
-    assert.ok(metaContent(html, "name", "description").includes("AI 伴侣"));
+    assert.match(html, /<title>Shiori · 会慢慢喜欢上你的 AI 伴侣 · 开源免费的 AI 桌宠<\/title>/);
+    assertDescription(metaContent(html, "name", "description"), ["Shiori", "AI 伴侣", "AI 女友", "AI 桌宠", "开源免费", "Windows"]);
+  });
+
+  it("has one h1, the app icon (decorative) with the keyword title as its visually hidden text (#799)", () => {
+    const headings = [...html.matchAll(/<h1[ >].*?<\/h1>/gs)].map((match) => match[0]);
+    assert.equal(headings.length, 1);
+    assert.match(
+      headings[0],
+      /^<h1><img src="\/icons\/icon-512\.png"[^>]* alt=""[^>]*><span class="sr-only">Shiori：会慢慢喜欢上你的开源 AI 伴侣与桌宠<\/span><\/h1>$/,
+    );
+    const styles = [...html.matchAll(/<style>(.*?)<\/style>/gs)].map((match) => match[1]).join("\n");
+    assert.match(styles, /\.sr-only\{[^}]*position:absolute/);
+  });
+
+  it("writes an alt attribute out on every picture: empty for decoration, words for the rest (#799)", () => {
+    const images = imgTagsOf(html);
+    assert.ok(images.length > 0);
+    for (const image of images) assert.match(image, / alt="[^"]*"/, `no alt="…" on ${image}`);
+    // Words for what carries something: the narrative's CGs, the showcase stills, the strip's own prints.
+    const narrativeCgs = new Set(NARRATIVE_LINES.flatMap((line) => (line.cg ? [line.cg] : [])));
+    const described = images.filter((image) => / alt="[^"]+"/.test(image));
+    assert.equal(described.length, narrativeCgs.size + SHOWCASE_FEATURES.length + GALLERY_PHOTOS.length);
+  });
+
+  it("describes the site, its publisher and the app as structured data, the app's version from the newest release (#799)", async () => {
+    const [data, ...others] = jsonLdOf(html);
+    assert.equal(others.length, 0, "the home page has one JSON-LD block");
+    assert.ok(isRecord(data) && data["@context"] === "https://schema.org" && Array.isArray(data["@graph"]));
+    const graph = data["@graph"].filter(isRecord);
+    const byType = (type: string) => {
+      const items = graph.filter((item) => item["@type"] === type);
+      assert.equal(items.length, 1, `expected one ${type}`);
+      return items[0];
+    };
+    const organization = byType("Organization");
+    const website = byType("WebSite");
+    const app = byType("SoftwareApplication");
+    const publisher = { "@id": `${ORIGIN}/#organization` };
+    assert.equal(organization["@id"], publisher["@id"]);
+    assert.equal(organization.name, "Shiori");
+    assert.equal(organization.url, `${ORIGIN}/`);
+    assert.ok(isRecord(organization.logo) && typeof organization.logo.url === "string");
+    assert.ok(site.has(distPathOf(organization.logo.url)), "the logo is not in the build output");
+    assert.deepEqual(organization.sameAs, ["https://github.com/YinFengWindy/Shiori-Agent"]);
+    assert.deepEqual(
+      { name: website.name, url: website.url, inLanguage: website.inLanguage, publisher: website.publisher },
+      { name: "Shiori", url: `${ORIGIN}/`, inLanguage: "zh-CN", publisher },
+    );
+    assert.deepEqual(
+      { ...app, image: undefined },
+      {
+        "@type": "SoftwareApplication",
+        "@id": `${ORIGIN}/#software`,
+        name: "Shiori",
+        description: metaContent(html, "name", "description"),
+        url: `${ORIGIN}/`,
+        image: undefined,
+        operatingSystem: "Windows",
+        applicationCategory: "LifestyleApplication",
+        inLanguage: "zh-CN",
+        isAccessibleForFree: true,
+        offers: { "@type": "Offer", price: "0", priceCurrency: "CNY" },
+        downloadUrl: "https://github.com/YinFengWindy/Shiori-Agent/releases/latest",
+        // The newest published full release of tests/fixtures/releases.json.
+        softwareVersion: "0.5.3",
+        dateModified: "2026-10-10T10:36:03.000Z",
+        license: "https://github.com/YinFengWindy/Shiori-Agent/blob/main/LICENSE",
+        author: publisher,
+        publisher,
+      },
+    );
+    assert.equal(app.image, metaContent(html, "property", "og:image"));
+    assert.deepEqual(await pictureAt(site, String(app.image)), { format: "jpeg", width: 1200, height: 630 });
   });
 
   it("points canonical and og:url at the site root on the production origin", () => {
@@ -34,7 +123,7 @@ describe("home page HTML", () => {
 
   it("carries Open Graph and Twitter card tags with an absolute, emitted image", () => {
     assert.equal(metaContent(html, "property", "og:type"), "website");
-    assert.equal(metaContent(html, "property", "og:title"), "Shiori · 会慢慢喜欢上你的 AI 伴侣");
+    assert.equal(metaContent(html, "property", "og:title"), "Shiori · 会慢慢喜欢上你的 AI 伴侣 · 开源免费的 AI 桌宠");
     assert.equal(metaContent(html, "property", "og:description"), metaContent(html, "name", "description"));
     const image = metaContent(html, "property", "og:image");
     // JPEG, not WebP: some link previewers cannot render WebP cards.
@@ -62,9 +151,8 @@ describe("home page HTML", () => {
     const lastLine = NARRATIVE_LINES.at(-1)?.text ?? "";
     assert.ok(html.lastIndexOf(`>${lastLine}</p>`) < at, "the download call must follow the narrative lines in reading order");
     const call = html.slice(at, html.indexOf("site-narrative-snaps", at));
-    const icon = call.match(/<h1><img [^>]*src="([^"]+)"[^>]*alt="Shiori"|<h1><img [^>]*alt="Shiori"[^>]*src="([^"]+)"/);
-    assert.ok(icon, "the title is the app icon with alt Shiori");
-    const iconSrc = icon[1] ?? icon[2];
+    const iconSrc = call.match(/<h1><img src="([^"]+)"/)?.[1];
+    assert.ok(iconSrc, "the title is the app icon");
     assert.ok(existsSync(resolve(dist, iconSrc.replace(/^\//, ""))), `app icon ${iconSrc} is not in the build output`);
     assert.match(call, />把我带回家吧，笨蛋。<\/p>/);
     assert.match(call, />会慢慢喜欢上你的 AI 伴侣<\/p>/);
@@ -258,8 +346,7 @@ describe("home page HTML", () => {
       const prints = [...strip.matchAll(/<li class="site-photo"([^>]*)><img ([^>]*)><\/li>/g)].map(([, item, img]) => ({
         hidden: item.includes('aria-hidden="true"'),
         lazy: / loading="lazy"/.test(img),
-        // An empty alt is emitted as a bare `alt`.
-        alt: / alt( |$)/.test(img) ? "" : img.match(/ alt="([^"]*)"/)?.[1],
+        alt: img.match(/ alt="([^"]*)"/)?.[1],
         src: img.match(/ src="([^"]+)"/)?.[1],
       }));
       assert.ok(prints.length > 0 && prints.length % 2 === 0, "the row is listed twice for a seamless loop");
@@ -365,6 +452,45 @@ describe("crawler files", () => {
     assert.ok(pages.includes(`${ORIGIN}/`), `home page missing from sitemap: ${pages.join(", ")}`);
     for (const page of pages) distPathOf(page);
   });
+
+  it("dates every sitemap page by the update time it states, never the build's clock (#799)", () => {
+    const entries = sitemapEntries(site);
+    for (const { loc, lastmod } of entries) {
+      assert.ok(lastmod, `${loc} has no lastmod`);
+      assert.equal(lastmod, new Date(metaContent(site.read(distPathOf(loc)), "property", "og:updated_time")).toISOString(), `${loc}'s lastmod is not its page's`);
+    }
+    const lastmodOf = (url: string) => entries.find((entry) => entry.loc === url)?.lastmod ?? "";
+    // The newest published release of tests/fixtures/releases.json.
+    assert.equal(lastmodOf(`${ORIGIN}/changelog/`), "2026-10-10T10:36:03.000Z");
+    // The blog list: its newest post. The home page: the newer of that and the newest release.
+    const posts = entries.filter((entry) => /\/blog\/[^/]+\/$/.test(entry.loc)).map((entry) => entry.lastmod ?? "");
+    const newestPost = posts.reduce((newest, day) => (day > newest ? day : newest), "");
+    assert.equal(lastmodOf(`${ORIGIN}/blog/`), newestPost);
+    assert.equal(lastmodOf(`${ORIGIN}/`), [newestPost, lastmodOf(`${ORIGIN}/changelog/`)].sort().at(-1));
+  });
+});
+
+/*
+ * The search engines' verification tags (#799): the drafts-mode test build
+ * runs with tests/fixtures/site-verification.env, the production-mode one
+ * without it.
+ */
+describe("site verification tags", () => {
+  const tags = (html: string) => [...html.matchAll(/<meta name="(google-site-verification|msvalidate\.01|baidu-site-verification)" content="([^"]*)">/g)].map(([, name, content]) => ({ name, content }));
+
+  it("names each engine's token when the build has it, on every page", () => {
+    for (const page of ["index.html", "blog/index.html", "changelog/index.html"]) {
+      assert.deepEqual(tags(draftsDist.read(page)), [
+        { name: "google-site-verification", content: "test-google-token" },
+        { name: "msvalidate.01", content: "TEST-BING-TOKEN" },
+        { name: "baidu-site-verification", content: "codeva-test-baidu" },
+      ]);
+    }
+  });
+
+  it("writes none when the build has no tokens", () => {
+    for (const page of ["index.html", "blog/index.html", "changelog/index.html"]) assert.deepEqual(tags(readDist(page)), []);
+  });
 });
 
 /*
@@ -376,13 +502,13 @@ describe("changelog page (#792)", () => {
   const html = readDist("changelog/index.html");
   const changelogUrl = `${ORIGIN}/changelog/`;
 
-  it("carries its own title, description, canonical URL and Open Graph tags", () => {
-    assert.match(html, /<title>更新日志 · Shiori<\/title>/);
-    assert.ok(metaContent(html, "name", "description").length > 0);
+  it("carries its own title and description, with the companion search words, canonical URL and Open Graph tags", () => {
+    assert.match(html, /<title>更新日志 · Shiori AI 伴侣<\/title>/);
+    assertDescription(metaContent(html, "name", "description"), ["Shiori", "AI 伴侣", "桌宠", "开源免费", "Windows"]);
     assert.match(html, new RegExp(`<link rel="canonical" href="${changelogUrl}">`));
     assert.equal(metaContent(html, "property", "og:url"), changelogUrl);
     assert.equal(metaContent(html, "property", "og:type"), "website");
-    assert.equal(metaContent(html, "property", "og:title"), "更新日志 · Shiori");
+    assert.equal(metaContent(html, "property", "og:title"), "更新日志 · Shiori AI 伴侣");
   });
 
   it("is in the sitemap", () => {

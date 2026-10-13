@@ -5,9 +5,12 @@ import react from "@astrojs/react";
 import sitemap from "@astrojs/sitemap";
 import { defineConfig } from "astro/config";
 import { imageBytesPlugin } from "./src/lib/imageQueries";
+import { sitemapLastmod } from "./src/lib/pageUpdated";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = resolve(here, "..", "..");
+// Each sitemap URL's lastmod is the day its built page states (#799).
+const lastmod = sitemapLastmod();
 
 /**
  * Shiori public website: fully static output, React only where a component
@@ -26,8 +29,9 @@ export default defineConfig({
     // about 5 s instead of showing the home page loader (#770) at once.
     inlineStylesheets: "always",
   },
-  // MDX: the blog posts (src/content/blog, content.config.ts).
-  integrations: [react(), mdx(), sitemap()],
+  // MDX: the blog posts (src/content/blog, content.config.ts). The lastmod
+  // integration comes before the sitemap's, which reads what it notes.
+  integrations: [react(), mdx(), lastmod.integration, sitemap({ serialize: lastmod.serialize })],
   vite: {
     // `picture.webp?bytes`: file sizes for the home page loader's progress.
     plugins: [imageBytesPlugin()],

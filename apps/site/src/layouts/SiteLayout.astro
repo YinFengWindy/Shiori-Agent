@@ -1,7 +1,9 @@
 ---
 import Analytics from "@vercel/analytics/astro";
-import { socialPreviewImage } from "../lib/siteAssets";
+import { UPDATED_TIME_PROPERTY } from "../lib/pageUpdated";
+import { type ShareImage, defaultShareImage } from "../lib/shareImage";
 import { SITE_DESCRIPTION, SITE_NAME, SITE_THEME_COLOR } from "../lib/siteMeta";
+import { siteVerificationMeta } from "../lib/siteVerification";
 import "../styles/site.css";
 
 /** Per-page head metadata; everything else is shared by every page. */
@@ -12,20 +14,29 @@ interface Props {
   description?: string;
   /** `og:type`: `article` for a blog post, `website` (default) otherwise. */
   ogType?: "website" | "article";
+  /** OG / Twitter picture, 1200×630 JPEG; defaults to the site's (`defaultShareImage`). */
+  image?: ShareImage;
+  /**
+   * When the page's content last changed (`og:updated_time`), which the
+   * sitemap repeats as its lastmod (lib/pageUpdated.ts); left out when unknown.
+   */
+  updated?: Date;
 }
 
 /**
  * Shared page shell: `lang="zh-CN"`, title, description, canonical URL,
  * Open Graph / Twitter card, theme color, icons, the sitemap and blog feed
- * links and Vercel Web Analytics. Every URL is absolute on `site` (astro.config.ts),
+ * links, the search engines' site-verification tags configured for the build
+ * (lib/siteVerification.ts) and Vercel Web Analytics. Every URL is absolute on `site` (astro.config.ts),
  * so crawlers see the canonical origin even on a preview deployment.
  */
-const { title, description = SITE_DESCRIPTION, ogType = "website" } = Astro.props;
+const { title, description = SITE_DESCRIPTION, ogType = "website", image = defaultShareImage, updated } = Astro.props;
 if (!Astro.site) throw new Error("astro.config.ts must set `site`: canonical and OG URLs are built from it");
 const canonicalUrl = new URL(Astro.url.pathname, Astro.site).href;
-const ogImageUrl = new URL(socialPreviewImage.image.src, Astro.site).href;
+const ogImageUrl = new URL(image.src, Astro.site).href;
 const sitemapUrl = new URL("sitemap-index.xml", Astro.site).href;
 const feedUrl = new URL("rss.xml", Astro.site).href;
+const verification = siteVerificationMeta(process.env);
 ---
 
 <!doctype html>
@@ -53,13 +64,16 @@ const feedUrl = new URL("rss.xml", Astro.site).href;
     <meta property="og:description" content={description} />
     <meta property="og:url" content={canonicalUrl} />
     <meta property="og:image" content={ogImageUrl} />
-    <meta property="og:image:width" content={String(socialPreviewImage.image.width)} />
-    <meta property="og:image:height" content={String(socialPreviewImage.image.height)} />
-    <meta property="og:image:alt" content={socialPreviewImage.alt} />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content={String(image.width)} />
+    <meta property="og:image:height" content={String(image.height)} />
+    <meta property="og:image:alt" content={image.alt} />
+    {updated && <meta property={UPDATED_TIME_PROPERTY} content={updated.toISOString()} />}
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content={title} />
     <meta name="twitter:description" content={description} />
     <meta name="twitter:image" content={ogImageUrl} />
+    {verification.map(({ name, content }) => <meta name={name} content={content} />)}
     {/* Page-specific metadata after the shared tags (article dates, structured data). */}
     <slot name="meta" />
   </head>
