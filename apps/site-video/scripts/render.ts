@@ -5,7 +5,7 @@
  *
  * The website does not show the videos any more (#790: on slow or flaky
  * lines they stalled and crowded out the page's pictures); it shows one
- * still per clip, rendered by scripts/stills.ts. This keeps the clips
+ * still per feature, captured from the real app by scripts/stills.ts. This keeps the clips
  * renderable for whenever a page wants them again (`pnpm run site:video`).
  *
  * Remotion renders in Chrome Headless Shell: `ensureBrowser()` downloads it

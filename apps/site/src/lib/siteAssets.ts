@@ -146,10 +146,10 @@ export const socialPreviewImage: SiteImage = {
 
 /**
  * The showcase stills (#790), by clip id (`SHOWCASE_CLIP_IDS` in
- * `content/showcase.ts`): one frame of each demo clip, rendered by
+ * `content/showcase.ts`): screenshots of the real desktop app, captured by
  * apps/site-video (`pnpm run site:stills`) and committed; the site build only
- * copies them. The page shows these instead of the clips themselves, which
- * stalled on slow or flaky lines.
+ * copies them. The page shows these instead of the demo clips, which stalled
+ * on slow or flaky lines.
  */
 const showcaseStills = import.meta.glob<ImageMetadata>("../assets/showcase/*.webp", { import: "default", eager: true });
 
