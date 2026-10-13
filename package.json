@@ -20,6 +20,8 @@
     "site:test": "pnpm --filter shiori-site run test",
     "site:typecheck": "pnpm --filter shiori-site run typecheck",
     "site:video": "pnpm --filter shiori-site-video run render",
+    "site:stills": "pnpm --filter shiori-site-video run stills",
+    "site:gallery": "pnpm --filter shiori-site-video run gallery",
     "site:video:typecheck": "pnpm --filter shiori-site-video run typecheck",
     "desktop:build": "pnpm run build:desktop",
     "desktop:dev": "pnpm --filter shiori-desktop run dev",

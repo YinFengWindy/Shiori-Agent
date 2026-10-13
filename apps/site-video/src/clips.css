@@ -34,12 +34,13 @@
   --clip-chat-bubble-radius: var(--radius-lg);
   --clip-chat-bubble-shadow: var(--shadow-soft);
 
-  /* The see-through blue -> lavender -> pink veil over the soft-focus app
-     window behind the channel windows. */
+  /* The light blue -> lavender -> pink veil over the app window behind the
+     channel windows: dense enough that the chat underneath recedes and the
+     three channel windows read first, without blurring it. */
   --clip-veil: linear-gradient(
     160deg,
-    color-mix(in srgb, var(--blue-150) 80%, transparent),
-    color-mix(in srgb, var(--lavender-100) 67%, transparent) 45%,
-    color-mix(in srgb, var(--pink-150) 80%, transparent)
+    color-mix(in srgb, var(--blue-150) 72%, transparent),
+    color-mix(in srgb, var(--lavender-100) 64%, transparent) 45%,
+    color-mix(in srgb, var(--pink-150) 72%, transparent)
   );
 }

@@ -77,6 +77,7 @@ const usedCgKeys = [...new Set(NARRATIVE_LINES.flatMap((line) => (line.cg ? [lin
       </noscript>
     </div>
     <div class="site-narrative-cgs" aria-hidden="true">
+      {/* No src but the first line's: the script below fetches each CG as its line draws near. */}
       {
         usedCgKeys.map((key) => {
           const cg = narrativeCgs[key];
@@ -127,6 +128,7 @@ const usedCgKeys = [...new Set(NARRATIVE_LINES.flatMap((line) => (line.cg ? [lin
 <script>
   import {
     createWheelGestureGate,
+    narrativeCgsToLoad,
     narrativeClickTarget,
     narrativeFinalOffset,
     narrativeStepAt,
@@ -143,6 +145,7 @@ const usedCgKeys = [...new Set(NARRATIVE_LINES.flatMap((line) => (line.cg ? [lin
   const lines = [...section.querySelectorAll<HTMLElement>("[data-narrative-line]")];
   const sprites = [...section.querySelectorAll<HTMLImageElement>("img[data-expression]")];
   const cgs = [...section.querySelectorAll<HTMLImageElement>("img[data-cg]")];
+  const lineCgs = lines.map((line) => line.dataset.cg);
   // Reduced motion keeps the static list layout (site.css): nothing to drive.
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
@@ -164,14 +167,22 @@ const usedCgKeys = [...new Set(NARRATIVE_LINES.flatMap((line) => (line.cg ? [lin
       }
       shownExpression = expression;
     }
-    for (const cg of cgs) {
-      const active = cg.dataset.cg === line.dataset.cg;
-      // CGs carry no src until the loader prefetches them (SiteLoader.astro);
-      // a line reached before that loads its own.
-      if (active && !cg.getAttribute("src") && cg.dataset.src) cg.src = cg.dataset.src;
-      cg.toggleAttribute("data-active", active);
-    }
+    for (const cg of cgs) cg.toggleAttribute("data-active", cg.dataset.cg === line.dataset.cg);
     shownIndex = index;
+  }
+
+  /**
+   * Fetch the CGs of the line on stage at `step` and of the next few
+   * (lib/narrativeModel.ts): the CGs carry no src (but the first line's)
+   * until their line draws near, so a reader who stops early, or a slow
+   * line, never spends bandwidth on the rest.
+   */
+  function loadCgsNear(step: number) {
+    const wanted = new Set(narrativeCgsToLoad(lineCgs, step));
+    for (const cg of cgs) {
+      const { cg: key, src } = cg.dataset;
+      if (key && src && wanted.has(key) && !cg.getAttribute("src")) cg.src = src;
+    }
   }
 
   function currentScroll() {
@@ -188,6 +199,7 @@ const usedCgKeys = [...new Set(NARRATIVE_LINES.flatMap((line) => (line.cg ? [lin
    * underneath, so stepping back fades it straight in again).
    */
   function showStep(step: number) {
+    loadCgsNear(step);
     show(Math.min(step, lines.length - 1));
     stage.toggleAttribute("data-final", step === lines.length);
   }

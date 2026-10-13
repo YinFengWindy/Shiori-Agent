@@ -3,8 +3,9 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
+import { GALLERY_PHOTOS, GALLERY_THUMB_HEIGHT, GALLERY_THUMB_MAX_BYTES } from "../src/content/gallery";
 import { NARRATIVE_LINES } from "../src/content/narrative";
-import { SHOWCASE_CLIP_IDS, SHOWCASE_CLIP_MAX_BYTES, SHOWCASE_FEATURES } from "../src/content/showcase";
+import { SHOWCASE_CLIP_IDS, SHOWCASE_FEATURES, SHOWCASE_STILL_MAX_BYTES } from "../src/content/showcase";
 
 /*
  * Assertions on the built site (`astro build` runs first, see the package's
@@ -148,10 +149,23 @@ describe("home page HTML", () => {
     const noscripts = [...html.matchAll(/<noscript><img src="([^"]+)"/g)].map((match) => match[1]);
     assert.equal(noscripts.length, 2, "the backdrop and the first sprite need a no-script copy");
     assert.ok(noscripts.some((src) => src.includes("/bg-day.")) && noscripts.some((src) => src.includes("/yinfeng-")));
-    // Nothing else may compete with them for the line at first.
+  });
+
+  it("leaves every narrative CG but the first line's without src: each is fetched as its line draws near", () => {
     const cgs = [...html.matchAll(/<img [^>]*class="site-narrative-cg"[^>]*>/g)].map((match) => match[0]);
     assert.ok(cgs.length > 0);
-    for (const cg of cgs) assert.match(cg, /^<img data-src="[^"]+"/);
+    const firstCg = NARRATIVE_LINES[0]?.cg;
+    for (const cg of cgs) {
+      const key = cg.match(/ data-cg="([^"]+)"/)?.[1];
+      assert.ok(key, `CG without data-cg: ${cg}`);
+      assert.match(cg, / data-src="\/_astro\/[^"]+"/);
+      if (key === firstCg) assert.match(cg, /^<img src="/);
+      else assert.doesNotMatch(cg, / src=/, `${key} must not download up front`);
+    }
+  });
+
+  it("has no video: nothing streams in behind the pictures", () => {
+    assert.doesNotMatch(html, /<video[\s>]|<source /);
   });
 
   it("knows the exact byte size of every picture the first screen may wait for", () => {
@@ -194,6 +208,8 @@ describe("home page HTML", () => {
     assert.match(script, /--site-loader-progress/);
     assert.match(script, /--site-loader-cap/);
     assert.match(script, /data-leaving/);
+    // The narrative's CGs load as their lines draw near (NarrativeStage.astro), not after the loader.
+    assert.doesNotMatch(script, /data-cg/);
   });
 
   describe("showcase after the narrative (#772)", () => {
@@ -216,28 +232,25 @@ describe("home page HTML", () => {
       }
     });
 
-    it("gives every clip a poster, a label, muted looping inline autoplay and nothing to download up front", () => {
-      const videos = [...showcase.matchAll(/<video [^>]*>.*?<\/video>/gs)].map((match) => match[0]);
+    it("shows every feature's still: an emitted WebP within budget, alt text, intrinsic size, lazy", () => {
       // One block per clip, in the clips' order.
       assert.deepEqual(SHOWCASE_FEATURES.map((feature) => feature.clip), [...SHOWCASE_CLIP_IDS]);
-      assert.equal(videos.length, SHOWCASE_FEATURES.length);
-      for (const [index, video] of videos.entries()) {
+      const blocks = [...showcase.matchAll(/<article id="([^"]+)" class="site-feature">(.*?)<\/article>/gs)];
+      assert.deepEqual(blocks.map((block) => block[1]), [...SHOWCASE_CLIP_IDS]);
+      for (const [index, [, , block]] of blocks.entries()) {
         const feature = SHOWCASE_FEATURES[index];
-        assert.ok(video.includes(` aria-label="${feature.clipLabel}"`), `${feature.clip} clip has no accessible name`);
-        for (const attribute of [/ autoplay[ >]/, / muted[ >]/, / loop[ >]/, / playsinline[ >]/, / preload="none"/]) {
-          assert.match(video, attribute);
+        const images = [...block.matchAll(/<img [^>]*>/g)].map((match) => match[0]);
+        assert.equal(images.length, 1, `${feature.clip} block needs exactly one picture`);
+        const [image] = images;
+        assert.ok(image.includes(` alt="${feature.stillAlt}"`), `${feature.clip} still has no alt text`);
+        for (const attribute of [/ loading="lazy"/, / decoding="async"/, / width="\d+"/, / height="\d+"/]) {
+          assert.match(image, attribute);
         }
-        const poster = video.match(/ poster="([^"]+)"/)?.[1];
-        assert.ok(poster, `${feature.clip} clip has no poster`);
-        assert.ok(existsSync(resolve(dist, poster.slice(1))), `poster ${poster} is not in the build output`);
-        // Sources wait in data-src until the clip nears the viewport.
-        assert.doesNotMatch(video, / src=/);
-        const sources = [...video.matchAll(/<source data-src="([^"]+)" type="([^"]+)">/g)].map((match) => [match[1], match[2]]);
-        assert.deepEqual(sources.map(([, type]) => type), ["video/webm", "video/mp4"]);
-        for (const [src] of sources) {
-          const size = statSync(resolve(dist, src.slice(1))).size;
-          assert.ok(size <= SHOWCASE_CLIP_MAX_BYTES, `${src} is ${size} bytes, over the ${SHOWCASE_CLIP_MAX_BYTES}-byte budget`);
-        }
+        const src = image.match(/ src="([^"]+)"/)?.[1];
+        assert.ok(src, `${feature.clip} still has no src`);
+        assert.ok(src.startsWith(`/_astro/${feature.clip}.`) && src.endsWith(".webp"), `${feature.clip} still is ${src}`);
+        const size = statSync(resolve(dist, src.slice(1))).size;
+        assert.ok(size <= SHOWCASE_STILL_MAX_BYTES, `${src} is ${size} bytes, over the ${SHOWCASE_STILL_MAX_BYTES}-byte budget`);
       }
     });
 
@@ -260,6 +273,22 @@ describe("home page HTML", () => {
       }
       assert.deepEqual(copy.map((print) => print.src), row.map((print) => print.src));
       assert.ok(copy.every((print) => print.hidden && print.alt === ""), "the loop copy is hidden from assistive tech");
+    });
+
+    it("prints small previews, not the full-size art: one per strip entry, 2× the print height, each within budget", () => {
+      const strip = showcase.slice(showcase.indexOf('class="site-photostrip"'));
+      const tags = [...strip.matchAll(/<li class="site-photo"[^>]*>(<img [^>]*>)/g)].map((match) => match[1]);
+      const row = tags.slice(0, tags.length / 2);
+      assert.equal(row.length, GALLERY_PHOTOS.length);
+      for (const [index, tag] of row.entries()) {
+        const { art } = GALLERY_PHOTOS[index] ?? {};
+        const src = tag.match(/ src="([^"]+)"/)?.[1];
+        assert.ok(src, `print ${index} has no src`);
+        assert.ok(src.startsWith(`/_astro/${art}.`) && src.endsWith(".webp"), `print ${index} is ${src}`);
+        assert.match(tag, new RegExp(` height="${GALLERY_THUMB_HEIGHT}"`));
+        const size = statSync(resolve(dist, src.slice(1))).size;
+        assert.ok(size <= GALLERY_THUMB_MAX_BYTES, `${src} is ${size} bytes, over the ${GALLERY_THUMB_MAX_BYTES}-byte budget`);
+      }
     });
   });
 

@@ -12,10 +12,7 @@ import mascotSurprised from "../../../desktop/renderer/src/shared/assets/mascot/
 import sceneDay from "../../../desktop/renderer/src/shared/assets/scene/bg-day.webp";
 import sceneDusk from "../../../desktop/renderer/src/shared/assets/scene/bg-dusk.webp";
 import sceneNight from "../../../desktop/renderer/src/shared/assets/scene/bg-night.webp";
-import cg2 from "../assets/art/cg-2.webp";
 import cg3 from "../assets/art/cg-3.webp";
-import cg4 from "../assets/art/cg-4.webp";
-import cg5 from "../assets/art/cg-5.webp";
 import cg6 from "../assets/art/cg-6.webp";
 import cg7 from "../assets/art/cg-7.webp";
 import cg8 from "../assets/art/cg-8.webp";
@@ -25,6 +22,7 @@ import topic1 from "../assets/art/topic-1.webp";
 import topic2 from "../assets/art/topic-2.webp";
 import topic3 from "../assets/art/topic-3.webp";
 import ogCover from "../assets/social/og-cover.jpg";
+import { GALLERY_PHOTOS } from "../content/gallery";
 import type { NarrativeCgKey } from "../content/narrative";
 import type { ShowcaseClipId } from "../content/showcase";
 
@@ -122,7 +120,6 @@ export const narrativeCgs: Record<NarrativeCgKey, SiteImage> = {
   "topic-3": { image: topic3, alt: "吟风配图：月夜窗边浅笑，黑色晚装缀有蝙蝠翼装饰" },
 };
 
-
 /**
  * The home page loader's backdrop (#770): 吟风 with her wings spread, full
  * length on a pale seaside (1920×1088, about 108 KB), framed by `cover`.
@@ -141,41 +138,27 @@ export const socialPreviewImage: SiteImage = {
 };
 
 /**
- * One feature demo clip of the showcase (#772): the VP9 WebM browsers pick
- * first, the H.264 MP4 for the rest, and the still shown before it plays.
- * Rendered by apps/site-video (`pnpm run site:video`) and committed: the
- * site build only copies them.
+ * The showcase stills (#790), by clip id (`SHOWCASE_CLIP_IDS` in
+ * `content/showcase.ts`): one frame of each demo clip, rendered by
+ * apps/site-video (`pnpm run site:stills`) and committed; the site build only
+ * copies them. The page shows these instead of the clips themselves, which
+ * stalled on slow or flaky lines.
  */
-export interface ShowcaseClip {
-  readonly webm: string;
-  readonly mp4: string;
-  readonly poster: ImageMetadata;
+const showcaseStills = import.meta.glob<ImageMetadata>("../assets/showcase/*.webp", { import: "default", eager: true });
+
+/** A showcase still, by its clip id. */
+export function showcaseStill(id: ShowcaseClipId): ImageMetadata {
+  return globFile(showcaseStills, `${id}.webp`);
 }
 
-const showcaseVideos = import.meta.glob<string>("../assets/showcase/*.{webm,mp4}", { import: "default", eager: true });
-const showcasePosters = import.meta.glob<ImageMetadata>("../assets/showcase/*-poster.jpg", { import: "default", eager: true });
-
-/** A showcase demo clip's files, by its id (`SHOWCASE_CLIP_IDS` in `content/showcase.ts`). */
-export function showcaseClip(id: ShowcaseClipId): ShowcaseClip {
-  return {
-    webm: globFile(showcaseVideos, `${id}.webm`),
-    mp4: globFile(showcaseVideos, `${id}.mp4`),
-    poster: globFile(showcasePosters, `${id}-poster.jpg`),
-  };
-}
+const galleryThumbs = import.meta.glob<ImageMetadata>("../assets/gallery/*.webp", { import: "default", eager: true });
 
 /**
- * The photo strip under the showcase, in strip order. cg-1 (a bedroom
- * scene, half-buttoned shirt) and cg-9 (bare shoulders under a slipping
- * jacket) are left out as too suggestive for a public strip.
+ * The photo strip under the showcase, in strip order (`content/gallery.ts`):
+ * each print is a small preview of its art, made by apps/site-video
+ * (`pnpm run site:gallery`) and committed, not the full-size file.
  */
-export const galleryPhotos: readonly SiteImage[] = [
-  { image: cg3, alt: "CG：趴在粉色电脑桌前兴奋地打字" },
-  { image: cg6, alt: "CG：晚霞海边的全身立绘，黑色蝙蝠翼连衣裙" },
-  { image: cg7, alt: "CG：夜晚街头挽臂同行的温馨场景" },
-  { image: cg5, alt: "CG：阳光洒落的窗边侧脸特写" },
-  { image: cg8, alt: "CG：夜色中坐在公园长椅上，以手托腮微笑，发间系着蝙蝠翼造型的发绳" },
-  { image: cg4, alt: "CG：窝在沙发上吃甜点的夜晚场景" },
-  { image: cg10, alt: "CG：从门后探身张望，身后是温暖的暖色房间" },
-  { image: cg2, alt: "CG：侧躺在床上，蓝紫色柔光近景" },
-];
+export const galleryPhotos: readonly SiteImage[] = GALLERY_PHOTOS.map(({ art, alt }) => ({
+  image: globFile(galleryThumbs, `${art}.webp`),
+  alt,
+}));

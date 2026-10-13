@@ -23,8 +23,8 @@ import { firstScreenImageBytes, loaderArtwork } from "../lib/siteAssets";
  * fades out, growing very slightly, onto the narrative's scene while 吟风's
  * sprite fades in, rising the last few pixels into place, and the dialogue
  * box follows with the first line (timings in site.css). Afterwards the
- * loader leaves the DOM and the narrative's CGs are fetched in the
- * background, in order of appearance.
+ * loader leaves the DOM. The narrative's CGs are not its business: each is
+ * fetched as its line draws near (NarrativeStage.astro, #790).
  *
  * Painted with the first frame: the markup and the styles (`.site-loader*`
  * in site.css, inlined with the rest of the CSS, see astro.config.ts) are
@@ -136,7 +136,6 @@ const petals = [
       loader.remove();
       delete root.dataset.siteLoader;
       for (const [type, options] of guarded) window.removeEventListener(type, block, options);
-      void prefetchCgs();
     });
 
     let revealed = false;
@@ -206,15 +205,5 @@ const petals = [
     };
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => void track(), { once: true });
     else void track();
-
-    // After the loader: the CGs, one at a time in order of appearance (their
-    // DOM order). Reduced motion lists the lines without CGs: none needed.
-    async function prefetchCgs() {
-      if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-      for (const cg of document.querySelectorAll("img[data-cg][data-src]")) {
-        if (!cg.getAttribute("src")) cg.src = cg.dataset.src;
-        await cg.decode().catch(() => undefined);
-      }
-    }
   })();
 </script>
