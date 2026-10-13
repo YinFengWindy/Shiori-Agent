@@ -9,18 +9,11 @@ import mascotSad from "../../../desktop/renderer/src/shared/assets/mascot/yinfen
 import mascotShy from "../../../desktop/renderer/src/shared/assets/mascot/yinfeng-shy.webp";
 import mascotSmug from "../../../desktop/renderer/src/shared/assets/mascot/yinfeng-smug.webp";
 import mascotSurprised from "../../../desktop/renderer/src/shared/assets/mascot/yinfeng-surprised.webp";
-import mascotConfusedLqip from "../../../desktop/renderer/src/shared/assets/mascot/yinfeng-confused.webp?lqip";
-import mascotLaughLqip from "../../../desktop/renderer/src/shared/assets/mascot/yinfeng-laugh.webp?lqip";
-import mascotNeutralLqip from "../../../desktop/renderer/src/shared/assets/mascot/yinfeng-neutral.webp?lqip";
-import mascotPoutLqip from "../../../desktop/renderer/src/shared/assets/mascot/yinfeng-pout.webp?lqip";
-import mascotSadLqip from "../../../desktop/renderer/src/shared/assets/mascot/yinfeng-sad.webp?lqip";
-import mascotShyLqip from "../../../desktop/renderer/src/shared/assets/mascot/yinfeng-shy.webp?lqip";
-import mascotSmugLqip from "../../../desktop/renderer/src/shared/assets/mascot/yinfeng-smug.webp?lqip";
-import mascotSurprisedLqip from "../../../desktop/renderer/src/shared/assets/mascot/yinfeng-surprised.webp?lqip";
 import sceneDay from "../../../desktop/renderer/src/shared/assets/scene/bg-day.webp";
 import sceneDusk from "../../../desktop/renderer/src/shared/assets/scene/bg-dusk.webp";
 import sceneNight from "../../../desktop/renderer/src/shared/assets/scene/bg-night.webp";
 import cg3 from "../assets/art/cg-3.webp";
+import cg6 from "../assets/art/cg-6.webp";
 import cg7 from "../assets/art/cg-7.webp";
 import cg8 from "../assets/art/cg-8.webp";
 import cg9 from "../assets/art/cg-9.webp";
@@ -82,22 +75,6 @@ export const narrativeExpressionSprites: Record<MascotExpression, ImageMetadata>
   surprised: mascotSurprised,
 };
 
-/**
- * The same sprites as tiny inline WebP placeholders (`data:` URIs, built by
- * lib/imageQueries.ts): the home page loader blurs the first line's one into her
- * silhouette, so it paints with the first frame.
- */
-export const narrativeExpressionPlaceholders: Record<MascotExpression, string> = {
-  neutral: mascotNeutralLqip,
-  smug: mascotSmugLqip,
-  laugh: mascotLaughLqip,
-  shy: mascotShyLqip,
-  confused: mascotConfusedLqip,
-  pout: mascotPoutLqip,
-  sad: mascotSadLqip,
-  surprised: mascotSurprisedLqip,
-};
-
 const mascotFileBytes = import.meta.glob<number>("../../../desktop/renderer/src/shared/assets/mascot/yinfeng-*.webp", {
   query: "?bytes",
   import: "default",
@@ -140,6 +117,13 @@ export const narrativeCgs: Record<NarrativeCgKey, SiteImage> = {
   "topic-3": { image: topic3, alt: "吟风配图：月夜窗边浅笑，黑色晚装缀有蝙蝠翼装饰" },
 };
 
+
+/**
+ * The home page loader's backdrop (#770): 吟风 with her wings spread, full
+ * length on a pale seaside (1920×1088, about 108 KB), framed by `cover`.
+ * Decorative: the loader is hidden from assistive technology.
+ */
+export const loaderArtwork: ImageMetadata = cg6;
 
 /**
  * Default social preview (OG / Twitter card): the seaside CG (cg-6)
