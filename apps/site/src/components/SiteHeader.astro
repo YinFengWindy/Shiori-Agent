@@ -1,0 +1,96 @@
+---
+import { GithubLogoIcon } from "@phosphor-icons/react";
+import { cx } from "@yinfengwindy/shiori-sdk";
+import { compactPrimaryButtonClass, compactTextButtonClass } from "../../../desktop/renderer/src/shared/styles";
+import { barIconImage } from "../lib/siteAssets";
+import { SITE_LINKS, SITE_NAME } from "../lib/siteMeta";
+import DownloadButton from "./DownloadButton.astro";
+import "../styles/header.css";
+
+/**
+ * The site's top bar (#773): the app icon and name (home, top), then 博客,
+ * 更新日志, GitHub and the download button. A thin, translucent light strip
+ * in the showcase's colours.
+ *
+ * `reveal` (home page): out of sight over the narrative, which is a
+ * full-screen stage of its own; it slides in from the top once the page
+ * has moved on to the showcase and away again on the way back
+ * (`lib/siteHeader.ts`). It sits outside the narrative's stage, so the
+ * stage's wheel, touch and click stepping never see it. `fixed` (blog):
+ * always there, in the page flow at the top and sticking while scrolling.
+ *
+ * Narrow screens keep the icon, the name, 博客 and the download button;
+ * 更新日志 and GitHub drop out (the footer links GitHub and the releases).
+ */
+interface Props {
+  mode: "reveal" | "fixed";
+  /** The section the page belongs to, marked `aria-current` in the bar. */
+  current?: "blog";
+}
+
+const { mode, current } = Astro.props;
+const linkClass = cx(compactTextButtonClass, "no-underline");
+// Off on narrow screens: see above.
+const wideOnlyClass = "max-sm:hidden";
+---
+
+<header class="site-header" data-site-header data-mode={mode}>
+  <nav class="site-header-bar" aria-label="站点导航">
+    <a href="/" class="site-header-brand no-underline" data-site-header-home>
+      <img
+        src={barIconImage.src}
+        width={barIconImage.width}
+        height={barIconImage.height}
+        alt=""
+        loading="lazy"
+        decoding="async"
+        class="site-header-icon"
+      />
+      <span class="site-header-name site-story-type">{SITE_NAME}</span>
+    </a>
+    <div class="site-header-links">
+      <a href="/blog/" class={linkClass} aria-current={current === "blog" ? "page" : undefined}>博客</a>
+      <a href={SITE_LINKS.changelog} class={cx(linkClass, wideOnlyClass)}>更新日志</a>
+      <a href={SITE_LINKS.github} class={cx(linkClass, wideOnlyClass)}>
+        <GithubLogoIcon size={18} aria-hidden="true" />
+        GitHub
+      </a>
+      <DownloadButton class={compactPrimaryButtonClass} iconSize={18} />
+    </div>
+  </nav>
+</header>
+
+<script>
+  import { isPastNarrative } from "../lib/siteHeader";
+
+  const header = document.querySelector<HTMLElement>("[data-site-header]");
+  if (!header) throw new Error("top bar is missing");
+
+  if (header.dataset.mode === "reveal") {
+    const narrative = document.querySelector<HTMLElement>("[data-narrative]");
+    if (!narrative) throw new Error("the top bar's reveal mode needs the narrative");
+    const home = header.querySelector<HTMLAnchorElement>("[data-site-header-home]");
+    if (!home) throw new Error("top bar home link is missing");
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      header.toggleAttribute("data-revealed", isPastNarrative(narrative.getBoundingClientRect().bottom, window.innerHeight));
+    };
+    const scheduleUpdate = () => {
+      frame ||= requestAnimationFrame(update);
+    };
+    window.addEventListener("scroll", scheduleUpdate, { passive: true });
+    window.addEventListener("resize", scheduleUpdate);
+    update();
+
+    // Already on the home page: the name takes the page back to its top
+    // rather than reloading it (and its loader).
+    home.addEventListener("click", (event) => {
+      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      event.preventDefault();
+      window.scrollTo({ top: 0, behavior: reducedMotion.matches ? "instant" : "smooth" });
+    });
+  }
+</script>

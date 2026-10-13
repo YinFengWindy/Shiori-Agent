@@ -23,6 +23,8 @@ export const SITE_LINKS = {
   releasesLatest: "https://github.com/YinFengWindy/Shiori-Agent/releases/latest",
   releases: "https://github.com/YinFengWindy/Shiori-Agent/releases",
   license: "https://github.com/YinFengWindy/Shiori-Agent/blob/main/LICENSE",
+  /** The top bar's 更新日志: the GitHub releases for now; #792 moves it to the site's own `/changelog/`. */
+  changelog: "https://github.com/YinFengWindy/Shiori-Agent/releases",
 } as const;
 
 /**

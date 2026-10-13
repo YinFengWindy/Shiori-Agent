@@ -1,39 +1,21 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync, statSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { existsSync, statSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, it } from "node:test";
-import { fileURLToPath } from "node:url";
 import { GALLERY_PHOTOS, GALLERY_THUMB_HEIGHT, GALLERY_THUMB_MAX_BYTES } from "../src/content/gallery";
 import { NARRATIVE_LINES } from "../src/content/narrative";
 import { SHOWCASE_CLIP_IDS, SHOWCASE_FEATURES, SHOWCASE_STILL_MAX_BYTES } from "../src/content/showcase";
+import { ORIGIN, dist as site, distPathOf, metaContent, sitemapPages } from "./support/builtSite";
 
 /*
  * Assertions on the built site (`astro build` runs first, see the package's
  * `test` script). Reading the emitted files directly is what a crawler that
  * does not execute JavaScript sees, so every check here holds without JS.
+ * The blog's pages are covered by blog.test.ts.
  */
 
-const dist = resolve(dirname(fileURLToPath(import.meta.url)), "..", "dist");
-const ORIGIN = "https://www.windchant.online";
-
-function readDist(path: string) {
-  const file = resolve(dist, path);
-  assert.ok(existsSync(file), `expected ${path} in the build output; run \`astro build\` first`);
-  return readFileSync(file, "utf8");
-}
-
-/** The `content` of the one `<meta>` whose `attribute` equals `key`. */
-function metaContent(html: string, attribute: "name" | "property", key: string) {
-  const matches = [...html.matchAll(new RegExp(`<meta ${attribute}="${key}" content="([^"]*)"`, "g"))];
-  assert.equal(matches.length, 1, `expected exactly one <meta ${attribute}="${key}">`);
-  return matches[0][1];
-}
-
-/** The output file behind an absolute URL on the site origin. */
-function distPathOf(url: string) {
-  assert.ok(url.startsWith(`${ORIGIN}/`), `${url} must be on ${ORIGIN}`);
-  return url.slice(ORIGIN.length + 1);
-}
+const dist = site.dir;
+const readDist = site.read;
 
 describe("home page HTML", () => {
   const html = readDist("index.html");
@@ -302,6 +284,49 @@ describe("home page HTML", () => {
     assert.match(footer, /© \d{4} Shiori/);
   });
 
+  describe("top bar (#773)", () => {
+    const bar = html.match(/<header class="site-header" data-site-header data-mode="reveal">(.*?)<\/header>/s);
+    const styles = [...html.matchAll(/<style>(.*?)<\/style>/gs)].map((match) => match[1]).join("\n");
+
+    it("sits after the loader and outside the narrative, so the stage's stepping never sees it", () => {
+      assert.ok(bar, "no reveal-mode top bar");
+      const at = html.indexOf(bar[0]);
+      assert.ok(at > html.indexOf('id="site-loader"'), "the loader must open the body");
+      assert.ok(at < html.indexOf("<main>"), "the bar comes before the page content, outside the narrative stage");
+    });
+
+    it("links the icon and name home, then 博客, 更新日志, GitHub and the Windows download — no in-page anchors", () => {
+      assert.ok(bar);
+      const links = [...bar[1].matchAll(/<a href="([^"]+)"[^>]*>(.*?)<\/a>/gs)].map(([, href, label]) => ({
+        href,
+        label: label.replace(/<[^>]+>/g, ""),
+      }));
+      assert.deepEqual(links, [
+        { href: "/", label: "Shiori" },
+        { href: "/blog/", label: "博客" },
+        { href: "https://github.com/YinFengWindy/Shiori-Agent/releases", label: "更新日志" },
+        { href: "https://github.com/YinFengWindy/Shiori-Agent", label: "GitHub" },
+        { href: "https://github.com/YinFengWindy/Shiori-Agent/releases/latest", label: "下载 Windows 版" },
+      ]);
+      assert.match(bar[1], /<img src="\/icons\/icon-192\.png"[^>]* alt=""/);
+      assert.match(bar[1], /<a href="https:\/\/github\.com\/YinFengWindy\/Shiori-Agent\/releases\/latest"[^>]* data-download-installer>/);
+    });
+
+    it("shares one direct-download script with the closing call: the release API is asked once", () => {
+      assert.equal([...html.matchAll(/<a [^>]*data-download-installer>/g)].length, 2);
+      assert.equal(html.split("https://api.github.com/repos/YinFengWindy/Shiori-Agent/releases/latest").length - 1, 1);
+    });
+
+    it("starts out of sight above the page, shows without scripting, and does not slide under reduced motion", () => {
+      assert.match(styles, /\.site-header\[data-mode=reveal\]\{[^}]*visibility:hidden[^}]*translate:0 -100%/);
+      assert.match(styles, /@media \(scripting:none\)\{\.site-header\[data-mode=reveal\]\{visibility:visible;translate:none\}/);
+      assert.match(
+        styles,
+        /@media \(prefers-reduced-motion:reduce\)\{\.site-header\[data-mode=reveal\],\.site-header\[data-mode=reveal\]\[data-revealed\],[^{]*\{transition:none\}/,
+      );
+    });
+  });
+
   it("mounts the Vercel Web Analytics component from the shared layout", () => {
     assert.match(html, /<vercel-analytics [^>]*><\/vercel-analytics>/);
   });
@@ -318,11 +343,7 @@ describe("crawler files", () => {
   });
 
   it("the sitemap lists the home page, and only production-origin URLs", () => {
-    const index = readDist("sitemap-index.xml");
-    const sitemaps = [...index.matchAll(/<loc>([^<]+)<\/loc>/g)].map((match) => match[1]);
-    assert.ok(sitemaps.length > 0, "sitemap index lists no sitemaps");
-    const pages = sitemaps.flatMap((url) =>
-      [...readDist(distPathOf(url)).matchAll(/<loc>([^<]+)<\/loc>/g)].map((match) => match[1]));
+    const pages = sitemapPages(site);
     assert.ok(pages.includes(`${ORIGIN}/`), `home page missing from sitemap: ${pages.join(", ")}`);
     for (const page of pages) distPathOf(page);
   });

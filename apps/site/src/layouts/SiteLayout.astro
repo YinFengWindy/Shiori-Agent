@@ -10,19 +10,22 @@ interface Props {
   title: string;
   /** Meta / OG description; defaults to the site description. */
   description?: string;
+  /** `og:type`: `article` for a blog post, `website` (default) otherwise. */
+  ogType?: "website" | "article";
 }
 
 /**
  * Shared page shell: `lang="zh-CN"`, title, description, canonical URL,
- * Open Graph / Twitter card, theme color, icons, the sitemap link and
- * Vercel Web Analytics. Every URL is absolute on `site` (astro.config.ts),
+ * Open Graph / Twitter card, theme color, icons, the sitemap and blog feed
+ * links and Vercel Web Analytics. Every URL is absolute on `site` (astro.config.ts),
  * so crawlers see the canonical origin even on a preview deployment.
  */
-const { title, description = SITE_DESCRIPTION } = Astro.props;
+const { title, description = SITE_DESCRIPTION, ogType = "website" } = Astro.props;
 if (!Astro.site) throw new Error("astro.config.ts must set `site`: canonical and OG URLs are built from it");
 const canonicalUrl = new URL(Astro.url.pathname, Astro.site).href;
 const ogImageUrl = new URL(socialPreviewImage.image.src, Astro.site).href;
 const sitemapUrl = new URL("sitemap-index.xml", Astro.site).href;
+const feedUrl = new URL("rss.xml", Astro.site).href;
 ---
 
 <!doctype html>
@@ -42,7 +45,8 @@ const sitemapUrl = new URL("sitemap-index.xml", Astro.site).href;
     <link rel="icon" type="image/png" href="/icons/icon-512.png" sizes="512x512" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" sizes="180x180" />
     <link rel="sitemap" href={sitemapUrl} />
-    <meta property="og:type" content="website" />
+    <link rel="alternate" type="application/rss+xml" title={`${SITE_NAME} 博客`} href={feedUrl} />
+    <meta property="og:type" content={ogType} />
     <meta property="og:locale" content="zh_CN" />
     <meta property="og:site_name" content={SITE_NAME} />
     <meta property="og:title" content={title} />
@@ -56,6 +60,8 @@ const sitemapUrl = new URL("sitemap-index.xml", Astro.site).href;
     <meta name="twitter:title" content={title} />
     <meta name="twitter:description" content={description} />
     <meta name="twitter:image" content={ogImageUrl} />
+    {/* Page-specific metadata after the shared tags (article dates, structured data). */}
+    <slot name="meta" />
   </head>
   <body>
     <slot />

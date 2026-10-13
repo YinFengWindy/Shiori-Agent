@@ -16,6 +16,7 @@
     "build:desktop": "pnpm --filter shiori-desktop run build",
     "build:site": "pnpm --filter shiori-site run build",
     "site:dev": "pnpm --filter shiori-site run dev",
+    "site:dev:drafts": "pnpm --filter shiori-site run dev:drafts",
     "site:preview": "pnpm --filter shiori-site run preview",
     "site:test": "pnpm --filter shiori-site run test",
     "site:typecheck": "pnpm --filter shiori-site run typecheck",

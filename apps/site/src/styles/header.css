@@ -1,0 +1,143 @@
+/*
+ * The site's top bar (#773, components/SiteHeader.astro): a thin,
+ * translucent light strip in the showcase's colours over the app's wash,
+ * blurring what scrolls under it. Same rule as site.css: the component
+ * rules below use only the --site-header-* names defined here, built from
+ * the app's primitives and semantic tokens (desktop tokens.css).
+ *
+ * Contrast: the links' ink (--color-text-secondary, 8.2:1 on neutral-50)
+ * sits on a fill at least 72% neutral-50 over the pale wash, so it stays
+ * well above 4.5:1; the name uses the feature titles' strong gradient
+ * (4.9:1 / 5.0:1 on lavender-50).
+ */
+.site-header {
+  --site-header-fill: color-mix(in srgb, var(--neutral-50) 72%, transparent);
+  --site-header-rule: color-mix(in srgb, var(--neutral-50) 85%, transparent);
+  --site-header-shadow: var(--shadow-shell);
+  --site-header-blur: 16px;
+  --site-header-name-fill: var(--gradient-accent-strong);
+  --site-header-icon-size: 2rem;
+}
+
+/* On the root: the music switch (home page) moves down by the bar's
+   height, in step with its slide, while it shows. */
+:root {
+  --site-header-height: 3.5rem;
+  --site-header-slide: var(--duration-base);
+}
+
+.site-header {
+  inset-inline: 0;
+  top: 0;
+  z-index: 20;
+  height: var(--site-header-height);
+  background: var(--site-header-fill);
+  border-bottom: 1px solid var(--site-header-rule);
+  box-shadow: var(--site-header-shadow);
+  backdrop-filter: blur(var(--site-header-blur)) saturate(1.4);
+}
+
+/* Blog pages: in the flow at the top, sticking while the page scrolls. */
+.site-header[data-mode="fixed"] {
+  position: sticky;
+}
+
+/* Home page: over the page, out of sight above the top edge until the
+   script reveals it (lib/siteHeader.ts); hidden, it takes no focus or
+   clicks. */
+.site-header[data-mode="reveal"] {
+  position: fixed;
+  translate: 0 -100%;
+  visibility: hidden;
+  transition:
+    translate var(--site-header-slide) var(--ease-out-soft),
+    visibility 0s linear var(--site-header-slide);
+}
+
+.site-header[data-mode="reveal"][data-revealed] {
+  translate: 0 0;
+  visibility: visible;
+  transition:
+    translate var(--site-header-slide) var(--ease-out-soft),
+    visibility 0s linear;
+}
+
+.site-sound-toggle {
+  transition: translate var(--site-header-slide) var(--ease-out-soft);
+}
+
+:root:has(.site-header[data-revealed]) .site-sound-toggle {
+  translate: 0 var(--site-header-height);
+}
+
+.site-header-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  height: 100%;
+  max-width: 76rem;
+  margin-inline: auto;
+  padding-inline: clamp(0.75rem, 3vw, 2rem);
+}
+
+.site-header-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: var(--radius-md);
+}
+
+.site-header-icon {
+  width: var(--site-header-icon-size);
+  height: var(--site-header-icon-size);
+  border-radius: var(--radius-sm);
+}
+
+.site-header-name {
+  font-size: 1.25rem;
+  line-height: 1;
+  /* Room for the italic's overhang inside the clipped gradient. */
+  padding-inline-end: 0.15em;
+  background-image: var(--site-header-name-fill);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+.site-header-links {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.site-header-links [aria-current="page"] {
+  color: var(--color-text-accent);
+}
+
+/* The narrowest phones: the download button drops the release tag the
+   script appends, so the bar never overflows. */
+@media (max-width: 429px) {
+  .site-header [data-download-version] {
+    display: none;
+  }
+}
+
+/* Without scripting nothing would reveal it: the home page shows it
+   from the start. */
+@media (scripting: none) {
+  .site-header[data-mode="reveal"] {
+    translate: none;
+    visibility: visible;
+  }
+}
+
+/* Reduced motion: the bar appears and goes without sliding, and the music
+   switch jumps under it. */
+@media (prefers-reduced-motion: reduce) {
+  .site-header[data-mode="reveal"],
+  .site-header[data-mode="reveal"][data-revealed],
+  .site-sound-toggle {
+    transition: none;
+  }
+}

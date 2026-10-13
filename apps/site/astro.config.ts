@@ -1,5 +1,6 @@
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
+import mdx from "@astrojs/mdx";
 import react from "@astrojs/react";
 import sitemap from "@astrojs/sitemap";
 import { defineConfig } from "astro/config";
@@ -25,7 +26,8 @@ export default defineConfig({
     // about 5 s instead of showing the home page loader (#770) at once.
     inlineStylesheets: "always",
   },
-  integrations: [react(), sitemap()],
+  // MDX: the blog posts (src/content/blog, content.config.ts).
+  integrations: [react(), mdx(), sitemap()],
   vite: {
     // `picture.webp?bytes`: file sizes for the home page loader's progress.
     plugins: [imageBytesPlugin()],
