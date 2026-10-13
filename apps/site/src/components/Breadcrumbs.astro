@@ -1,0 +1,41 @@
+---
+import { type Crumb, HOME_CRUMB, breadcrumbListJsonLd, inlineJson } from "../lib/breadcrumbs";
+import "../styles/breadcrumbs.css";
+
+/**
+ * The way back up from a reading page (#797): 首页 / 博客 / the post,
+ * 首页 / 更新日志. Every step but the last links to its page (首页 to the
+ * home page's download state); the last is the page itself, marked
+ * `aria-current`. Carries the trail as BreadcrumbList structured data too.
+ */
+interface Props {
+  /** The steps after 首页, the page itself last. */
+  trail: Crumb[];
+}
+
+const trail = [HOME_CRUMB, ...Astro.props.trail];
+if (!Astro.site) throw new Error("astro.config.ts must set `site`: the breadcrumb's structured data is built from it");
+const structuredDataJson = inlineJson(breadcrumbListJsonLd(trail, Astro.site));
+const last = trail.length - 1;
+---
+
+<nav class="site-breadcrumbs" aria-label="面包屑">
+  <ol class="site-breadcrumbs-list">
+    {
+      trail.map((crumb, index) => (
+        <li class="site-breadcrumbs-item">
+          {index === last ? (
+            <span aria-current="page" class="site-breadcrumbs-current">
+              {crumb.label}
+            </span>
+          ) : (
+            <a href={crumb.href} class="site-breadcrumbs-link">
+              {crumb.label}
+            </a>
+          )}
+        </li>
+      ))
+    }
+  </ol>
+  <script type="application/ld+json" set:html={structuredDataJson} />
+</nav>

@@ -129,3 +129,8 @@
     transition: none;
   }
 }
+
+/* The breadcrumb opens the post's head: the head's own gap spaces it. */
+.site-post-head .site-breadcrumbs {
+  margin-bottom: 0;
+}

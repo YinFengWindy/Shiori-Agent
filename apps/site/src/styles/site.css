@@ -482,6 +482,12 @@ html[data-site-loader="loading"] .site-dialogue {
   }
 }
 
+/* A visit the loader stays out of (Back / Forward, an anchor: the head's
+   gate script, lib/siteLoaderGate.ts) never paints it. */
+html[data-site-loader-skip] .site-loader {
+  display: none;
+}
+
 /* Without scripting nothing would report the page ready: no loader at all.
    (A browser without the `scripting` feature still gets the cap.) */
 @media (scripting: none) {

@@ -1,0 +1,164 @@
+/*
+ * A reading page's section index (#797, components/SectionIndex.astro): a
+ * post's table of contents, the changelog's versions. On wide screens the
+ * reading column stays centred and the index sticks in the right margin
+ * beside it (`.site-section-layout`); on narrow ones it folds into a
+ * `<details>` under the page's title. Same rule as site.css: the rules use
+ * only the --site-section-index-* names defined here, from the app's
+ * semantic tokens and the reading pages' --site-reading-* names.
+ *
+ * Contrast: entries are --color-text-secondary (8.2:1 on neutral-50), the
+ * current one --color-text-accent (6.0:1), days --color-text-muted (5.5:1),
+ * all on a fill at least 86% neutral-50 (the reading paper).
+ */
+.site-section-layout {
+  --site-section-index-width: 15rem;
+  --site-section-index-gap: 2.5rem;
+  --site-section-index-top: calc(var(--site-header-height) + 1.5rem);
+  --site-section-index-ink: var(--color-text-secondary);
+  --site-section-index-ink-current: var(--color-text-accent);
+  --site-section-index-ink-muted: var(--color-text-muted);
+  --site-section-index-rule: var(--color-border-soft);
+  --site-section-index-rule-current: var(--color-border-accent);
+}
+
+.site-section-index {
+  border: 1px solid var(--site-reading-edge);
+  border-radius: var(--radius-lg);
+  background: var(--site-reading-paper);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+/* Wide screens only (below). */
+.site-section-index--aside {
+  display: none;
+}
+
+/* ----------------------------------------------------------- inline -- */
+.site-section-index--inline {
+  margin-bottom: clamp(1.25rem, 3vw, 2rem);
+}
+
+.site-section-index-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-radius: inherit;
+  color: var(--site-reading-ink);
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+}
+
+.site-section-index-summary::-webkit-details-marker {
+  display: none;
+}
+
+.site-section-index-caret {
+  color: var(--site-section-index-ink-muted);
+  transition: rotate var(--duration-fast) var(--ease-out-soft);
+}
+
+.site-section-index--inline[open] .site-section-index-caret {
+  rotate: 180deg;
+}
+
+.site-section-index--inline .site-section-index-list {
+  margin: 0 1rem 1rem;
+}
+
+/* ------------------------------------------------------------ aside -- */
+.site-section-index-title {
+  margin-bottom: 0.5rem;
+  color: var(--site-reading-ink);
+  font-weight: 600;
+}
+
+/* ------------------------------------------------------------- list -- */
+.site-section-index-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-inline-start: 1px solid var(--site-section-index-rule);
+}
+
+/* Each entry marks its edge of the list's rule while it is the section being read. */
+.site-section-index-link {
+  display: block;
+  margin-inline-start: -1px;
+  padding: 0.3rem 0.75rem;
+  border-inline-start: 2px solid transparent;
+  color: var(--site-section-index-ink);
+  text-decoration: none;
+  transition:
+    color var(--duration-fast) var(--ease-out-soft),
+    border-color var(--duration-fast) var(--ease-out-soft);
+}
+
+.site-section-index-item[data-level="1"] .site-section-index-link {
+  padding-inline-start: 1.5rem;
+}
+
+.site-section-index-link:hover {
+  color: var(--site-section-index-ink-current);
+}
+
+.site-section-index-link[aria-current] {
+  border-inline-start-color: var(--site-section-index-rule-current);
+  color: var(--site-section-index-ink-current);
+  font-weight: 600;
+}
+
+.site-section-index-note {
+  display: block;
+  color: var(--site-section-index-ink-muted);
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+
+/* ----------------------------------------------------------- layout -- */
+/* Wide enough for the reading column and an index in each margin's room. */
+@media (min-width: 80rem) {
+  .site-section-layout {
+    display: grid;
+    grid-template-columns: 1fr minmax(0, var(--site-reading-measure)) 1fr;
+    column-gap: var(--site-section-index-gap);
+    align-items: start;
+  }
+
+  .site-section-layout-main {
+    grid-column: 2;
+  }
+
+  .site-section-index--aside {
+    position: sticky;
+    top: var(--site-section-index-top);
+    display: block;
+    grid-column: 3;
+    width: 100%;
+    max-width: var(--site-section-index-width);
+    max-height: calc(100dvh - var(--site-section-index-top) - 1.5rem);
+    overflow-y: auto;
+    padding: 1rem 1rem 1rem 1.25rem;
+  }
+
+  .site-section-index--inline {
+    display: none;
+  }
+}
+
+/* Following an index link glides to its section; under reduced motion it jumps. */
+@media (prefers-reduced-motion: no-preference) {
+  :root:has(.site-section-index) {
+    scroll-behavior: smooth;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .site-section-index-caret {
+    transition: none;
+  }
+}

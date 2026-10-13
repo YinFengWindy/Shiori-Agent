@@ -17,8 +17,19 @@ export const DOWNLOAD_HEADLINE = "把我带回家吧，笨蛋。";
 export const SITE_DESCRIPTION =
   "Shiori 是会慢慢喜欢上你的 AI 伴侣：记得聊过的往事，会主动找你聊天，也能陪你处理手头的事。";
 
+/**
+ * `id` of the home page's download call, the narrative's closing state
+ * (NarrativeStage.astro): `/#download` opens the home page there.
+ */
+export const DOWNLOAD_ANCHOR_ID = "download";
+
 /** Outbound calls to action. */
 export const SITE_LINKS = {
+  /**
+   * Home, as the top bar's icon and name and the breadcrumbs' 首页 link it
+   * (#797): the narrative's closing download state, not its first line.
+   */
+  home: `/#${DOWNLOAD_ANCHOR_ID}`,
   github: "https://github.com/YinFengWindy/Shiori-Agent",
   releasesLatest: "https://github.com/YinFengWindy/Shiori-Agent/releases/latest",
   releases: "https://github.com/YinFengWindy/Shiori-Agent/releases",

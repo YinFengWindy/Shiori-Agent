@@ -64,3 +64,63 @@ export function sitemapPages(site: BuiltSite) {
   assert.ok(sitemaps.length > 0, "sitemap index lists no sitemaps");
   return sitemaps.flatMap((url) => [...site.read(distPathOf(url)).matchAll(/<loc>([^<]+)<\/loc>/g)].map((match) => match[1]));
 }
+
+/** Plain text of an HTML fragment: tags dropped. */
+function textOf(html: string) {
+  return html.replace(/<[^>]+>/g, "").trim();
+}
+
+/**
+ * A page's breadcrumb trail (#797): its steps as shown, and the
+ * BreadcrumbList structured data inside it. Exactly one trail per page.
+ */
+export function breadcrumbsOf(html: string) {
+  const navs = [...html.matchAll(/<nav class="site-breadcrumbs" aria-label="面包屑">(.*?)<\/nav>/gs)];
+  assert.equal(navs.length, 1, "expected exactly one breadcrumb nav");
+  const nav = navs[0][1];
+  const steps = [...nav.matchAll(/<li class="site-breadcrumbs-item">(.*?)<\/li>/gs)].map(([, item]) => {
+    const link = item.match(/^<a href="([^"]+)"[^>]*>(.*)<\/a>$/s);
+    if (link) return { label: textOf(link[2]), href: link[1], current: false };
+    assert.match(item, /^<span aria-current="page"[^>]*>.*<\/span>$/s, `a breadcrumb step is neither a link nor the current page: ${item}`);
+    return { label: textOf(item), href: undefined, current: true };
+  });
+  const json = nav.match(/<script type="application\/ld\+json">(.*?)<\/script>/s)?.[1];
+  assert.ok(json, "the breadcrumb carries no JSON-LD");
+  return { steps, jsonLd: JSON.parse(json) as unknown };
+}
+
+/** The top bar's first link: the icon and name. */
+export function topBarHomeHref(html: string) {
+  const bar = html.match(/<header class="site-header"[^>]*>(.*?)<\/header>/s)?.[1];
+  assert.ok(bar, "no top bar");
+  const first = bar.match(/<a href="([^"]+)"[^>]*>/);
+  assert.ok(first, "the top bar has no link");
+  return first[1];
+}
+
+/**
+ * A page's section index (#797) in its two placements: the wide screens'
+ * sticky aside and the narrow screens' folded `<details>`, each as its
+ * entries (anchor, label without the note, note, nesting level).
+ */
+export function sectionIndexOf(html: string) {
+  const entries = (list: string) =>
+    [...list.matchAll(/<li class="site-section-index-item" data-level="(\d)"><a href="#([^"]+)" class="site-section-index-link" data-section-link="([^"]+)">(.*?)<\/a><\/li>/gs)].map(
+      ([, level, href, id, content]) => {
+        assert.equal(href, id, "an index link's anchor and its data-section-link differ");
+        const note = content.match(/<span class="site-section-index-note">(.*?)<\/span>/s)?.[1];
+        return { id, label: textOf(content.replace(/<span class="site-section-index-note">.*?<\/span>/s, "")), note, level: Number(level) };
+      },
+    );
+  const aside = html.match(/<nav class="site-section-index site-section-index--aside" aria-label="([^"]+)" data-section-index><p class="site-section-index-title">([^<]+)<\/p>(.*?)<\/nav>/s);
+  const inline = html.match(/<details class="site-section-index site-section-index--inline" data-section-index><summary class="site-section-index-summary">([^<]+)<svg.*?<\/summary><nav aria-label="([^"]+)">(.*?)<\/nav><\/details>/s);
+  return {
+    aside: aside ? { label: aside[1], title: aside[2], entries: entries(aside[3]) } : undefined,
+    inline: inline ? { title: inline[1], label: inline[2], entries: entries(inline[3]) } : undefined,
+  };
+}
+
+/** The `id` of every element of an HTML fragment (only `tag` elements, if given), in order. */
+export function idsOf(html: string, tag = "[a-z][a-z0-9-]*") {
+  return [...html.matchAll(new RegExp(String.raw`<${tag}\b[^>]*\sid="([^"]+)"`, "g"))].map((match) => match[1]);
+}

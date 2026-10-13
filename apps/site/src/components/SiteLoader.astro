@@ -35,6 +35,12 @@ import { firstScreenImageBytes, loaderArtwork } from "../lib/siteAssets";
  * `<noscript>` copies show), and if the script never runs the CSS fades it
  * at the cap.
  *
+ * Not on every visit (#797): on Back / Forward and on an address with an
+ * anchor (`/#download`) the head's gate script marks `<html>`
+ * `data-site-loader-skip` (lib/siteLoaderGate.ts), site.css hides the loader
+ * from the first frame, and the script below removes it and hands the first
+ * screen's pictures their `src` at once, with nothing held still.
+ *
  * `aria-hidden`: every word of the page is already in the document beneath
  * it, readable at once; a 「加载中」 status would only be noise.
  */
@@ -103,6 +109,20 @@ const petals = [
     const loader = document.getElementById("site-loader");
     if (!loader) return;
     const root = document.documentElement;
+
+    // Back / Forward or an anchor (the head's gate): no loader, the
+    // pictures load straight into their places. Module scripts (the scene's
+    // time-of-day swap of data-src) have run by DOMContentLoaded.
+    if (root.hasAttribute("data-site-loader-skip")) {
+      loader.remove();
+      const show = () => {
+        for (const image of document.querySelectorAll("img[data-first-screen][data-src]")) image.src = image.dataset.src;
+      };
+      if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", show, { once: true });
+      else show();
+      return;
+    }
+
     // The illustration fades in over the wash once decoded (site.css).
     const art = loader.querySelector("[data-loader-art]");
     art?.decode().then(

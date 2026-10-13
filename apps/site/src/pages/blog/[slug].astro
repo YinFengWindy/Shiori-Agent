@@ -1,16 +1,21 @@
 ---
 import { render } from "astro:content";
+import Breadcrumbs from "../../components/Breadcrumbs.astro";
+import SectionIndex from "../../components/SectionIndex.astro";
 import SiteFooter from "../../components/SiteFooter.astro";
 import SiteHeader from "../../components/SiteHeader.astro";
 import SiteLayout from "../../layouts/SiteLayout.astro";
 import {
   BLOG_AUTHOR,
+  BLOG_TITLE,
   type BlogPost,
   blogPostPath,
   formatPostDate,
   getPublishedPosts,
   isoPostDate,
 } from "../../lib/blog";
+import { inlineJson } from "../../lib/breadcrumbs";
+import { postTableOfContents } from "../../lib/sectionIndex";
 import { appIconImage } from "../../lib/siteAssets";
 import { SITE_NAME } from "../../lib/siteMeta";
 import "../../styles/reading.css";
@@ -21,6 +26,12 @@ import "../../styles/blog.css";
  * the post on a light reading column over the app's wash. The head carries
  * the post's own description, `og:type` article with its publication time,
  * and BlogPosting structured data with 吟风 as the author.
+ *
+ * Over the title, the breadcrumb 首页 / 博客 / the post is the way back
+ * (#797): its 博客 step is the 「返回博客」 link, so there is no second
+ * one. A post with two or more sections gets a table of contents from its
+ * rendered headings (their ids are the anchors): beside the column on wide
+ * screens, folded under the title on narrow ones (SectionIndex.astro).
  */
 export async function getStaticPaths() {
   const posts = await getPublishedPosts();
@@ -33,9 +44,11 @@ interface Props {
 
 const { post } = Astro.props;
 const { title, description, date, cover } = post.data;
-const { Content } = await render(post);
+const { Content, headings } = await render(post);
+const tableOfContents = postTableOfContents(headings);
+const postPath = blogPostPath(post);
 if (!Astro.site) throw new Error("astro.config.ts must set `site`: the post's structured data is built from it");
-const postUrl = new URL(blogPostPath(post), Astro.site).href;
+const postUrl = new URL(postPath, Astro.site).href;
 const published = isoPostDate(date);
 const structuredData = {
   "@context": "https://schema.org",
@@ -54,8 +67,7 @@ const structuredData = {
   },
   ...(cover ? { image: new URL(cover.image.src, Astro.site).href } : {}),
 };
-// `<` escaped so no text in the post can close the script element.
-const structuredDataJson = JSON.stringify(structuredData).replaceAll("<", "\\u003c");
+const structuredDataJson = inlineJson(structuredData);
 ---
 
 <SiteLayout title={`${title} · ${SITE_NAME}`} description={description} ogType="article">
@@ -66,31 +78,41 @@ const structuredDataJson = JSON.stringify(structuredData).replaceAll("<", "\\u00
   </Fragment>
   <SiteHeader mode="fixed" current="blog" />
   <main class="site-reading">
-    <article class="site-reading-column">
-      <header class="site-post-head">
-        <h1 class="site-reading-title site-story-type">{title}</h1>
-        <p class="site-reading-meta">
-          <time datetime={published}>{formatPostDate(date)}</time>
-          <span aria-hidden="true">·</span>
-          <span>{BLOG_AUTHOR}</span>
-        </p>
-      </header>
-      {
-        cover && (
-          <img
-            src={cover.image.src}
-            width={cover.image.width}
-            height={cover.image.height}
-            alt={cover.alt}
-            decoding="async"
-            class="site-post-cover"
+    <div class="site-section-layout">
+      <article class="site-reading-column site-section-layout-main">
+        <header class="site-post-head">
+          <Breadcrumbs
+            trail={[
+              { label: BLOG_TITLE, href: "/blog/" },
+              { label: title, href: postPath },
+            ]}
           />
-        )
-      }
-      <div class="site-prose">
-        <Content />
-      </div>
-    </article>
+          <h1 class="site-reading-title site-story-type">{title}</h1>
+          <p class="site-reading-meta">
+            <time datetime={published}>{formatPostDate(date)}</time>
+            <span aria-hidden="true">·</span>
+            <span>{BLOG_AUTHOR}</span>
+          </p>
+        </header>
+        {tableOfContents.length > 0 && <SectionIndex variant="inline" title="目录" entries={tableOfContents} />}
+        {
+          cover && (
+            <img
+              src={cover.image.src}
+              width={cover.image.width}
+              height={cover.image.height}
+              alt={cover.alt}
+              decoding="async"
+              class="site-post-cover"
+            />
+          )
+        }
+        <div class="site-prose">
+          <Content />
+        </div>
+      </article>
+      {tableOfContents.length > 0 && <SectionIndex variant="aside" title="目录" entries={tableOfContents} />}
+    </div>
   </main>
   <SiteFooter />
 </SiteLayout>

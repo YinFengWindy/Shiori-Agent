@@ -43,6 +43,11 @@
   color: var(--site-reading-ink);
 }
 
+/* Anything an anchor leads to (a post's headings, a release) stops clear of the sticky top bar. */
+.site-reading [id] {
+  scroll-margin-top: calc(var(--site-header-height) + 1rem);
+}
+
 /* Headings in the story type, filled with the blue-pink gradient. */
 .site-reading-heading,
 .site-reading-title {

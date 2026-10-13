@@ -5,7 +5,8 @@ import { describe, it } from "node:test";
 import { GALLERY_PHOTOS, GALLERY_THUMB_HEIGHT, GALLERY_THUMB_MAX_BYTES } from "../src/content/gallery";
 import { NARRATIVE_LINES } from "../src/content/narrative";
 import { SHOWCASE_CLIP_IDS, SHOWCASE_FEATURES, SHOWCASE_STILL_MAX_BYTES } from "../src/content/showcase";
-import { ORIGIN, dist as site, distPathOf, metaContent, sitemapPages } from "./support/builtSite";
+import { ORIGIN, breadcrumbsOf, dist as site, distPathOf, idsOf, metaContent, sectionIndexOf, sitemapPages, topBarHomeHref } from "./support/builtSite";
+import { runLoaderGate } from "./support/loaderGate";
 
 /*
  * Assertions on the built site (`astro build` runs first, see the package's
@@ -194,6 +195,21 @@ describe("home page HTML", () => {
     assert.doesNotMatch(script, /data-cg/);
   });
 
+  it("leaves the loader out on Back / Forward and anchored visits from the first frame: a head gate, a CSS hide, a script that stands down (#797)", () => {
+    const head = html.slice(0, html.indexOf("</head>"));
+    const gate = head.match(/<script>(.*?)<\/script>/s);
+    assert.ok(gate, "no inline gate script in the head");
+    // The built gate itself decides: marked on Back / Forward and with an anchor only.
+    assert.deepEqual(runLoaderGate(gate[1], { navigationType: "navigate", hash: "" }), []);
+    assert.deepEqual(runLoaderGate(gate[1], { navigationType: "back_forward", hash: "" }), ["data-site-loader-skip"]);
+    assert.deepEqual(runLoaderGate(gate[1], { navigationType: "navigate", hash: "#download" }), ["data-site-loader-skip"]);
+    assert.ok(head.indexOf(gate[0]) < head.indexOf("<style>"), "the gate must run before the stylesheet can paint the loader");
+    const styles = [...html.matchAll(/<style>(.*?)<\/style>/gs)].map((match) => match[1]).join("\n");
+    assert.match(styles, /html\[data-site-loader-skip\] \.site-loader\{display:none\}/);
+    const script = html.match(/<div id="site-loader".*?<script>(.*?)<\/script>/s)?.[1] ?? "";
+    assert.match(script, /hasAttribute\("data-site-loader-skip"\)\)\s*\{\s*loader\.remove\(\)/);
+  });
+
   describe("showcase after the narrative (#772)", () => {
     const start = html.indexOf('<section class="site-showcase"');
     const end = html.indexOf("</section>", html.indexOf('class="site-photostrip"'));
@@ -295,20 +311,22 @@ describe("home page HTML", () => {
       assert.ok(at < html.indexOf("<main>"), "the bar comes before the page content, outside the narrative stage");
     });
 
-    it("links the icon and name home, then 博客, 更新日志, GitHub and the Windows download — no in-page anchors", () => {
+    it("links the icon and name to the narrative's download state, then 博客, 更新日志, GitHub and the Windows download", () => {
       assert.ok(bar);
       const links = [...bar[1].matchAll(/<a href="([^"]+)"[^>]*>(.*?)<\/a>/gs)].map(([, href, label]) => ({
         href,
         label: label.replace(/<[^>]+>/g, ""),
       }));
       assert.deepEqual(links, [
-        { href: "/", label: "Shiori" },
+        { href: "/#download", label: "Shiori" },
         { href: "/blog/", label: "博客" },
         { href: "/changelog/", label: "更新日志" },
         { href: "https://github.com/YinFengWindy/Shiori-Agent", label: "GitHub" },
         { href: "https://github.com/YinFengWindy/Shiori-Agent/releases/latest", label: "下载 Windows 版" },
       ]);
       assert.match(bar[1], /<img src="\/icons\/icon-192\.png"[^>]* alt=""/);
+      // The link's target is the download call the narrative ends on.
+      assert.match(html, /<div id="download" class="site-download" data-narrative-download>/);
       assert.match(bar[1], /<a href="https:\/\/github\.com\/YinFengWindy\/Shiori-Agent\/releases\/latest"[^>]* data-download-installer>/);
     });
 
@@ -395,10 +413,49 @@ describe("changelog page (#792)", () => {
   });
 
   it("runs none of the notes' own markup: no script, event handler or javascript: link", () => {
-    const main = html.slice(html.indexOf("<main"), html.indexOf("</main>"));
+    // The notes alone: the page's own scripts (breadcrumb data, the index) sit outside them.
+    const notes = [...html.matchAll(/<div class="site-prose">(.*?)<\/div><\/article>/gs)].map((match) => match[1]).join("\n");
+    assert.equal([...html.matchAll(/<div class="site-prose">/g)].length, 3);
     // Real tags only: the escaped text may spell `onerror=` or `javascript:` harmlessly.
-    assert.doesNotMatch(main, /<(script|img)\b|<[a-z][^>]*\son\w+=|<[a-z][^>]*\s(href|src)="[^"]*javascript:/i);
-    assert.ok(main.includes("&lt;script&gt;alert(1)&lt;/script&gt;"), "the notes' script tag is not shown as text");
+    assert.doesNotMatch(notes, /<(script|img)\b|<[a-z][^>]*\son\w+=|<[a-z][^>]*\s(href|src)="[^"]*javascript:/i);
+    assert.ok(notes.includes("&lt;script&gt;alert(1)&lt;/script&gt;"), "the notes' script tag is not shown as text");
+  });
+
+  it("leads back home with a 首页 / 更新日志 breadcrumb and BreadcrumbList data; the icon and name go to the download state", () => {
+    const { steps, jsonLd } = breadcrumbsOf(html);
+    assert.deepEqual(steps, [
+      { label: "首页", href: "/#download", current: false },
+      { label: "更新日志", href: undefined, current: true },
+    ]);
+    assert.deepEqual(jsonLd, {
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      itemListElement: [
+        { "@type": "ListItem", position: 1, name: "首页", item: `${ORIGIN}/` },
+        { "@type": "ListItem", position: 2, name: "更新日志", item: changelogUrl },
+      ],
+    });
+    assert.equal(topBarHomeHref(html), "/#download");
+  });
+
+  it("indexes every version with its day, linked to its release, beside the list and folded for narrow screens", () => {
+    const { aside, inline } = sectionIndexOf(html);
+    assert.ok(aside, "no sticky version index");
+    assert.ok(inline, "no folded <details> version index");
+    assert.equal(aside.title, "版本");
+    assert.equal(aside.label, "版本");
+    assert.equal(inline.title, "版本");
+    assert.deepEqual(inline.entries, aside.entries);
+    assert.deepEqual(aside.entries, [
+      { id: "v0.5.3", label: "v0.5.3", note: "2026年10月10日", level: 0 },
+      { id: "v0.5.2", label: "v0.5.2", note: "2026年10月10日", level: 0 },
+      { id: "v0.1.0", label: "v0.1.0", note: "2026年8月23日", level: 0 },
+    ]);
+    // Each anchor is the release's own element, and the index covers every release on the page.
+    assert.deepEqual(
+      aside.entries.map((entry) => entry.id),
+      idsOf(html, "article"),
+    );
   });
 
   it("marks the notes' links off the site rel=noopener", () => {

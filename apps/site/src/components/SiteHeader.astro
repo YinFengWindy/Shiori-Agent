@@ -8,9 +8,11 @@ import DownloadButton from "./DownloadButton.astro";
 import "../styles/header.css";
 
 /**
- * The site's top bar (#773): the app icon and name (home, top), then 博客,
+ * The site's top bar (#773): the app icon and name, then 博客,
  * 更新日志, GitHub and the download button. A thin, translucent light strip
- * in the showcase's colours.
+ * in the showcase's colours. The icon and name lead to the home page's
+ * closing download state (`/#download`, #797); on the home page itself the
+ * narrative glides there instead of reloading (NarrativeStage.astro).
  *
  * `reveal` (home page): out of sight over the narrative, which is a
  * full-screen stage of its own; it slides in from the top once the page
@@ -36,7 +38,7 @@ const wideOnlyClass = "max-sm:hidden";
 
 <header class="site-header" data-site-header data-mode={mode}>
   <nav class="site-header-bar" aria-label="站点导航">
-    <a href="/" class="site-header-brand no-underline" data-site-header-home>
+    <a href={SITE_LINKS.home} class="site-header-brand no-underline">
       <img
         src={barIconImage.src}
         width={barIconImage.width}
@@ -69,9 +71,6 @@ const wideOnlyClass = "max-sm:hidden";
   if (header.dataset.mode === "reveal") {
     const narrative = document.querySelector<HTMLElement>("[data-narrative]");
     if (!narrative) throw new Error("the top bar's reveal mode needs the narrative");
-    const home = header.querySelector<HTMLAnchorElement>("[data-site-header-home]");
-    if (!home) throw new Error("top bar home link is missing");
-    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
     let frame = 0;
     const update = () => {
@@ -84,13 +83,5 @@ const wideOnlyClass = "max-sm:hidden";
     window.addEventListener("scroll", scheduleUpdate, { passive: true });
     window.addEventListener("resize", scheduleUpdate);
     update();
-
-    // Already on the home page: the name takes the page back to its top
-    // rather than reloading it (and its loader).
-    home.addEventListener("click", (event) => {
-      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-      event.preventDefault();
-      window.scrollTo({ top: 0, behavior: reducedMotion.matches ? "instant" : "smooth" });
-    });
   }
 </script>

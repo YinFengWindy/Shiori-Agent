@@ -17,10 +17,9 @@
   margin-bottom: 0;
 }
 
-/* Each release a full-width column of the list; a version link scrolls it clear of the sticky top bar. */
+/* Each release a full-width column of the list (its anchor clears the top bar, reading.css). */
 .site-changelog-release {
   width: 100%;
-  scroll-margin-top: calc(var(--site-header-height) + 1rem);
 }
 
 .site-changelog-head {

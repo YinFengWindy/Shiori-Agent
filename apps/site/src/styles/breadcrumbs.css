@@ -1,0 +1,64 @@
+/*
+ * The reading pages' breadcrumb trail (#797, components/Breadcrumbs.astro):
+ * one small line of links over the page heading, slashes between steps.
+ * Same rule as site.css: the rules use only the --site-breadcrumbs-* names
+ * defined here, from the app's semantic tokens.
+ *
+ * Contrast: links are --color-text-secondary (8.2:1 on neutral-50), the
+ * current page and the slashes --color-text-muted (5.5:1); on the wash's
+ * lightest stop and on the reading column they stay above 4.5:1.
+ */
+.site-breadcrumbs {
+  --site-breadcrumbs-ink: var(--color-text-secondary);
+  --site-breadcrumbs-ink-hover: var(--color-text-accent);
+  --site-breadcrumbs-ink-muted: var(--color-text-muted);
+
+  margin-bottom: 1rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.site-breadcrumbs-list {
+  display: flex;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.site-breadcrumbs-item {
+  display: flex;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* The page itself (a post's title, repeated in full right under it) gives way first. */
+.site-breadcrumbs-item:last-child {
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+.site-breadcrumbs-item + .site-breadcrumbs-item::before {
+  content: "/" / "";
+  margin-inline: 0.5rem;
+  color: var(--site-breadcrumbs-ink-muted);
+}
+
+.site-breadcrumbs-link {
+  border-radius: var(--radius-sm);
+  color: var(--site-breadcrumbs-ink);
+  text-decoration: none;
+  transition: color var(--duration-fast) var(--ease-out-soft);
+}
+
+.site-breadcrumbs-link:hover {
+  color: var(--site-breadcrumbs-ink-hover);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.site-breadcrumbs-current {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--site-breadcrumbs-ink-muted);
+}
