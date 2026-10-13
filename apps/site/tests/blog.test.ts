@@ -111,7 +111,7 @@ describe("blog in the production build", () => {
   it("serves the list page with its own title and canonical URL, the bar always there, 博客 marked current", () => {
     const html = dist.read("blog/index.html");
     assert.match(html, /<title>博客 · Shiori AI 伴侣<\/title>/);
-    assertDescription(metaContent(html, "name", "description"), ["Shiori", "AI 伴侣", "AI 女友", "桌宠"]);
+    assertDescription(metaContent(html, "name", "description"), ["Shiori", "AI 伴侣", "AI 女友", "Personal Agent"]);
     assert.match(html, new RegExp(`<link rel="canonical" href="${ORIGIN}/blog/">`));
     assert.match(html, /<header class="site-header" data-site-header data-mode="fixed">/);
     assert.match(html, /<a href="\/blog\/"[^>]* aria-current="page">博客<\/a>/);

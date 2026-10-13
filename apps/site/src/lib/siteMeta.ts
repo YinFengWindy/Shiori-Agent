@@ -16,21 +16,21 @@ export const DOWNLOAD_HEADLINE = "把我带回家吧，笨蛋。";
 /**
  * The home page's description (meta, OG, structured data), and the default
  * for pages that do not set their own. Worded for what people search for a
- * companion app with (AI 伴侣 / AI 女友 / AI 桌宠, remembers you, comes to
+ * companion app with (AI 伴侣 / AI 女友 / Personal Agent, remembers you, comes to
  * find you, open source and free, Windows), in the slogan's voice (#799).
  */
 export const SITE_DESCRIPTION =
-  "Shiori 是会慢慢喜欢上你的 AI 伴侣，一款开源免费的 Windows 桌面应用。她是待在桌面上的 AI 桌宠，也可以是你的 AI 女友：记得你们聊过的往事，太久不理她就会主动来找你，还能陪你处理手头的事。";
+  "Shiori 是会慢慢喜欢上你的 AI 伴侣，一款开源免费的 Windows Personal Agent。她可以是你的 AI 女友：记得你们聊过的往事，太久不理她就会主动来找你，也能陪你处理文件、搜索这些手头的事。";
 
 /** The home page's `<title>`: the name, the slogan and the search words it lacks (#799). */
-export const HOME_TITLE = `${SITE_NAME} · ${SITE_SLOGAN} · 开源免费的 AI 桌宠`;
+export const HOME_TITLE = `${SITE_NAME} · ${SITE_SLOGAN} · 开源免费的 Personal Agent`;
 
 /**
  * The home page's one `h1` (#799). The download call shows the app icon in
  * its place, so this text is visually hidden: it names the page for search
  * engines and screen readers without touching the design.
  */
-export const HOME_HEADING = `${SITE_NAME}：会慢慢喜欢上你的开源 AI 伴侣与桌宠`;
+export const HOME_HEADING = `${SITE_NAME}：会慢慢喜欢上你的 AI 伴侣，开源的 Personal Agent`;
 
 /** What every other page's `<title>` ends with, after its own name (#799). */
 export const SITE_TITLE_SUFFIX = `${SITE_NAME} AI 伴侣`;

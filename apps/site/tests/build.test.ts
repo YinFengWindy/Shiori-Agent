@@ -40,8 +40,8 @@ describe("home page HTML", () => {
 
   it("declares the language, and a title and description carrying the companion search words (#799)", () => {
     assert.match(html, /<html lang="zh-CN">/);
-    assert.match(html, /<title>Shiori · 会慢慢喜欢上你的 AI 伴侣 · 开源免费的 AI 桌宠<\/title>/);
-    assertDescription(metaContent(html, "name", "description"), ["Shiori", "AI 伴侣", "AI 女友", "AI 桌宠", "开源免费", "Windows"]);
+    assert.match(html, /<title>Shiori · 会慢慢喜欢上你的 AI 伴侣 · 开源免费的 Personal Agent<\/title>/);
+    assertDescription(metaContent(html, "name", "description"), ["Shiori", "AI 伴侣", "AI 女友", "Personal Agent", "开源免费", "Windows"]);
   });
 
   it("has one h1, the app icon (decorative) with the keyword title as its visually hidden text (#799)", () => {
@@ -49,7 +49,7 @@ describe("home page HTML", () => {
     assert.equal(headings.length, 1);
     assert.match(
       headings[0],
-      /^<h1><img src="\/icons\/icon-512\.png"[^>]* alt=""[^>]*><span class="sr-only">Shiori：会慢慢喜欢上你的开源 AI 伴侣与桌宠<\/span><\/h1>$/,
+      /^<h1><img src="\/icons\/icon-512\.png"[^>]* alt=""[^>]*><span class="sr-only">Shiori：会慢慢喜欢上你的 AI 伴侣，开源的 Personal Agent<\/span><\/h1>$/,
     );
     const styles = [...html.matchAll(/<style>(.*?)<\/style>/gs)].map((match) => match[1]).join("\n");
     assert.match(styles, /\.sr-only\{[^}]*position:absolute/);
@@ -123,7 +123,7 @@ describe("home page HTML", () => {
 
   it("carries Open Graph and Twitter card tags with an absolute, emitted image", () => {
     assert.equal(metaContent(html, "property", "og:type"), "website");
-    assert.equal(metaContent(html, "property", "og:title"), "Shiori · 会慢慢喜欢上你的 AI 伴侣 · 开源免费的 AI 桌宠");
+    assert.equal(metaContent(html, "property", "og:title"), "Shiori · 会慢慢喜欢上你的 AI 伴侣 · 开源免费的 Personal Agent");
     assert.equal(metaContent(html, "property", "og:description"), metaContent(html, "name", "description"));
     const image = metaContent(html, "property", "og:image");
     // JPEG, not WebP: some link previewers cannot render WebP cards.
@@ -504,7 +504,7 @@ describe("changelog page (#792)", () => {
 
   it("carries its own title and description, with the companion search words, canonical URL and Open Graph tags", () => {
     assert.match(html, /<title>更新日志 · Shiori AI 伴侣<\/title>/);
-    assertDescription(metaContent(html, "name", "description"), ["Shiori", "AI 伴侣", "桌宠", "开源免费", "Windows"]);
+    assertDescription(metaContent(html, "name", "description"), ["Shiori", "AI 伴侣", "Personal Agent", "开源免费", "Windows"]);
     assert.match(html, new RegExp(`<link rel="canonical" href="${changelogUrl}">`));
     assert.equal(metaContent(html, "property", "og:url"), changelogUrl);
     assert.equal(metaContent(html, "property", "og:type"), "website");
