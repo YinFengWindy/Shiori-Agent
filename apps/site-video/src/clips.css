@@ -35,12 +35,12 @@
   --clip-chat-bubble-shadow: var(--shadow-soft);
 
   /* The light blue -> lavender -> pink veil over the app window behind the
-     channel windows: a faint tint that sets the windows apart while the
-     chat underneath stays readable. */
+     channel windows: dense enough that the chat underneath recedes and the
+     three channel windows read first, without blurring it. */
   --clip-veil: linear-gradient(
     160deg,
-    color-mix(in srgb, var(--blue-150) 30%, transparent),
-    color-mix(in srgb, var(--lavender-100) 20%, transparent) 45%,
-    color-mix(in srgb, var(--pink-150) 30%, transparent)
+    color-mix(in srgb, var(--blue-150) 72%, transparent),
+    color-mix(in srgb, var(--lavender-100) 64%, transparent) 45%,
+    color-mix(in srgb, var(--pink-150) 72%, transparent)
   );
 }
