@@ -12,19 +12,22 @@ import {
   getPublishedPosts,
   isoPostDate,
 } from "../../lib/blog";
-import { SITE_NAME } from "../../lib/siteMeta";
+import { latestDate } from "../../lib/pageUpdated";
+import { pageTitle } from "../../lib/siteMeta";
 import "../../styles/reading.css";
 import "../../styles/blog.css";
 
 /**
  * The blog's list page (#773): one card per published post, newest first —
  * its cover if it has one, title, day and summary, the whole card one link.
- * The breadcrumb over the heading leads back home (#797).
+ * The breadcrumb over the heading leads back home (#797). Dated by the
+ * newest post (#799).
  */
 const posts = await getPublishedPosts();
+const updated = latestDate(posts.map((post) => post.data.date));
 ---
 
-<SiteLayout title={`${BLOG_TITLE} · ${SITE_NAME}`} description={BLOG_DESCRIPTION}>
+<SiteLayout title={pageTitle(BLOG_TITLE)} description={BLOG_DESCRIPTION} updated={updated}>
   <SiteHeader mode="fixed" current="blog" />
   <main class="site-reading">
     <div class="site-blog-shelf">

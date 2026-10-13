@@ -169,3 +169,26 @@ export const galleryPhotos: readonly SiteImage[] = GALLERY_PHOTOS.map(({ art, al
   image: globFile(galleryThumbs, `${art}.webp`),
   alt,
 }));
+
+/*
+ * The full-size art of the photo strip's previews, by name: the arts named in
+ * GALLERY_PHOTOS (content/gallery.ts), spelled out because a glob pattern must
+ * be literal. Not every file in assets/art: each file a glob names is emitted
+ * into the build, and some of the art (cg-1) is deliberately kept off the
+ * public site. A preview missing here fails `galleryArtOf` with its name.
+ */
+const fullArt = import.meta.glob<ImageMetadata>("../assets/art/{cg-2,cg-3,cg-4,cg-5,cg-6,cg-7,cg-8,cg-10}.webp", {
+  import: "default",
+  eager: true,
+});
+
+/**
+ * The full-size art a photo strip preview was shrunk from (same file name in
+ * `assets/art/`), for a picture larger than the preview (a post's share
+ * picture, #799); `undefined` when `image` is not one of the previews.
+ */
+export function galleryArtOf(image: ImageMetadata): ImageMetadata | undefined {
+  const preview = Object.keys(galleryThumbs).find((path) => galleryThumbs[path]?.src === image.src);
+  if (preview === undefined) return undefined;
+  return globFile(fullArt, preview.slice(preview.lastIndexOf("/") + 1));
+}

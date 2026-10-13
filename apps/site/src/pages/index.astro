@@ -6,9 +6,14 @@ import SiteHeader from "../components/SiteHeader.astro";
 import SiteLoader from "../components/SiteLoader.astro";
 import { SoundToggle } from "../components/SoundToggle";
 import SiteLayout from "../layouts/SiteLayout.astro";
-import { loaderArtwork } from "../lib/siteAssets";
+import { getPublishedPosts } from "../lib/blog";
+import { loadLatestRelease } from "../lib/changelog";
+import { latestDate } from "../lib/pageUpdated";
+import { defaultShareImage } from "../lib/shareImage";
+import { appIconImage, loaderArtwork } from "../lib/siteAssets";
 import { siteLoaderGateScript } from "../lib/siteLoaderGate";
-import { DOWNLOAD_ANCHOR_ID, SITE_NAME, SITE_SLOGAN } from "../lib/siteMeta";
+import { DOWNLOAD_ANCHOR_ID, HOME_TITLE } from "../lib/siteMeta";
+import { homeJsonLd, inlineJson } from "../lib/structuredData";
 import "../styles/showcase.css";
 
 /*
@@ -20,14 +25,27 @@ import "../styles/showcase.css";
  * then the footer, the page's last snap point. The top bar (#773) slides in
  * over everything after the narrative. The music switch stays in the corner
  * over all of it.
+ *
+ * The head describes the site, its publisher and the app as structured data
+ * (#799), the app's version being the newest release this build read. The
+ * page is dated by the newer of that release and the newest post, the
+ * changes a visitor would notice here.
  */
+if (!Astro.site) throw new Error("astro.config.ts must set `site`: the home page's structured data is built from it");
+const release = await loadLatestRelease();
+const posts = await getPublishedPosts();
+const updated = latestDate([release.publishedAt, ...posts.map((post) => post.data.date)]);
+const structuredDataJson = inlineJson(
+  homeJsonLd({ site: Astro.site, logoPath: appIconImage.src, imagePath: defaultShareImage.src, release }),
+);
 ---
 
-<SiteLayout title={`${SITE_NAME} · ${SITE_SLOGAN}`}>
+<SiteLayout title={HOME_TITLE} updated={updated}>
   {/* Before anything paints: is this a visit the loader stays out of (Back, an anchor)? */}
   <script slot="head" is:inline set:html={siteLoaderGateScript} />
   {/* The loader's illustration is the first picture the page asks for. */}
   <link slot="head" rel="preload" as="image" href={loaderArtwork.src} fetchpriority="high" />
+  <script slot="meta" type="application/ld+json" set:html={structuredDataJson} />
   <SiteLoader />
   <SiteHeader mode="reveal" />
   <main>

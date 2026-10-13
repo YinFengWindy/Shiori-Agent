@@ -186,6 +186,9 @@ importers:
       satteri:
         specifier: 0.10.5
         version: 0.10.5
+      sharp:
+        specifier: 0.35.5
+        version: 0.35.5(@types/node@26.6.3)
     devDependencies:
       '@astrojs/check':
         specifier: 0.9.10

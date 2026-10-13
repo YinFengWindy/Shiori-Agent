@@ -310,3 +310,14 @@ export function loadChangelog(): Promise<ChangelogEntry[]> {
     });
   return loaded;
 }
+
+/**
+ * The newest published release of this build (`loadChangelog`, the same
+ * fetch): the home page's structured data names its version, and pages date
+ * themselves by it (#799).
+ */
+export async function loadLatestRelease(): Promise<ChangelogEntry> {
+  const [latest] = await loadChangelog();
+  if (!latest) throw new Error(`no published release of ${CHANGELOG_REPOSITORY}`);
+  return latest;
+}

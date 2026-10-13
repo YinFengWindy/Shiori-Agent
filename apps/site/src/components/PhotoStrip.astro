@@ -1,5 +1,5 @@
 ---
-import { galleryPhotos } from "../lib/siteAssets";
+import { type SiteImage, galleryPhotos } from "../lib/siteAssets";
 
 /**
  * The CG photo strip closing the showcase (#772): photo prints in a row,
@@ -8,26 +8,36 @@ import { galleryPhotos } from "../lib/siteAssets";
  * tree; hovering pauses it. Nothing is clickable. Under reduced motion the
  * row stands still and scrolls by hand instead (the copy is dropped).
  */
+
+/** A print's picture, but for its alt text (the row's own, or none for the copy). */
+function printAttributes(photo: SiteImage) {
+  return {
+    src: photo.image.src,
+    width: photo.image.width,
+    height: photo.image.height,
+    loading: "lazy",
+    decoding: "async",
+    draggable: "false",
+  } as const;
+}
 ---
 
 <div class="site-photostrip" role="region" aria-label="吟风的 CG 相片" tabindex="0">
   <ul class="site-photostrip-track">
     {
-      [false, true].map((copy) =>
-        galleryPhotos.map((photo) => (
-          <li class="site-photo" data-copy={copy ? "" : undefined} aria-hidden={copy ? "true" : undefined}>
-            <img
-              src={photo.image.src}
-              width={photo.image.width}
-              height={photo.image.height}
-              alt={copy ? "" : photo.alt}
-              loading="lazy"
-              decoding="async"
-              draggable="false"
-            />
-          </li>
-        )),
-      )
+      galleryPhotos.map((photo) => (
+        <li class="site-photo">
+          <img {...printAttributes(photo)} alt={photo.alt} />
+        </li>
+      ))
+    }
+    {/* The loop copy: decorative, its empty alt written out as `alt=""` (#799). */}
+    {
+      galleryPhotos.map((photo) => (
+        <li class="site-photo" data-copy aria-hidden="true">
+          <img {...printAttributes(photo)} alt="" />
+        </li>
+      ))
     }
   </ul>
 </div>
