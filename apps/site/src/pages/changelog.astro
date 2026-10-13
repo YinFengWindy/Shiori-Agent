@@ -22,7 +22,7 @@ import "../styles/changelog.css";
  */
 const CHANGELOG_TITLE = "更新日志";
 const CHANGELOG_DESCRIPTION =
-  "Shiori 每个版本的新增、改进与修复都记在这里。这个开源免费的 Windows AI 伴侣与 Personal Agent 一直在长大：记忆、好感度、主动消息和聊天渠道的每一次变化，按版本从新到旧排好，也能直接下载最新版。";
+  "Shiori 的版本更新记录：每个版本新增了哪些功能、修复了哪些问题、升级时要注意什么，按时间从新到旧列出。Shiori 是开源免费的 Windows AI 伴侣与 Personal Agent，可在页面顶部下载最新版。";
 const entries = await loadChangelog();
 const [newest] = entries;
 const versionIndex = entries.map((entry) => ({
