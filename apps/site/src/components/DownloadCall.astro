@@ -2,17 +2,25 @@
 import { GithubLogoIcon } from "@phosphor-icons/react";
 import { cx, ghostButtonClass } from "@yinfengwindy/shiori-sdk";
 import { primaryButtonClass } from "../../../desktop/renderer/src/shared/styles";
+import { siteText } from "../i18n";
+import type { Locale } from "../i18n/locales";
 import { appIconImage } from "../lib/siteAssets";
-import { DOWNLOAD_HEADLINE, HOME_HEADING, SITE_LINKS, SITE_SLOGAN } from "../lib/siteMeta";
+import { SITE_LINKS } from "../lib/siteMeta";
 import DownloadButton from "./DownloadButton.astro";
 
 /**
  * The calls to action closing the narrative (#771): the page's one `h1` —
- * the app icon on screen, the keyword title (`HOME_HEADING`, #799) as its
+ * the app icon on screen, the keyword title (`meta.homeHeading`, #799) as its
  * visually hidden text, so the icon itself is decorative — 吟风's closing headline with its tagline, and the download / GitHub buttons, straight on the
  * scene — no panel. The download button's direct link comes from
  * DownloadButton.astro, shared with the top bar.
  */
+interface Props {
+  locale: Locale;
+}
+
+const { locale } = Astro.props;
+const text = siteText(locale);
 // Button labels share the slogan's story type (.site-story-type in site.css).
 const ctaLayoutClass = "site-story-type inline-flex items-center gap-2 text-body-lg";
 ---
@@ -28,14 +36,14 @@ const ctaLayoutClass = "site-story-type inline-flex items-center gap-2 text-body
       decoding="async"
       class="site-download-icon"
     />
-    <span class="sr-only">{HOME_HEADING}</span>
+    <span class="sr-only">{text.meta.homeHeading}</span>
   </h1>
   <div class="site-download-heading">
-    <p class="site-download-slogan site-story-type">{DOWNLOAD_HEADLINE}</p>
-    <p class="site-download-tagline site-story-type text-title">{SITE_SLOGAN}</p>
+    <p class="site-download-slogan site-story-type">{text.downloadHeadline}</p>
+    <p class="site-download-tagline site-story-type text-title">{text.slogan}</p>
   </div>
   <div class="flex flex-wrap justify-center gap-3">
-    <DownloadButton class={cx(primaryButtonClass, ctaLayoutClass)} iconSize={20} />
+    <DownloadButton label={text.downloadButton} class={cx(primaryButtonClass, ctaLayoutClass)} iconSize={20} />
     <a href={SITE_LINKS.github} class={cx(ghostButtonClass, ctaLayoutClass)}>
       <GithubLogoIcon size={20} aria-hidden="true" />
       GitHub

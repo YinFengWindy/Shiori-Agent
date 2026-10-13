@@ -1,0 +1,44 @@
+---
+import { cx, iconButtonClass } from "@yinfengwindy/shiori-sdk";
+import { compactTextButtonClass } from "../../../desktop/renderer/src/shared/styles";
+import { siteText } from "../i18n";
+import { LOCALE_INFO, type Locale, otherLocale } from "../i18n/locales";
+import "../styles/language.css";
+
+/**
+ * The link to the other language (#806): 「EN」 on a Chinese page, 「中」 on
+ * an English one, named in full for assistive technology. A plain link to
+ * the same page in the other language (`languageSwitchHref`), so it works
+ * without scripting; on the home page HomeLanguageSwitch.astro adds the
+ * reader's place to it as they go.
+ *
+ * `corner`: the home page's small button beside the music switch, over
+ * every stage of the page — the loader included, whose input guard lets it
+ * through (`data-loader-passthrough`, SiteLoader.astro). `bar`: inside the
+ * top bar, where it takes over once the bar slides in (header.css).
+ */
+interface Props {
+  /** The page's language (the switch leads to the other one). */
+  locale: Locale;
+  /** The same page in the other language. */
+  href: string;
+  variant: "corner" | "bar";
+}
+
+const { locale, href, variant } = Astro.props;
+const text = siteText(locale).languageSwitch;
+const className =
+  variant === "corner"
+    ? cx(iconButtonClass, "site-lang-corner text-body-sm font-semibold no-underline")
+    : cx(compactTextButtonClass, "site-lang-bar font-semibold no-underline");
+---
+
+<a
+  href={href}
+  hreflang={LOCALE_INFO[otherLocale(locale)].hreflang}
+  class={className}
+  aria-label={text.label}
+  title={text.label}
+  data-lang-switch
+  data-loader-passthrough={variant === "corner" ? "" : undefined}>{text.text}</a
+>

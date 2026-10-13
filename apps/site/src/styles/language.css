@@ -1,0 +1,74 @@
+/*
+ * The language switch (#806): the home page's corner button beside the
+ * music switch (LanguageSwitch.astro, `corner`), and the one-time English
+ * prompt under the corner on a Chinese page (LanguagePrompt.astro). Both
+ * sit above the home page's loader (z-index 100, site.css), whose input
+ * guard lets them through. The corner's placement and the button size are
+ * the shared --site-corner-* (site.css); the top bar's own switch hides the
+ * corner one while the bar shows (header.css).
+ */
+.site-lang-corner {
+  position: fixed;
+  z-index: 110;
+  top: var(--site-corner-inset);
+  right: calc(var(--site-corner-inset) + var(--site-corner-button) + var(--site-corner-gap));
+  transition:
+    opacity var(--duration-fast) var(--ease-out-soft),
+    visibility 0s linear;
+}
+
+/* Without scripting the top bar shows from the start, with its own switch. */
+@media (scripting: none) {
+  .site-lang-corner {
+    display: none;
+  }
+}
+
+/* A small glass card under the corner controls, in the top bar's colours. */
+.site-lang-prompt {
+  position: fixed;
+  z-index: 110;
+  top: calc(var(--site-corner-inset) + var(--site-corner-button) + var(--site-corner-gap));
+  right: var(--site-corner-inset);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-width: min(20rem, calc(100vw - 2 * var(--site-corner-inset)));
+  padding: 0.75rem 0.875rem;
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-glass-strong);
+  box-shadow: var(--shadow-pop);
+  backdrop-filter: blur(16px) saturate(1.4);
+  color: var(--color-text-primary);
+  animation: site-lang-prompt-in var(--duration-enter) var(--ease-out-soft) both;
+}
+
+.site-lang-prompt[hidden] {
+  display: none;
+}
+
+.site-lang-prompt-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+@keyframes site-lang-prompt-in {
+  from {
+    opacity: 0;
+    translate: 0 -0.5rem;
+  }
+}
+
+/* Reduced motion: the prompt is simply there, and the corner switch goes
+   without a fade. */
+@media (prefers-reduced-motion: reduce) {
+  .site-lang-prompt {
+    animation: none;
+  }
+
+  .site-lang-corner {
+    transition: none;
+  }
+}

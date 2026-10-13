@@ -13,7 +13,9 @@ import {
   isoPostDate,
 } from "../../lib/blog";
 import { latestDate } from "../../lib/pageUpdated";
-import { pageTitle } from "../../lib/siteMeta";
+import { pageTitle } from "../../i18n";
+import { type PageVersions, languageSwitchHref } from "../../i18n/locales";
+import { SITE_SECTIONS } from "../../lib/siteMeta";
 import "../../styles/reading.css";
 import "../../styles/blog.css";
 
@@ -21,17 +23,20 @@ import "../../styles/blog.css";
  * The blog's list page (#773): one card per published post, newest first —
  * its cover if it has one, title, day and summary, the whole card one link.
  * The breadcrumb over the heading leads back home (#797). Dated by the
- * newest post (#799).
+ * newest post (#799). Chinese only until the English blog (#807): the
+ * language switch leads to the English home page meanwhile.
  */
+const versions: PageVersions = SITE_SECTIONS.blog;
+const languageHref = languageSwitchHref("zh", versions);
 const posts = await getPublishedPosts();
 const updated = latestDate(posts.map((post) => post.data.date));
 ---
 
-<SiteLayout title={pageTitle(BLOG_TITLE)} description={BLOG_DESCRIPTION} updated={updated}>
-  <SiteHeader mode="fixed" current="blog" />
+<SiteLayout locale="zh" versions={versions} title={pageTitle(BLOG_TITLE, "zh")} description={BLOG_DESCRIPTION} updated={updated}>
+  <SiteHeader locale="zh" mode="fixed" current="blog" languageHref={languageHref} />
   <main class="site-reading">
     <div class="site-blog-shelf">
-      <Breadcrumbs trail={[{ label: BLOG_TITLE, href: "/blog/" }]} />
+      <Breadcrumbs locale="zh" trail={[{ label: BLOG_TITLE, href: SITE_SECTIONS.blog.zh }]} />
       <h1 class="site-reading-heading site-story-type">{BLOG_TITLE}</h1>
       {
         posts.length === 0 ? (
@@ -71,5 +76,5 @@ const updated = latestDate(posts.map((post) => post.data.date));
       }
     </div>
   </main>
-  <SiteFooter />
+  <SiteFooter locale="zh" />
 </SiteLayout>

@@ -2,28 +2,35 @@
 import { DownloadSimpleIcon, GithubLogoIcon, ScalesIcon } from "@phosphor-icons/react";
 import { cx } from "@yinfengwindy/shiori-sdk";
 import { compactTextButtonClass } from "../../../desktop/renderer/src/shared/styles";
+import { siteText } from "../i18n";
+import type { Locale } from "../i18n/locales";
 import { SITE_LINKS, SITE_NAME } from "../lib/siteMeta";
 import "../styles/footer.css";
 
 /** Page footer (#772): the project links, the license and the copyright line. */
+interface Props {
+  locale: Locale;
+}
+
+const text = siteText(Astro.props.locale).footer;
 const linkClass = cx(compactTextButtonClass, "no-underline");
 // Build year: the site is rebuilt on every change, so it stays current.
 const year = new Date().getFullYear();
 ---
 
 <footer class="site-footer">
-  <nav aria-label="项目链接" class="site-footer-links">
+  <nav aria-label={text.label} class="site-footer-links">
     <a href={SITE_LINKS.github} class={linkClass}>
       <GithubLogoIcon size={18} aria-hidden="true" />
       GitHub
     </a>
     <a href={SITE_LINKS.releases} class={linkClass}>
       <DownloadSimpleIcon size={18} aria-hidden="true" />
-      Release
+      {text.releases}
     </a>
     <a href={SITE_LINKS.license} class={linkClass}>
       <ScalesIcon size={18} aria-hidden="true" />
-      MIT 许可
+      {text.license}
     </a>
   </nav>
   <p class="text-body-sm">© {year} {SITE_NAME}</p>

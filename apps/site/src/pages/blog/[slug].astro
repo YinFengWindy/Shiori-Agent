@@ -17,7 +17,9 @@ import {
 import { postTableOfContents } from "../../lib/sectionIndex";
 import { postShareImage } from "../../lib/shareImage";
 import { appIconImage } from "../../lib/siteAssets";
-import { pageTitle } from "../../lib/siteMeta";
+import { pageTitle } from "../../i18n";
+import { type PageVersions, languageSwitchHref } from "../../i18n/locales";
+import { SITE_SECTIONS } from "../../lib/siteMeta";
 import { inlineJson, organizationJsonLd } from "../../lib/structuredData";
 import "../../styles/reading.css";
 import "../../styles/blog.css";
@@ -35,6 +37,9 @@ import "../../styles/blog.css";
  * one. A post with two or more sections gets a table of contents from its
  * rendered headings (their ids are the anchors): beside the column on wide
  * screens, folded under the title on narrow ones (SectionIndex.astro).
+ *
+ * Chinese only: a post names no English version (and so no alternate) until
+ * it has one (#807); the language switch leads to the English home page.
  */
 export async function getStaticPaths() {
   const posts = await getPublishedPosts();
@@ -50,10 +55,12 @@ const { title, description, date, cover } = post.data;
 const { Content, headings } = await render(post);
 const tableOfContents = postTableOfContents(headings);
 const postPath = blogPostPath(post);
+const versions: PageVersions = { zh: postPath };
+const languageHref = languageSwitchHref("zh", versions);
 if (!Astro.site) throw new Error("astro.config.ts must set `site`: the post's structured data is built from it");
 const postUrl = new URL(postPath, Astro.site).href;
 const published = isoPostDate(date);
-const shareImage = await postShareImage(cover);
+const shareImage = await postShareImage(cover, "zh");
 const structuredData = {
   "@context": "https://schema.org",
   "@type": "BlogPosting",
@@ -70,20 +77,21 @@ const structuredData = {
 const structuredDataJson = inlineJson(structuredData);
 ---
 
-<SiteLayout title={pageTitle(title)} description={description} ogType="article" image={shareImage} updated={date}>
+<SiteLayout locale="zh" versions={versions} title={pageTitle(title, "zh")} description={description} ogType="article" image={shareImage} updated={date}>
   <Fragment slot="meta">
     <meta property="article:published_time" content={published} />
     <meta property="article:author" content={BLOG_AUTHOR} />
     <script type="application/ld+json" set:html={structuredDataJson} />
   </Fragment>
-  <SiteHeader mode="fixed" current="blog" />
+  <SiteHeader locale="zh" mode="fixed" current="blog" languageHref={languageHref} />
   <main class="site-reading">
     <div class="site-section-layout">
       <article class="site-reading-column site-section-layout-main">
         <header class="site-post-head">
           <Breadcrumbs
+            locale="zh"
             trail={[
-              { label: BLOG_TITLE, href: "/blog/" },
+              { label: BLOG_TITLE, href: SITE_SECTIONS.blog.zh },
               { label: title, href: postPath },
             ]}
           />
@@ -114,5 +122,5 @@ const structuredDataJson = inlineJson(structuredData);
       {tableOfContents.length > 0 && <SectionIndex variant="aside" title="目录" entries={tableOfContents} />}
     </div>
   </main>
-  <SiteFooter />
+  <SiteFooter locale="zh" />
 </SiteLayout>

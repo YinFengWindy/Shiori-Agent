@@ -11,18 +11,20 @@ import { SITE_LINKS } from "../lib/siteMeta";
  * several of these buttons still asks the API once.
  */
 interface Props {
+  /** What it says, in the page's language; the release tag follows it. */
+  label: string;
   /** Classes of the link: its button surface, size and type. */
   class: string;
   /** Size of the download icon, in px. */
   iconSize: number;
 }
 
-const { class: className, iconSize } = Astro.props;
+const { label, class: className, iconSize } = Astro.props;
 ---
 
 <a href={SITE_LINKS.releasesLatest} class={className} data-download-installer>
   <DownloadSimpleIcon size={iconSize} weight="bold" aria-hidden="true" />
-  <span>下载 Windows 版<span data-download-version></span></span>
+  <span>{label}<span data-download-version></span></span>
 </a>
 
 <script>

@@ -95,13 +95,14 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * A meta description fit for search results (#799): 70–120 characters, long
- * enough to say something and short enough not to be cut much, naming every
+ * A meta description fit for search results (#799): 70–120 characters by
+ * default (Chinese), long enough to say something and short enough not to be
+ * cut much — `length` for another language (English: 70–160) — naming every
  * one of `words` (the search words the page is meant to be found by).
  */
-export function assertDescription(description: string, words: readonly string[]) {
-  const length = [...description].length;
-  assert.ok(length >= 70 && length <= 120, `description is ${length} characters, not 70–120: ${description}`);
+export function assertDescription(description: string, words: readonly string[], length = { min: 70, max: 120 }) {
+  const count = [...description].length;
+  assert.ok(count >= length.min && count <= length.max, `description is ${count} characters, not ${length.min}–${length.max}: ${description}`);
   for (const word of words) assert.ok(description.includes(word), `description does not mention ${word}: ${description}`);
 }
 

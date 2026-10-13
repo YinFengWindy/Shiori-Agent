@@ -1,10 +1,9 @@
 ---
 import { CaretDownIcon } from "@phosphor-icons/react";
-import {
-  mascotExpressions,
-  mascotName,
-} from "../../../desktop/renderer/src/shared/mascot/mascotExpressions";
+import { mascotExpressions } from "../../../desktop/renderer/src/shared/mascot/mascotExpressions";
 import { NARRATIVE_LINES } from "../content/narrative";
+import { siteText } from "../i18n";
+import type { Locale } from "../i18n/locales";
 import { narrativeCgs, narrativeExpressionSprites } from "../lib/siteAssets";
 import DownloadCall from "./DownloadCall.astro";
 import SceneBackdrop from "./SceneBackdrop.astro";
@@ -22,13 +21,26 @@ import SceneBackdrop from "./SceneBackdrop.astro";
  * Every line is static text in reading order; the ones off stage are
  * visually hidden, not removed. Under reduced motion, or without scripting,
  * site.css lays the lines out as a plain list with the download call below.
+ *
+ * Each line has a stable anchor (content/narrative.ts, #806): an address
+ * naming a line or the download call (`/#remembers`, `/#download`) opens the
+ * narrative on that step, which is how the language switch keeps the
+ * reader's place. A line's anchor is the `id` of its step's snap point, not
+ * of its text: the snap point sits in the page flow exactly at the step, so
+ * the browser's own jump lands there, where a jump to text on the pinned
+ * stage would chase it towards the narrative's end. The line names its
+ * anchor in `data-anchor`; under reduced motion, where the lines are a
+ * plain list and the snap points are gone, the script jumps to the line.
  */
 interface Props {
+  /** The page's language: the lines', the name plate's and the CGs' alt text. */
+  locale: Locale;
   /** `id` of the download call (hash links, focus). */
   downloadId: string;
 }
 
-const { downloadId } = Astro.props;
+const { locale, downloadId } = Astro.props;
+const text = siteText(locale);
 const [firstLine] = NARRATIVE_LINES;
 if (!firstLine) throw new Error("the narrative needs at least one line");
 // One step per line, then the download state.
@@ -83,11 +95,11 @@ const usedCgKeys = [...new Set(NARRATIVE_LINES.flatMap((line) => (line.cg ? [lin
           const cg = narrativeCgs[key];
           return (
             <img
-              src={firstLine.cg === key ? cg.image.src : undefined}
-              data-src={cg.image.src}
-              width={cg.image.width}
-              height={cg.image.height}
-              alt={cg.alt}
+              src={firstLine.cg === key ? cg.src : undefined}
+              data-src={cg.src}
+              width={cg.width}
+              height={cg.height}
+              alt={text.art[key]}
               decoding="async"
               class="site-narrative-cg"
               data-cg={key}
@@ -98,18 +110,19 @@ const usedCgKeys = [...new Set(NARRATIVE_LINES.flatMap((line) => (line.cg ? [lin
       }
     </div>
     <div class="site-dialogue">
-      <p class="site-dialogue-name site-story-type">{mascotName}</p>
+      <p class="site-dialogue-name site-story-type">{text.narrative.speaker}</p>
       <div class="site-dialogue-lines">
         {
           NARRATIVE_LINES.map((line, index) => (
             <p
               class="site-narrative-line site-story-type"
               data-narrative-line
+              data-anchor={line.id}
               data-expression={line.expression}
               data-cg={line.cg}
               data-active={index === 0 ? "" : undefined}
             >
-              {line.text}
+              {text.narrative.lines[line.id]}
             </p>
           ))
         }
@@ -117,11 +130,14 @@ const usedCgKeys = [...new Set(NARRATIVE_LINES.flatMap((line) => (line.cg ? [lin
       <CaretDownIcon size={20} weight="bold" aria-hidden="true" className="site-dialogue-caret" />
     </div>
     <div id={downloadId} class="site-download" data-narrative-download>
-      <DownloadCall />
+      <DownloadCall locale={locale} />
     </div>
   </div>
   <div class="site-narrative-snaps" aria-hidden="true">
-    {Array.from({ length: stepCount }, () => <div class="site-narrative-snap"></div>)}
+    {/* Each line's anchor; the download step's is the download call's own id. */}
+    {Array.from({ length: stepCount }, (_, step) => (
+      <div class="site-narrative-snap" id={NARRATIVE_LINES[step]?.id} />
+    ))}
   </div>
 </section>
 
@@ -130,8 +146,10 @@ const usedCgKeys = [...new Set(NARRATIVE_LINES.flatMap((line) => (line.cg ? [lin
     createWheelGestureGate,
     narrativeCgsToLoad,
     narrativeClickTarget,
+    narrativeAnchorStep,
     narrativeFinalOffset,
     narrativeStepAt,
+    narrativeStepOffset,
     narrativeStepTarget,
   } from "../lib/narrativeModel";
 
@@ -331,9 +349,24 @@ const usedCgKeys = [...new Set(NARRATIVE_LINES.flatMap((line) => (line.cg ? [lin
     const { scroll, target } = downloadOffsetFromHere();
     window.scrollTo({ top: window.scrollY + target - scroll.offset, behavior: "smooth" });
   });
-  if (!reducedMotion.matches && window.location.hash === `#${download.id}`) {
-    const { scroll, target } = downloadOffsetFromHere();
-    window.scrollTo({ top: window.scrollY + target - scroll.offset });
+  // An address naming a line or the download call (the language switch's,
+  // the top bar's from another page) opens the narrative on that step. A
+  // line's anchor is its snap point, where the browser's own jump lands; the
+  // download call's is the call itself, on the pinned stage, which the
+  // browser cannot bring on screen, so the step is scrolled to here. Under
+  // reduced motion the lines and the call sit in the page flow and the snap
+  // points are gone: the browser jumps to the call itself, and here to a line.
+  const anchoredStep = narrativeAnchorStep(window.location.hash, {
+    lineIds: lines.map((line) => required(line.dataset.anchor ?? null, "line anchor")),
+    downloadId: download.id,
+  });
+  if (anchoredStep !== null) {
+    if (!reducedMotion.matches) {
+      const scroll = currentScroll();
+      window.scrollTo({ top: window.scrollY + narrativeStepOffset(anchoredStep, scroll) - scroll.offset });
+    } else {
+      lines[anchoredStep]?.scrollIntoView({ block: "center" });
+    }
   }
 
   // A reload or a #hash link can open the page mid-narrative.

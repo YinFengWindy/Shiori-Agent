@@ -1,20 +1,31 @@
 ---
 import Analytics from "@vercel/analytics/astro";
+import LanguagePrompt from "../components/LanguagePrompt.astro";
+import { siteText } from "../i18n";
+import { LOCALES, LOCALE_INFO, type Locale, type PageVersions, hreflangLinks, languageSwitchHref } from "../i18n/locales";
 import { UPDATED_TIME_PROPERTY } from "../lib/pageUpdated";
-import { type ShareImage, defaultShareImage } from "../lib/shareImage";
-import { SITE_DESCRIPTION, SITE_NAME, SITE_THEME_COLOR } from "../lib/siteMeta";
+import { type ShareImage, siteShareImage } from "../lib/shareImage";
+import { SITE_NAME, SITE_THEME_COLOR } from "../lib/siteMeta";
 import { siteVerificationMeta } from "../lib/siteVerification";
 import "../styles/site.css";
 
 /** Per-page head metadata; everything else is shared by every page. */
 interface Props {
+  /** The page's language. */
+  locale: Locale;
+  /**
+   * The page in every language it exists in (`PageVersions`), itself
+   * included: its hreflang alternates, and the English prompt's target.
+   * Defaults to the page alone, which claims no alternate.
+   */
+  versions?: PageVersions;
   /** Full `<title>`, also used as the OG / Twitter title. */
   title: string;
-  /** Meta / OG description; defaults to the site description. */
+  /** Meta / OG description; defaults to the site description in the page's language. */
   description?: string;
   /** `og:type`: `article` for a blog post, `website` (default) otherwise. */
   ogType?: "website" | "article";
-  /** OG / Twitter picture, 1200×630 JPEG; defaults to the site's (`defaultShareImage`). */
+  /** OG / Twitter picture, 1200×630 JPEG; defaults to the site's (`siteShareImage`). */
   image?: ShareImage;
   /**
    * When the page's content last changed (`og:updated_time`), which the
@@ -24,14 +35,28 @@ interface Props {
 }
 
 /**
- * Shared page shell: `lang="zh-CN"`, title, description, canonical URL,
- * Open Graph / Twitter card, theme color, icons, the sitemap and blog feed
- * links, the search engines' site-verification tags configured for the build
- * (lib/siteVerification.ts) and Vercel Web Analytics. Every URL is absolute on `site` (astro.config.ts),
- * so crawlers see the canonical origin even on a preview deployment.
+ * Shared page shell, in the page's language (#806): `lang`, title,
+ * description, canonical URL (the page itself), hreflang alternates for a
+ * page in several languages (`hreflangLinks`: each language, then
+ * `x-default` on the Chinese page), Open Graph / Twitter card with its
+ * locale, theme color, icons, the sitemap and blog feed links, the search
+ * engines' site-verification tags configured for the build
+ * (lib/siteVerification.ts) and Vercel Web Analytics. A Chinese page also
+ * carries the one-time English prompt (LanguagePrompt.astro). Every URL is
+ * absolute on `site` (astro.config.ts), so crawlers see the canonical origin
+ * even on a preview deployment.
  */
-const { title, description = SITE_DESCRIPTION, ogType = "website", image = defaultShareImage, updated } = Astro.props;
+const { locale, title, ogType = "website", updated } = Astro.props;
+const text = siteText(locale);
+const { description = text.meta.description, image = siteShareImage(locale) } = Astro.props;
+const versions = Astro.props.versions ?? { [locale]: Astro.url.pathname };
+if (versions[locale] !== Astro.url.pathname) {
+  throw new Error(`a page's versions must name itself: ${Astro.url.pathname} is not versions.${locale} (${versions[locale]})`);
+}
 if (!Astro.site) throw new Error("astro.config.ts must set `site`: canonical and OG URLs are built from it");
+const localeInfo = LOCALE_INFO[locale];
+const alternates = hreflangLinks(versions, Astro.site);
+const otherOgLocales = LOCALES.filter((other) => other !== locale && versions[other] !== undefined).map((other) => LOCALE_INFO[other].ogLocale);
 const canonicalUrl = new URL(Astro.url.pathname, Astro.site).href;
 const ogImageUrl = new URL(image.src, Astro.site).href;
 const sitemapUrl = new URL("sitemap-index.xml", Astro.site).href;
@@ -40,7 +65,7 @@ const verification = siteVerificationMeta(process.env);
 ---
 
 <!doctype html>
-<html lang="zh-CN">
+<html lang={localeInfo.htmlLang}>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -49,6 +74,7 @@ const verification = siteVerificationMeta(process.env);
     <title>{title}</title>
     <meta name="description" content={description} />
     <link rel="canonical" href={canonicalUrl} />
+    {alternates.map(({ hreflang, href }) => <link rel="alternate" hreflang={hreflang} href={href} />)}
     <meta name="theme-color" content={SITE_THEME_COLOR} />
     <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48" />
     <link rel="icon" type="image/png" href="/icons/favicon-32.png" sizes="32x32" />
@@ -56,9 +82,10 @@ const verification = siteVerificationMeta(process.env);
     <link rel="icon" type="image/png" href="/icons/icon-512.png" sizes="512x512" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" sizes="180x180" />
     <link rel="sitemap" href={sitemapUrl} />
-    <link rel="alternate" type="application/rss+xml" title={`${SITE_NAME} 博客`} href={feedUrl} />
+    <link rel="alternate" type="application/rss+xml" title={text.meta.feedTitle} href={feedUrl} />
     <meta property="og:type" content={ogType} />
-    <meta property="og:locale" content="zh_CN" />
+    <meta property="og:locale" content={localeInfo.ogLocale} />
+    {otherOgLocales.map((ogLocale) => <meta property="og:locale:alternate" content={ogLocale} />)}
     <meta property="og:site_name" content={SITE_NAME} />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
@@ -79,6 +106,7 @@ const verification = siteVerificationMeta(process.env);
   </head>
   <body>
     <slot />
+    {localeInfo.offersEnglish && <LanguagePrompt href={languageSwitchHref(locale, versions)} />}
     <Analytics />
   </body>
 </html>

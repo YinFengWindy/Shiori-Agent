@@ -1,5 +1,7 @@
 ---
-import { type Crumb, HOME_CRUMB, breadcrumbListJsonLd } from "../lib/breadcrumbs";
+import { siteText } from "../i18n";
+import type { Locale } from "../i18n/locales";
+import { type Crumb, breadcrumbListJsonLd, homeCrumb } from "../lib/breadcrumbs";
 import { inlineJson } from "../lib/structuredData";
 import "../styles/breadcrumbs.css";
 
@@ -10,17 +12,20 @@ import "../styles/breadcrumbs.css";
  * `aria-current`. Carries the trail as BreadcrumbList structured data too.
  */
 interface Props {
+  /** The page's language: the home step and the trail's name. */
+  locale: Locale;
   /** The steps after 首页, the page itself last. */
   trail: Crumb[];
 }
 
-const trail = [HOME_CRUMB, ...Astro.props.trail];
+const { locale } = Astro.props;
+const trail = [homeCrumb(locale), ...Astro.props.trail];
 if (!Astro.site) throw new Error("astro.config.ts must set `site`: the breadcrumb's structured data is built from it");
 const structuredDataJson = inlineJson(breadcrumbListJsonLd(trail, Astro.site));
 const last = trail.length - 1;
 ---
 
-<nav class="site-breadcrumbs" aria-label="面包屑">
+<nav class="site-breadcrumbs" aria-label={siteText(locale).breadcrumbs.label}>
   <ol class="site-breadcrumbs-list">
     {
       trail.map((crumb, index) => (

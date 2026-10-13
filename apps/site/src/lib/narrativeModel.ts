@@ -133,3 +133,58 @@ export function narrativeCgsToLoad<Key extends string>(
   const keys = lineCgs.slice(line, line + lookahead + 1).filter((key): key is Key => key !== undefined);
   return [...new Set(keys)];
 }
+
+/**
+ * The narrative's anchors (#806): each line's id, then the download call's,
+ * one per step in step order. A `#hash` naming one opens the page on that
+ * step (`narrativeAnchorStep`), and the language switch carries the step on
+ * show across as its anchor (`narrativeStepAnchor`), so switching language
+ * keeps the reader on the same line.
+ */
+export interface NarrativeAnchors {
+  /** Each line's anchor id, in line order. */
+  readonly lineIds: readonly string[];
+  /** The download call's anchor id: the step after the last line. */
+  readonly downloadId: string;
+}
+
+function assertAnchors({ lineIds, downloadId }: NarrativeAnchors) {
+  if (lineIds.length === 0) throw new Error("the narrative needs at least one line anchor");
+  const ids = [...lineIds, downloadId];
+  if (new Set(ids).size !== ids.length) throw new Error(`narrative anchors must be distinct, got ${ids.join(", ")}`);
+}
+
+/**
+ * The step a `#hash` (`location.hash`: empty, or `#` and the anchor) opens
+ * the narrative on: a line's, or `lineIds.length` for the download call's;
+ * `null` when the hash names no step of the narrative (no hash, or an anchor
+ * elsewhere on the page, which the browser scrolls to itself).
+ */
+export function narrativeAnchorStep(hash: string, anchors: NarrativeAnchors): number | null {
+  assertAnchors(anchors);
+  if (!hash.startsWith("#")) return null;
+  let id: string;
+  try {
+    id = decodeURIComponent(hash.slice(1));
+  } catch {
+    // A malformed escape names nothing on the page.
+    return null;
+  }
+  if (id === anchors.downloadId) return anchors.lineIds.length;
+  const line = anchors.lineIds.indexOf(id);
+  return line >= 0 ? line : null;
+}
+
+/** The anchor of step `step`: its line's id, or the download call's past the last line. */
+export function narrativeStepAnchor(step: number, anchors: NarrativeAnchors): string {
+  assertAnchors(anchors);
+  const { lineIds, downloadId } = anchors;
+  if (!Number.isInteger(step) || step < 0 || step > lineIds.length) throw new Error(`step must be 0…${lineIds.length}, got ${step}`);
+  return lineIds[step] ?? downloadId;
+}
+
+/** The narrative offset of step `step`: `step` viewports below the section top. */
+export function narrativeStepOffset(step: number, { viewportHeight, lineCount }: Pick<NarrativeScroll, "viewportHeight" | "lineCount">): number {
+  if (!Number.isInteger(step) || step < 0 || step > lineCount) throw new Error(`step must be 0…${lineCount}, got ${step}`);
+  return step * viewportHeight;
+}

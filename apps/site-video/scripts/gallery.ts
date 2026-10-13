@@ -1,5 +1,5 @@
 /**
- * Shrinks the website photo strip's art (#790): every `GALLERY_PHOTOS` entry
+ * Shrinks the website photo strip's art (#790): every `GALLERY_ARTS` entry
  * of apps/site/src/content/gallery.ts, from `apps/site/src/assets/art/<art>.webp`
  * to `GALLERY_THUMB_HEIGHT` pixels tall in `apps/site/src/assets/gallery/<art>.webp`.
  * The site build only reads those committed files; run this
@@ -16,7 +16,7 @@ import { mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import sharp from "sharp";
-import { GALLERY_PHOTOS, GALLERY_THUMB_HEIGHT, GALLERY_THUMB_MAX_BYTES } from "../../site/src/content/gallery";
+import { GALLERY_ARTS, GALLERY_THUMB_HEIGHT, GALLERY_THUMB_MAX_BYTES } from "../../site/src/content/gallery";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const artDir = resolve(here, "../../site/src/assets/art");
@@ -26,7 +26,7 @@ const outDir = resolve(here, "../../site/src/assets/gallery");
 const WEBP_QUALITY = 78;
 
 mkdirSync(outDir, { recursive: true });
-const wanted = new Set(GALLERY_PHOTOS.map(({ art }) => `${art}.webp`));
+const wanted = new Set(GALLERY_ARTS.map((art) => `${art}.webp`));
 for (const file of readdirSync(outDir)) {
   if (!wanted.has(file)) rmSync(resolve(outDir, file));
 }

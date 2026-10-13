@@ -1,5 +1,7 @@
 ---
-import { type SiteImage, galleryPhotos } from "../lib/siteAssets";
+import { siteText } from "../i18n";
+import type { Locale } from "../i18n/locales";
+import { type GalleryPhoto, galleryPhotos } from "../lib/siteAssets";
 
 /**
  * The CG photo strip closing the showcase (#772): photo prints in a row,
@@ -8,13 +10,18 @@ import { type SiteImage, galleryPhotos } from "../lib/siteAssets";
  * tree; hovering pauses it. Nothing is clickable. Under reduced motion the
  * row stands still and scrolls by hand instead (the copy is dropped).
  */
+interface Props {
+  locale: Locale;
+}
+
+const text = siteText(Astro.props.locale);
 
 /** A print's picture, but for its alt text (the row's own, or none for the copy). */
-function printAttributes(photo: SiteImage) {
+function printAttributes({ image }: GalleryPhoto) {
   return {
-    src: photo.image.src,
-    width: photo.image.width,
-    height: photo.image.height,
+    src: image.src,
+    width: image.width,
+    height: image.height,
     loading: "lazy",
     decoding: "async",
     draggable: "false",
@@ -22,12 +29,12 @@ function printAttributes(photo: SiteImage) {
 }
 ---
 
-<div class="site-photostrip" role="region" aria-label="吟风的 CG 相片" tabindex="0">
+<div class="site-photostrip" role="region" aria-label={text.photoStrip.label} tabindex="0">
   <ul class="site-photostrip-track">
     {
       galleryPhotos.map((photo) => (
         <li class="site-photo">
-          <img {...printAttributes(photo)} alt={photo.alt} />
+          <img {...printAttributes(photo)} alt={text.art[photo.art]} />
         </li>
       ))
     }

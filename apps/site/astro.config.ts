@@ -4,6 +4,7 @@ import mdx from "@astrojs/mdx";
 import react from "@astrojs/react";
 import sitemap from "@astrojs/sitemap";
 import { defineConfig } from "astro/config";
+import { SITEMAP_I18N, withXDefault } from "./src/i18n/locales";
 import { imageBytesPlugin } from "./src/lib/imageQueries";
 import { sitemapLastmod } from "./src/lib/pageUpdated";
 
@@ -30,8 +31,18 @@ export default defineConfig({
     inlineStylesheets: "always",
   },
   // MDX: the blog posts (src/content/blog, content.config.ts). The lastmod
-  // integration comes before the sitemap's, which reads what it notes.
-  integrations: [react(), mdx(), lastmod.integration, sitemap({ serialize: lastmod.serialize })],
+  // integration comes before the sitemap's, which reads what it notes. The
+  // sitemap pairs each page with its other-language version as alternates,
+  // plus x-default on the Chinese one, as the pages' heads do (#806).
+  integrations: [
+    react(),
+    mdx(),
+    lastmod.integration,
+    sitemap({
+      i18n: SITEMAP_I18N,
+      serialize: async (item) => withXDefault(await lastmod.serialize(item)),
+    }),
+  ],
   vite: {
     // `picture.webp?bytes`: file sizes for the home page loader's progress.
     plugins: [imageBytesPlugin()],
