@@ -33,7 +33,8 @@ status=$?
 [ "$status" -eq 0 ] || exit 1
 
 # 2. The GitHub releases are an input too (the changelog, #792), outside
-#    git: a release published after the last commit makes the site stale.
+#    git: a release published after the last commit, or in the last 30
+#    minutes, builds (the rules and their limits: the script's comments).
 #    This is what lets the Deploy Hook's build through
 #    (.github/workflows/site-redeploy-on-release.yml): Vercel marks no
 #    deployment as hook-made, and the hook builds the branch's last commit,

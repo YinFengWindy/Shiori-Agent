@@ -149,6 +149,35 @@ describe("releaseNotesMarkdown", () => {
 });
 
 describe("renderReleaseNotes", () => {
+  // Notes carry text others write (generated notes list contributors' PR titles): no markup of theirs may run.
+  const hostile = [
+    "feat: <script>alert(1)</script> 标题",
+    "",
+    "<img src=x onerror=alert(2)>",
+    "",
+    "<div onclick=\"alert(3)\">块</div>",
+    "",
+    "- [点我](javascript:alert(4)) 与 [伪装](  JaVa&#x53;cript:alert(5)) 与 <javascript:alert(6)> 与 [数据](data:text/html,x)",
+    "- 行内 <a href=\"javascript:alert(7)\">链接</a> 与 ![图](javascript:alert(8))",
+    "- [邮件](mailto:hi@example.com) [站内](/blog/) [锚点](#v0.5.2) [GitHub](https://github.com/)",
+  ].join("\n");
+
+  it("never outputs the notes' own HTML: it shows as text", () => {
+    const html = renderReleaseNotes(hostile);
+    // Real tags only: the escaped text may spell `onerror=` harmlessly.
+    assert.doesNotMatch(html, /<(script|img|div)\b|<[a-z][^>]*\son\w+=/i);
+    assert.ok(html.includes("&lt;script&gt;alert(1)&lt;/script&gt;"), "the script tag is not shown as text");
+    assert.ok(html.includes("&lt;img src=x onerror=alert(2)&gt;"), "the img tag is not shown as text");
+  });
+
+  it("keeps http(s), mailto and on-site links only; any other scheme loses its link", () => {
+    const html = renderReleaseNotes(hostile);
+    // Addresses on real tags only (`<a …>` / `<img …>`), not in the escaped text.
+    const hrefs = [...html.matchAll(/<(?:a|img)\s[^>]*?(?:href|src)="([^"]*)"/g)].map((match) => match[1]);
+    assert.deepEqual(hrefs, ["mailto:hi@example.com", "/blog/", "#v0.5.2", "https://github.com/"]);
+    assert.match(html, /点我/);
+  });
+
   it("starts the notes' headings at h3, under the page's h1 and the version's h2", () => {
     const html = renderReleaseNotes("# 一\n\n## 二\n\n### 三\n\n###### 六");
     assert.equal(html.match(/<h\d>[^<]*<\/h\d>/g)?.join(""), "<h3>一</h3><h3>二</h3><h4>三</h4><h6>六</h6>");

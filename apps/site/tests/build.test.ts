@@ -394,6 +394,13 @@ describe("changelog page (#792)", () => {
     assert.doesNotMatch(html, /<h\d[^>]*>下载<\/h\d>|Shiori-Setup-0\.5\.2\.exe|Shiori\.Setup\.0\.1\.0\.exe|SHA256SUMS/);
   });
 
+  it("runs none of the notes' own markup: no script, event handler or javascript: link", () => {
+    const main = html.slice(html.indexOf("<main"), html.indexOf("</main>"));
+    // Real tags only: the escaped text may spell `onerror=` or `javascript:` harmlessly.
+    assert.doesNotMatch(main, /<(script|img)\b|<[a-z][^>]*\son\w+=|<[a-z][^>]*\s(href|src)="[^"]*javascript:/i);
+    assert.ok(main.includes("&lt;script&gt;alert(1)&lt;/script&gt;"), "the notes' script tag is not shown as text");
+  });
+
   it("marks the notes' links off the site rel=noopener", () => {
     const notes = html.slice(html.indexOf('<div class="site-prose">'), html.indexOf("</main>"));
     const links = [...notes.matchAll(/<a href="(https?:[^"]+)"([^>]*)>/g)].filter(([, href]) => !href.startsWith(ORIGIN));

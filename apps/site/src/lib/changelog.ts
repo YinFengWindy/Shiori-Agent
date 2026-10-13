@@ -9,7 +9,11 @@ import { defineHastPlugin, markdownToHtml } from "satteri";
  * without a network request; `loadChangelog` wires them to the environment.
  */
 
-/** The repository whose releases make the changelog. */
+/**
+ * The repository whose releases make the changelog. Repeated as REPOSITORY in
+ * scripts/vercel-release-since-head.mjs, which runs before dependencies are
+ * installed and so cannot import this module: change both together.
+ */
 export const CHANGELOG_REPOSITORY = "YinFengWindy/Shiori-Agent";
 
 /** The fields the changelog reads from one GitHub REST API release. */
@@ -107,7 +111,8 @@ export async function fetchReleases(options: { token: string | undefined; fetch:
 /**
  * The releases the changelog shows, newest first: published ones only.
  * Drafts are unpublished; prereleases are left out too, since the app's
- * updater and the download links only offer full releases.
+ * updater and the download links only offer full releases (the repository
+ * has published none so far; one would be a test build, not news for users).
  */
 export function publishedReleases(releases: readonly GitHubRelease[]): (GitHubRelease & { published_at: string })[] {
   return releases
@@ -166,13 +171,37 @@ export function releaseNotesMarkdown(release: Pick<GitHubRelease, "tag_name" | "
 }
 
 /**
- * The notes' HTML fits under the page's headings: the page is the `h1`, each
+ * Whether a link or picture address from the notes may stay: http(s),
+ * mailto, or an address on the site (a path, `#anchor` or `?query`, no
+ * scheme). Browsers skip control characters and spaces inside a scheme
+ * (`java\tscript:`), so those are dropped before the check.
+ */
+function isSafeUrl(url: string): boolean {
+  // eslint-disable-next-line no-control-regex -- control characters are exactly what browsers skip in a scheme
+  const compact = url.replace(/[\u0000- \u007f]/g, "");
+  const scheme = compact.match(/^([a-z][a-z0-9+.-]*):/i)?.[1];
+  if (scheme === undefined) return !compact.startsWith("//") && !compact.startsWith("\\");
+  return ["http", "https", "mailto"].includes(scheme.toLowerCase());
+}
+
+/**
+ * Release notes are not trusted markup: generated notes list contributors'
+ * PR titles, which anyone opening a PR writes. So the notes' own HTML is
+ * shown as text, never rendered (comments are already gone,
+ * `releaseNotesMarkdown`); a link to any scheme but http(s) / mailto
+ * (`javascript:`, `data:` …) keeps its text but loses the link, and such a
+ * picture goes.
+ *
+ * And the notes fit under the page's headings: the page is the `h1`, each
  * version an `h2`, so the notes' headings start at `h3` (`#` and `##` both
  * become `h3`, deeper ones move down one level). Links off the site get
  * `rel="noopener"`.
  */
 const releaseNotesPlugin = defineHastPlugin({
   name: "shiori-release-notes",
+  raw(node, ctx) {
+    ctx.replaceNode(node, { type: "text", value: node.value });
+  },
   element: [
     {
       filter: ["h1", "h2", "h3", "h4", "h5", "h6"],
@@ -185,7 +214,19 @@ const releaseNotesPlugin = defineHastPlugin({
       filter: ["a"],
       visit(node, ctx) {
         const href = node.properties.href;
-        if (typeof href === "string" && /^https?:\/\//i.test(href)) ctx.setProperty(node, "rel", ["noopener"]);
+        if (href === undefined || href === null) return;
+        if (typeof href !== "string" || !isSafeUrl(href)) {
+          ctx.replaceNode(node, [...node.children]);
+          return;
+        }
+        if (/^https?:/i.test(href.trim())) ctx.setProperty(node, "rel", ["noopener"]);
+      },
+    },
+    {
+      filter: ["img"],
+      visit(node, ctx) {
+        const src = node.properties.src;
+        if (typeof src !== "string" || !isSafeUrl(src)) ctx.removeNode(node);
       },
     },
   ],
