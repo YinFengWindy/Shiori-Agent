@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import sharp from "sharp";
 
 /*
  * Reading the built site (the package's `test` script runs `astro build`
@@ -57,12 +58,56 @@ export function distPathOf(url: string) {
   return path === "" || path.endsWith("/") ? `${path}index.html` : path;
 }
 
-/** Every page URL the build's sitemap lists. */
-export function sitemapPages(site: BuiltSite) {
+/** Every page the build's sitemap lists: its URL and its `<lastmod>`, if any. */
+export function sitemapEntries(site: BuiltSite) {
   const index = site.read("sitemap-index.xml");
   const sitemaps = [...index.matchAll(/<loc>([^<]+)<\/loc>/g)].map((match) => match[1]);
   assert.ok(sitemaps.length > 0, "sitemap index lists no sitemaps");
-  return sitemaps.flatMap((url) => [...site.read(distPathOf(url)).matchAll(/<loc>([^<]+)<\/loc>/g)].map((match) => match[1]));
+  return sitemaps.flatMap((url) =>
+    [...site.read(distPathOf(url)).matchAll(/<url><loc>([^<]+)<\/loc>(?:<lastmod>([^<]+)<\/lastmod>)?/g)].map(([, loc, lastmod]) => ({
+      loc,
+      lastmod,
+    })),
+  );
+}
+
+/** Every page URL the build's sitemap lists. */
+export function sitemapPages(site: BuiltSite) {
+  return sitemapEntries(site).map((entry) => entry.loc);
+}
+
+/** The parsed JSON-LD of every `<script type="application/ld+json">` in a page, in page order. */
+export function jsonLdOf(html: string): unknown[] {
+  return [...html.matchAll(/<script type="application\/ld\+json">(.*?)<\/script>/gs)].map((match) => JSON.parse(match[1]) as unknown);
+}
+
+/** The format and pixel size of an emitted picture, by its absolute URL, read from the file itself. */
+export async function pictureAt(site: BuiltSite, url: string) {
+  const path = distPathOf(url);
+  assert.ok(site.has(path), `${url} is not in the build output`);
+  const { format, width, height } = await sharp(resolve(site.dir, path)).metadata();
+  return { format, width, height };
+}
+
+/** Whether a parsed JSON value is an object (not an array or null). */
+export function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * A meta description fit for search results (#799): 70–120 characters, long
+ * enough to say something and short enough not to be cut much, naming every
+ * one of `words` (the search words the page is meant to be found by).
+ */
+export function assertDescription(description: string, words: readonly string[]) {
+  const length = [...description].length;
+  assert.ok(length >= 70 && length <= 120, `description is ${length} characters, not 70–120: ${description}`);
+  for (const word of words) assert.ok(description.includes(word), `description does not mention ${word}: ${description}`);
+}
+
+/** Every `<img>` tag of a page. */
+export function imgTagsOf(html: string) {
+  return [...html.matchAll(/<img\s[^>]*>/g)].map((match) => match[0]);
 }
 
 /** Plain text of an HTML fragment: tags dropped. */

@@ -13,7 +13,8 @@ export const BLOG_TITLE = "博客";
 export const BLOG_EMPTY_LINE = "还在写呢……别催啦，笨蛋。";
 
 /** Description of the blog: the list page's meta description and the RSS channel's. */
-export const BLOG_DESCRIPTION = "吟风写的 Shiori 小日记：她会记得什么、怎么慢慢喜欢上你、又为什么会来找你。";
+export const BLOG_DESCRIPTION =
+  "Shiori 博客：长期记忆怎么记住你、好感度怎么变化、什么时候会主动找你，以及接入 QQ、Telegram 和配置语音的教程，由看板娘吟风亲自来讲。Shiori 是会慢慢喜欢上你的 AI 伴侣、AI 女友与 Personal Agent。";
 
 /**
  * Drafts mode: `astro dev --mode drafts` (`pnpm site:dev:drafts`) or

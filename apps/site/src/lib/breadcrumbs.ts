@@ -35,8 +35,3 @@ export function breadcrumbListJsonLd(trail: readonly Crumb[], site: URL) {
     }),
   };
 }
-
-/** JSON for an inline `<script>`: `<` escaped so no text in it can close the element. */
-export function inlineJson(value: unknown): string {
-  return JSON.stringify(value).replaceAll("<", "\\u003c");
-}

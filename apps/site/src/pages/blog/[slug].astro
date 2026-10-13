@@ -14,10 +14,11 @@ import {
   getPublishedPosts,
   isoPostDate,
 } from "../../lib/blog";
-import { inlineJson } from "../../lib/breadcrumbs";
 import { postTableOfContents } from "../../lib/sectionIndex";
+import { postShareImage } from "../../lib/shareImage";
 import { appIconImage } from "../../lib/siteAssets";
-import { SITE_NAME } from "../../lib/siteMeta";
+import { pageTitle } from "../../lib/siteMeta";
+import { inlineJson, organizationJsonLd } from "../../lib/structuredData";
 import "../../styles/reading.css";
 import "../../styles/blog.css";
 
@@ -25,7 +26,9 @@ import "../../styles/blog.css";
  * One blog post (#773): title, day and byline, the cover if it has one, then
  * the post on a light reading column over the app's wash. The head carries
  * the post's own description, `og:type` article with its publication time,
- * and BlogPosting structured data with 吟风 as the author.
+ * its own share picture made from its cover (#799), and BlogPosting
+ * structured data with 吟风 as the author. Its `<title>` keeps the post's
+ * own title, in 吟风's voice, and ends with the site's (`pageTitle`).
  *
  * Over the title, the breadcrumb 首页 / 博客 / the post is the way back
  * (#797): its 博客 step is the 「返回博客」 link, so there is no second
@@ -50,6 +53,7 @@ const postPath = blogPostPath(post);
 if (!Astro.site) throw new Error("astro.config.ts must set `site`: the post's structured data is built from it");
 const postUrl = new URL(postPath, Astro.site).href;
 const published = isoPostDate(date);
+const shareImage = await postShareImage(cover);
 const structuredData = {
   "@context": "https://schema.org",
   "@type": "BlogPosting",
@@ -60,17 +64,13 @@ const structuredData = {
   url: postUrl,
   mainEntityOfPage: postUrl,
   author: { "@type": "Person", name: BLOG_AUTHOR },
-  publisher: {
-    "@type": "Organization",
-    name: SITE_NAME,
-    logo: { "@type": "ImageObject", url: new URL(appIconImage.src, Astro.site).href },
-  },
-  ...(cover ? { image: new URL(cover.image.src, Astro.site).href } : {}),
+  publisher: organizationJsonLd(Astro.site, appIconImage.src),
+  image: new URL(shareImage.src, Astro.site).href,
 };
 const structuredDataJson = inlineJson(structuredData);
 ---
 
-<SiteLayout title={`${title} · ${SITE_NAME}`} description={description} ogType="article">
+<SiteLayout title={pageTitle(title)} description={description} ogType="article" image={shareImage} updated={date}>
   <Fragment slot="meta">
     <meta property="article:published_time" content={published} />
     <meta property="article:author" content={BLOG_AUTHOR} />

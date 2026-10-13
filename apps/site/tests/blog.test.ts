@@ -3,7 +3,23 @@ import { readdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
-import { type BuiltSite, ORIGIN, breadcrumbsOf, dist, distPathOf, draftsDist, idsOf, metaContent, sectionIndexOf, sitemapPages, topBarHomeHref } from "./support/builtSite";
+import {
+  type BuiltSite,
+  ORIGIN,
+  assertDescription,
+  breadcrumbsOf,
+  dist,
+  draftsDist,
+  idsOf,
+  isRecord,
+  jsonLdOf,
+  metaContent,
+  pictureAt,
+  sectionIndexOf,
+  sitemapEntries,
+  sitemapPages,
+  topBarHomeHref,
+} from "./support/builtSite";
 
 /*
  * The blog (#773) as built. The production build (dist/) must leave draft
@@ -21,6 +37,8 @@ interface SourcePost {
   readonly description: string;
   readonly date: string;
   readonly draft: boolean;
+  /** Whether it has a cover picture. */
+  readonly cover: boolean;
   /** The post's first paragraph, as written. */
   readonly opening: string;
   /** How many `##` sections it has. */
@@ -46,6 +64,7 @@ const sourcePosts: SourcePost[] = readdirSync(blogDir)
       description: field("description"),
       date: field("date"),
       draft: /^draft: true$/m.test(frontmatter),
+      cover: /^cover:$/m.test(frontmatter),
       opening,
       sections: body.split("\n").filter((line) => line.startsWith("## ")).length,
     };
@@ -91,7 +110,8 @@ describe("blog in the production build", () => {
 
   it("serves the list page with its own title and canonical URL, the bar always there, 博客 marked current", () => {
     const html = dist.read("blog/index.html");
-    assert.match(html, /<title>博客 · Shiori<\/title>/);
+    assert.match(html, /<title>博客 · Shiori AI 伴侣<\/title>/);
+    assertDescription(metaContent(html, "name", "description"), ["Shiori", "AI 伴侣", "AI 女友", "Personal Agent"]);
     assert.match(html, new RegExp(`<link rel="canonical" href="${ORIGIN}/blog/">`));
     assert.match(html, /<header class="site-header" data-site-header data-mode="fixed">/);
     assert.match(html, /<a href="\/blog\/"[^>]* aria-current="page">博客<\/a>/);
@@ -131,24 +151,48 @@ describe("blog posts as rendered (drafts-mode build)", () => {
       const html = draftsDist.read(`blog/${post.slug}/index.html`);
 
       it("carries its title, description, canonical URL and article Open Graph tags", () => {
-        assert.ok(html.includes(`<title>${post.title} · Shiori</title>`));
+        // The post's own title, in 吟风's voice, then the site's with its search word (#799).
+        assert.ok(html.includes(`<title>${post.title} · Shiori AI 伴侣</title>`));
         assert.equal(metaContent(html, "name", "description"), post.description);
+        assertDescription(post.description, ["Shiori", "AI 伴侣"]);
         assert.ok(html.includes(`<link rel="canonical" href="${postUrl(post)}">`));
         assert.equal(metaContent(html, "property", "og:url"), postUrl(post));
         assert.equal(metaContent(html, "property", "og:type"), "article");
-        assert.equal(metaContent(html, "property", "og:title"), `${post.title} · Shiori`);
+        assert.equal(metaContent(html, "property", "og:title"), `${post.title} · Shiori AI 伴侣`);
         assert.equal(metaContent(html, "property", "og:description"), post.description);
         assert.equal(metaContent(html, "property", "article:published_time"), post.date);
         assert.equal(metaContent(html, "property", "article:author"), "吟风");
+      });
+
+      it("is shared with its own cover as a 1200×630 JPEG, or the site's picture without one (#799)", async () => {
         const image = metaContent(html, "property", "og:image");
-        assert.ok(draftsDist.has(distPathOf(image)), `og:image ${image} is not in the build output`);
+        assert.deepEqual(await pictureAt(draftsDist, image), { format: "jpeg", width: 1200, height: 630 });
+        assert.equal(metaContent(html, "property", "og:image:width"), "1200");
+        assert.equal(metaContent(html, "property", "og:image:height"), "630");
+        assert.equal(metaContent(html, "name", "twitter:image"), image);
+        const siteImage = metaContent(draftsDist.read("index.html"), "property", "og:image");
+        if (post.cover) {
+          assert.notEqual(image, siteImage, "a post with a cover is shared with the site's picture");
+          // Made from the cover: the same alt text as the picture over the post.
+          const coverAlt = html.match(/<img [^>]*alt="([^"]+)"[^>]*class="site-post-cover"/)?.[1];
+          assert.equal(metaContent(html, "property", "og:image:alt"), coverAlt);
+        } else {
+          assert.equal(image, siteImage);
+        }
+      });
+
+      it("is dated by its day in the head and the sitemap (#799)", () => {
+        const updated = new Date(`${post.date}T00:00:00Z`).toISOString();
+        assert.equal(metaContent(html, "property", "og:updated_time"), updated);
+        assert.equal(sitemapEntries(draftsDist).find((entry) => entry.loc === postUrl(post))?.lastmod, updated);
       });
 
       it("describes itself as a BlogPosting by 吟风 in structured data", () => {
-        const json = html.match(/<script type="application\/ld\+json">(.*?)<\/script>/s)?.[1];
-        assert.ok(json, "no JSON-LD");
-        const data: unknown = JSON.parse(json);
-        assert.ok(typeof data === "object" && data !== null);
+        const data = jsonLdOf(html).find((item) => isRecord(item) && item["@type"] === "BlogPosting");
+        assert.ok(isRecord(data), "no BlogPosting JSON-LD");
+        assert.ok(isRecord(data.publisher));
+        assert.equal(data.publisher["@id"], `${ORIGIN}/#organization`);
+        assert.equal(data.image, metaContent(html, "property", "og:image"));
         assert.deepEqual(
           { ...data, publisher: undefined, image: undefined },
           {
