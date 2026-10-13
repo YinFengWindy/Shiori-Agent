@@ -108,3 +108,28 @@ export function createWheelGestureGate(quietMs = 180) {
     return startsGesture;
   };
 }
+
+/**
+ * How many lines past the one on stage have their event CG fetched ahead
+ * (#790): one step is a wheel notch, a tap or a swipe, so two lines' lead
+ * leaves each CG a few seconds to arrive before its line shows, without
+ * fetching the whole set while the reader may never scroll that far.
+ */
+export const NARRATIVE_CG_LOOKAHEAD = 2;
+
+/**
+ * The event CGs to have loaded while step `step` is on stage: the CG of the
+ * line on stage (the last line under the download state) and of the next
+ * `lookahead` lines, in order of appearance, without repeats. `lineCgs`
+ * holds each line's CG key, `undefined` for a line without one.
+ */
+export function narrativeCgsToLoad<Key extends string>(
+  lineCgs: readonly (Key | undefined)[],
+  step: number,
+  lookahead = NARRATIVE_CG_LOOKAHEAD,
+): Key[] {
+  if (!Number.isInteger(step) || step < 0 || step > lineCgs.length) throw new Error(`step must be 0…${lineCgs.length}, got ${step}`);
+  const line = Math.min(step, lineCgs.length - 1);
+  const keys = lineCgs.slice(line, line + lookahead + 1).filter((key): key is Key => key !== undefined);
+  return [...new Set(keys)];
+}

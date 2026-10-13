@@ -9,7 +9,7 @@ Shiori 是一个以角色为基底进行角色扮演的 Agent 助手：Python �
 | `apps/backend/` | Python 后端：启动装配、Agent 回合、会话、记忆运行时、主动行为、桌面桥接 |
 | `apps/desktop/` | Electron 主进程（`src/`，只提供通用原语，不放插件代码）与 React renderer（`renderer/src/`） |
 | `apps/site/` | 官网与博客：Astro 静态站（`https://www.windchant.online`），设计 token 与 Tailwind 主题直接引用桌面端；`pages-redirect/` 是 GitHub Pages 跳转页 |
-| `apps/site-video/` | 官网演示短片的 Remotion 工程：`pnpm run site:video` 渲染到 `apps/site/src/assets/showcase/`，站点构建只读已提交产物 |
+| `apps/site-video/` | 官网演示短片的 Remotion 工程与站点图片脚本：`pnpm run site:stills` 渲染展示区静图到 `apps/site/src/assets/showcase/`，`pnpm run site:gallery` 生成相片带缩图到 `apps/site/src/assets/gallery/`，站点构建只读已提交产物；`pnpm run site:video` 渲染视频到 `apps/site-video/out/`（不提交、站点不引用） |
 | `plugins/<id>/` | 插件包：`backend/`、`ui/`、`surface/`、`background/`、`manifest.yaml`、`tests/` |
 | `packages/sdk/` | 统一 Shiori SDK（Python `shiori_sdk` + npm `@yinfengwindy/shiori-sdk`） |
 | `docs/knowledge/` | 架构与领域知识：从 `index.md`、`map.md` 开始定位 owning module |

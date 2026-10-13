@@ -17,15 +17,15 @@
   --site-feature-line-ink: var(--color-text-secondary);
   --site-feature-title-size: clamp(1.75rem, 1.1rem + 2vw, 2.75rem);
   --site-feature-line-size: clamp(1rem, 0.9rem + 0.35vw, 1.1875rem);
-  /* Soft blue / pink glow behind each clip, so the frame floats on the wash
+  /* Soft blue / pink glow behind each still, so the frame floats on the wash
      without a card around it. */
   --site-feature-glow-blue: color-mix(in srgb, var(--blue-300) 45%, transparent);
   --site-feature-glow-pink: color-mix(in srgb, var(--pink-300) 40%, transparent);
   --site-feature-glow-blur: 48px;
-  --site-feature-clip-radius: var(--radius-xl);
-  --site-feature-clip-shadow: var(--shadow-panel);
-  /* Hairline round each clip, a little lighter than its edges. */
-  --site-feature-clip-edge: color-mix(in srgb, var(--neutral-50) 70%, transparent);
+  --site-feature-still-radius: var(--radius-xl);
+  --site-feature-still-shadow: var(--shadow-panel);
+  /* Hairline round each still, a little lighter than its edges. */
+  --site-feature-still-edge: color-mix(in srgb, var(--neutral-50) 70%, transparent);
   /* A feature rising into place as it scrolls in (browsers with scroll-driven animations). */
   --site-feature-rise: 32px;
 
@@ -122,26 +122,28 @@
   position: absolute;
   z-index: -1;
   inset: 8% -4% -6% 6%;
-  border-radius: var(--site-feature-clip-radius);
+  border-radius: var(--site-feature-still-radius);
   background:
     radial-gradient(closest-side at 25% 30%, var(--site-feature-glow-blue), transparent),
     radial-gradient(closest-side at 75% 70%, var(--site-feature-glow-pink), transparent);
   filter: blur(var(--site-feature-glow-blur));
 }
 
-.site-feature-video {
+.site-feature-still {
   display: block;
   width: 100%;
   height: auto;
   aspect-ratio: 16 / 10;
-  border-radius: var(--site-feature-clip-radius);
+  border-radius: var(--site-feature-still-radius);
   box-shadow:
-    0 0 0 1px var(--site-feature-clip-edge),
-    var(--site-feature-clip-shadow);
+    0 0 0 1px var(--site-feature-still-edge),
+    var(--site-feature-still-shadow);
   background: var(--color-bg-soft);
+  user-select: none;
+  -webkit-user-drag: none;
 }
 
-/* Wide screens: text and clip side by side, sides alternating. */
+/* Wide screens: text and still side by side, sides alternating. */
 @media (min-width: 900px) {
   .site-feature {
     grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);

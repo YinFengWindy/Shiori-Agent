@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   createWheelGestureGate,
+  narrativeCgsToLoad,
   narrativeClickTarget,
   narrativeFinalOffset,
   narrativeStepAt,
@@ -128,5 +129,34 @@ describe("createWheelGestureGate", () => {
   it("starts a new gesture after the stream goes quiet", () => {
     const gate = createWheelGestureGate(180);
     assert.deepEqual([0, 100, 200, 379, 560].map(gate), [true, false, false, false, true]);
+  });
+});
+
+describe("narrativeCgsToLoad", () => {
+  // Lines 0–1 without a CG, then a, b, b (one CG over two lines), none, c.
+  const lineCgs = [undefined, undefined, "a", "b", "b", undefined, "c"] as const;
+
+  it("loads nothing while the lines on stage and just ahead have no CG", () => {
+    assert.deepEqual(narrativeCgsToLoad(lineCgs, 0, 1), []);
+  });
+
+  it("loads the CG on stage and those of the next `lookahead` lines, in order, without repeats", () => {
+    assert.deepEqual(narrativeCgsToLoad(lineCgs, 0, 2), ["a"]);
+    assert.deepEqual(narrativeCgsToLoad(lineCgs, 2, 2), ["a", "b"]);
+    assert.deepEqual(narrativeCgsToLoad(lineCgs, 4, 2), ["b", "c"]);
+    assert.deepEqual(narrativeCgsToLoad(lineCgs, 3, 0), ["b"]);
+  });
+
+  it("does not reach further ahead than the lookahead", () => {
+    assert.deepEqual(narrativeCgsToLoad(lineCgs, 1, 1), ["a"]);
+  });
+
+  it("keeps the last line's CG under the download state (step = line count)", () => {
+    assert.deepEqual(narrativeCgsToLoad(lineCgs, lineCgs.length, 2), ["c"]);
+  });
+
+  it("rejects a step outside the narrative", () => {
+    assert.throws(() => narrativeCgsToLoad(lineCgs, -1));
+    assert.throws(() => narrativeCgsToLoad(lineCgs, lineCgs.length + 1));
   });
 });

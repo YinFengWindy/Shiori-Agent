@@ -48,8 +48,9 @@ function TypingDots({ frame }: { frame: number }) {
 }
 
 /**
- * 多渠道: behind a soft-focus Shiori window, Telegram, QQ and 飞书 chats
- * open one after another, and the same 吟风 types into each.
+ * 多渠道: over the Shiori chat window, kept sharp under a light tinted
+ * veil, Telegram, QQ and 飞书 chats open one after another, and the same
+ * 吟风 types into each.
  */
 export function ChannelsClip() {
   const frame = useCurrentFrame();
@@ -57,7 +58,7 @@ export function ChannelsClip() {
   return (
     <AbsoluteFill style={{ background: "var(--clip-paper)" }}>
       <Screen zoom={0.03}>
-        <Shot src={CHAT_SHOT} style={{ filter: "blur(10px) saturate(0.85)", transform: "scale(1.04)" }} />
+        <Shot src={CHAT_SHOT} />
         <AbsoluteFill style={{ background: "var(--clip-veil)" }} />
         {WINDOWS.map((window) => {
           const typedAt = s(window.at + 0.9);
