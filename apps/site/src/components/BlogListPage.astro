@@ -1,0 +1,79 @@
+---
+import { pageTitle, siteText } from "../i18n";
+import { type Locale, languageSwitchHref } from "../i18n/locales";
+import SiteLayout from "../layouts/SiteLayout.astro";
+import { blogPostPath, formatPostDate, getPublishedPosts, isoPostDate } from "../lib/blog";
+import { latestDate } from "../lib/pageUpdated";
+import { SITE_SECTIONS } from "../lib/siteMeta";
+import Breadcrumbs from "./Breadcrumbs.astro";
+import SiteFooter from "./SiteFooter.astro";
+import SiteHeader from "./SiteHeader.astro";
+import "../styles/reading.css";
+import "../styles/blog.css";
+
+/**
+ * The blog's list page (#773) in one language (#807: `/blog/`,
+ * `/en/blog/`): one card per post published in it, newest first — its
+ * cover if it has one, title, day and summary, the whole card one link.
+ * The English list shows the translated posts only. The breadcrumb over the
+ * heading leads back home (#797). Dated by the newest post (#799).
+ */
+interface Props {
+  locale: Locale;
+}
+
+const { locale } = Astro.props;
+const text = siteText(locale);
+const versions = SITE_SECTIONS.blog;
+const languageHref = languageSwitchHref(locale, versions);
+const listPath = versions[locale];
+const posts = await getPublishedPosts(locale);
+const updated = latestDate(posts.map((post) => post.data.date));
+---
+
+<SiteLayout locale={locale} versions={versions} languageHref={languageHref} title={pageTitle(text.blog.title, locale)} description={text.blog.description} updated={updated}>
+  <SiteHeader locale={locale} mode="fixed" current="blog" languageHref={languageHref} />
+  <main class="site-reading">
+    <div class="site-blog-shelf">
+      <Breadcrumbs locale={locale} trail={[{ label: text.blog.title, href: listPath }]} />
+      <h1 class="site-reading-heading site-story-type">{text.blog.title}</h1>
+      {
+        posts.length === 0 ? (
+          <p class="site-blog-empty site-story-type">{text.blog.emptyLine}</p>
+        ) : (
+          <ul class="site-blog-list">
+            {posts.map((post) => (
+              <li>
+                <article class="site-post-card">
+                  {post.data.cover && (
+                    <img
+                      src={post.data.cover.image.src}
+                      width={post.data.cover.image.width}
+                      height={post.data.cover.image.height}
+                      alt={post.data.cover.alt}
+                      loading="lazy"
+                      decoding="async"
+                      class="site-post-card-cover"
+                    />
+                  )}
+                  <div class="site-post-card-text">
+                    <h2 class="site-post-card-title">
+                      <a href={blogPostPath(post.id, locale)} class="site-post-card-link">
+                        {post.data.title}
+                      </a>
+                    </h2>
+                    <time class="site-post-card-date" datetime={isoPostDate(post.data.date)}>
+                      {formatPostDate(post.data.date, locale)}
+                    </time>
+                    <p class="site-post-card-summary">{post.data.description}</p>
+                  </div>
+                </article>
+              </li>
+            ))}
+          </ul>
+        )
+      }
+    </div>
+  </main>
+  <SiteFooter locale={locale} />
+</SiteLayout>

@@ -80,12 +80,13 @@ export function versionFor(locale: Locale, versions: PageVersions): string {
 
 /**
  * The language switch's target on a page in `locale`: the same page in the
- * other language, or that language's home page when the page has no version
- * in it.
+ * other language, or — when the page has no version in it — `fallback`, a
+ * root-relative path taken in the other language (default its home page; a
+ * post without a translation falls back to the other language's blog).
  */
-export function languageSwitchHref(locale: Locale, versions: PageVersions): string {
+export function languageSwitchHref(locale: Locale, versions: PageVersions, fallback = "/"): string {
   const other = otherLocale(locale);
-  return versions[other] ?? localeHome(other);
+  return versions[other] ?? localePath(other, fallback);
 }
 
 /** One `<link rel="alternate" hreflang>` of a page. */

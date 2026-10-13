@@ -208,6 +208,7 @@ describe("changelogEntries", () => {
 
 describe("formatReleaseDate", () => {
   it("reads the day in Beijing time", () => {
-    assert.equal(formatReleaseDate(new Date("2026-10-09T16:41:11Z")), "2026年10月10日");
+    assert.equal(formatReleaseDate(new Date("2026-10-09T16:41:11Z"), "zh"), "2026年10月10日");
+    assert.equal(formatReleaseDate(new Date("2026-10-09T16:41:11Z"), "en"), "October 10, 2026");
   });
 });

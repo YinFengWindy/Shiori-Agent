@@ -3,6 +3,7 @@ import Analytics from "@vercel/analytics/astro";
 import LanguagePrompt from "../components/LanguagePrompt.astro";
 import { siteText } from "../i18n";
 import { LOCALES, LOCALE_INFO, type Locale, type PageVersions, hreflangLinks, languageSwitchHref } from "../i18n/locales";
+import { blogFeedPath } from "../lib/blogFeed";
 import { UPDATED_TIME_PROPERTY } from "../lib/pageUpdated";
 import { type ShareImage, siteShareImage } from "../lib/shareImage";
 import { SITE_NAME, SITE_THEME_COLOR } from "../lib/siteMeta";
@@ -19,6 +20,12 @@ interface Props {
    * Defaults to the page alone, which claims no alternate.
    */
   versions?: PageVersions;
+  /**
+   * Where the page sends a visitor to the other language (the English
+   * prompt's Switch); defaults to `languageSwitchHref(locale, versions)`.
+   * The page passes the same to its top bar.
+   */
+  languageHref?: string;
   /** Full `<title>`, also used as the OG / Twitter title. */
   title: string;
   /** Meta / OG description; defaults to the site description in the page's language. */
@@ -50,6 +57,7 @@ const { locale, title, ogType = "website", updated } = Astro.props;
 const text = siteText(locale);
 const { description = text.meta.description, image = siteShareImage(locale) } = Astro.props;
 const versions = Astro.props.versions ?? { [locale]: Astro.url.pathname };
+const { languageHref = languageSwitchHref(locale, versions) } = Astro.props;
 if (versions[locale] !== Astro.url.pathname) {
   throw new Error(`a page's versions must name itself: ${Astro.url.pathname} is not versions.${locale} (${versions[locale]})`);
 }
@@ -60,7 +68,7 @@ const otherOgLocales = LOCALES.filter((other) => other !== locale && versions[ot
 const canonicalUrl = new URL(Astro.url.pathname, Astro.site).href;
 const ogImageUrl = new URL(image.src, Astro.site).href;
 const sitemapUrl = new URL("sitemap-index.xml", Astro.site).href;
-const feedUrl = new URL("rss.xml", Astro.site).href;
+const feedUrl = new URL(blogFeedPath(locale), Astro.site).href;
 const verification = siteVerificationMeta(process.env);
 ---
 
@@ -82,7 +90,7 @@ const verification = siteVerificationMeta(process.env);
     <link rel="icon" type="image/png" href="/icons/icon-512.png" sizes="512x512" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" sizes="180x180" />
     <link rel="sitemap" href={sitemapUrl} />
-    <link rel="alternate" type="application/rss+xml" title={text.meta.feedTitle} href={feedUrl} />
+    <link rel="alternate" type="application/rss+xml" title={`${SITE_NAME} ${text.blog.title}`} href={feedUrl} />
     <meta property="og:type" content={ogType} />
     <meta property="og:locale" content={localeInfo.ogLocale} />
     {otherOgLocales.map((ogLocale) => <meta property="og:locale:alternate" content={ogLocale} />)}
@@ -106,7 +114,7 @@ const verification = siteVerificationMeta(process.env);
   </head>
   <body>
     <slot />
-    {localeInfo.promptsFor && <LanguagePrompt locale={localeInfo.promptsFor} href={languageSwitchHref(locale, versions)} />}
+    {localeInfo.promptsFor && <LanguagePrompt locale={localeInfo.promptsFor} href={languageHref} />}
     <Analytics />
   </body>
 </html>

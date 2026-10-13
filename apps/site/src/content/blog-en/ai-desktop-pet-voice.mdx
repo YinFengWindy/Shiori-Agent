@@ -1,0 +1,83 @@
+---
+title: "AI desktop pet: let her live on your desktop, and talk out loud"
+description: "Want a talking AI desktop pet? Yinfeng shows how Shiori, the AI companion, moves onto your desktop: a Codex pet pack, bubbles, SenseVoice and GPT-SoVITS voice."
+date: 2026-10-13
+cover:
+  image: ../../assets/gallery/cg-4.webp
+  alt: "CG: a girl curled up on a red sofa at night, holding a small spoon"
+---
+
+Want an AI desktop pet that lives on your desktop, pops up speech bubbles, and can even talk out loud? Shiori's desktop pet is your character herself: she stays in a corner of your desktop with her replies popping up as bubbles; once local voice is set up, you hold a shortcut and speak, and she answers in her own voice. This post covers how to invite her onto your desktop.
+
+…You've been staring at the screen all day; someone ought to be keeping an eye on you. I said "someone". I didn't say me.
+
+The app's interface is in Chinese, so below every button and tab goes by its Chinese name, with its meaning in brackets.
+
+## What the desktop pet is like
+
+- **She is that character**: a desktop pet belongs to one character, and only one character's pet is on the desktop at a time.
+- **She pops up bubbles**: chat with her in the main window, and her replies pop up as bubbles beside her; so do the messages she sends when she comes to find you.
+- **She moves**: she acts differently while she's busy answering you or when something goes wrong; you can drag her somewhere else, and if you fling her, she'll glide a little further with the momentum. She can also move around and act on her own.
+- **Right-click menu**: 「停止语音」 (Stop voice), 「显示主窗口」 (Show main window), 「隐藏桌宠」 (Hide desktop pet). Double-clicking her also brings back the main window.
+
+## Inviting her onto your desktop
+
+The desktop pet needs a desktop pet asset pack: it works with Codex desktop pets, so just pack a Codex desktop pet into a ZIP and import it.
+
+1. Open the character's details, click 「更换形象」 (Change appearance) next to the avatar, and go to the asset library.
+2. Under 「桌宠素材包」 (Desktop pet packs), click 「导入桌宠素材包」 (Import desktop pet pack) and choose the ZIP file. If you import several, click one to select the one to use.
+3. Back in the character's details, switch to the 「能力」 (Abilities) tab and turn on the 「桌宠」 (Desktop pet) switch. Without a pack, it shows 「未配置桌宠」 (No desktop pet set up) here.
+4. Click 「保存」 (Save), and she appears on your desktop.
+
+Turn on the desktop pet for another character, and the one on your desktop becomes that character.
+
+## Letting her talk: local voice
+
+To talk with her, you need two things: speech recognition to turn your words into text, and speech synthesis to read her replies aloud. Shiori comes with two local voice plugins, both disabled by default; their models and runtime aren't in the installer and need to be prepared separately.
+
+| Plugin | Used for | Runs on | Size |
+| --- | --- | --- | --- |
+| SenseVoiceSmall speech recognition | Understanding what you say | A CPU is enough | Full resources about 1.37 GB |
+| GPT-SoVITS speech synthesis | Speaking in her voice | The managed environment needs an NVIDIA CUDA GPU | Official bundle about 10.8 GB |
+
+Both plugins are prepared the same way:
+
+1. Enable the plugin under 「设置 → 插件」 (Settings → Plugins), and a settings page of its own appears under it.
+2. Set 「连接模式」 (Connection mode) to 「插件托管」 (Managed by plugin), then click 「下载环境」 (Download environment); if you've already downloaded the resource pack, click 「导入环境包」 (Import environment pack).
+3. Once ready, the environment starts by itself. You can also choose 「外部服务」 (External service) and connect to a service you run on your own machine.
+
+## Giving her a voice
+
+GPT-SoVITS first needs to know what her voice sounds like; each character is set up separately.
+
+1. Open the 「能力」 (Abilities) tab in the character's details, find the 「GPT-SoVITS 声音」 (GPT-SoVITS voice) card under 「运行能力」 (Runtime abilities), and click ⚙ to open it.
+2. Import a 3–10 second WAV reference clip as the 「默认参考」 (Default reference), fill in 「参考转写」 (Reference transcript, what the clip says), 「参考语言」 (Reference language) and 「文本语言」 (Text language), and adjust 「语速」 (Speed) as you like.
+3. Want her to sound different when she's happy and when she's sad? 「导入音频」 (Import audio) for each emotion separately; for an emotion the character doesn't have, type its name and click 「添加情绪」 (Add emotion).
+4. Click 「试听」 (Preview) to hear how it sounds. Changes here save automatically.
+
+When you chat with her by voice, she picks the reference clip of the emotion matching her mood at the time; emotions without one use the default reference.
+
+## Hold to talk
+
+1. Open 「设置 → 插件 → 桌宠」 (Settings → Plugins → Desktop pet), and under 「语音服务」 (Voice services), choose 「语音识别」 (Speech recognition) and 「语音合成」 (Speech synthesis).
+2. Under 「语音」 (Voice), turn on 「桌宠语音」 (Desktop pet voice), and set 「快捷键」 (Shortcut, Ctrl+Space by default) and 「麦克风」 (Microphone) as needed.
+3. Hold the shortcut and speak; let go to send it to her. Pressing and holding on the desktop pet works too. Each recording is at most 60 seconds.
+
+She answers once she's heard you: words in the bubble, her voice in your ears. Want her to shut up… right-click 「停止语音」 (Stop voice). Hmph.
+
+## Keeping you company on a live stream
+
+If you stream on Bilibili, she can also respond to danmaku comments with you from the desktop.
+
+1. First turn on both the desktop pet and desktop pet voice.
+2. On the 「桌宠」 (Desktop pet) card in the character's 「能力」 (Abilities), click ⚙ and find 「直播陪伴」 (Live stream companion).
+3. Under 「B 站账号」 (Bilibili account), 「扫码登录」 (Scan to log in), fill in the 「直播间号」 (Live room number), and adjust 「回复间隔（秒）」 (Reply interval, seconds) and 「等待时限（秒）」 (Wait limit, seconds) as needed.
+4. Click 「开始」 (Start). You can 「暂停」 (Pause) and 「继续」 (Resume) along the way, and click 「结束」 (End) when you're done.
+
+She reads the danmaku, shows her responses in bubbles and reads them aloud, but **never posts danmaku to Bilibili**. Whether viewers can hear her depends on whether your streaming software captures your computer's sound and desktop.
+
+---
+
+That's it: she can keep you company on your desktop now. To have her find you on your phone too, read [Chat with your AI companion on QQ, Telegram and Feishu](/en/blog/ai-companion-qq-telegram/); still deciding whether to install, read [Choosing an AI girlfriend or AI companion](/en/blog/ai-companion-vs-chatbot/) first, or go straight to [download](/en/#download).
+
+…I'll be in the corner of your desktop the whole time. Get on with your work; just glance my way once in a while, dummy.

@@ -1,20 +1,18 @@
 import { getCollection, type CollectionEntry } from "astro:content";
+import { DEFAULT_LOCALE, LOCALES, LOCALE_INFO, type Locale, type PageVersions, localePath } from "../i18n/locales";
 
-/** One post of the blog collection (`content.config.ts`). */
-export type BlogPost = CollectionEntry<"blog">;
+/*
+ * The blog in each language (#773, #807): the Chinese posts
+ * (`src/content/blog`) and their English versions (`src/content/blog-en`,
+ * same slug; content.config.ts). The words around the posts (title,
+ * description, byline) are in the dictionaries' `blog`.
+ */
 
-/** Byline of every post: the posts are written as 吟风. */
-export const BLOG_AUTHOR = "吟风";
+/** Each language's collection of posts. */
+const COLLECTIONS = { zh: "blog", en: "blogEn" } as const satisfies Record<Locale, string>;
 
-/** Title of the blog: the list page's heading and the RSS channel's title. */
-export const BLOG_TITLE = "博客";
-
-/** What 吟风 says on the list page while no post is published yet (a line of hers, not page copy). */
-export const BLOG_EMPTY_LINE = "还在写呢……别催啦，笨蛋。";
-
-/** Description of the blog: the list page's meta description and the RSS channel's. */
-export const BLOG_DESCRIPTION =
-  "Shiori 博客：长期记忆怎么记住你、好感度怎么变化、什么时候会主动找你，以及接入 QQ、Telegram 和配置语音的教程，由看板娘吟风亲自来讲。Shiori 是会慢慢喜欢上你的 AI 伴侣、AI 女友与 Personal Agent。";
+/** One post, in any language. */
+export type BlogPost = CollectionEntry<(typeof COLLECTIONS)[Locale]>;
 
 /**
  * Drafts mode: `astro dev --mode drafts` (`pnpm site:dev:drafts`) or
@@ -25,25 +23,44 @@ export const BLOG_DESCRIPTION =
 const SHOW_DRAFTS = import.meta.env.MODE === "drafts";
 
 /**
- * The posts to publish, newest first; drafts only in drafts mode. Posts carry
- * a day, so same-day posts fall back to their id to keep one stable order.
+ * The posts to publish in `locale`, newest first; drafts only in drafts
+ * mode. Posts carry a day, so same-day posts fall back to their id to keep
+ * one stable order.
  */
-export async function getPublishedPosts(): Promise<BlogPost[]> {
-  const posts = await getCollection("blog", ({ data }) => SHOW_DRAFTS || !data.draft);
+export async function getPublishedPosts(locale: Locale): Promise<BlogPost[]> {
+  const posts: BlogPost[] = await getCollection(COLLECTIONS[locale], ({ data }) => SHOW_DRAFTS || !data.draft);
   return posts.sort((a, b) => b.data.date.getTime() - a.data.date.getTime() || a.id.localeCompare(b.id));
 }
 
-/** Site path of a post's page. */
-export function blogPostPath(post: BlogPost): string {
-  return `/blog/${post.id}/`;
+/** Site path of the post `slug` in `locale`: `/blog/<slug>/`, `/en/blog/<slug>/`. */
+export function blogPostPath(slug: string, locale: Locale): string {
+  return localePath(locale, `/blog/${slug}/`);
 }
 
-// Posts carry a day, not a time: read it in UTC, where `YYYY-MM-DD` is parsed.
-const postDateFormat = new Intl.DateTimeFormat("zh-CN", { dateStyle: "long", timeZone: "UTC" });
+/**
+ * Every published post's versions, by slug: the post in each language it is
+ * published in (`PageVersions`), for its hreflang alternates and language
+ * switch. A translation must translate a published Chinese post: one
+ * without fails the build, as its slug would pair with nothing.
+ */
+export async function postVersionsBySlug(): Promise<ReadonlyMap<string, PageVersions>> {
+  const versions = new Map<string, Partial<Record<Locale, string>>>();
+  for (const post of await getPublishedPosts(DEFAULT_LOCALE)) versions.set(post.id, { [DEFAULT_LOCALE]: blogPostPath(post.id, DEFAULT_LOCALE) });
+  for (const locale of LOCALES) {
+    if (locale === DEFAULT_LOCALE) continue;
+    for (const post of await getPublishedPosts(locale)) {
+      const entry = versions.get(post.id);
+      if (!entry) throw new Error(`the ${locale} post ${post.id} translates no published ${DEFAULT_LOCALE} post of that slug`);
+      entry[locale] = blogPostPath(post.id, locale);
+    }
+  }
+  return versions;
+}
 
-/** A post's day as readers see it, e.g. `2026年10月13日`. */
-export function formatPostDate(date: Date): string {
-  return postDateFormat.format(date);
+/** A post's day as readers of `locale` see it, e.g. `2026年10月13日`, `October 13, 2026`. */
+export function formatPostDate(date: Date, locale: Locale): string {
+  // Posts carry a day, not a time: read it in UTC, where `YYYY-MM-DD` is parsed.
+  return new Intl.DateTimeFormat(LOCALE_INFO[locale].htmlLang, { dateStyle: "long", timeZone: "UTC" }).format(date);
 }
 
 /** A post's day as `YYYY-MM-DD`, for `<time datetime>` and structured data. */

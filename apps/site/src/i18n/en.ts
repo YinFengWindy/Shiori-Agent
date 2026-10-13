@@ -20,7 +20,6 @@ export const en: SiteDictionary = {
       "Shiori is the AI companion who grows to like you, a free and open-source Personal Agent and desktop AI for Windows. An AI girlfriend who remembers you.",
     homeHeading: `${SITE_NAME}: the AI companion who grows to like you, an open-source Personal Agent`,
     titleSuffix: `${SITE_NAME} AI Companion`,
-    feedTitle: `${SITE_NAME} Blog`,
   },
   slogan,
   downloadHeadline: "Take me home already, dummy.",
@@ -39,6 +38,22 @@ export const en: SiteDictionary = {
   breadcrumbs: {
     label: "Breadcrumb",
     home: "Home",
+  },
+  blog: {
+    title: "Blog",
+    description:
+      "Yinfeng's guides to Shiori: what sets this AI companion apart, chatting on QQ and Telegram, and a talking desktop pet. An AI girlfriend and Personal Agent.",
+    emptyLine: "Still writing… quit rushing me, dummy.",
+    author: "Yinfeng",
+    contents: "Contents",
+  },
+  changelog: {
+    title: "Changelog",
+    description:
+      "Shiori release notes, newest first: what each version adds and fixes. Shiori is a free, open-source AI companion and Personal Agent for Windows.",
+    versions: "Versions",
+    viewOnGitHub: "View on GitHub",
+    notesLanguage: "Release notes are written in Chinese.",
   },
   sound: {
     label: "Background music",
