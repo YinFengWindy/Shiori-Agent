@@ -1,0 +1,72 @@
+[
+  {
+    "url": "https://api.github.com/repos/YinFengWindy/Shiori-Agent/releases/1",
+    "html_url": "https://github.com/YinFengWindy/Shiori-Agent/releases/tag/v0.5.3",
+    "id": 1,
+    "tag_name": "v0.5.3",
+    "target_commitish": "main",
+    "name": "v0.5.3",
+    "draft": false,
+    "prerelease": false,
+    "created_at": "2026-10-10T10:36:03Z",
+    "published_at": "2026-10-10T10:36:03Z",
+    "assets": [],
+    "body": "<!-- shiori-daily-release:{\"tag\":\"v0.5.3\",\"commitCount\":2} -->\r\n\r\n## What's Changed\r\n* fix(roles): 修复角色卡导入误报工作区越界 (#776) by @YinFengWindy in https://github.com/YinFengWindy/Shiori-Agent/pull/777\r\n* feat(site): 拆出 apps/site（Astro）并接入 SEO 基础 (#769) by @YinFengWindy in https://github.com/YinFengWindy/Shiori-Agent/pull/775\r\n\r\n\r\n**Full Changelog**: https://github.com/YinFengWindy/Shiori-Agent/compare/v0.5.2...v0.5.3\r\n* feat: <script>alert(1)</script><img src=x onerror=alert(2)> by @someone in https://github.com/YinFengWindy/Shiori-Agent/pull/790\r\n* [点我](javascript:alert(3)) <a href=\"javascript:alert(4)\">链接</a>"
+  },
+  {
+    "url": "https://api.github.com/repos/YinFengWindy/Shiori-Agent/releases/1",
+    "html_url": "https://github.com/YinFengWindy/Shiori-Agent/releases/tag/v0.6.0-beta.1",
+    "id": 1,
+    "tag_name": "v0.6.0-beta.1",
+    "target_commitish": "main",
+    "name": "Shiori v0.6.0 beta 1",
+    "draft": false,
+    "prerelease": true,
+    "created_at": "2026-10-12T08:00:00Z",
+    "published_at": "2026-10-12T08:00:00Z",
+    "assets": [],
+    "body": "# Shiori v0.6.0 beta 1\n\n## 新增与改进\n\n- 预发布才有的功能。"
+  },
+  {
+    "url": "https://api.github.com/repos/YinFengWindy/Shiori-Agent/releases/1",
+    "html_url": "https://github.com/YinFengWindy/Shiori-Agent/releases/tag/v0.6.0",
+    "id": 1,
+    "tag_name": "v0.6.0",
+    "target_commitish": "main",
+    "name": "Shiori v0.6.0",
+    "draft": true,
+    "prerelease": false,
+    "created_at": null,
+    "published_at": null,
+    "assets": [],
+    "body": "# Shiori v0.6.0\n\n## 新增与改进\n\n- 尚未发布的草稿版本。"
+  },
+  {
+    "url": "https://api.github.com/repos/YinFengWindy/Shiori-Agent/releases/1",
+    "html_url": "https://github.com/YinFengWindy/Shiori-Agent/releases/tag/v0.5.2",
+    "id": 1,
+    "tag_name": "v0.5.2",
+    "target_commitish": "main",
+    "name": "Shiori v0.5.2",
+    "draft": false,
+    "prerelease": false,
+    "created_at": "2026-10-09T16:41:11Z",
+    "published_at": "2026-10-09T16:41:11Z",
+    "assets": [],
+    "body": "# Shiori v0.5.2\r\n\r\n## 新增与改进\r\n\r\n- **角色好感度**：新增七个关系阶段、对话中的好感变化。\r\n- **本地语音**：内置 SenseVoiceSmall 语音识别和 GPT-SoVITS 语音合成插件。\r\n\r\n## 修复\r\n\r\n- 后台消息插入时，流式回复仍归属原来的聊天回合。\r\n\r\n## 升级说明\r\n\r\n- 使用旧 `SurfaceHandle.voice` 的外部插件需要更新适配。详见[插件运行时契约](https://github.com/YinFengWindy/Shiori-Agent/blob/main/docs/_handbook/plugin-runtime-contract.md)。\r\n\r\n```text\r\n## 下载\r\n这一行在代码块里，不是标题。\r\n```\r\n\r\n## 下载\r\n\r\nWindows x64 用户可在「设置 → 关于」检查更新，或下载安装包 `Shiori-Setup-0.5.2.exe`。\r\n\r\n### 校验\r\n\r\n文件校验值见 `SHA256SUMS.txt`。\r\n\r\n[查看全部变化](https://github.com/YinFengWindy/Shiori-Agent/compare/v0.5.1...v0.5.2)"
+  },
+  {
+    "url": "https://api.github.com/repos/YinFengWindy/Shiori-Agent/releases/1",
+    "html_url": "https://github.com/YinFengWindy/Shiori-Agent/releases/tag/v0.1.0",
+    "id": 1,
+    "tag_name": "v0.1.0",
+    "target_commitish": "main",
+    "name": "v0.1.0",
+    "draft": false,
+    "prerelease": false,
+    "created_at": "2026-08-23T14:09:49Z",
+    "published_at": "2026-08-23T14:09:49Z",
+    "assets": [],
+    "body": "## 下载\n\n安装包 `Shiori.Setup.0.1.0.exe`。\n\n## 已知问题\n\n- 首个公开版本，仅支持 Windows x64。"
+  }
+]

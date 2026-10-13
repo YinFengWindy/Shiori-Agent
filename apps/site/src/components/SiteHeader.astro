@@ -16,7 +16,7 @@ import "../styles/header.css";
  * full-screen stage of its own; it slides in from the top once the page
  * has moved on to the showcase and away again on the way back
  * (`lib/siteHeader.ts`). It sits outside the narrative's stage, so the
- * stage's wheel, touch and click stepping never see it. `fixed` (blog):
+ * stage's wheel, touch and click stepping never see it. `fixed` (blog, changelog):
  * always there, in the page flow at the top and sticking while scrolling.
  *
  * Narrow screens keep the icon, the name, 博客 and the download button;
@@ -25,7 +25,7 @@ import "../styles/header.css";
 interface Props {
   mode: "reveal" | "fixed";
   /** The section the page belongs to, marked `aria-current` in the bar. */
-  current?: "blog";
+  current?: "blog" | "changelog";
 }
 
 const { mode, current } = Astro.props;
@@ -50,7 +50,7 @@ const wideOnlyClass = "max-sm:hidden";
     </a>
     <div class="site-header-links">
       <a href="/blog/" class={linkClass} aria-current={current === "blog" ? "page" : undefined}>博客</a>
-      <a href={SITE_LINKS.changelog} class={cx(linkClass, wideOnlyClass)}>更新日志</a>
+      <a href={SITE_LINKS.changelog} class={cx(linkClass, wideOnlyClass)} aria-current={current === "changelog" ? "page" : undefined}>更新日志</a>
       <a href={SITE_LINKS.github} class={cx(linkClass, wideOnlyClass)}>
         <GithubLogoIcon size={18} aria-hidden="true" />
         GitHub

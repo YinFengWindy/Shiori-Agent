@@ -1,0 +1,49 @@
+---
+import SiteFooter from "../components/SiteFooter.astro";
+import SiteHeader from "../components/SiteHeader.astro";
+import SiteLayout from "../layouts/SiteLayout.astro";
+import { formatReleaseDate, loadChangelog } from "../lib/changelog";
+import { SITE_NAME } from "../lib/siteMeta";
+import "../styles/reading.css";
+import "../styles/changelog.css";
+
+/**
+ * The changelog (#792): every published GitHub release, newest first — the
+ * version, its day, a link to the release on GitHub and its notes — on the
+ * blog's reading columns. Built from the GitHub API at build time
+ * (`lib/changelog.ts`); a release published later reaches the page through
+ * the redeploy workflow (.github/workflows/site-redeploy-on-release.yml).
+ */
+const CHANGELOG_TITLE = "更新日志";
+const CHANGELOG_DESCRIPTION = "Shiori 每个版本的新增、改进与修复。";
+const entries = await loadChangelog();
+---
+
+<SiteLayout title={`${CHANGELOG_TITLE} · ${SITE_NAME}`} description={CHANGELOG_DESCRIPTION}>
+  <SiteHeader mode="fixed" current="changelog" />
+  <main class="site-reading">
+    <div class="site-changelog">
+      <h1 class="site-reading-heading site-story-type">{CHANGELOG_TITLE}</h1>
+      {
+        entries.map((entry) => (
+          <article class="site-reading-column site-changelog-release" id={entry.version} aria-labelledby={`${entry.version}-title`}>
+            <header class="site-changelog-head">
+              <h2 class="site-reading-title site-story-type" id={`${entry.version}-title`}>
+                {entry.version}
+              </h2>
+              <p class="site-reading-meta">
+                <time datetime={entry.publishedAt.toISOString()}>{formatReleaseDate(entry.publishedAt)}</time>
+                <span aria-hidden="true">·</span>
+                <a href={entry.url} rel="noopener" class="site-changelog-source">
+                  GitHub 上查看
+                </a>
+              </p>
+            </header>
+            <div class="site-prose" set:html={entry.html} />
+          </article>
+        ))
+      }
+    </div>
+  </main>
+  <SiteFooter />
+</SiteLayout>

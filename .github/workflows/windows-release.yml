@@ -156,3 +156,15 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SHIORI_DAILY_RELEASE_PLAN: ${{ needs.plan.outputs.plan }}
         run: node apps/desktop/scripts/daily-release.mjs publish apps/desktop/release/installer
+
+  # A release published here uses GITHUB_TOKEN, and events made with that token
+  # start no workflow: site-redeploy-on-release.yml never sees this release
+  # through `release: published`, so it is called directly to put the new
+  # release on the site's changelog.
+  redeploy-site:
+    needs: package
+    if: github.event_name == 'schedule' && needs.package.result == 'success'
+    permissions: {}
+    uses: ./.github/workflows/site-redeploy-on-release.yml
+    secrets:
+      VERCEL_DEPLOY_HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK }}

@@ -183,6 +183,9 @@ importers:
       react-dom:
         specifier: ^19.2.5
         version: 19.2.8(react@19.2.8)
+      satteri:
+        specifier: 0.10.5
+        version: 0.10.5
     devDependencies:
       '@astrojs/check':
         specifier: 0.9.10

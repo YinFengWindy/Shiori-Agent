@@ -9,7 +9,7 @@
     "build": "astro build",
     "preview": "astro preview",
     "typecheck": "astro check",
-    "test": "astro build && astro build --mode drafts --outDir dist-drafts && tsx --test \"tests/**/*.test.ts\""
+    "test": "node --env-file=tests/fixtures/changelog.env node_modules/astro/bin/astro.mjs build && node --env-file=tests/fixtures/changelog.env node_modules/astro/bin/astro.mjs build --mode drafts --outDir dist-drafts && tsx --test \"tests/**/*.test.ts\""
   },
   "dependencies": {
     "@astrojs/mdx": "8.0.3",
@@ -21,7 +21,8 @@
     "@yinfengwindy/shiori-sdk": "workspace:*",
     "astro": "7.3.8",
     "react": "^19.2.5",
-    "react-dom": "^19.2.5"
+    "react-dom": "^19.2.5",
+    "satteri": "0.10.5"
   },
   "devDependencies": {
     "@astrojs/check": "0.9.10",
@@ -34,5 +35,6 @@
     "tsx": "^4.23.1",
     "typescript": "^5.8.0"
   },
-  "//dependencies": "Ranges shared with apps/desktop (react, tailwindcss, postcss, autoprefixer, @phosphor-icons/react, typescript) stay identical to it so pnpm resolves both to one store entry: the site compiles the desktop's styles.css with the desktop's Tailwind config (see tailwind.config.ts). Site-only packages are pinned."
+  "//dependencies": "Ranges shared with apps/desktop (react, tailwindcss, postcss, autoprefixer, @phosphor-icons/react, typescript) stay identical to it so pnpm resolves both to one store entry: the site compiles the desktop's styles.css with the desktop's Tailwind config (see tailwind.config.ts). Site-only packages are pinned. satteri is the Markdown engine Astro itself runs (the version @astrojs/markdown-satteri pins); lib/changelog.ts renders the release notes with it.",
+  "//test": "The test builds read the changelog from tests/fixtures/releases.json (tests/fixtures/changelog.env), not the GitHub API: offline and on known releases. `build` (Vercel) always fetches the real releases."
 }

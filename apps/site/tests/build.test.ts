@@ -304,7 +304,7 @@ describe("home page HTML", () => {
       assert.deepEqual(links, [
         { href: "/", label: "Shiori" },
         { href: "/blog/", label: "博客" },
-        { href: "https://github.com/YinFengWindy/Shiori-Agent/releases", label: "更新日志" },
+        { href: "/changelog/", label: "更新日志" },
         { href: "https://github.com/YinFengWindy/Shiori-Agent", label: "GitHub" },
         { href: "https://github.com/YinFengWindy/Shiori-Agent/releases/latest", label: "下载 Windows 版" },
       ]);
@@ -346,5 +346,65 @@ describe("crawler files", () => {
     const pages = sitemapPages(site);
     assert.ok(pages.includes(`${ORIGIN}/`), `home page missing from sitemap: ${pages.join(", ")}`);
     for (const page of pages) distPathOf(page);
+  });
+});
+
+/*
+ * The changelog page as `site:test` builds it: from tests/fixtures/releases.json
+ * (tests/fixtures/changelog.env), so the expected releases are known here.
+ * The notes' clean-up itself is unit-tested in changelog.test.ts.
+ */
+describe("changelog page (#792)", () => {
+  const html = readDist("changelog/index.html");
+  const changelogUrl = `${ORIGIN}/changelog/`;
+
+  it("carries its own title, description, canonical URL and Open Graph tags", () => {
+    assert.match(html, /<title>更新日志 · Shiori<\/title>/);
+    assert.ok(metaContent(html, "name", "description").length > 0);
+    assert.match(html, new RegExp(`<link rel="canonical" href="${changelogUrl}">`));
+    assert.equal(metaContent(html, "property", "og:url"), changelogUrl);
+    assert.equal(metaContent(html, "property", "og:type"), "website");
+    assert.equal(metaContent(html, "property", "og:title"), "更新日志 · Shiori");
+  });
+
+  it("is in the sitemap", () => {
+    assert.ok(sitemapPages(site).includes(changelogUrl));
+  });
+
+  it("marks 更新日志 current in the always-there top bar, linked from every page", () => {
+    assert.match(html, /<header class="site-header" data-site-header data-mode="fixed">/);
+    assert.match(html, /<a href="\/changelog\/"[^>]* aria-current="page">更新日志<\/a>/);
+    for (const page of ["index.html", "blog/index.html"]) assert.match(readDist(page), /<a href="\/changelog\/"[^>]*>更新日志<\/a>/);
+  });
+
+  it("lists the published full releases newest first, each with its day, GitHub link and notes as static HTML", () => {
+    assert.equal([...html.matchAll(/<h1[ >]/g)].length, 1);
+    const versions = [...html.matchAll(/<h2 class="site-reading-title site-story-type" id="(v[^"]+)-title">/g)].map((match) => match[1]);
+    assert.deepEqual(versions, ["v0.5.3", "v0.5.2", "v0.1.0"]);
+    assert.match(html, /<time datetime="2026-10-09T16:41:11\.000Z">2026年10月10日<\/time>/);
+    assert.match(html, /<a href="https:\/\/github\.com\/YinFengWindy\/Shiori-Agent\/releases\/tag\/v0\.5\.2" rel="noopener"[^>]*>GitHub 上查看<\/a>/);
+    assert.match(html, /<h3>新增与改进<\/h3>/);
+    assert.match(html, /<strong>角色好感度<\/strong>/);
+    assert.match(html, /<h3>已知问题<\/h3>/);
+  });
+
+  it("leaves out drafts, prereleases, the notes' repeated version headings, comments and 下载 sections", () => {
+    assert.doesNotMatch(html, /v0\.6\.0/);
+    assert.doesNotMatch(html, /Shiori v0\.5\.2|shiori-daily-release/);
+    assert.doesNotMatch(html, /<h\d[^>]*>下载<\/h\d>|Shiori-Setup-0\.5\.2\.exe|Shiori\.Setup\.0\.1\.0\.exe|SHA256SUMS/);
+  });
+
+  it("runs none of the notes' own markup: no script, event handler or javascript: link", () => {
+    const main = html.slice(html.indexOf("<main"), html.indexOf("</main>"));
+    // Real tags only: the escaped text may spell `onerror=` or `javascript:` harmlessly.
+    assert.doesNotMatch(main, /<(script|img)\b|<[a-z][^>]*\son\w+=|<[a-z][^>]*\s(href|src)="[^"]*javascript:/i);
+    assert.ok(main.includes("&lt;script&gt;alert(1)&lt;/script&gt;"), "the notes' script tag is not shown as text");
+  });
+
+  it("marks the notes' links off the site rel=noopener", () => {
+    const notes = html.slice(html.indexOf('<div class="site-prose">'), html.indexOf("</main>"));
+    const links = [...notes.matchAll(/<a href="(https?:[^"]+)"([^>]*)>/g)].filter(([, href]) => !href.startsWith(ORIGIN));
+    assert.ok(links.length > 0);
+    for (const [, href, rest] of links) assert.match(rest, /rel="noopener"/, `${href} has no rel=noopener`);
   });
 });

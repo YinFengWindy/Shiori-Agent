@@ -12,6 +12,7 @@ import {
   isoPostDate,
 } from "../../lib/blog";
 import { SITE_NAME } from "../../lib/siteMeta";
+import "../../styles/reading.css";
 import "../../styles/blog.css";
 
 /**
@@ -23,9 +24,9 @@ const posts = await getPublishedPosts();
 
 <SiteLayout title={`${BLOG_TITLE} · ${SITE_NAME}`} description={BLOG_DESCRIPTION}>
   <SiteHeader mode="fixed" current="blog" />
-  <main class="site-blog">
+  <main class="site-reading">
     <div class="site-blog-shelf">
-      <h1 class="site-blog-heading site-story-type">{BLOG_TITLE}</h1>
+      <h1 class="site-reading-heading site-story-type">{BLOG_TITLE}</h1>
       {
         posts.length === 0 ? (
           <p class="site-blog-empty site-story-type">{BLOG_EMPTY_LINE}</p>
