@@ -1,20 +1,13 @@
 ---
 import BlogPostPage from "../../../components/BlogPostPage.astro";
-import type { PageVersions } from "../../../i18n/locales";
-import { required } from "../../../lib/dom";
-import { type BlogPost, getPublishedPosts, postVersionsBySlug } from "../../../lib/blog";
+import { type PostPageProps, postStaticPaths } from "../../../lib/blog";
 
 /** A blog post in English, `/en/blog/<slug>/`: the translated posts only (#807; components/BlogPostPage.astro). */
-export async function getStaticPaths() {
-  const versions = await postVersionsBySlug();
-  const posts = await getPublishedPosts("en");
-  return posts.map((post) => ({ params: { slug: post.id }, props: { post, versions: required(versions.get(post.id), `the versions of post ${post.id}`) } }));
+export function getStaticPaths() {
+  return postStaticPaths("en");
 }
 
-interface Props {
-  post: BlogPost;
-  versions: PageVersions;
-}
+type Props = PostPageProps;
 
 const { post, versions } = Astro.props;
 ---

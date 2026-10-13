@@ -85,17 +85,29 @@ function asHtmlText(text: string) {
 /**
  * The Chinese left in an English page's visible text, word by word, after
  * the allowed Chinese is taken out: the app's interface names, quoted
- * 「like this」 because the app's interface is in Chinese and readers must
- * find them there; elements marked `lang="zh-CN"` (the changelog's notes,
+ * 「like this」 and followed at once by their English meaning in brackets
+ * (「账号」 (Accounts)), because the app's interface is in Chinese and
+ * readers must find them there — a quoted name without its meaning counts
+ * as untranslated; elements marked `lang="zh-CN"` (the changelog's notes,
  * shown as written); and the 「中」 of the switch back to Chinese.
  */
 function strayChinese(html: string) {
   const withoutChinese = html.replace(/<(\w+)[^>]* lang="zh-CN"[^>]*>.*?<\/\1>/gs, " ");
   return visibleTextOf(withoutChinese)
-    .replace(/「[^」]*」/g, " ")
+    .replace(/「[^」]*」(?= \([^)]*\p{Script=Latin}[^)]*\))/gu, " ")
     .split(/\s+/)
     .filter((word) => /\p{Script=Han}/u.test(word) && word !== "中");
 }
+
+describe("strayChinese", () => {
+  it("lets a quoted interface name through only with its English meaning right after it", () => {
+    const page = (text: string) => `<body><p>${text}</p></body>`;
+    assert.deepEqual(strayChinese(page("Open 「账号」 (Accounts) and 「连接」 (Connect).")), []);
+    assert.deepEqual(strayChinese(page("Open 「账号」 and click.")), ["「账号」"]);
+    assert.deepEqual(strayChinese(page("Open 「账号」 (见下文).")), ["「账号」", "(见下文)."]);
+    assert.deepEqual(strayChinese(page("Left as 未翻译.")), ["未翻译."]);
+  });
+});
 
 describe("English posts as written (#807)", () => {
   it("translates three published Chinese posts, under their slugs", () => {
@@ -193,15 +205,16 @@ describe("English posts as rendered (#807)", () => {
         assert.match(html, new RegExp(`<a href="/blog/${post.slug}/" hreflang="zh-CN"[^>]*data-lang-switch>中</a>`));
       });
 
-      it("links within the site in English where an English page exists", () => {
+      it("links within the site in English where an English page exists, and says so where a link leads to a Chinese page", () => {
         const prose = html.slice(html.indexOf('<div class="site-prose">'), html.indexOf("</article>"));
-        const links = [...prose.matchAll(/<a href="(\/[^"]*)"/g)].map((match) => match[1]);
+        const links = [...prose.matchAll(/<a href="(\/[^"]*)"[^>]*>(.*?)<\/a>/gs)].map(([, href, label]) => ({ href, label: label.replace(/<[^>]+>/g, "") }));
         assert.ok(links.length > 0);
-        for (const link of links) {
-          const path = link.replace(/#.*$/, "");
-          const english = `/en${path}`;
-          if (dist.has(distPathOf(`${ORIGIN}${english}`))) assert.ok(link.startsWith("/en/"), `${link} has an English page: ${english}`);
-          assert.ok(dist.has(distPathOf(`${ORIGIN}${path}`)), `${link} leads nowhere`);
+        for (const { href, label } of links) {
+          const path = href.replace(/#.*$/, "");
+          assert.ok(dist.has(distPathOf(`${ORIGIN}${path}`)), `${href} leads nowhere`);
+          if (path.startsWith("/en/")) continue;
+          assert.ok(!dist.has(distPathOf(`${ORIGIN}/en${path}`)), `${href} has an English page: /en${path}`);
+          assert.ok(label.endsWith(" (in Chinese)"), `the link to the Chinese page ${href} does not say so: ${label}`);
         }
       });
 
@@ -259,7 +272,7 @@ describe("English changelog (#807)", () => {
     assert.match(html, /<\/h1><p class="site-reading-meta site-changelog-notes-language">Release notes are written in Chinese\.<\/p>/);
     assert.equal([...html.matchAll(/<div class="site-prose" lang="zh-CN">/g)].length, 3);
     assert.match(html, /<h3>新增与改进<\/h3>/);
-    assert.doesNotMatch(zhHtml, /site-changelog-notes-language/);
+    assert.doesNotMatch(zhHtml, /<p [^>]*class="[^"]*site-changelog-notes-language/);
     assert.equal([...zhHtml.matchAll(/<div class="site-prose">/g)].length, 3);
   });
 

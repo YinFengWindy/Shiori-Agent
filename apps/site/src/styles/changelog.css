@@ -17,6 +17,12 @@
   margin-bottom: 0;
 }
 
+/* On a page in another language than the notes (#807): the line saying
+   they are in Chinese, a little apart from the heading over it. */
+.site-changelog-notes-language {
+  margin-top: 0.5rem;
+}
+
 /* Each release a full-width column of the list (its anchor clears the top bar, reading.css). */
 .site-changelog-release {
   width: 100%;

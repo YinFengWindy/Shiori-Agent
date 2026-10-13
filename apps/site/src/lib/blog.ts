@@ -67,3 +67,25 @@ export function formatPostDate(date: Date, locale: Locale): string {
 export function isoPostDate(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
+
+/** What a post page is built from: the post, and its versions (`postVersionsBySlug`). */
+export interface PostPageProps {
+  post: BlogPost;
+  versions: PageVersions;
+}
+
+/**
+ * The post pages of `locale` (`getStaticPaths` of pages/blog/[slug].astro
+ * and pages/en/blog/[slug].astro): one per post published in it, by slug,
+ * each with its versions.
+ */
+export async function postStaticPaths(locale: Locale) {
+  const versionsBySlug = await postVersionsBySlug();
+  const posts = await getPublishedPosts(locale);
+  return posts.map((post) => {
+    const versions = versionsBySlug.get(post.id);
+    if (!versions) throw new Error(`post ${post.id} has no versions: it is not published in ${DEFAULT_LOCALE}`);
+    const props: PostPageProps = { post, versions };
+    return { params: { slug: post.id }, props };
+  });
+}
