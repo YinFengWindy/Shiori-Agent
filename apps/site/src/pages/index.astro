@@ -1,17 +1,20 @@
 ---
 import NarrativeStage from "../components/NarrativeStage.astro";
+import ShowcaseSection from "../components/ShowcaseSection.astro";
+import SiteFooter from "../components/SiteFooter.astro";
 import SiteLoader from "../components/SiteLoader.astro";
 import { SoundToggle } from "../components/SoundToggle";
 import SiteLayout from "../layouts/SiteLayout.astro";
 import { SITE_NAME, SITE_SLOGAN } from "../lib/siteMeta";
+import "../styles/showcase.css";
 
 /*
  * Home page (#768): the loader over the first screen (#770), the
  * scroll-driven narrative (#771), which ends on the
  * download call over the same scene, then everything after it in one
- * free-scrolling block — the product showcase (#772) and the blog entry
- * (#773) go into `.site-after-narrative`, empty until then. The music
- * switch stays in the corner over all of it.
+ * free-scrolling block: the product showcase with its photo strip (#772),
+ * the blog entry to come (#773); then the footer, the page's last snap
+ * point. The music switch stays in the corner over all of it.
  */
 ---
 
@@ -19,7 +22,10 @@ import { SITE_NAME, SITE_SLOGAN } from "../lib/siteMeta";
   <SiteLoader />
   <main>
     <NarrativeStage downloadId="download" />
-    <div class="site-after-narrative"></div>
+    <div class="site-after-narrative">
+      <ShowcaseSection />
+    </div>
   </main>
+  <SiteFooter />
   <SoundToggle client:idle className="site-sound-toggle" />
 </SiteLayout>

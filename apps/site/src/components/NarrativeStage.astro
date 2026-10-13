@@ -230,7 +230,7 @@ const usedCgKeys = [...new Set(NARRATIVE_LINES.flatMap((line) => (line.cg ? [lin
     stepTo(target, scroll.offset, event.timeStamp);
   }
 
-  // Click / tap anywhere on the stage advances one line, as in a galgame;
+  // Click / tap anywhere on the stage advances one step, as in a galgame;
   // the download buttons and other controls keep their own action. Taps never fire
   // after a swipe, so this does not double-step with the touch handler.
   function onStageClick(event: MouseEvent) {
@@ -238,7 +238,9 @@ const usedCgKeys = [...new Set(NARRATIVE_LINES.flatMap((line) => (line.cg ? [lin
     if (event.target instanceof Element && event.target.closest("a, button")) return;
     const { scroll, from } = stepOrigin(event.timeStamp);
     const target = narrativeStepTarget(from, 1);
-    if (target === null) return;
+    // Clicks only play the narrative: on the download state they stay put
+    // rather than scroll the stage away (the wheel and swipes go on).
+    if (target === null || target > scroll.lineCount * scroll.viewportHeight) return;
     stepTo(target, scroll.offset, event.timeStamp);
   }
 

@@ -1,0 +1,26 @@
+{
+  "name": "shiori-site-video",
+  "private": true,
+  "type": "module",
+  "description": "Remotion source of the feature demo clips on the Shiori website (#772). Renders into apps/site/src/assets/showcase/, which the site build uses as committed files.",
+  "scripts": {
+    "render": "tsx scripts/render.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@phosphor-icons/react": "^2.1.10",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "remotion": "4.0.534"
+  },
+  "devDependencies": {
+    "@remotion/bundler": "4.0.534",
+    "@remotion/renderer": "4.0.534",
+    "@types/node": "26.6.3",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "tsx": "^4.23.1",
+    "typescript": "^5.8.0"
+  },
+  "//dependencies": "Remotion packages are pinned to one exact version (they must match each other). react, @phosphor-icons/react, typescript and the @types ranges stay identical to apps/desktop and apps/site so pnpm resolves them to the same store entries."
+}

@@ -70,10 +70,17 @@ describe("narrativeStepTarget", () => {
     assert.equal(step(4500, -1), 3600);
   });
 
-  it("leaves the browser to scroll above the first line and onward from the download state", () => {
+  it("steps from the download state onto the top of the content after the narrative, and from there back", () => {
+    assert.equal(step(4500, 1), 5400);
+    assert.equal(step(5400, -1), 4500);
+    assert.equal(step(5000, 1), 5400);
+    assert.equal(step(5000, -1), 4500);
+  });
+
+  it("leaves the browser to scroll above the first line and onward from the top of the content after the narrative", () => {
     assert.equal(step(0, -1), null);
-    assert.equal(step(4500, 1), null);
-    assert.equal(step(5200, -1), null);
+    assert.equal(step(5400, 1), null);
+    assert.equal(step(6000, -1), null);
     assert.equal(step(-2000, 1), null);
   });
 });

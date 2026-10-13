@@ -1,0 +1,33 @@
+---
+import { galleryPhotos } from "../lib/siteAssets";
+
+/**
+ * The CG photo strip closing the showcase (#772): photo prints in a row,
+ * slightly tilted, drifting sideways in an endless loop. The row is listed
+ * twice so the loop is seamless — the copy is hidden from the accessibility
+ * tree; hovering pauses it. Nothing is clickable. Under reduced motion the
+ * row stands still and scrolls by hand instead (the copy is dropped).
+ */
+---
+
+<div class="site-photostrip" role="region" aria-label="吟风的 CG 相片" tabindex="0">
+  <ul class="site-photostrip-track">
+    {
+      [false, true].map((copy) =>
+        galleryPhotos.map((photo) => (
+          <li class="site-photo" data-copy={copy ? "" : undefined} aria-hidden={copy ? "true" : undefined}>
+            <img
+              src={photo.image.src}
+              width={photo.image.width}
+              height={photo.image.height}
+              alt={copy ? "" : photo.alt}
+              loading="lazy"
+              decoding="async"
+              draggable="false"
+            />
+          </li>
+        )),
+      )
+    }
+  </ul>
+</div>

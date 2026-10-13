@@ -50,6 +50,10 @@ export default [
     "apps/site/src/**/*.ts",
     "apps/site/src/**/*.tsx",
     "apps/site/tests/**/*.ts",
+    // The website's Remotion demo clips (#772).
+    "apps/site-video/src/**/*.ts",
+    "apps/site-video/src/**/*.tsx",
+    "apps/site-video/scripts/**/*.ts",
     ...pluginRendererFiles,
   ]),
   {

@@ -20,7 +20,11 @@ import mascotSurprisedLqip from "../../../desktop/renderer/src/shared/assets/mas
 import sceneDay from "../../../desktop/renderer/src/shared/assets/scene/bg-day.webp";
 import sceneDusk from "../../../desktop/renderer/src/shared/assets/scene/bg-dusk.webp";
 import sceneNight from "../../../desktop/renderer/src/shared/assets/scene/bg-night.webp";
+import cg2 from "../assets/art/cg-2.webp";
 import cg3 from "../assets/art/cg-3.webp";
+import cg4 from "../assets/art/cg-4.webp";
+import cg5 from "../assets/art/cg-5.webp";
+import cg6 from "../assets/art/cg-6.webp";
 import cg7 from "../assets/art/cg-7.webp";
 import cg8 from "../assets/art/cg-8.webp";
 import cg9 from "../assets/art/cg-9.webp";
@@ -28,8 +32,24 @@ import cg10 from "../assets/art/cg-10.webp";
 import topic1 from "../assets/art/topic-1.webp";
 import topic2 from "../assets/art/topic-2.webp";
 import topic3 from "../assets/art/topic-3.webp";
+import affectionMp4 from "../assets/showcase/affection.mp4";
+import affectionPoster from "../assets/showcase/affection-poster.jpg";
+import affectionWebm from "../assets/showcase/affection.webm";
+import channelsMp4 from "../assets/showcase/channels.mp4";
+import channelsPoster from "../assets/showcase/channels-poster.jpg";
+import channelsWebm from "../assets/showcase/channels.webm";
+import memoryMp4 from "../assets/showcase/memory.mp4";
+import memoryPoster from "../assets/showcase/memory-poster.jpg";
+import memoryWebm from "../assets/showcase/memory.webm";
+import pluginsMp4 from "../assets/showcase/plugins.mp4";
+import pluginsPoster from "../assets/showcase/plugins-poster.jpg";
+import pluginsWebm from "../assets/showcase/plugins.webm";
+import proactiveMp4 from "../assets/showcase/proactive.mp4";
+import proactivePoster from "../assets/showcase/proactive-poster.jpg";
+import proactiveWebm from "../assets/showcase/proactive.webm";
 import ogCover from "../assets/social/og-cover.jpg";
 import type { NarrativeCgKey } from "../content/narrative";
+import type { ShowcaseClipId } from "../content/showcase";
 
 /** One site image: the build-time image metadata plus its accessible alt text. */
 export interface SiteImage {
@@ -43,8 +63,8 @@ export interface SiteImage {
  * change; only what a page uses is imported, because every imported image is
  * emitted into the build. `tests/assets.test.ts` checks that each
  * `../assets/art/*.webp` import above exists, and owns the WebP
- * size/metadata hygiene of every file in that directory — including the art
- * kept there for the gallery that comes next (#768).
+ * size/metadata hygiene of every file in that directory — including art
+ * no page shows (yet), kept for later use.
  *
  * The scene backgrounds and 吟风's expression sprites are the desktop's
  * own files (first-run guide / startup splash, the app's mascot) and are
@@ -150,3 +170,40 @@ export const socialPreviewImage: SiteImage = {
   image: ogCover,
   alt: "CG：晚霞海边的全身立绘，黑色蝙蝠翼连衣裙",
 };
+
+/**
+ * One feature demo clip of the showcase (#772): the VP9 WebM browsers pick
+ * first, the H.264 MP4 for the rest, and the still shown before it plays.
+ * Rendered by apps/site-video (`pnpm run site:video`) and committed: the
+ * site build only copies them.
+ */
+export interface ShowcaseClip {
+  readonly webm: string;
+  readonly mp4: string;
+  readonly poster: ImageMetadata;
+}
+
+/** The showcase's demo clips by id (ids and order: `content/showcase.ts`). */
+export const showcaseClips: Record<ShowcaseClipId, ShowcaseClip> = {
+  memory: { webm: memoryWebm, mp4: memoryMp4, poster: memoryPoster },
+  affection: { webm: affectionWebm, mp4: affectionMp4, poster: affectionPoster },
+  proactive: { webm: proactiveWebm, mp4: proactiveMp4, poster: proactivePoster },
+  channels: { webm: channelsWebm, mp4: channelsMp4, poster: channelsPoster },
+  plugins: { webm: pluginsWebm, mp4: pluginsMp4, poster: pluginsPoster },
+};
+
+/**
+ * The photo strip under the showcase, in strip order. cg-1 (a bedroom
+ * scene, half-buttoned shirt) and cg-9 (bare shoulders under a slipping
+ * jacket) are left out as too suggestive for a public strip.
+ */
+export const galleryPhotos: readonly SiteImage[] = [
+  { image: cg3, alt: "CG：趴在粉色电脑桌前兴奋地打字" },
+  { image: cg6, alt: "CG：晚霞海边的全身立绘，黑色蝙蝠翼连衣裙" },
+  { image: cg7, alt: "CG：夜晚街头挽臂同行的温馨场景" },
+  { image: cg5, alt: "CG：阳光洒落的窗边侧脸特写" },
+  { image: cg8, alt: "CG：夜色中坐在公园长椅上，以手托腮微笑，发间系着蝙蝠翼造型的发绳" },
+  { image: cg4, alt: "CG：窝在沙发上吃甜点的夜晚场景" },
+  { image: cg10, alt: "CG：从门后探身张望，身后是温暖的暖色房间" },
+  { image: cg2, alt: "CG：侧躺在床上，蓝紫色柔光近景" },
+];

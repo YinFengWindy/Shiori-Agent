@@ -1,0 +1,120 @@
+---
+import { SHOWCASE_FEATURES } from "../content/showcase";
+import { showcaseClips } from "../lib/siteAssets";
+import PhotoStrip from "./PhotoStrip.astro";
+import SceneBackdrop from "./SceneBackdrop.astro";
+
+/**
+ * The product showcase after the narrative (#772): one block per feature —
+ * a short title and line beside its demo clip, sides alternating — then the
+ * photo strip. Behind it, the narrative's scene carries on mirrored, as a
+ * reflection meeting the stage's bottom edge, and dissolves into the app's
+ * blue-lavender-pink wash.
+ *
+ * The clips carry no `src` in the HTML: the script below hands each its
+ * sources once it nears the viewport, plays it while on screen and pauses
+ * it off screen. Under reduced motion a clip never plays by itself: it
+ * keeps its poster, with the native controls to play it on request.
+ * Without scripting only the posters show.
+ */
+---
+
+<section class="site-showcase" aria-label="Shiori 功能展示">
+  <div class="site-showcase-scene" aria-hidden="true">
+    <SceneBackdrop />
+  </div>
+  <div class="site-showcase-features">
+    {
+      SHOWCASE_FEATURES.map((feature) => {
+        const clip = showcaseClips[feature.clip];
+        return (
+          <article id={feature.clip} class="site-feature">
+            <div class="site-feature-text">
+              <h2 class="site-feature-title site-story-type">{feature.title}</h2>
+              <p class="site-feature-line">{feature.line}</p>
+            </div>
+            <div class="site-feature-media">
+              <video
+                class="site-feature-video"
+                width={clip.poster.width}
+                height={clip.poster.height}
+                poster={clip.poster.src}
+                aria-label={feature.clipLabel}
+                autoplay
+                muted
+                loop
+                playsinline
+                preload="none"
+                data-showcase-video
+              >
+                <source data-src={clip.webm} type="video/webm" />
+                <source data-src={clip.mp4} type="video/mp4" />
+              </video>
+            </div>
+          </article>
+        );
+      })
+    }
+  </div>
+  <PhotoStrip />
+</section>
+
+<script>
+  // How far ahead of the viewport a clip starts downloading.
+  const PRELOAD_MARGIN = "300px 0px";
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+  const videos = [...document.querySelectorAll<HTMLVideoElement>("video[data-showcase-video]")];
+
+  /** Give a clip its sources (once). Under reduced motion it stays on its poster, with controls. */
+  function attachSources(video: HTMLVideoElement) {
+    if (video.dataset.loaded !== undefined) return;
+    video.dataset.loaded = "";
+    if (reducedMotion.matches) {
+      video.autoplay = false;
+      video.controls = true;
+    }
+    for (const source of video.querySelectorAll<HTMLSourceElement>("source[data-src]")) {
+      const src = source.dataset.src;
+      if (!src) throw new Error("showcase clip source has no data-src");
+      source.src = src;
+    }
+    video.load();
+  }
+
+  function play(video: HTMLVideoElement) {
+    // A rejected play() only means the browser declined to start it
+    // (power saving, a newer pause): the poster stays, nothing to report.
+    video.play().catch(() => {});
+  }
+
+  const nearby = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting || !(entry.target instanceof HTMLVideoElement)) continue;
+        attachSources(entry.target);
+        nearby.unobserve(entry.target);
+      }
+    },
+    { rootMargin: PRELOAD_MARGIN },
+  );
+
+  // Play only what is on screen: five clips looping at once off screen
+  // would only spend battery.
+  const onScreen = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      const video = entry.target;
+      if (!(video instanceof HTMLVideoElement)) continue;
+      if (entry.isIntersecting && !reducedMotion.matches) {
+        attachSources(video);
+        play(video);
+      } else if (!video.paused && !video.controls) {
+        video.pause();
+      }
+    }
+  });
+
+  for (const video of videos) {
+    nearby.observe(video);
+    onScreen.observe(video);
+  }
+</script>
