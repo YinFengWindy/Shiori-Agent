@@ -1,0 +1,73 @@
+---
+import { siteText } from "../i18n";
+import { type Locale, type PageVersions, languageSwitchHref, localeHome } from "../i18n/locales";
+import SiteLayout from "../layouts/SiteLayout.astro";
+import { getPublishedPosts } from "../lib/blog";
+import { loadLatestRelease } from "../lib/changelog";
+import { latestDate } from "../lib/pageUpdated";
+import { appIconImage, loaderArtwork, socialPreviewImage } from "../lib/siteAssets";
+import { siteLoaderGateScript } from "../lib/siteLoaderGate";
+import { DOWNLOAD_ANCHOR_ID } from "../lib/siteMeta";
+import { homeJsonLd, inlineJson } from "../lib/structuredData";
+import HomeLanguageSwitch from "./HomeLanguageSwitch.astro";
+import NarrativeStage from "./NarrativeStage.astro";
+import ShowcaseSection from "./ShowcaseSection.astro";
+import SiteFooter from "./SiteFooter.astro";
+import SiteHeader from "./SiteHeader.astro";
+import SiteLoader from "./SiteLoader.astro";
+import { SoundToggle } from "./SoundToggle";
+import "../styles/showcase.css";
+
+/*
+ * The home page (#768), the same page in every language (#806: `/` and
+ * `/en/`, pages/index.astro and pages/en/index.astro): the loader over the
+ * first screen (#770), the scroll-driven narrative (#771) — the loader only
+ * on a plain visit, not on Back / Forward or an anchor
+ * (lib/siteLoaderGate.ts, #797) — which ends on the download call over the
+ * same scene, then everything after it in one free-scrolling block: the
+ * product showcase with its photo strip (#772); then the footer, the page's
+ * last snap point. The top bar (#773) slides in over everything after the
+ * narrative. The music switch and the language switch stay in the corner
+ * over all of it, the language switch over the loader too; once the top bar
+ * shows, its own language switch takes over.
+ *
+ * The head describes the site, its publisher and the app as structured data
+ * (#799), the app's version being the newest release this build read. The
+ * page is dated by the newer of that release and the newest post, the
+ * changes a visitor would notice here.
+ */
+interface Props {
+  locale: Locale;
+}
+
+const { locale } = Astro.props;
+if (!Astro.site) throw new Error("astro.config.ts must set `site`: the home page's structured data is built from it");
+const text = siteText(locale);
+const versions: PageVersions = { zh: localeHome("zh"), en: localeHome("en") };
+const languageHref = languageSwitchHref(locale, versions);
+const release = await loadLatestRelease();
+const posts = await getPublishedPosts();
+const updated = latestDate([release.publishedAt, ...posts.map((post) => post.data.date)]);
+const structuredDataJson = inlineJson(
+  homeJsonLd({ site: Astro.site, locale, logoPath: appIconImage.src, imagePath: socialPreviewImage.src, release }),
+);
+---
+
+<SiteLayout locale={locale} versions={versions} title={text.meta.homeTitle} updated={updated}>
+  {/* Before anything paints: is this a visit the loader stays out of (Back, an anchor)? */}
+  <script slot="head" is:inline set:html={siteLoaderGateScript} />
+  {/* The loader's illustration is the first picture the page asks for. */}
+  <link slot="head" rel="preload" as="image" href={loaderArtwork.src} fetchpriority="high" />
+  <script slot="meta" type="application/ld+json" set:html={structuredDataJson} />
+  <SiteLoader />
+  <SiteHeader locale={locale} mode="reveal" languageHref={languageHref} />
+  <main>
+    <NarrativeStage locale={locale} downloadId={DOWNLOAD_ANCHOR_ID} />
+    <div class="site-after-narrative">
+      <ShowcaseSection locale={locale} />
+    </div>
+  </main>
+  <SiteFooter locale={locale} />
+  <SoundToggle client:idle className="site-sound-toggle" labels={text.sound} />
+  <HomeLanguageSwitch locale={locale} href={languageHref} />
+</SiteLayout>

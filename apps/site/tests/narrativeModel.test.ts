@@ -2,10 +2,13 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   createWheelGestureGate,
+  narrativeAnchorStep,
   narrativeCgsToLoad,
   narrativeClickTarget,
   narrativeFinalOffset,
+  narrativeStepAnchor,
   narrativeStepAt,
+  narrativeStepOffset,
   narrativeStepTarget,
 } from "../src/lib/narrativeModel";
 
@@ -158,5 +161,44 @@ describe("narrativeCgsToLoad", () => {
   it("rejects a step outside the narrative", () => {
     assert.throws(() => narrativeCgsToLoad(lineCgs, -1));
     assert.throws(() => narrativeCgsToLoad(lineCgs, lineCgs.length + 1));
+  });
+});
+
+describe("narrative anchors (#806)", () => {
+  const anchors = { lineIds: ["arrival", "introduction", "companion", "characters", "remembers"], downloadId: "download" };
+
+  it("opens the narrative on the step an address names: a line, or the download call after the last line", () => {
+    assert.equal(narrativeAnchorStep("#arrival", anchors), 0);
+    assert.equal(narrativeAnchorStep("#remembers", anchors), 4);
+    assert.equal(narrativeAnchorStep("#download", anchors), 5);
+  });
+
+  it("leaves addresses naming no step of the narrative to the browser", () => {
+    assert.equal(narrativeAnchorStep("", anchors), null);
+    assert.equal(narrativeAnchorStep("#memory", anchors), null);
+    assert.equal(narrativeAnchorStep("#%E0%A4%A", anchors), null);
+  });
+
+  it("names the step on show by its anchor, the download call past the last line", () => {
+    assert.equal(narrativeStepAnchor(0, anchors), "arrival");
+    assert.equal(narrativeStepAnchor(4, anchors), "remembers");
+    assert.equal(narrativeStepAnchor(5, anchors), "download");
+    assert.throws(() => narrativeStepAnchor(6, anchors));
+    assert.throws(() => narrativeStepAnchor(-1, anchors));
+  });
+
+  it("round-trips: the anchor of a step opens the narrative on that step, where the step reads back", () => {
+    for (let step = 0; step <= anchors.lineIds.length; step += 1) {
+      const landed = narrativeAnchorStep(`#${narrativeStepAnchor(step, anchors)}`, anchors);
+      assert.equal(landed, step);
+      assert.ok(landed !== null);
+      const offset = narrativeStepOffset(landed, { viewportHeight, lineCount: anchors.lineIds.length });
+      assert.equal(narrativeStepAt({ offset, viewportHeight, lineCount: anchors.lineIds.length }), step);
+    }
+  });
+
+  it("rejects anchors that would name two steps", () => {
+    assert.throws(() => narrativeAnchorStep("#a", { lineIds: ["a", "a"], downloadId: "download" }));
+    assert.throws(() => narrativeAnchorStep("#a", { lineIds: ["a"], downloadId: "a" }));
   });
 });

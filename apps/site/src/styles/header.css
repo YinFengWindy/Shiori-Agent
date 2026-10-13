@@ -14,7 +14,7 @@
   --site-header-fill: color-mix(in srgb, var(--neutral-50) 72%, transparent);
   --site-header-rule: color-mix(in srgb, var(--neutral-50) 85%, transparent);
   --site-header-shadow: var(--shadow-shell);
-  --site-header-blur: 16px;
+  --site-header-blur: var(--site-glass-blur);
   --site-header-name-fill: var(--gradient-accent-strong);
   --site-header-icon-size: 2rem;
 }
@@ -70,6 +70,16 @@
   translate: 0 var(--site-header-height);
 }
 
+/* The bar carries its own language switch (#806): the corner one fades out
+   while the bar shows, so there is only ever one. */
+:root:has(.site-header[data-revealed]) .site-lang-corner {
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity var(--duration-fast) var(--ease-out-soft),
+    visibility 0s linear var(--duration-fast);
+}
+
 .site-header-bar {
   display: flex;
   align-items: center;
@@ -116,12 +126,20 @@
 }
 
 /* The narrowest phones: the download button drops the release tag the
-   script appends, so the bar never overflows. */
+   script appends and the language switch (#806) tightens, so the bar never
+   overflows. Below 380px the name is visually hidden too (`max-[379px]:sr-only`
+   on it, SiteHeader.astro), still naming the home link for assistive
+   technology. */
 @media (max-width: 429px) {
   .site-header [data-download-version] {
     display: none;
   }
+
+  .site-header .site-lang-bar {
+    padding-inline: 0.5rem;
+  }
 }
+
 
 /* Without scripting nothing would reveal it: the home page shows it
    from the start. */

@@ -3,7 +3,9 @@
  * 更新日志. Pure data and its BreadcrumbList structured data.
  */
 
-import { SITE_LINKS } from "./siteMeta";
+import { siteText } from "../i18n";
+import type { Locale } from "../i18n/locales";
+import { homeDownloadHref } from "./siteMeta";
 
 /** One step of a trail: a page and the link to it. */
 export interface Crumb {
@@ -13,10 +15,12 @@ export interface Crumb {
 }
 
 /**
- * The trail's first step. It links to the home page's closing download
- * state, the same place as the top bar's icon and name.
+ * The trail's first step in `locale`. It links to the home page's closing
+ * download state, the same place as the top bar's icon and name.
  */
-export const HOME_CRUMB: Crumb = { label: "首页", href: SITE_LINKS.home };
+export function homeCrumb(locale: Locale): Crumb {
+  return { label: siteText(locale).breadcrumbs.home, href: homeDownloadHref(locale) };
+}
 
 /**
  * schema.org BreadcrumbList for a trail, URLs absolute on `site`. An item

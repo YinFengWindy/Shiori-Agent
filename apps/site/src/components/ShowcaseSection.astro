@@ -1,5 +1,7 @@
 ---
-import { SHOWCASE_FEATURES } from "../content/showcase";
+import { SHOWCASE_CLIP_IDS } from "../content/showcase";
+import { siteText } from "../i18n";
+import type { Locale } from "../i18n/locales";
 import { showcaseStill } from "../lib/siteAssets";
 import PhotoStrip from "./PhotoStrip.astro";
 import SceneBackdrop from "./SceneBackdrop.astro";
@@ -9,24 +11,32 @@ import SceneBackdrop from "./SceneBackdrop.astro";
  * a short title and line beside a screenshot of the app, sides
  * alternating — then the photo strip. Behind it, the narrative's scene
  * carries on mirrored, as a reflection meeting the stage's bottom edge, and
- * dissolves into the app's blue-lavender-pink wash.
+ * dissolves into the app's blue-lavender-pink wash. Each block's id is its
+ * feature's, an anchor the language switch carries across (#806).
  *
  * Stills, not the clips (#790): on a slow or flaky line the videos stalled
  * and crowded out every other picture. Each still loads lazily, as it nears
- * the viewport.
+ * the viewport. Every language shows the same (Chinese) app screenshots.
  */
+interface Props {
+  locale: Locale;
+}
+
+const { locale } = Astro.props;
+const text = siteText(locale).showcase;
 ---
 
-<section class="site-showcase" aria-label="Shiori 功能展示">
+<section class="site-showcase" aria-label={text.label}>
   <div class="site-showcase-scene" aria-hidden="true">
     <SceneBackdrop />
   </div>
   <div class="site-showcase-features">
     {
-      SHOWCASE_FEATURES.map((feature) => {
-        const still = showcaseStill(feature.clip);
+      SHOWCASE_CLIP_IDS.map((clip) => {
+        const still = showcaseStill(clip);
+        const feature = text.features[clip];
         return (
-          <article id={feature.clip} class="site-feature">
+          <article id={clip} class="site-feature">
             <div class="site-feature-text">
               <h2 class="site-feature-title site-story-type">{feature.title}</h2>
               <p class="site-feature-line">{feature.line}</p>
@@ -48,5 +58,5 @@ import SceneBackdrop from "./SceneBackdrop.astro";
       })
     }
   </div>
-  <PhotoStrip />
+  <PhotoStrip locale={locale} />
 </section>

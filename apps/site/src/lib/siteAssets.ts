@@ -22,18 +22,13 @@ import topic1 from "../assets/art/topic-1.webp";
 import topic2 from "../assets/art/topic-2.webp";
 import topic3 from "../assets/art/topic-3.webp";
 import ogCover from "../assets/social/og-cover.jpg";
-import { GALLERY_PHOTOS } from "../content/gallery";
+import { GALLERY_ARTS, type GalleryArt } from "../content/gallery";
 import type { NarrativeCgKey } from "../content/narrative";
 import type { ShowcaseClipId } from "../content/showcase";
 
-/** One site image: the build-time image metadata plus its accessible alt text. */
-export interface SiteImage {
-  readonly image: ImageMetadata;
-  readonly alt: string;
-}
-
 /**
- * The pictures the pages show, grouped by role. Pages import art from here
+ * The pictures the pages show, grouped by role; the alt text of each is in
+ * the dictionaries (i18n/zh.ts, i18n/en.ts), by the art's file name. Pages import art from here
  * rather than reaching into `../assets/`, so swapping a picture is a one-file
  * change; only what a page uses is imported, because every imported image is
  * emitted into the build. `tests/assets.test.ts` checks that each
@@ -115,16 +110,19 @@ export const firstScreenImageBytes: Readonly<Record<string, number>> = Object.fr
   ]),
 ]);
 
-/** Event CGs framed beside 吟风 while a narrative line plays (keys named by `content/narrative.ts`). */
-export const narrativeCgs: Record<NarrativeCgKey, SiteImage> = {
-  "cg-3": { image: cg3, alt: "CG：趴在粉色电脑桌前兴奋地打字" },
-  "cg-7": { image: cg7, alt: "CG：夜晚街头挽臂同行的温馨场景" },
-  "cg-8": { image: cg8, alt: "CG：夜色中坐在公园长椅上，以手托腮微笑，发间系着蝙蝠翼造型的发绳" },
-  "cg-9": { image: cg9, alt: "CG：倚在夜景窗边，外套披在肩头，回望镜头" },
-  "cg-10": { image: cg10, alt: "CG：从门后探身张望，身后是温暖的暖色房间" },
-  "topic-1": { image: topic1, alt: "吟风配图：倚在洒满阳光的窗边，居家休闲装扮" },
-  "topic-2": { image: topic2, alt: "吟风配图：坐在课桌前看手机，逆光的教室场景" },
-  "topic-3": { image: topic3, alt: "吟风配图：月夜窗边浅笑，黑色晚装缀有蝙蝠翼装饰" },
+/**
+ * Event CGs framed beside 吟风 while a narrative line plays (keys named by
+ * `content/narrative.ts`); each one's alt text is the dictionaries' `art[key]`.
+ */
+export const narrativeCgs: Record<NarrativeCgKey, ImageMetadata> = {
+  "cg-3": cg3,
+  "cg-7": cg7,
+  "cg-8": cg8,
+  "cg-9": cg9,
+  "cg-10": cg10,
+  "topic-1": topic1,
+  "topic-2": topic2,
+  "topic-3": topic3,
 };
 
 /**
@@ -137,12 +135,13 @@ export const loaderArtwork: ImageMetadata = cg6;
 /**
  * Default social preview (OG / Twitter card): the seaside CG (cg-6)
  * cover-cropped to the 1200×630 card size, as JPEG because some link
- * previewers do not render WebP.
+ * previewers do not render WebP. Its alt text is that of the art it shows,
+ * `SOCIAL_PREVIEW_ART`.
  */
-export const socialPreviewImage: SiteImage = {
-  image: ogCover,
-  alt: "CG：晚霞海边的全身立绘，黑色蝙蝠翼连衣裙",
-};
+export const socialPreviewImage: ImageMetadata = ogCover;
+
+/** The art the social preview is cut from: its alt text is the dictionaries' `art[SOCIAL_PREVIEW_ART]`. */
+export const SOCIAL_PREVIEW_ART = "cg-6" satisfies GalleryArt;
 
 /**
  * The showcase stills (#790), by clip id (`SHOWCASE_CLIP_IDS` in
@@ -160,19 +159,25 @@ export function showcaseStill(id: ShowcaseClipId): ImageMetadata {
 
 const galleryThumbs = import.meta.glob<ImageMetadata>("../assets/gallery/*.webp", { import: "default", eager: true });
 
+/** A print of the photo strip: the art it shows (its alt text's key) and its preview. */
+export interface GalleryPhoto {
+  readonly art: GalleryArt;
+  readonly image: ImageMetadata;
+}
+
 /**
  * The photo strip under the showcase, in strip order (`content/gallery.ts`):
  * each print is a small preview of its art, made by apps/site-video
  * (`pnpm run site:gallery`) and committed, not the full-size file.
  */
-export const galleryPhotos: readonly SiteImage[] = GALLERY_PHOTOS.map(({ art, alt }) => ({
+export const galleryPhotos: readonly GalleryPhoto[] = GALLERY_ARTS.map((art) => ({
+  art,
   image: globFile(galleryThumbs, `${art}.webp`),
-  alt,
 }));
 
 /*
  * The full-size art of the photo strip's previews, by name: the arts named in
- * GALLERY_PHOTOS (content/gallery.ts), spelled out because a glob pattern must
+ * GALLERY_ARTS (content/gallery.ts), spelled out because a glob pattern must
  * be literal. Not every file in assets/art: each file a glob names is emitted
  * into the build, and some of the art (cg-1) is deliberately kept off the
  * public site. A preview missing here fails `galleryArtOf` with its name.

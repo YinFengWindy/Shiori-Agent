@@ -1,0 +1,92 @@
+/*
+ * The language switch (#806): the home page's corner button beside the
+ * music switch (LanguageSwitch.astro, `corner`), and the one-time English
+ * prompt under the corner on a Chinese page (LanguagePrompt.astro). Both
+ * sit above the home page's loader (--site-layer-over-loader, site.css),
+ * whose input guard lets their clicks through. The corner's placement and
+ * the button size are the shared --site-corner-* (site.css); the top bar's
+ * own switch hides the corner one while the bar shows (header.css).
+ *
+ * Same rule as site.css and header.css: the component rules below use only
+ * the --site-lang-* names defined here, built from the app's semantic tokens.
+ */
+.site-lang-prompt {
+  --site-lang-prompt-width: 20rem;
+  --site-lang-prompt-padding-block: 0.75rem;
+  --site-lang-prompt-padding-inline: 0.875rem;
+  --site-lang-prompt-gap: 0.5rem;
+  --site-lang-prompt-border: var(--color-border-soft);
+  --site-lang-prompt-radius: var(--radius-lg);
+  --site-lang-prompt-fill: var(--color-bg-glass-strong);
+  --site-lang-prompt-blur: var(--site-glass-blur);
+  --site-lang-prompt-shadow: var(--shadow-pop);
+  --site-lang-prompt-ink: var(--color-text-primary);
+  /* How far it drops in from, at its entrance. */
+  --site-lang-prompt-rise: 0.5rem;
+}
+
+.site-lang-corner {
+  position: fixed;
+  z-index: var(--site-layer-over-loader);
+  top: var(--site-corner-inset);
+  right: calc(var(--site-corner-inset) + var(--site-corner-button) + var(--site-corner-gap));
+  transition:
+    opacity var(--duration-fast) var(--ease-out-soft),
+    visibility 0s linear;
+}
+
+/* Without scripting the top bar shows from the start, with its own switch. */
+@media (scripting: none) {
+  .site-lang-corner {
+    display: none;
+  }
+}
+
+/* A small glass card under the corner controls, in the top bar's colours. */
+.site-lang-prompt {
+  position: fixed;
+  z-index: var(--site-layer-over-loader);
+  top: calc(var(--site-corner-inset) + var(--site-corner-button) + var(--site-corner-gap));
+  right: var(--site-corner-inset);
+  display: flex;
+  flex-direction: column;
+  gap: var(--site-lang-prompt-gap);
+  max-width: min(var(--site-lang-prompt-width), calc(100vw - 2 * var(--site-corner-inset)));
+  padding: var(--site-lang-prompt-padding-block) var(--site-lang-prompt-padding-inline);
+  border: 1px solid var(--site-lang-prompt-border);
+  border-radius: var(--site-lang-prompt-radius);
+  background: var(--site-lang-prompt-fill);
+  box-shadow: var(--site-lang-prompt-shadow);
+  backdrop-filter: blur(var(--site-lang-prompt-blur)) saturate(1.4);
+  color: var(--site-lang-prompt-ink);
+  animation: site-lang-prompt-in var(--duration-enter) var(--ease-out-soft) both;
+}
+
+.site-lang-prompt[hidden] {
+  display: none;
+}
+
+.site-lang-prompt-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--site-lang-prompt-gap);
+}
+
+@keyframes site-lang-prompt-in {
+  from {
+    opacity: 0;
+    translate: 0 calc(-1 * var(--site-lang-prompt-rise));
+  }
+}
+
+/* Reduced motion: the prompt is simply there, and the corner switch goes
+   without a fade. */
+@media (prefers-reduced-motion: reduce) {
+  .site-lang-prompt {
+    animation: none;
+  }
+
+  .site-lang-corner {
+    transition: none;
+  }
+}

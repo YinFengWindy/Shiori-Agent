@@ -5,7 +5,9 @@ import SiteFooter from "../components/SiteFooter.astro";
 import SiteHeader from "../components/SiteHeader.astro";
 import SiteLayout from "../layouts/SiteLayout.astro";
 import { formatReleaseDate, loadChangelog } from "../lib/changelog";
-import { SITE_LINKS, pageTitle } from "../lib/siteMeta";
+import { pageTitle } from "../i18n";
+import { type PageVersions, languageSwitchHref } from "../i18n/locales";
+import { SITE_SECTIONS } from "../lib/siteMeta";
 import "../styles/reading.css";
 import "../styles/changelog.css";
 
@@ -18,11 +20,14 @@ import "../styles/changelog.css";
  * A breadcrumb leads back home and an index of the versions (each with its
  * day) jumps to any of them (#797): beside the list on wide screens, folded
  * under the heading on narrow ones (SectionIndex.astro). Dated by the
- * newest release (#799).
+ * newest release (#799). Chinese only until its English page (#807): the
+ * language switch leads to the English home page meanwhile.
  */
 const CHANGELOG_TITLE = "更新日志";
 const CHANGELOG_DESCRIPTION =
   "Shiori 的版本更新记录：每个版本新增了哪些功能、修复了哪些问题、升级时要注意什么，按时间从新到旧列出。Shiori 是开源免费的 Windows AI 伴侣与 Personal Agent，可在页面顶部下载最新版。";
+const versions: PageVersions = SITE_SECTIONS.changelog;
+const languageHref = languageSwitchHref("zh", versions);
 const entries = await loadChangelog();
 const [newest] = entries;
 const versionIndex = entries.map((entry) => ({
@@ -33,13 +38,13 @@ const versionIndex = entries.map((entry) => ({
 }));
 ---
 
-<SiteLayout title={pageTitle(CHANGELOG_TITLE)} description={CHANGELOG_DESCRIPTION} updated={newest?.publishedAt}>
-  <SiteHeader mode="fixed" current="changelog" />
+<SiteLayout locale="zh" versions={versions} title={pageTitle(CHANGELOG_TITLE, "zh")} description={CHANGELOG_DESCRIPTION} updated={newest?.publishedAt}>
+  <SiteHeader locale="zh" mode="fixed" current="changelog" languageHref={languageHref} />
   <main class="site-reading">
     <div class="site-section-layout">
       <div class="site-changelog site-section-layout-main">
         <header>
-          <Breadcrumbs trail={[{ label: CHANGELOG_TITLE, href: SITE_LINKS.changelog }]} />
+          <Breadcrumbs locale="zh" trail={[{ label: CHANGELOG_TITLE, href: SITE_SECTIONS.changelog.zh }]} />
           <h1 class="site-reading-heading site-story-type">{CHANGELOG_TITLE}</h1>
         </header>
         <SectionIndex variant="inline" title="版本" entries={versionIndex} />
@@ -66,5 +71,5 @@ const versionIndex = entries.map((entry) => ({
       <SectionIndex variant="aside" title="版本" entries={versionIndex} />
     </div>
   </main>
-  <SiteFooter />
+  <SiteFooter locale="zh" />
 </SiteLayout>

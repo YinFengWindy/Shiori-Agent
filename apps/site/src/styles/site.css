@@ -184,7 +184,7 @@
 .site-loader {
   position: fixed;
   inset: 0;
-  z-index: 100;
+  z-index: var(--site-layer-loader);
   animation: site-loader-timeout var(--site-loader-wash-out) var(--ease-out-soft) var(--site-loader-cap) both;
 }
 
@@ -811,12 +811,28 @@ html:has(.site-narrative) {
     drop-shadow(0 0 6px var(--site-slogan-glow-soft));
 }
 
+/* The home page's corner controls: the music switch, and the language
+   switch to its left (language.css), each an icon button (`iconButtonClass`,
+   h-10); the English prompt sits under them. Stacking: the loader covers
+   the page, and the controls that work while it shows (the language switch
+   and the English prompt, #806) sit above it. */
+:root {
+  --site-corner-inset: clamp(0.75rem, 2vw, 1.25rem);
+  --site-corner-button: 2.5rem;
+  --site-corner-gap: 0.5rem;
+  --site-layer-loader: 100;
+  --site-layer-over-loader: 110;
+  /* The frosted glass of the bars and cards floating over the page (the
+     top bar, the English prompt). */
+  --site-glass-blur: 16px;
+}
+
 /* The music switch floats in the top-right corner over every section. */
 .site-sound-toggle {
   position: fixed;
   z-index: 10;
-  top: clamp(0.75rem, 2vw, 1.25rem);
-  right: clamp(0.75rem, 2vw, 1.25rem);
+  top: var(--site-corner-inset);
+  right: var(--site-corner-inset);
 }
 
 /* Reduced motion — and no scripting, where nothing would map the scroll to

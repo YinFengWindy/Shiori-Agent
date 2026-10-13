@@ -5,7 +5,9 @@
  * `inlineJson`.
  */
 
-import { SITE_DESCRIPTION, SITE_LINKS, SITE_NAME } from "./siteMeta";
+import { siteText } from "../i18n";
+import { LOCALE_INFO, type Locale, localeHome } from "../i18n/locales";
+import { SITE_LINKS, SITE_NAME } from "./siteMeta";
 
 /** JSON for an inline `<script>`: `<` escaped so no text in it can close the element. */
 export function inlineJson(value: unknown): string {
@@ -41,6 +43,8 @@ export function softwareVersion(tag: string): string {
 /** What the home page's structured data is built from, beyond `site`. */
 export interface HomeJsonLdInput {
   site: URL;
+  /** The home page's language: its URL, description and `inLanguage`. */
+  locale: Locale;
   /** Site path of the app icon: the Organization's logo. */
   logoPath: string;
   /** Site path of the home page's share picture. */
@@ -53,34 +57,38 @@ export interface HomeJsonLdInput {
  * The home page's JSON-LD (#799), one `@graph`: the WebSite, its publisher
  * (the Organization) and the app as a free Windows SoftwareApplication — the
  * latest release's version and day, the latest-release page as its download.
+ * Each language's home page describes the site and the app in its own
+ * language (#806), under its own URL; the publisher is the same one.
  */
-export function homeJsonLd({ site, logoPath, imagePath, release }: HomeJsonLdInput) {
-  const home = new URL("/", site).href;
+export function homeJsonLd({ site, locale, logoPath, imagePath, release }: HomeJsonLdInput) {
+  const home = new URL(localeHome(locale), site).href;
+  const description = siteText(locale).meta.description;
+  const inLanguage = LOCALE_INFO[locale].htmlLang;
   const publisher = { "@id": organizationId(site) };
   return {
     "@context": "https://schema.org",
     "@graph": [
       {
         "@type": "WebSite",
-        "@id": new URL("/#website", site).href,
+        "@id": `${home}#website`,
         name: SITE_NAME,
         url: home,
-        description: SITE_DESCRIPTION,
-        inLanguage: "zh-CN",
+        description,
+        inLanguage,
         publisher,
       },
       organizationJsonLd(site, logoPath),
       {
         "@type": "SoftwareApplication",
-        "@id": new URL("/#software", site).href,
+        "@id": `${home}#software`,
         name: SITE_NAME,
-        description: SITE_DESCRIPTION,
+        description,
         url: home,
         image: new URL(imagePath, site).href,
         operatingSystem: "Windows",
         // A companion that lives on the desktop: closest of schema.org's app categories.
         applicationCategory: "LifestyleApplication",
-        inLanguage: "zh-CN",
+        inLanguage,
         isAccessibleForFree: true,
         offers: { "@type": "Offer", price: "0", priceCurrency: "CNY" },
         downloadUrl: SITE_LINKS.releasesLatest,

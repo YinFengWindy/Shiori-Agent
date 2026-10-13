@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import { existsSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, it } from "node:test";
-import { GALLERY_PHOTOS, GALLERY_THUMB_HEIGHT, GALLERY_THUMB_MAX_BYTES } from "../src/content/gallery";
+import { GALLERY_ARTS, GALLERY_THUMB_HEIGHT, GALLERY_THUMB_MAX_BYTES } from "../src/content/gallery";
 import { NARRATIVE_LINES } from "../src/content/narrative";
-import { SHOWCASE_CLIP_IDS, SHOWCASE_FEATURES, SHOWCASE_STILL_MAX_BYTES } from "../src/content/showcase";
+import { SHOWCASE_CLIP_IDS, SHOWCASE_STILL_MAX_BYTES } from "../src/content/showcase";
+import { zh } from "../src/i18n/zh";
 import {
   ORIGIN,
   assertDescription,
@@ -29,8 +30,12 @@ import { runLoaderGate } from "./support/loaderGate";
  * Assertions on the built site (`astro build` runs first, see the package's
  * `test` script). Reading the emitted files directly is what a crawler that
  * does not execute JavaScript sees, so every check here holds without JS.
- * The blog's pages are covered by blog.test.ts.
+ * The blog's pages are covered by blog.test.ts, the English home page and
+ * the language switch by i18nBuild.test.ts.
  */
+
+/** The Chinese showcase blocks, in page order. */
+const SHOWCASE_FEATURES = SHOWCASE_CLIP_IDS.map((clip) => ({ clip, ...zh.showcase.features[clip] }));
 
 const dist = site.dir;
 const readDist = site.read;
@@ -62,7 +67,7 @@ describe("home page HTML", () => {
     // Words for what carries something: the narrative's CGs, the showcase stills, the strip's own prints.
     const narrativeCgs = new Set(NARRATIVE_LINES.flatMap((line) => (line.cg ? [line.cg] : [])));
     const described = images.filter((image) => / alt="[^"]+"/.test(image));
-    assert.equal(described.length, narrativeCgs.size + SHOWCASE_FEATURES.length + GALLERY_PHOTOS.length);
+    assert.equal(described.length, narrativeCgs.size + SHOWCASE_FEATURES.length + GALLERY_ARTS.length);
   });
 
   it("describes the site, its publisher and the app as structured data, the app's version from the newest release (#799)", async () => {
@@ -138,7 +143,7 @@ describe("home page HTML", () => {
 
   it("carries every narrative line as static text, in script order", () => {
     let from = 0;
-    for (const { text } of NARRATIVE_LINES) {
+    for (const text of NARRATIVE_LINES.map((line) => zh.narrative.lines[line.id])) {
       const at = html.indexOf(`>${text}</p>`, from);
       assert.ok(at >= 0, `narrative line missing or out of order: ${text}`);
       from = at;
@@ -148,7 +153,8 @@ describe("home page HTML", () => {
   it("closes the narrative with the download call: icon title, slogan, download and GitHub links", () => {
     const at = html.indexOf('id="download"');
     assert.ok(at >= 0, "no #download call in the page");
-    const lastLine = NARRATIVE_LINES.at(-1)?.text ?? "";
+    const lastId = NARRATIVE_LINES.at(-1)?.id;
+    const lastLine = lastId ? zh.narrative.lines[lastId] : "";
     assert.ok(html.lastIndexOf(`>${lastLine}</p>`) < at, "the download call must follow the narrative lines in reading order");
     const call = html.slice(at, html.indexOf("site-narrative-snaps", at));
     const iconSrc = call.match(/<h1><img src="([^"]+)"/)?.[1];
@@ -364,9 +370,9 @@ describe("home page HTML", () => {
       const strip = showcase.slice(showcase.indexOf('class="site-photostrip"'));
       const tags = [...strip.matchAll(/<li class="site-photo"[^>]*>(<img [^>]*>)/g)].map((match) => match[1]);
       const row = tags.slice(0, tags.length / 2);
-      assert.equal(row.length, GALLERY_PHOTOS.length);
+      assert.equal(row.length, GALLERY_ARTS.length);
       for (const [index, tag] of row.entries()) {
-        const { art } = GALLERY_PHOTOS[index] ?? {};
+        const art = GALLERY_ARTS[index];
         const src = tag.match(/ src="([^"]+)"/)?.[1];
         assert.ok(src, `print ${index} has no src`);
         assert.ok(src.startsWith(`/_astro/${art}.`) && src.endsWith(".webp"), `print ${index} is ${src}`);
@@ -398,7 +404,7 @@ describe("home page HTML", () => {
       assert.ok(at < html.indexOf("<main>"), "the bar comes before the page content, outside the narrative stage");
     });
 
-    it("links the icon and name to the narrative's download state, then 博客, 更新日志, GitHub and the Windows download", () => {
+    it("links the icon and name to the narrative's download state, then 博客, 更新日志, GitHub, the Windows download and the English home page", () => {
       assert.ok(bar);
       const links = [...bar[1].matchAll(/<a href="([^"]+)"[^>]*>(.*?)<\/a>/gs)].map(([, href, label]) => ({
         href,
@@ -410,6 +416,7 @@ describe("home page HTML", () => {
         { href: "/changelog/", label: "更新日志" },
         { href: "https://github.com/YinFengWindy/Shiori-Agent", label: "GitHub" },
         { href: "https://github.com/YinFengWindy/Shiori-Agent/releases/latest", label: "下载 Windows 版" },
+        { href: "/en/", label: "EN" },
       ]);
       assert.match(bar[1], /<img src="\/icons\/icon-192\.png"[^>]* alt=""/);
       // The link's target is the download call the narrative ends on.

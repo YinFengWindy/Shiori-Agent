@@ -1,0 +1,91 @@
+---
+import { cx } from "@yinfengwindy/shiori-sdk";
+import { compactPrimaryButtonClass, compactTextButtonClass } from "../../../desktop/renderer/src/shared/styles";
+import { siteText } from "../i18n";
+import { LOCALE_INFO, type Locale } from "../i18n/locales";
+import "../styles/language.css";
+
+/**
+ * The one-time English prompt (#806) in the top-right corner of a Chinese
+ * page, for a visitor whose browser asks for no Chinese
+ * (lib/languagePrompt.ts), in the offered language's words (its
+ * dictionary's `languagePrompt`): 「View this site in English?」 with
+ * Switch — a link to the page's English version, which the home page keeps at the
+ * reader's place like its other switches (HomeLanguageSwitch.astro) — and
+ * Dismiss. Either answer is remembered and the prompt never shows again.
+ *
+ * Shipped `hidden`: without scripting, or for anyone else, it never shows.
+ * Above the home page's loader, whose input guard lets its clicks through
+ * (`data-loader-passthrough`, SiteLoader.astro).
+ */
+interface Props {
+  /** The language offered (`LocaleInfo.promptsFor`): the prompt's words and its link's. */
+  locale: Locale;
+  /** The page in that language (or that language's home page). */
+  href: string;
+}
+
+const { locale, href } = Astro.props;
+const text = siteText(locale).languagePrompt;
+const info = LOCALE_INFO[locale];
+---
+
+<aside
+  class="site-lang-prompt"
+  lang={info.htmlLang}
+  aria-label={text.label}
+  data-lang-prompt
+  data-loader-passthrough
+  hidden
+>
+  <p class="site-lang-prompt-question text-body-sm">{text.question}</p>
+  <div class="site-lang-prompt-actions">
+    <button type="button" class={compactTextButtonClass} data-lang-prompt-dismiss>{text.dismiss}</button>
+    <a href={href} hreflang={info.hreflang} class={cx(compactPrimaryButtonClass, "no-underline")} data-lang-switch data-lang-prompt-switch
+      >{text.switch}</a
+    >
+  </div>
+</aside>
+
+<script>
+  import {
+    LANGUAGE_PROMPT_STORAGE_KEY,
+    type LanguagePromptAnswer,
+    type LanguagePromptMemory,
+    languagePromptMemory,
+    shouldOfferEnglish,
+  } from "../lib/languagePrompt";
+
+  const prompt = document.querySelector<HTMLElement>("[data-lang-prompt]");
+  if (!prompt) throw new Error("the language prompt is missing");
+  const dismiss = prompt.querySelector<HTMLButtonElement>("[data-lang-prompt-dismiss]");
+  const switchLink = prompt.querySelector<HTMLAnchorElement>("[data-lang-prompt-switch]");
+  if (!dismiss || !switchLink) throw new Error("the language prompt's actions are missing");
+
+  function readMemory(): LanguagePromptMemory {
+    try {
+      return languagePromptMemory(window.localStorage.getItem(LANGUAGE_PROMPT_STORAGE_KEY));
+    } catch {
+      // Storage blocked: ask nothing rather than ask on every page.
+      return "unreadable";
+    }
+  }
+
+  function remember(answer: LanguagePromptAnswer) {
+    try {
+      window.localStorage.setItem(LANGUAGE_PROMPT_STORAGE_KEY, answer);
+    } catch {
+      // Storage full or blocked: the answer holds for this page only.
+    }
+  }
+
+  if (shouldOfferEnglish(navigator.languages, readMemory())) {
+    prompt.hidden = false;
+    dismiss.addEventListener("click", () => {
+      remember("dismissed");
+      prompt.hidden = true;
+    });
+    // The link itself navigates; remember the answer on the way.
+    switchLink.addEventListener("click", () => remember("switched"));
+  }
+</script>

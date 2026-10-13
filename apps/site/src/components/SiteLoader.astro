@@ -29,7 +29,12 @@ import { firstScreenImageBytes, loaderArtwork } from "../lib/siteAssets";
  * Painted with the first frame: the markup and the styles (`.site-loader*`
  * in site.css, inlined with the rest of the CSS, see astro.config.ts) are
  * in the HTML, and the script is inline. While the loader shows, wheel /
- * touch / key / click input does not reach the narrative. If the first
+ * touch / key / click input does not reach the narrative — except clicks on
+ * the controls shown above the loader, marked `data-loader-passthrough`
+ * (the language switch and the English prompt, #806), which work at once.
+ * Keys are not let through, even on those controls: Enter activates a link
+ * with a click anyway, while Space, the arrows and the page keys would
+ * scroll the narrative. If the first
  * screen is not ready within `--site-loader-cap` it reveals anyway (the
  * rest keeps loading); without scripting it is never shown (the pictures'
  * `<noscript>` copies show), and if the script never runs the CSS fades it
@@ -133,10 +138,12 @@ const petals = [
     root.dataset.siteLoader = "loading";
 
     // Keep the narrative still while the loader shows: wheel, touch, scroll
-    // keys and clicks stop here (capture on window runs before its handlers).
+    // keys and clicks stop here (capture on window runs before its handlers),
+    // but for clicks on the controls over the loader (never their keys: see above).
     const SCROLL_KEYS = new Set([" ", "PageDown", "PageUp", "ArrowDown", "ArrowUp", "Home", "End"]);
     const block = (event) => {
       if (event.type === "keydown" && !SCROLL_KEYS.has(event.key)) return;
+      if (event.type === "click" && event.target instanceof Element && event.target.closest("[data-loader-passthrough]")) return;
       if (event.cancelable && event.type !== "touchstart" && event.type !== "touchend") event.preventDefault();
       event.stopImmediatePropagation();
     };

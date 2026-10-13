@@ -1,6 +1,8 @@
 import type { ImageMetadata } from "astro";
 import { getImage } from "astro:assets";
-import { galleryArtOf, socialPreviewImage } from "./siteAssets";
+import { siteText } from "../i18n";
+import type { Locale } from "../i18n/locales";
+import { SOCIAL_PREVIEW_ART, galleryArtOf, socialPreviewImage } from "./siteAssets";
 
 /*
  * The picture a page is shared with (Open Graph / Twitter card, a post's
@@ -20,23 +22,26 @@ export interface ShareImage {
   readonly alt: string;
 }
 
-/** The site's own share picture (`socialPreviewImage`): every page without one of its own. */
-export const defaultShareImage: ShareImage = {
-  src: socialPreviewImage.image.src,
-  width: socialPreviewImage.image.width,
-  height: socialPreviewImage.image.height,
-  alt: socialPreviewImage.alt,
-};
+/** The site's own share picture (`socialPreviewImage`), described in `locale`: every page without one of its own. */
+export function siteShareImage(locale: Locale): ShareImage {
+  return {
+    src: socialPreviewImage.src,
+    width: socialPreviewImage.width,
+    height: socialPreviewImage.height,
+    alt: siteText(locale).art[SOCIAL_PREVIEW_ART],
+  };
+}
 
 /**
  * A post's share picture: its cover, cover-cropped to 1200×630 and encoded
- * as JPEG at build time; the site's picture when it has no cover. A cover
+ * as JPEG at build time; the site's picture (described in the post's
+ * `locale`) when it has no cover. A cover
  * from the photo strip's previews (480 px tall, too small for the card) is
  * made from the full-size art it was shrunk from; any other cover must be
  * large enough itself, as the image service never enlarges.
  */
-export async function postShareImage(cover: { image: ImageMetadata; alt: string } | undefined): Promise<ShareImage> {
-  if (!cover) return defaultShareImage;
+export async function postShareImage(cover: { image: ImageMetadata; alt: string } | undefined, locale: Locale): Promise<ShareImage> {
+  if (!cover) return siteShareImage(locale);
   const source = galleryArtOf(cover.image) ?? cover.image;
   if (source.width < SHARE_IMAGE_WIDTH || source.height < SHARE_IMAGE_HEIGHT) {
     throw new Error(

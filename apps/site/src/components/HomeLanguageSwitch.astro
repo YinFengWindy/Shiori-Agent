@@ -1,0 +1,80 @@
+---
+import type { Locale } from "../i18n/locales";
+import LanguageSwitch from "./LanguageSwitch.astro";
+
+/**
+ * The home page's language switch (#806): the corner button beside the
+ * music switch (the top bar carries its own), and the script that keeps
+ * every switch on the page — the corner's, the top bar's, the English
+ * prompt's — pointing at the reader's place: the line on show, the download
+ * call, or the showcase block being read, as an anchor on the other
+ * language's home page (`/en/#remembers`). That page opens there and skips
+ * its loader, as any anchored visit does (lib/siteLoaderGate.ts). Without
+ * scripting the switches lead to the other home page's top.
+ */
+interface Props {
+  locale: Locale;
+  /** The other language's home page. */
+  href: string;
+}
+
+const { locale, href } = Astro.props;
+---
+
+<LanguageSwitch locale={locale} href={href} variant="corner" />
+
+<script>
+  import { required } from "../lib/dom";
+  import { anchorAtReadingLine, hrefWithAnchor } from "../lib/languageSwitch";
+  import { narrativeElements } from "../lib/narrativeElements";
+  import { narrativeStepAnchor, narrativeStepAt } from "../lib/narrativeModel";
+  import { isPastNarrative } from "../lib/siteHeader";
+
+
+  const { section, stage, lines, download, anchors } = narrativeElements(document);
+  const features = [...document.querySelectorAll<HTMLElement>(".site-feature")];
+  // Each switch's static target, the place to be added to it.
+  const switches = [...document.querySelectorAll<HTMLAnchorElement>("a[data-lang-switch]")].map((link) => ({
+    link,
+    base: required(link.getAttribute("href"), "a language switch's href"),
+  }));
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+  /** Where each element is, under its anchor (`ids`, its own id by default). */
+  const places = (elements: readonly HTMLElement[], ids: readonly string[] = elements.map((element) => element.id)) =>
+    elements.map((element, index) => ({ id: ids[index] ?? element.id, top: element.getBoundingClientRect().top }));
+
+  /** The anchor of where the reader is. */
+  function readerAnchor(): string {
+    const viewportHeight = window.innerHeight;
+    // A block is being read once its top has risen to the middle of the screen.
+    const readingLine = viewportHeight / 2;
+    // Reduced motion: the lines and the download call sit in the page flow.
+    if (reducedMotion.matches) {
+      return anchorAtReadingLine([...places(lines, anchors.lineIds), ...places([download, ...features])], readingLine);
+    }
+    if (features.length > 0 && isPastNarrative(section.getBoundingClientRect().bottom, viewportHeight)) {
+      return anchorAtReadingLine(places(features), readingLine);
+    }
+    const step = narrativeStepAt({
+      offset: -section.getBoundingClientRect().top,
+      viewportHeight: stage.clientHeight,
+      lineCount: lines.length,
+    });
+    return narrativeStepAnchor(step, anchors);
+  }
+
+  let frame = 0;
+  function update() {
+    frame = 0;
+    const anchor = readerAnchor();
+    for (const { link, base } of switches) link.href = hrefWithAnchor(base, anchor);
+  }
+  const scheduleUpdate = () => {
+    frame ||= requestAnimationFrame(update);
+  };
+  window.addEventListener("scroll", scheduleUpdate, { passive: true });
+  window.addEventListener("resize", scheduleUpdate);
+  reducedMotion.addEventListener("change", scheduleUpdate);
+  update();
+</script>

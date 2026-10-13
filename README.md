@@ -1,4 +1,5 @@
 <div align="center">
+  <p><strong>中文</strong> | <a href="./README.en.md">English</a></p>
   <img src="./assets/shiori-app-icon.png" alt="Shiori 图标" width="96" />
   <h1>Shiori</h1>
   <p><strong>让角色走进日常</strong></p>
