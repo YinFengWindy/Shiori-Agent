@@ -6,7 +6,7 @@
   <p>
     <a href="https://github.com/YinFengWindy/Shiori-Agent/releases/latest"><strong>下载 Windows 版</strong></a>
     ·
-    <a href="https://yinfengwindy.github.io/Shiori-Agent/">官网</a>
+    <a href="https://www.windchant.online/">官网</a>
   </p>
   <p>
     <img src="https://img.shields.io/badge/platform-Windows%20x64-2563eb?style=flat-square" alt="Windows x64" />
