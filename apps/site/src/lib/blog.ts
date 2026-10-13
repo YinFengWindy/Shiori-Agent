@@ -23,10 +23,13 @@ export const BLOG_DESCRIPTION = "吟风写的 Shiori 小日记：她会记得什
  */
 const SHOW_DRAFTS = import.meta.env.MODE === "drafts";
 
-/** The posts to publish, newest first; drafts only in drafts mode. */
+/**
+ * The posts to publish, newest first; drafts only in drafts mode. Posts carry
+ * a day, so same-day posts fall back to their id to keep one stable order.
+ */
 export async function getPublishedPosts(): Promise<BlogPost[]> {
   const posts = await getCollection("blog", ({ data }) => SHOW_DRAFTS || !data.draft);
-  return posts.sort((a, b) => b.data.date.getTime() - a.data.date.getTime());
+  return posts.sort((a, b) => b.data.date.getTime() - a.data.date.getTime() || a.id.localeCompare(b.id));
 }
 
 /** Site path of a post's page. */
