@@ -1,6 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
 import { useCurrentFrame } from "remotion";
-import { palette, uiFont } from "./palette";
 import { progress } from "./screen";
 
 /** Frames an overlay takes to pop in. */
@@ -30,12 +29,12 @@ export function Pop({ at, outAt, rise = 16, children, style }: { at: number; out
 
 /** Milk-white rounded card in the app's look, for overlays. */
 export const cardStyle: CSSProperties = {
-  fontFamily: uiFont,
-  color: palette.neutral950,
-  background: palette.neutral50,
-  border: `1px solid ${palette.neutral200}`,
-  borderRadius: palette.radiusLg,
-  boxShadow: palette.shadowPanel,
+  fontFamily: "var(--font-sans)",
+  color: "var(--clip-ink)",
+  background: "var(--clip-paper)",
+  border: "1px solid var(--clip-edge)",
+  borderRadius: "var(--radius-lg)",
+  boxShadow: "var(--clip-card-shadow)",
 };
 
 /** A small pill label (icon + text) for overlays. */

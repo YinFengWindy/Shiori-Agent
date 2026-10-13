@@ -1,13 +1,17 @@
 import type { ComponentType } from "react";
 import { Composition } from "remotion";
-import { CLIP_FORMAT, DEMO_CLIPS, type DemoClipId } from "./clips";
+import { SHOWCASE_CLIP_IDS, type ShowcaseClipId } from "../../site/src/content/showcase";
+import { CLIP_FORMAT, CLIP_TIMING } from "./clips";
 import { AffectionClip } from "./clips/AffectionClip";
 import { ChannelsClip } from "./clips/ChannelsClip";
 import { MemoryClip } from "./clips/MemoryClip";
 import { PluginsClip } from "./clips/PluginsClip";
 import { ProactiveClip } from "./clips/ProactiveClip";
+// The design tokens first, then the clips' palette built from them.
+import "../../desktop/renderer/src/tokens.css";
+import "./clips.css";
 
-const CLIP_COMPONENTS: Record<DemoClipId, ComponentType> = {
+const CLIP_COMPONENTS: Record<ShowcaseClipId, ComponentType> = {
   memory: MemoryClip,
   affection: AffectionClip,
   proactive: ProactiveClip,
@@ -19,12 +23,12 @@ const CLIP_COMPONENTS: Record<DemoClipId, ComponentType> = {
 export function Root() {
   return (
     <>
-      {DEMO_CLIPS.map((clip) => (
+      {SHOWCASE_CLIP_IDS.map((id) => (
         <Composition
-          key={clip.id}
-          id={clip.id}
-          component={CLIP_COMPONENTS[clip.id]}
-          durationInFrames={Math.round(clip.seconds * CLIP_FORMAT.fps)}
+          key={id}
+          id={id}
+          component={CLIP_COMPONENTS[id]}
+          durationInFrames={Math.round(CLIP_TIMING[id].seconds * CLIP_FORMAT.fps)}
           {...CLIP_FORMAT}
         />
       ))}

@@ -8,7 +8,6 @@ import wallpaper from "../../../desktop/renderer/src/shared/assets/scene/bg-day.
 import generatedCg from "../../../site/src/assets/art/cg-3.webp";
 import { CHAT_SHOT, ChatMessages } from "../chatShot";
 import { cardStyle, Pill, Pop } from "../overlay";
-import { palette } from "../palette";
 import { progress, Screen, SCREEN_HEIGHT, SCREEN_WIDTH, Shot, useSeconds } from "../screen";
 
 /** Frames one shot takes to fade over the previous one. */
@@ -24,12 +23,12 @@ function FadeIn({ children }: { children: ReactNode }) {
 function Caption({ children }: { children: ReactNode }) {
   return (
     <Pop at={4} style={{ left: 40, bottom: 36 }}>
-      <Pill style={{ fontSize: 22, padding: "10px 22px", fontWeight: 700, background: palette.neutral50 }}>{children}</Pill>
+      <Pill style={{ fontSize: 22, padding: "10px 22px", fontWeight: 700, background: "var(--clip-paper)" }}>{children}</Pill>
     </Pop>
   );
 }
 
-const toolIcon = { size: 20, weight: "bold", color: palette.blueGrad } as const;
+const toolIcon = { size: 20, weight: "bold", color: "var(--clip-icon)" } as const;
 
 /** The work shot: 吟风 answers, and the tools she used to get there stack up beside her reply. */
 function ToolsShot() {
@@ -71,15 +70,15 @@ function DeskShot() {
     <Screen zoom={0.03} origin="100% 100%">
       <Img src={wallpaper} style={{ position: "absolute", inset: 0, width: SCREEN_WIDTH, height: SCREEN_HEIGHT, objectFit: "cover" }} />
       <Pop at={s(0.5)} rise={30} style={{ left: 150, top: 170 }}>
-        <div style={{ ...cardStyle, padding: 10, borderRadius: palette.radiusLg, transform: "rotate(-3deg)" }}>
-          <Img src={generatedCg} style={{ display: "block", width: 560, borderRadius: palette.radiusMd }} />
+        <div style={{ ...cardStyle, padding: 10, borderRadius: "var(--radius-lg)", transform: "rotate(-3deg)" }}>
+          <Img src={generatedCg} style={{ display: "block", width: 560, borderRadius: "var(--radius-md)" }} />
         </div>
       </Pop>
       <Pop at={s(0.2)} rise={50} style={{ right: 70, bottom: 0, width: 360 }}>
         <Img src={mascotLaugh} style={{ display: "block", width: "100%" }} />
       </Pop>
       <Pop at={s(1.0)} style={{ right: 300, bottom: 470 }}>
-        <div style={{ ...cardStyle, padding: "12px 18px", fontSize: 20, borderRadius: palette.radiusXl }}>画好啦，桌面也给你换上了～</div>
+        <div style={{ ...cardStyle, padding: "12px 18px", fontSize: 20, borderRadius: "var(--radius-xl)" }}>画好啦，桌面也给你换上了～</div>
       </Pop>
       <Caption>桌宠 · 生图</Caption>
     </Screen>
@@ -93,7 +92,7 @@ function DeskShot() {
 export function PluginsClip() {
   const s = useSeconds();
   return (
-    <AbsoluteFill style={{ background: palette.neutral50 }}>
+    <AbsoluteFill style={{ background: "var(--clip-paper)" }}>
       <Sequence durationInFrames={s(4) + CROSSFADE}>
         <ToolsShot />
       </Sequence>

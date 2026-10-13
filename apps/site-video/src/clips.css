@@ -1,0 +1,45 @@
+/*
+ * The clips' own palette, built from the desktop's design tokens
+ * (apps/desktop/renderer/src/tokens.css, imported before this file by
+ * Root.tsx) the way the website's site.css builds its --site-* names: the
+ * components use only these names and the semantic tokens, never a raw
+ * value or a primitive.
+ */
+:root {
+  /* Paper: the stage behind each clip, the overlay cards, chat bubbles. */
+  --clip-paper: var(--color-bg-soft);
+  --clip-ink: var(--color-text-primary);
+  --clip-body-ink: var(--neutral-900);
+  --clip-detail-ink: var(--color-text-muted);
+  --clip-meta-ink: var(--color-text-faint);
+  --clip-edge: var(--color-border-soft);
+  --clip-card-shadow: var(--shadow-panel);
+  --clip-bubble-shadow: var(--shadow-soft);
+  /* The body of a channel chat window, a shade under its bubbles. */
+  --clip-window-body: var(--color-bg-app);
+
+  /* Feature marks: the brand pink for hearts and bookmarks, the brand's
+     deep blue for tool and channel icons, the deep pink for gains. */
+  --clip-mark: var(--color-motif);
+  --clip-icon: var(--blue-grad);
+  --clip-accent-ink: var(--pink-grad);
+
+  /* Affection card: the stage badge and the track filling up. */
+  --clip-badge: var(--gradient-accent);
+  --clip-track: var(--lavender-200);
+  --clip-track-fill: var(--gradient-accent-medium);
+
+  /* The app's own chat bubbles (ChatMessageRow.tsx: rounded-lg, shadow-soft),
+     redrawn under the bubbles cut out of chat.png. */
+  --clip-chat-bubble-radius: var(--radius-lg);
+  --clip-chat-bubble-shadow: var(--shadow-soft);
+
+  /* The see-through blue -> lavender -> pink veil over the soft-focus app
+     window behind the channel windows. */
+  --clip-veil: linear-gradient(
+    160deg,
+    color-mix(in srgb, var(--blue-150) 80%, transparent),
+    color-mix(in srgb, var(--lavender-100) 67%, transparent) 45%,
+    color-mix(in srgb, var(--pink-150) 80%, transparent)
+  );
+}

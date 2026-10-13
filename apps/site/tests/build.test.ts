@@ -4,7 +4,7 @@ import { dirname, resolve } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import { NARRATIVE_LINES } from "../src/content/narrative";
-import { SHOWCASE_FEATURES } from "../src/content/showcase";
+import { SHOWCASE_CLIP_IDS, SHOWCASE_CLIP_MAX_BYTES, SHOWCASE_FEATURES } from "../src/content/showcase";
 
 /*
  * Assertions on the built site (`astro build` runs first, see the package's
@@ -218,6 +218,8 @@ describe("home page HTML", () => {
 
     it("gives every clip a poster, a label, muted looping inline autoplay and nothing to download up front", () => {
       const videos = [...showcase.matchAll(/<video [^>]*>.*?<\/video>/gs)].map((match) => match[0]);
+      // One block per clip, in the clips' order.
+      assert.deepEqual(SHOWCASE_FEATURES.map((feature) => feature.clip), [...SHOWCASE_CLIP_IDS]);
       assert.equal(videos.length, SHOWCASE_FEATURES.length);
       for (const [index, video] of videos.entries()) {
         const feature = SHOWCASE_FEATURES[index];
@@ -234,7 +236,7 @@ describe("home page HTML", () => {
         assert.deepEqual(sources.map(([, type]) => type), ["video/webm", "video/mp4"]);
         for (const [src] of sources) {
           const size = statSync(resolve(dist, src.slice(1))).size;
-          assert.ok(size < 1.5 * 1024 * 1024, `${src} is ${size} bytes, over the 1.5 MB budget`);
+          assert.ok(size <= SHOWCASE_CLIP_MAX_BYTES, `${src} is ${size} bytes, over the ${SHOWCASE_CLIP_MAX_BYTES}-byte budget`);
         }
       }
     });

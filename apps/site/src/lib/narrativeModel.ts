@@ -62,8 +62,8 @@ export function narrativeStepAt(scroll: NarrativeScroll): number {
  */
 export function narrativeStepTarget(scroll: NarrativeScroll, direction: 1 | -1): number | null {
   assertValid(scroll);
-  const { offset, viewportHeight, lineCount } = scroll;
-  const finalOffset = lineCount * viewportHeight;
+  const { offset, viewportHeight } = scroll;
+  const finalOffset = narrativeFinalOffset(scroll);
   // The top of the content after the narrative: the section's end.
   const afterOffset = finalOffset + viewportHeight;
   // Sub-pixel slack: a snapped offset can be fractional on zoomed pages.
@@ -76,6 +76,21 @@ export function narrativeStepTarget(scroll: NarrativeScroll, direction: 1 | -1):
   const target = Math.round(offset / viewportHeight) + direction;
   if (target < 0) return null;
   return target * viewportHeight;
+}
+
+/** The download state's offset: the narrative's last step, `lineCount` viewports down. */
+export function narrativeFinalOffset({ viewportHeight, lineCount }: Pick<NarrativeScroll, "viewportHeight" | "lineCount">): number {
+  return lineCount * viewportHeight;
+}
+
+/**
+ * Where a click or tap on the stage steps to: one step on, as in a galgame,
+ * but never past the download state (clicks there stay put rather than
+ * scroll the stage away; the wheel and swipes go on). `null`: no step.
+ */
+export function narrativeClickTarget(scroll: NarrativeScroll): number | null {
+  const target = narrativeStepTarget(scroll, 1);
+  return target !== null && target <= narrativeFinalOffset(scroll) ? target : null;
 }
 
 /**

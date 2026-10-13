@@ -3,7 +3,6 @@ import { AbsoluteFill, interpolate, useCurrentFrame } from "remotion";
 import roleSettingsShot from "../../../../assets/readme/role-settings.png";
 import { affectionMax, affectionMin, affectionStages } from "../../../desktop/renderer/src/affection/affectionStages";
 import { cardStyle, Pop } from "../overlay";
-import { palette } from "../palette";
 import { easeOutSoft, progress, Screen, Shot, useSeconds } from "../screen";
 
 /** Where the value sits on the track, 0–1. */
@@ -46,13 +45,13 @@ export function AffectionClip() {
   });
 
   return (
-    <AbsoluteFill style={{ background: palette.neutral50 }}>
+    <AbsoluteFill style={{ background: "var(--clip-paper)" }}>
       <Screen origin="50% 70%">
         <Shot src={roleSettingsShot} />
         <Pop at={s(0.3)} style={{ left: 323, top: 380, width: 1057 }}>
           <div style={{ ...cardStyle, padding: "28px 40px 32px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 22, fontWeight: 700 }}>
-              <HeartIcon size={26} weight="fill" color={palette.pink500} />
+              <HeartIcon size={26} weight="fill" color={"var(--clip-mark)"} />
               好感度
               <span style={{ marginLeft: "auto", display: "flex", alignItems: "baseline", gap: 14 }}>
                 <span
@@ -60,7 +59,7 @@ export function AffectionClip() {
                     display: "inline-block",
                     padding: "4px 16px",
                     borderRadius: 9999,
-                    background: palette.accent,
+                    background: "var(--clip-badge)",
                     fontSize: 20,
                     transform: `scale(${stagePulse})`,
                   }}
@@ -73,8 +72,8 @@ export function AffectionClip() {
               </span>
             </div>
             <div style={{ position: "relative", width: TRACK_WIDTH, margin: "30px auto 0" }}>
-              <div style={{ height: 12, borderRadius: 9999, background: palette.lavender200, overflow: "hidden" }}>
-                <div style={{ width: `${trackShare(value) * 100}%`, height: "100%", borderRadius: 9999, background: palette.accentMedium }} />
+              <div style={{ height: 12, borderRadius: 9999, background: "var(--clip-track)", overflow: "hidden" }}>
+                <div style={{ width: `${trackShare(value) * 100}%`, height: "100%", borderRadius: 9999, background: "var(--clip-track-fill)" }} />
               </div>
               {affectionStages.slice(1).map((boundary) => (
                 <div
@@ -85,7 +84,7 @@ export function AffectionClip() {
                     left: trackShare(boundary.lower) * TRACK_WIDTH,
                     width: 2,
                     height: 12,
-                    background: palette.neutral50,
+                    background: "var(--clip-paper)",
                   }}
                 />
               ))}
@@ -102,7 +101,7 @@ export function AffectionClip() {
                         transform: "translateX(-50%)",
                         fontSize: 17,
                         fontWeight: current ? 700 : 400,
-                        color: current ? palette.pinkGrad : palette.neutral600,
+                        color: current ? "var(--clip-accent-ink)" : "var(--clip-meta-ink)",
                       }}
                     >
                       {candidate.name}
@@ -114,9 +113,9 @@ export function AffectionClip() {
             <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 22 }}>
               {CHANGES.map((change) => (
                 <Pop key={change.reason} at={s(change.at)} rise={10} style={{ position: "relative" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 18, color: palette.neutral700 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 18, color: "var(--clip-detail-ink)" }}>
                     <span>{change.reason}</span>
-                    <span style={{ color: palette.pinkGrad, fontWeight: 700 }}>+{change.delta}</span>
+                    <span style={{ color: "var(--clip-accent-ink)", fontWeight: 700 }}>+{change.delta}</span>
                   </div>
                 </Pop>
               ))}

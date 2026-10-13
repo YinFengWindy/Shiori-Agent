@@ -4,7 +4,6 @@ import { AbsoluteFill, Img, useCurrentFrame } from "remotion";
 import avatar from "../../../site/src/assets/art/avatar.webp";
 import { CHAT_SHOT } from "../chatShot";
 import { cardStyle, Pop } from "../overlay";
-import { palette } from "../palette";
 import { progress, Screen, Shot, useSeconds } from "../screen";
 
 /** One channel window: its name, where it sits, when it arrives and 吟风's message in it. */
@@ -18,7 +17,7 @@ interface ChannelWindow {
   readonly text: string;
 }
 
-const iconProps = { size: 24, weight: "fill", color: palette.blueGrad } as const;
+const iconProps = { size: 24, weight: "fill", color: "var(--clip-icon)" } as const;
 
 const WINDOWS: readonly ChannelWindow[] = [
   { name: "Telegram", kind: "私聊", icon: <TelegramLogoIcon {...iconProps} />, left: 96, top: 210, at: 0.5, text: "到家了吗？今天风有点大，记得关窗。" },
@@ -39,7 +38,7 @@ function TypingDots({ frame }: { frame: number }) {
             width: 9,
             height: 9,
             borderRadius: 9999,
-            background: palette.neutral600,
+            background: "var(--clip-meta-ink)",
             opacity: 0.4 + 0.6 * Math.max(0, Math.sin((frame - dot * 5) / 5)),
           }}
         />
@@ -56,10 +55,10 @@ export function ChannelsClip() {
   const frame = useCurrentFrame();
   const s = useSeconds();
   return (
-    <AbsoluteFill style={{ background: palette.neutral50 }}>
+    <AbsoluteFill style={{ background: "var(--clip-paper)" }}>
       <Screen zoom={0.03}>
         <Shot src={CHAT_SHOT} style={{ filter: "blur(10px) saturate(0.85)", transform: "scale(1.04)" }} />
-        <AbsoluteFill style={{ background: `linear-gradient(160deg, ${palette.blue150}cc, ${palette.lavender100}aa 45%, ${palette.pink150}cc)` }} />
+        <AbsoluteFill style={{ background: "var(--clip-veil)" }} />
         {WINDOWS.map((window) => {
           const typedAt = s(window.at + 0.9);
           const typed = progress(frame, typedAt, s(0.3));
@@ -72,28 +71,28 @@ export function ChannelsClip() {
                     alignItems: "center",
                     gap: 10,
                     padding: "14px 18px",
-                    borderBottom: `1px solid ${palette.neutral200}`,
+                    borderBottom: "1px solid var(--clip-edge)",
                     fontSize: 20,
                     fontWeight: 700,
                   }}
                 >
                   {window.icon}
                   {window.name}
-                  <span style={{ marginLeft: "auto", fontSize: 15, fontWeight: 400, color: palette.neutral600 }}>{window.kind}</span>
+                  <span style={{ marginLeft: "auto", fontSize: 15, fontWeight: 400, color: "var(--clip-meta-ink)" }}>{window.kind}</span>
                 </div>
-                <div style={{ display: "flex", gap: 12, padding: "20px 18px 26px", minHeight: 150, background: palette.neutral100 }}>
+                <div style={{ display: "flex", gap: 12, padding: "20px 18px 26px", minHeight: 150, background: "var(--clip-window-body)" }}>
                   <Img src={avatar} style={{ width: 44, height: 44, borderRadius: 9999, flex: "none" }} />
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    <span style={{ fontSize: 14, color: palette.neutral600 }}>吟风</span>
+                    <span style={{ fontSize: 14, color: "var(--clip-meta-ink)" }}>吟风</span>
                     <div
                       style={{
                         padding: "10px 14px",
-                        borderRadius: palette.radiusMd,
-                        background: palette.neutral50,
-                        boxShadow: palette.shadowSoft,
+                        borderRadius: "var(--radius-md)",
+                        background: "var(--clip-paper)",
+                        boxShadow: "var(--clip-bubble-shadow)",
                         fontSize: 18,
                         lineHeight: 1.5,
-                        color: palette.neutral900,
+                        color: "var(--clip-body-ink)",
                       }}
                     >
                       {typed > 0 ? <span style={{ opacity: typed }}>{window.text}</span> : <TypingDots frame={frame} />}

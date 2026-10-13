@@ -15,7 +15,7 @@ const MESSAGE_PANE: Rect = { x: 276, y: 93, w: 815, h: 679 };
 
 /**
  * One message on chat.png, in screenshot pixels: the bubble (radius
- * `BUBBLE_RADIUS`, cut out without its shadow, which `ChatMessages` draws
+ * `--clip-chat-bubble-radius`, cut out without its shadow, which `ChatMessages` draws
  * again), plus 吟风's avatar centre and name label on her replies.
  */
 interface ChatMessage {
@@ -23,7 +23,6 @@ interface ChatMessage {
   readonly reply?: { readonly avatar: { readonly x: number; readonly y: number }; readonly name: Rect };
 }
 
-const BUBBLE_RADIUS = 16;
 const AVATAR_RADIUS = 17;
 
 /** 吟风's avatar and name above a reply bubble starting at `top`. */
@@ -45,8 +44,6 @@ export const CHAT_MESSAGES: readonly ChatMessage[] = [
 const MESSAGE_RISE = 14;
 /** Frames a message takes to fade in. */
 const MESSAGE_IN = 14;
-/** The bubbles' shadow on the screenshot, redrawn under each cut-out bubble. */
-const BUBBLE_SHADOW = "0 1px 3px rgba(60, 40, 55, 0.08), 0 6px 18px rgba(95, 26, 58, 0.07)";
 
 /**
  * The message pane with every message taken out: each pixel blended from
@@ -150,7 +147,7 @@ export function ChatMessages({ appearAt }: { appearAt: readonly number[] }) {
                 <ShotRegion src={CHAT_SHOT} rect={reply.name} />
               </>
             )}
-            <ShotRegion src={CHAT_SHOT} rect={message.bubble} style={{ borderRadius: BUBBLE_RADIUS, boxShadow: BUBBLE_SHADOW }} />
+            <ShotRegion src={CHAT_SHOT} rect={message.bubble} style={{ borderRadius: "var(--clip-chat-bubble-radius)", boxShadow: "var(--clip-chat-bubble-shadow)" }} />
           </div>
         );
       })}

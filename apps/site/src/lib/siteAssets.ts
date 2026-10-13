@@ -24,21 +24,6 @@ import cg10 from "../assets/art/cg-10.webp";
 import topic1 from "../assets/art/topic-1.webp";
 import topic2 from "../assets/art/topic-2.webp";
 import topic3 from "../assets/art/topic-3.webp";
-import affectionMp4 from "../assets/showcase/affection.mp4";
-import affectionPoster from "../assets/showcase/affection-poster.jpg";
-import affectionWebm from "../assets/showcase/affection.webm";
-import channelsMp4 from "../assets/showcase/channels.mp4";
-import channelsPoster from "../assets/showcase/channels-poster.jpg";
-import channelsWebm from "../assets/showcase/channels.webm";
-import memoryMp4 from "../assets/showcase/memory.mp4";
-import memoryPoster from "../assets/showcase/memory-poster.jpg";
-import memoryWebm from "../assets/showcase/memory.webm";
-import pluginsMp4 from "../assets/showcase/plugins.mp4";
-import pluginsPoster from "../assets/showcase/plugins-poster.jpg";
-import pluginsWebm from "../assets/showcase/plugins.webm";
-import proactiveMp4 from "../assets/showcase/proactive.mp4";
-import proactivePoster from "../assets/showcase/proactive-poster.jpg";
-import proactiveWebm from "../assets/showcase/proactive.webm";
 import ogCover from "../assets/social/og-cover.jpg";
 import type { NarrativeCgKey } from "../content/narrative";
 import type { ShowcaseClipId } from "../content/showcase";
@@ -105,9 +90,10 @@ const sceneFileBytes = import.meta.glob<number>("../../../desktop/renderer/src/s
   eager: true,
 });
 
-function bytesOf(files: Record<string, number>, name: string): number {
+/** The entry of an `import.meta.glob` result whose file is named `name`. */
+function globFile<T>(files: Record<string, T>, name: string): T {
   const entry = Object.entries(files).find(([path]) => path.endsWith(`/${name}`));
-  if (!entry) throw new Error(`no size for ${name}`);
+  if (!entry) throw new Error(`no file named ${name}`);
   return entry[1];
 }
 
@@ -117,10 +103,10 @@ function bytesOf(files: Record<string, number>, name: string): number {
  * page loader weighs its progress bar by these.
  */
 export const firstScreenImageBytes: Readonly<Record<string, number>> = Object.fromEntries([
-  ...Object.entries(sceneBackgrounds).map(([phase, image]) => [image.src, bytesOf(sceneFileBytes, `bg-${phase}.webp`)]),
+  ...Object.entries(sceneBackgrounds).map(([phase, image]) => [image.src, globFile(sceneFileBytes, `bg-${phase}.webp`)]),
   ...Object.entries(narrativeExpressionSprites).map(([expression, image]) => [
     image.src,
-    bytesOf(mascotFileBytes, `yinfeng-${expression}.webp`),
+    globFile(mascotFileBytes, `yinfeng-${expression}.webp`),
   ]),
 ]);
 
@@ -166,14 +152,17 @@ export interface ShowcaseClip {
   readonly poster: ImageMetadata;
 }
 
-/** The showcase's demo clips by id (ids and order: `content/showcase.ts`). */
-export const showcaseClips: Record<ShowcaseClipId, ShowcaseClip> = {
-  memory: { webm: memoryWebm, mp4: memoryMp4, poster: memoryPoster },
-  affection: { webm: affectionWebm, mp4: affectionMp4, poster: affectionPoster },
-  proactive: { webm: proactiveWebm, mp4: proactiveMp4, poster: proactivePoster },
-  channels: { webm: channelsWebm, mp4: channelsMp4, poster: channelsPoster },
-  plugins: { webm: pluginsWebm, mp4: pluginsMp4, poster: pluginsPoster },
-};
+const showcaseVideos = import.meta.glob<string>("../assets/showcase/*.{webm,mp4}", { import: "default", eager: true });
+const showcasePosters = import.meta.glob<ImageMetadata>("../assets/showcase/*-poster.jpg", { import: "default", eager: true });
+
+/** A showcase demo clip's files, by its id (`SHOWCASE_CLIP_IDS` in `content/showcase.ts`). */
+export function showcaseClip(id: ShowcaseClipId): ShowcaseClip {
+  return {
+    webm: globFile(showcaseVideos, `${id}.webm`),
+    mp4: globFile(showcaseVideos, `${id}.mp4`),
+    poster: globFile(showcasePosters, `${id}-poster.jpg`),
+  };
+}
 
 /**
  * The photo strip under the showcase, in strip order. cg-1 (a bedroom

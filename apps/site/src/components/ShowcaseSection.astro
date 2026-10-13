@@ -1,6 +1,6 @@
 ---
 import { SHOWCASE_FEATURES } from "../content/showcase";
-import { showcaseClips } from "../lib/siteAssets";
+import { showcaseClip } from "../lib/siteAssets";
 import PhotoStrip from "./PhotoStrip.astro";
 import SceneBackdrop from "./SceneBackdrop.astro";
 
@@ -26,7 +26,7 @@ import SceneBackdrop from "./SceneBackdrop.astro";
   <div class="site-showcase-features">
     {
       SHOWCASE_FEATURES.map((feature) => {
-        const clip = showcaseClips[feature.clip];
+        const clip = showcaseClip(feature.clip);
         return (
           <article id={feature.clip} class="site-feature">
             <div class="site-feature-text">

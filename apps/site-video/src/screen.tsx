@@ -13,8 +13,28 @@ export interface Rect {
   readonly h: number;
 }
 
-/** The app's ease-out (`--ease-out-soft` in the desktop's styles.css). */
-export const easeOutSoft = Easing.bezier(0.23, 1, 0.32, 1);
+/**
+ * A `cubic-bezier()` motion token of the desktop's tokens.css (loaded by
+ * Root.tsx) as a Remotion easing, read from the page once it is first used.
+ */
+function easingToken(name: string) {
+  let easing: ((t: number) => number) | undefined;
+  return (t: number) => {
+    if (!easing) {
+      const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+      const points = /^cubic-bezier\(([^)]+)\)$/.exec(value)?.[1]?.split(",").map(Number);
+      if (!points || points.length !== 4 || points.some(Number.isNaN)) {
+        throw new Error(`${name} is not a cubic-bezier() token: "${value}"`);
+      }
+      const [x1 = 0, y1 = 0, x2 = 0, y2 = 0] = points;
+      easing = Easing.bezier(x1, y1, x2, y2);
+    }
+    return easing(t);
+  };
+}
+
+/** The app's ease-out, `--ease-out-soft`. */
+export const easeOutSoft = easingToken("--ease-out-soft");
 
 /** 0 → 1 over `duration` frames from `start`, eased out; clamped on both ends. */
 export function progress(frame: number, start: number, duration: number) {

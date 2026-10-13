@@ -1,7 +1,6 @@
 import { Img } from "remotion";
 import avatar from "../../site/src/assets/art/avatar.webp";
 import { cardStyle } from "./overlay";
-import { palette } from "./palette";
 
 /**
  * A message notice from 吟风 (her avatar, name, where it came from, the
@@ -14,9 +13,9 @@ export function MessageNotice({ source, text, width = 420 }: { source: string; t
       <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
           <span style={{ fontSize: 18, fontWeight: 700 }}>吟风</span>
-          <span style={{ fontSize: 14, color: palette.neutral600 }}>{source}</span>
+          <span style={{ fontSize: 14, color: "var(--clip-meta-ink)" }}>{source}</span>
         </div>
-        <div style={{ fontSize: 18, lineHeight: 1.5, color: palette.neutral900 }}>{text}</div>
+        <div style={{ fontSize: 18, lineHeight: 1.5, color: "var(--clip-body-ink)" }}>{text}</div>
       </div>
     </div>
   );

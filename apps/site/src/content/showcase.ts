@@ -1,5 +1,20 @@
-/** A demo clip of the showcase; `lib/siteAssets.ts` maps each id to its rendered files (apps/site-video). */
-export type ShowcaseClipId = "memory" | "affection" | "proactive" | "channels" | "plugins";
+/**
+ * The showcase's demo clips, in page order: the one list of their ids. The
+ * clips' Remotion source (apps/site-video) renders one composition per id
+ * into `assets/showcase/<id>.{webm,mp4}` and `<id>-poster.jpg`, which
+ * `lib/siteAssets.ts` picks up by the same ids.
+ */
+export const SHOWCASE_CLIP_IDS = ["memory", "affection", "proactive", "channels", "plugins"] as const;
+
+/** A demo clip of the showcase. */
+export type ShowcaseClipId = (typeof SHOWCASE_CLIP_IDS)[number];
+
+/**
+ * Size budget of every rendered clip file (each format), so the showcase
+ * stays light on a phone: the render script refuses to write past it and
+ * the build test checks the emitted files against it.
+ */
+export const SHOWCASE_CLIP_MAX_BYTES = 1.5 * 1024 * 1024;
 
 /** One feature block of the home page showcase (#772). */
 export interface ShowcaseFeature {
