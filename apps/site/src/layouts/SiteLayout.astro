@@ -30,6 +30,8 @@ const sitemapUrl = new URL("sitemap-index.xml", Astro.site).href;
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    {/* Page-specific early requests (preloads), ahead of the inlined stylesheet. */}
+    <slot name="head" />
     <title>{title}</title>
     <meta name="description" content={description} />
     <link rel="canonical" href={canonicalUrl} />

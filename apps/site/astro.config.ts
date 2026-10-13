@@ -3,7 +3,7 @@ import { dirname, resolve } from "node:path";
 import react from "@astrojs/react";
 import sitemap from "@astrojs/sitemap";
 import { defineConfig } from "astro/config";
-import { imageQueriesPlugin } from "./src/lib/imageQueries";
+import { imageBytesPlugin } from "./src/lib/imageQueries";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = resolve(here, "..", "..");
@@ -27,8 +27,8 @@ export default defineConfig({
   },
   integrations: [react(), sitemap()],
   vite: {
-    // `picture.webp?lqip` / `?bytes`: build-time facts for the home page loader.
-    plugins: [imageQueriesPlugin()],
+    // `picture.webp?bytes`: file sizes for the home page loader's progress.
+    plugins: [imageBytesPlugin()],
     server: {
       fs: {
         // styles.css, the scene backgrounds and the title logo are imported

@@ -95,38 +95,77 @@
 }
 
 /*
- * Home page loader (#770, components/SiteLoader.astro): 吟风's blurred
- * silhouette on the app's own blue -> lavender -> pink wash, and a long,
- * slim progress bar on a milk-glass pill: a faint lavender track filling
- * with the pastel blue -> pink accent (blue-300 -> pink-300; decorative,
- * the percentage carries the reading), the percentage beside it in muted
- * ink (neutral-700 on the near-white pill: about 5.5:1).
+ * Home page loader (#770, components/SiteLoader.astro): 吟风's wide
+ * illustration (cg-6, pale seaside) over the app's blue -> lavender -> pink
+ * wash, a faint lavender shade rising from the bottom, a few sakura petals
+ * (the brand petal motif in the particle petal colours) drifting down, and
+ * a glowing progress line: a hairline track, the blue -> pink accent fill
+ * with a soft glow and a highlight sweeping along it, and a brand sparkle
+ * riding the head with a short light trail.
+ *
+ * The percentage rides above the sparkle in the slogan's gradient, inside
+ * the slogan's opaque neutral-50 halo, so the colour right around each
+ * glyph is the halo whatever lies beneath (the pale sky, her black dress
+ * or wings): gradient start ≈ #4d94c4 and end ≈ #df5f96 both read 3.2:1 on
+ * neutral-50, above the 3:1 large-text target (the number is 20px
+ * semibold, i.e. ≥ 14pt bold). The line itself is decorative; its glow and
+ * the shade keep it visible over the illustration.
  */
 .site-loader {
   --site-loader-wash: var(--gradient-app);
-  --site-loader-track: color-mix(in srgb, var(--lavender-200) 55%, transparent);
-  --site-loader-fill: var(--gradient-accent-medium);
-  --site-loader-percent-ink: var(--color-text-muted);
-  /* Milk-glass pill behind the bar, so it reads over her silhouette too. */
-  --site-loader-pill: var(--site-dialogue-fill-start);
-  /* Enough to melt the 20px placeholder (lib/imageQueries.ts) into a silhouette. */
-  --site-loader-silhouette-blur: 14px;
+  /* Where cover cropping keeps her: she stands left of centre, face high. */
+  --site-loader-art-focus: 35% 30%;
+  --site-loader-art-in: var(--duration-backdrop-in);
+  --site-loader-art-grow: 1.04;
+  --site-loader-shade: linear-gradient(
+    to top,
+    color-mix(in srgb, var(--lavender-100) 75%, transparent),
+    color-mix(in srgb, var(--lavender-100) 30%, transparent) 22%,
+    transparent 45%
+  );
+  --site-loader-petal-1: var(--color-particle-petal-1);
+  --site-loader-petal-2: var(--color-particle-petal-2);
+  --site-loader-petal-3: var(--color-particle-petal-3);
+  --site-loader-petal-opacity: 0.7;
+  /* One petal's fall from the top to below the bottom (scaled per petal),
+     and how far it sways sideways on the way. */
+  --site-loader-petal-fall: 11s;
+  --site-loader-petal-sway: 3rem;
+  --site-loader-track: color-mix(in srgb, var(--lavender-400) 22%, transparent);
+  --site-loader-fill-start: var(--blue-300);
+  --site-loader-fill-end: var(--pink-400);
+  --site-loader-glow-blue: color-mix(in srgb, var(--blue-300) 70%, transparent);
+  --site-loader-glow-pink: color-mix(in srgb, var(--pink-400) 60%, transparent);
+  --site-loader-shine: color-mix(in srgb, var(--neutral-50) 85%, transparent);
+  --site-loader-star: var(--pink-300);
+  --site-loader-star-core: var(--neutral-50);
+  --site-loader-trail: color-mix(in srgb, var(--pink-300) 75%, transparent);
+  --site-loader-line: 3px;
+  --site-loader-star-size: 1.75rem;
+  /* Loops while loading: the sweep along the fill, the sparkle's twinkle. */
+  --site-loader-shimmer: 1.8s;
+  --site-loader-twinkle: 1.1s;
+  /* The sparkle's one flash when the bar completes. */
+  --site-loader-flash: var(--duration-motif);
   /* Share of the first screen decoded, 0-1 (set by the loader's script). */
   --site-loader-progress: 0;
 }
 
-/* The reveal, on the root: the dialogue box outside the loader takes part.
-   Hold while the bar fills up; then the wash and the bar fade to the scene
-   while the silhouette sharpens into her sprite; once she is in focus the
-   dialogue box rises in with the first line (hold + focus + rise = 860ms;
-   the box rises only after the focus because the loader's silhouette lies
-   above it). The cap: the loader reveals anyway this long
-   after navigation, even if the first screen is not ready (also the delay
-   of the CSS-only fallback fade). */
+/* The reveal, on the root: 吟风 and the dialogue box outside the loader
+   take part. Hold while the bar reaches 100% and the sparkle flashes; then
+   the wash and the bar fade out while the scene shows through and 吟风
+   fades in, rising and growing the last bit into place; a beat later the
+   dialogue box rises in with the first line (hold + lead + rise = 860ms).
+   The cap: the loader reveals anyway this long after navigation, even if
+   the first screen is not ready (also the delay of the CSS-only fallback
+   fade). */
 :root {
   --site-loader-hold: var(--duration-base);
-  --site-loader-focus: var(--duration-crossfade);
   --site-loader-wash-out: var(--duration-stage);
+  --site-loader-cast-in: var(--duration-stage);
+  --site-loader-cast-rise: 18px;
+  --site-loader-cast-scale: 0.97;
+  --site-loader-lead: var(--duration-crossfade);
   --site-loader-rise: var(--duration-crossfade);
   --site-loader-dialogue-rise: 12px;
   --site-loader-cap: 10s;
@@ -141,9 +180,7 @@
 }
 
 /* ------------------------------------------------------------ loader -- */
-/* The narrative's first shot, laid out by the same rules: the figure is a
-   .site-narrative-figure in a full-viewport layer, exactly where the sticky
-   stage puts the sprite, and the plate frame copies .site-dialogue's box. */
+/* A full-viewport layer over the narrative's first screen. */
 .site-loader {
   position: fixed;
   inset: 0;
@@ -157,54 +194,201 @@
   background: var(--site-loader-wash);
 }
 
-/* Stretched to the box (the 20px placeholder rounds the aspect ratio). */
-.site-loader-silhouette {
-  object-fit: fill;
-  filter: blur(var(--site-loader-silhouette-blur));
+/* The illustration, crisp, filling the screen; the wash shows until it
+   is decoded, then it fades in (the script sets data-ready). */
+.site-loader-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  object-fit: cover;
+  object-position: var(--site-loader-art-focus);
+  opacity: 0;
+  transition: opacity var(--site-loader-art-in) var(--ease-out-soft);
 }
 
-/* Bottom centre, in the dialogue box's band: clear of 吟风's face. */
+.site-loader-art[data-ready] {
+  opacity: 1;
+}
+
+.site-loader-shade {
+  position: absolute;
+  inset: 0;
+  background-image: var(--site-loader-shade);
+}
+
+.site-loader-petals {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+/* Each petal falls from above the top, swaying and turning, already part
+   way down at the first frame (negative delay). */
+.site-loader-petal {
+  position: absolute;
+  top: -2rem;
+  left: var(--petal-x);
+  width: var(--petal-size);
+  height: var(--petal-size);
+  color: var(--site-loader-petal-1);
+  opacity: var(--site-loader-petal-opacity);
+  animation: site-loader-petal-fall calc(var(--site-loader-petal-fall) * var(--petal-speed)) linear
+    calc(var(--site-loader-petal-fall) * var(--petal-delay) * -1) infinite;
+}
+
+.site-loader-petal:nth-child(3n + 2) {
+  color: var(--site-loader-petal-2);
+}
+
+.site-loader-petal:nth-child(3n) {
+  color: var(--site-loader-petal-3);
+}
+
+@keyframes site-loader-petal-fall {
+  from {
+    translate: 0 0;
+    rotate: 0deg;
+  }
+  50% {
+    translate: var(--site-loader-petal-sway) 55vh;
+    rotate: 170deg;
+  }
+  to {
+    translate: 0 calc(100vh + 4rem);
+    rotate: 340deg;
+  }
+}
+
+/* Low and centred, over the shade: clear of her face. */
 .site-loader-progress {
   position: absolute;
   z-index: 3;
   inset-inline: 0;
-  bottom: clamp(4rem, 16dvh, 9rem);
-  width: min(32rem, 86vw);
+  bottom: clamp(3rem, 12dvh, 7rem);
+  width: min(32rem, 82vw);
   margin-inline: auto;
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.45rem 0.6rem 0.45rem 1rem;
-  border-radius: 9999px;
-  background: var(--site-loader-pill);
-  border: 1px solid var(--site-glass-border);
-  box-shadow: var(--shadow-soft);
-  backdrop-filter: blur(10px);
 }
 
+/* A hairline; the fill and the head sit on it without clipping. */
 .site-loader-track {
-  flex: 1;
-  height: 6px;
+  position: relative;
+  height: var(--site-loader-line);
   border-radius: 9999px;
   background: var(--site-loader-track);
-  overflow: hidden;
 }
 
 /* Real progress (bytes of the first screen, SiteLoader.astro), eased
-   between updates. */
+   between updates, glowing, with a highlight sweeping along it. */
 .site-loader-fill {
+  position: absolute;
+  inset-block: 0;
+  left: 0;
   width: calc(var(--site-loader-progress) * 100%);
-  height: 100%;
+  overflow: hidden;
   border-radius: inherit;
-  background-image: var(--site-loader-fill);
+  background-image: linear-gradient(90deg in oklab, var(--site-loader-fill-start), var(--site-loader-fill-end));
+  box-shadow:
+    0 0 6px var(--site-loader-glow-pink),
+    0 0 14px var(--site-loader-glow-blue);
   transition: width var(--duration-base) var(--ease-out-soft);
 }
 
+.site-loader-fill::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(90deg, transparent 0%, var(--site-loader-shine) 50%, transparent 100%);
+  background-size: 40% 100%;
+  background-repeat: no-repeat;
+  animation: site-loader-shimmer var(--site-loader-shimmer) linear infinite;
+}
+
+@keyframes site-loader-shimmer {
+  from {
+    background-position: -60% 0;
+  }
+  to {
+    background-position: 160% 0;
+  }
+}
+
+/* The head: rides the end of the fill, the percentage above it. */
+.site-loader-head {
+  position: absolute;
+  top: 50%;
+  left: calc(var(--site-loader-progress) * 100%);
+  width: 0;
+  height: 0;
+  transition: left var(--duration-base) var(--ease-out-soft);
+}
+
+/* The short light trail behind the sparkle. */
+.site-loader-head::before {
+  content: "";
+  position: absolute;
+  right: 0;
+  top: calc(var(--site-loader-line) * -1);
+  width: 3.5rem;
+  height: calc(var(--site-loader-line) * 2);
+  border-radius: 9999px;
+  background-image: linear-gradient(90deg, transparent, var(--site-loader-trail));
+  filter: blur(2px);
+}
+
+.site-loader-star {
+  position: absolute;
+  left: calc(var(--site-loader-star-size) / -2);
+  top: calc(var(--site-loader-star-size) / -2);
+  width: var(--site-loader-star-size);
+  height: var(--site-loader-star-size);
+  overflow: visible;
+  color: var(--site-loader-star);
+  filter:
+    drop-shadow(0 0 3px var(--site-loader-star-core))
+    drop-shadow(0 0 6px var(--site-loader-glow-pink))
+    drop-shadow(0 0 12px var(--site-loader-glow-blue));
+  animation: site-loader-twinkle var(--site-loader-twinkle) var(--ease-in-out-soft) infinite alternate;
+}
+
+/* A white core so the sparkle reads as light, not a sticker. */
+.site-loader-star-core {
+  color: var(--site-loader-star-core);
+}
+
+@keyframes site-loader-twinkle {
+  from {
+    opacity: 0.75;
+    scale: 0.85;
+    rotate: 0deg;
+  }
+  to {
+    opacity: 1;
+    scale: 1.1;
+    rotate: 15deg;
+  }
+}
+
+/* Above the sparkle, in the slogan's gradient and halo (contrast in the
+   token note). */
 .site-loader-percent {
-  min-width: 4ch;
-  color: var(--site-loader-percent-ink);
+  position: absolute;
+  bottom: calc(var(--site-loader-star-size) / 2 + 0.2rem);
+  left: 0;
+  translate: -50% 0;
+  font-size: 1.25rem;
+  line-height: 1;
+  white-space: nowrap;
   font-variant-numeric: tabular-nums;
-  text-align: end;
+  background-image: linear-gradient(90deg in oklab, var(--site-slogan-gradient-start), var(--site-slogan-gradient-end));
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  filter:
+    drop-shadow(0 0 1px var(--site-slogan-halo))
+    drop-shadow(0 0 1px var(--site-slogan-halo))
+    drop-shadow(0 0 8px var(--site-slogan-glow-soft));
 }
 
 /* Ready (or capped): the reveal. The layer's own animation spans the whole
@@ -213,26 +397,65 @@
    after the hold that lets it reach 100%. */
 .site-loader[data-leaving] {
   pointer-events: none;
-  animation: site-loader-leave calc(var(--site-loader-hold) + var(--site-loader-focus) + var(--site-loader-rise)) linear both;
+  animation: site-loader-leave calc(var(--site-loader-hold) + var(--site-loader-lead) + var(--site-loader-rise)) linear both;
 }
 
-.site-loader[data-leaving] .site-loader-wash,
-.site-loader[data-leaving] .site-loader-progress {
+/* After the hold the whole layer fades onto the narrative's scene, the
+   illustration growing very slightly as it goes. */
+.site-loader[data-leaving] > * {
   animation: site-loader-fade var(--site-loader-wash-out) var(--ease-in-out-soft) var(--site-loader-hold) both;
 }
 
-/* The sprite beneath is already decoded: fading the blur off it reads as
-   the silhouette coming into focus. */
-.site-loader[data-leaving] .site-loader-silhouette {
-  animation: site-loader-focus var(--site-loader-focus) var(--ease-in-out-soft) var(--site-loader-hold) both;
+.site-loader[data-leaving] .site-loader-art {
+  animation-name: site-loader-art-out;
 }
 
-/* The dialogue box waits under the loader, then rises in once 吟风 is in
-   focus. */
+@keyframes site-loader-art-out {
+  to {
+    opacity: 0;
+    scale: var(--site-loader-art-grow);
+  }
+}
+
+/* At 100% the sparkle flashes once before going out with the bar. */
+.site-loader[data-leaving] .site-loader-star {
+  animation: site-loader-flash var(--site-loader-flash) var(--ease-out-soft) both;
+}
+
+@keyframes site-loader-flash {
+  40% {
+    opacity: 1;
+    scale: 1.8;
+    rotate: 45deg;
+  }
+  to {
+    opacity: 1;
+    scale: 1;
+    rotate: 90deg;
+  }
+}
+
+/* 吟风 waits under the loader, then fades in with the scene, rising and
+   growing the last bit into place. */
+html[data-site-loader] .site-narrative-figure {
+  transform-origin: 50% 100%;
+  transition:
+    opacity var(--site-loader-cast-in) var(--ease-out-soft) var(--site-loader-hold),
+    translate var(--site-loader-cast-in) var(--ease-out-soft) var(--site-loader-hold),
+    scale var(--site-loader-cast-in) var(--ease-out-soft) var(--site-loader-hold);
+}
+
+html[data-site-loader="loading"] .site-narrative-figure {
+  opacity: 0;
+  translate: 0 var(--site-loader-cast-rise);
+  scale: var(--site-loader-cast-scale);
+}
+
+/* The dialogue box follows a beat later with the first line. */
 html[data-site-loader] .site-dialogue {
   transition:
-    opacity var(--site-loader-rise) var(--ease-out-soft) calc(var(--site-loader-hold) + var(--site-loader-focus)),
-    translate var(--site-loader-rise) var(--ease-out-soft) calc(var(--site-loader-hold) + var(--site-loader-focus));
+    opacity var(--site-loader-rise) var(--ease-out-soft) calc(var(--site-loader-hold) + var(--site-loader-lead)),
+    translate var(--site-loader-rise) var(--ease-out-soft) calc(var(--site-loader-hold) + var(--site-loader-lead));
 }
 
 html[data-site-loader="loading"] .site-dialogue {
@@ -256,13 +479,6 @@ html[data-site-loader="loading"] .site-dialogue {
 @keyframes site-loader-fade {
   to {
     opacity: 0;
-  }
-}
-
-@keyframes site-loader-focus {
-  to {
-    opacity: 0;
-    filter: blur(0);
   }
 }
 
@@ -673,24 +889,37 @@ html:has(.site-narrative) {
     margin-top: 0.75rem;
   }
 
-  /* The loader: the bar fills in steps, and with the stage unpinned there
-     is no shot to hand over to in place, so the whole layer fades out
-     (opacity only) and the dialogue box fades in without rising. */
-  .site-loader-fill {
+  /* The loader: the bar fills in steps with no sweep or twinkle, the whole
+     layer fades out (opacity only), and 吟风 and the dialogue box fade in
+     without moving. */
+  .site-loader-fill,
+  .site-loader-head {
     transition: none;
+  }
+
+  /* No sweep, twinkle, flash or falling petals: a still scene, line,
+     sparkle and number. */
+  .site-loader-fill::after,
+  .site-loader-petals {
+    display: none;
+  }
+
+  .site-loader-star,
+  .site-loader[data-leaving] .site-loader-star {
+    animation: none;
   }
 
   .site-loader[data-leaving] {
     animation: site-loader-fade var(--site-loader-wash-out) var(--ease-in-out-soft) both;
   }
 
-  .site-loader[data-leaving] .site-loader-wash,
-  .site-loader[data-leaving] .site-loader-silhouette,
-  .site-loader[data-leaving] .site-loader-progress {
+  .site-loader[data-leaving] > *,
+  .site-loader[data-leaving] .site-loader-art {
     animation: none;
   }
 
-  html[data-site-loader="loading"] .site-dialogue {
+  html[data-site-loader="loading"] :is(.site-narrative-figure, .site-dialogue) {
     translate: none;
+    scale: none;
   }
 }

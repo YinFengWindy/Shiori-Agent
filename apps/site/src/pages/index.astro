@@ -5,6 +5,7 @@ import SiteFooter from "../components/SiteFooter.astro";
 import SiteLoader from "../components/SiteLoader.astro";
 import { SoundToggle } from "../components/SoundToggle";
 import SiteLayout from "../layouts/SiteLayout.astro";
+import { loaderArtwork } from "../lib/siteAssets";
 import { SITE_NAME, SITE_SLOGAN } from "../lib/siteMeta";
 import "../styles/showcase.css";
 
@@ -19,6 +20,8 @@ import "../styles/showcase.css";
 ---
 
 <SiteLayout title={`${SITE_NAME} · ${SITE_SLOGAN}`}>
+  {/* The loader's illustration is the first picture the page asks for. */}
+  <link slot="head" rel="preload" as="image" href={loaderArtwork.src} fetchpriority="high" />
   <SiteLoader />
   <main>
     <NarrativeStage downloadId="download" />
