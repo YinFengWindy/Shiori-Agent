@@ -29,15 +29,16 @@ export interface LocaleInfo {
   /** Path prefix of its pages: empty for the root language, `/en` for English. */
   readonly prefix: string;
   /**
-   * Whether its pages offer the English site, once, to a visitor whose
-   * browser reads no Chinese (lib/languagePrompt.ts): the Chinese pages do.
+   * The language its pages offer, once, to a visitor whose browser reads
+   * none of theirs (LanguagePrompt.astro, lib/languagePrompt.ts): the
+   * Chinese pages offer English; `null` offers nothing.
    */
-  readonly offersEnglish: boolean;
+  readonly promptsFor: Locale | null;
 }
 
 export const LOCALE_INFO: Readonly<Record<Locale, LocaleInfo>> = {
-  zh: { htmlLang: "zh-CN", hreflang: "zh-CN", ogLocale: "zh_CN", prefix: "", offersEnglish: true },
-  en: { htmlLang: "en", hreflang: "en", ogLocale: "en_US", prefix: "/en", offersEnglish: false },
+  zh: { htmlLang: "zh-CN", hreflang: "zh-CN", ogLocale: "zh_CN", prefix: "", promptsFor: "en" },
+  en: { htmlLang: "en", hreflang: "en", ogLocale: "en_US", prefix: "/en", promptsFor: null },
 };
 
 /** `hreflang` of the alternate a visitor whose language the site lacks gets: the Chinese page. */

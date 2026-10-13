@@ -73,6 +73,18 @@ export const zh = {
     text: "EN",
     label: "切换到英文版（English）",
   },
+  /**
+   * The one-time prompt offering the site in this language
+   * (LanguagePrompt.astro), worded in this language for a visitor who reads
+   * it rather than the page's: the Chinese pages show the English entry.
+   * This Chinese one is for a page that would offer Chinese (none yet).
+   */
+  languagePrompt: {
+    label: "语言",
+    question: "要看中文版吗？",
+    switch: "切换",
+    dismiss: "关闭",
+  },
   /** The home page narrative (content/narrative.ts). */
   narrative: {
     /** The dialogue box's name plate. */

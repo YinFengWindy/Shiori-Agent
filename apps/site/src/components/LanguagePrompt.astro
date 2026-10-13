@@ -1,49 +1,60 @@
 ---
 import { cx } from "@yinfengwindy/shiori-sdk";
 import { compactPrimaryButtonClass, compactTextButtonClass } from "../../../desktop/renderer/src/shared/styles";
-import { LOCALE_INFO } from "../i18n/locales";
-import { LANGUAGE_PROMPT_TEXT } from "../lib/languagePrompt";
+import { siteText } from "../i18n";
+import { LOCALE_INFO, type Locale } from "../i18n/locales";
 import "../styles/language.css";
 
 /**
  * The one-time English prompt (#806) in the top-right corner of a Chinese
  * page, for a visitor whose browser asks for no Chinese
- * (lib/languagePrompt.ts): 「View this site in English?」 with Switch — a
- * link to the page's English version, which the home page keeps at the
+ * (lib/languagePrompt.ts), in the offered language's words (its
+ * dictionary's `languagePrompt`): 「View this site in English?」 with
+ * Switch — a link to the page's English version, which the home page keeps at the
  * reader's place like its other switches (HomeLanguageSwitch.astro) — and
  * Dismiss. Either answer is remembered and the prompt never shows again.
  *
  * Shipped `hidden`: without scripting, or for anyone else, it never shows.
- * Above the home page's loader, whose input guard lets it through
+ * Above the home page's loader, whose input guard lets its clicks through
  * (`data-loader-passthrough`, SiteLoader.astro).
  */
 interface Props {
-  /** The page's English version (or the English home page). */
+  /** The language offered (`LocaleInfo.promptsFor`): the prompt's words and its link's. */
+  locale: Locale;
+  /** The page in that language (or that language's home page). */
   href: string;
 }
 
-const { href } = Astro.props;
+const { locale, href } = Astro.props;
+const text = siteText(locale).languagePrompt;
+const info = LOCALE_INFO[locale];
 ---
 
 <aside
   class="site-lang-prompt"
-  lang={LOCALE_INFO.en.htmlLang}
-  aria-label={LANGUAGE_PROMPT_TEXT.label}
+  lang={info.htmlLang}
+  aria-label={text.label}
   data-lang-prompt
   data-loader-passthrough
   hidden
 >
-  <p class="site-lang-prompt-question text-body-sm">{LANGUAGE_PROMPT_TEXT.question}</p>
+  <p class="site-lang-prompt-question text-body-sm">{text.question}</p>
   <div class="site-lang-prompt-actions">
-    <button type="button" class={compactTextButtonClass} data-lang-prompt-dismiss>{LANGUAGE_PROMPT_TEXT.dismiss}</button>
-    <a href={href} hreflang={LOCALE_INFO.en.hreflang} class={cx(compactPrimaryButtonClass, "no-underline")} data-lang-switch data-lang-prompt-switch
-      >{LANGUAGE_PROMPT_TEXT.switch}</a
+    <button type="button" class={compactTextButtonClass} data-lang-prompt-dismiss>{text.dismiss}</button>
+    <a href={href} hreflang={info.hreflang} class={cx(compactPrimaryButtonClass, "no-underline")} data-lang-switch data-lang-prompt-switch
+      >{text.switch}</a
     >
   </div>
 </aside>
 
 <script>
-  import { LANGUAGE_PROMPT_STORAGE_KEY, type LanguagePromptAnswer, shouldOfferEnglish } from "../lib/languagePrompt";
+  import {
+    LANGUAGE_PROMPT_STORAGE_KEY,
+    type LanguagePromptAnswer,
+    type LanguagePromptMemory,
+    languagePromptMemory,
+    shouldOfferEnglish,
+  } from "../lib/languagePrompt";
 
   const prompt = document.querySelector<HTMLElement>("[data-lang-prompt]");
   if (!prompt) throw new Error("the language prompt is missing");
@@ -51,12 +62,12 @@ const { href } = Astro.props;
   const switchLink = prompt.querySelector<HTMLAnchorElement>("[data-lang-prompt-switch]");
   if (!dismiss || !switchLink) throw new Error("the language prompt's actions are missing");
 
-  function readAnswer(): string | null {
+  function readMemory(): LanguagePromptMemory {
     try {
-      return window.localStorage.getItem(LANGUAGE_PROMPT_STORAGE_KEY);
+      return languagePromptMemory(window.localStorage.getItem(LANGUAGE_PROMPT_STORAGE_KEY));
     } catch {
       // Storage blocked: ask nothing rather than ask on every page.
-      return "unavailable";
+      return "unreadable";
     }
   }
 
@@ -68,7 +79,7 @@ const { href } = Astro.props;
     }
   }
 
-  if (shouldOfferEnglish(navigator.languages, readAnswer())) {
+  if (shouldOfferEnglish(navigator.languages, readMemory())) {
     prompt.hidden = false;
     dismiss.addEventListener("click", () => {
       remember("dismissed");

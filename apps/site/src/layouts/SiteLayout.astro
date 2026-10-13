@@ -106,7 +106,7 @@ const verification = siteVerificationMeta(process.env);
   </head>
   <body>
     <slot />
-    {localeInfo.offersEnglish && <LanguagePrompt href={languageSwitchHref(locale, versions)} />}
+    {localeInfo.promptsFor && <LanguagePrompt locale={localeInfo.promptsFor} href={languageSwitchHref(locale, versions)} />}
     <Analytics />
   </body>
 </html>

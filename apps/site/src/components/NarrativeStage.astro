@@ -152,15 +152,10 @@ const usedCgKeys = [...new Set(NARRATIVE_LINES.flatMap((line) => (line.cg ? [lin
     narrativeStepOffset,
     narrativeStepTarget,
   } from "../lib/narrativeModel";
+  import { narrativeElements } from "../lib/narrativeElements";
 
-  function required<T>(element: T | null, name: string): T {
-    if (!element) throw new Error(`narrative ${name} is missing`);
-    return element;
-  }
 
-  const section = required(document.querySelector<HTMLElement>("[data-narrative]"), "section");
-  const stage = required(section.querySelector<HTMLElement>("[data-narrative-stage]"), "stage");
-  const lines = [...section.querySelectorAll<HTMLElement>("[data-narrative-line]")];
+  const { section, stage, lines, download, anchors } = narrativeElements(document);
   const sprites = [...section.querySelectorAll<HTMLImageElement>("img[data-expression]")];
   const cgs = [...section.querySelectorAll<HTMLImageElement>("img[data-cg]")];
   const lineCgs = lines.map((line) => line.dataset.cg);
@@ -321,7 +316,6 @@ const usedCgKeys = [...new Set(NARRATIVE_LINES.flatMap((line) => (line.cg ? [lin
   // The download call sits inside the pinned stage, so neither its #hash
   // nor keyboard focus would bring it on screen by themselves: both go to
   // the download state.
-  const download = required(stage.querySelector<HTMLElement>("[data-narrative-download]"), "download call");
   function downloadOffsetFromHere() {
     const scroll = currentScroll();
     return { scroll, target: narrativeFinalOffset(scroll) };
@@ -356,10 +350,7 @@ const usedCgKeys = [...new Set(NARRATIVE_LINES.flatMap((line) => (line.cg ? [lin
   // browser cannot bring on screen, so the step is scrolled to here. Under
   // reduced motion the lines and the call sit in the page flow and the snap
   // points are gone: the browser jumps to the call itself, and here to a line.
-  const anchoredStep = narrativeAnchorStep(window.location.hash, {
-    lineIds: lines.map((line) => required(line.dataset.anchor ?? null, "line anchor")),
-    downloadId: download.id,
-  });
+  const anchoredStep = narrativeAnchorStep(window.location.hash, anchors);
   if (anchoredStep !== null) {
     if (!reducedMotion.matches) {
       const scroll = currentScroll();

@@ -14,7 +14,7 @@
   --site-header-fill: color-mix(in srgb, var(--neutral-50) 72%, transparent);
   --site-header-rule: color-mix(in srgb, var(--neutral-50) 85%, transparent);
   --site-header-shadow: var(--shadow-shell);
-  --site-header-blur: 16px;
+  --site-header-blur: var(--site-glass-blur);
   --site-header-name-fill: var(--gradient-accent-strong);
   --site-header-icon-size: 2rem;
 }
@@ -127,8 +127,9 @@
 
 /* The narrowest phones: the download button drops the release tag the
    script appends and the language switch (#806) tightens, so the bar never
-   overflows; below 380px the name is visually hidden too, still naming the
-   home link for assistive technology. */
+   overflows. Below 380px the name is visually hidden too (`max-[379px]:sr-only`
+   on it, SiteHeader.astro), still naming the home link for assistive
+   technology. */
 @media (max-width: 429px) {
   .site-header [data-download-version] {
     display: none;
@@ -139,16 +140,6 @@
   }
 }
 
-@media (max-width: 379px) {
-  .site-header-name {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
-}
 
 /* Without scripting nothing would reveal it: the home page shows it
    from the start. */

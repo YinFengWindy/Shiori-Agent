@@ -18,6 +18,7 @@ import {
   topBarHomeHref,
 } from "./support/builtSite";
 import { runLoaderGate } from "./support/loaderGate";
+import { runLoaderInputGuard } from "./support/loaderInputGuard";
 
 /*
  * The site in two languages (#806), as the build emits it: the English home
@@ -241,13 +242,28 @@ describe("language switch (#806)", () => {
     const styles = [...zhHome.matchAll(/<style>(.*?)<\/style>/gs)].map((match) => match[1]).join("\n");
     assert.match(styles, /:root:has\(\.site-header\[data-revealed\]\) \.site-lang-corner\{[^}]*visibility:hidden/);
     assert.match(styles, /@media \(scripting:none\)\{\.site-lang-corner\{display:none\}\}/);
-    // Above the loader (z-index 100).
-    assert.match(styles, /\.site-lang-corner\{z-index:110;[^}]*position:fixed/);
+    // Above the loader.
+    assert.match(styles, /\.site-lang-corner\{z-index:var\(--site-layer-over-loader\);[^}]*position:fixed/);
+    assert.match(styles, /\.site-loader\{[^}]*z-index:var\(--site-layer-loader\)/);
+    const layer = (name: string) => Number(styles.match(new RegExp(`--site-layer-${name}:(\\d+)`))?.[1]);
+    assert.ok(layer("over-loader") > layer("loader"), "the switch must sit above the loader");
   });
 
-  it("lets clicks and keys on the switch through the loader's input guard", () => {
+  it("lets clicks on the switch through the loader's input guard, but no scroll key, even with the switch focused", () => {
     const script = zhHome.match(/<div id="site-loader".*?<script>(.*?)<\/script>/s)?.[1] ?? "";
-    assert.match(script, /closest\("\[data-loader-passthrough\]"\)\) return/);
+    const guard = runLoaderInputGuard(script);
+    const letThrough = { prevented: false, stopped: false };
+    const blocked = { prevented: true, stopped: true };
+    // A click on the switch (or Enter on it, which clicks) goes through.
+    assert.deepEqual(guard({ type: "click", onPassthrough: true }), letThrough);
+    assert.deepEqual(guard({ type: "keydown", key: "Enter", onPassthrough: true }), letThrough);
+    // Scroll keys never move the narrative while the loader shows, wherever the focus is.
+    for (const key of [" ", "PageDown", "ArrowDown", "End"]) {
+      assert.deepEqual(guard({ type: "keydown", key, onPassthrough: true }), blocked, `${JSON.stringify(key)} on the switch`);
+      assert.deepEqual(guard({ type: "keydown", key, onPassthrough: false }), blocked, `${JSON.stringify(key)} elsewhere`);
+    }
+    // Clicks anywhere else still stop at the loader.
+    assert.deepEqual(guard({ type: "click", onPassthrough: false }), blocked);
   });
 
   it("puts the switch in the top bar of the Chinese-only pages, to the English home page", () => {

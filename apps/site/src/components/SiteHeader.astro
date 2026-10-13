@@ -58,7 +58,8 @@ const wideOnlyClass = "max-sm:hidden";
         decoding="async"
         class="site-header-icon"
       />
-      <span class="site-header-name site-story-type">{SITE_NAME}</span>
+      {/* The narrowest phones hide the name from sight only, to keep the bar from overflowing (header.css). */}
+      <span class="site-header-name site-story-type max-[379px]:sr-only">{SITE_NAME}</span>
     </a>
     <div class="site-header-links">
       <a href={versionFor(locale, SITE_SECTIONS.blog)} class={linkClass} aria-current={current === "blog" ? "page" : undefined}>{text.blog}</a>

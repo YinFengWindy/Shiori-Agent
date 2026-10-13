@@ -24,32 +24,24 @@ const { locale, href } = Astro.props;
 <LanguageSwitch locale={locale} href={href} variant="corner" />
 
 <script>
+  import { required } from "../lib/dom";
   import { anchorAtReadingLine, hrefWithAnchor } from "../lib/languageSwitch";
+  import { narrativeElements } from "../lib/narrativeElements";
   import { narrativeStepAnchor, narrativeStepAt } from "../lib/narrativeModel";
   import { isPastNarrative } from "../lib/siteHeader";
 
-  function required<T>(element: T | null, name: string): T {
-    if (!element) throw new Error(`the language switch reads the ${name}, which is missing`);
-    return element;
-  }
 
-  const section = required(document.querySelector<HTMLElement>("[data-narrative]"), "narrative");
-  const stage = required(section.querySelector<HTMLElement>("[data-narrative-stage]"), "narrative stage");
-  const download = required(section.querySelector<HTMLElement>("[data-narrative-download]"), "download call");
-  const lines = [...section.querySelectorAll<HTMLElement>("[data-narrative-line]")];
+  const { section, stage, lines, download, anchors } = narrativeElements(document);
   const features = [...document.querySelectorAll<HTMLElement>(".site-feature")];
-  // The lines' anchors are named on them (their snap points carry the ids).
-  const lineIds = lines.map((line) => required(line.dataset.anchor ?? null, "line anchor"));
-  const anchors = { lineIds, downloadId: download.id };
   // Each switch's static target, the place to be added to it.
   const switches = [...document.querySelectorAll<HTMLAnchorElement>("a[data-lang-switch]")].map((link) => ({
     link,
-    base: required(link.getAttribute("href"), "switch's href"),
+    base: required(link.getAttribute("href"), "a language switch's href"),
   }));
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
   /** Where each element is, under its anchor (`ids`, its own id by default). */
-  const places = (elements: readonly HTMLElement[], ids = elements.map((element) => element.id)) =>
+  const places = (elements: readonly HTMLElement[], ids: readonly string[] = elements.map((element) => element.id)) =>
     elements.map((element, index) => ({ id: ids[index] ?? element.id, top: element.getBoundingClientRect().top }));
 
   /** The anchor of where the reader is. */
@@ -59,7 +51,7 @@ const { locale, href } = Astro.props;
     const readingLine = viewportHeight / 2;
     // Reduced motion: the lines and the download call sit in the page flow.
     if (reducedMotion.matches) {
-      return anchorAtReadingLine([...places(lines, lineIds), ...places([download, ...features])], readingLine);
+      return anchorAtReadingLine([...places(lines, anchors.lineIds), ...places([download, ...features])], readingLine);
     }
     if (features.length > 0 && isPastNarrative(section.getBoundingClientRect().bottom, viewportHeight)) {
       return anchorAtReadingLine(places(features), readingLine);

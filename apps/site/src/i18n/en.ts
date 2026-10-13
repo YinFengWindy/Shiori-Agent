@@ -49,6 +49,12 @@ export const en: SiteDictionary = {
     text: "中",
     label: "Switch to Chinese (中文)",
   },
+  languagePrompt: {
+    label: "Language",
+    question: "View this site in English?",
+    switch: "Switch",
+    dismiss: "Dismiss",
+  },
   narrative: {
     speaker: "Yinfeng",
     lines: {
