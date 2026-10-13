@@ -1,0 +1,210 @@
+/*
+ * The reading pages (the blog #773, the changelog #792): a light reading
+ * column over the app's blue -> lavender -> pink wash (the body background,
+ * --gradient-app, from the desktop's styles.css), with gradient headings in
+ * the story type. blog.css and changelog.css add their own layouts on top.
+ * Same rule as site.css: the component rules use only the --site-reading-*
+ * names defined here, built from the app's primitives and semantic tokens.
+ *
+ * Contrast: headings use the showcase titles' strong gradient
+ * (--gradient-accent-strong, 4.9:1 / 5.0:1 on lavender-50, the wash's
+ * lightest stop; the reading column and cards are lighter still). Body text
+ * is --color-text-primary (15:1), secondary lines --color-text-secondary
+ * (8.2:1), dates and bylines --color-text-muted (5.5:1), links
+ * --color-text-accent (6.0:1), all on a fill at least 78% neutral-50.
+ */
+.site-reading {
+  --site-reading-title-fill: var(--gradient-accent-strong);
+  --site-reading-heading-size: clamp(2rem, 1.4rem + 2vw, 3rem);
+  --site-reading-title-size: clamp(1.75rem, 1.2rem + 1.8vw, 2.5rem);
+
+  --site-reading-paper: color-mix(in srgb, var(--neutral-50) 86%, transparent);
+  --site-reading-edge: color-mix(in srgb, var(--neutral-50) 90%, transparent);
+  --site-reading-shadow: var(--shadow-soft);
+  --site-reading-radius: var(--radius-xl);
+  --site-reading-blur: 12px;
+
+  --site-reading-ink: var(--color-text-primary);
+  --site-reading-ink-secondary: var(--color-text-secondary);
+  --site-reading-ink-muted: var(--color-text-muted);
+  --site-reading-link: var(--color-text-accent);
+  --site-reading-rule: var(--color-border-soft);
+  --site-reading-quote-rule: var(--lavender-300);
+  --site-reading-code-fill: var(--lavender-100);
+
+  /* Reading: a comfortable line (about 36 CJK characters) and leading. */
+  --site-reading-measure: 40rem;
+  --site-reading-text-size: 1.0625rem;
+  --site-reading-leading: 1.9;
+
+  min-height: calc(100vh - var(--site-header-height));
+  min-height: calc(100dvh - var(--site-header-height));
+  padding: clamp(2rem, 6dvh, 4rem) clamp(1rem, 4vw, 2rem) clamp(3rem, 10dvh, 6rem);
+  color: var(--site-reading-ink);
+}
+
+/* Headings in the story type, filled with the blue-pink gradient. */
+.site-reading-heading,
+.site-reading-title {
+  width: fit-content;
+  line-height: 1.3;
+  /* Room for the italic's overhang inside the clipped gradient. */
+  padding-inline-end: 0.15em;
+  background-image: var(--site-reading-title-fill);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+/* The page's own heading (the blog's, the changelog's). */
+.site-reading-heading {
+  margin-bottom: clamp(1.5rem, 4dvh, 2.5rem);
+  font-size: var(--site-reading-heading-size);
+}
+
+/* The title over one column: a post's, a release's. */
+.site-reading-title {
+  font-size: var(--site-reading-title-size);
+}
+
+/* ---------------------------------------------------------- column -- */
+.site-reading-column {
+  max-width: var(--site-reading-measure);
+  margin-inline: auto;
+  padding: clamp(1.5rem, 5vw, 3.25rem);
+  border: 1px solid var(--site-reading-edge);
+  border-radius: var(--site-reading-radius);
+  background: var(--site-reading-paper);
+  box-shadow: var(--site-reading-shadow);
+  backdrop-filter: blur(var(--site-reading-blur));
+}
+
+/* A column's day (and byline, or link) under its title. */
+.site-reading-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  color: var(--site-reading-ink-muted);
+  font-size: 0.9375rem;
+}
+
+/* ----------------------------------------------------------- prose -- */
+/* Written text (a post, release notes): plain body type, generous leading. */
+.site-prose {
+  font-size: var(--site-reading-text-size);
+  line-height: var(--site-reading-leading);
+}
+
+.site-prose > * + * {
+  margin-top: 1.1em;
+}
+
+.site-prose h2 {
+  margin-top: 2.2em;
+  font-family: var(--font-display);
+  font-size: 1.375rem;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.site-prose h3 {
+  margin-top: 1.8em;
+  font-size: 1.1875rem;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.site-prose h4,
+.site-prose h5,
+.site-prose h6 {
+  margin-top: 1.5em;
+  font-size: 1.0625rem;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+/* Text that opens the column needs no gap over it. */
+.site-prose > :first-child {
+  margin-top: 0;
+}
+
+.site-prose strong {
+  font-weight: 600;
+}
+
+.site-prose a {
+  color: var(--site-reading-link);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  overflow-wrap: anywhere;
+}
+
+.site-prose code {
+  padding: 0.1em 0.35em;
+  border-radius: var(--radius-sm);
+  background: var(--site-reading-code-fill);
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 0.9em;
+  overflow-wrap: anywhere;
+}
+
+.site-prose pre {
+  overflow-x: auto;
+  padding: 1em 1.25em;
+  border-radius: var(--radius-md);
+  background: var(--site-reading-code-fill);
+  line-height: 1.6;
+}
+
+.site-prose pre code {
+  padding: 0;
+  background: none;
+}
+
+.site-prose ul,
+.site-prose ol {
+  padding-inline-start: 1.5em;
+}
+
+.site-prose ul {
+  list-style: disc;
+}
+
+.site-prose ol {
+  list-style: decimal;
+}
+
+.site-prose li + li {
+  margin-top: 0.4em;
+}
+
+.site-prose blockquote {
+  padding-inline-start: 1em;
+  border-inline-start: 3px solid var(--site-reading-quote-rule);
+  color: var(--site-reading-ink-secondary);
+}
+
+.site-prose table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9375rem;
+  line-height: 1.6;
+}
+
+.site-prose th,
+.site-prose td {
+  padding: 0.5em 0.75em;
+  border-bottom: 1px solid var(--site-reading-rule);
+  text-align: start;
+}
+
+.site-prose th {
+  color: var(--site-reading-ink-secondary);
+  font-weight: 600;
+}
+
+.site-prose hr {
+  border: 0;
+  border-top: 1px solid var(--site-reading-rule);
+  margin-block: 2em;
+}

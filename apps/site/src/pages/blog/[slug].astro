@@ -13,6 +13,7 @@ import {
 } from "../../lib/blog";
 import { appIconImage } from "../../lib/siteAssets";
 import { SITE_NAME } from "../../lib/siteMeta";
+import "../../styles/reading.css";
 import "../../styles/blog.css";
 
 /**
@@ -64,11 +65,11 @@ const structuredDataJson = JSON.stringify(structuredData).replaceAll("<", "\\u00
     <script type="application/ld+json" set:html={structuredDataJson} />
   </Fragment>
   <SiteHeader mode="fixed" current="blog" />
-  <main class="site-blog">
-    <article class="site-post">
+  <main class="site-reading">
+    <article class="site-reading-column">
       <header class="site-post-head">
-        <h1 class="site-post-title site-story-type">{title}</h1>
-        <p class="site-post-meta">
+        <h1 class="site-reading-title site-story-type">{title}</h1>
+        <p class="site-reading-meta">
           <time datetime={published}>{formatPostDate(date)}</time>
           <span aria-hidden="true">·</span>
           <span>{BLOG_AUTHOR}</span>
@@ -86,7 +87,7 @@ const structuredDataJson = JSON.stringify(structuredData).replaceAll("<", "\\u00
           />
         )
       }
-      <div class="site-post-body">
+      <div class="site-prose">
         <Content />
       </div>
     </article>

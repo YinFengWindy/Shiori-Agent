@@ -1,77 +1,28 @@
 /*
- * The blog (#773, pages/blog/): the list of posts and the post page, on the
- * app's blue -> lavender -> pink wash (the body background, --gradient-app,
- * from the desktop's styles.css). Same rule as site.css: the component rules
- * below use only the --site-blog-* names defined here, built from the app's
- * primitives and semantic tokens.
+ * The blog (#773, pages/blog/): the list of posts and the post page. The
+ * page, its heading, the reading column and the post's text are the shared
+ * reading styles (reading.css); this adds the list's cards and the post's
+ * head and cover, from the --site-reading-* names and the card's own below.
  *
- * Contrast: headings use the showcase titles' strong gradient
- * (--gradient-accent-strong, 4.9:1 / 5.0:1 on lavender-50, the wash's
- * lightest stop; the reading column and cards are lighter still). Body text
- * is --color-text-primary (15:1), secondary lines --color-text-secondary
- * (8.2:1), dates and bylines --color-text-muted (5.5:1), links
- * --color-text-accent (6.0:1), all on a fill at least 78% neutral-50.
+ * Contrast: card titles are --color-text-primary, summaries
+ * --color-text-secondary and days --color-text-muted on a card at least 78%
+ * neutral-50 (the ratios in reading.css).
  */
-.site-blog {
-  --site-blog-title-fill: var(--gradient-accent-strong);
-  --site-blog-heading-size: clamp(2rem, 1.4rem + 2vw, 3rem);
-  --site-blog-post-title-size: clamp(1.75rem, 1.2rem + 1.8vw, 2.5rem);
-  --site-blog-card-title-size: 1.375rem;
-
-  --site-blog-paper: color-mix(in srgb, var(--neutral-50) 86%, transparent);
-  --site-blog-card-paper: color-mix(in srgb, var(--neutral-50) 78%, transparent);
-  --site-blog-card-paper-hover: color-mix(in srgb, var(--neutral-50) 92%, transparent);
-  --site-blog-edge: color-mix(in srgb, var(--neutral-50) 90%, transparent);
-  --site-blog-shadow: var(--shadow-soft);
-  --site-blog-shadow-hover: var(--shadow-panel);
-  --site-blog-radius: var(--radius-xl);
-  --site-blog-blur: 12px;
-
-  --site-blog-ink: var(--color-text-primary);
-  --site-blog-ink-secondary: var(--color-text-secondary);
-  --site-blog-ink-muted: var(--color-text-muted);
-  --site-blog-link: var(--color-text-accent);
-  --site-blog-rule: var(--color-border-soft);
-  --site-blog-quote-rule: var(--lavender-300);
-
-  /* Reading: a comfortable line (about 36 CJK characters) and leading. */
-  --site-blog-measure: 40rem;
-  --site-blog-text-size: 1.0625rem;
-  --site-blog-leading: 1.9;
-  --site-blog-lift: -2px;
-
-  min-height: calc(100vh - var(--site-header-height));
-  min-height: calc(100dvh - var(--site-header-height));
-  padding: clamp(2rem, 6dvh, 4rem) clamp(1rem, 4vw, 2rem) clamp(3rem, 10dvh, 6rem);
-  color: var(--site-blog-ink);
-}
-
-/* Headings in the story type, filled with the blue-pink gradient. */
-.site-blog-heading,
-.site-post-title {
-  width: fit-content;
-  line-height: 1.3;
-  /* Room for the italic's overhang inside the clipped gradient. */
-  padding-inline-end: 0.15em;
-  background-image: var(--site-blog-title-fill);
-  background-clip: text;
-  -webkit-background-clip: text;
-  color: transparent;
-}
 
 /* ------------------------------------------------------------- list -- */
 .site-blog-shelf {
+  --site-blog-card-title-size: 1.375rem;
+  --site-blog-card-paper: color-mix(in srgb, var(--neutral-50) 78%, transparent);
+  --site-blog-card-paper-hover: color-mix(in srgb, var(--neutral-50) 92%, transparent);
+  --site-blog-shadow-hover: var(--shadow-panel);
+  --site-blog-lift: -2px;
+
   max-width: 64rem;
   margin-inline: auto;
 }
 
-.site-blog-heading {
-  margin-bottom: clamp(1.5rem, 4dvh, 2.5rem);
-  font-size: var(--site-blog-heading-size);
-}
-
 .site-blog-empty {
-  color: var(--site-blog-ink-secondary);
+  color: var(--site-reading-ink-secondary);
   font-size: 1.25rem;
 }
 
@@ -91,11 +42,11 @@
   flex-direction: column;
   height: 100%;
   overflow: hidden;
-  border: 1px solid var(--site-blog-edge);
-  border-radius: var(--site-blog-radius);
+  border: 1px solid var(--site-reading-edge);
+  border-radius: var(--site-reading-radius);
   background: var(--site-blog-card-paper);
-  box-shadow: var(--site-blog-shadow);
-  backdrop-filter: blur(var(--site-blog-blur));
+  box-shadow: var(--site-reading-shadow);
+  backdrop-filter: blur(var(--site-reading-blur));
   transition:
     background-color var(--duration-fast) var(--ease-out-soft),
     box-shadow var(--duration-fast) var(--ease-out-soft),
@@ -132,7 +83,7 @@
 }
 
 .site-post-card-link {
-  color: var(--site-blog-ink);
+  color: var(--site-reading-ink);
   text-decoration: none;
 }
 
@@ -144,43 +95,21 @@
 }
 
 .site-post-card-date {
-  color: var(--site-blog-ink-muted);
+  color: var(--site-reading-ink-muted);
   font-size: 0.875rem;
 }
 
 .site-post-card-summary {
-  color: var(--site-blog-ink-secondary);
+  color: var(--site-reading-ink-secondary);
   line-height: 1.75;
 }
 
 /* ------------------------------------------------------------- post -- */
-.site-post {
-  max-width: var(--site-blog-measure);
-  margin-inline: auto;
-  padding: clamp(1.5rem, 5vw, 3.25rem);
-  border: 1px solid var(--site-blog-edge);
-  border-radius: var(--site-blog-radius);
-  background: var(--site-blog-paper);
-  box-shadow: var(--site-blog-shadow);
-  backdrop-filter: blur(var(--site-blog-blur));
-}
-
 .site-post-head {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
   margin-bottom: clamp(1.25rem, 3vw, 2rem);
-}
-
-.site-post-title {
-  font-size: var(--site-blog-post-title-size);
-}
-
-.site-post-meta {
-  display: flex;
-  gap: 0.5rem;
-  color: var(--site-blog-ink-muted);
-  font-size: 0.9375rem;
 }
 
 .site-post-cover {
@@ -189,90 +118,7 @@
   height: auto;
   margin-bottom: clamp(1.5rem, 4vw, 2.25rem);
   border-radius: var(--radius-lg);
-  box-shadow: var(--site-blog-shadow);
-}
-
-/* The post's own text: plain body type, generous leading. */
-.site-post-body {
-  font-size: var(--site-blog-text-size);
-  line-height: var(--site-blog-leading);
-}
-
-.site-post-body > * + * {
-  margin-top: 1.1em;
-}
-
-.site-post-body h2 {
-  margin-top: 2.2em;
-  font-family: var(--font-display);
-  font-size: 1.375rem;
-  font-weight: 600;
-  line-height: 1.5;
-}
-
-.site-post-body h3 {
-  margin-top: 1.8em;
-  font-size: 1.1875rem;
-  font-weight: 600;
-  line-height: 1.5;
-}
-
-.site-post-body strong {
-  font-weight: 600;
-}
-
-.site-post-body a {
-  color: var(--site-blog-link);
-  text-decoration: underline;
-  text-underline-offset: 0.2em;
-}
-
-.site-post-body ul,
-.site-post-body ol {
-  padding-inline-start: 1.5em;
-}
-
-.site-post-body ul {
-  list-style: disc;
-}
-
-.site-post-body ol {
-  list-style: decimal;
-}
-
-.site-post-body li + li {
-  margin-top: 0.4em;
-}
-
-.site-post-body blockquote {
-  padding-inline-start: 1em;
-  border-inline-start: 3px solid var(--site-blog-quote-rule);
-  color: var(--site-blog-ink-secondary);
-}
-
-.site-post-body table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.9375rem;
-  line-height: 1.6;
-}
-
-.site-post-body th,
-.site-post-body td {
-  padding: 0.5em 0.75em;
-  border-bottom: 1px solid var(--site-blog-rule);
-  text-align: start;
-}
-
-.site-post-body th {
-  color: var(--site-blog-ink-secondary);
-  font-weight: 600;
-}
-
-.site-post-body hr {
-  border: 0;
-  border-top: 1px solid var(--site-blog-rule);
-  margin-block: 2em;
+  box-shadow: var(--site-reading-shadow);
 }
 
 /* Reduced motion: hovering a card changes its colours, never its place. */

@@ -1,0 +1,37 @@
+/*
+ * The changelog (#792, pages/changelog.astro): the page heading over one
+ * reading column per release (reading.css), stacked on the column's width.
+ * Contrast as in reading.css; the 「GitHub 上查看」 link is the prose links'
+ * --color-text-accent on the column's paper.
+ */
+.site-changelog {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(1.25rem, 4vw, 2rem);
+  max-width: var(--site-reading-measure);
+  margin-inline: auto;
+}
+
+/* The heading's own margin is the list's gap here. */
+.site-changelog .site-reading-heading {
+  margin-bottom: 0;
+}
+
+/* Each release a full-width column of the list; a version link scrolls it clear of the sticky top bar. */
+.site-changelog-release {
+  width: 100%;
+  scroll-margin-top: calc(var(--site-header-height) + 1rem);
+}
+
+.site-changelog-head {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: clamp(1rem, 3vw, 1.75rem);
+}
+
+.site-changelog-source {
+  color: var(--site-reading-link);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}

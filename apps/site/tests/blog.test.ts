@@ -148,7 +148,7 @@ describe("blog posts as rendered (drafts-mode build)", () => {
       });
 
       it("shows the title, day, byline and the post itself as static HTML", () => {
-        assert.ok(html.includes(`<h1 class="site-post-title site-story-type">${post.title}</h1>`));
+        assert.ok(html.includes(`<h1 class="site-reading-title site-story-type">${post.title}</h1>`));
         assert.match(html, new RegExp(`<time datetime="${post.date}">\\d{4}年\\d{1,2}月\\d{1,2}日</time>`));
         assert.match(html, /<span>吟风<\/span>/);
         assert.ok(html.includes(`<p>${post.opening}</p>`), "the post's first paragraph is not in the page");

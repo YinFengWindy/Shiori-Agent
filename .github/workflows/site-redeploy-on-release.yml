@@ -1,0 +1,37 @@
+name: Site Redeploy On Release
+
+# The site's changelog (/changelog/, #792) is built from the GitHub releases
+# at build time, so a newly published release reaches it only through a new
+# deployment. This calls the Vercel project's Deploy Hook (repository secret
+# VERCEL_DEPLOY_HOOK), which builds the production branch again. The Vercel
+# ignore step (apps/site/scripts/vercel-ignore-build.sh) lets that build
+# through even when the branch's last commit did not touch the site.
+#
+# `release: published` covers releases published by a person (the tag
+# releases' drafts). The daily release is published with GITHUB_TOKEN, whose
+# events start no workflow, so windows-release.yml calls this one directly.
+on:
+  release:
+    types: [published]
+  workflow_call:
+    secrets:
+      VERCEL_DEPLOY_HOOK:
+        required: true
+
+# The hook URL is the only credential; the job needs no repository access.
+permissions: {}
+
+jobs:
+  redeploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Trigger the Vercel deploy hook
+        env:
+          HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo "::error::Repository secret VERCEL_DEPLOY_HOOK is not set"
+            exit 1
+          fi
+          curl -fsS -o /dev/null -X POST "$HOOK"
