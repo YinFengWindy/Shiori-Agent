@@ -102,19 +102,34 @@ describe("home page HTML", () => {
     assert.ok(body.indexOf("site-loader-progress") < body.indexOf("<main>"), "the loader must come before <main>");
   });
 
-  it("paints 吟风's silhouette from an inline placeholder, in the narrative figure's box", () => {
-    const figure = html.match(/<div id="site-loader".*?<div class="site-narrative-figure mascot-stack"><img src="([^"]+)"[^>]*class="mascot-layer site-loader-silhouette"/s);
-    assert.ok(figure, "the loader's silhouette is not an img inside a .site-narrative-figure");
-    const [, src] = figure;
-    assert.match(src, /^data:image\/webp;base64,[A-Za-z0-9+/]+=*$/);
-    // A first-frame placeholder: a couple of KB at most, not a sprite (~166 KB).
-    assert.ok(src.length <= 2048, `placeholder data URI is ${src.length} characters`);
+  it("shows 吟风's illustration over the wash, preloaded from the head as the page's first picture", () => {
+    const art = html.match(/<div id="site-loader"[^>]*><div class="site-loader-wash"><\/div><img class="site-loader-art" src="([^"]+)"[^>]*>/);
+    assert.ok(art, "no illustration right after the loader's wash");
+    const [tag, src] = art;
+    assert.match(src, /^\/_astro\/cg-6\.[\w-]+\.webp$/);
+    assert.ok(existsSync(resolve(dist, src.slice(1))), `${src} is not in the build output`);
+    assert.match(tag, /fetchpriority="high"/);
+    const head = html.slice(0, html.indexOf("</head>"));
+    const preload = head.indexOf(`<link rel="preload" as="image" href="${src}" fetchpriority="high">`);
+    assert.ok(preload >= 0, "the illustration is not preloaded from the head");
+    assert.ok(preload < head.indexOf("<style>"), "the preload must come before the inlined stylesheet");
+    assert.ok(head.indexOf("<img") < 0 && !head.slice(0, preload).includes('rel="preload"'), "it must be the first preload");
+    // Crisp: no blurred inline placeholders any more.
+    assert.doesNotMatch(html, /data:image\//);
   });
 
-  it("shows a progress bar with a percentage, starting at 0%", () => {
+  it("drifts a few brand petals over the illustration, and holds 吟风 and the dialogue box back until the reveal", () => {
+    const petals = html.match(/<div class="site-loader-petals">(.*?)<\/div>/s)?.[1] ?? "";
+    assert.ok([...petals.matchAll(/<svg class="site-loader-petal"/g)].length >= 5);
+    const styles = [...html.matchAll(/<style>(.*?)<\/style>/gs)].map((match) => match[1]).join("\n");
+    assert.match(styles, /html\[data-site-loader=loading\] \.site-narrative-figure\{[^}]*opacity:0/);
+    assert.match(styles, /html\[data-site-loader=loading\] \.site-dialogue\{[^}]*opacity:0/);
+  });
+
+  it("shows a progress line whose head carries a brand sparkle and the percentage, starting at 0%", () => {
     assert.match(
       html,
-      /<div class="site-loader-progress"><div class="site-loader-track"><div class="site-loader-fill"><\/div><\/div><span [^>]*data-loader-percent[^>]*>0%<\/span><\/div>/,
+      /<div class="site-loader-progress"><div class="site-loader-track"><div class="site-loader-fill"><\/div><div class="site-loader-head"><svg class="site-loader-star" viewBox="4 4 16 16">.*?<\/svg><span [^>]*data-loader-percent[^>]*>0%<\/span><\/div><\/div><\/div>/s,
     );
   });
 
@@ -163,8 +178,11 @@ describe("home page HTML", () => {
     assert.match(styles, /@keyframes site-loader-timeout\{to\{[^}]*visibility:hidden/);
     assert.match(styles, /@media \(scripting:none\)\{\.site-loader,img\[data-first-screen\]\{display:none\}\}/);
     assert.match(styles, /\.site-loader-percent\{[^}]*font-variant-numeric:tabular-nums/);
-    // Reduced motion: the bar jumps in steps instead of easing.
-    assert.match(styles, /@media \(prefers-reduced-motion:reduce\)[^{]*\{[^@]*\.site-loader-fill\{transition:none\}/);
+    // Reduced motion: the bar jumps in steps and no loop runs (no sweep, twinkle, flash or falling petals).
+    const reduced = styles.match(/@media \(prefers-reduced-motion:reduce\),\(scripting:none\)\{(.*?)\}\}/s)?.[1] ?? "";
+    assert.match(reduced, /\.site-loader-fill,\.site-loader-head\{transition:none\}/);
+    assert.match(reduced, /\.site-loader-fill:after,\.site-loader-petals\{display:none\}/);
+    assert.match(reduced, /\.site-loader-star,\.site-loader\[data-leaving\] \.site-loader-star\{animation:none\}/);
   });
 
   it("drives the loader from an inline script, not a bundle that may still be downloading", () => {
