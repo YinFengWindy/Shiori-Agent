@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { createReleaseGitHub } from "./daily-release-github.mjs";
+import { dailyPlanMarker, readDailyPlan } from "./daily-release-policy.mjs";
 
 function client(fetchImpl) {
   return createReleaseGitHub({ token: "test-token", repository: "owner/repo", fetchImpl });
@@ -38,10 +39,18 @@ test("draft, notes, tag and promotion APIs carry the pinned source and stable fl
   const calls = [];
   const github = client(async (url, options) => {
     calls.push({ url, method: options.method, body: options.body && JSON.parse(options.body) });
-    return Response.json(url.endsWith("generate-notes") ? { body: "Changes" } : { id: 7 });
+    return Response.json(url.endsWith("generate-notes") ? { body: generated } : { id: 7 });
   });
+  const generated = [
+    "## What's Changed",
+    "* fix(roles): 修复角色卡导入误报工作区越界 (#776) by @YinFengWindy in https://github.com/owner/repo/pull/777",
+    "",
+    "",
+    "**Full Changelog**: https://github.com/owner/repo/compare/v0.5.0...v0.5.1",
+  ].join("\n");
   const plan = { tag: "v0.5.1", sha: "a".repeat(40), baselineTag: "v0.5.0" };
-  await github.createDraft(plan, "provenance");
+  const marker = dailyPlanMarker(plan);
+  await github.createDraft(plan, marker);
   await github.createTag(plan);
   await github.publish(7);
   assert.deepEqual(calls.map((call) => call.method), ["POST", "POST", "POST", "PATCH"]);
@@ -49,7 +58,10 @@ test("draft, notes, tag and promotion APIs carry the pinned source and stable fl
   assert.equal(calls[0].body.target_commitish, plan.sha);
   assert.equal(calls[1].body.target_commitish, plan.sha);
   assert.equal(calls[1].body.draft, true);
-  assert.equal(calls[1].body.body, "provenance\n\nChanges");
+  const body = calls[1].body.body;
+  assert.equal(body, `${marker}\n\n## 修复\n\n- 修复角色卡导入误报工作区越界（#777）`);
+  assert.deepEqual(readDailyPlan({ body }), plan);
+  for (const english of ["What's Changed", "by @", "Full Changelog"]) assert.ok(!body.includes(english));
   assert.deepEqual(calls[2].body, { ref: "refs/tags/v0.5.1", sha: plan.sha });
   assert.deepEqual(calls[3].body, { draft: false, prerelease: false, make_latest: "true" });
 });

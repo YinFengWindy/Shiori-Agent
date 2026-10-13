@@ -20,6 +20,12 @@
 私有草稿、上传所有顶层制品，并核对 GitHub 返回的大小和 SHA256。发布前再次
 检查正式基线、草稿归属和 tag SHA，最后公开为 stable / latest Release。
 
+Release 说明由 `daily-release-notes.mjs` 把 GitHub `generate-notes` 的 PR 列表
+转成中文：按 PR 标题类型分为「新增」（feat）、「修复」（fix）、「改进」
+（style / refactor / perf），每条只保留描述与 PR 编号；`site` scope、其他类型和
+无 Conventional Commit 前缀的标题不列出，没有可列条目时写一句内部维护说明。
+隐藏来源标记始终位于说明开头。
+
 Windows installer 使用 `${productName}-Setup-${version}.${ext}` 命名，例如
 `Shiori-Setup-0.5.1.exe`；blockmap、更新元数据和校验清单沿用同一个名称。
 自动发布在上传前拒绝含空格或其他不安全字符的文件名，避免 GitHub 重命名

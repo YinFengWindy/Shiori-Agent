@@ -1,4 +1,5 @@
 import { createReadStream } from "node:fs";
+import { chineseReleaseNotes } from "./daily-release-notes.mjs";
 
 /** Authenticated GitHub boundary with explicit pagination and fail-fast errors. */
 export function createReleaseGitHub({ token, repository, fetchImpl = fetch }) {
@@ -42,7 +43,8 @@ export function createReleaseGitHub({ token, repository, fetchImpl = fetch }) {
       });
       return api("POST", "releases", {
         tag_name: plan.tag, target_commitish: plan.sha, name: plan.tag,
-        body: `${body}\n\n${notes.body}`, draft: true, prerelease: false,
+        // The provenance marker stays first; only the generated changelog is localized.
+        body: `${body}\n\n${chineseReleaseNotes(notes.body)}`, draft: true, prerelease: false,
       });
     },
     createTag: (plan) => api("POST", "git/refs", { ref: `refs/tags/${plan.tag}`, sha: plan.sha }),
