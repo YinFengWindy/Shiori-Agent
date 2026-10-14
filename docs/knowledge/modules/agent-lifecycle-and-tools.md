@@ -13,6 +13,8 @@ source_paths:
   - apps/backend/agent/mcp/
   - apps/backend/core/compaction.py
   - plugins/screen_perception/backend/
+  - plugins/herdr/backend/
+  - packages/sdk/python/shiori_sdk/background_results.py
 related:
   - memory.md
   - proactive-and-drift.md
@@ -38,6 +40,10 @@ related:
 ## 插件与 MCP
 
 插件包位于顶层 `plugins/<id>/`（`manifest.yaml` + `backend/`、`ui/` 等子目录），对外 API 由 `packages/sdk/python/shiori_sdk/` 提供。宿主侧 `apps/backend/agent/plugin_host/` 的 `PluginKernel` 负责插件发现与准入、manifest 解析、依赖加载、setup 装配、失败回滚和卸载；能力（工具、渠道、账号、后台任务、bot 命令等）经 capabilities 与作用域服务暴露给插件。插件的 pre-tool handler 由 `plugin_host/tool_hooks.py` 的 `PluginToolHook` 适配到统一 ToolExecutor 接口。`apps/backend/agent/mcp/registry.py`（`McpServerRegistry`，持久化到 `mcp_servers.json`）与 `client.py` 管理 MCP server 配置和 stdio 连接，并把远端工具同步到 ToolRegistry；`manage_tools.py` 提供 `mcp_add` / `mcp_remove` / `mcp_list` 工具。
+
+`plugins/herdr/` 的 `herdr_start_task` 把完整需求写入 UTF-8 文件，连接明确的本机 Herdr session（CLI 和服务端均要求 >=0.9.4），在独立 worktree 以 Full Access 启动 Codex 或 Claude Code。`TaskService` 保留本进程任务记录；`delivery.py` 校验本回合结果、实际验证命令、干净提交和开放 Draft PR 的 head SHA。CLI 超时不会重发任务，Herdr 的 idle/done 不等于业务完成；工作中的终端只读取可见屏幕，日志读取失败不终止任务追踪。
+
+通用 `background_results` capability 在真实用户工具回合捕获原角色、线程、发送者与渠道投递元数据；`HostBackgroundResults` 在角色串行 gate 内重新检查会话和绑定，交给 `AgentLoop.process_background_result` 经原角色回报。结果 ID 在执行前保留以防模糊失败后的重复投递；结果回合不能再次捕获用户授权，也不触发新用户回合的副作用。此接口不提供重启恢复，Herdr 任务查询/继续/取消与 Dashboard 由后续任务承接。
 
 ## 修改影响
 

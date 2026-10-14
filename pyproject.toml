@@ -25,6 +25,7 @@ dev = [
     "qrcode>=8.2",
     "rich>=15.0.0",
     "shiori-host-testing==0.1.0",
+    "shiori-plugin-herdr[test]==0.1.0",
     "black>=26.0.0",
     "ruff>=0.15",
     "pyright>=1.1.403",
@@ -37,3 +38,5 @@ dev = [
 shiori-host-testing = { path = "packages/shiori-host-testing", editable = true }
 shiori-sdk = { path = "packages/sdk", editable = true }
 shiori-plugin-default-memory = { path = "plugins/default_memory", editable = true }
+
+shiori-plugin-herdr = { path = "plugins/herdr", editable = true }

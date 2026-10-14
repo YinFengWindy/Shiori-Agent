@@ -85,7 +85,11 @@ class TurnState:
         ``is_user_authored`` 判定。``omit_user_turn`` 只表示用户消息已另行落库
         （桌面发送就是这样），不能用来区分来信是谁。
         """
-        if (self.msg.metadata or {}).get("role_work_kind") == "scheduled_job":
+        metadata = self.msg.metadata or {}
+        if (
+            metadata.get("role_work_kind") == "scheduled_job"
+            or metadata.get("source") == "background_result"
+        ):
             return False
         return self.is_user_authored()
 

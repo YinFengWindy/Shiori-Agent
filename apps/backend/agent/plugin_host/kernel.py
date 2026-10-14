@@ -30,6 +30,7 @@ from core.roles.role_runtime import RoleRuntimeRegistry
 from agent.provider import LLMProvider
 from shiori_sdk.http import HttpClient
 from shiori_sdk.external_turns import ExternalTurns
+from shiori_sdk.background_results import BackgroundResults
 from agent.plugin_host.avatars import AvatarsCapability
 from agent.plugin_host.config import PluginConfig
 from agent.plugin_host.storage import PluginStorage
@@ -157,6 +158,7 @@ class HostServices:
     role_runtime_registry: RoleRuntimeRegistry | None = None
     # external_turns capability 的唯一实现，由 bootstrap 以本代 AgentLoop 装配（#721）。
     external_turns: ExternalTurns | None = None
+    background_results: BackgroundResults | None = None
     scene_observations: SceneObservationDemand = field(
         default_factory=SceneObservationDemand
     )
@@ -570,6 +572,9 @@ class PluginKernel:
             external_turns=(
                 services.external_turns if "external_turns" in grants else None
             ),
+            background_results=(
+                services.background_results if "background_results" in grants else None
+            ),
             tools=(
                 ToolsCapability(
                     services.tool_registry,
@@ -670,6 +675,7 @@ class PluginKernel:
             "models": lambda: None,
             "sessions": lambda: None,
             "external_turns": lambda: None,
+            "background_results": lambda: None,
             "http": lambda: None,
             "resources": lambda: None,
             "processes": lambda: None,

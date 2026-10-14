@@ -366,6 +366,30 @@ class _ProcessingMixin:
             name=f"agent_loop_external:{context.role_id}",
         )
 
+    async def process_background_result(
+        self,
+        context: RoleExecutionContext,
+        admit: Callable[[], InboundMessage],
+    ) -> None:
+        """Report on the original thread, under its role gate, without user intake."""
+        registry = self._role_runtime_registry
+        if registry is None:
+            raise RuntimeError("RoleRuntimeRegistry 未配置")
+
+        async def operation() -> None:
+            message = admit()
+            await self._process(
+                message, session_key=message.session_key, dispatch_outbound=True
+            )
+
+        async def detached_turn() -> None:
+            await registry.dispatch_passive_turn(context, operation)
+
+        await asyncio.create_task(
+            run_turn_task(detached_turn, detached=True),
+            name=f"agent_loop_background_result:{context.role_id}",
+        )
+
     def _ensure_direct_role_context(
         self,
         metadata: dict[str, object],

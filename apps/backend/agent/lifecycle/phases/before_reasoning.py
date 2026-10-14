@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, TypeAlias, cast
 
 from agent.core.passive_support import predict_current_user_source_ref
 from agent.core.types import ContextRequest
+from agent.tools.turn_origin import set_tool_origin
 from agent.lifecycle.phase import (
     PhaseFrame,
     PhaseModule,
@@ -57,6 +58,7 @@ class _SyncToolContextModule:
             state.msg.metadata if isinstance(state.msg.metadata, dict) else {}
         )
         source = MessageSource.from_inbound(state.msg)
+        set_tool_origin(state.msg)
         self._tools.set_context(
             channel=before_turn.channel,
             chat_id=before_turn.chat_id,
