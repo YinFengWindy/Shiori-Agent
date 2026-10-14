@@ -1,8 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
 import { describe, it } from "node:test";
-import { fileURLToPath } from "node:url";
 import {
   ORIGIN,
   assertDescription,
@@ -20,6 +17,7 @@ import {
   topBarHomeHref,
   visibleTextOf,
 } from "./support/builtSite";
+import { publishedPosts, untranslatedPosts } from "./support/sourcePosts";
 
 /*
  * The English blog and changelog (#807) as built: the translated posts
@@ -28,44 +26,10 @@ import {
  * covered by blog.test.ts, the home pages by i18nBuild.test.ts.
  */
 
-const contentDir = resolve(dirname(fileURLToPath(import.meta.url)), "..", "src", "content");
-
-interface SourcePost {
-  readonly slug: string;
-  readonly title: string;
-  readonly description: string;
-  readonly date: string;
-  readonly draft: boolean;
-  readonly sections: number;
-}
-
-/** The posts of one language as written, read straight from their frontmatter (values may be quoted). */
-function sourcePosts(dir: string): SourcePost[] {
-  return readdirSync(resolve(contentDir, dir))
-    .filter((file) => file.endsWith(".mdx"))
-    .map((file) => {
-      const text = readFileSync(resolve(contentDir, dir, file), "utf8").replaceAll("\r\n", "\n");
-      const [, frontmatter = "", body = ""] = text.match(/^---\n(.*?)\n---\n(.*)$/s) ?? [];
-      const field = (key: string) => {
-        const value = frontmatter.match(new RegExp(`^${key}: (.+)$`, "m"))?.[1];
-        assert.ok(value, `${dir}/${file} has no ${key}`);
-        return value.replace(/^"(.*)"$/, "$1");
-      };
-      return {
-        slug: file.replace(/\.mdx$/, ""),
-        title: field("title"),
-        description: field("description"),
-        date: field("date"),
-        draft: /^draft: true$/m.test(frontmatter),
-        sections: body.split("\n").filter((line) => line.startsWith("## ")).length,
-      };
-    });
-}
-
-const englishPosts = sourcePosts("blog-en").filter((post) => !post.draft);
-const chinesePosts = sourcePosts("blog").filter((post) => !post.draft);
+const englishPosts = publishedPosts("blog-en");
+const chinesePosts = publishedPosts("blog");
 const translated = new Set(englishPosts.map((post) => post.slug));
-const untranslated = chinesePosts.filter((post) => !translated.has(post.slug));
+const untranslated = untranslatedPosts();
 const enPostUrl = (slug: string) => `${ORIGIN}/en/blog/${slug}/`;
 const zhPostUrl = (slug: string) => `${ORIGIN}/blog/${slug}/`;
 /** The hreflang links of a page in both languages. */
@@ -99,6 +63,14 @@ function strayChinese(html: string) {
     .filter((word) => /\p{Script=Han}/u.test(word) && word !== "中");
 }
 
+/** The links within the site in a post's prose: where each leads, and its text. */
+function siteLinksOf(html: string) {
+  const start = html.indexOf('<div class="site-prose">');
+  assert.ok(start >= 0, "the page has no prose");
+  const prose = html.slice(start, html.indexOf("</article>"));
+  return [...prose.matchAll(/<a href="(\/[^"]*)"[^>]*>(.*?)<\/a>/gs)].map(([, href, label]) => ({ href, label: label.replace(/<[^>]+>/g, "") }));
+}
+
 describe("strayChinese", () => {
   it("lets a quoted interface name through only with its English meaning right after it", () => {
     const page = (text: string) => `<body><p>${text}</p></body>`;
@@ -109,10 +81,21 @@ describe("strayChinese", () => {
   });
 });
 
-describe("English posts as written (#807)", () => {
-  it("translates three published Chinese posts, under their slugs", () => {
-    assert.deepEqual([...translated].sort(), ["ai-companion-qq-telegram", "ai-companion-vs-chatbot", "ai-desktop-pet-voice"]);
-    for (const post of englishPosts) assert.ok(existsSync(resolve(contentDir, "blog", `${post.slug}.mdx`)), `${post.slug} has no Chinese original`);
+describe("English posts as written (#807, #811)", () => {
+  it("translates six published Chinese posts, under their slugs, dated as their originals", () => {
+    assert.deepEqual([...translated].sort(), [
+      "affection",
+      "ai-companion-qq-telegram",
+      "ai-companion-vs-chatbot",
+      "ai-desktop-pet-voice",
+      "come-find-you",
+      "long-term-memory",
+    ]);
+    for (const post of englishPosts) {
+      const original = chinesePosts.find((chinese) => chinese.slug === post.slug);
+      assert.ok(original, `${post.slug} has no published Chinese original`);
+      assert.equal(post.date, original.date, `${post.slug} is not dated as its original`);
+    }
   });
 });
 
@@ -122,7 +105,7 @@ describe("English blog list (#807)", () => {
   it("lists the translated posts only, newest first, each linked to its English page", () => {
     const listed = [...html.matchAll(/<a href="\/en\/blog\/([^"/]+)\/" class="site-post-card-link">/g)].map((match) => match[1]);
     assert.deepEqual(listed.sort(), [...translated].sort());
-    assert.equal(listed.length, 3);
+    assert.equal(listed.length, englishPosts.length);
     for (const post of englishPosts) {
       assert.ok(html.includes(`<p class="site-post-card-summary">${asHtmlText(post.description)}</p>`), `${post.slug} card has no summary`);
     }
@@ -206,10 +189,7 @@ describe("English posts as rendered (#807)", () => {
       });
 
       it("links within the site in English where an English page exists, and says so where a link leads to a Chinese page", () => {
-        const prose = html.slice(html.indexOf('<div class="site-prose">'), html.indexOf("</article>"));
-        const links = [...prose.matchAll(/<a href="(\/[^"]*)"[^>]*>(.*?)<\/a>/gs)].map(([, href, label]) => ({ href, label: label.replace(/<[^>]+>/g, "") }));
-        assert.ok(links.length > 0);
-        for (const { href, label } of links) {
+        for (const { href, label } of siteLinksOf(html)) {
           const path = href.replace(/#.*$/, "");
           assert.ok(dist.has(distPathOf(`${ORIGIN}${path}`)), `${href} leads nowhere`);
           if (path.startsWith("/en/")) continue;
@@ -225,8 +205,13 @@ describe("English posts as rendered (#807)", () => {
     });
   }
 
-  it("claims no English alternate for an untranslated Chinese post, whose switch leads to the English blog", () => {
-    assert.ok(untranslated.length > 0);
+  it("finds the site links in the prose of the posts that have some", () => {
+    // Not every post links within the site (the three of #811 do not), but some must, or the check above proves nothing.
+    assert.ok(englishPosts.some((post) => siteLinksOf(dist.read(`en/blog/${post.slug}/index.html`)).length > 0));
+  });
+
+  // Every published post is translated as of #811: this checks the next Chinese post published before its translation.
+  it("claims no English alternate for an untranslated Chinese post, whose switch leads to the English blog", { skip: untranslated.length === 0 && "every published post is translated" }, () => {
     for (const post of untranslated) {
       const html = dist.read(`blog/${post.slug}/index.html`);
       assert.deepEqual(hreflangsOf(html), [], post.slug);
@@ -244,7 +229,7 @@ describe("English feed (#807)", () => {
     assert.match(feed, /<channel><title>Shiori Blog<\/title><description>[^<]+<\/description><link>https:\/\/www\.windchant\.online\/en\/blog\/<\/link><language>en<\/language>/);
     const links = [...feed.matchAll(/<item><title>[^<]*<\/title><link>([^<]*)<\/link>/g)].map((match) => match[1]);
     assert.deepEqual(links.sort(), [...translated].sort().map(enPostUrl));
-    assert.equal([...feed.matchAll(/<dc:creator>Yinfeng<\/dc:creator>/g)].length, 3);
+    assert.equal([...feed.matchAll(/<dc:creator>Yinfeng<\/dc:creator>/g)].length, englishPosts.length);
   });
 
   it("leaves the Chinese feed Chinese", () => {

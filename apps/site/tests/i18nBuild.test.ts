@@ -21,6 +21,7 @@ import {
   visibleTextOf,
 } from "./support/builtSite";
 import { runLoaderGate } from "./support/loaderGate";
+import { untranslatedPosts } from "./support/sourcePosts";
 
 /*
  * The site in two languages (#806), as the build emits it: the English home
@@ -62,6 +63,16 @@ function asHtmlText(text: string) {
 
 /** Chinese characters. */
 const CJK = /\p{Script=Han}/u;
+
+/**
+ * A published Chinese post without its English version (#807), if one is
+ * left: none is while every post is translated (#811), and the checks of
+ * such a page skip until the next post is published before its translation.
+ */
+const chineseOnlyPost = untranslatedPosts()[0]?.slug;
+const noChineseOnlyPost = chineseOnlyPost === undefined && "every published post is translated";
+/** Where the Chinese-only post's switch and prompt lead, if there is one: the English blog. */
+const chineseOnlyPostTarget = chineseOnlyPost === undefined ? {} : { [`blog/${chineseOnlyPost}/index.html`]: "/en/blog/" };
 
 describe("English home page (#806)", () => {
   it("declares English and carries the English title and description with the English search words", () => {
@@ -197,25 +208,29 @@ describe("language pairing (#806)", () => {
     assert.equal(metaContent(zhHome, "property", "og:locale:alternate"), "en_US");
   });
 
-  it("claims no alternate for a page in Chinese only (a post without its English version, #807)", () => {
-    for (const page of ["blog/affection/index.html"]) {
-      const html = site.read(page);
-      assert.deepEqual(hreflangsOf(html), [], page);
-      assert.doesNotMatch(html, /og:locale:alternate/, page);
-      assert.match(html, /<html lang="zh-CN">/, page);
-    }
+  it("claims no alternate for a page in Chinese only (a post without its English version, #807)", { skip: noChineseOnlyPost }, () => {
+    const html = site.read(`blog/${chineseOnlyPost}/index.html`);
+    assert.deepEqual(hreflangsOf(html), []);
+    assert.doesNotMatch(html, /og:locale:alternate/);
+    assert.match(html, /<html lang="zh-CN">/);
   });
 
-  it("lists both home pages in the sitemap, each with the pair and x-default as alternates; single-language pages without", () => {
-    const sitemap = site.read(distPathOf(`${ORIGIN}/sitemap-0.xml`));
-    const urls = [...sitemap.matchAll(/<url>(.*?)<\/url>/gs)].map(([, url]) => ({
+  /** The sitemap's URLs, each with its alternates. */
+  const sitemapUrls = () =>
+    [...site.read(distPathOf(`${ORIGIN}/sitemap-0.xml`)).matchAll(/<url>(.*?)<\/url>/gs)].map(([, url]) => ({
       loc: url.match(/<loc>([^<]+)<\/loc>/)?.[1],
       links: [...url.matchAll(/<xhtml:link rel="alternate" hreflang="([^"]+)" href="([^"]+)"\/>/g)].map(([, hreflang, href]) => ({ hreflang, href })),
     }));
+
+  it("lists both home pages in the sitemap, each with the pair and x-default as alternates", () => {
+    const urls = sitemapUrls();
     for (const home of [`${ORIGIN}/`, `${ORIGIN}/en/`]) {
       assert.deepEqual(urls.find((url) => url.loc === home)?.links, pair, `${home} alternates`);
     }
-    assert.deepEqual(urls.find((url) => url.loc === `${ORIGIN}/blog/affection/`)?.links, []);
+  });
+
+  it("lists a page in Chinese only in the sitemap without alternates", { skip: noChineseOnlyPost }, () => {
+    assert.deepEqual(sitemapUrls().find((url) => url.loc === `${ORIGIN}/blog/${chineseOnlyPost}/`)?.links, []);
   });
 });
 
@@ -293,7 +308,8 @@ describe("language switch (#806)", () => {
       "blog/index.html": "/en/blog/",
       "changelog/index.html": "/en/changelog/",
       "blog/ai-companion-vs-chatbot/index.html": "/en/blog/ai-companion-vs-chatbot/",
-      "blog/affection/index.html": "/en/blog/",
+      "blog/affection/index.html": "/en/blog/affection/",
+      ...chineseOnlyPostTarget,
     };
     for (const [page, href] of Object.entries(targets)) {
       const switches = languageSwitchesOf(site.read(page));
@@ -311,7 +327,13 @@ describe("English prompt (#806)", () => {
   const promptOf = (html: string) => html.match(/<aside class="site-lang-prompt"[^>]*>.*?<\/aside>/s)?.[0];
 
   it("ships hidden on every Chinese page, in English, with Switch to the English page and Dismiss", () => {
-    const targets = { "index.html": "/en/", "blog/index.html": "/en/blog/", "changelog/index.html": "/en/changelog/", "blog/affection/index.html": "/en/blog/" };
+    const targets = {
+      "index.html": "/en/",
+      "blog/index.html": "/en/blog/",
+      "changelog/index.html": "/en/changelog/",
+      "blog/affection/index.html": "/en/blog/affection/",
+      ...chineseOnlyPostTarget,
+    };
     for (const [page, href] of Object.entries(targets)) {
       const prompt = promptOf(site.read(page));
       assert.ok(prompt, `${page} has no prompt`);

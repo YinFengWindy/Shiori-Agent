@@ -35,7 +35,7 @@
     "scripts/sdk_repository_layout.py",
     "scripts/sdk_module_names.py",
     "scripts/commands.py",
-    "apps/site-video/scripts/showcase_workspace.py",
+    "apps/site/scripts/showcase_workspace.py",
     "scripts/wheelhouse.py",
     "scripts/isolation_probe.py",
     "scripts/verify_host_distribution.py",

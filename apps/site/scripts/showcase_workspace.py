@@ -1,6 +1,6 @@
 """Builds the isolated desktop workspace one showcase still is captured from.
 
-``scripts/stills.ts`` runs this with the repository ``.venv`` once per
+``stills.ts`` (beside this file) runs this with the repository ``.venv`` once per
 still, then opens the real desktop app on the workspace it wrote. The role is
 copied from a real workspace (``--source``): only its card and the pictures
 the card references — name, profile, avatar, illustrations and the mood

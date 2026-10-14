@@ -5,8 +5,8 @@
  * committed files; run this (`pnpm run site:stills`) after the app's look
  * changes and commit the output.
  *
- * Each still gets a fresh, isolated workspace from scripts/showcase_workspace.py
- * (run with the repository .venv): a role card and its pictures copied from a
+ * Each still gets a fresh, isolated workspace from showcase_workspace.py
+ * beside this script (run with the repository .venv): a role card and its pictures copied from a
  * real workspace, plus demo chats, memories, affection and channel accounts.
  * The built desktop app (`pnpm --filter shiori-desktop build`) then opens on
  * it in Electron, driven by Playwright, with its own home and user-data
@@ -28,8 +28,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { _electron, type Page } from "playwright";
 import sharp from "sharp";
-import { SHOWCASE_STILL_MAX_BYTES, type ShowcaseClipId } from "../../site/src/content/showcase";
-import { clipIdsFromArgs } from "./clipArgs";
+import { SHOWCASE_CLIP_IDS, SHOWCASE_STILL_MAX_BYTES, type ShowcaseClipId } from "../src/content/showcase";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = resolve(here, "../../..");
@@ -143,6 +142,17 @@ async function assertWhole(page: Page, id: ShowcaseClipId, text: string) {
   if (!shown) throw new Error(`${id}: 「${text}」 is cut off or covered`);
 }
 
+/**
+ * The still ids asked for on the command line (every still when none is
+ * given); an unknown id is an error.
+ */
+function stillIdsFromArgs(args: readonly string[]): readonly ShowcaseClipId[] {
+  const isClipId = (id: string): id is ShowcaseClipId => (SHOWCASE_CLIP_IDS as readonly string[]).includes(id);
+  const unknown = args.filter((id) => !isClipId(id));
+  if (unknown.length > 0) throw new Error(`unknown still id: ${unknown.join(", ")}`);
+  return args.length > 0 ? args.filter(isClipId) : SHOWCASE_CLIP_IDS;
+}
+
 function python() {
   const venv = resolve(repo, ".venv");
   return process.platform === "win32" ? join(venv, "Scripts", "python.exe") : join(venv, "bin", "python");
@@ -202,7 +212,7 @@ if (!existsSync(join(source, "roles", "roles.json"))) {
   throw new Error(`no workspace with roles at ${source}: set SHIORI_SHOWCASE_SOURCE`);
 }
 
-const ids = clipIdsFromArgs(process.argv.slice(2));
+const ids = stillIdsFromArgs(process.argv.slice(2));
 mkdirSync(outDir, { recursive: true });
 const scratch = mkdtempSync(join(tmpdir(), "shiori-stills-"));
 try {
