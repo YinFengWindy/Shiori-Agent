@@ -13,6 +13,7 @@ from .tools import ToolsCapability
 from .sessions import PluginSessions
 from .external_turns import ExternalTurns
 from .background_results import BackgroundResults
+from .process_resources import PluginProcessResources
 from .tool_hooks import ToolHooksCapability
 from .storage import KeyValueStore
 from pathlib import Path
@@ -49,6 +50,8 @@ class ServicePluginContext(PluginRuntimeContext, Protocol):
     def external_turns(self) -> ExternalTurns: ...
     @property
     def background_results(self) -> BackgroundResults: ...
+    @property
+    def process_resources(self) -> PluginProcessResources: ...
     @property
     def tools(self) -> ToolsCapability: ...
     @property

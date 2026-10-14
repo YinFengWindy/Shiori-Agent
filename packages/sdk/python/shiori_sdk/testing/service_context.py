@@ -13,6 +13,7 @@ from .resources import FakeResources
 from .sessions import FakeSessions
 from .external_turns import FakeExternalTurns
 from .background_results import FakeBackgroundResults
+from .process_resources import FakeProcessResources
 from .http import FakeHttp
 from .runtime import FakeRuntimeLifecycle
 from .scene_observations import FakeSceneObservations
@@ -35,6 +36,8 @@ class FakeServiceContext(FakeExtensionContext):
         self.sessions = FakeSessions()
         self.external_turns = FakeExternalTurns()
         self.background_results = FakeBackgroundResults()
+        self.process_resources = FakeProcessResources()
+        self.effect("process_resources", self.process_resources.close)
         self.tools = FakeTools()
         self.kv = FakeKV()
         self.rpc = FakeRpc()

@@ -115,6 +115,17 @@ Python SDK minimum; audited packages using only unchanged APIs may keep their
 
 ### Unreleased
 
+- #821 (issue #818): `process_resources` exposes plugin-private, versioned in-process resource
+  contracts. Candidate generations attach without activating or reconfiguring
+  the resource; publication activates the new attachment and closes removed
+  resources. Rollback closes only otherwise unowned provisional resources.
+  Unload and shutdown await cleanup and surface failures. Factories must construct
+  idle objects without retaining generation contexts, providers, RPCs or tasks.
+  `FakeProcessResources` supplies independent SDK testing support.
+  Background result targets now use the current runtime dispatcher for each
+  report rather than retaining the originating runtime; stored origins remain
+  unchanged and their user binding is checked at admission. No restart recovery.
+
 - #820 (issues #817 / #816): `background_results` grants `capture()` during an
   authenticated role tool turn. The returned `BackgroundResultTarget` retains the original
   role, thread, actual transport and bound sender; `report(result_id, text)`

@@ -92,6 +92,8 @@ from agent.turns.turn_pushes import current_turn_pushes
 from conversation.push_sync import ExternalPushSyncService
 from proactive_v2.presence import PresenceStore
 from session.manager import SessionManager
+from agent.plugin_host.process_resources import ProcessResourceOwner
+from agent.plugin_host.background_results import ResultRunner
 
 logger = logging.getLogger(__name__)
 
@@ -468,6 +470,8 @@ def build_core_runtime(
     event_bus: EventBus | None = None,
     agent_loop_provider: Callable[[], Any] | None = None,
     event_outlet: EventBus | None = None,
+    process_resources: ProcessResourceOwner | None = None,
+    background_result_runner: ResultRunner | None = None,
 ) -> CoreRuntime:
     """Builds version-owned capabilities around stable transport and state owners."""
     bus = shared.bus if shared is not None else MessageBus()
@@ -700,11 +704,12 @@ def build_core_runtime(
             legacy_plugin_root=_legacy_plugin_root(),
             role_runtime_registry=role_runtime_registry,
             external_turns=external_turns,
+            process_resources=process_resources,
             background_results=HostBackgroundResults(
                 tools,
                 role_store,
                 ConversationService(session_manager),
-                loop.process_background_result,
+                background_result_runner or loop.process_background_result,
             ),
             scene_observations=scene_demand,
             is_reload=shared is not None,

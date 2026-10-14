@@ -4,6 +4,7 @@ import asyncio
 import json
 from pathlib import Path
 from types import SimpleNamespace
+from contextvars import ContextVar
 from unittest.mock import AsyncMock
 
 import pytest
@@ -87,7 +88,9 @@ def fixture(tmp_path, monkeypatch):
     context = FakeServiceContext("herdr", tmp_path)
     target = FakeBackgroundResultTarget("mira", "original-thread")
     cli = ScriptedCli(context, tmp_path)
-    service = TaskService(cli, context.background, tmp_path / "plugin-data")
+    service = TaskService(tmp_path / "plugin-data", context.processes)
+    monkeypatch.setattr(service, "create_cli", lambda config: cli)
+    context.effect("service", service.close)
     return context, target, cli, service
 
 
@@ -99,7 +102,7 @@ async def test_start_returns_before_execution_and_keeps_complete_requirement(
     cli.agent_kind = agent
     cli.prompt_gate.clear()
     requirement = "完整中文\n特殊字符：' \" ` $() &\n" + "长内容" * 10000
-    task = service.start(str(cli.repository), requirement, agent, target)
+    task = service.start(str(cli.repository), requirement, agent, target, cli.config)
     assert task.status == "queued"
     await cli.prompt_started.wait()
     assert task.worker is not None and not task.worker.done()
@@ -128,7 +131,7 @@ async def test_ambiguous_submission_is_never_resent_and_timeout_is_not_cancel(
         "plugins.herdr.backend.service.time",
         SimpleNamespace(monotonic=lambda: next(ticks)),
     )
-    task = service.start(str(cli.repository), "fix", "codex", target)
+    task = service.start(str(cli.repository), "fix", "codex", target, cli.config)
     await task.worker
     assert task.status == "unknown"
     assert "可能仍在运行" in task.error
@@ -142,7 +145,7 @@ async def test_success_requires_delivery_verifier_and_reports_once(
 ):
     context, target, cli, service = fixture
     cli.prompt_gate.clear()
-    task = service.start(str(cli.repository), "fix", "codex", target)
+    task = service.start(str(cli.repository), "fix", "codex", target, cli.config)
     await cli.prompt_started.wait()
     task.result_path.write_text("{}", encoding="utf-8")
     verify = AsyncMock()
@@ -160,7 +163,7 @@ async def test_failed_delivery_and_agent_replacement_are_never_completed(
 ):
     context, target, cli, service = fixture
     cli.prompt_gate.clear()
-    task = service.start(str(cli.repository), "fix", "codex", target)
+    task = service.start(str(cli.repository), "fix", "codex", target, cli.config)
     await cli.prompt_started.wait()
     task.result_path.write_text("{}", encoding="utf-8")
     monkeypatch.setattr(
@@ -171,7 +174,7 @@ async def test_failed_delivery_and_agent_replacement_are_never_completed(
     await task.worker
     assert task.status == "blocked" and "PR 不存在" in task.error
     cli.agent_kind = "claude"
-    replacement = service.start(str(cli.repository), "fix", "codex", target)
+    replacement = service.start(str(cli.repository), "fix", "codex", target, cli.config)
     await replacement.worker
     assert replacement.status == "blocked" and "替换" in replacement.error
     await context.aclose()
@@ -182,7 +185,7 @@ async def test_startup_blocked_preserves_terminal_and_never_submits_requirement(
 ):
     context, target, cli, service = fixture
     cli.start_error = CommandError("not ready", code="agent_not_ready")
-    task = service.start(str(cli.repository), "fix", "codex", target)
+    task = service.start(str(cli.repository), "fix", "codex", target, cli.config)
     await task.worker
     assert task.status == "blocked" and task.agent_state == "blocked"
     assert "terminal evidence" in task.error
@@ -204,7 +207,7 @@ async def test_selected_agent_model_and_full_access_reach_native_start(
     context, target, cli, service = fixture
     cli.agent_kind = agent
     cli.config = HerdrConfig(codex_model="codex-test", claude_model="claude-test")
-    task = service.start(str(cli.repository), "fix", agent, target)
+    task = service.start(str(cli.repository), "fix", agent, target, cli.config)
     await task.worker
     start = next(args for args in cli.calls if args[:2] == ("agent", "start"))
     assert start[start.index("--kind") + 1] == agent
@@ -219,7 +222,7 @@ async def test_working_read_uses_visible_and_read_race_does_not_abandon_task(
     cli.prompt_gate.clear()
     cli.prompt_error = CommandError("wait timeout", code="timeout")
     cli.state = "working"
-    task = service.start(str(cli.repository), "fix", "codex", target)
+    task = service.start(str(cli.repository), "fix", "codex", target, cli.config)
     await cli.prompt_started.wait()
     reads = []
 
@@ -239,4 +242,45 @@ async def test_working_read_uses_visible_and_read_race_does_not_abandon_task(
     await task.worker
     assert reads == ["visible", "recent-unwrapped"]
     assert task.status == "completed"
+    await context.aclose()
+
+
+async def test_monitor_does_not_inherit_runtime_context_and_keeps_config_snapshot(
+    fixture, monkeypatch
+):
+    context, target, cli, service = fixture
+    inherited = ContextVar("runtime-marker", default="none")
+    inherited.set("retiring-generation")
+    seen = []
+    started, finish = asyncio.Event(), asyncio.Event()
+
+    async def execute(task, *, continuing=False):
+        seen.append(inherited.get())
+        started.set()
+        try:
+            await finish.wait()
+        except asyncio.CancelledError:
+            task.touch("monitoring_stopped")
+            raise
+
+    monkeypatch.setattr(service, "_execute", execute)
+    config = HerdrConfig(session="original")
+    task = service.start(str(cli.repository), "fix", "codex", target, config)
+    config.session = "different"
+    await started.wait()
+    assert seen == ["none"] and task.config.session == "original"
+    await service.close()
+    assert task.status == "monitoring_stopped" and not target.reports
+    assert not cli.calls
+    await context.aclose()
+
+
+async def test_close_before_monitor_first_runs_marks_stopped_without_native_calls(
+    fixture,
+):
+    context, target, cli, service = fixture
+    task = service.start(str(cli.repository), "fix", "codex", target, cli.config)
+    await service.close()
+    assert task.status == "monitoring_stopped"
+    assert not cli.calls and not target.reports
     await context.aclose()

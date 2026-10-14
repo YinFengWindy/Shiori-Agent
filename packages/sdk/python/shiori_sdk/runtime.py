@@ -49,6 +49,7 @@ KNOWN_CAPABILITIES = frozenset(
         # 插件为角色提交外部上下文回合（#721）
         "external_turns",
         "background_results",
+        "process_resources",
         "events",
         "scene_observations",
         "kv",

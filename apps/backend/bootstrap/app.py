@@ -12,6 +12,7 @@ from bootstrap.channel_host import ChannelHost
 from bootstrap.channels import start_channels
 from bootstrap.tools import CoreRuntime, build_core_runtime
 from bootstrap.runtime.dispatcher import RuntimeDispatcher
+from agent.plugin_host.process_resources import ProcessResourceOwner
 from bootstrap.runtime.events import RuntimeEventBus
 from bootstrap.runtime.generations import GenerationManager, RuntimeCandidate
 from bootstrap.runtime.reload import RuntimeReloadMixin
@@ -99,6 +100,7 @@ class AppRuntime(RuntimeReloadMixin, RuntimeBackgroundMixin, RuntimeShutdownMixi
         self._shutdown_task: asyncio.Task[None] | None = None
         self._started = False
         self._dispatcher = RuntimeDispatcher(self)
+        self._plugin_process_resources = ProcessResourceOwner()
         self._background_groups = {}
         self._cleanup_errors: list[Exception] = []
         self._generation_manager = GenerationManager()
@@ -170,11 +172,15 @@ class AppRuntime(RuntimeReloadMixin, RuntimeBackgroundMixin, RuntimeShutdownMixi
                 event_bus=RuntimeEventBus(self.event_bus),
                 event_outlet=self.event_bus,
                 agent_loop_provider=lambda: self._dispatcher,
+                process_resources=self._plugin_process_resources,
+                background_result_runner=self._dispatcher.process_background_result,
             )
             event_bus = self.event_bus
             await self.core.start()
             current = RuntimeCandidate(1, self.core, self.config, published=True)
             self._generation_manager.start(current)
+            if self.core.plugin_manager is not None:
+                self.core.plugin_manager.publish_process_resources()
             self.bus.bind_runtime_admission(self.acquire)
 
             plugin_manager = getattr(self.core, "plugin_manager", None)

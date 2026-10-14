@@ -43,7 +43,9 @@ related:
 
 `plugins/herdr/` 的 `herdr_start_task` 把完整需求写入 UTF-8 文件，连接明确的本机 Herdr session（CLI 和服务端均要求 >=0.9.4），在独立 worktree 以 Full Access 启动 Codex 或 Claude Code。`TaskService` 保留本进程任务记录；`delivery.py` 校验本回合结果、实际验证命令、干净提交和开放 Draft PR 的 head SHA。CLI 超时不会重发任务，Herdr 的 idle/done 不等于业务完成；工作中的终端只读取可见屏幕，日志读取失败不终止任务追踪。
 
-通用 `background_results` capability 在真实用户工具回合捕获原角色、线程、发送者与渠道投递元数据；`HostBackgroundResults` 在角色串行 gate 内重新检查会话和绑定，交给 `AgentLoop.process_background_result` 经原角色回报。结果 ID 在执行前保留以防模糊失败后的重复投递；结果回合不能再次捕获用户授权，也不触发新用户回合的副作用。此接口不提供重启恢复，Herdr 任务查询/继续/取消与 Dashboard 由后续任务承接。
+通用 `background_results` capability 在真实用户工具回合捕获原角色、线程、发送者与渠道投递元数据；`HostBackgroundResults` 在角色串行 gate 内重新检查会话和绑定，经 `RuntimeDispatcher` 短暂获取当前代，再由 `AgentLoop.process_background_result` 经原角色回报。结果 ID 在执行前保留以防模糊失败后的重复投递；结果回合不能再次捕获用户授权，也不触发新用户回合的副作用。
+
+`process_resources` capability 由 `AppRuntime` 的 `ProcessResourceOwner` 持有，以插件 ID 和版本化 key 复用进程资源。候选代只附加，发布后才切换 active；候选回滚不关闭活资源，停用和应用退出关闭监控并报告清理失败。Herdr 的共享 `TaskService` 不保存旧 runtime 或 RPC，任务各自保存 Herdr 配置快照；聊天查询只显示当前角色任务，继续使用原 agent/worktree 和新 run ID，取消只有确认停止才成为 cancelled。`task_snapshot` 与订阅入口供 Dashboard 使用；不提供应用重启恢复。
 
 ## 修改影响
 

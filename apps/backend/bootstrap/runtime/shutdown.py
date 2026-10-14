@@ -29,6 +29,10 @@ class RuntimeShutdownMixin:
                 ("inbound.close", self._close_inbound),
                 ("control_tasks.stop", self._stop_control_tasks),
                 ("background.stop", self._stop_background),
+                (
+                    "plugin_process_resources.close",
+                    self._plugin_process_resources.close,
+                ),
                 ("generations.drain", lambda: self._drain_generations(retained)),
                 ("outbound.drain", self._drain_outbound),
                 ("channels.stop", self._stop_channels),

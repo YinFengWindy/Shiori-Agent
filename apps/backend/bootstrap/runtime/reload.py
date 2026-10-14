@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from copy import deepcopy
 from functools import partial
+import logging
 
 from agent.config_models import Config
 from bootstrap.runtime.events import RuntimeEventBus
@@ -14,6 +15,8 @@ from bootstrap.channels import start_channels
 from bootstrap.runtime.memory import validate_memory_transition
 from bootstrap.runtime.construction import prepare_core_runtime
 from bootstrap.runtime.channel_barrier import channel_handover_barrier
+
+logger = logging.getLogger(__name__)
 
 
 class RuntimeReloadMixin:
@@ -63,6 +66,8 @@ class RuntimeReloadMixin:
             event_bus=RuntimeEventBus(self.event_bus),
             event_outlet=self.event_bus,
             agent_loop_provider=lambda: self._dispatcher,
+            process_resources=self._plugin_process_resources,
+            background_result_runner=self._dispatcher.process_background_result,
         )
         candidate = RuntimeCandidate(self.generation + 1, core, snapshot)
         try:
@@ -112,6 +117,7 @@ class RuntimeReloadMixin:
         current.core.assert_hot_unloadable()
         if self.channel_host is None or candidate.channel_host is None:
             self._publish_pointer(candidate, commit)
+            await self._drain_plugin_process_resources()
             return
         async with channel_handover_barrier(
             self.channel_host,
@@ -141,6 +147,15 @@ class RuntimeReloadMixin:
             finally:
                 if retained is not None and not transferred:
                     await retained.release()
+        await self._drain_plugin_process_resources()
+
+    async def _drain_plugin_process_resources(self) -> None:
+        """A cleanup failure after publication cannot roll back committed settings."""
+        try:
+            await self._plugin_process_resources.drain()
+        except Exception as error:
+            self._cleanup_errors.append(error)
+            logger.error("Published plugin resource cleanup failed", exc_info=error)
 
     async def discard(self, candidate: RuntimeCandidate) -> None:
         """Closes an unpublished candidate after failed preparation or persistence."""
@@ -162,6 +177,8 @@ class RuntimeReloadMixin:
         previous = self._generation_manager.publish(candidate)
         self.config = candidate.config
         self.core = candidate.core
+        if candidate.core.plugin_manager is not None:
+            candidate.core.plugin_manager.publish_process_resources()
         self._publish_background(previous, candidate)
         # No await separates durable commit and pointer publication.
         self._generation_manager.retire(previous)

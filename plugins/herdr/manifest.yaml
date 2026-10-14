@@ -10,6 +10,6 @@ capabilities:
   - config
   - tools
   - processes
-  - background
+  - process_resources
   - background_results
 config_model: "config:HerdrConfig"
