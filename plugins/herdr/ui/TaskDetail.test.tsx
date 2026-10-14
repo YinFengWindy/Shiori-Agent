@@ -50,3 +50,18 @@ test("stage regression is visible and monitor sync time does not replace activit
   try { assert.equal(view.container.querySelector('[aria-current="step"]')?.textContent, "验证"); await view.render(render("implementation")); assert.equal(view.container.querySelector('[aria-current="step"]')?.textContent, "实现"); }
   finally { await view.cleanup(); }
 });
+
+test("displayed output is scoped to its task and run instead of carrying a pinned old snapshot", async () => {
+  const fake = createFakeHostServices(); const client = createFakePluginClient();
+  const render = (id: string, run_id: string, output: string) => <TaskDetail task={makeTask({ id, run_id, output })} roleName="Mira" client={client} host={fake.host} connected refresh={async () => undefined} />;
+  const view = await mountTestComponent(render("task-a", "run-a", "原回合输出"));
+  try {
+    await view.render(render("task-a", "run-a", "原回合的新窗口"));
+    assert.equal(view.container.querySelector("pre")?.textContent, "原回合输出");
+    await view.render(render("task-a", "run-b", ""));
+    assert.equal(view.container.querySelector("pre")?.textContent, "暂无输出");
+    assert.ok(!view.container.textContent?.includes("查看最新输出"));
+    await view.render(render("task-b", "run-b", "另一个任务的输出"));
+    assert.equal(view.container.querySelector("pre")?.textContent, "另一个任务的输出");
+  } finally { await view.cleanup(); }
+});

@@ -19,7 +19,7 @@ export function useRoleNames(host: PluginHostServices) {
     let request = 0;
     const load = () => { const current = ++request; void host.listRoles().then((value) => { if (active && current === request) { setRoles(value); setError(""); } }, (reason: unknown) => { if (active && current === request) setError(errorMessage(reason)); }); };
     load();
-    const off = host.onEvent((event) => { if (["roles.changed", "bridge.ready", "runtime.applied"].includes(event.method)) load(); });
+    const off = host.onEvent((event) => { if (["roles.updated", "bridge.ready", "runtime.applied"].includes(event.method)) load(); });
     return () => { active = false; off(); };
   }, [host]);
   return { names: new Map(roles.map((role) => [role.id, role.name])), error };

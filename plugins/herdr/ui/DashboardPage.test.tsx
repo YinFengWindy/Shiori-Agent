@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { act } from "react";
-import { chooseSelectOption, mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
+import { changeInputValue, chooseSelectOption, mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
+import type { RoleRecord } from "@yinfengwindy/shiori-sdk";
 import { DashboardPage } from "./DashboardPage";
 import { dashboardFixture, makeTask } from "./testFixtures";
 
@@ -51,5 +52,59 @@ test("repository and status filters combine without issuing task mutations", asy
     await chooseSelectOption("按状态筛选", "执行中");
     assert.match(view.container.textContent ?? "", /没有符合筛选条件/);
     assert.ok(fixture.calls.every((call) => call.name === "tasks.snapshot"));
+  } finally { await view.cleanup(); }
+});
+
+test("prepending a task preserves the default selection, detail scroll and continuation draft", async () => {
+  const current = makeTask({ status: "blocked", can_continue: true });
+  const fixture = dashboardFixture([current]);
+  const view = await mountTestComponent(<DashboardPage pageId="herdr" client={fixture.client} host={fixture.fake.host} />);
+  try {
+    const detail = view.container.querySelector<HTMLElement>('[aria-label="任务详情"]'); assert.ok(detail);
+    detail.scrollTop = 125;
+    const continueButton = Array.from(detail.querySelectorAll("button")).find((item) => item.textContent === "继续任务"); assert.ok(continueButton);
+    await act(async () => continueButton.click());
+    const draft = view.container.querySelector<HTMLTextAreaElement>("textarea"); assert.ok(draft);
+    await changeInputValue(draft, "保留这份追加要求草稿");
+    const added = makeTask({ id: "task-new", requirement: "后台新建的任务", created_at: "2026-10-14T11:00:00Z" });
+    fixture.setSnapshot({ instance_id: "process-a", tasks: [added, current] });
+    await act(async () => fixture.emit(added.id, added.revision));
+    assert.equal(view.container.querySelector('[aria-label="任务详情"]'), detail);
+    assert.equal(detail.scrollTop, 125);
+    assert.equal(view.container.querySelector("textarea"), draft);
+    assert.equal(draft.value, "保留这份追加要求草稿");
+    assert.match(view.container.querySelector('[aria-pressed="true"]')?.textContent ?? "", /修复滚动位置/);
+  } finally { await view.cleanup(); }
+});
+
+test("a selected task stays visible when background progress moves it outside the active filter", async () => {
+  const fixture = dashboardFixture([makeTask()]);
+  const view = await mountTestComponent(<DashboardPage pageId="herdr" client={fixture.client} host={fixture.fake.host} />);
+  try {
+    await chooseSelectOption("按状态筛选", "执行中");
+    const detail = view.container.querySelector('[aria-label="任务详情"]');
+    fixture.setSnapshot({ instance_id: "process-a", tasks: [makeTask({ revision: 2, status: "completed" }), makeTask({ id: "task-new", requirement: "其他进行中的任务" })] });
+    await act(async () => fixture.emit("task-a", 2));
+    assert.equal(view.container.querySelector('[aria-label="任务详情"]'), detail);
+    assert.match(detail?.textContent ?? "", /修复滚动位置/);
+    const row = view.container.querySelector<HTMLButtonElement>('[aria-label="任务列表"] button'); assert.ok(row);
+    await act(async () => row.click());
+    assert.match(view.container.querySelector('[aria-label="任务详情"]')?.textContent ?? "", /其他进行中的任务/);
+  } finally { await view.cleanup(); }
+});
+
+test("roles.updated refreshes the renamed role in the task list, selected filter and detail", async () => {
+  const role: RoleRecord = { id: "role-a", name: "Mira", description: "", system_prompt: "", runtime_config: {}, avatar: null, avatar_abs: null, chat_background: null, chat_background_abs: null, illustrations: [], illustrations_abs: [], asset_categories: [], asset_category_bindings: {}, created_at: "", updated_at: "" };
+  const fixture = dashboardFixture([makeTask()], [role]);
+  const view = await mountTestComponent(<DashboardPage pageId="herdr" client={fixture.client} host={fixture.fake.host} />);
+  try {
+    await chooseSelectOption("按角色筛选", "Mira");
+    fixture.setRoles([{ ...role, name: "改名后的 Mira" }]);
+    await act(async () => fixture.fake.emit({ id: "rename", type: "event", method: "roles.updated", payload: {} }));
+    for (const selector of ['[aria-label="任务列表"]', '[aria-label="按角色筛选"]', '[aria-label="任务详情"]']) {
+      assert.match(view.container.querySelector(selector)?.textContent ?? "", /改名后的 Mira/);
+    }
+    await chooseSelectOption("按角色筛选", "改名后的 Mira");
+    assert.equal(view.container.querySelectorAll('[aria-label="任务列表"] button').length, 1);
   } finally { await view.cleanup(); }
 });

@@ -11,9 +11,16 @@ export function DashboardPage({ client, host }: PluginNavPageComponentProps) {
   const { state, store } = useDashboard(client, host);
   const { names, error: roleError } = useRoleNames(host);
   const [filters, setFilters] = useState<TaskFilters>({ role: "", repository: "", status: "" });
-  const [selectedId, setSelectedId] = useState("");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const visible = filterTasks(state.tasks, filters);
-  const selected = visible.find((task) => task.id === selectedId) ?? visible[0];
+  // Capture the first available task once; new snapshots must not change what is being read.
+  if (selectedId === null && visible.length) setSelectedId(visible[0].id);
+  const selected = state.tasks.find((task) => task.id === selectedId);
+  const changeFilters = (next: TaskFilters) => {
+    const matches = filterTasks(state.tasks, next);
+    setFilters(next);
+    setSelectedId(matches.find((task) => task.id === selectedId)?.id ?? matches[0]?.id ?? "");
+  };
   const roleIds = [...new Set(state.tasks.map((task) => task.role_id))];
   const repositories = [...new Set(state.tasks.map((task) => task.repository))];
   const running = state.tasks.filter((task) => ["queued", "preparing", "running", "cancelling"].includes(task.status)).length;
@@ -24,9 +31,9 @@ export function DashboardPage({ client, host }: PluginNavPageComponentProps) {
     {state.error ? <host.ui.InlineError title="任务连接不可用" message={state.error} actions={<button type="button" className={compactGhostButtonClass} onClick={() => { store.stop(); void store.start(); }}>重新连接</button>} /> : null}
     {roleError ? <host.ui.InlineError title="角色名称加载失败" message={roleError} persona={false} /> : null}
     <div className="herdr-filters flex flex-wrap items-center gap-3" role="group" aria-label="筛选任务"><SlidersHorizontal className="h-4 w-4 shrink-0 text-ink-muted" aria-hidden="true" />
-      <Select aria-label="按角色筛选" className={cx(settingsInputClass, "herdr-filter")} value={filters.role} options={[{ value: "", label: "全部角色" }, ...roleIds.map((id) => ({ value: id, label: names.get(id) ?? id }))]} onValueChange={(role) => setFilters((value) => ({ ...value, role }))} />
-      <Select aria-label="按仓库筛选" className={cx(settingsInputClass, "herdr-filter")} value={filters.repository} options={[{ value: "", label: "全部仓库" }, ...repositories.map((path) => ({ value: path, label: path, triggerLabel: repositoryName(path) }))]} onValueChange={(repository) => setFilters((value) => ({ ...value, repository }))} />
-      <Select aria-label="按状态筛选" className={cx(settingsInputClass, "herdr-filter")} value={filters.status} options={[{ value: "", label: "全部状态" }, ...Object.entries(statusLabels).map(([value, label]) => ({ value, label }))]} onValueChange={(status) => setFilters((value) => ({ ...value, status }))} />
+      <Select aria-label="按角色筛选" className={cx(settingsInputClass, "herdr-filter")} value={filters.role} options={[{ value: "", label: "全部角色" }, ...roleIds.map((id) => ({ value: id, label: names.get(id) ?? id }))]} onValueChange={(role) => changeFilters({ ...filters, role })} />
+      <Select aria-label="按仓库筛选" className={cx(settingsInputClass, "herdr-filter")} value={filters.repository} options={[{ value: "", label: "全部仓库" }, ...repositories.map((path) => ({ value: path, label: path, triggerLabel: repositoryName(path) }))]} onValueChange={(repository) => changeFilters({ ...filters, repository })} />
+      <Select aria-label="按状态筛选" className={cx(settingsInputClass, "herdr-filter")} value={filters.status} options={[{ value: "", label: "全部状态" }, ...Object.entries(statusLabels).map(([value, label]) => ({ value, label }))]} onValueChange={(status) => changeFilters({ ...filters, status })} />
     </div>
     {state.loading ? <div role="status" className={cx(cardClass, "grid flex-1 place-items-center p-10 text-body text-ink-muted")}>正在加载任务…</div> : state.tasks.length === 0 ? <div className={cx(cardClass, "grid flex-1 place-items-center p-10 text-body text-ink-muted")}>暂无任务</div> : <div className={cx(cardClass, "herdr-workspace grid min-h-0 flex-1 overflow-hidden")}>
       <TaskList tasks={visible} selectedId={selected?.id ?? ""} names={names} onSelect={setSelectedId} />

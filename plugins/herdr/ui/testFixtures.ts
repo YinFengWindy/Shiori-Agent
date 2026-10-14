@@ -1,5 +1,5 @@
 import { createFakeHostServices, createFakePluginClient } from "@yinfengwindy/shiori-sdk/testing";
-import type { PluginEventHandler } from "@yinfengwindy/shiori-sdk";
+import type { PluginEventHandler, RoleRecord } from "@yinfengwindy/shiori-sdk";
 import type { HerdrTask, TaskSnapshot } from "./types";
 
 /** Explicit task fixtures keep tests at the same public snapshot boundary as the UI. */
@@ -8,8 +8,8 @@ export function makeTask(patch: Partial<HerdrTask> = {}): HerdrTask {
 }
 
 /** Controllable transport; it records requests and real subscribe/unsubscribe ownership. */
-export function dashboardFixture(tasks: HerdrTask[] = [makeTask()]) {
-  const fake = createFakeHostServices();
+export function dashboardFixture(tasks: HerdrTask[] = [makeTask()], roles: RoleRecord[] = []) {
+  const fake = createFakeHostServices({ listRoles: async () => roles });
   const handlers = new Set<PluginEventHandler>();
   const calls: Array<{ name: string; payload?: Record<string, unknown> }> = [];
   let snapshot: TaskSnapshot = { instance_id: "process-a", tasks };
@@ -23,5 +23,5 @@ export function dashboardFixture(tasks: HerdrTask[] = [makeTask()]) {
       return {} as T;
     },
   });
-  return { fake, client, handlers, calls, setSnapshot: (value: TaskSnapshot) => { snapshot = value; }, fail: (value: boolean) => { failed = value; }, emit(taskId: string, revision: number) { for (const handler of handlers) handler({ task_id: taskId, revision }, { id: "event", type: "event", method: "tasks.changed", payload: {} }); } };
+  return { fake, client, handlers, calls, setRoles: (value: RoleRecord[]) => { roles = value; }, setSnapshot: (value: TaskSnapshot) => { snapshot = value; }, fail: (value: boolean) => { failed = value; }, emit(taskId: string, revision: number) { for (const handler of handlers) handler({ task_id: taskId, revision }, { id: "event", type: "event", method: "tasks.changed", payload: {} }); } };
 }
