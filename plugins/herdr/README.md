@@ -12,6 +12,14 @@ Herdr 的终端状态和交付状态独立：idle/done 不代表完成，CLI 超
 插件核验本回合结果文件、代码提交、实际执行验证命令和开放 Draft PR 的 head SHA。
 不会自动重发可能已经接收的任务，不会合并 PR 或删除 worktree。
 
+Windows 验证命令先按 PATH/PATHEXT 解析可执行程序，普通 `pnpm test`、
+`pnpm --filter ... typecheck` 和含空格的参数可以使用。`.cmd` / `.bat` 会经过
+cmd 解析；如果程序路径或参数含 `& | < > ^ % !`、双引号、括号或控制字符，
+插件会在启动前以 `unsafe_windows_batch_argument` 拒绝并将任务报告为阻塞。
+请在交付结果的 `validation[].argv` 中改用原生可执行程序，或 Node/Python
+可执行程序加脚本路径及参数。插件不拼接 shell、不自动改写或重试这些命令。
+该限制只针对 Windows 批处理；传给 `herdr.exe` 的完整需求不受影响。
+
 仅当前 Shiori 运行期间追踪。关闭 Shiori 后 Herdr 任务可能继续运行，插件不恢复
 旧追踪记录；初始化、登录或交互请求会作为 blocked 回报，并保留终端和产物。
 任务文件与 worktree 位于插件私有数据目录，完整需求保存在 UTF-8 文件中。

@@ -100,7 +100,7 @@ async def test_windows_resolves_bare_command_without_changing_arguments(
     process.wait = AsyncMock(return_value=0)
     spawn = AsyncMock(return_value=(process, None))
     monkeypatch.setattr(cli.processes, "spawn", spawn)
-    arguments = ["test", "--filter", "a b", "引号 \" ' ` $() ; & 中文"]
+    arguments = ["test", "--filter", "@scope/pkg", "a b", "中文"]
     argv = ["pnpm", *arguments]
 
     assert await cli.command(argv) == "passed"
@@ -109,6 +109,59 @@ async def test_windows_resolves_bare_command_without_changing_arguments(
     assert spawn.call_args.args == (shim, *arguments)
     assert "shell" not in spawn.call_args.kwargs
     assert argv == ["pnpm", *arguments]
+
+
+@pytest.mark.parametrize("suffix", [".CMD", ".bAt"])
+@pytest.mark.parametrize("character", list('&|<>^%!"()\r\n\t\x00\x1a\x7f'))
+async def test_windows_batch_syntax_is_rejected_before_spawn(
+    cli, monkeypatch, tmp_path, suffix, character
+):
+    monkeypatch.setattr(cli_module.sys, "platform", "win32")
+    shim = str(tmp_path / f"pnpm{suffix}")
+    monkeypatch.setattr(cli_module.shutil, "which", lambda executable: shim)
+    spawn = AsyncMock()
+    monkeypatch.setattr(cli.processes, "spawn", spawn)
+
+    with pytest.raises(CommandError, match="原生可执行程序") as raised:
+        await cli.command(["pnpm", "test", f"before{character}after"])
+
+    assert raised.value.code == "unsafe_windows_batch_argument"
+    spawn.assert_not_awaited()
+
+
+async def test_windows_batch_path_expansion_is_rejected_before_spawn(
+    cli, monkeypatch, tmp_path
+):
+    monkeypatch.setattr(cli_module.sys, "platform", "win32")
+    shim = str(tmp_path / "%expanded%" / "pnpm.cmd")
+    monkeypatch.setattr(cli_module.shutil, "which", lambda executable: shim)
+    spawn = AsyncMock()
+    monkeypatch.setattr(cli.processes, "spawn", spawn)
+
+    with pytest.raises(CommandError) as raised:
+        await cli.command(["pnpm", "test"])
+
+    assert raised.value.code == "unsafe_windows_batch_argument"
+    spawn.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    "platform, executable", [("win32", "herdr.exe"), ("linux", "tool.cmd")]
+)
+async def test_native_commands_keep_special_arguments(
+    cli, monkeypatch, platform, executable
+):
+    monkeypatch.setattr(cli_module.sys, "platform", platform)
+    process = Mock(returncode=0)
+    process.communicate = AsyncMock(return_value=(b"passed", b""))
+    process.wait = AsyncMock(return_value=0)
+    spawn = AsyncMock(return_value=(process, None))
+    monkeypatch.setattr(cli.processes, "spawn", spawn)
+    arguments = ['a & b | c > d %NAME% !name! "quoted" (group)\nnext']
+
+    assert await cli.command([executable, *arguments]) == "passed"
+
+    assert spawn.call_args.args == (executable, *arguments)
 
 
 async def test_windows_missing_executable_fails_before_spawn(cli, monkeypatch):

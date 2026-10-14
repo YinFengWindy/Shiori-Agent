@@ -13,6 +13,10 @@ from shiori_sdk.processes import Processes
 
 from .config import HerdrConfig
 
+# Batch files cross cmd.exe parsing even with create_subprocess_exec. Reject
+# expansion, grouping, quoting and control syntax instead of attempting to escape it.
+_UNSAFE_BATCH_CHARACTERS = re.compile(r'[&|<>^%!"()\x00-\x1f\x7f]')
+
 
 class CommandError(RuntimeError):
     """A command failed; timeout/transport errors may leave Herdr work running."""
@@ -79,17 +83,26 @@ class HerdrCli:
     async def command(
         self, argv: list[str], *, cwd: Path | None = None, timeout: float | None = None
     ) -> str:
-        """Run without a shell; terminate only this owned CLI child on timeout."""
+        """Run one validated argv command; terminate only this child on timeout."""
         executable = argv[0]
         if sys.platform == "win32":
             # CreateProcess does not resolve bare npm commands through PATHEXT.
-            # Resolve once before spawning and preserve every argument verbatim.
+            # Resolve once before spawning; never retry a failed command.
             if os.path.dirname(executable):
                 executable = str((cwd or self.cwd) / executable)
             resolved = shutil.which(executable)
             if resolved is None:
                 raise FileNotFoundError(f"找不到可执行程序：{argv[0]}")
             executable = resolved
+            if Path(executable).suffix.casefold() in {".cmd", ".bat"} and any(
+                _UNSAFE_BATCH_CHARACTERS.search(argument)
+                for argument in (executable, *argv[1:])
+            ):
+                raise CommandError(
+                    "Windows .cmd/.bat 的路径或参数含可能被 cmd 重解释的字符；"
+                    "请改用原生可执行程序或 Node/Python 脚本的 argv 记录该验证。",
+                    code="unsafe_windows_batch_argument",
+                )
         process, owner = await self.processes.spawn(
             executable,
             *argv[1:],
