@@ -1,6 +1,7 @@
 """Desktop global read/control and generation-scoped event lifetime."""
 
 import asyncio
+import json
 from unittest.mock import AsyncMock
 
 import pytest
@@ -64,17 +65,99 @@ async def test_candidate_does_not_emit_and_disposal_removes_subscription(fixture
     assert len(ctx.rpc.events) == 1
 
 
+@pytest.mark.parametrize("action", ["continue", "cancel"])
 async def test_desktop_action_uses_task_owner_and_shared_operation(
-    fixture, monkeypatch
+    fixture, monkeypatch, action
 ):
     ctx, service, dashboard = fixture
     operation = AsyncMock(return_value=service.tasks["role-b"])
-    monkeypatch.setattr("plugins.herdr.backend.dashboard.continue_task", operation)
-    await dashboard.continue_task(
+    monkeypatch.setattr(service, f"{action}_task", operation)
+    await ctx.rpc.handlers[f"tasks.{action}"](
         {"task_id": "role-b", "role_id": "forged", "requirement": "追加要求"}
     )
-    operation.assert_awaited_once_with(service, "role-b", "追加要求", "role-b")
+    if action == "continue":
+        operation.assert_awaited_once_with("role-b", "追加要求", "role-b")
+    else:
+        operation.assert_awaited_once_with("role-b", "role-b")
     ctx.process_resources.active = False
     with pytest.raises(RuntimeError, match="配置已替换"):
         await dashboard.cancel_task({"task_id": "role-a"})
     await ctx.aclose()
+
+
+@pytest.mark.parametrize("action", ["continue", "cancel"])
+async def test_current_rpc_namespace_uses_retained_owners_operations(
+    tmp_path, monkeypatch, generations, action
+):
+    retired, current = generations
+    assert retired["cli"].CommandError is not current["cli"].CommandError
+    ctx = FakeServiceContext("herdr", tmp_path)
+    target = FakeBackgroundResultTarget("role-a", "thread-a")
+    service = retired["service"].TaskService(tmp_path, ctx.processes)
+    task = retired["models"].CodingTask(
+        "task-a",
+        "original",
+        tmp_path,
+        "codex",
+        target,
+        tmp_path,
+        "codex/task",
+        "run-a",
+        worktree=tmp_path,
+        pane_id="owned-pane",
+        agent_name="owned-agent",
+        status="blocked",
+        config=retired["config"].HerdrConfig(session="original"),
+    )
+    service.tasks[task.id] = task
+
+    async def command(cli, argv, **kwargs):
+        assert cli.config.session == "original"
+        return json.dumps(
+            {
+                "result": {
+                    "agent": {
+                        "agent": "codex",
+                        "agent_status": "idle",
+                        "pane_id": "owned-pane",
+                    }
+                }
+            }
+        )
+
+    async def execute(current_task, *, continuing):
+        assert current_task is task and continuing
+        current_task.touch("blocked")
+
+    monkeypatch.setattr(retired["cli"].HerdrCli, "command", command)
+    monkeypatch.setattr(service, "_execute", execute)
+    operation = AsyncMock(wraps=getattr(service, f"{action}_task"))
+    monkeypatch.setattr(service, f"{action}_task", operation)
+    dashboard = current["dashboard"].Dashboard(service, ctx.as_capability())
+    dashboard.register()
+    try:
+        result = await ctx.rpc.handlers[f"tasks.{action}"](
+            {
+                "task_id": task.id,
+                "requirement": "new requirement",
+                "role_id": "forged",
+            }
+        )
+        snapshot = result["task"]
+        assert isinstance(snapshot, dict)
+        assert snapshot["id"] == task.id
+        assert task.worker is not None
+        await task.worker
+        if action == "continue":
+            operation.assert_awaited_once_with(task.id, "new requirement", "role-a")
+            assert task.run_id != "run-a"
+            assert task.requirement.endswith("new requirement")
+        else:
+            operation.assert_awaited_once_with(task.id, "role-a")
+            assert task.status == "cancelled"
+            assert [json.loads(text)["status"] for text in target.reports.values()] == [
+                "cancelled"
+            ]
+    finally:
+        await service.close()
+        await ctx.aclose()

@@ -7,7 +7,7 @@ from shiori_sdk.rpc import Concurrency
 
 from .models import CodingTask
 from .service import TaskService
-from .task_management import cancel_task, continue_task, task_snapshot
+from .task_management import task_snapshot
 
 
 class Dashboard:
@@ -52,13 +52,13 @@ class Dashboard:
         requirement = payload.get("requirement")
         if not isinstance(requirement, str):
             raise ValueError("追加要求不能为空")
-        await continue_task(self.service, task.id, requirement, task.target.role_id)
+        await self.service.continue_task(task.id, requirement, task.target.role_id)
         return {"task": task_snapshot(task)}
 
     async def cancel_task(self, payload: dict[str, object]) -> dict[str, object]:
         """Cancellation remains pending until the shared service confirms it."""
         task = self._task(payload)
-        await cancel_task(self.service, task.id, task.target.role_id)
+        await self.service.cancel_task(task.id, task.target.role_id)
         return {"task": task_snapshot(task)}
 
     def changed(self, task: CodingTask) -> None:
