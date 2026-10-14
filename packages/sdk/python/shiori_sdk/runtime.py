@@ -48,6 +48,7 @@ KNOWN_CAPABILITIES = frozenset(
         "avatars",
         # 插件为角色提交外部上下文回合（#721）
         "external_turns",
+        "background_results",
         "events",
         "scene_observations",
         "kv",

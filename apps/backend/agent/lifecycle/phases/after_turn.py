@@ -176,6 +176,7 @@ class _BuildTurnCommittedModule:
         role_id = str(session.metadata.get("role_id") or "").strip()
         tool_chain_list = cast(list[dict[str, Any]], frame.slots[_TOOL_CHAIN_SLOT])
         omit_user_turn = bool(frame.slots[_OMIT_USER_TURN_SLOT])
+        source = str((msg.metadata or {}).get("source") or "").strip()
         raw_turn_metrics = snap.ctx.outbound_metadata.get("turn_metrics")
         turn_metrics = raw_turn_metrics if isinstance(raw_turn_metrics, dict) else {}
         frame.slots[_TURN_COMMITTED_SLOT] = TurnCommitted(
@@ -197,6 +198,7 @@ class _BuildTurnCommittedModule:
             react_stats=dict(cast(dict[str, int], frame.slots[_REACT_STATS_SLOT])),
             extra={
                 **dict(cast(dict[str, object], frame.slots[_EXTRA_SLOT])),
+                **({"source": source} if source else {}),
                 **(
                     {"committed_message_ids": list(state.committed_message_ids)}
                     if state.committed_message_ids

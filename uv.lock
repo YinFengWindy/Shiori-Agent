@@ -1523,6 +1523,7 @@ dev = [
     { name = "rich" },
     { name = "ruff" },
     { name = "shiori-host-testing" },
+    { name = "shiori-plugin-herdr", extra = ["test"] },
 ]
 
 [package.metadata]
@@ -1565,6 +1566,7 @@ dev = [
     { name = "rich", specifier = ">=15.0.0" },
     { name = "ruff", specifier = ">=0.15" },
     { name = "shiori-host-testing", editable = "packages/shiori-host-testing" },
+    { name = "shiori-plugin-herdr", extras = ["test"], editable = "plugins/herdr" },
 ]
 
 [[package]]
@@ -1604,6 +1606,28 @@ requires-dist = [
     { name = "shiori-sdk", extras = ["testing"], marker = "extra == 'test'", specifier = ">=3.1.0,<4" },
     { name = "sqlite-vec", specifier = ">=0.1.6" },
     { name = "tzdata", marker = "sys_platform == 'win32'", specifier = ">=2025.2" },
+]
+provides-extras = ["test"]
+
+[[package]]
+name = "shiori-plugin-herdr"
+version = "0.1.0"
+source = { editable = "plugins/herdr" }
+dependencies = [
+    { name = "pydantic" },
+    { name = "shiori-sdk" },
+]
+
+[package.optional-dependencies]
+test = [
+    { name = "shiori-sdk", extra = ["testing"] },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "pydantic", specifier = ">=2.11.7" },
+    { name = "shiori-sdk", specifier = ">=3.1.1,<4" },
+    { name = "shiori-sdk", extras = ["testing"], marker = "extra == 'test'", specifier = ">=3.1.1,<4" },
 ]
 provides-extras = ["test"]
 

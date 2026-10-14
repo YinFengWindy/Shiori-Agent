@@ -406,11 +406,11 @@ def test_manifest_rejects_non_boolean_default_enabled(tmp_path, value):
 
 # 成为内置插件时就默认停用的插件：升级前从未被缺省启用，不需要升级迁移，
 # 登记进迁移反而会给旧配置写入 enabled = true（#691）。
-_DEFAULT_DISABLED_SINCE_BUILTIN = {"gpt_sovits_tts", "sensevoice_asr"}
+_DEFAULT_DISABLED_SINCE_BUILTIN = {"gpt_sovits_tts", "herdr", "sensevoice_asr"}
 
 
 def test_builtin_default_disabled_plugins_match_the_upgrade_migration():
-    """manifest 里默认停用的内置插件必须登记在升级迁移里，否则升级用户会被悄悄停用。"""
+    """默认停用插件须区分首次内置即停用和从默认启用改为停用，只有后者需要迁移。"""
     from agent.plugin_default_enabled_migration import DEFAULT_DISABLED_PLUGINS
 
     root = Path(__file__).resolve().parents[4] / "plugins"

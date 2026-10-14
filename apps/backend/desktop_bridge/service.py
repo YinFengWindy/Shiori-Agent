@@ -300,7 +300,12 @@ class DesktopBridgeService:
         # Only the rows the turn committed; a turn that committed none sends
         # the summary alone.
         messages = committed_turn_messages(session, event) or []
-        if event.channel != DESKTOP_CHANNEL:
+        # DesktopChatService publishes ordinary desktop turns. Background
+        # reports bypass it, so their committed rows must reach clients here.
+        if (
+            event.channel != DESKTOP_CHANNEL
+            or event.extra.get("source") == "background_result"
+        ):
             request_id = str(event.request_id or "").strip()
             if not request_id:
                 request_id = f"turn:{role_id}:{event.thread_id}:{event.timestamp or ''}"

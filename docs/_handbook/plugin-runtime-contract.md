@@ -115,7 +115,17 @@ Python SDK minimum; audited packages using only unchanged APIs may keep their
 
 ### Unreleased
 
-No unassigned contract changes. The 3.1.1 batch below is already published to
+- #820 (issues #817 / #816): `background_results` grants `capture()` during an
+  authenticated role tool turn. The returned `BackgroundResultTarget` retains the original
+  role, thread, actual transport and bound sender; `report(result_id, text)`
+  rechecks them inside the role turn gate and reports through the role's normal
+  outbound path. Repeated attempted IDs do not produce another report, including
+  after an ambiguous failure. This is in-process only, without restart recovery.
+  SDK testing adds explicit `FakeBackgroundResults` / `FakeBackgroundResultTarget`.
+  No SDK version increment until the shared release batch is finalized.
+
+
+The 3.1.1 batch below is already published to
 both npm and PyPI and must not receive new contract changes.
 Record the next batch here with PR references instead of incrementing the version
 per PR. When it is finalized, move its notes into one versioned entry and

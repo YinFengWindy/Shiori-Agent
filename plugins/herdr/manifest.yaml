@@ -1,0 +1,15 @@
+api: 2
+runtime_api: ">=3.1.1 <4.0.0"
+id: herdr
+display_name: Herdr
+version: "0.1.0"
+desc: 本机 Coding Agent 任务
+default_enabled: false
+capabilities:
+  - workspace
+  - config
+  - tools
+  - processes
+  - background
+  - background_results
+config_model: "config:HerdrConfig"

@@ -627,6 +627,8 @@ def build_core_runtime(
 
     from agent.plugin_host import HostServices, PluginKernel
     from agent.plugin_host.external_turns import HostExternalTurns
+    from agent.plugin_host.background_results import HostBackgroundResults
+    from conversation.service import ConversationService
     from core.channels.role_routing import RoleTurnRouter
     from shiori_sdk.external_turns import ExternalTurns
 
@@ -698,6 +700,12 @@ def build_core_runtime(
             legacy_plugin_root=_legacy_plugin_root(),
             role_runtime_registry=role_runtime_registry,
             external_turns=external_turns,
+            background_results=HostBackgroundResults(
+                tools,
+                role_store,
+                ConversationService(session_manager),
+                loop.process_background_result,
+            ),
             scene_observations=scene_demand,
             is_reload=shared is not None,
             previously_active_plugins=(

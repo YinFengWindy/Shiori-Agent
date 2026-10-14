@@ -21,6 +21,7 @@ from bus.event_bus import EventBus
 import sys
 
 from shiori_sdk.testing.external_turns import FakeExternalTurns
+from shiori_sdk.testing.background_results import FakeBackgroundResults
 from shiori_sdk.testing.packages import stage_plugin_package
 from tests.support.plugin_kernel import (
     REPOSITORY_ROOT,
@@ -352,6 +353,7 @@ _EXPECTED_TOP_LEVEL_PLUGINS = {
     "desktop_pet",
     "feishu",
     "gpt_sovits_tts",
+    "herdr",
     "meme",
     "novelai",
     "story",
@@ -894,8 +896,11 @@ async def setup(ctx):
 
 
 @pytest.mark.asyncio
-async def test_external_turns_reach_only_a_plugin_that_declares_them(tmp_path: Path):
-    for plugin_id, capabilities in (("submits", "[external_turns]"), ("other", "[]")):
+@pytest.mark.parametrize("capability", ["external_turns", "background_results"])
+async def test_turn_services_reach_only_a_plugin_that_declares_them(
+    tmp_path: Path, capability: str
+):
+    for plugin_id, capabilities in (("submits", f"[{capability}]"), ("other", "[]")):
         plugin_dir = tmp_path / plugin_id
         (plugin_dir / "backend").mkdir(parents=True)
         (plugin_dir / "backend" / "plugin.py").write_text(
@@ -905,10 +910,10 @@ captured = {}
 
 async def setup(ctx):
     try:
-        captured["turns"] = ctx.external_turns
+        captured["turns"] = getattr(ctx, "CAPABILITY")
     except AttributeError as error:
         captured["denied"] = str(error)
-""",
+""".replace("CAPABILITY", capability),
             encoding="utf-8",
         )
         (plugin_dir / "manifest.yaml").write_text(
@@ -919,10 +924,14 @@ capabilities: {capabilities}
 """,
             encoding="utf-8",
         )
-    turns = FakeExternalTurns()
-    kernel = PluginKernel(
-        [tmp_path], services=HostServices(event_bus=EventBus(), external_turns=turns)
+    turns = (
+        FakeExternalTurns()
+        if capability == "external_turns"
+        else FakeBackgroundResults()
     )
+    services = HostServices(event_bus=EventBus())
+    setattr(services, capability, turns)
+    kernel = PluginKernel([tmp_path], services=services)
     await kernel.load_all()
 
     captured = {
@@ -931,7 +940,7 @@ capabilities: {capabilities}
         if name.startswith("akasic_plugin_") and name.endswith(("_submits", "_other"))
     }
     assert captured["submits"] == {"turns": turns}
-    assert "external_turns" in captured["other"]["denied"]
+    assert capability in captured["other"]["denied"]
 
 
 @pytest.mark.asyncio
@@ -942,6 +951,7 @@ capabilities: {capabilities}
         ("models", "role_runtime_registry", True),
         ("sessions", "session_manager", True),
         ("external_turns", "external_turns", True),
+        ("background_results", "background_results", True),
         ("memory", "role_store", True),
         ("memory", "workspace", False),
         ("http", "http", True),
