@@ -31,6 +31,7 @@ from agent.provider import LLMProvider
 from shiori_sdk.http import HttpClient
 from shiori_sdk.external_turns import ExternalTurns
 from shiori_sdk.background_results import BackgroundResults
+from agent.plugin_host.process_resources import ProcessResourceOwner
 from agent.plugin_host.avatars import AvatarsCapability
 from agent.plugin_host.config import PluginConfig
 from agent.plugin_host.storage import PluginStorage
@@ -159,6 +160,7 @@ class HostServices:
     # external_turns capability 的唯一实现，由 bootstrap 以本代 AgentLoop 装配（#721）。
     external_turns: ExternalTurns | None = None
     background_results: BackgroundResults | None = None
+    process_resources: ProcessResourceOwner | None = None
     scene_observations: SceneObservationDemand = field(
         default_factory=SceneObservationDemand
     )
@@ -259,6 +261,11 @@ class PluginKernel:
             await self._load_dependencies(record, records, ())
         if not self._services.is_reload:
             self.publish_accounts()
+
+    def publish_process_resources(self) -> None:
+        """Activate current plugin attachments after runtime pointer publication."""
+        if self._services.process_resources is not None:
+            self._services.process_resources.publish(self._namespace)
 
     def publish_accounts(self) -> None:
         """Makes this prepared generation's account reports authoritative."""
@@ -572,6 +579,14 @@ class PluginKernel:
             external_turns=(
                 services.external_turns if "external_turns" in grants else None
             ),
+            process_resources=(
+                services.process_resources.for_plugin(
+                    self._namespace, handle.plugin_id, handle.effects
+                )
+                if "process_resources" in grants
+                and services.process_resources is not None
+                else None
+            ),
             background_results=(
                 services.background_results if "background_results" in grants else None
             ),
@@ -676,6 +691,7 @@ class PluginKernel:
             "sessions": lambda: None,
             "external_turns": lambda: None,
             "background_results": lambda: None,
+            "process_resources": lambda: None,
             "http": lambda: None,
             "resources": lambda: None,
             "processes": lambda: None,

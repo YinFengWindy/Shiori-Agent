@@ -7,6 +7,8 @@ from shiori_sdk.background_results import BackgroundResults
 from shiori_sdk.tools import Tool
 
 from .service import TaskService
+from .config import HerdrConfig
+from shiori_sdk.process_resources import PluginProcessResources
 
 
 class StartCodingTask(Tool):
@@ -34,17 +36,31 @@ class StartCodingTask(Tool):
         "required": ["repository", "requirement"],
     }
 
-    def __init__(self, service: TaskService, results: BackgroundResults) -> None:
+    def __init__(
+        self,
+        service: TaskService,
+        results: BackgroundResults,
+        config: HerdrConfig,
+        resources: PluginProcessResources,
+    ) -> None:
         self.service = service
         self.results = results
+        self.config = config
+        self.resources = resources
 
     async def execute(self, **kwargs: Any) -> str:
         """Model arguments cannot choose a role, thread, or outbound destination."""
-        agent = kwargs.get("agent", self.service.cli.config.default_agent)
+        if not self.resources.active:
+            raise RuntimeError("插件配置已替换，请重新调用当前工具")
+        agent = kwargs.get("agent", self.config.default_agent)
         if agent not in {"codex", "claude"}:
             raise ValueError("agent 只支持 codex 或 claude")
         task = self.service.start(
-            kwargs["repository"], kwargs["requirement"], agent, self.results.capture()
+            kwargs["repository"],
+            kwargs["requirement"],
+            agent,
+            self.results.capture(),
+            self.config,
         )
         return json.dumps(
             {"task_id": task.id, "status": task.status, "agent": task.agent},

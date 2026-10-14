@@ -8,10 +8,19 @@ from typing import Literal
 
 from shiori_sdk.background_results import BackgroundResultTarget
 
-from .config import AgentKind
+from .config import AgentKind, HerdrConfig
 
 type TaskStatus = Literal[
-    "queued", "preparing", "running", "completed", "blocked", "unknown", "failed"
+    "queued",
+    "preparing",
+    "running",
+    "completed",
+    "blocked",
+    "unknown",
+    "failed",
+    "cancelling",
+    "cancelled",
+    "monitoring_stopped",
 ]
 
 
@@ -32,9 +41,12 @@ class CodingTask:
     directory: Path
     branch: str
     run_id: str
+    config: HerdrConfig = field(default_factory=HerdrConfig)
     status: TaskStatus = "queued"
     agent_state: str = "unknown"
     prompt_settled: bool = False
+    prompt_sent: bool = False
+    revision: int = 0
     worktree: Path | None = None
     workspace_id: str = ""
     pane_id: str = ""
@@ -49,12 +61,14 @@ class CodingTask:
     created_at: str = field(default_factory=now)
     updated_at: str = field(default_factory=now)
     worker: asyncio.Task[None] | None = field(default=None, repr=False)
+    operation_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
 
     def touch(self, status: TaskStatus | None = None) -> None:
         """Update observation time without conflating lifecycle with delivery."""
         if status is not None:
             self.status = status
         self.updated_at = now()
+        self.revision += 1
 
     @property
     def result_path(self) -> Path:

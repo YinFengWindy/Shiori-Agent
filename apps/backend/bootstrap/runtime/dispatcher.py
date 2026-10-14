@@ -50,6 +50,13 @@ class RuntimeDispatcher:
             with bind_runtime(lease):
                 return await lease.core.loop.run_role_operation(metadata, operation)
 
+    async def process_background_result(self, context, admit) -> None:
+        """Select the current generation only for this short result turn."""
+        await self._app.wait_for_admission()
+        async with self._app.acquire() as lease:
+            with bind_runtime(lease):
+                await lease.core.loop.process_background_result(context, admit)
+
     def request_interrupt(
         self, session_key: str, sender: str = "", command: str = "/stop"
     ):

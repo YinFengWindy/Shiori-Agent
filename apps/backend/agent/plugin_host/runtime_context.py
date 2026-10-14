@@ -42,6 +42,7 @@ from shiori_sdk.models import ChatProvider, RoleModels
 from shiori_sdk.sessions import PluginSessions
 from shiori_sdk.external_turns import ExternalTurns
 from shiori_sdk.background_results import BackgroundResults
+from shiori_sdk.process_resources import PluginProcessResources
 from shiori_sdk.tools import ToolsCapability as SdkToolsCapability
 from agent.plugin_host.kv import PluginKVStore
 from shiori_sdk.http import HttpClient
@@ -87,6 +88,7 @@ class PluginSetupContext:
         sessions: PluginSessions | None = None,
         external_turns: ExternalTurns | None = None,
         background_results: BackgroundResults | None = None,
+        process_resources: PluginProcessResources | None = None,
         tools: SdkToolsCapability | None = None,
         kv: PluginKVStore | None = None,
         http: HttpClient | None = None,
@@ -127,6 +129,7 @@ class PluginSetupContext:
         self._sessions = sessions
         self._external_turns = external_turns
         self._background_results = background_results
+        self._process_resources = process_resources
         self._tools = tools
         self._kv = kv
         self._http = http
@@ -312,6 +315,11 @@ class PluginSetupContext:
     def sessions(self) -> PluginSessions:
         """Return the explicitly granted sessions SDK capability."""
         return self._provided("sessions", self._sessions)
+
+    @property
+    def process_resources(self) -> PluginProcessResources:
+        """Access process-owned resources through this generation attachment."""
+        return self._provided("process_resources", self._process_resources)
 
     @property
     def background_results(self) -> BackgroundResults:
