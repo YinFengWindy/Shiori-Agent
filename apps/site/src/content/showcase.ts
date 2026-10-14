@@ -1,9 +1,9 @@
 /**
  * The showcase's features, in page order: the one list of their ids. Each
  * has a still, a screenshot of the real desktop app captured by
- * apps/site-video into `assets/showcase/<id>.webp`, which
- * `lib/siteAssets.ts` picks up by the same ids, and a Remotion demo clip of
- * the same id (the page shows the stills, not the videos: #790).
+ * `scripts/stills.ts` (`pnpm run site:stills`) into
+ * `assets/showcase/<id>.webp`, which `lib/siteAssets.ts` picks up by the
+ * same ids.
  */
 export const SHOWCASE_CLIP_IDS = ["memory", "affection", "proactive", "channels", "plugins"] as const;
 

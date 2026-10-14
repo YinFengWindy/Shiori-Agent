@@ -146,7 +146,7 @@ export const SOCIAL_PREVIEW_ART = "cg-6" satisfies GalleryArt;
 /**
  * The showcase stills (#790), by clip id (`SHOWCASE_CLIP_IDS` in
  * `content/showcase.ts`): screenshots of the real desktop app, captured by
- * apps/site-video (`pnpm run site:stills`) and committed; the site build only
+ * `scripts/stills.ts` (`pnpm run site:stills`) and committed; the site build only
  * copies them. The page shows these instead of the demo clips, which stalled
  * on slow or flaky lines.
  */
@@ -167,7 +167,7 @@ export interface GalleryPhoto {
 
 /**
  * The photo strip under the showcase, in strip order (`content/gallery.ts`):
- * each print is a small preview of its art, made by apps/site-video
+ * each print is a small preview of its art, made by `scripts/gallery.ts`
  * (`pnpm run site:gallery`) and committed, not the full-size file.
  */
 export const galleryPhotos: readonly GalleryPhoto[] = GALLERY_ARTS.map((art) => ({

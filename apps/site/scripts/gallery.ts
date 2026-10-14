@@ -6,21 +6,17 @@
  * (`pnpm run site:gallery`) after changing the strip's list or its art, and
  * commit the output. Files no entry names any more are deleted.
  *
- * It lives here, beside the clips' render scripts, because this package
- * already carries the image tooling (sharp); the site's own build stays free
- * of it.
- *
  * Usage: `tsx scripts/gallery.ts`.
  */
 import { mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import sharp from "sharp";
-import { GALLERY_ARTS, GALLERY_THUMB_HEIGHT, GALLERY_THUMB_MAX_BYTES } from "../../site/src/content/gallery";
+import { GALLERY_ARTS, GALLERY_THUMB_HEIGHT, GALLERY_THUMB_MAX_BYTES } from "../src/content/gallery";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const artDir = resolve(here, "../../site/src/assets/art");
-const outDir = resolve(here, "../../site/src/assets/gallery");
+const artDir = resolve(here, "../src/assets/art");
+const outDir = resolve(here, "../src/assets/gallery");
 
 /** WebP quality: soft enough for the budget, still clean on a 2× print. */
 const WEBP_QUALITY = 78;

@@ -89,7 +89,6 @@ lme_error_log_*.txt
 apps/site/dist/
 apps/site/dist-drafts/
 apps/site/.astro/
-apps/site-video/out/
 
 # Python distribution build products
 build/

@@ -1,8 +1,7 @@
 /*
  * Shiori design tokens: every custom property of the design system, and
  * nothing else. Imported first by styles.css (the desktop renderer, and the
- * website through it) and on its own by the website's Remotion demo clips
- * (apps/site-video), which render without Tailwind; one source for all.
+ * website through it); one source for both.
  */
 :root {
   /* ============================================================
