@@ -15,6 +15,7 @@ from .cli import CommandError, HerdrCli
 from .config import AgentKind, HerdrConfig
 from .delivery import verify_delivery, write_instructions
 from .models import CodingTask
+from .task_management import cancel_task, continue_task, inspect_task
 
 
 class TaskService:
@@ -30,6 +31,22 @@ class TaskService:
     def create_cli(self, config: HerdrConfig) -> HerdrCli:
         """Build a stateless adapter using the task's immutable session configuration."""
         return HerdrCli(config, self.processes, self.directory)
+
+    # Keep operations bound to this owner's import generation. New tool/RPC
+    # facades must not mix their CommandError class with the retained CLI's.
+    async def inspect_task(self, task_id: str, role_id: str) -> CodingTask:
+        """Refresh this role's task using the retained owner's CLI boundary."""
+        return await inspect_task(self, task_id, role_id)
+
+    async def continue_task(
+        self, task_id: str, requirement: str, role_id: str
+    ) -> CodingTask:
+        """Accept another run on this role's existing agent and worktree."""
+        return await continue_task(self, task_id, requirement, role_id)
+
+    async def cancel_task(self, task_id: str, role_id: str) -> CodingTask:
+        """Accept cancellation and track confirmation in the retained owner."""
+        return await cancel_task(self, task_id, role_id)
 
     def subscribe(self, listener: Callable[[CodingTask], None]) -> Callable[[], None]:
         """Observe in-process snapshots; registration belongs to the calling view."""

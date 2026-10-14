@@ -105,7 +105,7 @@ async def continue_task(
             )
         task.run_id = uuid4().hex
         task.requirement += "\n\n用户追加要求：\n" + requirement
-        task.summary = task.error = task.report_error = task.pr_url = ""
+        task.summary = task.error = task.report_error = task.pr_url = task.output = ""
         task.validation.clear()
         task.prompt_settled = task.prompt_sent = False
         task.touch("queued")
@@ -123,12 +123,16 @@ async def cancel_task(service: "TaskService", task_id: str, role_id: str) -> Cod
             raise RuntimeError("Herdr 插件已停止追踪")
         if task.status in {"completed", "cancelled", "cancelling"}:
             return task
+        # A retry after an unconfirmed stop has a new report. Calls made while
+        # this attempt is running remain idempotent via the cancelling state.
+        report_id = f"{task.id}:{task.run_id}:cancel:{uuid4().hex}"
+        task.report_error = ""
         task.touch("cancelling")
         previous = task.worker
         if previous is not None and not previous.done():
             previous.cancel()
         task.worker = asyncio.create_task(
-            _confirm_cancel(service, task, previous),
+            _confirm_cancel(service, task, previous, report_id),
             name=f"herdr-cancel:{task.id}",
             context=Context(),
         )
@@ -137,7 +141,10 @@ async def cancel_task(service: "TaskService", task_id: str, role_id: str) -> Cod
 
 
 async def _confirm_cancel(
-    service: "TaskService", task: CodingTask, previous: asyncio.Task[None] | None
+    service: "TaskService",
+    task: CodingTask,
+    previous: asyncio.Task[None] | None,
+    report_id: str,
 ) -> None:
     try:
         if previous is not None:
@@ -180,9 +187,7 @@ async def _confirm_cancel(
         task.touch("unknown")
     service.changed(task)
     try:
-        _ = await task.target.report(
-            f"{task.id}:{task.run_id}:cancel", service.report_text(task)
-        )
+        _ = await task.target.report(report_id, service.report_text(task))
     except Exception as error:
         task.report_error = str(error)
         service.changed(task)

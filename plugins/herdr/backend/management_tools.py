@@ -8,7 +8,7 @@ from shiori_sdk.background_results import BackgroundResults
 from shiori_sdk.tools import Tool, ToolsCapability
 
 from .service import TaskService
-from .task_management import cancel_task, continue_task, inspect_task, task_snapshot
+from .task_management import task_snapshot
 
 
 class TaskManagementTool(Tool):
@@ -76,13 +76,13 @@ class TaskManagementTool(Tool):
                 ensure_ascii=False,
             )
         if self.action == "get":
-            task = await inspect_task(self.service, kwargs["task_id"], role_id)
+            task = await self.service.inspect_task(kwargs["task_id"], role_id)
         elif self.action == "continue":
             _ = self.results.capture()
-            task = await continue_task(
-                self.service, kwargs["task_id"], kwargs["requirement"], role_id
+            task = await self.service.continue_task(
+                kwargs["task_id"], kwargs["requirement"], role_id
             )
         else:
             _ = self.results.capture()
-            task = await cancel_task(self.service, kwargs["task_id"], role_id)
+            task = await self.service.cancel_task(kwargs["task_id"], role_id)
         return json.dumps(task_snapshot(task), ensure_ascii=False)

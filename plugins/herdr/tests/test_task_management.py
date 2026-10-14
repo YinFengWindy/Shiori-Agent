@@ -1,6 +1,7 @@
 """Continuation ownership and cancellation confirmation against controlled agents."""
 
 import asyncio
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -92,7 +93,9 @@ async def test_continue_reuses_agent_and_worktree_with_new_run_and_no_concurrent
 
     monkeypatch.setattr(service, "_execute", execute)
     old_run, worktree = task.run_id, task.worktree
+    task.output = "previous run terminal output"
     assert await continue_task(service, task.id, "新要求\n第二行", "role-a") is task
+    assert task_snapshot(task)["output"] == ""
     await started.wait()
     assert task.run_id != old_run and task.worktree == worktree
     assert task.agent_name == "owned-agent" and configurations == ["original"]
@@ -143,8 +146,9 @@ async def test_cancel_reports_only_after_agent_stops_and_preserves_worktree(
     task.worker = asyncio.create_task(asyncio.Event().wait())
     await cancel_task(service, task.id, "role-a")
     assert task.status == "cancelling" and not target.reports
+    worker = task.worker
     repeated = await cancel_task(service, task.id, "role-a")
-    assert repeated is task
+    assert repeated is task and task.worker is worker
     await task.worker
     assert task.status == "cancelled"
     assert path.read_text(encoding="utf-8") == "keep me"
@@ -169,6 +173,47 @@ async def test_cancel_timeout_stays_unknown_and_never_kills_server(
     assert not any("server" in call or "remove" in call for call in cli.calls)
 
 
+@pytest.mark.parametrize("first_report_fails", [False, True])
+async def test_cancel_retry_reports_new_outcome_and_clears_old_report_error(
+    fixture, monkeypatch, first_report_fails
+):
+    service, task, cli, target, _ = fixture
+    cli.status, cli.stops = "working", False
+    with monkeypatch.context() as patcher:
+        ticks = iter([0, 999])
+        patcher.setattr(
+            "plugins.herdr.backend.task_management.time",
+            SimpleNamespace(monotonic=lambda: next(ticks)),
+        )
+        if first_report_fails:
+
+            async def fail_report(result_id, text):
+                raise RuntimeError("chat temporarily unavailable")
+
+            patcher.setattr(target, "report", fail_report)
+        await cancel_task(service, task.id, "role-a")
+        await task.worker
+
+    assert task.status == "unknown"
+    assert bool(task.report_error) is first_report_fails
+    if not first_report_fails:
+        assert [json.loads(text)["status"] for text in target.reports.values()] == [
+            "unknown"
+        ]
+    cli.stops = True
+    await cancel_task(service, task.id, "role-a")
+    assert task.report_error == ""
+    worker = task.worker
+    await cancel_task(service, task.id, "role-a")
+    assert task.worker is worker
+    await worker
+    assert task.status == "cancelled" and task.error == task.report_error == ""
+    assert [json.loads(text)["status"] for text in target.reports.values()] == (
+        ["cancelled"] if first_report_fails else ["unknown", "cancelled"]
+    )
+    assert sum("send-keys" in call for call in cli.calls) == 2
+
+
 async def test_completed_result_wins_over_late_cancel(fixture):
     service, task, cli, target, _ = fixture
     task.status = "completed"
@@ -186,6 +231,17 @@ async def test_inspect_refreshes_output_without_claiming_delivery_or_resubmittin
     assert task.agent_state == "done" and task.output == "needs interaction"
     assert task.status == "unknown" and not target.reports
     assert cli.calls == [("agent", "get", "owned-agent")]
+
+
+async def test_inspect_does_not_hide_unrelated_runtime_failure(fixture, monkeypatch):
+    service, task, cli, _, _ = fixture
+
+    async def unexpected_failure(*args):
+        raise RuntimeError("unexpected implementation failure")
+
+    monkeypatch.setattr(cli, "call", unexpected_failure)
+    with pytest.raises(RuntimeError, match="unexpected implementation failure"):
+        await service.inspect_task(task.id, "role-a")
 
 
 async def test_disable_during_continue_read_cannot_launch_a_new_run(
