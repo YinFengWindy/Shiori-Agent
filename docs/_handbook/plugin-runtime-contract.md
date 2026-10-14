@@ -115,7 +115,7 @@ Python SDK minimum; audited packages using only unchanged APIs may keep their
 
 ### Unreleased
 
-- #819: renderer `PluginHostServices.openExternal(url): Promise<void>` exposes
+- #822 (issue #819): renderer `PluginHostServices.openExternal(url): Promise<void>` exposes
   the existing validated desktop external-link operation. It accepts the host's
   HTTP(S)/mailto protocols and rejects refused links or shell failures; plugins
   receive no raw IPC access. The independent host-services fake records calls.
