@@ -115,8 +115,8 @@ Python SDK minimum; audited packages using only unchanged APIs may keep their
 
 ### Unreleased
 
-- #817 / #816: `background_results` grants `capture()` during an authenticated
-  role tool turn. The returned `BackgroundResultTarget` retains the original
+- #820 (issues #817 / #816): `background_results` grants `capture()` during an
+  authenticated role tool turn. The returned `BackgroundResultTarget` retains the original
   role, thread, actual transport and bound sender; `report(result_id, text)`
   rechecks them inside the role turn gate and reports through the role's normal
   outbound path. Repeated attempted IDs do not produce another report, including
