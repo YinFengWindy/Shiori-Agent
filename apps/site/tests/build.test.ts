@@ -415,6 +415,8 @@ describe("home page HTML", () => {
         { href: "/blog/", label: "博客" },
         { href: "/changelog/", label: "更新日志" },
         { href: "https://github.com/YinFengWindy/Shiori-Agent", label: "GitHub" },
+        // Its phone stand-in, an icon tile named GitHub (#814).
+        { href: "https://github.com/YinFengWindy/Shiori-Agent", label: "" },
         { href: "/en/", label: "EN" },
         { href: "https://github.com/YinFengWindy/Shiori-Agent/releases/latest", label: "下载 Windows 版" },
       ]);

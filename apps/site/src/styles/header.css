@@ -117,17 +117,6 @@
   color: var(--color-text-accent);
 }
 
-/* Narrow screens: the download button drops the release tag the script
-   appends, so the bar — with the home page's language and music switches
-   side by side (#810) — never overflows. Below 430px the name is visually
-   hidden too (`max-[429px]:sr-only` on it, SiteHeader.astro), still naming
-   the home link for assistive technology. */
-@media (max-width: 699px) {
-  .site-header [data-download-version] {
-    display: none;
-  }
-}
-
 
 /* Without scripting nothing would reveal it: the home page shows it
    from the start, without the music switch, which would not play. */

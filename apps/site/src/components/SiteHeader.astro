@@ -2,6 +2,7 @@
 import { GithubLogoIcon } from "@phosphor-icons/react";
 import { cx } from "@yinfengwindy/shiori-sdk";
 import { compactPrimaryButtonClass, compactTextButtonClass } from "../../../desktop/renderer/src/shared/styles";
+import { controlButtonClass } from "../lib/controlButton";
 import { type SiteDictionary, siteText } from "../i18n";
 import { type Locale, versionFor } from "../i18n/locales";
 import { barIconImage } from "../lib/siteAssets";
@@ -30,8 +31,9 @@ import "../styles/header.css";
  * `fixed` (blog, changelog, which play no music):
  * always there, in the page flow at the top and sticking while scrolling.
  *
- * Narrow screens keep the icon, the name (phones: the icon only), 博客, the switches and the download button;
- * 更新日志 and GitHub drop out (the footer links GitHub and the releases).
+ * Phones and small tablets (below `md`, 768px) keep the icon, the name, 博客 and the switches, with
+ * GitHub as a tile among them (#814); 更新日志 and the download button drop out
+ * — there is no phone version to download, and the footer links the releases.
  */
 interface Props {
   locale: Locale;
@@ -47,8 +49,9 @@ interface Props {
 const { locale, mode, current, languageHref, sound } = Astro.props;
 const text = siteText(locale).header;
 const linkClass = cx(compactTextButtonClass, "no-underline");
-// Off on narrow screens: see above.
-const wideOnlyClass = "max-sm:hidden";
+// Off on narrow screens (phones and small tablets, below `md`, 768px), and their stand-ins: see above.
+const wideOnlyClass = "max-md:hidden";
+const narrowOnlyClass = "md:hidden";
 ---
 
 <header class="site-header" data-site-header data-mode={mode}>
@@ -63,8 +66,7 @@ const wideOnlyClass = "max-sm:hidden";
         decoding="async"
         class="site-header-icon"
       />
-      {/* Phones hide the name from sight only, to keep the bar from overflowing (header.css). */}
-      <span class="site-header-name site-story-type max-[429px]:sr-only">{SITE_NAME}</span>
+      <span class="site-header-name site-story-type">{SITE_NAME}</span>
     </a>
     <div class="site-header-links">
       <a href={versionFor(locale, SITE_SECTIONS.blog)} class={linkClass} aria-current={current === "blog" ? "page" : undefined}>{text.blog}</a>
@@ -77,9 +79,13 @@ const wideOnlyClass = "max-sm:hidden";
         <GithubLogoIcon size={18} aria-hidden="true" />
         GitHub
       </a>
+      {/* Phones: GitHub as a tile beside the switches, in place of the text link. */}
+      <a href={SITE_LINKS.github} class={cx(controlButtonClass, narrowOnlyClass)} aria-label="GitHub" title="GitHub">
+        <GithubLogoIcon size={20} aria-hidden="true" />
+      </a>
       <LanguageSwitch locale={locale} href={languageHref} variant="bar" />
       {sound && <SoundToggle client:idle className="site-header-sound" labels={sound} />}
-      <DownloadButton label={text.download} class={compactPrimaryButtonClass} iconSize={18} />
+      <DownloadButton label={text.download} class={cx(compactPrimaryButtonClass, wideOnlyClass)} iconSize={18} />
     </div>
   </nav>
 </header>

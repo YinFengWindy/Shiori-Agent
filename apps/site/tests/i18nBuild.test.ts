@@ -265,6 +265,22 @@ describe("language switch (#806)", () => {
     for (const home of [zhHome, enHome]) assert.doesNotMatch(home, /passthrough/);
   });
 
+  it("on phones swaps the download button and the text GitHub link for a GitHub tile in the switches' look, on every page (#814)", () => {
+    const github = "https://github.com/YinFengWindy/Shiori-Agent";
+    for (const page of ["index.html", "en/index.html", "blog/index.html", "en/blog/index.html", "changelog/index.html", "en/changelog/index.html"]) {
+      const bar = site.read(page).match(/<header class="site-header"[^>]*>(.*?)<\/header>/s)?.[1] ?? "";
+      const githubLinks = [...bar.matchAll(new RegExp(`<a href="${github}" class="([^"]*)"([^>]*)>`, "g"))].map(([, className, rest]) => ({ className, rest }));
+      assert.deepEqual(
+        githubLinks.map(({ className }) => className.split(" ").filter((name) => name.endsWith(":hidden"))),
+        [["max-md:hidden"], ["md:hidden"]],
+        `${page}: the text link off on phones, the tile only on them`,
+      );
+      assert.equal(githubLinks[1].className, `${controlButtonClass} md:hidden`, page);
+      assert.match(githubLinks[1].rest, /aria-label="GitHub"/, page);
+      assert.match(bar, /<a href="[^"]+" class="[^"]* max-md:hidden" data-download-installer>/, `${page}: no download button on phones`);
+    }
+  });
+
   it("plays no music on the reading pages: their top bar has the language switch only", () => {
     for (const page of ["blog/index.html", "changelog/index.html", "en/blog/index.html"]) {
       const bar = site.read(page).match(/<header class="site-header"[^>]*>(.*?)<\/header>/s)?.[1] ?? "";
