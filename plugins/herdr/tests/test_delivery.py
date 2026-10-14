@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import shutil
 import subprocess
 import sys
 
@@ -19,7 +20,7 @@ class ValidationProcesses(FakeProcesses):
     """Run only Git and this test interpreter; external services remain controlled."""
 
     async def spawn(self, *command, **kwargs):
-        assert command[0] in {"git", sys.executable}
+        assert command[0] in {"git", shutil.which("git"), sys.executable}
         return await asyncio.create_subprocess_exec(*command, **kwargs), None
 
 

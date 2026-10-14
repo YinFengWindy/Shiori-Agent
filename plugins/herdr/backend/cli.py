@@ -4,6 +4,8 @@ import asyncio
 import json
 import os
 import re
+import shutil
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -78,8 +80,19 @@ class HerdrCli:
         self, argv: list[str], *, cwd: Path | None = None, timeout: float | None = None
     ) -> str:
         """Run without a shell; terminate only this owned CLI child on timeout."""
+        executable = argv[0]
+        if sys.platform == "win32":
+            # CreateProcess does not resolve bare npm commands through PATHEXT.
+            # Resolve once before spawning and preserve every argument verbatim.
+            if os.path.dirname(executable):
+                executable = str((cwd or self.cwd) / executable)
+            resolved = shutil.which(executable)
+            if resolved is None:
+                raise FileNotFoundError(f"找不到可执行程序：{argv[0]}")
+            executable = resolved
         process, owner = await self.processes.spawn(
-            *argv,
+            executable,
+            *argv[1:],
             env=dict(os.environ),
             cwd=str(cwd or self.cwd),
             stdin=asyncio.subprocess.DEVNULL,
