@@ -811,28 +811,42 @@ html:has(.site-narrative) {
     drop-shadow(0 0 6px var(--site-slogan-glow-soft));
 }
 
-/* The home page's corner controls: the music switch, and the language
-   switch to its left (language.css), each an icon button (`iconButtonClass`,
-   h-10); the English prompt sits under them. Stacking: the loader covers
-   the page, and the controls that work while it shows (the language switch
-   and the English prompt, #806) sit above it. */
+/* The home page's corner controls: the language switch and the music
+   switch, side by side in one look (`controlButtonClass`,
+   lib/controlButton.ts, h-10); the English prompt sits under them.
+   Stacking: under the top bar and the loader — they show once the loader
+   goes (#810). */
 :root {
   --site-corner-inset: clamp(0.75rem, 2vw, 1.25rem);
   --site-corner-button: 2.5rem;
   --site-corner-gap: 0.5rem;
+  --site-layer-corner: 10;
   --site-layer-loader: 100;
-  --site-layer-over-loader: 110;
   /* The frosted glass of the bars and cards floating over the page (the
      top bar, the English prompt). */
   --site-glass-blur: 16px;
 }
 
-/* The music switch floats in the top-right corner over every section. */
-.site-sound-toggle {
+/* The pair floats in the top-right corner over every section; it fades
+   out while the top bar, carrying its own pair, shows (header.css). */
+.site-corner-controls {
   position: fixed;
-  z-index: 10;
+  z-index: var(--site-layer-corner);
   top: var(--site-corner-inset);
   right: var(--site-corner-inset);
+  display: flex;
+  gap: var(--site-corner-gap);
+  transition:
+    opacity var(--duration-fast) var(--ease-out-soft),
+    visibility 0s linear;
+}
+
+/* Without scripting the top bar shows from the start, with its own
+   language switch, and the music could not play. */
+@media (scripting: none) {
+  .site-corner-controls {
+    display: none;
+  }
 }
 
 /* Reduced motion — and no scripting, where nothing would map the scroll to

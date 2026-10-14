@@ -19,8 +19,7 @@
   --site-header-icon-size: 2rem;
 }
 
-/* On the root: the music switch (home page) moves down by the bar's
-   height, in step with its slide, while it shows. */
+/* On the root: the reading pages size their content and anchors by it. */
 :root {
   --site-header-height: 3.5rem;
   --site-header-slide: var(--duration-base);
@@ -62,17 +61,10 @@
     visibility 0s linear;
 }
 
-.site-sound-toggle {
-  transition: translate var(--site-header-slide) var(--ease-out-soft);
-}
-
-:root:has(.site-header[data-revealed]) .site-sound-toggle {
-  translate: 0 var(--site-header-height);
-}
-
-/* The bar carries its own language switch (#806): the corner one fades out
-   while the bar shows, so there is only ever one. */
-:root:has(.site-header[data-revealed]) .site-lang-corner {
+/* The bar carries its own language and music switches (#806, #810): the
+   corner pair (site.css) fades out while the bar shows, so there is only
+   ever one of each, and comes back with the narrative. */
+:root:has(.site-header[data-revealed]) .site-corner-controls {
   opacity: 0;
   visibility: hidden;
   transition:
@@ -125,37 +117,26 @@
   color: var(--color-text-accent);
 }
 
-/* The narrowest phones: the download button drops the release tag the
-   script appends and the language switch (#806) tightens, so the bar never
-   overflows. Below 380px the name is visually hidden too (`max-[379px]:sr-only`
-   on it, SiteHeader.astro), still naming the home link for assistive
-   technology. */
-@media (max-width: 429px) {
-  .site-header [data-download-version] {
-    display: none;
-  }
-
-  .site-header .site-lang-bar {
-    padding-inline: 0.5rem;
-  }
-}
-
 
 /* Without scripting nothing would reveal it: the home page shows it
-   from the start. */
+   from the start, without the music switch, which would not play. */
 @media (scripting: none) {
   .site-header[data-mode="reveal"] {
     translate: none;
     visibility: visible;
   }
+
+  .site-header-sound {
+    display: none;
+  }
 }
 
-/* Reduced motion: the bar appears and goes without sliding, and the music
-   switch jumps under it. */
+/* Reduced motion: the bar appears and goes without sliding, and the corner
+   pair without fading. */
 @media (prefers-reduced-motion: reduce) {
   .site-header[data-mode="reveal"],
   .site-header[data-mode="reveal"][data-revealed],
-  .site-sound-toggle {
+  .site-corner-controls {
     transition: none;
   }
 }

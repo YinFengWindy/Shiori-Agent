@@ -5,6 +5,7 @@ import { NARRATIVE_LINES } from "../src/content/narrative";
 import { SHOWCASE_CLIP_IDS } from "../src/content/showcase";
 import { en } from "../src/i18n/en";
 import { zh } from "../src/i18n/zh";
+import { controlButtonClass } from "../src/lib/controlButton";
 import {
   ORIGIN,
   assertDescription,
@@ -20,7 +21,6 @@ import {
   visibleTextOf,
 } from "./support/builtSite";
 import { runLoaderGate } from "./support/loaderGate";
-import { runLoaderInputGuard } from "./support/loaderInputGuard";
 import { untranslatedPosts } from "./support/sourcePosts";
 
 /*
@@ -36,16 +36,24 @@ const enHome = site.read("en/index.html");
 
 /** Every language switch link of a page: where it leads, what it shows, its name, and whether it is the corner one. */
 function languageSwitchesOf(html: string) {
-  return [...html.matchAll(/<a href="([^"]+)" hreflang="([^"]+)" class="([^"]*)" aria-label="([^"]+)" title="[^"]+" data-lang-switch( data-loader-passthrough)?>([^<]+)<\/a>/g)].map(
-    ([, href, hreflang, className, label, passthrough, text]) => ({
+  return [...html.matchAll(/<a href="([^"]+)" hreflang="([^"]+)" class="([^"]*)" aria-label="([^"]+)" title="[^"]+" data-lang-switch>([^<]+)<\/a>/g)].map(
+    ([, href, hreflang, className, label, text]) => ({
       href,
       hreflang,
       label,
       text,
       corner: className.includes("site-lang-corner"),
-      passthrough: passthrough !== undefined,
     }),
   );
+}
+
+/** The classes of a stretch of page's language switch links and music switch buttons, in document order. */
+function controlClassesOf(html: string) {
+  return [
+    ...html.matchAll(
+      /<a href="[^"]+" hreflang="[^"]+" class="([^"]*)"[^>]* data-lang-switch>|<button type="button" aria-pressed="false" aria-label="[^"]+" title="[^"]+" class="([^"]*)">/g,
+    ),
+  ].map(([, language, music]) => (language === undefined ? { music } : { language }));
 }
 
 /** Text as Astro writes it into an element: `&`, `<`, `>` and quotes escaped. */
@@ -227,46 +235,72 @@ describe("language pairing (#806)", () => {
 });
 
 describe("language switch (#806)", () => {
-  it("puts a corner switch over the loader and one in the top bar on the Chinese home page, both to the English home page", () => {
+  it("puts a corner switch and one in the top bar on the Chinese home page, both to the English home page", () => {
     const switches = languageSwitchesOf(zhHome);
     const corner = switches.filter((link) => link.corner);
     assert.equal(corner.length, 1, "one corner switch");
-    assert.deepEqual(corner[0], { href: "/en/", hreflang: "en", label: zh.languageSwitch.label, text: "EN", corner: true, passthrough: true });
+    assert.deepEqual(corner[0], { href: "/en/", hreflang: "en", label: zh.languageSwitch.label, text: "EN", corner: true });
     const bar = zhHome.match(/<header class="site-header"[^>]*>(.*?)<\/header>/s)?.[1] ?? "";
     assert.deepEqual(languageSwitchesOf(bar).map(({ href, text, corner: inCorner }) => ({ href, text, inCorner })), [{ href: "/en/", text: "EN", inCorner: false }]);
   });
 
   it("leads back from the English home page with 「中」", () => {
     const corner = languageSwitchesOf(enHome).filter((link) => link.corner);
-    assert.deepEqual(corner, [{ href: "/", hreflang: "zh-CN", label: en.languageSwitch.label, text: "中", corner: true, passthrough: true }]);
+    assert.deepEqual(corner, [{ href: "/", hreflang: "zh-CN", label: en.languageSwitch.label, text: "中", corner: true }]);
   });
 
-  it("shows only one switch at a time: the corner one hides while the top bar shows, and without scripting", () => {
+  it("gives the language and music switches one look, side by side in the corner and in the top bar, before the download button (#810)", () => {
+    for (const home of [zhHome, enHome]) {
+      const corner = home.match(/<div class="site-corner-controls">(.*?)<\/astro-island><\/div>/s)?.[1] ?? "";
+      assert.deepEqual(controlClassesOf(corner), [{ language: `${controlButtonClass} site-lang-corner` }, { music: controlButtonClass }]);
+      const bar = home.match(/<header class="site-header"[^>]*>(.*?)<\/header>/s)?.[1] ?? "";
+      assert.deepEqual(controlClassesOf(bar), [{ language: controlButtonClass }, { music: `${controlButtonClass} site-header-sound` }]);
+      assert.ok(bar.indexOf('component-export="SoundToggle"') < bar.indexOf("data-download-installer"), "the switches come before the download button");
+    }
+  });
+
+  it("shows only one pair at a time: the corner pair fades out while the top bar shows; without scripting neither the corner pair nor music in the bar", () => {
     const styles = [...zhHome.matchAll(/<style>(.*?)<\/style>/gs)].map((match) => match[1]).join("\n");
-    assert.match(styles, /:root:has\(\.site-header\[data-revealed\]\) \.site-lang-corner\{[^}]*visibility:hidden/);
-    assert.match(styles, /@media \(scripting:none\)\{\.site-lang-corner\{display:none\}\}/);
-    // Above the loader.
-    assert.match(styles, /\.site-lang-corner\{z-index:var\(--site-layer-over-loader\);[^}]*position:fixed/);
+    assert.match(styles, /:root:has\(\.site-header\[data-revealed\]\) \.site-corner-controls\{[^}]*visibility:hidden/);
+    assert.match(styles, /@media \(scripting:none\)\{\.site-corner-controls\{display:none\}\}/);
+    assert.match(styles, /@media \(scripting:none\)\{[^}]*\}\.site-header-sound\{display:none\}\}/);
+  });
+
+  it("keeps the corner controls and the English prompt under the loader, which lets no click through (#810)", () => {
+    const styles = [...zhHome.matchAll(/<style>(.*?)<\/style>/gs)].map((match) => match[1]).join("\n");
+    assert.match(styles, /\.site-corner-controls\{[^}]*z-index:var\(--site-layer-corner\)/);
+    assert.match(styles, /\.site-lang-prompt\{[^}]*z-index:var\(--site-layer-corner\)/);
     assert.match(styles, /\.site-loader\{[^}]*z-index:var\(--site-layer-loader\)/);
     const layer = (name: string) => Number(styles.match(new RegExp(`--site-layer-${name}:(\\d+)`))?.[1]);
-    assert.ok(layer("over-loader") > layer("loader"), "the switch must sit above the loader");
+    assert.ok(layer("corner") < layer("loader"), "the corner controls must sit under the loader");
+    assert.doesNotMatch(styles, /over-loader/);
+    // The prompt waits for the loader to go, so its entrance plays in view.
+    assert.match(styles, /:root\[data-site-loader\] \.site-lang-prompt\{display:none\}/);
+    // Nothing is marked to pass the loader's input guard.
+    for (const home of [zhHome, enHome]) assert.doesNotMatch(home, /passthrough/);
   });
 
-  it("lets clicks on the switch through the loader's input guard, but no scroll key, even with the switch focused", () => {
-    const script = zhHome.match(/<div id="site-loader".*?<script>(.*?)<\/script>/s)?.[1] ?? "";
-    const guard = runLoaderInputGuard(script);
-    const letThrough = { prevented: false, stopped: false };
-    const blocked = { prevented: true, stopped: true };
-    // A click on the switch (or Enter on it, which clicks) goes through.
-    assert.deepEqual(guard({ type: "click", onPassthrough: true }), letThrough);
-    assert.deepEqual(guard({ type: "keydown", key: "Enter", onPassthrough: true }), letThrough);
-    // Scroll keys never move the narrative while the loader shows, wherever the focus is.
-    for (const key of [" ", "PageDown", "ArrowDown", "End"]) {
-      assert.deepEqual(guard({ type: "keydown", key, onPassthrough: true }), blocked, `${JSON.stringify(key)} on the switch`);
-      assert.deepEqual(guard({ type: "keydown", key, onPassthrough: false }), blocked, `${JSON.stringify(key)} elsewhere`);
+  it("on phones swaps the download button and the text GitHub link for a GitHub tile in the switches' look, on every page (#814)", () => {
+    const github = "https://github.com/YinFengWindy/Shiori-Agent";
+    for (const page of ["index.html", "en/index.html", "blog/index.html", "en/blog/index.html", "changelog/index.html", "en/changelog/index.html"]) {
+      const bar = site.read(page).match(/<header class="site-header"[^>]*>(.*?)<\/header>/s)?.[1] ?? "";
+      const githubLinks = [...bar.matchAll(new RegExp(`<a href="${github}" class="([^"]*)"([^>]*)>`, "g"))].map(([, className, rest]) => ({ className, rest }));
+      assert.deepEqual(
+        githubLinks.map(({ className }) => className.split(" ").filter((name) => name.endsWith(":hidden"))),
+        [["max-md:hidden"], ["md:hidden"]],
+        `${page}: the text link off on phones, the tile only on them`,
+      );
+      assert.equal(githubLinks[1].className, `${controlButtonClass} md:hidden`, page);
+      assert.match(githubLinks[1].rest, /aria-label="GitHub"/, page);
+      assert.match(bar, /<a href="[^"]+" class="[^"]* max-md:hidden" data-download-installer>/, `${page}: no download button on phones`);
     }
-    // Clicks anywhere else still stop at the loader.
-    assert.deepEqual(guard({ type: "click", onPassthrough: false }), blocked);
+  });
+
+  it("plays no music on the reading pages: their top bar has the language switch only", () => {
+    for (const page of ["blog/index.html", "changelog/index.html", "en/blog/index.html"]) {
+      const bar = site.read(page).match(/<header class="site-header"[^>]*>(.*?)<\/header>/s)?.[1] ?? "";
+      assert.deepEqual(controlClassesOf(bar), [{ language: controlButtonClass }], page);
+    }
   });
 
   it("puts the switch in the top bar of the reading pages, to the same page in English, or the English blog for an untranslated post (#807)", () => {
@@ -303,7 +337,7 @@ describe("English prompt (#806)", () => {
     for (const [page, href] of Object.entries(targets)) {
       const prompt = promptOf(site.read(page));
       assert.ok(prompt, `${page} has no prompt`);
-      assert.match(prompt, /^<aside class="site-lang-prompt" lang="en" aria-label="Language" data-lang-prompt data-loader-passthrough hidden>/);
+      assert.match(prompt, /^<aside class="site-lang-prompt" lang="en" aria-label="Language" data-lang-prompt hidden>/);
       assert.match(prompt, />View this site in English\?<\/p>/);
       assert.match(prompt, /<button type="button"[^>]*data-lang-prompt-dismiss>Dismiss<\/button>/);
       assert.ok(prompt.includes(`<a href="${href}" hreflang="en"`), `${page}'s prompt does not lead to ${href}`);

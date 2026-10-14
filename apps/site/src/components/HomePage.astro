@@ -27,9 +27,9 @@ import "../styles/showcase.css";
  * same scene, then everything after it in one free-scrolling block: the
  * product showcase with its photo strip (#772); then the footer, the page's
  * last snap point. The top bar (#773) slides in over everything after the
- * narrative. The music switch and the language switch stay in the corner
- * over all of it, the language switch over the loader too; once the top bar
- * shows, its own language switch takes over.
+ * narrative. The music switch and the language switch sit side by side in
+ * the corner over the narrative, once the loader has gone (#810); once the
+ * top bar shows, the pair in the bar takes over (header.css).
  *
  * The head describes the site, its publisher and the app as structured data
  * (#799), the app's version being the newest release this build read. The
@@ -60,7 +60,7 @@ const structuredDataJson = inlineJson(
   <link slot="head" rel="preload" as="image" href={loaderArtwork.src} fetchpriority="high" />
   <script slot="meta" type="application/ld+json" set:html={structuredDataJson} />
   <SiteLoader />
-  <SiteHeader locale={locale} mode="reveal" languageHref={languageHref} />
+  <SiteHeader locale={locale} mode="reveal" languageHref={languageHref} sound={text.sound} />
   <main>
     <NarrativeStage locale={locale} downloadId={DOWNLOAD_ANCHOR_ID} />
     <div class="site-after-narrative">
@@ -68,6 +68,8 @@ const structuredDataJson = inlineJson(
     </div>
   </main>
   <SiteFooter locale={locale} />
-  <SoundToggle client:idle className="site-sound-toggle" labels={text.sound} />
-  <HomeLanguageSwitch locale={locale} href={languageHref} />
+  <div class="site-corner-controls">
+    <HomeLanguageSwitch locale={locale} href={languageHref} />
+    <SoundToggle client:idle labels={text.sound} />
+  </div>
 </SiteLayout>
