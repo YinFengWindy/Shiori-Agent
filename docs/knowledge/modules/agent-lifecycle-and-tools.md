@@ -47,6 +47,8 @@ related:
 
 `process_resources` capability 由 `AppRuntime` 的 `ProcessResourceOwner` 持有，以插件 ID 和版本化 key 复用进程资源。候选代只附加，发布后才切换 active；候选回滚不关闭活资源，停用和应用退出关闭监控并报告清理失败。Herdr 的共享 `TaskService` 不保存旧 runtime 或 RPC，任务各自保存 Herdr 配置快照；聊天查询只显示当前角色任务，继续使用原 agent/worktree 和新 run ID，取消只有确认停止才成为 cancelled。`task_snapshot` 与订阅入口供 Dashboard 使用；不提供应用重启恢复。
 
+Herdr 的 `backend/progress.py` 读取当前 task/run 的有界 JSONL 阶段报告，以递增序号去重和拒绝旧报告；`backend/dashboard.py` 提供桌面全局快照、继续/取消 RPC 及只含 task ID/revision 的失效事件，当前代视图订阅随卸载移除。`ui/DashboardPage.tsx` 注册为独立 workspace 导航页，`dashboardStore.ts` 先订阅后读取、复用未变化快照并拒绝旧修订，页面卸载不停止任务。看板的全局范围不改变角色工具权限；PR 打开使用通用 `host.openExternal`，复用宿主原有协议校验。
+
 ## 修改影响
 
 - 修改 phase 上下文：检查所有插件 handler、记忆生命周期、自动 CG 和观测插件。

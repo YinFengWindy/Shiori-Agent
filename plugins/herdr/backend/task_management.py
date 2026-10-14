@@ -44,6 +44,11 @@ def task_snapshot(task: CodingTask) -> dict[str, object]:
         "created_at": task.created_at,
         "updated_at": task.updated_at,
         "revision": task.revision,
+        "stage": task.stage,
+        "progress_updated_at": task.progress_updated_at,
+        "progress_notice": task.progress_notice,
+        "progress_events": list(task.progress_events),
+        "can_continue": task.worker is None or task.worker.done(),
     }
 
 
@@ -136,6 +141,7 @@ async def cancel_task(service: "TaskService", task_id: str, role_id: str) -> Cod
             name=f"herdr-cancel:{task.id}",
             context=Context(),
         )
+        task.worker.add_done_callback(lambda _worker: service.changed(task))
         service.changed(task)
         return task
 

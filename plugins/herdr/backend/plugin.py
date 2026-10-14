@@ -7,6 +7,7 @@ from .config import HerdrConfig
 from .service import TaskService
 from .tool import StartCodingTask
 from .management_tools import TaskManagementTool
+from .dashboard import Dashboard
 
 
 async def setup(ctx: ServicePluginContext) -> None:
@@ -18,6 +19,7 @@ async def setup(ctx: ServicePluginContext) -> None:
         "tasks-v1", lambda: TaskService(directory, ctx.processes)
     )
     ctx.expose(service)
+    Dashboard(service, ctx).register()
     ctx.tools.register(
         StartCodingTask(service, ctx.background_results, config, ctx.process_resources),
         risk="external-side-effect",

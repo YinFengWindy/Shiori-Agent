@@ -33,6 +33,15 @@ test("the host service forwards generic native selection and preserves staging f
   await assert.rejects(host.pickFiles(options), /staging failed/);
 });
 
+test("external links use the existing validated desktop boundary and surface refusals", async () => {
+  const calls: string[] = [];
+  installDesktopApi({ openExternal: async (url: string) => { calls.push(url); return url.startsWith("https:") ? { ok: true, error: null } : { ok: false, error: "external link protocol is not authorized" }; } });
+  const host = pluginHostServicesFor("herdr");
+  await host.openExternal("https://github.com/owner/repo/pull/1");
+  await assert.rejects(host.openExternal("file:///secret"), /not authorized/);
+  assert.deepEqual(calls, ["https://github.com/owner/repo/pull/1", "file:///secret"]);
+});
+
 test("the host service forwards original-path and directory picks, cancellation included", async () => {
   const options: NativeFilePathPickerOptions = { maxFileBytes: 8, filters: [{ name: "Archive", extensions: ["7z"] }] };
   const calls: unknown[] = [];

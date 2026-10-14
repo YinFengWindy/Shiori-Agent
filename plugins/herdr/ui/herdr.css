@@ -1,0 +1,16 @@
+.herdr-dashboard .herdr-workspace { grid-template-columns: minmax(16rem, 34%) minmax(0, 1fr); }
+.herdr-dashboard .herdr-task-list { border-right: 1px solid var(--color-border-soft); }
+.herdr-dashboard .herdr-filter { flex: 0 1 12rem; }
+.herdr-task-row[aria-pressed="true"] { box-shadow: inset 3px 0 var(--color-accent-solid); }
+.herdr-status[data-tone="success"] { color: var(--color-success-text); background: var(--color-success-soft); }
+.herdr-status[data-tone="warning"] { color: var(--color-warning-text); background: var(--color-warning-soft); }
+.herdr-status[data-tone="muted"] { color: var(--color-text-muted); background: var(--color-bg-soft); }
+.herdr-output { height: 14rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+.herdr-timeline { max-height: 20rem; overflow-y: auto; }
+@media (max-width: 900px) {
+  .herdr-dashboard { overflow-y: auto; }
+  .herdr-dashboard .herdr-workspace { display: flex; flex-direction: column; flex: none; overflow: visible; }
+  .herdr-dashboard .herdr-task-list { max-height: 18rem; border-right: none; border-bottom: 1px solid var(--color-border-soft); }
+  .herdr-dashboard .herdr-task-detail { overflow: visible; }
+  .herdr-dashboard .herdr-filter { flex: 1 1 9rem; }
+}

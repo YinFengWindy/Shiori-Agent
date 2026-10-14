@@ -9,6 +9,7 @@ import { createFakeHostUi } from "./fakeHostUi";
 export type FakeHostCall =
   | { service: "onEvent" }
   | { service: "listRoles" }
+  | { service: "openExternal"; url: string }
   | { service: "pickImages"; options: { multiple: boolean } }
   | { service: "pickFiles"; options: NativeFilePickerOptions }
   | { service: "pickFilePaths"; options: NativeFilePathPickerOptions }
@@ -25,6 +26,8 @@ export type FakeHostFeedback = Extract<FakeHostCall, { service: "feedback" }>;
 export type FakeHostServicesOptions = {
   /** `listRoles`; default no roles. */
   listRoles?: () => Promise<RoleRecord[]>;
+  /** `openExternal`; records the requested URL without launching a browser. */
+  openExternal?: PluginHostServices["openExternal"];
   /** `pickImages`; default the user picks nothing. */
   pickImages?: PluginHostServices["pickImages"];
   /** `pickFiles`; default the user picks nothing. */
@@ -72,6 +75,10 @@ export function createFakeHostServices(options: FakeHostServicesOptions = {}) {
     listRoles() {
       calls.push({ service: "listRoles" });
       return options.listRoles ? options.listRoles() : Promise.resolve([]);
+    },
+    async openExternal(url) {
+      calls.push({ service: "openExternal", url });
+      await options.openExternal?.(url);
     },
     pickImages(pickOptions) {
       calls.push({ service: "pickImages", options: pickOptions });

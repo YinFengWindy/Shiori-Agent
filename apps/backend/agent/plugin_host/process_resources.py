@@ -23,7 +23,7 @@ class ProcessResourceOwner:
 
     def for_plugin(self, generation: str, plugin: str, effects: EffectScope):
         """Return one generation's private attachment and register its rollback."""
-        scope = _Attachment(self, generation, plugin)
+        scope = _Attachment(self, generation, plugin, effects)
         effects.add("process_resources", scope.close)
         return scope
 
@@ -68,8 +68,15 @@ class ProcessResourceOwner:
 
 
 class _Attachment:
-    def __init__(self, owner: ProcessResourceOwner, generation: str, plugin: str):
+    def __init__(
+        self,
+        owner: ProcessResourceOwner,
+        generation: str,
+        plugin: str,
+        effects: EffectScope,
+    ):
         self.owner, self.generation, self.plugin = owner, generation, plugin
+        self.effects = effects
         self.keys: set[tuple[str, str]] = set()
         self.closed = False
 
@@ -77,6 +84,7 @@ class _Attachment:
     def active(self) -> bool:
         return (
             not self.closed
+            and self.effects.active
             and self.owner._active == self.generation
             and not self.owner._closed
         )

@@ -112,3 +112,23 @@ async def test_removed_resource_failure_is_visible_at_publication_drain():
     with pytest.raises(ExceptionGroup, match="资源清理"):
         await owner.drain()
     await owner.close()
+
+
+async def test_attachment_is_inactive_as_soon_as_effect_cleanup_starts():
+    owner = ProcessResourceOwner()
+    effects = EffectScope("generation")
+    attachment = owner.for_plugin("generation", "plugin", effects)
+    owner.publish("generation")
+    entered, finish = asyncio.Event(), asyncio.Event()
+
+    async def view_cleanup():
+        entered.set()
+        await finish.wait()
+
+    effects.add("view-cleanup", view_cleanup)
+    cleanup = asyncio.create_task(effects.dispose_all())
+    await entered.wait()
+    assert not attachment.active
+    finish.set()
+    await cleanup
+    await owner.close()

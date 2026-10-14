@@ -60,6 +60,8 @@ export type PluginHostServices = {
   /** Subscribes to every desktop bridge event; returns the unsubscribe function. */
   onEvent: (listener: (event: BridgeEvent) => void) => () => void;
   listRoles: () => Promise<RoleRecord[]>;
+  /** Opens a validated http(s) or mailto URL through the desktop shell; rejects on failure. */
+  openExternal: (url: string) => Promise<void>;
   pickImages: (options: { multiple: boolean }) => Promise<string[]>;
   /** Native user selection plus bounded private staging, without a media grant. */
   pickFiles: (options: NativeFilePickerOptions) => Promise<string[]>;

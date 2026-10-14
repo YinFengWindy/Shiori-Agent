@@ -16,6 +16,10 @@ const sharedPluginHostServices: Omit<PluginHostServices, "config"> = {
     const payload = await invokeBridgePayload<{ roles: RoleRecord[] }>(window.miraDesktop.invoke, "roles.list", {});
     return payload.roles;
   },
+  async openExternal(url) {
+    const result = await window.miraDesktop.openExternal(url);
+    if (!result.ok) throw new Error(result.error ?? "无法打开链接");
+  },
   pickImages: (options) => window.miraDesktop.pickImages(options),
   pickFiles: (options) => window.miraDesktop.pickFiles(options),
   pickFilePaths: (options) => window.miraDesktop.pickFilePaths(options),
