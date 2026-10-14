@@ -1,5 +1,4 @@
 packages:
   - apps/desktop
   - apps/site
-  - apps/site-video
   - packages/sdk
