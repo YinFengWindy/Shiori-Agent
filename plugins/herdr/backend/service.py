@@ -15,6 +15,7 @@ from .cli import CommandError, HerdrCli
 from .config import AgentKind, HerdrConfig
 from .delivery import verify_delivery, write_instructions
 from .models import CodingTask
+from .progress import read_progress, record_stage
 from .task_management import cancel_task, continue_task, inspect_task
 
 
@@ -23,6 +24,7 @@ class TaskService:
 
     def __init__(self, directory: Path, processes: Processes) -> None:
         self.directory = directory
+        self.instance_id = uuid4().hex
         self.processes = processes
         self.tasks: dict[str, CodingTask] = {}
         self.closed = False
@@ -118,11 +120,15 @@ class TaskService:
 
     def launch_run(self, task: CodingTask, *, continuing: bool = False) -> None:
         """Own a detached monitor without inheriting a retired runtime's context."""
+        task.stage = task.progress_updated_at = task.progress_notice = ""
+        task.progress_sequence = 0
+        task.progress_events.clear()
         task.worker = asyncio.create_task(
             self._execute(task, continuing=continuing),
             name=f"herdr:{task.id}",
             context=Context(),
         )
+        task.worker.add_done_callback(lambda _worker: self.changed(task))
         self.changed(task)
 
     async def _execute(self, task: CodingTask, *, continuing: bool = False) -> None:
@@ -161,6 +167,8 @@ class TaskService:
     async def _prepare(self, task: CodingTask) -> None:
         cli = self.create_cli(task.config)
         task.touch("preparing")
+        record_stage(task, "preparing", "创建独立工作区并启动 Agent")
+        self.changed(task)
         await cli.require_supported_version()
         actual = (
             await cli.command(
@@ -224,6 +232,8 @@ class TaskService:
 
     async def _submit(self, task: CodingTask) -> None:
         cli = self.create_cli(task.config)
+        if not task.stage:
+            record_stage(task, "preparing", "准备当前回合需求")
         instructions = write_instructions(task)
         task.touch("running")
         task.prompt_sent = True
@@ -273,12 +283,16 @@ class TaskService:
                 # between get/read can make alternate-screen history unavailable;
                 # keep observing the agent instead of abandoning accepted work.
                 task.output = f"终端输出暂不可读：{error}"
+            _ = read_progress(task)
             self.changed(task)
             if task.agent_state == "blocked":
                 task.error = "Agent 等待登录、初始化或交互输入：\n" + task.output
                 task.touch("blocked")
                 return
             if task.agent_state in {"idle", "done"} and task.result_path.is_file():
+                _ = read_progress(task)
+                record_stage(task, "validation", "核验本回合提交、验证命令与 Draft PR")
+                self.changed(task)
                 await verify_delivery(task, cli)
                 task.error = ""
                 task.touch("completed")

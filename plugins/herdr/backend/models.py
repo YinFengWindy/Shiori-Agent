@@ -47,6 +47,11 @@ class CodingTask:
     prompt_settled: bool = False
     prompt_sent: bool = False
     revision: int = 0
+    stage: str = ""
+    progress_sequence: int = 0
+    progress_updated_at: str = ""
+    progress_notice: str = ""
+    progress_events: list[dict[str, object]] = field(default_factory=list)
     worktree: Path | None = None
     workspace_id: str = ""
     pane_id: str = ""
@@ -74,3 +79,8 @@ class CodingTask:
     def result_path(self) -> Path:
         """Separate artifact for each task attempt; never reuse a previous result."""
         return self.directory / f"{self.run_id}.json"
+
+    @property
+    def progress_path(self) -> Path:
+        """Each run owns a separate structured progress log."""
+        return self.directory / f"{self.run_id}.progress.jsonl"

@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from .cli import CommandError, HerdrCli
 from .models import CodingTask
+from .progress import progress_instructions
 
 
 class ValidationCommand(BaseModel):
@@ -48,7 +49,8 @@ def write_instructions(task: CodingTask) -> Path:
         "权限为 Full Access。遵守仓库 AGENTS 和用户完整需求，在当前独立 worktree 修改。"
         "完成与范围匹配的实际验证，提交并推送当前分支、创建 Draft PR；禁止合并 PR。"
         "不要删除 worktree 或切换分支。缺少登录/工具/配置或验证失败时明确报告阻塞。\n"
-        "验证命令使用 argv 数组，不使用 shell 拼接；cwd 必须位于当前 worktree，"
+        + progress_instructions(task)
+        + "验证命令使用 argv 数组，不使用 shell 拼接；cwd 必须位于当前 worktree，"
         "插件会重跑这些命令核验结果。不能使用仅打印成功的命令冒充测试。\n"
         "Windows 的 .cmd/.bat 路径或参数不能包含 & | < > ^ % ! 双引号、括号或控制字符；"
         "这类验证必须改用原生可执行程序，或以 Node/Python 可执行程序加脚本路径和参数"

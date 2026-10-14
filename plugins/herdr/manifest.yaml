@@ -12,4 +12,6 @@ capabilities:
   - processes
   - process_resources
   - background_results
+  - background
+  - rpc
 config_model: "config:HerdrConfig"

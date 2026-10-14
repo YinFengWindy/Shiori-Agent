@@ -49,3 +49,9 @@ test("emit delivers a bridge event to onEvent listeners until they unsubscribe",
   fake.emit({ id: "2", type: "event", method: "plugin.story.gallery", payload: {} });
   assert.deepEqual(methods, ["plugin.story.gallery"]);
 });
+
+test("external link fake records the request and preserves host failures", async () => {
+  const fake = createFakeHostServices({ openExternal: async () => { throw new Error("cannot open browser"); } });
+  await assert.rejects(fake.host.openExternal("https://example.test/pr"), /cannot open browser/);
+  assert.deepEqual(fake.calls, [{ service: "openExternal", url: "https://example.test/pr" }]);
+});

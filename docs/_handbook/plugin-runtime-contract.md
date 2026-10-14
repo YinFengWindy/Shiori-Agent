@@ -115,6 +115,13 @@ Python SDK minimum; audited packages using only unchanged APIs may keep their
 
 ### Unreleased
 
+- #822 (issue #819): renderer `PluginHostServices.openExternal(url): Promise<void>` exposes
+  the existing validated desktop external-link operation. It accepts the host's
+  HTTP(S)/mailto protocols and rejects refused links or shell failures; plugins
+  receive no raw IPC access. The independent host-services fake records calls.
+  Process-resource attachments become inactive as soon as their effect scope
+  begins cleanup, so retired view subscriptions cannot enqueue new emissions.
+
 - #821 (issue #818): `process_resources` exposes plugin-private, versioned in-process resource
   contracts. Candidate generations attach without activating or reconfiguring
   the resource; publication activates the new attachment and closes removed
