@@ -404,7 +404,7 @@ describe("home page HTML", () => {
       assert.ok(at < html.indexOf("<main>"), "the bar comes before the page content, outside the narrative stage");
     });
 
-    it("links the icon and name to the narrative's download state, then 博客, 更新日志, GitHub, the Windows download and the English home page", () => {
+    it("links the icon and name to the narrative's download state, then 博客, 更新日志, GitHub, the English home page and the Windows download", () => {
       assert.ok(bar);
       const links = [...bar[1].matchAll(/<a href="([^"]+)"[^>]*>(.*?)<\/a>/gs)].map(([, href, label]) => ({
         href,
@@ -415,8 +415,8 @@ describe("home page HTML", () => {
         { href: "/blog/", label: "博客" },
         { href: "/changelog/", label: "更新日志" },
         { href: "https://github.com/YinFengWindy/Shiori-Agent", label: "GitHub" },
-        { href: "https://github.com/YinFengWindy/Shiori-Agent/releases/latest", label: "下载 Windows 版" },
         { href: "/en/", label: "EN" },
+        { href: "https://github.com/YinFengWindy/Shiori-Agent/releases/latest", label: "下载 Windows 版" },
       ]);
       assert.match(bar[1], /<img src="\/icons\/icon-192\.png"[^>]* alt=""/);
       // The link's target is the download call the narrative ends on.

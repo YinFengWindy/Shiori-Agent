@@ -1,8 +1,8 @@
 ---
-import { cx, iconButtonClass } from "@yinfengwindy/shiori-sdk";
-import { compactTextButtonClass } from "../../../desktop/renderer/src/shared/styles";
+import { cx } from "@yinfengwindy/shiori-sdk";
 import { siteText } from "../i18n";
 import { LOCALE_INFO, type Locale, otherLocale } from "../i18n/locales";
+import { controlButtonClass } from "../lib/controlButton";
 import "../styles/language.css";
 
 /**
@@ -12,10 +12,10 @@ import "../styles/language.css";
  * without scripting; on the home page HomeLanguageSwitch.astro adds the
  * reader's place to it as they go.
  *
- * `corner`: the home page's small button beside the music switch, over
- * every stage of the page — the loader included, whose input guard lets it
- * through (`data-loader-passthrough`, SiteLoader.astro). `bar`: inside the
- * top bar, where it takes over once the bar slides in (header.css).
+ * Both variants wear the music switch's look (`controlButtonClass`, #810).
+ * `corner`: the home page's button in the corner controls, beside the music
+ * switch (HomePage.astro), which hide without scripting (site.css). `bar`: inside the top
+ * bar, where it takes over once the bar slides in (header.css).
  */
 interface Props {
   /** The page's language (the switch leads to the other one). */
@@ -27,10 +27,7 @@ interface Props {
 
 const { locale, href, variant } = Astro.props;
 const text = siteText(locale).languageSwitch;
-const className =
-  variant === "corner"
-    ? cx(iconButtonClass, "site-lang-corner text-body-sm font-semibold no-underline")
-    : cx(compactTextButtonClass, "site-lang-bar font-semibold no-underline");
+const className = cx(controlButtonClass, variant === "corner" && "site-lang-corner");
 ---
 
 <a
@@ -39,6 +36,5 @@ const className =
   class={className}
   aria-label={text.label}
   title={text.label}
-  data-lang-switch
-  data-loader-passthrough={variant === "corner" ? "" : undefined}>{text.text}</a
+  data-lang-switch>{text.text}</a
 >

@@ -15,8 +15,7 @@ import "../styles/language.css";
  * Dismiss. Either answer is remembered and the prompt never shows again.
  *
  * Shipped `hidden`: without scripting, or for anyone else, it never shows.
- * Above the home page's loader, whose input guard lets its clicks through
- * (`data-loader-passthrough`, SiteLoader.astro).
+ * On the home page it shows once the loader has gone (language.css).
  */
 interface Props {
   /** The language offered (`LocaleInfo.promptsFor`): the prompt's words and its link's. */
@@ -35,7 +34,6 @@ const info = LOCALE_INFO[locale];
   lang={info.htmlLang}
   aria-label={text.label}
   data-lang-prompt
-  data-loader-passthrough
   hidden
 >
   <p class="site-lang-prompt-question text-body-sm">{text.question}</p>
