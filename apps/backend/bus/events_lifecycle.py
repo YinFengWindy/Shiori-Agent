@@ -90,14 +90,14 @@ class ExternalTextPushed:
     ``message_push`` never raises it, because a role may only use it for the
     role's own desktop session. ``in_turn`` marks a push the model made during
     a turn: it is committed with that turn. Otherwise the send is stored at
-    once. ``delivery_key`` and ``external_message_id`` (the platform's ID,
-    when the sender reported one) identify the delivery, so it is stored once.
+    once. ``external_message_id`` is the platform's ID of the sent message,
+    when the sender reported one.
 
     ``tool`` names the sending tool, recorded as the message's source, sender
     and only tool used; ``media`` are images sent with the text as the same message; and
     ``message_metadata`` is stored with the recorded message over the push
-    defaults (e.g. the chat type and the account delivery facts: attempt,
-    account, target and the ``ViaAccount`` snapshot).
+    defaults; it supplies the chat type and the account delivery facts
+    (attempt, account, target and the ``ViaAccount`` snapshot).
     """
 
     session_key: str
@@ -106,9 +106,7 @@ class ExternalTextPushed:
     chat_id: str
     text: str
     tool: str
-    delivery_key: str = ""
     in_turn: bool = False
     external_message_id: str = ""
     media: tuple[str, ...] = ()
     message_metadata: dict[str, Any] = field(default_factory=_empty_metadata)
-    proactive: bool = True

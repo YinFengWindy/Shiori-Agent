@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 from datetime import datetime, timezone
 import asyncio
-from unittest.mock import AsyncMock
 
 import pytest
 
@@ -38,8 +37,6 @@ def _text_sync(tmp_path: Path):
         session_key: str = "role:mira",
         chat_id: str = "gqq:5",
         in_turn: bool = False,
-        proactive: bool = True,
-        delivery_key: str = "",
         message: str = "",
         image: str = "",
     ) -> None:
@@ -54,54 +51,11 @@ def _text_sync(tmp_path: Path):
                 text=message,
                 tool="account_send",
                 in_turn=in_turn,
-                delivery_key=delivery_key,
                 media=(image,) if image else (),
-                proactive=proactive,
             )
         )
 
     return session_manager, push, committed, texts
-
-
-async def test_concurrent_delivery_events_commit_and_notify_only_once(
-    tmp_path, monkeypatch
-):
-    manager = SessionManager(tmp_path)
-    session = manager.open_role_session("mira", role_name="Mira")
-    bus = EventBus()
-    service = ExternalPushSyncService(
-        live_turn_pushes=current_turn_pushes, session_manager=manager, event_bus=bus
-    )
-    committed = []
-    bus.on(ProactiveMessageCommitted, committed.append)
-    append = AsyncMock(wraps=manager._append_messages)
-    monkeypatch.setattr(manager, "_append_messages", append)
-    event = ExternalTextPushed(
-        session_key=session.key,
-        role_id="mira",
-        channel="qq",
-        chat_id="902",
-        text="delivered once",
-        tool="account_send",
-        delivery_key="scheduler:once",
-    )
-    tasks = []
-    try:
-        async with manager._lock(session.key):
-            tasks = [
-                asyncio.create_task(service.handle_text_pushed(event)) for _ in range(2)
-            ]
-            await asyncio.sleep(0)
-            assert append.await_count == 2
-            assert not any(task.done() for task in tasks)
-            assert session.messages == []
-        await asyncio.gather(*tasks)
-        stored = manager._store.fetch_session_messages(session.key)
-        assert len(stored) == 1
-        assert [item.message_id for item in committed] == [stored[0]["id"]]
-    finally:
-        await asyncio.gather(*tasks, return_exceptions=True)
-        await bus.aclose()
 
 
 @pytest.mark.parametrize("kind", ["text", "image"])
@@ -151,21 +105,18 @@ async def test_abandoned_push_retains_the_admitted_turn_boundary(
 
 
 @pytest.mark.asyncio
-async def test_host_text_push_is_stored_once_under_the_chats_thread(
+async def test_host_text_push_is_stored_under_the_chats_thread(
     tmp_path: Path,
 ) -> None:
     session_manager, push, committed, _ = _text_sync(tmp_path)
 
-    for _attempt in range(2):
-        # A retried delivery carries the same key.
-        await push(message="该喝水啦", delivery_key="scheduler:job:1")
+    await push(message="该喝水啦")
 
     stored = session_manager._store.fetch_session_messages("role:mira")
     assert [
         (message["role"], message["content"], message["thread_id"])
         for message in stored
     ] == [("assistant", "该喝水啦", network_thread_id("mira", "qq", "gqq:5"))]
-    assert stored[0]["metadata"]["delivery_key"] == "scheduler:job:1"
     # The sending tool is the message's source, sender and only tool used.
     assert (
         stored[0]["tools_used"],
@@ -243,27 +194,3 @@ async def test_push_from_a_turn_no_live_turn_owns_is_stored_in_the_role_session(
         )
     ]
     assert [event.session_key for event in committed] == ["role:mira"]
-
-
-@pytest.mark.parametrize("kind", ["text", "image"])
-@pytest.mark.parametrize("in_turn", [False, True])
-async def test_supplemental_push_keeps_its_intent_and_commit_notification(
-    tmp_path, kind, in_turn
-):
-    manager, push, committed, _ = _text_sync(tmp_path)
-    drafts = TurnPushDrafts("role:mira")
-    with drafts.collect():
-        await push(
-            chat_id="902",
-            proactive=False,
-            in_turn=in_turn,
-            **({"message": "CG"} if kind == "text" else {"image": "cg.png"}),
-        )
-    if in_turn:
-        assert drafts.messages[0]["proactive"] is False
-        assert committed == []
-        # Even an abandoned turn must record the intent of a delivered image.
-        await drafts.abandoned()
-    [stored] = manager._store.fetch_session_messages("role:mira")
-    assert stored["proactive"] is False
-    assert [event.message_id for event in committed] == [stored["id"]]

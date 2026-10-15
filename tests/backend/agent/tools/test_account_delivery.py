@@ -202,6 +202,7 @@ async def test_user_target_reaches_the_users_private_chat_and_is_recorded(
     assert stored["media"] == [image]
     assert stored["thread_id"] == network_thread_id("mira", "qq", "3174898512")
     assert stored["tools_used"] == ["account_send"]
+    assert stored["proactive"] is True
     metadata = stored["metadata"]
     assert (metadata["source"], metadata["sender_id"]) == (
         "account_send",

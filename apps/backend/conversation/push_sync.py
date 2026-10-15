@@ -54,8 +54,7 @@ class ExternalPushSyncService:
         A push made during a live turn becomes one of that turn's drafts,
         committed with its messages; if the turn never commits, ``persist``
         records it then. A host-owned send, or a turn push no live turn owns
-        (e.g. a background task's report), is stored at once. A delivery whose
-        ``delivery_key`` the role session already holds is not stored again.
+        (e.g. a background task's report), is stored at once.
         """
         message = self._push_message(event)
 
@@ -83,7 +82,8 @@ class ExternalPushSyncService:
         """A delivered push as a role message under the target chat's thread.
 
         The sending tool (``event.tool``) is the message's source, sender and
-        only tool used; ``message_metadata`` is applied over those defaults.
+        only tool used; ``message_metadata`` is applied over those defaults
+        and carries the chat type.
         """
         thread = self._conversations.ensure_thread_for_session(
             LegacySessionDescriptor(
@@ -97,15 +97,15 @@ class ExternalPushSyncService:
             **self._build_source_metadata(event, thread_id=thread.id),
             **event.message_metadata,
         }
-        if event.delivery_key:
-            metadata["delivery_key"] = event.delivery_key
         if event.external_message_id:
             metadata["external_message_id"] = event.external_message_id
         return build_session_message(
             "assistant",
             event.text,
             media=list(event.media) or None,
-            proactive=event.proactive,
+            # Always proactive: the only sender, account_send, is a send the role
+            # chose to make, never the reply to an inbound message.
+            proactive=True,
             tools_used=[event.tool],
             thread_id=thread.id,
             sender_role="assistant",
@@ -120,14 +120,12 @@ class ExternalPushSyncService:
         """Appends one delivered push to the role session under the chat's thread."""
         session_key = self._role_session_key(event)
         session = self._sessions.get_or_create(session_key)
-        committed = await self._sessions.append_messages(
+        # Without before_commit the append always commits.
+        _ = await self._sessions.append_messages(
             session,
             [message],
             pending_messages=True,
-            delivery_key=event.delivery_key or None,
         )
-        if not committed:
-            return
         await self._event_bus.fanout(
             ProactiveMessageCommitted(
                 session_key=session_key,
@@ -147,7 +145,6 @@ class ExternalPushSyncService:
         return {
             "source": event.tool,
             "sender_id": event.tool,
-            "chat_type": "unknown",
             "context_channel": event.channel,
             "context_chat_id": event.chat_id,
             "transport_channel": event.channel,
