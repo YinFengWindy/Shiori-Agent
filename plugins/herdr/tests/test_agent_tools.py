@@ -171,3 +171,22 @@ async def test_failures_are_structured_and_never_resent(
     if code == "timeout":
         assert "未自动重发" in result["error"]["message"]
         assert "回报" in result["note"]
+
+
+async def test_the_handling_role_answers_a_report_without_a_new_capture(plugin):
+    ctx, herdr, call = plugin
+    await call("herdr_prompt_agent", pane_id="wR:p2", text="修滚动")
+    # The turn reporting on the agent: the host refuses another capture.
+    ctx.background_results.target = None
+
+    answered = await call("herdr_send_keys", pane_id="wR:p2", keys=["enter"])
+    assert answered["ok"] is True
+    assert answered["command"]["report"] == "pending"
+    assert herdr.sent[-1] == ["agent", "send-keys", "wR:p2", "enter"]
+
+    # Another role never borrows the handling role's destination.
+    ctx.tools.context = {"role_id": "role-b"}
+    refused = await call("herdr_send_keys", pane_id="wR:p2", keys=["enter"])
+    assert refused["ok"] is False
+    assert refused["error"]["code"] == "not_permitted"
+    assert len(herdr.sent) == 2

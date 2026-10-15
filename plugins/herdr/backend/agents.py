@@ -6,7 +6,8 @@ from typing import Any
 from shiori_sdk.plugin_services import ServicePluginContext
 from shiori_sdk.rpc import Concurrency
 
-from .agent_control import USER, AgentControl, require_pane_id
+from .agent_commands import USER
+from .agent_control import AgentControl, require_pane_id
 from .cli import CommandError
 from .models import CodingTask
 from .service import TaskService
@@ -112,8 +113,7 @@ class SessionAgents:
         pane_id = require_pane_id(payload.get("pane_id"))
         session = self.cli.config.session
         commands = self.control.log.records(session, pane_id)
-        handover = self.control.watcher.handover(session, pane_id)
-        handler = handover.as_dict() if handover else None
+        handler = self.control.watcher.handler(session, pane_id)
 
         async def read() -> tuple[dict[str, Any], str]:
             agent = (await self.cli.call("agent", "get", pane_id))["agent"]

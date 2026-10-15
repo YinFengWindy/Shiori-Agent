@@ -14,7 +14,8 @@ from shiori_sdk.process_resources import PluginProcessResources
 from shiori_sdk.roles import Roles
 from shiori_sdk.tools import Tool, ToolsCapability
 
-from .agent_control import UNCONFIRMED_CODES, CommandSource
+from .agent_commands import CommandSource
+from .agent_control import UNCONFIRMED_CODES, require_pane_id
 from .agent_watch import OUTPUT_TAIL
 from .agents import SessionAgents
 from .cli import CommandError
@@ -31,6 +32,11 @@ _GUIDE = (
 _REPORT_NOTE = (
     "你已接手该 agent：它停下、卡住、关闭或追踪超时时，结果会回报给你和本聊天，"
     "不需要轮询。"
+)
+
+_HANDOVER_RULE = (
+    "收到该 agent 的回报后，仍是它接手角色的你可以直接用本工具回应，回报继续发往原聊天；"
+    "其他角色只能在用户发起的回合里操作。"
 )
 
 _DESCRIPTIONS = {
@@ -79,7 +85,8 @@ class AgentTool(Tool):
 
     @property
     def description(self) -> str:
-        return f"{_DESCRIPTIONS[self.action]}{_GUIDE}"
+        rule = _HANDOVER_RULE if self.action in {"prompt", "keys"} else ""
+        return f"{_DESCRIPTIONS[self.action]}{rule}{_GUIDE}"
 
     @property
     def parameters(self) -> dict[str, Any]:
@@ -125,17 +132,13 @@ class AgentTool(Tool):
         except ValueError as error:
             return _error("invalid_request", str(error))
 
-    def _handler(self, pane_id: str) -> dict[str, str] | None:
-        handover = self.agents.control.watcher.handover(
-            self.agents.control.session, pane_id
-        )
-        return handover.as_dict() if handover else None
-
     async def _list(self) -> str:
         listed = await self.agents.list_agents({})
         for group in cast(list[dict[str, Any]], listed["workspaces"]):
             for agent in cast(list[dict[str, Any]], group["agents"]):
-                agent["handler"] = self._handler(str(agent["pane_id"]))
+                agent["handler"] = self.agents.control.watcher.handler(
+                    str(listed["session"]), str(agent["pane_id"])
+                )
         return json.dumps({"ok": True, **listed}, ensure_ascii=False)
 
     async def _read(self, pane_id: object) -> str:
@@ -159,19 +162,26 @@ class AgentTool(Tool):
         role_id = self.tools.get_context().get("role_id", "")
         if not role_id:
             raise PermissionError("操控 agent 需要当前角色身份")
-        # Raises outside a live user-authored role tool turn: nothing is sent then.
-        target = self.results.capture()
+        control = self.agents.control
+        pane_id = require_pane_id(kwargs.get("pane_id"))
+        try:
+            target = self.results.capture()
+        except (PermissionError, ValueError) as error:
+            # The host refuses capture outside a user's own turn, e.g. in the
+            # turn reporting on this agent. Its handling role keeps the
+            # destination the host captured when it took the agent over.
+            handover = control.watcher.handover(control.session, pane_id)
+            if handover is None or handover.role_id != role_id:
+                raise PermissionError(str(error)) from error
+            target = handover.target
         role = self.roles.get_role(role_id)
         name = str(role.to_dict().get("name") or "") if role else ""
         source = CommandSource("role", role_id, name)
-        control = self.agents.control
         if self.action == "prompt":
-            command = await control.prompt(
-                kwargs.get("pane_id"), kwargs.get("text"), source, target
-            )
+            command = await control.prompt(pane_id, kwargs.get("text"), source, target)
         else:
             command = await control.send_keys(
-                kwargs.get("pane_id"), kwargs.get("keys"), source, target
+                pane_id, kwargs.get("keys"), source, target
             )
         return json.dumps(
             {"ok": True, "command": command.as_dict(), "note": _REPORT_NOTE},

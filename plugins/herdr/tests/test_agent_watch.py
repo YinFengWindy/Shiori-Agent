@@ -5,8 +5,13 @@ import json
 
 import pytest
 
-from plugins.herdr.backend.agent_control import USER, AgentCommand, CommandSource
-from plugins.herdr.backend.agent_watch import OUTPUT_TAIL, AgentWatcher, Handover
+from plugins.herdr.backend.agent_commands import (
+    USER,
+    AgentCommand,
+    CommandSource,
+    Handover,
+)
+from plugins.herdr.backend.agent_watch import OUTPUT_TAIL, AgentWatcher
 from plugins.herdr.backend.cli import HerdrCli
 from plugins.herdr.backend.config import HerdrConfig
 from shiori_sdk.testing.background_results import FakeBackgroundResultTarget
@@ -27,9 +32,15 @@ class Agent:
         self.now = 0.0
         self.looks = 0
         self.output = "x" * OUTPUT_TAIL + "最后一行"
+        # When set, the next output read is held until the second event is set.
+        self.read_gate: tuple[asyncio.Event, asyncio.Event] | None = None
 
     async def command(self, argv, **_kwargs):
         if argv[3:5] == ["agent", "read"]:
+            if self.read_gate:
+                (reading, release), self.read_gate = self.read_gate, None
+                reading.set()
+                await release.wait()
             return self.output
         assert argv[3:6] == ["agent", "get", "wR:p2"], argv
         self.now += 10
@@ -54,7 +65,8 @@ class Agent:
 @pytest.fixture
 async def watcher(tmp_path, monkeypatch):
     ctx = FakeServiceContext("herdr", tmp_path)
-    watcher = AgentWatcher(tmp_path, ctx.processes)
+    watcher = AgentWatcher()
+    watcher.attach(ctx.process_resources, ctx.processes, tmp_path)
     watcher.poll_seconds = 0
     watcher.start_grace_seconds = 30
     yield watcher, monkeypatch
@@ -102,7 +114,7 @@ async def test_each_way_an_agent_ends_up_is_reported_once(
     watcher, agent = script(watcher, *states)
     target = FakeBackgroundResultTarget("role-a", "thread-a")
     command = sent("修一下滚动")
-    watcher.take_over("default", "wR:p2", Handover("role-a", "Mira", target))
+    watcher.take_over("default", "wR:p2", Handover("Mira", target))
     watcher.follow(CONFIG, "wR:p2", command, target, working=False)
     assert command.report == "pending"
     await settled(command)
@@ -202,3 +214,26 @@ async def test_closing_stops_the_watch_without_reporting(watcher):
     assert target.reports == {}
     assert command.report == "failed"
     assert "停止监视" in command.report_error
+
+
+async def test_a_command_arriving_while_the_output_is_read_is_reported_next(watcher):
+    watcher, agent = script(watcher, "working", "idle")
+    reading, release = asyncio.Event(), asyncio.Event()
+    agent.read_gate = (reading, release)
+    target = FakeBackgroundResultTarget("role-a", "thread-a")
+    first, second = sent("先修滚动"), sent("再补测试")
+    watcher.follow(CONFIG, "wR:p2", first, target, working=True)
+    async with asyncio.timeout(5):
+        await reading.wait()
+    # Herdr saw the agent take up the new prompt; the next look finds it idle.
+    watcher.follow(CONFIG, "wR:p2", second, target, working=True)
+    agent.states = ["idle"]
+    release.set()
+    await settled(first, second)
+
+    reports = [json.loads(text) for text in target.reports.values()]
+    assert [[item["content"] for item in report["commands"]] for report in reports] == [
+        ["先修滚动"],
+        ["再补测试"],
+    ]
+    assert [report["outcome"] for report in reports] == ["finished", "finished"]

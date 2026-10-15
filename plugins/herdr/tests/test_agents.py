@@ -5,7 +5,8 @@ import json
 
 import pytest
 
-from plugins.herdr.backend.agent_control import AgentCommandLog, AgentControl
+from plugins.herdr.backend.agent_commands import AgentCommandLog
+from plugins.herdr.backend.agent_control import AgentControl
 from plugins.herdr.backend.agent_watch import AgentWatcher
 from plugins.herdr.backend.agents import SessionAgents
 from plugins.herdr.backend.cli import CommandError, HerdrCli
@@ -113,9 +114,7 @@ def fixture(tmp_path):
     herdr = ScriptedHerdr()
     cli.command = herdr.command  # type: ignore[method-assign]
     gate = SessionGate(cli, ctx.process_resources)
-    control = AgentControl(
-        gate, AgentCommandLog(), service, AgentWatcher(tmp_path, ctx.processes)
-    )
+    control = AgentControl(gate, AgentCommandLog(), service, AgentWatcher())
     SessionAgents(service, ctx.as_capability(), control).register()
     return ctx, service, herdr
 

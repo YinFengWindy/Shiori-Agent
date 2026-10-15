@@ -5,13 +5,14 @@ import json
 
 import pytest
 
-from plugins.herdr.backend.agent_control import (
+from plugins.herdr.backend.agent_commands import (
     USER,
     AgentCommandLog,
-    AgentControl,
     CommandSource,
+    Handover,
 )
-from plugins.herdr.backend.agent_watch import AgentWatcher, Handover
+from plugins.herdr.backend.agent_control import AgentControl
+from plugins.herdr.backend.agent_watch import AgentWatcher
 from plugins.herdr.backend.cli import CommandError, HerdrCli
 from plugins.herdr.backend.config import HerdrConfig
 from plugins.herdr.backend.models import CodingTask
@@ -30,8 +31,10 @@ class Herdr:
         self.argv: list[list[str]] = []
         self.timeouts: list[float | None] = []
         self.answer: CommandError | None = None
-        # What watches of the agent read.
+        # What watches of the agent read, and how often they read it.
         self.state = "working"
+        self.seq = 1
+        self.looks = 0
         # Holds the session check until set, to act between check and send.
         self.checked = asyncio.Event()
         self.checked.set()
@@ -50,7 +53,9 @@ class Herdr:
                 }
             )
         if argv[3:5] == ["agent", "get"]:
-            return json.dumps({"result": {"agent": {"agent_status": self.state}}})
+            self.looks += 1
+            agent = {"agent_status": self.state, "state_change_seq": self.seq}
+            return json.dumps({"result": {"agent": agent}})
         if argv[3:5] == ["agent", "read"]:
             return "output"
         self.argv.append(argv)
@@ -72,7 +77,8 @@ async def fixture(tmp_path, monkeypatch):
         HerdrCli, "command", lambda _cli, argv, **kwargs: herdr.command(argv, **kwargs)
     )
     log = AgentCommandLog()
-    watcher = AgentWatcher(tmp_path, ctx.processes)
+    watcher = AgentWatcher()
+    watcher.attach(ctx.process_resources, ctx.processes, tmp_path)
     control = AgentControl(
         SessionGate(cli, ctx.process_resources),
         log,
@@ -188,9 +194,7 @@ async def test_a_roles_command_hands_the_agent_over_and_the_users_follows_it(fix
 
     mira_target = FakeBackgroundResultTarget("role-a", "thread-a")
     mira = await control.prompt("wR:p2", "修滚动", ROLE, mira_target)
-    assert watcher.handover("default", "wR:p2") == Handover(
-        "role-a", "Mira", mira_target
-    )
+    assert watcher.handover("default", "wR:p2") == Handover("Mira", mira_target)
     ayu = FakeBackgroundResultTarget("role-b", "thread-b")
     keys = await control.send_keys(
         "wR:p2", ["enter"], CommandSource("role", "role-b", "Ayu"), ayu
@@ -225,3 +229,29 @@ async def test_a_role_command_without_a_captured_destination_is_not_sent(fixture
         await control.prompt("wR:p2", "修滚动", ROLE)
     assert herdr.argv == []
     assert log.records("default", "wR:p2") == []
+
+
+async def test_keys_answering_a_blocked_agent_are_not_reported_on_that_block(fixture):
+    control, _log, herdr = fixture
+    control.watcher.poll_seconds = 0
+    herdr.state, herdr.seq = "blocked", 5
+    target = FakeBackgroundResultTarget("role-a", "thread-a")
+    command = await control.send_keys("wR:p2", ["enter"], ROLE, target)
+
+    async def looks(count: int) -> None:
+        async with asyncio.timeout(5):
+            seen = herdr.looks
+            while herdr.looks < seen + count:
+                await asyncio.sleep(0)
+
+    # The first looks still read the block the keys answered.
+    await looks(3)
+    assert command.report == "pending" and target.reports == {}
+    herdr.state, herdr.seq = "working", 6
+    await looks(2)
+    herdr.state, herdr.seq = "blocked", 7
+    async with asyncio.timeout(5):
+        while command.report == "pending":
+            await asyncio.sleep(0)
+    [text] = target.reports.values()
+    assert json.loads(text)["outcome"] == "blocked"

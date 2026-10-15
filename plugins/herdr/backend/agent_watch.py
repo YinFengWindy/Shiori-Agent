@@ -20,16 +20,15 @@ from collections.abc import Callable
 from contextvars import Context
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import Any, Literal
 
 from shiori_sdk.background_results import BackgroundResultTarget
+from shiori_sdk.process_resources import PluginProcessResources
 from shiori_sdk.processes import Processes
 
+from .agent_commands import AgentCommand, Handover, ReportStatus
 from .cli import CommandError, HerdrCli
 from .config import HerdrConfig
-
-if TYPE_CHECKING:
-    from .agent_control import AgentCommand, ReportStatus
 
 type Outcome = Literal["finished", "idle", "blocked", "gone", "timeout", "unreadable"]
 
@@ -50,7 +49,7 @@ POLL_SECONDS = 2.0
 """Pause before each look at the agent, as the task monitor polls."""
 
 START_GRACE_SECONDS = 30.0
-"""How long an idle agent may take to start on a command before it is reported idle."""
+"""How long an agent may take to react to a command before its state is taken as is."""
 
 READ_FAILURE_LIMIT = 5
 """Consecutive failed state reads after which the watch gives up."""
@@ -59,22 +58,15 @@ USER_SENDER = "用户在 Herdr 面板直接发送"
 """How a report names a command the user typed into the panel."""
 
 
-@dataclass(frozen=True)
-class Handover:
-    """The role handling an agent, and where its reports go."""
-
-    role_id: str
-    role_name: str
-    target: BackgroundResultTarget
-
-    def as_dict(self) -> dict[str, str]:
-        """The role as the desktop and the role tools show it."""
-        return {"role_id": self.role_id, "role_name": self.role_name}
+def state_seq(agent: dict[str, Any]) -> int | None:
+    """Herdr's `state_change_seq` of an agent: it grows with every state change."""
+    seq = agent.get("state_change_seq")
+    return seq if isinstance(seq, int) else None
 
 
 @dataclass
 class _Pending:
-    command: "AgentCommand"
+    command: AgentCommand
     target: BackgroundResultTarget
 
 
@@ -82,7 +74,7 @@ class _Pending:
 class _Watch:
     """One agent's watch: the commands awaiting a report and what was seen."""
 
-    cli: HerdrCli
+    config: HerdrConfig
     pane_id: str
     pending: list[_Pending] = field(default_factory=list)
     reporting: list[_Pending] = field(default_factory=list)
@@ -91,8 +83,20 @@ class _Watch:
     # Bumped by every arriving command, so a read begun before it is discarded.
     revision: int = 0
     working: bool = False
+    # The agent's state sequence when the latest keys were pressed; a blocked
+    # state at or below it predates them.
+    baseline: int | None = None
     agent: dict[str, Any] = field(default_factory=dict)
     worker: asyncio.Task[None] | None = None
+
+
+@dataclass(frozen=True)
+class _Attachment:
+    """One generation's capabilities, usable while that generation is published."""
+
+    resources: PluginProcessResources
+    processes: Processes
+    directory: Path
 
 
 def report_text(
@@ -141,22 +145,45 @@ def report_text(
 class AgentWatcher:
     """Handovers and watches of this process, keyed by session and pane ID.
 
-    A process resource: it builds its own CLI per watch from the session's
-    configuration snapshot, so the errors it catches are its own generation's.
+    A process resource built idle, without capabilities: every generation
+    attaches its own process capability, and each read of a watch uses the
+    published generation's. The CLI is this module's own, so the errors it
+    catches are its own generation's.
     """
 
-    def __init__(self, directory: Path, processes: Processes) -> None:
-        self.directory, self.processes = directory, processes
+    def __init__(self) -> None:
         self.closed = False
         self.poll_seconds = POLL_SECONDS
         self.start_grace_seconds = START_GRACE_SECONDS
         self.clock: Callable[[], float] = time.monotonic
+        self._attachments: list[_Attachment] = []
         self._handovers: dict[tuple[str, str], Handover] = {}
         self._watches: dict[tuple[str, str], _Watch] = {}
+
+    def attach(
+        self, resources: PluginProcessResources, processes: Processes, directory: Path
+    ) -> None:
+        """A generation offers its capabilities; they are used once it is published."""
+        self._attachments.append(_Attachment(resources, processes, directory))
+
+    def _cli(self, config: HerdrConfig) -> HerdrCli | None:
+        """A CLI on the published generation's capability; None between generations."""
+        for index in range(len(self._attachments) - 1, -1, -1):
+            current = self._attachments[index]
+            if current.resources.active:
+                # Older generations were retired by this one and never return.
+                del self._attachments[:index]
+                return HerdrCli(config, current.processes, current.directory)
+        return None
 
     def handover(self, session: str, pane_id: str) -> Handover | None:
         """The agent's handling role, if any."""
         return self._handovers.get((session, pane_id))
+
+    def handler(self, session: str, pane_id: str) -> dict[str, str] | None:
+        """The handling role as the desktop and the role tools show it, or None."""
+        handover = self.handover(session, pane_id)
+        return handover.as_dict() if handover else None
 
     def take_over(self, session: str, pane_id: str, handover: Handover) -> None:
         """The role becomes the agent's handling role, replacing any earlier one."""
@@ -166,17 +193,19 @@ class AgentWatcher:
         self,
         config: HerdrConfig,
         pane_id: str,
-        command: "AgentCommand",
+        command: AgentCommand,
         target: BackgroundResultTarget,
         *,
         working: bool,
+        baseline: int | None = None,
     ) -> None:
         """Watch the agent for this delivered command and report it once.
 
         A command arriving while the agent is already watched joins the
         commands awaiting the report, which lists them all. `working` tells
         that the agent was seen working on the command already. Keys keep
-        what was seen, so an interrupt of working agent reads as it stopping.
+        what was seen, so an interrupt of working agent reads as it stopping;
+        `baseline` is the agent's state sequence read just before them.
         """
         if self.closed:
             command.settle_report("failed", "Shiori 已停止监视，不会回报")
@@ -184,8 +213,7 @@ class AgentWatcher:
         key = (config.session, pane_id)
         watch = self._watches.get(key)
         if watch is None:
-            cli = HerdrCli(config.model_copy(deep=True), self.processes, self.directory)
-            watch = self._watches[key] = _Watch(cli, pane_id)
+            watch = self._watches[key] = _Watch(config.model_copy(deep=True), pane_id)
             watch.worker = asyncio.create_task(
                 self._run(key, watch), name=f"herdr-watch:{pane_id}", context=Context()
             )
@@ -194,6 +222,8 @@ class AgentWatcher:
         watch.changed_at = self.clock()
         watch.revision += 1
         watch.working = working or (command.kind == "keys" and watch.working)
+        if baseline is not None:
+            watch.baseline = baseline
 
     async def close(self) -> None:
         """Stop every watch; the agents keep running and nothing is reported."""
@@ -207,6 +237,7 @@ class AgentWatcher:
             _ = worker.cancel()
         outcomes = await asyncio.gather(*workers, return_exceptions=True)
         self._handovers.clear()
+        self._attachments.clear()
         errors = [error for error in outcomes if isinstance(error, Exception)]
         if errors:
             raise ExceptionGroup("Herdr agent 监视清理失败", errors)
@@ -214,12 +245,22 @@ class AgentWatcher:
     async def _run(self, key: tuple[str, str], watch: _Watch) -> None:
         try:
             while watch.pending:
-                outcome, output = await self._observe(watch)
+                outcome, detail = await self._observe(watch)
+                # The batch is fixed the moment the outcome is: a command
+                # arriving while the output is read belongs to the next round.
                 watch.reporting, watch.pending = watch.pending, []
-                watch.working = False
+                revision, agent = watch.revision, watch.agent
                 if outcome == "gone":
                     _ = self._handovers.pop(key, None)
-                await self._report(key[0], watch, outcome, output)
+                output = (
+                    detail
+                    if outcome in {"gone", "unreadable"}
+                    else await self._tail(watch, agent)
+                )
+                if watch.revision == revision:
+                    # Nothing new was sent: the next round starts unseen.
+                    watch.working, watch.baseline = False, None
+                await self._report(key[0], watch, outcome, agent, output)
                 watch.reporting = []
             # Commands arriving during a report start another round above.
         except asyncio.CancelledError:
@@ -237,47 +278,70 @@ class AgentWatcher:
                 del self._watches[key]
 
     async def _observe(self, watch: _Watch) -> tuple[Outcome, str]:
-        """Poll until the agent stops, blocks, goes away, or the watch times out."""
+        """Poll until the agent stops, blocks, goes away, or the watch times out.
+
+        Returns without awaiting once the outcome is known, so the caller
+        fixes the batch that outcome belongs to.
+        """
         failures = 0
         while True:
             await asyncio.sleep(self.poll_seconds)
             revision = watch.revision
             outcome: Outcome | None = None
-            try:
-                agent = (await watch.cli.call("agent", "get", watch.pane_id))["agent"]
-            except CommandError as error:
-                if error.code == "agent_not_found":
-                    return "gone", ""
-                failures += 1
-                if failures >= READ_FAILURE_LIMIT:
-                    return "unreadable", f"状态读取失败：{error}"
-            else:
-                failures = 0
-                # A command arrived during the read: what was read predates it.
-                if revision != watch.revision:
-                    continue
-                watch.agent = agent
-                state = agent.get("agent_status")
-                if state == "working":
-                    watch.working = True
-                elif state == "blocked":
-                    outcome = "blocked"
-                elif state in {"idle", "done"}:
-                    if watch.working:
-                        outcome = "finished"
-                    elif self.clock() - watch.changed_at >= self.start_grace_seconds:
-                        outcome = "idle"
+            cli = self._cli(watch.config)
+            if cli is not None:
+                try:
+                    agent = (await cli.call("agent", "get", watch.pane_id))["agent"]
+                except CommandError as error:
+                    # A command arrived during the read: the answer predates it.
+                    if revision != watch.revision:
+                        continue
+                    if error.code == "agent_not_found":
+                        return "gone", ""
+                    failures += 1
+                    if failures >= READ_FAILURE_LIMIT:
+                        return "unreadable", f"状态读取失败：{error}"
+                else:
+                    failures = 0
+                    if revision != watch.revision:
+                        continue
+                    watch.agent = agent
+                    outcome = self._judge(watch, agent)
             if outcome is None and (
-                self.clock() - watch.changed_at >= watch.cli.config.task_timeout_seconds
+                self.clock() - watch.changed_at >= watch.config.task_timeout_seconds
             ):
                 outcome = "timeout"
             if outcome is not None:
-                return outcome, await self._tail(watch)
+                return outcome, ""
 
-    async def _tail(self, watch: _Watch) -> str:
-        state = watch.agent.get("agent_status")
+    def _judge(self, watch: _Watch, agent: dict[str, Any]) -> Outcome | None:
+        """How the agent ended up after the commands, or None while it is not done."""
+        state = agent.get("agent_status")
+        settled = self.clock() - watch.changed_at >= self.start_grace_seconds
+        if state == "working":
+            watch.working = True
+        elif state == "blocked":
+            # Pressing keys on a blocked agent answers it; until the state has
+            # changed since, the blocked state read is the one they answered.
+            seq = state_seq(agent)
+            if watch.baseline is None or seq is None or seq > watch.baseline:
+                return "blocked"
+            if settled:
+                return "blocked"
+        elif state in {"idle", "done"}:
+            if watch.working:
+                return "finished"
+            if settled:
+                return "idle"
+        return None
+
+    async def _tail(self, watch: _Watch, agent: dict[str, Any]) -> str:
+        cli = self._cli(watch.config)
+        if cli is None:
+            return "终端输出暂不可读：Herdr 插件正在切换配置"
+        state = agent.get("agent_status")
         try:
-            output = await watch.cli.read(
+            output = await cli.read(
                 watch.pane_id,
                 source="recent-unwrapped" if state in {"idle", "done"} else "visible",
             )
@@ -286,7 +350,12 @@ class AgentWatcher:
         return output[-OUTPUT_TAIL:]
 
     async def _report(
-        self, session: str, watch: _Watch, outcome: Outcome, output: str
+        self,
+        session: str,
+        watch: _Watch,
+        outcome: Outcome,
+        agent: dict[str, Any],
+        output: str,
     ) -> None:
         """One report per destination role and thread; a report ID is never resent."""
         groups: dict[tuple[str, str], list[_Pending]] = {}
@@ -295,9 +364,7 @@ class AgentWatcher:
                 item
             )
         for batch in groups.values():
-            text = report_text(
-                session, watch.pane_id, outcome, watch.agent, output, batch
-            )
+            text = report_text(session, watch.pane_id, outcome, agent, output, batch)
             status: ReportStatus
             try:
                 # The newest command's ID belongs to this report alone.
