@@ -22,7 +22,7 @@ def owned_task(service: "TaskService", task_id: str, role_id: str) -> CodingTask
 
 
 def task_snapshot(task: CodingTask) -> dict[str, object]:
-    """Bounded task read model shared by chat and later dashboard adapters."""
+    """Bounded task read model returned by the role-scoped chat tools."""
     return {
         "id": task.id,
         "run_id": task.run_id,

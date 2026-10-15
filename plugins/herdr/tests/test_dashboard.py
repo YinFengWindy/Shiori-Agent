@@ -35,17 +35,76 @@ def fixture(tmp_path):
     return ctx, service, dashboard
 
 
-async def test_snapshot_is_global_but_role_tool_remains_scoped(fixture):
-    ctx, service, dashboard = fixture
-    snapshot = await dashboard.snapshot({})
-    assert len(snapshot["tasks"]) == 2
-    assert ctx.rpc.concurrency["tasks.snapshot"] is Concurrency.READ_ONLY
+async def test_list_is_global_but_role_tool_remains_scoped(fixture):
+    ctx, service, _ = fixture
+    for name in ("tasks.list", "tasks.get"):
+        assert ctx.rpc.concurrency[name] is Concurrency.READ_ONLY
+    assert "tasks.snapshot" not in ctx.rpc.handlers
+    listed = await ctx.rpc.handlers["tasks.list"]({})
+    assert listed["instance_id"] == service.instance_id
+    assert {task["id"] for task in listed["tasks"]} == {"role-a", "role-b"}
     ctx.tools.context = {"role_id": "role-a"}
     tool = TaskManagementTool(
         service, ctx.tools, ctx.process_resources, "get", ctx.background_results
     )
     with pytest.raises(ValueError, match="当前角色"):
         await tool.execute(task_id="role-b")
+    await ctx.aclose()
+
+
+async def test_list_summarizes_and_get_details_the_current_run(fixture, tmp_path):
+    ctx, service, _ = fixture
+    task = service.tasks["role-a"]
+    task.requirement = "\n  修复滚动  \n第二行\n\n用户追加要求：\n再补测试"
+    task.created_at = "2999-01-01T00:00:00+00:00"
+    task.worktree, task.pane_id, task.status = tmp_path, "pane", "blocked"
+    task.output = "x" * 20000
+    task.progress_events = [
+        {"run_id": "old", "stage": "analysis", "detail": "旧回合"},
+        {"run_id": "run", "stage": "implementation", "detail": "改滚动"},
+    ]
+    task.stage, task.progress_updated_at = "implementation", "2026-10-15T09:01:00Z"
+
+    listed = await ctx.rpc.handlers["tasks.list"]({})
+    summary = listed["tasks"][0]
+    assert summary == {
+        "id": "role-a",
+        "title": "修复滚动",
+        "status": "blocked",
+        "stage": "implementation",
+        "progress_detail": "改滚动",
+        "progress_at": "2026-10-15T09:01:00Z",
+        "role_id": "role-a",
+        "agent": "codex",
+        "repository": str(tmp_path),
+        "branch": "branch",
+        "created_at": task.created_at,
+        "updated_at": task.updated_at,
+        "revision": task.revision,
+    }
+
+    result = await ctx.rpc.handlers["tasks.get"]({"task_id": "role-a"})
+    assert result["instance_id"] == service.instance_id
+    detail = result["task"]
+    assert {key: detail[key] for key in summary} == summary
+    assert len(detail["output"]) == 16000
+    assert [event["detail"] for event in detail["progress_events"]] == ["改滚动"]
+    assert detail["requirement"] == task.requirement
+    assert detail["worktree"] == str(tmp_path)
+    assert detail["can_continue"] is True and detail["can_cancel"] is True
+
+    task.status = "completed"
+    completed = (await ctx.rpc.handlers["tasks.get"]({"task_id": "role-a"}))["task"]
+    assert completed["can_cancel"] is False and completed["can_continue"] is True
+    task.status = "running"
+    running = (await ctx.rpc.handlers["tasks.get"]({"task_id": "role-a"}))["task"]
+    assert running["can_continue"] is False and running["can_cancel"] is True
+
+    with pytest.raises(ValueError, match="任务不存在"):
+        await ctx.rpc.handlers["tasks.get"]({"task_id": "missing"})
+    ctx.process_resources.active = False
+    with pytest.raises(RuntimeError, match="配置已替换"):
+        await ctx.rpc.handlers["tasks.list"]({})
     await ctx.aclose()
 
 

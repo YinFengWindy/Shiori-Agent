@@ -1,86 +1,48 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createFakeHostServices, createFakePluginClient, deferred } from "@yinfengwindy/shiori-sdk/testing";
-import { DashboardStore } from "./dashboardStore";
-import { dashboardFixture, makeTask } from "./testFixtures";
-import type { TaskSnapshot } from "./types";
+import { DashboardStore, mergeTaskList } from "./dashboardStore";
+import { herdrBackend, makeDetail, makeSummary } from "./testFixtures";
 
-test("unchanged, duplicate and old snapshots retain references; current runs replace old ones", async () => {
-  const fixture = dashboardFixture();
-  const store = new DashboardStore(fixture.client, fixture.fake.host);
-  try {
-    await store.start();
-    const initial = store.getSnapshot();
-    await store.refresh();
-    assert.equal(store.getSnapshot(), initial);
-    fixture.emit("task-a", 1);
-    assert.equal(fixture.calls.length, 2);
-    fixture.setSnapshot({ instance_id: "process-a", tasks: [makeTask({ revision: 3, run_id: "new-run", stage: "validation" })] });
-    await store.refresh();
-    fixture.setSnapshot({ instance_id: "process-a", tasks: [makeTask({ revision: 2, run_id: "old-run", stage: "implementation" })] });
-    await store.refresh();
-    assert.equal(store.getSnapshot().tasks[0].run_id, "new-run");
-    assert.equal(store.getSnapshot().tasks[0].stage, "validation");
-  } finally { store.stop(); }
-  assert.equal(fixture.handlers.size, 0);
+const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+test("a list without newer revisions keeps its references; another process replaces it", () => {
+  const current = { instance_id: "p", tasks: [makeSummary({ revision: 3 }), makeSummary({ id: "task-b" })] };
+  assert.equal(mergeTaskList(current, { instance_id: "p", tasks: [makeSummary({ revision: 2 }), makeSummary({ id: "task-b" })] }), current);
+  const advanced = mergeTaskList(current, { instance_id: "p", tasks: [makeSummary({ revision: 3 }), makeSummary({ id: "task-b", revision: 2 })] });
+  assert.equal(advanced.tasks[0], current.tasks[0]);
+  assert.equal(advanced.tasks[1].revision, 2);
+  const fresh = { instance_id: "q", tasks: [makeSummary({ revision: 1 })] };
+  assert.equal(mergeTaskList(current, fresh), fresh);
 });
 
-test("subscription precedes snapshot and an event during a read schedules another authoritative read", async () => {
-  const fixture = dashboardFixture();
-  const first = deferred<TaskSnapshot>();
-  let reads = 0;
-  const client = createFakePluginClient({ events: fixture.client.events, call: async <T,>() => {
-    assert.equal(fixture.handlers.size, 1);
-    reads++;
-    return (reads === 1 ? await first.promise : { instance_id: "p", tasks: [makeTask({ revision: 2, stage: "validation" })] }) as T;
-  } });
-  const store = new DashboardStore(client, fixture.fake.host);
-  try {
-    const starting = store.start();
-    await Promise.resolve();
-    fixture.emit("task-a", 2);
-    first.resolve({ instance_id: "p", tasks: [makeTask()] });
-    await starting;
-    assert.equal(reads, 2);
-    assert.equal(store.getSnapshot().tasks[0].revision, 2);
-  } finally { store.stop(); }
+test("the first loaded task is selected once; a task added later does not move the selection", async () => {
+  const backend = herdrBackend([makeDetail()]);
+  const store = new DashboardStore();
+  const detach = store.attach(backend.client, backend.fake.host);
+  await settle();
+  assert.equal(store.getSnapshot().selectedId, "task-a");
+  backend.setTasks([makeDetail({ id: "task-new", created_at: "2026-10-14T11:00:00Z" }), makeDetail()]);
+  backend.emit("task-new", 1);
+  await settle();
+  assert.equal(store.getSnapshot().list.value?.tasks[0].id, "task-new");
+  assert.equal(store.getSnapshot().selectedId, "task-a");
+  detach();
 });
 
-test("disconnect keeps readable tasks and reconnect/new mount refreshes; late subscriptions are disposed", async () => {
-  const fixture = dashboardFixture();
-  const store = new DashboardStore(fixture.client, fixture.fake.host);
-  await store.start();
-  fixture.fail(true);
-  await store.refresh();
-  assert.equal(store.getSnapshot().connected, false);
-  assert.equal(store.getSnapshot().tasks.length, 1);
-  store.stop();
-  fixture.fail(false);
-  fixture.setSnapshot({ instance_id: "p2", tasks: [] });
-  await store.start();
-  assert.equal(store.getSnapshot().tasks.length, 0);
-  store.stop();
-  const pending = deferred<() => void>();
-  let disposed = 0;
-  const late = new DashboardStore(createFakePluginClient({ events: { on: () => pending.promise } }), createFakeHostServices().host);
-  const starting = late.start();
-  late.stop();
-  pending.resolve(() => { disposed++; });
-  await starting;
-  assert.equal(disposed, 1);
-});
-
-test("a response from before disconnect cannot mark the lost connection healthy", async () => {
-  const fixture = dashboardFixture();
-  const pending = deferred<TaskSnapshot>();
-  const client = createFakePluginClient({ events: fixture.client.events, call: async <T,>() => await pending.promise as T });
-  const store = new DashboardStore(client, fixture.fake.host);
-  const starting = store.start();
-  await Promise.resolve();
-  fixture.fake.emit({ id: "exit", type: "event", method: "bridge.exit", payload: {} });
-  pending.resolve({ instance_id: "old", tasks: [makeTask()] });
-  await starting;
-  assert.equal(store.getSnapshot().connected, false);
-  assert.equal(store.getSnapshot().tasks.length, 0);
-  store.stop();
+test("when the mount point driving the feed leaves, the remaining one's client takes over", async () => {
+  const page = herdrBackend([makeDetail()]);
+  const sidebar = herdrBackend([makeDetail()]);
+  const store = new DashboardStore();
+  const detachPage = store.attach(page.client, page.fake.host);
+  const detachSidebar = store.attach(sidebar.client, sidebar.fake.host);
+  await settle();
+  assert.equal(page.handlers.size, 1);
+  assert.equal(sidebar.handlers.size, 0, "one subscription for both mount points");
+  detachPage();
+  await settle();
+  assert.equal(page.handlers.size, 0);
+  assert.equal(sidebar.handlers.size, 1);
+  assert.ok(sidebar.calls.some((call) => call.name === "tasks.list"));
+  detachSidebar();
+  assert.equal(sidebar.handlers.size, 0);
 });
