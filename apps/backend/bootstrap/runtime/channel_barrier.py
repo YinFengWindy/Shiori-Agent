@@ -46,6 +46,9 @@ async def channel_handover_barrier(
         # Intake can fail after partially pausing channels, so it belongs inside
         # the same recovery boundary as background drain and durable commit.
         host.pause_intake()
+        # stop() cancels in-flight background work, so a model call stuck in
+        # retries cannot hold admission closed; replies it already queued are
+        # still delivered by drain_outbound below.
         for group in groups:
             if group is current_group:
                 stopped_current = True

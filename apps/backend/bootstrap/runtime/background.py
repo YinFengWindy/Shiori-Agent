@@ -1,4 +1,10 @@
-"""Graceful handoff of proactive and optimizer scheduling between versions."""
+"""Handoff of proactive and optimizer scheduling between runtime versions.
+
+Background loops only do maintenance the next generation redoes on its own
+schedule (memory optimizing, proactive ticks), so replacing a version
+interrupts their in-flight work instead of waiting for it: a model call stuck
+in retries must never hold a settings switch or shutdown.
+"""
 
 from __future__ import annotations
 
@@ -62,7 +68,11 @@ class RuntimeBackground:
             self._loops.extend(self.proactive_loops.values())
 
     def start(self, previous: RuntimeBackground | None = None) -> None:
-        """Transfers scheduling only after the previous accepted work finishes."""
+        """Transfers scheduling once the stopped previous group has unwound.
+
+        Starting only after ``previous`` drains keeps two generations' loops
+        from touching the same memory and proactive state concurrently.
+        """
         if self._scene is not None:
             self._scene.activate()
         if not self._coroutines:
@@ -86,7 +96,7 @@ class RuntimeBackground:
                     ]
                     self._coroutines = []
                     if self._tasks:
-                        await asyncio.gather(*self._tasks)
+                        await self._join_tasks()
             finally:
                 self.discard()
                 await lease.release()
@@ -96,15 +106,33 @@ class RuntimeBackground:
         )
 
     def stop(self) -> None:
-        """Closes admission and wakes sleepers without cancelling accepted work."""
+        """Closes admission and cancels in-flight background work.
+
+        Loops are told to stop first so none schedules another round while its
+        task unwinds; ``drain`` then waits for the cancellation to finish.
+        """
         self._stopped = True
         for loop in self._loops:
             loop.stop()
+        for task in self._tasks:
+            task.cancel()
 
     async def drain(self) -> None:
-        """Waits for the accepted background work and all its owned polling."""
+        """Waits until the background work and all its owned polling have ended."""
         if self._runner is not None:
             await asyncio.shield(self._runner)
+
+    async def _join_tasks(self) -> None:
+        """Waits for every loop; only the cancellation ``stop`` requested is expected."""
+        outcomes = await asyncio.gather(*self._tasks, return_exceptions=True)
+        errors = [
+            outcome
+            for outcome in outcomes
+            if isinstance(outcome, BaseException)
+            and not isinstance(outcome, asyncio.CancelledError)
+        ]
+        if errors:
+            raise BaseExceptionGroup("Background runtime work failed", errors)
 
     def discard(self) -> None:
         """Closes prepared coroutine objects that were never scheduled."""

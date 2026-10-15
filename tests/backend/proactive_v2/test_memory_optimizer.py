@@ -120,6 +120,35 @@ def test_optimize_rolls_back_snapshot_when_merge_returns_empty(tmp_path):
     assert not role_memory._snapshot_path.exists()
 
 
+def test_cancelled_merge_returns_snapshot_to_pending(tmp_path):
+    memory = MarkdownMemoryStore(tmp_path)
+    role_memory = MarkdownMemoryStore(tmp_path / "roles" / "mira")
+    role_memory.write_long_term("old profile")
+    role_memory.append_pending("- pending fact")
+    long_term = role_memory.read_long_term()
+
+    async def scenario():
+        requested = asyncio.Event()
+
+        async def hang(**kwargs):
+            requested.set()
+            await asyncio.Event().wait()
+
+        provider = types.SimpleNamespace(chat=hang)
+        optimizer = MemoryOptimizer(memory, cast(Any, provider), "test-model", tmp_path)
+        run = asyncio.create_task(optimizer.optimize(role_id="mira"))
+        await requested.wait()
+        run.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await run
+
+    asyncio.run(scenario())
+
+    assert "pending fact" in role_memory.read_pending()
+    assert not role_memory._snapshot_path.exists()
+    assert role_memory.read_long_term() == long_term
+
+
 def test_optimize_updates_self_using_pending_only(tmp_path):
     memory = MarkdownMemoryStore(tmp_path)
     role_memory = MarkdownMemoryStore(tmp_path / "roles" / "mira")
