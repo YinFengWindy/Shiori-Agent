@@ -66,7 +66,7 @@ export function AgentSidebar({ client, host, animating, collapsed, width, onBegi
               const selected = current?.kind === "agent" && current.paneId === agent.pane_id;
               const onSelect = () => select({ kind: "agent", paneId: agent.pane_id });
               return task ? (
-                <TaskListItem key={agent.pane_id} task={task} role={roles.get(task.role_id)} selected={selected} now={now} host={host} onSelect={onSelect} />
+                <TaskListItem key={agent.pane_id} task={task} agent={agent} role={roles.get(task.role_id)} selected={selected} now={now} host={host} onSelect={onSelect} />
               ) : (
                 <AgentListItem key={agent.pane_id} agent={agent} selected={selected} onSelect={onSelect} />
               );

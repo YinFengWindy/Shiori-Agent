@@ -5,7 +5,7 @@ import { ToneDot } from "./TaskStatus";
 import { agentKindLabel, agentStatusLabel, agentStatusTone, agentTitle } from "./agentSelectors";
 import type { AgentSummary } from "./types";
 
-/** One agent of the session without a plugin task: terminal title, kind and Herdr state. */
+/** One agent of the session without a plugin task: terminal title, kind and Herdr state, working directory. */
 export function AgentListItem({ agent, selected, onSelect }: {
   agent: AgentSummary;
   selected: boolean;
@@ -28,6 +28,7 @@ export function AgentListItem({ agent, selected, onSelect }: {
           <ToneDot tone={agentStatusTone(agent.status)} />
           <span className="truncate">{agentKindLabel(agent.agent)} · {agentStatusLabel(agent.status)}</span>
         </span>
+        {agent.cwd ? <span className="min-w-0 truncate text-caption leading-tight text-ink-muted">{agent.cwd}</span> : null}
       </span>
     </button>
   );

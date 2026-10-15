@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useSyncExternalStore } from "react";
 import type { PluginHostServices, PluginRpcClient } from "@yinfengwindy/shiori-sdk";
-import { mergeUnchanged } from "./dashboardStore";
-import { TaskFeed } from "./taskFeed";
+import { mergeUnchanged, TaskFeed } from "./taskFeed";
 import type { AgentDetailResponse } from "./types";
 
 /** Polls one agent's state and terminal output while its view is mounted. */

@@ -36,6 +36,7 @@ class ScriptedHerdr:
     def __init__(self):
         self.argv: list[list[str]] = []
         self.running = True
+        self.read_error: CommandError | None = None
         self.agents = [
             agent("wR:p2", "wR", title="herdr插件问题"),
             agent("w9:p1", "w9", kind="codex", status="idle"),
@@ -75,6 +76,8 @@ class ScriptedHerdr:
                 )
             return json.dumps({"result": {"agent": found[0]}})
         if argv[3:5] == ["agent", "read"]:
+            if self.read_error:
+                raise self.read_error
             return f"output of {argv[5]} via {argv[7]}"
         raise AssertionError(argv)
 
@@ -116,10 +119,12 @@ async def test_agents_are_grouped_by_workspace_and_linked_to_their_task(
     for name in ("agents.list", "agents.get"):
         assert ctx.rpc.concurrency[name] is Concurrency.READ_ONLY
     # Same pane: the older task and a task of another session are not linked.
+    # The pane alone links: a codex task on a pane Herdr now reports as claude.
     for task in (
         make_task(tmp_path, "old", pane_id="w9:p1", created_at="t0"),
         make_task(tmp_path, "new", pane_id="w9:p1", created_at="t2"),
         make_task(tmp_path, "elsewhere", pane_id="wR:p2", session="other"),
+        make_task(tmp_path, "redetected", pane_id="wR:p4"),
     ):
         service.tasks[task.id] = task
 
@@ -140,6 +145,7 @@ async def test_agents_are_grouped_by_workspace_and_linked_to_their_task(
         "cwd": "D:\\Coding\\Shiori",
         "task_id": None,
     }
+    assert listed["workspaces"][0]["agents"][1]["task_id"] == "redetected"
     assert listed["workspaces"][1]["agents"][0]["task_id"] == "new"
     assert all(argv[1:3] == ["--session", "default"] for argv in herdr.argv[1:])
     await ctx.aclose()
@@ -167,7 +173,7 @@ async def test_get_reads_the_agent_and_its_task_and_reports_a_gone_agent(
     await ctx.aclose()
 
 
-async def test_session_is_checked_once_and_again_after_it_becomes_unavailable(
+async def test_session_is_checked_once_and_a_failed_read_reports_the_reason(
     fixture,
 ):
     ctx, _service, herdr = fixture
@@ -176,14 +182,17 @@ async def test_session_is_checked_once_and_again_after_it_becomes_unavailable(
     await list_agents({})
     assert sum(argv[1:] == ["--version"] for argv in herdr.argv) == 1
 
+    # The first poll after the session stops names the reason, not the raw CLI error.
     herdr.running = False
-    with pytest.raises(CommandError, match="no herdr server"):
-        await list_agents({})
-    # The failed read invalidates the check, so the next poll names the reason.
     with pytest.raises(CommandError, match="session 'default' 未运行"):
         await list_agents({})
     herdr.running = True
     assert (await list_agents({}))["workspaces"]
+
+    # A healthy session keeps the read's own error.
+    herdr.read_error = CommandError("alternate screen", code="read_failed")
+    with pytest.raises(CommandError, match="alternate screen"):
+        await ctx.rpc.handlers["agents.get"]({"pane_id": "wR:p2"})
 
     ctx.process_resources.active = False
     with pytest.raises(RuntimeError, match="配置已替换"):

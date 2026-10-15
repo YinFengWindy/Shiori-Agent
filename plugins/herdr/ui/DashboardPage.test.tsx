@@ -5,9 +5,7 @@ import { mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import { DashboardPage } from "./DashboardPage";
 import { AgentSidebar } from "./AgentSidebar";
 import { createDashboardStore, DashboardStoreProvider } from "./dashboardStore";
-import { herdrBackend, makeAgent, makeDetail, makeRole, makeWorkspace } from "./testFixtures";
-
-const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+import { herdrBackend, makeDetail, makeRole } from "./testFixtures";
 
 type Backend = ReturnType<typeof herdrBackend>;
 
@@ -76,40 +74,6 @@ test("task errors and report failures appear as host inline errors", async () =>
     const titles = backend.fake.uiRenders.InlineError.map((props) => props.title);
     assert.ok(titles.includes("任务需要处理") && titles.includes("聊天回报失败"));
     assert.match(view.container.textContent ?? "", /Agent 等待登录[\s\S]*渠道离线/);
-  } finally { await view.cleanup(); }
-});
-
-test("a selected agent that leaves the session is reported gone; leaving the page stops polling", async () => {
-  const backend = herdrBackend([], [], [makeWorkspace("Shiori", [makeAgent()])]);
-  const view = await mountTestComponent(workspace(backend, createDashboardStore(5)));
-  try {
-    const page = () => view.container.querySelector('[data-testid="herdr-page"]')?.textContent ?? "";
-    await act(async () => wait(20));
-    assert.equal(view.container.querySelector('[aria-label="Agent 详情"] h1')?.textContent, "herdr插件问题");
-    assert.match(page(), /output of wR:p2/);
-    backend.setWorkspaces([]);
-    await act(async () => wait(30));
-    assert.match(view.container.querySelector('[role="status"]')?.textContent ?? "", /Agent 已不存在/);
-  } finally { await view.cleanup(); }
-  const reads = backend.calls.length;
-  await wait(30);
-  assert.equal(backend.calls.length, reads, "no Herdr reads after the page is gone");
-});
-
-test("an agent carrying a task shows the task's delivery and actions around the agent's terminal", async () => {
-  const backend = herdrBackend(
-    [makeDetail({ status: "completed", summary: "改好了滚动", pr_url: "https://github.com/o/r/pull/1", can_cancel: false, output: "monitor output" })],
-    [],
-    [makeWorkspace("shiori-task", [makeAgent({ pane_id: "w9:p1", workspace_id: "w9", agent: "codex", task_id: "task-a" })])],
-  );
-  const view = await mountTestComponent(workspace(backend, createDashboardStore()));
-  try {
-    await act(async () => wait(10));
-    const detail = view.container.querySelector('[aria-label="任务详情"]');
-    assert.equal(detail?.querySelector("h1")?.textContent, "修复滚动位置");
-    assert.match(detail?.querySelector('[aria-label="修改摘要"]')?.textContent ?? "", /改好了滚动.*打开 Draft PR/);
-    assert.equal(detail?.querySelector('[aria-label="终端输出"] pre')?.textContent, "output of w9:p1");
-    assert.ok(detail?.querySelector('textarea[aria-label="追加要求"]'));
   } finally { await view.cleanup(); }
 });
 

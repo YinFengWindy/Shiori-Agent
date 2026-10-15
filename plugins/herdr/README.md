@@ -19,12 +19,13 @@ Ctrl+C 并确认就绪后才标记 cancelled；无法确认则为 unknown，保�
 
 导航栏的 Herdr 页面以 agent 为单位：宿主二级栏按 Herdr workspace 分组列出所配置
 session 的全部 agent，包括用户在 Herdr 中手动打开的 CLI（终端标题、类型与 Herdr
-状态）。承载插件任务的 agent 只出现一次，显示为该任务（发起角色头像、需求首行、
-状态与阶段、最近报告时间）。没有被列出的 agent 承载的插件任务（启动中、agent 已
+状态、工作目录）。承载插件任务的 agent 只出现一次，显示为该任务（发起角色头像、
+需求首行、状态与阶段、最近报告时间）并附带 agent 的 Herdr 状态。没有被列出的 agent 承载的插件任务（启动中、agent 已
 离开 session、属于其他 session，或 session 不可用时的全部任务）放在最后的「插件
 任务」组，未结束的在前，交付信息不会因此丢失。
 
-主区展示选中 agent 的最近终端输出；关联插件任务时，在其外围显示阶段条与最新进展、
+主区顶部是选中 agent 的头部（终端标题、Herdr 状态、类型与工作目录），其下为最近
+终端输出；关联插件任务时，在头部下方、终端外围显示阶段条与最新进展、
 折叠的活动记录 / 验证结果 / 完整需求，交付后突出修改摘要与 Draft PR，底部输入框
 提交追加要求。继续和取消（需确认）复用聊天工具的任务服务，是否可用由服务端判定；
 打开 PR 通过宿主校验的外部链接能力完成。选中的 agent 从 Herdr 消失后保持选中，主区
@@ -47,9 +48,10 @@ session 的全部 agent，包括用户在 Herdr 中手动打开的 CLI（终端�
 workspace 名称，每项含 pane ID（agent 标识）、类型、Herdr 状态、终端标题、cwd 及
 关联插件任务 ID；`agents.get`（参数 `pane_id`）返回该 agent 的状态、最近终端输出
 与关联任务详情，Herdr 已不认识该 agent 时返回 `agent: null`。两者都是只读并发请求，
-所有 Herdr 调用显式带配置的 session；插件任务按其自身 session、pane ID 与 agent
-类型关联。Herdr 版本与 session 运行检查在首次读取及任一读取失败后执行，session
-未运行或版本不兼容时返回明确原因，正常轮询不重复执行 `--version`。
+所有 Herdr 调用显式带配置的 session；插件任务按其自身 session 与 pane ID 关联
+（Herdr 不复用 pane ID）。Herdr 版本与 session 运行检查在首次读取前执行；读取
+失败时立即重新检查，检查不通过就返回其明确原因（如 session 未运行、版本不兼容），
+否则返回读取本身的错误。正常轮询不重复执行 `--version`。
 
 agent 状态没有推送事件，页面打开期间每 2.5 秒轮询列表与选中 agent，上一次读取
 结束后才排下一次，离开页面即停止。断线或配置重载时保留最后内容并禁用操作，连接

@@ -27,14 +27,14 @@ test("agents are grouped by workspace; a task's agent appears once, as its task,
     [role],
     [
       makeWorkspace("Shiori", [makeAgent(), makeAgent({ pane_id: "wR:p4", agent: "codex", status: "blocked", title: "" })]),
-      makeWorkspace("shiori-task", [makeAgent({ pane_id: "w9:p1", workspace_id: "w9", agent: "codex", task_id: "task-run" })]),
+      makeWorkspace("shiori-task", [makeAgent({ pane_id: "w9:p1", workspace_id: "w9", agent: "codex", status: "idle", task_id: "task-run" })]),
     ],
   );
   const view = await mountSidebar(backend);
   try {
-    assert.match(section(view.container, "Shiori"), /herdr插件问题.*Claude Code · 工作中.*Codex.*Codex · 等待输入/);
+    assert.match(section(view.container, "Shiori"), /herdr插件问题.*Claude Code · 工作中.*D:\/Coding\/Shiori.*Codex.*Codex · 等待输入/);
     const taskGroup = section(view.container, "shiori-task");
-    assert.match(taskGroup, /进行中的任务.*验证/);
+    assert.match(taskGroup, /进行中的任务.*验证.*空闲/, "the task row also shows its agent's Herdr state");
     assert.doesNotMatch(taskGroup, /herdr插件问题/);
     assert.equal(view.container.querySelector('section[aria-label="shiori-task"] img')?.getAttribute("src"), "fake-asset://D:/avatars/mira.png");
     const others = section(view.container, "插件任务");

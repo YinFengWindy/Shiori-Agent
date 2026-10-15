@@ -32,14 +32,17 @@ def agent_summary(agent: dict[str, Any], task_id: str | None) -> dict[str, objec
 def linked_task(
     tasks: Iterable[CodingTask], session: str, agent: dict[str, Any]
 ) -> CodingTask | None:
-    """The newest plugin task whose own session and pane host this same agent kind."""
+    """The newest plugin task started in this session on this pane.
+
+    Herdr never reuses pane IDs, so the pane alone identifies the agent; a
+    momentarily different detected kind must not list the agent twice.
+    """
     matches = [
         task
         for task in tasks
         if task.pane_id
         and task.config.session == session
         and task.pane_id == agent.get("pane_id")
-        and task.agent == agent.get("agent")
     ]
     return max(matches, key=lambda task: task.created_at, default=None)
 
@@ -76,9 +79,10 @@ def group_agents(
 class SessionAgents:
     """`agents.list` / `agents.get` against the current generation's session.
 
-    The Herdr version and session check runs before the first read and again
+    The Herdr version and session check runs before the first read and right
     after any failed read, so polling a healthy session costs only the reads
-    while a stopped or incompatible session still reports its actual reason.
+    while a session that stops or turns incompatible is reported by its actual
+    reason from the first failed poll on.
     """
 
     def __init__(
@@ -109,15 +113,25 @@ class SessionAgents:
             await self.cli.require_supported_version()
             self._verified = True
 
+    async def _explain(self, error: CommandError) -> CommandError:
+        """The session check's reason when it fails, otherwise the read's own error."""
+        self._verified = False
+        try:
+            await self.cli.require_supported_version()
+        except CommandError as reason:
+            reason.__cause__ = error
+            return reason
+        self._verified = True
+        return error
+
     async def list_agents(self, _payload: dict[str, object]) -> dict[str, object]:
         """Every agent of the configured session, grouped by workspace."""
         await self._require_session()
         try:
             agents = (await self.cli.call("agent", "list"))["agents"]
             workspaces = (await self.cli.call("workspace", "list"))["workspaces"]
-        except CommandError:
-            self._verified = False
-            raise
+        except CommandError as error:
+            raise await self._explain(error)
         return {
             "session": self.cli.config.session,
             "workspaces": group_agents(
@@ -149,8 +163,7 @@ class SessionAgents:
         except CommandError as error:
             if error.code == "agent_not_found":
                 return {"session": session, "agent": None, "output": "", "task": None}
-            self._verified = False
-            raise
+            raise await self._explain(error)
         task = linked_task(self.service.tasks.values(), session, agent)
         return {
             "session": session,

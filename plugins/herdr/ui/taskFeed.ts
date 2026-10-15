@@ -20,6 +20,11 @@ export type FeedSource<T> = {
   pollMs?: number;
 };
 
+/** A `merge` for polled sources: keeps the current response when a poll brings nothing new, so the views keep their references. */
+export function mergeUnchanged<T>(current: T | null, next: T): T {
+  return current !== null && JSON.stringify(current) === JSON.stringify(next) ? current : next;
+}
+
 /** Message shown while the desktop bridge is down; recovery arrives as a new client. */
 export const disconnectedMessage = "连接已断开";
 

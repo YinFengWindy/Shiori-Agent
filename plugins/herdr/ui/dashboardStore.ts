@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useSyncExternalStore } from "react";
 import { errorMessage, type PluginHostServices, type PluginRpcClient, type RoleRecord } from "@yinfengwindy/shiori-sdk";
 import { firstSelection, type Selection } from "./agentSelectors";
-import { TaskFeed, type FeedSource, type FeedState } from "./taskFeed";
+import { mergeUnchanged, TaskFeed, type FeedSource, type FeedState } from "./taskFeed";
 import type { AgentListResponse, TaskListResponse } from "./types";
 
 /** How often an open page rereads Herdr, which has no change events. */
@@ -27,11 +27,6 @@ const listSource: FeedSource<TaskListResponse> = {
     return !known || change.revision > known.revision;
   },
 };
-
-/** Keeps the current response when a poll brings nothing new, so the views keep their references. */
-export function mergeUnchanged<T>(current: T | null, next: T): T {
-  return current !== null && JSON.stringify(current) === JSON.stringify(next) ? current : next;
-}
 
 function agentListSource(pollMs: number): FeedSource<AgentListResponse> {
   return { read: (client) => client.call<AgentListResponse>("agents.list"), merge: mergeUnchanged, pollMs };
