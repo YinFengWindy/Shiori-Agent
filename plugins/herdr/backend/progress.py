@@ -34,7 +34,6 @@ def record_stage(
     """Record an observed stage, including legitimate returns to implementation."""
     observed_at = now()
     task.stage = stage
-    task.progress_updated_at = observed_at
     task.progress_events.append(
         {
             "run_id": task.run_id,
