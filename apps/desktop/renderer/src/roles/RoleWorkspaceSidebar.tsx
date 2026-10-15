@@ -4,8 +4,7 @@ import { SidebarResizeHandle } from "@yinfengwindy/shiori-sdk";
 import {
   cx,
   pressableClass,
-  secondarySidebarSurfaceClass,
-  sidebarContentMotionClass,
+  secondarySidebarShellClass,
   sidebarNavItemClass,
   type RoleRecord,
 } from "@yinfengwindy/shiori-sdk";
@@ -67,12 +66,7 @@ export function RoleWorkspaceSidebar({
 
   return (
     <aside
-      className={cx(
-        "role-workspace-sidebar relative grid h-full min-h-0 min-w-0 grid-rows-[auto_auto_minmax(0,1fr)] gap-2 py-3",
-        secondarySidebarSurfaceClass,
-        animating && sidebarContentMotionClass,
-        collapsed ? "pointer-events-none -translate-x-4 px-0 opacity-0" : "translate-x-0 pl-[10px] pr-[6px] opacity-100",
-      )}
+      className={cx("role-workspace-sidebar grid grid-rows-[auto_auto_minmax(0,1fr)] gap-2 py-3", secondarySidebarShellClass({ animating, collapsed, inset: "nav" }))}
       aria-hidden={collapsed}
       aria-label="角色"
       style={{ width }}

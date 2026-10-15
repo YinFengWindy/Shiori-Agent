@@ -120,7 +120,7 @@ class TaskService:
 
     def launch_run(self, task: CodingTask, *, continuing: bool = False) -> None:
         """Own a detached monitor without inheriting a retired runtime's context."""
-        task.stage = task.progress_updated_at = task.progress_notice = ""
+        task.stage = task.progress_notice = ""
         task.progress_sequence = 0
         task.progress_events.clear()
         task.worker = asyncio.create_task(

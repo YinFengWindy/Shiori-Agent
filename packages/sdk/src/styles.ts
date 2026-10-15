@@ -57,6 +57,27 @@ export const sidebarContentMotionClass =
   "transition-[opacity,transform] duration-base ease-out-soft motion-reduce:transition-opacity motion-reduce:transform-none";
 
 /**
+ * Outer box of a secondary sidebar rendered into the host's resizable track
+ * (the chat role list, settings, a plugin page's `sidebar`): transparent
+ * surface, the track's content motion while `animating`, and when
+ * `collapsed` a slide-out that ignores the pointer. `inset: "list"` is the
+ * chat-list rhythm for avatar rows (18px, including the vertical padding);
+ * `"nav"` the 10px inset of a navigation list, whose vertical padding the
+ * caller picks. Callers add their own grid rows and gaps.
+ */
+export function secondarySidebarShellClass({ animating, collapsed, inset }: { animating: boolean; collapsed: boolean; inset: "list" | "nav" }) {
+  return cx(
+    "relative h-full min-h-0 min-w-0",
+    secondarySidebarSurfaceClass,
+    inset === "list" && "py-[18px]",
+    animating && sidebarContentMotionClass,
+    collapsed
+      ? "pointer-events-none -translate-x-4 px-0 opacity-0"
+      : cx("translate-x-0 pr-[6px] opacity-100", inset === "list" ? "pl-[18px]" : "pl-[10px]"),
+  );
+}
+
+/**
  * Button surfaces without size. The full-size classes below add the default
  * padding; a compact button composes a surface with `compactButtonSizeClass`
  * instead of overriding the default padding (an override is unreliable: both

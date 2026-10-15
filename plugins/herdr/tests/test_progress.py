@@ -51,7 +51,6 @@ def test_stage_regression_is_real_progress_but_old_run_duplicates_and_reordering
     )
     assert read_progress(task)
     assert task.stage == "implementation" and len(task.progress_events) == 3
-    time = task.progress_updated_at
     task.progress_path.write_text(
         report(task, 2, "pull_request")
         + report(task, 3, "validation")
@@ -59,7 +58,7 @@ def test_stage_regression_is_real_progress_but_old_run_duplicates_and_reordering
         encoding="utf-8",
     )
     assert not read_progress(task)
-    assert task.stage == "implementation" and task.progress_updated_at == time
+    assert task.stage == "implementation" and len(task.progress_events) == 3
 
 
 def test_prompt_echo_partial_json_and_foreign_task_cannot_advance(task):

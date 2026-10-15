@@ -1,12 +1,12 @@
 import { TerminalWindow } from "@phosphor-icons/react";
 import type { PluginUiModule } from "@yinfengwindy/shiori-sdk";
 import { DashboardPage } from "./DashboardPage";
-import "./herdr.css";
+import { TaskSidebar } from "./TaskSidebar";
 
-/** Independent workspace navigation; task creation remains in chat. */
+/** Herdr's workspace: tasks in the host's secondary sidebar, the selected one in the page. Tasks start in chat. */
 const herdrUi: PluginUiModule = {
   pluginId: "herdr",
-  navPage: { label: "Herdr", icon: TerminalWindow, component: DashboardPage, presentation: "workspace" },
+  navPage: { label: "Herdr", icon: TerminalWindow, component: DashboardPage, sidebar: TaskSidebar, presentation: "workspace" },
   settingsSection: { kind: "schema", label: "Herdr" },
 };
 export default herdrUi;

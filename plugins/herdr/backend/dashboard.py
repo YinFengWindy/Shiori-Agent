@@ -7,7 +7,7 @@ from shiori_sdk.rpc import Concurrency
 
 from .models import CodingTask
 from .service import TaskService
-from .task_management import task_snapshot
+from .task_management import task_detail, task_summary
 
 
 class Dashboard:
@@ -21,7 +21,10 @@ class Dashboard:
     def register(self) -> None:
         """Register readers and controls only in the current plugin's RPC namespace."""
         self.ctx.rpc.register(
-            "tasks.snapshot", self.snapshot, concurrency=Concurrency.READ_ONLY
+            "tasks.list", self.list_tasks, concurrency=Concurrency.READ_ONLY
+        )
+        self.ctx.rpc.register(
+            "tasks.get", self.get_task, concurrency=Concurrency.READ_ONLY
         )
         self.ctx.rpc.register("tasks.continue", self.continue_task)
         self.ctx.rpc.register("tasks.cancel", self.cancel_task)
@@ -38,13 +41,26 @@ class Dashboard:
             raise ValueError("任务不存在")
         return task
 
-    async def snapshot(self, _payload: dict[str, object]) -> dict[str, object]:
-        """One authoritative snapshot, without slow Herdr terminal reads."""
-        self._require_active()
+    def _detail(self, task: CodingTask) -> dict[str, object]:
         return {
             "instance_id": self.service.instance_id,
-            "tasks": [task_snapshot(task) for task in self.service.tasks.values()],
+            "task": task_detail(self.service, task),
         }
+
+    async def list_tasks(self, _payload: dict[str, object]) -> dict[str, object]:
+        """Newest first; the process identity tells a fresh process from old revisions."""
+        self._require_active()
+        tasks = sorted(
+            self.service.tasks.values(), key=lambda task: task.created_at, reverse=True
+        )
+        return {
+            "instance_id": self.service.instance_id,
+            "tasks": [task_summary(task) for task in tasks],
+        }
+
+    async def get_task(self, payload: dict[str, object]) -> dict[str, object]:
+        """One task's current state, without slow Herdr terminal reads."""
+        return self._detail(self._task(payload))
 
     async def continue_task(self, payload: dict[str, object]) -> dict[str, object]:
         """The desktop user's explicit action uses the same service as role tools."""
@@ -53,13 +69,13 @@ class Dashboard:
         if not isinstance(requirement, str):
             raise ValueError("追加要求不能为空")
         await self.service.continue_task(task.id, requirement, task.target.role_id)
-        return {"task": task_snapshot(task)}
+        return self._detail(task)
 
     async def cancel_task(self, payload: dict[str, object]) -> dict[str, object]:
         """Cancellation remains pending until the shared service confirms it."""
         task = self._task(payload)
         await self.service.cancel_task(task.id, task.target.role_id)
-        return {"task": task_snapshot(task)}
+        return self._detail(task)
 
     def changed(self, task: CodingTask) -> None:
         """Candidates and retired generations never take over the active event sink."""

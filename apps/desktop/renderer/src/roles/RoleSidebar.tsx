@@ -7,7 +7,7 @@ import { SidebarResizeHandle } from "@yinfengwindy/shiori-sdk";
 import {
   cx,
   pressableClass,
-  sidebarContentMotionClass,
+  secondarySidebarShellClass,
   sidebarNavItemClass,
   type RoleRecord,
   PetalIcon,
@@ -95,11 +95,7 @@ export function RoleSidebar({
 
   return (
     <aside
-      className={cx(
-        "role-pane relative grid h-full min-h-0 min-w-0 grid-rows-[minmax(0,1fr)] overflow-hidden bg-transparent py-[18px]",
-        animating && sidebarContentMotionClass,
-        collapsed ? "pointer-events-none -translate-x-4 px-0 opacity-0" : "translate-x-0 pl-[18px] pr-[6px] opacity-100",
-      )}
+      className={cx("role-pane grid grid-rows-[minmax(0,1fr)] overflow-hidden", secondarySidebarShellClass({ animating, collapsed, inset: "list" }))}
       aria-hidden={collapsed}
       style={{ width }}
     >

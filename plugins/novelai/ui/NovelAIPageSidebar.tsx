@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { BookBookmark, ImageSquare } from "@phosphor-icons/react";
-import { cx, secondarySidebarSurfaceClass, sidebarContentMotionClass, sidebarNavItemClass, type PluginNavPageSidebarComponentProps } from "@yinfengwindy/shiori-sdk";
+import { cx, secondarySidebarShellClass, sidebarNavItemClass, type PluginNavPageSidebarComponentProps } from "@yinfengwindy/shiori-sdk";
 import { SidebarResizeHandle } from "@yinfengwindy/shiori-sdk";
 import { backToStudio, openPromptTagLibrary, useNovelAiPageStore } from "./novelAiPageStore";
 
@@ -34,12 +34,7 @@ export function NovelAIPageSidebar({ animating, collapsed, width, onBeginResize,
   };
   return (
     <aside
-      className={cx(
-        "relative grid h-full min-h-0 min-w-0 grid-rows-[minmax(0,1fr)] py-5",
-        secondarySidebarSurfaceClass,
-        animating && sidebarContentMotionClass,
-        collapsed ? "pointer-events-none -translate-x-4 px-0 opacity-0" : "translate-x-0 pl-[10px] pr-[6px] opacity-100",
-      )}
+      className={cx("grid grid-rows-[minmax(0,1fr)] py-5", secondarySidebarShellClass({ animating, collapsed, inset: "nav" }))}
       aria-hidden={collapsed}
       style={{ width }}
       data-testid="novelai-sidebar"

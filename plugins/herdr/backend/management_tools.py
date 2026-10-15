@@ -68,7 +68,7 @@ class TaskManagementTool(Tool):
             return json.dumps(
                 {
                     "tasks": [
-                        task_snapshot(task)
+                        task_snapshot(self.service, task)
                         for task in self.service.tasks.values()
                         if task.target.role_id == role_id
                     ]
@@ -85,4 +85,4 @@ class TaskManagementTool(Tool):
         else:
             _ = self.results.capture()
             task = await self.service.cancel_task(kwargs["task_id"], role_id)
-        return json.dumps(task_snapshot(task), ensure_ascii=False)
+        return json.dumps(task_snapshot(self.service, task), ensure_ascii=False)

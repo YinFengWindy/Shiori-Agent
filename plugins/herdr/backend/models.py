@@ -49,7 +49,6 @@ class CodingTask:
     revision: int = 0
     stage: str = ""
     progress_sequence: int = 0
-    progress_updated_at: str = ""
     progress_notice: str = ""
     progress_events: list[dict[str, object]] = field(default_factory=list)
     worktree: Path | None = None
