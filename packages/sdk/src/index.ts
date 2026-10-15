@@ -64,6 +64,7 @@ export {
   inputClass,
   pressableClass,
   primaryButtonSurfaceClass,
+  secondarySidebarShellClass,
   secondarySidebarSurfaceClass,
   sidebarContentMotionClass,
   sidebarNavItemClass,

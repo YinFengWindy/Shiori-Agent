@@ -4,8 +4,7 @@ import { pluginUiRegistry } from "../plugins/pluginUiRegistry";
 import { SidebarResizeHandle } from "@yinfengwindy/shiori-sdk";
 import {
   cx,
-  secondarySidebarSurfaceClass,
-  sidebarContentMotionClass,
+  secondarySidebarShellClass,
   sidebarNavItemClass,
 } from "@yinfengwindy/shiori-sdk";
 import { registerBuiltinSettingsSections } from "./registerBuiltinSettingsSections";
@@ -89,12 +88,7 @@ export function SettingsSidebar({
 
   return (
     <aside
-      className={cx(
-        "settings-sidebar relative grid h-full min-h-0 min-w-0 grid-rows-[minmax(0,1fr)] py-5",
-        secondarySidebarSurfaceClass,
-        animating && sidebarContentMotionClass,
-        collapsed ? "pointer-events-none -translate-x-4 px-0 opacity-0" : "translate-x-0 pl-[10px] pr-[6px] opacity-100",
-      )}
+      className={cx("settings-sidebar grid grid-rows-[minmax(0,1fr)] py-5", secondarySidebarShellClass({ animating, collapsed, inset: "nav" }))}
       aria-hidden={collapsed}
       style={{ width }}
     >

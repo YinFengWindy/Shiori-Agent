@@ -14,6 +14,7 @@ from plugins.herdr.backend.task_management import (
     cancel_task,
     continue_task,
     owned_task,
+    task_detail,
     task_snapshot,
     inspect_task,
 )
@@ -95,7 +96,7 @@ async def test_continue_reuses_agent_and_worktree_with_new_run_and_no_concurrent
     old_run, worktree = task.run_id, task.worktree
     task.output = "previous run terminal output"
     assert await continue_task(service, task.id, "新要求\n第二行", "role-a") is task
-    assert task_snapshot(task)["output"] == ""
+    assert task_snapshot(service, task)["output"] == ""
     await started.wait()
     assert task.run_id != old_run and task.worktree == worktree
     assert task.agent_name == "owned-agent" and configurations == ["original"]
@@ -154,7 +155,7 @@ async def test_cancel_reports_only_after_agent_stops_and_preserves_worktree(
     assert path.read_text(encoding="utf-8") == "keep me"
     assert len(target.reports) == 1
     assert sum("send-keys" in call for call in cli.calls) == 1
-    assert task_snapshot(task)["worktree"] == str(task.worktree)
+    assert task_snapshot(service, task)["worktree"] == str(task.worktree)
 
 
 async def test_cancel_timeout_stays_unknown_and_never_kills_server(
@@ -258,3 +259,35 @@ async def test_disable_during_continue_read_cannot_launch_a_new_run(
     with pytest.raises(RuntimeError, match="停止追踪"):
         await continue_task(service, task.id, "new", "role-a")
     assert task.run_id == "run-a" and task.worker is None
+
+
+async def test_read_model_availability_matches_what_the_operations_refuse(
+    fixture, monkeypatch
+):
+    service, task, cli, _, _ = fixture
+    monkeypatch.setattr(service, "_execute", lambda *_args, **_kwargs: asyncio.sleep(0))
+    snapshot = task_snapshot(service, task)
+    assert snapshot["can_continue"] is True and snapshot["can_cancel"] is True
+    assert {key: snapshot[key] for key in task_detail(service, task)} == task_detail(
+        service, task
+    )
+
+    task.pane_id = ""
+    assert task_detail(service, task)["can_continue"] is False
+    with pytest.raises(ValueError, match="尚无可继续"):
+        await continue_task(service, task.id, "new", "role-a")
+    task.pane_id = "owned-pane"
+
+    # Completed work may take a follow-up run; an already settled cancel is a no-op.
+    task.status = "completed"
+    assert task_detail(service, task)["can_continue"] is True
+    assert task_detail(service, task)["can_cancel"] is False
+    assert await cancel_task(service, task.id, "role-a") is task and not cli.calls
+
+    # Stopped tracking does not prove the agent stopped, so cancelling stays possible.
+    task.status = "monitoring_stopped"
+    assert task_detail(service, task)["can_cancel"] is True
+
+    service.closed = True
+    closed = task_detail(service, task)
+    assert closed["can_continue"] is False and closed["can_cancel"] is False

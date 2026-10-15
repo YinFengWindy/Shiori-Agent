@@ -54,3 +54,24 @@ test("scrolled up without new output there is no entry, and reaching the bottom 
     assert.equal(terminal.scrollTop, 400);
   } finally { await view.cleanup(); }
 });
+
+test("a resize while following keeps the end in view; scrolled up it leaves the position alone", async () => {
+  const resized: Array<() => void> = [];
+  class ManualResizeObserver {
+    constructor(callback: () => void) { resized.push(callback); }
+    observe() {}
+    disconnect() {}
+  }
+  const view = await mountTestComponent(<TaskTerminal output={lines(30)} />, { windowGlobals: { ResizeObserver: ManualResizeObserver } });
+  try {
+    const terminal = view.container.querySelector("pre");
+    assert.ok(terminal);
+    layout(terminal);
+    terminal.scrollTop = 200;
+    act(() => resized.forEach((callback) => callback()));
+    assert.equal(terminal.scrollTop, 300);
+    await scrollTo(terminal, 50);
+    act(() => resized.forEach((callback) => callback()));
+    assert.equal(terminal.scrollTop, 50);
+  } finally { await view.cleanup(); }
+});

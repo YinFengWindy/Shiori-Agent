@@ -5,8 +5,8 @@ import type { TaskDetail, TaskListResponse, TaskSummary } from "./types";
 /** A task list entry as `tasks.list` returns it. */
 export function makeSummary(patch: Partial<TaskSummary> = {}): TaskSummary {
   return {
-    id: "task-a", title: "修复滚动位置", status: "running", stage: "implementation", progress_detail: "改滚动容器",
-    progress_at: "2026-10-14T10:00:00Z", role_id: "role-a", agent: "codex", repository: "D:/repo", branch: "codex/task",
+    id: "task-a", title: "修复滚动位置", status: "running", finished: false, stage: "implementation", progress_detail: "改滚动容器",
+    progress_updated_at: "2026-10-14T10:00:00Z", role_id: "role-a", agent: "codex", repository: "D:/repo", branch: "codex/task",
     created_at: "2026-10-14T09:00:00Z", updated_at: "2026-10-14T10:00:05Z", revision: 1, ...patch,
   };
 }
@@ -31,8 +31,8 @@ export function herdrBackend(tasks: TaskDetail[] = [makeDetail()], roles: RoleRe
   const handlers = new Set<PluginEventHandler>();
   const calls: Array<{ name: string; payload?: Record<string, unknown> }> = [];
   let state = { instance_id: "process-a", tasks };
-  const summary = ({ id, title, status, stage, progress_detail, progress_at, role_id, agent, repository, branch, created_at, updated_at, revision }: TaskDetail): TaskSummary =>
-    ({ id, title, status, stage, progress_detail, progress_at, role_id, agent, repository, branch, created_at, updated_at, revision });
+  const summary = ({ id, title, status, finished, stage, progress_detail, progress_updated_at, role_id, agent, repository, branch, created_at, updated_at, revision }: TaskDetail): TaskSummary =>
+    ({ id, title, status, finished, stage, progress_detail, progress_updated_at, role_id, agent, repository, branch, created_at, updated_at, revision });
   const createClient = () => createFakePluginClient({
     events: { on: async (_name, handler) => { handlers.add(handler); return () => { handlers.delete(handler); }; } },
     call: async <T,>(name: string, payload?: Record<string, unknown>) => {

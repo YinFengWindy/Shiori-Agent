@@ -19,7 +19,7 @@ export function TaskListItem({ task, role, selected, now, host, onSelect }: {
   onSelect: (taskId: string) => void;
 }) {
   // Reported activity, not the monitor's synchronization heartbeat (`updated_at`).
-  const time = relativeTime(task.progress_at || task.created_at, now);
+  const time = relativeTime(task.progress_updated_at || task.created_at, now);
   return (
     <button
       type="button"

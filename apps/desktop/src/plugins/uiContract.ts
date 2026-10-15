@@ -70,6 +70,8 @@ export const pluginUiPeerExports: Record<string, string[]> = {
     "chatTerminalEventMethods", "isChatTerminalEvent",
     // Runtime API 3.1.1 (#720): the compact icon-only button.
     "compactIconButtonClass",
+    // Unreleased (#827): the shared secondary sidebar shell.
+    "secondarySidebarShellClass",
   ],
 };
 

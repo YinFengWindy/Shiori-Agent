@@ -59,11 +59,17 @@ async def test_list_summarizes_and_get_details_the_current_run(fixture, tmp_path
     task.created_at = "2999-01-01T00:00:00+00:00"
     task.worktree, task.pane_id, task.status = tmp_path, "pane", "blocked"
     task.output = "x" * 20000
+    # An older run's report written last must not stand in for this run's progress.
     task.progress_events = [
-        {"run_id": "old", "stage": "analysis", "detail": "旧回合"},
-        {"run_id": "run", "stage": "implementation", "detail": "改滚动"},
+        {
+            "run_id": "run",
+            "stage": "implementation",
+            "detail": "改滚动",
+            "observed_at": "t2",
+        },
+        {"run_id": "old", "stage": "analysis", "detail": "旧回合", "observed_at": "t3"},
     ]
-    task.stage, task.progress_updated_at = "implementation", "2026-10-15T09:01:00Z"
+    task.stage = "implementation"
 
     listed = await ctx.rpc.handlers["tasks.list"]({})
     summary = listed["tasks"][0]
@@ -71,9 +77,10 @@ async def test_list_summarizes_and_get_details_the_current_run(fixture, tmp_path
         "id": "role-a",
         "title": "修复滚动",
         "status": "blocked",
+        "finished": False,
         "stage": "implementation",
         "progress_detail": "改滚动",
-        "progress_at": "2026-10-15T09:01:00Z",
+        "progress_updated_at": "t2",
         "role_id": "role-a",
         "agent": "codex",
         "repository": str(tmp_path),
@@ -93,12 +100,11 @@ async def test_list_summarizes_and_get_details_the_current_run(fixture, tmp_path
     assert detail["worktree"] == str(tmp_path)
     assert detail["can_continue"] is True and detail["can_cancel"] is True
 
-    task.status = "completed"
-    completed = (await ctx.rpc.handlers["tasks.get"]({"task_id": "role-a"}))["task"]
-    assert completed["can_cancel"] is False and completed["can_continue"] is True
-    task.status = "running"
-    running = (await ctx.rpc.handlers["tasks.get"]({"task_id": "role-a"}))["task"]
-    assert running["can_continue"] is False and running["can_cancel"] is True
+    for status, finished in [("unknown", False), ("failed", True), ("cancelled", True)]:
+        task.status = status
+        assert (await ctx.rpc.handlers["tasks.list"]({}))["tasks"][0][
+            "finished"
+        ] is finished
 
     with pytest.raises(ValueError, match="任务不存在"):
         await ctx.rpc.handlers["tasks.get"]({"task_id": "missing"})

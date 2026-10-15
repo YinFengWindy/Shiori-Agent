@@ -1,6 +1,6 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ArrowDown } from "@phosphor-icons/react";
-import { compactGhostButtonClass, cx } from "@yinfengwindy/shiori-sdk";
+import { compactGhostButtonClass, cx, useLatestRef } from "@yinfengwindy/shiori-sdk";
 
 /** Distance from the end that still counts as reading the newest output. */
 const bottomSlackPx = 24;
@@ -21,6 +21,18 @@ export function TaskTerminal({ output }: { output: string }) {
     const node = element.current;
     if (held === null && node) node.scrollTop = node.scrollHeight;
   }, [held, shown]);
+
+  // A resized window changes the viewport, not the content: stay at the end while following.
+  const following = useLatestRef(held === null);
+  useEffect(() => {
+    const node = element.current;
+    if (!node) return;
+    const observer = new ResizeObserver(() => {
+      if (following.current) node.scrollTop = node.scrollHeight;
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [following]);
 
   const onScroll = () => {
     const node = element.current;

@@ -115,6 +115,13 @@ Python SDK minimum; audited packages using only unchanged APIs may keep their
 
 ### Unreleased
 
+- #827 (issue #825): `@yinfengwindy/shiori-sdk` exports
+  `secondarySidebarShellClass({ animating, collapsed, inset: "list" | "nav" })`,
+  the outer box of a secondary sidebar in the host's resizable track (surface,
+  content motion, collapsed slide-out, horizontal inset; `"list"` also sets the
+  chat-list vertical padding). The host's chat, role-workspace and settings
+  sidebars use it, as do the novelai and herdr page sidebars. Additive.
+
 - #822 (issue #819): renderer `PluginHostServices.openExternal(url): Promise<void>` exposes
   the existing validated desktop external-link operation. It accepts the host's
   HTTP(S)/mailto protocols and rejects refused links or shell failures; plugins
@@ -643,7 +650,7 @@ Runtime exports added in 2.9.0 (all are listed in `pluginUiPeerExports`):
 | Group | Exports |
 | --- | --- |
 | Helpers and hooks | `errorMessage`, `useLatestRef`, `roleToggleStatus`, `accountOnline`, `useAccountAction` |
-| Class names | `cx`, `cardClass`, `badgeClass`, `inputClass`, `textareaClass`, `pressableClass`, `compactPressableClass`, `primaryButtonSurfaceClass`, `ghostButtonSurfaceClass`, `ghostButtonClass`, `compactButtonSizeClass`, `compactGhostButtonClass`, `iconButtonClass`, `secondarySidebarSurfaceClass`, `sidebarNavItemClass`, `sidebarContentMotionClass`, `menuPanelClass`, `menuSeparatorClass` |
+| Class names | `cx`, `cardClass`, `badgeClass`, `inputClass`, `textareaClass`, `pressableClass`, `compactPressableClass`, `primaryButtonSurfaceClass`, `ghostButtonSurfaceClass`, `ghostButtonClass`, `compactButtonSizeClass`, `compactGhostButtonClass`, `iconButtonClass`, `secondarySidebarSurfaceClass`, `secondarySidebarShellClass` (Unreleased), `sidebarNavItemClass`, `sidebarContentMotionClass`, `menuPanelClass`, `menuSeparatorClass` |
 | Components | `Select`, `ActionMenu`, `AutosizeTextarea`, `SettingsToggleCard`, `RoleCapabilityCard` |
 | Icons | `UploadIcon`, `SparkleIcon`, `PetalIcon`, `withMotif`, `navMotifs` |
 

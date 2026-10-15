@@ -21,34 +21,93 @@ def owned_task(service: "TaskService", task_id: str, role_id: str) -> CodingTask
     return task
 
 
-def task_snapshot(task: CodingTask) -> dict[str, object]:
-    """Bounded task read model returned by the role-scoped chat tools."""
+FINISHED_STATUSES = frozenset(
+    {"completed", "cancelled", "failed", "monitoring_stopped"}
+)
+"""Statuses that ask nothing more of the user; blocked and unknown still do."""
+
+CANCEL_SETTLED = frozenset({"completed", "cancelled", "cancelling"})
+"""Statuses for which a cancellation request changes nothing."""
+
+
+def continue_refusal(service: "TaskService", task: CodingTask) -> str:
+    """Why `continue_task` refuses a new run before asking Herdr; empty if it would try.
+
+    The agent's own readiness is only known from Herdr at submission time.
+    """
+    if service.closed:
+        return "Herdr 插件已停止追踪"
+    if task.worker is not None and not task.worker.done():
+        return "任务仍在执行或汇报，请等待当前回合结束"
+    if not task.pane_id or task.worktree is None:
+        return "任务尚无可继续的 agent/worktree"
+    return ""
+
+
+def can_cancel(service: "TaskService", task: CodingTask) -> bool:
+    """Whether `cancel_task` would start a cancellation."""
+    return not service.closed and task.status not in CANCEL_SETTLED
+
+
+def _current_events(task: CodingTask) -> list[dict[str, object]]:
+    return [event for event in task.progress_events if event["run_id"] == task.run_id]
+
+
+def task_title(task: CodingTask) -> str:
+    """The first nonempty requirement line names a task without an invented title."""
+    return next(
+        (line.strip() for line in task.requirement.splitlines() if line.strip()), ""
+    )
+
+
+def task_summary(task: CodingTask) -> dict[str, object]:
+    """One task list entry; small enough to reread on every invalidation."""
+    events = _current_events(task)
+    latest = events[-1] if events else None
     return {
         "id": task.id,
-        "run_id": task.run_id,
-        "role_id": task.target.role_id,
-        "thread_id": task.target.thread_id,
-        "agent": task.agent,
-        "requirement": task.requirement,
-        "repository": str(task.repository),
-        "worktree": str(task.worktree or ""),
-        "branch": task.branch,
+        "title": task_title(task),
         "status": task.status,
-        "agent_state": task.agent_state,
-        "summary": task.summary,
-        "validation": list(task.validation),
-        "pr_url": task.pr_url,
-        "error": task.error,
-        "report_error": task.report_error,
-        "output": task.output[-16000:],
+        "finished": task.status in FINISHED_STATUSES,
+        "stage": task.stage,
+        "progress_detail": str(latest["detail"]) if latest else "",
+        "progress_updated_at": str(latest["observed_at"]) if latest else "",
+        "role_id": task.target.role_id,
+        "agent": task.agent,
+        "repository": str(task.repository),
+        "branch": task.branch,
         "created_at": task.created_at,
         "updated_at": task.updated_at,
         "revision": task.revision,
-        "stage": task.stage,
-        "progress_updated_at": task.progress_updated_at,
+    }
+
+
+def task_detail(service: "TaskService", task: CodingTask) -> dict[str, object]:
+    """One task's full read model; action availability follows the operations."""
+    return {
+        **task_summary(task),
+        "run_id": task.run_id,
+        "requirement": task.requirement,
+        "worktree": str(task.worktree or ""),
+        "output": task.output[-16000:],
+        "progress_events": _current_events(task),
         "progress_notice": task.progress_notice,
-        "progress_events": list(task.progress_events),
-        "can_continue": task.worker is None or task.worker.done(),
+        "validation": list(task.validation),
+        "summary": task.summary,
+        "pr_url": task.pr_url,
+        "error": task.error,
+        "report_error": task.report_error,
+        "can_continue": not continue_refusal(service, task),
+        "can_cancel": can_cancel(service, task),
+    }
+
+
+def task_snapshot(service: "TaskService", task: CodingTask) -> dict[str, object]:
+    """The chat tools' read model: the detail plus the reporting thread and agent state."""
+    return {
+        **task_detail(service, task),
+        "thread_id": task.target.thread_id,
+        "agent_state": task.agent_state,
     }
 
 
@@ -91,10 +150,9 @@ async def continue_task(
         raise ValueError("继续任务需要完整追加要求")
     task = owned_task(service, task_id, role_id)
     async with task.operation_lock:
-        if task.worker is not None and not task.worker.done():
-            raise ValueError("任务仍在执行或汇报，请等待当前回合结束")
-        if not task.pane_id or task.worktree is None:
-            raise ValueError("任务尚无可继续的 agent/worktree")
+        refusal = continue_refusal(service, task)
+        if refusal:
+            raise ValueError(refusal)
         cli = service.create_cli(task.config)
         agent = (await cli.call("agent", "get", task.agent_name))["agent"]
         if service.closed:
@@ -126,7 +184,7 @@ async def cancel_task(service: "TaskService", task_id: str, role_id: str) -> Cod
     async with task.operation_lock:
         if service.closed:
             raise RuntimeError("Herdr 插件已停止追踪")
-        if task.status in {"completed", "cancelled", "cancelling"}:
+        if task.status in CANCEL_SETTLED:
             return task
         # A retry after an unconfirmed stop has a new report. Calls made while
         # this attempt is running remain idempotent via the cancelling state.

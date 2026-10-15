@@ -21,9 +21,11 @@ export type TaskSummary = {
   id: string;
   title: string;
   status: TaskStatus;
+  /** Nothing more is asked of the user (the service decides; blocked and unknown are not finished). */
+  finished: boolean;
   stage: TaskStage | "";
   progress_detail: string;
-  progress_at: string;
+  progress_updated_at: string;
   role_id: string;
   agent: "codex" | "claude";
   repository: string;

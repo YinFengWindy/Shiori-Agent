@@ -47,23 +47,17 @@ export function statusTone(status: TaskStatus): StatusTone {
   return statusTones[status];
 }
 
-/** Statuses whose run is still under way. */
-const activeStatuses: ReadonlySet<TaskStatus> = new Set(["queued", "preparing", "running", "cancelling"]);
-
-/** Statuses that need nothing more; blocked and unknown tasks still wait for the user. */
-const finishedStatuses: ReadonlySet<TaskStatus> = new Set(["completed", "cancelled", "failed", "monitoring_stopped"]);
-
-/** Splits the newest-first list into 进行中 / 已结束, keeping order inside each group. */
+/** Splits the newest-first list into 进行中 / 已结束 by the service's `finished`, keeping order. */
 export function groupTasks(tasks: readonly TaskSummary[]) {
   return {
-    active: tasks.filter((task) => !finishedStatuses.has(task.status)),
-    finished: tasks.filter((task) => finishedStatuses.has(task.status)),
+    active: tasks.filter((task) => !task.finished),
+    finished: tasks.filter((task) => task.finished),
   };
 }
 
-/** The status, or the current stage while a run is under way. */
+/** The reported stage while the agent is running, otherwise the status. */
 export function phaseLabel(task: Pick<TaskSummary, "status" | "stage">) {
-  return activeStatuses.has(task.status) && task.stage ? stageLabels[task.stage] : statusLabels[task.status];
+  return task.status === "running" && task.stage ? stageLabels[task.stage] : statusLabels[task.status];
 }
 
 /** Display name of the coding agent. */

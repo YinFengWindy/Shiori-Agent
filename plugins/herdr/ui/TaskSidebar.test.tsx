@@ -1,27 +1,27 @@
 import assert from "node:assert/strict";
-import { afterEach, test } from "node:test";
+import { test } from "node:test";
 import { act } from "react";
 import { mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import { TaskSidebar } from "./TaskSidebar";
-import { dashboardStore, resetDashboardStoreForTests } from "./dashboardStore";
+import { createDashboardStore, DashboardStoreProvider } from "./dashboardStore";
 import { herdrBackend, makeDetail, makeRole } from "./testFixtures";
 
-afterEach(() => resetDashboardStoreForTests());
-
-function mountSidebar(backend: ReturnType<typeof herdrBackend>, onNavigate = () => {}) {
+function mountSidebar(backend: ReturnType<typeof herdrBackend>, onNavigate = () => {}, store = createDashboardStore()) {
   return mountTestComponent(
-    <TaskSidebar pageId="herdr" animating={false} collapsed={false} width={280} onBeginResize={() => {}} onNavigate={onNavigate} client={backend.client} host={backend.fake.host} />,
+    <DashboardStoreProvider value={store}>
+      <TaskSidebar pageId="herdr" animating={false} collapsed={false} width={280} onBeginResize={() => {}} onNavigate={onNavigate} client={backend.client} host={backend.fake.host} />
+    </DashboardStoreProvider>,
   );
 }
 
-test("tasks are grouped into 进行中 (including ones waiting for the user) and 已结束 with avatar, title and phase", async () => {
+test("tasks are grouped by the service's finished flag, with avatar, title and phase", async () => {
   const role = { ...makeRole("role-a", "Mira"), avatar_abs: "D:/avatars/mira.png" };
   const backend = herdrBackend([
-    makeDetail({ id: "task-done", title: "已交付的任务", status: "completed", created_at: "2026-10-14T08:00:00Z" }),
+    makeDetail({ id: "task-done", title: "已交付的任务", status: "completed", finished: true, created_at: "2026-10-14T08:00:00Z" }),
     makeDetail({ id: "task-run", title: "进行中的任务", status: "running", stage: "validation", created_at: "2026-10-14T09:00:00Z" }),
     makeDetail({ id: "task-blocked", title: "等登录的任务", status: "blocked" }),
     makeDetail({ id: "task-unknown", title: "待确认的任务", status: "unknown" }),
-    makeDetail({ id: "task-failed", title: "失败的任务", status: "failed" }),
+    makeDetail({ id: "task-failed", title: "失败的任务", status: "failed", finished: true }),
   ], [role]);
   const view = await mountSidebar(backend);
   try {
@@ -47,12 +47,13 @@ test("an empty task list shows its empty state", async () => {
 test("choosing a task selects it in the shared store and closes a compact drawer", async () => {
   let navigations = 0;
   const backend = herdrBackend([makeDetail(), makeDetail({ id: "task-b", title: "第二个任务" })]);
-  const view = await mountSidebar(backend, () => { navigations++; });
+  const store = createDashboardStore();
+  const view = await mountSidebar(backend, () => { navigations++; }, store);
   try {
     const second = Array.from(view.container.querySelectorAll("button")).find((button) => button.textContent?.includes("第二个任务"));
     assert.ok(second);
     await act(async () => second.click());
-    assert.equal(dashboardStore.getSnapshot().selectedId, "task-b");
+    assert.equal(store.getSnapshot().selectedId, "task-b");
     assert.equal(second.getAttribute("aria-current"), "true");
     assert.equal(navigations, 1);
   } finally { await view.cleanup(); }

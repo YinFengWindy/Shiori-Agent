@@ -7,62 +7,7 @@ from shiori_sdk.rpc import Concurrency
 
 from .models import CodingTask
 from .service import TaskService
-
-_RUNNING = {"queued", "preparing", "running", "cancelling", "monitoring_stopped"}
-_UNCANCELLABLE = {"completed", "cancelled", "cancelling", "monitoring_stopped"}
-
-
-def task_title(task: CodingTask) -> str:
-    """The first nonempty requirement line names a task without an invented title."""
-    return next(
-        (line.strip() for line in task.requirement.splitlines() if line.strip()), ""
-    )
-
-
-def task_summary(task: CodingTask) -> dict[str, object]:
-    """One task list entry; small enough to reread on every invalidation."""
-    latest = task.progress_events[-1] if task.progress_events else None
-    return {
-        "id": task.id,
-        "title": task_title(task),
-        "status": task.status,
-        "stage": task.stage,
-        "progress_detail": str(latest["detail"]) if latest else "",
-        "progress_at": task.progress_updated_at,
-        "role_id": task.target.role_id,
-        "agent": task.agent,
-        "repository": str(task.repository),
-        "branch": task.branch,
-        "created_at": task.created_at,
-        "updated_at": task.updated_at,
-        "revision": task.revision,
-    }
-
-
-def task_detail(task: CodingTask) -> dict[str, object]:
-    """Everything the detail pane shows; action availability is decided here."""
-    idle = task.worker is None or task.worker.done()
-    return {
-        **task_summary(task),
-        "run_id": task.run_id,
-        "requirement": task.requirement,
-        "worktree": str(task.worktree or ""),
-        "output": task.output[-16000:],
-        "progress_events": [
-            event for event in task.progress_events if event["run_id"] == task.run_id
-        ],
-        "progress_notice": task.progress_notice,
-        "validation": list(task.validation),
-        "summary": task.summary,
-        "pr_url": task.pr_url,
-        "error": task.error,
-        "report_error": task.report_error,
-        "can_continue": idle
-        and task.worktree is not None
-        and bool(task.pane_id)
-        and task.status not in _RUNNING,
-        "can_cancel": task.status not in _UNCANCELLABLE,
-    }
+from .task_management import task_detail, task_summary
 
 
 class Dashboard:
@@ -97,7 +42,10 @@ class Dashboard:
         return task
 
     def _detail(self, task: CodingTask) -> dict[str, object]:
-        return {"instance_id": self.service.instance_id, "task": task_detail(task)}
+        return {
+            "instance_id": self.service.instance_id,
+            "task": task_detail(self.service, task),
+        }
 
     async def list_tasks(self, _payload: dict[str, object]) -> dict[str, object]:
         """Newest first; the process identity tells a fresh process from old revisions."""

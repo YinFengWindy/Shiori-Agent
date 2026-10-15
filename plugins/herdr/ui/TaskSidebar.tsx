@@ -2,9 +2,8 @@ import { useEffect, useState } from "react";
 import { TerminalWindow } from "@phosphor-icons/react";
 import {
   cx,
-  secondarySidebarSurfaceClass,
+  secondarySidebarShellClass,
   SidebarResizeHandle,
-  sidebarContentMotionClass,
   type PluginNavPageSidebarComponentProps,
   type PluginHostServices,
   type RoleRecord,
@@ -68,12 +67,7 @@ export function TaskSidebar({ client, host, animating, collapsed, width, onBegin
   const item = { roles, selectedId: state.selectedId, now, host, onSelect: select };
   return (
     <aside
-      className={cx(
-        "relative grid h-full min-h-0 min-w-0 grid-rows-[minmax(0,1fr)] overflow-hidden py-[18px]",
-        secondarySidebarSurfaceClass,
-        animating && sidebarContentMotionClass,
-        collapsed ? "pointer-events-none -translate-x-4 px-0 opacity-0" : "translate-x-0 pl-[18px] pr-[6px] opacity-100",
-      )}
+      className={cx("grid grid-rows-[minmax(0,1fr)] overflow-hidden", secondarySidebarShellClass({ animating, collapsed, inset: "list" }))}
       aria-hidden={collapsed}
       style={{ width }}
     >

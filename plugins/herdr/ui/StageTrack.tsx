@@ -19,10 +19,10 @@ export function StageTrack({ task }: { task: TaskDetail }) {
           </li>
         ))}
       </ol>
-      {task.progress_detail || task.progress_at ? (
+      {task.progress_detail || task.progress_updated_at ? (
         <p className="flex min-w-0 items-baseline gap-2 text-body-sm text-ink-secondary">
           <span className="min-w-0 flex-1 break-words">{task.progress_detail}</span>
-          <time className="flex-none text-caption tabular-nums text-ink-muted" dateTime={task.progress_at}>{clockTime(task.progress_at)}</time>
+          <time className="flex-none text-caption tabular-nums text-ink-muted" dateTime={task.progress_updated_at}>{clockTime(task.progress_updated_at)}</time>
         </p>
       ) : null}
       {task.progress_notice ? <p className="text-caption text-warning-text">{task.progress_notice}</p> : null}

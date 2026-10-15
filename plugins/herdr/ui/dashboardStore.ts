@@ -1,4 +1,4 @@
-import { useEffect, useSyncExternalStore } from "react";
+import { createContext, useContext, useEffect, useSyncExternalStore } from "react";
 import { errorMessage, type PluginHostServices, type PluginRpcClient, type RoleRecord } from "@yinfengwindy/shiori-sdk";
 import { TaskFeed, type FeedSource, type FeedState } from "./taskFeed";
 import type { TaskListResponse } from "./types";
@@ -27,7 +27,7 @@ const listSource: FeedSource<TaskListResponse> = {
 /** What the sidebar and the page share. */
 export type DashboardState = {
   list: FeedState<TaskListResponse>;
-  /** Stays on the task the user is reading; only the first loaded task is picked automatically. */
+  /** Stays on the task being read; moves to the first task only when it is gone from the list. */
   selectedId: string | null;
   roles: readonly RoleRecord[];
   rolesError: string;
@@ -36,22 +36,25 @@ export type DashboardState = {
 type Attachment = { client: PluginRpcClient; host: PluginHostServices };
 
 /**
- * The page and its sidebar are sibling mount points with separate clients, so
- * their shared state lives here. Whichever mounted first drives the task list
- * feed; when it leaves while the other stays, the other's client takes over.
+ * State shared by the page and its sidebar, which the host mounts as siblings
+ * with separate clients. The most recently attached client drives the task
+ * list, so a reconnect hands over to a renewed client rather than an old one.
  */
-export class DashboardStore {
+class DashboardStore {
   private feed = new TaskFeed(listSource);
   private state: DashboardState = { list: this.feed.getSnapshot(), selectedId: null, roles: [], rolesError: "" };
   private listeners = new Set<() => void>();
   private attachments: Attachment[] = [];
-  private stopDriver: (() => void) | null = null;
+  private driver: Attachment | null = null;
+  private stopDriving: (() => void) | null = null;
   private rolesRequest = 0;
 
   constructor() {
     this.feed.subscribe(() => {
       const list = this.feed.getSnapshot();
-      this.commit({ ...this.state, list, selectedId: this.state.selectedId ?? list.value?.tasks[0]?.id ?? null });
+      const tasks = list.value?.tasks;
+      const kept = !tasks || tasks.some((task) => task.id === this.state.selectedId);
+      this.commit({ ...this.state, list, selectedId: kept ? this.state.selectedId : (tasks[0]?.id ?? null) });
     });
   }
 
@@ -74,23 +77,23 @@ export class DashboardStore {
     this.commit({ ...this.state, selectedId: taskId });
   };
 
-  /** Re-reads the task list now. */
-  refresh = () => this.feed.refresh();
-
   /** Registers a mounted view; returns its detach function. */
   attach(client: PluginRpcClient, host: PluginHostServices) {
     const attachment = { client, host };
     this.attachments.push(attachment);
-    if (this.attachments.length === 1) this.drive(attachment);
+    this.followLatest();
     return () => {
-      const index = this.attachments.indexOf(attachment);
-      if (index < 0) return;
-      this.attachments.splice(index, 1);
-      if (index > 0) return;
-      this.stopDriver?.();
-      this.stopDriver = null;
-      if (this.attachments[0]) this.drive(this.attachments[0]);
+      this.attachments = this.attachments.filter((item) => item !== attachment);
+      this.followLatest();
     };
+  }
+
+  private followLatest() {
+    const latest = this.attachments.at(-1) ?? null;
+    if (latest === this.driver) return;
+    this.stopDriving?.();
+    this.driver = latest;
+    this.stopDriving = latest ? this.drive(latest) : null;
   }
 
   private drive({ client, host }: Attachment) {
@@ -99,7 +102,7 @@ export class DashboardStore {
     const off = host.onEvent((event) => {
       if (event.method === "roles.updated") this.loadRoles(host);
     });
-    this.stopDriver = () => {
+    return () => {
       off();
       this.feed.stop();
       this.rolesRequest++;
@@ -115,17 +118,19 @@ export class DashboardStore {
   }
 }
 
-/** The one store both Herdr mount points read. */
-export let dashboardStore = new DashboardStore();
-
-/** Test-only: a fresh store, as after an application start. */
-export function resetDashboardStoreForTests() {
-  dashboardStore = new DashboardStore();
+/** A store; the module keeps the one both mount points share, tests make their own. */
+export function createDashboardStore() {
+  return new DashboardStore();
 }
+
+const StoreContext = createContext(createDashboardStore());
+
+/** Gives the components below a specific store (tests); without it they share the module's. */
+export const DashboardStoreProvider = StoreContext.Provider;
 
 /** Attaches a mounted view to the shared store and reads it. */
 export function useDashboard(client: PluginRpcClient, host: PluginHostServices) {
-  const store = dashboardStore;
+  const store = useContext(StoreContext);
   useEffect(() => store.attach(client, host), [store, client, host]);
   return { state: useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot), store };
 }
