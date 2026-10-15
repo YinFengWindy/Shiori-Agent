@@ -272,7 +272,7 @@ def build_registered_tools(
     multimodal = getattr(config, "multimodal", True)
     readonly_tools = build_readonly_tools(http_resources, multimodal=multimodal)
     store = session_store or SessionStore(workspace / "sessions.db")
-    push_tool = shared_push_tool or MessagePushTool(event_bus=event_publisher)
+    push_tool = shared_push_tool or MessagePushTool()
     memory_result = resolve_memory_toolset_provider(wiring.memory).register(
         tools,
         ToolsetDeps(
@@ -534,11 +534,7 @@ def build_core_runtime(
         event_publisher=event_bus,
         role_runtime_registry=role_runtime_registry,
         agent_loop_provider=agent_loop_provider or (lambda: loop_ref.get("loop")),
-        shared_push_tool=(
-            shared.push_tool
-            if shared
-            else MessagePushTool(event_bus=event_outlet or event_bus)
-        ),
+        shared_push_tool=shared.push_tool if shared else MessagePushTool(),
         shared_scheduler=shared.scheduler if shared else None,
     )
     presence = (

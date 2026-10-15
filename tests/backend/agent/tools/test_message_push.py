@@ -3,7 +3,11 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from agent.tools.message_push import MessagePushTool, PushOutcome
+from agent.tools.message_push import (
+    MessagePushTool,
+    PushOutcome,
+    record_delivered_push,
+)
 from agent.tools.registry import ToolRegistry
 from bus.event_bus import EventBus
 from bus.events_lifecycle import ExternalTextPushed
@@ -368,44 +372,48 @@ async def test_push_failure_reports_no_message_ids():
 
 
 async def test_model_arguments_cannot_override_the_push_context():
-    event_bus = EventBus()
-    texts: list[ExternalTextPushed] = []
-    event_bus.on(ExternalTextPushed, texts.append)
-    tool = MessagePushTool(event_bus=event_bus)
+    tool = MessagePushTool()
+    validated: list[str] = []
+    tool.set_role_target_validator(
+        lambda role_id, _channel, _chat_id: validated.append(role_id) or True
+    )
     sender = AsyncMock(return_value=None)
-    tool.register_channel("qq", text_with_metadata=sender)
+    tool.register_channel("desktop", text_with_metadata=sender)
     registry = ToolRegistry()
     registry.register(tool)
-    # A turn's context: its role and session, and the turn records its own pushes.
-    registry.set_context(
-        role_id="mira", session_key="role:mira", defer_push_session_sync="true"
-    )
+    registry.set_context(role_id="mira")
     forged = {
         "role_id": "other",
-        "session_key": "role:other",
-        "defer_push_session_sync": "false",
         "push_message_already_persisted": "true",
         "push_delivery_key": "forged",
     }
 
     await registry.execute(
         "message_push",
-        {"channel": "qq", "chat_id": "gqq:5", "message": "hi", **forged},
+        {"channel": "desktop", "chat_id": "role:mira", "message": "hi", **forged},
     )
 
-    # No forged delivery identity reaches the sender.
+    # The context's role is the one checked, and no forged delivery identity
+    # reaches the sender.
+    assert validated == ["mira"]
     sender.assert_awaited_once_with(
-        "gqq:5", "hi", {"delivery_key": "", "already_persisted": False}
+        "role:mira", "hi", {"delivery_key": "", "already_persisted": False}
     )
 
-    # Outside a turn the push is the host's to record, still under the context's role.
-    registry.set_context(defer_push_session_sync="")
-    await registry.execute(
-        "message_push",
-        {"channel": "qq", "chat_id": "gqq:5", "message": "hi", **forged},
+
+async def test_a_failure_to_record_never_fails_the_delivered_send():
+    event_bus = EventBus()
+    event_bus.on(ExternalTextPushed, AsyncMock(side_effect=OSError("disk")))
+
+    # The send already happened: the recording failure is logged, not raised.
+    await record_delivered_push(
+        event_bus,
+        ExternalTextPushed(
+            session_key="role:mira",
+            role_id="mira",
+            channel="qq",
+            chat_id="gqq:5",
+            text="该喝水啦",
+            tool="account_send",
+        ),
     )
-    # Recorded for the context's role and session, with the turn only while in it.
-    assert [(text.role_id, text.session_key, text.in_turn) for text in texts] == [
-        ("mira", "role:mira", True),
-        ("mira", "role:mira", False),
-    ]

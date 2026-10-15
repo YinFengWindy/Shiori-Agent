@@ -21,7 +21,11 @@ from agent.turns.outbound import DeliveryReceipt, PushToolOutboundPort
 from agent.turns.result import TurnResult, TurnOutbound
 from core.roles.reply_state import RoleReply
 from bus.event_bus import EventBus
-from bus.events_lifecycle import ProactiveMessageCommitted
+from bus.events_lifecycle import (
+    ExternalImagePushed,
+    ExternalTextPushed,
+    ProactiveMessageCommitted,
+)
 from shiori_sdk.role_events import RoleDeleted
 from shiori_sdk.memory.committed import TurnCommitted
 from agent.turns.turn_pushes import TurnPushDrafts, current_turn_pushes
@@ -50,7 +54,7 @@ async def test_desktop_push_intent_survives_direct_and_queued_delivery(
     sessions = SessionManager(tmp_path)
     session = sessions.open_role_session("mira", role_name="Mira")
     bus = EventBus()
-    push = MessagePushTool(event_bus=bus)
+    push = MessagePushTool()
     presence = Mock()
     relationship = Mock()
     relationship.enrich_session_metadata.side_effect = lambda metadata: metadata
@@ -482,7 +486,7 @@ async def test_desktop_push_publishes_its_message_after_a_channel_message(tmp_pa
     )
     sessions.save(session)
     bus = EventBus()
-    push = MessagePushTool(event_bus=bus)
+    push = MessagePushTool()
     service = DesktopBridgeService(
         workspace=tmp_path,
         role_store=roles,
@@ -521,7 +525,7 @@ async def test_pending_desktop_text_and_images_publish_once_after_formal_commit(
     sessions = SessionManager(tmp_path)
     session = sessions.open_role_session("mira", role_name="Mira")
     bus = EventBus()
-    push = MessagePushTool(event_bus=bus)
+    push = MessagePushTool()
     service = DesktopBridgeService(
         workspace=tmp_path,
         role_store=roles,
@@ -620,23 +624,18 @@ async def test_external_image_push_persists_and_broadcasts_desktop_session(
     )
     emitted: list[dict] = []
     service.add_event_listener(emitted.append)
-    push_tool = MessagePushTool(event_bus=event_bus)
-
-    async def send_image(_chat_id: str, _image: str) -> None:
-        return None
-
-    push_tool.register_channel("telegram", image=send_image)
     image = str(tmp_path / "scene.png")
 
-    result = await push_tool.execute(
-        channel="telegram",
-        chat_id="123",
-        image=image,
-        role_id="mira",
-        session_key="role:mira",
+    await event_bus.emit(
+        ExternalImagePushed(
+            session_key="role:mira",
+            role_id="mira",
+            channel="telegram",
+            chat_id="123",
+            image=image,
+        )
     )
 
-    assert result == "图片已发送"
     assert [
         message["media"]
         for message in session_manager._store.fetch_session_messages("role:mira")
@@ -763,17 +762,16 @@ async def test_host_text_push_to_a_channel_reaches_the_phone(tmp_path) -> None:
     )
     emitted: list[dict] = []
     service.add_event_listener(emitted.append)
-    push_tool = MessagePushTool(event_bus=event_bus)
-    push_tool.register_channel("qq", text=AsyncMock(return_value="qq-1"))
-
-    # As a scheduled job sends it: outside any turn, under the role's session.
-    await push_tool.execute(
-        channel="qq",
-        chat_id="gqq:5",
-        message="该喝水啦",
-        role_id="mira",
-        session_key="role:mira",
-        push_delivery_key="scheduler:job:1",
+    # A delivered external text recorded outside any turn, as account_send does.
+    await event_bus.emit(
+        ExternalTextPushed(
+            session_key="role:mira",
+            role_id="mira",
+            channel="qq",
+            chat_id="gqq:5",
+            text="该喝水啦",
+            external_message_id="qq-1",
+        )
     )
 
     thread_id = network_thread_id("mira", "qq", "gqq:5")

@@ -9,6 +9,7 @@ from conversation.listening import GroupListeningControl
 from conversation.service import ConversationService
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
+from typing import Any, cast
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -22,6 +23,8 @@ from agent.looping.ports import LLMConfig, LLMServices
 from agent.provider import LLMResponse, ToolCall
 from agent.tool_hooks import ToolExecutionRequest
 from agent.tool_hooks.executor import ToolExecutor
+from agent.account_delivery import AccountSendReceipt, UserChatTarget
+from agent.tools.account_delivery import AccountSendTool
 from agent.tools.message_push import MessagePushTool
 from agent.tools.registry import ToolRegistry
 from bus.event_bus import EventBus
@@ -31,6 +34,7 @@ from conversation.push_sync import ExternalPushSyncService
 from conversation.service import desktop_thread_id, scheduler_thread_id
 from shiori_sdk.channels.threads import network_thread_id
 from shiori_sdk.accounts.models import AccountRecord
+from shiori_sdk.accounts.targets import AccountTarget
 from core.identity import IdentityChat, UserIdentityStore
 from core.roles import RoleStore
 from core.roles.reply_state import AffectionChange, RoleReply
@@ -45,7 +49,7 @@ async def runtime(tmp_path):
     roles.create_role(role_id="mira", name="Mira", system_prompt="test")
     manager = SessionManager(tmp_path)
     bus = EventBus()
-    push = MessagePushTool(event_bus=bus)
+    push = MessagePushTool()
     bridge = DesktopBridgeService(
         workspace=tmp_path,
         role_store=roles,
@@ -61,6 +65,35 @@ async def runtime(tmp_path):
     session = (await bridge.app_service.open_role_session("mira")).session
     tools = ToolRegistry()
     tools.register(push)
+    account_senders: dict[str, AsyncMock] = {}
+
+    def user_chat(channel, _role_id):
+        return UserChatTarget(
+            chat=IdentityChat(f"{channel}:101", channel, "u1"),
+            target=AccountTarget("private", "u1"),
+        )
+
+    async def account_delivery_send(channel, _role_id, target, _message, *, media):
+        platform_message_id = await account_senders[channel]()
+        return AccountSendReceipt(
+            attempt_id="attempt-1",
+            account_id=f"{channel}:101",
+            channel=channel,
+            target_kind=target.kind,
+            target_id=target.id,
+            platform_message_id=platform_message_id,
+            ownership_current=True,
+        )
+
+    tools.register(
+        AccountSendTool(
+            cast(
+                Any,
+                SimpleNamespace(user_chat=user_chat, send=account_delivery_send),
+            ),
+            bus,
+        )
+    )
     emitted = []
     bridge.add_event_listener(emitted.append)
 
@@ -71,6 +104,20 @@ async def runtime(tmp_path):
                 tool_name="message_push",
                 source="passive",
                 arguments={"channel": "desktop", "chat_id": "role:mira", **payload},
+                session_key=session.key,
+            ),
+            tools.execute,
+        )
+        return str(result.output)
+
+    async def send_to_user(channel, **payload):
+        # The role's external send of a turn: account_send to the bound user.
+        result = await ToolExecutor().execute(
+            ToolExecutionRequest(
+                call_id="account-send",
+                tool_name="account_send",
+                source="passive",
+                arguments={"channel": channel, "target_kind": "user", **payload},
                 session_key=session.key,
             ),
             tools.execute,
@@ -106,6 +153,8 @@ async def runtime(tmp_path):
         session=session,
         emitted=emitted,
         call=call,
+        send_to_user=send_to_user,
+        account_senders=account_senders,
         pipeline=pipeline,
         push=push,
         bus=bus,
@@ -679,19 +728,13 @@ async def test_channel_pushes_during_a_turn_are_committed_with_it_under_their_ch
         session_manager=runtime.manager,
         event_bus=runtime.bus,
     )
-    runtime.push.register_channel("qq", text=AsyncMock(return_value="qq-msg-1"))
-    runtime.push.register_channel(
-        "qqfail", text=AsyncMock(side_effect=OSError("offline"))
-    )
-    target = network_thread_id("mira", "qq", "gqq:6")
+    runtime.account_senders["qq"] = AsyncMock(return_value="qq-msg-1")
+    runtime.account_senders["qqfail"] = AsyncMock(side_effect=OSError("offline"))
+    target = network_thread_id("mira", "qq", "u1")
 
     async def reasoning(**_kwargs):
-        assert "已发送" in await runtime.call(
-            channel="qq", chat_id="gqq:6", message="去另一个群说一声"
-        )
-        assert "发送失败" in await runtime.call(
-            channel="qqfail", chat_id="gqq:7", message="没发出去"
-        )
+        assert "qq-msg-1" in await runtime.send_to_user("qq", message="去跟用户说一声")
+        assert "offline" in await runtime.send_to_user("qqfail", message="没发出去")
         # Not recorded before the turn commits.
         assert runtime.manager._store.fetch_session_messages(runtime.session.key) == []
         return reply()
@@ -703,7 +746,7 @@ async def test_channel_pushes_during_a_turn_are_committed_with_it_under_their_ch
     stored = runtime.manager._store.fetch_session_messages(runtime.session.key)
     assert [(row["content"], row["thread_id"]) for row in stored] == [
         ("send to desktop", network_thread_id("mira", "qqbot", "friend")),
-        ("去另一个群说一声", target),
+        ("去跟用户说一声", target),
         ("done", network_thread_id("mira", "qqbot", "friend")),
     ]
     assert stored[1]["metadata"]["external_message_id"] == "qq-msg-1"
@@ -727,12 +770,10 @@ async def test_a_committed_turns_delivered_image_is_recorded_once_under_its_chat
         session_manager=runtime.manager,
         event_bus=runtime.bus,
     )
-    runtime.push.register_channel("qq", image=AsyncMock(return_value=None))
+    runtime.account_senders["qq"] = AsyncMock(return_value="")
 
     async def reasoning(**_kwargs):
-        assert "已发送" in await runtime.call(
-            channel="qq", chat_id="gqq:6", image="scene.png"
-        )
+        assert "attempt-1" in await runtime.send_to_user("qq", media=["scene.png"])
         return reply()
 
     await runtime.pipeline(reasoning).run(
@@ -745,7 +786,7 @@ async def test_a_committed_turns_delivered_image_is_recorded_once_under_its_chat
         for row in stored
         if row["role"] == "assistant"
     ] == [
-        ("", ["scene.png"], network_thread_id("mira", "qq", "gqq:6")),
+        ("", ["scene.png"], network_thread_id("mira", "qq", "u1")),
         ("done", None, network_thread_id("mira", "qqbot", "friend")),
     ]
 
@@ -756,12 +797,10 @@ async def test_a_failed_turn_still_records_the_channel_push_it_delivered(runtime
         session_manager=runtime.manager,
         event_bus=runtime.bus,
     )
-    runtime.push.register_channel("qq", text=AsyncMock(return_value="qq-msg-1"))
+    runtime.account_senders["qq"] = AsyncMock(return_value="qq-msg-1")
 
     async def reasoning(**_kwargs):
-        assert "已发送" in await runtime.call(
-            channel="qq", chat_id="gqq:6", message="去另一个群说一声"
-        )
+        assert "qq-msg-1" in await runtime.send_to_user("qq", message="去跟用户说一声")
         assert "已排队" in await runtime.call(message="never delivered")
         raise RuntimeError("turn failed")
 
@@ -772,7 +811,7 @@ async def test_a_failed_turn_still_records_the_channel_push_it_delivered(runtime
     # The desktop draft was never sent and is dropped; the delivered push is kept.
     stored = runtime.manager._store.fetch_session_messages(runtime.session.key)
     assert [(row["content"], row["thread_id"]) for row in stored] == [
-        ("去另一个群说一声", network_thread_id("mira", "qq", "gqq:6"))
+        ("去跟用户说一声", network_thread_id("mira", "qq", "u1"))
     ]
 
 
@@ -786,7 +825,7 @@ async def test_a_failed_turns_delivered_image_is_recorded_once_under_its_chat(
         session_manager=runtime.manager,
         event_bus=runtime.bus,
     )
-    runtime.push.register_channel("qq", image=AsyncMock(return_value=None))
+    runtime.account_senders["qq"] = AsyncMock(return_value="")
     original_append = runtime.manager.append_messages
     commits = []
 
@@ -798,9 +837,7 @@ async def test_a_failed_turns_delivered_image_is_recorded_once_under_its_chat(
         return await original_append(*args, **kwargs)
 
     async def failing_turn(**_kwargs):
-        assert "已发送" in await runtime.call(
-            channel="qq", chat_id="gqq:6", image="scene.png"
-        )
+        assert "attempt-1" in await runtime.send_to_user("qq", media=["scene.png"])
         if failure_stage == "reasoning":
             raise RuntimeError("turn failed")
         # Fails the commit, after AfterReasoningCtx.
@@ -831,7 +868,7 @@ async def test_a_failed_turns_delivered_image_is_recorded_once_under_its_chat(
         for row in stored
         if row["role"] == "assistant"
     ] == [
-        ("", ["scene.png"], network_thread_id("mira", "qq", "gqq:6")),
+        ("", ["scene.png"], network_thread_id("mira", "qq", "u1")),
         ("done", None, network_thread_id("mira", "qqbot", "friend")),
     ]
 
@@ -844,7 +881,7 @@ async def test_a_failure_to_record_abandoned_pushes_never_replaces_the_turns_err
         session_manager=runtime.manager,
         event_bus=runtime.bus,
     )
-    runtime.push.register_channel("qq", text=AsyncMock(return_value=None))
+    runtime.account_senders["qq"] = AsyncMock(return_value="")
     turn_error = OSError("commit failed")
     append = AsyncMock(
         side_effect=[turn_error, OSError("record 1"), OSError("record 2")]
@@ -852,9 +889,7 @@ async def test_a_failure_to_record_abandoned_pushes_never_replaces_the_turns_err
 
     async def reasoning(**_kwargs):
         for text in ("one", "two"):
-            assert "已发送" in await runtime.call(
-                channel="qq", chat_id="gqq:6", message=text
-            )
+            assert "attempt-1" in await runtime.send_to_user("qq", message=text)
         monkeypatch.setattr(runtime.manager, "append_messages", append)
         return reply()
 

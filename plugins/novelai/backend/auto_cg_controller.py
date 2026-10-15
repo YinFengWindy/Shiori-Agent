@@ -181,7 +181,6 @@ class AutoCgController:
             chat_id=event.chat_id,
             image=image_path,
             role_id=role_id,
-            session_key=event.session_key,
             push_proactive=False,
         )
         if not isinstance(push_result, str) or "图片已发送" not in push_result:

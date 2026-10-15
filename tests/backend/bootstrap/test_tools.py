@@ -524,3 +524,56 @@ async def test_summary_budget_reaches_runtime_writer_and_manual_context(
         assert loop._reasoner.context_window.config.summary_token_limit == 4000
     finally:
         await app.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_every_generation_rejects_role_pushes_to_external_channels(
+    tmp_path, monkeypatch
+):
+    """message_push records nothing itself: a role's external send never reaches
+    a sender, in the first generation or in one prepared from it (#829)."""
+    from dataclasses import replace
+    from agent.config_models import Config
+    from bootstrap.app import AppRuntime, RuntimeFeatures
+
+    monkeypatch.setattr("bootstrap.tools._resolve_plugin_dirs", lambda _: [])
+    RoleStore(tmp_path).create_role(role_id="mira", name="Mira", system_prompt="role")
+    config = Config(
+        provider="",
+        model="",
+        api_key="",
+        model_registrations=[],
+        memory_optimizer_enabled=False,
+    )
+    app = AppRuntime(
+        config,
+        tmp_path,
+        features=RuntimeFeatures(enable_message_channels=False, enable_proactive=False),
+    )
+    await app.start()
+    try:
+        assert app.core is not None
+        sender = AsyncMock(return_value="qq-1")
+        app.core.push_tool.register_channel("qq", text=sender, image=sender)
+        candidate = await app.prepare(replace(config, dev_mode=True))
+        try:
+            for core in (app.core, candidate.core):
+                push_tool = core.push_tool
+                # The model tool and the scheduler share the validated instance.
+                assert push_tool is app.core.push_tool
+                assert core.tools.get_tool("message_push") is push_tool
+                assert core.scheduler.push_tool is push_tool
+                for payload in ({"message": "hi"}, {"image": "cg.png"}):
+                    with pytest.raises(PermissionError, match="account_send"):
+                        await push_tool.execute(
+                            channel="qq",
+                            chat_id="gqq:5",
+                            role_id="mira",
+                            session_key="role:mira",
+                            **payload,
+                        )
+            sender.assert_not_awaited()
+        finally:
+            await app.discard(candidate)
+    finally:
+        await app.shutdown()

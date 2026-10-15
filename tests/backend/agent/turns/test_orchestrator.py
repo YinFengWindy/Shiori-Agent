@@ -27,8 +27,6 @@ from core.accounts import AccountRegistry
 from core.accounts.delivery_ledger import AccountDeliveryLedger
 from shiori_sdk.accounts.targets import AccountTarget
 from agent.turns.outbound import PushToolOutboundPort
-from agent.turns.turn_pushes import current_turn_pushes
-from conversation.push_sync import ExternalPushSyncService
 from session.manager.models import build_session_message
 from core.roles.reply_state import reply_state_metadata
 from core.identity import UserIdentityStore
@@ -701,11 +699,7 @@ async def test_passive_commit_waits_for_delivery_and_stale_generation_cannot_ove
 async def test_image_transport_lock_and_formal_delivery_do_not_deadlock(tmp_path):
     sessions = SessionManager(tmp_path)
     session = sessions.open_role_session("mira", role_name="Mira")
-    bus = EventBus()
-    ExternalPushSyncService(
-        live_turn_pushes=current_turn_pushes, session_manager=sessions, event_bus=bus
-    )
-    push = MessagePushTool(event_bus=bus)
+    push = MessagePushTool()
     push.set_transport_lock(asyncio.Lock())
     image_started, release_image, formal_started = (
         asyncio.Event(),
@@ -736,14 +730,9 @@ async def test_image_transport_lock_and_formal_delivery_do_not_deadlock(tmp_path
             SessionServices(sessions), SimpleNamespace(dispatch=formal_dispatch)
         )
     )
+    # A direct send holds the transport lock while the formal delivery waits.
     external = asyncio.create_task(
-        push.execute(
-            channel="telegram",
-            chat_id="123",
-            image="/tmp/old.png",
-            role_id="mira",
-            session_key=session.key,
-        )
+        push.execute(channel="telegram", chat_id="123", image="/tmp/old.png")
     )
     await image_started.wait()
     formal = asyncio.create_task(
@@ -752,11 +741,8 @@ async def test_image_transport_lock_and_formal_delivery_do_not_deadlock(tmp_path
     await formal_started.wait()
     release_image.set()
     results = await asyncio.wait_for(asyncio.gather(external, formal), timeout=2)
-    assert results[1] is True
-    assert [m["media"] for m in session.messages] == [
-        ["/tmp/old.png"],
-        ["/tmp/new.png"],
-    ]
+    assert results == ["图片已发送", True]
+    assert [m["media"] for m in session.messages] == [["/tmp/new.png"]]
     assert (
         session.messages[-1]["metadata"]["thought"]
         == session.metadata["current_thought"]

@@ -252,7 +252,7 @@ def test_plugin_wires_scene_observations_to_automatic_cg(tmp_path: Path) -> None
     registry = ToolRegistry()
     pushed = asyncio.Event()
     push_image = AsyncMock(side_effect=lambda *a, **kw: pushed.set())
-    push_tool = MessagePushTool(event_bus=event_bus)
+    push_tool = MessagePushTool()
     push_tool.register_channel("telegram", image=push_image)
     registry.register(push_tool)
     services = _services(
