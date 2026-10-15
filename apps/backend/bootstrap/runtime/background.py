@@ -123,13 +123,17 @@ class RuntimeBackground:
             await asyncio.shield(self._runner)
 
     async def _join_tasks(self) -> None:
-        """Waits for every loop; only the cancellation ``stop`` requested is expected."""
+        """Waits for every loop; only the cancellation ``stop`` requested is expected.
+
+        A loop that ends cancelled without ``stop`` leaked a cancellation from
+        inside its work, so it is reported like any other failure.
+        """
         outcomes = await asyncio.gather(*self._tasks, return_exceptions=True)
         errors = [
             outcome
             for outcome in outcomes
             if isinstance(outcome, BaseException)
-            and not isinstance(outcome, asyncio.CancelledError)
+            and not (self._stopped and isinstance(outcome, asyncio.CancelledError))
         ]
         if errors:
             raise BaseExceptionGroup("Background runtime work failed", errors)

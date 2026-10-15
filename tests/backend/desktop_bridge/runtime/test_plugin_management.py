@@ -1293,3 +1293,62 @@ async def test_queued_install_replaces_external_source_row_before_restart(
     finally:
         await service.aclose()
         await app.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_set_enabled_interrupts_background_work_that_ignores_stop(
+    tmp_path, monkeypatch
+):
+    """A memory optimizer stuck in model retries must not hold a plugin toggle."""
+    from core.common.runtime_scope import current_runtime_lease
+
+    _stage_plugin_dirs(tmp_path, monkeypatch)
+    started: dict[int, asyncio.Event] = {}
+    interrupted = asyncio.Event()
+    release = asyncio.Event()
+
+    class StuckOptimizer:
+        def stop(self):
+            pass
+
+        async def run(self):
+            lease = current_runtime_lease()
+            assert lease is not None
+            started.setdefault(lease.generation, asyncio.Event()).set()
+            try:
+                await release.wait()
+            except asyncio.CancelledError:
+                interrupted.set()
+                raise
+
+    def build(*args, loop_consumer, **kwargs):
+        loop = StuckOptimizer()
+        loop_consumer(loop)
+        return [loop.run()], None
+
+    monkeypatch.setattr(
+        "bootstrap.runtime.background.build_memory_optimizer_task", build
+    )
+    service, _, app = await _start_service(tmp_path)
+    try:
+        await asyncio.wait_for(started.setdefault(1, asyncio.Event()).wait(), 1)
+        response = await asyncio.wait_for(
+            _request(
+                service,
+                "plugins.setEnabled",
+                {"plugin_id": "hello", "enabled": False, "operation_id": "op-1"},
+            ),
+            5,
+        )
+        assert response.error is None, response.error
+        assert app.generation == 2 and app.accepting_work
+        await asyncio.wait_for(started.setdefault(2, asyncio.Event()).wait(), 1)
+        assert interrupted.is_set()
+        listed = await asyncio.wait_for(_request(service, "plugins.list"), 1)
+        by_id = {item["id"]: item for item in listed.payload["plugins"]}
+        assert by_id["hello"]["enabled"] is False
+    finally:
+        # Lets pre-fix work finish so a failing run still shuts down.
+        release.set()
+        await service.aclose()
+        await app.shutdown()

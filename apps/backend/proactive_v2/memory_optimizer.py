@@ -355,7 +355,7 @@ class MemoryOptimizer:
                 provider=active_provider,
                 model=active_model,
             )
-        except BaseException:
+        except asyncio.CancelledError:
             # 换代会取消在途整理：快照放回 PENDING，不留到下次整理才恢复。
             memory_store.rollback_pending_snapshot()
             raise

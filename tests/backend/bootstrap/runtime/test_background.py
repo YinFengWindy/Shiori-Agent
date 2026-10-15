@@ -105,6 +105,28 @@ async def test_drain_reports_failures_raised_while_work_unwinds(monkeypatch):
     await version.retire()
 
 
+@pytest.mark.asyncio
+async def test_drain_reports_cancellation_that_stop_did_not_request(monkeypatch):
+    class LeakedCancel(WorkLoop):
+        async def run(self):
+            self.started.set()
+            raise asyncio.CancelledError()
+
+    loop = LeakedCancel()
+    _install_loops(monkeypatch, loop)
+    version = candidate(1)
+    group = RuntimeBackground(
+        SimpleNamespace(features=SimpleNamespace(enable_proactive=False)), version
+    )
+    group.start()
+    with pytest.raises(BaseExceptionGroup) as failure:
+        await asyncio.wait_for(group.drain(), timeout=1)
+    assert [type(error) for error in failure.value.exceptions] == [
+        asyncio.CancelledError
+    ]
+    await version.retire()
+
+
 def test_scene_intake_activates_at_publication_even_without_polling_loops(monkeypatch):
     from unittest.mock import Mock
 
