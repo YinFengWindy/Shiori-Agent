@@ -1,4 +1,4 @@
-/** Public JSON contract of the Herdr plugin: dashboard RPC (`tasks.*`), `sessions.list` and its config. */
+/** Public JSON contract of the Herdr plugin: dashboard RPC (`tasks.*` / `agents.*`), `sessions.list` and its config. */
 
 /** Lifecycle owned by the task service. */
 export type TaskStatus =
@@ -83,3 +83,27 @@ export type HerdrSession = { name: string; status: "running" | "stopped" };
 
 /** `sessions.list`: every session Herdr knows on this machine. */
 export type SessionListResponse = { sessions: HerdrSession[] };
+
+/** One agent of the configured Herdr session (`agents.list` / `agents.get`). */
+export type AgentSummary = {
+  /** Herdr's stable target for this agent; pane IDs are never reused. */
+  pane_id: string;
+  workspace_id: string;
+  /** Agent kind as Herdr detects it, e.g. `claude` or `codex`. */
+  agent: string;
+  /** Herdr's own state (`working` / `idle` / `blocked` / `done` / `unknown`), not task delivery. */
+  status: string;
+  title: string;
+  cwd: string;
+  /** The plugin task running on this agent, if any. */
+  task_id: string | null;
+};
+
+/** A Herdr workspace and its agents, in Herdr's order. */
+export type AgentWorkspace = { workspace_id: string; label: string; agents: AgentSummary[] };
+
+/** `agents.list`: every agent of the configured session, grouped by workspace. */
+export type AgentListResponse = { session: string; workspaces: AgentWorkspace[] };
+
+/** `agents.get`; `agent` is null once Herdr no longer knows the agent. */
+export type AgentDetailResponse = { session: string; agent: AgentSummary | null; output: string; task: TaskDetail | null };

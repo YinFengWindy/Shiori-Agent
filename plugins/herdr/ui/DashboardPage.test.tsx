@@ -3,9 +3,11 @@ import { test } from "node:test";
 import { act } from "react";
 import { mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import { DashboardPage } from "./DashboardPage";
-import { TaskSidebar } from "./TaskSidebar";
+import { AgentSidebar } from "./AgentSidebar";
 import { createDashboardStore, DashboardStoreProvider } from "./dashboardStore";
-import { herdrBackend, makeDetail, makeRole } from "./testFixtures";
+import { herdrBackend, makeAgent, makeDetail, makeRole, makeWorkspace } from "./testFixtures";
+
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 type Backend = ReturnType<typeof herdrBackend>;
 
@@ -13,7 +15,7 @@ type Backend = ReturnType<typeof herdrBackend>;
 function workspace(backend: Backend, store: ReturnType<typeof createDashboardStore>, clients = { page: backend.client, sidebar: backend.client }) {
   return (
     <DashboardStoreProvider value={store}>
-      <TaskSidebar pageId="herdr" animating={false} collapsed={false} width={280} onBeginResize={() => {}} client={clients.sidebar} host={backend.fake.host} />
+      <AgentSidebar pageId="herdr" animating={false} collapsed={false} width={280} onBeginResize={() => {}} client={clients.sidebar} host={backend.fake.host} />
       <DashboardPage pageId="herdr" client={clients.page} host={backend.fake.host} />
     </DashboardStoreProvider>
   );
@@ -41,10 +43,10 @@ test("the sidebar selection drives the page; a background task does not move it"
   assert.equal(backend.handlers.size, 0, "leaving the page releases every subscription");
 });
 
-test("without tasks the page shows its empty state", async () => {
+test("without agents or tasks the page shows its empty state", async () => {
   const view = await mountTestComponent(workspace(herdrBackend([]), createDashboardStore()));
   try {
-    assert.match(view.container.querySelector('[data-testid="herdr-page"]')?.textContent ?? "", /暂无任务/);
+    assert.match(view.container.querySelector('[data-testid="herdr-page"]')?.textContent ?? "", /暂无 Agent/);
   } finally { await view.cleanup(); }
 });
 
@@ -74,5 +76,49 @@ test("task errors and report failures appear as host inline errors", async () =>
     const titles = backend.fake.uiRenders.InlineError.map((props) => props.title);
     assert.ok(titles.includes("任务需要处理") && titles.includes("聊天回报失败"));
     assert.match(view.container.textContent ?? "", /Agent 等待登录[\s\S]*渠道离线/);
+  } finally { await view.cleanup(); }
+});
+
+test("a selected agent that leaves the session is reported gone; leaving the page stops polling", async () => {
+  const backend = herdrBackend([], [], [makeWorkspace("Shiori", [makeAgent()])]);
+  const view = await mountTestComponent(workspace(backend, createDashboardStore(5)));
+  try {
+    const page = () => view.container.querySelector('[data-testid="herdr-page"]')?.textContent ?? "";
+    await act(async () => wait(20));
+    assert.equal(view.container.querySelector('[aria-label="Agent 详情"] h1')?.textContent, "herdr插件问题");
+    assert.match(page(), /output of wR:p2/);
+    backend.setWorkspaces([]);
+    await act(async () => wait(30));
+    assert.match(view.container.querySelector('[role="status"]')?.textContent ?? "", /Agent 已不存在/);
+  } finally { await view.cleanup(); }
+  const reads = backend.calls.length;
+  await wait(30);
+  assert.equal(backend.calls.length, reads, "no Herdr reads after the page is gone");
+});
+
+test("an agent carrying a task shows the task's delivery and actions around the agent's terminal", async () => {
+  const backend = herdrBackend(
+    [makeDetail({ status: "completed", summary: "改好了滚动", pr_url: "https://github.com/o/r/pull/1", can_cancel: false, output: "monitor output" })],
+    [],
+    [makeWorkspace("shiori-task", [makeAgent({ pane_id: "w9:p1", workspace_id: "w9", agent: "codex", task_id: "task-a" })])],
+  );
+  const view = await mountTestComponent(workspace(backend, createDashboardStore()));
+  try {
+    await act(async () => wait(10));
+    const detail = view.container.querySelector('[aria-label="任务详情"]');
+    assert.equal(detail?.querySelector("h1")?.textContent, "修复滚动位置");
+    assert.match(detail?.querySelector('[aria-label="修改摘要"]')?.textContent ?? "", /改好了滚动.*打开 Draft PR/);
+    assert.equal(detail?.querySelector('[aria-label="终端输出"] pre')?.textContent, "output of w9:p1");
+    assert.ok(detail?.querySelector('textarea[aria-label="追加要求"]'));
+  } finally { await view.cleanup(); }
+});
+
+test("an unavailable session shows Herdr's reason", async () => {
+  const backend = herdrBackend([]);
+  backend.failAgents(new Error("Herdr session 'default' 未运行，请先启动指定 session。"));
+  const view = await mountTestComponent(workspace(backend, createDashboardStore()));
+  try {
+    const failure = backend.fake.uiRenders.InlineError.find((props) => props.title === "Herdr session 不可用");
+    assert.match(String(failure?.message), /未运行/);
   } finally { await view.cleanup(); }
 });

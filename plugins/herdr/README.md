@@ -5,7 +5,7 @@
 中选择，修改自动保存。当前配置的 session 不在列表中时仍显示并保留；Herdr 不可用、命令失败
 或插件未启用时设置页显示读取错误，其余设置照常可改。Herdr 和选定的
 Codex / Claude Code 必须已安装、登录，并在该 session 可使用；插件不安装 CLI、
-修改全局设置或连接用户当前聚焦的 session。首版只提供 Full Access。
+修改全局设置，也不依赖 Herdr 当前聚焦的 pane。首版只提供 Full Access。
 
 聊天工具 `herdr_start_task` 接收仓库根目录、完整需求及可选的 `codex` / `claude`，
 立即返回任务编号，在独立 worktree 中修改、验证、提交并创建 Draft PR。
@@ -17,11 +17,18 @@ Codex / Claude Code 必须已安装、登录，并在该 session 可使用；插
 Ctrl+C 并确认就绪后才标记 cancelled；无法确认则为 unknown，保留产物。
 初次登录、目录信任或原生交互提示需先在 Herdr 处理，随后可继续原任务。
 
-导航栏的 Herdr 页面在宿主二级栏按「进行中 / 已结束」列出全部角色的任务（发起角色
-头像、需求首行、状态与阶段、最近报告时间），主区展示选中任务：阶段条与最新进展、
-终端输出、折叠的活动记录 / 验证结果 / 完整需求，交付后突出修改摘要与 Draft PR，
-底部输入框提交追加要求。继续和取消（需确认）复用聊天工具的任务服务，是否可用由
-服务端判定；打开 PR 通过宿主校验的外部链接能力完成。
+导航栏的 Herdr 页面以 agent 为单位：宿主二级栏按 Herdr workspace 分组列出所配置
+session 的全部 agent，包括用户在 Herdr 中手动打开的 CLI（终端标题、类型与 Herdr
+状态）。承载插件任务的 agent 只出现一次，显示为该任务（发起角色头像、需求首行、
+状态与阶段、最近报告时间）。没有被列出的 agent 承载的插件任务（启动中、agent 已
+离开 session、属于其他 session，或 session 不可用时的全部任务）放在最后的「插件
+任务」组，未结束的在前，交付信息不会因此丢失。
+
+主区展示选中 agent 的最近终端输出；关联插件任务时，在其外围显示阶段条与最新进展、
+折叠的活动记录 / 验证结果 / 完整需求，交付后突出修改摘要与 Draft PR，底部输入框
+提交追加要求。继续和取消（需确认）复用聊天工具的任务服务，是否可用由服务端判定；
+打开 PR 通过宿主校验的外部链接能力完成。选中的 agent 从 Herdr 消失后保持选中，主区
+提示其已不存在。手动打开的 agent 在本页只读，插件不判定其交付是否完成。
 
 阶段来自每回合独立的 `<run_id>.progress.jsonl`。Agent 按任务指令追加完整 JSON
 行，字段为 `task_id`、`run_id`、递增 `sequence`、`stage` 和 `detail`。仅当前
@@ -33,11 +40,22 @@ Ctrl+C 并确认就绪后才标记 cancelled；无法确认则为 unknown，保�
 
 桌面端 RPC：`tasks.list`（任务摘要）与 `tasks.get`（单任务详情）是只读并发请求，
 `tasks.continue` / `tasks.cancel` 返回与 `tasks.get` 相同的详情；`tasks.changed`
-事件仅携带任务 ID 和修订号。`sessions.list`（只读）调用 `herdr session list --json`，
-返回 `{sessions: [{name, status: "running" | "stopped"}]}`，不限定配置的 session。页面先订阅事件再读取，同一插件进程内较旧的修订不会
-覆盖较新的；断线时保留最后内容并禁用操作，连接恢复后重新读取。离开页面只退订
-视图，后台任务照常运行。后台新增任务不会切走当前选择；终端停在底部时跟随新输出，
-上翻后保持阅读内容并提示「有新输出」，切换任务或进入新回合会重置。
+事件仅携带任务 ID 和修订号。页面先订阅事件再读取，同一插件进程内较旧的修订不会
+覆盖较新的。`sessions.list`（只读）调用 `herdr session list --json`，
+返回 `{sessions: [{name, status: "running" | "stopped"}]}`，不限定配置的 session。
+`agents.list` 返回当前配置 session 的 agent，按 workspace 分组并带
+workspace 名称，每项含 pane ID（agent 标识）、类型、Herdr 状态、终端标题、cwd 及
+关联插件任务 ID；`agents.get`（参数 `pane_id`）返回该 agent 的状态、最近终端输出
+与关联任务详情，Herdr 已不认识该 agent 时返回 `agent: null`。两者都是只读并发请求，
+所有 Herdr 调用显式带配置的 session；插件任务按其自身 session、pane ID 与 agent
+类型关联。Herdr 版本与 session 运行检查在首次读取及任一读取失败后执行，session
+未运行或版本不兼容时返回明确原因，正常轮询不重复执行 `--version`。
+
+agent 状态没有推送事件，页面打开期间每 2.5 秒轮询列表与选中 agent，上一次读取
+结束后才排下一次，离开页面即停止。断线或配置重载时保留最后内容并禁用操作，连接
+恢复后重新读取。离开页面只退订视图，后台任务照常运行。后台刷新不会切走当前选择；
+终端停在底部时跟随新输出，上翻后保持阅读内容并提示「有新输出」，切换 agent 或
+进入新回合会重置。
 
 Herdr 的终端状态和交付状态独立：idle/done 不代表完成，CLI 超时也不代表停止。
 插件核验本回合结果文件、代码提交、实际执行验证命令和开放 Draft PR 的 head SHA。

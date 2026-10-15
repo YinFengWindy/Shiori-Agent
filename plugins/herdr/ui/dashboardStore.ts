@@ -1,7 +1,11 @@
 import { createContext, useContext, useEffect, useSyncExternalStore } from "react";
 import { errorMessage, type PluginHostServices, type PluginRpcClient, type RoleRecord } from "@yinfengwindy/shiori-sdk";
+import { firstSelection, type Selection } from "./agentSelectors";
 import { TaskFeed, type FeedSource, type FeedState } from "./taskFeed";
-import type { TaskListResponse } from "./types";
+import type { AgentListResponse, TaskListResponse } from "./types";
+
+/** How often an open page rereads Herdr, which has no change events. */
+export const agentPollMs = 2500;
 
 /** Keeps task objects whose revision did not advance, so unchanged rows keep their identity. */
 export function mergeTaskList(current: TaskListResponse | null, next: TaskListResponse): TaskListResponse {
@@ -24,11 +28,23 @@ const listSource: FeedSource<TaskListResponse> = {
   },
 };
 
+/** Keeps the current response when a poll brings nothing new, so the views keep their references. */
+export function mergeUnchanged<T>(current: T | null, next: T): T {
+  return current !== null && JSON.stringify(current) === JSON.stringify(next) ? current : next;
+}
+
+function agentListSource(pollMs: number): FeedSource<AgentListResponse> {
+  return { read: (client) => client.call<AgentListResponse>("agents.list"), merge: mergeUnchanged, pollMs };
+}
+
 /** What the sidebar and the page share. */
 export type DashboardState = {
+  /** Plugin tasks, following `tasks.changed`. */
   list: FeedState<TaskListResponse>;
-  /** Stays on the task being read; moves to the first task only when it is gone from the list. */
-  selectedId: string | null;
+  /** The session's agents, polled while a view is attached. */
+  agents: FeedState<AgentListResponse>;
+  /** Picked once the agents are first known; never moved by background updates, even when its agent is gone. */
+  selection: Selection | null;
   roles: readonly RoleRecord[];
   rolesError: string;
 };
@@ -38,24 +54,33 @@ type Attachment = { client: PluginRpcClient; host: PluginHostServices };
 /**
  * State shared by the page and its sidebar, which the host mounts as siblings
  * with separate clients. The most recently attached client drives the task
- * list, so a reconnect hands over to a renewed client rather than an old one.
+ * list and the agent polling, so a reconnect hands over to a renewed client
+ * rather than an old one, and the polling ends when the last view detaches.
  */
 class DashboardStore {
   private feed = new TaskFeed(listSource);
-  private state: DashboardState = { list: this.feed.getSnapshot(), selectedId: null, roles: [], rolesError: "" };
+  private agentFeed: TaskFeed<AgentListResponse>;
+  private state: DashboardState;
   private listeners = new Set<() => void>();
   private attachments: Attachment[] = [];
   private driver: Attachment | null = null;
   private stopDriving: (() => void) | null = null;
   private rolesRequest = 0;
 
-  constructor() {
-    this.feed.subscribe(() => {
+  /** `pollMs` is also the agent detail's polling interval. */
+  constructor(readonly pollMs = agentPollMs) {
+    this.agentFeed = new TaskFeed(agentListSource(pollMs));
+    this.state = { list: this.feed.getSnapshot(), agents: this.agentFeed.getSnapshot(), selection: null, roles: [], rolesError: "" };
+    const update = () => {
       const list = this.feed.getSnapshot();
-      const tasks = list.value?.tasks;
-      const kept = !tasks || tasks.some((task) => task.id === this.state.selectedId);
-      this.commit({ ...this.state, list, selectedId: kept ? this.state.selectedId : (tasks[0]?.id ?? null) });
-    });
+      const agents = this.agentFeed.getSnapshot();
+      // Wait for the first agent answer, so a task is not picked over the agent carrying it.
+      const settled = agents.value !== null || agents.error !== "";
+      const selection = this.state.selection ?? (settled ? firstSelection(agents.value, list.value?.tasks ?? []) : null);
+      this.commit({ ...this.state, list, agents, selection });
+    };
+    this.feed.subscribe(update);
+    this.agentFeed.subscribe(update);
   }
 
   subscribe = (listener: () => void) => {
@@ -67,14 +92,14 @@ class DashboardStore {
 
   private commit(next: DashboardState) {
     const current = this.state;
-    if (next.list === current.list && next.selectedId === current.selectedId && next.roles === current.roles && next.rolesError === current.rolesError) return;
+    if (next.list === current.list && next.agents === current.agents && next.selection === current.selection && next.roles === current.roles && next.rolesError === current.rolesError) return;
     this.state = next;
     for (const listener of this.listeners) listener();
   }
 
-  /** Selects a task to read; background updates never change it. */
-  select = (taskId: string) => {
-    this.commit({ ...this.state, selectedId: taskId });
+  /** Selects an agent or an agentless task; background updates never change it. */
+  select = (selection: Selection) => {
+    this.commit({ ...this.state, selection });
   };
 
   /** Registers a mounted view; returns its detach function. */
@@ -98,6 +123,7 @@ class DashboardStore {
 
   private drive({ client, host }: Attachment) {
     void this.feed.start(client, host);
+    void this.agentFeed.start(client, host);
     this.loadRoles(host);
     const off = host.onEvent((event) => {
       if (event.method === "roles.updated") this.loadRoles(host);
@@ -105,6 +131,7 @@ class DashboardStore {
     return () => {
       off();
       this.feed.stop();
+      this.agentFeed.stop();
       this.rolesRequest++;
     };
   }
@@ -119,8 +146,8 @@ class DashboardStore {
 }
 
 /** A store; the module keeps the one both mount points share, tests make their own. */
-export function createDashboardStore() {
-  return new DashboardStore();
+export function createDashboardStore(pollMs?: number) {
+  return new DashboardStore(pollMs);
 }
 
 const StoreContext = createContext(createDashboardStore());

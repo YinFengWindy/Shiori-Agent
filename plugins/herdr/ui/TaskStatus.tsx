@@ -1,4 +1,5 @@
 import { cx } from "@yinfengwindy/shiori-sdk";
+import { agentStatusLabel, agentStatusTone } from "./agentSelectors";
 import { statusLabels, statusTone, type StatusTone } from "./taskSelectors";
 import type { TaskStatus } from "./types";
 
@@ -10,9 +11,14 @@ const dotClasses: Record<StatusTone, string> = {
   muted: "bg-line-strong",
 };
 
+/** Small colored dot of a status tone. */
+export function ToneDot({ tone }: { tone: StatusTone }) {
+  return <span className={cx("h-2 w-2 shrink-0 rounded-full", dotClasses[tone])} aria-hidden="true" />;
+}
+
 /** Small colored dot of a task status. */
 export function StatusDot({ status }: { status: TaskStatus }) {
-  return <span className={cx("h-2 w-2 shrink-0 rounded-full", dotClasses[statusTone(status)])} aria-hidden="true" />;
+  return <ToneDot tone={statusTone(status)} />;
 }
 
 /** Status dot followed by its label. */
@@ -21,6 +27,16 @@ export function StatusLabel({ status, className }: { status: TaskStatus; classNa
     <span className={cx("inline-flex shrink-0 items-center gap-1.5", className)}>
       <StatusDot status={status} />
       {statusLabels[status]}
+    </span>
+  );
+}
+
+/** A Herdr agent state's dot followed by its label. */
+export function AgentStatusLabel({ status, className }: { status: string; className?: string }) {
+  return (
+    <span className={cx("inline-flex shrink-0 items-center gap-1.5", className)}>
+      <ToneDot tone={agentStatusTone(status)} />
+      {agentStatusLabel(status)}
     </span>
   );
 }

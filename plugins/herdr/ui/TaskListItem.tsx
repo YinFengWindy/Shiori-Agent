@@ -4,7 +4,8 @@ import { StatusDot } from "./TaskStatus";
 import { phaseLabel, relativeTime, taskTitle } from "./taskSelectors";
 import type { TaskSummary } from "./types";
 
-const itemClass = cx(
+/** A sidebar row laid out like a chat list row: a 32px leading mark, then two lines. */
+export const listItemClass = cx(
   sidebarNavItemClass,
   "grid min-h-[54px] w-full grid-cols-[32px_minmax(0,1fr)] items-center gap-2.5 px-2 py-2 text-left text-body-sm leading-none text-ink-secondary",
 );
@@ -23,7 +24,7 @@ export function TaskListItem({ task, role, selected, now, host, onSelect }: {
   return (
     <button
       type="button"
-      className={cx(itemClass, selected && "bg-surface text-ink shadow-soft")}
+      className={cx(listItemClass, selected && "bg-surface text-ink shadow-soft")}
       aria-current={selected ? "true" : undefined}
       onClick={() => onSelect(task.id)}
     >
