@@ -115,6 +115,18 @@ Python SDK minimum; audited packages using only unchanged APIs may keep their
 
 ### Unreleased
 
+- #842 (issues #842 / #843): **breaking** — `ChannelContext.push_tool`, the
+  `shiori_sdk.channels.services.PushSenders` protocol and the testing
+  `FakePushSenders` / `fake_channel_context(push_tool=)` are removed. Since
+  #829 / #839 a role's `message_push` may only reach its own desktop session, so
+  channel senders registered there were unreachable; role sends to channels use
+  `account_send` (`account.send`). Channel packages that still call
+  `ctx.push_tool` fail at `start` and must drop the registration. `message_push`
+  (reached by plugins through `ctx.tools.get_tool`) now raises on an unknown
+  channel, an unsupported payload or a sender failure instead of returning error
+  text; returning at all means the payload was sent or queued with the current
+  turn, so callers no longer inspect the result wording.
+
 - #827 (issue #825): `@yinfengwindy/shiori-sdk` exports
   `secondarySidebarShellClass({ animating, collapsed, inset: "list" | "nav" })`,
   the outer box of a secondary sidebar in the host's resizable track (surface,
@@ -470,11 +482,10 @@ an absent hook yields the neutral default. Protocols live in
 | `uses_bot_commands: bool` | the channel reads `ctx.bot_commands` at start; the host folds the command list into its `configuration_key` reuse check, so a command change rebuilds it | `False`: command changes keep the connection |
 
 `desktop` stays host-owned: role-owned `role:<id>` desktop sessions always
-stream. `MessagePushTool.register_channel(..., description=...)` accepts a short
-identity/`chat_id` format note; the `message_push` tool description lists only
-currently registered, non-retired channels with those notes. Packages using the
-hooks or `description` must require `runtime_api: ">=3.0.0 <4.0.0"`: older hosts
-ignore the hooks and reject the unknown keyword.
+stream. Packages using the hooks must require `runtime_api: ">=3.0.0 <4.0.0"`:
+older hosts ignore them. (`ChannelContext.push_tool` and its
+`register_channel(..., description=...)`, also introduced in 2.3, were removed
+by #842; see Unreleased.)
 
 ## Runtime API 2.4 host feedback and inline errors
 

@@ -324,23 +324,19 @@ def _feishu_threads() -> list[threading.Thread]:
     return [t for t in threading.enumerate() if t.name == "feishu-ws"]
 
 
-async def test_start_registers_hooks_and_stop_releases_everything(
+async def test_start_subscribes_and_stop_releases_everything(
     harness: Any,
 ) -> None:
     before = len(_feishu_threads())
     await harness.start()
 
     assert list(harness.bus.outbound) == ["feishu"]
-    registered = harness.push_tool.registrations["feishu"]
-    assert sorted(registered) == ["description", "file", "image", "text"]
-    assert "oc_" in str(registered["description"])
     assert len(_feishu_threads()) == before + 1
 
     await harness.channel.stop()
 
     assert harness.bus.outbound == {}
     assert harness.event_bus._subscriptions == []
-    assert harness.push_tool.registrations == {}
     assert harness.channel._api._client is None
     assert len(_feishu_threads()) == before
     assert harness.channel.status()["connected"] is False
@@ -361,7 +357,7 @@ async def test_stop_twice_after_start(harness: Any) -> None:
     await harness.channel.stop()
     await harness.channel.stop()
 
-    assert harness.push_tool.registrations == {}
+    assert harness.bus.outbound == {}
 
 
 async def test_channel_can_restart_after_stop(harness: Any, make_event: Any) -> None:
@@ -489,22 +485,16 @@ async def test_failed_delivery_is_marked_and_raised(
     assert harness.hub.delivery_statuses() == ["failed"]
 
 
-async def test_images_and_files_are_uploaded_then_sent(
-    harness: Any, tmp_path: Path
-) -> None:
+async def test_images_are_uploaded_then_sent(harness: Any, tmp_path: Path) -> None:
     await harness.start()
     image = tmp_path / "a.png"
     image.write_bytes(b"\x89PNG\r\n\x1a\n")
-    document = tmp_path / "报告.txt"
-    document.write_text("x", encoding="utf-8")
 
     await harness.channel.send_image(CHAT_ID, str(image))
-    await harness.channel.send_file(CHAT_ID, str(document))
 
-    assert harness.api.keys()[-4:] == ["upload_image", "send", "upload_file", "send"]
-    image_body, file_body = harness.api.bodies("send")
+    assert harness.api.keys()[-2:] == ["upload_image", "send"]
+    (image_body,) = harness.api.bodies("send")
     assert json.loads(image_body["content"]) == {"image_key": "img_1"}
-    assert json.loads(file_body["content"]) == {"file_key": "file_1"}
 
 
 def test_receive_ids_follow_the_id_prefix() -> None:

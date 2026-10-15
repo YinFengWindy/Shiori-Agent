@@ -576,9 +576,6 @@ class DesktopBridgeService:
             file=lambda chat_id, file_path, _name=None: _emit_session_for_chat(
                 chat_id, media=[file_path]
             ),
-            image=lambda chat_id, image_path: _emit_session_for_chat(
-                chat_id, media=[image_path]
-            ),
             image_with_metadata=lambda chat_id, image_path, metadata: _emit_session_for_chat(
                 chat_id, media=[image_path], metadata=metadata
             ),

@@ -1,4 +1,3 @@
-from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -6,7 +5,6 @@ import pytest
 from agent.tools.message_push import MessagePushTool, PushOutcome
 from tests.support.push import allow_every_role_target
 from agent.tools.registry import ToolRegistry
-from core.common.runtime_scope import bind_runtime
 
 
 @pytest.mark.parametrize("payload", [{"message": "CG"}, {"image": "cg.png"}])
@@ -70,7 +68,9 @@ async def test_model_cannot_supply_or_override_push_intent(host_intent):
 async def test_supplemental_file_is_rejected_before_any_payload_is_sent(extra_payload):
     tool = MessagePushTool(role_target_validator=allow_every_role_target)
     sender = AsyncMock(return_value=None)
-    tool.register_channel("desktop", text=sender, image=sender, file=sender)
+    tool.register_channel(
+        "desktop", text_with_metadata=sender, image_with_metadata=sender, file=sender
+    )
 
     with pytest.raises(ValueError, match="push_proactive=False.*file"):
         await tool.execute(
@@ -95,24 +95,16 @@ async def test_supplemental_file_is_rejected_before_any_payload_is_sent(extra_pa
         {"message": " ", "file": "\t", "image": "\n"},
     ],
 )
-async def test_blank_payload_is_rejected_before_resolving_or_sending(payload):
+async def test_blank_payload_is_rejected_before_sending(payload):
     tool = MessagePushTool(role_target_validator=allow_every_role_target)
     send = AsyncMock(return_value=None)
-
-    def resolve(_chat_id):
-        raise AssertionError("empty payload must not resolve its target")
-
     tool.register_channel(
-        "desktop",
-        text=send,
-        file=send,
-        image=send,
-        target_resolver=resolve,
+        "desktop", text_with_metadata=send, file=send, image_with_metadata=send
     )
 
-    result = await tool.execute(channel="desktop", chat_id="mira", **payload)
+    with pytest.raises(ValueError, match="message、file、image 至少提供一个"):
+        await tool.execute(channel="desktop", chat_id="mira", **payload)
 
-    assert result == "错误：message、file、image 至少提供一个"
     send.assert_not_awaited()
 
 
@@ -132,9 +124,9 @@ async def test_only_nonblank_fields_are_sent_without_changing_content(field, val
     }
     tool.register_channel(
         "desktop",
-        text=senders["message"],
+        text_with_metadata=senders["message"],
         file=senders["file"],
-        image=senders["image"],
+        image_with_metadata=senders["image"],
     )
     payload = dict.fromkeys(senders, " \t\n")
     payload[field] = value
@@ -148,41 +140,6 @@ async def test_only_nonblank_fields_are_sent_without_changing_content(field, val
             assert sender.await_args.args[:2] == ("mira", value)
         else:
             sender.assert_not_awaited()
-
-
-@pytest.mark.asyncio
-async def test_retired_transport_only_sends_for_previously_accepted_generation():
-    tool = MessagePushTool(role_target_validator=allow_every_role_target)
-    send = AsyncMock(return_value=None)
-    tool.register_channel("telegram", text=send)
-    tool.retire_channel("telegram")
-    old = SimpleNamespace(channel_names=frozenset({"telegram", "qq"}))
-    new = SimpleNamespace(channel_names=frozenset({"qq"}))
-
-    with bind_runtime(old):
-        await tool.execute(channel="telegram", chat_id="one", message="accepted")
-    with bind_runtime(new):
-        result = await tool.execute(channel="telegram", chat_id="one", message="new")
-    send.assert_awaited_once_with("one", "accepted")
-    assert "已停用" in result
-
-
-@pytest.mark.parametrize("sender_name", ["text", "stream_text"])
-async def test_delivery_metadata_keeps_legacy_senders_compatible(sender_name):
-    tool = MessagePushTool(role_target_validator=allow_every_role_target)
-    sender = AsyncMock(return_value=None)
-    tool.register_channel("telegram", **{sender_name: sender})
-
-    result = await tool.execute(
-        channel="telegram",
-        chat_id="one",
-        message="scheduled",
-        push_delivery_key="occurrence",
-        push_message_already_persisted=True,
-    )
-
-    sender.assert_awaited_once_with("one", "scheduled")
-    assert "已发送" in result
 
 
 async def test_metadata_sender_uses_push_identity_not_shared_turn_identity():
@@ -238,88 +195,40 @@ async def test_model_json_cannot_impersonate_pending_turn_delivery():
     assert "pending_commit" not in sender.await_args.args[2]
 
 
-@pytest.mark.parametrize("unsupported", ["text", "file", "image"])
+@pytest.mark.parametrize(
+    "unsupported", ["text_with_metadata", "file", "image_with_metadata"]
+)
 async def test_unsupported_payload_rejects_all_requested_sends_before_delivery(
     unsupported,
 ):
     tool = MessagePushTool(role_target_validator=allow_every_role_target)
-    senders = {name: AsyncMock(return_value=None) for name in ("text", "file", "image")}
+    senders = {
+        name: AsyncMock(return_value=None)
+        for name in ("text_with_metadata", "file", "image_with_metadata")
+    }
     tool.register_channel(
         "limited",
         **{name: sender for name, sender in senders.items() if name != unsupported},
     )
 
-    result = await tool.execute(
-        channel="limited",
-        chat_id="one",
-        message="hello",
-        file="/tmp/a.txt",
-        image="/tmp/a.png",
-    )
+    with pytest.raises(ValueError, match="不支持发送"):
+        await tool.execute(
+            channel="limited",
+            chat_id="one",
+            message="hello",
+            file="/tmp/a.txt",
+            image="/tmp/a.png",
+        )
 
-    assert result.startswith("发送失败：")
-    assert "已发送" not in result
     for sender in senders.values():
         sender.assert_not_awaited()
 
 
-@pytest.mark.asyncio
-async def test_message_push_tool_covers_success_failure_and_fallbacks():
+async def test_unregistered_channel_is_rejected():
     tool = MessagePushTool(role_target_validator=allow_every_role_target)
-    sent = {"text": [], "stream_text": [], "file": [], "image": []}
 
-    async def text(chat_id: str, message: str) -> None:
-        sent["text"].append((chat_id, message))
-
-    async def stream_text(chat_id: str, message: str) -> None:
-        sent["stream_text"].append((chat_id, message))
-
-    async def file(chat_id: str, path: str, name: str | None) -> None:
-        sent["file"].append((chat_id, path, name))
-
-    async def image(chat_id: str, path: str) -> None:
-        sent["image"].append((chat_id, path))
-
-    tool.register_channel(
-        "telegram",
-        text=text,
-        stream_text=stream_text,
-        file=file,
-        image=image,
-    )
-    result = await tool.execute(
-        channel="telegram",
-        chat_id=123,
-        message="hello",
-        file="/tmp/demo.txt",
-        image="https://img",
-    )
-
-    assert "文本已发送" in result
-    assert "文件 'demo.txt' 已发送" in result
-    assert "图片已发送" in result
-    assert sent["text"] == []
-    assert sent["stream_text"] == [("123", "hello")]
-    assert sent["file"] == [("123", "/tmp/demo.txt", "demo.txt")]
-    assert sent["image"] == [("123", "https://img")]
-
-    assert await tool.execute(channel="telegram", chat_id=1) == (
-        "错误：message、file、image 至少提供一个"
-    )
-    assert "未注册" in await tool.execute(channel="qq", chat_id=1, message="x")
-
-    tool.register_channel("limited", text=text)
-    limited = await tool.execute(
-        channel="limited", chat_id=1, file="/tmp/a.txt", image="/tmp/a.png"
-    )
-    assert "不支持发送文件" in limited
-    assert "不支持发送图片" in limited
-
-    async def broken(chat_id: str, message: str) -> None:
-        raise RuntimeError("send failed")
-
-    tool.register_channel("broken", text=broken)
-    assert "发送失败" in await tool.execute(channel="broken", chat_id=1, message="x")
+    with pytest.raises(ValueError, match="渠道 'qq' 未注册"):
+        await tool.execute(channel="qq", chat_id="1", message="x")
 
 
 @pytest.mark.asyncio
@@ -327,8 +236,8 @@ async def test_push_reports_sender_message_ids_in_send_order():
     tool = MessagePushTool(role_target_validator=allow_every_role_target)
     tool.register_channel(
         "qqbot",
-        text=AsyncMock(return_value=" text-id "),
-        image=AsyncMock(return_value="image-id"),
+        text_with_metadata=AsyncMock(return_value=" text-id "),
+        image_with_metadata=AsyncMock(return_value="image-id"),
         # A blank id is the same as no id.
         file=AsyncMock(return_value="   "),
     )
@@ -351,19 +260,21 @@ async def test_push_reports_sender_message_ids_in_send_order():
 
 
 @pytest.mark.asyncio
-async def test_push_failure_reports_no_message_ids():
+async def test_sender_failure_propagates_unchanged():
     tool = MessagePushTool(role_target_validator=allow_every_role_target)
+    failure = RuntimeError("upload failed")
     tool.register_channel(
-        "qqbot",
-        text=AsyncMock(return_value="text-id"),
-        image=AsyncMock(side_effect=RuntimeError("upload failed")),
+        "desktop",
+        text_with_metadata=AsyncMock(return_value="text-id"),
+        image_with_metadata=AsyncMock(side_effect=failure),
     )
 
-    outcome = await tool.push(
-        channel="qqbot", chat_id="c2c:user-1", message="hello", image="cat.png"
-    )
+    with pytest.raises(RuntimeError) as caught:
+        await tool.push(
+            channel="desktop", chat_id="role:mira", message="hello", image="cat.png"
+        )
 
-    assert outcome == PushOutcome("发送失败：upload failed")
+    assert caught.value is failure
 
 
 async def test_model_arguments_cannot_override_the_push_context():

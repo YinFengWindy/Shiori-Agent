@@ -18,7 +18,6 @@ from .services import (
     IntakeFactory,
     InterruptController,
     MessageBus,
-    PushSenders,
 )
 
 
@@ -62,7 +61,6 @@ class ChannelContext:
     bus: MessageBus
     session_manager: ChannelSessions
     event_bus: EventsCapability
-    push_tool: PushSenders
     attachment_store: AttachmentStore
     http_resources: HttpResources
     interrupt_controller: InterruptController | None

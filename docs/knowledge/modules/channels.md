@@ -25,7 +25,7 @@ related:
 
 ## 统一边界
 
-外部渠道全部由插件提供，宿主只拥有 `desktop`，不再有内置渠道或「频道」设置分区（#363）。`packages/sdk/python/shiori_sdk/channels/` 定义 Channel 合约、可选钩子与 `ChannelContext`；插件在 manifest 静态声明渠道，`setup` 里经 `ctx.channels.add()` 贡献实例。`apps/backend/bootstrap/channels.py` 的 `start_channels` 只装配插件贡献的渠道：构造共享上下文，按 `configuration_key`（声明 `uses_bot_commands` 的渠道再加上 bot 命令列表）跨代复用未变的连接；`bootstrap/channel_host.py` 负责启停、换代时的入站暂停与回滚、已移除连接的排空。`apps/backend/infra/channels/` 放宿主侧渠道基础设施：`account_group.py`（按账号增删成员连接的渠道组）、`intake.py`（`ChannelIntake`，配置切换期间的有界入站缓冲）、`runtime_context.py`（宿主专用的 `RuntimeChannelContext`）和 `base.py`（媒体落盘的 `AttachmentStore`）。`apps/backend/core/channels/hub.py` 做账号准入与入站路由，`core/common/channel_directory.py` 按渠道名向已发布的连接查询钩子。`desktop_bridge/runtime/channel_listing.py` 的 `channels.list` 把 `desktop` 与各插件的静态声明合并上运行状态，供角色绑定面板使用。渠道配置在各自的 `[plugins.<id>]`，由「设置 › 插件」的自动表单编辑。
+外部渠道全部由插件提供，宿主只拥有 `desktop`，不再有内置渠道或「频道」设置分区（#363）。`packages/sdk/python/shiori_sdk/channels/` 定义 Channel 合约、可选钩子与 `ChannelContext`；插件在 manifest 静态声明渠道，`setup` 里经 `ctx.channels.add()` 贡献实例。`apps/backend/bootstrap/channels.py` 的 `start_channels` 只装配插件贡献的渠道：构造共享上下文，按 `configuration_key`（声明 `uses_bot_commands` 的渠道再加上 bot 命令列表）跨代复用未变的连接；`bootstrap/channel_host.py` 负责启停、换代时的入站暂停与回滚、已移除连接的排空。`apps/backend/infra/channels/` 放宿主侧渠道基础设施：`account_group.py`（按账号增删成员连接的渠道组）、`intake.py`（`ChannelIntake`，配置切换期间的有界入站缓冲）和 `base.py`（媒体落盘的 `AttachmentStore`）。`apps/backend/core/channels/hub.py` 做账号准入与入站路由，`core/common/channel_directory.py` 按渠道名向已发布的连接查询钩子。`desktop_bridge/runtime/channel_listing.py` 的 `channels.list` 把 `desktop` 与各插件的静态声明合并上运行状态，供角色绑定面板使用。渠道配置在各自的 `[plugins.<id>]`，由「设置 › 插件」的自动表单编辑。
 
 | 插件 | 渠道名 | 结构 |
 | --- | --- | --- |

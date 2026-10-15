@@ -14,7 +14,6 @@ from typing import TYPE_CHECKING, Any
 import httpx
 
 from shiori_sdk.channels.services import InterruptController
-from shiori_sdk.channels.services import PushSenders as MessagePushTool
 from shiori_sdk.runtime import EventsCapability as EventBus
 from shiori_sdk.messages import InboundMessage, OutboundMessage
 from shiori_sdk.channel_events import StreamDeltaReady, TurnStarted
@@ -35,7 +34,6 @@ from .contacts import FeishuContacts
 from .dedupe import ExpiringIdSet
 from .formatting import (
     CHANNEL,
-    PUSH_TARGET_HINT,
     SYSTEM_PROMPT_HINT,
     markdown_card,
     split_markdown,
@@ -114,7 +112,6 @@ class FeishuChannel:
         self._loop: asyncio.AbstractEventLoop | None = None
         self._bus: MessageBus | None = None
         self._event_bus: EventBus | None = None
-        self._push_tool: MessagePushTool | None = None
         self._channel_hub: ChannelHub | None = None
         self._interrupt_controller: InterruptController | None = None
         self._resolver: InboundResolver | None = None
@@ -123,7 +120,6 @@ class FeishuChannel:
         self._accepting = False
         self._outbound_bound = False
         self._events_bound = False
-        self._push_registered = False
         self._bot_name = ""
         self._bot_open_id = ""
         self._identity_error = ""
@@ -207,7 +203,6 @@ class FeishuChannel:
         self._loop = asyncio.get_running_loop()
         self._bus = ctx.bus
         self._event_bus = ctx.event_bus
-        self._push_tool = ctx.push_tool
         self._channel_hub = ctx.channel_hub
         self._interrupt_controller = ctx.interrupt_controller
         self._resolver = InboundResolver(self._api, ctx.attachment_store)
@@ -217,14 +212,6 @@ class FeishuChannel:
             for event_type, handler in self._event_bindings:
                 ctx.event_bus.on(event_type, handler)
             self._events_bound = True
-        ctx.push_tool.register_channel(
-            self.name,
-            text=self.send,
-            file=self.send_file,
-            image=self.send_image,
-            description=PUSH_TARGET_HINT,
-        )
-        self._push_registered = True
         if not self._outbound_bound:
             ctx.bus.subscribe_outbound(self.name, self._on_response)
             self._outbound_bound = True
@@ -269,9 +256,6 @@ class FeishuChannel:
         if self._bus is not None and self._outbound_bound:
             self._bus.unsubscribe_outbound(self.name, self._on_response)
             self._outbound_bound = False
-        if self._push_tool is not None and self._push_registered:
-            self._push_tool.unregister_channel(self.name, text=self.send)
-            self._push_registered = False
         await self._api.aclose()
         logger.info("[feishu] 飞书渠道已停止")
 
@@ -776,17 +760,6 @@ class FeishuChannel:
         image_key = await self._api.upload_image(data)
         return await self._deliver(
             chat_id, "image", json.dumps({"image_key": image_key}), None
-        )
-
-    async def send_file(
-        self, chat_id: str, file_path: str, name: str | None = None
-    ) -> str:
-        """Uploads a local file and returns the platform message receipt."""
-        self._require_private_target(chat_id)
-        path = Path(file_path).expanduser()
-        file_key = await self._api.upload_file(path.read_bytes(), name or path.name)
-        return await self._deliver(
-            chat_id, "file", json.dumps({"file_key": file_key}), None
         )
 
     def _require_bus(self) -> MessageBus:

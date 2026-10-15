@@ -91,8 +91,6 @@ async def test_app_runtime_resolves_channel_hooks_through_its_channel_host(
         # Handover swaps the connections of this same long-lived host.
         app.channel_host._channels.append(_Streaming())
         assert directory.supports_stream_events("qqbot", "c2c:u1")
-        async with app.acquire() as lease:
-            assert lease.channel_names == frozenset()
     finally:
         await app.shutdown()
 

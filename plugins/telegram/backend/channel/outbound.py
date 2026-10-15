@@ -1,4 +1,4 @@
-"""Telegram 文本、流、文件和图片出站发送。"""
+"""Telegram 文本、流和图片出站发送。"""
 
 from __future__ import annotations
 
@@ -17,7 +17,6 @@ from ..utils import TelegramStreamMessage, sent_message_id
 from ..utils.topic import telegram_topic_kwargs
 from .compat import (
     _call_send_markdown,
-    _call_send_stream_markdown,
     _call_send_thinking_block,
 )
 from .formatting import mention_markdown, mentionable_user_id
@@ -58,22 +57,13 @@ class _OutboundMixin:
     async def send(
         self, chat_id: str, message: str, *, message_thread_id: int | None = None
     ) -> str | None:
-        """发送文本消息（供 MessagePushTool 调用），返回首条消息 id。"""
+        """发送文本消息，返回首条消息 id。"""
         return await _call_send_markdown(
             self._app.bot,
             self._resolve_chat_id(chat_id),
             message,
             self._telegram_outbound_limiter,
             **telegram_topic_kwargs(message_thread_id),
-        )
-
-    async def send_stream(self, chat_id: str, message: str) -> str | None:
-        """发送流式文本消息（私聊优先 draft，其他场景降级普通发送），返回消息 id。"""
-        return await _call_send_stream_markdown(
-            self._app.bot,
-            self._resolve_chat_id(chat_id),
-            message,
-            self._telegram_outbound_limiter,
         )
 
     def create_stream_sender(self, chat_id: str):
@@ -90,27 +80,6 @@ class _OutboundMixin:
             await stream.push_delta(delta)
 
         return _push
-
-    async def send_file(
-        self,
-        chat_id: str,
-        file_path: str,
-        name: str | None = None,
-        caption: str | None = None,
-        *,
-        message_thread_id: int | None = None,
-    ) -> str | None:
-        """发送文件，可附带说明文字；返回消息 id。"""
-        cid = int(self._resolve_chat_id(chat_id))
-        sent = await self._telegram_outbound_limiter.run(
-            cid,
-            kind="send",
-            label="send_document",
-            action=lambda: self._send_document_file(
-                cid, file_path, name, caption, message_thread_id
-            ),
-        )
-        return sent_message_id(sent)
 
     async def send_image(
         self, chat_id: str, image: str, *, message_thread_id: int | None = None
@@ -136,23 +105,6 @@ class _OutboundMixin:
                 action=lambda: self._send_photo_file(cid, image, message_thread_id),
             )
         return sent_message_id(sent)
-
-    async def _send_document_file(
-        self,
-        chat_id: int,
-        file_path: str,
-        name: str | None,
-        caption: str | None,
-        message_thread_id: int | None,
-    ) -> object:
-        with open(file_path, "rb") as f:
-            return await self._app.bot.send_document(
-                chat_id=chat_id,
-                document=f,
-                filename=name,
-                caption=caption,
-                **telegram_topic_kwargs(message_thread_id),
-            )
 
     async def _send_photo_file(
         self, chat_id: int, image: str, message_thread_id: int | None

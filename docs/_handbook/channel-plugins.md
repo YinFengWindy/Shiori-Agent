@@ -110,7 +110,7 @@ class DemoChatChannel:
 - **入站闸门**：换代期间宿主先 `pause_intake()`，新连接以 `ctx.intake_paused=True` 启动，发布后再 `resume_intake()`。在 `start(ctx)` 中调用 `ctx.intake_factory(accept, send)` 获取 `shiori_sdk.channels.services.ChannelIntake`：它在暂停时缓冲入站消息，溢出或关闭时回复「渠道配置正在切换」提示，`stop` 时调用 `close()` 排空。
 - **`stop` 的顺序**：先切断新工作的来源（暂停入站、退订事件、断开连接），再取消或等待在途任务，最后注销出站与推送注册。
 
-消息值从 `shiori_sdk.messages` 导入，流式事件从 `shiori_sdk.channel_events` 导入。`ChannelContext` 通过 Protocol 提供本代的宿主服务：`bus`（消息总线）、`session_manager`、`event_bus`、`push_tool`（`message_push` 工具）、`attachment_store`（入站媒体落盘）、`http_resources`、`interrupt_controller`（`/stop`）、`bot_commands`、`log`、`intake_factory`（见上文入站闸门）、`channel_hub`（账号准入与路由）、`intake_paused`。
+消息值从 `shiori_sdk.messages` 导入，流式事件从 `shiori_sdk.channel_events` 导入。`ChannelContext` 通过 Protocol 提供本代的宿主服务：`bus`（消息总线）、`session_manager`、`event_bus`、`attachment_store`（入站媒体落盘）、`http_resources`、`interrupt_controller`（`/stop`）、`bot_commands`、`log`、`intake_factory`（见上文入站闸门）、`channel_hub`（账号准入与路由）、`intake_paused`。
 
 ## 4. 入站、会话键与 chat_id 约定
 
@@ -161,28 +161,19 @@ ViaAccount(
 
 用户不在桌面前时，主动推送可以按在场与最近对话规则选中这些私聊，经 `account.send` 以 `target_kind="private"`、`target_id=<平台用户 ID>` 投递。因此**绑定的平台用户 ID 必须能直接作为该账号的私聊发送目标**。
 
-## 5. 出站与 `message_push`
+## 5. 出站
 
 ```python
 async def start(self, ctx):
     ctx.bus.subscribe_outbound(self.name, self._on_response)
-    ctx.push_tool.register_channel(
-        self.name,
-        text=self.send,
-        image=self.send_image,
-        file=self.send_file,
-        description="Demo Chat，私聊 chat_id 格式为 dm:<用户 ID>",
-    )
 
 async def stop(self):
     self._bus.unsubscribe_outbound(self.name, self._on_response)
-    self._push_tool.unregister_channel(self.name, text=self.send)
 ```
 
 - `subscribe_outbound` 接收 Agent 回合的最终回复（`OutboundMessage`）。发送成功或失败后调用 `ctx.channel_hub.mark_delivery(msg, default_channel=self.name, delivery_status="sent"|"failed", external_message_id=..., via_account=...)`，让会话里的消息状态正确；`via_account` 只在 `sent` 时传发送账号的快照。
 - **群聊被动回复点名触发者**：回复的 `msg.metadata` 带着触发消息的元数据（`chat_type`、`sender_id`、`external_message_id` 等）。`chat_type` 为群聊（`shiori_sdk.channels.chat_types.is_group_chat_type`）时，插件按平台惯例点名触发者：QQ 在开头 @ 发送者，Telegram 回复触发消息。模型额外选择要 @ 的成员放在 `metadata["mention_ids"]`（键名 `REPLY_MENTION_IDS_KEY`，只有群聊回复会带），插件一并提及；其中平台用不了的 ID 记 warning 后跳过，回复照常发出（触发者仍被点名）。私聊回复不受影响；没有群聊的渠道忽略这些字段。
-- `register_channel` 让模型能用 `message_push` 主动发消息。`description` 会写进工具描述的「当前可用渠道」列表，用一句话说明渠道身份和 chat_id 格式；工具描述只列出当前已注册、未停用的渠道。
-- `unregister_channel` 传入自己的 `text` 回调，只注销本实例的注册，不会误删换代后新连接的注册。
+- 角色主动往渠道发消息一律走下面的 `account.send`；`message_push` 带角色身份时只能发往该角色的桌面会话，渠道插件不再向它注册 sender。
 
 ### 账号目标发送（`account.send` / `account.targets`）
 
@@ -233,7 +224,7 @@ async def stop(self):
 测试放在 `plugins/<id>/tests/`，文件与 `backend/` 模块对应，全程不联网：
 
 - **账号与 setup**：用 `shiori_sdk.testing.channel_context.FakeChannelPluginContext` 上下文执行公开 `setup`；断言真实 manifest 声明、插件存储恢复、孤立账号处理和 SDK capability 调用。真实 PluginKernel/AppRuntime 重载与角色删除放在宿主集成测试。
-- **渠道行为**：平台 REST 用 `httpx.MockTransport` 替代，长连接用假连接；`ChannelContext` 直接构造，`channel_hub`、`push_tool` 可用简单替身（参考 `plugins/feishu/tests/conftest.py`）。至少覆盖：未登记、离线或无所属角色的接收账号被拒绝，响应规则准入、入站去重、`pause_intake` 期间缓冲、`stop` 对未启动实例安全、流式收尾与失败回退。
+- **渠道行为**：平台 REST 用 `httpx.MockTransport` 替代，长连接用假连接；`ChannelContext` 直接构造，`channel_hub` 可用简单替身（参考 `plugins/feishu/tests/conftest.py`）。至少覆盖：未登记、离线或无所属角色的接收账号被拒绝，响应规则准入、入站去重、`pause_intake` 期间缓冲、`stop` 对未启动实例安全、流式收尾与失败回退。
 - **真实运行时**：宿主测试侧的 `shiori_host_testing` 提供 `plugin_runtime` fixture，验证设置保存、热换代、账号删除和 runtime drain；插件单测不加载它。
 - `pyproject.toml` 声明 `dependencies = ["shiori-sdk>=3.1.0,<4"]`、`test = ["shiori-sdk[testing]>=3.1.0,<4"]` extra 和 pytest 配置（`-W error`、`asyncio_mode = "auto"`），`TESTING.md` 写明仓库外运行方式和真机验收清单。
 
@@ -250,12 +241,11 @@ uv run python -m scripts.verify_plugin_tests --plugins <id>
 - [ ] manifest 声明 `channels`、`accounts` 能力和渠道，渠道名与插件 id 一致且今后不改。
 - [ ] 凭据和响应规则只存于插件账号记录；恢复时清理已删除角色的账号，缺少凭据的账号独立报告连接状态。
 - [ ] 构造函数不产生流量；`configuration_key` 覆盖全部连接设置。
-- [ ] `start`/`stop` 可重复调用；`stop` 先断来源再排空任务；出站和推送注册在 `stop` 里撤销。
+- [ ] `start`/`stop` 可重复调用；`stop` 先断来源再排空任务；出站订阅在 `stop` 里撤销。
 - [ ] 入站带已登记的 `account_id`，经 `is_sender_allowed(..., account_id=...)` → `route_account_inbound` → 去重 → `publish_inbound`；用 `ChannelIntake` 处理换代暂停。
 - [ ] 入站、回复送达和 `account.send` 回执都附上 `ViaAccount` 快照；不支持的 `mention_ids` / `group_member` 明确报错。
 - [ ] 私聊入站在路由前交给 `answer_pairing_code` 并声明 `scope`；绑定的平台用户 ID 可直接作为 `account.send` 的私聊目标。
 - [ ] 开了流式就消费事件并在最终回复时收尾；失败时退回普通发送。
-- [ ] `register_channel(..., description=)` 写清 chat_id 格式。
 - [ ] 测试离线，`verify_plugin_tests.py --plugins <id>` 通过。
 
 

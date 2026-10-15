@@ -1,11 +1,10 @@
 """Host-free message, attachment and sender fixtures for transport tests."""
 
 import asyncio
-from collections.abc import Awaitable, Callable
 from pathlib import Path
 from uuid import uuid4
 
-from shiori_sdk.channels.services import OutboundHandler, Sender
+from shiori_sdk.channels.services import OutboundHandler
 from shiori_sdk.messages import InboundMessage, OutboundMessage
 
 
@@ -74,53 +73,6 @@ class FakeAttachmentStore:
         path = self.create_path(prefix, suffix)
         path.write_bytes(data)
         return path
-
-
-class FakePushSenders:
-    """Record the public senders owned by each connection."""
-
-    def __init__(self):
-        self.senders: dict[str, Sender | None] = {}
-        # Channel -> the sender names (and description) its connection registered.
-        self.registrations: dict[str, dict[str, object]] = {}
-
-    def register_channel(
-        self,
-        channel: str,
-        text: Sender | None = None,
-        stream_text: Sender | None = None,
-        file: Callable[[str, str, str | None], Awaitable[str | None]] | None = None,
-        image: Sender | None = None,
-        target_resolver: Callable[[str], str] | None = None,
-        text_with_metadata: (
-            Callable[[str, str, dict[str, object]], Awaitable[str | None]] | None
-        ) = None,
-        image_with_metadata: (
-            Callable[[str, str, dict[str, object]], Awaitable[str | None]] | None
-        ) = None,
-        description: str = "",
-    ) -> None:
-        """Retain a sender registration for a test-owned channel."""
-        self.senders[channel] = text
-        offered: dict[str, object | None] = {
-            "text": text,
-            "stream_text": stream_text,
-            "file": file,
-            "image": image,
-            "target_resolver": target_resolver,
-            "text_with_metadata": text_with_metadata,
-            "image_with_metadata": image_with_metadata,
-            "description": description.strip() or None,
-        }
-        self.registrations[channel] = {
-            name: value for name, value in offered.items() if value is not None
-        }
-
-    def unregister_channel(self, channel: str, *, text: Sender | None = None) -> None:
-        """Keep replacement registrations when the previous connection stops."""
-        if text is None or self.senders.get(channel) == text:
-            self.senders.pop(channel, None)
-            self.registrations.pop(channel, None)
 
 
 class FakeInterruptResult:

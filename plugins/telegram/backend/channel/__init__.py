@@ -20,7 +20,6 @@ from ..utils import (
     TelegramOutboundLimiter,
     TelegramStreamMessage,
     send_markdown,
-    send_stream_markdown,
     send_thinking_block,
 )
 

@@ -31,7 +31,7 @@ async def test_stop_all_attempts_each_channel_once_and_reports_failure():
 
 @pytest.mark.asyncio
 async def test_stop_all_reports_prior_retirement_failure_without_retrying_stop():
-    context = SimpleNamespace(push_tool=SimpleNamespace(retire_channel=Mock()))
+    context = SimpleNamespace()
     host = ChannelHost(lambda channel: context)
     channel = connection("one")
     channel.stop = AsyncMock(side_effect=RuntimeError("retirement failed"))
@@ -46,7 +46,7 @@ async def test_stop_all_reports_prior_retirement_failure_without_retrying_stop()
 
 @pytest.mark.asyncio
 async def test_retirement_reports_drain_stop_and_release_failures_together():
-    context = SimpleNamespace(push_tool=SimpleNamespace(retire_channel=Mock()))
+    context = SimpleNamespace()
     host = ChannelHost(lambda channel: context)
     channel = connection("one")
     drain_error = ValueError("accepted work drain failed")
@@ -70,7 +70,7 @@ async def test_retirement_reports_drain_stop_and_release_failures_together():
 
 @pytest.mark.asyncio
 async def test_cancelled_stop_waiter_does_not_cancel_retirement_or_lose_completion():
-    context = SimpleNamespace(push_tool=SimpleNamespace(retire_channel=Mock()))
+    context = SimpleNamespace()
     host = ChannelHost(lambda channel: context)
     channel = connection("one")
     channel.stop = AsyncMock()

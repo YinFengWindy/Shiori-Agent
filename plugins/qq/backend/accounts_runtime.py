@@ -104,10 +104,6 @@ class QQAccountsRuntime(QQAccountSettings, QQInboundAdapter, QQOutboundAdapter):
         for ref in self._configs:
             self._start_intake(ref)
         ctx.bus.subscribe_outbound(self.name, self._on_response)
-        ctx.push_tool.register_channel(
-            self.name,
-            text_with_metadata=self._send_with_metadata,
-        )
         for ref, config in self._configs.items():
             if config.auto_connect and self._servable(ref):
                 self._schedule(ref)
@@ -136,7 +132,6 @@ class QQAccountsRuntime(QQAccountSettings, QQInboundAdapter, QQOutboundAdapter):
                 self._configs.pop(ref, None)
         if self._ctx is not None:
             self._ctx.bus.unsubscribe_outbound(self.name, self._on_response)
-            self._ctx.push_tool.unregister_channel(self.name)
             self._ctx = None
 
     def _servable(self, ref: str) -> bool:

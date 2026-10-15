@@ -12,7 +12,6 @@ from plugins.telegram.backend.utils import (
     TelegramStreamMessage,
     render_telegram_preview_html,
     send_markdown,
-    send_stream_markdown,
     send_thinking_block,
 )
 
@@ -252,20 +251,6 @@ async def test_stream_message_falls_back_to_plain_text_on_html_parse_error():
 
 
 @pytest.mark.asyncio
-async def test_send_stream_markdown_falls_back_to_markdown_on_stream_failure():
-    bot = BotStub()
-    bot.edit_message_text = AsyncMock(side_effect=RuntimeError("boom"))
-
-    # 不带尾随空白：真实 telegramify-markdown 会去掉它，宿主桩不会。
-    text = " ".join(["hello world"] * 30)
-    await send_stream_markdown(cast(Any, bot), 123, text)
-
-    assert len(bot.messages) == 2
-    assert bot.messages[-1]["text"] == text
-    assert bot.edit_message_text.await_count == 1
-
-
-@pytest.mark.asyncio
 async def test_stream_message_ignores_message_not_modified_error():
     bot = BotStub()
 
@@ -294,7 +279,7 @@ async def test_stream_message_skips_duplicate_truncated_preview():
     first = "a" * 4096 + "X"
     second = "a" * 4096 + "Y"
 
-    await stream.push_delta(first, force=True)
+    await stream.push_delta(first)
     await stream.finalize(second)
 
     assert len(bot.messages) == 1
@@ -329,8 +314,9 @@ async def test_stream_message_retry_after_enters_cooldown_without_blocking(monke
     )
 
     stream = TelegramStreamMessage(cast(Any, bot), 123)
-    await stream.push_delta("hello", force=True)
-    await stream.push_delta(" world", force=True)
+    await stream.push_delta("hello")
+    # Enough growth to bypass throttling, so the edit hits the rate limit.
+    await stream.push_delta(" world" * 40)
     assert stream._edit_cooldown_until > 30.0
     await stream.push_delta(" again")
     await stream.push_delta(" after cooldown")
@@ -460,32 +446,3 @@ async def test_plain_text_fallback_returns_the_first_message_id(monkeypatch):
     )
 
     assert await send_markdown(cast(Any, bot), 456, "line1\nline2") == "1"
-
-
-@pytest.mark.asyncio
-async def test_send_stream_markdown_returns_the_streamed_message_id():
-    bot = BotStub()
-    text = " ".join(["hello world"] * 30)
-
-    # A private chat streams by editing one message: that message is the id.
-    assert await send_stream_markdown(cast(Any, bot), 123, text) == "1"
-    assert len(bot.messages) == 1
-    assert bot.edits
-
-
-@pytest.mark.asyncio
-async def test_send_stream_markdown_fallback_returns_the_resent_message_id():
-    bot = BotStub()
-    bot.edit_message_text = AsyncMock(side_effect=RuntimeError("boom"))
-    text = " ".join(["hello world"] * 30)
-
-    # The broken preview (message 1) is not the delivered message; the resend is.
-    assert await send_stream_markdown(cast(Any, bot), 123, text) == "2"
-
-
-@pytest.mark.asyncio
-async def test_send_stream_markdown_in_groups_returns_the_markdown_message_id():
-    bot = BotStub()
-
-    assert await send_stream_markdown(cast(Any, bot), -100, "hello") == "1"
-    assert await send_stream_markdown(cast(Any, bot), -100, "   ") is None

@@ -187,7 +187,6 @@ class AppRuntime(RuntimeReloadMixin, RuntimeBackgroundMixin, RuntimeShutdownMixi
             self.channel_host = await start_channels(
                 bus=self.core.bus,
                 session_manager=self.core.session_manager,
-                push_tool=self.core.push_tool,
                 http_resources=self.http_resources,
                 event_bus=event_bus,
                 bot_commands=plugin_manager.bot_commands if plugin_manager else None,
@@ -196,9 +195,6 @@ class AppRuntime(RuntimeReloadMixin, RuntimeBackgroundMixin, RuntimeShutdownMixi
                 enable_message_channels=self.features.enable_message_channels,
                 channel_directory=self.core.channel_directory,
                 role_store=self.core.role_runtime_registry.repository.store,
-            )
-            current.channel_names = frozenset(
-                channel.name for channel in self.channel_host.channels
             )
             # The long-lived host keeps the published connections across handovers.
             self.core.channel_directory.bind(self.channel_host.get)

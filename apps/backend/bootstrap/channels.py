@@ -4,7 +4,6 @@ from infra.channels.intake import ChannelIntake
 import logging
 
 from agent.looping.interrupt import InterruptController
-from agent.tools.message_push import MessagePushTool
 from bootstrap.channel_host import ChannelHost
 from bus.event_bus import EventBus
 from bus.queue import MessageBus
@@ -13,8 +12,7 @@ from core.roles.store import RoleStore
 from core.common.channel_directory import ChannelDirectory
 from core.net.http import SharedHttpResources
 from infra.channels.base import AttachmentStore
-from shiori_sdk.channels import Channel
-from infra.channels.runtime_context import RuntimeChannelContext
+from shiori_sdk.channels import Channel, ChannelContext
 from session.manager import SessionManager
 
 logger = logging.getLogger(__name__)
@@ -24,7 +22,6 @@ async def start_channels(
     *,
     bus: MessageBus,
     session_manager: SessionManager,
-    push_tool: MessagePushTool,
     http_resources: SharedHttpResources,
     event_bus: EventBus,
     bot_commands: list[tuple[str, str]] | None = None,
@@ -39,13 +36,12 @@ async def start_channels(
     attachment_store = AttachmentStore(session_manager.workspace / "uploads")
     channel_hub: ChannelHub | None = None
 
-    def _ctx_factory(channel: Channel) -> RuntimeChannelContext:
-        return RuntimeChannelContext(
+    def _ctx_factory(channel: Channel) -> ChannelContext:
+        return ChannelContext(
             intake_factory=ChannelIntake,
             bus=bus,
             session_manager=session_manager,
             event_bus=event_bus,
-            push_tool=push_tool,
             attachment_store=attachment_store,
             http_resources=http_resources,
             interrupt_controller=interrupt_controller,
@@ -55,7 +51,6 @@ async def start_channels(
         )
 
     host = ChannelHost(_ctx_factory, transport_lock=bus.transport_lock)
-    push_tool.set_transport_lock(bus.transport_lock)
     if not enable_message_channels:
         return host
     channel_hub = (

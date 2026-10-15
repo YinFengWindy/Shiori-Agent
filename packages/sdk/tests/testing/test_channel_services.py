@@ -4,16 +4,7 @@ from shiori_sdk.messages import OutboundMessage
 from shiori_sdk.testing.channel_services import (
     FakeInterruptController,
     FakeMessageBus,
-    FakePushSenders,
 )
-
-
-async def _text(chat_id: str, text: str) -> str | None:
-    return None
-
-
-async def _other_text(chat_id: str, text: str) -> str | None:
-    return None
 
 
 def test_interrupt_controller_records_requests_and_answers_with_its_message() -> None:
@@ -29,21 +20,6 @@ def test_interrupt_controller_records_requests_and_answers_with_its_message() ->
     assert controller.requests == [
         {"session_key": "role:mira", "sender": "u1", "command": "/stop"}
     ]
-
-
-def test_push_senders_record_offered_senders_and_keep_a_replacement() -> None:
-    senders = FakePushSenders()
-    senders.register_channel("chat", text=_text, image=_text, description=" 说明 ")
-    assert senders.registrations == {
-        "chat": {"text": _text, "image": _text, "description": "说明"}
-    }
-
-    senders.register_channel("chat", text=_other_text)
-    # The old connection stopping must not remove its replacement.
-    senders.unregister_channel("chat", text=_text)
-    assert senders.registrations == {"chat": {"text": _other_text}}
-    senders.unregister_channel("chat", text=_other_text)
-    assert senders.registrations == {} and senders.senders == {}
 
 
 async def test_message_bus_drops_emptied_channels_and_reports_marked_pending() -> None:

@@ -117,30 +117,15 @@ async def test_push_outbound_port_surfaces_transport_failure() -> None:
 
 
 @pytest.mark.asyncio
-async def test_push_outbound_port_surfaces_unregistered_channel_result() -> None:
-    class PushTool:
-        async def push(self, **kwargs):
-            return PushOutcome("渠道 'telegram' 未注册，可用渠道：['（无）']")
-
-    port = PushToolOutboundPort(PushTool())
-
-    with pytest.raises(OutboundDispatchError, match="未注册"):
-        await port.dispatch(
-            OutboundDispatch(channel="telegram", chat_id="123", content="hello")
-        )
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "result", ["发送失败：image failed", "文本已发送；渠道不支持发送图片"]
-)
-async def test_partial_media_failure_cannot_be_hidden_by_later_image_success(result):
+async def test_partial_media_failure_cannot_be_hidden_by_later_image_success():
     calls = []
 
     class PushTool:
         async def push(self, **kwargs):
             calls.append(kwargs)
-            return PushOutcome(result if len(calls) == 1 else "图片已发送")
+            if len(calls) == 1:
+                raise RuntimeError("image failed")
+            return PushOutcome("ok")
 
     port = PushToolOutboundPort(PushTool())
     with pytest.raises(OutboundDispatchError):

@@ -66,13 +66,6 @@ class QQOutboundAdapter:
             raise OneBotError("QQ 发送需要明确指定账号")
         return account_id
 
-    async def _send_with_metadata(
-        self, chat_id: str, message: str, metadata: dict[str, object]
-    ) -> str:
-        account_id = self._sending_account(metadata)
-        kind, target = qq_chat_target(chat_id)
-        return (await self.send_target(account_id, kind, target, message))["message_id"]
-
     async def _on_response(self, msg: OutboundMessage) -> None:
         """Sends a role reply; a group reply @s its trigger and chosen members.
 

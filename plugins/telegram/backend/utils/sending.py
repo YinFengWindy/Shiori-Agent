@@ -8,7 +8,6 @@ from telegram import Bot, MessageEntity as TgEntity, ReplyParameters
 from telegramify_markdown.entity import MessageEntity, split_entities
 
 from .limiter import TelegramOutboundLimiter, _run_outbound
-from .streaming import TelegramStreamMessage, _iter_stream_chunks
 from .topic import telegram_topic_kwargs
 
 logger = logging.getLogger("plugins.telegram.utils")
@@ -241,32 +240,3 @@ def _utf16_cut(text: str, max_utf16: int) -> int:
         if utf16_count > max_utf16:
             return i
     return len(text)
-
-
-async def send_stream_markdown(
-    bot: Bot,
-    chat_id: int | str,
-    text: str,
-    limiter: TelegramOutboundLimiter | None = None,
-) -> str | None:
-    """主动推送场景的简化流式展示；返回承载内容的那条消息 id。
-
-    私聊走单条消息的流式编辑，id 即该消息；降级为普通发送时取首条消息 id。
-    """
-    cid = int(chat_id)
-    stripped = text.strip()
-    if not stripped:
-        return None
-
-    if cid > 0:
-        try:
-            stream = TelegramStreamMessage(bot, cid, limiter)
-            for chunk in _iter_stream_chunks(stripped):
-                await stream.push_delta(chunk, force=True)
-            await stream.finalize(text)
-            return stream.message_id
-        except Exception as e:
-            logger.warning("[telegram] stream edit 失败，降级普通发送: %s", e)
-            return await send_markdown(bot, cid, text, limiter)
-
-    return await send_markdown(bot, cid, text, limiter)

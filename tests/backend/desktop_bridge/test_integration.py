@@ -865,13 +865,13 @@ async def test_desktop_bridge_push_rolls_back_runtime_side_effects_when_persist_
         presence=presence,
     )
 
-    result = await push_tool.execute(
-        channel="desktop",
-        chat_id=role.id,
-        message="主动消息",
-    )
+    with pytest.raises(RuntimeError, match="db down"):
+        await push_tool.execute(
+            channel="desktop",
+            chat_id=role.id,
+            message="主动消息",
+        )
 
-    assert "发送失败" in result
     assert presence.calls == []
     assert relationship.calls == []
     session = session_manager.get_or_create("role:mira")

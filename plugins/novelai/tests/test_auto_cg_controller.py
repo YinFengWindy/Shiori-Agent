@@ -112,10 +112,6 @@ async def test_controller_records_state_only_after_image_push_succeeds(
     tmp_path: Path,
 ) -> None:
     policy = AutoCgPolicy(FakeKV())
-
-    async def failing_image_sender(_chat_id: str, _image: str) -> None:
-        raise RuntimeError("desktop unavailable")
-
     push_tool = SimpleNamespace(
         name="message_push", execute=AsyncMock(return_value="图片已发送")
     )
@@ -149,11 +145,18 @@ async def test_controller_records_state_only_after_image_push_succeeds(
         visual_description="少女站在雨里",
     )
 
-    push_tool.execute.return_value = "图片发送失败"
-    with pytest.raises(RuntimeError, match="自动场景 CG 补发失败"):
+    push_tool.execute.side_effect = RuntimeError("desktop unavailable")
+    with pytest.raises(RuntimeError, match="desktop unavailable"):
         await controller._run(event, role_id="mira", bypass_cooldown=True)
 
     assert policy.cooldown_remaining("role:mira") == 0
+
+    # Success is "message_push returned", whatever its model-facing wording.
+    push_tool.execute.side_effect = None
+    push_tool.execute.return_value = "图片已排队，回合成功后发送"
+    await controller._run(event, role_id="mira", bypass_cooldown=True)
+
+    assert policy.cooldown_remaining("role:mira") > 0
 
 
 @pytest.mark.asyncio

@@ -14,7 +14,7 @@ from .account_sending import _AccountSendingMixin
 from .account_identity import QQBotAccountIdentity
 from .account_dispatch import _AccountDispatchMixin
 from .channel import QQBotChannel
-from .formatting import CHANNEL, PUSH_TARGET_HINT
+from .formatting import CHANNEL
 
 if TYPE_CHECKING:
     from shiori_sdk.channels.chat_types import ChatTypeDeclaration
@@ -71,13 +71,6 @@ class QQBotAccountsChannel(
     async def start(self, ctx: ChannelContext) -> None:
         """Register one public channel, then start each configured gateway."""
         self._runtime = ctx
-        ctx.push_tool.register_channel(
-            CHANNEL,
-            text=self.send,
-            stream_text=self.send_stream,
-            image=self.send_image,
-            description=PUSH_TARGET_HINT,
-        )
         ctx.bus.subscribe_outbound(CHANNEL, self._on_response)
         for event_type, handler in self._event_bindings:
             ctx.event_bus.on(event_type, handler)
@@ -101,7 +94,6 @@ class QQBotAccountsChannel(
         if self._runtime is not None:
             ctx = self._runtime
             ctx.bus.unsubscribe_outbound(CHANNEL, self._on_response)
-            ctx.push_tool.unregister_channel(CHANNEL, text=self.send)
             for event_type, handler in self._event_bindings:
                 ctx.event_bus.off(event_type, handler)
             self._runtime = None

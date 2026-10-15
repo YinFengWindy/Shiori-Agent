@@ -44,7 +44,6 @@ class RuntimeChannelHarness:
             async def start(self, context):
                 self.context = context
                 context.bus.subscribe_outbound(self.name, self.receive)
-                context.push_tool.register_channel(self.name, text=self.send)
                 self.accounts.report(self.account_id, connection="online")
 
             async def stop(self):
@@ -52,7 +51,6 @@ class RuntimeChannelHarness:
                 self.accounts.report(self.account_id, connection="offline")
                 if self.context is not None:
                     self.context.bus.unsubscribe_outbound(self.name, self.receive)
-                    self.context.push_tool.unregister_channel(self.name, text=self.send)
                 self.stopped = True
                 harness.events.append("stop")
                 if harness.fail_stop:

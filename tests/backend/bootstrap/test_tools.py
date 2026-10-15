@@ -554,7 +554,9 @@ async def test_every_generation_rejects_role_pushes_to_external_channels(
     try:
         assert app.core is not None
         sender = AsyncMock(return_value="qq-1")
-        app.core.push_tool.register_channel("qq", text=sender, image=sender)
+        app.core.push_tool.register_channel(
+            "qq", text_with_metadata=sender, image_with_metadata=sender
+        )
         candidate = await app.prepare(replace(config, dev_mode=True))
         try:
             for core in (app.core, candidate.core):

@@ -43,12 +43,10 @@ def _install_transport(monkeypatch, sent, tmp_path: Path):
             self.running = True
             self.paused = getattr(context, "intake_paused", False)
             context.bus.subscribe_outbound(self.name, self.send_outbound)
-            context.push_tool.register_channel(self.name, text=self.send)
 
         async def stop(self):
             self.running = False
             self.context.bus.unsubscribe_outbound(self.name, self.send_outbound)
-            self.context.push_tool.unregister_channel(self.name, text=self.send)
 
         async def send(self, chat_id, text):
             assert self.running
@@ -129,7 +127,7 @@ async def _prepare_account_switch(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_credential_change_drains_old_direct_and_queued_replies_before_switch(
+async def test_credential_change_drains_old_queued_replies_before_switch(
     tmp_path, monkeypatch
 ):
     sent = []
@@ -156,23 +154,21 @@ async def test_credential_change_drains_old_direct_and_queued_replies_before_swi
         assert not app.accepting_work
         assert not publish.done()
         with bind_runtime(accepted):
-            await accepted.core.push_tool.execute(
-                channel="fake", chat_id="chat", message="direct old"
-            )
             await accepted.core.bus.publish_outbound(
                 OutboundMessage("fake", "chat", "queued old")
             )
         await accepted.release()
         await asyncio.wait_for(publish, 3)
-        assert sent == [("account-A", "direct old"), ("account-A", "queued old")]
+        assert sent == [("account-A", "queued old")]
         assert app.generation == 2
         assert app._generation_manager.admission.is_set()
         assert app.accepting_work
         async with app.acquire() as fresh:
             with bind_runtime(fresh):
-                await fresh.core.push_tool.execute(
-                    channel="fake", chat_id="chat", message="new"
+                await fresh.core.bus.publish_outbound(
+                    OutboundMessage("fake", "chat", "new")
                 )
+                await fresh.core.bus.drain_outbound()
         assert sent[-1] == ("account-B", "new")
     finally:
         await accepted.release()
@@ -206,7 +202,8 @@ async def test_channel_commit_failure_restores_old_transport_and_admission(
             await app.publish(candidate, commit=fail)
         await app.discard(candidate)
         assert app.generation == 1 and app._generation_manager.admission.is_set()
-        await app.push_tool.execute(channel="fake", chat_id="chat", message="still A")
+        await app.bus.publish_outbound(OutboundMessage("fake", "chat", "still A"))
+        await app.bus.drain_outbound()
         assert sent == [("account-A", "still A")]
     finally:
         await app.shutdown()

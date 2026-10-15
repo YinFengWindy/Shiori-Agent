@@ -87,15 +87,12 @@ async def test_removed_channel_keeps_older_generation_work_and_scope_until_stop(
         await asyncio.sleep(0)
         assert not connection.stopped
         with bind_runtime(oldest):
-            await oldest.core.push_tool.execute(
-                channel="lifecycle", chat_id="one", message="direct old"
-            )
             await app.bus.publish_outbound(
                 OutboundMessage("lifecycle", "one", "queued old")
             )
         await oldest.release()
         await asyncio.wait_for(app.channel_host._retirements.drain(), 3)
-        assert runtime_channels.events == ["direct old", "queued old", "stop"]
+        assert runtime_channels.events == ["queued old", "stop"]
         assert connection.stop_calls == 1
         assert not app.channel_host._retirements.errors
     finally:

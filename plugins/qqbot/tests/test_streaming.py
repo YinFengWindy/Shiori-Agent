@@ -163,7 +163,7 @@ def test_qqbot_opts_c2c_chats_into_stream_events_and_prompt_rules() -> None:
     hint = channel.system_prompt_hint("c2c:app:user-1")
     assert hint.startswith("## 官方 QQBot 渠道规则（硬性）")
     assert "`channel=qqbot`" in hint
-    assert "c2c:<app_id>:<user_openid>" in hint
+    assert "`account_send`" in hint
 
 
 @pytest.mark.asyncio
