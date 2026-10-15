@@ -1,6 +1,6 @@
 import { createFakeHostServices, createFakePluginClient } from "@yinfengwindy/shiori-sdk/testing";
 import type { PluginEventHandler, RoleRecord } from "@yinfengwindy/shiori-sdk";
-import type { AgentCommand, AgentDetailResponse, AgentListResponse, AgentSummary, AgentWorkspace, TaskDetail, TaskListResponse, TaskSummary } from "./types";
+import type { AgentCommand, AgentDetailResponse, AgentHandler, AgentListResponse, AgentSummary, AgentWorkspace, TaskDetail, TaskListResponse, TaskSummary } from "./types";
 
 /** A task list entry as `tasks.list` returns it. */
 export function makeSummary(patch: Partial<TaskSummary> = {}): TaskSummary {
@@ -23,6 +23,14 @@ export function makeDetail(patch: Partial<TaskDetail> = {}): TaskDetail {
 /** An agent of the session as `agents.list` returns it. */
 export function makeAgent(patch: Partial<AgentSummary> = {}): AgentSummary {
   return { pane_id: "wR:p2", workspace_id: "wR", agent: "claude", status: "working", title: "herdr插件问题", cwd: "D:/Coding/Shiori", task_id: null, ...patch };
+}
+
+/** One recorded command as `agents.get` returns it. */
+export function makeCommand(patch: Partial<AgentCommand> = {}): AgentCommand {
+  return {
+    id: "c", kind: "prompt", content: "继续", source: { kind: "user", role_id: "", role_name: "" }, sent_at: "2026-10-15T10:00:00Z",
+    status: "sent", error: "", report: "none", report_error: "", ...patch,
+  };
 }
 
 /** A workspace group of `agents.list`. */
@@ -48,6 +56,7 @@ export function herdrBackend(tasks: TaskDetail[] = [makeDetail()], roles: RoleRe
   let agents: AgentListResponse = { session: "default", workspaces };
   let agentsError: Error | null = null;
   let commandError: Error | null = null;
+  let handler: AgentHandler | null = null;
   const commands: AgentCommand[] = [];
   const summary = ({ id, title, status, finished, stage, progress_detail, progress_updated_at, role_id, agent, repository, branch, created_at, updated_at, revision }: TaskDetail): TaskSummary =>
     ({ id, title, status, finished, stage, progress_detail, progress_updated_at, role_id, agent, repository, branch, created_at, updated_at, revision });
@@ -63,14 +72,14 @@ export function herdrBackend(tasks: TaskDetail[] = [makeDetail()], roles: RoleRe
         const agent = agents.workspaces.flatMap((group) => group.agents).find((item) => item.pane_id === payload?.pane_id) ?? null;
         const task = state.tasks.find((item) => item.id === agent?.task_id) ?? null;
         const canPrompt = agent !== null && !["queued", "preparing", "running", "cancelling"].includes(task?.status ?? "");
-        return structuredClone({ session: agents.session, agent, output: agent ? `output of ${agent.pane_id}` : "", task, commands, can_prompt: canPrompt } satisfies AgentDetailResponse) as T;
+        return structuredClone({ session: agents.session, agent, output: agent ? `output of ${agent.pane_id}` : "", task, commands, can_prompt: canPrompt, handler } satisfies AgentDetailResponse) as T;
       }
       if (name === "agents.prompt" || name === "agents.keys") {
         const prompt = name === "agents.prompt";
-        const command: AgentCommand = {
+        const command = makeCommand({
           id: `c${commands.length}`, kind: prompt ? "prompt" : "keys", content: prompt ? String(payload?.text) : (payload?.keys as string[]).join(" "),
-          source: { kind: "user", role_id: "", role_name: "" }, sent_at: "2026-10-15T10:00:00Z", status: commandError ? "failed" : "sent", error: commandError?.message ?? "",
-        };
+          status: commandError ? "failed" : "sent", error: commandError?.message ?? "", report: !commandError && handler ? "pending" : "none",
+        });
         commands.push(command);
         if (commandError) throw commandError;
         return structuredClone({ command }) as T;
@@ -92,6 +101,8 @@ export function herdrBackend(tasks: TaskDetail[] = [makeDetail()], roles: RoleRe
     setWorkspaces(next: AgentWorkspace[]) { agents = { ...agents, workspaces: next }; },
     /** Makes `agents.list` fail, as an unavailable session does; null recovers. */
     failAgents(error: Error | null) { agentsError = error; },
+    /** The role `agents.get` reports as handling every agent; null for none. */
+    setHandler(next: AgentHandler | null) { handler = next; },
     /** Makes `agents.prompt` / `agents.keys` fail (and record the failure); null recovers. */
     failCommands(error: Error | null) { commandError = error; },
     emit(taskId: string, revision: number) {

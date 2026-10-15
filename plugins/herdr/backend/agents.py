@@ -6,7 +6,8 @@ from typing import Any
 from shiori_sdk.plugin_services import ServicePluginContext
 from shiori_sdk.rpc import Concurrency
 
-from .agent_control import USER, AgentControl, require_pane_id
+from .agent_commands import USER
+from .agent_control import AgentControl, require_pane_id
 from .cli import CommandError
 from .models import CodingTask
 from .service import TaskService
@@ -106,11 +107,13 @@ class SessionAgents:
 
         An agent Herdr no longer knows is reported as `agent: null`, so the
         desktop can say it is gone instead of showing a read error.
-        `can_prompt` tells whether the agent takes direct input now.
+        `can_prompt` tells whether the agent takes direct input now; `handler`
+        is the role its commands are reported to, or null.
         """
         pane_id = require_pane_id(payload.get("pane_id"))
         session = self.cli.config.session
         commands = self.control.log.records(session, pane_id)
+        handler = self.control.watcher.handler(session, pane_id)
 
         async def read() -> tuple[dict[str, Any], str]:
             agent = (await self.cli.call("agent", "get", pane_id))["agent"]
@@ -138,6 +141,7 @@ class SessionAgents:
                 "task": None,
                 "commands": commands,
                 "can_prompt": False,
+                "handler": handler,
             }
         task = linked_task(self.service.tasks.values(), session, pane_id)
         return {
@@ -147,6 +151,7 @@ class SessionAgents:
             "task": task_detail(self.service, task) if task else None,
             "commands": commands,
             "can_prompt": not self.control.refusal(pane_id),
+            "handler": handler,
         }
 
     async def prompt_agent(self, payload: dict[str, object]) -> dict[str, object]:

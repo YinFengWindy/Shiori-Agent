@@ -1,6 +1,7 @@
 import { LinkBreak } from "@phosphor-icons/react";
-import type { PluginHostServices, PluginRpcClient } from "@yinfengwindy/shiori-sdk";
+import type { PluginHostServices, PluginRpcClient, RoleRecord } from "@yinfengwindy/shiori-sdk";
 import { AgentComposer, type DirectControl } from "./AgentComposer";
+import { AgentHandlerLine } from "./AgentHandlerLine";
 import { AgentHeader } from "./AgentHeader";
 import { CommandLog } from "./CommandLog";
 import { EmptyState } from "./EmptyState";
@@ -17,7 +18,7 @@ import type { AgentSummary } from "./types";
  * direct input only while no run of the task owns it; an agent Herdr no
  * longer lists or knows says so instead of going blank.
  */
-export function AgentDetailView({ paneId, listed, listLoaded, listError, roleName, tasksConnected, pollMs, client, host }: {
+export function AgentDetailView({ paneId, listed, listLoaded, listError, roleName, findRole, tasksConnected, pollMs, client, host }: {
   paneId: string;
   /** The agent as the latest list shows it; undefined once it left the list. */
   listed: AgentSummary | undefined;
@@ -26,6 +27,8 @@ export function AgentDetailView({ paneId, listed, listLoaded, listError, roleNam
   listError: string;
   /** The originating role of the agent's plugin task. */
   roleName: (taskId: string) => string;
+  /** A role of the host by ID, for the agent's handling role. */
+  findRole: (roleId: string) => RoleRecord | undefined;
   /** Task actions follow the task feeds' connection. */
   tasksConnected: boolean;
   pollMs: number;
@@ -53,7 +56,9 @@ export function AgentDetailView({ paneId, listed, listLoaded, listError, roleNam
   return (
     <article className="flex min-h-0 flex-1 flex-col" aria-label="Agent 详情">
       {failure}
-      <AgentHeader agent={agent} primary={!agent.task_id} />
+      <AgentHeader agent={agent} primary={!agent.task_id}>
+        {detail.value?.agent ? <AgentHandlerLine handler={detail.value.handler} findRole={findRole} host={host} /> : null}
+      </AgentHeader>
       {agent.task_id ? (
         <TaskDetailView
           key={agent.task_id}

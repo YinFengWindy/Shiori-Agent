@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { act } from "react";
 import { changeInputValue, createFakeHostServices, createFakePluginClient, deferred, mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import { AgentComposer } from "./AgentComposer";
+import { makeCommand } from "./testFixtures";
 import type { AgentCommandResponse } from "./types";
 
 test("the draft goes to the agent as a prompt and clears; a failure keeps it and shows why", async () => {
@@ -22,7 +23,7 @@ test("the draft goes to the agent as a prompt and clears; a failure keeps it and
       input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
     });
     assert.deepEqual(calls, [{ name: "agents.prompt", payload: { pane_id: "wR:p2", text: "继续\n第二行" } }]);
-    await act(async () => request.resolve({ command: { id: "c", kind: "prompt", content: "继续", source: { kind: "user", role_id: "", role_name: "" }, sent_at: "", status: "sent", error: "" } }));
+    await act(async () => request.resolve({ command: makeCommand() }));
     assert.equal(input.value, "");
     assert.equal(sent, 1);
 

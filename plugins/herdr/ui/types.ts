@@ -118,12 +118,19 @@ export type AgentCommand = {
   sent_at: string;
   status: "sending" | "sent" | "unconfirmed" | "failed";
   error: string;
+  /** Whether the agent's handling role hears how the agent ended up after this command. */
+  report: "none" | "pending" | "reported" | "failed";
+  report_error: string;
 };
+
+/** The role an agent's commands are reported to: the last role that sent it one. */
+export type AgentHandler = { role_id: string; role_name: string };
 
 /**
  * `agents.get`; `agent` is null once Herdr no longer knows the agent.
  * `commands` is the agent's record in this Shiori run, oldest first;
- * `can_prompt` is false while a plugin task's run owns the agent.
+ * `can_prompt` is false while a plugin task's run owns the agent;
+ * `handler` is null while no role handles it, so nothing is reported.
  */
 export type AgentDetailResponse = {
   session: string;
@@ -132,6 +139,7 @@ export type AgentDetailResponse = {
   task: TaskDetail | null;
   commands: AgentCommand[];
   can_prompt: boolean;
+  handler: AgentHandler | null;
 };
 
 /** `agents.prompt` / `agents.keys`: the recorded command. */

@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { AgentStatusLabel } from "./AgentStatusLabel";
 import { agentKindLabel, agentTitle } from "./agentSelectors";
 import type { AgentSummary } from "./types";
@@ -7,7 +8,7 @@ import type { AgentSummary } from "./types";
  * and working directory. Above a plugin task the task's title is the page
  * heading, so the agent's title is not one there.
  */
-export function AgentHeader({ agent, primary }: { agent: AgentSummary; primary: boolean }) {
+export function AgentHeader({ agent, primary, children }: { agent: AgentSummary; primary: boolean; children?: ReactNode }) {
   const title = agentTitle(agent);
   return (
     <header className="grid gap-1 border-b border-line-soft px-6 pb-4 pt-5" aria-label="Agent">
@@ -22,6 +23,7 @@ export function AgentHeader({ agent, primary }: { agent: AgentSummary; primary: 
       <p className="min-w-0 truncate text-body-sm text-ink-muted" title={agent.cwd}>
         {agentKindLabel(agent.agent)} · {agent.cwd}
       </p>
+      {children}
     </header>
   );
 }

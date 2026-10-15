@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { act } from "react";
 import { changeInputValue, mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import { AgentDetailView } from "./AgentDetailView";
-import { herdrBackend, makeAgent, makeDetail, makeWorkspace } from "./testFixtures";
+import { herdrBackend, makeAgent, makeDetail, makeRole, makeWorkspace } from "./testFixtures";
 import type { AgentSummary } from "./types";
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -16,6 +16,7 @@ function detailView(backend: ReturnType<typeof herdrBackend>, agent: AgentSummar
       listLoaded
       listError=""
       roleName={() => "Mira"}
+      findRole={(roleId) => (roleId === "role-a" ? makeRole("role-a", "Mira") : undefined)}
       tasksConnected
       pollMs={5}
       client={backend.client}
@@ -76,12 +77,32 @@ test("a message sent to an agent joins its record as from 「你」; a running t
     await changeInputValue(input, "继续");
     await act(async () => view.container.querySelector<HTMLButtonElement>('button[aria-label="发送"]')?.click());
     await act(async () => wait(10));
-    assert.match(view.container.querySelector('[aria-label="指令记录"]')?.textContent ?? "", /你继续/);
+    assert.match(view.container.querySelector('[aria-label="指令记录"]')?.textContent ?? "", /你不回报继续/);
 
     await view.render(detailView(backend, working));
     await act(async () => wait(10));
     assert.ok(view.container.querySelector('textarea[aria-label="追加要求"]'));
     assert.equal(view.container.querySelector('button[aria-label="中断"]'), null);
     assert.equal(Array.from(view.container.querySelectorAll("button")).some((button) => button.textContent === "直接发送"), false);
+  } finally { await view.cleanup(); }
+});
+
+test("the agent's handling role heads its commands, which say whether they are reported", async () => {
+  const agent = makeAgent();
+  const backend = herdrBackend([], [], [makeWorkspace("Shiori", [agent])]);
+  const view = await mountTestComponent(detailView(backend, agent));
+  const handler = () => view.container.querySelector('[aria-label="接手角色"]')?.textContent ?? "";
+  try {
+    await act(async () => wait(10));
+    assert.equal(handler(), "无人接手，不会回报");
+
+    backend.setHandler({ role_id: "role-a", role_name: "Mira" });
+    const input = view.container.querySelector<HTMLTextAreaElement>('textarea[aria-label="发给 Agent"]');
+    assert.ok(input);
+    await changeInputValue(input, "继续");
+    await act(async () => view.container.querySelector<HTMLButtonElement>('button[aria-label="发送"]')?.click());
+    await act(async () => wait(10));
+    assert.match(handler(), /接手Mira/);
+    assert.match(view.container.querySelector('[aria-label="指令记录"]')?.textContent ?? "", /你待回报继续/);
   } finally { await view.cleanup(); }
 });
