@@ -9,8 +9,9 @@ from .service import TaskService
 from .tool import StartCodingTask
 from .management_tools import TaskManagementTool
 from .dashboard import Dashboard
-from .sessions import register_session_rpc
+from .sessions import SessionGate, register_session_rpc
 from .agents import SessionAgents
+from .agent_control import AgentCommandLog, AgentControl
 
 
 async def setup(ctx: ServicePluginContext) -> None:
@@ -22,11 +23,16 @@ async def setup(ctx: ServicePluginContext) -> None:
         "tasks-v1", lambda: TaskService(directory, ctx.processes)
     )
     ctx.expose(service)
+    # Command records outlive configuration reloads like the tasks do.
+    commands = ctx.process_resources.acquire("agent-commands-v1", AgentCommandLog)
     Dashboard(service, ctx).register()
-    # The retained task service may belong to an earlier generation; listing
-    # sessions uses only this generation's config and process capability.
-    register_session_rpc(ctx, HerdrCli(config, ctx.processes, directory))
-    SessionAgents(service, ctx, config, directory).register()
+    # The retained task service may belong to an earlier generation; sessions
+    # and agents use only this generation's config and process capability,
+    # so the CommandError caught there is this generation's own.
+    cli = HerdrCli(config, ctx.processes, directory)
+    register_session_rpc(ctx, cli)
+    control = AgentControl(SessionGate(cli, ctx.process_resources), commands, service)
+    SessionAgents(service, ctx, control).register()
     ctx.tools.register(
         StartCodingTask(service, ctx.background_results, config, ctx.process_resources),
         risk="external-side-effect",

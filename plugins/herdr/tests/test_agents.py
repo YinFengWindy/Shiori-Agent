@@ -1,14 +1,17 @@
-"""Session agent RPC: workspace grouping, task links and session availability."""
+"""Session agent RPC: workspace grouping, task links, session availability, commands."""
 
+import asyncio
 import json
 
 import pytest
 
+from plugins.herdr.backend.agent_control import AgentCommandLog, AgentControl
 from plugins.herdr.backend.agents import SessionAgents
-from plugins.herdr.backend.cli import CommandError
+from plugins.herdr.backend.cli import CommandError, HerdrCli
 from plugins.herdr.backend.config import HerdrConfig
 from plugins.herdr.backend.models import CodingTask
 from plugins.herdr.backend.service import TaskService
+from plugins.herdr.backend.sessions import SessionGate
 from shiori_sdk.rpc import Concurrency
 from shiori_sdk.testing.background_results import FakeBackgroundResultTarget
 from shiori_sdk.testing.service_context import FakeServiceContext
@@ -79,6 +82,8 @@ class ScriptedHerdr:
             if self.read_error:
                 raise self.read_error
             return f"output of {argv[5]} via {argv[7]}"
+        if argv[3:5] in (["agent", "prompt"], ["agent", "send-keys"]):
+            return json.dumps({"result": {"agent": self.agents[0]}})
         raise AssertionError(argv)
 
 
@@ -103,12 +108,12 @@ def make_task(tmp_path, task_id, *, pane_id, session="default", created_at="t1")
 def fixture(tmp_path):
     ctx = FakeServiceContext("herdr", tmp_path)
     service = TaskService(tmp_path, ctx.processes)
-    view = SessionAgents(
-        service, ctx.as_capability(), HerdrConfig(session="default"), tmp_path
-    )
+    cli = HerdrCli(HerdrConfig(session="default"), ctx.processes, tmp_path)
     herdr = ScriptedHerdr()
-    view.cli.command = herdr.command  # type: ignore[method-assign]
-    view.register()
+    cli.command = herdr.command  # type: ignore[method-assign]
+    gate = SessionGate(cli, ctx.process_resources)
+    control = AgentControl(gate, AgentCommandLog(), service)
+    SessionAgents(service, ctx.as_capability(), control).register()
     return ctx, service, herdr
 
 
@@ -169,7 +174,14 @@ async def test_get_reads_the_agent_and_its_task_and_reports_a_gone_agent(
 
     herdr.agents = []
     gone = await ctx.rpc.handlers["agents.get"]({"pane_id": "w9:p1"})
-    assert gone == {"session": "default", "agent": None, "output": "", "task": None}
+    assert gone == {
+        "session": "default",
+        "agent": None,
+        "output": "",
+        "task": None,
+        "commands": [],
+        "can_prompt": False,
+    }
     await ctx.aclose()
 
 
@@ -197,4 +209,44 @@ async def test_session_is_checked_once_and_a_failed_read_reports_the_reason(
     ctx.process_resources.active = False
     with pytest.raises(RuntimeError, match="配置已替换"):
         await list_agents({})
+    await ctx.aclose()
+
+
+async def test_the_users_prompt_and_keys_are_recorded_and_returned_by_get(
+    fixture, tmp_path
+):
+    ctx, service, herdr = fixture
+    for name in ("agents.prompt", "agents.keys"):
+        assert ctx.rpc.concurrency[name] is Concurrency.INTEGRATION
+
+    await ctx.rpc.handlers["agents.prompt"]({"pane_id": "wR:p2", "text": "继续"})
+    await ctx.rpc.handlers["agents.keys"]({"pane_id": "wR:p2", "keys": ["ctrl+c"]})
+
+    assert herdr.argv[-2][3:6] == ["agent", "prompt", "wR:p2"]
+    assert herdr.argv[-1] == [
+        "herdr",
+        *("--session", "default", "agent", "send-keys", "wR:p2", "ctrl+c"),
+    ]
+    detail = await ctx.rpc.handlers["agents.get"]({"pane_id": "wR:p2"})
+    assert detail["can_prompt"] is True
+    assert [
+        (item["kind"], item["content"], item["source"], item["status"])
+        for item in detail["commands"]
+    ] == [
+        ("prompt", "继续", {"kind": "user", "role_id": "", "role_name": ""}, "sent"),
+        ("keys", "ctrl+c", {"kind": "user", "role_id": "", "role_name": ""}, "sent"),
+    ]
+
+    # A plugin task's running agent takes no direct input.
+    task = make_task(tmp_path, "busy", pane_id="wR:p2")
+    service.tasks[task.id] = task
+    task.worker = asyncio.get_running_loop().create_future()  # type: ignore[assignment]
+    assert (await ctx.rpc.handlers["agents.get"]({"pane_id": "wR:p2"}))[
+        "can_prompt"
+    ] is False
+    sent = len(herdr.argv)
+    with pytest.raises(ValueError, match="插件任务"):
+        await ctx.rpc.handlers["agents.prompt"]({"pane_id": "wR:p2", "text": "插话"})
+    assert len(herdr.argv) == sent
+    task.worker.cancel()
     await ctx.aclose()

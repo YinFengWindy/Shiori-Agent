@@ -53,3 +53,23 @@ test("sending submits once, applies the service's answer and clears; a failure k
     assert.equal(input.value, "再来一次");
   } finally { await view.cleanup(); }
 });
+
+test("with direct input, 直接发送 sends the same draft to the agent outside the task, beside Ctrl+C", async () => {
+  const fake = createFakeHostServices();
+  const calls: unknown[] = [];
+  const client = createFakePluginClient({ call: async <T,>(name: string, payload?: Record<string, unknown>) => { calls.push({ name, payload }); return {} as T; } });
+  // The task cannot continue right now, yet the agent takes direct input.
+  const view = await mountTestComponent(
+    <ContinueComposer task={makeDetail({ status: "completed", can_continue: false })} connected client={client} host={fake.host} onApplied={() => {}} direct={{ paneId: "w9:p1", enabled: true, onSent: () => {} }} />,
+  );
+  try {
+    const input = view.container.querySelector("textarea");
+    assert.ok(input);
+    await changeInputValue(input, "顺手看下日志");
+    const direct = Array.from(view.container.querySelectorAll("button")).find((button) => button.textContent === "直接发送");
+    assert.equal(view.container.querySelector<HTMLButtonElement>('button[aria-label="发送追加要求"]')?.disabled, true);
+    await act(async () => direct?.click());
+    assert.deepEqual(calls, [{ name: "agents.prompt", payload: { pane_id: "w9:p1", text: "顺手看下日志" } }]);
+    assert.ok(view.container.querySelector('button[aria-label="中断"]'));
+  } finally { await view.cleanup(); }
+});

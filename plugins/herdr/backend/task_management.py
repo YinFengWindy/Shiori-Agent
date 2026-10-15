@@ -2,6 +2,7 @@
 
 import asyncio
 import time
+from collections.abc import Iterable
 from contextvars import Context
 from uuid import uuid4
 from typing import TYPE_CHECKING
@@ -21,6 +22,29 @@ def owned_task(service: "TaskService", task_id: str, role_id: str) -> CodingTask
     return task
 
 
+def linked_task(
+    tasks: Iterable[CodingTask], session: str, pane_id: object
+) -> CodingTask | None:
+    """The newest plugin task started in this session on this pane.
+
+    Herdr documents closed pane IDs as never reused (`herdr --skill`), so the
+    pane alone identifies the agent; a moved pane gets a new ID and its task
+    falls back to the unlisted group. A momentarily different detected kind
+    must not list the agent twice.
+    """
+    matches = [
+        task
+        for task in tasks
+        if task.pane_id and task.config.session == session and task.pane_id == pane_id
+    ]
+    return max(matches, key=lambda task: task.created_at, default=None)
+
+
+def run_in_progress(task: CodingTask) -> bool:
+    """Whether a run of the task is still executing, reporting or cancelling."""
+    return task.worker is not None and not task.worker.done()
+
+
 FINISHED_STATUSES = frozenset(
     {"completed", "cancelled", "failed", "monitoring_stopped"}
 )
@@ -37,7 +61,7 @@ def continue_refusal(service: "TaskService", task: CodingTask) -> str:
     """
     if service.closed:
         return "Herdr 插件已停止追踪"
-    if task.worker is not None and not task.worker.done():
+    if run_in_progress(task):
         return "任务仍在执行或汇报，请等待当前回合结束"
     if not task.pane_id or task.worktree is None:
         return "任务尚无可继续的 agent/worktree"

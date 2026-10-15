@@ -105,5 +105,34 @@ export type AgentWorkspace = { workspace_id: string; label: string; agents: Agen
 /** `agents.list`: every agent of the configured session, grouped by workspace. */
 export type AgentListResponse = { session: string; workspaces: AgentWorkspace[] };
 
-/** `agents.get`; `agent` is null once Herdr no longer knows the agent. */
-export type AgentDetailResponse = { session: string; agent: AgentSummary | null; output: string; task: TaskDetail | null };
+/** Who sent a command: the panel's user, or a role (the role tools). */
+export type CommandSource = { kind: "user" | "role"; role_id: string; role_name: string };
+
+/** One prompt or key sequence sent to an agent; `unconfirmed` may still have been delivered. */
+export type AgentCommand = {
+  id: string;
+  kind: "prompt" | "keys";
+  /** The prompt text, or the Herdr key names joined by spaces. */
+  content: string;
+  source: CommandSource;
+  sent_at: string;
+  status: "sending" | "sent" | "unconfirmed" | "failed";
+  error: string;
+};
+
+/**
+ * `agents.get`; `agent` is null once Herdr no longer knows the agent.
+ * `commands` is the agent's record in this Shiori run, oldest first;
+ * `can_prompt` is false while a plugin task's run owns the agent.
+ */
+export type AgentDetailResponse = {
+  session: string;
+  agent: AgentSummary | null;
+  output: string;
+  task: TaskDetail | null;
+  commands: AgentCommand[];
+  can_prompt: boolean;
+};
+
+/** `agents.prompt` / `agents.keys`: the recorded command. */
+export type AgentCommandResponse = { command: AgentCommand };
