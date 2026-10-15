@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from agent.tools.message_push import MessagePushTool
+from tests.support.push import allow_every_role_target
 from bus.event_bus import EventBus
 from shiori_sdk.channel_events import StreamDeltaReady
 from shiori_sdk.memory.committed import TurnCommitted
@@ -772,7 +773,7 @@ async def test_desktop_bridge_emits_session_updated_for_background_desktop_push(
         system_prompt="you are mira",
     )
     session_manager = SessionManager(tmp_path)
-    push_tool = MessagePushTool()
+    push_tool = MessagePushTool(role_target_validator=allow_every_role_target)
     service = DesktopBridgeService(
         workspace=tmp_path,
         role_store=role_store,
@@ -844,7 +845,7 @@ async def test_desktop_bridge_push_rolls_back_runtime_side_effects_when_persist_
     )
     session_manager = SessionManager(tmp_path)
     session_manager.save_async = AsyncMock(side_effect=RuntimeError("db down"))  # type: ignore[method-assign]
-    push_tool = MessagePushTool()
+    push_tool = MessagePushTool(role_target_validator=allow_every_role_target)
     presence = _Presence()
     relationship = _Relationship()
     _ = DesktopBridgeService(
@@ -898,7 +899,7 @@ async def test_desktop_bridge_desktop_push_does_not_duplicate_existing_proactive
         "assistant", "主动消息", proactive=True, tools_used=["message_push"]
     )
     await session_manager.save_async(session)
-    push_tool = MessagePushTool()
+    push_tool = MessagePushTool(role_target_validator=allow_every_role_target)
     _ = DesktopBridgeService(
         workspace=tmp_path,
         role_store=role_store,

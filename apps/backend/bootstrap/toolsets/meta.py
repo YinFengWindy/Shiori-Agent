@@ -22,7 +22,9 @@ class CommonMetaToolsetProvider(ToolsetProvider):
 
     def register(self, registry: ToolRegistry, deps: ToolsetDeps):
         before = set(registry._tools.keys())
-        push_tool = register_common_meta_tools(
+        if deps.push_tool is None:
+            raise ValueError("meta_common toolset 缺少 push_tool")
+        register_common_meta_tools(
             registry,
             self._readonly_tools,
             deps.session_store,
@@ -34,7 +36,6 @@ class CommonMetaToolsetProvider(ToolsetProvider):
             registry=registry,
             source_name="meta_common",
             before=before,
-            extras={"push_tool": push_tool},
         )
 
 

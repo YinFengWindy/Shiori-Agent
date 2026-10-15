@@ -3,20 +3,15 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from agent.tools.message_push import (
-    MessagePushTool,
-    PushOutcome,
-    record_delivered_push,
-)
+from agent.tools.message_push import MessagePushTool, PushOutcome
+from tests.support.push import allow_every_role_target
 from agent.tools.registry import ToolRegistry
-from bus.event_bus import EventBus
-from bus.events_lifecycle import ExternalTextPushed
 from core.common.runtime_scope import bind_runtime
 
 
 @pytest.mark.parametrize("payload", [{"message": "CG"}, {"image": "cg.png"}])
 async def test_supplemental_delivery_forwards_its_intent(payload):
-    tool = MessagePushTool()
+    tool = MessagePushTool(role_target_validator=allow_every_role_target)
     sender = AsyncMock(return_value=None)
     tool.register_channel(
         "desktop", text_with_metadata=sender, image_with_metadata=sender
@@ -32,7 +27,7 @@ async def test_supplemental_delivery_forwards_its_intent(payload):
 
 @pytest.mark.parametrize("value", [None, 0, 1, "false", "true"])
 async def test_invalid_push_intent_is_rejected_before_transport(value):
-    tool = MessagePushTool()
+    tool = MessagePushTool(role_target_validator=allow_every_role_target)
     sender = AsyncMock(return_value=None)
     tool.register_channel("desktop", image_with_metadata=sender)
 
@@ -46,7 +41,7 @@ async def test_invalid_push_intent_is_rejected_before_transport(value):
 
 @pytest.mark.parametrize("host_intent", [None, False, True])
 async def test_model_cannot_supply_or_override_push_intent(host_intent):
-    tool = MessagePushTool()
+    tool = MessagePushTool(role_target_validator=allow_every_role_target)
     sender = AsyncMock(return_value=None)
     tool.register_channel("desktop", image_with_metadata=sender)
     registry = ToolRegistry()
@@ -73,7 +68,7 @@ async def test_model_cannot_supply_or_override_push_intent(host_intent):
     "extra_payload", [{}, {"message": "caption", "image": "cg.png"}]
 )
 async def test_supplemental_file_is_rejected_before_any_payload_is_sent(extra_payload):
-    tool = MessagePushTool()
+    tool = MessagePushTool(role_target_validator=allow_every_role_target)
     sender = AsyncMock(return_value=None)
     tool.register_channel("desktop", text=sender, image=sender, file=sender)
 
@@ -101,7 +96,7 @@ async def test_supplemental_file_is_rejected_before_any_payload_is_sent(extra_pa
     ],
 )
 async def test_blank_payload_is_rejected_before_resolving_or_sending(payload):
-    tool = MessagePushTool()
+    tool = MessagePushTool(role_target_validator=allow_every_role_target)
     send = AsyncMock(return_value=None)
 
     def resolve(_chat_id):
@@ -131,7 +126,7 @@ async def test_blank_payload_is_rejected_before_resolving_or_sending(payload):
     ],
 )
 async def test_only_nonblank_fields_are_sent_without_changing_content(field, value):
-    tool = MessagePushTool()
+    tool = MessagePushTool(role_target_validator=allow_every_role_target)
     senders = {
         name: AsyncMock(return_value=None) for name in ("message", "file", "image")
     }
@@ -157,7 +152,7 @@ async def test_only_nonblank_fields_are_sent_without_changing_content(field, val
 
 @pytest.mark.asyncio
 async def test_retired_transport_only_sends_for_previously_accepted_generation():
-    tool = MessagePushTool()
+    tool = MessagePushTool(role_target_validator=allow_every_role_target)
     send = AsyncMock(return_value=None)
     tool.register_channel("telegram", text=send)
     tool.retire_channel("telegram")
@@ -174,7 +169,7 @@ async def test_retired_transport_only_sends_for_previously_accepted_generation()
 
 @pytest.mark.parametrize("sender_name", ["text", "stream_text"])
 async def test_delivery_metadata_keeps_legacy_senders_compatible(sender_name):
-    tool = MessagePushTool()
+    tool = MessagePushTool(role_target_validator=allow_every_role_target)
     sender = AsyncMock(return_value=None)
     tool.register_channel("telegram", **{sender_name: sender})
 
@@ -191,7 +186,7 @@ async def test_delivery_metadata_keeps_legacy_senders_compatible(sender_name):
 
 
 async def test_metadata_sender_uses_push_identity_not_shared_turn_identity():
-    tool = MessagePushTool()
+    tool = MessagePushTool(role_target_validator=allow_every_role_target)
     sender = AsyncMock(return_value=None)
     tool.register_channel("desktop", text_with_metadata=sender)
 
@@ -230,7 +225,7 @@ async def test_metadata_sender_uses_push_identity_not_shared_turn_identity():
 
 
 async def test_model_json_cannot_impersonate_pending_turn_delivery():
-    tool = MessagePushTool()
+    tool = MessagePushTool(role_target_validator=allow_every_role_target)
     sender = AsyncMock(return_value=None)
     tool.register_channel("desktop", text_with_metadata=sender)
     await tool.execute(
@@ -247,7 +242,7 @@ async def test_model_json_cannot_impersonate_pending_turn_delivery():
 async def test_unsupported_payload_rejects_all_requested_sends_before_delivery(
     unsupported,
 ):
-    tool = MessagePushTool()
+    tool = MessagePushTool(role_target_validator=allow_every_role_target)
     senders = {name: AsyncMock(return_value=None) for name in ("text", "file", "image")}
     tool.register_channel(
         "limited",
@@ -270,7 +265,7 @@ async def test_unsupported_payload_rejects_all_requested_sends_before_delivery(
 
 @pytest.mark.asyncio
 async def test_message_push_tool_covers_success_failure_and_fallbacks():
-    tool = MessagePushTool()
+    tool = MessagePushTool(role_target_validator=allow_every_role_target)
     sent = {"text": [], "stream_text": [], "file": [], "image": []}
 
     async def text(chat_id: str, message: str) -> None:
@@ -329,7 +324,7 @@ async def test_message_push_tool_covers_success_failure_and_fallbacks():
 
 @pytest.mark.asyncio
 async def test_push_reports_sender_message_ids_in_send_order():
-    tool = MessagePushTool()
+    tool = MessagePushTool(role_target_validator=allow_every_role_target)
     tool.register_channel(
         "qqbot",
         text=AsyncMock(return_value=" text-id "),
@@ -357,7 +352,7 @@ async def test_push_reports_sender_message_ids_in_send_order():
 
 @pytest.mark.asyncio
 async def test_push_failure_reports_no_message_ids():
-    tool = MessagePushTool()
+    tool = MessagePushTool(role_target_validator=allow_every_role_target)
     tool.register_channel(
         "qqbot",
         text=AsyncMock(return_value="text-id"),
@@ -372,10 +367,11 @@ async def test_push_failure_reports_no_message_ids():
 
 
 async def test_model_arguments_cannot_override_the_push_context():
-    tool = MessagePushTool()
     validated: list[str] = []
-    tool.set_role_target_validator(
-        lambda role_id, _channel, _chat_id: validated.append(role_id) or True
+    tool = MessagePushTool(
+        role_target_validator=lambda role_id, _channel, _chat_id: (
+            validated.append(role_id) or True
+        )
     )
     sender = AsyncMock(return_value=None)
     tool.register_channel("desktop", text_with_metadata=sender)
@@ -398,22 +394,4 @@ async def test_model_arguments_cannot_override_the_push_context():
     assert validated == ["mira"]
     sender.assert_awaited_once_with(
         "role:mira", "hi", {"delivery_key": "", "already_persisted": False}
-    )
-
-
-async def test_a_failure_to_record_never_fails_the_delivered_send():
-    event_bus = EventBus()
-    event_bus.on(ExternalTextPushed, AsyncMock(side_effect=OSError("disk")))
-
-    # The send already happened: the recording failure is logged, not raised.
-    await record_delivered_push(
-        event_bus,
-        ExternalTextPushed(
-            session_key="role:mira",
-            role_id="mira",
-            channel="qq",
-            chat_id="gqq:5",
-            text="该喝水啦",
-            tool="account_send",
-        ),
     )

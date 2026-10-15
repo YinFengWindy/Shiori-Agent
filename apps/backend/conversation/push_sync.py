@@ -1,16 +1,12 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from typing import Any, Protocol, cast
+from typing import Any, Protocol
 
 from bus.event_bus import EventBus
-from bus.events_lifecycle import (
-    ExternalImagePushed,
-    ExternalTextPushed,
-    ProactiveMessageCommitted,
-)
+from bus.events_lifecycle import ExternalTextPushed, ProactiveMessageCommitted
 from conversation.service import ConversationService, LegacySessionDescriptor
-from session.manager import Session, SessionManager
+from session.manager import SessionManager
 from session.manager.models import build_session_message
 
 
@@ -50,93 +46,45 @@ class ExternalPushSyncService:
         self._conversations = conversation_service or ConversationService(
             session_manager
         )
-        event_bus.on(ExternalImagePushed, self.handle_image_pushed)
         event_bus.on(ExternalTextPushed, self.handle_text_pushed)
-
-    async def handle_image_pushed(
-        self,
-        event: ExternalImagePushed,
-    ) -> ExternalImagePushed:
-        """Records a delivered image once, with its turn or at once.
-
-        Same rule as a text: a push made during a live turn becomes one of
-        that turn's drafts (still recorded if the turn fails); an image pushed
-        from a turn no live turn owns (e.g. a background task's report) is
-        stored at once.
-        """
-
-        if event.already_persisted:
-            self._validate_existing_message(event)
-            return event
-        media = [event.image]
-        await self._record_delivery(
-            event,
-            in_turn=event.attach_to_turn,
-            content="",
-            media=media,
-        )
-        return event
 
     async def handle_text_pushed(self, event: ExternalTextPushed) -> ExternalTextPushed:
         """Records a delivered text once, with its turn or at once.
 
         A push made during a live turn becomes one of that turn's drafts,
-        committed with its messages (and still recorded if the turn fails). A
-        host-owned send, or a turn push no live turn owns (e.g. a background
-        task's report), is stored at once. A delivery whose ``delivery_key``
-        the role session already holds is not stored again.
-        """
-        await self._record_delivery(
-            event,
-            in_turn=event.in_turn,
-            content=event.text,
-            media=_text_media(event),
-        )
-        return event
-
-    async def _record_delivery(
-        self,
-        event: ExternalImagePushed | ExternalTextPushed,
-        *,
-        in_turn: bool,
-        content: str,
-        media: list[str] | None,
-    ) -> None:
-        """Records one delivered push with its live turn, or at once via ``persist``.
-
-        A push made during a live turn becomes one of that turn's drafts,
         committed with its messages; if the turn never commits, ``persist``
-        records it then. Without a live turn owning it, ``persist`` runs now.
+        records it then. A host-owned send, or a turn push no live turn owns
+        (e.g. a background task's report), is stored at once.
         """
-        message = self._push_message(event, content=content, media=media)
+        message = self._push_message(event)
 
         async def persist():
             # The same draft retains its delivery time and host turn identity
             # when failure/cancellation records a push that was already sent.
             await self._persist_push(event, message)
 
-        drafts = self._live_turn_pushes(event.session_key) if in_turn else None
+        drafts = self._live_turn_pushes(event.session_key) if event.in_turn else None
         if drafts is None:
             await persist()
-            return
+            return event
         drafts.append(
             message,
             owner=self,
             if_abandoned=persist,
         )
+        return event
 
-    def _role_session_key(self, event: ExternalImagePushed | ExternalTextPushed) -> str:
+    def _role_session_key(self, event: ExternalTextPushed) -> str:
         """The role's session, which records every push of the role."""
         return self._sessions.role_session_key(event.role_id)
 
-    def _push_message(
-        self,
-        event: ExternalImagePushed | ExternalTextPushed,
-        *,
-        content: str,
-        media: list[str] | None = None,
-    ) -> dict[str, Any]:
-        """A delivered push as a role message under the target chat's thread."""
+    def _push_message(self, event: ExternalTextPushed) -> dict[str, Any]:
+        """A delivered push as a role message under the target chat's thread.
+
+        The sending tool (``event.tool``) is the message's source, sender and
+        only tool used; ``message_metadata`` is applied over those defaults
+        and carries the chat type.
+        """
         thread = self._conversations.ensure_thread_for_session(
             LegacySessionDescriptor(
                 session_key=f"{event.channel}:{event.chat_id}",
@@ -146,22 +94,19 @@ class ExternalPushSyncService:
             )
         )
         metadata: dict[str, Any] = {
-            **self._build_source_metadata(event, thread_id=thread.id)
+            **self._build_source_metadata(event, thread_id=thread.id),
+            **event.message_metadata,
         }
-        tool = "message_push"
-        if isinstance(event, ExternalTextPushed):
-            tool = event.tool
-            metadata.update(source=tool, sender_id=tool, **event.message_metadata)
-            if event.delivery_key:
-                metadata["delivery_key"] = event.delivery_key
-            if event.external_message_id:
-                metadata["external_message_id"] = event.external_message_id
+        if event.external_message_id:
+            metadata["external_message_id"] = event.external_message_id
         return build_session_message(
             "assistant",
-            content,
-            media=media,
-            proactive=event.proactive,
-            tools_used=[tool],
+            event.text,
+            media=list(event.media) or None,
+            # Always proactive: the only sender, account_send, is a send the role
+            # chose to make, never the reply to an inbound message.
+            proactive=True,
+            tools_used=[event.tool],
             thread_id=thread.id,
             sender_role="assistant",
             metadata=metadata,
@@ -169,24 +114,18 @@ class ExternalPushSyncService:
 
     async def _persist_push(
         self,
-        event: ExternalImagePushed | ExternalTextPushed,
+        event: ExternalTextPushed,
         message: dict[str, Any],
     ) -> None:
         """Appends one delivered push to the role session under the chat's thread."""
         session_key = self._role_session_key(event)
         session = self._sessions.get_or_create(session_key)
-        committed = await self._sessions.append_messages(
+        # Without before_commit the append always commits.
+        _ = await self._sessions.append_messages(
             session,
             [message],
             pending_messages=True,
-            delivery_key=(
-                (event.delivery_key or None)
-                if isinstance(event, ExternalTextPushed)
-                else None
-            ),
         )
-        if not committed:
-            return
         await self._event_bus.fanout(
             ProactiveMessageCommitted(
                 session_key=session_key,
@@ -197,43 +136,15 @@ class ExternalPushSyncService:
             )
         )
 
-    def _validate_existing_message(self, event: ExternalImagePushed) -> None:
-        session = self._sessions.get_or_create(self._role_session_key(event))
-        if self._last_message_contains(session, event):
-            return
-        raise RuntimeError("外部图片已发送，但预写入的共享会话消息不存在")
-
-    @staticmethod
-    def _last_message_contains(session: Session, event: ExternalImagePushed) -> bool:
-        if not session.messages:
-            return False
-        message = session.messages[-1]
-        metadata = message.get("metadata")
-        source = cast(dict[str, Any], metadata) if isinstance(metadata, dict) else {}
-        same_transport = (
-            str(source.get("transport_channel") or "") == event.channel
-            and str(source.get("transport_chat_id") or "") == event.chat_id
-        )
-        multi_transport_proactive = (
-            message.get("proactive") is True
-            and str(source.get("source") or "") == "proactive"
-        )
-        return (
-            message.get("role") == "assistant"
-            and event.image in list(message.get("media") or [])
-            and (same_transport or multi_transport_proactive)
-        )
-
     def _build_source_metadata(
         self,
-        event: ExternalImagePushed | ExternalTextPushed,
+        event: ExternalTextPushed,
         *,
         thread_id: str,
     ) -> dict[str, str]:
         return {
-            "source": "message_push",
-            "sender_id": "message_push",
-            "chat_type": "unknown",
+            "source": event.tool,
+            "sender_id": event.tool,
             "context_channel": event.channel,
             "context_chat_id": event.chat_id,
             "transport_channel": event.channel,
@@ -242,8 +153,3 @@ class ExternalPushSyncService:
             "thread_id": thread_id,
             "session_key_override": self._role_session_key(event),
         }
-
-
-def _text_media(event: ExternalTextPushed) -> list[str] | None:
-    """The images sent in the same message as a pushed text, if any."""
-    return list(event.media) or None

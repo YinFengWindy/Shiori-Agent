@@ -46,8 +46,10 @@ def register_common_meta_tools(
     readonly_tools: dict[str, Tool],
     session_store: Any,
     workspace: Path,
-    push_tool: MessagePushTool | None = None,
-) -> MessagePushTool:
+    push_tool: MessagePushTool,
+) -> None:
+    """Registers the always-on meta tools; ``push_tool`` is the runtime's shared
+    ``message_push`` instance, built with the role target check bound."""
     # external_allowed 标出外部上下文受限回合仍可用的内置工具（#489）。
     tools.register(
         ToolSearchTool(tools),
@@ -112,9 +114,8 @@ def register_common_meta_tools(
         search_hint="你之前说 聊过什么 历史对话",
         external_allowed=True,
     )
-    resolved_push_tool = push_tool or MessagePushTool()
     tools.register(
-        resolved_push_tool,
+        push_tool,
         always_on=True,
         risk="external-side-effect",
     )
@@ -128,7 +129,6 @@ def register_common_meta_tools(
         always_on=True,
         risk="write",
     )
-    return resolved_push_tool
 
 
 def _register_memory_tool(

@@ -26,6 +26,7 @@ from agent.tool_hooks.executor import ToolExecutor
 from agent.account_delivery import AccountSendReceipt, UserChatTarget
 from agent.tools.account_delivery import AccountSendTool
 from agent.tools.message_push import MessagePushTool
+from tests.support.push import allow_every_role_target
 from agent.tools.registry import ToolRegistry
 from bus.event_bus import EventBus
 from shiori_sdk.messages import InboundMessage
@@ -49,7 +50,7 @@ async def runtime(tmp_path):
     roles.create_role(role_id="mira", name="Mira", system_prompt="test")
     manager = SessionManager(tmp_path)
     bus = EventBus()
-    push = MessagePushTool()
+    push = MessagePushTool(role_target_validator=allow_every_role_target)
     bridge = DesktopBridgeService(
         workspace=tmp_path,
         role_store=roles,

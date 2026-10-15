@@ -15,6 +15,7 @@ from agent.config_models import WiringConfig
 from agent.lifecycle.facade import TurnLifecycle
 from shiori_sdk.lifecycle import AfterStepCtx
 from agent.looping.interrupt import TurnInterruptState
+from agent.tools.message_push import MessagePushTool
 from agent.tools.registry import ToolRegistry
 from bootstrap.tools import (
     _build_loop_deps,
@@ -31,6 +32,7 @@ from bootstrap.wiring import (
 )
 from bus.event_bus import EventBus
 from core.roles import RoleStore
+from tests.support.push import allow_every_role_target
 
 
 def _toml_value(value):
@@ -591,6 +593,7 @@ def test_build_registered_tools_respects_toolset_order_and_subset(
         tools=ToolRegistry(),
         event_publisher=EventBus(),
         agent_loop_provider=lambda: None,
+        push_tool=MessagePushTool(role_target_validator=allow_every_role_target),
     )
 
     assert calls == ["memory", "schedule", "mcp"]
@@ -847,7 +850,7 @@ def test_build_registered_tools_without_mcp_toolset_still_returns_empty_registry
         api_key="k",
         wiring=WiringConfig(toolsets=["schedule"]),
     )
-    _, _, _, mcp_registry, _ = build_registered_tools(
+    _, _, mcp_registry, _ = build_registered_tools(
         config=config,
         workspace=tmp_path,
         http_resources=cast(Any, SimpleNamespace()),
@@ -858,6 +861,7 @@ def test_build_registered_tools_without_mcp_toolset_still_returns_empty_registry
         tools=ToolRegistry(),
         event_publisher=EventBus(),
         agent_loop_provider=lambda: None,
+        push_tool=MessagePushTool(role_target_validator=allow_every_role_target),
     )
 
     assert mcp_registry is not None

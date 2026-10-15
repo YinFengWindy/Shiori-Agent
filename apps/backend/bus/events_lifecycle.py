@@ -83,21 +83,6 @@ class ProactiveMessageCommitted:
 
 
 @dataclass(frozen=True)
-class ExternalImagePushed:
-    """Describes one image successfully delivered through an external channel."""
-
-    session_key: str
-    role_id: str
-    channel: str
-    chat_id: str
-    image: str
-    attach_to_turn: bool = False
-    already_persisted: bool = False
-    # Supplemental media is delivered and recorded without starting a proactive turn.
-    proactive: bool = True
-
-
-@dataclass(frozen=True)
 class ExternalTextPushed:
     """One text delivered through an external channel by a model tool.
 
@@ -105,14 +90,14 @@ class ExternalTextPushed:
     ``message_push`` never raises it, because a role may only use it for the
     role's own desktop session. ``in_turn`` marks a push the model made during
     a turn: it is committed with that turn. Otherwise the send is stored at
-    once. ``delivery_key`` and ``external_message_id`` (the platform's ID,
-    when the sender reported one) identify the delivery, so it is stored once.
+    once. ``external_message_id`` is the platform's ID of the sent message,
+    when the sender reported one.
 
-    ``tool`` names the sending tool;
-    ``media`` are images sent with the text as the same message; and
+    ``tool`` names the sending tool, recorded as the message's source, sender
+    and only tool used; ``media`` are images sent with the text as the same message; and
     ``message_metadata`` is stored with the recorded message over the push
-    defaults (e.g. the chat type and the account delivery facts: attempt,
-    account, target and the ``ViaAccount`` snapshot).
+    defaults; it supplies the chat type and the account delivery facts
+    (attempt, account, target and the ``ViaAccount`` snapshot).
     """
 
     session_key: str
@@ -120,10 +105,8 @@ class ExternalTextPushed:
     channel: str
     chat_id: str
     text: str
-    delivery_key: str = ""
+    tool: str
     in_turn: bool = False
     external_message_id: str = ""
-    tool: str = "message_push"
     media: tuple[str, ...] = ()
     message_metadata: dict[str, Any] = field(default_factory=_empty_metadata)
-    proactive: bool = True

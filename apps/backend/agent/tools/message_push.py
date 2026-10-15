@@ -9,8 +9,6 @@ from dataclasses import dataclass
 from typing import Any
 
 from shiori_sdk.tools import Tool
-from bus.event_bus import EventBus
-from bus.events_lifecycle import ExternalImagePushed, ExternalTextPushed
 from core.common.runtime_scope import current_runtime_lease
 
 logger = logging.getLogger(__name__)
@@ -21,6 +19,12 @@ PENDING_TURN_DELIVERY = object()
 # A sender returns the platform id of the message it just sent, or None when the
 # transport exposes no such id. Blank ids are normalized to None on receipt.
 SenderResult = str | None
+
+# The authoritative binding check for role-scoped sends: (role_id, channel,
+# chat_id) -> True to allow. Any other result rejects the send; a string is an
+# actionable error surfaced unchanged, so a wrong channel is told apart from a
+# genuinely unbound target without silently rewriting it.
+RoleTargetValidator = Callable[[str, str, str], bool | str]
 
 
 @dataclass(frozen=True)
@@ -77,12 +81,13 @@ class MessagePushTool(Tool):
         "required": ["channel", "chat_id"],
     }
 
-    def __init__(self) -> None:
+    def __init__(self, *, role_target_validator: RoleTargetValidator) -> None:
+        """``role_target_validator`` checks every send that carries a role."""
         # channel -> {type: sender_fn}
         self._senders: dict[str, dict[str, Callable[..., Awaitable[SenderResult]]]] = {}
         self._descriptions: dict[str, str] = {}
         self._target_resolvers: dict[str, Callable[[str], str]] = {}
-        self._role_target_validator: Callable[[str, str, str], bool | str] | None = None
+        self._role_target_validator = role_target_validator
         self._transport_lock: asyncio.Lock | None = None
         self._retired_channels: set[str] = set()
 
@@ -123,19 +128,6 @@ class MessagePushTool(Tool):
     def retire_channel(self, channel: str) -> None:
         """Restricts a removed transport to tasks accepted while it was configured."""
         self._retired_channels.add(channel)
-
-    def set_role_target_validator(
-        self,
-        validator: Callable[[str, str, str], bool | str],
-    ) -> None:
-        """Registers the authoritative binding check for role-scoped sends.
-
-        A string result is treated as an actionable validation error and is
-        surfaced unchanged, allowing callers to distinguish a wrong channel
-        from a genuinely unbound target without silently rewriting it.
-        """
-
-        self._role_target_validator = validator
 
     def register_channel(
         self,
@@ -260,7 +252,7 @@ class MessagePushTool(Tool):
 
         # The runtime validator only lets a role reach its own desktop session;
         # external role sends go through account_send, which records them.
-        if role_id and self._role_target_validator is not None:
+        if role_id:
             validation = self._role_target_validator(role_id, channel, chat_id)
             if validation is not True:
                 detail = (
@@ -351,27 +343,6 @@ class MessagePushTool(Tool):
         return PushOutcome(
             "；".join(results) if results else f"渠道 {channel!r} 没有可用的 sender",
             tuple(external_ids),
-        )
-
-
-async def record_delivered_push(
-    event_bus: EventBus, event: ExternalTextPushed | ExternalImagePushed
-) -> None:
-    """Has the push sync record a send the platform already accepted.
-
-    Used by ``account_send``, which owns a role's external sends.
-    ``message_push`` records nothing itself: with a role it may only reach the
-    role's desktop session, whose sender persists the message. Boundary: the
-    send happened, so a failure to record it is logged and never reported as a
-    failed send (the model would send it again).
-    """
-    try:
-        _ = await event_bus.emit(event)
-    except Exception:
-        logger.exception(
-            "[push] 已发送但未能记入角色会话 %s:%s",
-            event.channel,
-            event.chat_id,
         )
 
 

@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from agent.tools.message_push import MessagePushTool
+from tests.support.push import allow_every_role_target
 from bootstrap.channels import start_channels
 from bus.event_bus import EventBus
 from bus.queue import MessageBus
@@ -23,7 +24,7 @@ async def test_unchanged_key_reuses_independently_owned_connection(
     context = dict(
         bus=MessageBus(),
         session_manager=SessionManager(tmp_path),
-        push_tool=MessagePushTool(),
+        push_tool=MessagePushTool(role_target_validator=allow_every_role_target),
         http_resources=resources,
         event_bus=EventBus(),
     )
@@ -75,7 +76,7 @@ async def test_reused_channel_adopts_new_runtime_only_after_commit(tmp_path):
     context = dict(
         bus=MessageBus(),
         session_manager=SessionManager(tmp_path),
-        push_tool=MessagePushTool(),
+        push_tool=MessagePushTool(role_target_validator=allow_every_role_target),
         http_resources=resources,
         event_bus=EventBus(),
     )
@@ -113,7 +114,7 @@ async def test_bot_command_changes_rebuild_only_channels_that_use_them(
     context = dict(
         bus=MessageBus(),
         session_manager=SessionManager(tmp_path),
-        push_tool=MessagePushTool(),
+        push_tool=MessagePushTool(role_target_validator=allow_every_role_target),
         http_resources=resources,
         event_bus=EventBus(),
     )
@@ -181,7 +182,9 @@ async def test_start_channels_wires_plugin_channels_with_shared_context(tmp_path
         host = await start_channels(
             bus=MessageBus(),
             session_manager=cast(Any, SessionManager(tmp_path)),
-            push_tool=cast(Any, _PushTool()),
+            push_tool=cast(
+                Any, _PushTool(role_target_validator=allow_every_role_target)
+            ),
             http_resources=resources,
             event_bus=event_bus,
             interrupt_controller=cast(Any, controller),
@@ -213,7 +216,7 @@ async def test_start_channels_without_plugin_channels_starts_nothing(tmp_path):
         host = await start_channels(
             bus=MessageBus(),
             session_manager=SessionManager(tmp_path),
-            push_tool=MessagePushTool(),
+            push_tool=MessagePushTool(role_target_validator=allow_every_role_target),
             http_resources=resources,
             event_bus=EventBus(),
         )
@@ -231,7 +234,7 @@ async def test_start_channels_desktop_mode_skips_message_channels(tmp_path):
         host = await start_channels(
             bus=MessageBus(),
             session_manager=SessionManager(tmp_path),
-            push_tool=MessagePushTool(),
+            push_tool=MessagePushTool(role_target_validator=allow_every_role_target),
             http_resources=resources,
             event_bus=EventBus(),
             plugin_channels=[cast(Any, _PluginChannel(starts))],
@@ -253,7 +256,7 @@ async def test_reused_connection_stops_the_unused_candidate(tmp_path):
     context = dict(
         bus=MessageBus(),
         session_manager=SessionManager(tmp_path),
-        push_tool=MessagePushTool(),
+        push_tool=MessagePushTool(role_target_validator=allow_every_role_target),
         http_resources=resources,
         event_bus=EventBus(),
     )

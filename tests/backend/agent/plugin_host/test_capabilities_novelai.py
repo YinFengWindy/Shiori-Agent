@@ -23,6 +23,7 @@ from shiori_sdk.testing.packages import plugin_directory, stage_plugin_package
 from agent.plugin_host import HostServices, PluginKernel
 from agent.provider import LLMResponse, ToolCall
 from agent.tools.message_push import MessagePushTool
+from tests.support.push import allow_every_role_target
 from agent.tools.registry import ToolRegistry
 from bootstrap.runtime.generations import RuntimeCandidate
 from bus.event_bus import EventBus
@@ -64,7 +65,7 @@ async def test_cg_task_holds_generation_until_image_work_finishes(tmp_path: Path
     sessions.open_role_session("mira", role_name="Mira")
     event_bus, registry = EventBus(), ToolRegistry()
     push_image = AsyncMock(return_value=None)
-    push_tool = MessagePushTool()
+    push_tool = MessagePushTool(role_target_validator=allow_every_role_target)
     push_tool.register_channel("desktop", image=push_image)
     registry.register(push_tool)
     stage_plugin_package(plugin_directory("novelai"), tmp_path / "plugins/novelai")

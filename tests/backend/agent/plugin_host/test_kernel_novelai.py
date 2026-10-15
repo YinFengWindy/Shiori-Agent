@@ -15,6 +15,7 @@ from agent.provider import LLMResponse, ToolCall
 from shiori_sdk.lifecycle import AfterReasoningCtx, AfterToolResultCtx
 from agent.plugin_host import HostServices, PluginKernel
 from agent.tools.message_push import MessagePushTool
+from tests.support.push import allow_every_role_target
 from agent.tools.registry import ToolRegistry
 from bus.event_bus import EventBus
 from shiori_sdk.role_events import SceneObservationCommitted
@@ -252,7 +253,7 @@ def test_plugin_wires_scene_observations_to_automatic_cg(tmp_path: Path) -> None
     registry = ToolRegistry()
     pushed = asyncio.Event()
     push_image = AsyncMock(side_effect=lambda *a, **kw: pushed.set())
-    push_tool = MessagePushTool()
+    push_tool = MessagePushTool(role_target_validator=allow_every_role_target)
     push_tool.register_channel("telegram", image=push_image)
     registry.register(push_tool)
     services = _services(
