@@ -33,6 +33,7 @@ export function DashboardPage({ client, host }: PluginNavPageComponentProps) {
           listLoaded={agents.value !== null}
           listError={agents.error}
           roleName={roleName}
+          findRole={(roleId) => state.roles.find((role) => role.id === roleId)}
           tasksConnected={list.connected}
           pollMs={store.pollMs}
           client={client}

@@ -1,8 +1,10 @@
 """Prompts and key presses sent to session agents, with each agent's command record.
 
 The desktop panel and the role tools share this one sending path; only the
-recorded source differs. Records live as long as the Shiori process: they
-survive configuration reloads and are never persisted or recovered.
+recorded source differs. A role's command hands the agent over to that role,
+and a delivered command to an agent with a handling role is watched and
+reported back (`agent_watch.py`). Records live as long as the Shiori process:
+they survive configuration reloads and are never persisted or recovered.
 """
 
 import asyncio
@@ -12,6 +14,9 @@ from dataclasses import asdict, dataclass, field
 from typing import Literal, cast
 from uuid import uuid4
 
+from shiori_sdk.background_results import BackgroundResultTarget
+
+from .agent_watch import AgentWatcher, Handover
 from .cli import CommandError
 from .models import now
 from .service import TaskService
@@ -20,6 +25,7 @@ from .task_management import linked_task, run_in_progress
 
 type CommandKind = Literal["prompt", "keys"]
 type CommandStatus = Literal["sending", "sent", "unconfirmed", "failed"]
+type ReportStatus = Literal["none", "pending", "reported", "failed"]
 
 COMMAND_LIMIT = 100
 """Records kept per agent; older ones are dropped."""
@@ -68,10 +74,17 @@ class AgentCommand:
     sent_at: str = field(default_factory=now)
     status: CommandStatus = "sending"
     error: str = ""
+    # Whether the agent's handling role hears how the agent ended up after it.
+    report: ReportStatus = "none"
+    report_error: str = ""
 
     def settle(self, status: CommandStatus, error: str = "") -> None:
         """Record the outcome once Herdr answered, or failed to."""
         self.status, self.error = status, error
+
+    def settle_report(self, report: ReportStatus, error: str = "") -> None:
+        """Record whether, and how, the command is reported back."""
+        self.report, self.report_error = report, error
 
     def as_dict(self) -> dict[str, object]:
         """The JSON shape the desktop and the role tools read."""
@@ -120,12 +133,21 @@ class AgentControl:
     Every command handed to Herdr is recorded with its outcome. A timed-out
     or stalled prompt is recorded as unconfirmed and never resent. Inputs
     are validated here, so the panel RPC and the role tools share the rules.
+
+    A role's command carries the destination the host captured in its tool
+    turn and makes the role the agent's handling role; the user's command is
+    reported to the handling role of that moment, or not at all without one.
     """
 
     def __init__(
-        self, gate: SessionGate, log: AgentCommandLog, service: TaskService
+        self,
+        gate: SessionGate,
+        log: AgentCommandLog,
+        service: TaskService,
+        watcher: AgentWatcher,
     ) -> None:
         self.gate, self.log, self.service = gate, log, service
+        self.watcher = watcher
 
     @property
     def session(self) -> str:
@@ -145,15 +167,23 @@ class AgentControl:
         return ""
 
     async def prompt(
-        self, pane_id: object, text: object, source: CommandSource
+        self,
+        pane_id: object,
+        text: object,
+        source: CommandSource,
+        report_to: BackgroundResultTarget | None = None,
     ) -> AgentCommand:
-        """Submit `text` as a prompt; sent once Herdr sees the agent take it up."""
+        """Submit `text` as a prompt; sent once Herdr sees the agent take it up.
+
+        `report_to` is a role source's destination, captured in its tool turn.
+        """
         target = require_pane_id(pane_id)
         if not isinstance(text, str) or not text.strip():
             raise ValueError("消息不能为空")
         return await self._send(
             target,
             AgentCommand("prompt", text, source),
+            report_to,
             # Settles as soon as the agent starts working (or asks something),
             # so the request does not wait for the agent's whole turn.
             (
@@ -176,7 +206,11 @@ class AgentControl:
         )
 
     async def send_keys(
-        self, pane_id: object, keys: object, source: CommandSource
+        self,
+        pane_id: object,
+        keys: object,
+        source: CommandSource,
+        report_to: BackgroundResultTarget | None = None,
     ) -> AgentCommand:
         """Press Herdr logical keys (`ctrl+c`, `esc`, `enter` …) in order."""
         target = require_pane_id(pane_id)
@@ -187,6 +221,7 @@ class AgentControl:
         return await self._send(
             target,
             AgentCommand("keys", " ".join(pressed), source),
+            report_to,
             ("agent", "send-keys", target, *pressed),
         )
 
@@ -199,34 +234,54 @@ class AgentControl:
         self,
         pane_id: str,
         command: AgentCommand,
+        report_to: BackgroundResultTarget | None,
         args: tuple[str, ...],
         *,
         timeout: float | None = None,
     ) -> AgentCommand:
+        if command.source.kind == "role" and report_to is None:
+            raise PermissionError("角色的指令需要宿主抓取的回报目标")
         self._require_free(pane_id)
         task = linked_task(self.service.tasks.values(), self.session, pane_id)
+        config = self.gate.cli.config
         handed = False
+        target: BackgroundResultTarget | None = None
 
         async def submit() -> dict[str, object]:
             # The last look, after the session check: nothing awaits between
             # it and handing the input to Herdr.
-            nonlocal handed
+            nonlocal handed, target
             self._require_free(pane_id)
             _ = self.log.add(self.session, pane_id, command)
             handed = True
+            if report_to is not None:
+                source = command.source
+                self.watcher.take_over(
+                    self.session,
+                    pane_id,
+                    Handover(source.role_id, source.role_name, report_to),
+                )
+            handover = self.watcher.handover(self.session, pane_id)
+            target = handover.target if handover else None
             return await self.gate.cli.call(*args, timeout=timeout)
+
+        def follow(working: bool = False) -> None:
+            # A delivered or possibly delivered command is watched for its report.
+            if target is not None:
+                self.watcher.follow(config, pane_id, command, target, working=working)
 
         # The task's continue and cancel hold this lock to start or stop a run;
         # holding it here keeps a run from starting while the input is sent.
         async with task.operation_lock if task else nullcontext():
             try:
-                _ = await self.gate.run(submit, keep=_KEEP)
+                response = await self.gate.run(submit, keep=_KEEP)
             except CommandError as error:
                 if not handed:
                     raise  # The session check failed; nothing was sent.
                 if error.code in UNCONFIRMED_CODES:
                     message = "未确认 Agent 收到；输入可能已经送达，未自动重发。"
                     command.settle("unconfirmed", message)
+                    follow()
                     raise CommandError(message, code=error.code) from error
                 message = _REFUSALS.get(error.code, str(error))
                 command.settle("failed", message)
@@ -236,10 +291,18 @@ class AgentControl:
                     command.settle(
                         "unconfirmed", "Shiori 已停止等待；输入可能已经送达。"
                     )
+                    follow()
                 raise
             except Exception as error:
                 if handed:
                     command.settle("failed", str(error))
                 raise
             command.settle("sent")
+            # A prompt returns once Herdr saw the agent working (or blocked).
+            agent = response.get("agent")
+            follow(
+                command.kind == "prompt"
+                and isinstance(agent, dict)
+                and cast(dict[str, object], agent).get("agent_status") == "working"
+            )
         return command

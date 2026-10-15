@@ -11,6 +11,7 @@ from plugins.herdr.backend.agent_control import (
     AgentControl,
     CommandSource,
 )
+from plugins.herdr.backend.agent_watch import AgentWatcher, Handover
 from plugins.herdr.backend.cli import CommandError, HerdrCli
 from plugins.herdr.backend.config import HerdrConfig
 from plugins.herdr.backend.models import CodingTask
@@ -29,6 +30,8 @@ class Herdr:
         self.argv: list[list[str]] = []
         self.timeouts: list[float | None] = []
         self.answer: CommandError | None = None
+        # What watches of the agent read.
+        self.state = "working"
         # Holds the session check until set, to act between check and send.
         self.checked = asyncio.Event()
         self.checked.set()
@@ -46,6 +49,10 @@ class Herdr:
                     "endpoint_compatible": True,
                 }
             )
+        if argv[3:5] == ["agent", "get"]:
+            return json.dumps({"result": {"agent": {"agent_status": self.state}}})
+        if argv[3:5] == ["agent", "read"]:
+            return "output"
         self.argv.append(argv)
         self.timeouts.append(timeout)
         if self.answer:
@@ -54,26 +61,33 @@ class Herdr:
 
 
 @pytest.fixture
-async def fixture(tmp_path):
+async def fixture(tmp_path, monkeypatch):
     ctx = FakeServiceContext("herdr", tmp_path)
     # The smallest CLI timeout the config allows, shorter than Herdr's own wait.
     config = HerdrConfig(session="default", cli_timeout_seconds=5)
     cli = HerdrCli(config, ctx.processes, tmp_path)
     herdr = Herdr()
-    cli.command = herdr.command  # type: ignore[method-assign]
+    # Watches build their own CLI; every CLI talks to the same fake Herdr.
+    monkeypatch.setattr(
+        HerdrCli, "command", lambda _cli, argv, **kwargs: herdr.command(argv, **kwargs)
+    )
     log = AgentCommandLog()
+    watcher = AgentWatcher(tmp_path, ctx.processes)
     control = AgentControl(
         SessionGate(cli, ctx.process_resources),
         log,
         TaskService(tmp_path, ctx.processes),
+        watcher,
     )
     yield control, log, herdr
+    await watcher.close()
     await ctx.aclose()
 
 
 async def test_prompt_and_keys_use_explicit_argv_and_record_their_source(fixture):
     control, log, herdr = fixture
-    await control.prompt("wR:p2", '修一下 & 测试 "引号"', ROLE)
+    target = FakeBackgroundResultTarget("role-a", "thread-a")
+    await control.prompt("wR:p2", '修一下 & 测试 "引号"', ROLE, target)
     await control.send_keys("wR:p2", ["ctrl+c"], USER)
 
     assert herdr.argv == [
@@ -162,3 +176,52 @@ async def test_a_task_run_starting_during_the_session_check_refuses_the_input(
     assert herdr.argv == []
     assert log.records("default", "wR:p2") == []
     task.worker.cancel()
+
+
+async def test_a_roles_command_hands_the_agent_over_and_the_users_follows_it(fixture):
+    control, _log, herdr = fixture
+    watcher = control.watcher
+    watcher.poll_seconds = 0
+    # Without a handling role the user's command is not reported.
+    alone = await control.prompt("wR:p2", "先看看", USER)
+    assert alone.report == "none"
+
+    mira_target = FakeBackgroundResultTarget("role-a", "thread-a")
+    mira = await control.prompt("wR:p2", "修滚动", ROLE, mira_target)
+    assert watcher.handover("default", "wR:p2") == Handover(
+        "role-a", "Mira", mira_target
+    )
+    ayu = FakeBackgroundResultTarget("role-b", "thread-b")
+    keys = await control.send_keys(
+        "wR:p2", ["enter"], CommandSource("role", "role-b", "Ayu"), ayu
+    )
+    handover = watcher.handover("default", "wR:p2")
+    assert handover is not None and handover.as_dict() == {
+        "role_id": "role-b",
+        "role_name": "Ayu",
+    }
+    user = await control.prompt("wR:p2", "补测试", USER)
+    assert mira.report == keys.report == user.report == "pending"
+
+    herdr.state = "idle"
+    async with asyncio.timeout(5):
+        while user.report == "pending":
+            await asyncio.sleep(0)
+    # Each command goes to the role it was reported to when sent, once.
+    [mira_report] = mira_target.reports.values()
+    [ayu_report] = ayu.reports.values()
+    assert [item["content"] for item in json.loads(mira_report)["commands"]] == [
+        "修滚动"
+    ]
+    assert [
+        (item["content"], item["sender"]) for item in json.loads(ayu_report)["commands"]
+    ] == [("enter", "Ayu"), ("补测试", "用户在 Herdr 面板直接发送")]
+    assert alone.report == "none"
+
+
+async def test_a_role_command_without_a_captured_destination_is_not_sent(fixture):
+    control, log, herdr = fixture
+    with pytest.raises(PermissionError):
+        await control.prompt("wR:p2", "修滚动", ROLE)
+    assert herdr.argv == []
+    assert log.records("default", "wR:p2") == []

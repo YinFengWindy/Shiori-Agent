@@ -11,6 +11,35 @@ Codex / Claude Code 必须已安装、登录，并在该 session 可使用；插
 立即返回任务编号，在独立 worktree 中修改、验证、提交并创建 Draft PR。
 结果回到原角色与原聊天。角色或用户绑定失效时不会向另一个目标投递。
 
+操控 Herdr 中已有的 agent（包括用户手动打开的 Claude Code / Codex）用另外四个聊天工具，
+作用于所配置 session 的全部 agent，不按角色隔离，直接执行、不弹确认：
+`herdr_list_agents`（按 workspace 分组的 agent，附 pane ID、状态、终端标题、cwd 与接手角色）、
+`herdr_read_agent`（参数 `pane_id`；状态、标题、cwd、末尾 4000 字符终端输出、最近 20 条指令记录
+与接手角色）两个只读工具，以及 `herdr_prompt_agent`（`pane_id`、`text`）与 `herdr_send_keys`
+（`pane_id`、`keys`，Herdr 逻辑按键名数组）两个写工具。写工具与面板走同一个发送服务，
+指令记录的来源为发起角色（ID 与名称，名称来自 `roles` 能力的角色快照）；工具描述引导角色
+操作已有 agent 时用这些工具而不是 shell，新建隔离开发任务仍用 `herdr_start_task`。预期的
+失败以 `{ok: false, error: {code, message}}` 返回：`agent_not_found`、session 未运行
+（`server_unavailable` 等版本 / session 检查结果）、`timeout` / `agent_prompt_stalled`（未确认
+送达，不重发）、`invalid_request`（参数无效或插件任务回合进行中被拒）、`not_permitted`
+（不在用户发起的角色工具回合中，未发送）。
+
+角色用写工具操作某个 agent 时，宿主在该工具回合抓取回报目标（`background_results.capture()`），
+该角色成为这个 agent 的「接手角色」，后来的角色覆盖前一个。交给 Herdr 的指令（已发送或未确认
+送达）只要 agent 有接手角色就被监视：角色的指令回报给发指令的角色与原聊天，用户在面板直接
+发的指令回报给发送时的接手角色，回报里注明「用户在 Herdr 面板直接发送」；没有接手角色时
+不回报，面板标明「无人接手，不会回报」。插件不自行选择角色。监视每 2 秒读一次 agent 状态：
+观察到 working 后变为 idle/done 为「工作后已停下」，blocked 为「卡住」，agent 不存在为「已关闭」，
+指令后 30 秒仍空闲且从未观察到 working 为「未观察到开始工作」，距最近一条指令超过
+`task_timeout_seconds` 为「追踪超时」（不中断、不重发），连续 5 次读取失败为「无法读取」。
+prompt 返回时 Herdr 已看到 agent 开始工作即算观察到 working；按键不清除已观察到的 working，
+所以对工作中 agent 的 Ctrl+C 读作停下。每个 agent 同时只有一个监视：回报前到达的指令并入
+同一次回报，按回报目标（角色与会话）分组，每组一次回报，列出组内全部指令；回报 ID 为
+`herdr-agent:<组内最新指令 ID>`，每条指令最多回报一次，失败只记录、不重发。回报为 JSON：
+结果与说明、Herdr 状态、终端标题、指令（类型、内容、发送者、时间、送达状态）与终端末尾
+4000 字符。接手关系与监视只在本次 Shiori 运行期间有效，配置重载保留，停用插件或关闭应用
+即停止监视（未回报的指令标为回报失败），不影响 agent 本身。
+
 `herdr_list_tasks` / `herdr_get_task` 只显示当前角色的任务；查询会刷新终端状态和
 最近输出。`herdr_continue_task` 接收追加要求，在同一 agent/worktree 创建新回合，
 执行中拒绝并发提交。`herdr_cancel_task` 先返回 cancelling，发送指定 agent 的
@@ -43,9 +72,11 @@ prompt 在 agent 开始工作或提出确认时即算送达，Herdr 最多等 10
 「直接发送」（同一段文字原样发给 agent，不属于任务、不做交付核验）与中断。直接输入在
 发送期间持有该任务的操作锁，并在最后一刻再判断，任务的继续 / 取消不会与之交错。
 
-每个 agent 的指令记录（来源、时间、内容、结果：发送中 / 已发送 / 未确认送达 / 未发送）
-保存在插件进程内，按 session 与 pane ID 区分，每个 agent 保留最近 100 条，配置重载
-保留、关闭 Shiori 后不恢复；主区以折叠的「指令记录」显示，面板发出的来源标为「你」。
+每个 agent 的指令记录（来源、时间、内容、结果：发送中 / 已发送 / 未确认送达 / 未发送，
+以及送达或可能送达的指令的回报状态：待回报 / 已回报 / 回报失败 / 不回报）保存在插件进程内，
+按 session 与 pane ID 区分，每个 agent 保留最近 100 条，配置重载保留、关闭 Shiori 后不恢复；
+主区以折叠的「指令记录」显示，面板发出的来源标为「你」，角色发出的显示角色名。agent 头部
+下方显示当前接手角色（头像与名称），没有时显示「无人接手，不会回报」。
 
 阶段来自每回合独立的 `<run_id>.progress.jsonl`。Agent 按任务指令追加完整 JSON
 行，字段为 `task_id`、`run_id`、递增 `sequence`、`stage` 和 `detail`。仅当前
@@ -63,7 +94,8 @@ prompt 在 agent 开始工作或提出确认时即算送达，Herdr 最多等 10
 `agents.list` 返回当前配置 session 的 agent，按 workspace 分组并带
 workspace 名称，每项含 pane ID（agent 标识）、类型、Herdr 状态、终端标题、cwd 及
 关联插件任务 ID；`agents.get`（参数 `pane_id`）返回该 agent 的状态、最近终端输出
-与关联任务详情，以及该 agent 的指令记录 `commands` 和能否直接输入 `can_prompt`（插件
+与关联任务详情，以及该 agent 的指令记录 `commands`（每条带 `report` / `report_error`）、
+接手角色 `handler`（`{role_id, role_name}` 或 null）和能否直接输入 `can_prompt`（插件
 任务回合进行中为 false），Herdr 已不认识该 agent 时返回 `agent: null`。两者都是只读并发
 请求。`agents.prompt`（参数 `pane_id`、`text`）与 `agents.keys`（参数 `pane_id`、
 `keys`，Herdr 逻辑按键名如 `ctrl+c`、`esc`）以参数数组调用 Herdr、不经 shell，走有界的
