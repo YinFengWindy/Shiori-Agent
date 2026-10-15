@@ -3,13 +3,13 @@ import type { ManagedStatus } from "./useManagedNapCat";
 
 const preparationLabels = {
   idle: "等待启动", downloading: "下载中", extracting: "解压中",
-  verifying: "校验中", ready: "已就绪", error: "准备失败",
+  ready: "已就绪", error: "准备失败",
 } as const;
 
-/** Whether NapCat is still being downloaded, unpacked or verified. */
+/** Whether NapCat is still being downloaded or unpacked. */
 export function napCatPreparing(status: ManagedStatus) {
   const { stage } = status.preparation;
-  return stage === "downloading" || stage === "extracting" || stage === "verifying";
+  return stage === "downloading" || stage === "extracting";
 }
 
 /** Whether the QQ login itself has succeeded, whatever the connection is doing. */

@@ -44,7 +44,7 @@ class ManagedNapCat(NapCatInstaller):
         process = self._processes.get(ref)
         if process is not None and process.poll() is None:
             return
-        qq_runtime_dir = await self.prepare()
+        await self.prepare()
         self._files.write_configs(ref, expected_uin)
         self._qr.clear(ref)
         account_dir = self._files.account_dir(ref)
@@ -77,7 +77,7 @@ class ManagedNapCat(NapCatInstaller):
             # instance shares nt_qq/global login.db with the user's desktop QQ.
             "PUBLIC": str(profile / "Public"),
             "PATH": os.pathsep.join(
-                (str(self.install_dir), str(qq_runtime_dir), os.environ.get("PATH", ""))
+                (str(self.install_dir), os.environ.get("PATH", ""))
             ),
             "NAPCAT_WORKDIR": str(account_dir / "napcat"),
             "NAPCAT_WEBUI_PREFERRED_PORT": str(metadata["webui_port"]),
