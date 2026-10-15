@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from agent.tools.message_push import MessagePushTool
+from tests.support.push import allow_every_role_target
 from agent.scheduler import SchedulerService
 from bootstrap.runtime.events import RuntimeEventBus
 from bootstrap.runtime.generations import RuntimeCandidate
@@ -53,7 +54,7 @@ async def test_desktop_push_intent_survives_direct_and_queued_delivery(
     sessions = SessionManager(tmp_path)
     session = sessions.open_role_session("mira", role_name="Mira")
     bus = EventBus()
-    push = MessagePushTool()
+    push = MessagePushTool(role_target_validator=allow_every_role_target)
     presence = Mock()
     relationship = Mock()
     relationship.enrich_session_metadata.side_effect = lambda metadata: metadata
@@ -112,7 +113,7 @@ async def test_registered_committed_push_requires_its_original_message(
     role_store = RoleStore(tmp_path)
     role_store.create_role(role_id="mira", name="Mira", system_prompt="test")
     sessions = SessionManager(tmp_path)
-    push = MessagePushTool()
+    push = MessagePushTool(role_target_validator=allow_every_role_target)
     service = DesktopBridgeService(
         workspace=tmp_path,
         role_store=role_store,
@@ -152,7 +153,7 @@ async def test_push_tool_blank_media_cannot_create_empty_desktop_messages(
     role_store = RoleStore(tmp_path)
     role_store.create_role(role_id="mira", name="Mira", system_prompt="You are Mira.")
     manager = SessionManager(tmp_path)
-    push_tool = MessagePushTool()
+    push_tool = MessagePushTool(role_target_validator=allow_every_role_target)
     service = DesktopBridgeService(
         workspace=tmp_path,
         role_store=role_store,
@@ -485,7 +486,7 @@ async def test_desktop_push_publishes_its_message_after_a_channel_message(tmp_pa
     )
     sessions.save(session)
     bus = EventBus()
-    push = MessagePushTool()
+    push = MessagePushTool(role_target_validator=allow_every_role_target)
     service = DesktopBridgeService(
         workspace=tmp_path,
         role_store=roles,
@@ -524,7 +525,7 @@ async def test_pending_desktop_text_and_images_publish_once_after_formal_commit(
     sessions = SessionManager(tmp_path)
     session = sessions.open_role_session("mira", role_name="Mira")
     bus = EventBus()
-    push = MessagePushTool()
+    push = MessagePushTool(role_target_validator=allow_every_role_target)
     service = DesktopBridgeService(
         workspace=tmp_path,
         role_store=roles,

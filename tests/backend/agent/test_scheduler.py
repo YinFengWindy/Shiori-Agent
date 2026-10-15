@@ -15,6 +15,7 @@ from agent.looping.ports import AgentLoopConfig, AgentLoopDeps, MemoryServices
 from agent.provider import LLMResponse
 from agent.scheduler import JobStore, SchedulerService
 from agent.tools.message_push import MessagePushTool
+from tests.support.push import allow_every_role_target
 from agent.tools.registry import ToolRegistry
 from bus.event_bus import EventBus
 from bus.queue import MessageBus
@@ -113,7 +114,7 @@ async def test_recurring_desktop_delivery_persists_once_per_occurrence(tmp_path,
         ),
         AgentLoopConfig(),
     )
-    push = MessagePushTool()
+    push = MessagePushTool(role_target_validator=allow_every_role_target)
     bridge = DesktopBridgeService(
         workspace=tmp_path,
         role_store=role_store,

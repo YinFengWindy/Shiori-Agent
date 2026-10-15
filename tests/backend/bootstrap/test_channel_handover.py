@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from agent.tools.message_push import MessagePushTool
+from tests.support.push import allow_every_role_target
 from bootstrap.channel_host import ChannelHost, ChannelHandoverError
 from bus.queue import MessageBus
 from shiori_sdk.messages import OutboundMessage
@@ -60,7 +61,7 @@ class Connection:
 
 def hosts(events, *, fail_start=False, fail_stop=False):
     bus = MessageBus()
-    push = MessagePushTool()
+    push = MessagePushTool(role_target_validator=allow_every_role_target)
     push.set_transport_lock(bus.transport_lock)
     ctx = ChannelContext(
         intake_factory=ChannelIntake,

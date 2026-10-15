@@ -255,7 +255,7 @@ def build_registered_tools(
     event_publisher: EventBus | None = None,
     agent_loop_provider: Callable[[], Any] | None = None,
     role_runtime_registry: RoleRuntimeRegistry | None = None,
-    shared_push_tool: MessagePushTool | None = None,
+    push_tool: MessagePushTool,
     shared_scheduler: SchedulerService | None = None,
 ) -> tuple[
     ToolRegistry,
@@ -272,7 +272,6 @@ def build_registered_tools(
     multimodal = getattr(config, "multimodal", True)
     readonly_tools = build_readonly_tools(http_resources, multimodal=multimodal)
     store = session_store or SessionStore(workspace / "sessions.db")
-    push_tool = shared_push_tool or MessagePushTool()
     memory_result = resolve_memory_toolset_provider(wiring.memory).register(
         tools,
         ToolsetDeps(
@@ -522,6 +521,22 @@ def build_core_runtime(
         ),
         event_bus=event_bus,
     )
+    # One validated push tool serves every generation; later generations reuse
+    # the first one's, so its role check is bound once, at construction.
+    push_tool = (
+        shared.push_tool
+        if shared is not None
+        else MessagePushTool(
+            role_target_validator=lambda role_id, channel, chat_id: (
+                _validate_role_target(
+                    role_repository,
+                    role_id=role_id,
+                    channel=channel,
+                    chat_id=chat_id,
+                )
+            )
+        )
+    )
     loop_ref: dict[str, AgentLoop] = {}
     tools, push_tool, scheduler, mcp_registry, memory_runtime = build_registered_tools(
         config,
@@ -534,7 +549,7 @@ def build_core_runtime(
         event_publisher=event_bus,
         role_runtime_registry=role_runtime_registry,
         agent_loop_provider=agent_loop_provider or (lambda: loop_ref.get("loop")),
-        shared_push_tool=shared.push_tool if shared else MessagePushTool(),
+        push_tool=push_tool,
         shared_scheduler=shared.scheduler if shared else None,
     )
     presence = (
@@ -568,15 +583,6 @@ def build_core_runtime(
             live_turn_pushes=current_turn_pushes,
         )
     )
-    if shared is None:
-        push_tool.set_role_target_validator(
-            lambda role_id, channel, chat_id: _validate_role_target(
-                role_repository,
-                role_id=role_id,
-                channel=channel,
-                chat_id=chat_id,
-            )
-        )
     channel_directory = (
         shared.channel_directory if shared is not None else ChannelDirectory()
     )

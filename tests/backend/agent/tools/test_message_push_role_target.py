@@ -5,14 +5,15 @@ from unittest.mock import AsyncMock
 import pytest
 
 from agent.tools.message_push import MessagePushTool
+from tests.support.push import allow_every_role_target
 
 
 @pytest.mark.asyncio
 async def test_message_push_rejects_role_target_not_owned_by_role() -> None:
-    tool = MessagePushTool()
-    tool.set_role_target_validator(
-        lambda role_id, channel, chat_id: (role_id, channel, chat_id)
-        == ("mira", "telegram", "123")
+    tool = MessagePushTool(
+        role_target_validator=lambda role_id, channel, chat_id: (
+            (role_id, channel, chat_id) == ("mira", "telegram", "123")
+        )
     )
 
     with pytest.raises(PermissionError, match="未绑定目标渠道"):
@@ -27,10 +28,10 @@ async def test_message_push_rejects_role_target_not_owned_by_role() -> None:
 @pytest.mark.asyncio
 async def test_message_push_allows_the_role_owned_target() -> None:
     sent: list[tuple[str, str]] = []
-    tool = MessagePushTool()
-    tool.set_role_target_validator(
-        lambda role_id, channel, chat_id: (role_id, channel, chat_id)
-        == ("mira", "telegram", "123")
+    tool = MessagePushTool(
+        role_target_validator=lambda role_id, channel, chat_id: (
+            (role_id, channel, chat_id) == ("mira", "telegram", "123")
+        )
     )
 
     async def send(chat_id: str, message: str) -> None:
@@ -51,10 +52,10 @@ async def test_message_push_allows_the_role_owned_target() -> None:
 @pytest.mark.asyncio
 async def test_message_push_resolves_target_before_role_validation() -> None:
     sent: list[tuple[str, str]] = []
-    tool = MessagePushTool()
-    tool.set_role_target_validator(
-        lambda role_id, channel, chat_id: (role_id, channel, chat_id)
-        == ("mira", "telegram", "7602298892")
+    tool = MessagePushTool(
+        role_target_validator=lambda role_id, channel, chat_id: (
+            (role_id, channel, chat_id) == ("mira", "telegram", "7602298892")
+        )
     )
 
     async def send(chat_id: str, message: str) -> None:
@@ -79,7 +80,7 @@ async def test_message_push_resolves_target_before_role_validation() -> None:
 
 
 def test_message_push_description_lists_only_registered_channels() -> None:
-    tool = MessagePushTool()
+    tool = MessagePushTool(role_target_validator=allow_every_role_target)
     send = AsyncMock()
     tool.register_channel("desktop", text=send, description="桌面端")
     tool.register_channel("qqbot", text=send, description="官方 QQBot，不能写成 qq")
@@ -103,10 +104,10 @@ def test_message_push_description_lists_only_registered_channels() -> None:
 @pytest.mark.asyncio
 async def test_message_push_does_not_treat_qq_as_qqbot() -> None:
     sent: list[tuple[str, str]] = []
-    tool = MessagePushTool()
-    tool.set_role_target_validator(
-        lambda role_id, channel, chat_id: (role_id, channel, chat_id)
-        == ("yinfeng", "qqbot", "c2c:user-1")
+    tool = MessagePushTool(
+        role_target_validator=lambda role_id, channel, chat_id: (
+            (role_id, channel, chat_id) == ("yinfeng", "qqbot", "c2c:user-1")
+        )
     )
 
     async def send(chat_id: str, message: str) -> None:
@@ -137,7 +138,7 @@ async def test_message_push_sends_text_when_channel_only_registers_stream_sender
     None
 ):
     sent: list[tuple[str, str]] = []
-    tool = MessagePushTool()
+    tool = MessagePushTool(role_target_validator=allow_every_role_target)
 
     async def send_stream(chat_id: str, message: str) -> None:
         sent.append((chat_id, message))
@@ -156,9 +157,8 @@ async def test_message_push_sends_text_when_channel_only_registers_stream_sender
 
 @pytest.mark.asyncio
 async def test_message_push_surfaces_actionable_role_target_error() -> None:
-    tool = MessagePushTool()
-    tool.set_role_target_validator(
-        lambda _role_id, _channel, _chat_id: (
+    tool = MessagePushTool(
+        role_target_validator=lambda _role_id, _channel, _chat_id: (
             "角色未绑定 qq；该会话已绑定渠道 qqbot，请使用 channel=qqbot"
         )
     )

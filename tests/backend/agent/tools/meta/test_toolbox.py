@@ -12,6 +12,7 @@ from agent.tools.message_push import MessagePushTool
 from agent.tools.registry import ToolRegistry
 from agent.tools.web_fetch import WebFetchTool
 from agent.tools.web_search import WebSearchTool
+from tests.support.push import allow_every_role_target
 from shiori_sdk.memory.engine import MemoryToolProfile, MemoryToolSpec
 
 
@@ -88,6 +89,7 @@ def test_register_meta_tool_helpers_mark_expected_tools_always_on():
         readonly_tools,
         session_store=object(),
         workspace=Path("."),
+        push_tool=MessagePushTool(role_target_validator=allow_every_role_target),
     )
     register_memory_meta_tools(
         tools,

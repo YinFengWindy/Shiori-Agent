@@ -22,6 +22,7 @@ from session.manager import SessionManager
 from bus.event_bus import EventBus
 from bus.events_lifecycle import ProactiveMessageCommitted
 from agent.tools.message_push import MessagePushTool
+from tests.support.push import allow_every_role_target
 from agent.account_delivery import AccountDelivery
 from core.accounts import AccountRegistry
 from core.accounts.delivery_ledger import AccountDeliveryLedger
@@ -699,7 +700,7 @@ async def test_passive_commit_waits_for_delivery_and_stale_generation_cannot_ove
 async def test_image_transport_lock_and_formal_delivery_do_not_deadlock(tmp_path):
     sessions = SessionManager(tmp_path)
     session = sessions.open_role_session("mira", role_name="Mira")
-    push = MessagePushTool()
+    push = MessagePushTool(role_target_validator=allow_every_role_target)
     push.set_transport_lock(asyncio.Lock())
     image_started, release_image, formal_started = (
         asyncio.Event(),
@@ -756,7 +757,7 @@ async def test_image_only_channel_cannot_commit_requested_text(tmp_path, content
     session = sessions.open_role_session("mira", role_name="Mira")
     sessions.save(session)
     previous_metadata = dict(session.metadata)
-    push = MessagePushTool()
+    push = MessagePushTool(role_target_validator=allow_every_role_target)
     image_sender = AsyncMock(return_value=None)
     push.register_channel("desktop", image=image_sender)
     owner = TurnOrchestrator(

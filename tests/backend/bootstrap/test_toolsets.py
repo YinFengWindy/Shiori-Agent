@@ -5,6 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+from agent.tools.message_push import MessagePushTool
 from agent.tools.registry import ToolRegistry
 from bootstrap.toolsets.protocol import (
     ToolsetRegistrationResult,
@@ -13,6 +14,7 @@ from bootstrap.toolsets.protocol import (
 from bootstrap.toolsets.schedule import SchedulerToolsetProvider
 from bootstrap.tools import build_registered_tools
 from bus.event_bus import EventBus
+from tests.support.push import allow_every_role_target
 
 
 def test_scheduler_toolset_provider_registers_expected_tools(tmp_path: Path):
@@ -100,6 +102,7 @@ def test_build_registered_tools_uses_toolset_providers(monkeypatch, tmp_path: Pa
         "bootstrap.tools.build_scheduler",
         lambda *_args, **_kwargs: SimpleNamespace(),
     )
+    shared_push = MessagePushTool(role_target_validator=allow_every_role_target)
     tools, push_tool, scheduler, mcp_registry, memory_runtime = build_registered_tools(
         config=cast(
             Any, SimpleNamespace(spawn_enabled=False, proactive=SimpleNamespace())
@@ -113,10 +116,11 @@ def test_build_registered_tools_uses_toolset_providers(monkeypatch, tmp_path: Pa
         tools=ToolRegistry(),
         event_publisher=EventBus(),
         agent_loop_provider=lambda: None,
+        push_tool=shared_push,
     )
 
     assert calls == ["memory", "meta", "spawn", "schedule", "mcp"]
-    assert push_tool is not None
+    assert push_tool is shared_push
     assert scheduler is not None
     assert mcp_registry is not None
     assert memory_runtime.engine is not None
