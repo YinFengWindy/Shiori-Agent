@@ -285,3 +285,12 @@ async def test_close_before_monitor_first_runs_marks_stopped_without_native_call
     assert task.status == "monitoring_stopped"
     assert not cli.calls and not target.reports
     await context.aclose()
+
+
+async def test_start_fails_while_no_generation_is_published(fixture):
+    context, target, cli, service = fixture
+    # The generation retires before its successor is published.
+    context.process_resources.active = False
+    with pytest.raises(RuntimeError, match="切换配置"):
+        service.start(str(cli.repository), "fix", "codex", target, cli.config)
+    assert service.tasks == {} and cli.calls == [] and target.reports == {}

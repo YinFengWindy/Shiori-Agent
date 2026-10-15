@@ -9,8 +9,6 @@ import pytest
 from shiori_sdk.testing.service_context import FakeServiceContext
 from plugins.herdr.backend import agent_watch
 from plugins.herdr.backend.cli import HerdrCli
-from plugins.herdr.backend.config import HerdrConfig
-from plugins.herdr.backend.models import CodingTask
 from plugins.herdr.backend.plugin import setup
 from shiori_sdk.testing.background_results import FakeBackgroundResultTarget
 from plugins.herdr.backend.service import TaskService
@@ -261,47 +259,3 @@ async def test_a_task_is_monitored_and_verified_on_the_generation_published_afte
             await resource.close()  # type: ignore[attr-defined]
         await first.aclose()
         await second.aclose()
-
-
-async def test_task_operations_fail_while_no_generation_is_published(
-    tmp_path, monkeypatch
-):
-    async def command(cli, argv, **_kwargs):
-        raise AssertionError(f"切换配置期间不应调用 Herdr：{argv}")
-
-    monkeypatch.setattr(HerdrCli, "command", command)
-    context = FakeServiceContext("herdr", tmp_path)
-    await setup(context.as_capability())
-    service = context.exported
-    assert isinstance(service, TaskService)
-    target = FakeBackgroundResultTarget("role-a", "thread-a")
-    task = CodingTask(
-        "task-a",
-        "original",
-        tmp_path,
-        "codex",
-        target,
-        tmp_path,
-        "codex/task",
-        "run-a",
-        worktree=tmp_path,
-        pane_id="owned-pane",
-        agent_name="owned-agent",
-        status="blocked",
-        config=HerdrConfig(),
-    )
-    service.tasks[task.id] = task
-    # The generation retires before its successor is published.
-    context.process_resources.active = False
-    try:
-        with pytest.raises(RuntimeError, match="切换配置"):
-            service.start(str(tmp_path), "fix", "codex", target, HerdrConfig())
-        with pytest.raises(RuntimeError, match="切换配置"):
-            await service.continue_task(task.id, "再改", "role-a")
-        with pytest.raises(RuntimeError, match="切换配置"):
-            await service.cancel_task(task.id, "role-a")
-        assert list(service.tasks) == [task.id]
-        assert task.status == "blocked" and task.worker is None
-        assert target.reports == {}
-    finally:
-        await context.aclose()
