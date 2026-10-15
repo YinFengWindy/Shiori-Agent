@@ -1,7 +1,6 @@
 import type { PluginHostServices, PluginRpcClient } from "@yinfengwindy/shiori-sdk";
-import { directPromptAction, type DirectControl } from "./AgentComposer";
+import { directControls, type DirectControl } from "./AgentComposer";
 import { Composer } from "./Composer";
-import { InterruptButton } from "./InterruptButton";
 import type { TaskDetail, TaskDetailResponse } from "./types";
 
 /**
@@ -29,12 +28,13 @@ export function ContinueComposer({ task, connected, client, host, onApplied, dir
       onApplied(await client.call<TaskDetailResponse>("tasks.continue", { task_id: task.id, requirement }));
     },
   };
+  const controls = direct ? directControls(client, host, direct, "直接发送") : null;
   return (
     <Composer
       label="追加要求"
       primary={continueTask}
-      secondary={direct ? [directPromptAction(client, direct, "直接发送")] : []}
-      trailing={direct ? <InterruptButton paneId={direct.paneId} disabled={!direct.enabled} client={client} host={host} onSent={direct.onSent} /> : null}
+      secondary={controls ? [controls.action] : []}
+      trailing={controls?.interrupt}
       host={host}
     />
   );

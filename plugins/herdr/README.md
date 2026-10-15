@@ -33,14 +33,15 @@ session 的全部 agent，包括用户在 Herdr 中手动打开的 CLI（终端�
 
 底部输入框把文字作为 prompt 直接发给选中的 agent（`herdr agent prompt`），旁边的中断
 按钮发送一次 Ctrl+C（`herdr agent send-keys <pane> ctrl+c`），不经过角色、不需确认。
-prompt 在 agent 开始工作或提出确认时即算送达，最多等 10 秒；agent 已关闭、正在等待
+prompt 在 agent 开始工作或提出确认时即算送达，Herdr 最多等 10 秒（CLI 进程超时不短于此）；agent 已关闭、正在等待
 确认（`agent_blocked`，不发送任何输入）、session 不可用等失败会显示原因并保留输入；
 超时或 Herdr 未观察到 agent 开始工作（`agent_prompt_stalled`）记为「未确认送达」，消息
 可能已经送达，插件不自动重发，输入同样保留由用户决定。断线、session 不可用或 agent
-消失时禁用输入和中断。关联插件任务的 agent：任务回合进行中只有「追加要求」（回合
-期间由服务端拒绝）和任务的「取消」，直接输入与中断被拒绝，以免插进受监控的回合；
-回合结束后底部仍是「追加要求」（Enter 发送，开启新的受核验回合），另有「直接发送」
-（同一段文字原样发给 agent，不属于任务、不做交付核验）与中断。
+消失时禁用输入和中断。关联插件任务的 agent：任务回合进行中不提供直接发送和 Ctrl+C
+（服务端同样拒绝，以免插进受监控的回合），要停下它用任务的「取消」，取消有追踪和确认；
+底部的「追加要求」在回合结束后才可用（Enter 发送，开启新的受核验回合），同时出现
+「直接发送」（同一段文字原样发给 agent，不属于任务、不做交付核验）与中断。直接输入在
+发送期间持有该任务的操作锁，并在最后一刻再判断，任务的继续 / 取消不会与之交错。
 
 每个 agent 的指令记录（来源、时间、内容、结果：发送中 / 已发送 / 未确认送达 / 未发送）
 保存在插件进程内，按 session 与 pane ID 区分，每个 agent 保留最近 100 条，配置重载
@@ -66,7 +67,8 @@ workspace 名称，每项含 pane ID（agent 标识）、类型、Herdr 状态�
 任务回合进行中为 false），Herdr 已不认识该 agent 时返回 `agent: null`。两者都是只读并发
 请求。`agents.prompt`（参数 `pane_id`、`text`）与 `agents.keys`（参数 `pane_id`、
 `keys`，Herdr 逻辑按键名如 `ctrl+c`、`esc`）以参数数组调用 Herdr、不经 shell，走有界的
-外部调用通道，返回记录的指令 `{command}`；失败时记录也会留下失败或未确认状态。
+外部调用通道，返回记录的指令 `{command}`。交给 Herdr 的指令都会记录，失败时留下失败或
+未确认状态；参数无效、被拒绝或 session 检查未通过的请求不记录。
 所有 Herdr 调用显式带配置的 session；插件任务按其自身 session 与 pane ID 关联
 （Herdr 不复用 pane ID）。Herdr 版本与 session 运行检查在首次读取前执行；读取
 失败时立即重新检查，检查不通过就返回其明确原因（如 session 未运行、版本不兼容），

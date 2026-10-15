@@ -147,10 +147,14 @@ class HerdrCli:
                 process.kill()
             _ = await process.wait()
 
-    async def call(self, *args: str) -> dict[str, Any]:
-        """Decode a structured Herdr response, including server-side failures."""
+    async def call(self, *args: str, timeout: float | None = None) -> dict[str, Any]:
+        """Decode a structured Herdr response, including server-side failures.
+
+        `timeout` replaces the configured CLI timeout for this process.
+        """
         output = await self.command(
-            [self.config.executable, "--session", self.config.session, *args]
+            [self.config.executable, "--session", self.config.session, *args],
+            timeout=timeout,
         )
         try:
             payload = json.loads(output)

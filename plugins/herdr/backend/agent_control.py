@@ -7,8 +7,9 @@ survive configuration reloads and are never persisted or recovered.
 
 import asyncio
 from collections import deque
+from contextlib import nullcontext
 from dataclasses import asdict, dataclass, field
-from typing import Literal
+from typing import Literal, cast
 from uuid import uuid4
 
 from .cli import CommandError
@@ -28,7 +29,11 @@ UNCONFIRMED_CODES = frozenset({"timeout", "agent_prompt_stalled", "invalid_respo
 
 # Herdr's gate waits up to 5 s for a submitted prompt to show activity; the
 # caller timeout covers submission too, so it leaves room beyond that gate.
-PROMPT_TIMEOUT_MS = "10000"
+PROMPT_TIMEOUT_MS = 10000
+
+# The prompt process outlives Herdr's own wait by this much, so Herdr reports
+# its timeout itself instead of the process being killed mid-wait.
+_PROCESS_MARGIN_SECONDS = 5
 
 _REFUSALS = {
     "agent_not_found": "Agent 已关闭，未发送。",
@@ -102,11 +107,19 @@ class AgentCommandLog:
         self._records.clear()
 
 
+def require_pane_id(value: object) -> str:
+    """The agent target of a request: a nonempty pane ID."""
+    if not isinstance(value, str) or not value:
+        raise ValueError("缺少 agent 的 pane_id")
+    return value
+
+
 class AgentControl:
     """Sends prompts and keys to the configured session's agents and records them.
 
-    Every attempt that reaches the session is recorded with its outcome. A
-    timed-out or stalled prompt is recorded as unconfirmed and never resent.
+    Every command handed to Herdr is recorded with its outcome. A timed-out
+    or stalled prompt is recorded as unconfirmed and never resent. Inputs
+    are validated here, so the panel RPC and the role tools share the rules.
     """
 
     def __init__(
@@ -128,24 +141,25 @@ class AgentControl:
         """
         task = linked_task(self.service.tasks.values(), self.session, pane_id)
         if task is not None and run_in_progress(task):
-            return "该 Agent 正在执行插件任务，请使用追加要求或取消任务"
+            return "该 Agent 正在执行插件任务；要停下它请取消任务"
         return ""
 
     async def prompt(
-        self, pane_id: str, text: str, source: CommandSource
+        self, pane_id: object, text: object, source: CommandSource
     ) -> AgentCommand:
         """Submit `text` as a prompt; sent once Herdr sees the agent take it up."""
-        if not text.strip():
+        target = require_pane_id(pane_id)
+        if not isinstance(text, str) or not text.strip():
             raise ValueError("消息不能为空")
         return await self._send(
-            pane_id,
+            target,
             AgentCommand("prompt", text, source),
             # Settles as soon as the agent starts working (or asks something),
             # so the request does not wait for the agent's whole turn.
             (
                 "agent",
                 "prompt",
-                pane_id,
+                target,
                 text,
                 "--wait",
                 "--until",
@@ -153,49 +167,79 @@ class AgentControl:
                 "--until",
                 "blocked",
                 "--timeout",
-                PROMPT_TIMEOUT_MS,
+                str(PROMPT_TIMEOUT_MS),
+            ),
+            timeout=max(
+                self.gate.cli.config.cli_timeout_seconds,
+                PROMPT_TIMEOUT_MS / 1000 + _PROCESS_MARGIN_SECONDS,
             ),
         )
 
     async def send_keys(
-        self, pane_id: str, keys: list[str], source: CommandSource
+        self, pane_id: object, keys: object, source: CommandSource
     ) -> AgentCommand:
         """Press Herdr logical keys (`ctrl+c`, `esc`, `enter` …) in order."""
-        if not keys or not all(isinstance(key, str) and key for key in keys):
+        target = require_pane_id(pane_id)
+        names = cast(list[object], keys) if isinstance(keys, list) else []
+        if not names or not all(isinstance(name, str) and name for name in names):
             raise ValueError("按键不能为空")
+        pressed = [str(name) for name in names]
         return await self._send(
-            pane_id,
-            AgentCommand("keys", " ".join(keys), source),
-            ("agent", "send-keys", pane_id, *keys),
+            target,
+            AgentCommand("keys", " ".join(pressed), source),
+            ("agent", "send-keys", target, *pressed),
         )
 
-    async def _send(
-        self, pane_id: str, command: AgentCommand, args: tuple[str, ...]
-    ) -> AgentCommand:
-        if not pane_id:
-            raise ValueError("缺少 agent 的 pane_id")
+    def _require_free(self, pane_id: str) -> None:
         refusal = self.refusal(pane_id)
         if refusal:
             raise ValueError(refusal)
-        _ = self.log.add(self.session, pane_id, command)
-        try:
-            _ = await self.gate.run(
-                lambda: self.gate.cli.call(*args),
-                keep=_KEEP,
-            )
-        except CommandError as error:
-            if error.code in UNCONFIRMED_CODES:
-                message = "未确认 Agent 收到；输入可能已经送达，未自动重发。"
-                command.settle("unconfirmed", message)
+
+    async def _send(
+        self,
+        pane_id: str,
+        command: AgentCommand,
+        args: tuple[str, ...],
+        *,
+        timeout: float | None = None,
+    ) -> AgentCommand:
+        self._require_free(pane_id)
+        task = linked_task(self.service.tasks.values(), self.session, pane_id)
+        handed = False
+
+        async def submit() -> dict[str, object]:
+            # The last look, after the session check: nothing awaits between
+            # it and handing the input to Herdr.
+            nonlocal handed
+            self._require_free(pane_id)
+            _ = self.log.add(self.session, pane_id, command)
+            handed = True
+            return await self.gate.cli.call(*args, timeout=timeout)
+
+        # The task's continue and cancel hold this lock to start or stop a run;
+        # holding it here keeps a run from starting while the input is sent.
+        async with task.operation_lock if task else nullcontext():
+            try:
+                _ = await self.gate.run(submit, keep=_KEEP)
+            except CommandError as error:
+                if not handed:
+                    raise  # The session check failed; nothing was sent.
+                if error.code in UNCONFIRMED_CODES:
+                    message = "未确认 Agent 收到；输入可能已经送达，未自动重发。"
+                    command.settle("unconfirmed", message)
+                    raise CommandError(message, code=error.code) from error
+                message = _REFUSALS.get(error.code, str(error))
+                command.settle("failed", message)
                 raise CommandError(message, code=error.code) from error
-            message = _REFUSALS.get(error.code, str(error))
-            command.settle("failed", message)
-            raise CommandError(message, code=error.code) from error
-        except asyncio.CancelledError:
-            command.settle("unconfirmed", "Shiori 已停止等待；输入可能已经送达。")
-            raise
-        except Exception as error:
-            command.settle("failed", str(error))
-            raise
-        command.settle("sent")
+            except asyncio.CancelledError:
+                if handed:
+                    command.settle(
+                        "unconfirmed", "Shiori 已停止等待；输入可能已经送达。"
+                    )
+                raise
+            except Exception as error:
+                if handed:
+                    command.settle("failed", str(error))
+                raise
+            command.settle("sent")
         return command

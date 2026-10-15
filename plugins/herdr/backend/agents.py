@@ -1,12 +1,12 @@
 """Desktop RPC over every agent in the configured Herdr session."""
 
 from collections.abc import Iterable
-from typing import Any, cast
+from typing import Any
 
 from shiori_sdk.plugin_services import ServicePluginContext
 from shiori_sdk.rpc import Concurrency
 
-from .agent_control import USER, AgentControl
+from .agent_control import USER, AgentControl, require_pane_id
 from .cli import CommandError
 from .models import CodingTask
 from .service import TaskService
@@ -55,13 +55,6 @@ def group_agents(
         for key, members in groups.items()
         if members
     ]
-
-
-def _pane_id(payload: dict[str, object]) -> str:
-    pane_id = payload.get("pane_id")
-    if not isinstance(pane_id, str) or not pane_id:
-        raise ValueError("缺少 agent 的 pane_id")
-    return pane_id
 
 
 class SessionAgents:
@@ -115,7 +108,7 @@ class SessionAgents:
         desktop can say it is gone instead of showing a read error.
         `can_prompt` tells whether the agent takes direct input now.
         """
-        pane_id = _pane_id(payload)
+        pane_id = require_pane_id(payload.get("pane_id"))
         session = self.cli.config.session
         commands = self.control.log.records(session, pane_id)
 
@@ -157,22 +150,15 @@ class SessionAgents:
         }
 
     async def prompt_agent(self, payload: dict[str, object]) -> dict[str, object]:
-        """Send the user's text to the agent as a prompt."""
-        text = payload.get("text")
-        if not isinstance(text, str):
-            raise ValueError("消息不能为空")
-        command = await self.control.prompt(_pane_id(payload), text, USER)
+        """Send the user's text to the agent as a prompt; the control validates it."""
+        command = await self.control.prompt(
+            payload.get("pane_id"), payload.get("text"), USER
+        )
         return {"command": command.as_dict()}
 
     async def send_keys(self, payload: dict[str, object]) -> dict[str, object]:
         """Press the user's keys in the agent, e.g. `["ctrl+c"]` to interrupt."""
-        keys = payload.get("keys")
-        if not isinstance(keys, list):
-            raise ValueError("按键不能为空")
-        names = cast(list[object], keys)
-        if not all(isinstance(name, str) for name in names):
-            raise ValueError("按键名必须是字符串")
         command = await self.control.send_keys(
-            _pane_id(payload), [str(name) for name in names], USER
+            payload.get("pane_id"), payload.get("keys"), USER
         )
         return {"command": command.as_dict()}
