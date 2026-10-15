@@ -19,6 +19,7 @@ from plugins.herdr.backend.task_management import (
     inspect_task,
 )
 from shiori_sdk.testing.background_results import FakeBackgroundResultTarget
+from shiori_sdk.testing.process_resources import FakeProcessResources
 from shiori_sdk.testing.processes import FakeProcesses
 
 
@@ -53,7 +54,8 @@ class AgentCli(HerdrCli):
 @pytest.fixture
 def fixture(tmp_path, monkeypatch):
     target = FakeBackgroundResultTarget("role-a", "thread-a")
-    service = TaskService(tmp_path, FakeProcesses())
+    service = TaskService(tmp_path)
+    service.attach(FakeProcessResources(), FakeProcesses(), tmp_path)
     task = CodingTask(
         "task-a",
         "original",

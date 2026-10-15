@@ -7,6 +7,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from shiori_sdk.background_results import BackgroundResultTarget
+from shiori_sdk.process_resources import PluginProcessResources
 from shiori_sdk.processes import Processes
 from contextvars import Context
 from collections.abc import Callable
@@ -14,25 +15,49 @@ from collections.abc import Callable
 from .cli import CommandError, HerdrCli
 from .config import AgentKind, HerdrConfig
 from .delivery import verify_delivery, write_instructions
+from .generations import Generations, NoPublishedGeneration
 from .models import CodingTask
 from .progress import read_progress, record_stage
 from .task_management import cancel_task, continue_task, inspect_task
 
 
 class TaskService:
-    """Own task records and observers; Herdr owns the coding agent processes."""
+    """Own task records and observers; Herdr owns the coding agent processes.
 
-    def __init__(self, directory: Path, processes: Processes) -> None:
+    A process resource built idle, without capabilities: every generation
+    attaches its own process capability, and each Herdr command of a task
+    uses the published generation's.
+    """
+
+    def __init__(self, directory: Path) -> None:
         self.directory = directory
         self.instance_id = uuid4().hex
-        self.processes = processes
         self.tasks: dict[str, CodingTask] = {}
         self.closed = False
+        self._generations = Generations()
         self._listeners: set[Callable[[CodingTask], None]] = set()
 
+    def attach(
+        self, resources: PluginProcessResources, processes: Processes, directory: Path
+    ) -> None:
+        """A generation offers its capabilities; they are used once it is published."""
+        self._generations.attach(resources, processes, directory)
+
     def create_cli(self, config: HerdrConfig) -> HerdrCli:
-        """Build a stateless adapter using the task's immutable session configuration."""
-        return HerdrCli(config, self.processes, self.directory)
+        """A stateless adapter on the published generation's process capability.
+
+        Raises NoPublishedGeneration between generations: an operation fails
+        rather than waits, and only the monitor loop skips a round.
+        """
+        current = self._generations.current()
+        if current is None:
+            raise NoPublishedGeneration()
+        return HerdrCli(config, *current)
+
+    def require_published(self) -> None:
+        """Refuse new work between generations instead of waiting for the next one."""
+        if self._generations.current() is None:
+            raise NoPublishedGeneration()
 
     # Keep operations bound to this owner's import generation. New tool/RPC
     # facades must not mix their CommandError class with the retained CLI's.
@@ -72,6 +97,7 @@ class TaskService:
         for worker in workers:
             worker.cancel()
         outcomes = await asyncio.gather(*workers, return_exceptions=True)
+        self._generations.clear()
         for task in self.tasks.values():
             if task.status in {"queued", "preparing", "running", "cancelling"}:
                 task.error = "Shiori 已停止追踪；Herdr 中的任务可能仍在运行。"
@@ -100,6 +126,7 @@ class TaskService:
             raise ValueError("repository 必须是本机 Git 仓库的绝对目录")
         if not requirement.strip():
             raise ValueError("任务需求不能为空")
+        self.require_published()
         task_id = uuid4().hex
         task = CodingTask(
             id=task_id,
@@ -257,10 +284,16 @@ class TaskService:
             task.error = str(error)
 
     async def _observe(self, task: CodingTask) -> None:
-        cli = self.create_cli(task.config)
-        deadline = time.monotonic() + cli.config.task_timeout_seconds
+        deadline = time.monotonic() + task.config.task_timeout_seconds
         observed_work = False
         while time.monotonic() < deadline:
+            # Each round reads with the published generation; between
+            # generations the task is not given up, only this round is skipped.
+            try:
+                cli = self.create_cli(task.config)
+            except NoPublishedGeneration:
+                await asyncio.sleep(2)
+                continue
             observed = await cli.call("agent", "get", task.agent_name)
             agent = observed["agent"]
             if agent.get("pane_id") != task.pane_id:

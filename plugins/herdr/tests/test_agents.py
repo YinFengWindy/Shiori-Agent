@@ -109,7 +109,7 @@ def make_task(tmp_path, task_id, *, pane_id, session="default", created_at="t1")
 @pytest.fixture
 def fixture(tmp_path):
     ctx = FakeServiceContext("herdr", tmp_path)
-    service = TaskService(tmp_path, ctx.processes)
+    service = TaskService(tmp_path)
     cli = HerdrCli(HerdrConfig(session="default"), ctx.processes, tmp_path)
     herdr = ScriptedHerdr()
     cli.command = herdr.command  # type: ignore[method-assign]

@@ -18,7 +18,7 @@ from shiori_sdk.rpc import Concurrency
 @pytest.fixture
 def fixture(tmp_path):
     ctx = FakeServiceContext("herdr", tmp_path)
-    service = TaskService(tmp_path, ctx.processes)
+    service = TaskService(tmp_path)
     dashboard = Dashboard(service, ctx.as_capability())
     dashboard.register()
     for role in ("role-a", "role-b"):
@@ -158,7 +158,8 @@ async def test_current_rpc_namespace_uses_retained_owners_operations(
     assert retired["cli"].CommandError is not current["cli"].CommandError
     ctx = FakeServiceContext("herdr", tmp_path)
     target = FakeBackgroundResultTarget("role-a", "thread-a")
-    service = retired["service"].TaskService(tmp_path, ctx.processes)
+    service = retired["service"].TaskService(tmp_path)
+    service.attach(ctx.process_resources, ctx.processes, tmp_path)
     task = retired["models"].CodingTask(
         "task-a",
         "original",

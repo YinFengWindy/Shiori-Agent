@@ -88,7 +88,8 @@ def fixture(tmp_path, monkeypatch):
     context = FakeServiceContext("herdr", tmp_path)
     target = FakeBackgroundResultTarget("mira", "original-thread")
     cli = ScriptedCli(context, tmp_path)
-    service = TaskService(tmp_path / "plugin-data", context.processes)
+    service = TaskService(tmp_path / "plugin-data")
+    service.attach(context.process_resources, context.processes, tmp_path)
     monkeypatch.setattr(service, "create_cli", lambda config: cli)
     context.effect("service", service.close)
     return context, target, cli, service

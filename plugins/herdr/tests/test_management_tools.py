@@ -13,7 +13,7 @@ from shiori_sdk.testing.service_context import FakeServiceContext
 
 async def test_list_filters_by_host_role_and_fake_arguments_do_not_change_it(tmp_path):
     context = FakeServiceContext("herdr", tmp_path)
-    service = TaskService(tmp_path, context.processes)
+    service = TaskService(tmp_path)
     for role in ("role-a", "role-b"):
         service.tasks[role] = CodingTask(
             role,
@@ -44,7 +44,7 @@ async def test_list_filters_by_host_role_and_fake_arguments_do_not_change_it(tmp
 async def test_mutation_requires_authenticated_user_even_with_current_role(tmp_path):
     context = FakeServiceContext("herdr", tmp_path)
     context.tools.context = {"role_id": "role-a"}
-    service = TaskService(tmp_path, context.processes)
+    service = TaskService(tmp_path)
     tool = TaskManagementTool(
         service,
         context.tools,
@@ -67,7 +67,8 @@ async def test_current_tools_manage_retained_service_across_import_namespaces(
     context.tools.context = {"role_id": "role-a"}
     target = FakeBackgroundResultTarget("role-a", "thread-a")
     context.background_results.target = target
-    service = retired["service"].TaskService(tmp_path, context.processes)
+    service = retired["service"].TaskService(tmp_path)
+    service.attach(context.process_resources, context.processes, tmp_path)
     task = retired["models"].CodingTask(
         "task-a",
         "original",

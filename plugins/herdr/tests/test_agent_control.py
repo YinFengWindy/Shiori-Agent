@@ -95,7 +95,7 @@ async def fixture(tmp_path, monkeypatch):
     control = AgentControl(
         SessionGate(cli, ctx.process_resources),
         log,
-        TaskService(tmp_path, ctx.processes),
+        TaskService(tmp_path),
         watcher,
     )
     yield control, log, herdr

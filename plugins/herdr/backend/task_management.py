@@ -210,6 +210,8 @@ async def cancel_task(service: "TaskService", task_id: str, role_id: str) -> Cod
             raise RuntimeError("Herdr 插件已停止追踪")
         if task.status in CANCEL_SETTLED:
             return task
+        # Admission, not confirmation: fail now rather than in the background.
+        service.require_published()
         # A retry after an unconfirmed stop has a new report. Calls made while
         # this attempt is running remain idempotent via the cancelling state.
         report_id = f"{task.id}:{task.run_id}:cancel:{uuid4().hex}"

@@ -29,6 +29,7 @@ from shiori_sdk.processes import Processes
 from .agent_commands import AgentCommand, Handover, ReportStatus
 from .cli import CommandError, HerdrCli
 from .config import HerdrConfig
+from .generations import Generations
 
 type Outcome = Literal["finished", "idle", "blocked", "gone", "timeout", "unreadable"]
 
@@ -95,15 +96,6 @@ class _Watch:
     worker: asyncio.Task[None] | None = None
 
 
-@dataclass(frozen=True)
-class _Attachment:
-    """One generation's capabilities, usable while that generation is published."""
-
-    resources: PluginProcessResources
-    processes: Processes
-    directory: Path
-
-
 def report_text(
     session: str,
     pane_id: str,
@@ -161,33 +153,20 @@ class AgentWatcher:
         self.poll_seconds = POLL_SECONDS
         self.start_grace_seconds = START_GRACE_SECONDS
         self.clock: Callable[[], float] = time.monotonic
-        self._attachments: list[_Attachment] = []
+        self._generations = Generations()
         self._handovers: dict[tuple[str, str], Handover] = {}
         self._watches: dict[tuple[str, str], _Watch] = {}
 
     def attach(
         self, resources: PluginProcessResources, processes: Processes, directory: Path
     ) -> None:
-        """A generation offers its capabilities; they are used once it is published.
-
-        Generations no longer published are dropped: a retired one never returns.
-        """
-        self._attachments = [
-            attachment
-            for attachment in self._attachments
-            if attachment.resources.active
-        ]
-        self._attachments.append(_Attachment(resources, processes, directory))
+        """A generation offers its capabilities; they are used once it is published."""
+        self._generations.attach(resources, processes, directory)
 
     def _cli(self, config: HerdrConfig) -> HerdrCli | None:
         """A CLI on the published generation's capability; None between generations."""
-        for index in range(len(self._attachments) - 1, -1, -1):
-            current = self._attachments[index]
-            if current.resources.active:
-                # Older generations were retired by this one and never return.
-                del self._attachments[:index]
-                return HerdrCli(config, current.processes, current.directory)
-        return None
+        current = self._generations.current()
+        return None if current is None else HerdrCli(config, *current)
 
     def handover(self, session: str, pane_id: str) -> Handover | None:
         """The agent's handling role, if any."""
@@ -251,7 +230,7 @@ class AgentWatcher:
             _ = worker.cancel()
         outcomes = await asyncio.gather(*workers, return_exceptions=True)
         self._handovers.clear()
-        self._attachments.clear()
+        self._generations.clear()
         errors = [error for error in outcomes if isinstance(error, Exception)]
         if errors:
             raise ExceptionGroup("Herdr agent 监视清理失败", errors)
