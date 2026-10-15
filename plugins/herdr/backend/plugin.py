@@ -3,11 +3,13 @@
 from shiori_sdk.plugin_services import ServicePluginContext
 from shiori_sdk.storage import plugin_data_dir
 
+from .cli import HerdrCli
 from .config import HerdrConfig
 from .service import TaskService
 from .tool import StartCodingTask
 from .management_tools import TaskManagementTool
 from .dashboard import Dashboard
+from .sessions import register_session_rpc
 
 
 async def setup(ctx: ServicePluginContext) -> None:
@@ -20,6 +22,9 @@ async def setup(ctx: ServicePluginContext) -> None:
     )
     ctx.expose(service)
     Dashboard(service, ctx).register()
+    # The retained task service may belong to an earlier generation; listing
+    # sessions uses only this generation's config and process capability.
+    register_session_rpc(ctx, HerdrCli(config, ctx.processes, directory))
     ctx.tools.register(
         StartCodingTask(service, ctx.background_results, config, ctx.process_resources),
         risk="external-side-effect",

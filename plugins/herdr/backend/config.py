@@ -1,4 +1,4 @@
-"""Settings rendered by the host's standard plugin configuration form."""
+"""Plugin config, edited on the plugin's own settings page through `host.config`."""
 
 from typing import Literal
 
@@ -12,7 +12,7 @@ class HerdrConfig(BaseModel):
 
     executable: str = Field(default="herdr", min_length=1, title="Herdr 路径")
     session: str = Field(
-        default="shiori", pattern=r"^[a-zA-Z0-9_-]+$", title="Herdr Session"
+        default="default", pattern=r"^[a-zA-Z0-9_-]+$", title="Herdr Session"
     )
     default_agent: AgentKind = Field(default="codex", title="默认 Agent")
     codex_model: str = Field(default="", title="Codex 模型")

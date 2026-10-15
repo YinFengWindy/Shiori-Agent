@@ -20,3 +20,8 @@ def test_full_access_and_model_selection():
     ]
     with pytest.raises(ValidationError):
         HerdrConfig(session="")
+
+
+def test_session_defaults_to_herdr_default_and_keeps_a_saved_choice():
+    assert HerdrConfig().session == "default"
+    assert HerdrConfig.model_validate({"session": "shiori"}).session == "shiori"
