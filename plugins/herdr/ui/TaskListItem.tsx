@@ -1,7 +1,7 @@
 import { cx, sidebarNavItemClass, type PluginHostServices, type RoleRecord } from "@yinfengwindy/shiori-sdk";
 import { RoleAvatar } from "./RoleAvatar";
-import { StatusDot, ToneDot } from "./TaskStatus";
-import { agentStatusLabel, agentStatusTone } from "./agentSelectors";
+import { AgentStatusLabel } from "./AgentStatusLabel";
+import { StatusDot } from "./TaskStatus";
 import { phaseLabel, relativeTime, taskTitle } from "./taskSelectors";
 import type { AgentSummary, TaskSummary } from "./types";
 
@@ -39,12 +39,7 @@ export function TaskListItem({ task, agent, role, selected, now, host, onSelect 
         <span className="flex min-w-0 items-center gap-1.5 text-caption leading-tight text-ink-muted">
           <StatusDot status={task.status} />
           <span className="truncate">{phaseLabel(task)}</span>
-          {agent ? (
-            <>
-              <ToneDot tone={agentStatusTone(agent.status)} />
-              <span className="shrink-0">{agentStatusLabel(agent.status)}</span>
-            </>
-          ) : null}
+          {agent ? <AgentStatusLabel status={agent.status} /> : null}
         </span>
       </span>
     </button>

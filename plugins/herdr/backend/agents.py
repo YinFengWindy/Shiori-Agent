@@ -34,8 +34,10 @@ def linked_task(
 ) -> CodingTask | None:
     """The newest plugin task started in this session on this pane.
 
-    Herdr never reuses pane IDs, so the pane alone identifies the agent; a
-    momentarily different detected kind must not list the agent twice.
+    Herdr documents closed pane IDs as never reused (`herdr --skill`), so the
+    pane alone identifies the agent; a moved pane gets a new ID and its task
+    falls back to the unlisted group. A momentarily different detected kind
+    must not list the agent twice.
     """
     matches = [
         task
