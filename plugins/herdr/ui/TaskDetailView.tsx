@@ -9,9 +9,11 @@ import { disconnectedMessage } from "./taskFeed";
 import { useTaskDetail } from "./useTaskDetail";
 
 /** The selected task: header and stages, terminal, folded records, then the 追加要求 input. */
-export function TaskDetailView({ taskId, roleName, listConnected, client, host }: {
+export function TaskDetailView({ taskId, roleName, output, listConnected, client, host }: {
   taskId: string;
   roleName: string;
+  /** The live terminal of the agent carrying the task; otherwise the task monitor's last read. */
+  output?: string;
   /** The page already reports a lost connection once; the detail only follows it. */
   listConnected: boolean;
   client: PluginRpcClient;
@@ -35,7 +37,7 @@ export function TaskDetailView({ taskId, roleName, listConnected, client, host }
         {task.error ? <host.ui.InlineError title="任务需要处理" message={task.error} layout="row" /> : null}
         {task.report_error ? <host.ui.InlineError title="聊天回报失败" message={task.report_error} layout="row" /> : null}
         {task.status === "completed" ? <DeliverySummary task={task} host={host} /> : null}
-        <TaskTerminal key={task.run_id} output={task.output} />
+        <TaskTerminal key={task.run_id} output={output ?? task.output} />
         <TaskSections task={task} />
       </div>
       <ContinueComposer task={task} connected={connected} client={client} host={host} onApplied={feed.apply} />

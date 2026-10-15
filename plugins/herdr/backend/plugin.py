@@ -10,6 +10,7 @@ from .tool import StartCodingTask
 from .management_tools import TaskManagementTool
 from .dashboard import Dashboard
 from .sessions import register_session_rpc
+from .agents import SessionAgents
 
 
 async def setup(ctx: ServicePluginContext) -> None:
@@ -25,6 +26,7 @@ async def setup(ctx: ServicePluginContext) -> None:
     # The retained task service may belong to an earlier generation; listing
     # sessions uses only this generation's config and process capability.
     register_session_rpc(ctx, HerdrCli(config, ctx.processes, directory))
+    SessionAgents(service, ctx, config, directory).register()
     ctx.tools.register(
         StartCodingTask(service, ctx.background_results, config, ctx.process_resources),
         risk="external-side-effect",

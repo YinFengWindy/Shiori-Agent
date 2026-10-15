@@ -85,3 +85,23 @@ test("a subscription that resolves after stop is released", async () => {
   assert.equal(released, 1);
   assert.equal(feed.getSnapshot().value, null);
 });
+
+test("a polled source reads again only after the previous read settles, until it stops", async () => {
+  const fake = createFakeHostServices();
+  const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+  let pending = deferred<Value>();
+  let reads = 0;
+  const feed = new TaskFeed<Value>({ read: () => { reads++; return pending.promise; }, merge: (_current, next) => next, pollMs: 1 });
+  const starting = feed.start(createFakePluginClient(), fake.host);
+  await wait(20);
+  assert.equal(reads, 1, "no read starts while one is in flight");
+  pending.resolve({ revision: 1 });
+  await starting;
+  pending = deferred<Value>();
+  await wait(20);
+  assert.equal(reads, 2);
+  pending.resolve({ revision: 2 });
+  feed.stop();
+  await wait(20);
+  assert.equal(reads, 2, "stopping ends the polling");
+});

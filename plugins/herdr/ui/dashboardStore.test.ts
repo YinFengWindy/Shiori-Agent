@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createDashboardStore, mergeTaskList } from "./dashboardStore";
-import { herdrBackend, makeDetail, makeSummary } from "./testFixtures";
+import { herdrBackend, makeAgent, makeDetail, makeSummary, makeWorkspace } from "./testFixtures";
 
-const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+const settle = (ms = 0) => new Promise((resolve) => setTimeout(resolve, ms));
 
 test("a list without newer revisions keeps its references; another process replaces it", () => {
   const current = { instance_id: "p", tasks: [makeSummary({ revision: 3 }), makeSummary({ id: "task-b" })] };
@@ -15,21 +15,23 @@ test("a list without newer revisions keeps its references; another process repla
   assert.equal(mergeTaskList(current, fresh), fresh);
 });
 
-test("the selection stays through a task added later and moves to the first task once it is gone", async () => {
-  const backend = herdrBackend([makeDetail(), makeDetail({ id: "task-b" })]);
-  const store = createDashboardStore();
+test("the first agent is picked; the selection stays through polls, even once its agent is gone", async () => {
+  const p2 = makeAgent();
+  const p4 = makeAgent({ pane_id: "wR:p4", title: "第二个" });
+  const backend = herdrBackend([makeDetail()], [], [makeWorkspace("Shiori", [p2, p4])]);
+  const store = createDashboardStore(5);
   const detach = store.attach(backend.client, backend.fake.host);
   await settle();
-  assert.equal(store.getSnapshot().selectedId, "task-a", "the first loaded task is picked");
-  store.select("task-b");
-  backend.setTasks([makeDetail({ id: "task-new" }), makeDetail(), makeDetail({ id: "task-b" })]);
-  backend.emit("task-new", 1);
-  await settle();
-  assert.equal(store.getSnapshot().selectedId, "task-b");
-  backend.setTasks([makeDetail({ id: "task-new" }), makeDetail()]);
-  backend.emit("task-b", 9);
-  await settle();
-  assert.equal(store.getSnapshot().selectedId, "task-new");
+  assert.deepEqual(store.getSnapshot().selection, { kind: "agent", paneId: "wR:p2" }, "an agent is picked over a task");
+  store.select({ kind: "agent", paneId: "wR:p4" });
+  backend.setWorkspaces([makeWorkspace("Shiori", [makeAgent({ pane_id: "wR:p9" }), p2, p4])]);
+  await settle(30);
+  assert.equal(store.getSnapshot().agents.value?.workspaces[0].agents.length, 3);
+  assert.deepEqual(store.getSnapshot().selection, { kind: "agent", paneId: "wR:p4" });
+  backend.setWorkspaces([makeWorkspace("Shiori", [p2])]);
+  await settle(30);
+  assert.equal(store.getSnapshot().agents.value?.workspaces[0].agents.length, 1);
+  assert.deepEqual(store.getSnapshot().selection, { kind: "agent", paneId: "wR:p4" }, "a gone agent stays selected");
   detach();
 });
 
@@ -64,6 +66,6 @@ test("a reconnect keeps the list visible while the renewed client takes over", a
   const detachNew = store.attach(backend.renewClient(), backend.fake.host);
   await settle();
   assert.equal(backend.handlers.size, 1);
-  assert.deepEqual(backend.calls.slice(before).map((call) => call.name), ["tasks.list"]);
+  assert.deepEqual(backend.calls.slice(before).map((call) => call.name).sort(), ["agents.list", "tasks.list"]);
   detachNew();
 });
