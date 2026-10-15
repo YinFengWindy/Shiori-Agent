@@ -1,6 +1,9 @@
 # Herdr
 
-需要 Herdr 0.9.4 或以上版本。启用后在插件设置填写 Herdr 可执行文件与明确的本机 session。Herdr 和选定的
+需要 Herdr 0.9.4 或以上版本。插件默认连接 Herdr 的 `default` session；启用后可在插件设置页
+填写 Herdr 可执行文件，并从本机 `herdr session list` 列出的 session（带运行中 / 已停止状态）
+中选择，修改自动保存。当前配置的 session 不在列表中时仍显示并保留；Herdr 不可用、命令失败
+或插件未启用时设置页显示读取错误，其余设置照常可改。Herdr 和选定的
 Codex / Claude Code 必须已安装、登录，并在该 session 可使用；插件不安装 CLI、
 修改全局设置或连接用户当前聚焦的 session。首版只提供 Full Access。
 
@@ -30,7 +33,8 @@ Ctrl+C 并确认就绪后才标记 cancelled；无法确认则为 unknown，保�
 
 桌面端 RPC：`tasks.list`（任务摘要）与 `tasks.get`（单任务详情）是只读并发请求，
 `tasks.continue` / `tasks.cancel` 返回与 `tasks.get` 相同的详情；`tasks.changed`
-事件仅携带任务 ID 和修订号。页面先订阅事件再读取，同一插件进程内较旧的修订不会
+事件仅携带任务 ID 和修订号。`sessions.list`（只读）调用 `herdr session list --json`，
+返回 `{sessions: [{name, status: "running" | "stopped"}]}`，不限定配置的 session。页面先订阅事件再读取，同一插件进程内较旧的修订不会
 覆盖较新的；断线时保留最后内容并禁用操作，连接恢复后重新读取。离开页面只退订
 视图，后台任务照常运行。后台新增任务不会切走当前选择；终端停在底部时跟随新输出，
 上翻后保持阅读内容并提示「有新输出」，切换任务或进入新回合会重置。

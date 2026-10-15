@@ -1,4 +1,4 @@
-/** Public JSON contract of the Herdr plugin's dashboard RPC (`tasks.list` / `tasks.get`). */
+/** Public JSON contract of the Herdr plugin: dashboard RPC (`tasks.*`), `sessions.list` and its config. */
 
 /** Lifecycle owned by the task service. */
 export type TaskStatus =
@@ -66,3 +66,20 @@ export type TaskDetailResponse = { instance_id: string; task: TaskDetail };
 
 /** `tasks.changed` payload: an invalidation, never task state. */
 export type TaskChange = { task_id: string; revision: number };
+
+/** The plugin config (`HerdrConfig`) as the settings page edits it through `host.config`. */
+export type HerdrSettings = {
+  executable: string;
+  session: string;
+  default_agent: "codex" | "claude";
+  codex_model: string;
+  claude_model: string;
+  cli_timeout_seconds: number;
+  task_timeout_seconds: number;
+};
+
+/** One local Herdr session as `sessions.list` reports it. */
+export type HerdrSession = { name: string; status: "running" | "stopped" };
+
+/** `sessions.list`: every session Herdr knows on this machine. */
+export type SessionListResponse = { sessions: HerdrSession[] };
