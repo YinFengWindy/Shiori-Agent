@@ -569,7 +569,6 @@ async def test_every_generation_rejects_role_pushes_to_external_channels(
                             channel="qq",
                             chat_id="gqq:5",
                             role_id="mira",
-                            session_key="role:mira",
                             **payload,
                         )
             sender.assert_not_awaited()

@@ -101,7 +101,7 @@ class ExternalImagePushed:
 class ExternalTextPushed:
     """One text delivered through an external channel by a model tool.
 
-    Raised today by ``account_send`` through ``record_delivered_push``;
+    Raised by ``account_send`` through ``record_delivered_push``;
     ``message_push`` never raises it, because a role may only use it for the
     role's own desktop session. ``in_turn`` marks a push the model made during
     a turn: it is committed with that turn. Otherwise the send is stored at
