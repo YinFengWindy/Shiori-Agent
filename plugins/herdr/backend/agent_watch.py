@@ -83,9 +83,14 @@ class _Watch:
     # Bumped by every arriving command, so a read begun before it is discarded.
     revision: int = 0
     working: bool = False
-    # The agent's state sequence when the latest keys were pressed; a blocked
-    # state at or below it predates them.
+    # Keys may answer a block the agent was already in: until the state is
+    # known to have changed since, a blocked state read may be that old one.
+    guarded: bool = False
+    # The agent's state sequence read just before the latest keys, if known;
+    # a blocked state at or below it predates them.
     baseline: int | None = None
+    # A state other than blocked was seen since the latest keys.
+    left_block: bool = False
     agent: dict[str, Any] = field(default_factory=dict)
     worker: asyncio.Task[None] | None = None
 
@@ -163,7 +168,15 @@ class AgentWatcher:
     def attach(
         self, resources: PluginProcessResources, processes: Processes, directory: Path
     ) -> None:
-        """A generation offers its capabilities; they are used once it is published."""
+        """A generation offers its capabilities; they are used once it is published.
+
+        Generations no longer published are dropped: a retired one never returns.
+        """
+        self._attachments = [
+            attachment
+            for attachment in self._attachments
+            if attachment.resources.active
+        ]
         self._attachments.append(_Attachment(resources, processes, directory))
 
     def _cli(self, config: HerdrConfig) -> HerdrCli | None:
@@ -205,7 +218,8 @@ class AgentWatcher:
         commands awaiting the report, which lists them all. `working` tells
         that the agent was seen working on the command already. Keys keep
         what was seen, so an interrupt of working agent reads as it stopping;
-        `baseline` is the agent's state sequence read just before them.
+        `baseline` is the agent's state sequence read just before them, None
+        when that read failed.
         """
         if self.closed:
             command.settle_report("failed", "Shiori 已停止监视，不会回报")
@@ -222,8 +236,8 @@ class AgentWatcher:
         watch.changed_at = self.clock()
         watch.revision += 1
         watch.working = working or (command.kind == "keys" and watch.working)
-        if baseline is not None:
-            watch.baseline = baseline
+        if command.kind == "keys":
+            watch.guarded, watch.baseline, watch.left_block = True, baseline, False
 
     async def close(self) -> None:
         """Stop every watch; the agents keep running and nothing is reported."""
@@ -259,7 +273,8 @@ class AgentWatcher:
                 )
                 if watch.revision == revision:
                     # Nothing new was sent: the next round starts unseen.
-                    watch.working, watch.baseline = False, None
+                    watch.working, watch.guarded = False, False
+                    watch.baseline, watch.left_block = None, False
                 await self._report(key[0], watch, outcome, agent, output)
                 watch.reporting = []
             # Commands arriving during a report start another round above.
@@ -318,15 +333,25 @@ class AgentWatcher:
         """How the agent ended up after the commands, or None while it is not done."""
         state = agent.get("agent_status")
         settled = self.clock() - watch.changed_at >= self.start_grace_seconds
+        if state != "blocked":
+            watch.left_block = True
         if state == "working":
             watch.working = True
         elif state == "blocked":
-            # Pressing keys on a blocked agent answers it; until the state has
-            # changed since, the blocked state read is the one they answered.
+            # Pressing keys on a blocked agent answers it; until the state is
+            # known to have changed since, the block read may be the one they
+            # answered, and only the start grace makes it the agent's answer.
             seq = state_seq(agent)
-            if watch.baseline is None or seq is None or seq > watch.baseline:
-                return "blocked"
-            if settled:
+            fresh = (
+                not watch.guarded
+                or watch.left_block
+                or (
+                    watch.baseline is not None
+                    and seq is not None
+                    and seq > watch.baseline
+                )
+            )
+            if fresh or settled:
                 return "blocked"
         elif state in {"idle", "done"}:
             if watch.working:

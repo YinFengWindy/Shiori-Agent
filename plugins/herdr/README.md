@@ -33,7 +33,7 @@ Codex / Claude Code 必须已安装、登录，并在该 session 可使用；插
 不回报，面板标明「无人接手，不会回报」。插件不自行选择角色。监视每 2 秒读一次 agent 状态：
 观察到 working 后变为 idle/done 为「工作后已停下」，blocked 为「卡住」，agent 不存在为「已关闭」，
 按键前插件先读一次 agent 的 `state_change_seq`，按键之后只有 seq 增加后的 blocked 才算卡住（按 enter
-回答确认时，随后读到的旧 blocked 不算；30 秒后仍是原来的 blocked 才报卡住），
+回答确认时，随后读到的旧 blocked 不算；读不到 seq 时，期间见过非 blocked 状态后的 blocked 才算；30 秒后仍是原来的 blocked 也报卡住；这次读取失败不影响按键照常发送），
 指令后 30 秒仍空闲且从未观察到 working 为「未观察到开始工作」，距最近一条指令超过
 `task_timeout_seconds` 为「追踪超时」（不中断、不重发），连续 5 次读取失败为「无法读取」。
 prompt 返回时 Herdr 已看到 agent 开始工作即算观察到 working；按键不清除已观察到的 working，

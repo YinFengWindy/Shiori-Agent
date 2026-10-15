@@ -33,8 +33,10 @@ class Herdr:
         self.answer: CommandError | None = None
         # What watches of the agent read, and how often they read it.
         self.state = "working"
-        self.seq = 1
+        self.seq: int | None = 1
         self.looks = 0
+        # Fails the next state read once, when set.
+        self.get_error: CommandError | None = None
         # Holds the session check until set, to act between check and send.
         self.checked = asyncio.Event()
         self.checked.set()
@@ -53,6 +55,9 @@ class Herdr:
                 }
             )
         if argv[3:5] == ["agent", "get"]:
+            if self.get_error:
+                error, self.get_error = self.get_error, None
+                raise error
             self.looks += 1
             agent = {"agent_status": self.state, "state_change_seq": self.seq}
             return json.dumps({"result": {"agent": agent}})
@@ -63,6 +68,14 @@ class Herdr:
         if self.answer:
             raise self.answer
         return json.dumps({"result": {"agent": {"agent_status": "working"}}})
+
+
+async def looks(herdr: Herdr, count: int) -> None:
+    """Wait until watches have read the agent `count` more times."""
+    async with asyncio.timeout(5):
+        seen = herdr.looks
+        while herdr.looks < seen + count:
+            await asyncio.sleep(0)
 
 
 @pytest.fixture
@@ -238,18 +251,40 @@ async def test_keys_answering_a_blocked_agent_are_not_reported_on_that_block(fix
     target = FakeBackgroundResultTarget("role-a", "thread-a")
     command = await control.send_keys("wR:p2", ["enter"], ROLE, target)
 
-    async def looks(count: int) -> None:
-        async with asyncio.timeout(5):
-            seen = herdr.looks
-            while herdr.looks < seen + count:
-                await asyncio.sleep(0)
-
     # The first looks still read the block the keys answered.
-    await looks(3)
+    await looks(herdr, 3)
     assert command.report == "pending" and target.reports == {}
     herdr.state, herdr.seq = "working", 6
-    await looks(2)
+    await looks(herdr, 2)
     herdr.state, herdr.seq = "blocked", 7
+    async with asyncio.timeout(5):
+        while command.report == "pending":
+            await asyncio.sleep(0)
+    [text] = target.reports.values()
+    assert json.loads(text)["outcome"] == "blocked"
+
+
+async def test_keys_go_out_even_when_the_state_before_them_is_unreadable(fixture):
+    control, _log, herdr = fixture
+    herdr.get_error = CommandError("read failed", code="command_failed")
+    target = FakeBackgroundResultTarget("role-a", "thread-a")
+    command = await control.send_keys("wR:p2", ["ctrl+c"], ROLE, target)
+    assert command.status == "sent"
+    assert herdr.argv[-1][3:] == ["agent", "send-keys", "wR:p2", "ctrl+c"]
+
+
+async def test_a_block_of_unknown_sequence_after_keys_waits_for_a_change(fixture):
+    control, _log, herdr = fixture
+    control.watcher.poll_seconds = 0
+    herdr.state, herdr.seq = "blocked", None
+    target = FakeBackgroundResultTarget("role-a", "thread-a")
+    command = await control.send_keys("wR:p2", ["enter"], ROLE, target)
+
+    await looks(herdr, 3)
+    assert command.report == "pending" and target.reports == {}
+    herdr.state = "working"
+    await looks(herdr, 2)
+    herdr.state = "blocked"
     async with asyncio.timeout(5):
         while command.report == "pending":
             await asyncio.sleep(0)

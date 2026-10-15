@@ -177,8 +177,13 @@ class AgentControl:
             if target is not None and command.kind == "keys":
                 # Keys often answer a blocked agent: only a blocked state
                 # reached after this read is the agent getting stuck again.
-                agent = (await self.gate.cli.call("agent", "get", pane_id))["agent"]
-                baseline = state_seq(agent)
+                # A failed read leaves it unknown and never holds back the
+                # keys: an interrupt must not wait on an observation.
+                try:
+                    agent = await self.gate.cli.call("agent", "get", pane_id)
+                    baseline = state_seq(agent["agent"])
+                except CommandError:
+                    baseline = None
             # The last look, after the session check: nothing awaits between
             # it and handing the input to Herdr.
             self._require_free(pane_id)
