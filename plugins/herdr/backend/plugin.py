@@ -22,19 +22,18 @@ async def setup(ctx: ServicePluginContext) -> None:
     directory = plugin_data_dir(ctx.workspace, ctx.plugin_id)
     directory.mkdir(parents=True, exist_ok=True)
     config = HerdrConfig.model_validate(ctx.config.as_dict())
-    service = ctx.process_resources.acquire(
-        "tasks-v1", lambda: TaskService(directory, ctx.processes)
-    )
+    # Tasks and watches are built idle; each generation offers its own
+    # process capability, which they use only while it is published.
+    service = ctx.process_resources.acquire("tasks-v2", lambda: TaskService(directory))
+    service.attach(ctx.process_resources, ctx.processes, directory)
     ctx.expose(service)
     # Command records, handovers and watches outlive configuration reloads
     # like the tasks do.
     commands = ctx.process_resources.acquire("agent-commands-v2", AgentCommandLog)
-    # Built idle; each generation offers its own process capability, which
-    # the watches use only while that generation is published.
     watcher = ctx.process_resources.acquire("agent-watches-v2", AgentWatcher)
     watcher.attach(ctx.process_resources, ctx.processes, directory)
     Dashboard(service, ctx).register()
-    # The retained task service may belong to an earlier generation; sessions
+    # The retained task service may run an earlier generation's code; sessions
     # and agents use only this generation's config and process capability,
     # so the CommandError caught there is this generation's own.
     cli = HerdrCli(config, ctx.processes, directory)

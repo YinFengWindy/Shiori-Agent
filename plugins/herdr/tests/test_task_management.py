@@ -19,6 +19,7 @@ from plugins.herdr.backend.task_management import (
     inspect_task,
 )
 from shiori_sdk.testing.background_results import FakeBackgroundResultTarget
+from shiori_sdk.testing.process_resources import FakeProcessResources
 from shiori_sdk.testing.processes import FakeProcesses
 
 
@@ -51,9 +52,16 @@ class AgentCli(HerdrCli):
 
 
 @pytest.fixture
-def fixture(tmp_path, monkeypatch):
+def resources():
+    """The generation the fixture's service is attached to; tests may retire it."""
+    return FakeProcessResources()
+
+
+@pytest.fixture
+def fixture(tmp_path, monkeypatch, resources):
     target = FakeBackgroundResultTarget("role-a", "thread-a")
-    service = TaskService(tmp_path, FakeProcesses())
+    service = TaskService(tmp_path)
+    service.attach(resources, FakeProcesses(), tmp_path)
     task = CodingTask(
         "task-a",
         "original",
@@ -291,3 +299,24 @@ async def test_read_model_availability_matches_what_the_operations_refuse(
     service.closed = True
     closed = task_detail(service, task)
     assert closed["can_continue"] is False and closed["can_cancel"] is False
+
+
+@pytest.mark.parametrize("operation", ["inspect", "continue", "cancel"])
+async def test_operations_fail_while_no_generation_is_published(
+    fixture, resources, monkeypatch, operation
+):
+    service, task, cli, target, _ = fixture
+    # The service's own CLI factory, not the fixture's scripted one.
+    monkeypatch.delattr(service, "create_cli")
+    # The generation retires before its successor is published.
+    resources.active = False
+    with pytest.raises(RuntimeError, match="切换配置"):
+        if operation == "inspect":
+            await inspect_task(service, task.id, "role-a")
+        elif operation == "continue":
+            await continue_task(service, task.id, "再改", "role-a")
+        else:
+            await cancel_task(service, task.id, "role-a")
+    assert task.status == "blocked" and task.run_id == "run-a"
+    assert task.worker is None and task.output == ""
+    assert cli.calls == [] and target.reports == {}
