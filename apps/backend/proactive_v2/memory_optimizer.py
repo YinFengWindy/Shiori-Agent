@@ -348,12 +348,17 @@ class MemoryOptimizer:
                 self._mark_self_rewritten(role_store, clean_role_id)
             return
 
-        merged_memory = await self._merge_memory(
-            current_memory,
-            pending,
-            provider=active_provider,
-            model=active_model,
-        )
+        try:
+            merged_memory = await self._merge_memory(
+                current_memory,
+                pending,
+                provider=active_provider,
+                model=active_model,
+            )
+        except asyncio.CancelledError:
+            # 换代会取消在途整理：快照放回 PENDING，不留到下次整理才恢复。
+            memory_store.rollback_pending_snapshot()
+            raise
         if merged_memory:
             if current_memory:
                 memory_store.backup_long_term()
@@ -561,7 +566,12 @@ class MemoryOptimizerLoop:
                 logger.exception("[memory_optimizer] 优化异常")
 
     def stop(self) -> None:
-        """Stops future optimization batches without cancelling the active role."""
+        """Stops future optimization batches.
+
+        The runtime owner then cancels the task, interrupting the active role;
+        ``MemoryOptimizer`` returns its pending snapshot so nothing half-merged
+        is kept, and the next generation's loop reschedules on its own interval.
+        """
         self._running = False
         self._stop_requested.set()
 

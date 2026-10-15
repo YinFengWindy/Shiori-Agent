@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -100,6 +101,54 @@ async def test_proactive_loop_wrapper_methods_cover_paths(tmp_path: Path):
     await loop.run()
     loop._mcp_pool.connect_all.assert_awaited_once()
     loop._run_loop.assert_awaited_once()
+    loop._mcp_pool.disconnect_all.assert_awaited_once()
+
+
+def _bare_run_loop() -> ProactiveLoop:
+    loop = ProactiveLoop.__new__(ProactiveLoop)
+    loop._cfg = SimpleNamespace(role_id="mira")
+    loop._running = False
+    loop._stop_requested = asyncio.Event()
+    loop._poll_task = None
+    loop._mcp_pool = SimpleNamespace(
+        connect_all=AsyncMock(return_value=None),
+        disconnect_all=AsyncMock(return_value=None),
+    )
+    return loop
+
+
+@pytest.mark.asyncio
+async def test_run_disconnects_mcp_when_cancelled_while_connecting():
+    loop = _bare_run_loop()
+    connecting = asyncio.Event()
+
+    async def connect_all():
+        connecting.set()
+        await asyncio.Event().wait()
+
+    loop._mcp_pool.connect_all = connect_all
+    run = asyncio.create_task(loop.run())
+    await connecting.wait()
+    run.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await run
+    loop._mcp_pool.disconnect_all.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_run_disconnects_mcp_and_reports_a_failed_feed_poll():
+    loop = _bare_run_loop()
+
+    async def failing_poll():
+        raise OSError("poll failed")
+
+    async def run_loop():
+        loop._poll_task = asyncio.create_task(failing_poll())
+        await asyncio.sleep(0)
+
+    loop._run_loop = run_loop
+    with pytest.raises(OSError, match="poll failed"):
+        await loop.run()
     loop._mcp_pool.disconnect_all.assert_awaited_once()
 
 

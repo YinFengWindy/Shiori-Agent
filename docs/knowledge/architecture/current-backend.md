@@ -59,7 +59,7 @@ flowchart TD
 - `GenerationManager` / `RuntimeCandidate` 管理按引用计数的多代 `CoreRuntime`；`RuntimeLease` 把一个任务固定在开始时选中的那一代。
 - `RuntimeReloadMixin.prepare()` / `publish()` 由设置事务边界（`desktop_bridge/runtime/apply.py`）调用：先构建新一代，再切换发布指针，旧代在已接收工作排空后关闭（`CoreRuntime.stop()` + `MemoryRuntime.aclose()`）。
 - `RuntimeDispatcher` 是 bus 的唯一消费者，为每条渠道消息获取租约后交给当代 `AgentLoop.process_inbound()`；定时任务与子回合沿用父操作的那一代。
-- `RuntimeBackground` 为每一代准备主动循环与记忆优化任务，在上一代后台工作排空后才接管调度。
+- `RuntimeBackground` 为每一代准备主动循环与记忆优化任务。换代或关闭时 `stop()` 取消上一代在途的后台工作（记忆整理回滚 PENDING 快照，主动 tick 放弃未发出的部分，已进出站队列的回复照常发出），新一代等它退出后按自身间隔重新调度；切换不等待卡在模型重试里的后台任务。
 - `ChannelHost`（`bootstrap/channel_host.py`）是跨代长驻的渠道宿主，负责渠道启动、交接与失败快照。
 
 ## Bridge 与消息入口
@@ -128,7 +128,7 @@ LLM 调用由 `apps/backend/agent/provider.py` 封装，使用官方 `openai` SD
 flowchart TD
   A[AppRuntime.shutdown] --> B[关闭 bus 入站]
   B --> C[停止 AgentLoop / Scheduler 控制任务]
-  C --> D[停止并排空各代 RuntimeBackground]
+  C --> D[停止并取消各代 RuntimeBackground 在途工作]
   D --> E[排空各代已接收工作: CoreRuntime.drain]
   E --> F[排空出站并停止 ChannelHost]
   F --> G[各代 CoreRuntime.stop: PluginKernel.terminate_all / MCP.shutdown / EventBus.aclose / provider.aclose]

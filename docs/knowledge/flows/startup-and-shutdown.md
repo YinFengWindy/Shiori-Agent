@@ -55,7 +55,7 @@ sequenceDiagram
   participant Plugin as PluginKernel
   participant Store as Channels / Memory / HTTP
   App->>Loop: close inbound, stop control tasks
-  App->>App: stop and drain RuntimeBackground
+  App->>App: stop (cancel in-flight work) and drain RuntimeBackground
   App->>Gen: drain accepted work
   App->>Loop: drain outbound
   App->>Store: ChannelHost.stop_all()

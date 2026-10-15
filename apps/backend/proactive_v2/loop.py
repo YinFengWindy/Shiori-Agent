@@ -404,16 +404,21 @@ class ProactiveLoop:
 
             workspace = getattr(self._sessions, "workspace", None)
             self._mcp_pool = McpClientPool(Path(workspace) if workspace else None)
-        await self._mcp_pool.connect_all()
         try:
+            # Connecting sits inside the cleanup boundary: a runtime switch can
+            # cancel it after some servers are already up.
+            await self._mcp_pool.connect_all()
             await self._run_loop()
         finally:
             self.stop()
-            if self._poll_task is not None:
-                await self._poll_task
-                self._poll_task = None
-            await self._mcp_pool.disconnect_all()
-            logger.info("[proactive] mcp pool 已关闭")
+            try:
+                if self._poll_task is not None:
+                    poll_task, self._poll_task = self._poll_task, None
+                    await self._stop_poll_task(poll_task)
+            finally:
+                # A failed poll still propagates, but never leaks MCP connections.
+                await self._mcp_pool.disconnect_all()
+                logger.info("[proactive] mcp pool 已关闭")
 
     async def _run_loop(self) -> None:
         # 启动时先同步完成首次 feed 轮询,保证首次 tick 能拿到新鲜数据
@@ -477,9 +482,21 @@ class ProactiveLoop:
         return sense.target_session_key()
 
     def stop(self) -> None:
-        """Stops scheduling ticks while allowing an accepted tick to complete."""
+        """Stops scheduling ticks; the runtime owner cancels an in-flight tick.
+
+        A cancelled tick abandons whatever it has not delivered yet; replies it
+        already handed to the outbound queue are still sent by the dispatcher.
+        """
         self._running = False
         self._stop_requested.set()
+
+    @staticmethod
+    async def _stop_poll_task(task: asyncio.Task[None]) -> None:
+        """Interrupts an in-flight feed poll and re-raises any failure but its cancel."""
+        task.cancel()
+        await asyncio.wait([task])
+        if not task.cancelled() and (error := task.exception()) is not None:
+            raise error
 
     async def _wait_interval(self, seconds: float) -> None:
         try:

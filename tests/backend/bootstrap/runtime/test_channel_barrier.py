@@ -10,7 +10,7 @@ import pytest
 from agent.config_models import Config
 from bootstrap.app import AppRuntime, RuntimeFeatures
 from shiori_sdk.messages import OutboundMessage
-from core.common.runtime_scope import bind_runtime
+from core.common.runtime_scope import bind_runtime, current_runtime_lease
 
 # 渠道插件：token 即账号，换 token 就是换账号；Transport 由测试注入，便于记录发送。
 _TRANSPORT_MODULE = "_channel_barrier_transport"
@@ -327,5 +327,80 @@ async def test_rollback_resume_failure_still_reopens_admission(tmp_path, monkeyp
         assert app._generation_manager.admission.is_set()
         assert app.generation == 1
     finally:
+        await app.discard(candidate)
+        await app.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_account_switch_interrupts_background_work_that_ignores_stop(
+    tmp_path, monkeypatch
+):
+    sent = []
+    _install_transport(monkeypatch, sent, tmp_path)
+    queued = asyncio.Event()
+    interrupted = asyncio.Event()
+    starts = []
+
+    class StuckTick:
+        # Hands a reply to the outbound queue, then hangs like a retried model call.
+        def stop(self):
+            pass
+
+        async def run(self):
+            lease = current_runtime_lease()
+            assert lease is not None
+            starts.append(lease.generation)
+            if lease.generation > 1:
+                return
+            await lease.core.bus.publish_outbound(
+                OutboundMessage("fake", "chat", "proactive old")
+            )
+            queued.set()
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                interrupted.set()
+                raise
+
+    def build(*args, loop_consumer, **kwargs):
+        loop = StuckTick()
+        loop_consumer(loop)
+        return [loop.run()], None
+
+    monkeypatch.setattr(
+        "bootstrap.runtime.background.build_memory_optimizer_task", build
+    )
+    config = Config(
+        provider="",
+        model="",
+        api_key="",
+        model_registrations=[],
+        memory_optimizer_enabled=False,
+        plugins=_config("account-A"),
+    )
+    app = AppRuntime(config, tmp_path, features=RuntimeFeatures(enable_proactive=False))
+    await app.start()
+    await asyncio.wait_for(queued.wait(), 1)
+    candidate = await app.prepare(replace(config, plugins=_config("account-B")))
+    publish = asyncio.create_task(app.publish(candidate))
+    try:
+        for _ in range(10):
+            if not app.accepting_work:
+                break
+            await asyncio.sleep(0)
+        assert not app.accepting_work
+        request = asyncio.create_task(app.wait_for_admission())
+        await asyncio.wait_for(publish, 3)
+        await asyncio.wait_for(request, 1)
+        assert interrupted.is_set()
+        assert sent == [("account-A", "proactive old")]
+        assert app.generation == 2 and app.accepting_work
+        for _ in range(10):
+            if starts == [1, 2]:
+                break
+            await asyncio.sleep(0)
+        assert starts == [1, 2]
+    finally:
+        await asyncio.gather(publish, return_exceptions=True)
         await app.discard(candidate)
         await app.shutdown()
