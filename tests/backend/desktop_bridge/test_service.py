@@ -22,7 +22,6 @@ from agent.turns.result import TurnResult, TurnOutbound
 from core.roles.reply_state import RoleReply
 from bus.event_bus import EventBus
 from bus.events_lifecycle import (
-    ExternalImagePushed,
     ExternalTextPushed,
     ProactiveMessageCommitted,
 )
@@ -592,7 +591,7 @@ async def test_pending_desktop_text_and_images_publish_once_after_formal_commit(
 
 
 @pytest.mark.asyncio
-async def test_external_image_push_persists_and_broadcasts_desktop_session(
+async def test_external_media_push_persists_and_broadcasts_desktop_session(
     tmp_path,
 ) -> None:
     role_store = RoleStore(tmp_path)
@@ -626,13 +625,16 @@ async def test_external_image_push_persists_and_broadcasts_desktop_session(
     service.add_event_listener(emitted.append)
     image = str(tmp_path / "scene.png")
 
+    # An image account_send delivered without text, as media of the message.
     await event_bus.emit(
-        ExternalImagePushed(
+        ExternalTextPushed(
             session_key="role:mira",
             role_id="mira",
             channel="telegram",
             chat_id="123",
-            image=image,
+            text="",
+            tool="account_send",
+            media=(image,),
         )
     )
 
@@ -770,6 +772,7 @@ async def test_host_text_push_to_a_channel_reaches_the_phone(tmp_path) -> None:
             channel="qq",
             chat_id="gqq:5",
             text="该喝水啦",
+            tool="account_send",
             external_message_id="qq-1",
         )
     )

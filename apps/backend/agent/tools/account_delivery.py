@@ -7,12 +7,12 @@ arguments or results, because the role holds at most one account per channel.
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
 
 from agent.account_delivery import AccountDelivery
 from shiori_sdk.tools import Tool
 from agent.tools.external_access import ExternalArgumentLimit
-from agent.tools.message_push import record_delivered_push
 from bus.event_bus import EventBus
 from bus.events_lifecycle import ExternalTextPushed
 from shiori_sdk.accounts.targets import (
@@ -23,6 +23,8 @@ from shiori_sdk.accounts.targets import (
     is_user_target,
 )
 from shiori_sdk.channels.chat_types import CHAT_TYPE_PRIVATE
+
+logger = logging.getLogger(__name__)
 
 
 class AccountListTool(Tool):
@@ -211,4 +213,23 @@ class AccountSendTool(Tool):
                 "ownership_current": receipt.ownership_current,
             },
             ensure_ascii=False,
+        )
+
+
+async def record_delivered_push(event_bus: EventBus, event: ExternalTextPushed) -> None:
+    """Has the push sync record a send the platform already accepted.
+
+    ``account_send`` owns a role's external sends and records them here.
+    ``message_push`` records nothing itself: with a role it may only reach the
+    role's desktop session, whose sender persists the message. Boundary: the
+    send happened, so a failure to record it is logged and never reported as a
+    failed send (the model would send it again).
+    """
+    try:
+        _ = await event_bus.emit(event)
+    except Exception:
+        logger.exception(
+            "[push] 已发送但未能记入角色会话 %s:%s",
+            event.channel,
+            event.chat_id,
         )

@@ -9,8 +9,6 @@ from dataclasses import dataclass
 from typing import Any
 
 from shiori_sdk.tools import Tool
-from bus.event_bus import EventBus
-from bus.events_lifecycle import ExternalImagePushed, ExternalTextPushed
 from core.common.runtime_scope import current_runtime_lease
 
 logger = logging.getLogger(__name__)
@@ -351,27 +349,6 @@ class MessagePushTool(Tool):
         return PushOutcome(
             "；".join(results) if results else f"渠道 {channel!r} 没有可用的 sender",
             tuple(external_ids),
-        )
-
-
-async def record_delivered_push(
-    event_bus: EventBus, event: ExternalTextPushed | ExternalImagePushed
-) -> None:
-    """Has the push sync record a send the platform already accepted.
-
-    Used by ``account_send``, which owns a role's external sends.
-    ``message_push`` records nothing itself: with a role it may only reach the
-    role's desktop session, whose sender persists the message. Boundary: the
-    send happened, so a failure to record it is logged and never reported as a
-    failed send (the model would send it again).
-    """
-    try:
-        _ = await event_bus.emit(event)
-    except Exception:
-        logger.exception(
-            "[push] 已发送但未能记入角色会话 %s:%s",
-            event.channel,
-            event.chat_id,
         )
 
 

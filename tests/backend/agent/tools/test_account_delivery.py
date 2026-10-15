@@ -13,9 +13,11 @@ from agent.tools.account_delivery import (
     AccountListTool,
     AccountSendTool,
     AccountTargetsTool,
+    record_delivered_push,
 )
 from agent.turns.turn_pushes import current_turn_pushes
 from bus.event_bus import EventBus
+from bus.events_lifecycle import ExternalTextPushed
 from conversation.push_sync import ExternalPushSyncService
 from conversation.service import ConversationService, LegacySessionDescriptor
 from shiori_sdk.channels.threads import network_thread_id
@@ -199,8 +201,12 @@ async def test_user_target_reaches_the_users_private_chat_and_is_recorded(
     assert stored["content"] == "我在 QQ 上找你啦"
     assert stored["media"] == [image]
     assert stored["thread_id"] == network_thread_id("mira", "qq", "3174898512")
+    assert stored["tools_used"] == ["account_send"]
     metadata = stored["metadata"]
-    assert metadata["source"] == "account_send"
+    assert (metadata["source"], metadata["sender_id"]) == (
+        "account_send",
+        "account_send",
+    )
     assert metadata["chat_type"] == "private"
     assert metadata["delivery_attempt_id"] == attempt.attempt_id
     assert metadata["external_message_id"] == "qq-9"
@@ -259,3 +265,21 @@ async def test_user_target_on_a_telegram_bot_is_recorded_in_its_inbound_thread(
     )
     [stored] = session_manager._store.fetch_session_messages("role:mira")
     assert stored["thread_id"] == inbound_thread.id
+
+
+async def test_a_failure_to_record_never_fails_the_delivered_send():
+    event_bus = EventBus()
+    event_bus.on(ExternalTextPushed, AsyncMock(side_effect=OSError("disk")))
+
+    # The send already happened: the recording failure is logged, not raised.
+    await record_delivered_push(
+        event_bus,
+        ExternalTextPushed(
+            session_key="role:mira",
+            role_id="mira",
+            channel="qq",
+            chat_id="gqq:5",
+            text="该喝水啦",
+            tool="account_send",
+        ),
+    )

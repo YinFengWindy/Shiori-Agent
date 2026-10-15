@@ -9,92 +9,13 @@ import pytest
 
 from agent.turns.turn_pushes import TurnPushDrafts, current_turn_pushes
 from bus.event_bus import EventBus
-from bus.events_lifecycle import (
-    ExternalImagePushed,
-    ExternalTextPushed,
-    ProactiveMessageCommitted,
-)
+from bus.events_lifecycle import ExternalTextPushed, ProactiveMessageCommitted
 from shiori_sdk.channels.threads import network_thread_id
 from conversation.push_sync import ExternalPushSyncService
 from conversation.context_scope import user_context_view
 from core.identity import IdentityChat, UserIdentityStore
 from shiori_sdk.accounts.models import AccountRecord
 from session.manager import SessionManager
-
-
-@pytest.mark.asyncio
-async def test_pre_persisted_proactive_image_is_not_duplicated(tmp_path: Path) -> None:
-    session_manager = SessionManager(tmp_path)
-    session = session_manager.open_role_session("mira", role_name="Mira")
-    image = str(tmp_path / "scene.png")
-    session.add_message(
-        "assistant",
-        "给你看张图",
-        media=[image],
-        proactive=True,
-        metadata={
-            "transport_channel": "telegram",
-            "transport_chat_id": "123",
-        },
-    )
-    await session_manager.append_messages(session, session.messages[-1:])
-    event_bus = EventBus()
-    _ = ExternalPushSyncService(
-        live_turn_pushes=current_turn_pushes,
-        session_manager=session_manager,
-        event_bus=event_bus,
-    )
-    await event_bus.emit(
-        ExternalImagePushed(
-            session_key="role:mira",
-            role_id="mira",
-            channel="telegram",
-            chat_id="123",
-            image=image,
-            already_persisted=True,
-        )
-    )
-
-    assert len(session_manager.get_or_create("role:mira").messages) == 1
-
-
-@pytest.mark.asyncio
-async def test_pre_persisted_proactive_image_allows_retry_transport(
-    tmp_path: Path,
-) -> None:
-    session_manager = SessionManager(tmp_path)
-    session = session_manager.open_role_session("mira", role_name="Mira")
-    image = str(tmp_path / "scene.png")
-    session.add_message(
-        "assistant",
-        "给你看张图",
-        media=[image],
-        proactive=True,
-        metadata={
-            "source": "proactive",
-            "transport_channel": "qqbot",
-            "transport_chat_id": "primary",
-        },
-    )
-    await session_manager.append_messages(session, session.messages[-1:])
-    event_bus = EventBus()
-    _ = ExternalPushSyncService(
-        live_turn_pushes=current_turn_pushes,
-        session_manager=session_manager,
-        event_bus=event_bus,
-    )
-    await event_bus.emit(
-        ExternalImagePushed(
-            session_key="role:mira",
-            role_id="mira",
-            channel="telegram",
-            chat_id="retry-target",
-            image=image,
-            already_persisted=True,
-        )
-    )
-
-    assert len(session_manager.get_or_create("role:mira").messages) == 1
 
 
 def _text_sync(tmp_path: Path):
@@ -122,26 +43,19 @@ def _text_sync(tmp_path: Path):
         message: str = "",
         image: str = "",
     ) -> None:
-        # One delivered QQ push of the role, as the sending tool reports it.
+        # One delivered QQ push of the role, as account_send reports it: an
+        # image travels as media of the same message.
         await event_bus.emit(
-            ExternalImagePushed(
-                session_key=session_key,
-                role_id="mira",
-                channel="qq",
-                chat_id=chat_id,
-                image=image,
-                attach_to_turn=in_turn,
-                proactive=proactive,
-            )
-            if image
-            else ExternalTextPushed(
+            ExternalTextPushed(
                 session_key=session_key,
                 role_id="mira",
                 channel="qq",
                 chat_id=chat_id,
                 text=message,
+                tool="account_send",
                 in_turn=in_turn,
                 delivery_key=delivery_key,
+                media=(image,) if image else (),
                 proactive=proactive,
             )
         )
@@ -168,6 +82,7 @@ async def test_concurrent_delivery_events_commit_and_notify_only_once(
         channel="qq",
         chat_id="902",
         text="delivered once",
+        tool="account_send",
         delivery_key="scheduler:once",
     )
     tasks = []
@@ -251,6 +166,12 @@ async def test_host_text_push_is_stored_once_under_the_chats_thread(
         for message in stored
     ] == [("assistant", "该喝水啦", network_thread_id("mira", "qq", "gqq:5"))]
     assert stored[0]["metadata"]["delivery_key"] == "scheduler:job:1"
+    # The sending tool is the message's source, sender and only tool used.
+    assert (
+        stored[0]["tools_used"],
+        stored[0]["metadata"]["source"],
+        stored[0]["metadata"]["sender_id"],
+    ) == (["account_send"], "account_send", "account_send")
     assert [event.message_id for event in committed] == [stored[0]["id"]]
 
 

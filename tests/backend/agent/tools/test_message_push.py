@@ -3,14 +3,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from agent.tools.message_push import (
-    MessagePushTool,
-    PushOutcome,
-    record_delivered_push,
-)
+from agent.tools.message_push import MessagePushTool, PushOutcome
 from agent.tools.registry import ToolRegistry
-from bus.event_bus import EventBus
-from bus.events_lifecycle import ExternalTextPushed
 from core.common.runtime_scope import bind_runtime
 
 
@@ -398,22 +392,4 @@ async def test_model_arguments_cannot_override_the_push_context():
     assert validated == ["mira"]
     sender.assert_awaited_once_with(
         "role:mira", "hi", {"delivery_key": "", "already_persisted": False}
-    )
-
-
-async def test_a_failure_to_record_never_fails_the_delivered_send():
-    event_bus = EventBus()
-    event_bus.on(ExternalTextPushed, AsyncMock(side_effect=OSError("disk")))
-
-    # The send already happened: the recording failure is logged, not raised.
-    await record_delivered_push(
-        event_bus,
-        ExternalTextPushed(
-            session_key="role:mira",
-            role_id="mira",
-            channel="qq",
-            chat_id="gqq:5",
-            text="该喝水啦",
-            tool="account_send",
-        ),
     )
