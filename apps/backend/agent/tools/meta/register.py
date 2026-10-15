@@ -47,9 +47,9 @@ def register_common_meta_tools(
     session_store: Any,
     workspace: Path,
     push_tool: MessagePushTool,
-) -> MessagePushTool:
-    """Registers the always-on meta tools; ``push_tool`` is the runtime's shared,
-    already validated ``message_push`` instance and is returned as registered."""
+) -> None:
+    """Registers the always-on meta tools; ``push_tool`` is the runtime's shared
+    ``message_push`` instance, built with the role target check bound."""
     # external_allowed 标出外部上下文受限回合仍可用的内置工具（#489）。
     tools.register(
         ToolSearchTool(tools),
@@ -129,7 +129,6 @@ def register_common_meta_tools(
         always_on=True,
         risk="write",
     )
-    return push_tool
 
 
 def _register_memory_tool(

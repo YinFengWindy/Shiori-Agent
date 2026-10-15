@@ -103,7 +103,7 @@ def test_build_registered_tools_uses_toolset_providers(monkeypatch, tmp_path: Pa
         lambda *_args, **_kwargs: SimpleNamespace(),
     )
     shared_push = MessagePushTool(role_target_validator=allow_every_role_target)
-    tools, push_tool, scheduler, mcp_registry, memory_runtime = build_registered_tools(
+    tools, scheduler, mcp_registry, memory_runtime = build_registered_tools(
         config=cast(
             Any, SimpleNamespace(spawn_enabled=False, proactive=SimpleNamespace())
         ),
@@ -120,7 +120,6 @@ def test_build_registered_tools_uses_toolset_providers(monkeypatch, tmp_path: Pa
     )
 
     assert calls == ["memory", "meta", "spawn", "schedule", "mcp"]
-    assert push_tool is shared_push
     assert scheduler is not None
     assert mcp_registry is not None
     assert memory_runtime.engine is not None

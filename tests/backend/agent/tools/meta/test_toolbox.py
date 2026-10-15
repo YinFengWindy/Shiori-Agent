@@ -84,12 +84,13 @@ def test_register_meta_tool_helpers_mark_expected_tools_always_on():
         "list_dir": ListDirTool(),
     }
 
-    push_tool = register_common_meta_tools(
+    push_tool = MessagePushTool(role_target_validator=allow_every_role_target)
+    register_common_meta_tools(
         tools,
         readonly_tools,
         session_store=object(),
         workspace=Path("."),
-        push_tool=MessagePushTool(role_target_validator=allow_every_role_target),
+        push_tool=push_tool,
     )
     register_memory_meta_tools(
         tools,
@@ -97,7 +98,7 @@ def test_register_meta_tool_helpers_mark_expected_tools_always_on():
     )
 
     always_on = tools.get_always_on_names()
-    assert isinstance(push_tool, MessagePushTool)
+    assert tools.get_tool("message_push") is push_tool
     assert set(META_TOOLBOX_NAMES) - {"memorize"} <= always_on
     assert "reinforce_memory" in always_on
     # 外部上下文受限回合只放行这些内置工具；记忆读写、命令、文件、推送一律不放行。

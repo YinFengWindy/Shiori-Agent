@@ -259,7 +259,6 @@ def build_registered_tools(
     shared_scheduler: SchedulerService | None = None,
 ) -> tuple[
     ToolRegistry,
-    MessagePushTool,
     SchedulerService,
     McpServerRegistry,
     MemoryRuntime,
@@ -332,7 +331,6 @@ def build_registered_tools(
     track_build_resource(mcp_registry, mcp_registry.shutdown)
     return (
         tools,
-        push_tool,
         scheduler,
         mcp_registry,
         memory_runtime,
@@ -538,7 +536,7 @@ def build_core_runtime(
         )
     )
     loop_ref: dict[str, AgentLoop] = {}
-    tools, push_tool, scheduler, mcp_registry, memory_runtime = build_registered_tools(
+    tools, scheduler, mcp_registry, memory_runtime = build_registered_tools(
         config,
         workspace,
         http_resources,
