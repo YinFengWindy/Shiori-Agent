@@ -123,27 +123,3 @@ class ChannelHub(Protocol):
         external_message_id: str = "",
         via_account: dict[str, str] | None = None,
     ) -> object: ...
-
-
-class PushSenders(Protocol):
-    """Register connection-owned senders; stopping an old connection cannot remove a replacement."""
-
-    def register_channel(
-        self,
-        channel: str,
-        text: Sender | None = None,
-        stream_text: Sender | None = None,
-        file: Callable[[str, str, str | None], Awaitable[str | None]] | None = None,
-        image: Sender | None = None,
-        target_resolver: Callable[[str], str] | None = None,
-        text_with_metadata: (
-            Callable[[str, str, dict[str, object]], Awaitable[str | None]] | None
-        ) = None,
-        image_with_metadata: (
-            Callable[[str, str, dict[str, object]], Awaitable[str | None]] | None
-        ) = None,
-        description: str = "",
-    ) -> None: ...
-    def unregister_channel(
-        self, channel: str, *, text: Sender | None = None
-    ) -> None: ...

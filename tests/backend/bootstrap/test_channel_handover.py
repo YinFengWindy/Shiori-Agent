@@ -4,8 +4,6 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from agent.tools.message_push import MessagePushTool
-from tests.support.push import allow_every_role_target
 from bootstrap.channel_host import ChannelHost, ChannelHandoverError
 from bus.queue import MessageBus
 from shiori_sdk.messages import OutboundMessage
@@ -39,7 +37,6 @@ class Connection:
         self.intake = not ctx.intake_paused
         self.events.append(f"start:{self.label}")
         ctx.bus.subscribe_outbound(self.name, self.receive)
-        ctx.push_tool.register_channel(self.name, text=self.send)
         if self.fail_start:
             raise RuntimeError("offline")
 
@@ -50,7 +47,6 @@ class Connection:
             raise RuntimeError("disconnect failed")
         if self.ctx is not None:
             self.ctx.bus.unsubscribe_outbound(self.name, self.receive)
-            self.ctx.push_tool.unregister_channel(self.name, text=self.send)
 
     async def receive(self, msg):
         await self.send(msg.chat_id, msg.content)
@@ -61,12 +57,9 @@ class Connection:
 
 def hosts(events, *, fail_start=False, fail_stop=False):
     bus = MessageBus()
-    push = MessagePushTool(role_target_validator=allow_every_role_target)
-    push.set_transport_lock(bus.transport_lock)
     ctx = ChannelContext(
         intake_factory=ChannelIntake,
         bus=bus,
-        push_tool=push,
         session_manager=None,
         event_bus=None,
         attachment_store=None,
@@ -81,13 +74,13 @@ def hosts(events, *, fail_start=False, fail_stop=False):
     candidate = ChannelHost(lambda channel: ctx, transport_lock=bus.transport_lock)
     active.add(old, configuration="old")
     candidate.add(new, configuration="new")
-    return active, candidate, bus, push
+    return active, candidate, bus
 
 
 @pytest.mark.asyncio
 async def test_start_failure_cleans_candidate_subscriptions_and_restores_old():
     events = []
-    active, candidate, bus, _ = hosts(events, fail_start=True)
+    active, candidate, bus = hosts(events, fail_start=True)
     await active.start_all()
     with pytest.raises(ChannelHandoverError) as caught:
         await active.handover_channels(candidate, commit=None)
@@ -103,7 +96,7 @@ async def test_start_failure_cleans_candidate_subscriptions_and_restores_old():
 @pytest.mark.asyncio
 async def test_failed_stop_reports_degraded_connection_without_duplicate_start():
     events = []
-    active, candidate, bus, _ = hosts(events, fail_stop=True)
+    active, candidate, bus = hosts(events, fail_stop=True)
     await active.start_all()
     with pytest.raises(ChannelHandoverError) as caught:
         await active.handover_channels(candidate, commit=None)
@@ -115,7 +108,7 @@ async def test_failed_stop_reports_degraded_connection_without_duplicate_start()
 @pytest.mark.asyncio
 async def test_commit_failure_restores_connection_and_does_not_adopt_candidate():
     events = []
-    active, candidate, _, _ = hosts(events)
+    active, candidate, _ = hosts(events)
     await active.start_all()
     original = active.channels[0]
 
@@ -133,7 +126,7 @@ async def test_commit_failure_restores_connection_and_does_not_adopt_candidate()
 @pytest.mark.asyncio
 async def test_resume_failure_prevents_commit_and_restores_original_transport():
     events = []
-    active, candidate, bus, _ = hosts(events)
+    active, candidate, bus = hosts(events)
     await active.start_all()
     original = active.channels[0]
     active.pause_intake()
@@ -158,7 +151,7 @@ async def test_resume_failure_prevents_commit_and_restores_original_transport():
 @pytest.mark.asyncio
 async def test_reused_channel_is_resumed_before_commit():
     events = []
-    active, candidate, _, _ = hosts(events)
+    active, candidate, _ = hosts(events)
     candidate._channels = active.channels
     await active.start_all()
     active.pause_intake()
@@ -172,7 +165,7 @@ async def test_reused_channel_is_resumed_before_commit():
 @pytest.mark.asyncio
 async def test_commit_failure_repauses_candidate_before_async_cleanup_can_flush_input():
     events = []
-    active, candidate, _, _ = hosts(events)
+    active, candidate, _ = hosts(events)
     await active.start_all()
     new = candidate.channels[0]
     accepted = AsyncMock()
@@ -213,7 +206,7 @@ async def test_commit_failure_repauses_candidate_before_async_cleanup_can_flush_
 @pytest.mark.asyncio
 async def test_unchanged_connection_is_preserved_without_start_or_stop():
     events = []
-    active, candidate, bus, _ = hosts(events)
+    active, candidate, bus = hosts(events)
     candidate._channels = active.channels
     await active.start_all()
     await active.handover_channels(candidate, commit=lambda: events.append("commit"))
@@ -224,7 +217,7 @@ async def test_unchanged_connection_is_preserved_without_start_or_stop():
 @pytest.mark.asyncio
 async def test_restore_failure_is_reported_separately_from_candidate_failure():
     events = []
-    active, candidate, _, _ = hosts(events, fail_start=True)
+    active, candidate, _ = hosts(events, fail_start=True)
     await active.start_all()
     active.channels[0].fail_start = True
     with pytest.raises(ChannelHandoverError) as caught:
@@ -234,9 +227,9 @@ async def test_restore_failure_is_reported_separately_from_candidate_failure():
 
 
 @pytest.mark.asyncio
-async def test_handover_blocks_direct_sends_until_new_connection_is_ready():
+async def test_handover_blocks_replies_until_new_connection_is_ready():
     events = []
-    active, candidate, bus, push = hosts(events)
+    active, candidate, bus = hosts(events)
     await active.start_all()
     started = asyncio.Event()
     release = asyncio.Event()
@@ -253,7 +246,9 @@ async def test_handover_blocks_direct_sends_until_new_connection_is_ready():
     await started.wait()
     assert not new.intake
     send = asyncio.create_task(
-        push.execute(channel="chat", chat_id="one", message="old-task")
+        bus._dispatch_message(
+            OutboundMessage(channel="chat", chat_id="one", content="old-task")
+        )
     )
     await asyncio.sleep(0)
     assert not send.done()
@@ -268,7 +263,7 @@ async def test_handover_blocks_direct_sends_until_new_connection_is_ready():
 @pytest.mark.asyncio
 async def test_removed_channel_keeps_old_replies_until_retirement_signal():
     events = []
-    active, candidate, bus, _ = hosts(events)
+    active, candidate, bus = hosts(events)
     candidate._channels = []
     await active.start_all()
     old = active.channels[0]
@@ -289,7 +284,7 @@ async def test_removed_channel_keeps_old_replies_until_retirement_signal():
 @pytest.mark.asyncio
 async def test_readding_removed_channel_replaces_retained_transport_once():
     events = []
-    active, candidate, bus, _ = hosts(events)
+    active, candidate, bus = hosts(events)
     await active.start_all()
     drained = asyncio.Event()
     empty = ChannelHost(candidate._ctx_factory, transport_lock=bus.transport_lock)

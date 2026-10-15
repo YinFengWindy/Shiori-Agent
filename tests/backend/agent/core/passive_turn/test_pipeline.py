@@ -275,7 +275,7 @@ async def test_pipeline_keeps_background_other_role_and_external_sends_independe
     runtime,
 ):
     external = AsyncMock(return_value=None)
-    runtime.push.register_channel("external", text=external)
+    runtime.push.register_channel("external", text_with_metadata=external)
 
     async def reasoning(**_kwargs):
         assert "已发送" in await asyncio.create_task(runtime.call(message="background"))
@@ -294,7 +294,8 @@ async def test_pipeline_keeps_background_other_role_and_external_sends_independe
     assert [
         row["content"] for row in runtime.manager.get_or_create("role:other").messages
     ] == ["other"]
-    external.assert_awaited_once_with("friend", "external")
+    external.assert_awaited_once()
+    assert external.await_args.args[:2] == ("friend", "external")
 
 
 async def test_cancel_while_waiting_to_commit_cannot_leak_pushes_into_queued_save(

@@ -21,13 +21,10 @@ SYSTEM_PROMPT_HINT = (
     "## 飞书渠道渲染限制"
     "\n- 回复显示在飞书消息卡片里，只支持常用 Markdown：标题、粗体、斜体、删除线、"
     "列表、代码块、表格和链接；不支持 HTML，也不能用 Markdown 语法内嵌图片。"
-    "\n- 图片和文件请用 `message_push` 的 image / file 参数单独发送。"
+    "\n- 图片请用 `account_send` 的 media 参数单独发送。"
     f"\n- 单张卡片约 {CARD_TEXT_LIMIT} 字，超出会拆成多条消息，回复尽量精炼。"
-    "\n- 主动给当前用户发消息时用 `message_push` 的 `channel=feishu`，"
-    "chat_id 保持为当前私聊的 `oc_…`。"
-)
-PUSH_TARGET_HINT = (
-    "飞书私聊，chat_id 为 oc_… 私聊会话 ID，也可直接填用户 open_id（ou_…）"
+    "\n- 主动给当前用户发消息时用 `account_send` 的 `channel=feishu`、"
+    "`target_kind=user`。"
 )
 
 

@@ -13,7 +13,6 @@ from typing import Any
 
 from ..utils import (
     send_markdown as _send_markdown_impl,
-    send_stream_markdown as _send_stream_markdown_impl,
     send_thinking_block as _send_thinking_block_impl,
 )
 
@@ -25,11 +24,6 @@ def _facade() -> ModuleType:
 
 async def _call_send_markdown(*args: Any, **kwargs: Any):
     hook = getattr(_facade(), "send_markdown", _send_markdown_impl)
-    return await hook(*args, **kwargs)
-
-
-async def _call_send_stream_markdown(*args: Any, **kwargs: Any):
-    hook = getattr(_facade(), "send_stream_markdown", _send_stream_markdown_impl)
     return await hook(*args, **kwargs)
 
 

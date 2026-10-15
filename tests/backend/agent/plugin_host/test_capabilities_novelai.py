@@ -66,7 +66,7 @@ async def test_cg_task_holds_generation_until_image_work_finishes(tmp_path: Path
     event_bus, registry = EventBus(), ToolRegistry()
     push_image = AsyncMock(return_value=None)
     push_tool = MessagePushTool(role_target_validator=allow_every_role_target)
-    push_tool.register_channel("desktop", image=push_image)
+    push_tool.register_channel("desktop", image_with_metadata=push_image)
     registry.register(push_tool)
     stage_plugin_package(plugin_directory("novelai"), tmp_path / "plugins/novelai")
     kernel = PluginKernel(
@@ -123,6 +123,7 @@ async def test_cg_task_holds_generation_until_image_work_finishes(tmp_path: Path
     finish.set()
     await asyncio.wait_for(generation.drained.wait(), timeout=2)
     assert observed == [3]
-    push_image.assert_awaited_once_with("role:mira", image)
+    push_image.assert_awaited_once()
+    assert push_image.await_args.args[:2] == ("role:mira", image)
     core.stop.assert_awaited_once()
     assert await kernel.unload("novelai") == []

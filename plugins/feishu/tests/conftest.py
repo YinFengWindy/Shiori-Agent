@@ -22,7 +22,6 @@ from shiori_sdk.testing.channel_hub import FakeChannelHub
 from shiori_sdk.testing.channel_services import (
     FakeInterruptController,
     FakeMessageBus,
-    FakePushSenders,
 )
 from plugins.feishu.backend.channel import FeishuChannel
 from plugins.feishu.backend.ws import EventCallback
@@ -92,8 +91,6 @@ class FakeFeishu:
             )
         elif key == "upload_image":
             data = {"image_key": "img_1"}
-        elif key == "upload_file":
-            data = {"file_key": "file_1"}
         elif key == "create_card":
             data = {"card_id": f"card_{self.counter}"}
         elif key == "contact":
@@ -140,8 +137,6 @@ def _route_key(method: str, path: str) -> str:
         return "delete" if method == "DELETE" else "get"
     if path.endswith("/im/v1/images"):
         return "upload_image"
-    if path.endswith("/im/v1/files"):
-        return "upload_file"
     if path.endswith("/bot/v3/info"):
         return "bot"
     if path.startswith("/open-apis/contact/v3/users/"):
@@ -237,7 +232,6 @@ class Harness:
     api: FakeFeishu
     factory: ConnectionFactoryRecorder
     bus: FakeMessageBus
-    push_tool: FakePushSenders
     hub: FakeChannelHub
     event_bus: FakeEvents
     interrupts: FakeInterruptController
@@ -270,7 +264,7 @@ def build_harness(
         connection_factory=factory,
         **channel_kwargs,
     )
-    bus, push_tool = FakeMessageBus(), FakePushSenders()
+    bus = FakeMessageBus()
     hub = FakeChannelHub(allowed=allowed, blocked=blocked)
     event_bus = FakeEvents()
     interrupts = FakeInterruptController(message="已停止当前回复。")
@@ -278,13 +272,10 @@ def build_harness(
         tmp_path / "uploads",
         bus=bus,
         event_bus=event_bus,
-        push_tool=push_tool,
         interrupt_controller=interrupts,
         channel_hub=hub,
     )
-    return Harness(
-        channel, api, factory, bus, push_tool, hub, event_bus, interrupts, context
-    )
+    return Harness(channel, api, factory, bus, hub, event_bus, interrupts, context)
 
 
 def message_event(

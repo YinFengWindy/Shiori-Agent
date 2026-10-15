@@ -176,15 +176,15 @@ class AutoCgController:
         if push_tool is None:
             raise RuntimeError("自动场景 CG 缺少 message_push 工具")
         image_path = media[0]
-        push_result = await push_tool.execute(
+        # message_push raises on any undelivered payload; returning means the
+        # image was sent or queued with the current turn.
+        _ = await push_tool.execute(
             channel=event.channel,
             chat_id=event.chat_id,
             image=image_path,
             role_id=role_id,
             push_proactive=False,
         )
-        if not isinstance(push_result, str) or "图片已发送" not in push_result:
-            raise RuntimeError(f"自动场景 CG 补发失败: {push_result}")
         self._policy.record_success(event.session_key, prepared["visual_key"])
 
     async def _generate_media_with_retry(

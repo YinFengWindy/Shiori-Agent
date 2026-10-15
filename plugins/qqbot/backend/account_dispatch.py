@@ -25,22 +25,6 @@ class _AccountDispatchMixin:
             raise RuntimeError("QQBot 目标所属应用账号未连接")
         return channel
 
-    async def send(self, chat_id: str, message: str) -> str | None:
-        """Route a host C2C send to its application gateway."""
-        return await self._for_chat(chat_id).send(chat_id, message)
-
-    async def send_proactive(self, chat_id: str, message: str) -> str | None:
-        """Send proactive text through the application named by chat ID."""
-        return await self.send(chat_id, message)
-
-    async def send_image(self, chat_id: str, image: str) -> str | None:
-        """Send an image without crossing application target scopes."""
-        return await self._for_chat(chat_id).send_image(chat_id, image)
-
-    async def send_stream(self, chat_id: str, message: str) -> str | None:
-        """Send a completed stream through its owning application."""
-        return await self._for_chat(chat_id).send_stream(chat_id, message)
-
     def supports_stream_events(self, chat_id: str) -> bool:
         """Report live preview support only for connected C2C targets."""
         try:

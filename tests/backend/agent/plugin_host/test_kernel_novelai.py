@@ -254,7 +254,7 @@ def test_plugin_wires_scene_observations_to_automatic_cg(tmp_path: Path) -> None
     pushed = asyncio.Event()
     push_image = AsyncMock(side_effect=lambda *a, **kw: pushed.set())
     push_tool = MessagePushTool(role_target_validator=allow_every_role_target)
-    push_tool.register_channel("telegram", image=push_image)
+    push_tool.register_channel("desktop", image_with_metadata=push_image)
     registry.register(push_tool)
     services = _services(
         tmp_path,
@@ -273,8 +273,8 @@ def test_plugin_wires_scene_observations_to_automatic_cg(tmp_path: Path) -> None
         await event_bus.fanout(
             SceneObservationCommitted(
                 session_key="role:mira",
-                channel="telegram",
-                chat_id="chat",
+                channel="desktop",
+                chat_id="role:mira",
                 role_id="mira",
                 source="passive",
                 transition="started",
@@ -291,7 +291,8 @@ def test_plugin_wires_scene_observations_to_automatic_cg(tmp_path: Path) -> None
     assert generated_arguments["scene_key"] == "rain-confession"
     assert generated_arguments["visual_key"] == "rain-confession-standing"
     assert "third-person view" in generated_arguments["prompt"]
-    push_image.assert_awaited_once_with("chat", image_path)
+    push_image.assert_awaited_once()
+    assert push_image.await_args.args[:2] == ("role:mira", image_path)
 
 
 class _BlockingImageTool:

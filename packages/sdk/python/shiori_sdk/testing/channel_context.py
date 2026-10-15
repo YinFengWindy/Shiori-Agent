@@ -12,7 +12,6 @@ from shiori_sdk.channels.services import (
     IntakeFactory,
     InterruptController,
     MessageBus,
-    PushSenders,
 )
 from shiori_sdk.http import HttpResources
 from shiori_sdk.runtime import EventsCapability
@@ -29,7 +28,7 @@ from .avatars import FakeAvatars
 from .channel_group import FakeAccountChannelGroup
 from .channel_hub import FakeChannelHub
 from .channel_intake import FakeChannelIntake
-from .channel_services import FakeAttachmentStore, FakeMessageBus, FakePushSenders
+from .channel_services import FakeAttachmentStore, FakeMessageBus
 from .channel_sessions import FakeChannelSessions
 from .events import FakeEvents
 from .tools import FakeTools
@@ -119,7 +118,6 @@ def fake_channel_context(
     bus: MessageBus | None = None,
     session_manager: ChannelSessions | None = None,
     event_bus: EventsCapability | None = None,
-    push_tool: PushSenders | None = None,
     http_resources: HttpResources | None = None,
     interrupt_controller: InterruptController | None = None,
     bot_commands: Sequence[tuple[str, str]] = (),
@@ -130,8 +128,8 @@ def fake_channel_context(
     """Build the start context a host passes to ``Channel.start`` from SDK fakes.
 
     Every omitted service is a fresh SDK fake (``FakeMessageBus``,
-    ``FakeChannelSessions``, ``FakeEvents``, ``FakePushSenders``,
-    ``FakeHttpResources``, ``FakeChannelHub``); pass your own instance to
+    ``FakeChannelSessions``, ``FakeEvents``, ``FakeHttpResources``,
+    ``FakeChannelHub``); pass your own instance to
     inspect it. Received attachments are written beneath ``upload_dir``.
     """
     return ChannelContext(
@@ -140,7 +138,6 @@ def fake_channel_context(
             session_manager if session_manager is not None else FakeChannelSessions()
         ),
         event_bus=event_bus if event_bus is not None else FakeEvents(),
-        push_tool=push_tool if push_tool is not None else FakePushSenders(),
         attachment_store=FakeAttachmentStore(upload_dir),
         http_resources=(
             http_resources if http_resources is not None else FakeHttpResources()

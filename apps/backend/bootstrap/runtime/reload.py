@@ -77,7 +77,6 @@ class RuntimeReloadMixin:
             candidate.channel_host = await start_channels(
                 bus=self.bus,
                 session_manager=self.session_manager,
-                push_tool=self.push_tool,
                 http_resources=self.http_resources,
                 event_bus=self.event_bus,
                 interrupt_controller=self._dispatcher,
@@ -87,9 +86,6 @@ class RuntimeReloadMixin:
                 previous_host=self.channel_host,
                 channel_directory=core.channel_directory,
                 role_store=core.role_runtime_registry.repository.store,
-            )
-            candidate.channel_names = frozenset(
-                channel.name for channel in candidate.channel_host.channels
             )
         except BaseException:
             self._discard_background(candidate)

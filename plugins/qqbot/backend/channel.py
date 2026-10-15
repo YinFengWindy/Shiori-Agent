@@ -17,7 +17,7 @@ from shiori_sdk.channels.chat_types import ChatTypeDeclaration
 from shiori_sdk.channels import ChannelContext
 from shiori_sdk.channels.services import ChannelIntake
 
-from .formatting import CHANNEL, PUSH_TARGET_HINT, SYSTEM_PROMPT_HINT
+from .formatting import CHANNEL, SYSTEM_PROMPT_HINT
 from .gateway import _GatewayMixin, _TokenCache
 from .inbound import _InboundMixin
 from .outbound import _OutboundMixin
@@ -58,7 +58,6 @@ class QQBotChannel(
         # The application account's current message snapshot; None when the
         # channel runs without a host account.
         self._via_account = via_account
-        self._public_hooks = False
         self._bus: MessageBus | None = None
         self._interrupt_controller: InterruptController | None = None
         self._channel_hub: ChannelHub | None = None
@@ -73,7 +72,6 @@ class QQBotChannel(
         self._connection_state = "unknown"
         self._intake: ChannelIntake | None = None
         self._event_bus = None
-        self._push_tool = None
         self._event_bindings = [
             (TurnStarted, self._on_turn_started),
             (StreamDeltaReady, self._on_stream_delta),
@@ -117,22 +115,12 @@ class QQBotChannel(
         self._interrupt_controller = ctx.interrupt_controller
         self._channel_hub = ctx.channel_hub
         self._event_bus = ctx.event_bus
-        self._push_tool = ctx.push_tool
         self._intake = ctx.intake_factory(self._accept_inbound, self.send)
         self._open_http_client()
-        self._public_hooks = public_hooks
         if public_hooks and not self._events_bound:
             for event_type, handler in self._event_bindings:
                 ctx.event_bus.on(event_type, handler)
             self._events_bound = True
-        if public_hooks:
-            ctx.push_tool.register_channel(
-                self.name,
-                text=self.send_proactive,
-                stream_text=self.send_stream,
-                image=self.send_image,
-                description=PUSH_TARGET_HINT,
-            )
         self._stopped.clear()
         self._intake.start(paused=ctx.intake_paused)
         self._task = asyncio.create_task(self._gateway_loop(), name="qqbot_gateway")
@@ -164,8 +152,6 @@ class QQBotChannel(
             for event_type, handler in self._event_bindings:
                 self._event_bus.off(event_type, handler)
             self._events_bound = False
-        if self._push_tool is not None and self._public_hooks:
-            self._push_tool.unregister_channel(self.name, text=self.send_proactive)
         logger.info("[qqbot] 官方 QQBot 通道已停止")
 
     def pause_intake(self) -> None:

@@ -697,60 +697,6 @@ async def test_passive_commit_waits_for_delivery_and_stale_generation_cannot_ove
 
 
 @pytest.mark.asyncio
-async def test_image_transport_lock_and_formal_delivery_do_not_deadlock(tmp_path):
-    sessions = SessionManager(tmp_path)
-    session = sessions.open_role_session("mira", role_name="Mira")
-    push = MessagePushTool(role_target_validator=allow_every_role_target)
-    push.set_transport_lock(asyncio.Lock())
-    image_started, release_image, formal_started = (
-        asyncio.Event(),
-        asyncio.Event(),
-        asyncio.Event(),
-    )
-
-    async def image_sender(_chat_id, _image):
-        image_started.set()
-        await release_image.wait()
-
-    push.register_channel(
-        "telegram", text=AsyncMock(return_value=None), image=image_sender
-    )
-
-    async def desktop_sender(_chat_id: str, _payload: str) -> None:
-        return None
-
-    push.register_channel("desktop", text=desktop_sender, image=desktop_sender)
-    port = PushToolOutboundPort(push, execution_context={"role_id": "mira"})
-
-    async def formal_dispatch(outbound):
-        formal_started.set()
-        return await port.dispatch(outbound)
-
-    owner = TurnOrchestrator(
-        TurnOrchestratorDeps(
-            SessionServices(sessions), SimpleNamespace(dispatch=formal_dispatch)
-        )
-    )
-    # A direct send holds the transport lock while the formal delivery waits.
-    external = asyncio.create_task(
-        push.execute(channel="telegram", chat_id="123", image="/tmp/old.png")
-    )
-    await image_started.wait()
-    formal = asyncio.create_task(
-        _send(owner, _formal_result(owner, media=["/tmp/new.png"]))
-    )
-    await formal_started.wait()
-    release_image.set()
-    results = await asyncio.wait_for(asyncio.gather(external, formal), timeout=2)
-    assert results == ["图片已发送", True]
-    assert [m["media"] for m in session.messages] == [["/tmp/new.png"]]
-    assert (
-        session.messages[-1]["metadata"]["thought"]
-        == session.metadata["current_thought"]
-    )
-
-
-@pytest.mark.asyncio
 @pytest.mark.parametrize("content", ["unsent text", ""])
 async def test_image_only_channel_cannot_commit_requested_text(tmp_path, content):
     sessions = SessionManager(tmp_path)
@@ -759,7 +705,7 @@ async def test_image_only_channel_cannot_commit_requested_text(tmp_path, content
     previous_metadata = dict(session.metadata)
     push = MessagePushTool(role_target_validator=allow_every_role_target)
     image_sender = AsyncMock(return_value=None)
-    push.register_channel("desktop", image=image_sender)
+    push.register_channel("desktop", image_with_metadata=image_sender)
     owner = TurnOrchestrator(
         TurnOrchestratorDeps(
             SessionServices(sessions),
@@ -779,7 +725,8 @@ async def test_image_only_channel_cannot_commit_requested_text(tmp_path, content
         assert reloaded.metadata == previous_metadata
     else:
         assert await _send(owner, result)
-        image_sender.assert_awaited_once_with("role:mira", "/tmp/cat.png")
+        image_sender.assert_awaited_once()
+        assert image_sender.await_args.args[:2] == ("role:mira", "/tmp/cat.png")
         assert session.messages[0]["content"] == ""
         assert session.messages[0]["media"] == ["/tmp/cat.png"]
         assert session.metadata["current_mood"] == "平静"

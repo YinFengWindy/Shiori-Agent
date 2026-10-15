@@ -219,16 +219,6 @@ class FeishuApi:
         )
         return str(as_dict(payload.get("data")).get("image_key") or "")
 
-    async def upload_file(self, data: bytes, file_name: str) -> str:
-        """Uploads a message file and returns its ``file_key``."""
-        payload = await self.request(
-            "POST",
-            "/open-apis/im/v1/files",
-            data={"file_type": "stream", "file_name": file_name},
-            files={"file": (file_name, data)},
-        )
-        return str(as_dict(payload.get("data")).get("file_key") or "")
-
     async def get_user(self, open_id: str) -> dict[str, Any]:
         """Returns a user's contact profile (``name``, ``avatar`` URLs …).
 

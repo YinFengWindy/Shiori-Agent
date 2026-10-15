@@ -1,15 +1,16 @@
 """
-统一消息推送工具，agent 通过 channel + chat_id 向任意已注册渠道发送消息、文件或图片。
+统一消息推送工具，agent 通过 channel + chat_id 向已注册渠道发送消息、文件或图片。
+
+角色只能推送到自己的桌面会话；外部渠道发送走 account_send。
 """
 
-import asyncio
 import logging
+import os
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
 
 from shiori_sdk.tools import Tool
-from core.common.runtime_scope import current_runtime_lease
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,9 @@ SenderResult = str | None
 # genuinely unbound target without silently rewriting it.
 RoleTargetValidator = Callable[[str, str, str], bool | str]
 
+MetadataSender = Callable[[str, str, dict[str, object]], Awaitable[SenderResult]]
+FileSender = Callable[[str, str, str | None], Awaitable[SenderResult]]
+
 
 @dataclass(frozen=True)
 class PushOutcome:
@@ -37,6 +41,13 @@ class PushOutcome:
 
     text: str
     external_message_ids: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class _ChannelSenders:
+    text: MetadataSender | None
+    image: MetadataSender | None
+    file: FileSender | None
 
 
 class MessagePushTool(Tool):
@@ -83,13 +94,9 @@ class MessagePushTool(Tool):
 
     def __init__(self, *, role_target_validator: RoleTargetValidator) -> None:
         """``role_target_validator`` checks every send that carries a role."""
-        # channel -> {type: sender_fn}
-        self._senders: dict[str, dict[str, Callable[..., Awaitable[SenderResult]]]] = {}
+        self._senders: dict[str, _ChannelSenders] = {}
         self._descriptions: dict[str, str] = {}
-        self._target_resolvers: dict[str, Callable[[str], str]] = {}
         self._role_target_validator = role_target_validator
-        self._transport_lock: asyncio.Lock | None = None
-        self._retired_channels: set[str] = set()
 
     @property
     def description(self) -> str:
@@ -101,7 +108,6 @@ class MessagePushTool(Tool):
                 else channel
             )
             for channel in self._senders
-            if channel not in self._retired_channels
         ]
         return (
             "向指定渠道的用户主动发送消息、文件或图片。"
@@ -111,76 +117,31 @@ class MessagePushTool(Tool):
             "message/file/image 三者至少提供一个。"
         )
 
-    def set_transport_lock(self, lock: asyncio.Lock) -> None:
-        """Shares the bus handover barrier so direct sends drain before disconnect."""
-        self._transport_lock = lock
-
-    def unregister_channel(self, channel: str, *, text: Callable | None = None) -> None:
-        """Removes only the sender registration owned by the stopping connection."""
-        senders = self._senders.get(channel)
-        if senders is None or (text is not None and senders.get("text") != text):
-            return
-        self._senders.pop(channel, None)
-        self._descriptions.pop(channel, None)
-        self._target_resolvers.pop(channel, None)
-        self._retired_channels.discard(channel)
-
-    def retire_channel(self, channel: str) -> None:
-        """Restricts a removed transport to tasks accepted while it was configured."""
-        self._retired_channels.add(channel)
-
     def register_channel(
         self,
         channel: str,
-        text: Callable[[str, str], Awaitable[SenderResult]] | None = None,
-        stream_text: Callable[[str, str], Awaitable[SenderResult]] | None = None,
-        file: Callable[[str, str, str | None], Awaitable[SenderResult]] | None = None,
-        image: Callable[[str, str], Awaitable[SenderResult]] | None = None,
-        target_resolver: Callable[[str], str] | None = None,
-        text_with_metadata: (
-            Callable[[str, str, dict[str, object]], Awaitable[SenderResult]] | None
-        ) = None,
-        image_with_metadata: (
-            Callable[[str, str, dict[str, object]], Awaitable[SenderResult]] | None
-        ) = None,
+        *,
+        text_with_metadata: MetadataSender | None = None,
+        image_with_metadata: MetadataSender | None = None,
+        file: FileSender | None = None,
         description: str = "",
     ) -> None:
         """注册渠道的各类 sender。
-        - text(chat_id, message)
-        - stream_text(chat_id, message)
-        - file(chat_id, file_path, name=None)
-        - image(chat_id, image_path_or_url)
-        - target_resolver(chat_id) -> canonical chat_id
         - text_with_metadata(chat_id, message, metadata) preserves delivery ownership
+        - image_with_metadata(chat_id, image_path_or_url, metadata)
+        - file(chat_id, file_path, name=None)
         - description: 渠道身份与 chat_id 格式的简短说明，写进工具描述的可用渠道列表
         每个 sender 可返回平台为本次发送分配的消息 id（str）供投递记录使用；
         拿不到 id 的渠道返回 None。
         """
-        self._senders[channel] = {}
+        self._senders[channel] = _ChannelSenders(
+            text=text_with_metadata, image=image_with_metadata, file=file
+        )
         if description.strip():
             self._descriptions[channel] = description.strip()
         else:
             self._descriptions.pop(channel, None)
-        self._retired_channels.discard(channel)
-        if text:
-            self._senders[channel]["text"] = text
-        if stream_text:
-            self._senders[channel]["stream_text"] = stream_text
-        if text_with_metadata:
-            self._senders[channel]["text_with_metadata"] = text_with_metadata
-        if image_with_metadata:
-            self._senders[channel]["image_with_metadata"] = image_with_metadata
-        if file:
-            self._senders[channel]["file"] = file
-        if image:
-            self._senders[channel]["image"] = image
-        if target_resolver is not None:
-            self._target_resolvers[channel] = target_resolver
-        else:
-            self._target_resolvers.pop(channel, None)
-        logger.debug(
-            f"message_push: 注册渠道 {channel!r}  支持: {list(self._senders[channel])}"
-        )
+        logger.debug(f"message_push: 注册渠道 {channel!r}")
 
     async def execute(self, **kwargs: Any) -> str:
         """Sends nonblank payloads; host-only ``push_proactive=False`` marks supplements.
@@ -188,6 +149,9 @@ class MessagePushTool(Tool):
         The optional intent must be a bool. Omitting it keeps proactive delivery;
         model arguments cannot set it through the tool registry. Supplemental
         delivery supports text and images; files retain their legacy send path.
+        Returning at all means every payload was delivered or queued with the
+        current turn; a rejected target, unknown channel, unsupported payload or
+        sender failure raises.
         """
         return (await self.push(**kwargs)).text
 
@@ -197,27 +161,11 @@ class MessagePushTool(Tool):
         Host-owned delivery (formal proactive turns) needs the ids to record
         delivery on the committed message; the model only ever sees the text.
         """
-        if self._transport_lock is None:
-            return await self._execute_send(**kwargs)
-        async with self._transport_lock:
-            return await self._execute_send(**kwargs)
-
-    @staticmethod
-    def _has_retired_transport(channel: str) -> bool:
-        # A retired transport only serves work its own runtime generation accepted.
-        lease = current_runtime_lease()
-        return lease is not None and channel in lease.channel_names
-
-    async def _execute_send(self, **kwargs: Any) -> PushOutcome:
         proactive = kwargs.get("push_proactive", True)
         if not isinstance(proactive, bool):
             raise ValueError("push_proactive must be a bool")
         channel: str = kwargs["channel"]
-        if channel in self._retired_channels and not self._has_retired_transport(
-            channel
-        ):
-            return PushOutcome(f"渠道 {channel!r} 已停用")
-        requested_chat_id = str(kwargs["chat_id"])
+        chat_id = str(kwargs["chat_id"])
         message = _nonblank_payload(kwargs.get("message"))
         file = _nonblank_payload(kwargs.get("file"))
         image = _nonblank_payload(kwargs.get("image"))
@@ -235,20 +183,7 @@ class MessagePushTool(Tool):
         }
 
         if not message and not file and not image:
-            return PushOutcome("错误：message、file、image 至少提供一个")
-
-        try:
-            resolver = self._target_resolvers.get(channel)
-            chat_id = (
-                resolver(requested_chat_id)
-                if resolver is not None
-                else requested_chat_id
-            )
-        except Exception as e:
-            logger.error(
-                f"[message_push] 目标解析失败 {channel}:{requested_chat_id}: {e}"
-            )
-            return PushOutcome(f"发送失败：{e}")
+            raise ValueError("message、file、image 至少提供一个")
 
         # The runtime validator only lets a role reach its own desktop session;
         # external role sends go through account_send, which records them.
@@ -258,15 +193,13 @@ class MessagePushTool(Tool):
                 detail = (
                     validation
                     if isinstance(validation, str)
-                    else (
-                        f"角色 {role_id} 未绑定目标渠道: {channel}:{requested_chat_id}"
-                    )
+                    else f"角色 {role_id} 未绑定目标渠道: {channel}:{chat_id}"
                 )
                 raise PermissionError(detail)
 
         senders = self._senders.get(channel)
         if senders is None:
-            return PushOutcome(
+            raise ValueError(
                 f"渠道 {channel!r} 未注册，可用渠道：{list(self._senders) or ['（无）']}"
             )
 
@@ -274,15 +207,15 @@ class MessagePushTool(Tool):
         # Otherwise partial success could commit text or media that was never sent.
         unsupported = [
             f"渠道 {channel!r} 不支持发送{label}"
-            for payload, label, capabilities in (
-                (message, "文本", ("text_with_metadata", "stream_text", "text")),
-                (file, "文件", ("file",)),
-                (image, "图片", ("image_with_metadata", "image")),
+            for payload, label, sender in (
+                (message, "文本", senders.text),
+                (file, "文件", senders.file),
+                (image, "图片", senders.image),
             )
-            if payload and not any(name in senders for name in capabilities)
+            if payload and sender is None
         ]
         if unsupported:
-            return PushOutcome("发送失败：" + "；".join(unsupported))
+            raise ValueError("；".join(unsupported))
 
         results: list[str] = []
         external_ids: list[str] = []
@@ -292,58 +225,32 @@ class MessagePushTool(Tool):
             if message_id is not None:
                 external_ids.append(message_id)
 
-        try:
-            if message:
-                if "text_with_metadata" in senders:
-                    text_result = await senders["text_with_metadata"](
-                        chat_id,
-                        message,
-                        delivery_metadata,
-                    )
-                else:
-                    sender_name = "stream_text" if "stream_text" in senders else "text"
-                    text_result = await senders[sender_name](chat_id, message)
-                record_external_id(text_result)
-                preview = message[:60] + "..." if len(message) > 60 else message
-                logger.info(f"[message_push] {channel}:{chat_id} ← text: {preview!r}")
-                results.append(
-                    "文本已排队，回合成功后发送"
-                    if delivery_metadata.get("queued")
-                    else "文本已发送"
-                )
+        if message and senders.text is not None:
+            record_external_id(await senders.text(chat_id, message, delivery_metadata))
+            preview = message[:60] + "..." if len(message) > 60 else message
+            logger.info(f"[message_push] {channel}:{chat_id} ← text: {preview!r}")
+            results.append(
+                "文本已排队，回合成功后发送"
+                if delivery_metadata.get("queued")
+                else "文本已发送"
+            )
 
-            if file:
-                import os
+        if file and senders.file is not None:
+            name = os.path.basename(file)
+            record_external_id(await senders.file(chat_id, file, name))
+            logger.info(f"[message_push] {channel}:{chat_id} ← file: {file!r}")
+            results.append(f"文件 {name!r} 已发送")
 
-                name = os.path.basename(file)
-                record_external_id(await senders["file"](chat_id, file, name))
-                logger.info(f"[message_push] {channel}:{chat_id} ← file: {file!r}")
-                results.append(f"文件 {name!r} 已发送")
+        if image and senders.image is not None:
+            record_external_id(await senders.image(chat_id, image, delivery_metadata))
+            logger.info(f"[message_push] {channel}:{chat_id} ← image: {image!r}")
+            results.append(
+                "图片已排队，回合成功后发送"
+                if delivery_metadata.get("queued")
+                else "图片已发送"
+            )
 
-            if image:
-                if "image_with_metadata" in senders:
-                    record_external_id(
-                        await senders["image_with_metadata"](
-                            chat_id, image, delivery_metadata
-                        )
-                    )
-                else:
-                    record_external_id(await senders["image"](chat_id, image))
-                logger.info(f"[message_push] {channel}:{chat_id} ← image: {image!r}")
-                results.append(
-                    "图片已排队，回合成功后发送"
-                    if delivery_metadata.get("queued")
-                    else "图片已发送"
-                )
-
-        except Exception as e:
-            logger.error(f"[message_push] 发送失败 {channel}:{chat_id}: {e}")
-            return PushOutcome(f"发送失败：{e}")
-
-        return PushOutcome(
-            "；".join(results) if results else f"渠道 {channel!r} 没有可用的 sender",
-            tuple(external_ids),
-        )
+        return PushOutcome("；".join(results), tuple(external_ids))
 
 
 def _normalize_message_id(sent: SenderResult) -> str | None:

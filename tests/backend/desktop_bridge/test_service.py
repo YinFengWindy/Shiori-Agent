@@ -128,15 +128,14 @@ async def test_registered_committed_push_requires_its_original_message(
     )
     emitted = []
     service.add_event_listener(emitted.append)
-    result = await push.execute(
-        channel="desktop",
-        chat_id="role:mira",
-        message="uncommitted",
-        push_delivery_key=delivery_key,
-        push_message_already_persisted=True,
-    )
-    assert "发送失败" in result
-    assert "uncommitted delivery" in result
+    with pytest.raises(ValueError, match="uncommitted delivery"):
+        await push.execute(
+            channel="desktop",
+            chat_id="role:mira",
+            message="uncommitted",
+            push_delivery_key=delivery_key,
+            push_message_already_persisted=True,
+        )
     assert sessions._store.fetch_session_messages("role:mira") == []
     assert emitted == []
     await service.aclose()
@@ -167,19 +166,19 @@ async def test_push_tool_blank_media_cannot_create_empty_desktop_messages(
         push_tool=push_tool,
     )
     try:
-        result = await push_tool.execute(
-            channel="desktop",
-            chat_id="mira",
-            message=message,
-            **{field: "   "},
-        )
+        if message:
+            result = await push_tool.execute(
+                channel="desktop", chat_id="mira", message=message, **{field: "   "}
+            )
+            assert result == "文本已发送"
+        else:
+            with pytest.raises(ValueError, match="至少提供一个"):
+                await push_tool.execute(
+                    channel="desktop", chat_id="mira", message=message, **{field: "   "}
+                )
 
         persisted = manager._store.fetch_session_messages("role:mira")
         assert [item["content"] for item in persisted] == ([message] if message else [])
-        if message:
-            assert result == "文本已发送"
-        else:
-            assert result == "错误：message、file、image 至少提供一个"
     finally:
         await service.aclose()
 

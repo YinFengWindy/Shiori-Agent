@@ -38,7 +38,6 @@ def _context() -> ChannelContext:
         bus=None,  # type: ignore[arg-type]
         session_manager=None,  # type: ignore[arg-type]
         event_bus=None,  # type: ignore[arg-type]
-        push_tool=None,  # type: ignore[arg-type]
         attachment_store=None,  # type: ignore[arg-type]
         http_resources=None,  # type: ignore[arg-type]
         interrupt_controller=None,

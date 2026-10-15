@@ -9,8 +9,12 @@ from typing import Literal, NotRequired, TypedDict
 from core.common.task_collector import TaskCollector
 from core.common.cleanup import run_cleanup_steps
 from infra.channels.account_group import SupportsMemberChannels
-from shiori_sdk.channels import Channel, ChannelStatus, SupportsChannelStatus
-from infra.channels.runtime_context import RuntimeChannelContext
+from shiori_sdk.channels import (
+    Channel,
+    ChannelContext,
+    ChannelStatus,
+    SupportsChannelStatus,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +64,7 @@ def _failure(name: str, phase: str, error: BaseException) -> ChannelFailure:
 class ChannelHost:
     def __init__(
         self,
-        ctx_factory: Callable[[Channel], RuntimeChannelContext],
+        ctx_factory: Callable[[Channel], ChannelContext],
         *,
         transport_lock: asyncio.Lock | None = None,
     ) -> None:
@@ -143,7 +147,6 @@ class ChannelHost:
             if parked and retire_after is not None:
                 for channel in parked:
                     self._retired_transports[channel.name] = channel
-                    self._ctx_factory(channel).push_tool.retire_channel(channel.name)
                 self._retirements.spawn(
                     self._retire_transports(parked, retire_after, retire_complete),
                     name="channel-retire",
@@ -242,9 +245,6 @@ class ChannelHost:
                     await channel.start(self._ctx_factory(channel))
                     if channel in retired_replaced:
                         channel.pause_intake()
-                        self._ctx_factory(channel).push_tool.retire_channel(
-                            channel.name
-                        )
                 except BaseException as restore_error:
                     degraded.append(_failure(channel.name, "restore", restore_error))
             unsafe_names = {item.channel for item in degraded}

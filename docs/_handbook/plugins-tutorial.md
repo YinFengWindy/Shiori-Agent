@@ -159,19 +159,11 @@ class QQBotChannel:
 
     def system_prompt_hint(self, chat_id: str) -> str:
         return "## 官方 QQBot 渠道规则（硬性）\n- 发送消息时使用 `channel=qqbot`。"
-
-    async def start(self, ctx):
-        ctx.push_tool.register_channel(
-            self.name,
-            text=self.send,
-            description="官方 QQBot，私聊 chat_id 格式为 c2c:<user_openid>",
-        )
 ```
 
 - 钩子按渠道名查询当前已发布的连接；换代中正在排空的旧连接仍按它自己的钩子回答。
 - 开了流式事件就要订阅 `StreamDeltaReady` 并自己节流，最终回复仍经出站消息送达。
-- `register_channel(..., description=...)` 的说明写进 `message_push` 工具描述的「当前可用渠道」列表，用来告诉模型渠道身份和 chat_id 格式。工具描述只列出当前已注册、未停用的渠道。
-- 用到这些钩子或 `description` 参数的包要声明 `runtime_api: ">=3.0.0 <4.0.0"`；旧宿主会忽略钩子，并拒绝未知的 `description` 参数。
+- 用到这些钩子的包要声明 `runtime_api: ">=3.0.0 <4.0.0"`；旧宿主会忽略钩子。
 
 ## 阶段与依赖
 

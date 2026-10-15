@@ -148,9 +148,6 @@ class PushToolOutboundPort:
             outcome = await self._push.push(
                 channel=channel, chat_id=chat_id, **payload, **execution_context
             )
-            self._validate_delivery_result(
-                outcome.text, channel=channel, chat_id=chat_id
-            )
             external_ids.extend(outcome.external_message_ids)
 
         try:
@@ -171,20 +168,3 @@ class PushToolOutboundPort:
         # One session message may span several platform messages (text, then
         # images) but has a single external_message_id column: keep the first.
         return DeliveryReceipt.sent(external_ids[0] if external_ids else None)
-
-    @staticmethod
-    def _validate_delivery_result(
-        result: object, *, channel: str, chat_id: str
-    ) -> None:
-        """Every requested payload must succeed before a delivery can be committed."""
-        result_text = str(result)
-        if (
-            "已发送" not in result_text
-            or "不支持" in result_text
-            or "发送失败" in result_text
-        ):
-            raise OutboundDispatchError(
-                channel=channel,
-                chat_id=chat_id,
-                detail=result_text,
-            )

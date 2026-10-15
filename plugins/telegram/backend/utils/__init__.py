@@ -37,14 +37,12 @@ from .sending import (
     _strip_chunk,
     _utf16_cut,
     send_markdown,
-    send_stream_markdown,
     send_thinking_block,
     sent_message_id,
 )
 from .streaming import (
     TelegramStreamMessage,
     _edit_preview_message,
-    _iter_stream_chunks,
     _ring_tail,
     _send_preview_message,
 )
@@ -56,7 +54,6 @@ __all__ = [
     "TelegramStreamMessage",
     "render_telegram_preview_html",
     "send_markdown",
-    "send_stream_markdown",
     "send_thinking_block",
     "sent_message_id",
 ]

@@ -19,7 +19,6 @@ from shiori_sdk.testing.channel_hub import FakeChannelHub
 from shiori_sdk.testing.channel_services import (
     FakeInterruptController,
     FakeMessageBus,
-    FakePushSenders,
 )
 from shiori_sdk.testing.events import FakeEvents
 import plugins.qqbot.backend.channel as qqbot_channel
@@ -57,9 +56,8 @@ def _receipts(hub: FakeChannelHub) -> list[tuple[object, object]]:
 
 
 @pytest.mark.asyncio
-async def test_qqbot_channel_registers_and_stops_cleanly(tmp_path: Path) -> None:
+async def test_qqbot_channel_subscribes_and_stops_cleanly(tmp_path: Path) -> None:
     bus = FakeMessageBus()
-    push_tool = FakePushSenders()
     events = FakeEvents()
     channel = QQBotChannel("app", "secret")
 
@@ -68,25 +66,16 @@ async def test_qqbot_channel_registers_and_stops_cleanly(tmp_path: Path) -> None
 
     channel._gateway_loop = _no_gateway_loop
     assert channel._client is None
-    await channel.start(
-        fake_channel_context(tmp_path, bus=bus, push_tool=push_tool, event_bus=events)
-    )
+    await channel.start(fake_channel_context(tmp_path, bus=bus, event_bus=events))
     client = channel._client
     assert client is not None and not client.is_closed
     assert list(bus.outbound) == ["qqbot"]
-    assert sorted(push_tool.registrations["qqbot"]) == [
-        "description",
-        "image",
-        "stream_text",
-        "text",
-    ]
     await channel.stop()
     assert client.is_closed
     assert channel._client is None
 
     assert bus.outbound == {}
     assert events._subscriptions == []
-    assert push_tool.registrations == {}
 
 
 @pytest.mark.asyncio
@@ -546,7 +535,7 @@ async def test_qqbot_chatid_answers_without_entering_the_role(
 
 
 @pytest.mark.asyncio
-async def test_qqbot_push_senders_return_the_platform_message_id() -> None:
+async def test_qqbot_senders_return_the_platform_message_id() -> None:
     channel = QQBotChannel("app", "secret")
     channel._get_access_token = AsyncMock(return_value="access-token")
     channel._api_request = AsyncMock(
@@ -554,29 +543,13 @@ async def test_qqbot_push_senders_return_the_platform_message_id() -> None:
             {"id": "text-id"},
             {"file_info": "uploaded-file"},
             {"id": "image-id"},
-            {"id": "stream-id"},
-            {},
         ]
     )
-    channel._last_c2c_msg_id["user-1"] = "inbound-1"
-
-    assert await channel.send_proactive("c2c:app:user-1", "回复") == "text-id"
+    assert await channel.send("c2c:app:user-1", "回复") == "text-id"
     assert (
         await channel.send_image("c2c:app:user-1", "https://example.com/a.png")
         == "image-id"
     )
-    # The first stream chunk assigns the id; later chunks reuse it.
-    assert await channel.send_stream("c2c:app:user-1", "x" * 200) == "stream-id"
-
-
-@pytest.mark.asyncio
-async def test_qqbot_stream_fallback_returns_the_plain_message_id() -> None:
-    channel = QQBotChannel("app", "secret")
-    channel._get_access_token = AsyncMock(return_value="access-token")
-    channel._api_request = AsyncMock(return_value={"id": "plain-id"})
-
-    # No inbound message to anchor a stream: sent as a plain message.
-    assert await channel.send_stream("c2c:app:user-1", "回复") == "plain-id"
 
 
 @pytest.mark.asyncio

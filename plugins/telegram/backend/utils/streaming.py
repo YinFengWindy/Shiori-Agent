@@ -18,7 +18,6 @@ from .rendering import (
 )
 
 logger = logging.getLogger("plugins.telegram.utils")
-_STREAM_CHUNK_STEP = 120
 _STREAM_PUSH_MIN_INTERVAL_S = 2.5
 _STREAM_PUSH_MIN_CHARS = 200
 _TELEGRAM_MSG_LIMIT = 4096
@@ -62,12 +61,7 @@ class TelegramStreamMessage:
         """Id of the single message this stream sends and edits, once sent."""
         return str(self._message_id) if self._message_id is not None else None
 
-    async def push_delta(
-        self,
-        delta: str | dict[str, str],
-        *,
-        force: bool = False,
-    ) -> None:
+    async def push_delta(self, delta: str | dict[str, str]) -> None:
         if self._chat_id <= 0:
             return
         if isinstance(delta, str):
@@ -80,16 +74,15 @@ class TelegramStreamMessage:
             return
         html_text, plain_text = result
         now = asyncio.get_running_loop().time()
-        if not force and now < self._edit_cooldown_until:
+        if now < self._edit_cooldown_until:
             return
-        if not force:
-            grown = len(plain_text) - len(self._last_sent_plain)
-            if (
-                self._last_sent_plain
-                and grown < _STREAM_PUSH_MIN_CHARS
-                and now - self._last_sent_at < _STREAM_PUSH_MIN_INTERVAL_S
-            ):
-                return
+        grown = len(plain_text) - len(self._last_sent_plain)
+        if (
+            self._last_sent_plain
+            and grown < _STREAM_PUSH_MIN_CHARS
+            and now - self._last_sent_at < _STREAM_PUSH_MIN_INTERVAL_S
+        ):
+            return
         await self._send_or_edit(html_text, plain_text)
         self._last_sent_at = now
 
@@ -219,22 +212,6 @@ class TelegramStreamMessage:
         except (TimedOut, NetworkError) as e:
             logger.warning("[telegram] edit_message_text(stream) 失败 err=%s", e)
             return False
-
-
-def _iter_stream_chunks(text: str) -> list[str]:
-    if len(text) <= _STREAM_CHUNK_STEP:
-        return [text]
-    chunks: list[str] = []
-    start = 0
-    while start < len(text):
-        end = min(start + _STREAM_CHUNK_STEP, len(text))
-        if end < len(text):
-            newline = text.rfind("\n", start, end)
-            if newline > start:
-                end = newline + 1
-        chunks.append(text[start:end])
-        start = end
-    return chunks
 
 
 async def _send_preview_message(

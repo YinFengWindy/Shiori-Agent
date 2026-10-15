@@ -28,7 +28,6 @@ from shiori_sdk.testing.channel_sessions import FakeChannelSessions
 from shiori_sdk.testing.channel_services import (
     FakeInterruptController,
     FakeMessageBus,
-    FakePushSenders,
 )
 from shiori_sdk.testing.channel_hub import FakeChannelHub
 
@@ -234,7 +233,6 @@ async def test_telegram_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path:
         limiter=channel._telegram_outbound_limiter,
     )
     monkeypatch.setattr(mod, "send_markdown", AsyncMock())
-    monkeypatch.setattr(mod, "send_stream_markdown", AsyncMock())
     monkeypatch.setattr(mod, "send_thinking_block", AsyncMock())
     await channel.start(ctx)
     hub = channel._channel_hub
@@ -368,16 +366,10 @@ async def test_telegram_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path:
 
     channel._channel_hub = hub
     await channel.send("123", "hi")
-    await channel.send_stream("123", "stream hi")
     sample = tmp_path / "doc.txt"
     sample.write_text("x", encoding="utf-8")
-    # Push senders hand back the id of the message Telegram created.
-    channel._app.bot.send_document.return_value = SimpleNamespace(message_id=8)
+    # Senders hand back the id of the message Telegram created.
     channel._app.bot.send_photo.return_value = SimpleNamespace(message_id=7)
-    assert (
-        await channel.send_file("123", str(sample), name="doc.txt", caption="cap")
-        == "8"
-    )
     assert await channel.send_image("123", "https://example.com/img.jpg") == "7"
     await channel.send_image("123", str(sample))
     await channel._on_response(
@@ -393,7 +385,6 @@ async def test_telegram_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path:
         )
     )
     assert mod.send_markdown.await_count == 3
-    assert mod.send_stream_markdown.await_count == 1
     sender = channel.create_stream_sender("123")
     assert sender is not None
     await sender({"thinking_delta": "先想一点"})
@@ -547,7 +538,6 @@ async def test_telegram_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path:
     )
     assert channel._app.bot.edit_message_text.await_count >= 1
     assert mod.send_markdown.await_count == 3
-    assert mod.send_stream_markdown.await_count == 1
     mod.send_thinking_block.reset_mock()
     before_final_markdown = mod.send_markdown.await_count
     before_delete = channel._app.bot.delete_message.await_count
@@ -705,7 +695,6 @@ async def test_telegram_channel_rejects_a_chat_without_receiving_account(
     event_bus = FakeEvents()
     channel = mod.TelegramChannel(token="token")
     monkeypatch.setattr(mod, "send_markdown", AsyncMock())
-    monkeypatch.setattr(mod, "send_stream_markdown", AsyncMock())
     monkeypatch.setattr(mod, "send_thinking_block", AsyncMock())
     await channel.start(
         fake_channel_context(
@@ -848,12 +837,10 @@ async def test_plugin_channel_takes_runtime_state_and_commands_from_context(
     assert channel.name == "telegram"
     assert channel.configuration_key is None
     bus = FakeMessageBus()
-    push_tool = FakePushSenders()
     hub = FakeChannelHub()
     ctx = fake_channel_context(
         tmp_path / "uploads",
         bus=bus,
-        push_tool=push_tool,
         bot_commands=[("memorystatus", "查看记忆整理状态")],
         channel_hub=hub,
     )
@@ -867,16 +854,8 @@ async def test_plugin_channel_takes_runtime_state_and_commands_from_context(
         tmp_path / "uploads"
     )
     assert bus.outbound == {"telegram": [channel._on_response]}
-    assert sorted(push_tool.registrations["telegram"]) == [
-        "file",
-        "image",
-        "stream_text",
-        "target_resolver",
-        "text",
-    ]
     await channel.stop()
     assert bus.outbound == {}
-    assert push_tool.registrations == {}
 
 
 @pytest.mark.asyncio
