@@ -320,7 +320,7 @@ class _PersistenceMixin:
                         raise ValueError("角色已有更新的正式回复，已丢弃过时回合状态")
                 if not await before_commit():
                     return False
-            return await self._append_messages(
+            await self._append_messages(
                 session,
                 messages,
                 metadata_updates=metadata_updates,
@@ -329,6 +329,7 @@ class _PersistenceMixin:
                 removed_metadata_keys=removed_metadata_keys,
                 metadata_enricher=metadata_enricher,
             )
+            return True
 
         if expected_mood_updated_at is not None:
             async with self._reply_lock(session.key):
@@ -345,7 +346,7 @@ class _PersistenceMixin:
         pending_messages: bool = False,
         removed_metadata_keys: tuple[str, ...] = (),
         metadata_enricher: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
-    ) -> bool:
+    ) -> None:
         """Commit message facts and state together; optionally publish private drafts.
 
         Existing callers may pass messages already added to their session. Formal
@@ -394,7 +395,6 @@ class _PersistenceMixin:
             session.metadata = staged.metadata
             session.updated_at = staged.updated_at
             self._cache[session.key] = session
-            return True
 
     def get_message_media(
         self,
