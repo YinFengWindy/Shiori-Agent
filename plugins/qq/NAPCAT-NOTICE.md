@@ -1,16 +1,15 @@
 # NapCat component notice
 
 The QQ plugin downloads the unmodified Windows Node release of NapCat
-v4.18.28 from https://github.com/NapNeko/NapCatQQ/releases/tag/v4.18.28 at
+v4.18.38 from https://github.com/NapNeko/NapCatQQ/releases/tag/v4.18.38 at
 first use. Its SHA-256 is
-`fb64fa3b036ad2df1a5d7c204c482694c20e4b763978c8a4968fd3474c05b4a8`.
+`b88007a373a30deefb387e7cf17911752ff900bce22c534b3da6b644f5c6d0ae`.
 NapCat is Copyright © 2024 Mlikiowa. Its upstream source and license are at
 https://github.com/NapNeko/NapCatQQ.
 
-On Windows x64, managed mode also requires an existing official Tencent QQ
-9.9.31-49738 installation. The plugin checks the installed native files against
-pinned SHA-256 values and uses that directory at runtime. It does not copy or
-redistribute Tencent's DLLs.
+That release bundles the QQNT runtime it was built against (including
+`crypto.dll` and `ssl.dll`), so managed mode does not use or require a locally
+installed Tencent QQ, whatever its version.
 
 ## Limited Redistribution License for NapCat
 

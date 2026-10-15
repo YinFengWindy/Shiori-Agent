@@ -4,7 +4,7 @@ import { napCatPreparing } from "./qqStatusPresentation";
 
 /** One managed instance's preparation, QR login, and connection state. */
 export type ManagedStatus = {
-  preparation: { stage: "idle" | "downloading" | "extracting" | "verifying" | "ready" | "error"; percent: number; version: string; error?: string };
+  preparation: { stage: "idle" | "downloading" | "extracting" | "ready" | "error"; percent: number; version: string; error?: string };
   login: { phase: string; qrcode: string; error: string; login_phase?: string };
   connection: string;
   error: string;

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from shiori_sdk.testing.processes import FakeProcesses
 
-import asyncio
 import base64
 import io
 import json
@@ -23,10 +22,7 @@ async def test_per_account_ports_profiles_and_logout_are_isolated(
     monkeypatch, tmp_path
 ):
     manager = ManagedNapCat(tmp_path, FakeProcesses())
-    official_qq = tmp_path / "official-qq" / "resources" / "app"
-    monkeypatch.setattr(
-        manager, "prepare", lambda: asyncio.sleep(0, result=official_qq)
-    )
+    monkeypatch.setattr(manager, "prepare", AsyncMock())
     manager.install_dir.mkdir(parents=True)
     first = "a" * 32
     second = "b" * 32
@@ -46,14 +42,8 @@ async def test_per_account_ports_profiles_and_logout_are_isolated(
     assert len(launched) == 2
     a, b = (row[1]["env"] for row in launched)
     assert a["NAPCAT_WORKDIR"] != b["NAPCAT_WORKDIR"]
-    assert a["PATH"].split(os.pathsep)[:2] == [
-        str(manager.install_dir),
-        str(official_qq),
-    ]
-    assert b["PATH"].split(os.pathsep)[:2] == [
-        str(manager.install_dir),
-        str(official_qq),
-    ]
+    assert a["PATH"].split(os.pathsep)[0] == str(manager.install_dir)
+    assert b["PATH"].split(os.pathsep)[0] == str(manager.install_dir)
     assert a["APPDATA"] != b["APPDATA"]
     assert a["TEMP"] != b["TEMP"]
     # QQNT resolves its data root through %PUBLIC%, not the per-user variables.
@@ -160,9 +150,7 @@ async def test_refresh_rejects_missing_or_stale_png(
 @pytest.mark.asyncio
 async def test_unreclaimable_port_blocks_launch(monkeypatch, tmp_path):
     manager = ManagedNapCat(tmp_path, FakeProcesses())
-    monkeypatch.setattr(
-        manager, "prepare", lambda: asyncio.sleep(0, result=tmp_path / "qq")
-    )
+    monkeypatch.setattr(manager, "prepare", AsyncMock())
     launched = Mock()
     monkeypatch.setattr(manager._process_service, "popen", launched)
     reclaim = AsyncMock(side_effect=RuntimeError("已被占用"))

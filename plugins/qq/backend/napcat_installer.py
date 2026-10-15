@@ -16,13 +16,21 @@ from uuid import uuid4
 
 from shiori_sdk.files.json import atomic_save_json
 
-from .installed_qq import resolve_official_qq
-
-VERSION = "v4.18.28"
-ARCHIVE_SHA256 = "fb64fa3b036ad2df1a5d7c204c482694c20e4b763978c8a4968fd3474c05b4a8"
+VERSION = "v4.18.38"
+ARCHIVE_SHA256 = "b88007a373a30deefb387e7cf17911752ff900bce22c534b3da6b644f5c6d0ae"
 ARCHIVE_URL = (
     f"https://github.com/NapNeko/NapCatQQ/releases/download/{VERSION}/"
     "NapCat.Shell.Windows.Node.zip"
+)
+# The Windows Node release bundles the QQNT runtime it was built against,
+# including wrapper.node's crypto.dll/ssl.dll, so no local QQ install is used.
+_REQUIRED_FILES = (
+    "node.exe",
+    "index.js",
+    "wrapper.node",
+    "crypto.dll",
+    "ssl.dll",
+    "napcat/napcat.mjs",
 )
 
 
@@ -39,13 +47,10 @@ class NapCatInstaller:
         self.install_dir = self.root / VERSION
         self._preparation: dict[str, Any] = {"stage": "idle", "percent": 0}
         self._install_lock = asyncio.Lock()
-        self._validated_qq_dir: Path | None = None
 
     def preparation(self) -> dict[str, Any]:
         """Returns the current installer stage without blocking the UI."""
         package_ready = self._package_ready()
-        if package_ready and self._validated_qq_dir is not None:
-            return {"stage": "ready", "percent": 100, "version": VERSION}
         if not package_ready and self._preparation["stage"] == "ready":
             return {
                 "stage": "error",
@@ -63,15 +68,11 @@ class NapCatInstaller:
             data = json.loads(marker.read_text(encoding="utf-8"))
         except (ValueError, OSError):
             return False
-        return (
-            data == {"version": VERSION, "sha256": ARCHIVE_SHA256}
-            and (self.install_dir / "node.exe").is_file()
-            and (self.install_dir / "index.js").is_file()
-            and (self.install_dir / "wrapper.node").is_file()
-            and (self.install_dir / "napcat" / "napcat.mjs").is_file()
+        return data == {"version": VERSION, "sha256": ARCHIVE_SHA256} and all(
+            (self.install_dir / name).is_file() for name in _REQUIRED_FILES
         )
 
-    async def prepare(self) -> Path:
+    async def prepare(self) -> None:
         """Downloads, verifies, and publishes a complete installation atomically."""
         if not managed_available():
             raise RuntimeError("托管 NapCat 仅支持 Windows x64")
@@ -79,17 +80,10 @@ class NapCatInstaller:
             try:
                 if not self._package_ready():
                     await asyncio.to_thread(self._prepare_sync)
-                self._preparation = {"stage": "verifying", "percent": 99}
-                qq_runtime_dir = await asyncio.to_thread(
-                    resolve_official_qq, self.install_dir
-                )
             except Exception as exc:
-                self._validated_qq_dir = None
                 self._preparation = {"stage": "error", "percent": 0, "error": str(exc)}
                 raise
-            self._validated_qq_dir = qq_runtime_dir
             self._preparation = {"stage": "ready", "percent": 100}
-            return qq_runtime_dir
 
     def _prepare_sync(self) -> None:
         self.root.mkdir(parents=True, exist_ok=True)
@@ -134,12 +128,7 @@ class NapCatInstaller:
                             destination.open("wb") as target,
                         ):
                             shutil.copyfileobj(source, target)
-            for required in (
-                "node.exe",
-                "index.js",
-                "wrapper.node",
-                "napcat/napcat.mjs",
-            ):
+            for required in _REQUIRED_FILES:
                 if not (staging / required).is_file():
                     raise ValueError(f"NapCat 安装包缺少 {required}")
             atomic_save_json(
@@ -149,7 +138,6 @@ class NapCatInstaller:
             if self.install_dir.exists():
                 shutil.rmtree(self.install_dir)
             staging.replace(self.install_dir)
-            self._preparation = {"stage": "verifying", "percent": 99}
         finally:
             if staging.exists():
                 shutil.rmtree(staging)
