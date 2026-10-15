@@ -133,9 +133,6 @@ class PushToolOutboundPort:
         external_ids: list[str] = []
         execution_context: dict[str, Any] = {
             **self._execution_context,
-            "session_key": str(
-                outbound.metadata.get("session_key_override") or ""
-            ).strip(),
             "push_message_already_persisted": (
                 "false" if outbound.metadata.get("pending_commit") else "true"
             ),

@@ -64,7 +64,7 @@ async def test_cg_task_holds_generation_until_image_work_finishes(tmp_path: Path
     sessions.open_role_session("mira", role_name="Mira")
     event_bus, registry = EventBus(), ToolRegistry()
     push_image = AsyncMock(return_value=None)
-    push_tool = MessagePushTool(event_bus=event_bus)
+    push_tool = MessagePushTool()
     push_tool.register_channel("desktop", image=push_image)
     registry.register(push_tool)
     stage_plugin_package(plugin_directory("novelai"), tmp_path / "plugins/novelai")

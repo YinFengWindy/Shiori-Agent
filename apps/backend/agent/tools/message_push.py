@@ -37,18 +37,16 @@ class PushOutcome:
 
 class MessagePushTool(Tool):
     name = "message_push"
-    # Who is sending, from which session, and who records the delivery belong
-    # to the caller's execution context; a model argument of the same name
-    # must not reroute persistence or cause a second write. Only the target
-    # (channel, chat_id) and the payload are the model's.
+    # Who is sending and the delivery identity the sender receives belong to
+    # the caller's execution context; a model argument of the same name must
+    # not bypass the role target check or forge delivery metadata. Only the
+    # target (channel, chat_id) and the payload are the model's.
     context_precedence = frozenset(
         {
             "role_id",
-            "session_key",
             "push_delivery_key",
             "push_message_already_persisted",
             "push_proactive",
-            "defer_push_session_sync",
             "_pending_turn_delivery",
         }
     )
@@ -79,13 +77,12 @@ class MessagePushTool(Tool):
         "required": ["channel", "chat_id"],
     }
 
-    def __init__(self, event_bus: EventBus | None = None) -> None:
+    def __init__(self) -> None:
         # channel -> {type: sender_fn}
         self._senders: dict[str, dict[str, Callable[..., Awaitable[SenderResult]]]] = {}
         self._descriptions: dict[str, str] = {}
         self._target_resolvers: dict[str, Callable[[str], str]] = {}
         self._role_target_validator: Callable[[str, str, str], bool | str] | None = None
-        self._event_bus = event_bus
         self._transport_lock: asyncio.Lock | None = None
         self._retired_channels: set[str] = set()
 
@@ -235,7 +232,6 @@ class MessagePushTool(Tool):
         if not proactive and file:
             raise ValueError("push_proactive=False does not support file payloads")
         role_id = str(kwargs.get("role_id") or "").strip()
-        session_key = str(kwargs.get("session_key") or "").strip()
         pending_commit = kwargs.get("_pending_turn_delivery") is PENDING_TURN_DELIVERY
         delivery_metadata = {
             "delivery_key": str(kwargs.get("push_delivery_key") or "").strip(),
@@ -262,6 +258,8 @@ class MessagePushTool(Tool):
             )
             return PushOutcome(f"发送失败：{e}")
 
+        # The runtime validator only lets a role reach its own desktop session;
+        # external role sends go through account_send, which records them.
         if role_id and self._role_target_validator is not None:
             validation = self._role_target_validator(role_id, channel, chat_id)
             if validation is not True:
@@ -302,18 +300,6 @@ class MessagePushTool(Tool):
             if message_id is not None:
                 external_ids.append(message_id)
 
-        # Decided before sending: whether the role's session records this delivery
-        # afterwards (it needs the role; pending deliveries have their owner).
-        records_delivery = bool(
-            channel != "desktop"
-            and role_id
-            and session_key
-            and self._event_bus is not None
-            and not pending_commit
-        )
-        image_sent = False
-        text_sent = False
-        text_message_id: str | None = None
         try:
             if message:
                 if "text_with_metadata" in senders:
@@ -326,10 +312,8 @@ class MessagePushTool(Tool):
                     sender_name = "stream_text" if "stream_text" in senders else "text"
                     text_result = await senders[sender_name](chat_id, message)
                 record_external_id(text_result)
-                text_message_id = _normalize_message_id(text_result)
                 preview = message[:60] + "..." if len(message) > 60 else message
                 logger.info(f"[message_push] {channel}:{chat_id} ← text: {preview!r}")
-                text_sent = True
                 results.append(
                     "文本已排队，回合成功后发送"
                     if delivery_metadata.get("queued")
@@ -359,63 +343,15 @@ class MessagePushTool(Tool):
                     if delivery_metadata.get("queued")
                     else "图片已发送"
                 )
-                image_sent = True
 
         except Exception as e:
             logger.error(f"[message_push] 发送失败 {channel}:{chat_id}: {e}")
             return PushOutcome(f"发送失败：{e}")
 
-        # A delivered text is recorded in the role's session: with the turn that
-        # pushed it (``in_turn``), or at once for a host-owned send (a scheduled
-        # job). Already-persisted deliveries have their owner.
-        if (
-            records_delivery
-            and text_sent
-            and message
-            and not delivery_metadata["already_persisted"]
-        ):
-            await self._record_delivery(
-                ExternalTextPushed(
-                    session_key=session_key,
-                    role_id=role_id,
-                    channel=channel,
-                    chat_id=chat_id,
-                    text=message,
-                    delivery_key=str(delivery_metadata["delivery_key"]),
-                    in_turn=_is_truthy(kwargs.get("defer_push_session_sync")),
-                    external_message_id=text_message_id or "",
-                    proactive=proactive,
-                )
-            )
-
-        if records_delivery and image_sent and image:
-            await self._record_delivery(
-                ExternalImagePushed(
-                    session_key=session_key,
-                    role_id=role_id,
-                    channel=channel,
-                    chat_id=chat_id,
-                    image=image,
-                    attach_to_turn=_is_truthy(kwargs.get("defer_push_session_sync")),
-                    already_persisted=_is_truthy(
-                        kwargs.get("push_message_already_persisted")
-                    ),
-                    proactive=proactive,
-                )
-            )
-
         return PushOutcome(
             "；".join(results) if results else f"渠道 {channel!r} 没有可用的 sender",
             tuple(external_ids),
         )
-
-    async def _record_delivery(
-        self, event: ExternalTextPushed | ExternalImagePushed
-    ) -> None:
-        """Has the push sync record a delivery the platform already accepted."""
-        if self._event_bus is None:  # records_delivery implies a bus
-            return
-        await record_delivered_push(self._event_bus, event)
 
 
 async def record_delivered_push(
@@ -423,9 +359,11 @@ async def record_delivered_push(
 ) -> None:
     """Has the push sync record a send the platform already accepted.
 
-    Shared by the model's sending tools. Boundary: the send happened, so a
-    failure to record it is logged and never reported as a failed send (the
-    model would send it again).
+    Used by ``account_send``, which owns a role's external sends.
+    ``message_push`` records nothing itself: with a role it may only reach the
+    role's desktop session, whose sender persists the message. Boundary: the
+    send happened, so a failure to record it is logged and never reported as a
+    failed send (the model would send it again).
     """
     try:
         _ = await event_bus.emit(event)

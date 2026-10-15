@@ -32,7 +32,7 @@ related:
 
 ## 消息连续性
 
-渠道和桌面输入都应解析到稳定的会话/线程标识。消息先进入权威服务，再由 projector 或 presenter 形成不同界面的读取模型；桌面聊天界面只显示桌面这一路（`context_scope.in_desktop_view`）。`push_sync.py` 的 `ExternalPushSyncService` 把经外部渠道送达的推送记入角色会话（`role_session_key(role_id)`）下对应聊天的网络线程并广播 `ProactiveMessageCommitted`；属于进行中回合的推送随该回合一并提交，避免自动消息只出现在渠道而没有进入权威角色会话。
+渠道和桌面输入都应解析到稳定的会话/线程标识。消息先进入权威服务，再由 projector 或 presenter 形成不同界面的读取模型；桌面聊天界面只显示桌面这一路（`context_scope.in_desktop_view`）。`push_sync.py` 的 `ExternalPushSyncService` 把经外部渠道送达的推送（目前由 `account_send` 经 `record_delivered_push` 发出 `ExternalTextPushed`；`message_push` 带角色身份时只能发往桌面，不经这条路径）记入角色会话（`role_session_key(role_id)`）下对应聊天的网络线程并广播 `ProactiveMessageCommitted`；属于进行中回合的推送随该回合一并提交，避免自动消息只出现在渠道而没有进入权威角色会话。
 
 群聊旁听（#538）：角色对开启旁听的群里未 @、未回复角色的消息只存进旁听记录（`conversation/listening_store.py`，`sessions.db` 的 `listening_messages`，与角色会话分开），不进对话历史；每群每天有入库上限，超出部分只留在内存窗口作前文，同一平台消息只收一次，关闭旁听不删除已有记录。开关与上限的校验在 `conversation/listening.py`，小手机与 `set_group_listening` 工具共用，渠道需在插件 manifest 声明 `group_listening`。群回合把本群最近旁听记录整块放在本回合 context frame 里、紧挨当前消息（`agent/prompting/listening_block.py`，#539），保持系统提示词与历史在回合间字节稳定。
 

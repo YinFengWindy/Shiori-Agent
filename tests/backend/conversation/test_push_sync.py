@@ -7,10 +7,13 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from agent.tools.message_push import MessagePushTool
 from agent.turns.turn_pushes import TurnPushDrafts, current_turn_pushes
 from bus.event_bus import EventBus
-from bus.events_lifecycle import ExternalTextPushed, ProactiveMessageCommitted
+from bus.events_lifecycle import (
+    ExternalImagePushed,
+    ExternalTextPushed,
+    ProactiveMessageCommitted,
+)
 from shiori_sdk.channels.threads import network_thread_id
 from conversation.push_sync import ExternalPushSyncService
 from conversation.context_scope import user_context_view
@@ -41,23 +44,17 @@ async def test_pre_persisted_proactive_image_is_not_duplicated(tmp_path: Path) -
         session_manager=session_manager,
         event_bus=event_bus,
     )
-    push_tool = MessagePushTool(event_bus=event_bus)
-
-    async def send_image(_chat_id: str, _image: str) -> None:
-        return None
-
-    push_tool.register_channel("telegram", image=send_image)
-
-    result = await push_tool.execute(
-        channel="telegram",
-        chat_id="123",
-        image=image,
-        role_id="mira",
-        session_key="role:mira",
-        push_message_already_persisted="true",
+    await event_bus.emit(
+        ExternalImagePushed(
+            session_key="role:mira",
+            role_id="mira",
+            channel="telegram",
+            chat_id="123",
+            image=image,
+            already_persisted=True,
+        )
     )
 
-    assert result == "图片已发送"
     assert len(session_manager.get_or_create("role:mira").messages) == 1
 
 
@@ -86,28 +83,22 @@ async def test_pre_persisted_proactive_image_allows_retry_transport(
         session_manager=session_manager,
         event_bus=event_bus,
     )
-    push_tool = MessagePushTool(event_bus=event_bus)
-
-    async def send_image(_chat_id: str, _image: str) -> None:
-        return None
-
-    push_tool.register_channel("telegram", image=send_image)
-
-    result = await push_tool.execute(
-        channel="telegram",
-        chat_id="retry-target",
-        image=image,
-        role_id="mira",
-        session_key="role:mira",
-        push_message_already_persisted="true",
+    await event_bus.emit(
+        ExternalImagePushed(
+            session_key="role:mira",
+            role_id="mira",
+            channel="telegram",
+            chat_id="retry-target",
+            image=image,
+            already_persisted=True,
+        )
     )
 
-    assert result == "图片已发送"
     assert len(session_manager.get_or_create("role:mira").messages) == 1
 
 
 def _text_sync(tmp_path: Path):
-    """A role session, the sync service on its bus, a QQ push tool, and the events seen."""
+    """A role session, the sync service on its bus, a pusher, and the events seen."""
     session_manager = SessionManager(tmp_path)
     session_manager.open_role_session("mira", role_name="Mira")
     event_bus = EventBus()
@@ -120,13 +111,42 @@ def _text_sync(tmp_path: Path):
     texts: list[ExternalTextPushed] = []
     event_bus.on(ProactiveMessageCommitted, committed.append)
     event_bus.on(ExternalTextPushed, texts.append)
-    push_tool = MessagePushTool(event_bus=event_bus)
 
-    async def send_text(_chat_id: str, _text: str) -> str:
-        return "qq-1"
+    async def push(
+        *,
+        session_key: str = "role:mira",
+        chat_id: str = "gqq:5",
+        in_turn: bool = False,
+        proactive: bool = True,
+        delivery_key: str = "",
+        message: str = "",
+        image: str = "",
+    ) -> None:
+        # One delivered QQ push of the role, as the sending tool reports it.
+        await event_bus.emit(
+            ExternalImagePushed(
+                session_key=session_key,
+                role_id="mira",
+                channel="qq",
+                chat_id=chat_id,
+                image=image,
+                attach_to_turn=in_turn,
+                proactive=proactive,
+            )
+            if image
+            else ExternalTextPushed(
+                session_key=session_key,
+                role_id="mira",
+                channel="qq",
+                chat_id=chat_id,
+                text=message,
+                in_turn=in_turn,
+                delivery_key=delivery_key,
+                proactive=proactive,
+            )
+        )
 
-    push_tool.register_channel("qq", text=send_text)
-    return session_manager, push_tool, committed, texts
+    return session_manager, push, committed, texts
 
 
 async def test_concurrent_delivery_events_commit_and_notify_only_once(
@@ -175,18 +195,12 @@ async def test_abandoned_push_retains_the_admitted_turn_boundary(
     tmp_path, kind, failure
 ):
     manager, push, _, _ = _text_sync(tmp_path)
-    push.register_channel(
-        "qq", text=AsyncMock(return_value=None), image=AsyncMock(return_value=None)
-    )
     old_start = "2026-01-01T00:00:00+00:00"
     drafts = TurnPushDrafts("role:mira", started_at=datetime.fromisoformat(old_start))
     with drafts.collect():
-        await push.execute(
-            channel="qq",
+        await push(
             chat_id="902",
-            role_id="mira",
-            session_key="role:mira",
-            defer_push_session_sync="true",
+            in_turn=True,
             **(
                 {"message": "old turn text"}
                 if kind == "text"
@@ -225,18 +239,11 @@ async def test_abandoned_push_retains_the_admitted_turn_boundary(
 async def test_host_text_push_is_stored_once_under_the_chats_thread(
     tmp_path: Path,
 ) -> None:
-    session_manager, push_tool, committed, _ = _text_sync(tmp_path)
+    session_manager, push, committed, _ = _text_sync(tmp_path)
 
     for _attempt in range(2):
         # A retried delivery carries the same key.
-        await push_tool.execute(
-            channel="qq",
-            chat_id="gqq:5",
-            message="该喝水啦",
-            role_id="mira",
-            session_key="role:mira",
-            push_delivery_key="scheduler:job:1",
-        )
+        await push(message="该喝水啦", delivery_key="scheduler:job:1")
 
     stored = session_manager._store.fetch_session_messages("role:mira")
     assert [
@@ -252,9 +259,7 @@ async def test_host_text_push_is_stored_once_under_the_chats_thread(
 async def test_turn_push_waits_for_its_turn_and_is_kept_if_the_turn_fails(
     tmp_path: Path, kind: str
 ) -> None:
-    session_manager, push_tool, committed, _ = _text_sync(tmp_path)
-    sent = AsyncMock(return_value=None)
-    push_tool.register_channel("qq", text=sent, image=sent)
+    session_manager, push, committed, _ = _text_sync(tmp_path)
     payload = {"message": "顺便说一声"} if kind == "text" else {"image": "scene.png"}
     expected = (
         payload.get("message", ""),
@@ -264,14 +269,7 @@ async def test_turn_push_waits_for_its_turn_and_is_kept_if_the_turn_fails(
     drafts = TurnPushDrafts("role:mira")
 
     with drafts.collect():
-        await push_tool.execute(
-            channel="qq",
-            chat_id="gqq:5",
-            role_id="mira",
-            session_key="role:mira",
-            defer_push_session_sync="true",
-            **payload,
-        )
+        await push(in_turn=True, **payload)
 
     # Left to the turn's commit: nothing stored or announced yet.
     assert committed == []
@@ -293,17 +291,10 @@ async def test_turn_push_waits_for_its_turn_and_is_kept_if_the_turn_fails(
 
 @pytest.mark.asyncio
 async def test_committed_turn_does_not_record_its_pushes_again(tmp_path: Path) -> None:
-    session_manager, push_tool, _, _ = _text_sync(tmp_path)
+    session_manager, push, _, _ = _text_sync(tmp_path)
     drafts = TurnPushDrafts("role:mira")
     with drafts.collect():
-        await push_tool.execute(
-            channel="qq",
-            chat_id="gqq:5",
-            message="顺便说一声",
-            role_id="mira",
-            session_key="role:mira",
-            defer_push_session_sync="true",
-        )
+        await push(message="顺便说一声", in_turn=True)
 
     await drafts.committed()
     await drafts.abandoned()
@@ -317,22 +308,11 @@ async def test_push_from_a_turn_no_live_turn_owns_is_stored_in_the_role_session(
     tmp_path: Path, kind: str
 ) -> None:
     # A background task's report: the turn runs in the chat's own session.
-    session_manager, push_tool, committed, _ = _text_sync(tmp_path)
-    sent = AsyncMock(return_value=None)
-    push_tool.register_channel("qq", text=sent, image=sent)
+    session_manager, push, committed, _ = _text_sync(tmp_path)
     payload = {"message": "报告完成"} if kind == "text" else {"image": "report.png"}
 
-    result = await push_tool.execute(
-        channel="qq",
-        chat_id="gqq:5",
-        role_id="mira",
-        session_key="qq:gqq:5",
-        defer_push_session_sync="true",
-        **payload,
-    )
+    await push(session_key="qq:gqq:5", in_turn=True, **payload)
 
-    assert "已发送" in result
-    sent.assert_awaited_once()
     stored = session_manager._store.fetch_session_messages("role:mira")
     assert [(row["content"], row.get("media"), row["thread_id"]) for row in stored] == [
         (
@@ -350,21 +330,14 @@ async def test_supplemental_push_keeps_its_intent_and_commit_notification(
     tmp_path, kind, in_turn
 ):
     manager, push, committed, _ = _text_sync(tmp_path)
-    push.register_channel(
-        "qq", text=AsyncMock(return_value=None), image=AsyncMock(return_value=None)
-    )
     drafts = TurnPushDrafts("role:mira")
     with drafts.collect():
-        result = await push.execute(
-            channel="qq",
+        await push(
             chat_id="902",
-            role_id="mira",
-            session_key="role:mira",
-            push_proactive=False,
-            defer_push_session_sync=in_turn,
+            proactive=False,
+            in_turn=in_turn,
             **({"message": "CG"} if kind == "text" else {"image": "cg.png"}),
         )
-    assert "已发送" in result
     if in_turn:
         assert drafts.messages[0]["proactive"] is False
         assert committed == []
@@ -373,23 +346,3 @@ async def test_supplemental_push_keeps_its_intent_and_commit_notification(
     [stored] = manager._store.fetch_session_messages("role:mira")
     assert stored["proactive"] is False
     assert [event.message_id for event in committed] == [stored["id"]]
-
-
-@pytest.mark.asyncio
-async def test_a_failure_to_record_never_fails_the_delivered_send(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    session_manager, push_tool, _, _ = _text_sync(tmp_path)
-    monkeypatch.setattr(
-        session_manager, "append_messages", AsyncMock(side_effect=OSError("disk"))
-    )
-
-    result = await push_tool.execute(
-        channel="qq",
-        chat_id="gqq:5",
-        message="该喝水啦",
-        role_id="mira",
-        session_key="role:mira",
-    )
-
-    assert result == "文本已发送"

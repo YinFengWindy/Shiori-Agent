@@ -101,14 +101,14 @@ class ExternalImagePushed:
 class ExternalTextPushed:
     """One text delivered through an external channel by a model tool.
 
-    ``in_turn`` marks a push the model made during a turn: it is committed
-    with that turn. Otherwise a host-owned send (e.g. a scheduled job) is
-    stored at once. Already-persisted and still-pending deliveries never
-    raise it. ``delivery_key`` (host sends) and ``external_message_id`` (the
-    platform's ID, when the sender reported one) identify the delivery, so it
-    is stored once.
+    Raised by ``account_send`` through ``record_delivered_push``;
+    ``message_push`` never raises it, because a role may only use it for the
+    role's own desktop session. ``in_turn`` marks a push the model made during
+    a turn: it is committed with that turn. Otherwise the send is stored at
+    once. ``delivery_key`` and ``external_message_id`` (the platform's ID,
+    when the sender reported one) identify the delivery, so it is stored once.
 
-    ``tool`` names the sending tool (``message_push`` or ``account_send``);
+    ``tool`` names the sending tool;
     ``media`` are images sent with the text as the same message; and
     ``message_metadata`` is stored with the recorded message over the push
     defaults (e.g. the chat type and the account delivery facts: attempt,
