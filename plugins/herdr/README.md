@@ -29,7 +29,22 @@ session 的全部 agent，包括用户在 Herdr 中手动打开的 CLI（终端�
 折叠的活动记录 / 验证结果 / 完整需求，交付后突出修改摘要与 Draft PR，底部输入框
 提交追加要求。继续和取消（需确认）复用聊天工具的任务服务，是否可用由服务端判定；
 打开 PR 通过宿主校验的外部链接能力完成。选中的 agent 从 Herdr 消失后保持选中，主区
-提示其已不存在。手动打开的 agent 在本页只读，插件不判定其交付是否完成。
+提示其已不存在。插件不判定手动打开的 agent 的交付是否完成。
+
+底部输入框把文字作为 prompt 直接发给选中的 agent（`herdr agent prompt`），旁边的中断
+按钮发送一次 Ctrl+C（`herdr agent send-keys <pane> ctrl+c`），不经过角色、不需确认。
+prompt 在 agent 开始工作或提出确认时即算送达，最多等 10 秒；agent 已关闭、正在等待
+确认（`agent_blocked`，不发送任何输入）、session 不可用等失败会显示原因并保留输入；
+超时或 Herdr 未观察到 agent 开始工作（`agent_prompt_stalled`）记为「未确认送达」，消息
+可能已经送达，插件不自动重发，输入同样保留由用户决定。断线、session 不可用或 agent
+消失时禁用输入和中断。关联插件任务的 agent：任务回合进行中只有「追加要求」（回合
+期间由服务端拒绝）和任务的「取消」，直接输入与中断被拒绝，以免插进受监控的回合；
+回合结束后底部仍是「追加要求」（Enter 发送，开启新的受核验回合），另有「直接发送」
+（同一段文字原样发给 agent，不属于任务、不做交付核验）与中断。
+
+每个 agent 的指令记录（来源、时间、内容、结果：发送中 / 已发送 / 未确认送达 / 未发送）
+保存在插件进程内，按 session 与 pane ID 区分，每个 agent 保留最近 100 条，配置重载
+保留、关闭 Shiori 后不恢复；主区以折叠的「指令记录」显示，面板发出的来源标为「你」。
 
 阶段来自每回合独立的 `<run_id>.progress.jsonl`。Agent 按任务指令追加完整 JSON
 行，字段为 `task_id`、`run_id`、递增 `sequence`、`stage` 和 `detail`。仅当前
@@ -47,11 +62,15 @@ session 的全部 agent，包括用户在 Herdr 中手动打开的 CLI（终端�
 `agents.list` 返回当前配置 session 的 agent，按 workspace 分组并带
 workspace 名称，每项含 pane ID（agent 标识）、类型、Herdr 状态、终端标题、cwd 及
 关联插件任务 ID；`agents.get`（参数 `pane_id`）返回该 agent 的状态、最近终端输出
-与关联任务详情，Herdr 已不认识该 agent 时返回 `agent: null`。两者都是只读并发请求，
+与关联任务详情，以及该 agent 的指令记录 `commands` 和能否直接输入 `can_prompt`（插件
+任务回合进行中为 false），Herdr 已不认识该 agent 时返回 `agent: null`。两者都是只读并发
+请求。`agents.prompt`（参数 `pane_id`、`text`）与 `agents.keys`（参数 `pane_id`、
+`keys`，Herdr 逻辑按键名如 `ctrl+c`、`esc`）以参数数组调用 Herdr、不经 shell，走有界的
+外部调用通道，返回记录的指令 `{command}`；失败时记录也会留下失败或未确认状态。
 所有 Herdr 调用显式带配置的 session；插件任务按其自身 session 与 pane ID 关联
 （Herdr 不复用 pane ID）。Herdr 版本与 session 运行检查在首次读取前执行；读取
 失败时立即重新检查，检查不通过就返回其明确原因（如 session 未运行、版本不兼容），
-否则返回读取本身的错误。正常轮询不重复执行 `--version`。
+否则返回读取本身的错误（发送超时、agent 已关闭或正等待确认时不重查）。正常轮询不重复执行 `--version`。
 
 agent 状态没有推送事件，页面打开期间每 2.5 秒轮询列表与选中 agent，上一次读取
 结束后才排下一次，离开页面即停止。断线或配置重载时保留最后内容并禁用操作，连接

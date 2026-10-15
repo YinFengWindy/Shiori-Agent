@@ -1,6 +1,6 @@
 import { createFakeHostServices, createFakePluginClient } from "@yinfengwindy/shiori-sdk/testing";
 import type { PluginEventHandler, RoleRecord } from "@yinfengwindy/shiori-sdk";
-import type { AgentDetailResponse, AgentListResponse, AgentSummary, AgentWorkspace, TaskDetail, TaskListResponse, TaskSummary } from "./types";
+import type { AgentCommand, AgentDetailResponse, AgentListResponse, AgentSummary, AgentWorkspace, TaskDetail, TaskListResponse, TaskSummary } from "./types";
 
 /** A task list entry as `tasks.list` returns it. */
 export function makeSummary(patch: Partial<TaskSummary> = {}): TaskSummary {
@@ -47,6 +47,8 @@ export function herdrBackend(tasks: TaskDetail[] = [makeDetail()], roles: RoleRe
   let state = { instance_id: "process-a", tasks };
   let agents: AgentListResponse = { session: "default", workspaces };
   let agentsError: Error | null = null;
+  let commandError: Error | null = null;
+  const commands: AgentCommand[] = [];
   const summary = ({ id, title, status, finished, stage, progress_detail, progress_updated_at, role_id, agent, repository, branch, created_at, updated_at, revision }: TaskDetail): TaskSummary =>
     ({ id, title, status, finished, stage, progress_detail, progress_updated_at, role_id, agent, repository, branch, created_at, updated_at, revision });
   const createClient = () => createFakePluginClient({
@@ -60,7 +62,18 @@ export function herdrBackend(tasks: TaskDetail[] = [makeDetail()], roles: RoleRe
       if (name === "agents.get") {
         const agent = agents.workspaces.flatMap((group) => group.agents).find((item) => item.pane_id === payload?.pane_id) ?? null;
         const task = state.tasks.find((item) => item.id === agent?.task_id) ?? null;
-        return structuredClone({ session: agents.session, agent, output: agent ? `output of ${agent.pane_id}` : "", task } satisfies AgentDetailResponse) as T;
+        const canPrompt = agent !== null && !["queued", "preparing", "running", "cancelling"].includes(task?.status ?? "");
+        return structuredClone({ session: agents.session, agent, output: agent ? `output of ${agent.pane_id}` : "", task, commands, can_prompt: canPrompt } satisfies AgentDetailResponse) as T;
+      }
+      if (name === "agents.prompt" || name === "agents.keys") {
+        const prompt = name === "agents.prompt";
+        const command: AgentCommand = {
+          id: `c${commands.length}`, kind: prompt ? "prompt" : "keys", content: prompt ? String(payload?.text) : (payload?.keys as string[]).join(" "),
+          source: { kind: "user", role_id: "", role_name: "" }, sent_at: "2026-10-15T10:00:00Z", status: commandError ? "failed" : "sent", error: commandError?.message ?? "",
+        };
+        commands.push(command);
+        if (commandError) throw commandError;
+        return structuredClone({ command }) as T;
       }
       if (name === "tasks.list") return structuredClone({ instance_id: state.instance_id, tasks: state.tasks.map(summary) } satisfies TaskListResponse) as T;
       const task = state.tasks.find((item) => item.id === payload?.task_id);
@@ -79,6 +92,8 @@ export function herdrBackend(tasks: TaskDetail[] = [makeDetail()], roles: RoleRe
     setWorkspaces(next: AgentWorkspace[]) { agents = { ...agents, workspaces: next }; },
     /** Makes `agents.list` fail, as an unavailable session does; null recovers. */
     failAgents(error: Error | null) { agentsError = error; },
+    /** Makes `agents.prompt` / `agents.keys` fail (and record the failure); null recovers. */
+    failCommands(error: Error | null) { commandError = error; },
     emit(taskId: string, revision: number) {
       for (const handler of handlers) handler({ task_id: taskId, revision }, { id: "event", type: "event", method: "tasks.changed", payload: {} });
     },

@@ -1,4 +1,6 @@
 import type { PluginHostServices, PluginRpcClient } from "@yinfengwindy/shiori-sdk";
+import type { DirectControl } from "./AgentComposer";
+import { CommandLog } from "./CommandLog";
 import { ContinueComposer } from "./ContinueComposer";
 import { DeliverySummary } from "./DeliverySummary";
 import { StageTrack } from "./StageTrack";
@@ -7,13 +9,18 @@ import { TaskSections } from "./TaskSections";
 import { TaskTerminal } from "./TaskTerminal";
 import { disconnectedMessage } from "./taskFeed";
 import { useTaskDetail } from "./useTaskDetail";
+import type { AgentCommand } from "./types";
 
 /** The selected task: header and stages, terminal, folded records, then the 追加要求 input. */
-export function TaskDetailView({ taskId, roleName, output, listConnected, client, host }: {
+export function TaskDetailView({ taskId, roleName, output, commands = [], direct, listConnected, client, host }: {
   taskId: string;
   roleName: string;
   /** The live terminal of the agent carrying the task; otherwise the task monitor's last read. */
   output?: string;
+  /** The carrying agent's command record. */
+  commands?: AgentCommand[];
+  /** Direct input to the carrying agent, offered only while no run owns it. */
+  direct?: DirectControl;
   /** The page already reports a lost connection once; the detail only follows it. */
   listConnected: boolean;
   client: PluginRpcClient;
@@ -39,8 +46,9 @@ export function TaskDetailView({ taskId, roleName, output, listConnected, client
         {task.status === "completed" ? <DeliverySummary task={task} host={host} /> : null}
         <TaskTerminal key={task.run_id} output={output ?? task.output} />
         <TaskSections task={task} />
+        <CommandLog commands={commands} />
       </div>
-      <ContinueComposer task={task} connected={connected} client={client} host={host} onApplied={feed.apply} />
+      <ContinueComposer task={task} connected={connected} client={client} host={host} onApplied={feed.apply} direct={direct} />
     </article>
   );
 }

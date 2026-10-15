@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { act } from "react";
-import { mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
+import { changeInputValue, mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import { AgentDetailView } from "./AgentDetailView";
 import { herdrBackend, makeAgent, makeDetail, makeWorkspace } from "./testFixtures";
 import type { AgentSummary } from "./types";
@@ -61,5 +61,27 @@ test("an agent carrying a task shows its Herdr header above the task's delivery 
     assert.match(task?.querySelector('[aria-label="修改摘要"]')?.textContent ?? "", /改好了滚动.*打开 Draft PR/);
     assert.equal(task?.querySelector('[aria-label="终端输出"] pre')?.textContent, "output of w9:p1");
     assert.ok(task?.querySelector('textarea[aria-label="追加要求"]'));
+  } finally { await view.cleanup(); }
+});
+
+test("a message sent to an agent joins its record as from 「你」; a running task's agent takes no direct input", async () => {
+  const agent = makeAgent();
+  const working = makeAgent({ pane_id: "w9:p1", workspace_id: "w9", agent: "codex", task_id: "task-a" });
+  const backend = herdrBackend([makeDetail({ status: "running" })], [], [makeWorkspace("Shiori", [agent]), makeWorkspace("shiori-task", [working])]);
+  const view = await mountTestComponent(detailView(backend, agent));
+  try {
+    await act(async () => wait(10));
+    const input = view.container.querySelector<HTMLTextAreaElement>('textarea[aria-label="发给 Agent"]');
+    assert.ok(input);
+    await changeInputValue(input, "继续");
+    await act(async () => view.container.querySelector<HTMLButtonElement>('button[aria-label="发送"]')?.click());
+    await act(async () => wait(10));
+    assert.match(view.container.querySelector('[aria-label="指令记录"]')?.textContent ?? "", /你继续/);
+
+    await view.render(detailView(backend, working));
+    await act(async () => wait(10));
+    assert.ok(view.container.querySelector('textarea[aria-label="追加要求"]'));
+    assert.equal(view.container.querySelector('button[aria-label="中断"]'), null);
+    assert.equal(Array.from(view.container.querySelectorAll("button")).some((button) => button.textContent === "直接发送"), false);
   } finally { await view.cleanup(); }
 });

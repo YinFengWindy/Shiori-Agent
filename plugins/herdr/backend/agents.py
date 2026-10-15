@@ -1,17 +1,16 @@
-"""Read-only view of every agent in the configured Herdr session."""
+"""Desktop RPC over every agent in the configured Herdr session."""
 
 from collections.abc import Iterable
-from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from shiori_sdk.plugin_services import ServicePluginContext
 from shiori_sdk.rpc import Concurrency
 
-from .cli import CommandError, HerdrCli
-from .config import HerdrConfig
+from .agent_control import USER, AgentControl
+from .cli import CommandError
 from .models import CodingTask
 from .service import TaskService
-from .task_management import task_detail
+from .task_management import linked_task, task_detail
 
 
 def agent_summary(agent: dict[str, Any], task_id: str | None) -> dict[str, object]:
@@ -27,26 +26,6 @@ def agent_summary(agent: dict[str, Any], task_id: str | None) -> dict[str, objec
         "cwd": str(agent.get("cwd", "")),
         "task_id": task_id,
     }
-
-
-def linked_task(
-    tasks: Iterable[CodingTask], session: str, agent: dict[str, Any]
-) -> CodingTask | None:
-    """The newest plugin task started in this session on this pane.
-
-    Herdr documents closed pane IDs as never reused (`herdr --skill`), so the
-    pane alone identifies the agent; a moved pane gets a new ID and its task
-    falls back to the unlisted group. A momentarily different detected kind
-    must not list the agent twice.
-    """
-    matches = [
-        task
-        for task in tasks
-        if task.pane_id
-        and task.config.session == session
-        and task.pane_id == agent.get("pane_id")
-    ]
-    return max(matches, key=lambda task: task.created_at, default=None)
 
 
 def group_agents(
@@ -68,7 +47,7 @@ def group_agents(
     }
     groups: dict[str, list[dict[str, object]]] = {key: [] for key in labels}
     for agent in agents:
-        task = linked_task(owned, session, agent)
+        task = linked_task(owned, session, agent.get("pane_id"))
         summary = agent_summary(agent, task.id if task else None)
         groups.setdefault(str(summary["workspace_id"]), []).append(summary)
     return [
@@ -78,62 +57,50 @@ def group_agents(
     ]
 
 
-class SessionAgents:
-    """`agents.list` / `agents.get` against the current generation's session.
+def _pane_id(payload: dict[str, object]) -> str:
+    pane_id = payload.get("pane_id")
+    if not isinstance(pane_id, str) or not pane_id:
+        raise ValueError("缺少 agent 的 pane_id")
+    return pane_id
 
-    The Herdr version and session check runs before the first read and right
-    after any failed read, so polling a healthy session costs only the reads
-    while a session that stops or turns incompatible is reported by its actual
-    reason from the first failed poll on.
+
+class SessionAgents:
+    """`agents.*` RPC against the current generation's session.
+
+    Reads go through the control's session gate; prompts and keys are the
+    desktop user's commands on the shared control, recorded as from 「你」.
     """
 
     def __init__(
-        self,
-        service: TaskService,
-        ctx: ServicePluginContext,
-        config: HerdrConfig,
-        directory: Path,
+        self, service: TaskService, ctx: ServicePluginContext, control: AgentControl
     ) -> None:
-        self.service, self.ctx = service, ctx
-        # This generation's own adapter: its CommandError is the one caught here.
-        self.cli = HerdrCli(config, ctx.processes, directory)
-        self._verified = False
+        self.service, self.ctx, self.control = service, ctx, control
+        self.gate, self.cli = control.gate, control.gate.cli
 
     def register(self) -> None:
-        """Both readers are safe to run concurrently with each other and tasks."""
+        """Readers run concurrently; commands take the bounded external-call lane."""
         self.ctx.rpc.register(
             "agents.list", self.list_agents, concurrency=Concurrency.READ_ONLY
         )
         self.ctx.rpc.register(
             "agents.get", self.get_agent, concurrency=Concurrency.READ_ONLY
         )
-
-    async def _require_session(self) -> None:
-        if not self.ctx.process_resources.active:
-            raise RuntimeError("Herdr 配置已替换，请刷新看板")
-        if not self._verified:
-            await self.cli.require_supported_version()
-            self._verified = True
-
-    async def _explain(self, error: CommandError) -> CommandError:
-        """The session check's reason when it fails, otherwise the read's own error."""
-        self._verified = False
-        try:
-            await self.cli.require_supported_version()
-        except CommandError as reason:
-            reason.__cause__ = error
-            return reason
-        self._verified = True
-        return error
+        self.ctx.rpc.register(
+            "agents.prompt", self.prompt_agent, concurrency=Concurrency.INTEGRATION
+        )
+        self.ctx.rpc.register(
+            "agents.keys", self.send_keys, concurrency=Concurrency.INTEGRATION
+        )
 
     async def list_agents(self, _payload: dict[str, object]) -> dict[str, object]:
         """Every agent of the configured session, grouped by workspace."""
-        await self._require_session()
-        try:
+
+        async def read() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
             agents = (await self.cli.call("agent", "list"))["agents"]
             workspaces = (await self.cli.call("workspace", "list"))["workspaces"]
-        except CommandError as error:
-            raise await self._explain(error)
+            return agents, workspaces
+
+        agents, workspaces = await self.gate.run(read)
         return {
             "session": self.cli.config.session,
             "workspaces": group_agents(
@@ -142,17 +109,17 @@ class SessionAgents:
         }
 
     async def get_agent(self, payload: dict[str, object]) -> dict[str, object]:
-        """One agent's state, recent terminal output and linked task.
+        """One agent's state, recent terminal output, command record and linked task.
 
         An agent Herdr no longer knows is reported as `agent: null`, so the
         desktop can say it is gone instead of showing a read error.
+        `can_prompt` tells whether the agent takes direct input now.
         """
-        pane_id = payload.get("pane_id")
-        if not isinstance(pane_id, str) or not pane_id:
-            raise ValueError("缺少 agent 的 pane_id")
-        await self._require_session()
+        pane_id = _pane_id(payload)
         session = self.cli.config.session
-        try:
+        commands = self.control.log.records(session, pane_id)
+
+        async def read() -> tuple[dict[str, Any], str]:
             agent = (await self.cli.call("agent", "get", pane_id))["agent"]
             output = await self.cli.read(
                 pane_id,
@@ -162,14 +129,50 @@ class SessionAgents:
                     else "visible"
                 ),
             )
+            return agent, output
+
+        try:
+            agent, output = await self.gate.run(
+                read, keep=frozenset({"agent_not_found"})
+            )
         except CommandError as error:
-            if error.code == "agent_not_found":
-                return {"session": session, "agent": None, "output": "", "task": None}
-            raise await self._explain(error)
-        task = linked_task(self.service.tasks.values(), session, agent)
+            if error.code != "agent_not_found":
+                raise
+            return {
+                "session": session,
+                "agent": None,
+                "output": "",
+                "task": None,
+                "commands": commands,
+                "can_prompt": False,
+            }
+        task = linked_task(self.service.tasks.values(), session, pane_id)
         return {
             "session": session,
             "agent": agent_summary(agent, task.id if task else None),
             "output": output,
             "task": task_detail(self.service, task) if task else None,
+            "commands": commands,
+            "can_prompt": not self.control.refusal(pane_id),
         }
+
+    async def prompt_agent(self, payload: dict[str, object]) -> dict[str, object]:
+        """Send the user's text to the agent as a prompt."""
+        text = payload.get("text")
+        if not isinstance(text, str):
+            raise ValueError("消息不能为空")
+        command = await self.control.prompt(_pane_id(payload), text, USER)
+        return {"command": command.as_dict()}
+
+    async def send_keys(self, payload: dict[str, object]) -> dict[str, object]:
+        """Press the user's keys in the agent, e.g. `["ctrl+c"]` to interrupt."""
+        keys = payload.get("keys")
+        if not isinstance(keys, list):
+            raise ValueError("按键不能为空")
+        names = cast(list[object], keys)
+        if not all(isinstance(name, str) for name in names):
+            raise ValueError("按键名必须是字符串")
+        command = await self.control.send_keys(
+            _pane_id(payload), [str(name) for name in names], USER
+        )
+        return {"command": command.as_dict()}

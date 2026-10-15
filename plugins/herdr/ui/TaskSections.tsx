@@ -5,7 +5,7 @@ import { clockTime, stageLabels } from "./taskSelectors";
 import type { TaskDetail } from "./types";
 
 /** A folded section with a caret, closed by default. */
-function Section({ label, count, children }: { label: string; count?: number; children: ReactNode }) {
+export function Section({ label, count, children }: { label: string; count?: number; children: ReactNode }) {
   return (
     <details className="group rounded-md border border-line-soft bg-surface-soft">
       <summary className="flex cursor-pointer list-none items-center gap-1.5 px-3 py-2 text-body-sm font-medium text-ink-secondary [&::-webkit-details-marker]:hidden">
