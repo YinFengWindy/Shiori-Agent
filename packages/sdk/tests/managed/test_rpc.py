@@ -18,12 +18,7 @@ from shiori_sdk.testing.service_context import FakeServiceContext
 DATA = b"fixed archive"
 
 
-@pytest.fixture
-async def rpc(tmp_path, monkeypatch):
-    import shiori_sdk.managed.controller as module
-
-    monkeypatch.setattr(module.platform, "system", lambda: "Windows")
-    monkeypatch.setattr(module.platform, "machine", lambda: "AMD64")
+def _register(tmp_path: Path) -> tuple[FakeServiceContext, ManagedRuntime]:
     ctx = FakeServiceContext("sample", tmp_path / "workspace")
     asset = Artifact(
         "package.7z",
@@ -50,8 +45,29 @@ async def rpc(tmp_path, monkeypatch):
         namespace="sample-runtime",
         import_suffix=(".7z", ".zip"),
     )
+    return ctx, runtime
+
+
+@pytest.fixture
+async def rpc(tmp_path, monkeypatch):
+    import shiori_sdk.managed.controller as module
+
+    monkeypatch.setattr(module.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(module.platform, "machine", lambda: "AMD64")
+    ctx, runtime = _register(tmp_path)
     yield ctx.rpc.handlers, runtime
     await ctx.aclose()
+
+
+async def test_draining_only_waits_and_disposal_stops_the_runtime(tmp_path):
+    ctx, runtime = _register(tmp_path)
+    for drain in ctx.runtime.drainers:
+        await drain()
+    # An abandoned in-generation reload keeps this instance serving.
+    assert not runtime.closed
+    assert (await ctx.rpc.handlers["runtime.status"]({}))["phase"] == "stopped"
+    await ctx.aclose()
+    assert runtime.closed
 
 
 async def test_import_by_original_path_validates_and_never_copies(rpc, tmp_path):

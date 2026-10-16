@@ -14,6 +14,7 @@ from shiori_sdk.lifecycle import PHASE_SLOTS, require_phase_slot
 from shiori_sdk.tools import Tool
 from uuid import uuid4
 
+from agent.plugin_host.call_gate import PluginCallGate
 from agent.plugin_host.diagnostics import ChannelDeclarationError
 from agent.plugin_host.effects import EffectScope
 from agent.plugin_host.manifest import matches_channel_instance
@@ -72,7 +73,10 @@ def contribute_to_list[T](
 
 
 class ToolsCapability:
-    """注册插件工具到 ToolRegistry；卸载时通过 effect 反注册。"""
+    """注册插件工具到 ToolRegistry；卸载时通过 effect 反注册。
+
+    每个工具的执行都经过插件实例的调用闸门，代内重载据此排空在途调用。
+    """
 
     def __init__(
         self,
@@ -80,11 +84,13 @@ class ToolsCapability:
         effects: EffectScope,
         contributions: PluginContributions,
         plugin_id: str,
+        calls: PluginCallGate,
     ) -> None:
         self._registry = registry
         self._effects = effects
         self._contributions = contributions
         self._plugin_id = plugin_id
+        self._calls = calls
 
     def register(
         self,
@@ -102,6 +108,7 @@ class ToolsCapability:
         """
         name = str(tool.name)
         self._effects.ensure_active(f"tool:{name}")
+        self._calls.guard_tool(tool)
         self._registry.register(
             tool,
             risk=risk,
@@ -510,11 +517,13 @@ class RpcCapability:
         registry: "PluginRpcRegistry",
         effects: EffectScope,
         plugin_id: str,
+        calls: PluginCallGate,
         event_bus: Any = None,
     ) -> None:
         self._registry = registry
         self._effects = effects
         self._plugin_id = plugin_id
+        self._calls = calls
         self._event_bus = event_bus
 
     async def emit(self, name: str, payload: dict[str, Any]) -> bool:
@@ -553,7 +562,9 @@ class RpcCapability:
             admission_exempt=admission_exempt,
             handler=Handler.GENERATION,
         )
-        self._registry.register(full_name, self._plugin_id, handler, policy)
+        self._registry.register(
+            full_name, self._plugin_id, self._calls.guard(handler), policy
+        )
         self._effects.add(
             f"rpc:{full_name}", lambda: self._registry.unregister(full_name)
         )

@@ -1,7 +1,7 @@
 """Application-lifetime resources, with isolated candidate-generation attachments."""
 
 import asyncio
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from contextvars import Context
 from typing import cast
 
@@ -17,6 +17,9 @@ class ProcessResourceOwner:
         self._resources: dict[tuple[str, str], ProcessResource] = {}
         self._attachments: dict[tuple[str, str], set[str]] = {}
         self._active: str | None = None
+        # (generation, plugin) pairs whose attachments are being replaced
+        # within the generation; their resources outlive the detaching instance.
+        self._retained: set[tuple[str, str]] = set()
         self._closing: set[asyncio.Task[None]] = set()
         self._errors: list[BaseException] = []
         self._closed = False
@@ -26,6 +29,17 @@ class ProcessResourceOwner:
         scope = _Attachment(self, generation, plugin, effects)
         effects.add("process_resources", scope.close)
         return scope
+
+    def retain(self, generation: str, plugins: Iterable[str]) -> "ResourceRetention":
+        """Keeps these plugins' resources while their instances reload in-generation.
+
+        Until ``release()``, an attachment that closes detaches without
+        retiring the shared resource, so the replacing instance re-acquires
+        the same object.
+        """
+        held = frozenset((generation, plugin) for plugin in plugins)
+        self._retained |= held
+        return ResourceRetention(self, held)
 
     def publish(self, generation: str) -> None:
         """Switch active attachments without waiting for long-running plugin work."""
@@ -58,6 +72,30 @@ class ProcessResourceOwner:
         for key in tuple(self._resources):
             self._retire(key)
         await self.drain()
+
+    async def _await_retired(
+        self, pending: list[asyncio.Task[None]]
+    ) -> list[BaseException]:
+        """Waits for retirements and claims their failures for the caller."""
+        results = await asyncio.gather(*pending, return_exceptions=True)
+        errors = [result for result in results if isinstance(result, BaseException)]
+        for error in errors:
+            if error in self._errors:
+                self._errors.remove(error)
+        return errors
+
+    async def end_retention(
+        self, held: frozenset[tuple[str, str]]
+    ) -> list[BaseException]:
+        """Implements ``ResourceRetention.release`` for the pairs it held."""
+        self._retained -= held
+        plugins = {plugin for _generation, plugin in held}
+        pending = [
+            self._retire(key)
+            for key, attachments in tuple(self._attachments.items())
+            if key[0] in plugins and not attachments
+        ]
+        return await self._await_retired(pending) if pending else []
 
     async def drain(self) -> None:
         """Finish publication cleanup and report errors at the responsible boundary."""
@@ -112,15 +150,31 @@ class _Attachment:
             if attachments is None:
                 continue
             attachments.discard(self.generation)
+            if (self.generation, self.plugin) in self.owner._retained:
+                continue
             if not attachments or self.owner._active == self.generation:
                 pending.append(self.owner._retire(key))
         # Only teardown of the active attachment or unreferenced provisional
         # objects reaches close; retiring an old generation leaves active work.
         if pending:
-            results = await asyncio.gather(*pending, return_exceptions=True)
-            errors = [result for result in results if isinstance(result, BaseException)]
-            for error in errors:
-                if error in self.owner._errors:
-                    self.owner._errors.remove(error)
+            errors = await self.owner._await_retired(pending)
             if errors:
                 raise BaseExceptionGroup("插件进程资源附件清理失败", errors)
+
+
+class ResourceRetention:
+    """One in-generation reload's hold on its plugins' process resources."""
+
+    def __init__(
+        self, owner: ProcessResourceOwner, held: frozenset[tuple[str, str]]
+    ) -> None:
+        self._owner = owner
+        self._held = held
+
+    async def release(self) -> list[BaseException]:
+        """Ends the hold; retires resources no new instance re-acquired.
+
+        Returns their close failures to the caller instead of leaving them
+        for the next ``drain()``.
+        """
+        return await self._owner.end_retention(self._held)

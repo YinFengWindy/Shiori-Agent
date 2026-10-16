@@ -17,10 +17,16 @@ from agent.plugin_host.manifest import (
     PluginManifest,
     load_manifest,
 )
+from agent.plugin_host.reload import PluginReloadResult
 from agent.plugin_host.rpc import PluginRpcRegistry
 from agent.plugin_host.runtime_context import PluginRuntimeContext
 from agent.plugin_host.tool_hooks import PluginToolHook
-from agent.plugin_host.unload import PluginRestartRequired
+from agent.plugin_host.unload import (
+    PluginReloadFailed,
+    PluginReloadTimeout,
+    PluginReloadUnsupported,
+    PluginRestartRequired,
+)
 
 __all__ = [
     "ChannelDeclaration",
@@ -35,6 +41,10 @@ __all__ = [
     "PluginKernel",
     "PluginManifest",
     "PluginRecord",
+    "PluginReloadFailed",
+    "PluginReloadResult",
+    "PluginReloadTimeout",
+    "PluginReloadUnsupported",
     "PluginRestartRequired",
     "PluginRpcRegistry",
     "PluginRuntimeContext",

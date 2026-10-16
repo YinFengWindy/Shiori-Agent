@@ -24,7 +24,10 @@ class RuntimeLifecycle(Protocol):
 
     @property
     def was_active(self) -> bool: ...
-    def on_drain(self, callback: Callable[[], Awaitable[None]]) -> None: ...
+    def on_drain(self, callback: Callable[[], Awaitable[None]]) -> None:
+        """Only wait for accepted work (no teardown); may run more than once,
+        including while the instance stays active after an abandoned reload."""
+        ...
 
 
 class ServicePluginContext(PluginRuntimeContext, Protocol):
