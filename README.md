@@ -118,18 +118,18 @@ pnpm test --file RoleDetailPage.test.tsx
 
 ### 插件 SDK
 
-当前源码的 SDK 与 Runtime API 版本均为 **3.1.1**，此前未发布的契约改动已合并到这一批次。npm 与 PyPI 均已发布 **3.1.1**，可直接安装使用本批接口。前端包为 [@yinfengwindy/shiori-sdk](https://www.npmjs.com/package/@yinfengwindy/shiori-sdk)，后端包为 [shiori-sdk](https://pypi.org/project/shiori-sdk/)（Python 3.12+）。以下命令安装当前公开版本：
+当前源码的 SDK 与 Runtime API 版本均为 **3.1.2**，已于 **2026-10-16** 发布到 npm 与 PyPI。前端包为 [@yinfengwindy/shiori-sdk](https://www.npmjs.com/package/@yinfengwindy/shiori-sdk)，后端包为 [shiori-sdk](https://pypi.org/project/shiori-sdk/)（Python 3.12+）。本批新增后台结果回报 `background_results`、跨运行时重载保留资源的 `process_resources`、外部链接 `host.openExternal` 和二级侧栏样式 `secondarySidebarShellClass`。以下命令安装当前公开版本：
 
 ```sh
-pnpm add -D "@yinfengwindy/shiori-sdk@^3.1.1"
-uv add "shiori-sdk>=3.1.1,<4"
+pnpm add -D "@yinfengwindy/shiori-sdk@^3.1.2"
+uv add "shiori-sdk>=3.1.2,<4"
 ```
 
-插件位于 `plugins/<id>/`：`manifest.yaml` 声明能力与兼容范围，`backend/` 放 Python 后端，`ui/` 放可选 React 界面，`tests/` 放插件测试。前端构建需将 SDK、React 和 React DOM 保留为 external，由 Shiori 在运行时提供。仅使用原有兼容接口的插件可保留 `runtime_api: ">=3.1.0 <4.0.0"`；使用本批新增接口的插件统一声明 `">=3.1.1 <4.0.0"`，Python SDK 依赖下界也设为 `3.1.1`。
+插件位于 `plugins/<id>/`：`manifest.yaml` 声明能力与兼容范围，`backend/` 放 Python 后端，`ui/` 放可选 React 界面，`tests/` 放插件测试。前端构建需将 SDK、React 和 React DOM 保留为 external，由 Shiori 在运行时提供。仅使用原有兼容接口的插件可保留原最低版本；使用本批新增接口或渠道迁移的插件统一声明 `runtime_api: ">=3.1.2 <4.0.0"`，Python SDK 依赖下界也设为 `3.1.2`。
 
-**兼容提醒：3.1.1 包含破坏性变更。** 已发布的 `SurfaceHandle.voice` 接口已移除，关系快照的 `closeness` 已由好感度取代；受影响插件须迁移，版本范围通过不代表旧接口仍可用。详见 [SDK 兼容说明](./packages/sdk/README.md#compatibility)。今后普通契约 PR 只累积未发布记录，正式发布 SDK 或带新契约的桌面版本时再统一定版。
+**兼容提醒：3.1.2 包含破坏性变更。** `ChannelContext.push_tool` 与 `PushSenders` 已移除，角色向渠道发送使用 `account_send`；`message_push` 失败改为抛异常，调用方不再匹配返回文本判断失败。受影响插件须迁移，版本范围通过不代表旧接口仍可用。详见 [SDK 兼容说明](./packages/sdk/README.md#compatibility)。普通契约 PR 只累积未发布记录，正式发布 SDK 或带新契约的桌面版本时再统一定版。
 
-桌面版本、SDK / Runtime API 版本和插件自身版本各自独立。当前仓库中 20 个已有插件（含兼容声明更新）的版本为 **0.1.1**，新增的 SenseVoice ASR / GPT-SoVITS TTS 为 **0.2.0**；插件 `version` 与 Python 包元数据保持一致，`runtime_api` 单独声明所需宿主接口。
+桌面版本、SDK / Runtime API 版本和插件自身版本各自独立。每个发布批次中，有包内容或兼容声明变化的已有插件只升一次 patch，新插件保留初始版本，未变插件不升号。插件 `version` 与 Python 包元数据保持一致，`runtime_api` 单独声明所需宿主接口。
 
 - [SDK README](./packages/sdk/README.md)：安装、React peer 与独立测试配置。
 - [插件教程](./docs/_handbook/plugins-tutorial.md)：从创建插件到开发界面。
