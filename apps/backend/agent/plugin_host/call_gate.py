@@ -29,6 +29,7 @@ class PluginCallGate:
     def __init__(self, plugin_id: str) -> None:
         self._plugin_id = plugin_id
         self._open = True
+        self._retired = False
         self._in_flight = 0
         self._idle = asyncio.Event()
         self._idle.set()
@@ -43,6 +44,11 @@ class PluginCallGate:
         return self._open
 
     @property
+    def retired(self) -> bool:
+        """Whether the instance was disposed; a retired gate never reopens."""
+        return self._retired
+
+    @property
     def in_flight(self) -> int:
         """Number of admitted calls that have not finished yet."""
         return self._in_flight
@@ -52,8 +58,13 @@ class PluginCallGate:
         self._open = False
 
     def reopen(self) -> None:
-        """Admits calls again after an abandoned transition."""
-        self._open = True
+        """Admits calls again after an abandoned transition, unless retired."""
+        self._open = not self._retired
+
+    def retire(self) -> None:
+        """Seals for good: the instance is being disposed and never admits again."""
+        self._retired = True
+        self._open = False
 
     async def wait_idle(self) -> None:
         """Waits until every admitted call has finished."""
@@ -62,7 +73,12 @@ class PluginCallGate:
     def guard[**P, R](
         self, call: Callable[P, Awaitable[R]]
     ) -> Callable[P, Awaitable[R]]:
-        """Wraps one plugin callable with this instance's admission and accounting."""
+        """Wraps one plugin callable with this instance's admission and accounting.
+
+        RPC handlers and service methods are wrapped per registration and are
+        not shared across instances, so one gate suffices; only tool objects
+        (see ``guard_tool``) can outlive an instance and need a gate list.
+        """
         gates = (self,)
 
         @functools.wraps(call)
@@ -84,16 +100,18 @@ class PluginCallGate:
         if gates is None:
             gates = []
             execute = tool.execute
+            tool_gates = gates
 
+            @functools.wraps(execute)
             async def admitted(**kwargs: Any) -> Any:
+                _prune(tool_gates)
                 return await PluginCallGate._call_through(
-                    tuple(gates), execute, **kwargs
+                    tuple(tool_gates), execute, **kwargs
                 )
 
             setattr(tool, _TOOL_GATES, gates)
             setattr(tool, "execute", admitted)
-        # Retired instances stop mattering once they are sealed and idle.
-        gates[:] = [gate for gate in gates if gate.open or gate.in_flight]
+        _prune(gates)
         gates.append(self)
 
     def _enter(self) -> None:
@@ -126,3 +144,8 @@ class PluginCallGate:
         finally:
             for gate in admitting:
                 gate._exit()
+
+
+def _prune(gates: list[PluginCallGate]) -> None:
+    """Drops gates of disposed instances once their admitted calls finished."""
+    gates[:] = [gate for gate in gates if not gate.retired or gate.in_flight]

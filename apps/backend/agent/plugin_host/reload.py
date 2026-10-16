@@ -9,6 +9,7 @@ process-resource hold, rolling back to the old config if the new one fails.
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass
 from typing import Any
@@ -20,6 +21,8 @@ from agent.plugin_host.unload import (
     PluginReloadTimeout,
     PluginReloadUnsupported,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -129,7 +132,12 @@ async def reload_closure(
     await _drain(closure, drain_timeout)
     replacement = asyncio.create_task(
         _replace(
-            closure, values=values, raw_values=raw_values, tables=tables, steps=steps
+            closure,
+            values=values,
+            raw_values=raw_values,
+            tables=tables,
+            steps=steps,
+            drain_timeout=drain_timeout,
         )
     )
     return await _run_to_completion(replacement)
@@ -142,6 +150,12 @@ async def _drain(closure: list[PluginHandle], timeout: float) -> None:
     ``on_drain``; its providers stay open meanwhile, so a dependent's accepted
     work can still call them (and those calls are waited for when the provider
     is sealed in turn).
+
+    When the drain is abandoned (timeout, ``on_drain`` failure, cancellation)
+    every instance stays as it was: ``on_drain`` of stages that already
+    finished has run, which is harmless because ``on_drain`` only waits for
+    accepted work, and an ``on_drain`` still in progress finishes in the
+    background.
     """
     current: list[PluginHandle] = []
     abandoned = False
@@ -173,10 +187,13 @@ async def _drain(closure: list[PluginHandle], timeout: float) -> None:
         # Stop the remaining stages before reopening what was sealed so far.
         abandoned = True
         _reopen(closure)
-        waiting.add_done_callback(
-            lambda task: None if task.cancelled() else task.exception()
-        )
+        waiting.add_done_callback(_log_abandoned_drain)
         raise
+
+
+def _log_abandoned_drain(task: asyncio.Task[None]) -> None:
+    if not task.cancelled() and (error := task.exception()) is not None:
+        logger.error("已放弃的插件重载排空以异常结束", exc_info=error)
 
 
 def _reopen(closure: list[PluginHandle]) -> None:
@@ -184,7 +201,9 @@ def _reopen(closure: list[PluginHandle]) -> None:
         handle.calls.reopen()
 
 
-async def _run_to_completion[T](task: asyncio.Task[T]) -> T:
+async def _run_to_completion(
+    task: asyncio.Task[PluginReloadResult],
+) -> PluginReloadResult:
     """Awaits ``task`` without letting caller cancellation interrupt it."""
     cancelled = False
     while not task.done():
@@ -193,9 +212,23 @@ async def _run_to_completion[T](task: asyncio.Task[T]) -> T:
         except asyncio.CancelledError:
             cancelled = True
     if cancelled:
-        if not task.cancelled():
-            # The outcome is consistent either way; the caller asked to stop.
-            _ = task.exception()
+        # The outcome is consistent either way; the caller asked to stop and
+        # will not see it, so it is logged here.
+        if task.cancelled():
+            logger.error("调用方取消后，插件重载任务被取消")
+        elif isinstance(error := task.exception(), PluginReloadFailed):
+            logger.error(
+                "调用方取消后插件重载失败，已恢复原配置；未恢复: %s",
+                list(error.restore_failed),
+                exc_info=error,
+            )
+        elif error is not None:
+            logger.error("调用方取消后插件重载异常结束", exc_info=error)
+        else:
+            logger.warning(
+                "调用方取消后插件重载仍已完成，新配置已生效: %s",
+                list(task.result().plugin_ids),
+            )
         raise asyncio.CancelledError
     return task.result()
 
@@ -207,6 +240,7 @@ async def _replace(
     raw_values: dict[str, Any],
     tables: ConfigTables,
     steps: ReloadSteps,
+    drain_timeout: float,
 ) -> PluginReloadResult:
     target = closure[-1].plugin_id
     records = [handle.record for handle in reversed(closure)]
@@ -221,8 +255,11 @@ async def _replace(
         previous = tables.swap(target, values, raw_values)
         handles, failed = await _activate(records, steps)
         if failed:
+            # New instances that did start may already serve calls; let those
+            # finish (bounded) before disposing them.
+            if timeout := await _seal_and_wait(handles, drain_timeout):
+                errors.append(timeout)
             for handle in reversed(handles):
-                handle.calls.seal()
                 errors.extend(await steps.dispose(handle))
             _ = tables.swap(target, *previous)
             _, restore_failed = await _activate(records, steps)
@@ -237,6 +274,23 @@ async def _replace(
             cleanup_errors=tuple(errors),
         ) from next(iter(failed.values()))
     return PluginReloadResult(plugin_ids, tuple(errors))
+
+
+async def _seal_and_wait(
+    handles: list[PluginHandle], timeout: float
+) -> PluginReloadTimeout | None:
+    """Seals ``handles`` and waits for their admitted calls, up to ``timeout``."""
+    for handle in handles:
+        handle.calls.seal()
+    waiting = asyncio.ensure_future(
+        asyncio.gather(*(handle.calls.wait_idle() for handle in handles))
+    )
+    done, _ = await asyncio.wait({waiting}, timeout=timeout)
+    if done:
+        return None
+    _ = waiting.cancel()
+    busy = tuple(handle.plugin_id for handle in handles if handle.calls.in_flight)
+    return PluginReloadTimeout(busy, timeout)
 
 
 async def _activate(

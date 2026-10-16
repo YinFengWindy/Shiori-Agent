@@ -75,6 +75,7 @@ async def setup(ctx):
 """
 
 _CONSUMER = """
+import asyncio
 import sys
 from shiori_sdk.tools import Tool
 
@@ -97,6 +98,11 @@ class Relay(Tool):
 
 async def setup(ctx):
     provider = ctx.dependencies.require("provider")
+    if provider.label == "consumer-fails":
+        # A call into the new provider is under way when this setup fails.
+        probe.pending.append(asyncio.ensure_future(provider.execute()))
+        await asyncio.sleep(0)
+        raise RuntimeError("consumer rejects the new provider")
     ctx.tools.register(Relay(provider))
     probe.events.append(
         (
@@ -166,6 +172,8 @@ def probe(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
     module.bystander_release = asyncio.Event()
     module.setup_gate = asyncio.Event()
     module.relay_gate = asyncio.Event()
+    module.pending = []
+    module.shared = []
     module.Resource = _Resource
     monkeypatch.setitem(sys.modules, "reload_probe", module)
     return module
@@ -337,9 +345,12 @@ async def test_drain_timeout_abandons_the_reload_unchanged(probe, tmp_path):
         await _reload(kernel, "v2", timeout=0.05)
 
     assert caught.value.busy == ("provider",)
-    # The dependent stage drained; the provider stage timed out; nothing left.
+    # The dependent stage already ran its wait-only on_drain; the provider
+    # stage timed out; nothing was disposed and both stay ACTIVE.
+    assert ("drain", "consumer") in probe.events
     assert ("drain", "provider", "v1") not in probe.events
     assert not any(event[0] == "dispose" for event in probe.events)
+    assert all(row["state"] == "ACTIVE" for row in kernel.states())
     # The sealed dependent was reopened and admits calls again.
     relay = asyncio.create_task(tools.execute("consumer_relay", {}))
     await _until(probe, ("relay-start",))
@@ -350,6 +361,129 @@ async def test_drain_timeout_abandons_the_reload_unchanged(probe, tmp_path):
     assert await in_flight == "v1"
     assert await relay == "v1"
     await kernel.terminate_all(force=True)
+
+
+@pytest.mark.asyncio
+async def test_rollback_waits_for_calls_admitted_by_a_discarded_new_instance(
+    probe, tmp_path
+):
+    kernel, services, _ = await _kernel(tmp_path)
+    reload = asyncio.create_task(_reload(kernel, "consumer-fails"))
+    await _until(probe, ("call-start", "consumer-fails"))
+    for _ in range(20):
+        await asyncio.sleep(0)
+    assert ("dispose", "provider", "consumer-fails") not in probe.events
+
+    probe.release.set()
+    with pytest.raises(PluginReloadFailed) as caught:
+        await asyncio.wait_for(reload, 1)
+
+    assert list(caught.value.failed) == ["consumer"]
+    assert caught.value.cleanup_errors == ()
+    assert probe.events.index(("call-end", "consumer-fails")) < probe.events.index(
+        ("dispose", "provider", "consumer-fails")
+    )
+    assert await probe.pending[0] == "consumer-fails"
+    assert services.plugin_configs["provider"] == {"label": "v1"}
+    await kernel.terminate_all(force=True)
+
+
+@pytest.mark.asyncio
+async def test_rollback_drain_timeout_is_reported_and_disposal_proceeds(
+    probe, tmp_path
+):
+    kernel, _, _ = await _kernel(tmp_path)
+
+    with pytest.raises(PluginReloadFailed) as caught:
+        await _reload(kernel, "consumer-fails", timeout=0.05)
+
+    [timeout] = caught.value.cleanup_errors
+    assert isinstance(timeout, PluginReloadTimeout)
+    assert timeout.busy == ("provider",)
+    assert ("dispose", "provider", "consumer-fails") in probe.events
+    assert all(row["state"] == "ACTIVE" for row in kernel.states())
+    probe.release.set()
+    assert await probe.pending[0] == "consumer-fails"
+    await kernel.terminate_all(force=True)
+
+
+_SHARER = """
+import sys
+from shiori_sdk.tools import Tool
+
+probe = sys.modules["reload_probe"]
+
+
+class Shared(Tool):
+    name = "shared_tool"
+    description = "one object kept across generations"
+    parameters = {"type": "object", "properties": {}}
+
+    async def execute(self, **kwargs):
+        probe.events.append(("shared-call",))
+        await probe.release.wait()
+        return "shared"
+
+
+class Holder:
+    def __init__(self):
+        self.tool = Shared()
+
+    async def close(self):
+        pass
+
+
+async def setup(ctx):
+    holder = ctx.process_resources.acquire("holder-v1", Holder)
+    probe.shared.append(holder.tool)
+    ctx.tools.register(holder.tool)
+"""
+
+
+@pytest.mark.asyncio
+async def test_retired_generation_gate_never_admits_a_shared_tool_call(probe, tmp_path):
+    _write(tmp_path, "sharer", "capabilities: [tools, process_resources]\n", _SHARER)
+    owner = ProcessResourceOwner()
+
+    async def generation() -> tuple[PluginKernel, ToolRegistry]:
+        tools = ToolRegistry()
+        kernel = PluginKernel(
+            [tmp_path],
+            services=HostServices(
+                event_bus=EventBus(),
+                tool_registry=tools,
+                workspace=tmp_path / "workspace",
+                process_resources=owner,
+            ),
+        )
+        await kernel.load_all()
+        kernel.publish_process_resources()
+        return kernel, tools
+
+    first, _ = await generation()
+    second, tools = await generation()
+    await first.terminate_all(force=True)
+    tool = probe.shared[0]
+    assert probe.shared[1] is tool
+    in_flight = asyncio.create_task(tools.execute("shared_tool", {}))
+    await _until(probe, ("shared-call",))
+    reload = asyncio.create_task(
+        second.reload("sharer", values={}, raw_values={}, drain_timeout=5)
+    )
+    for _ in range(20):
+        await asyncio.sleep(0)
+
+    # Neither the terminated generation nor the draining one admits it.
+    with pytest.raises(PluginRpcError):
+        await asyncio.wait_for(tool.execute(), 1)
+    probe.release.set()
+    assert await in_flight == "shared"
+    await asyncio.wait_for(reload, 1)
+    # Dead gates were pruned: only the reloaded instance gates the object.
+    assert len(tool.__dict__["__plugin_call_gates__"]) == 1
+    assert await tool.execute() == "shared"
+    await second.terminate_all(force=True)
+    await owner.close()
 
 
 @pytest.mark.asyncio

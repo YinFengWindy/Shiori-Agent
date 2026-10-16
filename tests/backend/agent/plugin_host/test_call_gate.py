@@ -81,3 +81,19 @@ async def test_shared_tool_counts_each_call_for_every_gate_that_admitted_it():
     new.seal()
     with pytest.raises(PluginRpcError):
         await tool.execute()
+
+
+@pytest.mark.asyncio
+async def test_retired_gate_never_reopens_and_leaves_the_tool_gate_list():
+    tool = _Blocking()
+    tool.release.set()
+    old, new = PluginCallGate("demo"), PluginCallGate("demo")
+    old.guard_tool(tool)
+    old.retire()
+    old.reopen()
+    with pytest.raises(PluginRpcError):
+        await tool.execute()
+
+    new.guard_tool(tool)
+    assert tool.__dict__["__plugin_call_gates__"] == [new]
+    assert await tool.execute() == "done"

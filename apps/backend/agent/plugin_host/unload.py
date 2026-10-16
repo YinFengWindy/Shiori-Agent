@@ -53,7 +53,12 @@ class PluginReloadTimeout(RuntimeError):
 
     Every closure plugin admits calls again with its old instance and config.
     ``busy`` lists the plugins whose calls or ``on_drain`` callbacks were still
-    running when the timeout expired.
+    running when the timeout expired. ``on_drain`` of dependents drained
+    before the timeout has already run (it only waits, so nothing changed),
+    and an ``on_drain`` in progress may still finish in the background.
+
+    Also reported in ``PluginReloadFailed.cleanup_errors`` when new instances
+    discarded by a rollback did not finish their calls in time.
     """
 
     code = "plugin_reload_timeout"

@@ -769,6 +769,8 @@ class PluginKernel:
         self, handle: PluginHandle, error: BaseException
     ) -> None:
         logger.warning("插件 %s 加载失败，回滚: %s", handle.record.name, error)
+        # A rolled-back instance never admits calls again, even via stale references.
+        handle.calls.retire()
         if handle.record.candidate_id in self._active_order:
             self._active_order.remove(handle.record.candidate_id)
         cleanup_errors = await handle.effects.dispose_all()
@@ -972,6 +974,9 @@ class PluginKernel:
         return None if owner is None else owner.retain(self._namespace, plugin_ids)
 
     async def _dispose_handle(self, handle: PluginHandle) -> list[Exception]:
+        # Every disposal path (unload, terminate, reload) stops admitting calls,
+        # so stale references to a disposed instance are rejected.
+        handle.calls.retire()
         handle.state = PluginState.UNLOADING
         errors = await handle.effects.dispose_all()
         # 配置 schema 的生命周期绑定在 handle 本身（真正被卸载/整代被处置时），
@@ -1019,6 +1024,8 @@ class PluginKernel:
 
     async def drain(self) -> None:
         """Waits for plugin-owned work while the retiring transport remains attached."""
+        # Holding the transition lock keeps a reload from interleaving with the
+        # retirement drain; no caller re-enters the kernel from on_drain.
         async with self._transition_lock:
             await run_drainers(reversed(self._active_handles()))
 
