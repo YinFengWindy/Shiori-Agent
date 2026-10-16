@@ -4,12 +4,17 @@ import hashlib
 import logging
 import time
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 from .context import ContextStore
 from .empty_reply import EmptyReplyError
 from .reasoner import Reasoner
 from agent.lifecycle.phase import Phase
+from agent.lifecycle.plugin_contributions import (
+    NO_PLUGIN_CONTRIBUTIONS,
+    PluginContributionSource,
+)
+from core.common.live_contributions import LiveContributions
 from agent.lifecycle.phases.after_reasoning import (
     AfterReasoningFrame,
     default_after_reasoning_modules,
@@ -77,12 +82,6 @@ class AgentCoreDeps:
     outbound_port: "OutboundPort | None" = None
     history_window: int = 500
     memory_consolidator: MemoryConsolidator | None = None
-    before_turn_plugin_modules: list[object] | None = None
-    before_reasoning_plugin_modules: list[object] | None = None
-    before_step_plugin_modules: list[object] | None = None
-    after_step_plugin_modules: list[object] | None = None
-    after_reasoning_plugin_modules: list[object] | None = None
-    after_turn_plugin_modules: list[object] | None = None
 
 
 class AgentCore:
@@ -102,29 +101,9 @@ class AgentCore:
     def pipeline(self) -> "PassiveTurnPipeline":
         return self._passive_pipeline
 
-    def add_before_turn_plugin_modules(
-        self,
-        modules: list[object],
-    ) -> None:
-        self._passive_pipeline.add_before_turn_plugin_modules(modules)
-
-    def add_before_reasoning_plugin_modules(
-        self,
-        modules: list[object],
-    ) -> None:
-        self._passive_pipeline.add_before_reasoning_plugin_modules(modules)
-
-    def add_after_reasoning_plugin_modules(
-        self,
-        modules: list[object],
-    ) -> None:
-        self._passive_pipeline.add_after_reasoning_plugin_modules(modules)
-
-    def add_after_turn_plugin_modules(
-        self,
-        modules: list[object],
-    ) -> None:
-        self._passive_pipeline.add_after_turn_plugin_modules(modules)
+    def bind_plugin_contributions(self, plugins: PluginContributionSource) -> None:
+        """改为从 ``plugins`` 实时读取回合级阶段的插件模块。"""
+        self._passive_pipeline.bind_plugin_contributions(plugins)
 
     async def process(
         self,
@@ -162,63 +141,43 @@ class PassiveTurnPipeline:
         self._reasoner = deps.reasoner
         self._llm = getattr(deps, "llm", None)
         self._llm_config = getattr(deps, "llm_config", None)
-        add_before_step = getattr(
-            self._reasoner, "add_before_step_plugin_modules", None
-        )
-        if add_before_step is not None:
-            add_before_step(list(deps.before_step_plugin_modules or []))
-        add_after_step = getattr(self._reasoner, "add_after_step_plugin_modules", None)
-        if add_after_step is not None:
-            add_after_step(list(deps.after_step_plugin_modules or []))
         self._outbound_port = deps.outbound_port or _NoopOutboundPort()
         self._history_window = deps.history_window
         self._memory_consolidator = deps.memory_consolidator
-        self._before_turn_plugin_modules = list(deps.before_turn_plugin_modules or [])
-        self._before_reasoning_plugin_modules = list(
-            deps.before_reasoning_plugin_modules or []
-        )
-        self._after_reasoning_plugin_modules = list(
-            deps.after_reasoning_plugin_modules or []
-        )
-        self._after_turn_plugin_modules = list(deps.after_turn_plugin_modules or [])
         bus = deps.event_bus or EventBus()
         self._bus = bus
 
-        self._before_turn = self._build_before_turn_phase()
-        self._before_reasoning = self._build_before_reasoning_phase()
-        self._after_reasoning = self._build_after_reasoning_phase()
-        self._after_turn = self._build_after_turn_phase()
+        # 插件模块每回合从当前插件来源读取，贡献变化时才重建阶段（#855）。
+        self._plugins = NO_PLUGIN_CONTRIBUTIONS
+        self._before_turn = LiveContributions(
+            lambda: self._plugins.before_turn_modules,
+            self._build_before_turn_phase,
+        )
+        self._before_reasoning = LiveContributions(
+            lambda: self._plugins.before_reasoning_modules,
+            self._build_before_reasoning_phase,
+        )
+        self._after_reasoning = LiveContributions(
+            lambda: self._plugins.after_reasoning_modules,
+            self._build_after_reasoning_phase,
+        )
+        self._after_turn = LiveContributions(
+            lambda: self._plugins.after_turn_modules,
+            self._build_after_turn_phase,
+        )
 
-    def add_before_turn_plugin_modules(
-        self,
-        modules: list[object],
-    ) -> None:
-        self._before_turn_plugin_modules.extend(modules)
-        self._before_turn = self._build_before_turn_phase()
-
-    def add_before_reasoning_plugin_modules(
-        self,
-        modules: list[object],
-    ) -> None:
-        self._before_reasoning_plugin_modules.extend(modules)
-        self._before_reasoning = self._build_before_reasoning_phase()
-
-    def add_after_reasoning_plugin_modules(
-        self,
-        modules: list[object],
-    ) -> None:
-        self._after_reasoning_plugin_modules.extend(modules)
-        self._after_reasoning = self._build_after_reasoning_phase()
-
-    def add_after_turn_plugin_modules(
-        self,
-        modules: list[object],
-    ) -> None:
-        self._after_turn_plugin_modules.extend(modules)
-        self._after_turn = self._build_after_turn_phase()
+    def bind_plugin_contributions(self, plugins: PluginContributionSource) -> None:
+        """改为从 ``plugins`` 实时读取回合级阶段的插件模块。"""
+        self._plugins = plugins
+        # 绑定时立即按当前贡献构造一次，模块 slot 冲突等装配错误在启动时暴露。
+        self._before_turn.current()
+        self._before_reasoning.current()
+        self._after_reasoning.current()
+        self._after_turn.current()
 
     def _build_before_turn_phase(
         self,
+        plugin_modules: list[Any],
     ) -> Phase[TurnState, BeforeTurnCtx, BeforeTurnFrame]:
         return Phase(
             default_before_turn_modules(
@@ -227,13 +186,14 @@ class PassiveTurnPipeline:
                 self._context_store,
                 keep_count=self._history_window,
                 consolidator=self._memory_consolidator,
-                plugin_modules=cast("list[Any]", self._before_turn_plugin_modules),
+                plugin_modules=plugin_modules,
             ),
             frame_factory=BeforeTurnFrame,
         )
 
     def _build_before_reasoning_phase(
         self,
+        plugin_modules: list[Any],
     ) -> Phase[BeforeReasoningInput, BeforeReasoningCtx, BeforeReasoningFrame]:
         return Phase(
             default_before_reasoning_modules(
@@ -241,13 +201,14 @@ class PassiveTurnPipeline:
                 self._tools,
                 self._session.session_manager,
                 self._context,
-                plugin_modules=cast("list[Any]", self._before_reasoning_plugin_modules),
+                plugin_modules=plugin_modules,
             ),
             frame_factory=BeforeReasoningFrame,
         )
 
     def _build_after_reasoning_phase(
         self,
+        plugin_modules: list[Any],
     ) -> Phase[AfterReasoningInput, AfterReasoningResult, AfterReasoningFrame]:
         return Phase(
             default_after_reasoning_modules(
@@ -255,13 +216,14 @@ class PassiveTurnPipeline:
                 self._session,
                 self._llm,
                 self._llm_config,
-                plugin_modules=cast("list[Any]", self._after_reasoning_plugin_modules),
+                plugin_modules=plugin_modules,
             ),
             frame_factory=AfterReasoningFrame,
         )
 
     def _build_after_turn_phase(
         self,
+        plugin_modules: list[Any],
     ) -> Phase[TurnSnapshot, OutboundMessage, AfterTurnFrame]:
         return Phase(
             default_after_turn_modules(
@@ -269,7 +231,7 @@ class PassiveTurnPipeline:
                 self._outbound_port,
                 self._context,
                 self._history_window,
-                plugin_modules=cast("list[Any]", self._after_turn_plugin_modules),
+                plugin_modules=plugin_modules,
                 relationship_runtime=getattr(
                     self._session, "relationship_runtime", None
                 ),
@@ -324,7 +286,7 @@ class PassiveTurnPipeline:
             try:
                 # Phase 1: BeforeTurn 模块链（会话、上下文、BeforeTurn 事件）。
                 with diagnostic_context(phase="before_turn"):
-                    before_turn = await self._before_turn.run(state)
+                    before_turn = await self._before_turn.current().run(state)
                 # TurnState 存内部默认 metadata；BeforeTurnCtx 存插件导出，同名 key 以后者覆盖。
                 state.extra_metadata.update(before_turn.extra_metadata)
                 if before_turn.abort:
@@ -364,7 +326,7 @@ class PassiveTurnPipeline:
 
                 # Phase 2: BeforeReasoning 模块链（工具上下文、BeforeReasoning 事件、prompt warmup）。
                 with diagnostic_context(phase="before_reasoning"):
-                    before_reasoning = await self._before_reasoning.run(
+                    before_reasoning = await self._before_reasoning.current().run(
                         BeforeReasoningInput(state=state, before_turn=before_turn)
                     )
                 if before_reasoning.abort:
@@ -476,7 +438,7 @@ class PassiveTurnPipeline:
             try:
                 # Phase 5: AfterReasoning 模块链（parse、AfterReasoning 事件、持久化、出站消息）。
                 with diagnostic_context(phase="after_reasoning"):
-                    after_reasoning = await self._after_reasoning.run(
+                    after_reasoning = await self._after_reasoning.current().run(
                         AfterReasoningInput(state=state, turn_result=turn_result)
                     )
             except Exception as exc:
@@ -512,7 +474,7 @@ class PassiveTurnPipeline:
             try:
                 # Phase 6: AfterTurn 模块链（TurnCommitted fanout、AfterTurn fanout、dispatch）。
                 with diagnostic_context(phase="after_turn"):
-                    outbound = await self._after_turn.run(
+                    outbound = await self._after_turn.current().run(
                         TurnSnapshot(
                             state=state,
                             outbound=after_reasoning.outbound,
@@ -565,10 +527,10 @@ class PassiveTurnPipeline:
             dispatch_outbound=dispatch_outbound,
             session=self._session.session_manager.get_or_create(session_key),
         )
-        after_reasoning = await self._after_reasoning.run(
+        after_reasoning = await self._after_reasoning.current().run(
             AfterReasoningInput(state=state, turn_result=turn_result)
         )
-        return await self._after_turn.run(
+        return await self._after_turn.current().run(
             TurnSnapshot(
                 state=state,
                 outbound=after_reasoning.outbound,

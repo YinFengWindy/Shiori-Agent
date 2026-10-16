@@ -96,7 +96,7 @@ class ProactiveTurnPipeline:
         self._drift_pipeline = deps.drift_pipeline
         self._target_transport_fn = deps.target_transport_fn
         self._proactive_gates = deps.proactive_gates or ProactiveGateChain()
-        self._tool_executor = ToolExecutor(deps.tool_hooks or [])
+        self._tool_executor = ToolExecutor(deps.tool_hooks)
 
         if (
             self._drift_pipeline is not None

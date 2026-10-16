@@ -377,7 +377,6 @@ def make_proactive_pipeline(
             workspace_context_fn=workspace_context_fn,
             drift_pipeline=drift_pipeline,
             target_transport_fn=target_transport_fn,
-            tool_hooks=None,
             proactive_gates=proactive_gates,
         )
     )

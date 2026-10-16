@@ -578,3 +578,110 @@ async def test_every_generation_rejects_role_pushes_to_external_channels(
             await app.discard(candidate)
     finally:
         await app.shutdown()
+
+
+_LIVE_PROBE_PLUGIN = """
+from shiori_sdk.tool_hooks import HookOutcome
+
+
+class RequestSummary:
+    slot = "live_probe.request_summary"
+    requires = ("after_step.copy_input", "step:ctx")
+    produces = ("step:early_stop_reason",)
+
+    async def run(self, frame):
+        frame.slots["step:early_stop_reason"] = "live_probe"
+        return frame
+
+
+async def _block(event):
+    return HookOutcome(decision="deny", reason="live_probe 拦截")
+
+
+async def setup(ctx):
+    ctx.lifecycle.contribute("after_step", [RequestSummary()])
+    ctx.tool_hooks.add_handler(_block, tool_name_filter="dummy")
+""".strip()
+
+
+@pytest.mark.asyncio
+async def test_started_runtime_follows_plugin_unload_and_load_within_generation(
+    tmp_path, monkeypatch
+):
+    """start() binds the live kernel: unload/load applies on the next turn (#855)."""
+    from agent.config_models import Config
+    from agent.looping.ports import LLMServices
+    from agent.provider import LLMResponse, ToolCall
+    from agent.tools.spawn import SpawnTool
+    from bootstrap.app import AppRuntime, RuntimeFeatures
+    from tests.support.tool_hooks import DummyTool, FakeProvider
+
+    package = tmp_path / "host_plugins" / "live_probe"
+    (package / "backend").mkdir(parents=True)
+    (package / "backend" / "plugin.py").write_text(_LIVE_PROBE_PLUGIN, encoding="utf-8")
+    (package / "manifest.yaml").write_text(
+        "api: 2\nid: live_probe\nversion: '0.1'\n"
+        "capabilities: [lifecycle, tool_hooks]\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "bootstrap.tools._resolve_plugin_dirs", lambda _: [package.parent]
+    )
+    config = Config(
+        provider="",
+        model="",
+        api_key="",
+        model_registrations=[],
+        memory_optimizer_enabled=False,
+    )
+    app = AppRuntime(
+        config,
+        tmp_path,
+        features=RuntimeFeatures(enable_message_channels=False, enable_proactive=False),
+    )
+    await app.start()
+    core = app.core
+    kernel = core.plugin_manager
+    assert kernel is not None
+    tool = DummyTool("dummy")
+    core.tools.register(tool)
+    turn = [
+        LLMResponse(content="", tool_calls=[ToolCall("c1", "dummy", {"x": 1})]),
+        LLMResponse(content="done", tool_calls=[]),
+    ]
+    provider = FakeProvider(turn * 3)
+    reasoner = cast(Any, core.loop)._reasoner
+    reasoner._llm = LLMServices(
+        provider=cast(Any, provider), light_provider=cast(Any, provider)
+    )
+    spawn = core.tools.get_tool("spawn")
+    assert isinstance(spawn, SpawnTool)
+
+    def spawn_hook_names() -> list[str]:
+        return [hook.name for hook in cast(Any, spawn.manager)._tool_hooks()]
+
+    async def run_turn() -> list[Any]:
+        """Runs one dummy tool round; returns the tools sent with the next request."""
+        _ = await cast(Any, core.loop)._run_agent_loop(
+            [{"role": "user", "content": "test"}]
+        )
+        return provider.calls[-1]["tools"]
+
+    try:
+        # Active: the hook denies the tool and the after_step module requests
+        # the closing summary, which is sent without tools.
+        assert await run_turn() == []
+        assert tool.calls == []
+        assert spawn_hook_names() == ["plugin:live_probe:_block"]
+
+        _ = await kernel.unload("live_probe")
+        assert await run_turn() != []
+        assert tool.calls == [{"x": 1}]
+        assert spawn_hook_names() == []
+
+        assert await kernel.load("live_probe")
+        assert await run_turn() == []
+        assert tool.calls == [{"x": 1}]
+        assert spawn_hook_names() == ["plugin:live_probe:_block"]
+    finally:
+        await app.shutdown()

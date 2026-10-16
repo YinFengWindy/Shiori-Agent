@@ -210,7 +210,7 @@ class _PassiveReasoningLoopMixin:
             ):
                 break
             # 3. BeforeStep 模块链：token 估算、BeforeStep 事件、提示注入。
-            step_ctx = await self._before_step.run(
+            step_ctx = await self._before_step.current().run(
                 BeforeStepInput(
                     session_key=tool_event_session_key,
                     channel=tool_event_channel,
@@ -748,7 +748,7 @@ class _PassiveReasoningLoopMixin:
                     else support.estimate_messages_tokens(messages)
                 )
                 # 7a. AfterStep 模块链（工具分支）：通知观察者本轮工具执行完毕。
-                after_step = await self._after_step.run(
+                after_step = await self._after_step.current().run(
                     AfterStepCtx(
                         session_key=tool_event_session_key,
                         channel=tool_event_channel,
@@ -837,7 +837,7 @@ class _PassiveReasoningLoopMixin:
             )
             messages.append({"role": "assistant", "content": response.content})
             # 8c. AfterStep 模块链（最终回复分支）：通知观察者本轮推理结束。
-            _ = await self._after_step.run(
+            _ = await self._after_step.current().run(
                 AfterStepCtx(
                     session_key=tool_event_session_key,
                     channel=tool_event_channel,

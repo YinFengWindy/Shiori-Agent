@@ -25,7 +25,7 @@ from bus.processing import ProcessingState
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from agent.tool_hooks.base import ToolHook
+    from agent.lifecycle.plugin_contributions import PluginContributionSource
 
 from .helpers import (
     _item_content,
@@ -94,50 +94,14 @@ class _ProcessingMixin:
         self._running = False
         logger.info("AgentLoop 停止")
 
-    def add_tool_hooks(self, hooks: list["ToolHook"]) -> None:
-        self._reasoner.add_tool_hooks(hooks)
+    def bind_plugin_contributions(self, plugins: "PluginContributionSource") -> None:
+        """让被动回合的阶段模块与 tool hooks 每次使用时从 ``plugins`` 读取。
 
-    def add_before_turn_plugin_modules(
-        self,
-        modules: list[object],
-    ) -> None:
-        self._agent_core.add_before_turn_plugin_modules(modules)
-
-    def add_before_reasoning_plugin_modules(
-        self,
-        modules: list[object],
-    ) -> None:
-        self._agent_core.add_before_reasoning_plugin_modules(modules)
-
-    def add_after_reasoning_plugin_modules(
-        self,
-        modules: list[object],
-    ) -> None:
-        self._agent_core.add_after_reasoning_plugin_modules(modules)
-
-    def add_after_turn_plugin_modules(
-        self,
-        modules: list[object],
-    ) -> None:
-        self._agent_core.add_after_turn_plugin_modules(modules)
-
-    def add_prompt_render_plugin_modules(
-        self,
-        modules: list[object],
-    ) -> None:
-        self._reasoner.add_prompt_render_plugin_modules(modules)
-
-    def add_before_step_plugin_modules(
-        self,
-        modules: list[object],
-    ) -> None:
-        self._reasoner.add_before_step_plugin_modules(modules)
-
-    def add_after_step_plugin_modules(
-        self,
-        modules: list[object],
-    ) -> None:
-        self._reasoner.add_after_step_plugin_modules(modules)
+        ``plugins`` 通常是本代的插件内核：其中插件被卸载或新加载后，下一次
+        回合/工具调用即按当前 ACTIVE 插件执行。
+        """
+        self._reasoner.bind_plugin_contributions(plugins)
+        self._agent_core.bind_plugin_contributions(plugins)
 
     # ── 中断控制面 ────────────────────────────────────────────────
 

@@ -80,8 +80,12 @@ async def test_finalize_denial_from_a_different_plugin_truncates_subagent_batch(
         ),
         LLMResponse(content="收尾总结"),
     ]
-    subagent = SubAgent(provider=provider, model="test-model", tools=[tool])
-    subagent.add_tool_hooks([_OtherPluginFinalizeHook()])
+    subagent = SubAgent(
+        provider=provider,
+        model="test-model",
+        tools=[tool],
+        tool_hooks=lambda: [_OtherPluginFinalizeHook()],
+    )
 
     result = await subagent.run("do the thing")
 
@@ -108,8 +112,12 @@ async def test_plain_deny_without_finalize_does_not_truncate_subagent_batch():
         ),
         LLMResponse(content="最终结果"),
     ]
-    subagent = SubAgent(provider=provider, model="test-model", tools=[tool])
-    subagent.add_tool_hooks([_OtherPluginPlainDenyHook()])
+    subagent = SubAgent(
+        provider=provider,
+        model="test-model",
+        tools=[tool],
+        tool_hooks=lambda: [_OtherPluginPlainDenyHook()],
+    )
 
     result = await subagent.run("do the thing")
 
@@ -245,8 +253,8 @@ async def test_finalize_denial_truncates_multi_tool_batch_with_closed_chain():
         model="m",
         tools=[tool_a, tool_b],
         max_iterations=10,
+        tool_hooks=lambda: [hook],
     )
-    subagent.add_tool_hooks([hook])
 
     result = await subagent.run("do work")
 
@@ -278,8 +286,8 @@ async def test_finalize_path_runs_mandatory_exit_with_closed_chain():
         tools=[tool, exit_tool],
         max_iterations=10,
         mandatory_exit_tools=["checkpoint"],
+        tool_hooks=lambda: [FinalizeOnCallHook("s2")],
     )
-    subagent.add_tool_hooks([FinalizeOnCallHook("s2")])
 
     result = await subagent.run("do work")
 

@@ -12,6 +12,8 @@ import asyncio
 from collections.abc import Coroutine
 from typing import Any, Protocol
 
+from agent.core.proactive_turn.gates import no_proactive_gates
+from agent.tool_hooks import no_tool_hooks
 from bootstrap.proactive import build_memory_optimizer_task, build_proactive_runtime
 from bootstrap.runtime.generations import RuntimeCandidate
 from core.common.runtime_scope import bind_runtime
@@ -56,8 +58,18 @@ class RuntimeBackground:
                 memory_store=core.memory_runtime,
                 presence=core.presence,
                 agent_loop=core.loop,
-                tool_hooks=list(manager.tool_hooks) if manager else None,
-                proactive_gates=list(manager.proactive_gates) if manager else None,
+                # Read the kernel live so plugins unloaded or loaded within this
+                # generation take effect on the next tool call or tick.
+                tool_hooks=(
+                    (lambda: manager.tool_hooks)
+                    if manager is not None
+                    else no_tool_hooks
+                ),
+                proactive_gates=(
+                    (lambda: manager.proactive_gates)
+                    if manager is not None
+                    else no_proactive_gates
+                ),
                 proactive_motives=core.proactive_motives,
                 event_bus=core.event_bus,
                 provider_consumer=core.additional_providers.append,

@@ -26,6 +26,7 @@ from agent.core.passive_turn.empty_reply import EmptyReplyError
 from agent.tool_hooks.base import ToolHook
 from agent.tool_hooks.types import HookContext
 from shiori_sdk.tool_hooks import HookOutcome
+from agent.lifecycle.plugin_contributions import StaticPluginContributions
 from agent.tools.account_delivery import ACCOUNT_SEND_EXTERNAL_LIMIT, AccountSendTool
 from shiori_sdk.tools import Tool
 from agent.tools.registry import ToolRegistry
@@ -786,6 +787,30 @@ async def test_iteration_summary_fetches_mood_without_json_content_contract():
     assert result.metadata["role_reply_mood_fresh"] is True
 
 
+class _AbortStepModule:
+    """Plugin before_step module that asks the step to stop early."""
+
+    slot = "test.abort_step"
+    produces = ("step:abort_reply",)
+
+    async def run(self, frame):
+        frame.slots["step:abort_reply"] = "提前收尾"
+        return frame
+
+
+class _AfterStepRecorder:
+    """Plugin after_step module that records each step's AfterStepCtx."""
+
+    slot = "test.record_after_step"
+
+    def __init__(self) -> None:
+        self.seen: list = []
+
+    async def run(self, frame):
+        self.seen.append(frame.input)
+        return frame
+
+
 @pytest.mark.parametrize("early_stop", [False, True])
 @pytest.mark.parametrize(
     "empty_content", ["", " \n", '{"content":"","mood":"平静","thought":"私密"}']
@@ -818,8 +843,8 @@ async def test_role_summary_empty_content_uses_shared_recovery_without_replaying
     provider.chat.side_effect = responses
     reasoner = make_reasoner(provider, tools, max_iterations=1)
     if early_stop:
-        reasoner._before_step.run = AsyncMock(
-            return_value=SimpleNamespace(early_stop=True)
+        reasoner.bind_plugin_contributions(
+            StaticPluginContributions(before_step_modules=[_AbortStepModule()])
         )
     operation = reasoner.run(
         [{"role": "user", "content": "检查"}],
@@ -869,8 +894,8 @@ async def test_explicitly_refused_role_summary_does_not_retry_or_fetch_mood(earl
     provider.chat.side_effect = responses
     reasoner = make_reasoner(provider, tools, max_iterations=1)
     if early_stop:
-        reasoner._before_step.run = AsyncMock(
-            return_value=SimpleNamespace(early_stop=True)
+        reasoner.bind_plugin_contributions(
+            StaticPluginContributions(before_step_modules=[_AbortStepModule()])
         )
     with pytest.raises(EmptyReplyError) as caught:
         await reasoner.run([{"role": "user", "content": "检查"}], reply_moods=("平静",))
@@ -931,7 +956,9 @@ async def test_finalize_denial_from_a_different_plugin_identity_truncates_the_ba
         LLMResponse(content="收尾总结"),
     ]
     reasoner = make_reasoner(provider, tools)
-    reasoner.add_tool_hooks([_OtherPluginFinalizeHook()])
+    reasoner.bind_plugin_contributions(
+        StaticPluginContributions(tool_hooks=[_OtherPluginFinalizeHook()])
+    )
 
     result = await reasoner.run([{"role": "user", "content": "test"}])
 
@@ -968,7 +995,9 @@ async def test_finalize_denial_from_a_different_plugin_identity_truncates_the_pr
         LLMResponse(content="收尾总结"),
     ]
     reasoner = make_reasoner(provider, tools, tool_search_enabled=True)
-    reasoner.add_tool_hooks([_OtherPluginFinalizeHook()])
+    reasoner.bind_plugin_contributions(
+        StaticPluginContributions(tool_hooks=[_OtherPluginFinalizeHook()])
+    )
 
     result = await reasoner.run([{"role": "user", "content": "test"}])
 
@@ -996,7 +1025,9 @@ async def test_plain_deny_without_finalize_does_not_truncate_the_batch():
         LLMResponse(content="最终回复"),
     ]
     reasoner = make_reasoner(provider, tools)
-    reasoner.add_tool_hooks([_OtherPluginPlainDenyHook()])
+    reasoner.bind_plugin_contributions(
+        StaticPluginContributions(tool_hooks=[_OtherPluginPlainDenyHook()])
+    )
 
     result = await reasoner.run([{"role": "user", "content": "test"}])
 
@@ -1308,7 +1339,9 @@ async def test_external_restricted_turn_rechecks_account_send_after_hooks():
         LLMResponse(content="好的"),
     ]
     reasoner = make_reasoner(provider, tools)
-    reasoner.add_tool_hooks([_RetargetToGroupHook()])
+    reasoner.bind_plugin_contributions(
+        StaticPluginContributions(tool_hooks=[_RetargetToGroupHook()])
+    )
 
     result = await reasoner.run(
         [{"role": "user", "content": "帮我告诉你主人"}],
@@ -1362,18 +1395,14 @@ async def test_after_step_receives_the_request_budget_hard_limit():
     tools.register(CounterTool(), always_on=True)
     reasoner = make_reasoner(provider, tools)
     reasoner._llm_config.max_tokens = 100
-    observed = []
-    run_after_step = reasoner._after_step.run
-
-    async def capture(ctx):
-        observed.append(ctx)
-        return await run_after_step(ctx)
-
-    reasoner._after_step.run = capture
+    recorder = _AfterStepRecorder()
+    reasoner.bind_plugin_contributions(
+        StaticPluginContributions(after_step_modules=[recorder])
+    )
     try:
         result = await reasoner.run([{"role": "user", "content": "数一下"}])
         assert result.reply == "完成"
-        step = next(ctx for ctx in observed if ctx.has_more)
+        step = next(ctx for ctx in recorder.seen if ctx.has_more)
         assert step.input_limit_tokens == 8000 - 100 - 20
     finally:
         await provider.aclose()

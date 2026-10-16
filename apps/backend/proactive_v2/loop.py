@@ -28,8 +28,13 @@ from bus.event_bus import EventBus
 from core.error_context import current_session_key
 from agent.looping.ports import SessionServices
 from agent.provider import LLMProvider
-from agent.tool_hooks import ToolHook
-from agent.core.proactive_turn.gates import ProactiveGate, ProactiveGateChain
+from agent.tool_hooks import ToolHookSource, no_tool_hooks
+from agent.core.proactive_turn.gates import (
+    ProactiveGate,
+    ProactiveGateChain,
+    ProactiveGateSource,
+    no_proactive_gates,
+)
 from agent.tools.message_push import MessagePushTool
 from agent.tools.registry import ToolRegistry
 from agent.turns.outbound import PushToolOutboundPort
@@ -87,8 +92,8 @@ class ProactiveLoop:
         light_model: str = "",
         passive_busy_fn: Callable[[str], bool] | None = None,
         shared_tools: ToolRegistry | None = None,
-        tool_hooks: list[ToolHook] | None = None,
-        proactive_gates: list[ProactiveGate] | None = None,
+        tool_hooks: ToolHookSource = no_tool_hooks,
+        proactive_gates: ProactiveGateSource = no_proactive_gates,
         proactive_motives: list[ProactiveGate] | None = None,
         tick_dispatcher: Callable[[Callable[[], Any]], Any] | None = None,
         event_bus: EventBus | None = None,
@@ -115,7 +120,7 @@ class ProactiveLoop:
         self._light_model = light_model or (config.model or model)
         self._passive_busy_fn = passive_busy_fn
         self._shared_tools = shared_tools
-        self._tool_hooks = tool_hooks or []
+        self._tool_hooks = tool_hooks
         self._proactive_gates = ProactiveGateChain(
             proactive_gates, motives=proactive_motives or ()
         )

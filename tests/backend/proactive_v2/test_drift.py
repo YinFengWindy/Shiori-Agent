@@ -1014,7 +1014,6 @@ async def test_agent_tick_drift_send_message_skips_normal_post_loop(tmp_path: Pa
                 max_steps=5,
             ),
             target_transport_fn=lambda: ("telegram", "1"),
-            tool_hooks=None,
         )
     )
 

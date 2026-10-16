@@ -25,10 +25,11 @@ from agent.prompting.usage_accounting import current_usage
 from agent.tool_hooks import (
     ToolExecutionRequest,
     ToolExecutor,
+    ToolHookSource,
     append_finalize_skipped_tool_results,
     is_finalize_denial,
+    no_tool_hooks,
 )
-from agent.tool_hooks.base import ToolHook
 from agent.tool_runtime import (
     append_assistant_tool_calls,
     append_tool_result,
@@ -127,7 +128,9 @@ class SubAgent:
         max_iterations: int = 30,
         max_tokens: int = 8192,
         mandatory_exit_tools: Sequence[str] = (),
+        tool_hooks: ToolHookSource = no_tool_hooks,
     ) -> None:
+        """``tool_hooks`` 在每次工具调用时读取，插件变化对运行中的子任务即时生效。"""
         self._provider = provider
         self._model = model
         self._system_prompt = system_prompt
@@ -143,10 +146,7 @@ class SubAgent:
         prepared = prepare_toolset(tools)
         self._tool_map: dict[str, Tool] = prepared.tool_map
         self._tool_schemas: list[dict[str, Any]] = prepared.schemas
-        self._tool_executor = ToolExecutor([])
-
-    def add_tool_hooks(self, hooks: list[ToolHook]) -> None:
-        self._tool_executor.add_hooks(hooks)
+        self._tool_executor = ToolExecutor(tool_hooks)
 
     async def run(self, task: str) -> str:
         """执行任务并返回文本结果。

@@ -365,9 +365,9 @@ async def test_new_chain_after_reasoning_persists_meme_and_fires_turn_committed(
             event_bus=event_bus,
             outbound_port=cast(Any, dispatch_port),
             history_window=100,
-            after_reasoning_plugin_modules=kernel.after_reasoning_modules,
         )
     )
+    agent_core.bind_plugin_contributions(kernel)
     wire_turn_lifecycle(
         lifecycle=TurnLifecycle(event_bus),
         active_turn_states={},

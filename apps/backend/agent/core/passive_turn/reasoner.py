@@ -32,7 +32,7 @@ from .compaction import (
     request_compaction_scope,
     with_working_summary,
 )
-from typing import TYPE_CHECKING, Any, Awaitable, Callable, cast
+from typing import TYPE_CHECKING, Any, Awaitable, Callable
 
 from .helpers import (
     build_turn_injection_prompt,
@@ -49,6 +49,11 @@ from .reasoning_result import _PassiveReasoningResultMixin
 from agent.core.runtime_support import ToolDiscoveryState
 from agent.core.types import ReasonerResult
 from agent.lifecycle.phase import Phase
+from agent.lifecycle.plugin_contributions import (
+    NO_PLUGIN_CONTRIBUTIONS,
+    PluginContributionSource,
+)
+from core.common.live_contributions import LiveContributions
 from agent.lifecycle.phases.after_step import AfterStepFrame, default_after_step_modules
 from agent.lifecycle.phases.before_step import (
     BeforeStepFrame,
@@ -76,7 +81,6 @@ if TYPE_CHECKING:
     from agent.context import ContextBuilder
     from agent.core.runtime_support import SessionLike, TurnRunResult
     from agent.looping.ports import LLMConfig, LLMServices
-    from agent.tool_hooks.base import ToolHook
     from agent.tools.registry import ToolRegistry
     from conversation.context_scope import ContextView
     from session.manager import Session, SessionManager
@@ -140,26 +144,8 @@ class Reasoner(ABC):
         ``context_view`` 限定从会话读取的历史只含回合所在上下文的消息。
         """
 
-    def add_tool_hooks(self, hooks: list["ToolHook"]) -> None:
-        """子类可重写以注入 tool hooks。默认 no-op。"""
-
-    def add_prompt_render_plugin_modules(
-        self,
-        modules: list[object],
-    ) -> None:
-        """子类可重写以注入 prompt render modules。默认 no-op。"""
-
-    def add_before_step_plugin_modules(
-        self,
-        modules: list[object],
-    ) -> None:
-        """子类可重写以注入 before-step modules。默认 no-op。"""
-
-    def add_after_step_plugin_modules(
-        self,
-        modules: list[object],
-    ) -> None:
-        """子类可重写以注入 after-step modules。默认 no-op。"""
+    def bind_plugin_contributions(self, plugins: PluginContributionSource) -> None:
+        """子类可重写以实时读取插件的 tool hooks 与步骤阶段模块。默认 no-op。"""
 
     async def render_prompt(
         self,
@@ -212,7 +198,7 @@ class DefaultReasoner(
             if session_manager is not None and compaction_memory is not None
             else None
         )
-        self._prompt_render_plugin_modules: list[object] = []
+        self._plugins = NO_PLUGIN_CONTRIBUTIONS
         self.context_window = (
             ContextWindow(
                 session_manager,
@@ -225,84 +211,68 @@ class DefaultReasoner(
             if session_manager is not None and self._compaction is not None
             else None
         )
-        self._before_step_plugin_modules: list[object] = []
-        self._after_step_plugin_modules: list[object] = []
-        self._tool_executor = ToolExecutor([])
+        # 插件 hook 与阶段模块每次使用时从当前插件来源读取（#855）。
+        self._tool_executor = ToolExecutor(lambda: self._plugins.tool_hooks)
         self._stream_sink_factory: (
             Callable[[object], Callable[[dict[str, str] | str], Awaitable[None]] | None]
             | None
         ) = None
         bus = event_bus or EventBus()
         self._bus = bus
-        self._before_step = self._build_before_step_phase()
-        self._after_step = self._build_after_step_phase()
-        self._prompt_render: (
-            Phase[
-                PromptRenderInput,
-                PromptRenderResult,
-                PromptRenderFrame,
-            ]
-            | None
-        ) = (
-            self._build_prompt_render_phase(context) if context is not None else None
+        self._before_step = LiveContributions(
+            lambda: self._plugins.before_step_modules,
+            self._build_before_step_phase,
+        )
+        self._after_step = LiveContributions(
+            lambda: self._plugins.after_step_modules,
+            self._build_after_step_phase,
+        )
+        self._prompt_render = (
+            LiveContributions(
+                lambda: self._plugins.prompt_render_modules,
+                lambda modules: self._build_prompt_render_phase(context, modules),
+            )
+            if context is not None
+            else None
         )
 
-    def add_tool_hooks(self, hooks: list["ToolHook"]) -> None:
-        self._tool_executor.add_hooks(hooks)
-
-    def add_prompt_render_plugin_modules(
-        self,
-        modules: list[object],
-    ) -> None:
-        self._prompt_render_plugin_modules.extend(modules)
-        if self._context is not None:
-            self._prompt_render = self._build_prompt_render_phase(self._context)
-
-    def add_before_step_plugin_modules(
-        self,
-        modules: list[object],
-    ) -> None:
-        self._before_step_plugin_modules.extend(modules)
-        self._before_step = self._build_before_step_phase()
-
-    def add_after_step_plugin_modules(
-        self,
-        modules: list[object],
-    ) -> None:
-        self._after_step_plugin_modules.extend(modules)
-        self._after_step = self._build_after_step_phase()
+    def bind_plugin_contributions(self, plugins: PluginContributionSource) -> None:
+        """改为从 ``plugins`` 实时读取 tool hooks 与步骤阶段模块。"""
+        self._plugins = plugins
+        # 绑定时立即按当前贡献构造一次，模块 slot 冲突等装配错误在启动时暴露。
+        self._before_step.current()
+        self._after_step.current()
+        if self._prompt_render is not None:
+            self._prompt_render.current()
 
     def _build_before_step_phase(
         self,
+        plugin_modules: list[Any],
     ) -> Phase[BeforeStepInput, BeforeStepCtx, BeforeStepFrame]:
         return Phase(
-            default_before_step_modules(
-                self._bus,
-                plugin_modules=cast("list[Any]", self._before_step_plugin_modules),
-            ),
+            default_before_step_modules(self._bus, plugin_modules=plugin_modules),
             frame_factory=BeforeStepFrame,
         )
 
     def _build_after_step_phase(
         self,
+        plugin_modules: list[Any],
     ) -> Phase[AfterStepCtx, AfterStepCtx, AfterStepFrame]:
         return Phase(
-            default_after_step_modules(
-                self._bus,
-                plugin_modules=cast("list[Any]", self._after_step_plugin_modules),
-            ),
+            default_after_step_modules(self._bus, plugin_modules=plugin_modules),
             frame_factory=AfterStepFrame,
         )
 
     def _build_prompt_render_phase(
         self,
         context: "ContextBuilder",
+        plugin_modules: list[Any],
     ) -> Phase[PromptRenderInput, PromptRenderResult, PromptRenderFrame]:
         return Phase(
             default_prompt_render_modules(
                 self._bus,
                 context,
-                plugin_modules=cast("list[Any]", self._prompt_render_plugin_modules),
+                plugin_modules=plugin_modules,
             ),
             frame_factory=PromptRenderFrame,
         )
@@ -311,11 +281,9 @@ class DefaultReasoner(
         self,
         input: PromptRenderInput,
     ) -> PromptRenderResult:
-        if self._context is None:
-            raise RuntimeError("DefaultReasoner.render_prompt requires context")
         if self._prompt_render is None:
-            self._prompt_render = self._build_prompt_render_phase(self._context)
-        return await self._prompt_render.run(input)
+            raise RuntimeError("DefaultReasoner.render_prompt requires context")
+        return await self._prompt_render.current().run(input)
 
     def set_stream_sink_factory(
         self,
@@ -345,9 +313,6 @@ class DefaultReasoner(
             raise RuntimeError(
                 "DefaultReasoner.run_turn requires context and session_manager"
             )
-        if self._prompt_render is None:
-            self._prompt_render = self._build_prompt_render_phase(self._context)
-
         # The model and policy are execution snapshots, before any history render.
         policy = CompactionPolicy(
             self._llm_config.compaction_retained_turns,

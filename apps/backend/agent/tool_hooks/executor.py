@@ -12,6 +12,8 @@ from agent.tool_hooks.types import (
 )
 
 ToolInvoker = Callable[[str, dict[str, Any]], Awaitable[Any]]
+# 工具 hook 来源：每次工具调用都重新读取，插件代内卸载/加载后下一次调用即生效。
+ToolHookSource = Callable[[], Sequence[ToolHook]]
 # 宿主对 pre hooks 之后最终参数的准入判定：返回拒绝原因，或 None 表示放行。
 ToolAdmission = Callable[[str, dict[str, Any]], str | None]
 
@@ -24,12 +26,20 @@ class HookExecutionError(RuntimeError):
         super().__init__(f"hook {hook_name} ({event}) failed: {cause}")
 
 
-class ToolExecutor:
-    def __init__(self, hooks: Sequence[ToolHook] | None = None) -> None:
-        self._hooks = list(hooks or [])
+def no_tool_hooks() -> Sequence[ToolHook]:
+    """没有任何 hook 的来源（未接插件内核的执行器使用）。"""
+    return ()
 
-    def add_hooks(self, hooks: Sequence[ToolHook]) -> None:
-        self._hooks.extend(hooks)
+
+class ToolExecutor:
+    """按 pre / admit / invoke / post 固定流程执行单次工具调用。
+
+    ``hooks`` 是 hook 来源而不是快照：每次调用开始时读取一次，同一次调用的
+    pre 与 post 阶段共用这份读取结果。
+    """
+
+    def __init__(self, hooks: ToolHookSource = no_tool_hooks) -> None:
+        self._hooks = hooks
 
     async def execute(
         self,
@@ -50,6 +60,7 @@ class ToolExecutor:
         2. invoker：用最终参数执行真实工具
         3. post hooks：记录成功或错误后的附加信息与 trace
         """
+        hooks = tuple(self._hooks())
         current_arguments = dict(request.arguments)
         extra_messages: list[str] = []
         pre_trace: list[HookTraceItem] = []
@@ -59,6 +70,7 @@ class ToolExecutor:
             # pre_hook 是唯一允许改输入/直接 deny 的阶段。
             denied_reason, denied_finalize, current_arguments = (
                 await self._run_pre_hooks(
+                    hooks,
                     request=request,
                     current_arguments=current_arguments,
                     extra_messages=extra_messages,
@@ -97,6 +109,7 @@ class ToolExecutor:
             try:
                 # 工具自身报错后，允许 post_tool_error 做记录型处理。
                 await self._run_post_hooks(
+                    hooks,
                     HookContext(
                         event="post_tool_error",
                         request=request,
@@ -127,6 +140,7 @@ class ToolExecutor:
         try:
             # post_tool_use 只做观察和补充信息，不回写执行参数。
             await self._run_post_hooks(
+                hooks,
                 HookContext(
                     event="post_tool_use",
                     request=request,
@@ -165,6 +179,7 @@ class ToolExecutor:
         try:
             denied_reason, denied_finalize, current_arguments = (
                 await self._run_pre_hooks(
+                    tuple(self._hooks()),
                     request=request,
                     current_arguments=current_arguments,
                     extra_messages=extra_messages,
@@ -198,13 +213,14 @@ class ToolExecutor:
 
     async def _run_pre_hooks(
         self,
+        hooks: Sequence[ToolHook],
         *,
         request: ToolExecutionRequest,
         current_arguments: dict[str, Any],
         extra_messages: list[str],
         traces: list[HookTraceItem],
     ) -> tuple[str, bool, dict[str, Any]]:
-        for hook in self._hooks:
+        for hook in hooks:
             if hook.event != "pre_tool_use":
                 continue
             ctx = HookContext(
@@ -251,13 +267,14 @@ class ToolExecutor:
 
     async def _run_post_hooks(
         self,
+        hooks: Sequence[ToolHook],
         ctx: HookContext,
         *,
         extra_messages: list[str],
         traces: list[HookTraceItem],
         fail_open: bool = False,
     ) -> None:
-        for hook in self._hooks:
+        for hook in hooks:
             if hook.event != ctx.event:
                 continue
             try:

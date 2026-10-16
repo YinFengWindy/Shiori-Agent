@@ -5,7 +5,6 @@ from typing import Any
 
 from agent.background.subagent_manager import SubagentManager
 from agent.policies.delegation import DelegationPolicy
-from agent.tool_hooks.base import ToolHook
 from shiori_sdk.tools import Tool
 from agent.tools.registry import ToolRegistry
 import logging
@@ -25,9 +24,6 @@ class SpawnTool(Tool):
         self._manager = manager
         self._tool_registry = tool_registry
         self._policy = policy or DelegationPolicy()
-
-    def add_tool_hooks(self, hooks: list[ToolHook]) -> None:
-        self._manager.add_tool_hooks(hooks)
 
     @property
     def manager(self) -> SubagentManager:

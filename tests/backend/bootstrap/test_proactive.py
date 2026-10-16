@@ -169,6 +169,10 @@ def test_build_proactive_runtime_isolates_role_policy_and_state(tmp_path, monkey
             return ProactiveGateDecision.continue_()
 
     proactive_gate = _PassGate()
+
+    def gate_source() -> list[ProactiveGateAdapter]:
+        return [proactive_gate]
+
     from agent.core.proactive_turn.strategies import RelationshipStrategy
 
     motive = RelationshipStrategy(MagicMock())
@@ -189,7 +193,7 @@ def test_build_proactive_runtime_isolates_role_policy_and_state(tmp_path, monkey
                 role_runtime_registry=MagicMock(),
             ),
         ),
-        proactive_gates=[proactive_gate],
+        proactive_gates=gate_source,
         proactive_motives=[motive],
         event_bus=event_bus,
         desktop_presence=presence,
@@ -217,8 +221,8 @@ def test_build_proactive_runtime_isolates_role_policy_and_state(tmp_path, monkey
     )
     assert created[0]["event_bus"] is event_bus
     assert created[1]["event_bus"] is event_bus
-    assert created[0]["proactive_gates"] == [proactive_gate]
-    assert created[1]["proactive_gates"] == [proactive_gate]
+    assert created[0]["proactive_gates"] is gate_source
+    assert created[1]["proactive_gates"] is gate_source
     assert created[0]["proactive_motives"] == [motive]
     assert created[1]["proactive_motives"] == [motive]
     # Every loop reads the one app-level desktop presence for target selection.

@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
 from time import perf_counter
 from typing import Literal, Mapping, Protocol, Sequence, cast, runtime_checkable
+
+from core.common.live_contributions import LiveContributions
 
 
 class ProactiveMode(StrEnum):
@@ -80,6 +83,9 @@ class ProactiveGateActivation:
     mode: ProactiveMode
     reason: str
     metadata: Mapping[str, object]
+    # The claiming instance receives the completion even if its plugin was
+    # unloaded or reloaded after evaluation.
+    gate: "ProactiveGate" = field(compare=False, repr=False)
 
 
 def resolve_gate_attempt_index(gate: ProactiveGateActivation | None) -> int:
@@ -153,33 +159,54 @@ class ProactiveGateAdapter:
         _ = completion
 
 
+# Global gate source, read on every evaluation so plugins unloaded or loaded
+# within a generation take effect on the next tick.
+ProactiveGateSource = Callable[[], Sequence[ProactiveGate]]
+
+
+def no_proactive_gates() -> Sequence[ProactiveGate]:
+    """Gate source used when no plugin kernel is wired."""
+    return ()
+
+
 class ProactiveGateChain:
-    """Evaluates global gates before core motives and routes selected-mode completion."""
+    """Evaluates global gates before core motives and routes selected-mode completion.
+
+    ``gates`` is read on every evaluation; the chain is re-validated and re-sorted
+    only when the gate set changes, and once at construction so duplicate names
+    in the startup set fail where the chain is wired.
+    """
 
     def __init__(
         self,
-        gates: Sequence[ProactiveGate] | None = None,
+        gates: ProactiveGateSource = no_proactive_gates,
         *,
         motives: Sequence[ProactiveGate] = (),
     ) -> None:
-        named: dict[str, ProactiveGate] = {}
-        for gate in [*(gates or ()), *motives]:
+        self._motives = tuple(motives)
+        self._motive_names = {gate.name for gate in motives}
+        self._ordered = LiveContributions(gates, self._order)
+
+    def _order(self, gates: list[ProactiveGate]) -> tuple[ProactiveGate, ...]:
+        """Validates names and orders global gates ahead of core motives."""
+        names: set[str] = set()
+        for gate in [*gates, *self._motives]:
             name = str(gate.name).strip()
             if not name:
                 raise ValueError("Proactive gate name must not be empty")
-            if name in named:
+            if name in names:
                 raise ValueError(f"Duplicate proactive gate name: {name}")
-            named[name] = gate
-        self._gates_by_name = named
-        self._motive_names = {gate.name for gate in motives}
+            names.add(name)
         # Global admission always runs before core motives, regardless of priority.
-        self._gates = tuple(
-            sorted(gates or (), key=lambda gate: (-int(gate.priority), gate.name))
-        ) + tuple(sorted(motives, key=lambda gate: (-int(gate.priority), gate.name)))
+        return tuple(
+            sorted(gates, key=lambda gate: (-int(gate.priority), gate.name))
+        ) + tuple(
+            sorted(self._motives, key=lambda gate: (-int(gate.priority), gate.name))
+        )
 
     def evaluate(self, ctx: ProactiveGateContext) -> ProactiveGateResult:
         trace: list[ProactiveGateTraceItem] = []
-        for gate in self._gates:
+        for gate in self._ordered.current():
             started = perf_counter()
             decision = gate.evaluate(ctx)
             duration_ms = int((perf_counter() - started) * 1000)
@@ -218,6 +245,7 @@ class ProactiveGateChain:
                         mode=mode,
                         reason=decision.reason,
                         metadata=dict(decision.metadata),
+                        gate=gate,
                     ),
                     trace=tuple(trace),
                 )
@@ -229,12 +257,8 @@ class ProactiveGateChain:
         )
 
     def finalize(self, completion: ProactiveGateCompletion) -> None:
-        gate = self._gates_by_name.get(completion.activation.gate_name)
-        if gate is None:
-            raise RuntimeError(
-                f"Activated proactive gate is no longer registered: {completion.activation.gate_name}"
-            )
-        gate.finalize(completion)
+        """Routes the outcome to the gate instance that claimed the tick."""
+        completion.activation.gate.finalize(completion)
 
     @staticmethod
     def _validate_decision(

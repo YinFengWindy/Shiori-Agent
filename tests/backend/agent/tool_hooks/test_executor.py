@@ -49,7 +49,7 @@ def test_tool_executor_pre_hook_can_update_arguments() -> None:
         event="pre_tool_use",
         outcome=HookOutcome(updated_input={"x": 2}),
     )
-    executor = ToolExecutor([hook])
+    executor = ToolExecutor(lambda: [hook])
 
     result = asyncio.run(
         executor.execute(
@@ -75,7 +75,7 @@ def test_tool_executor_denied_is_not_error() -> None:
         event="pre_tool_use",
         outcome=HookOutcome(decision="deny", reason="blocked"),
     )
-    executor = ToolExecutor([hook])
+    executor = ToolExecutor(lambda: [hook])
 
     result = asyncio.run(
         executor.execute(
@@ -107,7 +107,7 @@ def test_tool_executor_deny_with_finalize_propagates_onto_result_and_trace() -> 
         event="pre_tool_use",
         outcome=HookOutcome(decision="deny", reason="预算耗尽", finalize=True),
     )
-    executor = ToolExecutor([hook])
+    executor = ToolExecutor(lambda: [hook])
 
     result = asyncio.run(
         executor.execute(
@@ -136,7 +136,7 @@ def test_preflight_propagates_finalize_from_a_deny_outcome() -> None:
         event="pre_tool_use",
         outcome=HookOutcome(decision="deny", reason="预算耗尽", finalize=True),
     )
-    executor = ToolExecutor([hook])
+    executor = ToolExecutor(lambda: [hook])
 
     result = asyncio.run(
         executor.preflight(
@@ -160,7 +160,7 @@ def test_tool_executor_post_hook_only_adds_extra_message() -> None:
         event="post_tool_use",
         outcome=HookOutcome(extra_message="hint"),
     )
-    executor = ToolExecutor([hook])
+    executor = ToolExecutor(lambda: [hook])
 
     result = asyncio.run(
         executor.execute(
@@ -185,7 +185,7 @@ def test_tool_executor_post_error_hook_cannot_swallow_error() -> None:
         event="post_tool_error",
         outcome=HookOutcome(extra_message="logged"),
     )
-    executor = ToolExecutor([hook])
+    executor = ToolExecutor(lambda: [hook])
 
     async def _broken(_tool_name: str, _arguments: dict[str, Any]) -> Any:
         raise RuntimeError("boom")
@@ -210,7 +210,7 @@ def test_tool_executor_post_error_hook_cannot_swallow_error() -> None:
 def test_tool_executor_hook_exception_becomes_controlled_error() -> None:
     hook = _SpyHook(name="boom_hook", event="pre_tool_use")
     hook._run_error = RuntimeError("hook boom")
-    executor = ToolExecutor([hook])
+    executor = ToolExecutor(lambda: [hook])
 
     result = asyncio.run(
         executor.execute(
@@ -232,7 +232,7 @@ def test_tool_executor_hook_exception_becomes_controlled_error() -> None:
 def test_tool_executor_post_tool_use_hook_failure_does_not_pollute_success() -> None:
     hook = _SpyHook(name="boom_hook", event="post_tool_use")
     hook._run_error = RuntimeError("post hook boom")
-    executor = ToolExecutor([hook])
+    executor = ToolExecutor(lambda: [hook])
 
     result = asyncio.run(
         executor.execute(
@@ -249,3 +249,24 @@ def test_tool_executor_post_tool_use_hook_failure_does_not_pollute_success() -> 
     assert result.status == "success"
     assert result.output == {"tool": "dummy", "arguments": {"x": 1}}
     assert result.post_hook_trace[-1].reason == "hook failed: post hook boom"
+
+
+def test_tool_executor_reads_hook_source_on_every_call() -> None:
+    """插件 hook 来源变化后，下一次调用即按当前 hook 执行（#855）。"""
+    hook = _SpyHook(
+        name="deny",
+        event="pre_tool_use",
+        outcome=HookOutcome(decision="deny", reason="blocked"),
+    )
+    active: list[ToolHook] = [hook]
+    executor = ToolExecutor(lambda: active)
+    request = ToolExecutionRequest(
+        call_id="c1", tool_name="dummy", arguments={}, source="passive"
+    )
+
+    assert asyncio.run(executor.execute(request, _invoke)).status == "denied"
+    active.clear()
+    assert asyncio.run(executor.execute(request, _invoke)).status == "success"
+    active.append(hook)
+    assert asyncio.run(executor.execute(request, _invoke)).status == "denied"
+    assert len(hook.calls) == 2

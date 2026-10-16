@@ -25,6 +25,7 @@ from agent.tool_hooks.types import HookContext
 from shiori_sdk.tool_hooks import HookOutcome
 from shiori_sdk.tools import Tool
 from agent.tools.registry import ToolRegistry
+from agent.lifecycle.plugin_contributions import StaticPluginContributions
 
 
 class FinalizeOnCallHook(ToolHook):
@@ -178,5 +179,5 @@ def make_agent_loop_with_tools(
             )
         ),
     )
-    loop.add_tool_hooks(list(hooks))
+    loop.bind_plugin_contributions(StaticPluginContributions(tool_hooks=hooks))
     return loop
