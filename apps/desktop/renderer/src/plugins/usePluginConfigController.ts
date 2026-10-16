@@ -8,10 +8,12 @@ import {
 } from "./pluginBridgeClient";
 import { pluginConfigChanges } from "./pluginConfigChanges";
 
-// A validation rejection is the only failure the user can fix by editing
-// further without reloading; anything else (TOML round-trip issues,
-// unexpected backend errors) pauses until an explicit retry or reload.
-const RECOVERABLE_WITHOUT_RELOAD = new Set(["plugin_config_invalid"]);
+// Failures the next edit may resolve without reloading: a validation
+// rejection, a config the plugin could not start with (the old config keeps
+// running), or a plugin busy with in-flight work. Anything else (TOML
+// round-trip issues, unexpected backend errors) pauses until an explicit
+// retry or reload.
+const RECOVERABLE_WITHOUT_RELOAD = new Set(["plugin_config_invalid", "plugin_reload_failed", "plugin_reload_busy"]);
 
 function cloneValues(values: PluginConfigValues): PluginConfigValues {
   return JSON.parse(JSON.stringify(values)) as PluginConfigValues;

@@ -23,9 +23,14 @@ function packageIdentity(entry: RuntimePluginUi): string {
   return JSON.stringify({ ...entry, activationToken: undefined });
 }
 
-/** Serializes roster changes so a stale import cannot republish a disabled plugin. */
+/**
+ * Serializes roster changes so a stale import cannot republish a disabled plugin.
+ * A new backend activation of unchanged code (a generation swap or an
+ * in-generation reload mints a new `activationToken`) is acknowledged again
+ * with this window's existing outcome, without reimporting the module.
+ */
 export function createRuntimePluginUiSynchronization(host: RuntimePluginUiHost) {
-  const loaded = new Map<string, { identity: string; dispose: () => void }>();
+  const loaded = new Map<string, { identity: string; token: string | undefined; error?: unknown; dispose: () => void }>();
   const failures = new Map<string, string>();
   let tail = Promise.resolve(new Map<string, string>());
   const synchronize = async (entries: RuntimePluginUi[]) => {
@@ -37,15 +42,25 @@ export function createRuntimePluginUiSynchronization(host: RuntimePluginUiHost) 
       failures.delete(id);
     }
     for (const entry of entries) {
-      if (loaded.has(entry.pluginId)) continue;
+      const current = loaded.get(entry.pluginId);
+      if (current) {
+        if (current.token !== entry.activationToken) {
+          current.token = entry.activationToken;
+          if (failures.has(entry.pluginId)) host.failed(entry, current.error);
+          else host.succeeded?.(entry);
+        }
+        continue;
+      }
+      let failure: unknown;
       const dispose = await loadRuntimePluginUi([entry], {
         ...host,
         failed: (failedEntry, error) => {
+          failure = error;
           failures.set(failedEntry.pluginId, errorMessage(error, { includeDetail: true }));
           host.failed(failedEntry, error);
         },
       });
-      loaded.set(entry.pluginId, { identity: packageIdentity(entry), dispose });
+      loaded.set(entry.pluginId, { identity: packageIdentity(entry), token: entry.activationToken, error: failure, dispose });
     }
     return new Map(failures);
   };

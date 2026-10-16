@@ -144,17 +144,27 @@ class ToolsCapability:
 
 
 class LifecycleCapability:
-    """向 Shiori 定义的 phase 槽位贡献模块；槽位顺序语义仍由核心拥有。"""
+    """向 Shiori 定义的 phase 槽位贡献模块；槽位顺序语义仍由核心拥有。
+
+    模块的 ``run`` 经过插件实例的调用闸门：代内重载会等待已进入的这一次执行，
+    闸门关闭后模块直接放行 frame。
+    """
 
     def __init__(
-        self, contributions: PluginContributions, effects: EffectScope
+        self,
+        contributions: PluginContributions,
+        effects: EffectScope,
+        calls: PluginCallGate,
     ) -> None:
         self._contributions = contributions
         self._effects = effects
+        self._calls = calls
 
     def contribute(self, slot: str, modules: Sequence[object]) -> None:
         require_phase_slot(slot)
         self._effects.ensure_active(f"phase:{slot}")
+        for module in modules:
+            self._calls.guard_phase_module(module)
         target = self._contributions.phase_modules[slot]
         target.extend(modules)
 
@@ -167,24 +177,31 @@ class LifecycleCapability:
 
 
 class ToolHooksCapability:
-    """贡献工具执行前置 hook（ToolExecutor pre_hook 链）。"""
+    """贡献工具执行前置 hook（ToolExecutor pre_hook 链）。
+
+    hook 的 ``run`` 经过插件实例的调用闸门：代内重载会等待已进入的这一次执行；
+    闸门关闭后 pre_tool_use hook 拒绝本次工具调用（不在无守卫时执行），
+    其余 hook 直接放行。
+    """
 
     def __init__(
         self,
         contributions: PluginContributions,
         effects: EffectScope,
         plugin_id: str,
+        calls: PluginCallGate,
     ) -> None:
         self._contributions = contributions
         self._effects = effects
         self._plugin_id = plugin_id
+        self._calls = calls
 
     def add(self, hook: "ToolHook") -> None:
+        label = f"tool_hook:{getattr(hook, 'name', hook)}"
+        self._effects.ensure_active(label)
+        self._calls.guard_tool_hook(hook)
         contribute_to_list(
-            self._contributions.tool_hooks,
-            hook,
-            effects=self._effects,
-            label=f"tool_hook:{getattr(hook, 'name', hook)}",
+            self._contributions.tool_hooks, hook, effects=self._effects, label=label
         )
 
     def add_handler(

@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import shutil
+import sys
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 
@@ -842,6 +845,530 @@ async def test_a_reference_is_type_checked_by_its_resolved_value(tmp_path, monke
         assert "capacity" in rejected.error.message
         assert all("input" not in item for item in rejected.error.details["errors"])
         assert path.read_text(encoding="utf-8") == before
+    finally:
+        await service.aclose()
+        await app.shutdown()
+
+
+# ── 代内重载（#857） ───────────────────────────────────────────────────────
+
+_TUNED = """
+import sys
+from pydantic import BaseModel
+from shiori_sdk.tools import Tool
+
+probe = sys.modules["bridge_reload_probe"]
+
+
+class TunedModel(BaseModel):
+    label: str = "v1"
+    token: str = ""
+
+
+class Wait(Tool):
+    name = "tuned_wait"
+    description = "waits for the test"
+    parameters = {"type": "object", "properties": {}}
+
+    def __init__(self, label):
+        self.label = label
+
+    async def execute(self, **kwargs):
+        probe.events.append(("call", self.label))
+        await probe.release.wait()
+        return self.label
+
+
+async def setup(ctx):
+    label = ctx.config.get("label")
+    if label in ("broken", probe.fail_label):
+        raise RuntimeError("broken label")
+    if label == "slow":
+        probe.events.append(("setup-waiting",))
+        await probe.setup_gate.wait()
+    probe.events.append(("setup", "tuned", label, ctx.config.get("token")))
+    ctx.tools.register(Wait(label))
+    ctx.effect("dispose", lambda: probe.events.append(("dispose", "tuned", label)))
+    ctx.expose(label)
+"""
+
+_TUNED_USER = """
+import sys
+
+probe = sys.modules["bridge_reload_probe"]
+
+
+async def setup(ctx):
+    probe.events.append(("setup", "tuned_user", ctx.dependencies.require("tuned")))
+"""
+
+_STEADY = """
+import sys
+from shiori_sdk.tools import Tool
+
+probe = sys.modules["bridge_reload_probe"]
+
+
+class Busy(Tool):
+    name = "steady_wait"
+    description = "an unrelated in-flight call"
+    parameters = {"type": "object", "properties": {}}
+
+    async def execute(self, **kwargs):
+        await probe.steady_release.wait()
+        return "steady"
+
+
+async def setup(ctx):
+    # Stands in for a managed runtime: its effect must survive unrelated saves.
+    probe.events.append(("setup", "steady"))
+    ctx.tools.register(Busy())
+    ctx.effect("stop-service", lambda: probe.events.append(("dispose", "steady")))
+"""
+
+_WIRED = """
+import sys
+from pydantic import BaseModel
+
+probe = sys.modules["bridge_reload_probe"]
+
+
+class WiredModel(BaseModel):
+    label: str = ""
+
+
+async def setup(ctx):
+    probe.events.append(("setup", "wired", ctx.config.get("label")))
+"""
+
+_PAUSED = """
+import sys
+from pydantic import BaseModel
+
+probe = sys.modules["bridge_reload_probe"]
+
+
+class PausedModel(BaseModel):
+    label: str = ""
+
+
+async def setup(ctx):
+    probe.events.append(("setup", "paused"))
+"""
+
+
+@pytest.fixture
+def reload_probe(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
+    module = ModuleType("bridge_reload_probe")
+    module.events = []
+    module.release = asyncio.Event()
+    module.steady_release = asyncio.Event()
+    module.setup_gate = asyncio.Event()
+    module.fail_label = None
+    monkeypatch.setitem(sys.modules, "bridge_reload_probe", module)
+    return module
+
+
+def _stage_reload_plugins(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, pinned: bool
+) -> None:
+    root = tmp_path / "reload_plugins"
+    packages = {
+        "tuned": ("capabilities: [config, tools]\nconfig_model: TunedModel\n", _TUNED),
+        "tuned_user": (
+            "capabilities: [dependencies]\ndependencies: [tuned]\n",
+            _TUNED_USER,
+        ),
+        "steady": ("capabilities: [tools]\n", _STEADY),
+        "wired": (
+            "capabilities: [config, channels]\nconfig_model: WiredModel\n",
+            _WIRED,
+        ),
+        "paused": ("capabilities: [config]\nconfig_model: PausedModel\n", _PAUSED),
+    }
+    if pinned:
+        # A hard dependent of ``tuned`` that cannot be unloaded in-process.
+        packages["pinned"] = (
+            "capabilities: [dependencies]\ndependencies: [tuned]\n"
+            "supports_hot_unload: false\n",
+            "async def setup(ctx):\n    pass\n",
+        )
+    for plugin_id, (manifest, source) in packages.items():
+        (root / plugin_id / "backend").mkdir(parents=True)
+        (root / plugin_id / "manifest.yaml").write_text(
+            f'api: 2\nid: {plugin_id}\nversion: "0.1.0"\n{manifest}',
+            encoding="utf-8",
+        )
+        (root / plugin_id / "backend/plugin.py").write_text(source, encoding="utf-8")
+    monkeypatch.setattr(
+        "bootstrap.tools._resolve_plugin_dirs", lambda workspace: [root]
+    )
+
+
+async def _start_reload_service(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    label: str = "v1",
+    pinned: bool = False,
+):
+    _stage_reload_plugins(tmp_path, monkeypatch, pinned=pinned)
+    service, path, app = await _start_service(
+        tmp_path, _config(extra=f'\n[plugins.tuned]\nlabel = "{label}"\n')
+    )
+    events: list[dict] = []
+    service.add_event_listener(events.append)
+    return service, path, app, events
+
+
+def _save(label: str, operation_id: str, plugin_id: str = "tuned", **values):
+    return {
+        "plugin_id": plugin_id,
+        "operation_id": operation_id,
+        "values": {"label": label, **values},
+    }
+
+
+async def _settle() -> None:
+    for _ in range(20):
+        await asyncio.sleep(0)
+
+
+@pytest.mark.asyncio
+async def test_save_reloads_only_the_plugin_and_its_dependents_in_generation(
+    tmp_path, monkeypatch, reload_probe
+):
+    monkeypatch.setenv("SHIORI_TEST_TUNED_TOKEN", "expanded-secret")
+    service, path, app, events = await _start_reload_service(tmp_path, monkeypatch)
+    try:
+        reload_probe.events.clear()
+        reload_probe.release.set()
+        payload = _save("v2", "op-reload", token="${SHIORI_TEST_TUNED_TOKEN}")
+
+        response = await _request(service, "plugin.config.set", payload)
+
+        assert response.error is None, response.error
+        assert response.payload["generation"] == app.generation == 1
+        assert response.payload["reloaded_plugins"] == ["tuned", "tuned_user"]
+        # Only the closure was set up again, with the expanded values; the
+        # managed-runtime-like bystander kept its effects.
+        assert reload_probe.events == [
+            ("dispose", "tuned", "v1"),
+            ("setup", "tuned", "v2", "expanded-secret"),
+            ("setup", "tuned_user", "v2"),
+        ]
+        assert await app.core.tools.execute("tuned_wait", {}) == "v2"
+        # Live tables, committed text and disk agree; secrets stay references.
+        assert app.config.plugins["tuned"]["token"] == "expanded-secret"
+        assert app.config.raw_plugin_configs["tuned"]["token"] == (
+            "${SHIORI_TEST_TUNED_TOKEN}"
+        )
+        assert path.read_text(encoding="utf-8") == service.settings.config_text
+        assert load_config_text(service.settings.config_text) == app.config
+        assert [event["method"] for event in events] == ["plugins.reloaded"]
+        assert events[0]["payload"] == {
+            "generation": 1,
+            "plugin_ids": ["tuned", "tuned_user"],
+        }
+
+        retry = await _request(service, "plugin.config.set", dict(payload))
+        assert retry.payload == response.payload
+        assert len([event for event in reload_probe.events if event[0] == "setup"]) == 2
+        # The replay neither reloads nor announces the reload again.
+        assert [event["method"] for event in events] == ["plugins.reloaded"]
+    finally:
+        await service.aclose()
+        await app.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_save_waits_for_the_plugins_own_call_but_not_unrelated_ones(
+    tmp_path, monkeypatch, reload_probe
+):
+    service, path, app, _ = await _start_reload_service(tmp_path, monkeypatch)
+    tools = app.core.tools
+    unrelated = asyncio.create_task(tools.execute("steady_wait", {}))
+    own = asyncio.create_task(tools.execute("tuned_wait", {}))
+    try:
+        await _settle()
+        saving = asyncio.create_task(
+            _request(service, "plugin.config.set", _save("v2", "op-wait"))
+        )
+        await _settle()
+        assert not saving.done()
+        assert 'label = "v2"' not in path.read_text(encoding="utf-8")
+
+        reload_probe.release.set()
+        assert await own == "v1"
+        response = await asyncio.wait_for(saving, 5)
+        assert response.error is None, response.error
+        # The unrelated call never held the save up and is still running.
+        assert not unrelated.done()
+        assert 'label = "v2"' in path.read_text(encoding="utf-8")
+    finally:
+        reload_probe.release.set()
+        reload_probe.steady_release.set()
+        await unrelated
+        await service.aclose()
+        await app.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_failed_setup_keeps_the_old_config_running_and_persists_nothing(
+    tmp_path, monkeypatch, reload_probe
+):
+    service, path, app, events = await _start_reload_service(tmp_path, monkeypatch)
+    try:
+        reload_probe.release.set()
+        before = path.read_text(encoding="utf-8")
+
+        response = await _request(
+            service, "plugin.config.set", _save("broken", "op-broken")
+        )
+
+        assert response.error is not None
+        assert response.error.code == "plugin_reload_failed"
+        # The dependent cannot start without the new provider either.
+        assert response.error.details["plugin_ids"] == ["tuned", "tuned_user"]
+        assert response.error.message.splitlines()[0].endswith("新配置未保存")
+        assert path.read_text(encoding="utf-8") == before
+        assert service.settings.config_text == before
+        assert app.config.plugins["tuned"] == {"label": "v1"}
+        assert app.generation == 1
+        assert await app.core.tools.execute("tuned_wait", {}) == "v1"
+        assert events == []
+    finally:
+        await service.aclose()
+        await app.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_drain_timeout_reports_busy_and_persists_nothing(
+    tmp_path, monkeypatch, reload_probe
+):
+    monkeypatch.setattr(
+        "desktop_bridge.runtime.apply.PLUGIN_RELOAD_DRAIN_TIMEOUT_SECONDS", 0.05
+    )
+    service, path, app, events = await _start_reload_service(tmp_path, monkeypatch)
+    in_flight = asyncio.create_task(app.core.tools.execute("tuned_wait", {}))
+    try:
+        await _settle()
+        before = path.read_text(encoding="utf-8")
+
+        response = await _request(service, "plugin.config.set", _save("v2", "op-busy"))
+
+        assert response.error is not None
+        assert response.error.code == "plugin_reload_busy"
+        assert response.error.details["plugin_ids"] == ["tuned"]
+        assert path.read_text(encoding="utf-8") == before
+        assert service.settings.config_text == before
+        assert events == []
+        reload_probe.release.set()
+        assert await in_flight == "v1"
+        # The old instance kept serving; a retry of the same operation applies.
+        retry = await _request(service, "plugin.config.set", _save("v2", "op-busy"))
+        assert retry.error is None, retry.error
+        assert await app.core.tools.execute("tuned_wait", {}) == "v2"
+    finally:
+        reload_probe.release.set()
+        await service.aclose()
+        await app.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_failed_commit_restores_the_old_instance(
+    tmp_path, monkeypatch, reload_probe
+):
+    service, path, app, _ = await _start_reload_service(tmp_path, monkeypatch)
+    try:
+        reload_probe.release.set()
+        before = path.read_text(encoding="utf-8")
+
+        def fail(*args, **kwargs):
+            raise OSError("disk full")
+
+        monkeypatch.setattr(service.settings.transaction, "commit", fail)
+        response = await _request(service, "plugin.config.set", _save("v2", "op-io"))
+
+        assert response.error is not None
+        assert response.error.code == "runtime_commit_failed"
+        assert path.read_text(encoding="utf-8") == before
+        assert service.settings.config_text == before
+        assert app.config.plugins["tuned"] == {"label": "v1"}
+        assert await app.core.tools.execute("tuned_wait", {}) == "v1"
+    finally:
+        await service.aclose()
+        await app.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_cancelled_save_after_draining_still_persists_what_it_applied(
+    tmp_path, monkeypatch, reload_probe
+):
+    service, path, app, events = await _start_reload_service(tmp_path, monkeypatch)
+    try:
+        reload_probe.release.set()
+        saving = asyncio.create_task(
+            _request(service, "plugin.config.set", _save("slow", "op-cancel"))
+        )
+        async with asyncio.timeout(1):
+            while ("setup-waiting",) not in reload_probe.events:
+                await asyncio.sleep(0)
+        saving.cancel()
+        await _settle()
+        reload_probe.setup_gate.set()
+        with pytest.raises(asyncio.CancelledError):
+            await saving
+
+        # The reload ran to completion, so its config is committed with it.
+        assert await app.core.tools.execute("tuned_wait", {}) == "slow"
+        assert 'label = "slow"' in path.read_text(encoding="utf-8")
+        assert path.read_text(encoding="utf-8") == service.settings.config_text
+        assert load_config_text(service.settings.config_text) == app.config
+        # Renderer contexts of the replaced instances are still told to renew.
+        await _settle()
+        assert [event["method"] for event in events] == ["plugins.reloaded"]
+        assert events[0]["payload"]["plugin_ids"] == ["tuned", "tuned_user"]
+    finally:
+        await service.aclose()
+        await app.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_failed_commit_reports_plugins_that_could_not_be_restored(
+    tmp_path, monkeypatch, reload_probe
+):
+    service, path, app, _ = await _start_reload_service(tmp_path, monkeypatch)
+    try:
+        reload_probe.release.set()
+        before = path.read_text(encoding="utf-8")
+
+        def fail(*args, **kwargs):
+            raise OSError("disk full")
+
+        monkeypatch.setattr(service.settings.transaction, "commit", fail)
+        reload_probe.fail_label = "v1"
+        response = await _request(service, "plugin.config.set", _save("v2", "op-io"))
+
+        assert response.error is not None
+        assert response.error.code == "runtime_commit_failed"
+        assert response.error.details["restore_failed"] == ["tuned", "tuned_user"]
+        assert "未能按原配置恢复" in response.error.message
+        assert path.read_text(encoding="utf-8") == before
+    finally:
+        await service.aclose()
+        await app.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_failed_target_still_swaps_the_generation(
+    tmp_path, monkeypatch, reload_probe
+):
+    service, _, app, events = await _start_reload_service(
+        tmp_path, monkeypatch, label="broken"
+    )
+    try:
+        reload_probe.release.set()
+
+        response = await _request(service, "plugin.config.set", _save("v2", "op-fix"))
+
+        assert response.error is None, response.error
+        assert response.payload["changed"] is True
+        assert "reloaded_plugins" not in response.payload
+        assert app.generation == 2
+        assert await app.core.tools.execute("tuned_wait", {}) == "v2"
+        assert [event["method"] for event in events] == ["runtime.applied"]
+    finally:
+        await service.aclose()
+        await app.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_closure_without_hot_unload_keeps_requiring_a_restart(
+    tmp_path, monkeypatch, reload_probe
+):
+    service, path, app, events = await _start_reload_service(
+        tmp_path, monkeypatch, pinned=True
+    )
+    try:
+        before = path.read_text(encoding="utf-8")
+        reload_probe.events.clear()
+
+        response = await _request(
+            service, "plugin.config.set", _save("v2", "op-pinned")
+        )
+
+        assert response.error is not None
+        assert response.error.code == "plugin_restart_required"
+        assert response.error.details["plugin_ids"] == ["pinned"]
+        assert path.read_text(encoding="utf-8") == before
+        assert app.generation == 1
+        assert reload_probe.events == []
+        assert events == []
+    finally:
+        await service.aclose()
+        await app.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_disabled_plugin_config_is_stored_without_reload_or_swap(
+    tmp_path, monkeypatch, reload_probe
+):
+    """A disabled plugin registers no config model, so the settings page can only
+    reach it when it is disabled while the save waits for the settings lock."""
+    service, path, app, _ = await _start_reload_service(tmp_path, monkeypatch)
+    try:
+        apply = service.settings.apply
+
+        async def disable_first(*args, **kwargs):
+            monkeypatch.setattr(service.settings, "apply", apply)
+            disabled = await _request(
+                service,
+                "plugins.setEnabled",
+                {"plugin_id": "paused", "enabled": False, "operation_id": "op-off"},
+            )
+            assert disabled.error is None, disabled.error
+            reload_probe.events.clear()
+            return await apply(*args, **kwargs)
+
+        monkeypatch.setattr(service.settings, "apply", disable_first)
+        response = await _request(
+            service, "plugin.config.set", _save("later", "op-paused", "paused")
+        )
+
+        assert response.error is None, response.error
+        assert "reloaded_plugins" not in response.payload
+        assert response.payload["generation"] == app.generation == 2
+        assert reload_probe.events == []
+        assert app.config.plugins["paused"] == {"enabled": False, "label": "later"}
+        assert path.read_text(encoding="utf-8") == service.settings.config_text
+        assert load_config_text(service.settings.config_text) == app.config
+    finally:
+        await service.aclose()
+        await app.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_channel_closure_still_swaps_the_generation(
+    tmp_path, monkeypatch, reload_probe
+):
+    service, _, app, events = await _start_reload_service(tmp_path, monkeypatch)
+    try:
+        reload_probe.events.clear()
+
+        response = await _request(
+            service, "plugin.config.set", _save("v2", "op-wired", "wired")
+        )
+
+        assert response.error is None, response.error
+        assert response.payload["changed"] is True
+        assert "reloaded_plugins" not in response.payload
+        assert app.generation == 2
+        # A swap sets every plugin up again, as before.
+        assert ("setup", "steady") in reload_probe.events
+        assert ("setup", "wired", "v2") in reload_probe.events
+        assert [event["method"] for event in events] == ["runtime.applied"]
+        assert events[0]["payload"]["changed"] is True
     finally:
         await service.aclose()
         await app.shutdown()

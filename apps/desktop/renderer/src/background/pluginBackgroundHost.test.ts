@@ -253,6 +253,21 @@ test("a roster update preserves sibling scopes and disposes only inactive plugin
   await host.stop();
 });
 
+test("an in-generation reload replaces only the reloaded plugins' scopes (#857)", async () => {
+  const log: string[] = [];
+  const roster = fakeRoster(["a", "b", "c"]);
+  let signal: Parameters<PluginBackgroundHostDeps["subscribeRosterChanged"]>[0] = () => {};
+  const host = new PluginBackgroundHost(makeDeps({
+    registry: { list: () => [entry("a", log), entry("b", log), entry("c", log)] },
+    ...roster.deps, subscribeRosterChanged: (listener) => { signal = listener; return () => {}; },
+  }, log));
+  await host.start(); log.length = 0;
+  signal({ reloaded: ["a", "c"] }); await flushMicrotasks();
+  assert.deepEqual(log, ["a:dispose:noop", "c:dispose:noop", "a:setup", "c:setup"]);
+  assert.deepEqual(host.runningPluginIds().sort(), ["a", "b", "c"]);
+  await host.stop();
+});
+
 test("publication during initial setup is retained and recovers from a reload rejection", async () => {
   const log: string[] = [];
   let signal: Parameters<PluginBackgroundHostDeps["subscribeRosterChanged"]>[0] | undefined;

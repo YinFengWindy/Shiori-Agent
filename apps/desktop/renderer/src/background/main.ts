@@ -1,5 +1,6 @@
 import { errorMessage } from "@yinfengwindy/shiori-sdk";
 import { pluginRosterChanged } from "../plugins/pluginRuntimeChanged";
+import { reloadedPluginIds } from "../../../src/shared/pluginsReloaded";
 // Registers every plugin's `background/index.ts` before the host reads the registry.
 import "./pluginBackgroundModules";
 import { createPluginBridgeClient } from "../plugins/pluginBridgeClient";
@@ -60,7 +61,10 @@ const host = new PluginBackgroundHost({
   subscribeRosterChanged(listener) {
     return onEvent((event) => {
       if (!pluginRosterChanged(event)) return;
-      listener(event.method === "bridge.exit" ? "unavailable" : event.method === "plugins.changed" ? "roster" : "runtime");
+      if (event.method === "bridge.exit") listener("unavailable");
+      else if (event.method === "plugins.changed") listener("roster");
+      else if (event.method === "plugins.reloaded") listener({ reloaded: reloadedPluginIds(event) });
+      else listener("runtime");
     });
   },
   createCtx(pluginId, scope) {

@@ -155,6 +155,16 @@ class _Named:
     def __init__(self, name: str) -> None:
         self.name = name
 
+    async def run(self, ctx: object) -> object:
+        return ctx
+
+
+class _Module:
+    """A minimal phase module: the capability gates its ``run``."""
+
+    async def run(self, frame: object) -> object:
+        return frame
+
 
 # ── 共享 helper ────────────────────────────────────────────────────────────
 
@@ -246,8 +256,8 @@ def test_tools_capability_plugin_tool_is_external_only_when_declared():
 async def test_lifecycle_contribution_removed_on_dispose():
     contributions = PluginContributions()
     scope = EffectScope("demo")
-    capability = LifecycleCapability(contributions, scope)
-    first, second = object(), object()
+    capability = LifecycleCapability(contributions, scope, PluginCallGate("demo"))
+    first, second = _Module(), _Module()
 
     capability.contribute("before_turn", [first, second])
     assert contributions.phase_modules["before_turn"] == [first, second]
@@ -257,20 +267,24 @@ async def test_lifecycle_contribution_removed_on_dispose():
 
 
 def test_lifecycle_unknown_slot_raises():
-    capability = LifecycleCapability(PluginContributions(), EffectScope("demo"))
+    capability = LifecycleCapability(
+        PluginContributions(), EffectScope("demo"), PluginCallGate("demo")
+    )
     with pytest.raises(ValueError, match="未知 phase 槽位"):
-        capability.contribute("after_everything", [object()])
+        capability.contribute("after_everything", [_Module()])
 
 
 @pytest.mark.asyncio
 async def test_lifecycle_dispose_only_removes_own_modules():
     contributions = PluginContributions()
-    foreign = object()
+    foreign = _Module()
     contributions.phase_modules["after_turn"].append(foreign)
     scope = EffectScope("demo")
-    mine = object()
+    mine = _Module()
 
-    LifecycleCapability(contributions, scope).contribute("after_turn", [mine])
+    LifecycleCapability(contributions, scope, PluginCallGate("demo")).contribute(
+        "after_turn", [mine]
+    )
     _ = await scope.dispose_all()
 
     # 其他插件贡献的模块不能被本插件卸载带走
@@ -279,9 +293,11 @@ async def test_lifecycle_dispose_only_removes_own_modules():
 
 def test_all_phase_slots_are_contributable():
     contributions = PluginContributions()
-    capability = LifecycleCapability(contributions, EffectScope("demo"))
+    capability = LifecycleCapability(
+        contributions, EffectScope("demo"), PluginCallGate("demo")
+    )
     for slot in PHASE_SLOTS:
-        capability.contribute(slot, [object()])
+        capability.contribute(slot, [_Module()])
     assert all(len(contributions.phase_modules[slot]) == 1 for slot in PHASE_SLOTS)
 
 
@@ -294,7 +310,7 @@ async def test_tool_hooks_capability_add_and_dispose():
     scope = EffectScope("demo")
     hook = _Named("plugin:demo:guard")
 
-    ToolHooksCapability(contributions, scope, "demo").add(hook)  # type: ignore[arg-type]
+    ToolHooksCapability(contributions, scope, "demo", PluginCallGate("demo")).add(hook)  # type: ignore[arg-type]
     assert contributions.tool_hooks == [hook]
     assert scope.labels == ["tool_hook:plugin:demo:guard"]
 
@@ -311,9 +327,9 @@ async def test_tool_hooks_capability_add_handler_builds_name_from_function():
     async def rewrite_rm_to_mv(event: object) -> None:
         return None
 
-    ToolHooksCapability(contributions, scope, "shell_restore").add_handler(
-        rewrite_rm_to_mv, tool_name_filter="shell"
-    )
+    ToolHooksCapability(
+        contributions, scope, "shell_restore", PluginCallGate("shell_restore")
+    ).add_handler(rewrite_rm_to_mv, tool_name_filter="shell")
 
     assert len(contributions.tool_hooks) == 1
     hook = contributions.tool_hooks[0]
@@ -334,9 +350,9 @@ async def test_tool_hooks_capability_add_handler_honors_explicit_handler_name():
 
     bound = functools.partial(guard, object())
 
-    ToolHooksCapability(contributions, scope, "legacy_hook").add_handler(
-        bound, handler_name="guard"
-    )
+    ToolHooksCapability(
+        contributions, scope, "legacy_hook", PluginCallGate("legacy_hook")
+    ).add_handler(bound, handler_name="guard")
 
     assert contributions.tool_hooks[0].name == "plugin:legacy_hook:guard"
 
@@ -611,9 +627,9 @@ async def test_closed_scope_rejects_contributions_before_mutating_registries():
                 registry, scope, contributions, "demo", PluginCallGate("demo")
             ).register(_FakeTool())
         with pytest.raises(RuntimeError, match="已处置"):
-            LifecycleCapability(contributions, scope).contribute(
-                "after_turn", [object()]
-            )
+            LifecycleCapability(
+                contributions, scope, PluginCallGate("demo")
+            ).contribute("after_turn", [_Module()])
         with pytest.raises(RuntimeError, match="已处置"):
             RpcCapability(rpc, scope, "demo", PluginCallGate("demo")).register(
                 "ping", _ping

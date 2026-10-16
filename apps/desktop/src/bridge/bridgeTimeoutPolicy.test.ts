@@ -5,6 +5,7 @@ import { bridgeRequestTimeoutMs, bridgeTimeoutPolicy } from "./bridgeTimeoutPoli
 test("bridge timeout policy keeps command classes explicit", () => {
   assert.equal(bridgeRequestTimeoutMs("health"), bridgeTimeoutPolicy.health);
   assert.equal(bridgeRequestTimeoutMs("runtime.apply"), null);
+  assert.equal(bridgeRequestTimeoutMs("plugin.config.set"), null);
   assert.equal(bridgeRequestTimeoutMs("chat.context.compact"), null);
   assert.equal(bridgeRequestTimeoutMs("plugins.communication.services.call"), null);
   assert.equal(bridgeRequestTimeoutMs("plugins.communication.services.call", 20_000), null);

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { pluginRuntimeChanged, pluginRosterChanged } from "./pluginRuntimeChanged";
+import { pluginContextReplaced, pluginRuntimeChanged, pluginRosterChanged } from "./pluginRuntimeChanged";
 
 test("no-op runtime writes preserve contexts, real publication and transport reconnect replace them", () => {
   const event = { id: "test", type: "event" as const, method: "runtime.applied", payload: { changed: false } };
@@ -18,4 +18,14 @@ test("readiness refreshes only the roster, while publications refresh both", () 
   assert.equal(pluginRosterChanged(event), true);
   assert.equal(pluginRosterChanged({ ...event, method: "runtime.applied" }), true);
   assert.equal(pluginRosterChanged({ ...event, method: "plugin.demo.changed" }), false);
+});
+
+test("an in-generation reload replaces only the reloaded plugins' contexts (#857)", () => {
+  const event = { id: "save", type: "event" as const, method: "plugins.reloaded", payload: { generation: 1, plugin_ids: ["novelai", "story"] } };
+  assert.equal(pluginRuntimeChanged(event), false);
+  assert.equal(pluginRosterChanged(event), true);
+  assert.equal(pluginContextReplaced(event, "novelai"), true);
+  assert.equal(pluginContextReplaced(event, "story"), true);
+  assert.equal(pluginContextReplaced(event, "desktop_pet"), false);
+  assert.equal(pluginContextReplaced({ ...event, method: "runtime.applied", payload: { changed: true } }, "desktop_pet"), true);
 });

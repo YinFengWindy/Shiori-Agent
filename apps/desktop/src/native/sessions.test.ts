@@ -78,3 +78,19 @@ test("stop revokes acquisitions still waiting for backend authorization", async 
   pending.resolve(context); await Promise.all([rejectedStart, rejectedPlayback]);
   assert.equal(f.calls.includes("start"), false); assert.equal(f.calls.includes("play"), false);
 });
+
+test("revoking one plugin leaves other plugins' sessions and pending opens intact (#857)", async () => {
+  const f = fixture();
+  const other = { plugin_id: "pet", owner: "pet", generation: "one" };
+  const kept = await f.sessions.open(7, other);
+  const approvals = { pet: deferred<typeof context>(), demo: deferred<typeof context>() };
+  f.options.authorize = (value) => approvals[value.plugin_id as "pet" | "demo"].promise;
+  const opening = f.sessions.open(7, other);
+  const reloaded = f.sessions.open(7, context);
+  f.sessions.revoke("demo");
+  approvals.pet.resolve(other); approvals.demo.resolve(context);
+  await opening;
+  await assert.rejects(reloaded, /失效/);
+  f.options.authorize = async (value) => value;
+  await f.sessions.call(7, kept, "audio.devices");
+});

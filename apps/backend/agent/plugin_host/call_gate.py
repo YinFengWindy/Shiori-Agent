@@ -8,11 +8,14 @@ from collections.abc import Awaitable, Callable, Sequence
 from typing import Any
 
 from shiori_sdk.rpc import PluginRpcError
+from shiori_sdk.tool_hooks import HookOutcome
 from shiori_sdk.tools import Tool
 
 # Gates that registered one tool object, kept on the object itself. A tool kept
 # in a process resource can be registered by several instances or generations.
 _TOOL_GATES = "__plugin_call_gates__"
+# Same bookkeeping for the ``run`` of a contributed phase module or tool hook.
+_RUN_GATES = "__plugin_run_gates__"
 
 
 class PluginCallGate:
@@ -96,23 +99,70 @@ class PluginCallGate:
         any of them is open and counted by every open one, so each instance
         waits for exactly the calls it admitted.
         """
-        gates: list[PluginCallGate] | None = tool.__dict__.get(_TOOL_GATES)
+        self._guard_method(tool, "execute", _TOOL_GATES, skipped=None)
+
+    def guard_phase_module(self, module: object) -> None:
+        """Gates a contributed phase module's ``run`` like a tool call.
+
+        A run admitted while the instance is open is waited for by a reload.
+        Once no registering instance admits (reload drain, disposal), the
+        module passes its frame through unchanged instead of failing the
+        turn: a phase built before the reload keeps referencing it, and the
+        plugin is simply absent for that run.
+        """
+        self._guard_method(module, "run", _RUN_GATES, skipped=_pass_frame)
+
+    def guard_tool_hook(self, hook: object) -> None:
+        """Gates a contributed tool hook's ``run`` like a tool call.
+
+        While no registering instance admits, a ``pre_tool_use`` hook fails
+        closed: it may guard admission (deny or rewrite the call), so the tool
+        call is denied rather than run unguarded during a reload. Post hooks
+        cannot affect admission and let the call result pass unchanged.
+        """
+        pre_tool = getattr(hook, "event", "pre_tool_use") == "pre_tool_use"
+        self._guard_method(
+            hook,
+            "run",
+            _RUN_GATES,
+            skipped=_deny_tool_call(self._plugin_id) if pre_tool else _pass_hook,
+        )
+
+    def _guard_method(
+        self,
+        target: object,
+        method: str,
+        gates_attribute: str,
+        *,
+        skipped: Callable[..., Any] | None,
+    ) -> None:
+        """Wraps ``target.<method>`` in place, shared by every gate that registers it.
+
+        ``skipped`` produces the result when no gate admits the call; ``None``
+        rejects it with ``plugin_unavailable`` instead.
+        """
+        gates: list[PluginCallGate] | None = vars(target).get(gates_attribute)
         if gates is None:
             gates = []
-            execute = tool.execute
-            tool_gates = gates
+            call = getattr(target, method)
+            target_gates = gates
 
-            @functools.wraps(execute)
-            async def admitted(**kwargs: Any) -> Any:
-                _prune(tool_gates)
+            @functools.wraps(call)
+            async def admitted(*args: Any, **kwargs: Any) -> Any:
+                _prune(target_gates)
+                if skipped is not None and not any(gate.open for gate in target_gates):
+                    return skipped(*args, **kwargs)
                 return await PluginCallGate._call_through(
-                    tuple(tool_gates), execute, **kwargs
+                    tuple(target_gates), call, *args, **kwargs
                 )
 
-            setattr(tool, _TOOL_GATES, gates)
-            setattr(tool, "execute", admitted)
+            setattr(target, gates_attribute, gates)
+            setattr(target, method, admitted)
         _prune(gates)
-        gates.append(self)
+        # One instance may contribute the same object more than once (e.g. to
+        # two phase slots); it still admits each call once.
+        if self not in gates:
+            gates.append(self)
 
     def _enter(self) -> None:
         self._in_flight += 1
@@ -149,3 +199,25 @@ class PluginCallGate:
 def _prune(gates: list[PluginCallGate]) -> None:
     """Drops gates of disposed instances once their admitted calls finished."""
     gates[:] = [gate for gate in gates if not gate.retired or gate.in_flight]
+
+
+def _pass_frame(frame: Any) -> Any:
+    """Result of a skipped phase module run: the frame, unchanged."""
+    return frame
+
+
+def _pass_hook(*_args: Any) -> HookOutcome:
+    """Result of a skipped post hook run: leave the call result unchanged."""
+    return HookOutcome()
+
+
+def _deny_tool_call(plugin_id: str) -> Callable[..., HookOutcome]:
+    """Result of a skipped pre-tool hook run: deny the call, never run it unguarded."""
+
+    def deny(*_args: Any) -> HookOutcome:
+        return HookOutcome(
+            decision="deny",
+            reason=f"插件 {plugin_id} 正在重载，本次工具调用未执行，请稍后重试",
+        )
+
+    return deny

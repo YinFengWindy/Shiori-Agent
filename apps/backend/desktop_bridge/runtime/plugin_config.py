@@ -79,6 +79,11 @@ class RuntimePluginConfig:
     ) -> dict[str, Any]:
         """Validates, commits and hot-applies one plugin's ``[plugins.<id>]`` table.
 
+        The plugin and its ACTIVE hard dependents are reloaded within the
+        current generation (``reloaded_plugins`` in the result); a disabled
+        plugin's table is only stored. Closures with channels or without hot
+        unload support, and non-ACTIVE targets, still swap the generation.
+
         A submitted value containing a ``${NAME}`` reference is validated in
         its resolved form (so e.g. an integer field may hold ``${PORT}``) but
         persisted verbatim; only values without a reference are persisted in
@@ -131,6 +136,8 @@ class RuntimePluginConfig:
             derive=DerivedWrite(
                 build_config_toml=_merge,
                 fingerprint_payload={"plugin_id": plugin_id, "values": persisted},
+                # 只改这一张表：能代内重载就只重载该插件及其硬依赖方（#857）。
+                reload_plugin=plugin_id,
             ),
         )
         return {

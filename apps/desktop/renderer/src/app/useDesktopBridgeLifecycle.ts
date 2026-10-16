@@ -233,7 +233,9 @@ export function useDesktopBridgeLifecycle({
           return;
         }
 
-        if (event.method === "plugins.changed") {
+        // A plugin reloaded within the current runtime re-reports its renderer
+        // entries through this refresh; roles and other plugins are untouched.
+        if (event.method === "plugins.changed" || event.method === "plugins.reloaded") {
           void refreshPluginEnabledState().catch(reportPluginStateError);
           return;
         }

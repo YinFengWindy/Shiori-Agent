@@ -64,3 +64,28 @@ test("mounted contributions renew client subscriptions on real generation change
   } finally { await view.cleanup(); }
   assert.equal(listeners.size, 0);
 });
+
+test("an in-generation reload renews only the reloaded plugin's client (#857)", async () => {
+  const listeners = new Set<(event: BridgeEvent) => void>();
+  const clients: Record<string, PluginRpcClient[]> = { demo: [], pet: [] };
+  function Contribution({ pluginId }: { pluginId: string }) {
+    const client = usePluginRpcClient(pluginId);
+    useEffect(() => { clients[pluginId].push(client); }, [client, pluginId]);
+    return null;
+  }
+  const view = await mountTestComponent(<><Contribution pluginId="demo" /><Contribution pluginId="pet" /></>, { windowGlobals: { miraDesktop: {
+    onEvent: (listener: (event: BridgeEvent) => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
+    invoke: async ({ method }: { method: string }) => ({ id: "response", type: "response", method, error: null,
+      payload: method.endsWith(".open") ? { generation: "g1" } : { ok: true } }),
+  } } });
+  try {
+    await act(async () => {
+      for (const listener of [...listeners]) {
+        listener({ id: "save", type: "event", method: "plugins.reloaded", payload: { generation: 1, plugin_ids: ["demo"] } });
+      }
+    });
+    assert.equal(clients.demo.length, 2);
+    assert.equal(clients.pet.length, 1);
+    assert.deepEqual(await clients.pet[0].call("read"), { ok: true });
+  } finally { await view.cleanup(); }
+});

@@ -11,7 +11,11 @@ export const bridgeTimeoutPolicy = Object.freeze({
 export function bridgeRequestTimeoutMs(method: string, requestedTimeoutMs?: number): number | null {
   // Providers own public service deadlines and actual work completion. Context
   // disposal or bridge exit still ends the caller's wait through lifecycle cleanup.
-  if (method === "runtime.apply" || method === "chat.context.compact" || method === "plugins.communication.services.call") return null;
+  // Settings transactions report their committed outcome, never a guess: a
+  // plugin config save waits for the settings lock, that plugin's in-flight
+  // calls (bounded by the backend's drain timeout), its setup or restore, or a
+  // full generation swap, none of which has a fixed bound.
+  if (method === "runtime.apply" || method === "plugin.config.set" || method === "chat.context.compact" || method === "plugins.communication.services.call") return null;
   if (requestedTimeoutMs !== undefined) {
     if (!Number.isInteger(requestedTimeoutMs) || requestedTimeoutMs <= 0 || requestedTimeoutMs > 2_147_483_647) {
       throw new Error("请求超时必须是有效的正整数毫秒数");

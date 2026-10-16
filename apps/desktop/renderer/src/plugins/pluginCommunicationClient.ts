@@ -1,6 +1,6 @@
 import { PluginBridgeError, type BridgeEvent, type PluginEventHandler, type PluginPeer, type PluginRpcClient } from "@yinfengwindy/shiori-sdk";
 import { PluginBackgroundMethods } from "./pluginBackgroundMethods";
-import { pluginRuntimeChanged } from "./pluginRuntimeChanged";
+import { pluginContextReplaced } from "./pluginRuntimeChanged";
 import { PluginCommunicationLifetime } from "./pluginCommunicationLifetime";
 import { invokeBridgePayload, type DesktopInvoke } from "../shared/bridgeInvoke";
 
@@ -63,9 +63,10 @@ export function createPluginCommunicationClient(pluginId: string, options: {
     return closing;
   };
   function onEvent(event: BridgeEvent) {
-    if (pluginRuntimeChanged(event)) {
+    if (pluginContextReplaced(event, pluginId)) {
       // An exited process owns no contexts. Calling it to close one would
-      // implicitly start a replacement bridge solely for cleanup.
+      // implicitly start a replacement bridge solely for cleanup. A reloaded
+      // plugin's owners are already gone on the backend; closing is a no-op.
       void closeContext(event.method !== "bridge.exit").catch(() => undefined);
       return;
     }

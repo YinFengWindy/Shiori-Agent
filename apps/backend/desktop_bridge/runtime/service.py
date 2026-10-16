@@ -56,7 +56,9 @@ class ReloadableDesktopService:
     def __init__(self, app: AppRuntime, config_path: Path, roles: RoleStore) -> None:
         self.app = app
         self.roles = roles
-        self.settings = RuntimeSettingsApplication(app, config_path, roles)
+        self.settings = RuntimeSettingsApplication(
+            app, config_path, roles, on_plugins_reloaded=self._plugins_reloaded
+        )
         self.role_tasks = RuntimeRoleTasks(app, roles)
         self.plugin_config = RuntimePluginConfig(app, self.settings)
         self.plugin_management = RuntimePluginManagement(app, self.settings)
@@ -67,6 +69,10 @@ class ReloadableDesktopService:
         self._entries = [self._current]
         self._listeners: set = set()
         self._retirements = TaskCollector("Desktop runtime retirement")
+        # One `plugins.reloaded` publication per applied reload, keyed by its
+        # operation ID while it is being sent (see `_plugins_reloaded`).
+        self._reload_events = TaskCollector("Plugin reload notification")
+        self._pending_reload_events: dict[str, asyncio.Task[None]] = {}
 
     @property
     def has_event_listeners(self) -> bool:
@@ -156,7 +162,16 @@ class ReloadableDesktopService:
                 )
 
                 if method == "plugin.config.set":
-                    await self._notify_applied(request_id, result)
+                    if result.get("reloaded_plugins"):
+                        # Announced once, by the reload itself; a memo replay
+                        # finds nothing pending and emits nothing.
+                        pending = self._pending_reload_events.get(
+                            str(payload.get("operation_id"))
+                        )
+                        if pending is not None:
+                            _ = await asyncio.wait({pending})
+                    else:
+                        await self._notify_applied(request_id, result)
                 return result
 
             return await self._respond_or_apply_error(
@@ -308,6 +323,46 @@ class ReloadableDesktopService:
             }
         )
 
+    def _plugins_reloaded(
+        self, operation_id: str, generation: int, plugin_ids: tuple[str, ...]
+    ) -> None:
+        """Announces plugins reloaded within the current generation, exactly once.
+
+        Called synchronously from the reload's uninterruptible commit, so the
+        event goes out even when the saving request was cancelled after the
+        drain; the request itself only waits for it to keep the event ahead of
+        its response. Only these plugins' renderer contexts, background entries
+        and native sessions are replaced; ``runtime.applied`` stays reserved
+        for a generation swap and refresh-only saves, so nothing else (roles,
+        other plugins) refreshes.
+        """
+        task = self._reload_events.spawn(
+            self._notify_reloaded(operation_id, generation, plugin_ids),
+            name="plugins-reloaded-event",
+        )
+        self._pending_reload_events[operation_id] = task
+
+        def forget(done: asyncio.Task[None]) -> None:
+            if self._pending_reload_events.get(operation_id) is done:
+                del self._pending_reload_events[operation_id]
+
+        task.add_done_callback(forget)
+
+    async def _notify_reloaded(
+        self, operation_id: str, generation: int, plugin_ids: tuple[str, ...]
+    ) -> None:
+        entry = self._current
+        if generation != entry.lease.generation:
+            return
+        await entry.service.publish_event(
+            {
+                "id": operation_id,
+                "type": "event",
+                "method": "plugins.reloaded",
+                "payload": {"generation": generation, "plugin_ids": list(plugin_ids)},
+            }
+        )
+
     async def _respond_or_apply_error(self, request_id: str, method: str, compute):
         """Runs one SETTINGS/PLUGIN_CONFIG/PLUGIN_MANAGEMENT handler.
 
@@ -435,6 +490,7 @@ class ReloadableDesktopService:
         """Cancels tasks only when the desktop bridge itself is shutting down."""
         self._retirements.cancel_all()
         await self._retirements.drain()
+        await self._reload_events.drain()
         # Each close removes its own entry once the lease is released.
         await run_cleanup_steps(
             *[
@@ -445,4 +501,8 @@ class ReloadableDesktopService:
         if self._retirements.errors:
             raise ExceptionGroup(
                 "Desktop runtime retirement failed", self._retirements.errors
+            )
+        if self._reload_events.errors:
+            raise ExceptionGroup(
+                "Plugin reload notification failed", self._reload_events.errors
             )
