@@ -482,7 +482,7 @@ describe("crawler files", () => {
 /*
  * The search engines' verification tags (#799): the drafts-mode test build
  * runs with tests/fixtures/site-verification.env, the production-mode one
- * without it.
+ * without it, using the public Baidu token included in source.
  */
 describe("site verification tags", () => {
   const tags = (html: string) => [...html.matchAll(/<meta name="(google-site-verification|msvalidate\.01|baidu-site-verification)" content="([^"]*)">/g)].map(([, name, content]) => ({ name, content }));
@@ -497,8 +497,12 @@ describe("site verification tags", () => {
     }
   });
 
-  it("writes none when the build has no tokens", () => {
-    for (const page of ["index.html", "blog/index.html", "changelog/index.html"]) assert.deepEqual(tags(readDist(page)), []);
+  it("includes the public Baidu token without build environment setup", () => {
+    for (const page of ["index.html", "blog/index.html", "changelog/index.html"]) {
+      assert.deepEqual(tags(readDist(page)), [
+        { name: "baidu-site-verification", content: "codeva-DEC4knpJlo" },
+      ]);
+    }
   });
 });
 
