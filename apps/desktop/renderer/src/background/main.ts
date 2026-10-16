@@ -1,5 +1,6 @@
 import { errorMessage } from "@yinfengwindy/shiori-sdk";
-import { pluginRosterChanged, reloadedPluginIds } from "../plugins/pluginRuntimeChanged";
+import { pluginRosterChanged } from "../plugins/pluginRuntimeChanged";
+import { reloadedPluginIds } from "../../../src/shared/pluginsReloaded";
 // Registers every plugin's `background/index.ts` before the host reads the registry.
 import "./pluginBackgroundModules";
 import { createPluginBridgeClient } from "../plugins/pluginBridgeClient";

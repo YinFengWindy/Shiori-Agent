@@ -694,10 +694,25 @@ class Guard:
         return HookOutcome(decision="deny", reason=self.label)
 
 
+class Note:
+    name = "plugin:hooked:note"
+    event = "post_tool_use"
+
+    def __init__(self, label):
+        self.label = label
+
+    def matches(self, ctx):
+        return True
+
+    async def run(self, ctx):
+        return HookOutcome(extra_message=self.label)
+
+
 async def setup(ctx):
     label = ctx.config.get("label")
     ctx.lifecycle.contribute("before_turn", [Stamp(label)])
     ctx.tool_hooks.add(Guard(label))
+    ctx.tool_hooks.add(Note(label))
 """
 
 
@@ -760,11 +775,11 @@ async def test_reload_waits_for_a_running_phase_module_and_skips_stale_runs(
 
 
 @pytest.mark.asyncio
-async def test_reload_waits_for_a_running_tool_hook_and_skips_stale_runs(
+async def test_reload_waits_for_a_running_tool_hook_and_fails_closed_meanwhile(
     probe, tmp_path
 ):
     kernel = await _hooked_kernel(tmp_path)
-    (old,) = kernel.tool_hooks
+    old, old_note = kernel.tool_hooks
     running = asyncio.create_task(old.run(None))
     await _until(probe, ("hook-start", "v1"))
 
@@ -772,12 +787,17 @@ async def test_reload_waits_for_a_running_tool_hook_and_skips_stale_runs(
     for _ in range(20):
         await asyncio.sleep(0)
     assert not reload.done()
-    assert (await old.run(None)).decision == "pass"
+    # A sealed pre-tool guard denies instead of letting the call run unguarded;
+    # a post hook cannot affect admission and passes.
+    sealed = await old.run(None)
+    assert sealed.decision == "deny" and "正在重载" in sealed.reason
+    assert (await old_note.run(None)).extra_message == ""
 
     probe.release.set()
     assert (await running).reason == "v1"
     await asyncio.wait_for(reload, 1)
-    (new,) = kernel.tool_hooks
-    assert (await old.run(None)).decision == "pass"
+    new, new_note = kernel.tool_hooks
+    assert (await old.run(None)).decision == "deny"
     assert (await new.run(None)).reason == "v2"
+    assert (await new_note.run(None)).extra_message == "v2"
     await kernel.terminate_all(force=True)

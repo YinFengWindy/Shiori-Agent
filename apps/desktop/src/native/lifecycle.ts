@@ -1,5 +1,6 @@
 import type { WebContentsDidStartNavigationEventParams } from "electron";
 import type { BridgeEvent } from "@yinfengwindy/shiori-sdk/contract";
+import { reloadedPluginIds } from "../shared/pluginsReloaded.js";
 
 /** Window lifecycle subset needed to revoke document-scoped native resources. */
 export type NativeLifecycleSource = {
@@ -24,7 +25,5 @@ export function revokeNativeSessionsOnBridgeEvent(event: BridgeEvent, revoke: (p
     revoke();
     return;
   }
-  const reloaded = event.method === "plugins.reloaded" ? event.payload.plugin_ids : undefined;
-  if (!Array.isArray(reloaded)) return;
-  for (const pluginId of reloaded) if (typeof pluginId === "string") revoke(pluginId);
+  for (const pluginId of reloadedPluginIds(event)) revoke(pluginId);
 }

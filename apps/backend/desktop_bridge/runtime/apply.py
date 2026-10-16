@@ -148,13 +148,25 @@ class DerivedWrite:
     reload_plugin: str | None = None
 
 
+# (operation_id, generation, reloaded plugin ids) of one applied in-generation reload.
+type PluginsReloadedListener = Callable[[str, int, tuple[str, ...]], None]
+
+
 class RuntimeSettingsApplication:
     """Prepares candidates, commits persistence, and remembers idempotent results."""
 
     def __init__(
-        self, app: AppRuntime, config_path: Path, role_store: RoleStore
+        self,
+        app: AppRuntime,
+        config_path: Path,
+        role_store: RoleStore,
+        *,
+        on_plugins_reloaded: PluginsReloadedListener | None = None,
     ) -> None:
         self.app = app
+        # Told synchronously, inside the reload's uninterruptible commit, which
+        # plugins an operation reloaded; called once per applied reload.
+        self._on_plugins_reloaded = on_plugins_reloaded
         self.roles = role_store
         self.transaction = ConfigTransaction(config_path, role_store.workspace)
         self.config_text = config_path.read_text(encoding="utf-8")
@@ -294,17 +306,15 @@ class RuntimeSettingsApplication:
         except (ValueError, TypeError) as exc:
             raise RuntimeApplyError("runtime_config_invalid", str(exc)) from exc
         if config == self.app.config:
-            try:
-                with self.roles.lock:
-                    roles_payload = prepare_role_model_updates(
+            with self.roles.lock:
+                self._commit(
+                    text,
+                    lambda: prepare_role_model_updates(
                         self.roles,
                         updates,
                         {item.id for item in config.model_registrations},
-                    )
-                    self.transaction.commit(text, roles_payload)
-            except (OSError, ValueError, RuntimeError) as exc:
-                raise RuntimeApplyError("runtime_commit_failed", str(exc)) from exc
-            self.config_text = text
+                    ),
+                )
             result = {"generation": generation, "changed": bool(updates)}
             self._remember(operation_id, fingerprint, result)
             return result
@@ -385,14 +395,14 @@ class RuntimeSettingsApplication:
         result: dict[str, Any] = {"generation": self.app.generation, "changed": False}
 
         def commit(plugin_ids: tuple[str, ...]) -> None:
-            try:
-                self.transaction.commit(text)
-            except (OSError, ValueError, RuntimeError) as exc:
-                raise RuntimeApplyError("runtime_commit_failed", str(exc)) from exc
-            self.config_text = text
+            self._commit(text)
             if plugin_ids:
                 result["reloaded_plugins"] = list(plugin_ids)
             self._remember(operation_id, fingerprint, result)
+            if plugin_ids and self._on_plugins_reloaded is not None:
+                self._on_plugins_reloaded(
+                    operation_id, result["generation"], plugin_ids
+                )
 
         try:
             reloaded = await kernel.reload(
@@ -427,9 +437,21 @@ class RuntimeSettingsApplication:
                 plugin_ids=list(exc.busy),
             ) from exc
         except PluginReloadFailed as exc:
-            if isinstance(exc.__cause__, RuntimeApplyError):
-                # The commit failed; the old instances run the old config.
-                raise exc.__cause__ from exc
+            if isinstance(cause := exc.__cause__, RuntimeApplyError):
+                # The commit failed; the old config was restored, except for
+                # the plugins in ``restore_failed`` (left FAILED).
+                restore = (
+                    f"\n插件 {', '.join(exc.restore_failed)} 未能按原配置恢复"
+                    if exc.restore_failed
+                    else ""
+                )
+                raise RuntimeApplyError(
+                    cause.code,
+                    f"{cause}{restore}",
+                    **cause.details,
+                    plugin_ids=list(exc.failed),
+                    restore_failed=list(exc.restore_failed),
+                ) from exc
             # First line: the kernel's summary (including whether the old
             # config came back); then each setup error, shown as detail.
             raise RuntimeApplyError(
@@ -439,12 +461,25 @@ class RuntimeSettingsApplication:
                 plugin_ids=list(exc.failed),
                 restore_failed=list(exc.restore_failed),
             ) from exc
-        except LookupError:
-            # The plugin is no longer discovered; a generation swap decides.
-            return None
         for error in reloaded.cleanup_errors:
             logger.warning("插件重载后的清理失败: %s", error, exc_info=error)
         return result
+
+    def _commit(
+        self, text: str, roles_payload: Callable[[], dict | None] | None = None
+    ) -> None:
+        """Durably commits ``text`` (and role records) as the committed config.
+
+        Any failure surfaces as ``runtime_commit_failed`` with both files
+        restored by the transaction.
+        """
+        try:
+            self.transaction.commit(
+                text, roles_payload() if roles_payload is not None else None
+            )
+        except (OSError, ValueError, RuntimeError) as exc:
+            raise RuntimeApplyError("runtime_commit_failed", str(exc)) from exc
+        self.config_text = text
 
     def _remember(
         self, operation_id: str, fingerprint: str, result: dict[str, Any]

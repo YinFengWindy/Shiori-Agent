@@ -179,8 +179,9 @@ class LifecycleCapability:
 class ToolHooksCapability:
     """贡献工具执行前置 hook（ToolExecutor pre_hook 链）。
 
-    hook 的 ``run`` 经过插件实例的调用闸门：代内重载会等待已进入的这一次执行，
-    闸门关闭后 hook 直接放行本次工具调用。
+    hook 的 ``run`` 经过插件实例的调用闸门：代内重载会等待已进入的这一次执行；
+    闸门关闭后 pre_tool_use hook 拒绝本次工具调用（不在无守卫时执行），
+    其余 hook 直接放行。
     """
 
     def __init__(
@@ -196,13 +197,11 @@ class ToolHooksCapability:
         self._calls = calls
 
     def add(self, hook: "ToolHook") -> None:
-        self._effects.ensure_active(f"tool_hook:{getattr(hook, 'name', hook)}")
+        label = f"tool_hook:{getattr(hook, 'name', hook)}"
+        self._effects.ensure_active(label)
         self._calls.guard_tool_hook(hook)
         contribute_to_list(
-            self._contributions.tool_hooks,
-            hook,
-            effects=self._effects,
-            label=f"tool_hook:{getattr(hook, 'name', hook)}",
+            self._contributions.tool_hooks, hook, effects=self._effects, label=label
         )
 
     def add_handler(

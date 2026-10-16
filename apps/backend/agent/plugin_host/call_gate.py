@@ -113,8 +113,20 @@ class PluginCallGate:
         self._guard_method(module, "run", _RUN_GATES, skipped=_pass_frame)
 
     def guard_tool_hook(self, hook: object) -> None:
-        """Gates a contributed tool hook's ``run``; a sealed hook passes the call."""
-        self._guard_method(hook, "run", _RUN_GATES, skipped=_pass_hook)
+        """Gates a contributed tool hook's ``run`` like a tool call.
+
+        While no registering instance admits, a ``pre_tool_use`` hook fails
+        closed: it may guard admission (deny or rewrite the call), so the tool
+        call is denied rather than run unguarded during a reload. Post hooks
+        cannot affect admission and let the call result pass unchanged.
+        """
+        pre_tool = getattr(hook, "event", "pre_tool_use") == "pre_tool_use"
+        self._guard_method(
+            hook,
+            "run",
+            _RUN_GATES,
+            skipped=_deny_tool_call(self._plugin_id) if pre_tool else _pass_hook,
+        )
 
     def _guard_method(
         self,
@@ -195,5 +207,17 @@ def _pass_frame(frame: Any) -> Any:
 
 
 def _pass_hook(*_args: Any) -> HookOutcome:
-    """Result of a skipped tool hook run: let the call proceed unchanged."""
+    """Result of a skipped post hook run: leave the call result unchanged."""
     return HookOutcome()
+
+
+def _deny_tool_call(plugin_id: str) -> Callable[..., HookOutcome]:
+    """Result of a skipped pre-tool hook run: deny the call, never run it unguarded."""
+
+    def deny(*_args: Any) -> HookOutcome:
+        return HookOutcome(
+            decision="deny",
+            reason=f"插件 {plugin_id} 正在重载，本次工具调用未执行，请稍后重试",
+        )
+
+    return deny

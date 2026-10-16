@@ -147,31 +147,38 @@ consolidates these additions and the subsequent #847 breaking migration.
   - Each phase-module `run` and tool-hook `run` contributed through `ctx.lifecycle` /
     `ctx.tool_hooks` counts as an in-flight call of its plugin: a reload waits for the
     run in progress (not for the whole turn). While the plugin is sealed or after it
-    was disposed, its module passes the frame through unchanged and its hook lets the
-    tool call pass, so a turn that started before the reload never reaches the old
-    instance. **breaking** (narrow): the host gates `run` in place on the contributed
+    was disposed, its phase module passes the frame through unchanged and its
+    `post_tool_use` / `post_tool_error` hooks leave the result unchanged, while its
+    `pre_tool_use` hooks fail closed: the tool call is denied with "插件 X 正在重载，本次
+    工具调用未执行，请稍后重试" instead of running unguarded. A turn that started before
+    the reload never reaches the old instance. **breaking** (narrow): the host gates `run` in place on the contributed
     object, as it already does for tools, so phase modules and tool hook objects must
     accept attribute assignment (no `__slots__`); otherwise `setup` fails.
   - The reload waits up to 60 s for the closure's in-flight calls. If they do not
     finish, nothing changes and the save fails with `plugin_reload_busy`
     (`details.plugin_ids` = still busy). If the new config fails `setup`, the old
     config is restored and the save fails with `plugin_reload_failed`
-    (`details.plugin_ids`, `details.restore_failed`). In both cases the config is not
-    written and the settings page keeps the draft.
+    (`details.plugin_ids`, `details.restore_failed`). If writing the config file fails
+    after the new instances started, they are rolled back the same way and the save
+    fails with `runtime_commit_failed` carrying the same details. In all cases the
+    config is not written and the settings page keeps the draft.
   - New bridge event `plugins.reloaded` with payload `{generation, plugin_ids}` (target
     first, then dependents). It replaces `runtime.applied` for this save: renderer
     communication contexts, `usePluginRpcClient` clients, background scopes and native
     sessions of exactly these plugins are closed and recreated; the reloaded plugins'
     renderer entries report activation again for the new `activation_token`. Other
-    plugins' contexts and the role list are not refreshed. An idempotent retry of the
-    same `operation_id` repeats the event.
+    plugins' contexts and the role list are not refreshed. The event is emitted once
+    per applied reload, also when the saving request was cancelled after the reload
+    committed; an idempotent retry of the same `operation_id` returns the remembered
+    result without emitting it again.
   - Unchanged: a closure that contributes or declares channels, or contains a plugin
     with `supports_hot_unload: false`, and a target that is not ACTIVE still swap the
     generation (`runtime.applied` with `changed: true`, or `plugin_restart_required`).
     A disabled plugin's table is stored without any reload. `plugins.setEnabled`,
     install, update and uninstall still swap the generation.
-  - `plugin.config.set` no longer has the bridge's default 30 s request deadline; the
-    backend bounds it by the drain timeout above.
+  - `plugin.config.set` no longer has the bridge's default 30 s request deadline, like
+    `runtime.apply`: the drain is bounded, but waiting for the settings lock, setup,
+    restore and the generation-swap fallback are not.
 
 ### 3.1.2 release batch
 

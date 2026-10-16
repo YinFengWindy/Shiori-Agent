@@ -10,6 +10,7 @@ import pytest
 from agent.config import load_config_text
 from agent.provider import LLMProvider, LLMResponse
 from bootstrap.app import AppRuntime, RuntimeFeatures
+from core.common.task_collector import TaskCollector
 from core.desktop_presence import DesktopPresence
 from core.roles.relationship_runtime import RoleAffectionService
 from core.roles.store import RoleStore
@@ -63,7 +64,7 @@ async def test_apply_notifications_distinguish_publication_from_replays(method):
 
 
 @pytest.mark.asyncio
-async def test_in_generation_plugin_reload_announces_only_the_reloaded_plugins():
+async def test_in_generation_plugin_reload_is_announced_once_by_the_reload_itself():
     service = object.__new__(ReloadableDesktopService)
     result = {
         "plugin_id": "demo",
@@ -71,13 +72,29 @@ async def test_in_generation_plugin_reload_announces_only_the_reloaded_plugins()
         "changed": False,
         "reloaded_plugins": ["demo", "dependent"],
     }
-    service.plugin_config = SimpleNamespace(set=AsyncMock(return_value=result))
+    applied = False
+
+    async def set_config(payload, **kwargs):
+        nonlocal applied
+        if not applied:
+            # The settings transaction reports the reload from its commit.
+            applied = True
+            service._plugins_reloaded("op-1", 2, ("demo", "dependent"))
+        return result
+
+    service.plugin_config = SimpleNamespace(set=set_config)
+    service._reload_events = TaskCollector("test")
+    service._pending_reload_events = {}
     transport = SimpleNamespace(publish_event=AsyncMock())
     service._current = _ServiceGeneration(transport, SimpleNamespace(generation=2))
 
     async def request():
         return await service.handle(
-            {"id": "save", "method": "plugin.config.set", "payload": {}},
+            {
+                "id": "save",
+                "method": "plugin.config.set",
+                "payload": {"operation_id": "op-1"},
+            },
             emit_event=lambda event: None,
         )
 
@@ -85,15 +102,16 @@ async def test_in_generation_plugin_reload_announces_only_the_reloaded_plugins()
     # No runtime.applied: other plugins' contexts and the role list stay as they are.
     transport.publish_event.assert_awaited_once_with(
         {
-            "id": "save",
+            "id": "op-1",
             "type": "event",
             "method": "plugins.reloaded",
             "payload": {"generation": 2, "plugin_ids": ["demo", "dependent"]},
         }
     )
-    service._current.lease.generation = 3
+    # A memo replay of the same operation announces nothing again.
     assert (await request()).payload == result
     assert transport.publish_event.await_count == 1
+    assert service._pending_reload_events == {}
 
 
 @pytest.mark.asyncio
