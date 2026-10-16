@@ -15,6 +15,14 @@
 - 同一固定 SHA 用于构建、tag 和 Release；构建时传入 `SHIORI_RELEASE_VERSION`，
   不修改 `main` 的 `package.json`。构建期间 main 新增的提交留给下一版。
 
+所有 schedule、tag 与 manual 入口在构建前运行 `node scripts/check_sdk_release.mjs`：
+要求 SDK 版本同步且 Unreleased 已清空，拒绝复用任何 SDK/桌面稳定标签已分发的
+同版本不同 SDK 源码或回退版本。新契约必须先人工定版；不会自动升 SDK 号。
+README/实际测试变化不算 SDK 源码变化，宿主侧契约由 Unreleased 记录保护；
+上传 artifact / 创建或公开 Release 前刷新标签再检查一次，固定构建 SHA 不变，
+防止构建期间出现新的同版本分发冲突。
+详细规则见 [SDK 发布](sdk-publishing.md#契约定版检查)。
+
 后端 release 检查、桌面类型检查及单测、打包测试、Windows 构建、布局校验、
 更新元数据和 SHA256SUMS 校验全部保留。上传 Actions artifact 后，自动流程创建
 私有草稿、上传所有顶层制品，并核对 GitHub 返回的大小和 SHA256。发布前再次
@@ -52,7 +60,7 @@ tag 在全部上传核验成功后才创建。若创建 tag 后公开失败，�
 
 - `workflow_dispatch` 保持已有行为：从分支执行只构建并上传 Actions artifact；
   从 `v*` 标签执行仍生成草稿。
-- 推送 `v*` 标签仍按标签版本构建并创建草稿，不自动公开。SDK 工作流不变。
+- 推送 `v*` 标签仍按标签版本构建并创建草稿，不自动公开。SDK 的正式标签发布也使用同一契约检查，SDK PR/手动构建仅验证产物。
 - `pnpm --filter shiori-desktop run test:package` 包含调度、Git 历史、GitHub 边界、
   上传恢复和版本进位测试，在 PR CI 与 Windows release 中均执行。测试不发布
   真实 tag / Release。构建和布局通过不等同于真实 Windows 安装、升级、卸载验收。

@@ -39,7 +39,7 @@ and renderer declaration keys are rejected. This table defines the v1 fields:
 | `api` | yes | integer `2` |
 | `id` | yes | `[a-z][a-z0-9_-]{0,63}` |
 | `version` | yes | full SemVer 2.0 string, including optional prerelease/build |
-| `runtime_api` | yes | compatibility range; host currently advertises `3.1.1` |
+| `runtime_api` | yes | compatibility range; host currently advertises `3.1.2` |
 | `entry` | yes | explicit package-relative `.py` backend entry |
 | `capabilities` | yes | existing v2 capability-name list, including `[]` |
 | `channels` | no | static channel declarations (Runtime API 2.2); requires the `channels` capability |
@@ -83,12 +83,19 @@ its version must not be reused for subsequent contract changes.
 The single version source remains
 `packages/sdk/python/shiori_sdk/_version.py`
 (`RUNTIME_API_VERSION = __version__`), synchronized by
-`node scripts/sync_sdk_version.mjs`. The current source batch is **3.1.1**,
-published to both npm and PyPI. The former unpublished
-per-PR increments have been consolidated into this one version. Packages using
-any new API in this batch declare `runtime_api: ">=3.1.1 <4.0.0"` and the matching
-Python SDK minimum; audited packages using only unchanged APIs may keep their
-3.1.0 minimum. **The selected patch number does not imply backward compatibility.**
+`node scripts/sync_sdk_version.mjs`. The source batch is **3.1.2**.
+At release preparation on 2026-10-16,
+3.1.2 was finalized but not yet published to npm or PyPI; the latest verified
+registry release was 3.1.1. Check the registries for current availability.
+Packages using the new 3.1.2 APIs or
+channel migration declare `runtime_api: ">=3.1.2 <4.0.0"` and the matching
+Python SDK minimum; audited packages using only unchanged APIs retain their
+existing minimum. **The selected patch number does not imply backward compatibility.**
+
+Desktop v0.5.5 already distributed #820/#821/#822/#827 while still advertising
+3.1.1, which differs from the published registry 3.1.1. That historical mistake
+must not be fixed by moving tags or replacing 3.1.1 artifacts. Version 3.1.2
+consolidates these additions and the subsequent #847 breaking migration.
 
 | Version | Adds | Introduced by |
 | --- | --- | --- |
@@ -112,10 +119,17 @@ Python SDK minimum; audited packages using only unchanged APIs may keep their
 | `3.0.0` | **breaking**: the unified Shiori SDK. `@shiori/plugin-sdk` becomes `@yinfengwindy/shiori-sdk` (no alias) and shares version and source tree `packages/sdk/` with the Python `shiori-sdk`, which owns plugin-facing Python contracts, lifecycle values and independent test fakes; every 2.x range is rejected with `incompatible_runtime` (see [Runtime API 3.0](#runtime-api-30-unified-shiori-sdk)) | #551 (#585–#591) |
 | `3.1.0` | `shiori_sdk.lifecycle` gains `AfterTurnCtx`, `PHASE_SLOTS` / `require_phase_slot` and `requires` / `produces` on the `LifecycleModule` protocol; packages importing or implementing any of them require `runtime_api: ">=3.1.0 <4.0.0"`. `shiori_sdk.runtime` owns the host's `KNOWN_CAPABILITIES` and manifest `capabilities` validation. `shiori-sdk[testing]`'s `sdk_context` grants only the plugin manifest's (validated) `capabilities` with an isolated temporary `plugin_dir`, and `FakeLifecycle` rejects unknown phase slots like the host. `shiori_sdk.runtime.HostServiceUnavailable` is raised before `setup` when a declared capability's host service is missing, so `workspace` / `session_manager` on the typed contexts are no longer optional. `shiori_sdk.redaction.summarize_llm_output_for_log` moves back to the host (`core.common.llm_output_log`); `redact_secrets` stays in the SDK. Those corrections preceded the first 3.1.0 publication on 2026-10-03 | #620, #622, #624 (#619) |
 | `3.1.1` | **breaking** relative to published 3.1.0: removes `SurfaceHandle.voice` and its voice types, and replaces relationship `closeness` with affection. The batch also adds plugin services/native resources, local and managed environments, private settings autosave, role capability dialogs, external turns, terminal chat events and scoped attachment tools. See the complete batch below. | #674/#677, #678, #679, #683/#688, #699/#703, #700/#704, #701/#705, #710/#717, #715/#728, #721/#726, #719/#735, #740/#743, #734/#738, #720/#744, #749/#751, #748/#754, #750/#752, #756/#757; consolidated by #762 |
+| `3.1.2` | **breaking** relative to published 3.1.1: removes channel push-sender registration and makes `message_push` raise on failure. Adds background results, process resources, external links and secondary sidebar styling. Finalized for release preparation on 2026-10-16; registry publication was pending at that point. | #820, #821, #822, #827, #847; finalized for #851 |
 
 ### Unreleased
 
-- #842 (issues #842 / #843): **breaking** — `ChannelContext.push_tool`, the
+<!-- Record the next contract batch here, with PR references and breaking markers. -->
+
+### 3.1.2 release batch
+
+These notes were finalized for 3.1.2 on 2026-10-16, before npm and PyPI publication.
+
+- #847 (issues #842 / #843): **breaking** — `ChannelContext.push_tool`, the
   `shiori_sdk.channels.services.PushSenders` protocol and the testing
   `FakePushSenders` / `fake_channel_context(push_tool=)` are removed. Since
   #829 / #839 a role's `message_push` may only reach its own desktop session, so
@@ -159,14 +173,6 @@ Python SDK minimum; audited packages using only unchanged APIs may keep their
   outbound path. Repeated attempted IDs do not produce another report, including
   after an ambiguous failure. This is in-process only, without restart recovery.
   SDK testing adds explicit `FakeBackgroundResults` / `FakeBackgroundResultTarget`.
-  No SDK version increment until the shared release batch is finalized.
-
-
-The 3.1.1 batch below is already published to
-both npm and PyPI and must not receive new contract changes.
-Record the next batch here with PR references instead of incrementing the version
-per PR. When it is finalized, move its notes into one versioned entry and
-synchronize the SDK, host pins and affected plugin minimum ranges.
 
 ### 3.1.1 release batch
 
@@ -485,7 +491,7 @@ an absent hook yields the neutral default. Protocols live in
 stream. Packages using the hooks must require `runtime_api: ">=3.0.0 <4.0.0"`:
 older hosts ignore them. (`ChannelContext.push_tool` and its
 `register_channel(..., description=...)`, also introduced in 2.3, were removed
-by #842; see Unreleased.)
+by #847; see the [3.1.2 release batch](#312-release-batch).)
 
 ## Runtime API 2.4 host feedback and inline errors
 
@@ -661,7 +667,7 @@ Runtime exports added in 2.9.0 (all are listed in `pluginUiPeerExports`):
 | Group | Exports |
 | --- | --- |
 | Helpers and hooks | `errorMessage`, `useLatestRef`, `roleToggleStatus`, `accountOnline`, `useAccountAction` |
-| Class names | `cx`, `cardClass`, `badgeClass`, `inputClass`, `textareaClass`, `pressableClass`, `compactPressableClass`, `primaryButtonSurfaceClass`, `ghostButtonSurfaceClass`, `ghostButtonClass`, `compactButtonSizeClass`, `compactGhostButtonClass`, `iconButtonClass`, `secondarySidebarSurfaceClass`, `secondarySidebarShellClass` (Unreleased), `sidebarNavItemClass`, `sidebarContentMotionClass`, `menuPanelClass`, `menuSeparatorClass` |
+| Class names | `cx`, `cardClass`, `badgeClass`, `inputClass`, `textareaClass`, `pressableClass`, `compactPressableClass`, `primaryButtonSurfaceClass`, `ghostButtonSurfaceClass`, `ghostButtonClass`, `compactButtonSizeClass`, `compactGhostButtonClass`, `iconButtonClass`, `secondarySidebarSurfaceClass`, `secondarySidebarShellClass` (3.1.2), `sidebarNavItemClass`, `sidebarContentMotionClass`, `menuPanelClass`, `menuSeparatorClass` |
 | Components | `Select`, `ActionMenu`, `AutosizeTextarea`, `SettingsToggleCard`, `RoleCapabilityCard` |
 | Icons | `UploadIcon`, `SparkleIcon`, `PetalIcon`, `withMotif`, `navMotifs` |
 

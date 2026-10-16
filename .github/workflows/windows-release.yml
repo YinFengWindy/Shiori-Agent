@@ -79,6 +79,10 @@ jobs:
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 
+      # All desktop entry points distribute an SDK, including manual artifacts.
+      - name: Require a finalized SDK contract
+        run: node scripts/check_sdk_release.mjs
+
       - name: Resolve release version
         if: github.event_name != 'schedule'
         shell: pwsh
@@ -134,6 +138,15 @@ jobs:
               throw "Checksum mismatch for $filePath"
             }
           }
+
+      # An SDK release may finish while this Windows build runs. Refresh only
+      # tags/history; keep building and publishing the already pinned checkout.
+      - name: Recheck SDK contract before distributing artifacts
+        shell: pwsh
+        run: |
+          git fetch --tags origin
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/check_sdk_release.mjs
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
