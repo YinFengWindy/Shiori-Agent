@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
@@ -43,8 +44,9 @@ class PluginContributionSource(Protocol):
     def tool_hooks(self) -> Sequence["ToolHook"]: ...
 
 
-class _NoPluginContributions:
-    """未接插件内核时的空来源。"""
+@dataclass(frozen=True)
+class StaticPluginContributions:
+    """内容固定的插件贡献来源；默认实例即未接插件内核时的空来源。"""
 
     before_turn_modules: Sequence[object] = ()
     before_reasoning_modules: Sequence[object] = ()
@@ -56,4 +58,4 @@ class _NoPluginContributions:
     tool_hooks: Sequence["ToolHook"] = ()
 
 
-NO_PLUGIN_CONTRIBUTIONS: PluginContributionSource = _NoPluginContributions()
+NO_PLUGIN_CONTRIBUTIONS: PluginContributionSource = StaticPluginContributions()

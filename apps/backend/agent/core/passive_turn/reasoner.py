@@ -230,7 +230,7 @@ class DefaultReasoner(
         self._prompt_render = (
             LiveContributions(
                 lambda: self._plugins.prompt_render_modules,
-                self._build_prompt_render_phase,
+                lambda modules: self._build_prompt_render_phase(context, modules),
             )
             if context is not None
             else None
@@ -265,14 +265,13 @@ class DefaultReasoner(
 
     def _build_prompt_render_phase(
         self,
+        context: "ContextBuilder",
         plugin_modules: list[Any],
     ) -> Phase[PromptRenderInput, PromptRenderResult, PromptRenderFrame]:
-        if self._context is None:
-            raise RuntimeError("DefaultReasoner.render_prompt requires context")
         return Phase(
             default_prompt_render_modules(
                 self._bus,
-                self._context,
+                context,
                 plugin_modules=plugin_modules,
             ),
             frame_factory=PromptRenderFrame,

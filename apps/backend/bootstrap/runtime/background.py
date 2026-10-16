@@ -58,7 +58,8 @@ class RuntimeBackground:
                 memory_store=core.memory_runtime,
                 presence=core.presence,
                 agent_loop=core.loop,
-                # 实时读取插件内核：代内卸载/加载的插件下一次工具调用/tick 即生效。
+                # Read the kernel live so plugins unloaded or loaded within this
+                # generation take effect on the next tool call or tick.
                 tool_hooks=(
                     (lambda: manager.tool_hooks)
                     if manager is not None

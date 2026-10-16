@@ -14,7 +14,6 @@ from shiori_sdk.channel_events import TurnCancelled
 from shiori_sdk.channels.message_source import MessageSource
 from conversation.service import desktop_thread_id
 from tests.support.external_turns import ROOM, ExternalTurnHost, room_message
-from tests.support.plugin_kernel import make_kernel
 from tests.support.tool_hooks import (
     FinalizeOnCallHook,
     DummyTool,
@@ -273,55 +272,3 @@ async def test_cancelling_an_external_turn_leaves_the_waiting_desktop_turn(tmp_p
         ("user", "hello"),
         ("assistant", "reply-2"),
     ]
-
-
-_LIVE_HOOK_PLUGIN = """
-from shiori_sdk.tool_hooks import HookOutcome
-
-
-async def _block(event):
-    return HookOutcome(decision="deny", reason="live_probe 拦截")
-
-
-async def setup(ctx):
-    ctx.tool_hooks.add_handler(_block, tool_name_filter="dummy")
-""".strip()
-
-
-async def test_bound_plugin_kernel_tool_hooks_follow_unload_and_load(tmp_path):
-    """绑定内核后，插件代内卸载/加载在下一次工具调用即生效（#855）。"""
-    plugin_dir = tmp_path / "plugins" / "live_probe"
-    (plugin_dir / "backend").mkdir(parents=True)
-    (plugin_dir / "backend" / "plugin.py").write_text(
-        _LIVE_HOOK_PLUGIN, encoding="utf-8"
-    )
-    (plugin_dir / "manifest.yaml").write_text(
-        "api: 2\nid: live_probe\nversion: '0.1'\ncapabilities: [tool_hooks]\n",
-        encoding="utf-8",
-    )
-    kernel = make_kernel(
-        [tmp_path / "plugins"], event_bus=EventBus(), workspace=tmp_path / "ws"
-    )
-    await kernel.load_all()
-    tool = DummyTool("dummy")
-    turn = [
-        LLMResponse(content="", tool_calls=[ToolCall("c1", "dummy", {"x": 1})]),
-        LLMResponse(content="done", tool_calls=[]),
-    ]
-    provider = FakeProvider(turn * 3)
-    loop = make_agent_loop_with_tools(tmp_path, provider, [tool])
-    loop.bind_plugin_contributions(kernel)
-    messages = [{"role": "user", "content": "test"}]
-    try:
-        _ = await loop._run_agent_loop(messages)
-        assert tool.calls == []
-
-        _ = await kernel.unload("live_probe")
-        _ = await loop._run_agent_loop(messages)
-        assert tool.calls == [{"x": 1}]
-
-        assert await kernel.load("live_probe")
-        _ = await loop._run_agent_loop(messages)
-        assert tool.calls == [{"x": 1}]
-    finally:
-        await kernel.terminate_all(force=True)

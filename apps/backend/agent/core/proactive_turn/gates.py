@@ -83,6 +83,9 @@ class ProactiveGateActivation:
     mode: ProactiveMode
     reason: str
     metadata: Mapping[str, object]
+    # The claiming instance receives the completion even if its plugin was
+    # unloaded or reloaded after evaluation.
+    gate: "ProactiveGate" = field(compare=False, repr=False)
 
 
 def resolve_gate_attempt_index(gate: ProactiveGateActivation | None) -> int:
@@ -156,21 +159,14 @@ class ProactiveGateAdapter:
         _ = completion
 
 
-# 全局 gate 来源：每次评估都重新读取，插件代内卸载/加载后下一次 tick 即生效。
+# Global gate source, read on every evaluation so plugins unloaded or loaded
+# within a generation take effect on the next tick.
 ProactiveGateSource = Callable[[], Sequence[ProactiveGate]]
 
 
 def no_proactive_gates() -> Sequence[ProactiveGate]:
-    """没有任何全局 gate 的来源（未接插件内核时使用）。"""
+    """Gate source used when no plugin kernel is wired."""
     return ()
-
-
-@dataclass(frozen=True)
-class _GateIndex:
-    """One validated arrangement of the current global gates plus core motives."""
-
-    ordered: tuple[ProactiveGate, ...]
-    by_name: Mapping[str, ProactiveGate]
 
 
 class ProactiveGateChain:
@@ -189,28 +185,28 @@ class ProactiveGateChain:
     ) -> None:
         self._motives = tuple(motives)
         self._motive_names = {gate.name for gate in motives}
-        self._index = LiveContributions(gates, self._build_index)
+        self._ordered = LiveContributions(gates, self._order)
 
-    def _build_index(self, gates: list[ProactiveGate]) -> _GateIndex:
-        named: dict[str, ProactiveGate] = {}
+    def _order(self, gates: list[ProactiveGate]) -> tuple[ProactiveGate, ...]:
+        """Validates names and orders global gates ahead of core motives."""
+        names: set[str] = set()
         for gate in [*gates, *self._motives]:
             name = str(gate.name).strip()
             if not name:
                 raise ValueError("Proactive gate name must not be empty")
-            if name in named:
+            if name in names:
                 raise ValueError(f"Duplicate proactive gate name: {name}")
-            named[name] = gate
+            names.add(name)
         # Global admission always runs before core motives, regardless of priority.
-        ordered = tuple(
+        return tuple(
             sorted(gates, key=lambda gate: (-int(gate.priority), gate.name))
         ) + tuple(
             sorted(self._motives, key=lambda gate: (-int(gate.priority), gate.name))
         )
-        return _GateIndex(ordered=ordered, by_name=named)
 
     def evaluate(self, ctx: ProactiveGateContext) -> ProactiveGateResult:
         trace: list[ProactiveGateTraceItem] = []
-        for gate in self._index.current().ordered:
+        for gate in self._ordered.current():
             started = perf_counter()
             decision = gate.evaluate(ctx)
             duration_ms = int((perf_counter() - started) * 1000)
@@ -249,6 +245,7 @@ class ProactiveGateChain:
                         mode=mode,
                         reason=decision.reason,
                         metadata=dict(decision.metadata),
+                        gate=gate,
                     ),
                     trace=tuple(trace),
                 )
@@ -260,12 +257,8 @@ class ProactiveGateChain:
         )
 
     def finalize(self, completion: ProactiveGateCompletion) -> None:
-        gate = self._index.current().by_name.get(completion.activation.gate_name)
-        if gate is None:
-            raise RuntimeError(
-                f"Activated proactive gate is no longer registered: {completion.activation.gate_name}"
-            )
-        gate.finalize(completion)
+        """Routes the outcome to the gate instance that claimed the tick."""
+        completion.activation.gate.finalize(completion)
 
     @staticmethod
     def _validate_decision(

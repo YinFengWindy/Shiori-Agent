@@ -21,7 +21,7 @@ from shiori_sdk.messages import InboundMessage
 from shiori_sdk.channel_events import ToolCallCompleted, ToolCallStarted
 from shiori_sdk.lifecycle import LifecycleFrame
 from session.manager import SessionManager
-from tests.support.plugin_contributions import StaticPluginContributions
+from agent.lifecycle.plugin_contributions import StaticPluginContributions
 
 
 class _RequestSummary:

@@ -25,7 +25,7 @@ from agent.tool_hooks.types import HookContext
 from shiori_sdk.tool_hooks import HookOutcome
 from shiori_sdk.tools import Tool
 from agent.tools.registry import ToolRegistry
-from tests.support.plugin_contributions import StaticPluginContributions
+from agent.lifecycle.plugin_contributions import StaticPluginContributions
 
 
 class FinalizeOnCallHook(ToolHook):

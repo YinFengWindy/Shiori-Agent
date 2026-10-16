@@ -7,6 +7,7 @@ import pytest
 from agent.core.proactive_turn.gates import (
     ProactiveGateAdapter,
     ProactiveGateChain,
+    ProactiveGateCompletion,
     ProactiveGateContext,
     ProactiveGateDecision,
     ProactiveGateActivation,
@@ -102,6 +103,7 @@ def test_resolve_gate_attempt_index_accepts_non_negative_integer_strings():
         mode=ProactiveMode.SCENE_FOLLOWUP,
         reason="due",
         metadata={"attempt_index": "2"},
+        gate=ProactiveGateAdapter(),
     )
 
     assert resolve_gate_attempt_index(gate) == 2
@@ -114,6 +116,7 @@ def test_resolve_gate_attempt_index_rejects_invalid_metadata(value):
         mode=ProactiveMode.SCENE_FOLLOWUP,
         reason="due",
         metadata={"attempt_index": value},
+        gate=ProactiveGateAdapter(),
     )
 
     with pytest.raises(ValueError, match="attempt_index"):
@@ -172,7 +175,7 @@ def test_core_motive_cannot_veto_global_admission():
 
 
 def test_gate_chain_reads_current_gates_on_every_evaluation():
-    """插件 gate 卸载后下一次评估不再生效、新加载的 gate 生效（#855）。"""
+    """A removed plugin gate stops applying and an added one applies (#855)."""
     calls: list[str] = []
     blocker = _Gate("plugin.blocker", 0, ProactiveGateDecision.block("busy"), calls)
     active: list[ProactiveGateAdapter] = [blocker]
@@ -184,7 +187,39 @@ def test_gate_chain_reads_current_gates_on_every_evaluation():
     active.append(blocker)
     assert chain.evaluate(_ctx()).blocked
     assert calls == ["plugin.blocker", "plugin.blocker"]
-    # 重名只在 gate 集合变化时重新校验，并在下一次评估时报错。
+    # Names are re-validated only when the gate set changes.
     active.append(_Gate("plugin.blocker", 1, ProactiveGateDecision.continue_(), []))
     with pytest.raises(ValueError, match="Duplicate proactive gate name"):
         chain.evaluate(_ctx())
+
+
+def test_gate_removed_after_activation_still_finalizes_on_original_gate():
+    """Completion reaches the claiming gate even after its removal (#855)."""
+
+    class _Claiming(ProactiveGateAdapter):
+        name = "plugin.claim"
+
+        def __init__(self) -> None:
+            self.completions: list[ProactiveGateCompletion] = []
+
+        def evaluate(self, ctx: ProactiveGateContext) -> ProactiveGateDecision:
+            return ProactiveGateDecision.activate(
+                ProactiveMode.SCENE_FOLLOWUP, reason="due"
+            )
+
+        def finalize(self, completion: ProactiveGateCompletion) -> None:
+            self.completions.append(completion)
+
+    gate = _Claiming()
+    active: list[ProactiveGateAdapter] = [gate]
+    chain = ProactiveGateChain(lambda: active)
+    activation = chain.evaluate(_ctx()).activation
+    assert activation is not None
+    active.clear()
+
+    completion = ProactiveGateCompletion(
+        activation, "role:mira", datetime.now(timezone.utc), "delivered"
+    )
+    chain.finalize(completion)
+
+    assert gate.completions == [completion]
