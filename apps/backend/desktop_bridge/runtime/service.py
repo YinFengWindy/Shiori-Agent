@@ -502,3 +502,7 @@ class ReloadableDesktopService:
             raise ExceptionGroup(
                 "Desktop runtime retirement failed", self._retirements.errors
             )
+        if self._reload_events.errors:
+            raise ExceptionGroup(
+                "Plugin reload notification failed", self._reload_events.errors
+            )

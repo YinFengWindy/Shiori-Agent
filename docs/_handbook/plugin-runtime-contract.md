@@ -150,8 +150,11 @@ consolidates these additions and the subsequent #847 breaking migration.
     was disposed, its phase module passes the frame through unchanged and its
     `post_tool_use` / `post_tool_error` hooks leave the result unchanged, while its
     `pre_tool_use` hooks fail closed: the tool call is denied with "插件 X 正在重载，本次
-    工具调用未执行，请稍后重试" instead of running unguarded. A turn that started before
-    the reload never reaches the old instance. **breaking** (narrow): the host gates `run` in place on the contributed
+    工具调用未执行，请稍后重试" instead of running unguarded. This also applies to tools
+    that a closure plugin's own in-flight call runs through the executor (for example a
+    subagent): those inner calls are denied, so that outer call fails instead of
+    finishing. A turn that started before the reload never reaches the old instance.
+    **breaking** (narrow): the host gates `run` in place on the contributed
     object, as it already does for tools, so phase modules and tool hook objects must
     accept attribute assignment (no `__slots__`); otherwise `setup` fails.
   - The reload waits up to 60 s for the closure's in-flight calls. If they do not

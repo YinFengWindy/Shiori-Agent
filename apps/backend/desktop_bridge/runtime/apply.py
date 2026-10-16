@@ -445,12 +445,15 @@ class RuntimeSettingsApplication:
                     if exc.restore_failed
                     else ""
                 )
-                raise RuntimeApplyError(
-                    cause.code,
-                    f"{cause}{restore}",
+                # The reload's own fields describe this failure; they take
+                # precedence over any same-named detail of the commit error.
+                details = {
                     **cause.details,
-                    plugin_ids=list(exc.failed),
-                    restore_failed=list(exc.restore_failed),
+                    "plugin_ids": list(exc.failed),
+                    "restore_failed": list(exc.restore_failed),
+                }
+                raise RuntimeApplyError(
+                    cause.code, f"{cause}{restore}", **details
                 ) from exc
             # First line: the kernel's summary (including whether the old
             # config came back); then each setup error, shown as detail.
