@@ -123,6 +123,23 @@ consolidates these additions and the subsequent #847 breaking migration.
 
 <!-- Record the next contract batch here, with PR references and breaking markers. -->
 
+- **In-generation plugin reload (host groundwork, #856 / #860).** The plugin kernel can
+  reload one plugin and its hard dependents without replacing the runtime generation;
+  the bridge starts using it with #857. Plugin-observable semantics:
+  - `ctx.runtime.on_drain` callbacks must only wait for accepted work and must not tear
+    anything down. They may run more than once, and may run while the instance stays
+    active (a reload abandoned after its drain timeout reopens the instance).
+  - A reloaded instance sees `ctx.runtime.was_active` as `True`, so start-up recovery
+    does not repeat.
+  - Once an instance is being reloaded, unloaded or terminated, calls into its tools,
+    RPC handlers and services — including through references held from earlier — are
+    rejected with `PluginRpcError("plugin_unavailable")` instead of reaching the old
+    instance. Unload and disable still cancel in-flight work rather than waiting for it.
+  - Process resources acquired with `ctx.process_resources` survive an in-generation
+    reload, and the new instance re-acquires the same object.
+  - The SDK managed runtime helper (`shiori_sdk.managed.rpc.register_runtime_rpc`) no
+    longer stops the managed service from `on_drain`; it stops on disposal (#860).
+
 ### 3.1.2 release batch
 
 Published to both npm and PyPI on 2026-10-16 by the

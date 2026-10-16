@@ -281,6 +281,6 @@ class ManagedRuntime:
         self.phase = "stopped"
 
     async def close(self) -> None:
-        """Prevent further work before plugin draining releases runtime leases."""
+        """Prevent further work and stop the service; runs when the plugin is disposed."""
         self.closed = True
         await self.stop()

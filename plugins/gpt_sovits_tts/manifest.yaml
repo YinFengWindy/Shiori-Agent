@@ -13,6 +13,5 @@ capabilities:
   - events
   - background
   - processes
-  - runtime
 # 新安装默认停用；需要本机推理环境，由用户在插件页启用。
 default_enabled: false

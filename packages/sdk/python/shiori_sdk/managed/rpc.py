@@ -133,5 +133,8 @@ def register_runtime_rpc(
         ctx.rpc.register(
             "runtime." + name, handler, concurrency=Concurrency.INTEGRATION
         )
+    # Disposal stops the service and releases its lease; generation retirement
+    # drains first and disposes afterwards, so the next owner's start (which
+    # waits on that lease) still follows. Nothing is registered for on_drain:
+    # it must only wait, and an abandoned reload keeps this instance serving.
     ctx.effect("managed_runtime", runtime.close)
-    ctx.runtime.on_drain(runtime.close)
