@@ -13,6 +13,7 @@ import logging
 import sys
 from collections.abc import Awaitable, Callable, Mapping
 from copy import deepcopy
+from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass, field, replace
 from importlib.abc import Loader
 from pathlib import Path
@@ -63,6 +64,7 @@ from agent.plugin_host.discovery import (
     discover_plugins,
     find_uninstalled_external_sources,
 )
+from agent.plugin_host.call_gate import PluginCallGate
 from agent.plugin_host.effects import EffectScope
 from agent.plugin_host.events import ScopedEventBus
 from agent.plugin_host.handle import PluginHandle, PluginRecord, PluginState
@@ -89,7 +91,11 @@ from agent.plugin_host.runtime_lifecycle import PluginRuntimeLifecycle
 from agent.plugin_host.scene_observations import SceneObservationsCapability
 from agent.plugin_host.trust_store import PluginTrustStore
 from agent.plugin_host.trusted_imports import TrustedPluginImports
-from agent.plugin_host.unload import PluginRestartRequired
+from agent.plugin_host.unload import (
+    PluginReloadFailed,
+    PluginReloadUnsupported,
+    PluginRestartRequired,
+)
 from bus.event_bus import EventBus
 from core.roles import RoleStore
 from core.scene.demand import SceneObservationDemand
@@ -170,6 +176,16 @@ class HostServices:
     plugin_runtime_contract: HostRuntimeContract | None = None
 
 
+@dataclass(frozen=True)
+class PluginReloadResult:
+    """Outcome of a successful in-generation reload."""
+
+    # Every plugin set up again, target first, in dependency order.
+    plugin_ids: tuple[str, ...]
+    # Cleanup failures of the retired instances; the new ones are ACTIVE.
+    cleanup_errors: tuple[Exception, ...]
+
+
 class PluginKernel:
     """通过作用域 effect 回滚与 capability 注入装配插件，聚合其宿主贡献。"""
 
@@ -205,6 +221,8 @@ class PluginKernel:
         self._strict = strict
         self._handles: dict[str, PluginHandle] = {}
         self._active_order: list[str] = []
+        # Serializes in-generation reloads so their closures never interleave.
+        self._transition_lock = asyncio.Lock()
         # 每个内核（= 每个 runtime generation）独立一份 RPC/配置 schema 注册表
         self.rpc = PluginRpcRegistry()
         self.rpc.communication.configure(
@@ -288,7 +306,13 @@ class PluginKernel:
         record: PluginRecord,
         records: dict[str, PluginRecord],
         trail: tuple[str, ...],
+        reactivating: frozenset[str] = frozenset(),
     ) -> None:
+        """Loads ``record`` after its dependencies.
+
+        ``reactivating`` names plugins being brought back by an in-generation
+        reload; their setup sees ``was_active`` and ``is_reload`` as True.
+        """
         existing = self._handles.get(record.candidate_id)
         if existing is not None and existing.state in {
             PluginState.ACTIVE,
@@ -319,7 +343,9 @@ class PluginKernel:
                         raise PluginDependencyError(
                             f"插件 {plugin_id} 缺少依赖 {dependency}"
                         )
-                    await self._load_dependencies(target, records, (*trail, plugin_id))
+                    await self._load_dependencies(
+                        target, records, (*trail, plugin_id), reactivating
+                    )
                     loaded = self._handles.get(target.candidate_id)
                     if loaded is None or loaded.state is not PluginState.ACTIVE:
                         raise PluginDependencyError(
@@ -341,7 +367,7 @@ class PluginKernel:
                         record=record, state=PluginState.BLOCKED, error=exc
                     )
                     return
-        await self._load_one(record)
+        await self._load_one(record, reactivated=plugin_id in reactivating)
 
     def _find_record(self, name: str) -> PluginRecord | None:
         exact = [record for record in self.discover() if record.candidate_id == name]
@@ -365,11 +391,15 @@ class PluginKernel:
         handle = self._handles.get(record.candidate_id)
         return handle is not None and handle.state is PluginState.ACTIVE
 
-    async def _load_one(self, record: PluginRecord) -> None:
+    async def _load_one(self, record: PluginRecord, *, reactivated: bool) -> None:
         existing = self._handles.get(record.candidate_id)
         if existing is not None and existing.state is PluginState.ACTIVE:
             return
-        handle = PluginHandle(record=record, effects=EffectScope(record.manifest.id))
+        handle = PluginHandle(
+            record=record,
+            effects=EffectScope(record.manifest.id),
+            calls=PluginCallGate(record.manifest.id),
+        )
         self._handles[record.candidate_id] = handle
         if not self._config_enabled(record.manifest):
             handle.state = PluginState.DISABLED
@@ -403,7 +433,7 @@ class PluginKernel:
         try:
             self._import_entry(handle, content)
             self._register_config_schema(handle)
-            await self._setup_v2(handle)
+            await self._setup_v2(handle, reactivated=reactivated)
         except asyncio.CancelledError as e:
             # A cancelled setup owns registrations even before it becomes ACTIVE.
             await self._rollback_failed_load(handle, e)
@@ -479,7 +509,7 @@ class PluginKernel:
             return
         self.config_schemas.register(handle.plugin_id, model_cls)
 
-    async def _setup_v2(self, handle: PluginHandle) -> None:
+    async def _setup_v2(self, handle: PluginHandle, *, reactivated: bool) -> None:
         module = sys.modules[handle.record.import_path]
         setup = getattr(module, "setup", None)
         if not callable(setup):
@@ -492,7 +522,11 @@ class PluginKernel:
         require_host_services(handle.plugin_id, grants, services)
         rpc = (
             RpcCapability(
-                self.rpc, handle.effects, handle.plugin_id, self._services.event_bus
+                self.rpc,
+                handle.effects,
+                handle.plugin_id,
+                handle.calls,
+                self._services.event_bus,
             )
             if "rpc" in handle.record.manifest.capabilities
             else None
@@ -596,6 +630,7 @@ class PluginKernel:
                     handle.effects,
                     handle.contributions,
                     handle.plugin_id,
+                    handle.calls,
                 )
                 if services.tool_registry is not None
                 else None
@@ -617,9 +652,10 @@ class PluginKernel:
             processes=HostProcesses().as_capability(),
             tool_turn=current_tool_turn,
             runtime=PluginRuntimeLifecycle(
-                services.is_reload,
+                services.is_reload or reactivated,
                 handle.drainers,
-                was_active=handle.plugin_id in services.previously_active_plugins,
+                was_active=reactivated
+                or handle.plugin_id in services.previously_active_plugins,
             ),
             scene_observations=SceneObservationsCapability(
                 services.scene_observations, handle.effects
@@ -658,7 +694,7 @@ class PluginKernel:
             ),
             services=(
                 ScopedPluginServices(
-                    self.rpc.services, handle.plugin_id, handle.effects
+                    self.rpc.services, handle.plugin_id, handle.effects, handle.calls
                 )
                 if "services" in grants
                 else None
@@ -866,6 +902,28 @@ class PluginKernel:
         visit(handle)
         return closure
 
+    @staticmethod
+    def _refuse_in_generation(name: str, closure: list[PluginHandle]) -> None:
+        """Rejects closures only a generation swap may replace, before touching any."""
+        if not closure:
+            raise PluginReloadUnsupported([name], "inactive")
+        channels = [
+            handle.plugin_id
+            for handle in closure
+            if "channels" in handle.record.manifest.capabilities
+            or handle.record.manifest.channels
+            or handle.contributions.channels
+        ]
+        if channels:
+            raise PluginReloadUnsupported(channels, "channels")
+        unsafe = [
+            handle.plugin_id
+            for handle in closure
+            if not handle.record.manifest.supports_hot_unload
+        ]
+        if unsafe:
+            raise PluginReloadUnsupported(unsafe, "hot_unload")
+
     async def unload(self, name: str, *, force: bool = False) -> list[Exception]:
         """Disposes a dependency closure; force is reserved for final resource cleanup."""
         closure = self._unload_closure(name)
@@ -873,6 +931,123 @@ class PluginKernel:
             self.assert_hot_unloadable(name)
         errors: list[Exception] = []
         for handle in closure:
+            errors.extend(await self._dispose_handle(handle))
+        return errors
+
+    async def reload(
+        self,
+        name: str,
+        *,
+        values: dict[str, Any],
+        raw_values: dict[str, Any],
+    ) -> PluginReloadResult:
+        """Re-runs setup of an ACTIVE plugin with new config, within this generation.
+
+        ``values``/``raw_values`` replace the plugin table in
+        ``HostServices.plugin_configs``/``raw_plugin_configs`` (the live
+        generation config); the enable flag inside them must stay on. The
+        closure (target plus ACTIVE plugins that hard-depend on it) is drained
+        and disposed dependents-first, then set up again target-first with
+        ``ctx.runtime.was_active``/``is_reload`` True; plugins outside it are
+        untouched. Process resources of the closure survive and are
+        re-acquired by the new instances.
+
+        Raises ``PluginReloadUnsupported`` before anything changes when only a
+        generation swap may replace the closure. If any closure plugin fails
+        to become ACTIVE, the new instances are discarded, the old tables are
+        restored, the closure is set up again with them and
+        ``PluginReloadFailed`` is raised.
+        """
+        async with self._transition_lock:
+            closure = self._unload_closure(name)
+            self._refuse_in_generation(name, closure)
+            target = closure[-1]
+            if not plugin_enabled(target.record.manifest, values):
+                raise ValueError(f"重载不能停用插件 {target.plugin_id}，请改用 unload")
+            records = [handle.record for handle in reversed(closure)]
+            plugin_ids = tuple(record.manifest.id for record in records)
+            with self._retain_process_resources(plugin_ids):
+                errors = await self._retire(closure)
+                previous = self._replace_config(target.plugin_id, values, raw_values)
+                failed = await self._reactivate(records)
+                if failed:
+                    errors.extend(
+                        await self._retire(
+                            [
+                                handle
+                                for record in reversed(records)
+                                if (handle := self._handles.get(record.candidate_id))
+                            ]
+                        )
+                    )
+                    _ = self._replace_config(target.plugin_id, *previous)
+                    restore_failed = await self._reactivate(records)
+                    raise PluginReloadFailed(
+                        target.plugin_id,
+                        failed=tuple(plugin_id for plugin_id, _ in failed),
+                        restore_failed=tuple(
+                            plugin_id for plugin_id, _ in restore_failed
+                        ),
+                    ) from failed[0][1]
+            return PluginReloadResult(plugin_ids, tuple(errors))
+
+    def _retain_process_resources(
+        self, plugin_ids: tuple[str, ...]
+    ) -> AbstractContextManager[None]:
+        owner = self._services.process_resources
+        if owner is None:
+            return nullcontext()
+        return owner.retain(self._namespace, plugin_ids)
+
+    def _replace_config(
+        self,
+        plugin_id: str,
+        values: dict[str, Any] | None,
+        raw_values: dict[str, Any] | None,
+    ) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+        """Swaps one plugin live config tables; returns the replaced ones."""
+        previous = (
+            self._services.plugin_configs.get(plugin_id),
+            self._services.raw_plugin_configs.get(plugin_id),
+        )
+        for tables, table in (
+            (self._services.plugin_configs, values),
+            (self._services.raw_plugin_configs, raw_values),
+        ):
+            if table is None:
+                _ = tables.pop(plugin_id, None)
+            else:
+                tables[plugin_id] = table
+        return previous
+
+    async def _reactivate(
+        self, records: list[PluginRecord]
+    ) -> list[tuple[str, BaseException | None]]:
+        """Sets up reloaded plugins in dependency order; returns those not ACTIVE."""
+        reactivating = frozenset(record.manifest.id for record in records)
+        failed: list[tuple[str, BaseException | None]] = []
+        for record in records:
+            await self._load_dependencies(
+                record, self._records_by_id(), (), reactivating
+            )
+            handle = self._handles.get(record.candidate_id)
+            if handle is None or handle.state is not PluginState.ACTIVE:
+                failed.append(
+                    (record.manifest.id, handle.error if handle is not None else None)
+                )
+        return failed
+
+    async def _retire(self, closure: list[PluginHandle]) -> list[Exception]:
+        """Drains then disposes handles in order, waiting only for their own calls."""
+        errors: list[Exception] = []
+        for handle in closure:
+            await handle.calls.close()
+            for callback in handle.drainers:
+                try:
+                    await callback()
+                except Exception as exc:
+                    logger.warning("插件 %s 排空失败: %s", handle.record.name, exc)
+                    errors.append(exc)
             errors.extend(await self._dispose_handle(handle))
         return errors
 

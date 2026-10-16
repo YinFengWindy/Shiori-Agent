@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 from collections.abc import Awaitable, Callable
 
+from agent.plugin_host.call_gate import PluginCallGate
 from agent.plugin_host.capabilities import PluginContributions
 from agent.plugin_host.effects import EffectScope
 from agent.plugin_host.manifest import PluginManifest
@@ -71,6 +72,8 @@ class PluginHandle:
     record: PluginRecord
     state: PluginState = PluginState.DISCOVERED
     effects: EffectScope = field(default_factory=lambda: EffectScope("unbound"))
+    # Admission for host-routed calls into this instance (tools, services, RPC).
+    calls: PluginCallGate = field(default_factory=lambda: PluginCallGate("unbound"))
     contributions: PluginContributions = field(default_factory=PluginContributions)
     instance: Any = None
     drainers: list[Callable[[], Awaitable[None]]] = field(default_factory=list)

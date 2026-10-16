@@ -22,6 +22,7 @@ from agent.plugin_host.capabilities import (
     ToolsCapability,
     contribute_to_list,
 )
+from agent.plugin_host.call_gate import PluginCallGate
 from agent.plugin_host.diagnostics import ChannelDeclarationError
 from agent.plugin_host.effects import EffectScope
 from agent.plugin_host.rpc import PluginRpcRegistry
@@ -146,6 +147,9 @@ class _FakeRegistry:
 class _FakeTool:
     name = "demo_tool"
 
+    async def execute(self, **kwargs: object) -> str:
+        return ""
+
 
 class _Named:
     def __init__(self, name: str) -> None:
@@ -186,7 +190,9 @@ async def test_tools_capability_registers_with_plugin_source_and_unregisters():
     registry = _FakeRegistry()
     contributions = PluginContributions()
     scope = EffectScope("demo")
-    capability = ToolsCapability(registry, scope, contributions, "demo_plugin")
+    capability = ToolsCapability(
+        registry, scope, contributions, "demo_plugin", PluginCallGate("demo_plugin")
+    )
 
     capability.register(_FakeTool(), risk="destructive", always_on=True)
 
@@ -219,7 +225,11 @@ def test_tools_capability_plugin_tool_is_external_only_when_declared():
     """#489：插件工具默认不进外部上下文允许集合，显式声明后才进。"""
     registry = ToolRegistry()
     capability = ToolsCapability(
-        registry, EffectScope("demo"), PluginContributions(), "demo_plugin"
+        registry,
+        EffectScope("demo"),
+        PluginContributions(),
+        "demo_plugin",
+        PluginCallGate("demo_plugin"),
     )
 
     capability.register(_PluginTool("undeclared"))
@@ -422,14 +432,18 @@ async def _ping(payload):
 async def test_rpc_capability_registers_under_plugin_namespace_and_disposes():
     registry = PluginRpcRegistry()
     scope = EffectScope("demo_plugin")
-    capability = RpcCapability(registry, scope, "demo_plugin")
+    capability = RpcCapability(
+        registry, scope, "demo_plugin", PluginCallGate("demo_plugin")
+    )
 
     capability.register(
         "ping", _ping, concurrency=Concurrency.READ_ONLY, admission_exempt=True
     )
 
     resolved = registry.resolve("plugin.demo_plugin.ping")
-    assert resolved == ("demo_plugin", _ping)
+    assert resolved is not None
+    assert resolved[0] == "demo_plugin"
+    assert await resolved[1]({"x": 1}) == {"pong": {"x": 1}}
     policy = registry.policy_for("plugin.demo_plugin.ping")
     assert policy is not None
     assert policy.concurrency is Concurrency.READ_ONLY
@@ -442,7 +456,9 @@ async def test_rpc_capability_registers_under_plugin_namespace_and_disposes():
 async def test_rpc_capability_dispose_unregisters_the_method():
     registry = PluginRpcRegistry()
     scope = EffectScope("demo_plugin")
-    capability = RpcCapability(registry, scope, "demo_plugin")
+    capability = RpcCapability(
+        registry, scope, "demo_plugin", PluginCallGate("demo_plugin")
+    )
     capability.register("ping", _ping)
 
     _ = await scope.dispose_all()
@@ -453,7 +469,12 @@ async def test_rpc_capability_dispose_unregisters_the_method():
 
 def test_rpc_capability_defaults_to_conservative_mutation_policy():
     registry = PluginRpcRegistry()
-    capability = RpcCapability(registry, EffectScope("demo_plugin"), "demo_plugin")
+    capability = RpcCapability(
+        registry,
+        EffectScope("demo_plugin"),
+        "demo_plugin",
+        PluginCallGate("demo_plugin"),
+    )
 
     capability.register("write", _ping)
 
@@ -470,7 +491,9 @@ async def test_rpc_events_report_delivery_and_reject_disposed_producers():
 
     bus = EventBus()
     scope = EffectScope("demo")
-    capability = RpcCapability(PluginRpcRegistry(), scope, "demo", bus)
+    capability = RpcCapability(
+        PluginRpcRegistry(), scope, "demo", PluginCallGate("demo"), bus
+    )
     assert await capability.emit("changed", {}) is False
 
     def delivered(event):
@@ -584,15 +607,17 @@ async def test_closed_scope_rejects_contributions_before_mutating_registries():
         with pytest.raises(RuntimeError, match="已处置"):
             contribute_to_list(target, "late", effects=scope, label="late")
         with pytest.raises(RuntimeError, match="已处置"):
-            ToolsCapability(registry, scope, contributions, "demo").register(
-                _FakeTool()
-            )
+            ToolsCapability(
+                registry, scope, contributions, "demo", PluginCallGate("demo")
+            ).register(_FakeTool())
         with pytest.raises(RuntimeError, match="已处置"):
             LifecycleCapability(contributions, scope).contribute(
                 "after_turn", [object()]
             )
         with pytest.raises(RuntimeError, match="已处置"):
-            RpcCapability(rpc, scope, "demo").register("ping", _ping)
+            RpcCapability(rpc, scope, "demo", PluginCallGate("demo")).register(
+                "ping", _ping
+            )
 
     scope.add("register-late", register_late)
     assert await scope.dispose_all() == []

@@ -1,7 +1,8 @@
 """Application-lifetime resources, with isolated candidate-generation attachments."""
 
 import asyncio
-from collections.abc import Callable
+from collections.abc import Callable, Generator, Iterable
+from contextlib import contextmanager
 from contextvars import Context
 from typing import cast
 
@@ -17,6 +18,9 @@ class ProcessResourceOwner:
         self._resources: dict[tuple[str, str], ProcessResource] = {}
         self._attachments: dict[tuple[str, str], set[str]] = {}
         self._active: str | None = None
+        # (generation, plugin) pairs whose attachments are being replaced
+        # within the generation; their resources outlive the detaching instance.
+        self._retained: set[tuple[str, str]] = set()
         self._closing: set[asyncio.Task[None]] = set()
         self._errors: list[BaseException] = []
         self._closed = False
@@ -26,6 +30,25 @@ class ProcessResourceOwner:
         scope = _Attachment(self, generation, plugin, effects)
         effects.add("process_resources", scope.close)
         return scope
+
+    @contextmanager
+    def retain(self, generation: str, plugins: Iterable[str]) -> Generator[None]:
+        """Keeps these plugins' resources while their instances reload in-generation.
+
+        An attachment closed inside the block detaches without retiring the
+        shared resource, so the replacing instance re-acquires the same object.
+        Resources no replacing instance acquired retire when the block exits.
+        """
+        held = {(generation, plugin) for plugin in plugins}
+        self._retained |= held
+        try:
+            yield
+        finally:
+            self._retained -= held
+            names = {plugin for _generation, plugin in held}
+            for key, attachments in tuple(self._attachments.items()):
+                if key[0] in names and not attachments:
+                    self._retire(key)
 
     def publish(self, generation: str) -> None:
         """Switch active attachments without waiting for long-running plugin work."""
@@ -112,6 +135,8 @@ class _Attachment:
             if attachments is None:
                 continue
             attachments.discard(self.generation)
+            if (self.generation, self.plugin) in self.owner._retained:
+                continue
             if not attachments or self.owner._active == self.generation:
                 pending.append(self.owner._retire(key))
         # Only teardown of the active attachment or unreferenced provisional

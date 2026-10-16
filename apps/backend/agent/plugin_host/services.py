@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 from shiori_sdk.rpc import PluginRpcError
 from shiori_sdk.services import ServiceHandler
+from agent.plugin_host.call_gate import PluginCallGate
 from agent.plugin_host.effects import EffectScope
 
 
@@ -109,12 +110,17 @@ class PluginServiceRegistry:
 
 
 class ScopedPluginServices:
-    """Bind publication to the real setup owner and its disposal scope."""
+    """Bind publication to the real setup owner, its disposal scope and call gate."""
 
     def __init__(
-        self, registry: PluginServiceRegistry, plugin_id: str, scope: EffectScope
+        self,
+        registry: PluginServiceRegistry,
+        plugin_id: str,
+        scope: EffectScope,
+        calls: PluginCallGate,
     ):
         self._registry, self._plugin_id, self._scope = registry, plugin_id, scope
+        self._calls = calls
 
     def register(
         self,
@@ -131,7 +137,9 @@ class ScopedPluginServices:
             service_id,
             contract=contract,
             label=label,
-            methods=methods,
+            methods={
+                name: self._calls.guard(handler) for name, handler in methods.items()
+            },
             metadata=metadata,
             scope=self._scope,
         )
