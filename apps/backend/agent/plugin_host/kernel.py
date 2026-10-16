@@ -552,7 +552,7 @@ class PluginKernel:
             effects=handle.effects,
             capabilities=capabilities,
             lifecycle=(
-                LifecycleCapability(handle.contributions, handle.effects)
+                LifecycleCapability(handle.contributions, handle.effects, handle.calls)
                 if "lifecycle" in handle.record.manifest.capabilities
                 else None
             ),
@@ -579,7 +579,7 @@ class PluginKernel:
                 raw_values=self._services.raw_plugin_configs.get(handle.plugin_id),
             ),
             tool_hooks=ToolHooksCapability(
-                handle.contributions, handle.effects, handle.plugin_id
+                handle.contributions, handle.effects, handle.plugin_id, handle.calls
             ),
             bot_commands=BotCommandsCapability(handle.contributions, handle.effects),
             dependencies=PluginDependencies(
@@ -918,6 +918,7 @@ class PluginKernel:
         values: dict[str, Any],
         raw_values: dict[str, Any],
         drain_timeout: float,
+        commit: Callable[[tuple[str, ...]], None] | None = None,
     ) -> PluginReloadResult:
         """Re-runs setup of an ACTIVE plugin with new config, within this generation.
 
@@ -929,6 +930,12 @@ class PluginKernel:
         seconds and disposed dependents-first, then set up again target-first
         with ``ctx.runtime.was_active``/``is_reload`` True. Plugins outside it
         are untouched; the closure's process resources survive.
+
+        ``commit`` (given the reloaded plugin ids) persists the new config
+        once every closure plugin is ACTIVE with it. It runs synchronously in
+        the same uninterruptible replacement as the setup, so caller
+        cancellation cannot separate "reloaded" from "persisted"; when it
+        raises, the reload is rolled back like a setup failure of the target.
 
         Raises, with nothing changed: ``LookupError`` for an unknown plugin,
         ``PluginReloadUnsupported`` when no in-generation reload applies, and
@@ -959,6 +966,7 @@ class PluginKernel:
                     retain=self._retain_process_resources,
                 ),
                 drain_timeout=drain_timeout,
+                commit=commit,
             )
 
     async def _activate_reloaded(

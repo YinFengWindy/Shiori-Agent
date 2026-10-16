@@ -39,6 +39,33 @@ test("a changed activationToken alone does not reevaluate an otherwise-unchanged
   assert.deepEqual(events, ["css", "import", "register"], "a token-only change must not dispose or reimport");
 });
 
+test("a new activation of unchanged code is acknowledged again with this window's outcome (#857)", async () => {
+  const reports: string[] = [];
+  const sync = createRuntimePluginUiSynchronization({
+    importModule: async (url) => {
+      if (url === "broken") throw new Error("broken module");
+      return { default: { pluginId: "demo" } };
+    },
+    loadCss: async () => () => undefined,
+    register: () => undefined,
+    unregister: () => undefined,
+    succeeded: (entry) => { reports.push(`ok:${entry.pluginId}:${entry.activationToken}`); },
+    failed: (entry, error) => { reports.push(`failed:${entry.pluginId}:${entry.activationToken}:${String(error)}`); },
+  });
+  const demo = { pluginId: "demo", entry: "demo", css: [], activationToken: "t1" };
+  const broken = { pluginId: "other", entry: "broken", css: [], activationToken: "b1" };
+  await sync([demo, broken]);
+  // The backend reloaded "demo" (new token); "other" kept its activation.
+  await sync([{ ...demo, activationToken: "t2" }, broken]);
+  await sync([{ ...demo, activationToken: "t2" }, { ...broken, activationToken: "b2" }]);
+  assert.deepEqual(reports, [
+    "ok:demo:t1",
+    "failed:other:b1:Error: broken module",
+    "ok:demo:t2",
+    "failed:other:b2:Error: broken module",
+  ]);
+});
+
 
 test("runtime UI failures retain the RPC cause in their displayed diagnostic state", async () => {
   const { PluginBridgeError } = await import("@yinfengwindy/shiori-sdk");

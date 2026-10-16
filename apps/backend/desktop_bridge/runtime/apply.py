@@ -5,20 +5,37 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import logging
 import tomllib
 from collections import OrderedDict
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
 from agent.config import load_config_text
+from agent.config_models import Config
+from agent.plugin_host import (
+    PluginReloadFailed,
+    PluginReloadTimeout,
+    PluginReloadUnsupported,
+)
 from bootstrap.app import AppRuntime
 from core.roles.model_updates import prepare_role_model_updates
 from core.roles.store import RoleStore
 from desktop_bridge.config_transaction import ConfigTransaction
 
+logger = logging.getLogger(__name__)
+
 _RESULT_HISTORY_LIMIT = 64
+
+# How long saving a plugin's config waits for that plugin's in-flight calls
+# (tool calls, RPC/service calls, phase-module and tool-hook runs) before
+# giving up with ``plugin_reload_busy``. Long enough for one ordinary plugin
+# action to finish (browser_use bounds each browser action at 45 s), so a save
+# made during such an action applies right after it instead of failing; much
+# longer and the settings page would sit on "saving" with no feedback.
+PLUGIN_RELOAD_DRAIN_TIMEOUT_SECONDS = 60.0
 
 
 class RuntimeApplyError(ValueError):
@@ -125,6 +142,10 @@ class DerivedWrite:
 
     build_config_toml: Callable[[str], str]
     fingerprint_payload: dict[str, Any]
+    # Set when the derived text only replaces this plugin's ``[plugins.<id>]``
+    # table: ``apply`` then reloads that plugin within the current generation
+    # instead of swapping the generation, whenever the plugin allows it.
+    reload_plugin: str | None = None
 
 
 class RuntimeSettingsApplication:
@@ -199,6 +220,7 @@ class RuntimeSettingsApplication:
                 prepare_service,
                 publish_service,
                 fingerprint,
+                reload_plugin=derive.reload_plugin if derive is not None else None,
             )
 
     @staticmethod
@@ -249,6 +271,8 @@ class RuntimeSettingsApplication:
         prepare_service: Callable,
         publish_service: Callable,
         fingerprint: str,
+        *,
+        reload_plugin: str | None = None,
     ) -> dict[str, Any]:
         text = payload["config_toml"]
         updates = payload.get("role_model_updates", [])
@@ -284,6 +308,12 @@ class RuntimeSettingsApplication:
             result = {"generation": generation, "changed": bool(updates)}
             self._remember(operation_id, fingerprint, result)
             return result
+        if reload_plugin is not None and not updates:
+            reloaded = await self._reload_plugin(
+                reload_plugin, config, text, operation_id, fingerprint
+            )
+            if reloaded is not None:
+                return reloaded
         candidate = None
         service = None
         try:
@@ -324,6 +354,98 @@ class RuntimeSettingsApplication:
         self._remember(operation_id, fingerprint, result)
         return result
 
+    async def _reload_plugin(
+        self,
+        plugin_id: str,
+        config: Config,
+        text: str,
+        operation_id: str,
+        fingerprint: str,
+    ) -> dict[str, Any] | None:
+        """Applies a change confined to one plugin table without a generation swap.
+
+        Reloads the plugin and its ACTIVE hard dependents in the published
+        generation, or only stores the table of a disabled plugin. The live
+        config tables, the committed text and the file change together or not
+        at all: the commit runs inside the kernel's uninterruptible
+        replacement, and a failed commit restores the old instances. Returns
+        ``None`` when only a generation swap can apply the change (another part
+        of the config differs, the closure has channels or cannot be hot
+        unloaded, or the target is not ACTIVE).
+        """
+        current = self.app.config
+        core = self.app.core
+        kernel = core.plugin_manager if core is not None else None
+        if kernel is None or _without_plugin(config, plugin_id) != _without_plugin(
+            current, plugin_id
+        ):
+            return None
+        values = config.plugins.get(plugin_id, {})
+        raw_values = config.raw_plugin_configs.get(plugin_id, {})
+        result: dict[str, Any] = {"generation": self.app.generation, "changed": False}
+
+        def commit(plugin_ids: tuple[str, ...]) -> None:
+            try:
+                self.transaction.commit(text)
+            except (OSError, ValueError, RuntimeError) as exc:
+                raise RuntimeApplyError("runtime_commit_failed", str(exc)) from exc
+            self.config_text = text
+            if plugin_ids:
+                result["reloaded_plugins"] = list(plugin_ids)
+            self._remember(operation_id, fingerprint, result)
+
+        try:
+            reloaded = await kernel.reload(
+                plugin_id,
+                values=values,
+                raw_values=raw_values,
+                drain_timeout=PLUGIN_RELOAD_DRAIN_TIMEOUT_SECONDS,
+                commit=commit,
+            )
+        except PluginReloadUnsupported as exc:
+            if exc.reason == "disabled":
+                # Nothing runs with these values; store them so a later enable
+                # and every comparison against the live config see them. The
+                # tables only change once the text is persisted.
+                commit(())
+                _store_plugin_tables(current, plugin_id, values, raw_values)
+                return result
+            if exc.reason == "retired":
+                # The published kernel is only retired while the application
+                # shuts down; a new generation must not be prepared then.
+                raise RuntimeApplyError(
+                    "runtime_generation_conflict",
+                    "运行时正在关闭，配置未保存",
+                    generation=self.app.generation,
+                ) from exc
+            return None
+        except PluginReloadTimeout as exc:
+            raise RuntimeApplyError(
+                "plugin_reload_busy",
+                f"插件 {', '.join(exc.busy) or plugin_id} 正在执行任务，"
+                "新配置未保存，请稍后重试",
+                plugin_ids=list(exc.busy),
+            ) from exc
+        except PluginReloadFailed as exc:
+            if isinstance(exc.__cause__, RuntimeApplyError):
+                # The commit failed; the old instances run the old config.
+                raise exc.__cause__ from exc
+            # First line: the kernel's summary (including whether the old
+            # config came back); then each setup error, shown as detail.
+            raise RuntimeApplyError(
+                "plugin_reload_failed",
+                f"{exc}，新配置未保存\n"
+                + "\n".join(f"{key}: {error}" for key, error in exc.failed.items()),
+                plugin_ids=list(exc.failed),
+                restore_failed=list(exc.restore_failed),
+            ) from exc
+        except LookupError:
+            # The plugin is no longer discovered; a generation swap decides.
+            return None
+        for error in reloaded.cleanup_errors:
+            logger.warning("插件重载后的清理失败: %s", error, exc_info=error)
+        return result
+
     def _remember(
         self, operation_id: str, fingerprint: str, result: dict[str, Any]
     ) -> None:
@@ -332,3 +454,29 @@ class RuntimeSettingsApplication:
         self._results[operation_id] = fingerprint, result
         while len(self._results) > _RESULT_HISTORY_LIMIT:
             self._results.popitem(last=False)
+
+
+def _without_plugin(config: Config, plugin_id: str) -> Config:
+    """Returns ``config`` without one plugin's tables, to compare everything else."""
+    return replace(
+        config,
+        plugins={
+            key: value for key, value in config.plugins.items() if key != plugin_id
+        },
+        raw_plugin_configs={
+            key: value
+            for key, value in config.raw_plugin_configs.items()
+            if key != plugin_id
+        },
+    )
+
+
+def _store_plugin_tables(
+    config: Config,
+    plugin_id: str,
+    values: dict[str, Any],
+    raw_values: dict[str, Any],
+) -> None:
+    """Replaces one plugin's tables in the live config shared with the kernel."""
+    config.plugins[plugin_id] = values
+    config.raw_plugin_configs[plugin_id] = raw_values

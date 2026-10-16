@@ -75,7 +75,9 @@ class PluginReloadFailed(RuntimeError):
     """New configuration failed to activate; the previous configuration was restored.
 
     ``failed`` maps each plugin that did not become ACTIVE with the new values
-    to its setup error, in load order; ``__cause__`` is the first of them.
+    to its setup error, in load order; ``__cause__`` is the first of them. A
+    failing ``commit`` callback of ``PluginKernel.reload`` is reported here
+    under the target plugin, with that error as ``__cause__``.
     ``restore_failed`` maps those that also failed to come back with the old
     values (normally empty); they stay FAILED like any setup failure.
     ``cleanup_errors`` are disposal and process-resource close failures met

@@ -21,13 +21,16 @@ export class PluginNativeSessions {
   private capture: { token: string } | null = null;
   private playback: { token: string } | null = null;
   private revision = 0;
+  // Bumped by a single plugin's revoke, so other plugins' pending opens survive it.
+  private readonly pluginRevisions = new Map<string, number>();
   constructor(private readonly options: NativeSessionOptions) {}
 
   async open(sender: number, context: PluginNativeContext) {
     if (!this.options.isBackground(sender)) throw new Error("原生能力仅供插件后台使用");
     const revision = this.revision;
+    const pluginRevision = this.pluginRevisions.get(context.plugin_id);
     const approved = await this.options.authorize(context);
-    if (revision !== this.revision || !this.options.isBackground(sender) || approved.plugin_id !== context.plugin_id || approved.generation !== context.generation) throw new Error("插件运行实例已失效");
+    if (revision !== this.revision || pluginRevision !== this.pluginRevisions.get(context.plugin_id) || !this.options.isBackground(sender) || approved.plugin_id !== context.plugin_id || approved.generation !== context.generation) throw new Error("插件运行实例已失效");
     const token = randomUUID();
     this.sessions.set(token, { sender, context, captureEpoch: 0, playEpoch: 0, keyEpochs: new Map() });
     return token;
@@ -99,7 +102,8 @@ export class PluginNativeSessions {
 
   /** Revokes just these tokens; a late close cannot affect a successor with the same plugin ID. */
   revoke(pluginId?: string) {
-    this.revision += 1;
+    if (pluginId) this.pluginRevisions.set(pluginId, (this.pluginRevisions.get(pluginId) ?? 0) + 1);
+    else this.revision += 1;
     for (const [token, session] of this.sessions) if (!pluginId || session.context.plugin_id === pluginId) this.close(token);
     if (!pluginId) { this.options.recorder.dispose(); this.options.player.dispose(); }
   }

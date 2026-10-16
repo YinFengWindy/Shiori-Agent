@@ -5,8 +5,11 @@ import type { PluginBackgroundEntry } from "./pluginBackgroundRegistry";
 /** A registry surface narrow enough to fake in tests without the real singleton. */
 export type PluginBackgroundRegistryLike = { list(): PluginBackgroundEntry[] };
 
-/** Distinguishes a runtime replacement from an availability-only refresh. */
-export type PluginBackgroundChange = "runtime" | "roster" | "unavailable";
+/**
+ * Distinguishes a runtime replacement from an availability-only refresh;
+ * `reloaded` names plugins set up again within the current runtime.
+ */
+export type PluginBackgroundChange = "runtime" | "roster" | "unavailable" | { reloaded: readonly string[] };
 
 export type PluginBackgroundHostDeps = {
   registry: PluginBackgroundRegistryLike;
@@ -35,8 +38,9 @@ export type PluginBackgroundHostDeps = {
  * entirely). Instead of duplicating that store, this host asks the backend
  * directly (`listEnabledPluginIds`, backed by `plugins.list`) at startup and
  * again whenever the roster changes. `runtime.applied` replaces generation
- * scopes; `plugins.changed` only reconciles availability. A renderer entry
- * becoming ready must not restart unrelated plugins.
+ * scopes; `plugins.reloaded` replaces only the named plugins' scopes;
+ * `plugins.changed` only reconciles availability. A renderer entry becoming
+ * ready or another plugin reloading must not restart unrelated plugins.
  */
 export class PluginBackgroundHost {
   private readonly running = new Map<string, BackgroundEffectScope>();
@@ -51,7 +55,7 @@ export class PluginBackgroundHost {
   /** Subscribes before queued startup so publications during async setup are retained. */
   async start(): Promise<void> {
     this.unsubscribeRosterChanged = this.deps.subscribeRosterChanged((change) => {
-      void this.enqueue(() => change === "unavailable" ? this.teardownAll() : this.reconcile(change === "runtime"));
+      void this.enqueue(() => change === "unavailable" ? this.teardownAll() : this.reconcile(replacedScopes(change)));
     });
     await this.enqueue(() => this.reconcile());
   }
@@ -80,7 +84,8 @@ export class PluginBackgroundHost {
     return next;
   }
 
-  private async reconcile(replaceGeneration = false): Promise<void> {
+  /** `replaced` scopes are torn down and set up again even when still enabled. */
+  private async reconcile(replaced: "all" | ReadonlySet<string> = new Set()): Promise<void> {
     // Reported rather than allowed to escape: `subscribeRosterChanged`'s
     // listener cannot await this, so a roster fetch that throws would
     // otherwise fail silently and leave the running set stale.
@@ -91,8 +96,8 @@ export class PluginBackgroundHost {
       this.deps.onError?.("", "roster", error);
       return;
     }
-    if (replaceGeneration) {
-      for (const pluginId of this.running.keys()) await this.teardown(pluginId);
+    for (const pluginId of [...this.running.keys()]) {
+      if (replaced === "all" || replaced.has(pluginId)) await this.teardown(pluginId);
     }
     for (const entry of this.deps.registry.list()) {
       const shouldRun = enabled.has(entry.pluginId);
@@ -137,4 +142,10 @@ export class PluginBackgroundHost {
     const errors = await scope.disposeAll();
     for (const error of errors) this.deps.onError?.(pluginId, "dispose", error);
   }
+}
+
+/** Which running scopes a change replaces: all, the reloaded plugins', or none. */
+function replacedScopes(change: Exclude<PluginBackgroundChange, "unavailable">): "all" | ReadonlySet<string> {
+  if (change === "runtime") return "all";
+  return new Set(change === "roster" ? [] : change.reloaded);
 }

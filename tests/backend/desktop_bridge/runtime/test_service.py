@@ -63,6 +63,40 @@ async def test_apply_notifications_distinguish_publication_from_replays(method):
 
 
 @pytest.mark.asyncio
+async def test_in_generation_plugin_reload_announces_only_the_reloaded_plugins():
+    service = object.__new__(ReloadableDesktopService)
+    result = {
+        "plugin_id": "demo",
+        "generation": 2,
+        "changed": False,
+        "reloaded_plugins": ["demo", "dependent"],
+    }
+    service.plugin_config = SimpleNamespace(set=AsyncMock(return_value=result))
+    transport = SimpleNamespace(publish_event=AsyncMock())
+    service._current = _ServiceGeneration(transport, SimpleNamespace(generation=2))
+
+    async def request():
+        return await service.handle(
+            {"id": "save", "method": "plugin.config.set", "payload": {}},
+            emit_event=lambda event: None,
+        )
+
+    assert (await request()).payload == result
+    # No runtime.applied: other plugins' contexts and the role list stay as they are.
+    transport.publish_event.assert_awaited_once_with(
+        {
+            "id": "save",
+            "type": "event",
+            "method": "plugins.reloaded",
+            "payload": {"generation": 2, "plugin_ids": ["demo", "dependent"]},
+        }
+    )
+    service._current.lease.generation = 3
+    assert (await request()).payload == result
+    assert transport.publish_event.await_count == 1
+
+
+@pytest.mark.asyncio
 async def test_simultaneous_notifications_claim_publication_before_transport_await():
     entered = asyncio.Event()
     release = asyncio.Event()

@@ -128,6 +128,21 @@ test("readiness and a no-op runtime notification keep subscriptions and pending 
   await client.dispose();
 });
 
+test("an in-generation reload closes only the reloaded plugins' contexts (#857)", async () => {
+  const fixture = host();
+  const reloaded = createPluginCommunicationClient("demo", fixture.options);
+  const bystander = createPluginCommunicationClient("pet", fixture.options);
+  let heard = 0;
+  await bystander.events.on("changed", () => { heard += 1; });
+  assert.deepEqual(await reloaded.call("read"), { ok: true });
+  fixture.emit("plugins.reloaded", { generation: 1, plugin_ids: ["demo"] });
+  await assert.rejects(reloaded.call("read"), { code: "plugin_unavailable" });
+  fixture.emit("plugin.pet.changed");
+  assert.equal(heard, 1);
+  assert.deepEqual(await bystander.call("read"), { ok: true });
+  await bystander.dispose();
+});
+
 test("unmount while open is pending rejects the caller and closes its late context", async () => {
   const fixture = host();
   let complete!: () => void;

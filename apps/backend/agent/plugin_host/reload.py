@@ -121,13 +121,15 @@ async def reload_closure(
     tables: ConfigTables,
     steps: ReloadSteps,
     drain_timeout: float,
+    commit: Callable[[tuple[str, ...]], None] | None = None,
 ) -> PluginReloadResult:
     """Drains ``closure`` (dependents first, target last), then replaces it.
 
     Until the drain completes nothing is disposed: a timeout, an ``on_drain``
     failure or caller cancellation reopens every gate and leaves the old
     instances and tables in place. Once draining succeeded the replacement
-    runs to completion even if the caller is cancelled meanwhile.
+    runs to completion even if the caller is cancelled meanwhile, including
+    ``commit`` (see ``PluginKernel.reload``).
     """
     await _drain(closure, drain_timeout)
     replacement = asyncio.create_task(
@@ -138,6 +140,7 @@ async def reload_closure(
             tables=tables,
             steps=steps,
             drain_timeout=drain_timeout,
+            commit=commit,
         )
     )
     return await _run_to_completion(replacement)
@@ -241,6 +244,7 @@ async def _replace(
     tables: ConfigTables,
     steps: ReloadSteps,
     drain_timeout: float,
+    commit: Callable[[tuple[str, ...]], None] | None,
 ) -> PluginReloadResult:
     target = closure[-1].plugin_id
     records = [handle.record for handle in reversed(closure)]
@@ -254,6 +258,13 @@ async def _replace(
             errors.extend(await steps.dispose(handle))
         previous = tables.swap(target, values, raw_values)
         handles, failed = await _activate(records, steps)
+        if not failed and commit is not None:
+            try:
+                commit(plugin_ids)
+            except Exception as error:
+                # Nothing was persisted: restore the old config like a setup
+                # failure, reported under the target.
+                failed = {target: error}
         if failed:
             # New instances that did start may already serve calls; let those
             # finish (bounded) before disposing them.

@@ -359,13 +359,18 @@ describe("useDesktopBridgeLifecycle", () => {
 });
 
 
-it("refreshes plugin availability after readiness without reloading roles", async () => {
-  const view = await mountLifecycle();
-  try {
-    const beforeRoles = view.roleReads();
-    const beforeLists = view.invokedMethods.filter((method) => method === "plugins.list").length;
-    await view.emit("plugins.changed", { plugin_id: "demo", kind: "ui", generation: 1 });
-    assert.equal(view.invokedMethods.filter((method) => method === "plugins.list").length, beforeLists + 1);
-    assert.equal(view.roleReads(), beforeRoles);
-  } finally { await view.cleanup(); }
-});
+for (const [method, payload] of [
+  ["plugins.changed", { plugin_id: "demo", kind: "ui", generation: 1 }],
+  ["plugins.reloaded", { plugin_ids: ["demo"], generation: 1 }],
+] as const) {
+  it(`refreshes plugin availability after ${method} without reloading roles`, async () => {
+    const view = await mountLifecycle();
+    try {
+      const beforeRoles = view.roleReads();
+      const beforeLists = view.invokedMethods.filter((invoked) => invoked === "plugins.list").length;
+      await view.emit(method, payload);
+      assert.equal(view.invokedMethods.filter((invoked) => invoked === "plugins.list").length, beforeLists + 1);
+      assert.equal(view.roleReads(), beforeRoles);
+    } finally { await view.cleanup(); }
+  });
+}

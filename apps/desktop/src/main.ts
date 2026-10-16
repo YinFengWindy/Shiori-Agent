@@ -46,6 +46,7 @@ import { surfaceRoleActivity } from "./surface/roleActivity.js";
 import { startDesktopPresenceReporting } from "./presence/reporter.js";
 import { createVoiceCaptureWindow } from "./voice/window.js";
 import { createNativeRuntime } from "./native/runtime.js";
+import { revokeNativeSessionsOnBridgeEvent } from "./native/lifecycle.js";
 import type { PluginNativeSessions } from "./native/sessions.js";
 import { BrowserVoiceRecorder } from "./voice/recorder.js";
 import { configureSettingsConfigPath } from "./settings.js";
@@ -352,7 +353,7 @@ void app.whenReady().then(async () => {
   });
   wireBridgeEvents(bridge, localAssets, (event) => {
     messageNotifications?.handleEvent(event);
-    if (event.method === "bridge.exit" || event.method === "runtime.applied" && event.payload.changed !== false) sessions.revoke();
+    revokeNativeSessionsOnBridgeEvent(event, (pluginId) => sessions.revoke(pluginId));
     const activity = surfaceRoleActivity(event);
     if (activity) activeDesktopSurfaces.publishActivity(activity);
   });

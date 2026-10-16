@@ -156,7 +156,10 @@ class ReloadableDesktopService:
                 )
 
                 if method == "plugin.config.set":
-                    await self._notify_applied(request_id, result)
+                    if result.get("reloaded_plugins"):
+                        await self._notify_reloaded(request_id, result)
+                    else:
+                        await self._notify_applied(request_id, result)
                 return result
 
             return await self._respond_or_apply_error(
@@ -305,6 +308,31 @@ class ReloadableDesktopService:
                 "type": "event",
                 "method": "runtime.applied",
                 "payload": {**result, "changed": changed},
+            }
+        )
+
+    async def _notify_reloaded(self, request_id, result):
+        """Announces plugins reloaded within the current generation.
+
+        Only those plugins' renderer contexts, background entries and native
+        sessions are replaced; ``runtime.applied`` stays reserved for a
+        generation swap and refresh-only saves, so nothing else (roles, other
+        plugins) refreshes. An idempotent retry repeats the event, which only
+        replaces the same contexts again; a retry from a retired generation
+        emits nothing.
+        """
+        entry = self._current
+        if result["generation"] != entry.lease.generation:
+            return
+        await entry.service.publish_event(
+            {
+                "id": request_id,
+                "type": "event",
+                "method": "plugins.reloaded",
+                "payload": {
+                    "generation": result["generation"],
+                    "plugin_ids": list(result["reloaded_plugins"]),
+                },
             }
         )
 

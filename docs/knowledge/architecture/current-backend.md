@@ -61,6 +61,7 @@ flowchart TD
 - `RuntimeDispatcher` 是 bus 的唯一消费者，为每条渠道消息获取租约后交给当代 `AgentLoop.process_inbound()`；定时任务与子回合沿用父操作的那一代。
 - `RuntimeBackground` 为每一代准备主动循环与记忆优化任务。换代或关闭时 `stop()` 取消上一代在途的后台工作（记忆整理回滚 PENDING 快照，主动 tick 放弃未发出的部分，已进出站队列的回复照常发出），新一代等它退出后按自身间隔重新调度；切换不等待卡在模型重试里的后台任务。
 - `ChannelHost`（`bootstrap/channel_host.py`）是跨代长驻的渠道宿主，负责渠道启动、交接与失败快照。
+- 例外：`plugin.config.set` 只改一张插件表时不换代（#857）。`RuntimeSettingsApplication._reload_plugin` 调 `PluginKernel.reload` 在当前代内重载目标及其强依赖消费者（排空它们自己的在途调用，含阶段模块与工具钩子的当次执行，最长 60 秒），落盘在内核不可取消的替换步骤里完成，桥接发 `plugins.reloaded`。闭包含渠道或不支持热卸载的插件、目标非 ACTIVE 时仍走整代切换；已停用插件只落盘。
 
 ## Bridge 与消息入口
 

@@ -197,3 +197,41 @@ test("an external response in the edit's render batch preserves the draft before
     assert.deepEqual(await config.get(), { text: "same-batch draft" });
   } finally { await view.cleanup(); }
 });
+
+for (const code of ["plugin_reload_failed", "plugin_reload_busy"] as const) {
+  test(`a ${code} save keeps the draft, shows the error and retries on the next edit (#857)`, async () => {
+    let stored: PluginConfigValues = { label: "saved" };
+    const writes: unknown[] = [];
+    let controller!: ReturnType<typeof usePluginConfigController>;
+    function Form() { controller = usePluginConfigController("demo"); return null; }
+    const view = await mountTestComponent(null, { windowGlobals: { miraDesktop: {
+      onEvent: () => () => {},
+      invoke: async ({ method, payload }: { method: string; payload: Record<string, unknown> }) => {
+        if (method === "plugin.config.set") {
+          const values = payload.values as PluginConfigValues;
+          writes.push(values.label);
+          if (values.label === "rejected") return { id: "save", type: "response", method, payload: {},
+            error: { code, message: "插件 demo 的新配置未能生效（demo 启动失败），已恢复原配置，新配置未保存\ndemo: broken" } };
+          stored = { ...values };
+        }
+        return { id: "response", type: "response", method, error: null, payload: {
+          plugin_id: payload.plugin_id, schema: {}, values: { ...stored }, env_status: {}, generation: 1,
+        } };
+      },
+    } } });
+    try {
+      await view.render(<Form />);
+      await settle();
+      await act(async () => controller.updateDraft(() => ({ label: "rejected" })));
+      await act(async () => { await new Promise((resolve) => setTimeout(resolve, 420)); });
+      assert.equal(controller.savePhase, "error");
+      assert.equal(controller.statusMessage, "插件 demo 的新配置未能生效（demo 启动失败），已恢复原配置，新配置未保存");
+      assert.match(controller.statusDetail, /demo: broken/);
+      assert.deepEqual(controller.draft, { label: "rejected" });
+      await act(async () => controller.updateDraft(() => ({ label: "fixed" })));
+      await act(async () => { await new Promise((resolve) => setTimeout(resolve, 420)); });
+      assert.deepEqual(writes, ["rejected", "fixed"]);
+      assert.equal(controller.savePhase, "idle");
+    } finally { await view.cleanup(); }
+  });
+}

@@ -139,6 +139,39 @@ consolidates these additions and the subsequent #847 breaking migration.
     reload, and the new instance re-acquires the same object.
   - The SDK managed runtime helper (`shiori_sdk.managed.rpc.register_runtime_rpc`) no
     longer stops the managed service from `on_drain`; it stops on disposal (#860).
+- **Saving plugin config reloads within the generation (#857).** `plugin.config.set`
+  reloads the target and the ACTIVE plugins that hard-depend on it in the current
+  runtime generation instead of publishing a new one; other plugins are not set up
+  again and keep their effects (managed services, channel connections), and the
+  `generation` stays the same. Plugin-observable semantics:
+  - Each phase-module `run` and tool-hook `run` contributed through `ctx.lifecycle` /
+    `ctx.tool_hooks` counts as an in-flight call of its plugin: a reload waits for the
+    run in progress (not for the whole turn). While the plugin is sealed or after it
+    was disposed, its module passes the frame through unchanged and its hook lets the
+    tool call pass, so a turn that started before the reload never reaches the old
+    instance. **breaking** (narrow): the host gates `run` in place on the contributed
+    object, as it already does for tools, so phase modules and tool hook objects must
+    accept attribute assignment (no `__slots__`); otherwise `setup` fails.
+  - The reload waits up to 60 s for the closure's in-flight calls. If they do not
+    finish, nothing changes and the save fails with `plugin_reload_busy`
+    (`details.plugin_ids` = still busy). If the new config fails `setup`, the old
+    config is restored and the save fails with `plugin_reload_failed`
+    (`details.plugin_ids`, `details.restore_failed`). In both cases the config is not
+    written and the settings page keeps the draft.
+  - New bridge event `plugins.reloaded` with payload `{generation, plugin_ids}` (target
+    first, then dependents). It replaces `runtime.applied` for this save: renderer
+    communication contexts, `usePluginRpcClient` clients, background scopes and native
+    sessions of exactly these plugins are closed and recreated; the reloaded plugins'
+    renderer entries report activation again for the new `activation_token`. Other
+    plugins' contexts and the role list are not refreshed. An idempotent retry of the
+    same `operation_id` repeats the event.
+  - Unchanged: a closure that contributes or declares channels, or contains a plugin
+    with `supports_hot_unload: false`, and a target that is not ACTIVE still swap the
+    generation (`runtime.applied` with `changed: true`, or `plugin_restart_required`).
+    A disabled plugin's table is stored without any reload. `plugins.setEnabled`,
+    install, update and uninstall still swap the generation.
+  - `plugin.config.set` no longer has the bridge's default 30 s request deadline; the
+    backend bounds it by the drain timeout above.
 
 ### 3.1.2 release batch
 
@@ -380,7 +413,8 @@ awaitable methods with `ctx.rpc.handle`; `ctx.events` is plugin-local and
 `ctx.hostEvents` explicitly subscribes to host events.
 
 Components must renew subscription effects when their injected `client` changes.
-The host replaces contexts on a real runtime publication or bridge restart,
+The host replaces contexts on a real runtime publication or bridge restart, and
+only the named plugins' contexts on `plugins.reloaded` (in-generation reload),
 reclaims methods/listeners/pending requests on teardown, renderer failure, and
 main-frame document reload/navigation. Document ownership tokens prevent delayed
 cleanup from touching successor registrations; in-page/subframe navigation leaves
@@ -1084,7 +1118,7 @@ arbitrary filesystem URLs are not exposed through this protocol. CSP admits this
 controlled scheme and the exact import-map hash; production adds neither
 `unsafe-inline` scripts nor `unsafe-eval`.
 
-Initial roster loading, bridge reconnection, `runtime.applied`, `plugins.changed`, and plugin toggles
+Initial roster loading, bridge reconnection, `runtime.applied`, `plugins.changed`, `plugins.reloaded`, and plugin toggles
 share one serialized refresh path. Disable/removal cleans this window's registry
 entries and CSS. JavaScript module evaluation follows browser caching; replace a
 plugin package and restart the application to load its new code.

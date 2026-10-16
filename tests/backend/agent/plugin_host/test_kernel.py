@@ -238,6 +238,9 @@ async def test_setup_cancellation_rolls_back_before_force_cleanup(tmp_path, stri
         )
         (package / "backend/plugin.py").write_text(
             "import asyncio\n"
+            "class Module:\n"
+            "    async def run(self, frame):\n"
+            "        return frame\n"
             "async def setup(ctx):\n"
             "    state = ['started']\n"
             "    ctx.expose(state)\n"
@@ -246,7 +249,7 @@ async def test_setup_cancellation_rolls_back_before_force_cleanup(tmp_path, stri
             f"        event.append('{name}')\n"
             "        return event\n"
             "    ctx.events.on(list, on_event)\n"
-            "    ctx.lifecycle.contribute('before_turn', [object()])\n"
+            "    ctx.lifecycle.contribute('before_turn', [Module()])\n"
             + ("    await asyncio.Event().wait()\n" if name == "waiting" else ""),
             encoding="utf-8",
         )

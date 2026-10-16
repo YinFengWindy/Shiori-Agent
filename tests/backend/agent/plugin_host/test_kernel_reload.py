@@ -657,3 +657,127 @@ async def test_terminate_waits_for_a_reload_and_later_reloads_are_refused(
     with pytest.raises(PluginReloadUnsupported) as caught:
         await _reload(kernel, "v3")
     assert caught.value.reason == "retired"
+
+
+_HOOKED = """
+import sys
+from shiori_sdk.tool_hooks import HookOutcome
+
+probe = sys.modules["reload_probe"]
+
+
+class Stamp:
+    slot = "hooked.stamp"
+
+    def __init__(self, label):
+        self.label = label
+
+    async def run(self, frame):
+        probe.events.append(("module-start", self.label))
+        await probe.release.wait()
+        return [*frame, self.label]
+
+
+class Guard:
+    name = "plugin:hooked:guard"
+    event = "pre_tool_use"
+
+    def __init__(self, label):
+        self.label = label
+
+    def matches(self, ctx):
+        return True
+
+    async def run(self, ctx):
+        probe.events.append(("hook-start", self.label))
+        await probe.release.wait()
+        return HookOutcome(decision="deny", reason=self.label)
+
+
+async def setup(ctx):
+    label = ctx.config.get("label")
+    ctx.lifecycle.contribute("before_turn", [Stamp(label)])
+    ctx.tool_hooks.add(Guard(label))
+"""
+
+
+async def _hooked_kernel(tmp_path: Path) -> PluginKernel:
+    _write(
+        tmp_path, "hooked", "capabilities: [lifecycle, tool_hooks, config]\n", _HOOKED
+    )
+    configs = {"hooked": {"label": "v1"}}
+    kernel = PluginKernel(
+        [tmp_path],
+        services=HostServices(
+            event_bus=EventBus(),
+            plugin_configs=configs,
+            raw_plugin_configs={"hooked": {"label": "v1"}},
+        ),
+    )
+    await kernel.load_all()
+    return kernel
+
+
+def _reload_hooked(kernel: PluginKernel):
+    return kernel.reload(
+        "hooked",
+        values={"label": "v2"},
+        raw_values={"label": "v2"},
+        drain_timeout=5,
+    )
+
+
+@pytest.mark.asyncio
+async def test_reload_waits_for_a_running_phase_module_and_skips_stale_runs(
+    probe, tmp_path
+):
+    kernel = await _hooked_kernel(tmp_path)
+    old = kernel.before_turn_modules[0]
+    # A turn holds a phase built before the reload and is inside the module.
+    running = asyncio.create_task(old.run(["frame"]))
+    await _until(probe, ("module-start", "v1"))
+
+    reload = asyncio.create_task(_reload_hooked(kernel))
+    for _ in range(20):
+        await asyncio.sleep(0)
+    assert not reload.done()
+    # While draining, another run of the old module passes the frame through.
+    assert await old.run(["next"]) == ["next"]
+
+    probe.release.set()
+    assert await running == ["frame", "v1"]
+    await asyncio.wait_for(reload, 1)
+    (new,) = kernel.before_turn_modules
+    assert new is not old
+    # A phase still holding the disposed module never runs the old instance.
+    assert await old.run(["stale"]) == ["stale"]
+    assert await new.run(["fresh"]) == ["fresh", "v2"]
+    assert [event for event in probe.events if event[0] == "module-start"] == [
+        ("module-start", "v1"),
+        ("module-start", "v2"),
+    ]
+    await kernel.terminate_all(force=True)
+
+
+@pytest.mark.asyncio
+async def test_reload_waits_for_a_running_tool_hook_and_skips_stale_runs(
+    probe, tmp_path
+):
+    kernel = await _hooked_kernel(tmp_path)
+    (old,) = kernel.tool_hooks
+    running = asyncio.create_task(old.run(None))
+    await _until(probe, ("hook-start", "v1"))
+
+    reload = asyncio.create_task(_reload_hooked(kernel))
+    for _ in range(20):
+        await asyncio.sleep(0)
+    assert not reload.done()
+    assert (await old.run(None)).decision == "pass"
+
+    probe.release.set()
+    assert (await running).reason == "v1"
+    await asyncio.wait_for(reload, 1)
+    (new,) = kernel.tool_hooks
+    assert (await old.run(None)).decision == "pass"
+    assert (await new.run(None)).reason == "v2"
+    await kernel.terminate_all(force=True)
