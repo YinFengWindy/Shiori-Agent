@@ -83,10 +83,8 @@ its version must not be reused for subsequent contract changes.
 The single version source remains
 `packages/sdk/python/shiori_sdk/_version.py`
 (`RUNTIME_API_VERSION = __version__`), synchronized by
-`node scripts/sync_sdk_version.mjs`. The source batch is **3.1.2**.
-At release preparation on 2026-10-16,
-3.1.2 was finalized but not yet published to npm or PyPI; the latest verified
-registry release was 3.1.1. Check the registries for current availability.
+`node scripts/sync_sdk_version.mjs`. The source batch is **3.1.2**,
+published to both npm and PyPI on 2026-10-16.
 Packages using the new 3.1.2 APIs or
 channel migration declare `runtime_api: ">=3.1.2 <4.0.0"` and the matching
 Python SDK minimum; audited packages using only unchanged APIs retain their
@@ -119,7 +117,7 @@ consolidates these additions and the subsequent #847 breaking migration.
 | `3.0.0` | **breaking**: the unified Shiori SDK. `@shiori/plugin-sdk` becomes `@yinfengwindy/shiori-sdk` (no alias) and shares version and source tree `packages/sdk/` with the Python `shiori-sdk`, which owns plugin-facing Python contracts, lifecycle values and independent test fakes; every 2.x range is rejected with `incompatible_runtime` (see [Runtime API 3.0](#runtime-api-30-unified-shiori-sdk)) | #551 (#585–#591) |
 | `3.1.0` | `shiori_sdk.lifecycle` gains `AfterTurnCtx`, `PHASE_SLOTS` / `require_phase_slot` and `requires` / `produces` on the `LifecycleModule` protocol; packages importing or implementing any of them require `runtime_api: ">=3.1.0 <4.0.0"`. `shiori_sdk.runtime` owns the host's `KNOWN_CAPABILITIES` and manifest `capabilities` validation. `shiori-sdk[testing]`'s `sdk_context` grants only the plugin manifest's (validated) `capabilities` with an isolated temporary `plugin_dir`, and `FakeLifecycle` rejects unknown phase slots like the host. `shiori_sdk.runtime.HostServiceUnavailable` is raised before `setup` when a declared capability's host service is missing, so `workspace` / `session_manager` on the typed contexts are no longer optional. `shiori_sdk.redaction.summarize_llm_output_for_log` moves back to the host (`core.common.llm_output_log`); `redact_secrets` stays in the SDK. Those corrections preceded the first 3.1.0 publication on 2026-10-03 | #620, #622, #624 (#619) |
 | `3.1.1` | **breaking** relative to published 3.1.0: removes `SurfaceHandle.voice` and its voice types, and replaces relationship `closeness` with affection. The batch also adds plugin services/native resources, local and managed environments, private settings autosave, role capability dialogs, external turns, terminal chat events and scoped attachment tools. See the complete batch below. | #674/#677, #678, #679, #683/#688, #699/#703, #700/#704, #701/#705, #710/#717, #715/#728, #721/#726, #719/#735, #740/#743, #734/#738, #720/#744, #749/#751, #748/#754, #750/#752, #756/#757; consolidated by #762 |
-| `3.1.2` | **breaking** relative to published 3.1.1: removes channel push-sender registration and makes `message_push` raise on failure. Adds background results, process resources, external links and secondary sidebar styling. Finalized for release preparation on 2026-10-16; registry publication was pending at that point. | #820, #821, #822, #827, #847; finalized for #851 |
+| `3.1.2` | **breaking** relative to published 3.1.1: removes channel push-sender registration and makes `message_push` raise on failure. Adds background results, process resources, external links and secondary sidebar styling. Published to npm and PyPI on 2026-10-16. | #820, #821, #822, #827, #847; finalized for #851 |
 
 ### Unreleased
 
@@ -127,7 +125,8 @@ consolidates these additions and the subsequent #847 breaking migration.
 
 ### 3.1.2 release batch
 
-These notes were finalized for 3.1.2 on 2026-10-16, before npm and PyPI publication.
+Published to both npm and PyPI on 2026-10-16 by the
+[SDK release run](https://github.com/YinFengWindy/Shiori-Agent/actions/runs/38855118971).
 
 - #847 (issues #842 / #843): **breaking** — `ChannelContext.push_tool`, the
   `shiori_sdk.channels.services.PushSenders` protocol and the testing

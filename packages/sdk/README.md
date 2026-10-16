@@ -2,12 +2,10 @@
 
 [@yinfengwindy/shiori-sdk](https://www.npmjs.com/package/@yinfengwindy/shiori-sdk)
 and [shiori-sdk](https://pypi.org/project/shiori-sdk/) are the TypeScript and Python distributions of the
-same plugin contract. The source and Runtime API version is **3.1.2**. At release
-preparation on **2026-10-16**, the latest verified npm and PyPI release was
-**3.1.1** and 3.1.2 was not yet published. Check the registry links above for
-current availability. The 3.1.2 installation commands below apply **after
-publication completes**; before then, use this checkout or locally built
-artifacts as described in the [publishing guide](https://github.com/YinFengWindy/Shiori-Agent/blob/main/docs/agents/sdk-publishing.md#本地验证).
+same plugin contract. The source and Runtime API version is **3.1.2**, published
+to both npm and PyPI on **2026-10-16**. The [release run](https://github.com/YinFengWindy/Shiori-Agent/actions/runs/38855118971)
+built, verified and published both distributions. The installation commands below
+use this published version and its testing support.
 
 Start with the [plugin tutorial](https://github.com/YinFengWindy/Shiori-Agent/blob/main/docs/_handbook/plugins-tutorial.md)
 and [runtime contract](https://github.com/YinFengWindy/Shiori-Agent/blob/main/docs/_handbook/plugin-runtime-contract.md)
@@ -76,7 +74,7 @@ same; a version already shipped in either form is not reused for new contracts.
 
 ## TypeScript
 
-After 3.1.2 is published, install the SDK and its React peers as development dependencies:
+Install the SDK and its React peers as development dependencies:
 
 ```sh
 pnpm add -D "@yinfengwindy/shiori-sdk@^3.1.2" "react@^19.2.5" "react-dom@^19.2.5"
@@ -134,7 +132,7 @@ other unavailable services and must not be silently classified as local disposal
 
 ## Python
 
-Requires Python **3.12+**. After 3.1.2 is published, install in your plugin project:
+Requires Python **3.12+**. Install in your plugin project:
 
 ```sh
 uv add "shiori-sdk>=3.1.2,<4"

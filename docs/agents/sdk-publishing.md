@@ -1,9 +1,10 @@
 # SDK 发布
 
 SDK 使用同一个版本号发布 `@yinfengwindy/shiori-sdk`（npm）与 `shiori-sdk`（PyPI）。
-截至 **2026-10-16 发布准备时**，仓库已定版 **3.1.2，尚未发布**；已核实的
-npm 与 PyPI 最新公开版本为 **3.1.1**。当前可用版本以 [npm](https://www.npmjs.com/package/@yinfengwindy/shiori-sdk)
-与 [PyPI](https://pypi.org/project/shiori-sdk/) 为准；README 的 3.1.2 安装命令仅在发布完成后使用。
+**3.1.2 已于 2026-10-16 发布**到 [npm](https://www.npmjs.com/package/@yinfengwindy/shiori-sdk)
+与 [PyPI](https://pypi.org/project/shiori-sdk/)。[正式发布 run](https://github.com/YinFengWindy/Shiori-Agent/actions/runs/38855118971)
+的 build、npm 和 PyPI job 均成功，注册表产物校验和与该次 CI 归档一致。
+README 的 3.1.2 安装命令可直接使用。
 本批包括后台结果回报、跨代进程资源、外部链接、二级侧栏样式以及 #847 的渠道
 push-sender 删除与 `message_push` 异常语义，补丁编号不代表兼容；迁移说明见
 [SDK README](../../packages/sdk/README.md#compatibility)。
@@ -120,14 +121,14 @@ owner 字段填写 GitHub owner。维护者仍需完成下面的外部设置。
    运行 `uv lock` 刷新 `uv.lock` 并确认 `uv sync --dev --locked` 可用，按变更更新 README，
    走 PR/CI 后合入 `main`。版本、功能和许可证校验通过后再打标签。可在 Actions 中手动运行 SDK release
    检查构建流程；这只验证产物，不证明外部账号已配置。
-2. 在已合入的提交上创建并推送 `sdk-v<version>`。例如发布仓库当前版本：
+2. 在已合入的提交上创建并推送 `sdk-v<version>`，将下方占位替换为下一批已定版的新版本：
 
    ```powershell
-   git tag sdk-v3.1.2 <已验证的-main-提交-SHA>
-   git push origin sdk-v3.1.2
+   git tag sdk-v<version> <已验证的-main-提交-SHA>
+   git push origin sdk-v<version>
    ```
 
-   这是正式发布操作，需要维护者有意执行；不要挪动或覆盖已发布标签。
+   这是正式发布操作，需要维护者有意执行；`sdk-v3.1.2` 已发布，不要重复创建、挪动或覆盖已发布标签。
 3. 两个发布 job 均成功，才算双端发布完成。build artifact 名为
    `sdk-release-<run-id>-<build-attempt>`，保存 30 天，包含 `.tgz`、`.whl`、`.tar.gz`
    和 `manifest.json`。需要长期恢复证据时及时下载保存整份 artifact。
