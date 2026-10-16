@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from hashlib import sha1
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
 from agent.skills import BUILTIN_SKILLS_DIR
-from agent.tool_hooks import ToolHook
+from agent.tool_hooks import ToolHookSource, no_tool_hooks
 from agent.tools.registry import ToolRegistry
 from agent.tools.web_fetch import WebFetchTool
 from agent.turns.result import TurnOutbound, TurnResult, TurnTrace
@@ -61,7 +61,7 @@ class AgentTickDeps:
     shared_tools: ToolRegistry | None = None
     turn_orchestrator: TurnOrchestrator | None = None
     pool: McpClientPool | None = None
-    tool_hooks: list[ToolHook] = field(default_factory=list)
+    tool_hooks: ToolHookSource = no_tool_hooks
     proactive_gates: ProactiveGateChain | None = None
     # 群环境层（#497）：主动与发呆回合注入各外部会话的最近动态。
     group_environment: GroupEnvironment | None = None

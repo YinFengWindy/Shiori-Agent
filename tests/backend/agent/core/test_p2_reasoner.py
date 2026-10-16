@@ -21,6 +21,7 @@ from shiori_sdk.messages import InboundMessage
 from shiori_sdk.channel_events import ToolCallCompleted, ToolCallStarted
 from shiori_sdk.lifecycle import LifecycleFrame
 from session.manager import SessionManager
+from tests.support.plugin_contributions import StaticPluginContributions
 
 
 class _RequestSummary:
@@ -486,7 +487,9 @@ def test_default_reasoner_honors_after_step_stop_after_tool_batch():
         discovery=ToolDiscoveryState(),
         tool_search_enabled=False,
     )
-    reasoner.add_after_step_plugin_modules([_RequestSummary()])
+    reasoner.bind_plugin_contributions(
+        StaticPluginContributions(after_step_modules=[_RequestSummary()])
+    )
 
     result = asyncio.run(reasoner.run([{"role": "user", "content": "hi"}]))
 

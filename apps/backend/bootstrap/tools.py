@@ -42,6 +42,7 @@ from agent.tools.account_delivery import (
 )
 from core.accounts.delivery_ledger import AccountDeliveryLedger
 from agent.tools.registry import ToolRegistry
+from agent.tools.spawn import SpawnTool
 from conversation.listening import GroupListeningControl
 from core.scene.controller import SceneAwarenessController
 from core.scene.demand import SceneObservationDemand
@@ -139,32 +140,13 @@ class CoreRuntime:
         if self.plugin_manager is not None:
             await self.plugin_manager.load_all()
             logger.info("插件加载完成: %d 个", self.plugin_manager.loaded_count)
-            self.loop.add_before_turn_plugin_modules(
-                self.plugin_manager.before_turn_modules,
-            )
-            self.loop.add_before_reasoning_plugin_modules(
-                self.plugin_manager.before_reasoning_modules,
-            )
-            self.loop.add_prompt_render_plugin_modules(
-                self.plugin_manager.prompt_render_modules,
-            )
-            self.loop.add_before_step_plugin_modules(
-                self.plugin_manager.before_step_modules,
-            )
-            self.loop.add_after_step_plugin_modules(
-                self.plugin_manager.after_step_modules,
-            )
-            self.loop.add_after_reasoning_plugin_modules(
-                self.plugin_manager.after_reasoning_modules,
-            )
-            self.loop.add_after_turn_plugin_modules(
-                self.plugin_manager.after_turn_modules,
-            )
-            if self.plugin_manager.tool_hooks:
-                self.loop.add_tool_hooks(self.plugin_manager.tool_hooks)
-                spawn_tool = self.tools.get_tool("spawn")
-                if spawn_tool is not None and hasattr(spawn_tool, "add_tool_hooks"):
-                    spawn_tool.add_tool_hooks(self.plugin_manager.tool_hooks)
+            # 接入内核本身而不是复制贡献列表：代内卸载/加载的插件下一次
+            # 回合或工具调用即按当前 ACTIVE 插件执行（#855）。
+            kernel = self.plugin_manager
+            self.loop.bind_plugin_contributions(kernel)
+            spawn = self.tools.get_tool("spawn")
+            if isinstance(spawn, SpawnTool):
+                spawn.manager.bind_tool_hooks(lambda: kernel.tool_hooks)
 
     async def inspect_modules(self) -> str:
         """Renders this generation\'s lifecycle module configuration."""

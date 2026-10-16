@@ -7,8 +7,12 @@ from typing import TYPE_CHECKING, Callable
 from agent.config_models import Config
 from agent.looping.core import AgentLoop
 from agent.provider import LLMProvider
-from agent.tool_hooks import ToolHook
-from agent.core.proactive_turn.gates import ProactiveGate
+from agent.tool_hooks import ToolHookSource, no_tool_hooks
+from agent.core.proactive_turn.gates import (
+    ProactiveGate,
+    ProactiveGateSource,
+    no_proactive_gates,
+)
 from agent.core.prompt_block import build_role_user_identities_prompt
 from agent.tools.message_push import MessagePushTool
 from conversation.service import desktop_chat_id, desktop_thread_id
@@ -62,8 +66,8 @@ def build_proactive_runtime(
     memory_store: "MemoryRuntime | None",
     presence: PresenceStore,
     agent_loop: AgentLoop,
-    tool_hooks: list[ToolHook] | None = None,
-    proactive_gates: list[ProactiveGate] | None = None,
+    tool_hooks: ToolHookSource = no_tool_hooks,
+    proactive_gates: ProactiveGateSource = no_proactive_gates,
     proactive_motives: list[ProactiveGate] | None = None,
     event_bus: "EventBus | None" = None,
     provider_consumer: Callable[[LLMProvider], None] | None = None,

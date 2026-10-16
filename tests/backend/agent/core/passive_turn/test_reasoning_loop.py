@@ -26,6 +26,7 @@ from agent.core.passive_turn.empty_reply import EmptyReplyError
 from agent.tool_hooks.base import ToolHook
 from agent.tool_hooks.types import HookContext
 from shiori_sdk.tool_hooks import HookOutcome
+from tests.support.plugin_contributions import StaticPluginContributions
 from agent.tools.account_delivery import ACCOUNT_SEND_EXTERNAL_LIMIT, AccountSendTool
 from shiori_sdk.tools import Tool
 from agent.tools.registry import ToolRegistry
@@ -818,7 +819,7 @@ async def test_role_summary_empty_content_uses_shared_recovery_without_replaying
     provider.chat.side_effect = responses
     reasoner = make_reasoner(provider, tools, max_iterations=1)
     if early_stop:
-        reasoner._before_step.run = AsyncMock(
+        reasoner._before_step.current().run = AsyncMock(
             return_value=SimpleNamespace(early_stop=True)
         )
     operation = reasoner.run(
@@ -869,7 +870,7 @@ async def test_explicitly_refused_role_summary_does_not_retry_or_fetch_mood(earl
     provider.chat.side_effect = responses
     reasoner = make_reasoner(provider, tools, max_iterations=1)
     if early_stop:
-        reasoner._before_step.run = AsyncMock(
+        reasoner._before_step.current().run = AsyncMock(
             return_value=SimpleNamespace(early_stop=True)
         )
     with pytest.raises(EmptyReplyError) as caught:
@@ -931,7 +932,9 @@ async def test_finalize_denial_from_a_different_plugin_identity_truncates_the_ba
         LLMResponse(content="收尾总结"),
     ]
     reasoner = make_reasoner(provider, tools)
-    reasoner.add_tool_hooks([_OtherPluginFinalizeHook()])
+    reasoner.bind_plugin_contributions(
+        StaticPluginContributions(tool_hooks=[_OtherPluginFinalizeHook()])
+    )
 
     result = await reasoner.run([{"role": "user", "content": "test"}])
 
@@ -968,7 +971,9 @@ async def test_finalize_denial_from_a_different_plugin_identity_truncates_the_pr
         LLMResponse(content="收尾总结"),
     ]
     reasoner = make_reasoner(provider, tools, tool_search_enabled=True)
-    reasoner.add_tool_hooks([_OtherPluginFinalizeHook()])
+    reasoner.bind_plugin_contributions(
+        StaticPluginContributions(tool_hooks=[_OtherPluginFinalizeHook()])
+    )
 
     result = await reasoner.run([{"role": "user", "content": "test"}])
 
@@ -996,7 +1001,9 @@ async def test_plain_deny_without_finalize_does_not_truncate_the_batch():
         LLMResponse(content="最终回复"),
     ]
     reasoner = make_reasoner(provider, tools)
-    reasoner.add_tool_hooks([_OtherPluginPlainDenyHook()])
+    reasoner.bind_plugin_contributions(
+        StaticPluginContributions(tool_hooks=[_OtherPluginPlainDenyHook()])
+    )
 
     result = await reasoner.run([{"role": "user", "content": "test"}])
 
@@ -1308,7 +1315,9 @@ async def test_external_restricted_turn_rechecks_account_send_after_hooks():
         LLMResponse(content="好的"),
     ]
     reasoner = make_reasoner(provider, tools)
-    reasoner.add_tool_hooks([_RetargetToGroupHook()])
+    reasoner.bind_plugin_contributions(
+        StaticPluginContributions(tool_hooks=[_RetargetToGroupHook()])
+    )
 
     result = await reasoner.run(
         [{"role": "user", "content": "帮我告诉你主人"}],
@@ -1363,13 +1372,13 @@ async def test_after_step_receives_the_request_budget_hard_limit():
     reasoner = make_reasoner(provider, tools)
     reasoner._llm_config.max_tokens = 100
     observed = []
-    run_after_step = reasoner._after_step.run
+    run_after_step = reasoner._after_step.current().run
 
     async def capture(ctx):
         observed.append(ctx)
         return await run_after_step(ctx)
 
-    reasoner._after_step.run = capture
+    reasoner._after_step.current().run = capture
     try:
         result = await reasoner.run([{"role": "user", "content": "数一下"}])
         assert result.reply == "完成"

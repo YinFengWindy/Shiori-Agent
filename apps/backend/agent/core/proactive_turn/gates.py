@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
 from time import perf_counter
 from typing import Literal, Mapping, Protocol, Sequence, cast, runtime_checkable
+
+from core.common.live_contributions import LiveContributions
 
 
 class ProactiveMode(StrEnum):
@@ -153,33 +156,61 @@ class ProactiveGateAdapter:
         _ = completion
 
 
+# 全局 gate 来源：每次评估都重新读取，插件代内卸载/加载后下一次 tick 即生效。
+ProactiveGateSource = Callable[[], Sequence[ProactiveGate]]
+
+
+def no_proactive_gates() -> Sequence[ProactiveGate]:
+    """没有任何全局 gate 的来源（未接插件内核时使用）。"""
+    return ()
+
+
+@dataclass(frozen=True)
+class _GateIndex:
+    """One validated arrangement of the current global gates plus core motives."""
+
+    ordered: tuple[ProactiveGate, ...]
+    by_name: Mapping[str, ProactiveGate]
+
+
 class ProactiveGateChain:
-    """Evaluates global gates before core motives and routes selected-mode completion."""
+    """Evaluates global gates before core motives and routes selected-mode completion.
+
+    ``gates`` is read on every evaluation; the chain is re-validated and re-sorted
+    only when the gate set changes, and once at construction so duplicate names
+    in the startup set fail where the chain is wired.
+    """
 
     def __init__(
         self,
-        gates: Sequence[ProactiveGate] | None = None,
+        gates: ProactiveGateSource = no_proactive_gates,
         *,
         motives: Sequence[ProactiveGate] = (),
     ) -> None:
+        self._motives = tuple(motives)
+        self._motive_names = {gate.name for gate in motives}
+        self._index = LiveContributions(gates, self._build_index)
+
+    def _build_index(self, gates: list[ProactiveGate]) -> _GateIndex:
         named: dict[str, ProactiveGate] = {}
-        for gate in [*(gates or ()), *motives]:
+        for gate in [*gates, *self._motives]:
             name = str(gate.name).strip()
             if not name:
                 raise ValueError("Proactive gate name must not be empty")
             if name in named:
                 raise ValueError(f"Duplicate proactive gate name: {name}")
             named[name] = gate
-        self._gates_by_name = named
-        self._motive_names = {gate.name for gate in motives}
         # Global admission always runs before core motives, regardless of priority.
-        self._gates = tuple(
-            sorted(gates or (), key=lambda gate: (-int(gate.priority), gate.name))
-        ) + tuple(sorted(motives, key=lambda gate: (-int(gate.priority), gate.name)))
+        ordered = tuple(
+            sorted(gates, key=lambda gate: (-int(gate.priority), gate.name))
+        ) + tuple(
+            sorted(self._motives, key=lambda gate: (-int(gate.priority), gate.name))
+        )
+        return _GateIndex(ordered=ordered, by_name=named)
 
     def evaluate(self, ctx: ProactiveGateContext) -> ProactiveGateResult:
         trace: list[ProactiveGateTraceItem] = []
-        for gate in self._gates:
+        for gate in self._index.current().ordered:
             started = perf_counter()
             decision = gate.evaluate(ctx)
             duration_ms = int((perf_counter() - started) * 1000)
@@ -229,7 +260,7 @@ class ProactiveGateChain:
         )
 
     def finalize(self, completion: ProactiveGateCompletion) -> None:
-        gate = self._gates_by_name.get(completion.activation.gate_name)
+        gate = self._index.current().by_name.get(completion.activation.gate_name)
         if gate is None:
             raise RuntimeError(
                 f"Activated proactive gate is no longer registered: {completion.activation.gate_name}"

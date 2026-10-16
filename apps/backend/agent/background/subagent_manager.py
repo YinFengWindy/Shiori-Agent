@@ -21,7 +21,7 @@ from agent.background.subagent_profiles import (
     SubagentRuntime,
     build_spawn_spec,
 )
-from agent.tool_hooks.base import ToolHook
+from agent.tool_hooks import ToolHookSource, no_tool_hooks
 from bus.internal_events import (
     SpawnCompletionEvent,
 )
@@ -86,9 +86,11 @@ class SubagentManager:
         self._running_tasks: dict[str, asyncio.Task[None]] = {}
         self._running_jobs: dict[str, RunningSubagentJob] = {}
         self._cancel_announced: set[str] = set()
+        self._tool_hooks: ToolHookSource = no_tool_hooks
 
-    def add_tool_hooks(self, hooks: list[ToolHook]) -> None:
-        object.__setattr__(self._runtime, "tool_hooks", list(hooks))
+    def bind_tool_hooks(self, tool_hooks: ToolHookSource) -> None:
+        """子 Agent 的每次工具调用都从 ``tool_hooks`` 读取当前插件 hook。"""
+        self._tool_hooks = tool_hooks
 
     def _spawn_jobs_dir(self) -> Path:
         root = self._workspace / "subagent-runs"
@@ -429,7 +431,7 @@ class SubagentManager:
             profile=profile,
             multimodal=self._multimodal,
         )
-        return spec.build(runtime or self._runtime)
+        return spec.build(runtime or self._runtime, tool_hooks=self._tool_hooks)
 
     @property
     def role_runtime_enabled(self) -> bool:
@@ -447,7 +449,6 @@ class SubagentManager:
                 provider=snapshot.provider,
                 model=snapshot.model,
                 max_tokens=self._runtime.max_tokens,
-                tool_hooks=list(self._runtime.tool_hooks),
             )
             return await operation(runtime)
 
