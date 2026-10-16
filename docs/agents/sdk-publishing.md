@@ -1,9 +1,18 @@
 # SDK 发布
 
-SDK 使用同一个版本号发布 `@yinfengwindy/shiori-sdk`（npm）与 `shiori-sdk`（PyPI），仓库当前为
-`3.1.1`（npm 与 PyPI 均已发布）。此前未发布的
-契约改动统一归入 `3.1.1`。本批包含 `SurfaceHandle.voice` 与 `closeness` 等破坏性变更，
-补丁编号不代表兼容；迁移说明见 [SDK README](../../packages/sdk/README.md#compatibility)。
+SDK 使用同一个版本号发布 `@yinfengwindy/shiori-sdk`（npm）与 `shiori-sdk`（PyPI）。
+截至 **2026-10-16 发布准备时**，仓库已定版 **3.1.2，尚未发布**；已核实的
+npm 与 PyPI 最新公开版本为 **3.1.1**。当前可用版本以 [npm](https://www.npmjs.com/package/@yinfengwindy/shiori-sdk)
+与 [PyPI](https://pypi.org/project/shiori-sdk/) 为准；README 的 3.1.2 安装命令仅在发布完成后使用。
+本批包括后台结果回报、跨代进程资源、外部链接、二级侧栏样式以及 #847 的渠道
+push-sender 删除与 `message_push` 异常语义，补丁编号不代表兼容；迁移说明见
+[SDK README](../../packages/sdk/README.md#compatibility)。
+
+桌面 v0.5.5 已将 #820/#821/#822/#827 的新增契约以旧版本号 3.1.1 分发，
+内容与注册表 3.1.1 不同。3.1.2 统一修正后续分发；不得重写 v0.5.5 / sdk-v3.1.1
+标签或覆盖旧注册表产物。`ChannelContext.push_tool` 注册及 `PushSenders` /
+`FakePushSenders` 必须移除；角色向渠道发送使用 `account_send`。`message_push` 失败会
+抛异常，调用方不再匹配返回文本来判断失败，正常返回表示已发送或已加入当前回合队列。
 
 普通契约 PR 在 [运行时契约](../_handbook/plugin-runtime-contract.md#unreleased) 的 Unreleased 区
 记录变更、breaking 与 PR 溯源，不逐 PR 升号。正式发布 SDK **或包含新契约的桌面版本**前，
@@ -13,12 +22,24 @@ SDK 使用同一个版本号发布 `@yinfengwindy/shiori-sdk`（npm）与 `shior
 版本唯一来源是 `packages/sdk/python/shiori_sdk/_version.py`，SDK 与 Runtime API 同号。
 修改后运行 `node scripts/sync_sdk_version.mjs`，同步 npm 包以及宿主、host-testing 的精确版本约束；
 再统一本批新增接口的插件 `runtime_api` / Python SDK 最低版本，运行 `uv lock` 刷新锁文件。
-同步脚本只传播版本，不负责决定或递增版本。已发布的 `3.1.0` 历史与兼容插件的最低约束保持不变。
+同步脚本只传播版本，不负责决定或递增版本。已发布历史与兼容插件的最低约束保持不变。
+
+本批插件以最近正式桌面 v0.5.5 为基线，只给有包内容或兼容声明变化的插件升一次 patch：
+
+| 插件 | 本批插件版本 | SDK / Runtime API 最低版本与依据 |
+| --- | --- | --- |
+| herdr | 0.1.1 | 3.1.2：四项新增接口；0.1.0 已随 v0.5.5 发布 |
+| novelai | 0.1.2 | 3.1.2：二级侧栏与 `message_push` 异常迁移 |
+| feishu / qq / qqbot / telegram | 各 0.1.2 | 3.1.2：移除渠道 push-sender 注册，并包含本批渠道改动 |
+| story | 0.1.2 | 自身 SDK 最低仍为 3.1.0；精确依赖 novelai==0.1.2 |
+
+其他插件未变，不升版本；herdr 的根开发依赖及 uv.lock 同步更新。
 
 工作流为 `.github/workflows/sdk-release.yml`：
 
 - `sdk-vX.Y.Z` 标签触发正式发布，标签版本必须与两个包一致，提交必须在
-  `origin/main` 历史中。目前只支持稳定版 `X.Y.Z`。
+  `origin/main` 历史中。目前只支持稳定版 `X.Y.Z`。正式 tag 构建前还必须通过
+  `node scripts/check_sdk_release.mjs` 的契约定版检查。
 - 相关 PR 与手动 `workflow_dispatch` 仅构建验证，不发布。手动运行即使选择标签
   也不会发布。SDK 标签不会匹配桌面安装包的 `v*` 标签。
 - build job 使用仓库固定的 pnpm `10.33.0` 打包，确保 `publishConfig.exports`
@@ -28,6 +49,26 @@ SDK 使用同一个版本号发布 `@yinfengwindy/shiori-sdk`（npm）与 `shior
   编译入口，并将提交和 SHA-256 写入 `manifest.json`。
 - npm 与 PyPI 各有独立发布 job，只有它们拥有 `id-token: write`。它们按 build job
   输出的 artifact ID 下载同一批文件、复核校验和，再通过 OIDC 发布；发布时不重建。
+
+## 契约定版检查
+
+`node scripts/check_sdk_release.mjs` 要求完整 Git 历史与标签、SDK/npm/宿主/host-testing
+版本一致、Runtime API 复用 SDK 版本，且契约文档的 Unreleased 正文为空（允许 HTML
+注释占位）。所有稳定 `sdk-vX.Y.Z` 和桌面 `vX.Y.Z` 标签都是不可复用的分发证据，
+包括桌面先于注册表发布的情况；历史上尚无统一 SDK 目录的桌面标签明确跳过。
+检查拒绝 SDK 版本回退，或与任一同版本标签不同的 SDK 源码。当前 HEAD 上的新标签
+可通过，也会继续检查所有旧标签，不能借它掩盖历史冲突。
+
+指纹覆盖 `packages/sdk` 的 Python、renderer、公开 testing helpers、构建脚本和元数据，
+排除实际测试、说明文档、缓存和生成目录。只改 README/测试而运行时源码未变可继续
+使用已发布 SDK 版本；仅宿主中的契约变更靠 Unreleased 记录保护，维护者仍须正确
+登记和定版。检查不推断语义兼容性，也不查询注册表，不自动升号。
+
+Windows 的 schedule、tag、manual 三个入口都会在构建前执行；SDK 工作流仅 tag push
+执行，PR 与 workflow_dispatch 仍允许普通契约 PR 累积 Unreleased 并验证产物。
+Windows 在上传 artifact / 创建或公开 Release 前还会刷新远端标签并重新检查，
+防止构建期间另一发布冻结了同版本不同源码；刷新不会改变本次固定的 checkout SHA。
+CI checkout 必须保留 `fetch-depth: 0`；本地检查前先获取完整 tags。
 
 ## 首次账号配置
 
@@ -82,8 +123,8 @@ owner 字段填写 GitHub owner。维护者仍需完成下面的外部设置。
 2. 在已合入的提交上创建并推送 `sdk-v<version>`。例如发布仓库当前版本：
 
    ```powershell
-   git tag sdk-v3.1.1 <已验证的-main-提交-SHA>
-   git push origin sdk-v3.1.1
+   git tag sdk-v3.1.2 <已验证的-main-提交-SHA>
+   git push origin sdk-v3.1.2
    ```
 
    这是正式发布操作，需要维护者有意执行；不要挪动或覆盖已发布标签。
@@ -96,9 +137,9 @@ owner 字段填写 GitHub owner。维护者仍需完成下面的外部设置。
 
    ```powershell
    gh run download <run-id> --name sdk-release-<run-id>-<build-attempt> --dir sdk-first-release
-   uv run python -m scripts.sdk_release verify sdk-first-release --ref refs/tags/sdk-v3.1.1 --commit <标签提交-SHA>
+   uv run python -m scripts.sdk_release verify sdk-first-release --ref refs/tags/sdk-v3.1.2 --commit <标签提交-SHA>
    npm login
-   npm publish ./sdk-first-release/yinfengwindy-shiori-sdk-3.1.1.tgz --access public
+   npm publish ./sdk-first-release/yinfengwindy-shiori-sdk-3.1.2.tgz --access public
    ```
 
    手动首次发布使用账号 2FA；本地不加 `--provenance`，后续 GitHub OIDC 发布自动生成

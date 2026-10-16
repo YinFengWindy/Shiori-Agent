@@ -27,10 +27,10 @@ const source = JSON.parse(await readFile(join(root, "packages/sdk/package.json")
 await writeFile(join(output, "smoke.mjs"), `
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { BridgeError, errorMessage, usePrivateAutosave } from "@yinfengwindy/shiori-sdk";
+import { BridgeError, errorMessage, secondarySidebarShellClass, usePrivateAutosave } from "@yinfengwindy/shiori-sdk";
 import * as contract from "@yinfengwindy/shiori-sdk/contract";
 import * as host from "@yinfengwindy/shiori-sdk/host-internal";
-import { deferred, createFakePluginClient, mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
+import { deferred, createFakeHostServices, createFakePluginClient, mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import { createElement } from "react";
 const manifest = JSON.parse(await readFile("node_modules/@yinfengwindy/shiori-sdk/package.json", "utf8"));
 assert.equal(manifest.version, ${JSON.stringify(source.version)});
@@ -40,6 +40,10 @@ assert.equal(errorMessage(new Error("probe")), "probe");
 assert.equal(typeof createFakePluginClient, "function");
 assert.equal(typeof host, "object");
 assert.equal(typeof contract, "object");
+assert.equal(typeof secondarySidebarShellClass({ animating: false, collapsed: false, inset: "list" }), "string");
+const fakeHost = createFakeHostServices();
+await fakeHost.host.openExternal("https://example.test/sdk-release");
+assert.deepEqual(fakeHost.calls, [{ service: "openExternal", url: "https://example.test/sdk-release" }]);
 const task = deferred(); task.resolve("ready"); assert.equal(await task.promise, "ready");
 const mounted = await mountTestComponent(createElement("button", null, "standalone"));
 try { assert.match(mounted.container.textContent, /standalone/); } finally { await mounted.cleanup(); }
@@ -54,10 +58,15 @@ console.log("Non-editable npm SDK import + DOM testing smoke passed", manifest.v
 `, "utf8");
 execFileSync(process.execPath, ["smoke.mjs"], { cwd: output, stdio: "inherit" });
 await writeFile(join(output, "consumer.ts"), `
-import { type PluginRpcClient, usePrivateAutosave } from "@yinfengwindy/shiori-sdk";
-import { createFakePluginClient } from "@yinfengwindy/shiori-sdk/testing";
+import { type PluginHostServices, type PluginRpcClient, secondarySidebarShellClass, usePrivateAutosave } from "@yinfengwindy/shiori-sdk";
+import { createFakeHostServices, createFakePluginClient } from "@yinfengwindy/shiori-sdk/testing";
 const client: PluginRpcClient = createFakePluginClient();
+const host: PluginHostServices = createFakeHostServices().host;
+const opened: Promise<void> = host.openExternal("https://example.test/sdk-release");
+const sidebar: string = secondarySidebarShellClass({ animating: false, collapsed: true, inset: "nav" });
 void client;
+void opened;
+void sidebar;
 void usePrivateAutosave;
 `, "utf8");
 run(["exec", "tsc", "--noEmit", "--strict", "--target", "ES2022", "--module", "ESNext", "--moduleResolution", "bundler", "consumer.ts"], output);

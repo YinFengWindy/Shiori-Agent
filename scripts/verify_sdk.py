@@ -53,8 +53,15 @@ def main() -> None:
     (bare / "pytest.ini").write_text("[pytest]\naddopts = -W error\n", encoding="utf-8")
     (bare / "test_unrelated.py").write_text(
         "import importlib.util\nimport shiori_sdk\n\n"
+        "from shiori_sdk.background_results import BackgroundResults\n"
+        "from shiori_sdk.process_resources import PluginProcessResources\n"
+        "from shiori_sdk.channels import ChannelContext, services\n\n"
         "def test_unrelated():\n"
         "    assert shiori_sdk.RUNTIME_API_VERSION == shiori_sdk.__version__\n"
+        "    assert callable(BackgroundResults.capture)\n"
+        "    assert callable(PluginProcessResources.acquire)\n"
+        "    assert 'push_tool' not in ChannelContext.__dataclass_fields__\n"
+        "    assert not hasattr(services, 'PushSenders')\n"
         "    assert importlib.util.find_spec('pytest_asyncio') is None\n"
         "    assert importlib.util.find_spec('httpx') is not None\n",
         encoding="utf-8",

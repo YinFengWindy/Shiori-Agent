@@ -25,7 +25,7 @@ dev = [
     "qrcode>=8.2",
     "rich>=15.0.0",
     "shiori-host-testing==0.1.0",
-    "shiori-plugin-herdr[test]==0.1.0",
+    "shiori-plugin-herdr[test]==0.1.1",
     "black>=26.0.0",
     "ruff>=0.15",
     "pyright>=1.1.403",

@@ -2,16 +2,49 @@
 
 [@yinfengwindy/shiori-sdk](https://www.npmjs.com/package/@yinfengwindy/shiori-sdk)
 and [shiori-sdk](https://pypi.org/project/shiori-sdk/) are the TypeScript and Python distributions of the
-same plugin contract. The current source version is **3.1.1**, with Runtime API
-**3.1.1**. All contract changes since the published 3.1.0 are consolidated into
-this batch. **3.1.1 is published to both npm and PyPI.** The commands below
-install this release and its testing support.
+same plugin contract. The source and Runtime API version is **3.1.2**. At release
+preparation on **2026-10-16**, the latest verified npm and PyPI release was
+**3.1.1** and 3.1.2 was not yet published. Check the registry links above for
+current availability. The 3.1.2 installation commands below apply **after
+publication completes**; before then, use this checkout or locally built
+artifacts as described in the [publishing guide](https://github.com/YinFengWindy/Shiori-Agent/blob/main/docs/agents/sdk-publishing.md#本地验证).
 
 Start with the [plugin tutorial](https://github.com/YinFengWindy/Shiori-Agent/blob/main/docs/_handbook/plugins-tutorial.md)
 and [runtime contract](https://github.com/YinFengWindy/Shiori-Agent/blob/main/docs/_handbook/plugin-runtime-contract.md)
 for plugin layout, capability declarations and packaging.
 
 ## Compatibility
+
+### 3.1.2 migration
+
+**3.1.2 includes breaking changes despite its patch version.** Relative to the
+published 3.1.1:
+
+- Remove `ChannelContext.push_tool` registration. `PushSenders`, `FakePushSenders`
+  and the `push_tool=` argument to `fake_channel_context` are gone. Role sends
+  to channels use `account_send` (`account.send`); role `message_push`
+  only targets the role's own desktop session.
+- A `message_push` tool obtained with `ctx.tools.get_tool` raises on an unknown
+  channel, unsupported payload or sender failure. Handle exceptions at the
+  caller's boundary; do not inspect returned error text. A normal return means
+  the message was sent or queued in the current turn.
+- `background_results` captures an authenticated tool turn for later reports
+  to its original role conversation; `process_resources` owns versioned plugin
+  resources across runtime generations. The renderer adds `host.openExternal`
+  and `secondarySidebarShellClass`. These APIs and their independent testing
+  fakes require SDK / Runtime API `>=3.1.2 <4.0.0`.
+
+The host range check still accepts older 3.x ranges, so affected authors must
+migrate and declare the 3.1.2 minimum themselves. Unchanged APIs retain their
+previous minimum. The selected patch number is the project's release batch
+number, not a backward-compatibility guarantee.
+
+Desktop v0.5.5 shipped the four additions while incorrectly advertising 3.1.1;
+its embedded SDK differs from the registry 3.1.1. Do not infer support from that
+label or replace old artifacts/tags. This 3.1.2 batch gives the additions and
+the subsequent channel migration a new, consistent version.
+
+### Previously published 3.1.1 migration
 
 **3.1.1 includes breaking changes despite its patch version.** Compared with the
 published 3.1.0:
@@ -43,10 +76,10 @@ same; a version already shipped in either form is not reused for new contracts.
 
 ## TypeScript
 
-Install the SDK and its React peers as development dependencies in your plugin project:
+After 3.1.2 is published, install the SDK and its React peers as development dependencies:
 
 ```sh
-pnpm add -D "@yinfengwindy/shiori-sdk@^3.1.1" "react@^19.2.5" "react-dom@^19.2.5"
+pnpm add -D "@yinfengwindy/shiori-sdk@^3.1.2" "react@^19.2.5" "react-dom@^19.2.5"
 ```
 
 Build the plugin UI as ESM, externalizing `@yinfengwindy/shiori-sdk`, `react`,
@@ -57,7 +90,7 @@ The host renderer ABI guarantees `19.2.0`; declare compatible host peers separat
 in the plugin's `manifest.yaml`, alongside its Runtime API range:
 
 ```yaml
-runtime_api: ">=3.1.1 <4.0.0"
+runtime_api: ">=3.1.2 <4.0.0"
 peer_dependencies:
   react: ">=19.2.0 <20.0.0"
   react-dom: ">=19.2.0 <20.0.0"
@@ -101,16 +134,16 @@ other unavailable services and must not be silently classified as local disposal
 
 ## Python
 
-Requires Python **3.12+**. Install in your plugin project:
+Requires Python **3.12+**. After 3.1.2 is published, install in your plugin project:
 
 ```sh
-uv add "shiori-sdk>=3.1.1,<4"
+uv add "shiori-sdk>=3.1.2,<4"
 ```
 
 For independent plugin tests, add the optional testing support and run your suite:
 
 ```sh
-uv add --dev "shiori-sdk[testing]>=3.1.1,<4"
+uv add --dev "shiori-sdk[testing]>=3.1.2,<4"
 uv run pytest tests
 ```
 

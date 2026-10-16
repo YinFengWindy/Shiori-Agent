@@ -14,6 +14,8 @@ on:
       - "scripts/sdk_registry.py"
       - "scripts/verify_sdk.*"
       - "scripts/sync_sdk_version.mjs"
+      - "scripts/check_sdk_release.*"
+      - "docs/_handbook/plugin-runtime-contract.md"
       - "tests/backend/scripts/test_sdk_release.py"
       - "tests/backend/scripts/test_sdk_registry.py"
       - "pnpm-lock.yaml"
@@ -48,6 +50,9 @@ jobs:
         with:
           node-version: "24"
           cache: pnpm
+      - name: Require a finalized SDK contract for publication
+        if: github.event_name == 'push'
+        run: node scripts/check_sdk_release.mjs
       - name: Install build and verification tools
         run: |
           python -m venv .venv
