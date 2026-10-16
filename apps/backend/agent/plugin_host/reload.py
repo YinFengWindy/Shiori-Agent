@@ -1,0 +1,259 @@
+"""In-generation reload of one plugin and the ACTIVE plugins that hard-depend on it.
+
+The kernel decides *which* handles form the closure and owns loading and
+disposal; this module owns the transition itself: seal and drain the closure
+(abandoning unchanged on timeout or cancellation), then replace it under a
+process-resource hold, rolling back to the old config if the new one fails.
+"""
+
+from __future__ import annotations
+
+import asyncio
+from collections.abc import Awaitable, Callable, Iterable
+from dataclasses import dataclass
+from typing import Any
+
+from agent.plugin_host.handle import PluginHandle, PluginRecord, PluginState
+from agent.plugin_host.process_resources import ResourceRetention
+from agent.plugin_host.unload import (
+    PluginReloadFailed,
+    PluginReloadTimeout,
+    PluginReloadUnsupported,
+)
+
+
+@dataclass(frozen=True)
+class PluginReloadResult:
+    """Outcome of a successful in-generation reload."""
+
+    # Every plugin set up again, target first, in dependency order.
+    plugin_ids: tuple[str, ...]
+    # Disposal and process-resource close failures; the new instances are ACTIVE.
+    cleanup_errors: tuple[BaseException, ...]
+
+
+@dataclass(frozen=True)
+class ReloadSteps:
+    """Kernel operations a reload composes; the kernel keeps owning handles."""
+
+    # Disposes one handle and drops it from the kernel; returns cleanup errors.
+    dispose: Callable[[PluginHandle], Awaitable[list[Exception]]]
+    # Loads one record (after its dependencies) as a reactivation of the given
+    # plugin ids; returns the handle it ended up with.
+    activate: Callable[[PluginRecord, frozenset[str]], Awaitable[PluginHandle | None]]
+    # Holds the plugins' process resources across the swap, when the host has any.
+    retain: Callable[[tuple[str, ...]], ResourceRetention | None]
+
+
+@dataclass(frozen=True)
+class ConfigTables:
+    """The live generation config tables (expanded and raw) shared with the host."""
+
+    values: dict[str, dict[str, Any]]
+    raw: dict[str, dict[str, Any]]
+
+    def swap(
+        self,
+        plugin_id: str,
+        values: dict[str, Any] | None,
+        raw: dict[str, Any] | None,
+    ) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+        """Replaces one plugin's tables; returns the replaced ones (None = absent)."""
+        previous = (self.values.get(plugin_id), self.raw.get(plugin_id))
+        for tables, table in ((self.values, values), (self.raw, raw)):
+            if table is None:
+                _ = tables.pop(plugin_id, None)
+            else:
+                tables[plugin_id] = table
+        return previous
+
+
+def hot_unload_blockers(handles: Iterable[PluginHandle]) -> list[str]:
+    """Plugin ids among ``handles`` that declare ``supports_hot_unload: false``."""
+    return [
+        handle.plugin_id
+        for handle in handles
+        if not handle.record.manifest.supports_hot_unload
+    ]
+
+
+def refuse_reload(
+    plugin_id: str,
+    target: PluginHandle | None,
+    closure: list[PluginHandle],
+    *,
+    retired: bool,
+) -> None:
+    """Rejects reloads only a generation swap (or no reload) may serve."""
+    if retired:
+        raise PluginReloadUnsupported([plugin_id], "retired")
+    if target is None or target.state is not PluginState.ACTIVE:
+        disabled = target is not None and target.state is PluginState.DISABLED
+        raise PluginReloadUnsupported([plugin_id], "disabled" if disabled else "failed")
+    channels = [
+        handle.plugin_id
+        for handle in closure
+        if "channels" in handle.record.manifest.capabilities
+        or handle.record.manifest.channels
+        or handle.contributions.channels
+    ]
+    if channels:
+        raise PluginReloadUnsupported(channels, "channels")
+    if unsafe := hot_unload_blockers(closure):
+        raise PluginReloadUnsupported(unsafe, "hot_unload")
+
+
+async def run_drainers(handles: Iterable[PluginHandle]) -> None:
+    """Awaits each handle's ``on_drain`` callbacks in order; a failure propagates."""
+    for handle in handles:
+        for callback in handle.drainers:
+            await callback()
+
+
+async def reload_closure(
+    closure: list[PluginHandle],
+    *,
+    values: dict[str, Any],
+    raw_values: dict[str, Any],
+    tables: ConfigTables,
+    steps: ReloadSteps,
+    drain_timeout: float,
+) -> PluginReloadResult:
+    """Drains ``closure`` (dependents first, target last), then replaces it.
+
+    Until the drain completes nothing is disposed: a timeout, an ``on_drain``
+    failure or caller cancellation reopens every gate and leaves the old
+    instances and tables in place. Once draining succeeded the replacement
+    runs to completion even if the caller is cancelled meanwhile.
+    """
+    await _drain(closure, drain_timeout)
+    replacement = asyncio.create_task(
+        _replace(
+            closure, values=values, raw_values=raw_values, tables=tables, steps=steps
+        )
+    )
+    return await _run_to_completion(replacement)
+
+
+async def _drain(closure: list[PluginHandle], timeout: float) -> None:
+    """Drains the closure stage by stage, dependents first.
+
+    Each stage seals one plugin, waits for its admitted calls and runs its
+    ``on_drain``; its providers stay open meanwhile, so a dependent's accepted
+    work can still call them (and those calls are waited for when the provider
+    is sealed in turn).
+    """
+    current: list[PluginHandle] = []
+    abandoned = False
+
+    async def staged() -> None:
+        for handle in closure:
+            if abandoned:
+                return
+            current[:] = [handle]
+            handle.calls.seal()
+            await handle.calls.wait_idle()
+            if abandoned:
+                return
+            await run_drainers((handle,))
+        current.clear()
+
+    # Waiting runs as its own task that is never cancelled: on_drain callbacks
+    # may await (gather) the plugin's own work, and cancelling them would
+    # cancel that work, while an abandoned reload must leave it running.
+    waiting = asyncio.create_task(staged())
+    try:
+        done, _ = await asyncio.wait({waiting}, timeout=timeout)
+        if not done:
+            raise PluginReloadTimeout(
+                tuple(handle.plugin_id for handle in current), timeout
+            )
+        waiting.result()
+    except BaseException:
+        # Stop the remaining stages before reopening what was sealed so far.
+        abandoned = True
+        _reopen(closure)
+        waiting.add_done_callback(
+            lambda task: None if task.cancelled() else task.exception()
+        )
+        raise
+
+
+def _reopen(closure: list[PluginHandle]) -> None:
+    for handle in closure:
+        handle.calls.reopen()
+
+
+async def _run_to_completion[T](task: asyncio.Task[T]) -> T:
+    """Awaits ``task`` without letting caller cancellation interrupt it."""
+    cancelled = False
+    while not task.done():
+        try:
+            _ = await asyncio.wait({task})
+        except asyncio.CancelledError:
+            cancelled = True
+    if cancelled:
+        if not task.cancelled():
+            # The outcome is consistent either way; the caller asked to stop.
+            _ = task.exception()
+        raise asyncio.CancelledError
+    return task.result()
+
+
+async def _replace(
+    closure: list[PluginHandle],
+    *,
+    values: dict[str, Any],
+    raw_values: dict[str, Any],
+    tables: ConfigTables,
+    steps: ReloadSteps,
+) -> PluginReloadResult:
+    target = closure[-1].plugin_id
+    records = [handle.record for handle in reversed(closure)]
+    plugin_ids = tuple(record.manifest.id for record in records)
+    retention = steps.retain(plugin_ids)
+    errors: list[BaseException] = []
+    failed: dict[str, BaseException] = {}
+    restore_failed: dict[str, BaseException] = {}
+    try:
+        for handle in closure:
+            errors.extend(await steps.dispose(handle))
+        previous = tables.swap(target, values, raw_values)
+        handles, failed = await _activate(records, steps)
+        if failed:
+            for handle in reversed(handles):
+                handle.calls.seal()
+                errors.extend(await steps.dispose(handle))
+            _ = tables.swap(target, *previous)
+            _, restore_failed = await _activate(records, steps)
+    finally:
+        if retention is not None:
+            errors.extend(await retention.release())
+    if failed:
+        raise PluginReloadFailed(
+            target,
+            failed=failed,
+            restore_failed=restore_failed,
+            cleanup_errors=tuple(errors),
+        ) from next(iter(failed.values()))
+    return PluginReloadResult(plugin_ids, tuple(errors))
+
+
+async def _activate(
+    records: list[PluginRecord], steps: ReloadSteps
+) -> tuple[list[PluginHandle], dict[str, BaseException]]:
+    """Sets the closure up in dependency order; returns its handles and failures."""
+    reactivating = frozenset(record.manifest.id for record in records)
+    handles: list[PluginHandle] = []
+    failed: dict[str, BaseException] = {}
+    for record in records:
+        handle = await steps.activate(record, reactivating)
+        if handle is not None:
+            handles.append(handle)
+        if handle is None or handle.state is not PluginState.ACTIVE:
+            failed[record.manifest.id] = (
+                handle.error
+                if handle is not None and handle.error is not None
+                else RuntimeError(f"插件 {record.manifest.id} 未能激活")
+            )
+    return handles, failed

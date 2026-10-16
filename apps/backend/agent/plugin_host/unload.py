@@ -19,21 +19,23 @@ class PluginRestartRequired(RuntimeError):
         return {"plugin_ids": list(self.plugin_ids), "restart_required": True}
 
 
-type ReloadRefusal = Literal["inactive", "channels", "hot_unload"]
-"""Why an in-generation transition was refused before anything changed.
+type ReloadRefusal = Literal["disabled", "failed", "retired", "channels", "hot_unload"]
+"""Why an in-generation reload was refused before anything changed.
 
-``inactive``: the target is not an ACTIVE plugin of this generation.
-``channels``: the closure contributes or declares channels, whose connections
-only a generation swap hands over. ``hot_unload``: the closure declares
-``supports_hot_unload: false``.
+``disabled``: the target is disabled; storing its config needs no reload.
+``failed``: the target exists but is not ACTIVE (failed, blocked, untrusted…);
+only a generation swap can retry it. ``retired``: this generation has been
+terminated. ``channels``: the closure contributes or declares channels, whose
+connections only a generation swap hands over. ``hot_unload``: the closure
+declares ``supports_hot_unload: false``.
 """
 
 
 class PluginReloadUnsupported(RuntimeError):
-    """Refuses an in-generation unload/reload before any plugin is touched.
+    """Refuses an in-generation reload before any plugin is touched.
 
-    Callers fall back to a full generation swap, which applies its own rules
-    (for example ``PluginRestartRequired``).
+    Except for ``disabled``, callers fall back to a full generation swap,
+    which applies its own rules (for example ``PluginRestartRequired``).
     """
 
     code = "plugin_reload_unsupported"
@@ -46,13 +48,33 @@ class PluginReloadUnsupported(RuntimeError):
         )
 
 
+class PluginReloadTimeout(RuntimeError):
+    """In-flight work did not drain in time; the reload was abandoned unchanged.
+
+    Every closure plugin admits calls again with its old instance and config.
+    ``busy`` lists the plugins whose calls or ``on_drain`` callbacks were still
+    running when the timeout expired.
+    """
+
+    code = "plugin_reload_timeout"
+
+    def __init__(self, busy: tuple[str, ...], timeout: float) -> None:
+        self.busy = busy
+        self.timeout = timeout
+        super().__init__(
+            f"插件 {', '.join(busy)} 的进行中调用未在 {timeout:g} 秒内结束，本次重载已放弃"
+        )
+
+
 class PluginReloadFailed(RuntimeError):
     """New configuration failed to activate; the previous configuration was restored.
 
-    ``failed`` lists the plugins that did not become ACTIVE with the new
-    values. ``restore_failed`` lists those that also failed to come back with
-    the old values (normally empty); they stay FAILED like any setup failure.
-    The first setup error is chained as ``__cause__``.
+    ``failed`` maps each plugin that did not become ACTIVE with the new values
+    to its setup error, in load order; ``__cause__`` is the first of them.
+    ``restore_failed`` maps those that also failed to come back with the old
+    values (normally empty); they stay FAILED like any setup failure.
+    ``cleanup_errors`` are disposal and process-resource close failures met
+    along the way.
     """
 
     code = "plugin_reload_failed"
@@ -61,12 +83,14 @@ class PluginReloadFailed(RuntimeError):
         self,
         plugin_id: str,
         *,
-        failed: tuple[str, ...],
-        restore_failed: tuple[str, ...],
+        failed: dict[str, BaseException],
+        restore_failed: dict[str, BaseException],
+        cleanup_errors: tuple[BaseException, ...],
     ) -> None:
         self.plugin_id = plugin_id
         self.failed = failed
         self.restore_failed = restore_failed
+        self.cleanup_errors = cleanup_errors
         super().__init__(
             f"插件 {plugin_id} 的新配置未能生效（{', '.join(failed)} 启动失败），已恢复原配置"
             if not restore_failed

@@ -9,7 +9,7 @@ from agent.plugin_host.config_schema import (
 from agent.plugin_host.effects import EffectScope
 from agent.plugin_host.events import ScopedEventBus
 from agent.plugin_host.handle import PluginHandle, PluginRecord, PluginState
-from agent.plugin_host.kernel import HostServices, PluginKernel, PluginReloadResult
+from agent.plugin_host.kernel import HostServices, PluginKernel
 from agent.plugin_host.manifest import (
     DEFAULT_ENTRY,
     ChannelDeclaration,
@@ -17,11 +17,13 @@ from agent.plugin_host.manifest import (
     PluginManifest,
     load_manifest,
 )
+from agent.plugin_host.reload import PluginReloadResult
 from agent.plugin_host.rpc import PluginRpcRegistry
 from agent.plugin_host.runtime_context import PluginRuntimeContext
 from agent.plugin_host.tool_hooks import PluginToolHook
 from agent.plugin_host.unload import (
     PluginReloadFailed,
+    PluginReloadTimeout,
     PluginReloadUnsupported,
     PluginRestartRequired,
 )
@@ -41,6 +43,7 @@ __all__ = [
     "PluginRecord",
     "PluginReloadFailed",
     "PluginReloadResult",
+    "PluginReloadTimeout",
     "PluginReloadUnsupported",
     "PluginRestartRequired",
     "PluginRpcRegistry",

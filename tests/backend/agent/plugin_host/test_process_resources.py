@@ -132,3 +132,30 @@ async def test_attachment_is_inactive_as_soon_as_effect_cleanup_starts():
     finish.set()
     await cleanup
     await owner.close()
+
+
+async def test_retained_resource_survives_in_generation_replacement():
+    owner = ProcessResourceOwner()
+    old_effects, new_effects = EffectScope("old"), EffectScope("new")
+    old = owner.for_plugin("gen", "plugin", old_effects)
+    kept = old.acquire("kept-v1", Resource)
+
+    class Failing:
+        async def close(self):
+            raise ValueError("dropped close failure")
+
+    _ = old.acquire("dropped-v1", Failing)
+    owner.publish("gen")
+    retention = owner.retain("gen", ["plugin"])
+    assert await old_effects.dispose_all() == []
+    new = owner.for_plugin("gen", "plugin", new_effects)
+    assert new.acquire("kept-v1", Resource) is kept and new.active
+
+    # Only the resource the new instance did not re-acquire retires, and its
+    # failure is returned here instead of waiting for the next drain().
+    errors = await retention.release()
+    assert [str(error) for error in errors] == ["dropped close failure"]
+    assert kept.closed == 0
+    await owner.drain()
+    await owner.close()
+    assert kept.closed == 1
