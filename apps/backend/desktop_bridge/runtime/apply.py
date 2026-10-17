@@ -146,6 +146,9 @@ class DerivedWrite:
     # table: ``apply`` then reloads that plugin within the current generation
     # instead of swapping the generation, whenever the plugin allows it.
     reload_plugin: str | None = None
+    # Set with ``reload_plugin`` when the write flips the plugin's enabled flag:
+    # the plugin is loaded or unloaded within the generation instead.
+    toggle: bool = False
 
 
 # (operation_id, generation, reloaded plugin ids) of one applied in-generation reload.
@@ -233,6 +236,7 @@ class RuntimeSettingsApplication:
                 publish_service,
                 fingerprint,
                 reload_plugin=derive.reload_plugin if derive is not None else None,
+                toggle=derive is not None and derive.toggle,
             )
 
     @staticmethod
@@ -285,6 +289,7 @@ class RuntimeSettingsApplication:
         fingerprint: str,
         *,
         reload_plugin: str | None = None,
+        toggle: bool = False,
     ) -> dict[str, Any]:
         text = payload["config_toml"]
         updates = payload.get("role_model_updates", [])
@@ -320,7 +325,7 @@ class RuntimeSettingsApplication:
             return result
         if reload_plugin is not None and not updates:
             reloaded = await self._reload_plugin(
-                reload_plugin, config, text, operation_id, fingerprint
+                reload_plugin, config, text, operation_id, fingerprint, toggle=toggle
             )
             if reloaded is not None:
                 return reloaded
@@ -371,17 +376,20 @@ class RuntimeSettingsApplication:
         text: str,
         operation_id: str,
         fingerprint: str,
+        *,
+        toggle: bool,
     ) -> dict[str, Any] | None:
         """Applies a change confined to one plugin table without a generation swap.
 
         Reloads the plugin and its ACTIVE hard dependents in the published
-        generation, or only stores the table of a disabled plugin. The live
-        config tables, the committed text and the file change together or not
-        at all: the commit runs inside the kernel's uninterruptible
-        replacement, and a failed commit restores the old instances. Returns
+        generation, or only stores the table of a disabled plugin; with
+        ``toggle``, loads or unloads them instead (``PluginKernel.set_enabled``).
+        The live config tables, the committed text and the file change together
+        or not at all: the commit runs inside the kernel's uninterruptible
+        transition, and a failed commit restores the old instances. Returns
         ``None`` when only a generation swap can apply the change (another part
         of the config differs, the closure has channels or cannot be hot
-        unloaded, or the target is not ACTIVE).
+        unloaded, or a plugin involved is in a state only a swap can retry).
         """
         current = self.app.config
         core = self.app.core
@@ -405,7 +413,7 @@ class RuntimeSettingsApplication:
                 )
 
         try:
-            reloaded = await kernel.reload(
+            reloaded = await (kernel.set_enabled if toggle else kernel.reload)(
                 plugin_id,
                 values=values,
                 raw_values=raw_values,

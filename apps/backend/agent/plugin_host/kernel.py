@@ -96,11 +96,13 @@ from agent.plugin_host.reload import (
     PluginReloadResult,
     ReloadSteps,
     hot_unload_blockers,
+    refuse_generation_only,
     refuse_reload,
     reload_closure,
     run_drainers,
+    toggle_closure,
 )
-from agent.plugin_host.unload import PluginRestartRequired
+from agent.plugin_host.unload import PluginReloadUnsupported, PluginRestartRequired
 from bus.event_bus import EventBus
 from core.roles import RoleStore
 from core.scene.demand import SceneObservationDemand
@@ -882,20 +884,44 @@ class PluginKernel:
         handle = self._handles.get(record.candidate_id) if record else None
         if handle is None or handle.state is not PluginState.ACTIVE:
             return []
-        closure: list[PluginHandle] = []
-        seen: set[str] = set()
+        return _dependent_closure(handle, self._active_handles())
 
-        def visit(target: PluginHandle) -> None:
-            if target.plugin_id in seen:
-                return
-            seen.add(target.plugin_id)
-            for dependent in reversed(self._active_handles()):
-                if target.plugin_id in dependent.record.manifest.dependencies:
-                    visit(dependent)
-            closure.append(target)
+    def _enable_closure(self, target: PluginHandle) -> list[PluginHandle]:
+        """A DISABLED target plus the plugins its absence blocks, dependents first.
 
-        visit(handle)
-        return closure
+        Its hard dependencies are not loaded with it: a DISABLED one leaves the
+        target BLOCKED, as a generation swap would, while one in any other
+        inactive state could only be retried by a swap, which is required then.
+        """
+        records = self._records_by_id()
+        for dependency in target.record.manifest.dependencies:
+            record = records.get(dependency)
+            handle = self._handles.get(record.candidate_id) if record else None
+            if handle is not None and handle.state not in {
+                PluginState.ACTIVE,
+                PluginState.DISABLED,
+            }:
+                raise PluginReloadUnsupported([dependency], "failed")
+        blocked = [
+            handle
+            for handle in self._handles.values()
+            if handle.state is PluginState.BLOCKED and handle.record.admission is None
+        ]
+        return _dependent_closure(target, blocked)
+
+    def _disable_closure(self, target: PluginHandle) -> list[PluginHandle] | None:
+        """Handles to unload when disabling ``target``; None when its state stays."""
+        if target.state is PluginState.ACTIVE:
+            return _dependent_closure(target, self._active_handles())
+        if target.record.admission is None and target.state in {
+            PluginState.FAILED,
+            PluginState.BLOCKED,
+        }:
+            # Nothing runs; the handle only becomes DISABLED.
+            return [target]
+        if target.state is PluginState.RESTART_REQUIRED:
+            raise PluginReloadUnsupported([target.plugin_id], "failed")
+        return None
 
     async def unload(self, name: str, *, force: bool = False) -> list[Exception]:
         """Disposes a dependency closure; force is reserved for final resource cleanup."""
@@ -968,6 +994,91 @@ class PluginKernel:
                 drain_timeout=drain_timeout,
                 commit=commit,
             )
+
+    async def set_enabled(
+        self,
+        name: str,
+        *,
+        values: dict[str, Any],
+        raw_values: dict[str, Any],
+        drain_timeout: float,
+        commit: Callable[[tuple[str, ...]], None] | None = None,
+    ) -> PluginReloadResult:
+        """Enables or disables a plugin within this generation, as ``values`` say.
+
+        ``values``/``raw_values`` replace the plugin table like ``reload``; the
+        enable flag inside them decides the direction.
+
+        - Disabling an ACTIVE plugin disposes it and the ACTIVE plugins that
+          hard-depend on it without draining (in-flight work is cancelled, as
+          on a generation swap) and closes their process resources; they are
+          left DISABLED or BLOCKED. A FAILED or dependency-BLOCKED target only
+          becomes DISABLED.
+        - Enabling a DISABLED plugin loads it and the dependency-BLOCKED
+          plugins it unblocks. A setup failure leaves that plugin FAILED (and
+          the change persisted), as a generation swap would.
+        - When the plugin's state does not change, only the tables are replaced
+          (``plugin_ids`` empty).
+
+        ``commit`` (given the affected plugin ids) persists the change inside
+        the same uninterruptible transition; when it raises, the previous tables
+        and states are restored and ``PluginReloadFailed`` (or, when nothing was
+        loaded or unloaded, the commit error itself) is raised. Raises
+        ``PluginReloadUnsupported`` with nothing changed when only a generation
+        swap applies: the generation is retired, the closure has channels or
+        cannot be hot unloaded, or a plugin involved is in a state only a swap
+        can retry. See ``agent.plugin_host.reload.toggle_closure``.
+        """
+        async with self._transition_lock:
+            record = self._find_record(name)
+            if record is None:
+                raise LookupError(f"未找到插件: {name}")
+            plugin_id = record.manifest.id
+            if self._retired:
+                raise PluginReloadUnsupported([plugin_id], "retired")
+            target = self._handles.get(record.candidate_id)
+            if target is None:
+                raise PluginReloadUnsupported([plugin_id], "failed")
+            enabled = plugin_enabled(record.manifest, values)
+            tables = ConfigTables(
+                self._services.plugin_configs, self._services.raw_plugin_configs
+            )
+            if enabled:
+                closure = (
+                    self._enable_closure(target)
+                    if target.state is PluginState.DISABLED
+                    else None
+                )
+            else:
+                closure = self._disable_closure(target)
+            if closure is None:
+                previous = tables.swap(plugin_id, values, raw_values)
+                try:
+                    if commit is not None:
+                        commit(())
+                except BaseException:
+                    _ = tables.swap(plugin_id, *previous)
+                    raise
+                return PluginReloadResult((), ())
+            refuse_generation_only(closure)
+            result = await toggle_closure(
+                closure,
+                enabled=enabled,
+                values=values,
+                raw_values=raw_values,
+                tables=tables,
+                steps=ReloadSteps(
+                    dispose=self._dispose_handle,
+                    activate=self._activate_reloaded,
+                    retain=self._retain_process_resources,
+                ),
+                drain_timeout=drain_timeout,
+                commit=commit,
+            )
+            if not enabled:
+                # A later re-enable within this generation is a fresh start.
+                self._services.previously_active_plugins -= frozenset(result.plugin_ids)
+            return result
 
     async def _activate_reloaded(
         self, record: PluginRecord, reactivating: frozenset[str]
@@ -1139,6 +1250,26 @@ def _purge_modules(import_path: str) -> None:
     for module_name in tuple(sys.modules):
         if module_name == import_path or module_name.startswith(import_path + "."):
             _ = sys.modules.pop(module_name, None)
+
+
+def _dependent_closure(
+    handle: PluginHandle, members: list[PluginHandle]
+) -> list[PluginHandle]:
+    """``handle`` plus the ``members`` that hard-depend on it, dependents first."""
+    closure: list[PluginHandle] = []
+    seen: set[str] = set()
+
+    def visit(target: PluginHandle) -> None:
+        if target.plugin_id in seen:
+            return
+        seen.add(target.plugin_id)
+        for dependent in reversed(members):
+            if target.plugin_id in dependent.record.manifest.dependencies:
+                visit(dependent)
+        closure.append(target)
+
+    visit(handle)
+    return closure
 
 
 def _required_renderer_kinds(record: PluginRecord) -> frozenset[str]:

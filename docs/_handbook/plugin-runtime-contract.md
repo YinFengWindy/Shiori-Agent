@@ -177,11 +177,38 @@ consolidates these additions and the subsequent #847 breaking migration.
   - Unchanged: a closure that contributes or declares channels, or contains a plugin
     with `supports_hot_unload: false`, and a target that is not ACTIVE still swap the
     generation (`runtime.applied` with `changed: true`, or `plugin_restart_required`).
-    A disabled plugin's table is stored without any reload. `plugins.setEnabled`,
-    install, update and uninstall still swap the generation.
+    A disabled plugin's table is stored without any reload. Install, update and
+    uninstall still swap the generation.
   - `plugin.config.set` no longer has the bridge's default 30 s request deadline, like
     `runtime.apply`: the drain is bounded, but waiting for the settings lock, setup,
     restore and the generation-swap fallback are not.
+
+- **Enabling and disabling a plugin happens within the generation (#858).**
+  `plugins.setEnabled` loads or unloads the target and the plugins that hard-depend
+  on it in the current runtime generation; other plugins are not set up again and
+  keep their effects, and the `generation` stays the same. Plugin-observable
+  semantics:
+  - Disabling disposes the target and its ACTIVE hard dependents without draining:
+    `on_drain` does not run, scoped and `spawn_runtime` background tasks are
+    cancelled (as on a generation swap), calls into them are rejected with
+    `plugin_unavailable`, and their process resources are closed. The target
+    becomes `DISABLED` and the dependents `BLOCKED`.
+  - Enabling sets up a disabled target and the plugins that were `BLOCKED` only
+    because of it, with `ctx.runtime.was_active` `False`. A plugin whose setup fails
+    stays `FAILED` with the flag persisted, as before.
+  - The bridge emits `plugins.reloaded` `{generation, plugin_ids}` (target first,
+    then dependents) instead of `runtime.applied`, with the same once-per-operation
+    guarantees as for a config save; the result carries the same ids in
+    `reloaded_plugins`. Renderers refresh the plugin roster and replace exactly
+    these plugins' communication contexts, background scopes and native sessions;
+    surfaces of a disabled plugin close when the roster drops it. If writing the
+    config file fails, the previous states are restored and the toggle fails with
+    `runtime_commit_failed`.
+  - Unchanged: a closure that contributes or declares channels (qq, qqbot, telegram,
+    feishu), contains a plugin with `supports_hot_unload: false`, or (when enabling)
+    depends on a plugin in a state only a fresh load can retry (for example
+    `FAILED`) still swaps the generation (`runtime.applied` with `changed: true`, or
+    `plugin_restart_required`).
 
 ### 3.1.2 release batch
 
