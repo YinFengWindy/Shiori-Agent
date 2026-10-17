@@ -8,18 +8,12 @@ or the enable/disable write path itself.
 Enable state lives in ``[plugins.<id>].enabled``. Historical preference
 upgrade belongs to the configuration loading boundary.
 
-Toggling reuses the exact same transactional settings-apply pipeline as
-``plugin.config.set`` (#177): any write to the ``plugins`` table changes
-``AppConfig.plugins``, so ``RuntimeSettingsApplication._apply``'s
-identity fast-path never applies to it regardless of entry point — the
-full prepare/publish generation swap always runs, which is also how the
-kernel picks up the new enabled state (a fresh ``PluginKernel.load_all()``
-skips a config-disabled plugin; see ``PluginKernel._config_enabled``).
-This is consistent with #177's established behavior rather than a new
-"lighter" mechanism; a true single-plugin hot patch that leaves every
-other plugin's in-memory state untouched would need its own
-partial-generation-apply design and is left as a follow-up rather than
-invented ad hoc here.
+Toggling reuses the transactional settings-apply pipeline of
+``plugin.config.set``: the flag is spliced into the plugin's table inside the
+settings lock, and the plugin is loaded or unloaded within the current
+generation (``PluginKernel.set_enabled``, #858). Only closures with channels
+or without hot-unload support, and plugins in a state only a fresh load can
+retry, still swap the generation.
 """
 
 from __future__ import annotations
@@ -160,7 +154,12 @@ class RuntimePluginManagement:
         prepare_service: Callable,
         publish_service: Callable,
     ) -> dict[str, Any]:
-        """Persists a plugin's enabled flag and hot-applies it via a generation swap."""
+        """Persists a plugin's enabled flag and loads or unloads it in the generation.
+
+        ``reloaded_plugins`` in the result lists the plugins loaded or unloaded
+        (the target and the plugins that depend on it); it is absent when the
+        state did not change or a generation swap applied the change.
+        """
         plugin_id = str(payload.get("plugin_id") or "").strip()
         enabled = payload.get("enabled")
         operation_id = payload.get("operation_id")
@@ -202,6 +201,8 @@ class RuntimePluginManagement:
             derive=DerivedWrite(
                 build_config_toml=_merge,
                 fingerprint_payload={"plugin_id": plugin_id, "enabled": enabled},
+                reload_plugin=plugin_id,
+                toggle=True,
             ),
         )
         return {"plugin_id": plugin_id, "enabled": enabled, **result}

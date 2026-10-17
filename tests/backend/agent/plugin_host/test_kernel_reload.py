@@ -801,3 +801,170 @@ async def test_reload_waits_for_a_running_tool_hook_and_fails_closed_meanwhile(
     assert (await new.run(None)).reason == "v2"
     assert (await new_note.run(None)).extra_message == "v2"
     await kernel.terminate_all(force=True)
+
+
+# ── 代内启停（#858） ──────────────────────────────────────────────────────
+
+
+def _toggle(kernel: PluginKernel, enabled: bool, commit=None, label: str = "v1"):
+    table = {"label": label, "enabled": enabled}
+    return kernel.set_enabled(
+        "provider",
+        values=table,
+        raw_values=dict(table),
+        drain_timeout=5,
+        commit=commit,
+    )
+
+
+def _states(kernel: PluginKernel) -> dict[str, str]:
+    return {row["id"]: row["state"] for row in kernel.states()}
+
+
+@pytest.mark.asyncio
+async def test_disable_and_enable_only_touch_the_closure_within_the_generation(
+    probe, tmp_path
+):
+    kernel, services, tools = await _kernel(tmp_path)
+    in_flight = asyncio.create_task(tools.execute("provider_slow", {}))
+    await _until(probe, ("call-start", "v1"))
+    probe.events.clear()
+    committed = []
+
+    # Disabling does not wait for the provider's in-flight call.
+    disabled = await asyncio.wait_for(_toggle(kernel, False, committed.append), 1)
+
+    assert disabled.plugin_ids == ("provider", "consumer")
+    assert committed == [("provider", "consumer")]
+    assert probe.events == [("dispose", "consumer"), ("dispose", "provider", "v1")]
+    assert _states(kernel) == {
+        "provider": "DISABLED",
+        "consumer": "BLOCKED",
+        "bystander": "ACTIVE",
+    }
+    assert services.plugin_configs["provider"] == {"label": "v1", "enabled": False}
+    assert tools.get_tool("provider_slow") is None
+    assert kernel.rpc.resolve("plugin.provider.echo") is None
+    # Nothing re-acquires the provider's process resource, so it is closed.
+    assert probe.resources[0].closed == 1
+    probe.release.set()
+    assert await in_flight == "v1"
+
+    probe.events.clear()
+    enabled = await _toggle(kernel, True, committed.append)
+
+    assert enabled.plugin_ids == ("provider", "consumer")
+    assert committed[-1] == ("provider", "consumer")
+    # A plugin turned on again within the generation starts fresh.
+    assert probe.events == [
+        ("setup", "provider", "v1", False, False),
+        ("setup", "consumer", "v1", False, False),
+    ]
+    assert all(state == "ACTIVE" for state in _states(kernel).values())
+    new_provider = kernel._dependency_api("provider")
+    assert kernel._dependency_api("consumer")["provider"] is new_provider
+    assert await _echo(kernel) == {"label": "v1"}
+    assert probe.resources[-1] is not probe.resources[0]
+    await kernel.terminate_all(force=True)
+
+
+@pytest.mark.asyncio
+async def test_failed_toggle_commit_restores_the_previous_states(probe, tmp_path):
+    kernel, services, _ = await _kernel(tmp_path)
+    probe.events.clear()
+
+    def fail(_plugin_ids):
+        raise OSError("disk full")
+
+    with pytest.raises(PluginReloadFailed) as caught:
+        await _toggle(kernel, False, fail)
+
+    assert isinstance(caught.value.__cause__, OSError)
+    assert caught.value.restore_failed == {}
+    assert all(state == "ACTIVE" for state in _states(kernel).values())
+    assert services.plugin_configs["provider"] == {"label": "v1"}
+    # The restored instances were active before, and kept their resource.
+    assert ("setup", "provider", "v1", True, True) in probe.events
+    assert probe.resources[0] is probe.resources[-1]
+    assert probe.resources[0].closed == 0
+
+    await _toggle(kernel, False)
+    probe.events.clear()
+    with pytest.raises(PluginReloadFailed):
+        await _toggle(kernel, True, fail)
+
+    assert ("setup", "provider", "v1", False, False) in probe.events
+    assert _states(kernel) == {
+        "provider": "DISABLED",
+        "consumer": "BLOCKED",
+        "bystander": "ACTIVE",
+    }
+    assert services.plugin_configs["provider"] == {"label": "v1", "enabled": False}
+    await kernel.terminate_all(force=True)
+
+
+@pytest.mark.asyncio
+async def test_enabling_a_plugin_whose_setup_fails_keeps_it_failed(probe, tmp_path):
+    kernel, services, _ = await _kernel(
+        tmp_path, configs={"provider": {"label": "broken", "enabled": False}}
+    )
+    committed = []
+
+    result = await _toggle(kernel, True, committed.append, label="broken")
+
+    # Like a generation swap: the change is kept, the plugin reports its error.
+    assert committed == [("provider", "consumer")]
+    assert result.plugin_ids == ("provider", "consumer")
+    assert _states(kernel) == {
+        "provider": "FAILED",
+        "consumer": "BLOCKED",
+        "bystander": "ACTIVE",
+    }
+    assert services.plugin_configs["provider"]["enabled"] is True
+    await kernel.terminate_all(force=True)
+
+
+@pytest.mark.asyncio
+async def test_toggle_refuses_closures_only_a_generation_swap_can_change(
+    probe, tmp_path
+):
+    kernel, services, _ = await _kernel(
+        tmp_path,
+        consumer_capabilities="channels",
+        consumer_manifest=(
+            "channels:\n  - {name: relay, label: Relay, chat_types:"
+            " [{type: private, label: Private, chat_id_label: ID}]}\n"
+        ),
+    )
+    probe.events.clear()
+
+    with pytest.raises(PluginReloadUnsupported) as caught:
+        await _toggle(kernel, False)
+
+    assert caught.value.reason == "channels"
+    assert caught.value.plugin_ids == ("consumer",)
+    assert probe.events == []
+    assert services.plugin_configs["provider"] == {"label": "v1"}
+    assert all(state == "ACTIVE" for state in _states(kernel).values())
+    await kernel.terminate_all(force=True)
+
+
+@pytest.mark.asyncio
+async def test_enable_refuses_a_dependency_only_a_swap_can_retry(probe, tmp_path):
+    kernel, _, _ = await _kernel(
+        tmp_path,
+        configs={"provider": {"label": "broken"}, "consumer": {"enabled": False}},
+    )
+
+    with pytest.raises(PluginReloadUnsupported) as caught:
+        await kernel.set_enabled(
+            "consumer",
+            values={"enabled": True},
+            raw_values={"enabled": True},
+            drain_timeout=5,
+        )
+
+    assert caught.value.reason == "failed"
+    assert caught.value.plugin_ids == ("provider",)
+    assert _states(kernel)["consumer"] == "DISABLED"
+    await kernel.terminate_all(force=True)

@@ -1338,7 +1338,7 @@ async def test_disabled_plugin_config_is_stored_without_reload_or_swap(
 
         assert response.error is None, response.error
         assert "reloaded_plugins" not in response.payload
-        assert response.payload["generation"] == app.generation == 2
+        assert response.payload["generation"] == app.generation == 1
         assert reload_probe.events == []
         assert app.config.plugins["paused"] == {"enabled": False, "label": "later"}
         assert path.read_text(encoding="utf-8") == service.settings.config_text

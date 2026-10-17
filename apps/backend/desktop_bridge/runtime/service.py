@@ -162,16 +162,7 @@ class ReloadableDesktopService:
                 )
 
                 if method == "plugin.config.set":
-                    if result.get("reloaded_plugins"):
-                        # Announced once, by the reload itself; a memo replay
-                        # finds nothing pending and emits nothing.
-                        pending = self._pending_reload_events.get(
-                            str(payload.get("operation_id"))
-                        )
-                        if pending is not None:
-                            _ = await asyncio.wait({pending})
-                    else:
-                        await self._notify_applied(request_id, result)
+                    await self._announce_plugin_write(request_id, payload, result)
                 return result
 
             return await self._respond_or_apply_error(
@@ -196,8 +187,9 @@ class ReloadableDesktopService:
                         prepare_service=self._prepare,
                         publish_service=self._publish,
                     )
-                    # Also retire renderer/background/surface resources after a
-                    # successful hot disable in the uninstall transaction.
+                    # A disable in the uninstall transaction that swapped the
+                    # generation retires renderer/background/surface resources
+                    # here; an in-generation one announced `plugins.reloaded`.
                     await self._notify_applied(
                         request_id, {**result, "generation": self.app.generation}
                     )
@@ -226,7 +218,7 @@ class ReloadableDesktopService:
                     prepare_service=self._prepare,
                     publish_service=self._publish,
                 )
-                await self._notify_applied(request_id, result)
+                await self._announce_plugin_write(request_id, payload, result)
                 return result
 
             return await self._respond_or_apply_error(
@@ -304,6 +296,21 @@ class ReloadableDesktopService:
             if not entry.requests:
                 entry.idle.set()
 
+    async def _announce_plugin_write(self, request_id, payload, result):
+        """Announces one plugin's config or enable write before its response.
+
+        An in-generation reload, load or unload was announced once, by its own
+        commit (``plugins.reloaded``); waiting for that keeps the event ahead
+        of the response, and a memo replay finds nothing pending and emits
+        nothing. Any other outcome is a generation swap or a refresh-only save.
+        """
+        if result.get("reloaded_plugins"):
+            pending = self._pending_reload_events.get(str(payload.get("operation_id")))
+            if pending is not None:
+                _ = await asyncio.wait({pending})
+        else:
+            await self._notify_applied(request_id, result)
+
     async def _notify_applied(self, request_id, result):
         """Announces actual publication once, while preserving refresh-only events."""
         entry = self._current
@@ -326,7 +333,7 @@ class ReloadableDesktopService:
     def _plugins_reloaded(
         self, operation_id: str, generation: int, plugin_ids: tuple[str, ...]
     ) -> None:
-        """Announces plugins reloaded within the current generation, exactly once.
+        """Announces plugins reloaded, loaded or unloaded in the generation, once.
 
         Called synchronously from the reload's uninterruptible commit, so the
         event goes out even when the saving request was cancelled after the

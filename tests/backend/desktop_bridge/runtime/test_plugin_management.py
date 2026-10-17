@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import asyncio
 import shutil
+import sys
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 
@@ -94,12 +96,14 @@ async def test_external_service_worker_retains_real_runtime_after_consumer_cance
             with pytest.raises(asyncio.CancelledError):
                 await call
         assert state["active"] == 1 and state["maximum"] == 1
+        # A settings save swaps the generation (an in-generation disable would
+        # cancel the worker with the plugin instead of retiring the runtime).
         disabled = await _request(
             service,
-            "plugins.setEnabled",
+            "runtime.apply",
             {
-                "plugin_id": "retained_service",
-                "enabled": False,
+                "config_toml": service.settings.config_text
+                + "\n[plugins.retained_service]\nenabled = false\n",
                 "operation_id": "disable-retained-worker",
             },
         )
@@ -640,69 +644,145 @@ async def test_disabling_a_plugin_makes_its_rpc_method_immediately_uncallable(
         await app.shutdown()
 
 
+_LAMP = """
+import sys
+from shiori_sdk.tools import Tool
+
+probe = sys.modules["toggle_probe"]
+
+
+class Glow(Tool):
+    name = "lamp_glow"
+    description = "answers while the lamp is on"
+    parameters = {"type": "object", "properties": {}}
+
+    async def execute(self, **kwargs):
+        return "glow"
+
+
+async def setup(ctx):
+    probe.events.append(("setup", "lamp", ctx.runtime.was_active))
+    ctx.tools.register(Glow())
+
+    async def ping(payload):
+        return {"pong": True}
+
+    ctx.rpc.register("ping", ping)
+    ctx.effect("dispose", lambda: probe.events.append(("dispose", "lamp")))
+    ctx.expose("lamp")
+"""
+
+_LAMP_USER = """
+import sys
+
+probe = sys.modules["toggle_probe"]
+
+
+async def setup(ctx):
+    ctx.dependencies.require("lamp")
+    probe.events.append(("setup", "lamp_user"))
+    ctx.effect("dispose", lambda: probe.events.append(("dispose", "lamp_user")))
+"""
+
+_STEADY = """
+import sys
+
+probe = sys.modules["toggle_probe"]
+
+
+async def setup(ctx):
+    # Stands in for a managed runtime: a toggle elsewhere must not restart it.
+    probe.events.append(("setup", "steady"))
+    ctx.effect("stop-service", lambda: probe.events.append(("dispose", "steady")))
+"""
+
+
+@pytest.fixture
+def toggle_probe(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
+    module = ModuleType("toggle_probe")
+    module.events = []
+    monkeypatch.setitem(sys.modules, "toggle_probe", module)
+    return module
+
+
+def _stage_toggle_plugins(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = tmp_path / "toggle_plugins"
+    packages = {
+        "lamp": ("capabilities: [tools, rpc, runtime]\n", _LAMP),
+        "lamp_user": (
+            "capabilities: [dependencies]\ndependencies: [lamp]\n",
+            _LAMP_USER,
+        ),
+        "steady": ("capabilities: []\n", _STEADY),
+    }
+    for plugin_id, (manifest, source) in packages.items():
+        (root / plugin_id / "backend").mkdir(parents=True)
+        (root / plugin_id / "manifest.yaml").write_text(
+            f"api: 2\nid: {plugin_id}\n{manifest}", encoding="utf-8"
+        )
+        (root / plugin_id / "backend/plugin.py").write_text(source, encoding="utf-8")
+    monkeypatch.setattr(
+        "bootstrap.tools._resolve_plugin_dirs", lambda workspace: [root]
+    )
+
+
 @pytest.mark.asyncio
-async def test_set_enabled_publishes_runtime_applied(tmp_path, monkeypatch):
-    """#226: the headless plugin-host window has no `pluginEnabledStateStore`
-    of its own and learns its roster changed only through `runtime.applied`.
-
-    Before this test existed, `plugins.setEnabled` was dispatched through the
-    PLUGIN_MANAGEMENT branch of `ReloadableDesktopService.handle`, a
-    different branch from the one that publishes `runtime.applied` (SETTINGS,
-    gated on `method == "runtime.apply"`) — even though `set_enabled` performs
-    the exact same kind of settings apply and returns the same
-    `{generation, changed}` shape. The toggle succeeded and persisted, but no
-    event ever told another window about it, so a disabled plugin's
-    `app.background` contribution kept running until an unrelated settings
-    save happened to fire `runtime.apply`, or the app restarted.
-    """
-    _stage_plugin_dirs(tmp_path, monkeypatch)
-    service, _, app = await _start_service(tmp_path)
+async def test_set_enabled_toggles_within_the_generation_and_announces_once(
+    tmp_path, monkeypatch, toggle_probe
+):
+    _stage_toggle_plugins(tmp_path, monkeypatch)
+    service, path, app = await _start_service(tmp_path)
     published: list[dict] = []
-    service.add_event_listener(lambda event: published.append(event))
+    service.add_event_listener(published.append)
     try:
-        response = await _request(
-            service,
-            "plugins.setEnabled",
-            {
-                "plugin_id": "hello",
-                "enabled": False,
-                "operation_id": "op-disable",
-            },
-        )
-        assert response.error is None, response.error
+        toggle_probe.events.clear()
+        off = {"plugin_id": "lamp", "enabled": False, "operation_id": "op-off"}
 
-        applied = [
-            event for event in published if event.get("method") == "runtime.applied"
-        ]
-        assert (
-            len(applied) == 1
-        ), f"expected exactly one runtime.applied, got {published}"
-        # A real publication announces the resulting generation once.
-        assert applied[0]["payload"] == response.payload
-        retry = await _request(
+        disabled = await _request(service, "plugins.setEnabled", off)
+
+        assert disabled.error is None, disabled.error
+        assert disabled.payload["generation"] == app.generation == 1
+        assert disabled.payload["reloaded_plugins"] == ["lamp", "lamp_user"]
+        # Only the plugin and its dependent were unloaded; the bystander runs on.
+        assert toggle_probe.events == [("dispose", "lamp_user"), ("dispose", "lamp")]
+        assert [event["method"] for event in published] == ["plugins.reloaded"]
+        assert published[0]["payload"] == {
+            "generation": 1,
+            "plugin_ids": ["lamp", "lamp_user"],
+        }
+        assert app.core.tools.get_tool("lamp_glow") is None
+        gone = await _request(service, "plugin.lamp.ping", {})
+        assert gone.error is not None and gone.error.code == "unknown_method"
+        listed = await _request(service, "plugins.list")
+        states = {row["id"]: row["state"] for row in listed.payload["plugins"]}
+        assert states == {
+            "lamp": "DISABLED",
+            "lamp_user": "BLOCKED",
+            "steady": "ACTIVE",
+        }
+        assert path.read_text(encoding="utf-8") == service.settings.config_text
+        assert load_config_text(service.settings.config_text) == app.config
+
+        retry = await _request(service, "plugins.setEnabled", dict(off))
+        assert retry.payload == disabled.payload
+        # The replay neither unloads nor announces anything again.
+        assert len(published) == 1
+
+        toggle_probe.events.clear()
+        enabled = await _request(
             service,
             "plugins.setEnabled",
-            {"plugin_id": "hello", "enabled": False, "operation_id": "op-disable"},
+            {"plugin_id": "lamp", "enabled": True, "operation_id": "op-on"},
         )
-        assert retry.error is None, retry.error
-        assert retry.payload == response.payload
-        assert published[-1]["payload"] == {**response.payload, "changed": False}
-        reenabled = await _request(
-            service,
-            "plugins.setEnabled",
-            {"plugin_id": "hello", "enabled": True, "operation_id": "op-enable"},
-        )
-        assert reenabled.error is None, reenabled.error
-        assert published[-1]["payload"] == reenabled.payload
-        count = len(published)
-        stale = await _request(
-            service,
-            "plugins.setEnabled",
-            {"plugin_id": "hello", "enabled": False, "operation_id": "op-disable"},
-        )
-        assert stale.error is None, stale.error
-        assert stale.payload == response.payload
-        assert len(published) == count
+
+        assert enabled.error is None, enabled.error
+        assert enabled.payload["reloaded_plugins"] == ["lamp", "lamp_user"]
+        assert toggle_probe.events == [("setup", "lamp", False), ("setup", "lamp_user")]
+        assert [event["method"] for event in published] == ["plugins.reloaded"] * 2
+        assert await app.core.tools.execute("lamp_glow", {}) == "glow"
+        back = await _request(service, "plugin.lamp.ping", {})
+        assert back.error is None and back.payload == {"pong": True}
+        assert app.generation == 1
     finally:
         await service.aclose()
         await app.shutdown()
@@ -1296,10 +1376,15 @@ async def test_queued_install_replaces_external_source_row_before_restart(
 
 
 @pytest.mark.asyncio
-async def test_set_enabled_interrupts_background_work_that_ignores_stop(
-    tmp_path, monkeypatch
+@pytest.mark.parametrize(("plugin_id", "swapped"), [("hello", False), ("qqbot", True)])
+async def test_set_enabled_is_not_held_by_background_work_that_ignores_stop(
+    tmp_path, monkeypatch, plugin_id, swapped
 ):
-    """A memory optimizer stuck in model retries must not hold a plugin toggle."""
+    """A memory optimizer stuck in model retries must not hold a plugin toggle.
+
+    An in-generation toggle leaves it running; a channel plugin's toggle still
+    swaps the generation, which interrupts it.
+    """
     from core.common.runtime_scope import current_runtime_lease
 
     _stage_plugin_dirs(tmp_path, monkeypatch)
@@ -1336,17 +1421,18 @@ async def test_set_enabled_interrupts_background_work_that_ignores_stop(
             _request(
                 service,
                 "plugins.setEnabled",
-                {"plugin_id": "hello", "enabled": False, "operation_id": "op-1"},
+                {"plugin_id": plugin_id, "enabled": False, "operation_id": "op-1"},
             ),
             5,
         )
         assert response.error is None, response.error
-        assert app.generation == 2 and app.accepting_work
-        await asyncio.wait_for(started.setdefault(2, asyncio.Event()).wait(), 1)
-        assert interrupted.is_set()
+        assert app.generation == (2 if swapped else 1) and app.accepting_work
+        if swapped:
+            await asyncio.wait_for(started.setdefault(2, asyncio.Event()).wait(), 1)
+        assert interrupted.is_set() is swapped
         listed = await asyncio.wait_for(_request(service, "plugins.list"), 1)
         by_id = {item["id"]: item for item in listed.payload["plugins"]}
-        assert by_id["hello"]["enabled"] is False
+        assert by_id[plugin_id]["enabled"] is False
     finally:
         # Lets pre-fix work finish so a failing run still shuts down.
         release.set()
