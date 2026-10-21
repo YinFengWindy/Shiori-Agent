@@ -38,6 +38,8 @@ QQ 群会话的规范 chat_id 是 `gqq:<群号>`，裸号一律是私聊。渠�
 
 ## 标识与投递
 
+自然聊天的普通渠道回复使用逐条确认的序列（#866）：角色模型仍由同一角色的 gate 串行执行，入站 dispatcher 按聊天排队；仅在两条消息间的等待让出角色 gate，等待期间不持 bus transport lock。每段进入原 channel lane，渠道在其 90 秒单条边界内完成平台请求与回执，队列接收不代表已发送。当前段的 pending / failed / uncertain 行保留投递记录，Session 历史与 ContextView 统一排除未确认正文；已执行工具单独保留。换代入口取消旧代序列尾部，已开始的平台发送及记账收尾后释放 runtime lease。桌面交互序列仍走自己的 commit/event 路径。
+
 SDK 的 `shiori_sdk.channels.session_key`、`shiori_sdk.channels.reply_context` 和公共 channel identifier helper 负责稳定定位账号、聊天、线程与回复上下文。群聊过滤和成员隔离必须在入站边界明确处理。typing、流式编辑等辅助动作允许独立失败，但最终消息投递和权威会话写入必须可观测。
 
 「谁能和角色说话」由接收账号的响应规则决定（私聊/群聊开关、黑名单，均为账号级设置，所有群聊共用），规则连同账号身份、所属角色和凭据保存在账号所属插件自己的存储里，宿主只在内存里按已加载插件登记的账号建索引（#450）。入站准入由 `ChannelHub.route_account_inbound` 统一判断：接收账号属于某个角色、其插件已加载且在线、对应私聊/群聊开关打开，发送者不在账号黑名单里即放行；黑名单条目按发送者 ID 精确匹配，或按渠道别名（Telegram 用户名）忽略大小写匹配；`/stop` 走同一准入。群聊里只有「点名」账号的消息（SDK `addresses_account`：插件标记了 @ 本账号，或上报的被回复者 `reply_to_sender_id` 等于账号自己的平台 ID）才开启回合（#537）；未点名的群消息在角色旁听该群时存进旁听记录（#538，渠道需在 manifest 声明 `group_listening`，目前只有 QQ），否则丢弃。`reply_to_sender_id` 目前只有 QQ 上报，Telegram 只认 @。

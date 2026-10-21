@@ -5,6 +5,7 @@ import logging
 from collections.abc import Awaitable, Callable
 from typing import TypeVar
 
+from shiori_sdk.channels.delivery import in_acknowledged_reply
 from telegram.error import NetworkError, RetryAfter, TimedOut
 
 logger = logging.getLogger("plugins.telegram.utils")
@@ -74,6 +75,8 @@ class TelegramOutboundLimiter:
                         delay,
                     )
                 except (TimedOut, NetworkError) as e:
+                    if in_acknowledged_reply():
+                        raise
                     last_err = e
                     delay = min(0.8 * (2 ** (attempt - 1)), 8.0)
                     self._cooldown(cid, delay)
@@ -209,6 +212,8 @@ async def _send_with_retry(
             )
             await asyncio.sleep(delay)
         except (TimedOut, NetworkError) as e:
+            if in_acknowledged_reply():
+                raise
             last_err = e
             if attempt >= max_attempts:
                 break
@@ -252,6 +257,8 @@ async def _send_with_retry_result(
             )
             await asyncio.sleep(delay)
         except (TimedOut, NetworkError) as e:
+            if in_acknowledged_reply():
+                raise
             last_err = e
             if attempt >= max_attempts:
                 break

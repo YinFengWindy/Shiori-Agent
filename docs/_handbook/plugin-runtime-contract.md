@@ -123,13 +123,35 @@ consolidates these additions and the subsequent #847 breaking migration.
 
 <!-- Record the next contract batch here, with PR references and breaking markers. -->
 
-- **Complete reply sequences (#865 / #871, built-in capability #874).** The
+- **Acknowledged channel reply sequences (#866 / #876).** Ordinary channel turns may
+  select the host-owned `ReplySequencePolicy` when the live transport registers with
+  `subscribe_outbound(..., supports_reply_sequence=True)`. Telegram, QQ, QQBot
+  and Feishu opt in. `OutboundMessage.delivery_outcome` carries a transient
+  `DeliveryOutcome(status, external_message_id)` after a channel operation;
+  queue acceptance is never a sent receipt. Each current segment has its own
+  persisted ID and platform receipt; unstarted suffixes remain private. Failed
+  or unknown outcomes stop the batch without bus retries. Pending, failed and
+  uncertain sequence rows are excluded from shared model and memory history;
+  executed tool traces remain separate facts. Channel callbacks bound one
+  logical segment (length chunks, attachments and bookkeeping) to 90 seconds;
+  a deadline records uncertainty. Pacing holds neither the transport lock nor
+  the role generation gate, so unrelated chats can proceed while same-chat
+  requests retain admission order. Runtime replacement cancels old suffixes
+  and retains already started sends through their final bookkeeping. Explicit
+  `InterruptController.request_interrupt` accepts optional `channel` / `chat_id`
+  keywords so `/stop` targets its chat; default single-session callers remain
+  compatible. Automatic new-input interruption and internal/proactive replies
+  are not enabled by this change. SDK/runtime version remains unchanged until
+  the release batch is assigned.
+
+- **Complete reply sequences (#865 / #871, built-in capability #874 / #875).** The
   default-off role setting `runtime_config.natural_chat_enabled` selects a
-  host-owned presentation policy on supported interactive turns. Model text is
-  buffered, existing reply
-  hooks run, and the host parses boundaries outside fenced code and publishes
-  complete messages serially. Each stored message has its own ID and shares
-  `turn_id` / `reply_sequence_id`, with a zero-based `reply_sequence_index`.
+  host-owned presentation policy on interactive desktop turns and admitted
+  ordinary turns on opted-in channels (Telegram, QQ, QQBot and Feishu).
+  Model text is buffered, existing reply hooks run, and the host parses boundaries
+  outside fenced code and publishes complete messages serially. Each stored
+  message has its own ID and shares `reply_sequence_id` (the desktop `turn_id`
+  or channel `request_id`), with a zero-based `reply_sequence_index`.
   Desktop attempts also carry `trigger_user_message_id`, the stable persisted
   user row shared by initial sends and retries. Sequence undo resolves that exact
   row within the same thread; an unresolved anchor never selects an earlier turn.
@@ -137,7 +159,7 @@ consolidates these additions and the subsequent #847 breaking migration.
   update payload shape as `session.updated`; they do not finish the turn.
   `chat.done`, `chat.error` and `chat.cancelled` remain the terminal events.
   Cancellation retains the published prefix and abandons the pending suffix;
-  no policy retains the existing single-message streaming behavior. The built-in
+  without a policy, existing single-message streaming is retained. The built-in
   capability contributes only the instant-chat setting and separator instructions.
   Role manifest v10 atomically migrates the former plugin preference, preserving
   an explicit built-in value and unrelated plugin namespaces.

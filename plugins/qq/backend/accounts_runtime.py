@@ -103,7 +103,9 @@ class QQAccountsRuntime(QQAccountSettings, QQInboundAdapter, QQOutboundAdapter):
         self._intake_paused = ctx.intake_paused
         for ref in self._configs:
             self._start_intake(ref)
-        ctx.bus.subscribe_outbound(self.name, self._on_response)
+        ctx.bus.subscribe_outbound(
+            self.name, self._on_response, supports_reply_sequence=True
+        )
         for ref, config in self._configs.items():
             if config.auto_connect and self._servable(ref):
                 self._schedule(ref)

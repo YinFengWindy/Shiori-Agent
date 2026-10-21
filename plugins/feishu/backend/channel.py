@@ -15,7 +15,12 @@ import httpx
 
 from shiori_sdk.channels.services import InterruptController
 from shiori_sdk.runtime import EventsCapability as EventBus
-from shiori_sdk.messages import InboundMessage, OutboundMessage
+from shiori_sdk.channels.delivery import (
+    bounded_reply_delivery,
+    in_acknowledged_reply,
+    reply_failure_status,
+)
+from shiori_sdk.messages import DeliveryOutcome, InboundMessage, OutboundMessage
 from shiori_sdk.channel_events import StreamDeltaReady, TurnStarted
 from shiori_sdk.channels.services import MessageBus
 from shiori_sdk.accounts import VIA_ACCOUNT_KEY, ViaAccount
@@ -213,7 +218,9 @@ class FeishuChannel:
                 ctx.event_bus.on(event_type, handler)
             self._events_bound = True
         if not self._outbound_bound:
-            ctx.bus.subscribe_outbound(self.name, self._on_response)
+            ctx.bus.subscribe_outbound(
+                self.name, self._on_response, supports_reply_sequence=True
+            )
             self._outbound_bound = True
         self._intake.start(paused=ctx.intake_paused)
         self._accepting = True
@@ -590,6 +597,8 @@ class FeishuChannel:
             )
         )
         result = self._interrupt_controller.request_interrupt(
+            channel=self.name,
+            chat_id=chat_id,
             session_key=session_key,
             sender=sender,
             command=STOP_COMMAND,
@@ -622,6 +631,10 @@ class FeishuChannel:
     # ── outbound ─────────────────────────────────────────────────────
 
     async def _on_response(self, msg: OutboundMessage) -> None:
+        # One logical message includes length chunks, media and its receipt.
+        await bounded_reply_delivery(msg, self._send_response, timeout_seconds=90)
+
+    async def _send_response(self, msg: OutboundMessage) -> None:
         session_key = resolve_outbound_session_key(msg, default_channel=self.name)
         first_id: str | None = None
         receipts: list[str] = []
@@ -641,16 +654,25 @@ class FeishuChannel:
             for image in msg.media:
                 image_id = await self.send_image(msg.chat_id, image)
                 first_id = first_id or image_id
-        except BaseException:
+        except BaseException as error:
             # Keep the first acknowledged chunk when a later chunk fails.
             first_id = first_id or next(iter(receipts), None)
-            self._record_delivery_status(msg, "failed", first_id)
+            self._record_delivery_status(
+                msg,
+                reply_failure_status(
+                    msg,
+                    rejected=isinstance(error, (FeishuApiError, ValueError)),
+                    external_message_id=first_id,
+                ),
+                first_id,
+            )
             raise
         self._record_delivery_status(msg, "sent", first_id)
 
     def _record_delivery_status(
         self, msg: OutboundMessage, status: str, external_message_id: str | None = None
     ) -> None:
+        msg.delivery_outcome = DeliveryOutcome(status, external_message_id or "")
         if self._channel_hub is None:
             return
         self._channel_hub.mark_delivery(
@@ -697,6 +719,8 @@ class FeishuChannel:
                 chat_id, "interactive", markdown_card(chunk), reply_to
             )
         except Exception as error:
+            if in_acknowledged_reply() and not isinstance(error, FeishuApiError):
+                raise
             if is_rate_limited(error):
                 raise
             logger.warning("[feishu] 卡片发送失败，改发纯文本: %s", error)
@@ -730,6 +754,8 @@ class FeishuChannel:
         try:
             return await with_rate_limit_retry(reply, label=label)
         except Exception as error:
+            if in_acknowledged_reply() and not isinstance(error, FeishuApiError):
+                raise
             if is_rate_limited(error):
                 raise
             logger.warning("[feishu] 引用回复失败，改为普通发送: %s", error)

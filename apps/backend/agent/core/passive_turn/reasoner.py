@@ -6,6 +6,7 @@ from shiori_sdk.tools import TOOL_ATTACHMENT_SCOPE_KEY, ToolAttachmentScope
 from agent.tools.turn_scope import tool_turn
 from agent.looping.interrupt import in_detached_turn
 from agent.turns.reply_sequence import buffered_reply_scope, presented_tool_chain
+from agent.turns.channel_sequence import supports_channel_sequence
 from agent.account_delivery.turn_state import account_delivery_scope
 
 from core.roles.reply_state import role_mood_catalog
@@ -440,8 +441,13 @@ class DefaultReasoner(
                 thread_id=inbound_thread_id(msg),
                 window_sources=window_sources,
                 supports_reply_sequence=(
-                    msg.channel == "desktop"
-                    and bool(msg.metadata.get("turn_id"))
+                    (
+                        (msg.channel == "desktop" and bool(msg.metadata.get("turn_id")))
+                        or (
+                            supports_channel_sequence(msg.channel)
+                            and bool(msg.metadata.get("request_id"))
+                        )
+                    )
                     and not in_detached_turn()
                     and msg.metadata.get("role_work_kind") != "scheduled_job"
                     and msg.metadata.get("source") != "background_result"
