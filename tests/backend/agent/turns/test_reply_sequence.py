@@ -56,7 +56,8 @@ def test_empty_segments_are_rejected(content):
         parse_reply_sequence(content, POLICY)
 
 
-async def test_cancel_finishes_inflight_publish_and_never_starts_tail():
+@pytest.mark.parametrize("cancel_count", [1, 2])
+async def test_cancel_finishes_inflight_publish_and_never_starts_tail(cancel_count):
     entered, release = asyncio.Event(), asyncio.Event()
     sent = []
 
@@ -69,22 +70,24 @@ async def test_cancel_finishes_inflight_publish_and_never_starts_tail():
         deliver_reply_sequence(ReplySequence(("one", "two")), publish)
     )
     await entered.wait()
-    task.cancel()
-    await asyncio.sleep(0)
-    assert not task.done()
+    for _ in range(cancel_count):
+        task.cancel()
+        await asyncio.sleep(0)
+        assert not task.done()
     release.set()
     with pytest.raises(asyncio.CancelledError):
         await task
     assert sent == [(0, "one")]
 
 
-async def test_failed_publish_does_not_attempt_the_tail():
+@pytest.mark.parametrize("failure", [OSError, asyncio.CancelledError])
+async def test_failed_publish_does_not_attempt_the_tail(failure):
     sent = []
 
     async def publish(index, content):
         sent.append(content)
-        raise OSError("publish failed")
+        raise failure("publish failed")
 
-    with pytest.raises(OSError):
+    with pytest.raises(failure):
         await deliver_reply_sequence(ReplySequence(("one", "two")), publish)
     assert sent == ["one"]

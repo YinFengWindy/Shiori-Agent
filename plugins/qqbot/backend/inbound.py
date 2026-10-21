@@ -158,6 +158,8 @@ class _InboundMixin:
             )
         )
         result = self._interrupt_controller.request_interrupt(
+            channel=CHANNEL,
+            chat_id=chat_id,
             session_key=session_key,
             sender=sender,
             command="/stop",

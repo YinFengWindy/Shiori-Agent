@@ -114,12 +114,17 @@ class _ArchivedTool(Tool):
 
 
 @pytest.mark.parametrize(
-    "enabled,channel,source,selected",
+    "enabled,channel,source,selected,admitted",
     [
-        (True, "desktop", "", True),
-        (False, "desktop", "", False),
-        (True, "telegram", "", False),
-        (True, "desktop", "background_result", False),
+        (True, "desktop", "", True, False),
+        (False, "desktop", "", False, False),
+        (True, "telegram", "", False, False),
+        (True, "telegram", "", True, True),
+        (True, "qq", "", True, True),
+        (True, "qqbot", "", True, True),
+        (True, "feishu", "", True, True),
+        (False, "qqbot", "", False, True),
+        (True, "desktop", "background_result", False, False),
     ],
 )
 async def test_natural_chat_role_draft_reaches_only_supported_model_requests(
@@ -128,6 +133,7 @@ async def test_natural_chat_role_draft_reaches_only_supported_model_requests(
     channel,
     source,
     selected,
+    admitted,
 ):
     from typing import Any, cast
     from agent.context import ContextBuilder
@@ -181,17 +187,29 @@ async def test_natural_chat_role_draft_reaches_only_supported_model_requests(
         return ReasonerResult(reply="自由回答")
 
     reasoner.run = AsyncMock(side_effect=run)
-    result = await reasoner.run_turn(
-        msg=InboundMessage(
-            channel=channel,
-            sender="user",
-            chat_id="a",
-            content="hi",
-            metadata={"turn_id": "t", "source": source, "thread_id": thread},
-        ),
-        session=session,
-        context_view=turn_context_view(tmp_path, "mira", thread),
-    )
+    from agent.turns.channel_sequence import ChannelSequenceOwner
+    from bus.queue import MessageBus
+
+    bus = MessageBus()
+    if admitted:
+        bus.subscribe_outbound(channel, AsyncMock(), supports_reply_sequence=True)
+    with ChannelSequenceOwner().bind(bus):
+        result = await reasoner.run_turn(
+            msg=InboundMessage(
+                channel=channel,
+                sender="user",
+                chat_id="a",
+                content="hi",
+                metadata={
+                    "turn_id": "t",
+                    "request_id": "request",
+                    "source": source,
+                    "thread_id": thread,
+                },
+            ),
+            session=session,
+            context_view=turn_context_view(tmp_path, "mira", thread),
+        )
     assert (result.reply_sequence is not None) is selected
 
 

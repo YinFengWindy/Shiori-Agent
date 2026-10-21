@@ -21,10 +21,23 @@ _DEFAULT_TTL_S = 1800  # 30 分钟
 # 渠道回合状态，也不消费它们留下的中断态。每个回合任务开头由 ``run_turn_task`` 显式
 # 设定，所以从外部回合里派生出的新回合仍按自己的登记处理，不会继承此值。
 _DETACHED_TURN: ContextVar[bool] = ContextVar("detached_turn", default=False)
+_TRACKING_KEY: ContextVar[str] = ContextVar("turn_tracking_key", default="")
+
+
+def turn_tracking_key(session_key: str, channel: str = "", chat_id: str = "") -> str:
+    """Identify external chat work while retaining the desktop session key API."""
+    if channel and channel != "desktop" and chat_id:
+        return f"{session_key}\x1f{channel}\x1f{chat_id}"
+    return session_key
+
+
+def current_tracking_key(session_key: str) -> str:
+    """Resolve progress/resume writes to the current task's registered chat."""
+    return _TRACKING_KEY.get() or session_key
 
 
 async def run_turn_task[T](
-    operation: Callable[[], Awaitable[T]], *, detached: bool
+    operation: Callable[[], Awaitable[T]], *, detached: bool, tracking_key: str = ""
 ) -> T:
     """Runs ``operation()`` as the body of one turn's own task.
 
@@ -35,6 +48,7 @@ async def run_turn_task[T](
     task cancelled before its first step leaves none behind.
     """
     _DETACHED_TURN.set(detached)
+    _TRACKING_KEY.set(tracking_key)
     return await operation()
 
 
@@ -73,7 +87,7 @@ def tracked_turn_state(
     """
     if in_detached_turn():
         return None
-    return states.get(session_key)
+    return states.get(current_tracking_key(session_key))
 
 
 @dataclass
@@ -94,4 +108,7 @@ class InterruptController(Protocol):
         session_key: str,
         sender: str = "",
         command: str = "/stop",
+        *,
+        channel: str = "",
+        chat_id: str = "",
     ) -> InterruptResult: ...

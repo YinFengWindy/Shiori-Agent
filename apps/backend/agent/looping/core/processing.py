@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from agent.tools.turn_scope import tool_turn
+from agent.turns.channel_sequence_commit import ChannelSequenceDeliveryError
+from agent.turns.channel_sequence import without_channel_sequence
 
 import asyncio
 import time
@@ -12,6 +14,8 @@ from core.error_context import current_session_key
 from ..interrupt import (
     TurnInterruptState,
     run_turn_task,
+    turn_tracking_key,
+    current_tracking_key,
 )
 from collections.abc import Callable
 from dataclasses import replace
@@ -50,17 +54,26 @@ class _ProcessingMixin:
         key = item.session_key
         if await self._compact_command(item, key, dispatch_outbound=True) is not None:
             return
-        self._active_turn_states[key] = self._build_initial_turn_state(item, key)
-        task = asyncio.create_task(
-            run_turn_task(lambda: self._process_role_scoped(item, key), detached=False)
+        tracking_key = turn_tracking_key(key, item.channel, item.chat_id)
+        self._active_turn_states[tracking_key] = self._build_initial_turn_state(
+            item, key
         )
-        self._active_tasks[key] = task
+        task = asyncio.create_task(
+            run_turn_task(
+                lambda: self._process_role_scoped(item, key),
+                detached=False,
+                tracking_key=tracking_key,
+            )
+        )
+        self._active_tasks[tracking_key] = task
         try:
             await task
         except asyncio.CancelledError:
             if asyncio.current_task().cancelling():
                 raise
             logger.info(f"Turn cancelled for {key}")
+        except ChannelSequenceDeliveryError:
+            logger.exception("Reply sequence stopped for %s", key)
         except Exception as e:
             logger.error(f"处理消息出错: {e}", exc_info=True)
             await self.bus.publish_outbound(
@@ -72,9 +85,9 @@ class _ProcessingMixin:
                 )
             )
         finally:
-            if self._active_tasks.get(key) is task:
-                self._active_tasks.pop(key, None)
-                self._active_turn_states.pop(key, None)
+            if self._active_tasks.get(tracking_key) is task:
+                self._active_tasks.pop(tracking_key, None)
+                self._active_turn_states.pop(tracking_key, None)
 
     @property
     def processing_state(self) -> ProcessingState | None:
@@ -149,7 +162,7 @@ class _ProcessingMixin:
                     dispatch_outbound=dispatch_outbound,
                 )
             if resumed_from_interrupt:
-                self._interrupt_states.pop(key, None)
+                self._interrupt_states.pop(current_tracking_key(key), None)
             return outbound
         except asyncio.CancelledError:
             await self._observe_turn_cancelled(msg, key)
@@ -248,17 +261,18 @@ class _ProcessingMixin:
         if command is not None:
             return command.content
         self._active_turn_states[key] = self._build_initial_turn_state(msg, key)
-        task = asyncio.create_task(
-            run_turn_task(
-                lambda: self._process_role_scoped(
-                    msg,
-                    session_key=key,
-                    dispatch_outbound=False,
+        with without_channel_sequence():
+            task = asyncio.create_task(
+                run_turn_task(
+                    lambda: self._process_role_scoped(
+                        msg,
+                        session_key=key,
+                        dispatch_outbound=False,
+                    ),
+                    detached=False,
                 ),
-                detached=False,
-            ),
-            name=f"agent_loop_direct:{key}",
-        )
+                name=f"agent_loop_direct:{key}",
+            )
         self._active_tasks[key] = task
         try:
             response = await task

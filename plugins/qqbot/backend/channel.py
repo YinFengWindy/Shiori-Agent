@@ -125,7 +125,9 @@ class QQBotChannel(
         self._intake.start(paused=ctx.intake_paused)
         self._task = asyncio.create_task(self._gateway_loop(), name="qqbot_gateway")
         if public_hooks and not self._outbound_bound:
-            ctx.bus.subscribe_outbound(CHANNEL, self._on_response)
+            ctx.bus.subscribe_outbound(
+                CHANNEL, self._on_response, supports_reply_sequence=True
+            )
             self._outbound_bound = True
         logger.info("[qqbot] 官方 QQBot 通道已启动")
 

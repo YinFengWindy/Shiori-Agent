@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from agent.turns.channel_sequence import channel_sequence_context
+from agent.turns.channel_sequence_commit import commit_channel_reply_sequence
+
 from dataclasses import dataclass
 import logging
 from typing import TYPE_CHECKING, Any, TypeAlias, cast
@@ -305,8 +308,11 @@ class _PersistAssistantMessageModule:
             frame.slots["reply:messages"].extend(drafts.messages)
         policy = frame.input.turn_result.reply_sequence
         if policy is not None:
-            if ctx.channel != "desktop" or not ctx.outbound_metadata.get("turn_id"):
-                raise ValueError("消息序列需要具有 turn_id 的桌面交互回合")
+            if not ctx.outbound_metadata.get("turn_id") and not (
+                channel_sequence_context() is not None
+                and ctx.outbound_metadata.get("request_id")
+            ):
+                raise ValueError("消息序列需要可投递的交互回合标识")
             sequence = parse_reply_sequence(ctx.reply, policy)
             frame.slots["reply:sequence"] = sequence
             ctx.reply = sequence.content
@@ -347,7 +353,8 @@ class _PersistAssistantMessageModule:
             for index, content in enumerate(sequence.messages):
                 metadata = {
                     **assistant_metadata,
-                    "reply_sequence_id": assistant_metadata["turn_id"],
+                    "reply_sequence_id": assistant_metadata.get("turn_id")
+                    or assistant_metadata["request_id"],
                     "reply_sequence_index": index,
                 }
                 kwargs = dict(assistant_kwargs)
@@ -364,6 +371,7 @@ class _PersistAssistantMessageModule:
                         "tools_used",
                         "tool_chain",
                         "context_retry",
+                        REPLY_MENTION_IDS_KEY,
                     ):
                         metadata.pop(key, None)
                 if index < len(sequence.messages) - 1:
@@ -493,7 +501,36 @@ class _AppendMessagesModule:
             }
         try:
             sequence = frame.slots.get("reply:sequence")
-            if sequence is not None:
+            if sequence is not None and state.msg.channel != "desktop":
+                ctx = cast(AfterReasoningCtx, frame.slots[_CTX_SLOT])
+                extra_media: list[str] = []
+                _append_media(
+                    extra_media,
+                    collect_prefixed_slots(frame.slots, _OUTBOUND_MEDIA_PREFIX),
+                )
+                await commit_channel_reply_sequence(
+                    manager=self._session_services.session_manager,
+                    session=session,
+                    messages=owned_messages,
+                    sequence=sequence,
+                    state_kwargs=state_kwargs,
+                    metadata={
+                        **ctx.outbound_metadata,
+                        **collect_prefixed_slots(
+                            frame.slots, _OUTBOUND_METADATA_PREFIX
+                        ),
+                    },
+                    channel=ctx.channel,
+                    chat_id=ctx.chat_id,
+                    extra_media=extra_media,
+                    on_first_commit=(
+                        state.turn_pushes.committed
+                        if state.turn_pushes is not None
+                        else None
+                    ),
+                )
+                state.dispatch_outbound = False
+            elif sequence is not None:
                 await commit_reply_sequence(
                     manager=self._session_services.session_manager,
                     bus=self._bus,

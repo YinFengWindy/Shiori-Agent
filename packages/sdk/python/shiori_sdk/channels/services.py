@@ -23,7 +23,16 @@ class MessageBus(Protocol):
     """Publish admitted input and register connection-owned reply handlers."""
 
     async def publish_inbound(self, msg: InboundMessage) -> None: ...
-    def subscribe_outbound(self, channel: str, callback: OutboundHandler) -> None: ...
+    def subscribe_outbound(
+        self,
+        channel: str,
+        callback: OutboundHandler,
+        *,
+        supports_reply_sequence: bool = False,
+    ) -> None:
+        """Register transport; sequence opt-in promises bounded sends and delivery_outcome receipts."""
+        ...
+
     def unsubscribe_outbound(self, channel: str, callback: OutboundHandler) -> None: ...
     def has_pending_outbound(
         self, channel: str, chat_id: str, external_message_id: str
@@ -78,7 +87,13 @@ class InterruptController(Protocol):
     """Interrupt a turn without placing a command on the conversation queue."""
 
     def request_interrupt(
-        self, session_key: str, sender: str = "", command: str = "/stop"
+        self,
+        session_key: str,
+        sender: str = "",
+        command: str = "/stop",
+        *,
+        channel: str = "",
+        chat_id: str = "",
     ) -> InterruptResult: ...
 
 
