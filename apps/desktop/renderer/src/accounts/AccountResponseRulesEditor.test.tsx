@@ -34,7 +34,7 @@ async function mountEditor(initial = account, options: { fail?: () => boolean; w
   function Owner() {
     const [snapshot, setSnapshot] = useState(initial);
     publish = setSnapshot;
-    return <AccountResponseRulesEditor account={snapshot} onChanged={async () => {
+    return <AccountResponseRulesEditor account={snapshot} disabled={false} onChanged={async () => {
       setSnapshot(await client.get(snapshot.id));
       refreshes += 1;
     }} />;

@@ -22,12 +22,18 @@ function sameIds(a: string[], b: string[]) {
  * field loses focus. Host snapshots own the rules; local state holds only an
  * in-flight field change and the unsaved blacklist text.
  */
-export function AccountResponseRulesEditor({ account, onChanged }: { account: AccountSnapshot; onChanged: () => void | Promise<void> }) {
+export function AccountResponseRulesEditor({ account, disabled, onChanged }: {
+  account: AccountSnapshot;
+  /** Prevents writing a retained snapshot while the owner is refreshing or cannot confirm its rules. */
+  disabled: boolean;
+  onChanged: () => void | Promise<void>;
+}) {
   const [pending, setPending] = useState<RuleMutation | null>(null);
   const [blockedDraft, setBlockedDraft] = useState<string | null>(null);
   const [error, setError] = useState("");
-  const latest = useLatestRef({ account, onChanged });
+  const latest = useLatestRef({ account, disabled, onChanged });
   const busy = pending !== null;
+  const locked = busy || disabled;
   // Any newer host snapshot supersedes an optimistic change, even for the
   // same account ID: a replacement Bot may have revoked the previous grant.
   const rules = pending?.account === account ? { ...account.responseRules, ...pending.patch } : account.responseRules;
@@ -36,16 +42,19 @@ export function AccountResponseRulesEditor({ account, onChanged }: { account: Ac
   const showGroups = account.capabilities.includes("groups");
 
   async function save(patch: Partial<AccountResponseRules>) {
-    if (busy) return;
+    if (busy || latest.current.disabled) return;
     const mutation = { account: latest.current.account, patch };
     const submittedDraft = blockedDraft;
     setPending(mutation);
     setError("");
     try {
-      await client.setRules(mutation.account.id, { ...mutation.account.responseRules, ...patch });
-      // The mutation's response may predate a rebind or another host update.
-      // Refresh the owner instead of adopting that response as a new baseline.
-      await latest.current.onChanged();
+      try {
+        await client.setRules(mutation.account.id, { ...mutation.account.responseRules, ...patch });
+      } finally {
+        // A response may predate a rebind; a bridge failure may leave the write
+        // outcome unknown. Confirm the current host rules after either outcome.
+        await latest.current.onChanged();
+      }
     } catch (failure) {
       setError(errorMessage(failure, { includeDetail: true }));
     } finally {
@@ -69,16 +78,16 @@ export function AccountResponseRulesEditor({ account, onChanged }: { account: Ac
     <h3 className="m-0 text-body font-medium text-ink">响应规则</h3>
     {error ? <InlineError message={error} /> : null}
     <label className="flex items-center gap-3 text-body-sm text-ink-secondary">
-      <input type="checkbox" checked={rules.privateEnabled} disabled={busy} onChange={(event) => toggle("privateEnabled", event.target.checked)} />私聊启用
+      <input type="checkbox" checked={rules.privateEnabled} disabled={locked} onChange={(event) => toggle("privateEnabled", event.target.checked)} />私聊启用
     </label>
     {showGroups ? <label className="flex items-center gap-3 text-body-sm text-ink-secondary">
-      <input type="checkbox" checked={rules.groupEnabled} disabled={busy} onChange={(event) => toggle("groupEnabled", event.target.checked)} />群聊启用
+      <input type="checkbox" checked={rules.groupEnabled} disabled={locked} onChange={(event) => toggle("groupEnabled", event.target.checked)} />群聊启用
     </label> : null}
     {account.capabilities.includes("full_tools") ? <SettingsToggleField label="允许完整工具权限"
-      checked={rules.allowFullTools === true} disabled={busy}
+      checked={rules.allowFullTools === true} disabled={locked}
       onChange={(checked) => toggle("allowFullTools", checked)} /> : null}
     <label className="grid gap-2 text-body-sm text-ink-secondary">黑名单成员 ID
-      <textarea className={textareaClass} rows={3} value={blockedText} disabled={busy}
+      <textarea className={textareaClass} rows={3} value={blockedText} disabled={locked}
         onChange={(event) => setBlockedDraft(event.target.value)} onBlur={commitBlocked} />
     </label>
   </section>;

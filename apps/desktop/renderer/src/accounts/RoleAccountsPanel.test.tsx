@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { act } from "react";
-import { mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
+import type { BridgeEvent } from "@yinfengwindy/shiori-sdk";
+import { changeInputValue, deferred, mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import { pluginUiRegistry } from "../plugins/pluginUiRegistry";
 import { resetPluginEnabledStateForTests, setPluginEnabledSnapshot } from "../plugins/pluginEnabledStateStore";
 
@@ -17,11 +18,14 @@ const accountRow = {
 
 type Request = { method: string; payload: Record<string, unknown> };
 
-function desktop(respond: (request: Request) => Record<string, unknown>) {
+function desktop(
+  respond: (request: Request) => Record<string, unknown> | Promise<Record<string, unknown>>,
+  onEvent: (listener: (event: BridgeEvent) => void) => () => void = () => () => undefined,
+) {
   return { windowGlobals: { miraDesktop: {
-    onEvent: () => () => undefined,
+    onEvent,
     invoke: async (request: Request) =>
-      ({ id: "r", type: "response", method: request.method, error: null, payload: {}, ...respond(request) }),
+      ({ id: "r", type: "response", method: request.method, error: null, payload: {}, ...await respond(request) }),
   } } };
 }
 
@@ -41,6 +45,150 @@ async function loadPanel() {
 }
 
 const dialog = () => document.querySelector('[role="dialog"]');
+
+/** Exercises the real panel, account hook, and client; only bridge replies are controlled. */
+async function mountRulesPanel({ loseSaveResponse = false }: { loseSaveResponse?: boolean } = {}) {
+  const RoleAccountsPanel = await loadPanel();
+  setPluginEnabledSnapshot([{ id: "test-provider", enabled: true, state: "ACTIVE" }]);
+  registerPlatform("test-provider", "Test");
+  const writes: Request[] = [];
+  const reads: Array<ReturnType<typeof deferred<Record<string, unknown>>>> = [];
+  const listeners = new Set<(event: BridgeEvent) => void>();
+  let hostRules: unknown = { ...accountRow.response_rules, allow_full_tools: true };
+  let firstRead = true;
+  const row = () => ({ ...accountRow, capabilities: ["full_tools"], response_rules: hostRules });
+  const view = await mountTestComponent(<RoleAccountsPanel roleId="role-1" />, desktop((request) => {
+    if (request.method === "accounts.rules.set") {
+      writes.push(request);
+      hostRules = request.payload.response_rules;
+      if (loseSaveResponse) return { error: { code: "bridge_timeout", message: "请求超时，请稍后重试", details: { outcome: "unknown" } } };
+      return { payload: { account: row() } };
+    }
+    assert.equal(request.method, "accounts.list");
+    if (firstRead) {
+      firstRead = false;
+      return { payload: { accounts: [row()] } };
+    }
+    const read = deferred<Record<string, unknown>>();
+    reads.push(read);
+    return read.promise;
+  }, (listener) => { listeners.add(listener); return () => { listeners.delete(listener); }; }));
+  await act(async () => view.container.querySelector("button")?.click());
+  const toggle = document.querySelector<HTMLButtonElement>('[role="dialog"] [role="switch"][aria-label="允许完整工具权限"]');
+  const blocked = document.querySelector<HTMLTextAreaElement>('[role="dialog"] textarea');
+  assert.ok(toggle); assert.ok(blocked);
+  return { writes, reads, toggle, blocked,
+    retry: () => {
+      const button = Array.from(dialog()?.querySelectorAll("button") ?? []).find((item) => item.textContent === "重试");
+      assert.ok(button); return button;
+    },
+    settleRead: (index: number, fail = false) => act(async () => {
+      assert.ok(reads[index]);
+      reads[index].resolve(fail
+        ? { error: { code: "account_read_failed", message: "账号读取失败", details: {} } }
+        : { payload: { accounts: [row()] } });
+    }),
+    emit: () => act(async () => {
+      for (const listener of listeners) listener({ id: "e", type: "event", method: "accounts.updated", payload: { account_id: accountRow.id } });
+    }),
+    cleanup: async () => {
+      await view.cleanup();
+      pluginUiRegistry.unregisterPlugin("test-provider");
+      resetPluginEnabledStateForTests();
+    },
+  };
+}
+
+test("rules stay locked after a successful revocation until a failed account refresh is retried successfully", async () => {
+  const view = await mountRulesPanel();
+  try {
+    assert.equal(view.toggle.getAttribute("aria-checked"), "true");
+    await changeInputValue(view.blocked, "draft-peer");
+    await act(async () => view.toggle.click());
+    assert.equal(view.writes.length, 1);
+    assert.equal(view.blocked.disabled, true);
+    await view.settleRead(0, true);
+    assert.match(dialog()?.textContent ?? "", /账号读取失败/);
+    assert.equal(view.toggle.disabled, true);
+    assert.equal(view.blocked.disabled, true);
+    assert.equal(view.blocked.value, "draft-peer");
+    await act(async () => {
+      view.toggle.click();
+      view.blocked.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+    });
+    assert.equal(view.writes.length, 1, "stale rules cannot be written while the latest read failed");
+    await act(async () => view.retry().click());
+    assert.equal(view.retry().disabled, true);
+    assert.equal(view.blocked.disabled, true);
+    assert.match(dialog()?.textContent ?? "", /账号读取失败/);
+    await view.settleRead(1, true);
+    assert.equal(view.blocked.disabled, true);
+    await act(async () => view.retry().click());
+    assert.equal(view.blocked.disabled, true);
+    await view.settleRead(2);
+    assert.equal(view.toggle.getAttribute("aria-checked"), "false");
+    assert.equal(view.blocked.disabled, false);
+    assert.equal(view.blocked.value, "draft-peer");
+    assert.doesNotMatch(dialog()?.textContent ?? "", /账号读取失败/);
+    await act(async () => view.blocked.dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
+    assert.deepEqual(view.writes[1].payload.response_rules, {
+      private_enabled: true, group_enabled: true, blocked_sender_ids: ["draft-peer"],
+    });
+    await view.settleRead(3);
+    assert.equal(view.toggle.getAttribute("aria-checked"), "false");
+  } finally { await view.cleanup(); }
+});
+
+test("a superseded post-save refresh cannot unlock rules while the newer host read is pending", async () => {
+  const view = await mountRulesPanel();
+  try {
+    await changeInputValue(view.blocked, "draft-peer");
+    await act(async () => view.toggle.click());
+    await view.emit();
+    assert.equal(view.reads.length, 2);
+    await view.settleRead(0);
+    assert.equal(view.toggle.disabled, true);
+    assert.equal(view.blocked.disabled, true);
+    await act(async () => {
+      view.toggle.click();
+      view.blocked.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+    });
+    assert.equal(view.writes.length, 1);
+    await view.settleRead(1);
+    assert.equal(view.toggle.getAttribute("aria-checked"), "false");
+    assert.equal(view.blocked.disabled, false);
+    assert.equal(view.blocked.value, "draft-peer");
+    await act(async () => view.blocked.dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
+    assert.deepEqual(view.writes[1].payload.response_rules, {
+      private_enabled: true, group_enabled: true, blocked_sender_ids: ["draft-peer"],
+    });
+    await view.settleRead(2);
+  } finally { await view.cleanup(); }
+});
+
+test("an unknown rule-save outcome also requires a confirmed host snapshot before further edits", async () => {
+  const view = await mountRulesPanel({ loseSaveResponse: true });
+  try {
+    await changeInputValue(view.blocked, "draft-peer");
+    await act(async () => view.toggle.click());
+    assert.equal(view.reads.length, 1, "a failed bridge reply does not confirm that the rules were unchanged");
+    assert.equal(view.blocked.disabled, true);
+    await view.settleRead(0, true);
+    assert.match(dialog()?.textContent ?? "", /请求超时/);
+    assert.equal(view.blocked.disabled, true);
+    await act(async () => view.retry().click());
+    await view.settleRead(1);
+    assert.equal(view.toggle.getAttribute("aria-checked"), "false");
+    assert.equal(view.blocked.disabled, false);
+    assert.equal(view.blocked.value, "draft-peer");
+    await act(async () => view.blocked.dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
+    assert.deepEqual(view.writes[1].payload.response_rules, {
+      private_enabled: true, group_enabled: true, blocked_sender_ids: ["draft-peer"],
+    });
+    await view.settleRead(2);
+    assert.equal(view.toggle.getAttribute("aria-checked"), "false");
+  } finally { await view.cleanup(); }
+});
 
 test("each channel is one whole-row button that opens its detail; the account's avatar carries the channel badge", async () => {
   const RoleAccountsPanel = await loadPanel();
