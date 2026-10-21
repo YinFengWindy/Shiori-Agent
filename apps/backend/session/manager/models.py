@@ -186,7 +186,9 @@ class Session:
                 continue
 
             content = m.get("content", "") or ""
-            if m.get("proactive"):
+            if m.get("proactive") and not (m.get("metadata") or {}).get(
+                "proactive_tool_facts"
+            ):
                 out.extend(_build_proactive_history_messages(str(content), m))
                 continue
 
@@ -246,14 +248,17 @@ class Session:
     ) -> list[str]:
         """返回与 get_history 同一窗口内模型调用过或经 tool_search 解锁的工具名。
 
-        按首次出现顺序去重；主动消息的工具链不进入 LLM 历史，因此也不计入。
+        按首次出现顺序去重；主动草稿控制不进入历史，已落库的主动工作事实计入。
         ``include`` 与 get_history 的同名参数一致。
         """
         names: dict[str, None] = {}
         for m in self.history_window(
             max_messages, start_index=start_index, include=include
         ):
-            if m.get("role") != "assistant" or m.get("proactive"):
+            if m.get("role") != "assistant" or (
+                m.get("proactive")
+                and not (m.get("metadata") or {}).get("proactive_tool_facts")
+            ):
                 continue
             for call in m.get("tool_calls") or []:
                 names.setdefault(call["function"]["name"], None)

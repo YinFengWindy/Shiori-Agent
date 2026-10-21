@@ -90,6 +90,7 @@ class SendMessageTool(Tool):
     async def execute(
         self,
         message: str = "",
+        messages: list[str] | None = None,
         content: str = "",
         image: str = "",
         media: list[str] | str | None = None,
@@ -110,13 +111,19 @@ class SendMessageTool(Tool):
                 {"error": "message_push already used in this drift run"},
                 ensure_ascii=False,
             )
-        if not text and not media_paths:
+        if messages is None and not text and not media_paths:
             logger.info("[drift_tools] message_push rejected: empty message and media")
             return json.dumps(
                 {"error": "message or media is required"}, ensure_ascii=False
             )
         reply = parse_push_reply(
-            {"message": text, "media": media_paths, "mood": mood, "thought": thought},
+            {
+                "message": text,
+                "messages": messages,
+                "media": media_paths,
+                "mood": mood,
+                "thought": thought,
+            },
             self._ctx,
         )
         self._ctx.drift_message_attempted = True

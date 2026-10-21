@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 import httpx
 import pytest
+from unittest.mock import AsyncMock
 
 from plugins.qqbot.backend.account_sending import _AccountSendingMixin
 from shiori_sdk.accounts.targets import UncertainDeliveryError
@@ -26,6 +27,38 @@ class _Sending(_AccountSendingMixin):
             ),
             via_account=lambda app_id: {"platform_account_id": app_id},
         )
+
+
+async def test_natural_route_preserves_application_address_without_affecting_sends(
+    monkeypatch,
+):
+    channel = SimpleNamespace(
+        _chat_id=lambda openid: f"c2c:100:{openid}",
+        send=AsyncMock(return_value="receipt"),
+    )
+    sending = _Sending(channel)
+    payload = {
+        "account_id": "account-100",
+        "target_kind": "private",
+        "target_id": "opaque",
+        "message": "raw payload",
+    }
+    assert await sending.account_resolve(payload) == {
+        "channel": "qqbot",
+        "chat_id": "c2c:100:opaque",
+        "chat_type": "private",
+        "message_thread_id": None,
+    }
+    channel.send.assert_not_awaited()
+    with pytest.raises(RuntimeError):
+        await sending.account_resolve({**payload, "account_id": "other"})
+    monkeypatch.setattr(
+        sending,
+        "account_resolve",
+        AsyncMock(side_effect=AssertionError("ordinary sends must not resolve")),
+    )
+    assert (await sending.account_send(payload))["message_id"] == "receipt"
+    channel.send.assert_awaited_once_with("c2c:100:opaque", "raw payload")
 
 
 @pytest.mark.asyncio

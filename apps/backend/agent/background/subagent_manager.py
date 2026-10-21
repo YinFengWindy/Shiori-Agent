@@ -27,6 +27,7 @@ from bus.internal_events import (
 )
 from bus.events import SpawnCompletionItem
 from bus.queue import MessageBus
+from shiori_sdk.messages import InboundMessage
 from core.common.strategy_trace import build_strategy_trace_envelope
 from core.common.runtime_scope import current_runtime_lease
 from core.common.runtime_tasks import create_runtime_task
@@ -85,6 +86,7 @@ class SubagentManager:
         self._multimodal = multimodal
         self._running_tasks: dict[str, asyncio.Task[None]] = {}
         self._running_jobs: dict[str, RunningSubagentJob] = {}
+        self._origins: dict[str, InboundMessage] = {}
         self._cancel_announced: set[str] = set()
         self._tool_hooks: ToolHookSource = no_tool_hooks
 
@@ -189,11 +191,14 @@ class SubagentManager:
         profile: str = PROFILE_RESEARCH,
         retry_count: int = 0,
         role_id: str = "",
+        origin: InboundMessage | None = None,
     ) -> str:
         """创建后台 subagent 任务，并立即把控制权还给主 agent。"""
         job_id = uuid.uuid4().hex[:8]
         display_label = (label or task[:30] or job_id).strip()
         task_dir = self._job_task_dir(job_id)
+        if origin is not None:
+            self._origins[job_id] = origin
         # 1. 先生成 job_id 和 trace，确保后台任务还没起时也能追踪来源。
         self._append_spawn_trace(
             job_id=job_id,
@@ -284,6 +289,7 @@ class SubagentManager:
     def _forget_running_job(self, job_id: str) -> None:
         self._running_tasks.pop(job_id, None)
         self._running_jobs.pop(job_id, None)
+        self._origins.pop(job_id, None)
         self._cancel_announced.discard(job_id)
 
     async def _run_subagent(
@@ -496,9 +502,12 @@ class SubagentManager:
                 profile=profile,
             ),
             decision=decision,
+            origin=self._origins.get(job_id),
         )
         lease = current_runtime_lease()
-        if lease is not None:
+        # A role report enters the current runtime when the result is ready;
+        # its completed job still owns its original execution lease until exit.
+        if lease is not None and item.origin is None:
             item.runtime_lease = lease.retain()
         # 3. 最后发布到 bus，让主 agent 以同一会话身份继续回复用户。
         try:

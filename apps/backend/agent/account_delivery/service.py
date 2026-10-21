@@ -30,6 +30,7 @@ from shiori_sdk.accounts.conversation import (
     AccountConversation,
 )
 from core.identity import IdentityChat, UserIdentityStore, identities_for_account
+from shiori_sdk.accounts.routing import ACCOUNT_RESOLVE_METHOD, AccountRoute
 
 if TYPE_CHECKING:
     # The registry is injected; importing its package here initializes the kernel
@@ -87,6 +88,17 @@ class UserChatTarget:
 
     chat: IdentityChat
     target: AccountTarget
+
+
+@dataclass(frozen=True)
+class ResolvedAccountTarget:
+    """A validated target bound to the exact account connection that resolved it."""
+
+    channel: str
+    role_id: str
+    target: AccountTarget
+    route: AccountRoute
+    access: AccountAccess
 
 
 class AccountDelivery:
@@ -187,6 +199,41 @@ class AccountDelivery:
                 f"当前角色在渠道 {account.record.plugin_id} 的账号已不可用"
             ) from None
 
+    async def resolve_target(
+        self,
+        channel: str,
+        role_id: str,
+        target: AccountTarget,
+        *,
+        known_private_route: AccountRoute | None = None,
+    ) -> ResolvedAccountTarget:
+        """Resolve a natural batch's scope, reusing an authoritative bound address.
+
+        Ordinary explicit sends do not depend on this optional plugin capability.
+        """
+        account = self.channel_account(channel, role_id)
+        access = self._authorize(account, role_id)
+        if known_private_route is not None:
+            # The proactive target selector already resolved this bound user's
+            # private chat. Do not query the plugin again or infer from a user ID.
+            if target.kind != "private" or known_private_route.chat_type != "private":
+                raise ValueError("已知绑定地址必须是私聊")
+            result = known_private_route.to_payload()
+        else:
+            result = await self._call(
+                channel,
+                ACCOUNT_RESOLVE_METHOD,
+                {"account_id": account.record.id, **target.to_payload()},
+            )
+        if not self._accounts.validate_access(access):
+            raise PermissionError("账号归属或连接状态已变化")
+        route = AccountRoute.for_account(result, account.record)
+        if (route.chat_type == "group") != (target.kind == "group"):
+            raise ValueError("目标类型与实际会话不一致")
+        if route.message_thread_id != target.message_thread_id:
+            raise ValueError("目标话题与实际会话不一致")
+        return ResolvedAccountTarget(channel, role_id, target, route, access)
+
     async def _call(self, plugin_id: str, method: str, payload: dict[str, Any]):
         resolved = self._rpc.resolve(f"plugin.{plugin_id}.{method}")
         if resolved is None or resolved[0] != plugin_id:
@@ -267,6 +314,7 @@ class AccountDelivery:
         *,
         source: str = "passive_tool",
         media: list[str] | None = None,
+        expected_access: AccountAccess | None = None,
     ) -> AccountSendReceipt:
         """Persist an attempt before sending, then record acceptance or failure.
 
@@ -277,6 +325,9 @@ class AccountDelivery:
         on ``channel`` (with an empty account ID). Once the platform returns
         a receipt the send is recorded and returned as sent; an invalid
         plugin snapshot is only logged and left out.
+
+        ``expected_access`` pins a natural batch to its resolved connection.
+        Omitted by ordinary explicit sends, which retain their existing contract.
         """
         try:
             account = self.channel_account(channel, role_id)
@@ -302,6 +353,11 @@ class AccountDelivery:
             if not message.strip() and not media:
                 raise ValueError("消息和图片不能都为空")
             access = self._authorize(account, role_id)
+            if expected_access is not None and (
+                access != expected_access
+                or not self._accounts.validate_access(expected_access)
+            ):
+                raise PermissionError("回复批次的账号归属或连接状态已变化")
         except Exception as exc:
             self._ledger.mark_failed(attempt.attempt_id, type(exc).__name__)
             raise
@@ -339,6 +395,8 @@ class AccountDelivery:
         ):
             mark_account_delivery_sent()
             self._ledger.mark_uncertain(attempt.attempt_id, "MissingReceipt")
+            if expected_access is not None:
+                raise UncertainDeliveryError("平台未返回回执，发送结果不确定")
             raise RuntimeError("平台未返回回执，发送结果不确定")
         mark_account_delivery_sent()
         if message_id:

@@ -956,7 +956,7 @@ async def test_preparation_spans_first_sequence_commit_effect_and_all_segments(
 ):
     from agent.turns.channel_sequence import ChannelSequenceOwner
     from agent.turns.outbound import BusOutboundPort
-    from agent.turns.reply_sequence import ReplySequencePolicy
+    from agent.turns.reply_sequence import ReplySequence
     from bus.queue import MessageBus
     from session.manager.models import build_session_message
     from shiori_sdk.memory.committed import TurnCommitted
@@ -985,8 +985,8 @@ async def test_preparation_spans_first_sequence_commit_effect_and_all_segments(
             after_commit=after_commit,
         )
         return TurnRunResult(
-            reply="one\n<message-break/>\ntwo",
-            reply_sequence=ReplySequencePolicy("<message-break/>"),
+            reply="one\n\ntwo",
+            reply_sequence=ReplySequence(("one", "two")),
         )
 
     async def deliver(outbound):

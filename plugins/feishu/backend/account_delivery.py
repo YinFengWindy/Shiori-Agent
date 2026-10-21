@@ -11,10 +11,12 @@ from shiori_sdk.storage import read_mapping
 
 from shiori_sdk.accounts import VIA_ACCOUNT_KEY
 from shiori_sdk.accounts.conversation import AccountConversation
+from shiori_sdk.accounts.routing import AccountRoute
 from shiori_sdk.accounts.targets import (
     GROUP_MEMBER_TARGET,
     UncertainDeliveryError,
     account_send_media,
+    AccountTarget,
 )
 from shiori_sdk.media import detect_image_mime_from_header
 
@@ -94,6 +96,19 @@ class FeishuAccountDelivery:
                 ) from exc
             receipt = receipt or message_id
         return {"message_id": receipt}
+
+    async def resolve_account(self, payload: dict[str, object]) -> dict[str, object]:
+        """Resolve the observed private chat using the same application as sends."""
+        target = AccountTarget.from_arguments(payload)
+        if target.kind != "private" or target.message_thread_id is not None:
+            raise ValueError("飞书仅支持私聊发送")
+        ref = self._accounts.ref_for_account(payload)
+        channel = self._accounts.channel(ref)
+        if channel is None:
+            raise RuntimeError("飞书账号未连接")
+        return AccountRoute(
+            channel.name, self._private_chat(ref, target.id)
+        ).to_payload()
 
     async def send_account(self, payload: dict[str, object]) -> dict[str, object]:
         """Validates the shared account-send contract before private delivery.

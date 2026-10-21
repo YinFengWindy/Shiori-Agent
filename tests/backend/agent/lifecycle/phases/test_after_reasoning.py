@@ -32,16 +32,15 @@ from session.manager.models import whole_session
 from agent.turns.channel_sequence import ChannelSequenceOwner
 from bus.queue import MessageBus
 from shiori_sdk.messages import DeliveryOutcome
-from agent.turns.reply_sequence import ReplySequencePolicy
+from agent.turns.reply_sequence import ReplySequence
 
 
-@pytest.mark.parametrize("structured", [False, True])
 async def test_external_sequence_sends_each_committed_row_once_with_first_only_extras(
-    tmp_path, monkeypatch, structured
+    tmp_path, monkeypatch
 ):
     manager = SessionManager(tmp_path)
     session = role_session(manager)
-    request = turn(session, content="one\n<message-break/>\ntwo")
+    request = turn(session, content="one\n\ntwo")
     request.state.msg.channel = "qq"
     request.state.msg.chat_id = "gqq:123"
     request.state.msg.metadata.update(
@@ -55,13 +54,9 @@ async def test_external_sequence_sends_each_committed_row_once_with_first_only_e
             "chat_type": "group",
         }
     )
-    request.turn_result.reply_sequence = ReplySequencePolicy("<message-break/>")
-    if structured:
-        request.turn_result.reply = "one\n<host-boundary/>\ntwo"
-        request.turn_result.reply_sequence = ReplySequencePolicy(
-            "<host-boundary/>", message_count=2
-        )
-        request.turn_result.raw_reply = json.dumps({"messages": ["one", "two"]})
+    request.turn_result.reply = "one\n\ntwo"
+    request.turn_result.reply_sequence = ReplySequence(("one", "two"))
+    request.turn_result.raw_reply = json.dumps({"messages": ["one", "two"]})
     request.turn_result.role_reply = RoleReply(
         content=request.turn_result.reply,
         mood="平静",
@@ -764,15 +759,16 @@ async def test_desktop_sequence_preserves_raw_reply_while_committing_clean_bubbl
 ):
     manager = SessionManager(tmp_path)
     session = role_session(manager)
-    raw = "  one\n<message-break/>\ntwo  "
-    request = turn(session, content=raw)
+    request = turn(session, content="  one\n\ntwo  ")
+    request.turn_result.reply = "  one\n\ntwo  "
+    request.turn_result.reply_sequence = ReplySequence(("  one", "two  "))
+    request.turn_result.raw_reply = "raw tool arguments"
     request.state.msg.metadata["turn_id"] = "desktop-sequence"
-    request.turn_result.reply_sequence = ReplySequencePolicy("<message-break/>")
     monkeypatch.setattr("agent.turns.reply_sequence.wait_between_messages", AsyncMock())
 
     result = await phase(manager).run(request)
 
-    assert result.ctx.response_metadata.raw_text == raw
+    assert result.ctx.response_metadata.raw_text == "raw tool arguments"
     assert result.ctx.reply == "  one\n\ntwo  "
     stored = SessionManager(tmp_path).get_or_create(session.key)
     assert [

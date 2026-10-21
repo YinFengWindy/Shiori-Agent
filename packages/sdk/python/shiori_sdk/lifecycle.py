@@ -110,6 +110,9 @@ class AfterReasoningCtx:
     media: list[str] = field(default_factory=list)
     meme_tag: str | None = None
     outbound_metadata: dict[str, object] = field(default_factory=dict)
+    # Validated natural-chat bubbles. Decorators rewrite each item; ``reply``
+    # stays their plain join for whole-turn observers.
+    reply_messages: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

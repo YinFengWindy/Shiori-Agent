@@ -27,6 +27,45 @@ def _setup_context() -> FakeChannelPluginContext:
     return context
 
 
+async def test_natural_route_reuses_private_chat_lookup_and_does_not_change_send(
+    monkeypatch,
+):
+    channel = SimpleNamespace(
+        name="feishu:feishu:app",
+        send=AsyncMock(return_value="om_1"),
+        via_account=lambda: {},
+    )
+    accounts = SimpleNamespace(
+        channel=lambda ref: channel if ref == "feishu:app" else None,
+        ref_for_account=lambda payload: (
+            "feishu:app" if payload["account_id"] == "one" else "other"
+        ),
+    )
+    delivery = FeishuAccountDelivery(_setup_context(), accounts)
+    payload = {
+        "account_id": "one",
+        "target_kind": "private",
+        "target_id": "feishu:ou_a",
+        "message": "raw payload",
+    }
+    assert await delivery.resolve_account(payload) == {
+        "channel": channel.name,
+        "chat_id": "oc_a",
+        "chat_type": "private",
+        "message_thread_id": None,
+    }
+    channel.send.assert_not_awaited()
+    with pytest.raises(RuntimeError):
+        await delivery.resolve_account({**payload, "account_id": "other"})
+    monkeypatch.setattr(
+        delivery,
+        "resolve_account",
+        AsyncMock(side_effect=AssertionError("ordinary sends must not resolve")),
+    )
+    assert (await delivery.send_account(payload))["message_id"] == "om_1"
+    channel.send.assert_awaited_once_with("oc_a", "raw payload")
+
+
 @pytest.mark.asyncio
 async def test_profile_and_targets_stay_scoped_to_the_selected_account() -> None:
     accounts = SimpleNamespace(

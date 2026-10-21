@@ -3,6 +3,7 @@ import logging
 from collections import deque
 from collections.abc import Awaitable, Callable, Iterator
 from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 
 from bus.events import InboundItem
@@ -47,6 +48,10 @@ class MessageBus:
         self.transport_lock = asyncio.Lock()
         self._acknowledgements: dict[int, asyncio.Future[DeliveryOutcome]] = {}
         self._ack_started: set[int] = set()
+        self._outbound_authority: ContextVar[Callable[[], bool] | None] = ContextVar(
+            "outbound_authority", default=None
+        )
+        self._outbound_checks: dict[int, Callable[[], bool]] = {}
         self._sequence_transports: set[tuple[str, Callable]] = set()
 
     def bind_runtime_admission(self, lease_factory: Callable) -> None:
@@ -77,8 +82,36 @@ class MessageBus:
         """阻塞直到有消息可消费"""
         return await self._inbound.get()
 
+    @contextmanager
+    def outbound_authority(self, validate: Callable[[], bool]):
+        """Retain a host-owned connection fence on every queued output of this task.
+
+        The fence is private queue state, including error output, and is checked
+        under the transport lock immediately before a callback starts.
+        """
+        token = self._outbound_authority.set(validate)
+        try:
+            yield
+        finally:
+            self._outbound_authority.reset(token)
+
+    def outbound_authorized(self) -> bool:
+        """Recheck the current task's captured authority after waiting for its gate."""
+        validate = self._outbound_authority.get()
+        return validate is None or validate()
+
+    def _may_deliver(self, message: OutboundMessage) -> bool:
+        validate = self._outbound_checks.get(id(message))
+        if validate is None or validate():
+            return True
+        message.delivery_outcome = DeliveryOutcome("failed")
+        return False
+
     async def publish_outbound(self, msg: OutboundMessage) -> None:
         """agent → channel"""
+        validate = self._outbound_authority.get()
+        if validate is not None:
+            self._outbound_checks[id(msg)] = validate
         key = self._outbound_key(msg)
         self._pending_outbound[key] = self._pending_outbound.get(key, 0) + 1
         await self._outbound.put(msg)
@@ -307,6 +340,7 @@ class MessageBus:
             lane.in_flight = None
 
     def _settle(self, msg: OutboundMessage) -> None:
+        self._outbound_checks.pop(id(msg), None)
         self._release_pending(self._outbound_key(msg))
         self._outbound.task_done()
 
@@ -333,6 +367,9 @@ class MessageBus:
                     async with self.transport_lock:
                         if acknowledgement.cancelled():
                             return
+                        if not self._may_deliver(msg):
+                            acknowledgement.set_result(DeliveryOutcome("failed"))
+                            return
                         self._ack_started.add(id(msg))
                         receipt = await deliver_acknowledged(
                             msg, tuple(self._subscribers.get(msg.channel, []))
@@ -349,6 +386,8 @@ class MessageBus:
             attempted = tuple(self._subscribers.get(msg.channel, []))
             failed: list[Callable[[OutboundMessage], Awaitable[None]]] = []
             for cb in attempted:
+                if not self._may_deliver(msg):
+                    return
                 error = await self._deliver_once(cb, msg, retrying=False)
                 if error is not None:
                     logger.warning(
@@ -363,12 +402,15 @@ class MessageBus:
         await _backoff(self.outbound_retry_delay_s)
         async with self.transport_lock:
             for cb in self._retry_targets(msg, attempted, failed):
+                if not self._may_deliver(msg):
+                    return
                 error = await self._deliver_once(cb, msg, retrying=True)
                 if error is not None:
                     logger.error(
                         "分发消息到 %s 重试仍失败，发送降级通知: %s", msg.channel, error
                     )
-                    await self._send_failure_notice(cb, msg)
+                    if self._may_deliver(msg):
+                        await self._send_failure_notice(cb, msg)
 
     def _retry_targets(
         self,

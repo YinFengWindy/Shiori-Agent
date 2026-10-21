@@ -9,7 +9,9 @@ from bootstrap.runtime.generations import RuntimeLease
 
 from core.common.runtime_scope import bind_runtime, current_runtime_lease
 from agent.turns.channel_sequence import channel_reply_scope
-from agent.turns.reply_interruption import reply_interruption_scope
+from agent.turns.reply_interruption import ReplyInterruption, reply_interruption_scope
+from bus.events import SpawnCompletionItem
+from shiori_sdk.channels.chat_types import is_group_chat_type
 from shiori_sdk.messages import InboundMessage
 
 if TYPE_CHECKING:
@@ -46,9 +48,18 @@ class RuntimeDispatcher:
                         await self._app.wait_for_admission()
                     lease = inherited or self._app.acquire()
                     pending.add(lease)
-                    key = (
-                        channel_reply_scope(item)
+                    origin = (
+                        item
                         if isinstance(item, InboundMessage)
+                        else (
+                            item.origin
+                            if isinstance(item, SpawnCompletionItem)
+                            else None
+                        )
+                    )
+                    key = (
+                        channel_reply_scope(origin)
+                        if origin is not None
                         else (item.session_key, item.channel, item.chat_id)
                     )
                     message_id = str(
@@ -64,14 +75,18 @@ class RuntimeDispatcher:
                     if dedupe is not None:
                         accepted.add(dedupe)
                     interruption = None
+                    background = ()
                     if (
-                        isinstance(item, InboundMessage)
-                        and item.metadata.get("role_id")
-                        and self._app.bus.supports_reply_sequence(item.channel)
+                        origin is not None
+                        and origin.metadata.get("role_id")
+                        and (
+                            origin.channel == "desktop"
+                            or self._app.bus.supports_reply_sequence(origin.channel)
+                        )
                     ):
                         role = (
                             lease.core.role_runtime_registry.repository.store.get_role(
-                                str(item.metadata["role_id"])
+                                str(origin.metadata["role_id"])
                             )
                         )
                         if role is None:
@@ -83,10 +98,20 @@ class RuntimeDispatcher:
                                 accepted.discard(dedupe)
                             continue
                         if role.runtime_config.get("natural_chat_enabled") is True:
-                            interruption = lease.reply_sequences.admit(item)
+                            background = lease.reply_sequences.background_tasks(origin)
+                            interruption = (
+                                lease.reply_sequences.admit(item)
+                                if isinstance(item, InboundMessage)
+                                else ReplyInterruption()
+                            )
                     task = group.create_task(
                         self._process_inbound(
-                            item, lease, tails.get(key), pending, interruption
+                            item,
+                            lease,
+                            tails.get(key),
+                            pending,
+                            interruption,
+                            background,
                         )
                     )
                     tails[key] = task
@@ -101,6 +126,22 @@ class RuntimeDispatcher:
                         task.add_done_callback(
                             lambda _, item=item, owner=lease.reply_sequences, reply=interruption: owner.forget(
                                 item, reply
+                            )
+                        )
+                    elif interruption is not None and origin is not None:
+                        registration = lease.reply_sequences.register_background(
+                            origin,
+                            interruption,
+                            task,
+                            senders=(
+                                frozenset({origin.sender})
+                                if is_group_chat_type(origin.metadata.get("chat_type"))
+                                else None
+                            ),
+                        )
+                        task.add_done_callback(
+                            lambda _, owner=lease.reply_sequences, reply=registration: owner.forget_background(
+                                reply
                             )
                         )
         finally:
@@ -120,11 +161,16 @@ class RuntimeDispatcher:
         previous: asyncio.Task | None,
         pending: set[RuntimeLease],
         interruption=None,
+        background=(),
     ) -> None:
         async with lease:
             pending.discard(lease)
             if previous is not None:
                 await asyncio.shield(asyncio.gather(previous, return_exceptions=True))
+            if background:
+                await asyncio.shield(
+                    asyncio.gather(*background, return_exceptions=True)
+                )
             bus = self._app.bus
             assert bus is not None
             try:
@@ -135,7 +181,7 @@ class RuntimeDispatcher:
                 ):
                     await lease.core.loop.process_inbound(item)
             finally:
-                if interruption is not None:
+                if interruption is not None and isinstance(item, InboundMessage):
                     lease.reply_sequences.forget(item, interruption)
 
     async def process_direct(self, *args, **kwargs):
@@ -159,7 +205,7 @@ class RuntimeDispatcher:
         """Select the current generation only for this short result turn."""
         await self._app.wait_for_admission()
         async with self._app.acquire() as lease:
-            with bind_runtime(lease):
+            with bind_runtime(lease), lease.reply_sequences.bind(self._app.bus):
                 await lease.core.loop.process_background_result(context, admit)
 
     def request_interrupt(

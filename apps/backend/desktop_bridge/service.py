@@ -25,7 +25,7 @@ from agent.tools.message_push import MessagePushTool
 from agent.turns.turn_pushes import current_turn_pushes
 from bus.event_bus import EventBus
 from bus.events_context import ContextWindowChanged
-from bus.events_lifecycle import ProactiveMessageCommitted
+from bus.events_lifecycle import ProactiveMessageCommitted, ReplyMessageCommitted
 from shiori_sdk.role_events import RoleDeleted
 from shiori_sdk.memory.committed import TurnCommitted
 from conversation.listening import GroupListeningControl
@@ -112,6 +112,7 @@ class DesktopBridgeService:
         self._context_window_listener = self._on_context_window_changed
         self.event_bus.on(ContextWindowChanged, self._context_window_listener)
         self._proactive_message_listener = self._on_proactive_message_committed
+        self.event_bus.on(ReplyMessageCommitted, self._on_background_reply_message)
         self.event_bus.on(TurnCommitted, self._turn_committed_listener)
         self.event_bus.on(
             ProactiveMessageCommitted,
@@ -316,6 +317,27 @@ class DesktopBridgeService:
             )
         await self._broadcast_phone_updates(role_id, messages)
 
+    async def _on_background_reply_message(self, event: ReplyMessageCommitted) -> None:
+        """Publish actual background/proactive rows while their batch is still active."""
+        session = self.session_manager.get_or_create(event.session_key)
+        messages = [
+            message
+            for message in session.messages
+            if str(message.get("id") or "") in event.message_ids
+            and message.get("metadata", {}).get("source")
+            in {"proactive", "background_result"}
+            and message.get("content")
+        ]
+        if not messages:
+            return
+        role_id = str(session.metadata.get("role_id") or "")
+        await self._broadcast_session_updated(
+            request_id=event.turn_id,
+            session=session,
+            messages=messages,
+        )
+        await self._broadcast_phone_updates(role_id, messages)
+
     async def _on_proactive_message_committed(
         self,
         event: ProactiveMessageCommitted,
@@ -457,6 +479,7 @@ class DesktopBridgeService:
         """Releases bridge event subscriptions and desktop chat tasks."""
 
         self.event_bus.off(TurnCommitted, self._turn_committed_listener)
+        self.event_bus.off(ReplyMessageCommitted, self._on_background_reply_message)
         self.event_bus.off(ContextWindowChanged, self._context_window_listener)
         self.event_bus.off(
             ProactiveMessageCommitted,

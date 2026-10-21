@@ -265,7 +265,7 @@ class _PassiveReasoningResultMixin:
                 raise RuntimeError("自然聊天缺少已校验的完成回复")
             metadata["natural_reply"] = natural_reply.reply
             metadata["natural_reply_corrected"] = natural_reply.corrected
-            reply = natural_reply.reply.decorated_input
+            reply = natural_reply.reply.sequence.content
             if role_reply is not None:
                 metadata["role_reply"] = replace(role_reply, content=reply)
 

@@ -23,28 +23,31 @@ _RELATIONSHIP_FALLBACK_STYLE_HINT = (
 )
 
 
-def build_system_prompt(role_prompt: str) -> str:
+def build_system_prompt(role_prompt: str, *, natural_chat: bool = False) -> str:
     """构建主动决策模式的稳定系统提示词。"""
 
     identity = str(role_prompt or "").strip()
     if not identity:
         raise ValueError("role.system_prompt required for proactive generation")
 
+    reply_unit = "一轮回复" if natural_chat else "一条消息"
+    final_reply = "最终回复" if natural_chat else "一条最终消息"
+    payload = "非空 messages 列表" if natural_chat else "非空 message"
     return (
         f"{identity}\n\n"
-        "你现在处于主动推送决策模式：判断现在是否该给用户发一条消息，以及发什么。\n"
+        f"你现在处于主动推送决策模式：判断现在是否该给用户发{reply_unit}，以及发什么。\n"
         "数据已预取完毕，会在后续 system context frame 里提供；基于那些数据直接决策。\n\n"
         "【优先级】Alert > Content > Context-fallback（本轮是否允许以 context frame 为准）\n\n"
         "【你的任务】\n"
-        "⚡ 如果本轮有 Alert：把本轮所有 Alert 整合成一条消息，调用 message_push 并填写本轮全部 Alert 的 id 作为 evidence，然后 finish_turn(decision=reply) 结束。Alert 是系统触发的高优先级通知，不走内容筛选流程。\n"
+        f"⚡ 如果本轮有 Alert：把本轮所有 Alert 整合成{reply_unit}，调用 message_push 并填写本轮全部 Alert 的 id 作为 evidence，然后 finish_turn(decision=reply) 结束。Alert 是系统触发的高优先级通知，不走内容筛选流程。\n"
         "1. 对本轮 Content 逐条判断：这条内容是否可能让用户不感兴趣，是否可能不符合规则，是否值得进入 interesting。\n"
         "2. 你的主工作是分类，不是主动研究新题材，不是主动扩展候选池。\n"
         "3. 你要基于规则和用户偏好，把本轮 Content 分成 interesting 和 not_interesting。\n\n"
         "【你的输出】\n"
-        "1. 有 Alert → 把本轮所有 Alert 整合成一条消息，evidence 填写全部 Alert id，message_push 后 finish_turn(decision=reply)（跳过一切分类步骤）。\n"
+        f"1. 有 Alert → 把本轮所有 Alert 整合成{reply_unit}，evidence 填写全部 Alert id，message_push 后 finish_turn(decision=reply)（跳过一切分类步骤）。\n"
         "2. 无 Alert：对每条 Content 给出最终分类：mark_interesting 或 mark_not_interesting。\n"
         "3. 如果最终没有 interesting，调用 finish_turn(decision=skip, reason=no_content)。\n"
-        "4. 如果最终有 interesting，生成一条最终消息并按 message_push + finish_turn(decision=reply) 收尾。\n\n"
+        f"4. 如果最终有 interesting，生成{final_reply}并按 message_push + finish_turn(decision=reply) 收尾。\n\n"
         "【工具职责】\n"
         "1. Workspace 主动上下文：这是用户当前明确提出并要求你遵守的规则集合。它定义你该怎么筛、哪些要先验证、哪些必须过滤；它不提供新闻事实。\n"
         "2. recall_memory：仅用于 Content 评估——判断单条内容是否可能是用户雷点，或是否可能让用户感兴趣。Alert 不需要调用此工具。\n"
@@ -82,7 +85,7 @@ def build_system_prompt(role_prompt: str) -> str:
         "【决策流程】\n\n"
         "【Alert 快速路径】本轮如有 Alert：\n"
         "  → get_recent_chat 确认用户不在忙\n"
-        "  → 把本轮所有 Alert 的内容整合成一条消息，evidence 必须填写本轮全部 Alert 的 id\n"
+        f"  → 把本轮所有 Alert 的内容整合成{reply_unit}，evidence 必须填写本轮全部 Alert 的 id\n"
         "  → message_push → finish_turn(decision=reply) 结束\n"
         "  → 结束，可以不调用 recall_memory / mark_* / get_content / web_fetch\n\n"
         "【Content 路径】本轮无 Alert 时，Content 的主要任务不是做研究，而是把本轮候选逐条分成 interesting 或 not_interesting。\n"
@@ -108,7 +111,7 @@ def build_system_prompt(role_prompt: str) -> str:
         "  context 数据已在上方，有亮点 → message_push + finish_turn(decision=reply)，否则 finish_turn(decision=skip, reason=no_content)\n\n"
         "【发送要求】\n"
         "- 使用当前角色身份和语气自然表达，不写成系统通知\n"
-        "- message_push 必须带非空 message；finish_turn(decision=skip, reason=...) 不要在之前调用 message_push\n"
+        f"- message_push 必须带{payload}；finish_turn(decision=skip, reason=...) 不要在之前调用 message_push\n"
         "- 消息里出现的具体数字、比分、排名、阵容、结果，必须来自本轮已提供的 Alerts/Content 数据；严禁基于训练知识或记忆脑补任何可验证事实。\n"
         "- 当某段内容基于外部来源且该来源有可靠链接时，在这段内容结束后自然附上对应原始链接，方便用户立即溯源\n"
         "- 链接要紧跟相关内容，不要把所有链接集中堆到整条消息末尾，也不要做成生硬的参考文献区\n"

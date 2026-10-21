@@ -6,11 +6,10 @@ import json
 from copy import deepcopy
 from dataclasses import dataclass, replace
 from typing import Any
-from uuid import uuid4
 
 from agent.provider import LLMProvider, LLMResponse, is_truncated_finish_reason
 from agent.tool_runtime import append_assistant_tool_calls, append_tool_result
-from agent.turns.reply_sequence import ReplySequence, ReplySequencePolicy
+from agent.turns.reply_sequence import ReplySequence
 from agent.turns.reply_interruption import ReplyPlanInvalidated, reply_was_invalidated
 from prompts.natural_chat import FINISH_REPLY_TOOL_NAME
 from .budgeted_request import budgeted_chat
@@ -39,17 +38,6 @@ class NaturalReply:
 
     sequence: ReplySequence
     raw_text: str
-    policy: ReplySequencePolicy
-
-    @property
-    def decorated_input(self) -> str:
-        """Carry boundaries through the existing once-per-turn decorators.
-
-        This opaque boundary is created by the host, never requested from the
-        model. Literal protocol examples and unclosed code fences in individual
-        messages therefore cannot change the model's chosen message boundaries.
-        """
-        return f"\n{self.policy.separator}\n".join(self.sequence.messages)
 
 
 def finish_reply_schema(*, strict: bool = False) -> dict[str, Any]:
@@ -95,13 +83,9 @@ def _validate(response: LLMResponse) -> NaturalReply:
         raise InvalidNaturalReply("messages 必须是非空消息列表")
     if any(not isinstance(item, str) or not item.strip() for item in messages):
         raise InvalidNaturalReply("messages 每项必须是非空字符串")
-    separator = f"<shiori-message-{uuid4().hex}/>"
-    while any(separator in item for item in messages):
-        separator = f"<shiori-message-{uuid4().hex}/>"
     return NaturalReply(
         sequence=ReplySequence(tuple(messages)),
         raw_text=call.raw_arguments or json.dumps(payload, ensure_ascii=False),
-        policy=ReplySequencePolicy(separator, message_count=len(messages)),
     )
 
 

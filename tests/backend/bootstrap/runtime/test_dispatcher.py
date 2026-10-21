@@ -23,6 +23,696 @@ from tests.support.chat_replies import chat_reply
 from session.manager import SessionManager
 
 
+async def proactive_task(
+    env,
+    tmp_path,
+    *,
+    addressed=False,
+    topic=None,
+    stage="pacing",
+    failure=None,
+    failure_at=2,
+    channel="qq",
+    target_id="room",
+    desktop=False,
+    draft_messages=None,
+    correction_response=None,
+    invalidate_draft=False,
+):
+    """A real proactive draft tool loop, account receipt ledger and role dispatcher."""
+    from agent.account_delivery import AccountDelivery
+    from agent.tools.account_delivery import AccountSendTool
+    from agent.turns.orchestrator import TurnOrchestrator, TurnOrchestratorDeps
+    from agent.turns.outbound import DeliveryReceipt
+    from agent.looping.ports import SessionServices
+    from bus.events_lifecycle import ProactiveMessageCommitted
+    from conversation.service import ConversationService, desktop_thread_id
+    from core.accounts.delivery_ledger import AccountDeliveryLedger
+    from core.common.runtime_scope import bind_runtime
+    from core.identity import UserIdentityStore
+    from proactive_v2.tools import ToolDeps
+    from tests.backend.proactive_v2.conftest import make_proactive_pipeline, FakeLLM
+
+    sent, events = [], []
+    event_bus = env.host.loop._event_bus
+    event_bus.on(ProactiveMessageCommitted, events.append)
+
+    async def resolve(payload):
+        if stage == "retarget":
+            env.started.set()
+            await env.release.wait()
+        return {
+            "channel": channel,
+            "chat_id": (
+                "gqq:" + payload["target_id"]
+                if channel == "qq"
+                else payload["target_id"]
+            ),
+            "chat_type": "group",
+            "message_thread_id": payload.get("message_thread_id"),
+        }
+
+    async def send(payload):
+        sent.append(payload)
+        if (stage == "sending" and len(sent) == 1) or (
+            stage == "sending_last"
+            and len(sent) == len(draft_messages or ["prefix", "tail"])
+        ):
+            env.started.set()
+            await env.release.wait()
+        if failure is not None and len(sent) == failure_at:
+            raise failure
+        return {"message_id": f"proactive-{len(sent)}"}
+
+    rpc = SimpleNamespace(
+        resolve=lambda name: (
+            channel,
+            resolve if name.endswith("account.resolve") else send,
+        )
+    )
+    delivery = AccountDelivery(
+        env.host.roles.accounts,
+        rpc,
+        AccountDeliveryLedger(tmp_path),
+        UserIdentityStore(tmp_path),
+    )
+    env.host.loop.tools.register(AccountSendTool(delivery, event_bus))
+
+    async def desktop_send(message):
+        await send({"message": message.content})
+        return DeliveryReceipt.sent()
+
+    owner = TurnOrchestrator(
+        TurnOrchestratorDeps(
+            session=SessionServices(
+                env.host.manager,
+                conversation_service=ConversationService(env.host.manager),
+            ),
+            outbound=SimpleNamespace(dispatch=desktop_send),
+            event_bus=event_bus,
+            account_delivery=delivery,
+            role_lookup=env.host.roles.get_role,
+        )
+    )
+    llm = FakeLLM(
+        [
+            ("get_recent_chat", {}),
+            (
+                "message_push",
+                {
+                    "messages": (
+                        ["主动前缀", "主动尾段"]
+                        if draft_messages is None
+                        else draft_messages
+                    ),
+                    "mood": "平静",
+                    "thought": "我想和你说说。",
+                    "evidence": [],
+                    **(
+                        {
+                            "account_channel": channel,
+                            "target_kind": "group",
+                            "target_id": target_id,
+                            "mention_ids": ["alice"] if addressed else [],
+                            **({"message_thread_id": topic} if topic else {}),
+                        }
+                        if not desktop
+                        else {}
+                    ),
+                },
+            ),
+            ("finish_turn", {"decision": "reply"}),
+        ]
+    )
+
+    corrections = []
+
+    async def provider_chat(**kwargs):
+        if [t["function"]["name"] for t in kwargs["tools"]] == ["finish_reply"]:
+            corrections.append(kwargs)
+            assert correction_response is not None
+            return correction_response
+        if stage == "generation" and not llm.calls:
+            env.started.set()
+            await env.release.wait()
+        call = await llm(kwargs["messages"], kwargs["tools"], kwargs["tool_choice"])
+        assert call is not None
+        if invalidate_draft and call["name"] == "message_push":
+            from agent.turns.reply_interruption import current_reply_interruption
+
+            interruption = current_reply_interruption()
+            assert interruption is not None
+            interruption.invalidate()
+        return LLMResponse(
+            content="",
+            tool_calls=[
+                ToolCall(f"proactive-{len(llm.calls)}", call["name"], call["input"])
+            ],
+        )
+
+    from proactive_v2.agent_tick_factory import AgentTickDeps, AgentTickFactory
+
+    model = AgentTickFactory(
+        AgentTickDeps(
+            cfg=None,
+            sense=None,
+            presence=None,
+            provider=SimpleNamespace(chat=provider_chat),
+            model="test",
+            max_tokens=2048,
+            memory=None,
+            state_store=None,
+            any_action_gate=None,
+            passive_busy_fn=None,
+            deduper=None,
+            rng=None,
+            workspace_context_fn=lambda: "",
+            role_prompt_fn=lambda: "",
+        )
+    )._build_llm_fn()
+
+    async def recent_chat(**_):
+        if stage == "tool":
+            env.started.set()
+            await env.release.wait()
+        return [{"role": "user", "content": "已执行的查询事实"}]
+
+    pipeline = make_proactive_pipeline(
+        session_key="role:mira",
+        llm_fn=model,
+        target_transport_fn=lambda: ("desktop", "role:mira"),
+        tool_deps=ToolDeps(
+            shared_tools=env.host.loop.tools,
+            recent_chat_fn=recent_chat,
+        ),
+    )
+    pipeline._turn_orchestrator = owner
+    registry = env.host.loop.role_runtime_registry
+    context = registry.create_context(
+        role_id="mira",
+        thread_id=desktop_thread_id("mira"),
+        transport_channel="desktop",
+        transport_chat_id="role:mira",
+        source="proactive",
+        work_kind="proactive_tick",
+    )
+
+    async def run():
+        async with env.candidate.acquire() as lease:
+            with bind_runtime(lease):
+                return await registry.dispatch_proactive_tick(context, pipeline.run)
+
+    task = asyncio.create_task(run())
+    return SimpleNamespace(
+        task=task,
+        sent=sent,
+        events=events,
+        pipeline=pipeline,
+        llm=llm,
+        corrections=corrections,
+    )
+
+
+@pytest.mark.parametrize("correction_kind", ["valid", "business_tool", "invalidated"])
+async def test_proactive_format_correction_never_replays_completed_work(
+    tmp_path, monkeypatch, correction_kind
+):
+    from agent.core.passive_turn.natural_reply import NaturalReplyCorrectionError
+    from session.manager.models import whole_session
+
+    response = LLMResponse(
+        "",
+        [
+            (
+                ToolCall("correction", "public", {})
+                if correction_kind == "business_tool"
+                else ToolCall(
+                    "correction",
+                    "finish_reply",
+                    {"messages": ["整理好了。", "后续细节"]},
+                )
+            )
+        ],
+    )
+    async with natural_dispatcher(tmp_path, monkeypatch) as env:
+        env.release.set()
+        proactive = await proactive_task(
+            env,
+            tmp_path,
+            draft_messages=[],
+            correction_response=response,
+            invalidate_draft=correction_kind == "invalidated",
+        )
+        if correction_kind == "business_tool":
+            with pytest.raises(NaturalReplyCorrectionError):
+                await proactive.task
+        else:
+            await proactive.task
+        assert [m["message"] for m in proactive.sent] == (
+            ["整理好了。", "后续细节"] if correction_kind == "valid" else []
+        )
+        assert len(proactive.corrections) == (
+            0 if correction_kind == "invalidated" else 1
+        )
+        if proactive.corrections:
+            request = proactive.corrections[0]
+            assert request["call_purpose"] == "auxiliary"
+            assert [t["function"]["name"] for t in request["tools"]] == ["finish_reply"]
+            assert any("已执行的查询事实" in str(m) for m in request["messages"])
+        rows = SessionManager(tmp_path).get_or_create("role:mira").messages
+        facts = [m for m in rows if m.get("tool_chain")]
+        assert len(facts) == 1
+        assert [c["name"] for g in facts[0]["tool_chain"] for c in g["calls"]] == [
+            "get_recent_chat"
+        ]
+        assert not env.tool_calls
+        assert len(proactive.llm.calls) == (3 if correction_kind == "valid" else 2)
+        assert len(proactive.events) == int(correction_kind == "valid")
+        assert not any(
+            "finish_reply" in str(m)
+            for m in SessionManager(tmp_path)
+            .get_or_create("role:mira")
+            .get_history(include=whole_session)
+        )
+
+
+async def test_admitted_group_request_stops_proactive_tail_at_safe_send_boundary(
+    tmp_path, monkeypatch
+):
+    stage, addressed = "pacing", True
+    async with natural_dispatcher(tmp_path, monkeypatch, stage=stage) as env:
+        proactive = await proactive_task(
+            env, tmp_path, addressed=addressed, stage=stage
+        )
+        await asyncio.wait_for(env.started.wait(), 3)
+        await env.receive("补充", sender="alice" if addressed else "bob")
+        await env.receive("继续补充", sender="alice" if addressed else "bob")
+        await until(lambda: env.bus.inbound_size == 0)
+        env.release.set()
+        await asyncio.wait_for(proactive.task, 3)
+        await until(lambda: env.candidate.references == 0)
+        assert [m["message"] for m in proactive.sent] == ["主动前缀"]
+        assert len(proactive.events) == 1
+        assert proactive.events[0].assistant_response == "主动前缀"
+        assert proactive.events[0].chat_id == "gqq:room"
+        assert not proactive.pipeline._state_store._deliveries
+        stored = SessionManager(tmp_path).get_or_create("role:mira")
+        assert not any("主动尾段" in m["content"] for m in stored.messages)
+        assert [
+            m["content"]
+            for m in stored.messages
+            if m["content"] in {"补充", "继续补充"}
+        ] == ["补充", "继续补充"]
+        facts = [
+            m for m in stored.messages if m.get("tool_chain") and m.get("proactive")
+        ]
+        assert len(facts) == 1
+        assert facts[0]["tool_chain"][0]["calls"][0]["name"] == "get_recent_chat"
+        assert len(proactive.llm.calls) == 3
+
+
+@pytest.mark.parametrize(
+    "input_options",
+    [
+        {"sender": "bob"},
+        {"chat": "gqq:other"},
+    ],
+)
+async def test_proactive_addressed_group_isolates_other_sender_origin_and_chatter(
+    tmp_path, monkeypatch, input_options
+):
+    async with natural_dispatcher(tmp_path, monkeypatch) as env:
+        proactive = await proactive_task(env, tmp_path, addressed=True)
+        await asyncio.wait_for(env.started.wait(), 3)
+        await env.receive("其他请求", **input_options)
+        await until(lambda: env.bus.inbound_size == 0)
+        assert not proactive.task.done()
+        if any(
+            key in input_options for key in ("account", "chat", "chat_type", "topic")
+        ):
+            await until(lambda: bool(env.requests))
+        else:
+            assert env.requests == []
+        env.release.set()
+        await asyncio.wait_for(proactive.task, 3)
+        await until(lambda: env.candidate.references == 0)
+        assert [m["message"] for m in proactive.sent] == ["主动前缀", "主动尾段"]
+        assert len(proactive.events) == 1
+        assert len(proactive.pipeline._state_store._deliveries) == 1
+        assert proactive.sent[0]["mention_ids"] == ["alice"]
+        assert proactive.sent[1]["mention_ids"] == []
+
+
+async def test_proactive_telegram_topic_does_not_cancel_other_batch(
+    tmp_path, monkeypatch
+):
+    async with natural_dispatcher(tmp_path, monkeypatch) as env:
+        proactive = await proactive_task(
+            env, tmp_path, channel="telegram", target_id="-42", topic=27
+        )
+        await asyncio.wait_for(env.started.wait(), 3)
+        unrelated = await env.receive(
+            "别的话题", channel="telegram", chat="-42", topic="28"
+        )
+        assert unrelated is not None
+        await until(lambda: env.bus.inbound_size == 0)
+        assert not proactive.task.done()
+        await env.receive(
+            "当前话题的有效请求", channel="telegram", chat="-42", topic="27"
+        )
+        await until(lambda: env.bus.inbound_size == 0)
+        env.release.set()
+        await asyncio.wait_for(proactive.task, 3)
+        await until(lambda: env.candidate.references == 0)
+        assert [m["message"] for m in proactive.sent] == ["主动前缀"]
+        assert proactive.sent[0]["message_thread_id"] == 27
+
+
+async def test_proactive_duplicate_input_is_rejected_before_invalidating_batch(
+    tmp_path, monkeypatch
+):
+    async with natural_dispatcher(tmp_path, monkeypatch) as env:
+        env.release.set()
+        await env.receive("already-stored", external_id="platform-original")
+        await until(lambda: env.candidate.references == 0)
+        env.release.clear()
+        env.started.clear()
+        proactive = await proactive_task(env, tmp_path)
+        await asyncio.wait_for(env.started.wait(), 3)
+        duplicate = await env.receive("duplicate-copy", external_id="platform-original")
+        assert duplicate is not None and duplicate.metadata["conversation_duplicate"]
+        await until(lambda: env.bus.inbound_size == 0)
+        assert not proactive.task.done()
+        env.release.set()
+        await proactive.task
+        assert [m["message"] for m in proactive.sent] == ["主动前缀", "主动尾段"]
+        assert len(env.requests) == 1
+
+
+async def test_request_accepted_during_proactive_target_resolution_invalidates_new_target(
+    tmp_path, monkeypatch
+):
+    async with natural_dispatcher(tmp_path, monkeypatch) as env:
+        proactive = await proactive_task(env, tmp_path, stage="retarget")
+        await asyncio.wait_for(env.started.wait(), 3)
+        await env.receive("目标解析期间的有效补充")
+        await until(lambda: env.bus.inbound_size == 0)
+        env.release.set()
+        await proactive.task
+        await until(lambda: env.candidate.references == 0)
+        assert proactive.sent == []
+        assert len(proactive.llm.calls) == 2
+
+
+async def test_addressed_proactive_supplement_stops_before_other_sender_fifo(
+    tmp_path, monkeypatch
+):
+    async with natural_dispatcher(tmp_path, monkeypatch) as env:
+
+        async def single_reply(**kwargs):
+            if kwargs.get("response_format"):
+                return LLMResponse(content='{"mood":"平静","thought":"我想继续聊。"}')
+            env.requests.append(kwargs)
+            return chat_reply(
+                [f"reply-{len(env.requests)}"], tools=kwargs.get("tools", [])
+            )
+
+        monkeypatch.setattr(env.host.provider, "chat", single_reply)
+        proactive = await proactive_task(env, tmp_path, addressed=True)
+        await asyncio.wait_for(env.started.wait(), 3)
+        await env.receive("bob-first", sender="bob")
+        await env.receive("alice-later", sender="alice")
+        await until(lambda: env.candidate.references == 0 and env.bus.inbound_size == 0)
+        await proactive.task
+        assert not env.release.is_set()
+        assert [m["message"] for m in proactive.sent] == ["主动前缀"]
+        assert [
+            m["content"]
+            for m in SessionManager(tmp_path).get_or_create("role:mira").messages
+            if m["content"] in {"bob-first", "alice-later"}
+        ] == ["bob-first", "alice-later"]
+
+
+@pytest.mark.parametrize(
+    "failure_at,unknown",
+    [(1, False), (2, True)],
+)
+async def test_proactive_failed_or_unknown_send_stops_without_retry_and_keeps_only_receipts(
+    tmp_path, monkeypatch, failure_at, unknown
+):
+    from shiori_sdk.accounts.targets import UncertainDeliveryError
+    from session.manager.models import whole_session
+
+    failure = (
+        UncertainDeliveryError("lost receipt") if unknown else ValueError("refused")
+    )
+    async with natural_dispatcher(tmp_path, monkeypatch) as env:
+        env.release.set()
+        proactive = await proactive_task(
+            env, tmp_path, failure=failure, failure_at=failure_at
+        )
+        with pytest.raises(type(failure), match=str(failure)):
+            await proactive.task
+        assert len(proactive.sent) == failure_at
+        assert not proactive.pipeline._state_store._deliveries
+        assert len(proactive.events) == failure_at - 1
+        session = SessionManager(tmp_path).get_or_create("role:mira")
+        rows = [m for m in session.messages if m.get("delivery_status")]
+        assert [m["delivery_status"] for m in rows] == (
+            ["sent"] if failure_at == 2 else []
+        ) + ["uncertain" if unknown else "failed"]
+        shown = [
+            m["content"]
+            for m in session.get_history(include=whole_session)
+            if m["role"] == "assistant"
+        ]
+        assert ("主动前缀" in shown) == (failure_at == 2)
+        assert "主动尾段" not in shown
+
+
+async def test_proactive_runtime_retirement_never_sends_old_tail(tmp_path, monkeypatch):
+    async with natural_dispatcher(tmp_path, monkeypatch) as env:
+        proactive = await proactive_task(env, tmp_path)
+        await asyncio.wait_for(env.started.wait(), 3)
+        env.candidate.reply_sequences.stop()
+        env.release.set()
+        await asyncio.wait_for(proactive.task, 3)
+        assert [m["message"] for m in proactive.sent] == ["主动前缀"]
+        assert not env.candidate.reply_sequences._background
+
+
+@pytest.mark.parametrize("stage", ["generation", "sending"])
+async def test_desktop_supplements_stop_proactive_work_and_publish_only_committed_prefix(
+    tmp_path, monkeypatch, stage
+):
+    from conversation.service import ConversationService
+    from conversation.listening import GroupListeningControl
+    from desktop_bridge.service import DesktopBridgeService
+    from core.common.runtime_scope import bind_runtime
+
+    async with natural_dispatcher(tmp_path, monkeypatch, stage=stage) as env:
+        bridge = DesktopBridgeService(
+            workspace=tmp_path,
+            role_store=env.host.roles,
+            session_manager=env.host.manager,
+            agent_loop=env.host.loop,
+            event_bus=env.host.loop._event_bus,
+            group_environment=env.host.group_environment,
+            group_listening=GroupListeningControl(
+                ConversationService(env.host.manager), lambda _: False
+            ),
+        )
+        emitted = []
+        bridge.add_event_listener(emitted.append)
+        try:
+            proactive = await proactive_task(env, tmp_path, desktop=True, stage=stage)
+            await asyncio.wait_for(env.started.wait(), 3)
+            async with env.candidate.acquire() as lease:
+                with bind_runtime(lease):
+                    for turn in ("supplement-1", "supplement-2"):
+                        response = await bridge.handle(
+                            {
+                                "id": turn,
+                                "method": "chat.send",
+                                "payload": {"role_id": "mira", "content": turn},
+                            },
+                            emit_event=emitted.append,
+                        )
+                        assert response.error is None
+            env.release.set()
+            await asyncio.wait_for(proactive.task, 3)
+            await asyncio.wait_for(
+                bridge.chat_service._tasks_by_session["role:mira"].task, 3
+            )
+            session = SessionManager(tmp_path).get_or_create("role:mira")
+            assert [m["message"] for m in proactive.sent] == (
+                ["主动前缀"] if stage in {"pacing", "sending"} else []
+            )
+            assert [
+                m["content"]
+                for m in session.messages
+                if m["content"].startswith("supplement-")
+            ] == ["supplement-1", "supplement-2"]
+            assert not any("主动尾段" in m["content"] for m in session.messages)
+            facts = [
+                m
+                for m in session.messages
+                if m.get("proactive") and m.get("tool_chain")
+            ]
+            assert len(facts) == (0 if stage == "generation" else 1)
+            if stage in {"generation", "tool"}:
+                assert len(proactive.llm.calls) == 1
+            assert any(
+                e["method"] == "chat.done" and e["payload"]["turn_id"] == "supplement-2"
+                for e in emitted
+            )
+            if proactive.sent:
+                persisted_prefix = next(
+                    m for m in session.messages if m["content"] == "主动前缀"
+                )
+                assert any(
+                    e["method"] == "session.updated"
+                    and e["payload"].get("message", {}).get("id")
+                    == persisted_prefix["id"]
+                    for e in emitted
+                )
+        finally:
+            env.release.set()
+            await bridge.aclose()
+
+
+@pytest.mark.parametrize("stage", ["generation"])
+async def test_proactive_outer_shutdown_finishes_started_step_without_next_tool(
+    tmp_path, monkeypatch, stage
+):
+    async with natural_dispatcher(tmp_path, monkeypatch, stage=stage) as env:
+        proactive = await proactive_task(env, tmp_path, desktop=True, stage=stage)
+        await asyncio.wait_for(env.started.wait(), 3)
+        env.candidate.reply_sequences.stop()
+        proactive.task.cancel()
+        await asyncio.sleep(0)
+        assert not proactive.task.done()
+        env.release.set()
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.wait_for(proactive.task, 3)
+        assert proactive.sent == []
+        assert len(proactive.llm.calls) == 1
+        rows = SessionManager(tmp_path).get_or_create("role:mira").messages
+        facts = [m for m in rows if m.get("tool_chain") and m.get("proactive")]
+        assert len(facts) == (1 if stage == "tool" else 0)
+
+
+@pytest.mark.parametrize(
+    "stage,channel,chat,topic",
+    [
+        ("generation", "qq", "gqq:room", ""),
+        ("pacing", "telegram", "-42", "27"),
+    ],
+)
+async def test_spawn_report_uses_original_role_account_topic_and_keeps_completed_facts(
+    tmp_path, monkeypatch, stage, channel, chat, topic
+):
+    from agent.background.subagent_manager import SubagentManager
+    from session.manager.models import whole_session
+
+    async with natural_dispatcher(tmp_path, monkeypatch, stage=stage) as env:
+        env.release.set()
+        origin = await env.receive(
+            "请后台整理", channel=channel, chat=chat, topic=topic
+        )
+        await until(lambda: env.candidate.references == 0)
+        env.release.clear()
+        env.started.clear()
+        env.tool_calls.clear()
+        replies = []
+
+        async def model(**kwargs):
+            if kwargs.get("response_format"):
+                return LLMResponse(content='{"mood":"平静","thought":"我想说明结果。"}')
+            number = len(replies)
+            replies.append(kwargs)
+            if number == 0 and stage == "generation":
+                env.started.set()
+                await env.release.wait()
+            if number == 0 and stage == "tool":
+                return LLMResponse(
+                    content="尚未展示的工具前言",
+                    tool_calls=[
+                        ToolCall("completed-tool", "public", {}),
+                        ToolCall("unstarted-tool", "public", {}),
+                    ],
+                )
+            return chat_reply(
+                ["回报前缀", "回报尾段"] if number == 0 else ["结合补充的新回复"],
+                tools=kwargs.get("tools", []),
+            )
+
+        monkeypatch.setattr(env.host.provider, "chat", model)
+        producer = SubagentManager(
+            provider=env.host.provider,
+            workspace=tmp_path,
+            bus=env.bus,
+            model="test",
+            max_tokens=256,
+            fetch_requester=object(),
+        )
+        run_job = AsyncMock(return_value="完成的后台原始结果，不得重跑")
+        monkeypatch.setattr(
+            producer,
+            "_build_subagent",
+            lambda **_: SimpleNamespace(
+                run=run_job, last_exit_reason="completed", last_usage={}
+            ),
+        )
+        assert origin is not None
+        await producer.spawn(
+            task="整理资料",
+            label="资料",
+            origin_channel=channel,
+            origin_chat_id=chat,
+            role_id="mira",
+            origin=origin,
+        )
+        await producer.drain()
+        await asyncio.wait_for(env.started.wait(), 3)
+        await env.receive("补充要求", channel=channel, chat=chat, topic=topic)
+        await until(lambda: env.bus.inbound_size == 0)
+        env.release.set()
+        await until(lambda: env.candidate.references == 0)
+        run_job.assert_awaited_once_with("整理资料")
+        rows = SessionManager(tmp_path).get_or_create("role:mira").messages
+        assert not any("回报尾段" in m["content"] for m in rows)
+        assert not any(
+            m["role"] == "user" and m["content"].startswith("[后台") for m in rows
+        )
+        completion_facts = [
+            call
+            for row in rows
+            for group in row.get("tool_chain", [])
+            for call in group["calls"]
+            if call["name"] == "spawn"
+        ]
+        assert len(completion_facts) == 1
+        assert completion_facts[0]["result"] == "完成的后台原始结果，不得重跑"
+        assert env.tool_calls == (["executed"] if stage == "tool" else [])
+        result_rows = [m for m in rows if m["content"] == "回报前缀"]
+        assert len(result_rows) == (1 if stage == "pacing" else 0)
+        if result_rows:
+            metadata = result_rows[0]["metadata"]
+            assert metadata["account_id"] == origin.metadata["account_id"]
+            assert str(metadata["message_thread_id"]) == topic
+        history = (
+            SessionManager(tmp_path)
+            .get_or_create("role:mira")
+            .get_history(include=whole_session)
+        )
+        assert (
+            sum(m.get("content") == "完成的后台原始结果，不得重跑" for m in history)
+            == 1
+        )
+        assert all("回报尾段" not in str(m.get("content")) for m in history)
+
+
 async def until(predicate):
     async def wait():
         while not predicate():
@@ -576,3 +1266,270 @@ async def test_spawn_completion_keeps_internal_tracking_and_dispatcher_alive(
         await asyncio.gather(dispatcher, return_exceptions=True)
         candidate.reply_sequences.forget(existing_input, existing_reply)
         await loop._event_bus.aclose()
+
+
+@pytest.mark.parametrize("count", [2])
+async def test_completed_proactive_last_send_settles_success_despite_supplement(
+    tmp_path, monkeypatch, count
+):
+    async with natural_dispatcher(tmp_path, monkeypatch, stage="sending_last") as env:
+        messages = [f"delivered-{i}" for i in range(count)]
+        proactive = await proactive_task(
+            env, tmp_path, stage="sending_last", draft_messages=messages
+        )
+        await asyncio.wait_for(env.started.wait(), 3)
+        await env.receive("new question")
+        await until(lambda: env.bus.inbound_size == 0)
+        env.release.set()
+        await proactive.task
+        await until(lambda: env.candidate.references == 0)
+        assert [m["message"] for m in proactive.sent] == messages
+        assert len(proactive.pipeline._state_store._deliveries) == 1
+        assert len(proactive.events) == 1
+        assert proactive.events[0].assistant_response == "\n\n".join(messages)
+
+
+async def test_proactive_pacing_releases_role_for_other_chat_and_keeps_new_state(
+    tmp_path, monkeypatch
+):
+    from session.manager.models import whole_session
+
+    async with natural_dispatcher(tmp_path, monkeypatch) as env:
+
+        async def model(**kwargs):
+            if kwargs.get("response_format"):
+                return LLMResponse('{"mood":"平静","thought":"我刚回答了另一个群。"}')
+            env.requests.append(kwargs)
+            return chat_reply(["另一群已答"], tools=kwargs.get("tools", []))
+
+        monkeypatch.setattr(env.host.provider, "chat", model)
+        proactive = await proactive_task(env, tmp_path, addressed=True)
+        await asyncio.wait_for(env.started.wait(), 3)
+        await env.receive("other group", chat="gqq:other")
+        await until(lambda: bool(env.requests))
+        await until(lambda: env.candidate.references == 1)
+        assert any(m.content == "另一群已答" for m in env.sent)
+        session = SessionManager(tmp_path).get_or_create("role:mira")
+        newer_stamp = session.metadata["current_mood_updated_at"]
+        history = session.get_history(include=whole_session)
+        assert any(
+            m["role"] == "tool" and "已执行的查询事实" in m["content"] for m in history
+        )
+        assert "get_recent_chat" in session.get_history_tool_names(
+            include=whole_session
+        )
+        assert not proactive.task.done()
+        env.release.set()
+        await proactive.task
+        await until(lambda: env.candidate.references == 0)
+        assert [m["message"] for m in proactive.sent] == ["主动前缀", "主动尾段"]
+        assert (
+            SessionManager(tmp_path)
+            .get_or_create("role:mira")
+            .metadata["current_mood_updated_at"]
+            == newer_stamp
+        )
+
+
+async def test_interrupted_proactive_facts_reach_next_model_without_replay(
+    tmp_path, monkeypatch
+):
+    from session.manager.models import whole_session
+
+    async with natural_dispatcher(tmp_path, monkeypatch) as env:
+        proactive = await proactive_task(env, tmp_path)
+        await asyncio.wait_for(env.started.wait(), 3)
+        await env.receive("use the completed result")
+        await until(lambda: env.bus.inbound_size == 0)
+        env.release.set()
+        await proactive.task
+        await until(lambda: env.candidate.references == 0)
+        session = SessionManager(tmp_path).get_or_create("role:mira")
+        assert "get_recent_chat" in session.get_history_tool_names(
+            include=whole_session
+        )
+        assert any(
+            m.get("role") == "tool" and "已执行的查询事实" in str(m.get("content"))
+            for m in env.requests[0]["messages"]
+        )
+        assert len(proactive.llm.calls) == 3
+        facts = {
+            m["id"]
+            for m in session.messages
+            if m.get("metadata", {}).get("proactive_tool_facts")
+        }
+        assert facts
+        assert await env.host.manager.undo_last_turn("role:mira") is not None
+        reloaded = SessionManager(tmp_path).get_or_create("role:mira")
+        assert facts <= {m["id"] for m in reloaded.messages}
+        assert "get_recent_chat" in reloaded.get_history_tool_names(
+            include=whole_session
+        )
+
+
+@pytest.mark.parametrize("stage", ["gate", "generation_error", "pacing"])
+async def test_spawn_report_fences_captured_account_until_real_qq_send(
+    tmp_path, monkeypatch, stage
+):
+    enabled, change = True, "reassign"
+    from agent.background.subagent_manager import SubagentManager
+    from plugins.qq.backend.accounts_outbound_adapter import QQOutboundAdapter
+
+    async with natural_dispatcher(
+        tmp_path, monkeypatch, enabled=enabled, stage="none"
+    ) as env:
+        origin = await env.receive("start background", chat="gqq:42")
+        assert origin is not None
+        await until(lambda: env.candidate.references == 0)
+        await env.bus.drain_outbound()
+        env.requests.clear()
+        calls = []
+
+        class Adapter(QQOutboundAdapter):
+            _ctx = None
+
+            def via_account(self, account_id):
+                return {}
+
+            async def send_target(self, account_id, kind, target_id, message, **kwargs):
+                calls.append((account_id, message))
+                return {"message_id": str(len(calls))}
+
+        # Use the real QQ adapter; only its native network operation is replaced.
+        for callback in tuple(env.bus._subscribers["qq"]):
+            env.bus.unsubscribe_outbound("qq", callback)
+        adapter = Adapter()
+        attempted = []
+
+        async def outbound(message):
+            attempted.append(message)
+            await adapter._on_response(message)
+
+        env.bus.subscribe_outbound("qq", outbound, supports_reply_sequence=True)
+        entered, release = asyncio.Event(), asyncio.Event()
+        registry = env.host.loop.role_runtime_registry
+        accounts = env.host.roles.accounts
+        original_authorize = accounts.authorize
+
+        def authorize(account_id, role_id):
+            access = original_authorize(account_id, role_id)
+            if stage == "gate":
+                entered.set()
+            return access
+
+        monkeypatch.setattr(accounts, "authorize", authorize)
+
+        async def model(**kwargs):
+            if kwargs.get("response_format"):
+                return LLMResponse('{"mood":"平静","thought":"我想说明结果。"}')
+            env.requests.append(kwargs)
+            if stage in {"generation", "generation_error"}:
+                entered.set()
+                await release.wait()
+                if stage == "generation_error":
+                    raise RuntimeError(
+                        "private error must not reach the revoked destination"
+                    )
+            return chat_reply(
+                ["old role confidential report", "old report tail"],
+                tools=kwargs.get("tools", []),
+            )
+
+        monkeypatch.setattr(env.host.provider, "chat", model)
+
+        async def pace(_):
+            entered.set()
+            await release.wait()
+
+        if stage == "pacing":
+            monkeypatch.setattr(
+                "agent.turns.reply_sequence.wait_between_messages", pace
+            )
+        holder = None
+        if stage == "gate":
+            held = asyncio.Event()
+
+            async def hold():
+                held.set()
+                await release.wait()
+
+            context = registry.create_context(
+                role_id="mira",
+                thread_id=origin.metadata["thread_id"],
+                transport_channel="qq",
+                transport_chat_id="gqq:42",
+                source="desktop",
+                work_kind="scheduled_job",
+            )
+            holder = asyncio.create_task(
+                registry.dispatch_background_task(context, hold)
+            )
+            await held.wait()
+        if stage == "outbound":
+            await env.bus.transport_lock.acquire()
+        producer = SubagentManager(
+            provider=env.host.provider,
+            workspace=tmp_path,
+            bus=env.bus,
+            model="test",
+            max_tokens=256,
+            fetch_requester=object(),
+        )
+        work = AsyncMock(return_value="private completed source fact")
+        monkeypatch.setattr(
+            producer,
+            "_build_subagent",
+            lambda **_: SimpleNamespace(
+                run=work, last_exit_reason="completed", last_usage={}
+            ),
+        )
+        try:
+            await producer.spawn(
+                task="private work",
+                label="job",
+                origin_channel="qq",
+                origin_chat_id="gqq:42",
+                role_id="mira",
+                origin=origin,
+            )
+            await producer.drain()
+            if stage == "outbound":
+                await until(lambda: env.bus.outbound_size > 0)
+            else:
+                await asyncio.wait_for(entered.wait(), 3)
+            if change == "reassign":
+                env.host.roles.create_role(
+                    role_id="newowner", name="New", system_prompt="new owner"
+                )
+            accounts.release("qq:one", "live")
+            new = accounts.register(
+                plugin_id="qq",
+                platform="qq",
+                platform_account_id="one",
+                config_ref="one",
+                token="new-live",
+                role_id="newowner" if change == "reassign" else "mira",
+            )
+            accounts.report(new.record.id, "new-live", connection="online")
+            release.set()
+            if stage == "outbound":
+                env.bus.transport_lock.release()
+            if holder is not None:
+                await holder
+            await until(lambda: env.candidate.references == 0)
+            await env.bus.drain_outbound()
+            assert calls == (
+                [("qq:one", "old role confidential report")]
+                if stage == "pacing"
+                else []
+            )
+            assert len(attempted) == (1 if stage == "pacing" else 0)
+            if stage == "gate":
+                assert env.requests == []
+            work.assert_awaited_once()
+        finally:
+            release.set()
+            if stage == "outbound" and env.bus.transport_lock.locked():
+                env.bus.transport_lock.release()
+            if holder is not None:
+                await holder

@@ -7,6 +7,7 @@ from agent.background.subagent_manager import SubagentManager
 from agent.policies.delegation import DelegationPolicy
 from shiori_sdk.tools import Tool
 from agent.tools.registry import ToolRegistry
+from agent.tools.turn_origin import current_tool_origin
 import logging
 
 logger = logging.getLogger(__name__)
@@ -170,6 +171,15 @@ subagent 没有看过当前会话。像给刚进房间的同事写交接文档�
             }
             if role_id:
                 spawn_kwargs["role_id"] = role_id
+            if self._manager.role_runtime_enabled is True:
+                origin = current_tool_origin()
+                if (
+                    origin.channel != channel
+                    or origin.chat_id != chat_id
+                    or origin.metadata.get("role_id") != role_id
+                ):
+                    raise ValueError("后台任务目标与真实入站身份不一致")
+                spawn_kwargs["origin"] = origin
             return await self._manager.spawn(
                 **spawn_kwargs,
             )

@@ -8,14 +8,13 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from agent.turns.channel_sequence import channel_sequence_context
-from agent.turns.reply_interruption import (
-    interruptible_reply_delivery,
-    reply_was_invalidated,
+from agent.turns.reply_interruption import interruptible_reply_delivery
+from agent.turns.reply_sequence import (
+    ReplySequence,
+    deliver_sequence,
+    publish_final_role_state,
 )
-from agent.turns import reply_sequence as pacing
 from agent.turns.outbound import sanitize_user_visible_content
-from core.common.cancellation import finish_started
-from core.roles.turn_gate import wait_outside_role_gate
 from session.manager import Session, SessionManager
 from session.manager.models import build_session_message
 from shiori_sdk.messages import OutboundMessage
@@ -31,7 +30,7 @@ async def commit_channel_reply_sequence(
     manager: SessionManager,
     session: Session,
     messages: list[dict[str, Any]],
-    sequence: pacing.ReplySequence,
+    sequence: ReplySequence,
     state_kwargs: dict[str, Any],
     metadata: dict[str, Any],
     channel: str,
@@ -79,7 +78,7 @@ async def commit_channel_reply_sequence(
         if current_message is not None:
             context.bus.cancel_waiting_outbound(current_message)
 
-    async def publish(index: int) -> None:
+    async def publish(index: int, _content: str) -> None:
         nonlocal current_message
         if cancelled:
             raise asyncio.CancelledError
@@ -136,33 +135,14 @@ async def commit_channel_reply_sequence(
             raise ChannelSequenceDeliveryError(
                 f"{channel} reply delivery {receipt.status}"
             )
-        if index == len(replies) - 1:
-            current = manager.get_or_create(session.key)
-            expected = state_kwargs.get("expected_mood_updated_at")
-            # A different chat may have completed while this batch was pacing.
-            # Its newer whole-turn state wins; this batch's facts already exist
-            # on their own messages, including tools and usage.
-            turn_stamp = str(
-                (state_kwargs.get("metadata_updates") or {}).get("last_turn_ts", "")
-            )
-            newer_turn = (
-                bool(turn_stamp)
-                and str(current.metadata.get("last_turn_ts", "")) > turn_stamp
-            )
-            if not newer_turn and (
-                expected is None
-                or str(current.metadata.get("current_mood_updated_at", "")) == expected
-            ):
-                await manager.append_messages(current, [], **state_kwargs)
+
+    async def on_last() -> None:
+        # A different chat may have completed while this batch was pacing.
+        # Its newer whole-turn state wins; this batch's facts already exist
+        # on their own messages, including tools and usage.
+        await publish_final_role_state(manager, session.key, state_kwargs)
 
     with context.owner.delivering(), interruptible_reply_delivery():
-        for index in range(len(replies)):
-            if index:
-                await wait_outside_role_gate(
-                    lambda: pacing.wait_between_messages(
-                        pacing.message_pause(sequence.messages[index - 1])
-                    )
-                )
-            if reply_was_invalidated():
-                raise asyncio.CancelledError
-            await finish_started(publish(index), on_cancel=cancel_pending)
+        await deliver_sequence(
+            sequence.messages, publish, on_last, on_cancel=cancel_pending
+        )

@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 from agent.tools.turn_scope import tool_turn
+from agent.background.result_history import commit_background_fact
 from agent.turns.channel_sequence_commit import ChannelSequenceDeliveryError
-from agent.turns.channel_sequence import without_channel_sequence
+from agent.turns.channel_sequence import (
+    without_channel_sequence,
+    channel_sequence_context,
+)
 from agent.turns.reply_interruption import (
     current_reply_interruption,
     reply_interruption_scope,
+    ReplyInterruption,
 )
 
 import asyncio
@@ -22,11 +27,15 @@ from ..interrupt import (
     current_tracking_key,
 )
 from collections.abc import Callable
+from contextlib import nullcontext
+from functools import partial
+from shiori_sdk.accounts.models import AccountNotFoundError
 from dataclasses import replace
 
 from core.roles.role_runtime import RoleBusyError, RoleExecutionContext
+from core.roles.services import RoleSessionService
 from shiori_sdk.external_turns import ExternalTurnResult
-from bus.events import InboundItem
+from bus.events import InboundItem, SpawnCompletionItem
 from shiori_sdk.messages import InboundMessage, OutboundMessage
 from bus.processing import ProcessingState
 
@@ -61,6 +70,8 @@ class _ProcessingMixin:
         # Typed internal completions keep their own session identity. Their
         # channel/chat is a return destination, not an admitted external origin.
         tracking_key = key
+        if isinstance(item, SpawnCompletionItem) and item.origin is not None:
+            tracking_key = f"{key}\x1fbackground\x1f{item.event.job_id}"
         if isinstance(item, InboundMessage):
             metadata = item.metadata
             tracking_key = turn_tracking_key(
@@ -71,39 +82,66 @@ class _ProcessingMixin:
                 chat_type=str(metadata.get("chat_type") or ""),
                 message_thread_id=str(metadata.get("message_thread_id") or ""),
             )
-        self._active_turn_states[tracking_key] = self._build_initial_turn_state(
-            item, key
-        )
-        task = asyncio.create_task(
-            run_turn_task(
-                lambda: self._process_role_scoped(item, key),
-                detached=False,
-                tracking_key=tracking_key,
+        authority = None
+        if isinstance(item, SpawnCompletionItem) and item.origin is not None:
+            try:
+                authority = self._background_outbound_authority(item.origin)
+            except (PermissionError, AccountNotFoundError):
+                # A revoked internal return destination must not receive an error.
+                logger.info("Spawn result destination no longer authorized for %s", key)
+                return
+        with (
+            self.bus.outbound_authority(authority)
+            if authority is not None
+            else nullcontext()
+        ):
+            self._active_turn_states[tracking_key] = self._build_initial_turn_state(
+                item, key
             )
-        )
-        self._active_tasks[tracking_key] = task
-        try:
-            await task
-        except asyncio.CancelledError:
-            if asyncio.current_task().cancelling():
-                raise
-            logger.info(f"Turn cancelled for {key}")
-        except ChannelSequenceDeliveryError:
-            logger.exception("Reply sequence stopped for %s", key)
-        except Exception as e:
-            logger.error(f"处理消息出错: {e}", exc_info=True)
-            await self.bus.publish_outbound(
-                OutboundMessage(
-                    channel=item.channel,
-                    chat_id=item.chat_id,
-                    content=f"出错：{e}",
-                    metadata=dict(getattr(item, "metadata", {}) or {}),
+            task = asyncio.create_task(
+                run_turn_task(
+                    lambda: self._process_role_scoped(item, key),
+                    detached=False,
+                    tracking_key=tracking_key,
                 )
             )
-        finally:
-            if self._active_tasks.get(tracking_key) is task:
-                self._active_tasks.pop(tracking_key, None)
-                self._active_turn_states.pop(tracking_key, None)
+            self._active_tasks[tracking_key] = task
+            try:
+                await task
+            except asyncio.CancelledError:
+                if asyncio.current_task().cancelling():
+                    raise
+                logger.info(f"Turn cancelled for {key}")
+            except ChannelSequenceDeliveryError:
+                logger.exception("Reply sequence stopped for %s", key)
+            except Exception as e:
+                logger.error(f"处理消息出错: {e}", exc_info=True)
+                await self.bus.publish_outbound(
+                    OutboundMessage(
+                        channel=item.channel,
+                        chat_id=item.chat_id,
+                        content=f"出错：{e}",
+                        metadata=dict(getattr(item, "metadata", {}) or {}),
+                    )
+                )
+            finally:
+                if self._active_tasks.get(tracking_key) is task:
+                    self._active_tasks.pop(tracking_key, None)
+                    self._active_turn_states.pop(tracking_key, None)
+
+    def _background_outbound_authority(
+        self, origin: InboundMessage
+    ) -> Callable[[], bool] | None:
+        """Capture the same account connection fence for both internal report entries."""
+        registry = getattr(self, "_role_runtime_registry", None)
+        account_id = str(origin.metadata.get("account_id") or "")
+        if registry is None or not account_id:
+            return None
+        accounts = registry.repository.store.accounts
+        access = accounts.authorize(
+            account_id, str(origin.metadata.get("role_id") or "")
+        )
+        return partial(accounts.validate_access, access)
 
     @property
     def processing_state(self) -> ProcessingState | None:
@@ -200,6 +238,26 @@ class _ProcessingMixin:
 
         registry = getattr(self, "_role_runtime_registry", None)
         metadata = getattr(item, "metadata", None)
+        if (
+            registry is not None
+            and isinstance(item, SpawnCompletionItem)
+            and item.origin is not None
+        ):
+            origin = item.origin
+            role_id = str(origin.metadata["role_id"])
+            # Internal completion owns a captured destination, never a newly
+            # admitted external message or an inherited generation's context.
+            context = registry.create_context(
+                role_id=role_id,
+                thread_id=str(origin.metadata["thread_id"]),
+                transport_channel=origin.channel,
+                transport_chat_id=origin.chat_id,
+                source="background_result",
+                work_kind="passive_turn",
+                request_id=f"spawn:{item.event.job_id}",
+            )
+            metadata = {**origin.metadata, **context.to_metadata()}
+            item = replace(item, origin=replace(origin, metadata=metadata))
         if registry is None or not isinstance(metadata, dict):
             return await self._process(
                 item,
@@ -225,6 +283,13 @@ class _ProcessingMixin:
             )
 
         async def operation() -> OutboundMessage:
+            if isinstance(item, SpawnCompletionItem) and item.origin is not None:
+                if not self.bus.outbound_authorized():
+                    raise asyncio.CancelledError
+                role = registry.repository.store.get_role(context.role_id)
+                if role is None:
+                    raise asyncio.CancelledError
+                RoleSessionService(self.session_manager).open_by_role(role)
             return await self._process(
                 item,
                 session_key=session_key,
@@ -383,19 +448,89 @@ class _ProcessingMixin:
         if registry is None:
             raise RuntimeError("RoleRuntimeRegistry 未配置")
 
+        origin = admit()
+        authority = self._background_outbound_authority(origin)
+        transport = channel_sequence_context()
+        role = registry.repository.store.get_role(context.role_id)
+        if role is None:
+            raise asyncio.CancelledError
+        interruption = (
+            ReplyInterruption(
+                role_lookup=lambda: registry.repository.store.get_role(context.role_id)
+            )
+            if transport is not None
+            and role.runtime_config.get("natural_chat_enabled") is True
+            else None
+        )
+        predecessors = (
+            transport.owner.background_tasks(origin) if transport is not None else ()
+        )
+
         async def operation() -> None:
+            # Recheck both report admission and the captured connection after the gate.
+            if authority is not None and not authority():
+                raise asyncio.CancelledError
             message = admit()
+            result_text = str(message.metadata.pop("background_result_text"))
+            role = registry.repository.store.get_role(context.role_id)
+            if role is None:
+                raise asyncio.CancelledError
+            RoleSessionService(self.session_manager).open_by_role(role)
+            if interruption is not None:
+                await commit_background_fact(
+                    self.session_manager,
+                    message.session_key,
+                    metadata=message.metadata,
+                    call_id=context.request_id,
+                    name="background_result",
+                    arguments={},
+                    result=result_text,
+                )
             await self._process(
                 message, session_key=message.session_key, dispatch_outbound=True
             )
 
         async def detached_turn() -> None:
-            await registry.dispatch_passive_turn(context, operation)
+            if predecessors:
+                await asyncio.shield(
+                    asyncio.gather(*predecessors, return_exceptions=True)
+                )
+            with (
+                reply_interruption_scope(interruption),
+                (
+                    self.bus.outbound_authority(authority)
+                    if authority is not None
+                    else nullcontext()
+                ),
+            ):
+                await registry.dispatch_passive_turn(context, operation)
 
-        await asyncio.create_task(
+        task = asyncio.create_task(
             run_turn_task(detached_turn, detached=True),
             name=f"agent_loop_background_result:{context.role_id}",
         )
+        registration = (
+            transport.owner.register_background(
+                origin,
+                interruption,
+                task,
+                senders=(
+                    frozenset({origin.sender})
+                    if origin.metadata.get("chat_type") in {"group", "supergroup"}
+                    else None
+                ),
+            )
+            if transport is not None and interruption is not None
+            else None
+        )
+        try:
+            await task
+        except asyncio.CancelledError:
+            if asyncio.current_task().cancelling():
+                raise
+        finally:
+            if transport is not None and registration is not None:
+                transport.owner.forget_background(registration)
 
     def _ensure_direct_role_context(
         self,

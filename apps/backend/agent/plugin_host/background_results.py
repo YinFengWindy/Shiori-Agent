@@ -106,6 +106,8 @@ class _Target:
                     "omit_user_turn": True,
                     "skip_post_memory": True,
                     "suppress_stream_events": True,
+                    "turn_id": result_id,
+                    "background_result_text": text,
                 },
             )
 

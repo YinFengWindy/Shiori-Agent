@@ -47,17 +47,24 @@ class CitationAfterReasoningModule:
 
     async def run[FrameT: LifecycleFrame](self, frame: FrameT) -> FrameT:
         ctx = _reasoning_ctx(frame)
-        reply = ctx.reply
-        cleaned, cited_ids = extract_cited_ids(reply)
-        cleaned = strip_inline_memory_refs(cleaned)
+        texts = ctx.reply_messages or (ctx.reply,)
+        cleaned_messages: list[str] = []
+        cited_ids: list[str] = []
+        for reply in texts:
+            cleaned, found = extract_cited_ids(reply)
+            cleaned_messages.append(strip_inline_memory_refs(cleaned))
+            cited_ids.extend(found)
         if cited_ids:
             frame.slots[_PERSIST_CITED_SLOT] = cited_ids
         else:
             fallback_ids = extract_cited_ids_from_tool_chain(list(ctx.tool_chain))
             if fallback_ids:
                 frame.slots[_PERSIST_CITED_SLOT] = fallback_ids
-        if cleaned != reply:
-            ctx.reply = cleaned
+        if ctx.reply_messages:
+            ctx.reply_messages = tuple(cleaned_messages)
+            ctx.reply = "\n\n".join(cleaned_messages)
+        elif cleaned_messages[0] != ctx.reply:
+            ctx.reply = cleaned_messages[0]
         return frame
 
 
@@ -70,6 +77,15 @@ class ProtocolTagCleanupModule:
 
     async def run[FrameT: LifecycleFrame](self, frame: FrameT) -> FrameT:
         ctx = _reasoning_ctx(frame)
+        if ctx.reply_messages:
+            cleaned_messages = tuple(
+                strip_inline_memory_refs(strip_trailing_protocol_tags(reply))
+                for reply in ctx.reply_messages
+            )
+            if cleaned_messages != ctx.reply_messages:
+                ctx.reply_messages = cleaned_messages
+                ctx.reply = "\n\n".join(cleaned_messages)
+            return frame
         reply = ctx.reply
         cleaned = strip_inline_memory_refs(strip_trailing_protocol_tags(reply))
         if cleaned != reply:

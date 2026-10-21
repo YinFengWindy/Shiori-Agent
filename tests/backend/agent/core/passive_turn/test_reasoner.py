@@ -21,18 +21,17 @@ from session.manager import SessionManager
 from session.manager.consolidation import ConsolidationCommitRequest
 from shiori_sdk.tools import Tool
 from agent.core.passive_turn.natural_reply import NaturalReply
-from agent.turns.reply_sequence import ReplySequencePolicy, parse_reply_sequence
+from agent.turns.reply_sequence import ReplySequence
 
 
-def natural_metadata(content, policy):
-    if policy is None:
+def natural_metadata(messages):
+    if not messages:
         return {}
-    sequence = parse_reply_sequence(content, policy)
+    sequence = ReplySequence(tuple(messages))
     return {
         "natural_reply": NaturalReply(
             sequence,
-            json.dumps({"messages": sequence.messages}, ensure_ascii=False),
-            policy,
+            json.dumps({"messages": list(sequence.messages)}, ensure_ascii=False),
         )
     }
 
@@ -166,7 +165,6 @@ async def test_reply_policy_filters_visible_tokens_but_preserves_thinking(
     tmp_path, enabled
 ):
     from agent.turns.reply_sequence import reply_is_buffered
-    from agent.turns.reply_sequence import ReplySequencePolicy
 
     manager = SessionManager(tmp_path)
     reasoner = DefaultReasoner(
@@ -178,7 +176,7 @@ async def test_reply_policy_filters_visible_tokens_but_preserves_thinking(
         context=AsyncMock(),
         session_manager=manager,
     )
-    policy = ReplySequencePolicy("<message-break/>") if enabled else None
+    messages = ("one", "two") if enabled else ()
     reasoner.render_prompt = AsyncMock(
         return_value=PromptRenderResult(
             messages=[{"role": "user", "content": "hi"}],
@@ -213,7 +211,7 @@ async def test_reply_policy_filters_visible_tokens_but_preserves_thinking(
             streamed=True,
             metadata={
                 "tool_chain": original_chain,
-                **natural_metadata("one\n<message-break/>\ntwo", policy),
+                **natural_metadata(messages),
             },
         )
 
@@ -228,7 +226,7 @@ async def test_reply_policy_filters_visible_tokens_but_preserves_thinking(
     result = await reasoner.run_turn(
         msg=msg, session=manager.get_or_create(msg.session_key)
     )
-    assert result.reply_sequence == policy
+    assert result.reply_sequence == (ReplySequence(("one", "two")) if enabled else None)
     assert result.streamed is (not enabled)
     assert result.tool_chain == [
         {**original_chain[0], "text": "" if enabled else tool_preamble}
@@ -335,9 +333,7 @@ async def test_builtin_natural_chat_controls_prompt_and_stream_on_supported_tran
         return ReasonerResult(
             reply=reply,
             streamed=True,
-            metadata=natural_metadata(
-                reply, ReplySequencePolicy("<message-break/>") if selected else None
-            ),
+            metadata=natural_metadata(("第一句", "下一句") if selected else ()),
         )
 
     reasoner.run = AsyncMock(side_effect=run)

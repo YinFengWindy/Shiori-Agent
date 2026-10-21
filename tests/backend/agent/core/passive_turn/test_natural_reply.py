@@ -13,7 +13,6 @@ from agent.core.passive_turn.natural_reply import (
     NaturalReplyProtocol,
 )
 from agent.provider import LLMProvider, LLMResponse, ToolCall
-from agent.turns.reply_sequence import parse_reply_sequence
 from agent.turns.reply_interruption import (
     ReplyInterruption,
     ReplyPlanInvalidated,
@@ -42,9 +41,7 @@ async def test_preserves_independent_messages_with_quotes_fences_and_literal_pro
 
     assert protocol.reply is not None
     assert protocol.reply.raw_text == raw
-    assert parse_reply_sequence(
-        protocol.reply.decorated_input, protocol.reply.policy
-    ).messages == tuple(contents)
+    assert protocol.reply.sequence.messages == tuple(contents)
     assert result.response.content == "\n\n".join(contents)
     assert result.response.tool_calls == []
     provider.chat.assert_not_called()

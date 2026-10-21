@@ -6,6 +6,7 @@ import asyncio
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
+from collections.abc import Iterator
 
 from bus.queue import MessageBus
 from agent.turns.reply_interruption import ReplyInterruption
@@ -28,10 +29,20 @@ def channel_reply_scope(message: InboundMessage) -> tuple[str, ...]:
 
 @dataclass(frozen=True)
 class ChannelSequenceContext:
-    """Accepted ordinary channel turn, bound by its runtime dispatcher."""
+    """A runtime's reply transport, shared by admitted turns and owned reports."""
 
     owner: ChannelSequenceOwner
     bus: MessageBus
+
+
+@dataclass(eq=False)
+class BackgroundReply:
+    """One role report's exact destination, optional addressees and lifetime."""
+
+    origin: InboundMessage
+    interruption: ReplyInterruption
+    task: asyncio.Task
+    senders: frozenset[str] | None
 
 
 _CURRENT: ContextVar[ChannelSequenceContext | None] = ContextVar(
@@ -40,12 +51,12 @@ _CURRENT: ContextVar[ChannelSequenceContext | None] = ContextVar(
 
 
 def channel_sequence_context() -> ChannelSequenceContext | None:
-    """Return the ordinary channel delivery context, absent for direct/internal work."""
+    """Return the bound transport; unintegrated direct/internal work has none."""
     return _CURRENT.get()
 
 
 def supports_channel_sequence(channel: str) -> bool:
-    """Only admitted ordinary replies with an opted-in transport can use a batch."""
+    """A batch needs both a runtime owner and an opted-in channel transport."""
     context = _CURRENT.get()
     return context is not None and context.bus.supports_reply_sequence(channel)
 
@@ -68,6 +79,7 @@ class ChannelSequenceOwner:
         self._stopped = False
         self._replies: dict[tuple[str, ...], ReplyInterruption] = {}
         self._plans: set[ReplyInterruption] = set()
+        self._background: set[BackgroundReply] = set()
 
     def admit(self, message: InboundMessage) -> ReplyInterruption:
         """Invalidate the same real sender's plan at accepted queue admission.
@@ -77,6 +89,7 @@ class ChannelSequenceOwner:
         Other group members retain the dispatcher's chat order.
         """
         key = (*channel_reply_scope(message), message.sender)
+        self.interrupt_background(message)
         previous = self._replies.get(key)
         if previous is not None:
             previous.invalidate()
@@ -84,6 +97,84 @@ class ChannelSequenceOwner:
         self._replies[key] = reply
         self._plans.add(reply)
         return reply
+
+    def interrupt_background(self, message: InboundMessage) -> None:
+        """Invalidate matching role output only after real input was admitted."""
+        scope = channel_reply_scope(message)
+        for reply in tuple(self._background):
+            if channel_reply_scope(reply.origin) != scope:
+                continue
+            if reply.senders is None or message.sender in reply.senders:
+                reply.interruption.invalidate()
+
+    def background_tasks(self, message: InboundMessage) -> tuple[asyncio.Task, ...]:
+        """Keep accepted requests behind an earlier report in this exact chat."""
+        scope = channel_reply_scope(message)
+        return tuple(
+            reply.task
+            for reply in self._background
+            if channel_reply_scope(reply.origin) == scope
+            and reply.task is not asyncio.current_task()
+        )
+
+    def owns_background(self, interruption: ReplyInterruption | None) -> bool:
+        """Only a registered report may opt an internal turn into natural delivery."""
+        return any(reply.interruption is interruption for reply in self._background)
+
+    @contextmanager
+    def background_reply(
+        self,
+        origin: InboundMessage,
+        interruption: ReplyInterruption,
+        *,
+        senders: frozenset[str] | None,
+    ) -> Iterator[BackgroundReply]:
+        """Register generation-owned output without admitting a synthetic user."""
+        task = asyncio.current_task()
+        assert task is not None
+        reply = self.register_background(origin, interruption, task, senders=senders)
+        try:
+            yield reply
+        finally:
+            self.forget_background(reply)
+
+    def register_background(
+        self,
+        origin: InboundMessage,
+        interruption: ReplyInterruption,
+        task: asyncio.Task,
+        *,
+        senders: frozenset[str] | None,
+    ) -> BackgroundReply:
+        """Register a queued report synchronously before another input can arrive."""
+        reply = BackgroundReply(origin, interruption, task, senders)
+        if self._stopped:
+            interruption.invalidate()
+        self._background.add(reply)
+        self._plans.add(interruption)
+        return reply
+
+    def forget_background(self, reply: BackgroundReply) -> None:
+        """Retire this report's registration without touching a successor."""
+        self._background.discard(reply)
+        self._plans.discard(reply.interruption)
+
+    def retarget_background(
+        self,
+        reply: BackgroundReply,
+        origin: InboundMessage,
+        *,
+        senders: frozenset[str] | None,
+    ) -> None:
+        """Move a draft to a validated destination without overlooking queued input."""
+        reply.origin = origin
+        reply.senders = senders
+        scope = channel_reply_scope(origin)
+        if any(
+            key[:-1] == scope and (senders is None or key[-1] in senders)
+            for key in self._replies
+        ):
+            reply.interruption.invalidate()
 
     def forget(self, message: InboundMessage, reply: ReplyInterruption) -> None:
         """Release only this exact registration; an older turn owns no successor."""
