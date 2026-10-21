@@ -38,9 +38,9 @@ describe("mergeSessionSummaryAndMessage", () => {
     }));
     let current = createSession([pending]);
     for (const part of parts) {
-      current = mergeSessionSummaryAndMessage(current, createSummary(), undefined, [part]);
+      current = mergeSessionSummaryAndMessage(current, createSummary(), null, [part]);
     }
-    const final = mergeSessionSummaryAndMessage(current, createSummary(), undefined, parts);
+    const final = mergeSessionSummaryAndMessage(current, createSummary(), null, parts);
     assert.deepEqual(final.messages.map((message) => message.id), ["part-0", "part-1", "part-2"]);
     assert.equal(final.messages[0]!.render_id, "local:turn");
     assert.equal(final.messages.filter((message) => message.reasoning_content).length, 1);
