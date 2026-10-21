@@ -217,21 +217,29 @@ class GrokAccounts:
             return {"account_id": account_id_for(CHANNEL, config.connection_id)}
 
     def _purge(self, config: ConnectionConfig) -> None:
-        self.store.remove(config.connection_id)
-        self.configs.pop(config.connection_id, None)
+        # Keep the binding until every cleanup succeeds so a new plan can retry.
         ExchangeJournal.purge_saved(self.ctx.kv, config.connection_id, config.peer_id)
         (self.data_dir / config.connection_id / "client.json").unlink(missing_ok=True)
+        self.store.remove(config.connection_id)
+        self.configs.pop(config.connection_id, None)
 
     def delete_plan(self, config_ref: str) -> AccountDeletionPlan:
         """Stop callbacks before removing credentials and transport state."""
-        config = self.configs.get(config_ref) or self.store.get(config_ref)
+        config = self.configs.get(config_ref)
+        if config is None:
+            rows = self.store.rows()
+            if config_ref in rows:
+                config = read_connection(rows[config_ref])
+
+        async def disconnect() -> None:
+            if config is not None:
+                await self._disconnect(config_ref)
 
         async def purge() -> None:
-            self._purge(config)
+            if config is not None:
+                self._purge(config)
 
-        return AccountDeletionPlan(
-            disconnect=lambda: self._disconnect(config_ref), purge=purge
-        )
+        return AccountDeletionPlan(disconnect=disconnect, purge=purge)
 
     def save_rules(self, config_ref: str, rules: AccountResponseRules) -> None:
         """Keep the host's response rules through reloads."""

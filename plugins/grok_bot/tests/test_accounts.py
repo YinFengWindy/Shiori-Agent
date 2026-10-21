@@ -11,6 +11,7 @@ from shiori_sdk.testing.channel_context import (
 )
 from plugins.grok_bot.backend.accounts import GrokAccounts
 from plugins.grok_bot.backend.connection import GrokConnection
+from plugins.grok_bot.backend.config import ConnectionConfig
 from plugins.grok_bot.backend.store import ConnectionStore
 
 
@@ -125,5 +126,82 @@ async def test_deleted_role_and_corrupt_record_do_not_restore_other_accounts(
         assert (
             account_id_for("grok_bot", config.connection_id) not in ctx.accounts.records
         )
+    finally:
+        await ctx.aclose()
+
+
+@pytest.mark.parametrize("failed_step", ["journal", "client_file", "record"])
+async def test_delete_plan_can_be_recreated_after_each_cleanup_failure(
+    tmp_path: Path,
+    config: ConnectionConfig,
+    monkeypatch: pytest.MonkeyPatch,
+    failed_step: str,
+) -> None:
+    ctx = FakeChannelPluginContext("grok_bot", Path(__file__).resolve().parents[1])
+    ctx.workspace = tmp_path
+    accounts = GrokAccounts(ctx, ctx.channels.group("grok_bot"))
+    accounts.store.save(config.model_copy(update={"enabled": False}))
+    await accounts.load()
+    journal_key = f"exchange:{config.connection_id}:{config.peer_id}"
+    ctx.kv.set(journal_key, {"pending": "stale transport state"})
+    client_file = accounts.data_dir / config.connection_id / "client.json"
+    client_file.parent.mkdir(parents=True)
+    client_file.write_text("{}", encoding="utf-8")
+    failed = False
+
+    def fail_once() -> None:
+        nonlocal failed
+        if not failed:
+            failed = True
+            raise OSError("cleanup unavailable")
+
+    if failed_step == "journal":
+        delete = ctx.kv.delete
+
+        def delete_journal(key: str) -> None:
+            if key == journal_key:
+                fail_once()
+            delete(key)
+
+        monkeypatch.setattr(ctx.kv, "delete", delete_journal)
+    elif failed_step == "client_file":
+        unlink = Path.unlink
+
+        def unlink_client(path: Path, missing_ok: bool = False) -> None:
+            if path == client_file:
+                fail_once()
+            unlink(path, missing_ok=missing_ok)
+
+        monkeypatch.setattr(Path, "unlink", unlink_client)
+    else:
+        remove = accounts.store.remove
+
+        def remove_record(connection_id: str) -> None:
+            fail_once()
+            remove(connection_id)
+
+        monkeypatch.setattr(accounts.store, "remove", remove_record)
+
+    try:
+        plan = accounts.delete_plan(config.connection_id)
+        await plan.disconnect()
+        with pytest.raises(OSError, match="cleanup unavailable"):
+            await plan.purge()
+        assert config.connection_id in accounts.store.rows()
+        assert config.connection_id in accounts.configs
+
+        retry = accounts.delete_plan(config.connection_id)
+        await retry.disconnect()
+        await retry.purge()
+        assert config.connection_id not in accounts.store.rows()
+        assert config.connection_id not in accounts.configs
+        assert ctx.kv.get(journal_key) is None
+        assert not client_file.exists()
+
+        # The host may request a new plan even after plugin data is already gone.
+        ctx.accounts.records.pop(account_id_for("grok_bot", config.connection_id))
+        completed = accounts.delete_plan(config.connection_id)
+        await completed.disconnect()
+        await completed.purge()
     finally:
         await ctx.aclose()
