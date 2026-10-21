@@ -123,6 +123,18 @@ consolidates these additions and the subsequent #847 breaking migration.
 
 <!-- Record the next contract batch here, with PR references and breaking markers. -->
 
+- **Account media supplements (issue #886).** Host/plugin calls to `account_send.execute`
+  may supply protected `push_proactive=False` and `push_chat_id` with
+  `target_kind="user"`. Here `channel` is the original transport channel; the host
+  resolves its exact canonical private chat against current user bindings and the
+  role's owned accounts before using the account plugin's sender. It never guesses
+  a target from a chat ID or redirects to another bound chat. Both arguments are
+  absent from model schemas and protected by execution-context precedence.
+  `ExternalTextPushed.proactive` defaults to true; false persists the supplement
+  without proactive classification while retaining the existing commit broadcast.
+  NovelAI records generation cooldown/dedup before invoking delivery, so a failed
+  or cancelled send cannot cause the next observation to regenerate the image.
+
 - **Explicit account tool permission (PR #873, issue #870).** `AccountResponseRules.allow_full_tools`
   defaults to false, including when absent in saved JSON. Only accounts declaring
   the `full_tools` capability expose the per-account switch. The channel hub drops

@@ -284,6 +284,101 @@ async def test_user_target_reaches_the_users_private_chat_and_is_recorded(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("transport", ["qq", "qq_bot_instance"])
+async def test_supplement_uses_exact_bound_chat_and_is_not_proactive(
+    tmp_path, transport
+):
+    tool, sent, ledger, sessions = _user_send_setup(tmp_path, chat_channel=transport)
+    await tool.execute(
+        channel=transport,
+        role_id="mira",
+        session_key="role:mira",
+        target_kind="user",
+        push_chat_id="3174898512",
+        push_proactive=False,
+        media=["https://example.test/cg.png"],
+    )
+    assert len(sent) == 1
+    assert sent[0]["target_id"] == "3174898512"
+    [message] = sessions._store.fetch_session_messages("role:mira")
+    assert message.get("proactive", False) is False
+    assert message["thread_id"] == network_thread_id("mira", transport, "3174898512")
+    assert message["media"] == ["https://example.test/cg.png"]
+    [attempt] = ledger.list_for_role("mira")
+    assert attempt.status == "sent"
+
+
+@pytest.mark.asyncio
+async def test_supplement_never_retargets_an_unbound_original_chat(tmp_path):
+    tool, sent, ledger, sessions = _user_send_setup(tmp_path)
+    with pytest.raises(LookupError, match="绑定用户的私聊"):
+        await tool.execute(
+            channel="qq",
+            role_id="mira",
+            target_kind="user",
+            push_chat_id="old-peer",
+            push_proactive=False,
+            media=["https://example.test/cg.png"],
+        )
+    assert sent == []
+    assert ledger.list_for_role("mira") == []
+    assert sessions._store.fetch_session_messages("role:mira") == []
+
+
+@pytest.mark.asyncio
+async def test_model_cannot_forge_supplement_flags_or_original_chat(tmp_path):
+    from agent.tools.registry import ToolRegistry
+
+    tool, sent, _, sessions = _user_send_setup(tmp_path)
+    registry = ToolRegistry()
+    registry.register(tool)
+    await registry.execute(
+        "account_send",
+        {
+            "channel": "qq",
+            "target_kind": "user",
+            "message": "hi",
+            "push_chat_id": "forged",
+            "push_proactive": False,
+        },
+        context={"role_id": "mira", "session_key": "role:mira"},
+    )
+    assert len(sent) == 1
+    [message] = sessions._store.fetch_session_messages("role:mira")
+    assert message["proactive"] is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "flags",
+    [
+        {"push_proactive": "false", "push_chat_id": "3174898512"},
+        {"push_proactive": False},
+        {
+            "push_proactive": False,
+            "push_chat_id": "3174898512",
+            "target_kind": "private",
+        },
+        {"push_chat_id": "3174898512"},
+    ],
+)
+async def test_invalid_host_supplement_arguments_are_rejected_before_sending(
+    tmp_path, flags
+):
+    tool, sent, _, _ = _user_send_setup(tmp_path)
+    arguments = {
+        "channel": "qq",
+        "role_id": "mira",
+        "target_kind": "user",
+        "message": "hi",
+        **flags,
+    }
+    with pytest.raises(ValueError):
+        await tool.execute(**arguments)
+    assert sent == []
+
+
+@pytest.mark.asyncio
 async def test_user_target_refuses_a_specific_target_or_an_unbound_channel(
     tmp_path,
 ) -> None:

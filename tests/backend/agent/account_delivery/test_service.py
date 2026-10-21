@@ -90,6 +90,31 @@ def _service(tmp_path, plugin_id: str = "chat"):
     )
 
 
+def test_bound_user_chat_selects_exact_second_binding_and_checks_role(tmp_path):
+    service, accounts, _, _, account_id = _service(tmp_path)
+    identities = UserIdentityStore(tmp_path)
+    record = accounts.get(account_id).record
+    for user_id, chat_id in [("first", "dm:first"), ("second", "dm:second")]:
+        identities.pair(
+            identities.create_pairing_code().code,
+            record=record,
+            user_id=user_id,
+            scope="account",
+            chat=IdentityChat(record.id, "chat_bot", chat_id),
+        )
+    channel, target = service.bound_user_chat("mira", "chat_bot", "dm:second")
+    assert channel == "chat"
+    assert target.target == AccountTarget("private", "second")
+    assert target.chat.chat_id == "dm:second"
+    for role_id, transport, chat_id in [
+        ("other", "chat_bot", "dm:second"),
+        ("mira", "chat_wrong_instance", "dm:second"),
+        ("mira", "chat_bot", "g:second"),
+    ]:
+        with pytest.raises(LookupError, match="绑定用户的私聊"):
+            service.bound_user_chat(role_id, transport, chat_id)
+
+
 @pytest.mark.asyncio
 async def test_each_target_has_durable_receipt_even_if_turn_later_fails(
     tmp_path,

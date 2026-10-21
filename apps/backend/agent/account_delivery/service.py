@@ -14,6 +14,7 @@ from shiori_sdk.accounts.models import (
     AccountAccess,
     AccountNotFoundError,
     AccountSnapshot,
+    account_serves_channel,
     delivered_via_account,
 )
 from core.accounts.delivery_ledger import AccountDeliveryAttempt, AccountDeliveryLedger
@@ -146,6 +147,34 @@ class AccountDelivery:
             f"你的用户在渠道 {record.plugin_id} 已绑定身份，但还没有私聊过当前角色"
             "在该渠道的账号，无法直接发给用户"
         )
+
+    def bound_user_chat(
+        self, role_id: str, channel: str, chat_id: str
+    ) -> tuple[str, UserChatTarget]:
+        """Resolve an original user chat without guessing targets or retargeting.
+
+        Unlike a new ``user`` send, a background supplement belongs to an exact
+        transport address. Resolve it across the role's owned accounts and all
+        applicable bindings, preserving instance channels and opaque chat IDs.
+        ``send`` still applies the live account ownership/connection fence.
+        """
+        if not role_id:
+            raise PermissionError("需要角色上下文")
+        bindings = self._identities.list()
+        for account in self._accounts.list(role_id=role_id):
+            record = account.record
+            if not account_serves_channel(record, channel):
+                continue
+            for identity in identities_for_account(bindings, record):
+                chat = identity.chat_for(record.id)
+                if chat is not None and (chat.channel, chat.chat_id) == (
+                    channel,
+                    chat_id,
+                ):
+                    return record.plugin_id, UserChatTarget(
+                        chat, AccountTarget("private", identity.user_id)
+                    )
+        raise LookupError(f"补发目标已不是绑定用户的私聊: {channel}:{chat_id}")
 
     def _authorize(self, account: AccountSnapshot, role_id: str) -> AccountAccess:
         """Captures the ownership fence; an account removed since lookup is named

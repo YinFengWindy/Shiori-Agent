@@ -107,6 +107,9 @@ class AccountSendTool(Tool):
     ``message_push`` delivery, so the chat shows it.
     Other private peers are recorded when the plugin confirms their canonical
     conversation address; a target ID alone is never guessed to be a chat ID.
+    Host-only ``push_proactive=False`` and ``push_chat_id`` deliver a supplement
+    to that exact currently bound private chat on the supplied transport channel.
+    These flags are never accepted from model arguments through the registry.
     """
 
     name = "account_send"
@@ -154,7 +157,13 @@ class AccountSendTool(Tool):
     # The turn's session and whether its pushes commit with it come from the
     # execution context, never from model arguments.
     context_precedence = frozenset(
-        {"role_id", "session_key", "defer_push_session_sync"}
+        {
+            "role_id",
+            "session_key",
+            "defer_push_session_sync",
+            "push_chat_id",
+            "push_proactive",
+        }
     )
 
     def __init__(self, delivery: AccountDelivery, event_bus: EventBus) -> None:
@@ -171,11 +180,24 @@ class AccountSendTool(Tool):
         role_id = str(kwargs.get("role_id") or "")
         message = str(kwargs.get("message") or "")
         media = list(account_send_media(kwargs))
-        user_chat = (
-            self._delivery.user_chat(channel, role_id)
-            if is_user_target(kwargs)
-            else None
-        )
+        proactive = kwargs.get("push_proactive", True)
+        if not isinstance(proactive, bool):
+            raise ValueError("push_proactive must be a bool")
+        original_chat_id = str(kwargs.get("push_chat_id") or "").strip()
+        if not proactive:
+            if not original_chat_id or not is_user_target(kwargs):
+                raise ValueError("非主动补发需要原始用户私聊 push_chat_id")
+            channel, user_chat = self._delivery.bound_user_chat(
+                role_id, channel, original_chat_id
+            )
+        else:
+            if original_chat_id:
+                raise ValueError("push_chat_id 只用于非主动补发")
+            user_chat = (
+                self._delivery.user_chat(channel, role_id)
+                if is_user_target(kwargs)
+                else None
+            )
         target = (
             user_chat.target
             if user_chat is not None
@@ -200,6 +222,7 @@ class AccountSendTool(Tool):
                     external_message_id=receipt.platform_message_id,
                     tool=self.name,
                     media=tuple(media),
+                    proactive=proactive,
                     message_metadata={
                         "chat_type": CHAT_TYPE_PRIVATE,
                         **receipt.message_metadata(),

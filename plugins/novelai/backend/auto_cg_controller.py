@@ -172,20 +172,38 @@ class AutoCgController:
         if not media:
             return
 
-        push_tool = self._tool_registry.get_tool("message_push")
-        if push_tool is None:
-            raise RuntimeError("自动场景 CG 缺少 message_push 工具")
-        image_path = media[0]
-        # message_push raises on any undelivered payload; returning means the
-        # image was sent or queued with the current turn.
-        _ = await push_tool.execute(
-            channel=event.channel,
-            chat_id=event.chat_id,
-            image=image_path,
-            role_id=role_id,
-            push_proactive=False,
-        )
+        # Generation already persisted the image and role asset. Delivery failure
+        # or cancellation must not make the next observation generate it again.
         self._policy.record_success(event.session_key, prepared["visual_key"])
+        await self._deliver_media(event, role_id=role_id, image_path=media[0])
+
+    async def _deliver_media(
+        self, event: SceneObservationCommitted, *, role_id: str, image_path: str
+    ) -> None:
+        tool_name = "message_push" if event.channel == "desktop" else "account_send"
+        push_tool = self._tool_registry.get_tool(tool_name)
+        if push_tool is None:
+            raise RuntimeError(f"自动场景 CG 缺少 {tool_name} 工具")
+        if event.channel == "desktop":
+            _ = await push_tool.execute(
+                channel=event.channel,
+                chat_id=event.chat_id,
+                image=image_path,
+                role_id=role_id,
+                push_proactive=False,
+            )
+        else:
+            # The host resolves this exact original private chat through the
+            # role's currently owned account; it must never retarget a new binding.
+            _ = await push_tool.execute(
+                channel=event.channel,
+                target_kind="user",
+                role_id=role_id,
+                session_key=event.session_key,
+                push_chat_id=event.chat_id,
+                push_proactive=False,
+                media=[image_path],
+            )
 
     async def _generate_media_with_retry(
         self,
