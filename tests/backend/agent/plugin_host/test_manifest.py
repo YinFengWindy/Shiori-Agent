@@ -406,7 +406,12 @@ def test_manifest_rejects_non_boolean_default_enabled(tmp_path, value):
 
 # 成为内置插件时就默认停用的插件：升级前从未被缺省启用，不需要升级迁移，
 # 登记进迁移反而会给旧配置写入 enabled = true（#691）。
-_DEFAULT_DISABLED_SINCE_BUILTIN = {"gpt_sovits_tts", "herdr", "sensevoice_asr"}
+_DEFAULT_DISABLED_SINCE_BUILTIN = {
+    "gpt_sovits_tts",
+    "grok_bot",
+    "herdr",
+    "sensevoice_asr",
+}
 
 
 def test_builtin_default_disabled_plugins_match_the_upgrade_migration():

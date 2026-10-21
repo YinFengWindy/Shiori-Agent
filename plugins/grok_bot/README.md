@@ -2,7 +2,7 @@
 
 每个角色可连接一个已有 Grok Bot。不同角色的 Webhook、密钥、回程认证和会话独立；只支持文字私聊。
 
-安装发布的 `grok_bot-0.1.0.zip` 后，在插件页启用，再到角色账号页配置。源码打包使用 `node scripts/build-plugin.mjs --plugin plugins/grok_bot`。宿主需包含 #869 的接收回执与会话记录契约。
+Grok Bot 随 Shiori 内置，默认关闭。在插件页启用，再到角色账号页配置，无需另外安装 ZIP。开发态从仓库 `plugins/grok_bot` 加载，正式桌面包同时包含后端、账号配置 UI 和回程客户端。
 
 ## 配置
 
@@ -12,6 +12,10 @@
 4. Shiori 发出一次 `connection_check`；Grok 调用回程客户端完成握手后，连接才显示在线。HTTP 200 只表示 Grok 接收了任务，不证明回程可用。若本机执行权限、设备或客户端不可用，保持未就绪，检查账号状态后再连接。
 
 Windows 默认客户端是随插件发布的 `client.ps1`，使用系统 Windows PowerShell 5.1 或 PowerShell 7，不需要 Python。其他平台提供 `backend/client.py`，需要独立 Python 3.10+；打包后的 Shiori 可执行文件不是 Python 解释器。
+
+客户端使用当前内置插件目录中的文件：开发态为 `<仓库>/plugins/grok_bot/client.ps1`，Windows 安装版为 `<安装目录>/resources/runtime/_internal/plugins/grok_bot/client.ps1`。账号详情中的客户端路径和 Webhook 的 `callback_client` 是本次运行的实际位置。`connection_file` 仍保存在 `<工作区>/plugin-data/grok_bot/<连接 ID>/client.json`。给 Grok 配置本地执行路径时，应核对这两个实际位置；以前为测试工作树或外部安装目录授予的路径许可不会自动覆盖内置客户端位置。
+
+插件 ID、启用配置和插件数据目录保持不变，内置化不清除已有连接或历史。若自行安装过同 ID 的外部测试包，需先备份并移开该工作区代码副本，保留 `plugin-data/grok_bot` 和已有配置；内置与外部副本同时存在仍会按插件 ID 冲突阻止加载，不会静默替换或删除副本。
 
 ## 给 Grok routine 的协议说明
 

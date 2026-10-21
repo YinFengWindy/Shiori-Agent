@@ -1172,10 +1172,12 @@ from the shipped host code. Changing the manifest in the dev server invalidates
 those imports and reloads the page. Installed workspace packages always undergo
 the existing contract, duplicate-ID and exact-content trust checks regardless of
 this field. The declaration never grants trust, overrides a builtin, or installs
-anything automatically. Grok Bot declares external distribution and provides a
-repository example of an installable channel. SenseVoice and GPT-SoVITS remain
-bundled builtin plugins (default disabled) since #693; the build smoke and
-distribution tests below also generate their own external sources.
+anything automatically. Grok Bot is bundled and default disabled since #877;
+its source UI and callback client use the host's builtin build paths, while its
+existing plugin ID, configuration and workspace data paths remain unchanged.
+SenseVoice and GPT-SoVITS remain bundled builtin plugins (default disabled) since
+#693. The build smoke and distribution tests below generate their own external
+sources rather than relying on a shipped plugin to remain external.
 
 The frozen host collects the complete SDK runtime independently of these plugin
 sources, including implicit namespace directories such as `shiori_sdk.files`.

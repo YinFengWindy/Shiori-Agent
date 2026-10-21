@@ -3,9 +3,16 @@ import { EventEmitter } from "node:events";
 import { mkdtemp, mkdir, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { createServer } from "vite";
 import { builtinPluginEntries, builtinPluginEntrySource } from "./builtin-plugin-entries.mjs";
+
+test("the shipped Grok account UI enters the builtin registry without an external build", async () => {
+  const pluginsRoot = fileURLToPath(new URL("../../../plugins", import.meta.url));
+  const entry = await builtinPluginEntrySource(pluginsRoot, "ui");
+  assert.ok(entry.paths.includes(join(pluginsRoot, "grok_bot", "ui", "index.tsx")));
+});
 
 test("all three registries import only builtins and react to development manifest changes", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "plugin-entries-"));

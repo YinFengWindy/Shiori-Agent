@@ -1,6 +1,7 @@
 """Directory identity, source classification and static admission regressions."""
 
 import shutil
+from pathlib import Path
 
 import pytest
 
@@ -16,6 +17,27 @@ def _discover(roots, external=()):
     return discover_plugins(
         roots, external_roots=list(external), namespace="test", strict=True, host=None
     )
+
+
+def test_bundled_grok_source_is_admitted_without_external_renderer(
+    tmp_path: Path,
+) -> None:
+    source = Path(__file__).resolve().parents[4] / "plugins" / "grok_bot"
+    package = tmp_path / "grok_bot"
+    _ = shutil.copytree(
+        source,
+        package,
+        ignore=shutil.ignore_patterns("__pycache__", "tests", "renderer"),
+    )
+
+    [record] = _discover([tmp_path])
+
+    assert record.manifest.id == "grok_bot"
+    assert record.source == "builtin"
+    assert record.admission is None
+    assert record.entry_file.is_file()
+    assert not record.manifest.default_enabled
+    assert not (package / "renderer" / "ui.mjs").exists()
 
 
 def test_external_source_is_reported_only_outside_discovery(contract_package):
