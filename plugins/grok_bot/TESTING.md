@@ -32,3 +32,18 @@ Grok account form for a disposable role. The shown callback client must resolve
 inside the current builtin package; the connection file remains in that isolated
 workspace's `plugin-data/grok_bot`. Do not reuse a user's real Webhook to verify
 the distribution change.
+
+Connection/budget changes (#891) use the focused plugin suite plus:
+
+```sh
+pnpm desktop:test --file plugins/grok_bot/ui --file accounts/AccountResponseRulesEditor --file accounts/RoleAccountsPanel --file packages/sdk/src/account/account.test
+```
+
+Activation must make no Webhook requests; actual messages work without a handshake
+but still require the local token. Budget coverage includes interleaved chains
+(A uses 10, B uses 2, B's third message succeeds), chain exhaustion isolation,
+deduplication/restart, migration of complete legacy graphs, and closed migration
+of previously pruned graphs. Retention evicts only whole settled chains and never
+unresolved queued/sending/uncertain work. Desktop acceptance checks routine preview
+and exact copy, activation/deactivation, and the remaining full-tools grant; there
+are no private/blacklist controls or message status/reset panel for fixed peers.

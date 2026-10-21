@@ -1,16 +1,15 @@
 import { useEffect, useState } from "react";
-import { ghostButtonClass, inputClass, useAccountAction, type PluginAccountDetailComponentProps } from "@yinfengwindy/shiori-sdk";
+import { RoutineConfiguration } from "./RoutineConfiguration";
+import { inputClass, useAccountAction, type PluginAccountDetailComponentProps } from "@yinfengwindy/shiori-sdk";
 
 type ConnectionDetail = {
   webhook_url: string;
   has_key: boolean;
   enabled: boolean;
-  verified: boolean;
   max_messages: number;
-  exchange_count: number;
-  last_status: string;
   client_path: string;
   connection_file: string;
+  routine_config: string;
 };
 
 /** Isolate drafts when the account page switches between roles. */
@@ -28,19 +27,16 @@ function ConnectionLoader(props: PluginAccountDetailComponentProps) {
   useEffect(() => {
     if (!accountId) return;
     let active = true;
-    let timer: ReturnType<typeof setTimeout> | undefined;
     async function refresh() {
       try {
         const value = await client.call<ConnectionDetail>("account.detail", { account_id: accountId });
         if (active) { setDetail(value); setError(""); }
       } catch {
         if (active) setError("连接信息加载失败");
-      } finally {
-        if (active) timer = setTimeout(() => { void refresh(); }, 5000);
       }
     }
     void refresh();
-    return () => { active = false; clearTimeout(timer); };
+    return () => { active = false; };
   }, [accountId, connection, client, revision]);
   if (accountId && !detail) return error
     ? <host.ui.InlineError message={error} />
@@ -79,16 +75,10 @@ function ConnectionForm({ account, roleId, client, host, onChanged, detail }: Pl
     });
   }
 
-  async function continueExchange() {
-    if (!account) return;
-    await run("connect", async () => {
-      await client.call("account.reset_exchange", { account_id: account.id, role_id: roleId });
-      return account.id;
-    });
-  }
-
   return <div className="grid gap-4">
-    <host.ui.AccountStatusCard account={account} pending={pending} action={connected
+    <host.ui.AccountStatusCard account={account} pending={pending}
+      status={account?.runtimeActive && account.connection === "online" ? { label: "已启用", tone: "success" } : undefined}
+      action={connected
       ? { kind: "disconnect", onClick: () => void disconnect() }
       : { kind: "connect", onClick: () => void save(), disabled: !canSave }}>
       <host.ui.Reveal show={Boolean(error)} className="pt-3">
@@ -101,16 +91,9 @@ function ConnectionForm({ account, roleId, client, host, onChanged, detail }: Pl
     <label className="grid gap-2 text-body-sm text-ink-secondary">Webhook 密钥
       <input className={inputClass} type="password" value={secret} disabled={busy || connected} onChange={(event) => setSecret(event.target.value)} autoComplete="new-password" placeholder={detail?.has_key ? "已保存" : ""} />
     </label>
-    <label className="grid gap-2 text-body-sm text-ink-secondary">连续交流消息上限
+    <label className="grid gap-2 text-body-sm text-ink-secondary">单次交流消息上限
       <input className={inputClass} type="number" min={2} max={100} value={limit} disabled={busy || connected} onChange={(event) => setLimit(Number(event.target.value))} />
     </label>
-    {detail ? <div className="grid gap-2 border-t border-line-soft pt-4 text-body-sm text-ink-secondary">
-      <span>{detail.verified ? "回程已验证" : "等待回程验证"} · {detail.exchange_count} / {detail.max_messages}</span>
-      {detail.last_status ? <span role="status">{detail.last_status}</span> : null}
-      <button className={ghostButtonClass} disabled={busy || !connected} onClick={() => void continueExchange()}>继续新一轮交流</button>
-      <details><summary>回程客户端</summary>
-        <dl className="grid gap-2 text-ink-muted"><dt>客户端</dt><dd className="m-0 break-all">{detail.client_path}</dd><dt>连接文件</dt><dd className="m-0 break-all">{detail.connection_file}</dd></dl>
-      </details>
-    </div> : null}
+    {detail ? <RoutineConfiguration key={detail.routine_config} text={detail.routine_config} host={host} /> : null}
   </div>;
 }

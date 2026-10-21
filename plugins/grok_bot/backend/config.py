@@ -1,9 +1,16 @@
 """Validated role-owned Grok connections; secrets never appear in model reprs."""
 
+from dataclasses import replace
 from urllib.parse import urlsplit
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+
+from shiori_sdk.accounts import (
+    AccountResponseRules,
+    response_rules_to_dict,
+    stored_response_rules,
+)
 
 CHANNEL = "grok_bot"
 PROTOCOL = "shiori-grok/1"
@@ -22,7 +29,6 @@ class ConnectionConfig(BaseModel):
     callback_token: str = Field(min_length=32, repr=False)
     peer_name: str = "Grok Bot"
     enabled: bool = True
-    verified: bool = False
     callback_port: int = Field(default=0, ge=0, le=65535)
     max_messages: int = Field(default=12, ge=2, le=100)
     response_rules: dict[str, object] | None = None
@@ -66,7 +72,18 @@ class ConnectionConfig(BaseModel):
 def read_connection(value: object) -> ConnectionConfig:
     """Validate stored data without rendering secret input in an exception."""
     try:
-        return ConnectionConfig.model_validate(value)
+        if isinstance(value, dict):
+            value = dict(value)
+            value.pop("verified", None)
+        config = ConnectionConfig.model_validate(value)
+        rules = stored_response_rules(config.response_rules) or AccountResponseRules()
+        return config.model_copy(
+            update={
+                "response_rules": response_rules_to_dict(
+                    replace(rules, private_enabled=True, blocked_sender_ids=())
+                )
+            }
+        )
     except ValidationError as error:
         fields = sorted({str(item["loc"][0]) for item in error.errors() if item["loc"]})
         raise ValueError(f"Grok 连接配置无效：{', '.join(fields)}") from None

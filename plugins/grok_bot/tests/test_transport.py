@@ -49,3 +49,35 @@ async def test_timeout_is_uncertain_and_never_retried():
         assert len(calls) == 1
     finally:
         await transport.stop()
+
+
+@pytest.mark.parametrize(
+    "status, category",
+    [
+        (401, "认证失败"),
+        (403, "认证失败"),
+        (404, "地址不存在"),
+        (429, "请求过于频繁"),
+        (503, "服务暂不可用"),
+    ],
+)
+async def test_rejections_expose_safe_actionable_categories_without_remote_body(
+    status, category
+):
+    transport = WebhookTransport(
+        "https://example.test/routine",
+        "private-key",
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(status, text="secret-remote-response")
+        ),
+    )
+    transport.start()
+    try:
+        with pytest.raises(ValueError) as raised:
+            await transport.post({"text": "hello"})
+        assert category in str(raised.value)
+        assert f"HTTP {status}" in str(raised.value)
+        assert "private-key" not in str(raised.value)
+        assert "secret-remote-response" not in str(raised.value)
+    finally:
+        await transport.stop()

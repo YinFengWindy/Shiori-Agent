@@ -2,6 +2,7 @@ import json
 import asyncio
 from pathlib import Path
 from unittest.mock import AsyncMock
+from plugins.grok_bot.backend.transport import WebhookTransport
 from uuid import uuid4
 
 import pytest
@@ -25,14 +26,13 @@ async def test_multiple_roles_isolate_credentials_pause_rules_reload_and_delete(
     ctx.workspace = tmp_path
     group = ctx.channels.group("grok_bot")
     accounts = GrokAccounts(ctx, group)
-    one = config.model_copy(update={"verified": True})
+    one = config
     two = config.model_copy(
         update={
             "connection_id": uuid4().hex,
             "peer_id": uuid4().hex,
             "role_id": "other",
             "callback_token": "other-token-" + uuid4().hex,
-            "verified": True,
         }
     )
     store = ConnectionStore(ctx.kv)
@@ -50,19 +50,24 @@ async def test_multiple_roles_isolate_credentials_pause_rules_reload_and_delete(
         detail = await accounts.detail({"account_id": first.account_id})
         assert config.callback_token not in json.dumps(detail)
         assert config.webhook_key not in json.dumps(detail)
+        assert {"verified", "last_status", "exchange_count"}.isdisjoint(detail)
+        routine = detail["routine_config"]
+        assert isinstance(routine, str)
+        assert str(accounts.client_path) in routine
+        assert "fixed_peer" in ctx.accounts.records[first.account_id].capabilities
         with pytest.raises(ValueError, match="另一个角色"):
             await accounts.disconnect(
                 {"account_id": first.account_id, "role_id": "other"}
             )
         accounts.save_rules(
             one.connection_id,
-            AccountResponseRules(private_enabled=False, allow_full_tools=True),
+            AccountResponseRules(allow_full_tools=True),
         )
         await accounts.disconnect({"account_id": first.account_id, "role_id": "mira"})
         assert not first.client_file.exists()
         assert second.client_file.exists()
         assert store.get(one.connection_id).enabled is False
-        assert store.get(one.connection_id).response_rules["private_enabled"] is False
+        assert store.get(one.connection_id).response_rules["private_enabled"] is True
         assert store.get(one.connection_id).response_rules["allow_full_tools"] is True
         assert not (store.get(two.connection_id).response_rules or {}).get(
             "allow_full_tools", False
@@ -87,6 +92,57 @@ async def test_multiple_roles_isolate_credentials_pause_rules_reload_and_delete(
         await ctx.aclose()
 
 
+async def test_legacy_filters_are_removed_before_registration_and_cannot_be_resaved(
+    tmp_path, config
+):
+    ctx = FakeChannelPluginContext("grok_bot", Path(__file__).resolve().parents[1])
+    ctx.workspace = tmp_path
+    rules = {
+        "private_enabled": False,
+        "group_enabled": False,
+        "blocked_sender_ids": [config.peer_id],
+        "allow_full_tools": True,
+    }
+    ctx.kv.set(
+        "connections",
+        {
+            config.connection_id: {
+                **config.model_dump(),
+                "verified": False,
+                "enabled": False,
+                "response_rules": rules,
+            }
+        },
+    )
+    accounts = GrokAccounts(ctx, ctx.channels.group("grok_bot"))
+    try:
+        await accounts.load()
+        account = ctx.accounts.records[account_id_for("grok_bot", config.connection_id)]
+        assert account.record.response_rules.private_enabled
+        assert account.record.response_rules.blocked_sender_ids == ()
+        assert account.record.response_rules.allow_full_tools
+        assert "fixed_peer" in account.capabilities
+        saved = accounts.store.rows()[config.connection_id]
+        assert isinstance(saved, dict)
+        assert "verified" not in saved
+        for rejected in (
+            AccountResponseRules(private_enabled=False),
+            AccountResponseRules(blocked_sender_ids=(config.peer_id,)),
+        ):
+            with pytest.raises(ValueError, match="固定对端"):
+                accounts.save_rules(config.connection_id, rejected)
+        assert (
+            accounts.store.get(config.connection_id).response_rules["allow_full_tools"]
+            is True
+        )
+        accounts.save_rules(config.connection_id, AccountResponseRules())
+        assert not accounts.store.get(config.connection_id).response_rules.get(
+            "allow_full_tools", False
+        )
+    finally:
+        await ctx.aclose()
+
+
 async def test_save_keeps_secret_reference_and_stable_identity_but_rotates_new_bot(
     tmp_path, config, monkeypatch
 ):
@@ -95,7 +151,8 @@ async def test_save_keeps_secret_reference_and_stable_identity_but_rotates_new_b
     ctx.config.references["${GROK_SECRET}"] = "resolved-secret"
     group = ctx.channels.group("grok_bot")
     accounts = GrokAccounts(ctx, group)
-    monkeypatch.setattr(GrokConnection, "probe", AsyncMock())
+    post = AsyncMock(side_effect=AssertionError("activation must not contact Grok"))
+    monkeypatch.setattr(WebhookTransport, "post", post)
     await group.start(fake_channel_context(tmp_path))
     try:
         result = await accounts.save(
@@ -134,7 +191,7 @@ async def test_save_keeps_secret_reference_and_stable_identity_but_rotates_new_b
         assert changed.connection_id == original.connection_id
         assert changed.peer_id != original.peer_id
         assert changed.callback_token != original.callback_token
-        assert changed.verified is False
+        post.assert_not_awaited()
         assert not changed.response_rules.get("allow_full_tools", False)
         assert ctx.accounts.records[
             result["account_id"]
@@ -266,7 +323,7 @@ async def test_reconnect_keeps_all_inflight_send_receipts_and_reply_correlation(
     ctx.workspace = tmp_path
     group = ctx.channels.group("grok_bot")
     accounts = GrokAccounts(ctx, group)
-    accounts.store.save(config.model_copy(update={"verified": True}))
+    accounts.store.save(config)
     await accounts.load()
     await group.start(fake_channel_context(tmp_path))
     old = accounts.connections[config.connection_id]
@@ -277,7 +334,8 @@ async def test_reconnect_keeps_all_inflight_send_receipts_and_reply_correlation(
         await release.wait()
 
     monkeypatch.setattr(old._transport, "post", delayed_post)
-    monkeypatch.setattr(GrokConnection, "probe", AsyncMock())
+    post = AsyncMock(side_effect=AssertionError("activation must not contact Grok"))
+    monkeypatch.setattr(WebhookTransport, "post", post)
     tasks: list[asyncio.Task[dict[str, object]]] = []
     try:
         async with asyncio.timeout(5):
@@ -298,7 +356,9 @@ async def test_reconnect_keeps_all_inflight_send_receipts_and_reply_correlation(
             await asyncio.gather(*tasks)
         current = accounts.connections[config.connection_id]
         assert current is not old
-        assert current.journal.state.count == 2
+        assert {
+            key: budget.count for key, budget in current.journal.state.exchanges.items()
+        } == {"out-1": 1, "out-2": 1}
         assert {
             key: value.state for key, value in current.journal.state.messages.items()
         } == {"out-1": "accepted", "out-2": "accepted"}
@@ -318,7 +378,7 @@ async def test_reconnect_validates_credentials_before_retiring_and_restores_on_f
     ctx.workspace = tmp_path
     group = ctx.channels.group("grok_bot")
     accounts = GrokAccounts(ctx, group)
-    accounts.store.save(config.model_copy(update={"verified": True}))
+    accounts.store.save(config)
     await accounts.load()
     await group.start(fake_channel_context(tmp_path))
     old = accounts.connections[config.connection_id]
@@ -341,7 +401,7 @@ async def test_reconnect_validates_credentials_before_retiring_and_restores_on_f
         assert group.member(config.connection_id) is old
         assert old.status()["connected"]
         assert old.client_file.exists()
-        assert accounts.store.get(config.connection_id).verified
+        assert accounts.store.get(config.connection_id).enabled
         with pytest.raises(ValueError, match="journal unavailable"):
             await accounts.save(
                 {

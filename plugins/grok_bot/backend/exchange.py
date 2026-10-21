@@ -1,93 +1,67 @@
-"""Durable correlation, duplicate admission and bounded automatic exchanges."""
+"""Durable correlation, duplicate admission and independent reply-chain budgets."""
 
 import hashlib
-import time
-from collections.abc import Callable
 from typing import Literal
-from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from shiori_sdk.storage import KeyValueStore
 
+from .exchange_state import ExchangeBudget, Receipt, read_exchange_state
 from .protocol import BotMessage, CallbackError
 
-QUIET_RESET_SECONDS = 1800
 MAX_RECORDS = 512
 MAX_PENDING = 16
-
-
-class Receipt(BaseModel):
-    """Transport state without a second copy of completed conversation text."""
-
-    model_config = ConfigDict(extra="forbid", strict=True)
-    direction: Literal["in", "out"]
-    digest: str
-    exchange_id: str
-    reply_to: str = ""
-    state: Literal["queued", "sending", "accepted", "complete", "failed", "uncertain"]
-    text: str = ""
-
-
-class ExchangeState(BaseModel):
-    """A message budget survives new IDs, reconnects and application restarts."""
-
-    model_config = ConfigDict(extra="forbid", strict=True)
-    exchange_id: str = ""
-    count: int = Field(default=0, ge=0)
-    last_activity: float = 0.0
-    messages: dict[str, Receipt] = Field(default_factory=dict)
-    last_status: str = ""
+_PENDING_STATES = {"queued", "sending", "uncertain"}
 
 
 class ExchangeJournal:
-    """Persist one Bot binding's correlation and enforce its admission budget."""
+    """Persist one Bot binding's receipts with a separate budget per root message."""
 
-    def __init__(
-        self,
-        kv: KeyValueStore,
-        connection_id: str,
-        peer_id: str,
-        *,
-        clock: Callable[[], float] = time.time,
-    ) -> None:
+    def __init__(self, kv: KeyValueStore, connection_id: str, peer_id: str) -> None:
         self._kv = kv
         self._key = f"exchange:{connection_id}:{peer_id}"
-        self._clock = clock
-        try:
-            self.state = ExchangeState.model_validate(kv.get(self._key, {}))
-        except ValidationError:
-            raise ValueError("Grok 对话状态无效，不能安全恢复") from None
-        # A process exit may leave an accepted remote send without its receipt.
-        # Keep it uncertain; startup must never replay that side effect.
-        changed = False
+        saved = kv.get(self._key, {})
+        self.state = read_exchange_state(saved)
+        # An interrupted remote send is uncertain and must never be replayed.
         for receipt in self.state.messages.values():
             if receipt.state == "sending":
                 receipt.state = "uncertain"
-                changed = True
-        if changed:
-            self.state.last_status = "上次发送结果不确定，请勿自动重发"
+                self.state.last_status = "上次发送结果不确定，请勿自动重发"
+        if self.state.model_dump() != saved:
             self._save()
 
     def _save(self) -> None:
-        while len(self.state.messages) > MAX_RECORDS:
-            key = next(
+        self._kv.set(self._key, self.state.model_dump())
+
+    def _make_room(self, protected_exchange: str) -> None:
+        # Expire whole settled chains, never individual ancestors or counters.
+        # Replies to expired chains fail instead of receiving a fresh budget.
+        while len(self.state.messages) >= MAX_RECORDS:
+            pending = {
+                receipt.exchange_id
+                for receipt in self.state.messages.values()
+                if receipt.state in _PENDING_STATES
+            }
+            expired = next(
                 (
-                    key
-                    for key, receipt in self.state.messages.items()
-                    if receipt.state not in {"queued", "sending"}
-                    and receipt.exchange_id != self.state.exchange_id
+                    exchange_id
+                    for exchange_id in self.state.exchanges
+                    if exchange_id != protected_exchange and exchange_id not in pending
                 ),
                 None,
             )
-            if key is None:
-                break
-            del self.state.messages[key]
-        self._kv.set(self._key, self.state.model_dump())
+            if expired is None:
+                raise CallbackError(429, "待处理交流过多，请稍后再试")
+            self.state.messages = {
+                key: receipt
+                for key, receipt in self.state.messages.items()
+                if receipt.exchange_id != expired
+            }
+            del self.state.exchanges[expired]
 
     def begin(
         self, message: BotMessage, direction: Literal["in", "out"], limit: int
     ) -> bool:
-        """Reserve once before a side effect; return False for an identical replay."""
+        """Reserve once in the parent's chain, or start one independent root."""
         digest = hashlib.sha256(
             (message.reply_to + "\0" + message.text).encode("utf-8")
         ).hexdigest()
@@ -98,41 +72,42 @@ class ExchangeJournal:
             if previous.state in {"uncertain", "sending", "failed"}:
                 raise CallbackError(409, "该消息结果不确定或已失败，请检查连接状态")
             return False
-        now = self._clock()
-        quiet = now - self.state.last_activity >= QUIET_RESET_SECONDS
-        if not self.state.exchange_id or (quiet and not message.reply_to):
-            self.state.exchange_id = uuid4().hex
-            self.state.count = 0
+        exchange_id = message.message_id
+        budget = ExchangeBudget()
         if message.reply_to:
             parent = self.state.messages.get(message.reply_to)
             if (
                 parent is None
                 or parent.direction == direction
-                or parent.exchange_id != self.state.exchange_id
                 or parent.state == "failed"
             ):
                 raise CallbackError(409, "回复对应的消息不存在或交流已结束")
-        if self.state.count >= limit:
-            self.state.last_status = "已达连续交流上限"
-            self._save()
-            raise CallbackError(409, self.state.last_status)
+            exchange_id = parent.exchange_id
+            budget = self.state.exchanges[exchange_id]
+            if budget.closed:
+                raise CallbackError(409, "回复对应的交流已过期")
+        elif exchange_id in self.state.exchanges:
+            raise CallbackError(409, "消息标识已被使用或交流已过期")
+        if budget.count >= limit:
+            raise CallbackError(409, "已达单次交流消息上限")
         pending = sum(
-            receipt.state in {"queued", "sending", "uncertain"}
-            and receipt.exchange_id == self.state.exchange_id
+            receipt.state in _PENDING_STATES
             for receipt in self.state.messages.values()
+            if receipt.exchange_id == exchange_id
         )
         if pending >= MAX_PENDING:
             raise CallbackError(429, "待处理消息过多，请稍后再试")
+        self._make_room(exchange_id)
         self.state.messages[message.message_id] = Receipt(
             direction=direction,
             digest=digest,
-            exchange_id=self.state.exchange_id,
+            exchange_id=exchange_id,
             reply_to=message.reply_to,
             state="queued" if direction == "in" else "sending",
             text=message.text if direction == "in" else "",
         )
-        self.state.count += 1
-        self.state.last_activity = now
+        budget.count += 1
+        self.state.exchanges[exchange_id] = budget
         self.state.last_status = "等待角色处理" if direction == "in" else "正在发送"
         self._save()
         return True
@@ -151,11 +126,9 @@ class ExchangeJournal:
         self._save()
 
     def complete_parent(self, message_id: str) -> None:
-        """A corresponding reply proves an incoming turn has completed."""
+        """Mark a processed incoming message complete without changing its budget."""
         parent = self.state.messages.get(message_id)
         if parent is not None and parent.direction == "in":
-            if parent.state == "queued" and self.state.last_status == "等待角色处理":
-                self.state.last_status = "角色已处理"
             parent.state, parent.text = "complete", ""
             self._save()
 
@@ -166,16 +139,6 @@ class ExchangeJournal:
             for key, receipt in self.state.messages.items()
             if receipt.direction == "in" and receipt.state == "queued"
         ]
-
-    def reset(self) -> None:
-        """Start a new budget only through an explicit account UI action."""
-        if self.pending():
-            raise ValueError("仍有待处理消息，不能重置交流")
-        self.state.exchange_id = uuid4().hex
-        self.state.count = 0
-        self.state.last_status = ""
-        self.state.last_activity = self._clock()
-        self._save()
 
     @staticmethod
     def purge_saved(kv: KeyValueStore, connection_id: str, peer_id: str) -> None:
