@@ -7,7 +7,8 @@ from dataclasses import dataclass, field
 from bus.events import InboundItem
 from shiori_sdk.messages import DeliveryOutcome, OutboundMessage
 from shiori_sdk.channels.errors import NonRetryableDeliveryError
-from bus.acknowledged import deliver_acknowledged, finish_started
+from bus.acknowledged import deliver_acknowledged
+from core.common.cancellation import finish_started
 
 logger = logging.getLogger(__name__)
 

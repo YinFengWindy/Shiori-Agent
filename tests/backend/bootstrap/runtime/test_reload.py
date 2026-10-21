@@ -9,7 +9,7 @@ from bootstrap.app import AppRuntime, RuntimeFeatures
 from bootstrap.runtime.generations import RuntimeRetention
 from core.common.runtime_scope import bind_runtime
 from shiori_sdk.messages import OutboundMessage
-from bus.acknowledged import finish_started
+from core.common.cancellation import finish_started
 
 
 @pytest.mark.parametrize("reuse", [False, True])
