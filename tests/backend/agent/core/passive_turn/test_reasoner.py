@@ -26,7 +26,7 @@ async def test_reply_policy_filters_visible_tokens_but_preserves_thinking(
     tmp_path, enabled
 ):
     from agent.turns.reply_sequence import reply_is_buffered
-    from shiori_sdk.reply_sequence import ReplySequencePolicy
+    from agent.turns.reply_sequence import ReplySequencePolicy
 
     manager = SessionManager(tmp_path)
     reasoner = DefaultReasoner(
@@ -131,20 +131,16 @@ async def test_natural_chat_role_draft_reaches_only_supported_model_requests(
 ):
     from typing import Any, cast
     from agent.context import ContextBuilder
-    from agent.lifecycle.plugin_contributions import StaticPluginContributions
     from core.roles import RoleStore
-    from plugins.natural_chat.backend.plugin import NaturalChatPromptModule, SEPARATOR
-    from plugins.natural_chat.backend.role_state import NaturalChatRoleState
-    from agent.plugin_host.roles import HostRoles
+    from core.roles.services import RoleSessionService
+    from prompts.natural_chat import NATURAL_CHAT_SEPARATOR
     from conversation.context_scope import turn_context_view
     from conversation.service import desktop_thread_id
     from shiori_sdk.channels.threads import network_thread_id
 
     roles = RoleStore(tmp_path)
     roles.create_role(role_id="mira", name="Mira", system_prompt="保持原有性格")
-    state = NaturalChatRoleState(HostRoles(roles).as_capability())
-    roles.extensions.register("natural_chat", state.write_draft, state.project)
-    roles.update_role("mira", plugin_drafts={"natural_chat": {"enabled": enabled}})
+    role = roles.update_role("mira", runtime_config={"natural_chat_enabled": enabled})
     memory = SimpleNamespace(
         read_self=lambda: "",
         read_profile=lambda: "",
@@ -152,8 +148,7 @@ async def test_natural_chat_role_draft_reaches_only_supported_model_requests(
         get_memory_context=lambda: "",
     )
     manager = SessionManager(tmp_path)
-    session = manager.get_or_create("role:mira")
-    session.metadata["role_id"] = "mira"
+    session = RoleSessionService(manager).open_by_role(role)
     thread = (
         desktop_thread_id("mira")
         if channel == "desktop"
@@ -168,15 +163,10 @@ async def test_natural_chat_role_draft_reaches_only_supported_model_requests(
         context=ContextBuilder(tmp_path, memory=cast(Any, memory), runtime_roles=roles),
         session_manager=manager,
     )
-    reasoner.bind_plugin_contributions(
-        StaticPluginContributions(
-            prompt_render_modules=[NaturalChatPromptModule(state)],
-        )
-    )
 
     async def run(messages, **kwargs):
         rendered = str(messages)
-        assert (SEPARATOR in rendered) is selected
+        assert (NATURAL_CHAT_SEPARATOR in rendered) is selected
         assert "保持原有性格" in rendered
         return ReasonerResult(reply="自由回答")
 

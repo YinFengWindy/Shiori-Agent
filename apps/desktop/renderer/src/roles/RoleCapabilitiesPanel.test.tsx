@@ -10,6 +10,29 @@ import type { RoleFormState } from "../shared/types";
 import { RoleCapabilitiesPanel } from "./RoleCapabilitiesPanel";
 
 describe("RoleCapabilitiesPanel", () => {
+  it("keeps natural chat available without any plugins and edits only its role draft", async () => {
+    setPluginEnabledSnapshot([]);
+    const initialForm = createEmptyRoleForm();
+    let form = initialForm;
+    const panel = () => <RoleCapabilitiesPanel activeRole={null} bridgeReady roleForm={form} onUpdate={(next) => { form = typeof next === "function" ? next(form) : next; }} />;
+    const view = await mountTestComponent(panel(), { windowGlobals: { miraDesktop: { onEvent: () => () => undefined, invoke: async () => ({ error: null, payload: { providers: [] } }), readSettings: async () => ({ formData: createSettingsDraft() }) } } });
+    try {
+      const toggle = view.container.querySelector<HTMLButtonElement>('[role="switch"][aria-label="自然聊天"]');
+      assert.ok(toggle);
+      assert.equal(toggle.getAttribute("aria-checked"), "false");
+      assert.equal(view.container.querySelectorAll('[aria-label="自然聊天"]').length, 1);
+      await act(async () => toggle.click());
+      await view.render(panel());
+      assert.deepEqual(form, { ...initialForm, naturalChatEnabled: true });
+      assert.equal(toggle.getAttribute("aria-checked"), "true");
+      await act(async () => toggle.click());
+      assert.deepEqual(form, initialForm);
+    } finally {
+      await view.cleanup();
+      resetPluginEnabledStateForTests();
+    }
+  });
+
   it("renders capability names and current state labels", () => {
     const markup = renderToStaticMarkup(<RoleCapabilitiesPanel activeRole={null} bridgeReady roleForm={{ ...createEmptyRoleForm(), nsfwMemoryEnabled: true }} onUpdate={() => undefined} />);
 

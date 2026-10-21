@@ -13,6 +13,8 @@ from agent.lifecycle.phase import (
     topo_sort_modules,
 )
 from agent.lifecycle.types import PromptRenderInput, PromptRenderResult
+from agent.turns.reply_sequence import ReplySequencePolicy
+from prompts.natural_chat import NATURAL_CHAT_PROMPT, NATURAL_CHAT_SEPARATOR
 from shiori_sdk.lifecycle import PromptRenderCtx
 from shiori_sdk.prompting import PromptSectionRender
 from bus.event_bus import EventBus
@@ -57,7 +59,6 @@ class _BuildPromptRenderCtxModule:
             turn_injection_prompt=input.turn_injection_prompt,
             session_metadata=dict(input.session_metadata),
             extra_hints=list(input.extra_hints or []),
-            supports_reply_sequence=input.supports_reply_sequence,
         )
         return frame
 
@@ -87,6 +88,21 @@ class _RenderPromptModule:
     async def run(self, frame: PromptRenderFrame) -> PromptRenderFrame:
         ctx = cast(PromptRenderCtx, frame.slots[_CTX_SLOT])
         minimal = frame.input.minimal_request
+        runtime_config = frame.input.session_metadata.get("role_runtime_config") or {}
+        reply_sequence = (
+            ReplySequencePolicy(NATURAL_CHAT_SEPARATOR)
+            if frame.input.supports_reply_sequence
+            and not minimal
+            and runtime_config.get("natural_chat_enabled") is True
+            else None
+        )
+        bottom_sections = list(ctx.system_sections_bottom)
+        if reply_sequence is not None:
+            bottom_sections.append(
+                PromptSectionRender(
+                    name="natural_chat", content=NATURAL_CHAT_PROMPT, is_static=False
+                )
+            )
         rendered = self._context.render(
             ContextRequest(
                 history=[] if minimal else ctx.history,
@@ -107,7 +123,7 @@ class _RenderPromptModule:
                 text_attachment_tool=frame.input.text_attachment_tool,
             ),
             system_sections_top=[] if minimal else ctx.system_sections_top,
-            system_sections_bottom=[] if minimal else ctx.system_sections_bottom,
+            system_sections_bottom=[] if minimal else bottom_sections,
             session_metadata=ctx.session_metadata,
         )
         messages = list(rendered.messages)
@@ -126,11 +142,7 @@ class _RenderPromptModule:
         frame.slots[_RESULT_SLOT] = PromptRenderResult(
             messages=messages,
             current_message=current_message,
-            reply_sequence=(
-                ctx.reply_sequence
-                if frame.input.supports_reply_sequence and not minimal
-                else None
-            ),
+            reply_sequence=reply_sequence,
         )
         return frame
 

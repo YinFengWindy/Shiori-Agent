@@ -9,9 +9,15 @@ from agent.turns.reply_sequence import (
     deliver_reply_sequence,
     parse_reply_sequence,
 )
-from shiori_sdk.reply_sequence import ReplySequencePolicy
+from agent.turns.reply_sequence import ReplySequencePolicy
 
 POLICY = ReplySequencePolicy("<message-break/>")
+
+
+@pytest.mark.parametrize("separator", ["", " ", " x", "x\ny", "x\ry", "```x"])
+def test_rejects_invalid_separator(separator):
+    with pytest.raises(ValueError):
+        ReplySequencePolicy(separator)
 
 
 def test_only_explicit_boundaries_split_and_preserve_markdown():

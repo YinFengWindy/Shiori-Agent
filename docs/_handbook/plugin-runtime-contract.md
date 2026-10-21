@@ -123,10 +123,10 @@ consolidates these additions and the subsequent #847 breaking migration.
 
 <!-- Record the next contract batch here, with PR references and breaking markers. -->
 
-- **Complete reply sequences (#865 / #871).** `shiori_sdk.reply_sequence.ReplySequencePolicy`
-  supplies an explicit separator line through `PromptRenderCtx.reply_sequence`.
-  Plugins opt in only when the host-owned `supports_reply_sequence` is true
-  (currently interactive desktop turns). Model text is buffered, existing reply
+- **Complete reply sequences (#865 / #871, built-in capability #874).** The
+  default-off role setting `runtime_config.natural_chat_enabled` selects a
+  host-owned presentation policy on supported interactive turns. Model text is
+  buffered, existing reply
   hooks run, and the host parses boundaries outside fenced code and publishes
   complete messages serially. Each stored message has its own ID and shares
   `turn_id` / `reply_sequence_id`, with a zero-based `reply_sequence_index`.
@@ -137,9 +137,17 @@ consolidates these additions and the subsequent #847 breaking migration.
   update payload shape as `session.updated`; they do not finish the turn.
   `chat.done`, `chat.error` and `chat.cancelled` remain the terminal events.
   Cancellation retains the published prefix and abandons the pending suffix;
-  no policy retains the existing single-message streaming behavior. The bundled
-  `natural_chat` plugin exposes a default-off role capability and contributes
-  only the instant-chat setting and separator instructions.
+  no policy retains the existing single-message streaming behavior. The built-in
+  capability contributes only the instant-chat setting and separator instructions.
+  Role manifest v10 atomically migrates the former plugin preference, preserving
+  an explicit built-in value and unrelated plugin namespaces.
+  **breaking** relative to the unreleased #871 API: removes
+  `shiori_sdk.reply_sequence.ReplySequencePolicy` and the plugin-only
+  `PromptRenderCtx.reply_sequence` / `supports_reply_sequence` fields. They had no
+  other plugin consumers; the policy and eligibility input now live in the host.
+  Published SDK 3.1.2 did not contain those additions. The SDK version stays unchanged
+  until the next contract batch is finalized; delivery events and metadata above
+  remain available.
 
 - **In-generation plugin reload (host groundwork, #856 / #860).** The plugin kernel can
   reload one plugin and its hard dependents without replacing the runtime generation;

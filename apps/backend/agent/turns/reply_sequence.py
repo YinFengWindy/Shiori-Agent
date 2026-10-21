@@ -10,10 +10,25 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any
 
-from shiori_sdk.reply_sequence import ReplySequencePolicy
-
 _BUFFERED_REPLY: ContextVar[bool] = ContextVar("buffered_reply", default=False)
 _FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
+
+
+@dataclass(frozen=True)
+class ReplySequencePolicy:
+    """Host-owned boundary format for complete, separately delivered messages."""
+
+    separator: str
+
+    def __post_init__(self) -> None:
+        if (
+            not self.separator
+            or self.separator != self.separator.strip()
+            or "\n" in self.separator
+            or "\r" in self.separator
+            or self.separator.startswith(("```", "~~~"))
+        ):
+            raise ValueError("消息分隔符必须是非空的独立单行标记")
 
 
 @contextmanager

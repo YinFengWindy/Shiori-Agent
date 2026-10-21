@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any, Protocol
 
 from agent.lifecycle.types import PromptRenderInput
-from shiori_sdk.reply_sequence import ReplySequencePolicy
+from agent.turns.reply_sequence import ReplySequencePolicy
 from core.roles.reply_state import RoleReply
 
 if TYPE_CHECKING:
