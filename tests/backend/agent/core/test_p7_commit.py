@@ -275,7 +275,7 @@ async def test_new_chain_after_reasoning_persists_meme_and_fires_turn_committed(
     from agent.core.passive_turn import ContextStore
 
     order: list[str] = []
-    memes = tmp_path / "memes"
+    memes = tmp_path / "plugin-data" / "meme" / "library"
     (memes / "shy").mkdir(parents=True)
     image = memes / "shy" / "001.png"
     image.write_bytes(b"\x89PNG\r\n\x1a\n")
