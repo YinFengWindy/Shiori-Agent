@@ -37,29 +37,14 @@ def test_now_utc_is_timezone_aware_utc():
     assert now.utcoffset() == timedelta(0)
 
 
-def test_interesting_set_is_independent_per_instance():
+def test_mutable_tick_fields_are_independent_per_instance():
     ctx1 = AgentTickContext()
     ctx2 = AgentTickContext()
     ctx1.interesting_item_ids.add("feed-mcp:1")
-    assert "feed-mcp:1" not in ctx2.interesting_item_ids
-
-
-def test_discarded_set_is_independent_per_instance():
-    ctx1 = AgentTickContext()
-    ctx2 = AgentTickContext()
     ctx1.discarded_item_ids.add("feed-mcp:2")
-    assert "feed-mcp:2" not in ctx2.discarded_item_ids
-
-
-def test_cited_item_ids_is_independent_per_instance():
-    ctx1 = AgentTickContext()
-    ctx2 = AgentTickContext()
     ctx1.cited_item_ids.append("feed-mcp:3")
-    assert ctx2.cited_item_ids == []
-
-
-def test_fetched_alerts_is_independent_per_instance():
-    ctx1 = AgentTickContext()
-    ctx2 = AgentTickContext()
     ctx1.fetched_alerts.append({"id": "a1"})
+    assert "feed-mcp:1" not in ctx2.interesting_item_ids
+    assert "feed-mcp:2" not in ctx2.discarded_item_ids
+    assert ctx2.cited_item_ids == []
     assert ctx2.fetched_alerts == []

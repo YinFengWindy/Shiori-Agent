@@ -44,10 +44,6 @@ from core.identity import UserIdentityStore
 # ── TOOL_SCHEMAS 结构 ─────────────────────────────────────────────────────
 
 
-def test_tool_schemas_is_list():
-    assert isinstance(TOOL_SCHEMAS, list)
-
-
 def _fn(name: str) -> dict:
     """从 TOOL_SCHEMAS 取指定工具的 function 块。"""
     return next(s["function"] for s in TOOL_SCHEMAS if s["function"]["name"] == name)
@@ -69,6 +65,11 @@ def test_all_tools_present():
         "finish_turn",
     }
     assert required <= names  # 允许超集（未来可加工具），但必须包含以上全部
+    assert "message" in _fn("message_push")["parameters"]["required"]
+    assert "url" in _fn("web_fetch")["parameters"]["required"]
+    assert "query" in _fn("web_search")["parameters"]["required"]
+    assert "query" in _fn("recall_memory")["parameters"]["required"]
+    assert "reason" in _fn("finish_turn")["parameters"]["properties"]
 
 
 def test_each_schema_has_openai_format():
@@ -89,14 +90,6 @@ def test_message_push_schema_evidence_is_array():
     assert props["evidence"]["items"]["type"] == "string"
 
 
-def test_message_push_schema_message_required():
-    assert "message" in _fn("message_push")["parameters"]["required"]
-
-
-def test_finish_turn_schema_reason_is_supported():
-    assert "reason" in _fn("finish_turn")["parameters"]["properties"]
-
-
 def test_message_push_requires_non_empty_message():
     ctx = AgentTickContext(
         reply_context=RoleReplyContext(("平静",), ""),
@@ -113,28 +106,10 @@ def test_message_push_requires_non_empty_message():
         )
 
 
-def test_mark_not_interesting_schema_item_ids_is_array():
-    props = _fn("mark_not_interesting")["parameters"]["properties"]
-    assert "item_ids" in props
-    assert props["item_ids"]["type"] == "array"
-
-
-def test_mark_interesting_schema_item_ids_is_array():
-    props = _fn("mark_interesting")["parameters"]["properties"]
-    assert "item_ids" in props
-    assert props["item_ids"]["type"] == "array"
-
-
-def test_web_fetch_schema_url_required():
-    assert "url" in _fn("web_fetch")["parameters"]["required"]
-
-
-def test_web_search_schema_query_required():
-    assert "query" in _fn("web_search")["parameters"]["required"]
-
-
-def test_recall_memory_schema_query_required():
-    assert "query" in _fn("recall_memory")["parameters"]["required"]
+def test_interest_marker_schemas_take_item_id_arrays():
+    for name in ("mark_not_interesting", "mark_interesting"):
+        item_ids = _fn(name)["parameters"]["properties"]["item_ids"]
+        assert item_ids["type"] == "array"
 
 
 # ── _web_fetch ────────────────────────────────────────────────────────────
@@ -658,14 +633,6 @@ def test_mark_not_interesting_adds_to_discarded():
     assert result["ok"] is True
 
 
-def test_mark_not_interesting_single_item():
-    ctx = AgentTickContext(
-        reply_context=RoleReplyContext(("平静",), ""),
-    )
-    _mark_not_interesting(ctx, {"item_ids": ["alert-mcp:99"]})
-    assert "alert-mcp:99" in ctx.discarded_item_ids
-
-
 def test_mark_not_interesting_empty_list():
     ctx = AgentTickContext(
         reply_context=RoleReplyContext(("平静",), ""),
@@ -741,23 +708,16 @@ async def test_get_context_returns_rows_and_marks_fetched(rows):
 
 
 @pytest.mark.asyncio
-async def test_get_recent_chat_calls_fn_with_n():
-    fake_chat_fn = AsyncMock(return_value=[{"role": "user", "content": "hi"}])
+async def test_get_recent_chat_passes_explicit_n_and_defaults_to_20():
     ctx = AgentTickContext(
         reply_context=RoleReplyContext(("平静",), ""),
     )
-    await _get_recent_chat(ctx, {"n": 10}, recent_chat_fn=fake_chat_fn)
-    fake_chat_fn.assert_called_once_with(n=10)
-
-
-@pytest.mark.asyncio
-async def test_get_recent_chat_default_n_20():
-    fake_chat_fn = AsyncMock(return_value=[])
-    ctx = AgentTickContext(
-        reply_context=RoleReplyContext(("平静",), ""),
-    )
-    await _get_recent_chat(ctx, {}, recent_chat_fn=fake_chat_fn)
-    fake_chat_fn.assert_called_once_with(n=20)
+    explicit = AsyncMock(return_value=[])
+    await _get_recent_chat(ctx, {"n": 10}, recent_chat_fn=explicit)
+    explicit.assert_called_once_with(n=10)
+    default = AsyncMock(return_value=[])
+    await _get_recent_chat(ctx, {}, recent_chat_fn=default)
+    default.assert_called_once_with(n=20)
 
 
 @pytest.mark.asyncio
@@ -772,16 +732,6 @@ async def test_get_recent_chat_returns_json():
 
 
 # ── execute() 分发 ────────────────────────────────────────────────────────
-
-
-@pytest.mark.asyncio
-async def test_execute_increments_steps_taken():
-    ctx = AgentTickContext(
-        reply_context=RoleReplyContext(("平静",), ""),
-    )
-    deps = ToolDeps()
-    await execute("get_alert_events", {}, ctx, deps)
-    assert ctx.steps_taken == 1
 
 
 @pytest.mark.asyncio

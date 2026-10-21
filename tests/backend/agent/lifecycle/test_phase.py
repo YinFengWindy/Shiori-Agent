@@ -188,21 +188,29 @@ def _before_turn_ctx(**kwargs: object) -> BeforeTurnCtx:
 
 
 @pytest.mark.asyncio
-async def test_lifecycle_on_before_turn():
+async def test_lifecycle_hooks_receive_only_their_own_phase():
+    """Each facade registration is the bus subscription for that phase only."""
     bus = EventBus()
     lifecycle = TurnLifecycle(bus)
-    handler = AsyncMock(return_value=None)
-    lifecycle.on_before_turn(handler)
+    handlers = {
+        name: AsyncMock(return_value=None)
+        for name in (
+            "before_turn",
+            "before_reasoning",
+            "before_step",
+            "after_reasoning",
+            "after_step",
+            "after_turn",
+        )
+    }
+    lifecycle.on_before_turn(handlers["before_turn"])
+    lifecycle.on_before_reasoning(handlers["before_reasoning"])
+    lifecycle.on_before_step(handlers["before_step"])
+    lifecycle.on_after_reasoning(handlers["after_reasoning"])
+    lifecycle.on_after_step(handlers["after_step"])
+    lifecycle.on_after_turn(handlers["after_turn"])
+
     await bus.emit(_before_turn_ctx())
-    handler.assert_awaited_once()
-
-
-@pytest.mark.asyncio
-async def test_lifecycle_on_before_reasoning():
-    bus = EventBus()
-    lifecycle = TurnLifecycle(bus)
-    handler = AsyncMock(return_value=None)
-    lifecycle.on_before_reasoning(handler)
     await bus.emit(
         BeforeReasoningCtx(
             session_key="k",
@@ -214,15 +222,6 @@ async def test_lifecycle_on_before_reasoning():
             retrieved_memory_block="",
         )
     )
-    handler.assert_awaited_once()
-
-
-@pytest.mark.asyncio
-async def test_lifecycle_on_before_step():
-    bus = EventBus()
-    lifecycle = TurnLifecycle(bus)
-    handler = AsyncMock(return_value=None)
-    lifecycle.on_before_step(handler)
     await bus.emit(
         BeforeStepCtx(
             session_key="k",
@@ -233,15 +232,6 @@ async def test_lifecycle_on_before_step():
             visible_tool_names=None,
         )
     )
-    handler.assert_awaited_once()
-
-
-@pytest.mark.asyncio
-async def test_lifecycle_on_after_reasoning():
-    bus = EventBus()
-    lifecycle = TurnLifecycle(bus)
-    handler = AsyncMock(return_value=None)
-    lifecycle.on_after_reasoning(handler)
     await bus.emit(
         AfterReasoningCtx(
             session_key="k",
@@ -256,15 +246,6 @@ async def test_lifecycle_on_after_reasoning():
             reply="hi",
         )
     )
-    handler.assert_awaited_once()
-
-
-@pytest.mark.asyncio
-async def test_lifecycle_on_after_step():
-    bus = EventBus()
-    lifecycle = TurnLifecycle(bus)
-    handler = AsyncMock(return_value=None)
-    lifecycle.on_after_step(handler)
     await bus.fanout(
         AfterStepCtx(
             session_key="k",
@@ -280,15 +261,6 @@ async def test_lifecycle_on_after_step():
             has_more=True,
         )
     )
-    handler.assert_awaited_once()
-
-
-@pytest.mark.asyncio
-async def test_lifecycle_on_after_turn():
-    bus = EventBus()
-    lifecycle = TurnLifecycle(bus)
-    handler = AsyncMock(return_value=None)
-    lifecycle.on_after_turn(handler)
     await bus.fanout(
         AfterTurnCtx(
             session_key="k",
@@ -300,4 +272,6 @@ async def test_lifecycle_on_after_turn():
             will_dispatch=True,
         )
     )
-    handler.assert_awaited_once()
+
+    for handler in handlers.values():
+        handler.assert_awaited_once()

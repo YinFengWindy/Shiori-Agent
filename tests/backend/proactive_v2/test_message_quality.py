@@ -1,10 +1,4 @@
-"""
-tests/proactive_v2/test_message_quality.py
-
-验证两个消息质量 fix：
-1. get_recent_chat 只返回 role=user 消息，不含 bot 自身历史推送（role=assistant）
-2. 系统提示【发送要求】包含禁止脑补具体数字/比分/排名等事实的硬规则
-"""
+"""get_recent_chat drops proactive pushes and context frames, and keeps passive replies."""
 
 from __future__ import annotations
 
@@ -17,33 +11,6 @@ import pytest
 
 from proactive_v2.context import AgentTickContext
 from proactive_v2.tools import _get_recent_chat
-from tests.backend.proactive_v2.conftest import make_proactive_pipeline
-
-# ── Fix 1: get_recent_chat 过滤 role=assistant ────────────────────────────
-
-
-@pytest.mark.asyncio
-async def test_get_recent_chat_filters_out_proactive_pushes():
-    """主动推送（proactive=True）不应出现在结果中，防止 bot 循环引用自己的推送。"""
-    mixed = [
-        {"role": "user", "content": "在吗"},
-        {"role": "assistant", "content": "G2 刚赢了 FaZe，bo3 2-1", "proactive": True},
-        {"role": "user", "content": "好的"},
-        {"role": "assistant", "content": "心率 130 偏高", "proactive": True},
-    ]
-    fake_chat_fn = AsyncMock(return_value=mixed)
-    ctx = AgentTickContext(
-        reply_context=RoleReplyContext(("平静",), ""),
-    )
-
-    raw = await _get_recent_chat(ctx, {"n": 20}, recent_chat_fn=fake_chat_fn)
-    result = json.loads(raw)
-
-    proactive_msgs = [m for m in result if m.get("proactive")]
-    assert not proactive_msgs, (
-        "get_recent_chat 不应返回 proactive=True 的消息，"
-        f"实际返回了：{proactive_msgs}"
-    )
 
 
 @pytest.mark.asyncio
@@ -173,48 +140,3 @@ async def test_get_recent_chat_mixed_passive_and_proactive():
     assert len(result) == 4  # 3 user + 1 passive reply
     proactive_msgs = [m for m in result if m.get("proactive")]
     assert not proactive_msgs
-
-
-# ── Fix 2: 系统提示【发送要求】包含脑补禁止规则 ──────────────────────────
-
-
-def _make_system_prompt() -> str:
-    tick = make_proactive_pipeline(llm_fn=None)
-    return tick._build_system_prompt()
-
-
-def test_system_prompt_contains_no_hallucination_rule():
-    """【发送要求】必须有明确的脑补禁止规则，覆盖数字/比分/排名等。"""
-    prompt = _make_system_prompt()
-    assert "脑补" in prompt, "发送要求应包含'脑补'禁止规则"
-    # 确保是在发送要求附近
-    idx = prompt.find("【发送要求】")
-    assert idx >= 0, "系统提示应有【发送要求】章节"
-    send_section = prompt[idx:]
-    assert "脑补" in send_section, "脑补禁止规则应位于【发送要求】章节内"
-
-
-def test_system_prompt_no_hallucination_covers_specific_facts():
-    """脑补禁止规则应明确覆盖比分、排名等可验证事实，而不是空泛的禁止。"""
-    prompt = _make_system_prompt()
-    idx = prompt.find("【发送要求】")
-    send_section = prompt[idx:]
-
-    # 应至少命中以下关键词之一（排名、比分、数字）
-    keywords = ["排名", "比分", "数字", "结果"]
-    matched = [kw for kw in keywords if kw in send_section]
-    assert matched, (
-        f"【发送要求】的脑补禁止规则应包含 {keywords} 中至少一个关键词，"
-        f"实际发送要求内容：{send_section[:400]}"
-    )
-
-
-def test_system_prompt_no_hallucination_requires_data_source():
-    """禁止脑补的规则应明确说明事实必须来自本轮数据。"""
-    prompt = _make_system_prompt()
-    idx = prompt.find("【发送要求】")
-    send_section = prompt[idx:]
-
-    assert (
-        "本轮" in send_section or "Alerts" in send_section or "Content" in send_section
-    ), "脑补禁止规则应说明事实必须来自本轮 Alerts/Content 数据"

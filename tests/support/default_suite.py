@@ -1,10 +1,10 @@
 """Default host pytest selection (about 1000 parametrized cases).
 
 ``pytest`` with no path arguments collects this set from ``tests/backend``.
-Everything else under ``tests/backend`` stays in the tree, is marked
-``extended`` when collected, and is collected with ``pytest --extended``.
+Everything else that remains under ``tests/backend`` is marked ``extended``
+when collected, and is collected with ``pytest --extended``.
 
-Not on this path, and not deleted:
+Not on this path:
 
 - ``plugins/*/tests`` — ``scripts.verify_plugin_tests`` and
   ``pytest plugins/<id>/tests``
