@@ -74,7 +74,10 @@ async def proactive_task(
 
     async def send(payload):
         sent.append(payload)
-        if stage == "sending" and len(sent) == 1:
+        if (stage == "sending" and len(sent) == 1) or (
+            stage == "sending_last"
+            and len(sent) == len(draft_messages or ["prefix", "tail"])
+        ):
             env.started.set()
             await env.release.wait()
         if failure is not None and len(sent) == failure_at:
@@ -351,7 +354,12 @@ async def test_proactive_addressed_group_isolates_other_sender_origin_and_chatte
         await env.receive("其他请求", **input_options)
         await until(lambda: env.bus.inbound_size == 0)
         assert not proactive.task.done()
-        assert env.requests == []
+        if any(
+            key in input_options for key in ("account", "chat", "chat_type", "topic")
+        ):
+            await until(lambda: bool(env.requests))
+        else:
+            assert env.requests == []
         env.release.set()
         await asyncio.wait_for(proactive.task, 3)
         await until(lambda: env.candidate.references == 0)
@@ -1287,3 +1295,275 @@ async def test_spawn_completion_keeps_internal_tracking_and_dispatcher_alive(
         await asyncio.gather(dispatcher, return_exceptions=True)
         candidate.reply_sequences.forget(existing_input, existing_reply)
         await loop._event_bus.aclose()
+
+
+@pytest.mark.parametrize("count", [1, 2])
+async def test_completed_proactive_last_send_settles_success_despite_supplement(
+    tmp_path, monkeypatch, count
+):
+    async with natural_dispatcher(tmp_path, monkeypatch, stage="sending_last") as env:
+        messages = [f"delivered-{i}" for i in range(count)]
+        proactive = await proactive_task(
+            env, tmp_path, stage="sending_last", draft_messages=messages
+        )
+        await asyncio.wait_for(env.started.wait(), 3)
+        await env.receive("new question")
+        await until(lambda: env.bus.inbound_size == 0)
+        env.release.set()
+        await proactive.task
+        await until(lambda: env.candidate.references == 0)
+        assert [m["message"] for m in proactive.sent] == messages
+        assert len(proactive.pipeline._state_store._deliveries) == 1
+        assert len(proactive.events) == 1
+        assert proactive.events[0].assistant_response == "\n\n".join(messages)
+
+
+async def test_proactive_pacing_releases_role_for_other_chat_and_keeps_new_state(
+    tmp_path, monkeypatch
+):
+    from session.manager.models import whole_session
+
+    async with natural_dispatcher(tmp_path, monkeypatch) as env:
+
+        async def model(**kwargs):
+            if kwargs.get("response_format"):
+                return LLMResponse('{"mood":"平静","thought":"我刚回答了另一个群。"}')
+            env.requests.append(kwargs)
+            return chat_reply(["另一群已答"], tools=kwargs.get("tools", []))
+
+        monkeypatch.setattr(env.host.provider, "chat", model)
+        proactive = await proactive_task(env, tmp_path, addressed=True)
+        await asyncio.wait_for(env.started.wait(), 3)
+        await env.receive("other group", chat="gqq:other")
+        await until(lambda: bool(env.requests))
+        await until(lambda: env.candidate.references == 1)
+        assert any(m.content == "另一群已答" for m in env.sent)
+        session = SessionManager(tmp_path).get_or_create("role:mira")
+        newer_stamp = session.metadata["current_mood_updated_at"]
+        history = session.get_history(include=whole_session)
+        assert any(
+            m["role"] == "tool" and "已执行的查询事实" in m["content"] for m in history
+        )
+        assert "get_recent_chat" in session.get_history_tool_names(
+            include=whole_session
+        )
+        assert not proactive.task.done()
+        env.release.set()
+        await proactive.task
+        await until(lambda: env.candidate.references == 0)
+        assert [m["message"] for m in proactive.sent] == ["主动前缀", "主动尾段"]
+        assert (
+            SessionManager(tmp_path)
+            .get_or_create("role:mira")
+            .metadata["current_mood_updated_at"]
+            == newer_stamp
+        )
+
+
+async def test_interrupted_proactive_facts_reach_next_model_without_replay(
+    tmp_path, monkeypatch
+):
+    from session.manager.models import whole_session
+
+    async with natural_dispatcher(tmp_path, monkeypatch) as env:
+        proactive = await proactive_task(env, tmp_path)
+        await asyncio.wait_for(env.started.wait(), 3)
+        await env.receive("use the completed result")
+        await until(lambda: env.bus.inbound_size == 0)
+        env.release.set()
+        await proactive.task
+        await until(lambda: env.candidate.references == 0)
+        session = SessionManager(tmp_path).get_or_create("role:mira")
+        assert "get_recent_chat" in session.get_history_tool_names(
+            include=whole_session
+        )
+        assert any(
+            m.get("role") == "tool" and "已执行的查询事实" in str(m.get("content"))
+            for m in env.requests[0]["messages"]
+        )
+        assert len(proactive.llm.calls) == 3
+        facts = {
+            m["id"]
+            for m in session.messages
+            if m.get("metadata", {}).get("proactive_tool_facts")
+        }
+        assert facts
+        assert await env.host.manager.undo_last_turn("role:mira") is not None
+        reloaded = SessionManager(tmp_path).get_or_create("role:mira")
+        assert facts <= {m["id"] for m in reloaded.messages}
+        assert "get_recent_chat" in reloaded.get_history_tool_names(
+            include=whole_session
+        )
+
+
+@pytest.mark.parametrize("enabled", [False, True])
+@pytest.mark.parametrize("change", ["reassign", "reconnect"])
+@pytest.mark.parametrize(
+    "stage", ["gate", "generation", "generation_error", "outbound", "pacing"]
+)
+async def test_spawn_report_fences_captured_account_until_real_qq_send(
+    tmp_path, monkeypatch, enabled, change, stage
+):
+    if stage == "pacing" and not enabled:
+        pytest.skip("Ordinary report has one outbound message")
+    from agent.background.subagent_manager import SubagentManager
+    from plugins.qq.backend.accounts_outbound_adapter import QQOutboundAdapter
+
+    async with natural_dispatcher(
+        tmp_path, monkeypatch, enabled=enabled, stage="none"
+    ) as env:
+        origin = await env.receive("start background", chat="gqq:42")
+        assert origin is not None
+        await until(lambda: env.candidate.references == 0)
+        await env.bus.drain_outbound()
+        env.requests.clear()
+        calls = []
+
+        class Adapter(QQOutboundAdapter):
+            _ctx = None
+
+            def via_account(self, account_id):
+                return {}
+
+            async def send_target(self, account_id, kind, target_id, message, **kwargs):
+                calls.append((account_id, message))
+                return {"message_id": str(len(calls))}
+
+        # Use the real QQ adapter; only its native network operation is replaced.
+        for callback in tuple(env.bus._subscribers["qq"]):
+            env.bus.unsubscribe_outbound("qq", callback)
+        adapter = Adapter()
+        attempted = []
+
+        async def outbound(message):
+            attempted.append(message)
+            await adapter._on_response(message)
+
+        env.bus.subscribe_outbound("qq", outbound, supports_reply_sequence=True)
+        entered, release = asyncio.Event(), asyncio.Event()
+        registry = env.host.loop.role_runtime_registry
+        accounts = env.host.roles.accounts
+        original_authorize = accounts.authorize
+
+        def authorize(account_id, role_id):
+            access = original_authorize(account_id, role_id)
+            if stage == "gate":
+                entered.set()
+            return access
+
+        monkeypatch.setattr(accounts, "authorize", authorize)
+
+        async def model(**kwargs):
+            if kwargs.get("response_format"):
+                return LLMResponse('{"mood":"平静","thought":"我想说明结果。"}')
+            env.requests.append(kwargs)
+            if stage in {"generation", "generation_error"}:
+                entered.set()
+                await release.wait()
+                if stage == "generation_error":
+                    raise RuntimeError(
+                        "private error must not reach the revoked destination"
+                    )
+            return chat_reply(
+                ["old role confidential report", "old report tail"],
+                tools=kwargs.get("tools", []),
+            )
+
+        monkeypatch.setattr(env.host.provider, "chat", model)
+
+        async def pace(_):
+            entered.set()
+            await release.wait()
+
+        if stage == "pacing":
+            monkeypatch.setattr(
+                "agent.turns.reply_sequence.wait_between_messages", pace
+            )
+        holder = None
+        if stage == "gate":
+            held = asyncio.Event()
+
+            async def hold():
+                held.set()
+                await release.wait()
+
+            context = registry.create_context(
+                role_id="mira",
+                thread_id=origin.metadata["thread_id"],
+                transport_channel="qq",
+                transport_chat_id="gqq:42",
+                source="desktop",
+                work_kind="scheduled_job",
+            )
+            holder = asyncio.create_task(
+                registry.dispatch_background_task(context, hold)
+            )
+            await held.wait()
+        if stage == "outbound":
+            await env.bus.transport_lock.acquire()
+        producer = SubagentManager(
+            provider=env.host.provider,
+            workspace=tmp_path,
+            bus=env.bus,
+            model="test",
+            max_tokens=256,
+            fetch_requester=object(),
+        )
+        work = AsyncMock(return_value="private completed source fact")
+        monkeypatch.setattr(
+            producer,
+            "_build_subagent",
+            lambda **_: SimpleNamespace(
+                run=work, last_exit_reason="completed", last_usage={}
+            ),
+        )
+        try:
+            await producer.spawn(
+                task="private work",
+                label="job",
+                origin_channel="qq",
+                origin_chat_id="gqq:42",
+                role_id="mira",
+                origin=origin,
+            )
+            await producer.drain()
+            if stage == "outbound":
+                await until(lambda: env.bus.outbound_size > 0)
+            else:
+                await asyncio.wait_for(entered.wait(), 3)
+            if change == "reassign":
+                env.host.roles.create_role(
+                    role_id="newowner", name="New", system_prompt="new owner"
+                )
+            accounts.release("qq:one", "live")
+            new = accounts.register(
+                plugin_id="qq",
+                platform="qq",
+                platform_account_id="one",
+                config_ref="one",
+                token="new-live",
+                role_id="newowner" if change == "reassign" else "mira",
+            )
+            accounts.report(new.record.id, "new-live", connection="online")
+            release.set()
+            if stage == "outbound":
+                env.bus.transport_lock.release()
+            if holder is not None:
+                await holder
+            await until(lambda: env.candidate.references == 0)
+            await env.bus.drain_outbound()
+            assert calls == (
+                [("qq:one", "old role confidential report")]
+                if stage == "pacing"
+                else []
+            )
+            assert len(attempted) == (1 if stage == "pacing" else 0)
+            if stage == "gate":
+                assert env.requests == []
+            work.assert_awaited_once()
+        finally:
+            release.set()
+            if stage == "outbound" and env.bus.transport_lock.locked():
+                env.bus.transport_lock.release()
+            if holder is not None:
+                await holder

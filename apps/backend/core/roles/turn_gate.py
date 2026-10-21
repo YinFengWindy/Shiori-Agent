@@ -54,3 +54,14 @@ async def wait_outside_role_gate(wait: Callable[[], Awaitable[None]]) -> None:
     lease.release()
     await wait()
     await lease.acquire()
+
+
+async def reacquire_role_gate() -> None:
+    """Reenter before protected accounting after a cancelled pacing wait.
+
+    Callers shield their cleanup; an exited wait may have left this lease
+    suspended while another chat owns the role's lock.
+    """
+    lease = _CURRENT_GATE.get()
+    if lease is not None and not lease.held:
+        await lease.acquire()

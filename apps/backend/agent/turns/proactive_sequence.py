@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any
 
 from agent.account_delivery.service import AccountDelivery, ResolvedAccountTarget
@@ -12,11 +13,12 @@ from agent.turns.channel_sequence import BackgroundReply, channel_sequence_conte
 from agent.turns.outbound import OutboundDispatch, OutboundPort
 from agent.turns.reply_interruption import (
     interruptible_reply_delivery,
+    reply_was_invalidated,
 )
-from agent.turns.reply_sequence import (
-    ReplySequence,
-    deliver_reply_sequence,
-)
+from agent.turns import reply_sequence as pacing
+from agent.turns.reply_sequence import ReplySequence
+from core.common.cancellation import finish_started
+from core.roles.turn_gate import wait_outside_role_gate
 from bus.event_bus import EventBus
 from bus.events_lifecycle import ReplyMessageCommitted
 from session.manager import Session, SessionManager
@@ -37,6 +39,8 @@ class ProactiveReplyPlan:
     registration: BackgroundReply
     account_target: ResolvedAccountTarget | None = None
     completion: CompletedReply | None = None
+    tool_chain: list[dict[str, Any]] = field(default_factory=list)
+    committed_tool_count: int = 0
 
     @property
     def origin(self) -> InboundMessage:
@@ -52,6 +56,28 @@ _CURRENT: ContextVar[ProactiveReplyPlan | None] = ContextVar(
 def current_proactive_reply() -> ProactiveReplyPlan | None:
     """Return the active tick's natural reply, absent when the role opts out."""
     return _CURRENT.get()
+
+
+def record_proactive_tool_fact(
+    *, call_id: str, name: str, arguments: dict, result: str
+) -> None:
+    """Retain completed work on this plan; draft/finish controls are not work facts."""
+    plan = current_proactive_reply()
+    if plan is None or name in {"message_push", "finish_turn", "finish_drift"}:
+        return
+    plan.tool_chain.append(
+        {
+            "text": "",
+            "calls": [
+                {
+                    "call_id": call_id,
+                    "name": name,
+                    "arguments": arguments,
+                    "result": result,
+                }
+            ],
+        }
+    )
 
 
 @contextmanager
@@ -171,7 +197,12 @@ async def commit_proactive_sequence(
             await manager.append_messages(session, [message], pending_messages=True)
         delivered.append(message)
         if index == len(sequence.messages) - 1:
-            await manager.append_messages(session, [], **state_kwargs)
+            current = manager.get_or_create(session.key)
+            # A different chat may finish while this plan yields its pacing wait.
+            if str(
+                current.metadata.get("current_mood_updated_at", "")
+            ) == state_kwargs.get("expected_mood_updated_at"):
+                await manager.append_messages(current, [], **state_kwargs)
         if event_bus is not None:
             await event_bus.emit(
                 ReplyMessageCommitted(
@@ -182,4 +213,13 @@ async def commit_proactive_sequence(
             )
 
     with context.owner.delivering(), interruptible_reply_delivery():
-        await deliver_reply_sequence(sequence, publish)
+        for index, content in enumerate(sequence.messages):
+            if index:
+                await wait_outside_role_gate(
+                    lambda: pacing.wait_between_messages(
+                        pacing.message_pause(sequence.messages[index - 1])
+                    )
+                )
+            if reply_was_invalidated():
+                raise asyncio.CancelledError
+            await finish_started(publish(index, content))

@@ -242,9 +242,10 @@ def test_agent_tick_factory_feeds_the_affection_block_to_proactive_and_drift(
     assert drift._tool_deps.affection_prompt_fn is deps.affection_prompt_fn
 
 
+@pytest.mark.parametrize("late_target", [False, True, "revoked", "admitted"])
 @pytest.mark.parametrize("needs_correction", [False, True])
 async def test_natural_drift_uses_shared_messages_and_preserves_thinking(
-    tmp_path, monkeypatch, needs_correction
+    tmp_path, monkeypatch, needs_correction, late_target
 ):
     from unittest.mock import AsyncMock, Mock
     from agent.provider import LLMResponse, ToolCall
@@ -274,6 +275,42 @@ async def test_natural_drift_uses_shared_messages_and_preserves_thinking(
     deps.sense.target_transport = lambda: ("desktop", "role:mira")
     deps.state_store = SimpleNamespace(workspace_dir=tmp_path, mark_delivery=Mock())
     deps.turn_orchestrator = owner
+    from agent.account_delivery import AccountDelivery
+    from core.accounts import AccountRegistry
+    from core.accounts.delivery_ledger import AccountDeliveryLedger
+    from core.identity import UserIdentityStore
+    from shiori_sdk.accounts.targets import AccountTarget
+
+    accounts = AccountRegistry(lambda role_id: role_id == "mira")
+    record = accounts.register(
+        plugin_id="telegram",
+        platform="telegram",
+        platform_account_id="bot",
+        config_ref="bot",
+        role_id="mira",
+        token="live",
+    )
+    accounts.report(record.record.id, "live", connection="online")
+    routed = []
+
+    async def account_send(payload):
+        routed.append(payload)
+        return {"message_id": f"sent-{len(routed)}"}
+
+    def rpc(method):
+        assert method == "plugin.telegram.account.send"
+        return "telegram", account_send
+
+    owner._account_delivery = AccountDelivery(
+        accounts,
+        SimpleNamespace(resolve=rpc),
+        AccountDeliveryLedger(tmp_path),
+        UserIdentityStore(tmp_path),
+    )
+    owner._bound_chat_target = lambda role_id, channel, chat: (
+        "telegram",
+        AccountTarget("private", "user42"),
+    )
     expected = [
         "刚想到你。",
         "示例里的 <message-break/> 是原文。\n```python\nprint('hello')",
@@ -291,6 +328,8 @@ async def test_natural_drift_uses_shared_messages_and_preserves_thinking(
                 total_tokens=7,
             )
         if len(requests) == 1:
+            if late_target:
+                deps.sense.target_transport = lambda: ("telegram", "42")
             return LLMResponse(
                 "",
                 [
@@ -332,19 +371,55 @@ async def test_natural_drift_uses_shared_messages_and_preserves_thinking(
         session_key="role:mira", reply_context=owner.capture_reply_context("role:mira")
     )
     monkeypatch.setattr("agent.turns.reply_sequence.wait_between_messages", AsyncMock())
-    with ChannelSequenceOwner().bind(MessageBus()):
+    batches = ChannelSequenceOwner()
+    with batches.bind(MessageBus()):
         async with owner.natural_reply_scope(
             "role:mira", "desktop", "role:mira", turn_id="drift:test"
         ):
-            assert await drift.run(ctx, factory._build_llm_fn())
+            if late_target == "revoked":
+                accounts.release(record.record.id, "live")
+            if late_target == "admitted":
+                import asyncio
+                from shiori_sdk.messages import InboundMessage
+
+                batches.admit(
+                    InboundMessage(
+                        "telegram",
+                        "user42",
+                        "42",
+                        "已准入的新消息",
+                        metadata={
+                            "role_id": "mira",
+                            "account_id": record.record.id,
+                            "chat_type": "private",
+                        },
+                    )
+                )
+                with pytest.raises(asyncio.CancelledError):
+                    await drift.run(ctx, factory._build_llm_fn())
+            else:
+                assert await drift.run(ctx, factory._build_llm_fn())
             plan = current_proactive_reply()
             assert plan is not None and plan.completion is not None
             assert plan.protocol.reply is not None
             assert plan.protocol.reply.raw_text == raw
             assert plan.completion.response.thinking == "保留正常思考"
             assert plan.completion.total_tokens == (18 if needs_correction else 11)
+    if late_target in {"revoked", "admitted"}:
+        assert not ctx.drift_finished and not ctx.drift_message_sent
+        dispatch.assert_not_awaited()
+        assert routed == []
+        assert SessionManager(tmp_path).get_or_create("role:mira").messages == []
+        deps.state_store.mark_delivery.assert_not_called()
+        return
     assert ctx.drift_finished and ctx.drift_message_sent
-    assert [call.args[0].content for call in dispatch.await_args_list] == expected
+    assert [call.args[0].content for call in dispatch.await_args_list] == (
+        [] if late_target else expected
+    )
+    assert [payload["message"] for payload in routed] == (
+        expected if late_target else []
+    )
+    assert all(payload["target_id"] == "user42" for payload in routed)
     rows = SessionManager(tmp_path).get_or_create("role:mira").messages
     assert [row["content"] for row in rows] == expected
     assert rows[0]["reasoning_content"] == "保留正常思考"

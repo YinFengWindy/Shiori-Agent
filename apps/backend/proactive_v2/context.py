@@ -59,7 +59,6 @@ class AgentTickContext:
     reply_context: RoleReplyContext | None = None
     reply_format_corrections: int = 0
     role_reply: RoleReply | None = None
-    tool_chain: list[dict] = field(default_factory=list)
     drift_entered: bool = False
     drift_finished: bool = False
     drift_message_sent: bool = False

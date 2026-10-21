@@ -224,9 +224,7 @@ class ProactiveTurnPipeline:
                     # Shared completion correction stops at the same safe boundary.
                     return None
                 finally:
-                    await orchestrator.commit_proactive_tool_facts(
-                        self._session_key, ctx.tool_chain
-                    )
+                    await orchestrator.commit_proactive_tool_facts(self._session_key)
 
         task = asyncio.create_task(
             natural_turn(), name=f"proactive-reply:{ctx.tick_id}"

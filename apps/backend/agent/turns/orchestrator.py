@@ -38,6 +38,7 @@ from agent.turns.proactive_sequence import (
 )
 from core.common.runtime_scope import current_runtime_lease
 from core.common.cancellation import finish_started
+from core.roles.turn_gate import reacquire_role_gate
 from shiori_sdk.messages import InboundMessage
 
 if TYPE_CHECKING:
@@ -209,14 +210,44 @@ class TurnOrchestrator:
             account_target=target,
         )
         assert resolved is not None
+        self._retarget_plan(
+            plan,
+            origin,
+            resolved,
+            senders=frozenset(resolved.target.mention_ids) or None,
+        )
+
+    async def retarget_natural_transport(
+        self, session_key: str, channel: str, chat_id: str
+    ) -> None:
+        """Honor Drift's late target selector and authorize its exact new address."""
+        plan = current_proactive_reply()
+        if plan is None or (plan.origin.channel, plan.origin.chat_id) == (
+            channel,
+            chat_id,
+        ):
+            return
+        origin, resolved = await self._reply_origin(
+            session_key,
+            channel,
+            chat_id,
+            turn_id=str(plan.origin.metadata["turn_id"]),
+        )
+        self._retarget_plan(plan, origin, resolved, senders=None)
+
+    @staticmethod
+    def _retarget_plan(
+        plan: ProactiveReplyPlan,
+        origin: InboundMessage,
+        resolved: ResolvedAccountTarget | None,
+        *,
+        senders: frozenset[str] | None,
+    ) -> None:
+        """Replace an authorized target and fence together on the registered plan."""
         plan.account_target = resolved
         context = channel_sequence_context()
         assert context is not None
-        context.owner.retarget_background(
-            plan.registration,
-            origin,
-            senders=frozenset(resolved.target.mention_ids) or None,
-        )
+        context.owner.retarget_background(plan.registration, origin, senders=senders)
 
     def capture_reply_context(self, session_key: str) -> RoleReplyContext:
         """Capture role output constraints and the successful-state stamp per tick."""
@@ -385,7 +416,7 @@ class TurnOrchestrator:
             raise ValueError("主动草稿与已校验消息列表不一致")
         sequence = reply.sequence
         delivered: list[dict[str, Any]] = []
-        complete = False
+        await self.commit_proactive_tool_facts(session.key)
         await self._run_effects(result.side_effects)
         try:
             await commit_proactive_sequence(
@@ -400,14 +431,14 @@ class TurnOrchestrator:
                 state_kwargs=state_kwargs,
                 delivered=delivered,
             )
-            complete = True
             return True
         finally:
 
             async def finalize() -> None:
+                await reacquire_role_gate()
                 await self._run_effects(
                     result.success_side_effects
-                    if complete
+                    if len(delivered) == len(sequence.messages)
                     else result.failure_side_effects
                 )
                 if not delivered:
@@ -591,12 +622,10 @@ class TurnOrchestrator:
         )
         return metadata
 
-    async def commit_proactive_tool_facts(
-        self, session_key: str, tool_chain: list[dict]
-    ) -> None:
+    async def commit_proactive_tool_facts(self, session_key: str) -> None:
         """Retain completed work once even when an unseen proactive plan is invalidated."""
         plan = current_proactive_reply()
-        if plan is None or not tool_chain:
+        if plan is None or len(plan.tool_chain) == plan.committed_tool_count:
             return
         # Role deletion owns its storage; never recreate it during cleanup.
         if (
@@ -609,10 +638,13 @@ class TurnOrchestrator:
         message = build_session_message(
             "assistant",
             "",
-            metadata=plan.origin.metadata,
+            metadata={**plan.origin.metadata, "proactive_tool_facts": True},
             proactive=True,
-            tool_chain=tool_chain,
+            tool_chain=plan.tool_chain[plan.committed_tool_count :],
         )
-        await finish_started(
-            manager.append_messages(session, [message], pending_messages=True)
-        )
+
+        async def commit() -> None:
+            await manager.append_messages(session, [message], pending_messages=True)
+            plan.committed_tool_count = len(plan.tool_chain)
+
+        await finish_started(commit())

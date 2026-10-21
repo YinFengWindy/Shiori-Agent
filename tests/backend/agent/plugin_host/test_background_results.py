@@ -69,7 +69,9 @@ async def bridge(host, tmp_path):
 
 
 @tool_turn
-async def capture(host, channel="desktop", chat_id="role:mira", sender="user"):
+async def capture(
+    host, channel="desktop", chat_id="role:mira", sender="user", account_id=None
+):
     host.loop.tools.set_context(
         role_id="mira",
         thread_id=desktop_thread_id("mira") if channel == "desktop" else USER_DM,
@@ -92,6 +94,7 @@ async def capture(host, channel="desktop", chat_id="role:mira", sender="user"):
                 ),
                 "chat_type": "private",
                 "message_thread_id": 27 if channel != "desktop" else None,
+                **({"account_id": account_id} if account_id else {}),
             },
         )
     )
@@ -659,3 +662,78 @@ async def test_natural_background_completion_keeps_shared_correction_raw_thinkin
         if m.get("metadata", {}).get("reply_sequence_id")
         == "background:shared-protocol"
     ] == ["检查完成。", "原始结果已经保存。"]
+
+
+@pytest.mark.parametrize("enabled", [False, True])
+@pytest.mark.parametrize("stage", ["generation", "outbound"])
+async def test_sdk_report_connection_fence_survives_generation_and_queued_delivery(
+    host, monkeypatch, enabled, stage
+):
+    from agent.provider import LLMResponse
+    from agent.turns.channel_sequence import ChannelSequenceOwner
+    from agent.turns.channel_sequence_commit import ChannelSequenceDeliveryError
+    from bus.queue import MessageBus
+    from shiori_sdk.messages import DeliveryOutcome
+
+    accounts = host.roles.accounts
+    accounts.report("qq:101", "fixture", connection="online")
+    host.roles.update_role("mira", runtime_config={"natural_chat_enabled": enabled})
+    target = await capture(host, "qq", "902", "902", account_id="qq:101")
+    bus = MessageBus()
+    host.loop.bus = bus
+    host.loop._agent_core.pipeline._outbound_port._bus = bus
+    entered, release = asyncio.Event(), asyncio.Event()
+    delivered = []
+
+    async def send(message):
+        delivered.append(message.content)
+        message.delivery_outcome = DeliveryOutcome("sent", "native:one")
+
+    bus.subscribe_outbound("qq", send, supports_reply_sequence=True)
+
+    async def chat(**kwargs):
+        if kwargs.get("response_format"):
+            return LLMResponse('{"mood":"平静","thought":"我想说明结果。"}')
+        if stage == "generation":
+            entered.set()
+            await release.wait()
+        return chat_reply(["private SDK report"], tools=kwargs.get("tools", []))
+
+    monkeypatch.setattr(host.provider, "chat", chat)
+    if stage == "outbound":
+        await bus.transport_lock.acquire()
+    dispatcher = asyncio.create_task(bus.dispatch_outbound())
+    try:
+        with ChannelSequenceOwner().bind(bus):
+            reporting = asyncio.create_task(
+                target.report("sdk:revoked", "private completed fact")
+            )
+            if stage == "generation":
+                await asyncio.wait_for(entered.wait(), 3)
+            else:
+                async with asyncio.timeout(3):
+                    while not bus.outbound_size:
+                        await asyncio.sleep(0)
+            accounts.release("qq:101", "fixture")
+            new = accounts.register(
+                plugin_id="qq",
+                platform="qq",
+                platform_account_id="101",
+                config_ref="101",
+                role_id="mira",
+                token="replacement",
+            )
+            accounts.report(new.record.id, "replacement", connection="online")
+            release.set()
+            if stage == "outbound":
+                bus.transport_lock.release()
+            [result] = await asyncio.gather(reporting, return_exceptions=True)
+            assert result is True or isinstance(result, ChannelSequenceDeliveryError)
+            await asyncio.wait_for(bus.drain_outbound(), 3)
+        assert delivered == []
+    finally:
+        release.set()
+        if stage == "outbound" and bus.transport_lock.locked():
+            bus.transport_lock.release()
+        dispatcher.cancel()
+        await asyncio.gather(dispatcher, return_exceptions=True)

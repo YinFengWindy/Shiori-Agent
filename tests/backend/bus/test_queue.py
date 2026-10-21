@@ -583,3 +583,36 @@ async def test_cancel_after_get_but_before_routing_returns_the_message():
     await _cancel(bus, dispatcher)
     assert bus.outbound_size == 1
     assert bus._outbound.get_nowait().content == "fetched"
+
+
+async def test_revoked_outbound_authority_blocks_retry_notice_and_does_not_leak_to_next_task(
+    monkeypatch,
+):
+    bus = MessageBus(outbound_retry_delay_s=0)
+    allowed = True
+    calls = []
+
+    async def receive(message):
+        calls.append(message.content)
+        if message.content == "private report":
+            raise ConnectionError("before transport acceptance")
+
+    async def revoke(_):
+        nonlocal allowed
+        allowed = False
+
+    monkeypatch.setattr("bus.queue._backoff", revoke)
+    bus.subscribe_outbound("chat", receive)
+    with bus.outbound_authority(lambda: allowed):
+        await bus.publish_outbound(OutboundMessage("chat", "one", "private report"))
+    dispatcher = asyncio.create_task(bus.dispatch_outbound())
+    try:
+        await asyncio.wait_for(bus.drain_outbound(), 2)
+        assert calls == ["private report"]
+        assert not bus._outbound_checks
+        await bus.publish_outbound(OutboundMessage("chat", "one", "ordinary output"))
+        await asyncio.wait_for(bus.drain_outbound(), 2)
+        assert calls == ["private report", "ordinary output"]
+    finally:
+        dispatcher.cancel()
+        await asyncio.gather(dispatcher, return_exceptions=True)

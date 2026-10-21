@@ -17,7 +17,10 @@ DriftTurnPipeline — Drift 空闲时间链路顶层抽象。
 
 from __future__ import annotations
 from agent.turns.reply_interruption import reply_was_invalidated
-from agent.turns.proactive_sequence import current_proactive_reply
+from agent.turns.proactive_sequence import (
+    current_proactive_reply,
+    record_proactive_tool_fact,
+)
 from prompts.natural_chat import NATURAL_CHAT_DRAFT_PROMPT
 
 from agent.tools.turn_scope import tool_turn
@@ -281,23 +284,12 @@ class DriftTurnPipeline:
                 ),
                 exec_fn,
             )
-            if current_proactive_reply() is not None and tool_name not in {
-                "message_push",
-                "finish_drift",
-            }:
-                ctx.tool_chain.append(
-                    {
-                        "text": "",
-                        "calls": [
-                            {
-                                "call_id": str(tool_call.get("id") or f"drift_{steps}"),
-                                "name": tool_name,
-                                "arguments": tool_args,
-                                "result": str(result.output),
-                            }
-                        ],
-                    }
-                )
+            record_proactive_tool_fact(
+                call_id=str(tool_call.get("id") or f"drift_{steps}"),
+                name=tool_name,
+                arguments=tool_args,
+                result=str(result.output),
+            )
 
             # 3.6 错误处理。
             if result.status == "error":

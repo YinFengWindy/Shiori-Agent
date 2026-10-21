@@ -334,6 +334,7 @@ class AgentTickFactory:
             if target is None:
                 raise RuntimeError("drift message has no candidate session to go to")
             channel, chat_id = target
+            await orchestrator.retarget_natural_transport(session_key, channel, chat_id)
             return await orchestrator.handle_proactive_turn(
                 result=result,
                 session_key=session_key,

@@ -14,7 +14,10 @@ from proactive_v2.gateway import GatewayResult
 from proactive_v2.tools import TOOL_SCHEMAS, dispatch
 from proactive_v2.reply_output import correct_push_call, reply_schemas
 from agent.turns.reply_interruption import reply_was_invalidated
-from agent.turns.proactive_sequence import current_proactive_reply
+from agent.turns.proactive_sequence import (
+    current_proactive_reply,
+    record_proactive_tool_fact,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -326,23 +329,13 @@ async def run_tool_step(
         ),
         lambda name, args: dispatch(name, args, ctx, pipeline._tool_deps),
     )
+    record_proactive_tool_fact(
+        call_id=str(tool_call.get("id") or f"call_{ctx.steps_taken}"),
+        name=tool_name,
+        arguments=tool_args,
+        result=str(exec_result.output),
+    )
     if current_proactive_reply() is not None:
-        if tool_name not in {"message_push", "finish_turn"}:
-            ctx.tool_chain.append(
-                {
-                    "text": "",
-                    "calls": [
-                        {
-                            "call_id": str(
-                                tool_call.get("id") or f"call_{ctx.steps_taken}"
-                            ),
-                            "name": tool_name,
-                            "arguments": tool_args,
-                            "result": str(exec_result.output),
-                        }
-                    ],
-                }
-            )
         if tool_name == "message_push" and ctx.account_target is not None:
             await pipeline._turn_orchestrator.retarget_natural_reply(
                 pipeline._session_key,

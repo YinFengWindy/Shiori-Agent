@@ -133,10 +133,15 @@ consolidates these additions and the subsequent #847 breaking migration.
   Native account transports retain ownership of request deadlines; the host adds
   no fixed segment timeout. A started send and its bookkeeping finish together;
   failed or uncertain sends stop the batch without retry, and only confirmed dialogue
-  enters subsequent context. Completed tool facts survive invalidation.
+  enters subsequent context. Completed tool facts survive invalidation and enter
+  model history before pacing releases the role gate. Generation, sends and
+  protected accounting remain serial; older batches cannot replace newer mood
+  state. Drift reauthorizes its late-selected target before sending.
   Proactive success/failure, presence, relationship and committed-turn observers
   run once for the logical reply; a partial reply publishes only its delivered
-  prefix. Explicit-send tool payloads and system notifications are unchanged.
+  prefix. A cancelled final send that still confirms every segment settles as
+  success once, including ACK/dedupe effects. Explicit-send tool payloads and
+  system notifications are unchanged.
 - **Read-only account target routes for natural batches (PR #894, issue #868).** Channel
   plugins may register `account.resolve`, receiving `account_id` plus the existing
   `AccountTarget.to_payload()` fields and returning `AccountRoute.to_payload()`:
@@ -154,8 +159,14 @@ consolidates these additions and the subsequent #847 breaking migration.
   Telegram, QQ, QQBot, Feishu and Grok account plugins supply the resolver.
 - **Background origin and ordering (PR #894, issue #868).** Host-originated spawn results
   retain their original role, account, chat, topic and real sender; typed legacy
-  completions without an origin retain their existing internal path. Internal
-  results are never reclassified as external user admission. A group proactive
+  completions without an origin retain their existing internal path. Typed
+  completions and captured SDK reports with an account retain the existing
+  AccountAccess connection fence;
+  the host rechecks it inside the role gate and immediately before each queued
+  transport callback, including error/retry output. Revoked destinations receive
+  neither the report nor an error notification, with natural chat on or off. This
+  fence is private queue state and introduces no SDK sending interface.
+  Internal results are never reclassified as external user admission. A group proactive
   reply with no addressee yields to the first admitted, deduplicated request;
   addressed output yields only to that real sender, while other senders wait in
   chat order. Channel admission/mention/reply/blacklist policy stays in the
