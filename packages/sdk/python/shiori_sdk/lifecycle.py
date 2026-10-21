@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Protocol, runtime_checkable
 from .prompting import PromptSectionRender
+from .reply_sequence import ReplySequencePolicy
 
 # The seven host phases plugins may contribute to, in AgentLoop wiring order.
 PHASE_SLOTS = (
@@ -182,3 +183,7 @@ class PromptRenderCtx:
     # writable
     system_sections_top: list[PromptSectionRender] = field(default_factory=list)
     system_sections_bottom: list[PromptSectionRender] = field(default_factory=list)
+    # Only supported interactive reply owners honor this opt-in policy.
+    reply_sequence: ReplySequencePolicy | None = None
+    # Host-owned eligibility; budget previews and detached turns cannot opt in.
+    supports_reply_sequence: bool = False

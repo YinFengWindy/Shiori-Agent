@@ -248,7 +248,7 @@ export function useDesktopBridgeLifecycle({
           return;
         }
 
-        if (event.method === "session.updated") {
+        if (event.method === "session.updated" || event.method === "chat.message") {
           const update = parseSessionMessageUpdatePayload(event.payload);
           if (!update) return;
           const currentSession = activeSessionRef.current;

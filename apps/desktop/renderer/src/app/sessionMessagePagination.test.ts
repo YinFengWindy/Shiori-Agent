@@ -23,6 +23,31 @@ function createSession(messages: SessionMessage[]): SessionPayload {
 }
 
 describe("mergeSessionSummaryAndMessage", () => {
+  it("reconciles complete sequence messages without repeating thinking or merging their identities", () => {
+    const pending: SessionMessage = {
+      role: "assistant", content: "", reasoning_content: "thinking", streaming: true,
+      render_id: "local:turn", metadata: { turn_id: "turn-1" },
+    };
+    const parts: SessionMessage[] = ["one", "two", "three"].map((content, index) => ({
+      id: `part-${index}`, seq: index + 1, role: "assistant", content,
+      ...(index === 0 ? { reasoning_content: "thinking" } : {}),
+      metadata: {
+        turn_id: "turn-1", reply_sequence_id: "turn-1", reply_sequence_index: index,
+        ...(index === 0 ? { turn_metrics: { total_tokens: 42 } } : {}),
+      },
+    }));
+    let current = createSession([pending]);
+    for (const part of parts) {
+      current = mergeSessionSummaryAndMessage(current, createSummary(), undefined, [part]);
+    }
+    const final = mergeSessionSummaryAndMessage(current, createSummary(), undefined, parts);
+    assert.deepEqual(final.messages.map((message) => message.id), ["part-0", "part-1", "part-2"]);
+    assert.equal(final.messages[0]!.render_id, "local:turn");
+    assert.equal(final.messages.filter((message) => message.reasoning_content).length, 1);
+    assert.equal(final.messages.filter((message) => message.metadata?.turn_metrics).length, 1);
+    assert.equal(final.messages.some((message) => message.streaming), false);
+  });
+
   it("acknowledges an interrupted turn without consuming the next turn's identical prefix", () => {
     const interrupted: SessionMessage = {
       role: "assistant", content: "晚安<emoji:moon>", render_id: "local:interrupted", streaming: false,

@@ -25,6 +25,37 @@ def _find_last_passive_turn(
     for assistant_index in range(len(messages) - 1, -1, -1):
         if not _is_passive_assistant_message(messages[assistant_index]):
             continue
+        sequence_id = str(
+            messages[assistant_index].get("metadata", {}).get("reply_sequence_id") or ""
+        )
+        if sequence_id:
+            sequence_indices = [
+                index
+                for index, message in enumerate(messages[: assistant_index + 1])
+                if _is_passive_assistant_message(message)
+                and message.get("metadata", {}).get("reply_sequence_id") == sequence_id
+            ]
+            # Turn IDs are host-owned; unrelated pushes interleaved with the
+            # complete bubbles must survive an undo of this reply sequence.
+            for user_index in range(sequence_indices[0] - 1, -1, -1):
+                user = messages[user_index]
+                if not _is_real_user_message(user):
+                    continue
+                metadata = user.get("metadata", {})
+                if sequence_id not in (
+                    metadata.get("turn_id"),
+                    metadata.get("client_message_id"),
+                ):
+                    continue
+                delete_indices = [user_index, *sequence_indices]
+                context_index = user_index - 1
+                while context_index >= 0 and _is_context_frame_message(
+                    messages[context_index]
+                ):
+                    delete_indices.insert(0, context_index)
+                    context_index -= 1
+                return delete_indices, user_index, assistant_index
+            continue
         user_index = assistant_index - 1
         while user_index >= 0 and _is_context_frame_message(messages[user_index]):
             user_index -= 1

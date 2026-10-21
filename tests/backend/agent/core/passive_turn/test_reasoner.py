@@ -21,6 +21,73 @@ from session.manager.consolidation import ConsolidationCommitRequest
 from shiori_sdk.tools import Tool
 
 
+@pytest.mark.parametrize("enabled", [False, True])
+async def test_reply_policy_filters_visible_tokens_but_preserves_thinking(
+    tmp_path, enabled
+):
+    from agent.turns.reply_sequence import reply_is_buffered
+    from shiori_sdk.reply_sequence import ReplySequencePolicy
+
+    manager = SessionManager(tmp_path)
+    reasoner = DefaultReasoner(
+        llm=LLMServices(provider=AsyncMock(), light_provider=AsyncMock()),
+        llm_config=LLMConfig(),
+        tools=ToolRegistry(),
+        discovery=ToolDiscoveryState(),
+        tool_search_enabled=False,
+        context=AsyncMock(),
+        session_manager=manager,
+    )
+    policy = ReplySequencePolicy("<message-break/>") if enabled else None
+    reasoner.render_prompt = AsyncMock(
+        return_value=PromptRenderResult(
+            messages=[{"role": "user", "content": "hi"}],
+            reply_sequence=policy,
+        )
+    )
+    seen = []
+
+    async def sink(delta):
+        seen.append(delta)
+
+    reasoner.set_stream_sink_factory(lambda _: sink)
+
+    async def run(*args, **kwargs):
+        assert reply_is_buffered() is enabled
+        await kwargs["on_content_delta"](
+            {
+                "content_delta": "one\n<message-break/>\ntwo",
+                "thinking_delta": "thinking",
+            }
+        )
+        return ReasonerResult(reply="one\n<message-break/>\ntwo", streamed=True)
+
+    reasoner.run = AsyncMock(side_effect=run)
+    msg = InboundMessage(
+        channel="desktop",
+        sender="user",
+        chat_id="a",
+        content="hi",
+        metadata={"turn_id": "t"},
+    )
+    result = await reasoner.run_turn(
+        msg=msg, session=manager.get_or_create(msg.session_key)
+    )
+    assert result.reply_sequence == policy
+    assert result.streamed is (not enabled)
+    assert seen == (
+        [{"thinking_delta": "thinking"}]
+        if enabled
+        else [
+            {
+                "content_delta": "one\n<message-break/>\ntwo",
+                "thinking_delta": "thinking",
+            }
+        ]
+    )
+    assert not reply_is_buffered()
+
+
 class _ArchivedTool(Tool):
     name = "archived_tool"
     description = "A tool discovered by an older turn"
@@ -28,6 +95,88 @@ class _ArchivedTool(Tool):
 
     async def execute(self, **kwargs):
         return "ok"
+
+
+@pytest.mark.parametrize(
+    "enabled,channel,source,selected",
+    [
+        (True, "desktop", "", True),
+        (False, "desktop", "", False),
+        (True, "telegram", "", False),
+        (True, "desktop", "background_result", False),
+    ],
+)
+async def test_natural_chat_role_draft_reaches_only_supported_model_requests(
+    tmp_path,
+    enabled,
+    channel,
+    source,
+    selected,
+):
+    from typing import Any, cast
+    from agent.context import ContextBuilder
+    from agent.lifecycle.plugin_contributions import StaticPluginContributions
+    from core.roles import RoleStore
+    from plugins.natural_chat.backend.plugin import NaturalChatPromptModule, SEPARATOR
+    from plugins.natural_chat.backend.role_state import NaturalChatRoleState
+    from agent.plugin_host.roles import HostRoles
+    from conversation.context_scope import turn_context_view
+    from conversation.service import desktop_thread_id
+    from shiori_sdk.channels.threads import network_thread_id
+
+    roles = RoleStore(tmp_path)
+    roles.create_role(role_id="mira", name="Mira", system_prompt="保持原有性格")
+    state = NaturalChatRoleState(HostRoles(roles).as_capability())
+    roles.extensions.register("natural_chat", state.write_draft, state.project)
+    roles.update_role("mira", plugin_drafts={"natural_chat": {"enabled": enabled}})
+    memory = SimpleNamespace(
+        read_self=lambda: "",
+        read_profile=lambda: "",
+        read_recent_context=lambda: "",
+        get_memory_context=lambda: "",
+    )
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("role:mira")
+    session.metadata["role_id"] = "mira"
+    thread = (
+        desktop_thread_id("mira")
+        if channel == "desktop"
+        else network_thread_id("mira", channel, "a")
+    )
+    reasoner = DefaultReasoner(
+        llm=LLMServices(provider=AsyncMock(), light_provider=AsyncMock()),
+        llm_config=LLMConfig(),
+        tools=ToolRegistry(),
+        discovery=ToolDiscoveryState(),
+        tool_search_enabled=False,
+        context=ContextBuilder(tmp_path, memory=cast(Any, memory), runtime_roles=roles),
+        session_manager=manager,
+    )
+    reasoner.bind_plugin_contributions(
+        StaticPluginContributions(
+            prompt_render_modules=[NaturalChatPromptModule(state)],
+        )
+    )
+
+    async def run(messages, **kwargs):
+        rendered = str(messages)
+        assert (SEPARATOR in rendered) is selected
+        assert "保持原有性格" in rendered
+        return ReasonerResult(reply="自由回答")
+
+    reasoner.run = AsyncMock(side_effect=run)
+    result = await reasoner.run_turn(
+        msg=InboundMessage(
+            channel=channel,
+            sender="user",
+            chat_id="a",
+            content="hi",
+            metadata={"turn_id": "t", "source": source, "thread_id": thread},
+        ),
+        session=session,
+        context_view=turn_context_view(tmp_path, "mira", thread),
+    )
+    assert (result.reply_sequence is not None) is selected
 
 
 async def test_current_attachments_are_isolated_across_concurrent_and_followup_turns(

@@ -55,17 +55,21 @@ def wire_turn_lifecycle(
 ) -> None:
     from agent.looping.interrupt import tracked_turn_state
     from shiori_sdk.lifecycle import AfterStepCtx
+    from agent.turns.reply_sequence import reply_is_buffered
 
     async def _progress_reporter(ctx: AfterStepCtx) -> None:
         state = tracked_turn_state(active_turn_states, ctx.session_key)
         if state is None:
             return
-        if ctx.partial_reply:
+        if ctx.partial_reply and not reply_is_buffered():
             state.partial_reply = ctx.partial_reply
         if ctx.partial_thinking:
             state.partial_thinking = ctx.partial_thinking
         state.tools_used = list(ctx.tools_used_so_far)
-        state.tool_chain_partial = list(ctx.tool_chain_partial)
+        state.tool_chain_partial = [
+            {**group, "text": ""} if reply_is_buffered() else dict(group)
+            for group in ctx.tool_chain_partial
+        ]
 
     lifecycle.on_after_step(_progress_reporter)
 

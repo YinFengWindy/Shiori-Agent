@@ -57,6 +57,7 @@ class _BuildPromptRenderCtxModule:
             turn_injection_prompt=input.turn_injection_prompt,
             session_metadata=dict(input.session_metadata),
             extra_hints=list(input.extra_hints or []),
+            supports_reply_sequence=input.supports_reply_sequence,
         )
         return frame
 
@@ -123,7 +124,13 @@ class _RenderPromptModule:
                 )
             )
         frame.slots[_RESULT_SLOT] = PromptRenderResult(
-            messages=messages, current_message=current_message
+            messages=messages,
+            current_message=current_message,
+            reply_sequence=(
+                ctx.reply_sequence
+                if frame.input.supports_reply_sequence and not minimal
+                else None
+            ),
         )
         return frame
 

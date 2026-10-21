@@ -12,6 +12,38 @@ from session.manager import SessionManager
 _FRAME = '<system-reminder data-system-context-frame="true">内部</system-reminder>'
 
 
+async def test_undo_complete_reply_sequence_preserves_interleaved_background_message(
+    tmp_path,
+):
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("role:a")
+    session.add_message("user", "hello", metadata={"turn_id": "turn-1"})
+    session.add_message(
+        "assistant",
+        "one",
+        metadata={
+            "turn_id": "turn-1",
+            "reply_sequence_id": "turn-1",
+            "reply_sequence_index": 0,
+        },
+    )
+    session.add_message("assistant", "background", proactive=True)
+    session.add_message(
+        "assistant",
+        "two",
+        metadata={
+            "turn_id": "turn-1",
+            "reply_sequence_id": "turn-1",
+            "reply_sequence_index": 1,
+        },
+    )
+    manager.save(session)
+    result = await manager.undo_last_turn(session.key)
+    assert result is not None and len(result.deleted_ids) == 3
+    reloaded = SessionManager(tmp_path).get_or_create(session.key)
+    assert [row["content"] for row in reloaded.messages] == ["background"]
+
+
 def _run(coro):
     return asyncio.run(coro)
 

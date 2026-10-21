@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 from shiori_sdk.prompting import PromptSectionRender
 from shiori_sdk.messages import InboundMessage, OutboundMessage
+from shiori_sdk.reply_sequence import ReplySequencePolicy
 from conversation.context_scope import source_belongs_to_user
 from shiori_sdk.channels.message_source import MessageSource
 from shiori_sdk.lifecycle import (
@@ -167,6 +168,7 @@ class PromptRenderInput:
     minimal_request: bool = False
     # Channel-owned reader hint; authorization lives in tool execution context.
     text_attachment_tool: str = "read_file"
+    supports_reply_sequence: bool = False
 
 
 @dataclass(frozen=True)
@@ -174,6 +176,7 @@ class PromptRenderResult:
     messages: list[dict[str, Any]]
     # The envelope owner's input, before any trailing plugin hints.
     current_message: dict[str, Any] | None = None
+    reply_sequence: ReplySequencePolicy | None = None
 
 
 @dataclass(frozen=True)
