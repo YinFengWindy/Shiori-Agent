@@ -37,6 +37,7 @@ from session.manager.models import (
     HistoryFilter,
     CONTEXT_TURN_STARTED_AT,
     message_thread_id,
+    delivered_history,
 )
 from session.store.common import CONTEXT_SCOPES, ContextScope
 
@@ -224,8 +225,10 @@ class ContextView:
 
     def includes(self, message: Mapping[str, Any]) -> bool:
         """``message`` 是否对本回合可见。"""
-        return self.includes_thread(message_thread_id(message)) and (
-            self.scope != "user" or self.user_threads.includes(message)
+        return (
+            delivered_history(message)
+            and self.includes_thread(message_thread_id(message))
+            and (self.scope != "user" or self.user_threads.includes(message))
         )
 
     def includes_thread(self, thread_id: str) -> bool:

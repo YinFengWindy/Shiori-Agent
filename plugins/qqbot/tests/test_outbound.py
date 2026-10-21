@@ -8,7 +8,7 @@ import pytest
 
 from plugins.qqbot.backend.channel import QQBotChannel
 from plugins.qqbot.backend.stream_delivery import _StreamState
-from shiori_sdk.messages import OutboundMessage
+from shiori_sdk.messages import DeliveryOutcome, OutboundMessage
 from shiori_sdk.channels.errors import NonRetryableDeliveryError
 from shiori_sdk.testing.channel_hub import FakeChannelHub
 
@@ -17,6 +17,40 @@ def _receipts(hub: FakeChannelHub) -> list[tuple[object, object, object]]:
     return [
         (item["delivery_status"], item["external_message_id"], item["via_account"])
         for item in hub.deliveries
+    ]
+
+
+async def test_natural_messages_send_separately_without_stream_requests():
+    paths = []
+
+    def handler(request):
+        if request.url.path == "/app/getAppAccessToken":
+            return httpx.Response(200, json={"access_token": "tok", "expires_in": 7200})
+        paths.append(request.url.path)
+        return httpx.Response(200, json={"id": f"reply-{len(paths)}"})
+
+    channel = QQBotChannel("app", "secret")
+    channel._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    channel._channel_hub = FakeChannelHub()
+    messages = [
+        OutboundMessage(
+            "qqbot",
+            "c2c:app:user",
+            content,
+            metadata={"reply_sequence_id": "turn", "reply_sequence_index": index},
+            committed_message_id=f"row-{index}",
+        )
+        for index, content in enumerate(("one", "two"))
+    ]
+    try:
+        for message in messages:
+            await channel._on_response(message)
+    finally:
+        await channel._client.aclose()
+    assert paths == ["/v2/users/user/messages"] * 2
+    assert [message.delivery_outcome for message in messages] == [
+        DeliveryOutcome("sent", "reply-1"),
+        DeliveryOutcome("sent", "reply-2"),
     ]
 
 

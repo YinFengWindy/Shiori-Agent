@@ -9,6 +9,7 @@ describe("shouldProcessDesktopBridgeEventSynchronously", () => {
     const methods = [
       "bridge.exit",
       "chat.delta",
+      "chat.message",
       "chat.tool.started",
       "chat.tool.completed",
       "chat.done",

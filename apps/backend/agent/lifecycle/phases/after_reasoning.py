@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from agent.turns.channel_sequence import channel_sequence_context
+from agent.turns.channel_sequence_commit import commit_channel_reply_sequence
+
 from dataclasses import dataclass
 import logging
 from typing import TYPE_CHECKING, Any, TypeAlias, cast
@@ -33,6 +36,8 @@ from agent.lifecycle.types import AfterReasoningInput, AfterReasoningResult
 from shiori_sdk.lifecycle import AfterReasoningCtx
 from bus.event_bus import EventBus
 from shiori_sdk.messages import OutboundMessage
+from agent.turns.reply_sequence import parse_reply_sequence
+from agent.turns.reply_sequence_commit import commit_reply_sequence
 
 if TYPE_CHECKING:
     from agent.looping.ports import LLMConfig, LLMServices
@@ -141,8 +146,10 @@ class _BuildAfterReasoningCtxModule:
         if session is not None:
             frame.slots["reply:previous_metadata"] = dict(session.metadata)
             frame.slots["reply:messages"] = []
-            frame.slots["reply:private"] = "reply:state" in frame.slots or bool(
-                input.state.turn_pushes and input.state.turn_pushes.messages
+            frame.slots["reply:private"] = (
+                "reply:state" in frame.slots
+                or turn_result.reply_sequence is not None
+                or bool(input.state.turn_pushes and input.state.turn_pushes.messages)
             )
         raw_turn_metrics = turn_result.context_retry.get("turn_metrics")
         turn_metrics = (
@@ -299,6 +306,17 @@ class _PersistAssistantMessageModule:
         drafts = frame.input.state.turn_pushes
         if drafts is not None:
             frame.slots["reply:messages"].extend(drafts.messages)
+        policy = frame.input.turn_result.reply_sequence
+        if policy is not None:
+            if not ctx.outbound_metadata.get("turn_id") and not (
+                channel_sequence_context() is not None
+                and ctx.outbound_metadata.get("request_id")
+            ):
+                raise ValueError("消息序列需要可投递的交互回合标识")
+            sequence = parse_reply_sequence(ctx.reply, policy)
+            frame.slots["reply:sequence"] = sequence
+            ctx.reply = sequence.content
+            ctx.response_metadata.raw_text = sequence.content
         assistant_kwargs: dict[str, Any] = {
             "tools_used": list(ctx.tools_used) if ctx.tools_used else None,
             "tool_chain": list(ctx.tool_chain) if ctx.tool_chain else None,
@@ -331,7 +349,39 @@ class _PersistAssistantMessageModule:
                 session=session,
             )
         )
-        if frame.slots["reply:private"]:
+        if policy is not None:
+            for index, content in enumerate(sequence.messages):
+                metadata = {
+                    **assistant_metadata,
+                    "reply_sequence_id": assistant_metadata.get("turn_id")
+                    or assistant_metadata["request_id"],
+                    "reply_sequence_index": index,
+                }
+                kwargs = dict(assistant_kwargs)
+                if index:
+                    for key in (
+                        "tools_used",
+                        "tool_chain",
+                        "reasoning_content",
+                        "media",
+                    ):
+                        kwargs.pop(key, None)
+                    for key in (
+                        "turn_metrics",
+                        "tools_used",
+                        "tool_chain",
+                        "context_retry",
+                        REPLY_MENTION_IDS_KEY,
+                    ):
+                        metadata.pop(key, None)
+                if index < len(sequence.messages) - 1:
+                    metadata.pop("mood", None)
+                    metadata.pop("thought", None)
+                kwargs["metadata"] = metadata
+                frame.slots["reply:messages"].append(
+                    build_session_message("assistant", content, **kwargs)
+                )
+        elif frame.slots["reply:private"]:
             frame.slots["reply:messages"].append(
                 build_session_message("assistant", ctx.reply, **assistant_kwargs)
             )
@@ -380,8 +430,9 @@ class _AppendMessagesModule:
     slot = "after_reasoning.append_messages"
     requires = ("after_reasoning.update_meta",)
 
-    def __init__(self, session_services: SessionServices) -> None:
+    def __init__(self, session_services: SessionServices, bus: EventBus) -> None:
         self._session_services = session_services
+        self._bus = bus
 
     async def run(self, frame: AfterReasoningFrame) -> AfterReasoningFrame:
         state = frame.input.state
@@ -449,11 +500,56 @@ class _AppendMessagesModule:
                 ),
             }
         try:
-            await self._session_services.session_manager.append_messages(
-                session,
-                owned_messages,
-                **state_kwargs,
-            )
+            sequence = frame.slots.get("reply:sequence")
+            if sequence is not None and state.msg.channel != "desktop":
+                ctx = cast(AfterReasoningCtx, frame.slots[_CTX_SLOT])
+                extra_media: list[str] = []
+                _append_media(
+                    extra_media,
+                    collect_prefixed_slots(frame.slots, _OUTBOUND_MEDIA_PREFIX),
+                )
+                await commit_channel_reply_sequence(
+                    manager=self._session_services.session_manager,
+                    session=session,
+                    messages=owned_messages,
+                    sequence=sequence,
+                    state_kwargs=state_kwargs,
+                    metadata={
+                        **ctx.outbound_metadata,
+                        **collect_prefixed_slots(
+                            frame.slots, _OUTBOUND_METADATA_PREFIX
+                        ),
+                    },
+                    channel=ctx.channel,
+                    chat_id=ctx.chat_id,
+                    extra_media=extra_media,
+                    on_first_commit=(
+                        state.turn_pushes.committed
+                        if state.turn_pushes is not None
+                        else None
+                    ),
+                )
+                state.dispatch_outbound = False
+            elif sequence is not None:
+                await commit_reply_sequence(
+                    manager=self._session_services.session_manager,
+                    bus=self._bus,
+                    session=session,
+                    messages=owned_messages,
+                    sequence=sequence,
+                    state_kwargs=state_kwargs,
+                    on_first_commit=(
+                        state.turn_pushes.committed
+                        if state.turn_pushes is not None
+                        else None
+                    ),
+                )
+            else:
+                await self._session_services.session_manager.append_messages(
+                    session,
+                    owned_messages,
+                    **state_kwargs,
+                )
             if frame.slots["reply:private"]:
                 state.session = self._session_services.session_manager.get_or_create(
                     session.key
@@ -553,7 +649,7 @@ def default_after_reasoning_modules(
         _PersistUserMessageModule(session_services),
         _PersistAssistantMessageModule(),
         _UpdateSessionMetadataModule(relationship_runtime),
-        _AppendMessagesModule(session_services),
+        _AppendMessagesModule(session_services, bus),
         _BuildOutboundMessageModule(),
         _ReturnAfterReasoningResultModule(),
     ]

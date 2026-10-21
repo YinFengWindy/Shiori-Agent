@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any, Protocol
 
 from agent.lifecycle.types import PromptRenderInput
+from agent.turns.reply_sequence import ReplySequencePolicy
 from core.roles.reply_state import RoleReply
 
 if TYPE_CHECKING:
@@ -112,6 +113,7 @@ class TurnRunResult:
     # persisted message/outbound metadata (JSON), so it must stay JSON-safe.
     role_reply: RoleReply | None = None
     role_reply_mood_fresh: bool = False
+    reply_sequence: ReplySequencePolicy | None = None
 
 
 class WindowTurnRunner(Protocol):

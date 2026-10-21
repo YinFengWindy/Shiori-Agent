@@ -1,4 +1,4 @@
-"""Reference-counted runtime versions; publication never cancels their work."""
+"""Reference-counted runtime versions and their pending channel reply lifetimes."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from core.common.task_collector import TaskCollector
+from agent.turns.channel_sequence import ChannelSequenceOwner
 
 if TYPE_CHECKING:
     from bootstrap.channel_host import ChannelHost
@@ -36,6 +37,7 @@ class RuntimeCandidate:
     _close_task: asyncio.Task[None] | None = field(default=None, init=False, repr=False)
     channel_host: ChannelHost | None = None
     force_close: bool = False
+    reply_sequences: ChannelSequenceOwner = field(default_factory=ChannelSequenceOwner)
     _work_changed: asyncio.Event = field(
         default_factory=asyncio.Event, init=False, repr=False
     )
@@ -100,6 +102,11 @@ class RuntimeLease:
         self._candidate = candidate
         self._released = False
         self._persistent = persistent
+
+    @property
+    def reply_sequences(self) -> ChannelSequenceOwner:
+        """Returns the retained generation's ordinary reply delivery lifetime."""
+        return self._candidate.reply_sequences
 
     @property
     def core(self) -> CoreRuntime:

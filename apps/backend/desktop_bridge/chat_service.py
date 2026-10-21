@@ -10,7 +10,7 @@ from agent.looping.core import AgentLoop
 from agent.looping.interrupt import TurnInterruptState
 from bus.event_bus import EventBus
 from conversation.service import desktop_thread_id
-from bus.events_lifecycle import TurnFailed
+from bus.events_lifecycle import ReplyMessageCommitted, TurnFailed
 from shiori_sdk.channel_events import (
     StreamDeltaReady,
     ToolCallCompleted,
@@ -351,6 +351,31 @@ class DesktopChatService:
             # Resolve the terminal event only after all awaited turn work succeeds.
             committed = event
 
+        async def _on_message(event: ReplyMessageCommitted) -> None:
+            if event.session_key != session_key or event.turn_id != turn_id:
+                return
+            session = self._session_manager.get_or_create(session_key)
+            ids = set(event.message_ids)
+
+            async def publish(payload: dict[str, Any]) -> None:
+                # An intermediate message is visible immediately. The ordinary
+                # terminal session.updated still waits for role ownership release.
+                await self._emit_payload(
+                    emit_event,
+                    {
+                        **payload,
+                        "method": "chat.message",
+                        "payload": {**payload["payload"], "turn_id": turn_id},
+                    },
+                )
+
+            await self._emit_session_updated(
+                request_id=request_id,
+                session=session,
+                emit_event=publish,
+                messages=[row for row in session.messages if row.get("id") in ids],
+            )
+
         async def _on_failed(event: TurnFailed) -> None:
             nonlocal failure_detail
             if event.session_key == session_key:
@@ -412,6 +437,7 @@ class DesktopChatService:
             self._event_bus.on(ToolCallStarted, _on_tool_started)
             self._event_bus.on(ToolCallCompleted, _on_tool_completed)
         self._event_bus.on(TurnCommitted, _on_done)
+        self._event_bus.on(ReplyMessageCommitted, _on_message)
         self._event_bus.on(TurnFailed, _on_failed)
         try:
             reply = await self._agent_loop.process_direct(
@@ -486,6 +512,7 @@ class DesktopChatService:
                 self._event_bus.off(ToolCallStarted, _on_tool_started)
                 self._event_bus.off(ToolCallCompleted, _on_tool_completed)
             self._event_bus.off(TurnCommitted, _on_done)
+            self._event_bus.off(ReplyMessageCommitted, _on_message)
             self._event_bus.off(TurnFailed, _on_failed)
 
     async def _emit_failed_session_update(

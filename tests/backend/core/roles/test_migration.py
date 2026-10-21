@@ -68,9 +68,9 @@ def test_existing_novelai_namespace_is_authoritative_over_legacy_true():
     assert migrated["roles"][0]["runtime_config"] == {}
 
 
-def test_v9_manifest_is_left_untouched() -> None:
+def test_current_manifest_is_left_untouched() -> None:
     payload = {
-        "version": 9,
+        "version": CURRENT_MANIFEST_VERSION,
         "roles": [
             {
                 "id": "mira",
@@ -81,3 +81,34 @@ def test_v9_manifest_is_left_untouched() -> None:
     }
 
     assert migrate_manifest_payload(payload) == (payload, False)
+
+
+@pytest.mark.parametrize("version", [9, CURRENT_MANIFEST_VERSION])
+@pytest.mark.parametrize("legacy_enabled", [False, True])
+@pytest.mark.parametrize("current_enabled", [None, False, True])
+def test_natural_chat_moves_to_builtin_without_overwriting_new_choice(
+    version, legacy_enabled, current_enabled
+):
+    runtime = {"dialogue_model_effort": "high"}
+    if current_enabled is not None:
+        runtime["natural_chat_enabled"] = current_enabled
+    original = {
+        "version": version,
+        "roles": [{"id": "mira", "runtime_config": runtime}, {"id": "new"}],
+        "plugin_data": {
+            "natural_chat": {"mira": {"enabled": legacy_enabled}},
+            "other": {"opaque": 42},
+        },
+    }
+    migrated, changed = migrate_manifest_payload(original)
+    assert changed
+    assert migrated["roles"][0]["runtime_config"] == {
+        "dialogue_model_effort": "high",
+        "natural_chat_enabled": (
+            legacy_enabled if current_enabled is None else current_enabled
+        ),
+    }
+    assert "natural_chat_enabled" not in migrated["roles"][1].get("runtime_config", {})
+    assert migrated["plugin_data"] == {"other": {"opaque": 42}}
+    assert original["plugin_data"]["natural_chat"]["mira"]["enabled"] is legacy_enabled
+    assert migrate_manifest_payload(migrated) == (migrated, False)

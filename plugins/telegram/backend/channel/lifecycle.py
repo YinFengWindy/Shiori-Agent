@@ -361,7 +361,9 @@ class TelegramChannel(
 
     def _bind_runtime(self) -> None:
         if not self._outbound_bound:
-            self._require_bus().subscribe_outbound(self._channel, self._on_response)
+            self._require_bus().subscribe_outbound(
+                self._channel, self._on_response, supports_reply_sequence=True
+            )
             self._outbound_bound = True
         if self._event_bus is not None and not self._events_bound:
             for binding in self._event_bindings:

@@ -5,8 +5,9 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+from telegram.error import TimedOut
 
-from shiori_sdk.messages import OutboundMessage
+from shiori_sdk.messages import DeliveryOutcome, OutboundMessage
 from plugins.telegram.backend.channel.outbound import _OutboundMixin
 from plugins.telegram.backend.utils import TelegramOutboundLimiter
 from shiori_sdk.testing.channel_hub import FakeChannelHub
@@ -43,6 +44,48 @@ def reply_channel(receipt):
     channel._reply_buffers = {}
     channel._thinking_buffers = {}
     return channel
+
+
+async def test_natural_messages_receive_independent_platform_receipts():
+    channel = reply_channel(None)
+    channel._app.bot.send_message.side_effect = [
+        SimpleNamespace(message_id=301),
+        SimpleNamespace(message_id=302),
+    ]
+    messages = [
+        OutboundMessage(
+            "telegram",
+            "123",
+            content,
+            metadata={"reply_sequence_id": "turn", "reply_sequence_index": index},
+            committed_message_id=f"row-{index}",
+        )
+        for index, content in enumerate(("one", "two"))
+    ]
+    for message in messages:
+        await channel._on_response(message)
+    assert [message.delivery_outcome for message in messages] == [
+        DeliveryOutcome("sent", "301"),
+        DeliveryOutcome("sent", "302"),
+    ]
+    assert channel._app.bot.send_message.await_count == 2
+    channel._app.bot.edit_message_text.assert_not_awaited()
+    assert [entry["message_id"] for entry in channel._channel_hub.deliveries] == [
+        "row-0",
+        "row-1",
+    ]
+
+
+async def test_natural_network_timeout_never_retries_a_platform_send():
+    channel = reply_channel(None)
+    channel._app.bot.send_message.side_effect = TimedOut("unknown outcome")
+    message = OutboundMessage(
+        "telegram", "123", "one", metadata={"reply_sequence_id": "turn"}
+    )
+    with pytest.raises(TimedOut):
+        await channel._on_response(message)
+    channel._app.bot.send_message.assert_awaited_once()
+    assert message.delivery_outcome == DeliveryOutcome("uncertain")
 
 
 @pytest.mark.parametrize(

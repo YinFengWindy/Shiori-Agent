@@ -71,6 +71,9 @@ def _import_telegram_channel(monkeypatch: pytest.MonkeyPatch):
     class BadRequest(TelegramError):
         pass
 
+    class Forbidden(TelegramError):
+        pass
+
     class RetryAfter(TelegramError):
         def __init__(self, retry_after=1.0):
             super().__init__(retry_after)
@@ -170,6 +173,7 @@ def _import_telegram_channel(monkeypatch: pytest.MonkeyPatch):
     telegram_error.Conflict = Conflict
     telegram_error.InvalidToken = InvalidToken
     telegram_error.BadRequest = BadRequest
+    telegram_error.Forbidden = Forbidden
     telegram_error.NetworkError = NetworkError
     telegram_error.RetryAfter = RetryAfter
     telegram_error.TelegramError = TelegramError
@@ -300,7 +304,13 @@ async def test_telegram_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path:
     )
     await channel._on_stop_command(stop_update, context)
     assert interrupt_controller.requests == [
-        {"session_key": "telegram:123", "sender": "1", "command": "/stop"}
+        {
+            "session_key": "telegram:123",
+            "sender": "1",
+            "command": "/stop",
+            "channel": "telegram",
+            "chat_id": "123",
+        }
     ]
     assert len(bus.inbound) == 1
 
