@@ -66,8 +66,6 @@ def mood_payload(mood="平静", thought="我终于放心了。") -> str:
 
 
 async def test_natural_reply_correction_keeps_business_effects_and_thinking_once():
-    from agent.turns.reply_sequence import parse_reply_sequence
-
     counter = CounterTool()
     tools = ToolRegistry()
     tools.register(counter)
@@ -92,10 +90,8 @@ async def test_natural_reply_correction_keeps_business_effects_and_thinking_once
         natural_chat=True,
     )
     natural = result.metadata["natural_reply"]
-    assert parse_reply_sequence(result.reply, natural.policy).messages == (
-        "完成了",
-        "可以看看",
-    )
+    assert natural.sequence.messages == ("完成了", "可以看看")
+    assert result.reply == "完成了\n\n可以看看"
     assert counter.calls == 1
     assert result.metadata["tools_used"] == ["counter"]
     assert result.thinking == "原本的思考"
@@ -163,8 +159,6 @@ async def test_natural_reply_interruption_preserves_work_without_mood_or_late_re
 async def test_natural_reply_waits_for_business_results_and_needs_no_extra_call(
     mixed, tool_search_enabled, max_iterations
 ):
-    from agent.turns.reply_sequence import parse_reply_sequence
-
     counter = CounterTool()
     tools = ToolRegistry()
     tools.register(counter)
@@ -194,9 +188,7 @@ async def test_natural_reply_waits_for_business_results_and_needs_no_extra_call(
     assert counter.calls == 1
     assert provider.chat.await_count == 3
     assert not result.metadata["natural_reply_corrected"]
-    assert parse_reply_sequence(
-        result.reply, result.metadata["natural_reply"].policy
-    ).messages == ("执行成功",)
+    assert result.metadata["natural_reply"].sequence.messages == ("执行成功",)
 
 
 def streaming_chat(responses: list[LLMResponse]):

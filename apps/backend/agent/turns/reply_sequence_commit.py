@@ -6,7 +6,11 @@ import asyncio
 from typing import Any
 from collections.abc import Awaitable, Callable
 
-from agent.turns.reply_sequence import ReplySequence, deliver_reply_sequence
+from agent.turns.reply_sequence import (
+    ReplySequence,
+    deliver_sequence,
+    publish_final_role_state,
+)
 from bus.event_bus import EventBus
 from bus.events_lifecycle import ReplyMessageCommitted
 from session.manager import Session, SessionManager
@@ -100,18 +104,12 @@ async def commit_reply_sequence(
     async def publish(index: int, _content: str) -> None:
         reply = replies[index]
         batch = [*prefix, reply] if index == 0 else [reply]
-        final = index == len(replies) - 1
-        kwargs = (
-            state_kwargs
-            if final
-            else {
-                "pending_messages": True,
-                "expected_mood_updated_at": state_kwargs.get(
-                    "expected_mood_updated_at"
-                ),
-            }
+        await manager.append_messages(
+            session,
+            batch,
+            pending_messages=True,
+            expected_mood_updated_at=state_kwargs.get("expected_mood_updated_at"),
         )
-        await manager.append_messages(session, batch, **kwargs)
         if index == 0 and on_first_commit is not None:
             await on_first_commit()
         # emit is a required publication boundary, not a best-effort observer.
@@ -123,5 +121,8 @@ async def commit_reply_sequence(
             )
         )
 
+    async def on_last() -> None:
+        await publish_final_role_state(manager, session.key, state_kwargs)
+
     with interruptible_reply_delivery():
-        await deliver_reply_sequence(sequence, publish)
+        await deliver_sequence(sequence.messages, publish, on_last)

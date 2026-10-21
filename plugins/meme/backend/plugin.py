@@ -74,21 +74,31 @@ class _MemeReactions:
         )
 
     async def decorate_meme(self, ctx: AfterReasoningCtx) -> AfterReasoningCtx:
-        """Resolve image and emoji protocols before citation cleans leftover tags."""
+        """Resolve image and emoji protocols on each bubble before citation."""
         role_id = self._role_id_for_session(ctx.session_key)
-        cleaned, tag = _extract_meme_tag(ctx.reply)
-        cleaned = _resolve_emoji_protocols(
-            cleaned,
-            self._role_decorator.resolve_emoji if role_id else lambda _name: "",
-        )
-        decorated = self._role_decorator.decorate(
-            cleaned,
-            role_id=role_id,
-            meme_tag=tag,
-        )
-        ctx.reply = decorated.content
-        ctx.media.extend(decorated.media)
-        ctx.meme_tag = decorated.tag
+        resolve = self._role_decorator.resolve_emoji if role_id else lambda _name: ""
+        texts = ctx.reply_messages or (ctx.reply,)
+        rewritten: list[str] = []
+        attached = False
+        for text in texts:
+            cleaned, tag = _extract_meme_tag(text)
+            cleaned = _resolve_emoji_protocols(cleaned, resolve)
+            use_tag = tag if tag and not attached else None
+            decorated = self._role_decorator.decorate(
+                cleaned, role_id=role_id, meme_tag=use_tag
+            )
+            if use_tag:
+                attached = True
+                ctx.media.extend(decorated.media)
+                ctx.meme_tag = decorated.tag
+            rewritten.append(decorated.content)
+        if not attached:
+            ctx.meme_tag = None
+        if ctx.reply_messages:
+            ctx.reply_messages = tuple(rewritten)
+            ctx.reply = "\n\n".join(rewritten)
+        else:
+            ctx.reply = rewritten[0]
         return ctx
 
     def build_prompt_block(self, role_id: str) -> str | None:

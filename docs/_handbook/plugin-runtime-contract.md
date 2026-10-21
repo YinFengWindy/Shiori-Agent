@@ -142,6 +142,11 @@ consolidates these additions and the subsequent #847 breaking migration.
   prefix. A cancelled final send that still confirms every segment settles as
   success once, including ACK/dedupe effects. Explicit-send tool payloads and
   system notifications are unchanged.
+- **Validated reply bubbles (PR #894, issue #868).** `AfterReasoningCtx.reply_messages`
+  carries the validated natural-chat bubbles. Decorators rewrite each item;
+  `reply` stays their plain join for whole-turn observers. Additive relative to
+  published SDK 3.1.2. The host no longer splits a reply on code fences or
+  indentation, and no longer round-trips a delimiter through the prompt.
 - **Read-only account target routes for natural batches (PR #894, issue #868).** Channel
   plugins may register `account.resolve`, receiving `account_id` plus the existing
   `AccountTarget.to_payload()` fields and returning `AccountRoute.to_payload()`:

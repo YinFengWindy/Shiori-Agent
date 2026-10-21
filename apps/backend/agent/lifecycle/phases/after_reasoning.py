@@ -36,7 +36,7 @@ from agent.lifecycle.types import AfterReasoningInput, AfterReasoningResult
 from shiori_sdk.lifecycle import AfterReasoningCtx
 from bus.event_bus import EventBus
 from shiori_sdk.messages import OutboundMessage
-from agent.turns.reply_sequence import ReplySequence, parse_reply_sequence
+from agent.turns.reply_sequence import ReplySequence
 from agent.turns.reply_interruption import reply_was_invalidated
 from agent.turns.reply_sequence_commit import (
     commit_invalidated_reply,
@@ -172,7 +172,7 @@ class _BuildAfterReasoningCtxModule:
             if isinstance(raw_turn_metrics, dict)
             else {}
         )
-        frame.slots[_CTX_SLOT] = AfterReasoningCtx(
+        ctx = AfterReasoningCtx(
             session_key=input.state.session_key,
             channel=msg.channel,
             chat_id=msg.chat_id,
@@ -200,6 +200,11 @@ class _BuildAfterReasoningCtxModule:
                 **({REPLY_MENTION_IDS_KEY: list(mention_ids)} if mention_ids else {}),
             },
         )
+        sequence = turn_result.reply_sequence
+        if isinstance(sequence, ReplySequence) and not reply_was_invalidated():
+            ctx.reply_messages = sequence.messages
+            ctx.reply = sequence.content
+        frame.slots[_CTX_SLOT] = ctx
         return frame
 
 
@@ -317,8 +322,8 @@ class _PersistAssistantMessageModule:
         drafts = frame.input.state.turn_pushes
         if drafts is not None:
             frame.slots["reply:messages"].extend(drafts.messages)
-        policy = frame.input.turn_result.reply_sequence
-        if policy is not None or reply_was_invalidated():
+        carried = frame.input.turn_result.reply_sequence
+        if isinstance(carried, ReplySequence) or reply_was_invalidated():
             if not ctx.outbound_metadata.get("turn_id") and not (
                 channel_sequence_context() is not None
                 and ctx.outbound_metadata.get("request_id")
@@ -327,12 +332,11 @@ class _PersistAssistantMessageModule:
             if reply_was_invalidated():
                 sequence = ReplySequence(("",))
             else:
-                assert policy is not None
-                sequence = parse_reply_sequence(ctx.reply, policy)
+                decorated = ctx.reply_messages or carried.messages
+                sequence = ReplySequence(tuple(decorated))
             frame.slots["reply:sequence"] = sequence
-            # Diagnostic observers need the original raw_text; only visible
-            # dialogue should drop the message-boundary protocol.
             ctx.reply = sequence.content
+            ctx.reply_messages = sequence.messages
         assistant_kwargs: dict[str, Any] = {
             "tools_used": list(ctx.tools_used) if ctx.tools_used else None,
             "tool_chain": list(ctx.tool_chain) if ctx.tool_chain else None,
@@ -365,7 +369,7 @@ class _PersistAssistantMessageModule:
                 session=session,
             )
         )
-        if policy is not None or reply_was_invalidated():
+        if isinstance(carried, ReplySequence) or reply_was_invalidated():
             for index, content in enumerate(sequence.messages):
                 metadata = {
                     **assistant_metadata,

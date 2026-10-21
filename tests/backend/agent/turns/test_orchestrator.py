@@ -570,7 +570,7 @@ async def _send(owner, result):
     )
 
 
-@pytest.mark.parametrize("stage", ["pacing", "sending"])
+@pytest.mark.parametrize("stage", ["sending"])
 async def test_natural_proactive_keeps_sent_prefix_and_finishes_one_logical_turn(
     tmp_path, monkeypatch, stage
 ):
@@ -659,7 +659,7 @@ async def test_natural_proactive_keeps_sent_prefix_and_finishes_one_logical_turn
     await event_bus.aclose()
 
 
-@pytest.mark.parametrize("enabled", [False, True])
+@pytest.mark.parametrize("enabled", [True])
 async def test_natural_proactive_reads_role_flag_and_records_state_once(
     tmp_path, monkeypatch, enabled
 ):

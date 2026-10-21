@@ -617,7 +617,7 @@ class DefaultReasoner(
                         result.metadata.get("role_reply_mood_fresh")
                     ),
                     reply_sequence=(
-                        natural_reply.policy
+                        natural_reply.sequence
                         if isinstance(natural_reply, NaturalReply)
                         else None
                     ),

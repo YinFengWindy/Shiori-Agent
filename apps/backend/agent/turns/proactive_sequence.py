@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field, replace
@@ -11,14 +10,12 @@ from typing import TYPE_CHECKING, Any
 from agent.account_delivery.service import AccountDelivery, ResolvedAccountTarget
 from agent.turns.channel_sequence import BackgroundReply, channel_sequence_context
 from agent.turns.outbound import OutboundDispatch, OutboundPort
-from agent.turns.reply_interruption import (
-    interruptible_reply_delivery,
-    reply_was_invalidated,
+from agent.turns.reply_interruption import interruptible_reply_delivery
+from agent.turns.reply_sequence import (
+    ReplySequence,
+    deliver_sequence,
+    publish_final_role_state,
 )
-from agent.turns import reply_sequence as pacing
-from agent.turns.reply_sequence import ReplySequence
-from core.common.cancellation import finish_started
-from core.roles.turn_gate import wait_outside_role_gate
 from bus.event_bus import EventBus
 from bus.events_lifecycle import ReplyMessageCommitted
 from session.manager import Session, SessionManager
@@ -196,13 +193,6 @@ async def commit_proactive_sequence(
                 raise RuntimeError("桌面主动回复未被接纳")
             await manager.append_messages(session, [message], pending_messages=True)
         delivered.append(message)
-        if index == len(sequence.messages) - 1:
-            current = manager.get_or_create(session.key)
-            # A different chat may finish while this plan yields its pacing wait.
-            if str(
-                current.metadata.get("current_mood_updated_at", "")
-            ) == state_kwargs.get("expected_mood_updated_at"):
-                await manager.append_messages(current, [], **state_kwargs)
         if event_bus is not None:
             await event_bus.emit(
                 ReplyMessageCommitted(
@@ -212,14 +202,8 @@ async def commit_proactive_sequence(
                 )
             )
 
+    async def on_last() -> None:
+        await publish_final_role_state(manager, session.key, state_kwargs)
+
     with context.owner.delivering(), interruptible_reply_delivery():
-        for index, content in enumerate(sequence.messages):
-            if index:
-                await wait_outside_role_gate(
-                    lambda: pacing.wait_between_messages(
-                        pacing.message_pause(sequence.messages[index - 1])
-                    )
-                )
-            if reply_was_invalidated():
-                raise asyncio.CancelledError
-            await finish_started(publish(index, content))
+        await deliver_sequence(sequence.messages, publish, on_last)

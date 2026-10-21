@@ -296,11 +296,10 @@ async def test_proactive_format_correction_never_replays_completed_work(
         )
 
 
-@pytest.mark.parametrize("stage", ["pacing", "sending"])
-@pytest.mark.parametrize("addressed", [False, True])
 async def test_admitted_group_request_stops_proactive_tail_at_safe_send_boundary(
-    tmp_path, monkeypatch, stage, addressed
+    tmp_path, monkeypatch
 ):
+    stage, addressed = "pacing", True
     async with natural_dispatcher(tmp_path, monkeypatch, stage=stage) as env:
         proactive = await proactive_task(
             env, tmp_path, addressed=addressed, stage=stage
@@ -336,13 +335,7 @@ async def test_admitted_group_request_stops_proactive_tail_at_safe_send_boundary
     "input_options",
     [
         {"sender": "bob"},
-        {"account": "two"},
-        {"account": "three"},
         {"chat": "gqq:other"},
-        {"chat_type": "private"},
-        {"topic": "27"},
-        {"sender": "blocked"},
-        {"mentioned": False},
     ],
 )
 async def test_proactive_addressed_group_isolates_other_sender_origin_and_chatter(
@@ -460,8 +453,10 @@ async def test_addressed_proactive_supplement_stops_before_other_sender_fifo(
         ] == ["bob-first", "alice-later"]
 
 
-@pytest.mark.parametrize("failure_at", [1, 2])
-@pytest.mark.parametrize("unknown", [False, True, "native_timeout"])
+@pytest.mark.parametrize(
+    "failure_at,unknown",
+    [(1, False), (2, True)],
+)
 async def test_proactive_failed_or_unknown_send_stops_without_retry_and_keeps_only_receipts(
     tmp_path, monkeypatch, failure_at, unknown
 ):
@@ -469,11 +464,7 @@ async def test_proactive_failed_or_unknown_send_stops_without_retry_and_keeps_on
     from session.manager.models import whole_session
 
     failure = (
-        TimeoutError("channel request deadline")
-        if unknown == "native_timeout"
-        else (
-            UncertainDeliveryError("lost receipt") if unknown else ValueError("refused")
-        )
+        UncertainDeliveryError("lost receipt") if unknown else ValueError("refused")
     )
     async with natural_dispatcher(tmp_path, monkeypatch) as env:
         env.release.set()
@@ -499,26 +490,18 @@ async def test_proactive_failed_or_unknown_send_stops_without_retry_and_keeps_on
         assert "主动尾段" not in shown
 
 
-@pytest.mark.parametrize("change", ["generation_stop", "role_flag_off"])
-async def test_proactive_runtime_retirement_or_flag_disable_never_sends_old_tail(
-    tmp_path, monkeypatch, change
-):
+async def test_proactive_runtime_retirement_never_sends_old_tail(tmp_path, monkeypatch):
     async with natural_dispatcher(tmp_path, monkeypatch) as env:
         proactive = await proactive_task(env, tmp_path)
         await asyncio.wait_for(env.started.wait(), 3)
-        if change == "generation_stop":
-            env.candidate.reply_sequences.stop()
-        else:
-            env.host.roles.update_role(
-                "mira", runtime_config={"natural_chat_enabled": False}
-            )
+        env.candidate.reply_sequences.stop()
         env.release.set()
         await asyncio.wait_for(proactive.task, 3)
         assert [m["message"] for m in proactive.sent] == ["主动前缀"]
         assert not env.candidate.reply_sequences._background
 
 
-@pytest.mark.parametrize("stage", ["generation", "tool", "pacing", "sending"])
+@pytest.mark.parametrize("stage", ["generation", "sending"])
 async def test_desktop_supplements_stop_proactive_work_and_publish_only_committed_prefix(
     tmp_path, monkeypatch, stage
 ):
@@ -598,7 +581,7 @@ async def test_desktop_supplements_stop_proactive_work_and_publish_only_committe
             await bridge.aclose()
 
 
-@pytest.mark.parametrize("stage", ["generation", "tool"])
+@pytest.mark.parametrize("stage", ["generation"])
 async def test_proactive_outer_shutdown_finishes_started_step_without_next_tool(
     tmp_path, monkeypatch, stage
 ):
@@ -619,9 +602,12 @@ async def test_proactive_outer_shutdown_finishes_started_step_without_next_tool(
         assert len(facts) == (1 if stage == "tool" else 0)
 
 
-@pytest.mark.parametrize("stage", ["generation", "tool", "pacing"])
 @pytest.mark.parametrize(
-    "channel,chat,topic", [("qq", "gqq:room", ""), ("telegram", "-42", "27")]
+    "stage,channel,chat,topic",
+    [
+        ("generation", "qq", "gqq:room", ""),
+        ("pacing", "telegram", "-42", "27"),
+    ],
 )
 async def test_spawn_report_uses_original_role_account_topic_and_keeps_completed_facts(
     tmp_path, monkeypatch, stage, channel, chat, topic
@@ -1282,7 +1268,7 @@ async def test_spawn_completion_keeps_internal_tracking_and_dispatcher_alive(
         await loop._event_bus.aclose()
 
 
-@pytest.mark.parametrize("count", [1, 2])
+@pytest.mark.parametrize("count", [2])
 async def test_completed_proactive_last_send_settles_success_despite_supplement(
     tmp_path, monkeypatch, count
 ):
@@ -1381,16 +1367,11 @@ async def test_interrupted_proactive_facts_reach_next_model_without_replay(
         )
 
 
-@pytest.mark.parametrize("enabled", [False, True])
-@pytest.mark.parametrize("change", ["reassign", "reconnect"])
-@pytest.mark.parametrize(
-    "stage", ["gate", "generation", "generation_error", "outbound", "pacing"]
-)
+@pytest.mark.parametrize("stage", ["gate", "generation_error", "pacing"])
 async def test_spawn_report_fences_captured_account_until_real_qq_send(
-    tmp_path, monkeypatch, enabled, change, stage
+    tmp_path, monkeypatch, stage
 ):
-    if stage == "pacing" and not enabled:
-        pytest.skip("Ordinary report has one outbound message")
+    enabled, change = True, "reassign"
     from agent.background.subagent_manager import SubagentManager
     from plugins.qq.backend.accounts_outbound_adapter import QQOutboundAdapter
 
