@@ -14,8 +14,8 @@ import { AccountResponseRulesEditor } from "./AccountResponseRulesEditor";
 /**
  * One role's account detail, top to bottom: who it is, the platform's own
  * connection controls (account.detail, led by the shared status card), the
- * response rules while the account is online, then the danger zone. A null
- * account is a new one being added for `roleId`.
+ * response rules while online or when a saved account supports tool grants,
+ * then the danger zone. A null account is a new one being added for `roleId`.
  */
 export function AccountDetailDialog({ account, pluginId, roleId, onClose, onChanged }: {
   account: AccountSnapshot | null;
@@ -41,8 +41,8 @@ export function AccountDetailDialog({ account, pluginId, roleId, onClose, onChan
           <PlatformControls account={account} roleId={roleId} onChanged={onChanged} />
         </AccountDetailActionsTarget>
       </section> : null}
-      {/* Rules only matter while the account can receive messages. */}
-      <Reveal show={accountOnline(account)} className="pt-6">
+      {/* Saved tool grants must remain editable before connection and during failures. */}
+      <Reveal show={accountOnline(account) || account?.capabilities.includes("full_tools") === true} className="pt-6">
         {account ? <AccountResponseRulesEditor key={account.id} account={account} onChanged={onChanged} /> : null}
       </Reveal>
       <Reveal show={Boolean(account)} className="pt-6">

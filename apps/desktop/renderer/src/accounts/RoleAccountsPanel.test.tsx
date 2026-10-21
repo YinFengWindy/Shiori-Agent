@@ -125,6 +125,45 @@ test("response rules are left out while the account is not online", async () => 
   }
 });
 
+for (const connection of ["offline", "error", "connecting"]) {
+  test(`a saved account can edit its full tool grant while ${connection}`, async () => {
+    const RoleAccountsPanel = await loadPanel();
+    setPluginEnabledSnapshot([{ id: "test-provider", enabled: true, state: "ACTIVE" }]);
+    registerPlatform("test-provider", "Test");
+    const changes: Request[] = [];
+    let enabled = false;
+    const row = () => ({ ...accountRow, connection, capabilities: ["full_tools"],
+      response_rules: { ...accountRow.response_rules, allow_full_tools: enabled } });
+    const view = await mountTestComponent(<RoleAccountsPanel roleId="role-1" />,
+      desktop((request) => {
+        if (request.method === "accounts.rules.set") {
+          changes.push(request);
+          const rules = request.payload.response_rules;
+          assert.ok(rules && typeof rules === "object");
+          enabled = Reflect.get(rules, "allow_full_tools") === true;
+          return { payload: { account: row() } };
+        }
+        return { payload: request.method === "accounts.list" ? { accounts: [row()] } : {} };
+      }));
+    try {
+      await act(async () => view.container.querySelector("button")?.click());
+      const toggle = document.querySelector<HTMLButtonElement>('[role="dialog"] [role="switch"][aria-label="允许完整工具权限"]');
+      assert.ok(toggle);
+      assert.equal(toggle.getAttribute("aria-checked"), "false");
+      await act(async () => toggle.click());
+      assert.equal(toggle.getAttribute("aria-checked"), "true");
+      assert.deepEqual(changes, [{ method: "accounts.rules.set", payload: {
+        account_id: "account-1", response_rules: { private_enabled: true,
+          group_enabled: true, blocked_sender_ids: [], allow_full_tools: true },
+      } }]);
+    } finally {
+      await view.cleanup();
+      pluginUiRegistry.unregisterPlugin("test-provider");
+      resetPluginEnabledStateForTests();
+    }
+  });
+}
+
 test("删除账号 in the detail asks for confirmation, keeps the account when cleanup fails, and closes the detail once deleted", async () => {
   const RoleAccountsPanel = await loadPanel();
   setPluginEnabledSnapshot([{ id: "test-provider", enabled: true, state: "ACTIVE" }]);
