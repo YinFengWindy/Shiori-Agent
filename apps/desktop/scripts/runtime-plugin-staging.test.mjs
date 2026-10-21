@@ -1,10 +1,26 @@
 import assert from "node:assert/strict";
-import { access, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { access, cp, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { stageBuiltinPlugins } from "./runtime-plugin-staging.mjs";
 import { collectPluginBackendModules } from "./runtime-plugin-modules.mjs";
+
+test("the shipped Grok backend and callback client enter the frozen builtin resources", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "grok-builtin-staging-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const source = join(root, "source"), staged = join(root, "staged");
+  const grok = fileURLToPath(new URL("../../../plugins/grok_bot", import.meta.url));
+  await cp(grok, join(source, "grok_bot"), { recursive: true });
+  await stageBuiltinPlugins(source, staged);
+
+  const modules = await collectPluginBackendModules(staged);
+  assert.ok(modules.includes("plugins.grok_bot.backend.plugin"));
+  assert.ok(modules.includes("plugins.grok_bot.backend.callback_server"));
+  assert.deepEqual(await readFile(join(staged, "grok_bot", "client.ps1")), await readFile(join(grok, "client.ps1")));
+  await assert.rejects(access(join(staged, "grok_bot", "tests")));
+});
 
 test("frozen staging excludes external source before hidden-import collection", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "runtime-plugin-staging-"));
