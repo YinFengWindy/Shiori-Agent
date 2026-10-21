@@ -129,9 +129,11 @@ class DesktopChatService:
         acknowledged promptly and each accepted runner keeps its own identity.
         """
         turn = self._tasks_by_session.get(session_key)
-        if turn is None or not self.is_busy(session_key):
+        if not self.is_busy(session_key):
             return
-        if turn.reply_interruption is None:
+        # Admission must fail before the handler persists a supplement when
+        # busy work has no owner capable of accepting the handoff.
+        if turn is None or turn.reply_interruption is None:
             raise ChatTurnBusyError("当前会话已有正在执行的聊天任务")
         turn.reply_interruption.invalidate()
 
