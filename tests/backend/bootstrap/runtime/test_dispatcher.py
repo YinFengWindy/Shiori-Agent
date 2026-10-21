@@ -19,6 +19,7 @@ from core.roles import RoleAggregateService
 from shiori_sdk.accounts.models import AccountResponseRules
 from agent.provider import LLMResponse, ToolCall
 from tests.support.external_turns import ExternalTurnHost
+from tests.support.chat_replies import chat_reply
 from session.manager import SessionManager
 
 
@@ -93,10 +94,12 @@ async def natural_dispatcher(tmp_path, monkeypatch, *, stage="pacing", enabled=T
                         ToolCall("must-not-run", "public", {}),
                     ],
                 )
-            return LLMResponse(
-                content=(
+            return chat_reply(
+                ["prefix", "tail"] if not number else [f"next-{number}"],
+                tools=kwargs.get("tools", []),
+                plain_content=(
                     "prefix\n<message-break/>\ntail" if not number else f"next-{number}"
-                )
+                ),
             )
         finally:
             running -= 1

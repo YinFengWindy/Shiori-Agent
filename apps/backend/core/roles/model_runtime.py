@@ -5,7 +5,7 @@ from core.roles.errors import RoleNotFoundError
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
-from typing import Awaitable, Callable, Generator, Literal
+from typing import Any, Awaitable, Callable, Generator, Literal
 
 from agent.prompting.input_budget import BudgetPolicy
 from agent.prompting.usage_anchor import UsageAnchors
@@ -204,6 +204,13 @@ class RoleAwareProvider(LLMProvider):
             request = {**request, "model": snapshot.model, "extra_body": None}
         return provider.input_budget(**request)
 
+    @property
+    def supports_strict_tools(self) -> bool:
+        """Use the selected role endpoint's schema capability."""
+        snapshot = _current_snapshot.get()
+        provider = snapshot.provider if snapshot is not None else self._fallback
+        return provider.supports_strict_tools
+
     async def chat(
         self,
         messages: list[dict],
@@ -218,11 +225,15 @@ class RoleAwareProvider(LLMProvider):
         response_format: dict[str, str] | None = None,
         call_purpose: LLMCallPurpose = "default",
         auxiliary_max_tokens: int | None = None,
+        defer_tool_argument_errors: bool = False,
     ) -> LLMResponse:
         """Keeps role effort for default calls and permits explicit auxiliary work."""
         snapshot = _current_snapshot.get()
         provider = snapshot.provider if snapshot is not None else self._fallback
         resolved_model = snapshot.model if snapshot is not None else model
+        recovery_options: dict[str, Any] = (
+            {"defer_tool_argument_errors": True} if defer_tool_argument_errors else {}
+        )
         return await provider.chat(
             messages=messages,
             tools=tools,
@@ -238,4 +249,5 @@ class RoleAwareProvider(LLMProvider):
             **({"response_format": response_format} if response_format else {}),
             call_purpose=call_purpose,
             auxiliary_max_tokens=auxiliary_max_tokens,
+            **recovery_options,
         )

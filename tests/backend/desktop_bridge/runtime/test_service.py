@@ -18,6 +18,7 @@ from core.roles.store import RoleStore
 from desktop_bridge.runtime.service import ReloadableDesktopService
 from desktop_bridge.runtime.service import _ServiceGeneration
 from session.manager import SessionManager
+from tests.support.chat_replies import chat_reply
 
 _REGISTRATION = "00000000-0000-4000-a000-000000000001"
 
@@ -90,8 +91,12 @@ async def test_desktop_supplements_acknowledge_immediately_and_keep_turn_ownersh
         if index == 1 and stage == "replacement_twice_cancel":
             latest_entered.set()
             await latest_release.wait()
-        return LLMResponse(
-            content="prefix\n<message-break/>\ntail" if index == 0 else "new answer"
+        return chat_reply(
+            ["prefix", "tail"] if index == 0 else ["new answer"],
+            tools=kwargs.get("tools", []),
+            plain_content=(
+                "prefix\n<message-break/>\ntail" if index == 0 else "new answer"
+            ),
         )
 
     async def pause(_):

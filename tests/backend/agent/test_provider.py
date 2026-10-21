@@ -86,6 +86,59 @@ class _RawToolCall:
         self.function = SimpleNamespace(name=name, arguments=raw_arguments)
 
 
+@pytest.mark.parametrize("streamed", [False, True])
+async def test_argument_recovery_retains_invalid_json_without_executing_it(
+    monkeypatch, streamed
+):
+    raw = '{"messages": ["未完成'
+    if streamed:
+        response = _FakeStream(
+            [
+                SimpleNamespace(
+                    choices=[
+                        SimpleNamespace(
+                            delta=SimpleNamespace(
+                                content=None,
+                                tool_calls=[
+                                    SimpleNamespace(
+                                        index=0,
+                                        id="reply",
+                                        function=SimpleNamespace(
+                                            name="finish_reply", arguments=raw
+                                        ),
+                                    )
+                                ],
+                            ),
+                            finish_reason="length",
+                        )
+                    ]
+                )
+            ]
+        )
+    else:
+        response = _Response(
+            content="",
+            tool_calls=[_RawToolCall("reply", "finish_reply", raw)],
+            finish_reason="length",
+        )
+    fake = _FakeClient([response])
+    monkeypatch.setattr("agent.provider.AsyncOpenAI", lambda **_: fake)
+    provider = LLMProvider(api_key="k")
+    result = await provider.chat(
+        messages=[{"role": "user", "content": "hello"}],
+        tools=[],
+        model="m",
+        max_tokens=100,
+        defer_tool_argument_errors=True,
+        on_content_delta=AsyncMock() if streamed else None,
+    )
+    assert result.tool_calls[0].arguments == {}
+    assert result.tool_calls[0].raw_arguments == raw
+    assert result.tool_calls[0].arguments_error
+    assert result.finish_reason == "length"
+    assert "defer_tool_argument_errors" not in fake.calls[0]
+
+
 class _FakeClient:
     def __init__(self, responses: list[object]) -> None:
         self._responses = responses

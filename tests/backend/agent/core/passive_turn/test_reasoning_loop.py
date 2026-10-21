@@ -65,6 +65,140 @@ def mood_payload(mood="平静", thought="我终于放心了。") -> str:
     return json.dumps({"mood": mood, "thought": thought}, ensure_ascii=False)
 
 
+async def test_natural_reply_correction_keeps_business_effects_and_thinking_once():
+    from agent.turns.reply_sequence import parse_reply_sequence
+
+    counter = CounterTool()
+    tools = ToolRegistry()
+    tools.register(counter)
+    provider = AsyncMock()
+    provider.chat.side_effect = [
+        LLMResponse(content="", tool_calls=[ToolCall("work", "counter", {})]),
+        LLMResponse(
+            content="完成了\n\n可以看看", thinking="原本的思考", total_tokens=30
+        ),
+        LLMResponse(
+            content="",
+            tool_calls=[
+                ToolCall("reply", "finish_reply", {"messages": ["完成了", "可以看看"]})
+            ],
+            total_tokens=10,
+        ),
+        LLMResponse(content=mood_payload()),
+    ]
+    result = await make_reasoner(provider, tools).run(
+        [{"role": "user", "content": "帮我处理"}],
+        reply_moods=("平静",),
+        natural_chat=True,
+    )
+    natural = result.metadata["natural_reply"]
+    assert parse_reply_sequence(result.reply, natural.policy).messages == (
+        "完成了",
+        "可以看看",
+    )
+    assert counter.calls == 1
+    assert result.metadata["tools_used"] == ["counter"]
+    assert result.thinking == "原本的思考"
+    assert result.metadata["react_stats"]["total_tokens"] == 40
+    assert result.metadata["natural_reply_corrected"] is True
+    assert provider.chat.await_count == 4
+    requests = [call.kwargs for call in provider.chat.call_args_list]
+    assert [tool["function"]["name"] for tool in requests[2]["tools"]] == [
+        "finish_reply"
+    ]
+    assert requests[2]["call_purpose"] == "auxiliary"
+    assert requests[3]["messages"][-2]["content"] == "完成了\n\n可以看看"
+    assert all("shiori-message" not in str(request) for request in requests)
+
+
+@pytest.mark.parametrize("invalidate_at", [2, 3])
+async def test_natural_reply_interruption_preserves_work_without_mood_or_late_reply(
+    invalidate_at,
+):
+    from agent.turns.reply_interruption import (
+        ReplyInterruption,
+        reply_interruption_scope,
+    )
+
+    interruption = ReplyInterruption()
+    counter = CounterTool()
+    tools = ToolRegistry()
+    tools.register(counter)
+    provider = AsyncMock()
+    responses = [
+        LLMResponse(content="", tool_calls=[ToolCall("work", "counter", {})]),
+        LLMResponse(content="需要格式纠正的正文"),
+        LLMResponse(
+            content="",
+            tool_calls=[ToolCall("reply", "finish_reply", {"messages": ["迟到回复"]})],
+        ),
+    ]
+    calls = 0
+
+    async def chat(**kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == invalidate_at:
+            interruption.invalidate()
+        return responses.pop(0)
+
+    provider.chat.side_effect = chat
+    with reply_interruption_scope(interruption):
+        result = await make_reasoner(provider, tools).run(
+            [{"role": "user", "content": "处理一下"}],
+            reply_moods=("平静",),
+            natural_chat=True,
+        )
+    assert result.reply == ""
+    assert "natural_reply" not in result.metadata
+    assert result.metadata["tools_used"] == ["counter"]
+    assert "done" in str(result.metadata["tool_chain"])
+    assert counter.calls == 1
+    assert provider.chat.await_count == invalidate_at
+
+
+@pytest.mark.parametrize("mixed", [False, True])
+@pytest.mark.parametrize("tool_search_enabled", [False, True])
+@pytest.mark.parametrize("max_iterations", [1, 5])
+async def test_natural_reply_waits_for_business_results_and_needs_no_extra_call(
+    mixed, tool_search_enabled, max_iterations
+):
+    from agent.turns.reply_sequence import parse_reply_sequence
+
+    counter = CounterTool()
+    tools = ToolRegistry()
+    tools.register(counter)
+    work = [ToolCall("work", "counter", {})]
+    if mixed:
+        work.append(ToolCall("premature", "finish_reply", {"messages": ["尚未执行"]}))
+    provider = AsyncMock()
+    provider.chat.side_effect = [
+        LLMResponse(content="", tool_calls=work),
+        LLMResponse(
+            content="",
+            tool_calls=[ToolCall("reply", "finish_reply", {"messages": ["执行成功"]})],
+        ),
+        LLMResponse(content=mood_payload()),
+    ]
+    result = await make_reasoner(
+        provider,
+        tools,
+        max_iterations=max_iterations,
+        tool_search_enabled=tool_search_enabled,
+    ).run(
+        [{"role": "user", "content": "处理一下"}],
+        reply_moods=("平静",),
+        natural_chat=True,
+        preloaded_tools={"counter"},
+    )
+    assert counter.calls == 1
+    assert provider.chat.await_count == 3
+    assert not result.metadata["natural_reply_corrected"]
+    assert parse_reply_sequence(
+        result.reply, result.metadata["natural_reply"].policy
+    ).messages == ("执行成功",)
+
+
 def streaming_chat(responses: list[LLMResponse]):
     """A provider.chat stand-in that streams each response's content when a
     live sink is given, mirroring real provider streaming behaviour."""

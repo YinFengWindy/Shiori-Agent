@@ -11,6 +11,56 @@ from core.compaction import CompactionController, CompactionPolicy
 from core.compaction_summary import WorkingSummary
 
 
+async def test_minimal_preflight_counts_required_reply_schema(memory_harness):
+    from agent.core.passive_turn.compaction import (
+        ensure_request_budget,
+        request_compaction_scope,
+    )
+    from agent.core.passive_turn.natural_reply import finish_reply_schema
+    from core.compaction import CompactionFailedError
+
+    h = memory_harness
+    session = h.manager.get_or_create("cli:minimal-reply-schema")
+    provider = LLMProvider(
+        api_key="test",
+        model_context_window=300,
+        default_max_tokens=100,
+        budget_policy=BudgetPolicy(safety_margin_tokens=20),
+    )
+    messages = [{"role": "user", "content": "hi"}]
+    scope = RequestCompaction(
+        CompactionController(h.manager, h.maintenance, SimpleNamespace(model_name="m")),
+        session.key,
+        None,
+        CompactionPolicy(),
+        0,
+        1,
+        AsyncMock(),
+        lambda _: [],
+        degraded=True,
+    )
+    reply_tool = finish_reply_schema()
+    schemas = [reply_tool]
+    try:
+        plain = provider.input_budget(
+            messages=messages, tools=[], model="m", max_tokens=100
+        )
+        assert plain is not None and not plain.needs_trim
+        with (
+            request_compaction_scope(scope),
+            pytest.raises(CompactionFailedError) as caught,
+        ):
+            await ensure_request_budget(
+                messages, schemas, provider, "m", 100, reply_tool=reply_tool
+            )
+        assert schemas == [reply_tool]
+        result = caught.value.result
+        assert result.failure_stage == "minimal_budget"
+        assert result.final_budget["schema_tokens"] > 0
+    finally:
+        await provider.aclose()
+
+
 async def test_normal_request_keeps_actual_progress_without_overwriting_last_compaction(
     memory_harness,
 ):

@@ -13,8 +13,7 @@ from agent.lifecycle.phase import (
     topo_sort_modules,
 )
 from agent.lifecycle.types import PromptRenderInput, PromptRenderResult
-from agent.turns.reply_sequence import ReplySequencePolicy
-from prompts.natural_chat import NATURAL_CHAT_PROMPT, NATURAL_CHAT_SEPARATOR
+from prompts.natural_chat import NATURAL_CHAT_PROMPT
 from shiori_sdk.lifecycle import PromptRenderCtx
 from shiori_sdk.prompting import PromptSectionRender
 from bus.event_bus import EventBus
@@ -89,15 +88,13 @@ class _RenderPromptModule:
         ctx = cast(PromptRenderCtx, frame.slots[_CTX_SLOT])
         minimal = frame.input.minimal_request
         runtime_config = frame.input.session_metadata.get("role_runtime_config") or {}
-        reply_sequence = (
-            ReplySequencePolicy(NATURAL_CHAT_SEPARATOR)
-            if frame.input.supports_reply_sequence
+        natural_chat = (
+            frame.input.supports_reply_sequence
             and not minimal
             and runtime_config.get("natural_chat_enabled") is True
-            else None
         )
         bottom_sections = list(ctx.system_sections_bottom)
-        if reply_sequence is not None:
+        if natural_chat:
             bottom_sections.append(
                 PromptSectionRender(
                     name="natural_chat", content=NATURAL_CHAT_PROMPT, is_static=False
@@ -142,7 +139,7 @@ class _RenderPromptModule:
         frame.slots[_RESULT_SLOT] = PromptRenderResult(
             messages=messages,
             current_message=current_message,
-            reply_sequence=reply_sequence,
+            natural_chat=natural_chat,
         )
         return frame
 

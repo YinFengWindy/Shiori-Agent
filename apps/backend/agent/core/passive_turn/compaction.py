@@ -22,6 +22,19 @@ if TYPE_CHECKING:
     from session.manager.window import WindowPreparation
 
 
+def prepare_request_schemas(
+    schemas: list[dict], reply_tool: dict | None, *, tools_disabled: bool = False
+) -> None:
+    """Retain the output contract when business capabilities are disabled."""
+    if tools_disabled:
+        schemas.clear()
+    if reply_tool is not None:
+        name = reply_tool["function"]["name"]
+        schemas[:] = [tool for tool in schemas if tool["function"]["name"] != name] + [
+            reply_tool
+        ]
+
+
 @dataclass
 class RequestCompaction:
     """Immutable policy and persisted prefix, with a mutable current request boundary."""
@@ -71,11 +84,11 @@ class RequestCompaction:
         *,
         force: bool = False,
         minimal_only: bool = False,
+        reply_tool: dict | None = None,
     ) -> None:
         """Re-render only persisted history; carry the exact current-turn suffix along."""
 
-        if self.degraded:
-            schemas.clear()
+        prepare_request_schemas(schemas, reply_tool, tools_disabled=self.degraded)
         candidate_schemas = schemas
 
         def measure(candidate: list[dict]):
@@ -138,6 +151,7 @@ class RequestCompaction:
                 if schemas_for_history is not None
                 else schemas
             )
+            prepare_request_schemas(candidate_schemas, reply_tool)
             names = [schema["function"]["name"] for schema in candidate_schemas]
             prefix = await self.render(prepared, summary, names)
             next_prefix_length = len(prefix)
@@ -147,6 +161,7 @@ class RequestCompaction:
             nonlocal next_prefix_length, candidate_schemas
             assert self.render_minimal is not None
             candidate_schemas = []
+            prepare_request_schemas(candidate_schemas, reply_tool)
             prefix = await self.render_minimal(summary)
             next_prefix_length = len(prefix)
             return [*prefix, *completed_tool_results(tail)]
@@ -293,6 +308,7 @@ async def ensure_request_budget(
     *,
     purpose: str = "default",
     schemas_for_history: Callable[[list[str]], list[dict]] | None = None,
+    reply_tool: dict | None = None,
 ) -> None:
     """Guard every rendered speaking request, including recovery and finalization."""
     if not isinstance(provider, LLMProvider):
@@ -300,9 +316,17 @@ async def ensure_request_budget(
     scope = _current.get()
     if scope is not None:
         await scope.ensure(
-            messages, schemas, provider, model, max_tokens, purpose, schemas_for_history
+            messages,
+            schemas,
+            provider,
+            model,
+            max_tokens,
+            purpose,
+            schemas_for_history,
+            reply_tool=reply_tool,
         )
         return
+    prepare_request_schemas(schemas, reply_tool)
     budget = provider.input_budget(
         messages=messages,
         tools=schemas,
