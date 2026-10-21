@@ -34,7 +34,7 @@ Shiori 是一个以角色为基底进行角色扮演的 Agent 助手：Python �
 | 范围 | 命令 |
 |---|---|
 | Python 格式与 lint | `.venv\Scripts\black.exe --check .`、`.venv\Scripts\ruff.exe check .` |
-| Python 测试 | 默认 `.venv\Scripts\pytest.exe` 跑 `tests/support/default_suite.py` 的约 1000 条宿主契约（`-W error`）。Ubuntu `check-and-test` 调用 `python -m scripts.select_tests`：始终包含这份契约集，再按相对 `main` 的 merge-base 补邻居（记忆↔agent、桥接↔agent、SDK→插件测试）。锁文件、CI workflow、`pytest.ini`、`default_suite`、`select_tests` 或无法归类的路径改为 `pytest --extended`。插件仍是 `verify_plugin_tests`，SDK 仍是 `verify_sdk`，这两条作业不按差异关掉。只改文档或 `apps/desktop/` 时仍只有默认契约集。 |
+| Python 测试 | 默认 `.venv\Scripts\pytest.exe` 跑 `tests/support/default_suite.py` 的约 1000 条宿主契约（`-W error`）。Ubuntu `check-and-test` 调用 `python -m scripts.select_tests`：始终包含这份契约集，再按相对 `main` 的 merge-base 补邻居（记忆↔agent、桥接↔agent、SDK→`packages/sdk/tests`）。插件套件只在 `verify_plugin_tests` 里跑。锁文件、CI workflow、`pytest.ini`、`default_suite`、`select_tests` 或无法归类的路径改为 `pytest --extended`。插件仍是 `verify_plugin_tests`，SDK 仍是 `verify_sdk`，这两条作业不按差异关掉。只改文档或 `apps/desktop/` 时仍只有默认契约集。 |
 | Python 类型 | pyright：源码 `pyrightconfig.json`，测试 `--project pyrightconfig.tests.json` |
 | 桌面端 / TypeScript | `pnpm lint`、`pnpm typecheck`、`pnpm test`（插件 UI：`pnpm desktop:test:plugin-ui`） |
 
