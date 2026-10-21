@@ -192,3 +192,74 @@ async def test_telegram_stop_requires_exact_origin_even_with_one_active_turn(
     finally:
         release.set()
         await task
+
+
+@pytest.mark.parametrize("target", ["desktop", "private", "legacy"])
+async def test_partial_control_plane_origin_never_selects_another_scope(target):
+    from bootstrap.runtime.dispatcher import RuntimeDispatcher
+    from shiori_sdk.channels.services import InterruptController
+
+    loop = object.__new__(AgentLoop)
+    loop._active_turn_states = {}
+    loop._active_tasks = {}
+    loop._interrupt_states = {}
+    loop._compact_command = AsyncMock(return_value=None)
+    entered, release = asyncio.Event(), asyncio.Event()
+
+    async def process(item, key):
+        entered.set()
+        await release.wait()
+
+    loop._process_role_scoped = process
+    channel = "desktop" if target == "desktop" else "telegram_one"
+    chat = "role:mira" if target == "desktop" else "room"
+    metadata = {"session_key_override": "role:mira"}
+    if target == "private":
+        metadata.update(account_id="telegram:one", chat_type="private")
+    task = asyncio.create_task(
+        loop.process_inbound(
+            InboundMessage(channel, "alice", chat, "hello", metadata=metadata)
+        )
+    )
+    await entered.wait()
+    controller: InterruptController = RuntimeDispatcher(
+        SimpleNamespace(agent_loop=loop)
+    )
+    partial_origins = [
+        {"account_id": "telegram:one"},
+        {"chat_type": "group"},
+        {"message_thread_id": "11"},
+        {"channel": "telegram_one"},
+        {"chat_id": "room"},
+        {"account_id": "telegram:one", "chat_type": "group", "message_thread_id": "11"},
+        {
+            "channel": "telegram_one",
+            "account_id": "telegram:one",
+            "chat_type": "private",
+        },
+        {"chat_id": "room", "account_id": "telegram:one", "chat_type": "private"},
+        {"channel": "telegram_one", "chat_id": "room", "account_id": "telegram:one"},
+        {
+            "channel": "desktop",
+            "chat_id": "role:mira",
+            "account_id": "telegram:one",
+            "chat_type": "private",
+        },
+        {"channel": "desktop", "chat_id": "other-session"},
+    ]
+    try:
+        for origin in partial_origins:
+            result = controller.request_interrupt("role:mira", **origin)
+            assert result.message == "当前没有正在执行的任务。", origin
+            assert not task.done()
+            assert not loop._interrupt_states
+        complete = {} if target == "desktop" else {"channel": channel, "chat_id": chat}
+        if target == "private":
+            complete.update(account_id="telegram:one", chat_type="private")
+        assert controller.request_interrupt("role:mira", **complete).message.startswith(
+            "本轮已中断"
+        )
+        await task
+    finally:
+        release.set()
+        await task

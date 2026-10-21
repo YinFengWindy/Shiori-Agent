@@ -117,8 +117,22 @@ class DesktopChatService:
         turn = self._tasks_by_session.get(session_key)
         return turn is not None and not turn.completed and not turn.task.done()
 
+    def owns_chat_turn(self, session_key: str, turn_id: str | None = None) -> bool:
+        """Whether this service actually owns the active turn, never a borrowed alias.
+
+        The optional ID routes control requests to their original runtime.
+        Admission can omit it to find this generation's latest accepted turn.
+        """
+        turn = self._tasks_by_session.get(session_key)
+        return (
+            turn is not None
+            and turn in self._turns
+            and self.is_busy(session_key)
+            and (turn_id is None or turn.turn_id == turn_id)
+        )
+
     def can_supersede_chat_turn(self, session_key: str) -> bool:
-        """Whether the current desktop owner accepts supplements."""
+        """Whether the current owned or borrowed predecessor accepts supplements."""
         turn = self._tasks_by_session.get(session_key)
         return turn is not None and turn.reply_interruption is not None
 
@@ -144,10 +158,10 @@ class DesktopChatService:
         borrows its predecessor identity until a new input is accepted; invalid
         requests never invalidate it and RPC admission never waits for it.
         """
-        if self.is_busy(session_key):
+        if self.owns_chat_turn(session_key) or not owner.owns_chat_turn(session_key):
             return
         turn = owner._tasks_by_session.get(session_key)
-        if turn is not None:
+        if turn is not None and self._tasks_by_session.get(session_key) is not turn:
             self._tasks_by_session[session_key] = turn
             turn.task.add_done_callback(
                 lambda done: self._discard_task(session_key, done)
@@ -165,7 +179,7 @@ class DesktopChatService:
         if not normalized_session_key or not normalized_turn_id:
             raise ValueError("session_key 和 turn_id 不能为空")
         active_turn = self._tasks_by_session.get(normalized_session_key)
-        if active_turn is None or active_turn.task.done():
+        if active_turn is None or not self.owns_chat_turn(normalized_session_key):
             return ChatTurnCancelResult(
                 status="idle",
                 session_key=normalized_session_key,
@@ -198,7 +212,7 @@ class DesktopChatService:
         if not normalized_session_key or not normalized_turn_id:
             raise ValueError("session_key 和 turn_id 不能为空")
         active_turn = self._tasks_by_session.get(normalized_session_key)
-        if active_turn is None or active_turn.task.done():
+        if active_turn is None or not self.owns_chat_turn(normalized_session_key):
             return ChatTurnCancelResult(
                 status="idle",
                 session_key=normalized_session_key,

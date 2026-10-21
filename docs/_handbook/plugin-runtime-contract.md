@@ -146,7 +146,11 @@ consolidates these additions and the subsequent #847 breaking migration.
   this behavior. `InterruptController.request_interrupt` accepts the receiving
   `account_id`, `chat_type` and opaque `message_thread_id` alongside channel/chat.
   Channel `/stop` uses that exact origin; partial legacy addresses never select
-  a scoped account/topic by a unique-match fallback. Desktop session-only and
+  a scoped account/topic by a unique-match fallback. Partially supplied external
+  origins return idle; missing transport or chat type never implies desktop or
+  private-chat ownership. Across runtime generations, supplements chain to the
+  latest actually owned turn; borrowed predecessor references cannot receive
+  turn-ID cancellation or impersonate a generation's accepted work. Desktop session-only and
   unscoped legacy task calls remain compatible. **breaking** for external
   integrations targeting account-scoped turns: session-only or partially
   addressed `request_interrupt` calls no longer infer that target; callers must

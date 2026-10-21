@@ -36,17 +36,22 @@ class _InterruptMixin:
         message_thread_id: str = "",
     ) -> InterruptResult:
         """Channel 层调用的中断入口，不走 MessageBus。"""
-        key = turn_tracking_key(
-            session_key,
-            channel,
-            chat_id,
-            account_id=account_id,
-            chat_type=chat_type,
-            message_thread_id=message_thread_id,
-        )
+        try:
+            key = turn_tracking_key(
+                session_key,
+                channel,
+                chat_id,
+                account_id=account_id,
+                chat_type=chat_type,
+                message_thread_id=message_thread_id,
+            )
+        except ValueError:
+            key = None
         # Session-only legacy callers may stop sole legacy work. Never infer
         # an account/topic from a shared role session or a partial chat address.
-        if key not in self._active_tasks and not channel:
+        if key not in self._active_tasks and not any(
+            (channel, chat_id, account_id, chat_type, message_thread_id)
+        ):
             matches = [
                 k
                 for k, state in self._active_turn_states.items()
@@ -58,7 +63,7 @@ class _InterruptMixin:
             ]
             if len(matches) == 1:
                 key = matches[0]
-        task = self._active_tasks.get(key)
+        task = self._active_tasks.get(key) if key is not None else None
         if task is None or task.done():
             return InterruptResult(
                 status="idle",
@@ -66,6 +71,7 @@ class _InterruptMixin:
                 message="当前没有正在执行的任务。",
             )
 
+        assert key is not None
         # 保存中断态（纯内存，不落库）
         active_state = self._active_turn_states.get(key)
         if active_state is None:

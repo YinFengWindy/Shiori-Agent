@@ -35,21 +35,40 @@ def turn_tracking_key(
     chat_type: str = "",
     message_thread_id: str = "",
 ) -> str:
-    """Identify external chat work while retaining the desktop session key API."""
-    if channel and channel != "desktop" and chat_id:
-        base = f"{session_key}\x1f{channel}\x1f{chat_id}"
-        if account_id or chat_type or message_thread_id:
-            return "\x1f".join(
-                (
-                    base,
-                    account_id,
-                    "group" if is_group_chat_type(chat_type) else "private",
-                    chat_id,
-                    message_thread_id,
-                )
+    """Identify a complete transport origin, rejecting partial external addresses.
+
+    Only an unspecified origin or the exact desktop address uses the bare
+    session key. Legacy external addresses may omit all extended fields.
+    """
+    if not any((channel, chat_id, account_id, chat_type, message_thread_id)):
+        return session_key
+    if (
+        channel == "desktop"
+        and chat_id == session_key
+        and not account_id
+        and not message_thread_id
+        and chat_type in ("", "private")
+    ):
+        return session_key
+    if (
+        not channel
+        or not chat_id
+        or channel == "desktop"
+        or ((account_id or message_thread_id) and not chat_type)
+    ):
+        raise ValueError("External turn origin requires channel, chat and chat type")
+    base = f"{session_key}\x1f{channel}\x1f{chat_id}"
+    if account_id or chat_type or message_thread_id:
+        return "\x1f".join(
+            (
+                base,
+                account_id,
+                "group" if is_group_chat_type(chat_type) else chat_type,
+                chat_id,
+                message_thread_id,
             )
-        return base
-    return session_key
+        )
+    return base
 
 
 def current_tracking_key(session_key: str) -> str:
