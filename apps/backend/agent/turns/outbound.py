@@ -3,7 +3,8 @@ from __future__ import annotations
 import inspect
 import re
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from contextlib import AbstractContextManager
+from typing import Any, Protocol, runtime_checkable
 
 from shiori_sdk.messages import OutboundMessage
 from agent.tools.message_push import PENDING_TURN_DELIVERY
@@ -80,9 +81,22 @@ class OutboundPort(Protocol):
         ...
 
 
+@runtime_checkable
+class PreparesOutbound(Protocol):
+    """Optional queued-transport lifetime covering observers before dispatch."""
+
+    def prepare(self, outbound: OutboundMessage) -> AbstractContextManager[None]:
+        """Keep the originating turn pending until enqueue or scope failure."""
+        ...
+
+
 class BusOutboundPort:
     def __init__(self, bus: Any) -> None:
         self._bus = bus
+
+    def prepare(self, outbound: OutboundMessage) -> AbstractContextManager[None]:
+        """Make the planned reply visible to connection handover before enqueue."""
+        return self._bus.prepare_outbound(outbound)
 
     async def dispatch(self, outbound: OutboundDispatch) -> DeliveryReceipt | None:
         """Queues the payload on the bus; the channel records delivery itself.

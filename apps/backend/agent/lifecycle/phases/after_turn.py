@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+from contextlib import nullcontext
 from dataclasses import dataclass, replace
 import logging
 from typing import TYPE_CHECKING, Any, TypeAlias, cast
@@ -15,13 +16,14 @@ from agent.core.types import to_tool_call_groups
 from conversation.context_scope import history_filter
 from agent.lifecycle.phase import (
     PhaseFrame,
+    Phase,
     PhaseModule,
     collect_prefixed_slots,
     topo_sort_modules,
 )
 from agent.lifecycle.types import TurnSnapshot, TurnState
 from shiori_sdk.lifecycle import AfterTurnCtx
-from agent.turns.outbound import OutboundDispatch, OutboundPort
+from agent.turns.outbound import OutboundDispatch, OutboundPort, PreparesOutbound
 from bus.event_bus import EventBus
 from shiori_sdk.messages import OutboundMessage
 from bus.events_lifecycle import NOT_USER_AUTHORED_KEY, SKIP_POST_MEMORY_KEY
@@ -53,6 +55,32 @@ _TURN_COMMITTED_SLOT = "turn:committed"
 _CTX_SLOT = "turn:ctx"
 _EXTRA_PREFIX = "turn:extra:"
 _TELEMETRY_PREFIX = "turn:telemetry:"
+
+
+def _will_dispatch(snapshot: TurnSnapshot) -> bool:
+    """Share the actual normal-reply decision with pre-dispatch observers."""
+    return snapshot.state.dispatch_outbound and not snapshot.outbound.metadata.get(
+        "account_delivery_sent"
+    )
+
+
+class AfterTurnPhase(Phase[TurnSnapshot, OutboundMessage, AfterTurnFrame]):
+    """Own the pre-enqueue reply lifetime across all after-turn observers."""
+
+    def __init__(self, modules: AfterTurnModules, outbound: OutboundPort) -> None:
+        super().__init__(modules, frame_factory=AfterTurnFrame)
+        self._outbound = outbound
+
+    async def run(self, input: TurnSnapshot) -> OutboundMessage:
+        # Only queued ports need preparation; other ports keep the dispatch-only
+        # contract. The context releases on normal return, failure and cancellation.
+        preparation = (
+            self._outbound.prepare(input.outbound)
+            if _will_dispatch(input) and isinstance(self._outbound, PreparesOutbound)
+            else nullcontext()
+        )
+        with preparation:
+            return await super().run(input)
 
 
 class _BuildTurnWorkModule:
@@ -211,6 +239,7 @@ class _BuildTurnCommittedModule:
             external_message_id=str(
                 (msg.metadata or {}).get("external_message_id") or ""
             ).strip(),
+            will_dispatch=_will_dispatch(snap),
             total_tokens=(
                 value
                 if isinstance((value := turn_metrics.get("total_tokens")), int)
@@ -284,7 +313,7 @@ class _BuildAfterTurnCtxModule:
             reply=snap.outbound.content,
             tools_used=snap.ctx.tools_used,
             thinking=snap.ctx.thinking,
-            will_dispatch=state.dispatch_outbound,
+            will_dispatch=_will_dispatch(snap),
         )
         return frame
 
@@ -324,9 +353,7 @@ class _DispatchOutboundModule:
     async def run(self, frame: AfterTurnFrame) -> AfterTurnFrame:
         snap = frame.input
         outbound = snap.outbound
-        if snap.state.dispatch_outbound and not outbound.metadata.get(
-            "account_delivery_sent"
-        ):
+        if _will_dispatch(snap):
             _ = await self._outbound.dispatch(
                 OutboundDispatch(
                     channel=outbound.channel,

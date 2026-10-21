@@ -19,7 +19,11 @@ from agent.lifecycle.phases.after_reasoning import (
     AfterReasoningFrame,
     default_after_reasoning_modules,
 )
-from agent.lifecycle.phases.after_turn import AfterTurnFrame, default_after_turn_modules
+from agent.lifecycle.phases.after_turn import (
+    AfterTurnFrame,
+    AfterTurnPhase,
+    default_after_turn_modules,
+)
 from agent.lifecycle.phases.before_reasoning import (
     BeforeReasoningFrame,
     default_before_reasoning_modules,
@@ -225,7 +229,7 @@ class PassiveTurnPipeline:
         self,
         plugin_modules: list[Any],
     ) -> Phase[TurnSnapshot, OutboundMessage, AfterTurnFrame]:
-        return Phase(
+        return AfterTurnPhase(
             default_after_turn_modules(
                 self._bus,
                 self._outbound_port,
@@ -236,7 +240,7 @@ class PassiveTurnPipeline:
                     self._session, "relationship_runtime", None
                 ),
             ),
-            frame_factory=AfterTurnFrame,
+            outbound=self._outbound_port,
         )
 
     # 核心方法：处理一条普通被动消息，并提交最终出站结果。

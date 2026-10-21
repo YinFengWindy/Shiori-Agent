@@ -218,6 +218,29 @@ async def test_save_keeps_secret_reference_and_stable_identity_but_rotates_new_b
         await ctx.aclose()
 
 
+async def test_enabled_saved_account_reports_fixed_peer_and_error_when_secret_cannot_resolve(
+    tmp_path, config
+):
+    ctx = FakeChannelPluginContext("grok_bot", Path(__file__).resolve().parents[1])
+    ctx.workspace = tmp_path
+    accounts = GrokAccounts(ctx, ctx.channels.group("grok_bot"))
+    accounts.store.save(
+        config.model_copy(update={"webhook_key": "${MISSING_GROK_KEY}"})
+    )
+    try:
+        await accounts.load()
+        snapshot = ctx.accounts.records[
+            account_id_for("grok_bot", config.connection_id)
+        ]
+        assert snapshot.capabilities == frozenset({"fixed_peer", "full_tools"})
+        assert snapshot.connection == "error"
+        assert snapshot.error == "Webhook 密钥未配置或环境变量未解析"
+        assert not ctx.accounts.rejections
+        assert not accounts.connections
+    finally:
+        await ctx.aclose()
+
+
 async def test_deleted_role_and_corrupt_record_do_not_restore_other_accounts(
     tmp_path, config
 ):

@@ -37,7 +37,7 @@ class MessageBus(Protocol):
     def has_pending_outbound(
         self, channel: str, chat_id: str, external_message_id: str
     ) -> bool:
-        """Whether a committed reply still owns this turn's live preview."""
+        """Whether a preparing, queued or dispatching reply still owns this turn."""
         ...
 
 

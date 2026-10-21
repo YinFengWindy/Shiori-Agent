@@ -132,6 +132,20 @@ consolidates these additions and the subsequent #847 breaking migration.
   and reject unsupported rule mutations; the capability alone does not bypass
   the host's admission or authorization checks. Grok is the initial consumer.
 
+- **Committed reply dispatch intent (PR #892, issue #891).**
+  `TurnCommitted.will_dispatch` is an additive boolean defaulting to false. It
+  reports the host's normal-reply dispatch decision before that reply is queued,
+  accounting for disabled dispatch and prior explicit account delivery. The same
+  decision supplies `AfterTurnCtx.will_dispatch` and the actual dispatch gate.
+  Channels can retain inbound correlation for a planned reply without guessing
+  from nonempty text or tool names. `MessageBus.has_pending_outbound` now includes
+  the host-owned preparation lifetime before enqueue, as well as queued and
+  dispatching replies, so connection handover during observer fanout retains
+  correlation. The after-turn owner releases preparation on return, failure or
+  cancellation; successful enqueue keeps the queued ownership continuously.
+  Nonqueued outbound ports retain their dispatch-only contract. This intent is not a
+  delivery receipt and does not claim that a remote peer accepted a message.
+
 - **Account media supplements (PR #889, issue #886).** Host/plugin calls to `account_send.execute`
   may supply protected `push_proactive=False` and `push_chat_id` with
   `target_kind="user"`. Here `channel` is the original transport channel; the host
