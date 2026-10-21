@@ -23,10 +23,10 @@ export function RoleAccountsPanel({ roleId }: { roleId: string }) {
       pluginId={selected.pluginId}
       roleId={roleId}
       onClose={() => setSelected(null)}
-      onChanged={(accountId) => {
+      onChanged={async (accountId) => {
         // A created account turns the add dialog into that account's detail.
         if (accountId) setSelected({ pluginId: selected.pluginId, accountId });
-        void reload();
+        await reload();
       }}
     /> : null}
   </div>;

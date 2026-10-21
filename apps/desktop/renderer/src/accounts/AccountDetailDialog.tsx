@@ -22,7 +22,7 @@ export function AccountDetailDialog({ account, pluginId, roleId, onClose, onChan
   pluginId: string;
   roleId: string;
   onClose: () => void;
-  onChanged: (accountId?: string) => void;
+  onChanged: (accountId?: string) => void | Promise<void>;
 }) {
   const isPluginEnabled = usePluginEnabledState();
   const pluginControls = pluginUiRegistry.getAccountDetail(pluginId, isPluginEnabled);
