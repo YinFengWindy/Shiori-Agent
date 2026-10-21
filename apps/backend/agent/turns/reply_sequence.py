@@ -10,6 +10,8 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any
 
+from core.common.cancellation import finish_started
+
 _BUFFERED_REPLY: ContextVar[bool] = ContextVar("buffered_reply", default=False)
 _FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
 
@@ -149,18 +151,4 @@ async def deliver_reply_sequence(
     for index, content in enumerate(sequence.messages):
         if index:
             await wait_between_messages(message_pause(sequence.messages[index - 1]))
-        task = asyncio.ensure_future(publish(index, content))
-        cancelled = False
-        while True:
-            try:
-                await asyncio.shield(task)
-                break
-            except asyncio.CancelledError:
-                if task.cancelled():
-                    raise
-                cancelled = True
-                if task.done():
-                    task.result()
-                    break
-        if cancelled:
-            raise asyncio.CancelledError
+        await finish_started(publish(index, content))

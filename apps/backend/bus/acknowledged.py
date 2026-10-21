@@ -50,24 +50,3 @@ async def deliver_acknowledged(
             "uncertain", receipt.external_message_id if receipt is not None else ""
         )
     return receipt
-
-
-async def finish_started[T](
-    operation: Awaitable[T], *, on_cancel: Callable[[], None] | None = None
-) -> T:
-    """Finish one started platform operation and bookkeeping before cancellation."""
-    task = asyncio.ensure_future(operation)
-    cancelled = False
-    while True:
-        try:
-            result = await asyncio.shield(task)
-            break
-        except asyncio.CancelledError:
-            if on_cancel is not None:
-                on_cancel()
-            if task.cancelled():
-                raise
-            cancelled = True
-    if cancelled:
-        raise asyncio.CancelledError
-    return result

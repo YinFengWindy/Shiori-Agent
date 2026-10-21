@@ -10,7 +10,7 @@ from typing import Any
 from agent.turns.channel_sequence import channel_sequence_context
 from agent.turns import reply_sequence as pacing
 from agent.turns.outbound import sanitize_user_visible_content
-from bus.acknowledged import finish_started
+from core.common.cancellation import finish_started
 from core.roles.turn_gate import wait_outside_role_gate
 from session.manager import Session, SessionManager
 from session.manager.models import build_session_message
