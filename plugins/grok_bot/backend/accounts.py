@@ -2,6 +2,7 @@
 
 import asyncio
 import os
+from dataclasses import replace
 from secrets import token_urlsafe
 from uuid import uuid4
 
@@ -14,6 +15,7 @@ from shiori_sdk.accounts import (
     stored_response_rules,
 )
 from shiori_sdk.channels.context import ChannelPluginContext
+from shiori_sdk.accounts.conversation import AccountConversation
 from shiori_sdk.channels.group import AccountChannelGroup
 from shiori_sdk.storage import plugin_data_dir
 
@@ -61,14 +63,20 @@ class GrokAccounts:
     def _report(
         self, connection_id: str, state: ConnectionState, error: str = ""
     ) -> None:
+        config = self.configs.get(connection_id)
         self.ctx.accounts.report(
             account_id_for(CHANNEL, connection_id),
             connection=state,
             error=error,
+            tool_conversation=(
+                AccountConversation(config.channel_name, config.chat_id)
+                if config is not None
+                else None
+            ),
             capabilities=(
-                frozenset({"private", "known_targets", "send"})
+                frozenset({"full_tools", "private", "known_targets", "send"})
                 if state == "online"
-                else frozenset()
+                else frozenset({"full_tools"})
             ),
         )
 
@@ -148,6 +156,15 @@ class GrokAccounts:
             )
             url = payload.get("webhook_url", previous.webhook_url if previous else "")
             same_peer = previous is not None and url == previous.webhook_url
+            rules = previous.response_rules if previous else None
+            if previous is not None and not same_peer:
+                # A different Bot must receive its own explicit tool grant.
+                rules = response_rules_to_dict(
+                    replace(
+                        stored_response_rules(rules) or AccountResponseRules(),
+                        allow_full_tools=False,
+                    )
+                )
             config = read_connection(
                 {
                     **(previous.model_dump() if previous else {}),
@@ -158,6 +175,7 @@ class GrokAccounts:
                         else uuid4().hex
                     ),
                     "role_id": role_id,
+                    "response_rules": rules,
                     "webhook_url": url,
                     "webhook_key": payload.get("webhook_key")
                     or (previous.webhook_key if previous else ""),

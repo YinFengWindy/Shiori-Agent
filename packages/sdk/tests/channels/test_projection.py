@@ -7,7 +7,11 @@ from shiori_sdk.messages import InboundMessage
 
 def test_plugin_metadata_drops_flags_only_the_host_may_assert() -> None:
     message = InboundMessage(
-        "chat", "u", "c", "hi", metadata={SENDER_IS_USER_KEY: True, "k": 1}
+        "chat",
+        "u",
+        "c",
+        "hi",
+        metadata={SENDER_IS_USER_KEY: True, "account_full_tools": True, "k": 1},
     )
 
     assert plugin_metadata(message) == {"k": 1}

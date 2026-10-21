@@ -18,6 +18,7 @@ test("account client maps host snapshots and sends only explicit rule mutations"
   });
   const [account] = await client.list();
   assert.equal(account.responseRules.blockedSenderIds[0], "sender-1");
+  assert.equal(account.responseRules.allowFullTools, false);
   assert.deepEqual(account.capabilities, ["groups"]);
   assert.equal(account.configRef, "private-a");
   assert.deepEqual(calls.map(({ method }) => method), ["accounts.list"]);
@@ -26,6 +27,8 @@ test("account client maps host snapshots and sends only explicit rule mutations"
     account_id: "a", response_rules: { private_enabled: true, group_enabled: true,
       blocked_sender_ids: ["sender-1"] },
   } });
+  await client.setRules("a", { ...account.responseRules, allowFullTools: true });
+  assert.deepEqual(calls[2].payload, { account_id: "a", response_rules: { private_enabled: true, group_enabled: true, blocked_sender_ids: ["sender-1"], allow_full_tools: true } });
 });
 
 test("account deletion names the owning role and surfaces the host's refusal", async () => {

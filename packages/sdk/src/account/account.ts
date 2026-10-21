@@ -13,6 +13,8 @@ export type AccountResponseRules = {
   privateEnabled: boolean;
   groupEnabled: boolean;
   blockedSenderIds: string[];
+  /** Explicit account tool grant, independent of sender identity; absent means false. */
+  allowFullTools?: boolean;
 };
 
 /** An account a loaded plugin registered, joined with its current plugin report. */

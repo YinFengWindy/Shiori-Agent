@@ -79,6 +79,11 @@ class _SyncToolContextModule:
             # 身份收窄行为（#540）。
             sender_id=source.sender_id or "",
             sender_is_user="true" if state.is_user_authored() else "false",
+            account_full_tools=(
+                "true"
+                if self._tools.allows_full_tools(state.msg, role_id=role_id)
+                else "false"
+            ),
             context_scope=state.context_scope or "",
             current_timestamp=before_turn.timestamp.isoformat(),
             current_user_source_ref=predict_current_user_source_ref(

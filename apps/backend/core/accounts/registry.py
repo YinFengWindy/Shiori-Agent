@@ -23,6 +23,7 @@ from shiori_sdk.accounts.models import (
     account_id_for,
 )
 from .runtime_state import DIRECT_GENERATION, AccountRuntimeState
+from shiori_sdk.accounts.conversation import AccountConversation
 
 # Decoded bytes; a platform avatar thumbnail is a few KiB to a few dozen KiB.
 _MAX_AVATAR_BYTES = 256 * 1024
@@ -340,6 +341,7 @@ class AccountRegistry:
         connection: ConnectionState,
         capabilities: frozenset[str] = frozenset(),
         error: str = "",
+        tool_conversation: AccountConversation | None = None,
     ) -> AccountSnapshot:
         """Updates this plugin generation's live state for a registered account.
 
@@ -353,8 +355,20 @@ class AccountRegistry:
                     state.records[account_id], generation=generation
                 )
             before = self._published_view(account_id)
+            if tool_conversation is not None:
+                if not isinstance(tool_conversation, AccountConversation):
+                    raise ValueError("工具授权需要规范私聊地址")
+                tool_conversation = AccountConversation.for_account(
+                    tool_conversation.to_payload(), state.records[account_id]
+                )
             row = self._runtime.report(
-                account_id, token, generation, connection, capabilities, error
+                account_id,
+                token,
+                generation,
+                connection,
+                capabilities,
+                error,
+                tool_conversation,
             )
             snapshot = self._runtime.snapshot(row, generation=generation)
         self._notify_if_changed(account_id, before)

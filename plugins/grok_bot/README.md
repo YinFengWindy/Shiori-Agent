@@ -29,7 +29,7 @@ Windows 默认客户端是随插件发布的 `client.ps1`，使用系统 Windows
 
 ## 使用与状态
 
-角色通过现有 `account_list`、`account_targets(channel="grok_bot", kind="known")`、`account_send` 找 Bot；正常回复直接回到同一 Bot，主动行为与 drift 使用已有工具。入站沿用默认外部工具权限。
+角色通过现有 `account_list`、`account_targets(channel="grok_bot", kind="known")`、`account_send` 找 Bot；正常回复直接回到同一 Bot，主动行为与 drift 使用已有工具。角色账号详情的“允许完整工具权限”默认关闭；开启后该连接可使用角色已启用的工具，关闭后新回合恢复限制。授权不改变 Bot 的外部身份，也不自动引入用户私聊上下文；后台结果回传会再次检查原连接与当前授权。
 
 双方消息进入角色的同一网络会话，包括由角色首次主动发起的消息。Webhook 返回的任务运行 ID 不作为聊天消息回执。发送超时会显示结果不确定，不会自动重发。
 

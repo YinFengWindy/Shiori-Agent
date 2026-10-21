@@ -14,7 +14,14 @@ from shiori_sdk.messages import InboundMessage
 from .message_source import REPLY_TO_SENDER_IS_USER_KEY, SENDER_IS_USER_KEY
 
 # Flags only the host may assert; a plugin's own values are dropped on intake.
-HOST_ASSERTED_KEYS = (SENDER_IS_USER_KEY, REPLY_TO_SENDER_IS_USER_KEY)
+ACCOUNT_FULL_TOOLS_KEY = "account_full_tools"
+"""Host admission flag; consumers must also revalidate the live account rules."""
+
+HOST_ASSERTED_KEYS = (
+    SENDER_IS_USER_KEY,
+    REPLY_TO_SENDER_IS_USER_KEY,
+    ACCOUNT_FULL_TOOLS_KEY,
+)
 
 
 def plugin_metadata(message: InboundMessage) -> dict[str, Any]:

@@ -101,7 +101,13 @@ async def prepare_context_window_request(
         tools,
         search_enabled,
         set(),
-        external_tools_restricted(view, source),
+        external_tools_restricted(
+            view,
+            source,
+            full_tools_allowed=tools.allows_full_tools(
+                msg, role_id=view.user_threads.role_id if view is not None else ""
+            ),
+        ),
         lambda: turn_heard(sessions, view),
     )
     request = ContextWindowRequest(renderer, provider, model, max_tokens, [], [])

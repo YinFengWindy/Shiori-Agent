@@ -103,3 +103,28 @@ test("the group toggle shows only for group-capable accounts, the blacklist alwa
     assert.match(view.container.textContent ?? "", /黑名单成员 ID/);
   } finally { await view.cleanup(); }
 });
+
+test("full tool permission defaults off, persists independently and rolls back failed revocation", async () => {
+  const calls: Request[] = [];
+  let failing = false;
+  const view = await mountTestComponent(<AccountResponseRulesEditor account={{ ...account, capabilities: ["full_tools"] }} onChanged={() => undefined} />, desktop(calls, () => failing));
+  try {
+    const toggle = view.container.querySelector<HTMLButtonElement>('[role="switch"][aria-label="允许完整工具权限"]');
+    assert.ok(toggle);
+    assert.equal(toggle.getAttribute("aria-checked"), "false");
+    await act(async () => toggle.click());
+    assert.equal(toggle.getAttribute("aria-checked"), "true");
+    assert.deepEqual(calls[0].payload.response_rules, { private_enabled: true, group_enabled: true, blocked_sender_ids: [], allow_full_tools: true });
+    await act(async () => checkbox(view.container, "私聊启用")?.click());
+    assert.equal((calls[1].payload.response_rules as Record<string, unknown>).allow_full_tools, true);
+    failing = true;
+    await act(async () => toggle.click());
+    assert.equal(toggle.getAttribute("aria-checked"), "true");
+    failing = false;
+    await act(async () => toggle.click());
+    assert.equal(toggle.getAttribute("aria-checked"), "false");
+    assert.equal((calls.at(-1)?.payload.response_rules as Record<string, unknown>).allow_full_tools, undefined);
+    await view.render(<AccountResponseRulesEditor key="other" account={account} onChanged={() => undefined} />);
+    assert.equal(view.container.querySelector('[aria-label="允许完整工具权限"]'), null);
+  } finally { await view.cleanup(); }
+});

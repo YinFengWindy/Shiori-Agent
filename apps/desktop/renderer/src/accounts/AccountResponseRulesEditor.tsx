@@ -1,7 +1,7 @@
 import { errorMessage } from "@yinfengwindy/shiori-sdk";
 import { useState } from "react";
 import { InlineError } from "../shared/feedback/InlineError";
-import { textareaClass, type AccountResponseRules, type AccountSnapshot } from "@yinfengwindy/shiori-sdk";
+import { SettingsToggleField, textareaClass, type AccountResponseRules, type AccountSnapshot } from "@yinfengwindy/shiori-sdk";
 import { createAccountClient } from "./accountClient";
 
 const client = createAccountClient();
@@ -46,7 +46,7 @@ export function AccountResponseRulesEditor({ account, onChanged }: { account: Ac
     }
   }
 
-  function toggle(field: "privateEnabled" | "groupEnabled", checked: boolean) {
+  function toggle(field: "privateEnabled" | "groupEnabled" | "allowFullTools", checked: boolean) {
     void save({ ...rules, [field]: checked });
   }
 
@@ -64,6 +64,9 @@ export function AccountResponseRulesEditor({ account, onChanged }: { account: Ac
     {showGroups ? <label className="flex items-center gap-3 text-body-sm text-ink-secondary">
       <input type="checkbox" checked={rules.groupEnabled} disabled={busy} onChange={(event) => toggle("groupEnabled", event.target.checked)} />群聊启用
     </label> : null}
+    {account.capabilities.includes("full_tools") ? <SettingsToggleField label="允许完整工具权限"
+      checked={rules.allowFullTools === true} disabled={busy}
+      onChange={(checked) => toggle("allowFullTools", checked)} /> : null}
     <label className="grid gap-2 text-body-sm text-ink-secondary">黑名单成员 ID
       <textarea className={textareaClass} rows={3} value={blockedText} disabled={busy}
         onChange={(event) => setBlockedText(event.target.value)} onBlur={commitBlocked} />
