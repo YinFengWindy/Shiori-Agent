@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 import threading
 from pathlib import Path
-from shiori_sdk.extensions import PrivateStorage
+from shiori_sdk.storage import plugin_data_dir
 from typing import Any
 
 from .assets import adopt_library_images
@@ -39,11 +39,8 @@ CREATE TABLE IF NOT EXISTS catalog_request_payloads (
 class StoryCatalog:
     """Own library discovery metadata without owning Story facts."""
 
-    def __init__(self, workspace: Path, *, storage: PrivateStorage) -> None:
-
-        self.root = storage.migrate_data(
-            workspace, "story", "stories", workspace / "stories"
-        )
+    def __init__(self, workspace: Path) -> None:
+        self.root = plugin_data_dir(workspace, "story") / "stories"
         self.root.mkdir(parents=True, exist_ok=True)
         adopt_library_images(self.root, workspace)
         self.db_path = self.root / "catalog.db"

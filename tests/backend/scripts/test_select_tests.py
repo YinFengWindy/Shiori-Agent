@@ -9,7 +9,6 @@ import pytest
 from scripts.select_tests import (
     REPO_ROOT,
     changed_paths,
-    discover_plugins,
     format_plan,
     materialize,
     plan,
@@ -27,7 +26,6 @@ def test_docs_and_desktop_stay_on_the_default_suite() -> None:
             "README.md",
             "plugins/tsconfig.json",
         ],
-        plugins={},
     )
     assert selection.mode == "default"
     assert selection.host_paths == ()
@@ -35,7 +33,7 @@ def test_docs_and_desktop_stay_on_the_default_suite() -> None:
 
 
 def test_memory_change_pulls_agent() -> None:
-    selection = select(["apps/backend/core/memory/runtime.py"], plugins={})
+    selection = select(["apps/backend/core/memory/runtime.py"])
     assert selection.mode == "selected"
     assert "tests/backend/core/memory" in selection.host_paths
     assert "tests/backend/agent" in selection.host_paths
@@ -43,7 +41,7 @@ def test_memory_change_pulls_agent() -> None:
 
 
 def test_agent_change_pulls_bridge_and_memory() -> None:
-    selection = select(["apps/backend/agent/loop.py"], plugins={})
+    selection = select(["apps/backend/agent/loop.py"])
     assert selection.host_paths == (
         "tests/backend/agent",
         "tests/backend/core/memory",
@@ -52,43 +50,34 @@ def test_agent_change_pulls_bridge_and_memory() -> None:
 
 
 def test_bridge_change_pulls_agent() -> None:
-    selection = select(["apps/backend/desktop_bridge/dispatcher.py"], plugins={})
+    selection = select(["apps/backend/desktop_bridge/dispatcher.py"])
     assert "tests/backend/desktop_bridge" in selection.host_paths
     assert "tests/backend/agent" in selection.host_paths
 
 
 def test_roles_change_pulls_agent_and_memory() -> None:
-    selection = select(["apps/backend/core/roles/store.py"], plugins={})
+    selection = select(["apps/backend/core/roles/store.py"])
     assert "tests/backend/core/roles" in selection.host_paths
     assert "tests/backend/agent" in selection.host_paths
     assert "tests/backend/core/memory" in selection.host_paths
 
 
-def test_sdk_change_pulls_plugin_tests() -> None:
-    selection = select(
-        ["packages/sdk/python/shiori_sdk/memory/engine.py"],
-        plugins={"qq": True, "story": True, "empty": False},
-    )
-    assert "packages/sdk/tests" in selection.external_paths
-    assert "plugins/qq/tests" in selection.external_paths
-    assert "plugins/story/tests" in selection.external_paths
-    assert "plugins/empty/tests" not in selection.external_paths
+def test_sdk_change_pulls_sdk_suite_and_plugin_host() -> None:
+    selection = select(["packages/sdk/python/shiori_sdk/memory/engine.py"])
+    assert selection.external_paths == ("packages/sdk/tests",)
     assert "tests/backend/agent/plugin_host" in selection.host_paths
 
 
-def test_one_plugin_does_not_pull_every_plugin_or_the_sdk_suite() -> None:
-    selection = select(
-        ["plugins/qq/backend/channel.py"],
-        plugins={"qq": True, "story": True},
-    )
-    assert selection.external_paths == ("plugins/qq/tests",)
-    assert "tests/backend/agent/plugin_host" in selection.host_paths
-    assert "packages/sdk/tests" not in selection.external_paths
+def test_plugin_change_leaves_plugin_suites_to_isolation() -> None:
+    selection = select(["plugins/qq/backend/channel.py"])
+    assert selection.mode == "selected"
+    assert selection.external_paths == ()
+    assert selection.host_paths == ("tests/backend/agent/plugin_host",)
 
 
 def test_changed_extended_test_is_selected_without_widening_the_tree() -> None:
     path = "tests/backend/agent/core/passive_turn/test_reasoning_loop.py"
-    selection = select([path], plugins={})
+    selection = select([path])
     assert selection.mode == "selected"
     assert selection.host_paths == (path,)
 
@@ -96,7 +85,6 @@ def test_changed_extended_test_is_selected_without_widening_the_tree() -> None:
 def test_docs_do_not_shrink_a_memory_change() -> None:
     selection = select(
         ["README.md", "apps/backend/core/memory/runtime.py"],
-        plugins={},
     )
     assert "tests/backend/agent" in selection.host_paths
 
@@ -118,18 +106,18 @@ def test_docs_do_not_shrink_a_memory_change() -> None:
     ],
 )
 def test_harness_and_unknown_sources_escalate(path: str) -> None:
-    selection = select([path, "apps/backend/core/memory/runtime.py"], plugins={})
+    selection = select([path, "apps/backend/core/memory/runtime.py"])
     assert selection.mode == "extended"
     assert selection.host_paths == ()
 
 
 def test_format_plan_omits_paths_when_extended() -> None:
-    selection = select(["uv.lock"], plugins={})
+    selection = select(["uv.lock"])
     assert format_plan(selection) == ("mode=extended",)
 
 
 def test_format_plan_lists_neighbor_paths() -> None:
-    selection = select(["apps/backend/desktop_bridge/router.py"], plugins={})
+    selection = select(["apps/backend/desktop_bridge/router.py"])
     text = "\n".join(format_plan(selection))
     assert text.startswith("mode=selected\n")
     assert "also=tests/backend/agent" in text
@@ -137,25 +125,20 @@ def test_format_plan_lists_neighbor_paths() -> None:
 
 
 def test_missing_neighbor_directory_escalates(tmp_path: Path) -> None:
-    selection = select(["apps/backend/core/memory/store.py"], plugins={})
+    selection = select(["apps/backend/core/memory/store.py"])
     assert materialize(selection, tmp_path).mode == "extended"
 
 
 def test_materialize_keeps_existing_directories(tmp_path: Path) -> None:
     for relative in ("tests/backend/core/memory", "tests/backend/agent"):
         (tmp_path / relative).mkdir(parents=True)
-    selection = select(["apps/backend/core/memory/store.py"], plugins={})
+    selection = select(["apps/backend/core/memory/store.py"])
     resolved = materialize(selection, tmp_path)
     assert resolved.mode == "selected"
     assert resolved.host_paths == (
         "tests/backend/agent",
         "tests/backend/core/memory",
     )
-
-
-def test_discover_plugins_sees_qq() -> None:
-    found = discover_plugins(REPO_ROOT)
-    assert found["qq"] is True
 
 
 def test_changed_paths_follow_merge_base(tmp_path: Path) -> None:

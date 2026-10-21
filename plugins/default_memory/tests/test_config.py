@@ -103,6 +103,6 @@ max_chars = 3000
 def test_default_memory_db_path_resolves_under_workspace(tmp_path: Path) -> None:
     cfg = load_default_memory_config(plugin_dir=tmp_path)
 
-    assert resolve_memory_db_path(
-        workspace=tmp_path, default_config=cfg, storage=FakeMemoryStorage()
-    ) == (tmp_path / "plugin-data" / "default_memory" / "memory2.db")
+    assert resolve_memory_db_path(workspace=tmp_path, default_config=cfg) == (
+        tmp_path / "plugin-data" / "default_memory" / "memory2.db"
+    )

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 from pathlib import Path
-from shiori_sdk.extensions import PrivateStorage
 
 from .import_source import resolve_package_import_source
 from .models import RolePetPackage, RolePetState
@@ -17,12 +16,10 @@ from shiori_sdk.roles import Roles
 class DesktopPetRpcHandlers:
     """Owns request/response shaping for every ``plugin.desktop_pet.*`` method."""
 
-    def __init__(
-        self, *, role_store: Roles, workspace: Path, storage: PrivateStorage
-    ) -> None:
+    def __init__(self, *, role_store: Roles, workspace: Path) -> None:
         self._workspace = workspace
         self._role_store = role_store
-        self._packages = RolePetPackageService(role_store, workspace, storage)
+        self._packages = RolePetPackageService(role_store, workspace)
         self._state = RolePetStateStore(role_store)
 
     async def pets_list(self, payload: dict[str, Any]) -> dict[str, Any]:

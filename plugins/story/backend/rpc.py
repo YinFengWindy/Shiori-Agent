@@ -11,7 +11,7 @@ from uuid import uuid4
 
 from shiori_sdk.roles import Roles
 from shiori_sdk.models import RoleModels
-from shiori_sdk.extensions import BackgroundTasks, PrivateStorage
+from shiori_sdk.extensions import BackgroundTasks
 from plugins.novelai.backend.api import ImageGenerationAPI
 
 
@@ -52,14 +52,13 @@ class StorySimulationHandler:
         workspace: Path,
         role_store: Roles,
         background: BackgroundTasks,
-        storage: PrivateStorage,
         models: RoleModels,
         director: StoryDirector | None = None,
         image_tool: ImageGenerationAPI | None = None,
     ) -> None:
         self._roles = role_store
         self._workspace = workspace
-        self._catalog = StoryCatalog(workspace, storage=storage)
+        self._catalog = StoryCatalog(workspace)
         self._background = background
         self._repositories: dict[str, StoryRepository] = {}
         self._director = director

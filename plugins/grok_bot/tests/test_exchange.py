@@ -40,38 +40,6 @@ def test_interleaved_chains_keep_independent_budgets_through_restart():
     assert journal.state.exchanges["b0"].count == 4
 
 
-def test_legacy_active_account_budget_becomes_two_chains_without_losing_receipts():
-    kv = FakeKV()
-    original = ExchangeJournal(kv, "c", "b")
-    for root, length in (("a", 10), ("b", 2)):
-        for index in range(length):
-            deliver(
-                original,
-                f"{root}{index}",
-                "out" if index % 2 == 0 else "in",
-                f"{root}{index - 1}" if index else "",
-            )
-    legacy_messages = {
-        key: {**receipt.model_dump(), "exchange_id": "old"}
-        for key, receipt in original.state.messages.items()
-    }
-    kv.set(
-        "exchange:c:b",
-        {
-            "exchange_id": "old",
-            "count": 12,
-            "last_activity": 100.0,
-            "messages": legacy_messages,
-        },
-    )
-    migrated = ExchangeJournal(kv, "c", "b")
-    deliver(migrated, "b2", "out", "b1")
-    assert migrated.state.exchanges["a0"].count == 10
-    assert migrated.state.exchanges["b0"].count == 3
-    assert not migrated.begin(BotMessage("a0", "hello"), "out", 12)
-    assert ExchangeJournal(kv, "c", "b").state == migrated.state
-
-
 def test_duplicate_conflict_correlation_and_unknown_send_never_replay():
     kv = FakeKV()
     journal = ExchangeJournal(kv, "c", "b")

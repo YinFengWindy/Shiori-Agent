@@ -180,19 +180,6 @@ async function openLocalAttachment(value: string) {
   return result;
 }
 
-/**
- * Where the pet's data lived before plugins had a store.
- *
- * Handed to `PluginDataStore` as a one-off migration source so an existing
- * installation keeps its remembered positions and its visible/hidden choice
- * when the pet's settings move into `plugin-data/desktop_pet.json` (#181-C).
- * Nothing else in the host reads this path.
- */
-function legacyPluginDataPath(pluginId: string): string | null {
-  if (pluginId !== "desktop_pet") return null;
-  return resolve(app.getPath("userData"), "desktop-pet.json");
-}
-
 /** Publishes host events, such as lock state, for explicit ctx.hostEvents subscriptions. */
 function publishDesktopEvent(method: string, payload: Record<string, unknown>): void {
   const transport: LocalAssetTransport<BridgeEvent> = {
@@ -253,10 +240,9 @@ void app.whenReady().then(async () => {
   ensureDesktopRuntimeConfig(runtimePaths);
   configureSettingsConfigPath(runtimePaths.configPath);
   process.env.SHIORI_DESKTOP_USER_DATA_DIR = app.getPath("userData");
-  // Opaque per-plugin persistence, with one legacy file-location migration.
+  // Opaque per-plugin persistence under userData/plugin-data.
   const activePluginData = new PluginDataStore({
     directory: resolve(app.getPath("userData"), "plugin-data"),
-    legacyPathFor: legacyPluginDataPath,
     onError: (pluginId, operation, error) => {
       logDesktopDiagnostic({ scope: "main", event: "plugin-data.failed", payload: { pluginId, operation, error } });
     },

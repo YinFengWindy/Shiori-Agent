@@ -8,7 +8,6 @@ desc: NovelAI 生图集成——手动生图、提示词标签库、生成历史
 capabilities:
   - background
   - http
-  - storage
   - tools
   - tool_hooks
   - events

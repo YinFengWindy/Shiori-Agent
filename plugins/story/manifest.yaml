@@ -8,7 +8,6 @@ dependencies:
   - novelai
 capabilities:
   - background
-  - storage
   - roles
   - dependencies
   - rpc

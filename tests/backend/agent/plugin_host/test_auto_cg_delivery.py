@@ -8,7 +8,6 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-import pytest
 from shiori_sdk.channels.threads import network_thread_id
 from shiori_sdk.role_events import SceneObservationCommitted
 from shiori_sdk.testing.http import FakeHttp

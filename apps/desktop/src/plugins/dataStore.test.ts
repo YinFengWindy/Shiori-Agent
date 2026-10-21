@@ -18,8 +18,7 @@ async function withRoot(run: (root: string) => Promise<void>): Promise<void> {
 function storeAt(
   root: string,
   options: {
-    legacyPathFor?: (pluginId: string) => string | null;
-    onError?: (pluginId: string, operation: "read" | "write" | "migrate", error: unknown) => void;
+    onError?: (pluginId: string, operation: "read" | "write", error: unknown) => void;
   } = {},
 ): PluginDataStore {
   return new PluginDataStore({ directory: join(root, "plugin-data"), ...options });
@@ -54,6 +53,7 @@ test("a corrupt file reads as null, so a plugin can fall back to its own default
     await writeFile(dataPath(root, "desktop_pet"), "{ not json", "utf-8");
 
     assert.equal(await storeAt(root).read("desktop_pet"), null);
+    assert.match(await readFile(dataPath(root, "desktop_pet"), "utf-8"), /not json/);
   });
 });
 
@@ -81,64 +81,12 @@ test("concurrent writes are serialized, so the last one is what lands on disk", 
   });
 });
 
-test("a pre-store file is migrated on first read and the original is kept", async () => {
+test("a stored literal null stays null", async () => {
   await withRoot(async (root) => {
-    const legacyPath = join(root, "desktop-pet.json");
-    await writeFile(legacyPath, JSON.stringify({ visible: true, roleId: "mira" }), "utf-8");
-    const store = storeAt(root, { legacyPathFor: (id) => (id === "desktop_pet" ? legacyPath : null) });
-
-    assert.deepEqual(await store.read("desktop_pet"), { visible: true, roleId: "mira" });
-    // Landed in the store, so the next read no longer depends on the old file.
-    assert.deepEqual(
-      JSON.parse(await readFile(dataPath(root, "desktop_pet"), "utf-8")),
-      { visible: true, roleId: "mira" },
-    );
-    // Not deleted: this runs on a user's existing installation and the copy has
-    // not been proven good at this point.
-    assert.match(await readFile(legacyPath, "utf-8"), /mira/);
-  });
-});
-
-test("a corrupt store file is not rebuilt from the pre-store file", async () => {
-  await withRoot(async (root) => {
-    const legacyPath = join(root, "desktop-pet.json");
-    await writeFile(legacyPath, JSON.stringify({ roleId: "old-role" }), "utf-8");
-    const store = storeAt(root, { legacyPathFor: () => legacyPath });
-    await store.read("desktop_pet");
-    await store.write("desktop_pet", { roleId: "current-role" });
-
-    // The store file exists but is damaged. The pre-store file is still on disk
-    // — it is never deleted — so treating "unreadable" the same as "absent"
-    // would silently restore whatever the user had at upgrade time, months of
-    // changes ago. Falling back to the plugin's own defaults is the only answer
-    // that cannot resurrect stale state.
-    await writeFile(dataPath(root, "desktop_pet"), "{ not json", "utf-8");
-
-    assert.equal(await storeAt(root, { legacyPathFor: () => legacyPath }).read("desktop_pet"), null);
-    assert.match(await readFile(dataPath(root, "desktop_pet"), "utf-8"), /not json/,
-      "a failed read must not overwrite the file it failed on");
-  });
-});
-
-test("a stored literal null is not mistaken for a plugin that never wrote", async () => {
-  await withRoot(async (root) => {
-    const legacyPath = join(root, "desktop-pet.json");
-    await writeFile(legacyPath, JSON.stringify({ roleId: "old-role" }), "utf-8");
-    const store = storeAt(root, { legacyPathFor: () => legacyPath });
+    const store = storeAt(root);
     await store.write("desktop_pet", null);
 
-    assert.equal(await storeAt(root, { legacyPathFor: () => legacyPath }).read("desktop_pet"), null);
-  });
-});
-
-test("migration does not undo a value the plugin has already written", async () => {
-  await withRoot(async (root) => {
-    const legacyPath = join(root, "desktop-pet.json");
-    await writeFile(legacyPath, JSON.stringify({ visible: true }), "utf-8");
-    const store = storeAt(root, { legacyPathFor: () => legacyPath });
-    await store.write("desktop_pet", { visible: false });
-
-    assert.deepEqual(await store.read("desktop_pet"), { visible: false });
+    assert.equal(await store.read("desktop_pet"), null);
   });
 });
 

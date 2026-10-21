@@ -12,7 +12,7 @@ from shiori_sdk.memory.build import EmbeddingConfig, MemoryBuildConfig
 
 
 class HostMemoryStorage(PluginStorage):
-    """Preserves the host's atomic migration receipts and live-database lease lock."""
+    """Resolves memory data targets and opens databases under the host lease lock."""
 
     def resolve_config(
         self,

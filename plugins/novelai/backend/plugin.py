@@ -118,9 +118,9 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
     )
     ctx.rpc.register("role_settings.set", role_settings.set)
     novelai_store = NovelAIStore(
-        workspace, storage=ctx.storage, original_media=ctx.sessions.original_media_path
+        workspace, original_media=ctx.sessions.original_media_path
     )
-    prompt_tag_store = PromptTagStore(workspace, storage=ctx.storage)
+    prompt_tag_store = PromptTagStore(workspace)
     service = NovelAIService(
         settings=settings,
         client=NovelAIClient(

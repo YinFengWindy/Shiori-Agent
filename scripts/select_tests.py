@@ -2,13 +2,14 @@
 
 The default allowlist in ``tests/support/default_suite.py`` always runs.
 Changed paths add neighbor suites (memory and agent, desktop bridge and
-agent, SDK and plugin tests). Lockfiles, CI workflows, ``pytest.ini``,
+agent, SDK and its own suite). Lockfiles, CI workflows, ``pytest.ini``,
 the allowlist, this script, and any path the map does not recognize
 widen to ``pytest --extended``.
 
 Docs, the marketing site, and the Electron tree add nothing: a docs-only
-diff stays on the allowlist. ``plugin-isolation`` and ``verify_sdk`` are
-not turned off by this map.
+diff stays on the allowlist. Plugin suites need their own environments,
+so they run only in ``plugin-isolation``, which this map never turns off;
+``verify_sdk`` stays unconditional as well.
 """
 
 from __future__ import annotations
@@ -16,7 +17,7 @@ from __future__ import annotations
 import argparse
 import subprocess
 import sys
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -141,29 +142,12 @@ def normalize(path: str) -> str:
     return text.lstrip("/")
 
 
-def discover_plugins(root: Path) -> dict[str, bool]:
-    """Map each plugin id to whether ``plugins/<id>/tests`` exists."""
-    plugins = root / "plugins"
-    found: dict[str, bool] = {}
-    if not plugins.is_dir():
-        return found
-    for child in sorted(plugins.iterdir()):
-        if not child.is_dir():
-            continue
-        if not (
-            (child / "manifest.yaml").is_file() or (child / "pyproject.toml").is_file()
-        ):
-            continue
-        found[child.name] = (child / "tests").is_dir()
-    return found
-
-
-def select(paths: Iterable[str], *, plugins: Mapping[str, bool]) -> Selection:
+def select(paths: Iterable[str]) -> Selection:
     """Map changed paths to a pytest plan. Unknown inputs widen the plan."""
     host: list[str] = []
     external: list[str] = []
     for raw in paths:
-        kind, mapped_host, mapped_external = _classify(normalize(raw), plugins)
+        kind, mapped_host, mapped_external = _classify(normalize(raw))
         if kind == "skip":
             continue
         if kind == "escalate":
@@ -206,7 +190,6 @@ def plan(
     root: Path | None = None,
     *,
     base: str | None = None,
-    plugins: Mapping[str, bool] | None = None,
 ) -> Selection:
     """Read ``git`` and return the pytest plan. Git failures widen."""
     repo = root or REPO_ROOT
@@ -214,8 +197,7 @@ def plan(
         paths = changed_paths(repo, base=base)
     except GitSelectionError:
         return Selection("extended")
-    catalog = discover_plugins(repo) if plugins is None else plugins
-    return materialize(select(paths, plugins=catalog), repo)
+    return materialize(select(paths), repo)
 
 
 def format_plan(selection: Selection) -> tuple[str, ...]:
@@ -245,9 +227,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"select_tests: {exc}; widening to --extended", file=sys.stderr)
         selection = Selection("extended")
     else:
-        selection = materialize(
-            select(paths, plugins=discover_plugins(args.root)), args.root
-        )
+        selection = materialize(select(paths), args.root)
         if selection.mode == "extended":
             print("select_tests: widening to --extended", file=sys.stderr)
     for line in format_plan(selection):
@@ -295,17 +275,7 @@ def _is_doc(path: str) -> bool:
     return path.endswith(_DOC_SUFFIXES)
 
 
-def _plugin_test_paths(plugins: Mapping[str, bool]) -> tuple[str, ...]:
-    return tuple(
-        f"plugins/{plugin_id}/tests"
-        for plugin_id, has_tests in sorted(plugins.items())
-        if has_tests
-    )
-
-
-def _classify(
-    path: str, plugins: Mapping[str, bool]
-) -> tuple[str, tuple[str, ...], tuple[str, ...]]:
+def _classify(path: str) -> tuple[str, tuple[str, ...], tuple[str, ...]]:
     if not path:
         return ("skip", (), ())
     if path in _ESCALATE_EXACT or any(
@@ -321,7 +291,7 @@ def _classify(
         return (
             "map",
             ("tests/backend/agent/plugin_host", "tests/backend/scripts"),
-            ("packages/sdk/tests", *_plugin_test_paths(plugins)),
+            ("packages/sdk/tests",),
         )
     if _matches(path, "packages/shiori-host-testing"):
         return ("map", ("tests/backend/shiori_host_testing",), ())
@@ -329,10 +299,7 @@ def _classify(
         plugin_id = path.split("/", 2)[1] if path.count("/") >= 1 else ""
         if not plugin_id or "." in plugin_id:
             return ("escalate", (), ())
-        external = (
-            (f"plugins/{plugin_id}/tests",) if plugins.get(plugin_id, True) else ()
-        )
-        return ("map", ("tests/backend/agent/plugin_host",), external)
+        return ("map", ("tests/backend/agent/plugin_host",), ())
     if path.startswith("scripts/") and path.endswith((".py", ".pyi", ".mjs", ".mts")):
         return ("map", ("tests/backend/scripts",), ())
     if path.startswith("tests/backend/") and not path.endswith("/conftest.py"):

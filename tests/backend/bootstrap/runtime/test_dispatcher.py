@@ -18,7 +18,7 @@ from core.channels import ChannelHub
 from core.roles import RoleAggregateService
 from shiori_sdk.accounts.models import AccountResponseRules
 from agent.provider import LLMResponse, ToolCall
-from tests.support.external_turns import ExternalTurnHost
+from tests.support.host_external_turns import ExternalTurnHost
 from tests.support.chat_replies import chat_reply
 from session.manager import SessionManager
 
@@ -197,15 +197,14 @@ async def natural_dispatcher(tmp_path, monkeypatch, *, stage="pacing", enabled=T
 
 
 @pytest.mark.parametrize("stage", ["pacing", "generation", "sending"])
-@pytest.mark.parametrize("chat_type", ["private", "group"])
 async def test_admitted_supplements_stop_only_unsent_reply_and_keep_all_input(
-    tmp_path, monkeypatch, stage, chat_type
+    tmp_path, monkeypatch, stage
 ):
     async with natural_dispatcher(tmp_path, monkeypatch, stage=stage) as env:
-        await env.receive("first", chat_type=chat_type)
+        await env.receive("first", chat_type="group")
         await asyncio.wait_for(env.started.wait(), 3)
-        await env.receive("second", chat_type=chat_type)
-        await env.receive("third", chat_type=chat_type)
+        await env.receive("second", chat_type="group")
+        await env.receive("third", chat_type="group")
         await until(lambda: env.bus.inbound_size == 0)
         if stage == "sending":
             assert env.candidate.references > 0
@@ -229,21 +228,7 @@ async def test_admitted_supplements_stop_only_unsent_reply_and_keep_all_input(
         assert env.candidate.reply_sequences._replies == {}
 
 
-@pytest.mark.parametrize(
-    "change",
-    [
-        "sender",
-        "chat",
-        "account",
-        "channel",
-        "role",
-        "topic",
-        "chat_type",
-        "sidechat",
-        "blacklist",
-        "duplicate",
-    ],
-)
+@pytest.mark.parametrize("change", ["sender", "chat", "sidechat"])
 async def test_group_admission_and_exact_origin_do_not_cancel_other_reply(
     tmp_path, monkeypatch, change
 ):

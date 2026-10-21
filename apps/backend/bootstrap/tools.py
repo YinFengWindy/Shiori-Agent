@@ -691,7 +691,6 @@ def build_core_runtime(
             plugin_configs=config.plugins,
             raw_plugin_configs=config.raw_plugin_configs,
             relationship_runtime=relationship_runtime,
-            legacy_plugin_root=_legacy_plugin_root(),
             role_runtime_registry=role_runtime_registry,
             external_turns=external_turns,
             process_resources=process_resources,
@@ -790,17 +789,6 @@ def build_core_runtime(
 def _resolve_plugin_dirs(workspace: Path) -> list[Path]:
     """Resolves the top-level `plugins/` directory for dev and frozen runs."""
     return [*plugin_roots(), workspace / "plugins"]
-
-
-def _legacy_plugin_root() -> Path | None:
-    """插件包上移到仓库顶层之前的位置，用于一次性迁移遗留的本地状态。
-
-    `.kv.json` 被 gitignore 覆盖，目录重命名经 git
-    落到本地时不会跟着搬，会静默留在旧路径（见 #178 / #209）。打包形态下
-    这个目录不存在，返回 None。
-    """
-    legacy = REPOSITORY_ROOT / "apps" / "backend" / "plugins"
-    return legacy if legacy.is_dir() else None
 
 
 def _role_owns_channel_target(

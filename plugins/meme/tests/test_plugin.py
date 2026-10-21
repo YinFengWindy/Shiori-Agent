@@ -45,7 +45,7 @@ def _prompt(*, role_id: str = "") -> PromptRenderCtx:
 
 
 def _write_library(workspace: Path) -> Path:
-    """Seed the legacy ``memes`` layout at the path storage migration returns."""
+    """Seed the meme library under the plugin data root."""
     library = workspace / "plugin-data" / "meme" / "library"
     (library / "shy").mkdir(parents=True)
     image = library / "shy" / "001.png"

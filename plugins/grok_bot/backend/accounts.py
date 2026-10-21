@@ -266,11 +266,7 @@ class GrokAccounts:
         return AccountDeletionPlan(disconnect=disconnect, purge=purge)
 
     def save_rules(self, config_ref: str, rules: AccountResponseRules) -> None:
-        """Save tool grants; hidden legacy filters cannot re-enter the host index."""
-        if not rules.private_enabled or rules.blocked_sender_ids:
-            raise ValueError(
-                "固定对端账号由连接启停控制收发，不支持私聊开关或成员黑名单"
-            )
+        """Save tool grants and response rules for one connection."""
         config = self.configs[config_ref].model_copy(
             update={"response_rules": response_rules_to_dict(rules)}
         )

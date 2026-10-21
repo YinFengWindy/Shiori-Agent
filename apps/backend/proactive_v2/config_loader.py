@@ -78,8 +78,7 @@ def _validate_ranges(config: dict[str, Any]) -> None:
 
 
 # Global delivery-target keys, removed once proactive delivery moved to each
-# role's candidate sessions (#399); startup migration deletes them from
-# config.toml (``agent/proactive_target_migration.py``).
+# role's candidate sessions (#399). Loading rejects them.
 REMOVED_TARGET_KEYS: tuple[str, ...] = (
     "target",
     "default_role_id",
@@ -89,7 +88,7 @@ REMOVED_TARGET_KEYS: tuple[str, ...] = (
 
 
 def reject_removed_target_keys(p: dict[str, Any]) -> None:
-    """Rejects a global proactive target that re-appeared after the migration."""
+    """Rejects a global proactive target. Delivery is chosen per role."""
     present = [key for key in REMOVED_TARGET_KEYS if key in p]
     if present:
         raise ProactiveConfigError(
