@@ -36,6 +36,11 @@ async def test_complete_messages_are_published_during_turn_and_survive_reload(
     from agent.turns.reply_sequence import buffered_reply_scope
     from bootstrap.wiring import wire_turn_lifecycle
     from shiori_sdk.lifecycle import AfterStepCtx
+    from agent.core.passive_turn.reasoner import DefaultReasoner
+    from agent.core.runtime_support import ToolDiscoveryState
+    from agent.core.types import ReasonerResult
+    from agent.lifecycle.types import PromptRenderResult
+    from agent.looping.ports import LLMConfig, LLMServices
 
     manager, bus = SessionManager(tmp_path), EventBus()
     session = manager.get_or_create("role:mira")
@@ -77,6 +82,50 @@ async def test_complete_messages_are_published_during_turn_and_survive_reload(
     wire_turn_lifecycle(
         TurnLifecycle(bus), active_turn_states={session.key: interrupt_state}
     )
+    tool_preamble = "未发出的工具前正文\n<message-break/>\n尾部"
+    tool_chain = [
+        {
+            "text": tool_preamble,
+            "reasoning_content": "tool thinking",
+            "calls": [
+                {
+                    "call_id": "lookup-1",
+                    "name": "lookup",
+                    "arguments": {},
+                    "result": "found",
+                    "status": "ok",
+                }
+            ],
+        }
+    ]
+    default_reasoner = DefaultReasoner(
+        llm=LLMServices(provider=AsyncMock(), light_provider=AsyncMock()),
+        llm_config=LLMConfig(),
+        tools=ToolRegistry(),
+        discovery=ToolDiscoveryState(),
+        tool_search_enabled=False,
+        context=Mock(),
+        session_manager=manager,
+    )
+    default_reasoner.render_prompt = AsyncMock(
+        return_value=PromptRenderResult(
+            messages=[{"role": "user", "content": "hi"}],
+            reply_sequence=result.reply_sequence,
+        )
+    )
+    default_reasoner.run = AsyncMock(
+        return_value=ReasonerResult(
+            reply=raw,
+            thinking=result.thinking,
+            metadata={
+                "tools_used": result.tools_used,
+                "tool_chain": tool_chain,
+                "role_reply": result.role_reply,
+                "role_reply_mood_fresh": True,
+                "react_stats": {"total_tokens": 42},
+            },
+        )
+    )
 
     async def reason(**kwargs):
         if mode == "cancel_before":
@@ -98,7 +147,7 @@ async def test_complete_messages_are_published_during_turn_and_survive_reload(
                 )
                 ready_to_cancel.set()
                 await asyncio.Event().wait()
-        return result
+        return await default_reasoner.run_turn(**kwargs)
 
     pipeline = PassiveTurnPipeline(
         AgentCoreDeps(
@@ -218,6 +267,13 @@ async def test_complete_messages_are_published_during_turn_and_survive_reload(
         "malformed": [],
     }[mode]
     assert [row["content"] for row in replies] == expected
+    if mode in {"enabled", "disabled", "cancel"}:
+        expected_chain = [
+            {**tool_chain[0], "text": tool_preamble if mode == "disabled" else ""}
+        ]
+        assert replies[0]["tool_chain"] == expected_chain
+        assert replies[0]["metadata"]["tool_chain"] == expected_chain
+        assert tool_chain[0]["text"] == tool_preamble
     assert len({row["id"] for row in replies}) == len(expected)
     assert sum(bool(row.get("media")) for row in replies) == int(
         bool(expected) and mode != "cancel_before"

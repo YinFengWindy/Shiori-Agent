@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import re
-from collections.abc import Awaitable, Callable, Iterator
+from collections.abc import Awaitable, Callable, Iterator, Sequence
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
+from typing import Any
 
 from shiori_sdk.reply_sequence import ReplySequencePolicy
 
@@ -28,6 +29,17 @@ def buffered_reply_scope(enabled: bool) -> Iterator[None]:
 def reply_is_buffered() -> bool:
     """Whether progress observers must keep model text private."""
     return _BUFFERED_REPLY.get()
+
+
+def presented_tool_chain(
+    groups: Sequence[dict[str, Any]], *, buffered: bool
+) -> list[dict[str, Any]]:
+    """Retain tool facts and thinking while hiding dialogue never published.
+
+    Both interrupted progress and completed results use this projection. The
+    reasoning loop's private trace remains intact for subsequent model requests.
+    """
+    return [{**group, "text": ""} if buffered else dict(group) for group in groups]
 
 
 @dataclass(frozen=True)

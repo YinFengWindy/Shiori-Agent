@@ -358,6 +358,7 @@ _EXPECTED_TOP_LEVEL_PLUGINS = {
     "gpt_sovits_tts",
     "herdr",
     "meme",
+    "natural_chat",
     "novelai",
     "story",
     "observe",

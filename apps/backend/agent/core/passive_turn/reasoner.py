@@ -5,7 +5,7 @@ from shiori_sdk.messages import TEXT_ATTACHMENT_TOOL_KEY
 from shiori_sdk.tools import TOOL_ATTACHMENT_SCOPE_KEY, ToolAttachmentScope
 from agent.tools.turn_scope import tool_turn
 from agent.looping.interrupt import in_detached_turn
-from agent.turns.reply_sequence import buffered_reply_scope
+from agent.turns.reply_sequence import buffered_reply_scope, presented_tool_chain
 from agent.account_delivery.turn_state import account_delivery_scope
 
 from core.roles.reply_state import role_mood_catalog
@@ -514,7 +514,9 @@ class DefaultReasoner(
                         ),
                     )
                 tools_used = list(result.metadata.get("tools_used") or [])
-                tool_chain = list(result.metadata.get("tool_chain") or [])
+                tool_chain = presented_tool_chain(
+                    result.metadata.get("tool_chain") or [], buffered=buffer_reply
+                )
                 retry_trace["selected_plan"] = plan["name"]
                 retry_trace["trimmed_sections"] = sorted(plan["disabled_sections"])
                 if attempt > 0:

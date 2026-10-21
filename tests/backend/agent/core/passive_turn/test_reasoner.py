@@ -46,6 +46,14 @@ async def test_reply_policy_filters_visible_tokens_but_preserves_thinking(
         )
     )
     seen = []
+    tool_preamble = "未发出的铺垫\n<message-break/>\n另一条铺垫"
+    original_chain = [
+        {
+            "text": tool_preamble,
+            "reasoning_content": "tool thinking",
+            "calls": [{"name": "lookup", "result": "found"}],
+        }
+    ]
 
     async def sink(delta):
         seen.append(delta)
@@ -60,7 +68,11 @@ async def test_reply_policy_filters_visible_tokens_but_preserves_thinking(
                 "thinking_delta": "thinking",
             }
         )
-        return ReasonerResult(reply="one\n<message-break/>\ntwo", streamed=True)
+        return ReasonerResult(
+            reply="one\n<message-break/>\ntwo",
+            streamed=True,
+            metadata={"tool_chain": original_chain},
+        )
 
     reasoner.run = AsyncMock(side_effect=run)
     msg = InboundMessage(
@@ -75,6 +87,10 @@ async def test_reply_policy_filters_visible_tokens_but_preserves_thinking(
     )
     assert result.reply_sequence == policy
     assert result.streamed is (not enabled)
+    assert result.tool_chain == [
+        {**original_chain[0], "text": "" if enabled else tool_preamble}
+    ]
+    assert original_chain[0]["text"] == tool_preamble
     assert seen == (
         [{"thinking_delta": "thinking"}]
         if enabled
