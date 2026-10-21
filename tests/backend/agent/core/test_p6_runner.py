@@ -92,6 +92,7 @@ async def test_core_runner_handles_spawn_completion_via_direct_helper_deps():
         "role_id": "mira",
         "current_timestamp": item.timestamp.isoformat(),
         "current_user_source_ref": "telegram:123:9",
+        "account_full_tools": "false",
     }
     tools = SimpleNamespace(
         set_context=MagicMock(),
@@ -130,6 +131,7 @@ async def test_core_runner_handles_spawn_completion_via_direct_helper_deps():
         thread_id="",
         sender_id="",
         sender_is_user="false",
+        account_full_tools="false",
         context_scope="",
         role_id="mira",
         current_timestamp=item.timestamp.isoformat(),
