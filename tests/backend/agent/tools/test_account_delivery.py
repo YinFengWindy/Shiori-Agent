@@ -24,6 +24,7 @@ from shiori_sdk.channels.threads import network_thread_id
 from core.accounts import AccountRegistry
 from core.accounts.delivery_ledger import AccountDeliveryLedger
 from shiori_sdk.accounts.targets import AccountTarget
+from shiori_sdk.accounts.conversation import AccountConversation
 from core.identity import IdentityChat, UserIdentityStore
 from session.manager import SessionManager
 
@@ -121,6 +122,45 @@ _VIA = {
     "display_name": "Mira",
     "prefix": "QQ「Mira」",
 }
+
+
+@pytest.mark.asyncio
+async def test_private_bot_first_contact_is_recorded_in_canonical_network_thread(
+    tmp_path,
+):
+    """A bot does not need to be paired as the desktop user to have a history."""
+    receipt = AccountSendReceipt(
+        attempt_id="attempt-bot",
+        account_id="grok_bot:bridge",
+        channel="grok_bot",
+        target_kind="private",
+        target_id="peer-id",
+        platform_message_id="",
+        ownership_current=True,
+        conversation=AccountConversation("grok_bot_bridge", "dm:peer-id"),
+    )
+    delivery = SimpleNamespace(send=AsyncMock(return_value=receipt))
+    sessions = SessionManager(tmp_path)
+    sessions.open_role_session("mira", role_name="Mira")
+    bus = EventBus()
+    _ = ExternalPushSyncService(
+        live_turn_pushes=current_turn_pushes, session_manager=sessions, event_bus=bus
+    )
+    tool = AccountSendTool(delivery, bus)
+    await tool.execute(
+        channel="grok_bot",
+        role_id="mira",
+        target_kind="private",
+        target_id="peer-id",
+        message="我先来找你",
+    )
+    [stored] = sessions._store.fetch_session_messages("role:mira")
+    assert stored["content"] == "我先来找你"
+    assert stored["thread_id"] == network_thread_id(
+        "mira", "grok_bot_bridge", "dm:peer-id"
+    )
+    assert not stored["metadata"].get("external_message_id")
+    assert stored["metadata"]["delivery_attempt_id"] == "attempt-bot"
 
 
 def _user_send_setup(

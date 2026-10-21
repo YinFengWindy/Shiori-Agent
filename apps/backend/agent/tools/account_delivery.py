@@ -105,11 +105,13 @@ class AccountSendTool(Tool):
     resolved from their bindings (``AccountDelivery.user_chat``); such a send
     is also recorded in the role session under that chat's thread, like a
     ``message_push`` delivery, so the chat shows it.
+    Other private peers are recorded when the plugin confirms their canonical
+    conversation address; a target ID alone is never guessed to be a chat ID.
     """
 
     name = "account_send"
     description = (
-        "通过当前角色在指定渠道的账号向一个明确目标发送文本和/或图片，返回平台真实消息回执。"
+        "通过当前角色在指定渠道的账号向一个明确目标发送文本和/或图片，返回渠道接收状态与可用的消息回执。"
         f"发给你的用户时用 target_kind={USER_TARGET}，只需指定 channel，"
         "由系统按用户的身份绑定找到其私聊；用户在该渠道未绑定或还没私聊过你的账号时会报错。"
         "其他目标先调用 account_targets 获取目标 ID；不接受模糊名称。"
@@ -182,7 +184,8 @@ class AccountSendTool(Tool):
         receipt = await self._delivery.send(
             channel, role_id, target, message, media=media
         )
-        if user_chat is not None:
+        conversation = user_chat.chat if user_chat is not None else receipt.conversation
+        if conversation is not None:
             # Recorded like a pushed message: with the turn that sent it, or
             # at once outside a live turn.
             await record_delivered_push(
@@ -190,8 +193,8 @@ class AccountSendTool(Tool):
                 ExternalTextPushed(
                     session_key=str(kwargs.get("session_key") or ""),
                     role_id=role_id,
-                    channel=user_chat.chat.channel,
-                    chat_id=user_chat.chat.chat_id,
+                    channel=conversation.channel,
+                    chat_id=conversation.chat_id,
                     text=message,
                     in_turn=str(kwargs.get("defer_push_session_sync") or "") == "true",
                     external_message_id=receipt.platform_message_id,
@@ -210,6 +213,7 @@ class AccountSendTool(Tool):
                 "target_kind": receipt.target_kind,
                 "target_id": receipt.target_id,
                 "platform_message_id": receipt.platform_message_id,
+                "delivery_status": "accepted",
                 "ownership_current": receipt.ownership_current,
             },
             ensure_ascii=False,

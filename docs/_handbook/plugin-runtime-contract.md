@@ -123,6 +123,22 @@ consolidates these additions and the subsequent #847 breaking migration.
 
 <!-- Record the next contract batch here, with PR references and breaking markers. -->
 
+- **Explicit account-send acceptance and canonical private conversations (#869).**
+  `account.send` may return `accepted: true` when the transport accepts a task but
+  provides no platform message ID. Only the boolean `true` permits an empty ID;
+  absent/ambiguous receipts remain uncertain. Existing `message_id` receipts keep
+  their behavior. A run/task ID must not be presented as a platform message ID.
+  A confirmed private send may also include `conversation: {channel, chat_id,
+  chat_type: "private"}` using `shiori_sdk.accounts.conversation.AccountConversation`.
+  This must be the canonical inbound address resolved by the sending plugin,
+  not a guessed chat ID derived from its target ID. The host validates the
+  channel against the account platform and records `account_send` in this network
+  thread even when the peer is not the desktop user. Invalid optional addresses
+  are logged and omitted without retrying an already accepted side effect.
+  `TurnCommitted.external_message_id` now carries the original inbound ID (default
+  empty for non-transport turns), so channels can finish durable input even when
+  the role intentionally sends no reply.
+
 - **In-generation plugin reload (host groundwork, #856 / #860).** The plugin kernel can
   reload one plugin and its hard dependents without replacing the runtime generation;
   the bridge starts using it with #857. Plugin-observable semantics:
