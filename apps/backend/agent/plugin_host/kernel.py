@@ -287,6 +287,9 @@ class PluginKernel:
             }:
                 raise ValueError("插件已执行或状态已变化，请重新读取后操作")
             records = self.discover()
+            previous_admissions = {
+                record.candidate_id: record.admission for record in records
+            }
             records[records.index(previous)] = candidate
             workspace = self._services.workspace
             if workspace is None:
@@ -294,6 +297,12 @@ class PluginKernel:
             refresh_dependency_admission(records, PluginTrustStore(workspace))
             self._records = records
             for record in records:
+                target = record.candidate_id == candidate.candidate_id
+                if (
+                    not target
+                    and record.admission == previous_admissions[record.candidate_id]
+                ):
+                    continue
                 current = self._handles.get(record.candidate_id)
                 if current is not None and current.state in {
                     PluginState.UNTRUSTED,
@@ -301,16 +310,15 @@ class PluginKernel:
                     PluginState.DISABLED,
                 }:
                     current.record = record
-                    current.error = (
-                        RuntimeError(record.admission.reason)
-                        if record.admission
-                        else None
-                    )
-                    current.state = (
-                        PluginState[record.admission.state]
-                        if record.admission
-                        else PluginState.DISABLED
-                    )
+                    if target:
+                        current.error = None
+                        current.state = PluginState.DISABLED
+                    elif record.admission is not None:
+                        current.error = RuntimeError(record.admission.reason)
+                        current.state = PluginState[record.admission.state]
+                    # Clearing static admission does not disable a waiting consumer.
+                    # Keep its runtime BLOCKED state/cause so the normal enable
+                    # closure can recover it when its approved provider starts.
 
     async def fail_admission_activation(
         self, candidate_id: str, fingerprint: str, error: Exception

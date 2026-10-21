@@ -289,6 +289,121 @@ async def test_dependencies_become_trustable_but_are_not_implicitly_approved(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("provider_state", ["disabled", "failed"])
+async def test_unrelated_trust_preserves_runtime_dependency_failures(
+    tmp_path, monkeypatch, provider_state
+):
+    provider = _stage(tmp_path, "provider")
+    consumer = _stage(tmp_path, "consumer", dependencies=("provider",))
+    if provider_state == "failed":
+        source = provider / "backend/plugin.py"
+        source.write_text(
+            source.read_text(encoding="utf-8")
+            + "\nraise RuntimeError('provider failed')\n",
+            encoding="utf-8",
+        )
+    for package in (provider, consumer):
+        PluginTrustStore(tmp_path).approve(
+            package, inspect_package_content(package).fingerprint, approved_session=""
+        )
+    _stage(tmp_path, "unrelated")
+    (tmp_path / "config.toml").write_text(
+        "[llm]\nregistrations = []\n[plugins.provider]\n"
+        f"enabled = {'false' if provider_state == 'disabled' else 'true'}\n",
+        encoding="utf-8",
+    )
+    app, service = await _start(tmp_path, monkeypatch)
+    try:
+        before = {
+            row["id"]: row
+            for row in (await _request(service, "plugins.list")).payload["plugins"]
+        }
+        assert before["consumer"]["state"] == "BLOCKED"
+        assert before["consumer"]["diagnostic"]["code"] == "dependency_unavailable"
+        assert before["provider"]["state"] == provider_state.upper()
+        assert (await _approve(service, before["unrelated"])).error is None
+        after = {
+            row["id"]: row
+            for row in (await _request(service, "plugins.list")).payload["plugins"]
+        }
+        for plugin_id in ("consumer", "provider"):
+            for field in ("enabled", "state", "error", "diagnostic"):
+                assert after[plugin_id][field] == before[plugin_id][field]
+        assert (await _request(service, "plugin.consumer.ping")).error is not None
+        assert (
+            await _request(service, "plugin.unrelated.ping", {"value": 19})
+        ).payload == {"pong": 19}
+        if provider_state == "disabled":
+            enabled = await _request(
+                service,
+                "plugins.setEnabled",
+                {
+                    "plugin_id": "provider",
+                    "enabled": True,
+                    "operation_id": "enable-provider",
+                },
+            )
+            assert enabled.error is None
+            assert (
+                await _request(service, "plugin.consumer.ping", {"value": 23})
+            ).payload == {"pong": 23}
+    finally:
+        await service.aclose()
+        await app.shutdown()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("channels", [False, True])
+async def test_pretrusted_enabled_consumer_recovers_when_provider_is_approved(
+    tmp_path, monkeypatch, channels
+):
+    consumer = _stage(tmp_path, "consumer", dependencies=("provider",))
+    disabled = _stage(tmp_path, "disabled_consumer", dependencies=("provider",))
+    for package in (consumer, disabled):
+        PluginTrustStore(tmp_path).approve(
+            package, inspect_package_content(package).fingerprint, approved_session=""
+        )
+    _stage(tmp_path, "provider", channels=channels)
+    _stage(tmp_path, "untrusted_consumer", dependencies=("provider",))
+    (tmp_path / "config.toml").write_text(
+        "[llm]\nregistrations = []\n[plugins.disabled_consumer]\nenabled = false\n",
+        encoding="utf-8",
+    )
+    app, service = await _start(tmp_path, monkeypatch)
+    try:
+        before = {
+            row["id"]: row
+            for row in (await _request(service, "plugins.list")).payload["plugins"]
+        }
+        assert before["consumer"]["state"] == "BLOCKED"
+        assert before["consumer"]["trusted"]
+        assert (await _approve(service, before["provider"])).error is None
+        after = {
+            row["id"]: row
+            for row in (await _request(service, "plugins.list")).payload["plugins"]
+        }
+        assert after["provider"]["state"] == "ACTIVE"
+        assert after["consumer"]["state"] == "ACTIVE"
+        assert (
+            await _request(service, "plugin.consumer.ping", {"value": 29})
+        ).payload == {"pong": 29}
+        assert after["disabled_consumer"]["state"] == "DISABLED"
+        assert not after["disabled_consumer"]["enabled"]
+        assert after["untrusted_consumer"]["state"] == "UNTRUSTED"
+        assert not after["untrusted_consumer"]["trusted"]
+        assert after["untrusted_consumer"]["can_trust"]
+        assert (
+            await _request(service, "plugin.disabled_consumer.ping")
+        ).error is not None
+        assert (
+            await _request(service, "plugin.untrusted_consumer.ping")
+        ).error is not None
+    finally:
+        await service.aclose()
+        await app.shutdown()
+
+
+@pytest.mark.asyncio
 async def test_bridge_restart_cannot_run_replaced_code_in_the_same_desktop_session(
     tmp_path, monkeypatch
 ):
