@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -13,6 +14,8 @@ from agent.lifecycle.phases.after_turn import (
     _DispatchOutboundModule,
     _memory_extra,
     _BuildTurnCommittedModule,
+    _BuildAfterTurnCtxModule,
+    _FanoutTurnCommittedModule,
 )
 from agent.lifecycle.types import TurnState
 from agent.account_delivery import AccountDelivery
@@ -29,6 +32,9 @@ from core.roles import RoleRelationshipRuntimeService, RoleStore
 from core.roles.reply_state import AffectionChange
 from proactive_v2.presence import PresenceStore
 from session.manager import SessionManager
+from agent.turns.outbound import BusOutboundPort
+from bus.event_bus import EventBus
+from bus.queue import MessageBus
 
 
 @pytest.mark.asyncio
@@ -97,6 +103,86 @@ async def test_account_send_suppresses_default_dispatch() -> None:
     )
     await module.run(frame)
     port.dispatch.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    "dispatch_outbound, account_sent, expected",
+    [(True, False, True), (True, True, False), (False, False, False)],
+)
+async def test_commit_observers_receive_actual_dispatch_intent_before_enqueue(
+    tmp_path, dispatch_outbound, account_sent, expected
+):
+    session = SessionManager(tmp_path).get_or_create("role:mira")
+    session.metadata["role_id"] = "mira"
+    message = InboundMessage(
+        channel="grok_bot_a",
+        sender="peer",
+        chat_id="dm:peer",
+        content="hello",
+        metadata={"external_message_id": "bot-input"},
+    )
+    state = TurnState(
+        msg=message,
+        session_key=session.key,
+        session=session,
+        dispatch_outbound=dispatch_outbound,
+    )
+    outbound = OutboundMessage(
+        channel=message.channel,
+        chat_id=message.chat_id,
+        content="nonempty reply",
+        metadata={
+            "external_message_id": "bot-input",
+            "account_delivery_sent": account_sent,
+        },
+    )
+    frame = AfterTurnFrame(
+        input=SimpleNamespace(
+            state=state,
+            outbound=outbound,
+            ctx=SimpleNamespace(
+                reply=outbound.content,
+                tools_used=[],
+                thinking=None,
+                response_metadata=SimpleNamespace(raw_text=outbound.content),
+                meme_tag=None,
+                media=[],
+                outbound_metadata={},
+            ),
+        )
+    )
+    frame.slots.update(
+        {
+            "turn:tool_chain": [],
+            "turn:omit_user_turn": False,
+            "turn:budget": {},
+            "turn:react_stats": {},
+            "turn:extra": {},
+        }
+    )
+    bus, events = MessageBus(), EventBus()
+    observed = []
+
+    def observe(committed: TurnCommitted) -> None:
+        observed.append(
+            (
+                committed.will_dispatch,
+                bus.has_pending_outbound(message.channel, message.chat_id, "bot-input"),
+                bus.outbound_size,
+            )
+        )
+
+    events.on(TurnCommitted, observe)
+    await _BuildTurnCommittedModule().run(frame)
+    await _FanoutTurnCommittedModule(events).run(frame)
+    assert observed == [(expected, False, 0)]
+    await _BuildAfterTurnCtxModule().run(frame)
+    assert frame.slots["turn:ctx"].will_dispatch is expected
+    await _DispatchOutboundModule(BusOutboundPort(bus)).run(frame)
+    assert (
+        bus.has_pending_outbound(message.channel, message.chat_id, "bot-input")
+        is expected
+    )
 
 
 @pytest.mark.asyncio
