@@ -10,8 +10,6 @@ from pathlib import Path
 from conversation.store import ensure_conversation_schema
 from infra.persistence.sqlite_transaction import immediate_transaction
 
-from .common import CONTEXT_CURSOR_COLUMNS
-
 # Triggers that keep the external-content messages_fts index in sync with messages.
 _FTS_TRIGGERS = ("messages_ai", "messages_ad", "messages_au")
 
@@ -33,9 +31,6 @@ class _SessionConnection:
         self._closed = False
         self._has_fts = False
         self._init_schema()
-        from session.media_assets import adopt_persisted_media
-
-        adopt_persisted_media(self._conn, self._workspace)
 
     def __del__(self) -> None:
         if not self._closed:
@@ -54,10 +49,15 @@ class _SessionConnection:
                     created_at        TEXT NOT NULL,
                     updated_at        TEXT NOT NULL,
                     last_consolidated INTEGER NOT NULL DEFAULT 0,
+                    last_user_at      TEXT,
+                    last_proactive_at TEXT,
+                    next_seq          INTEGER NOT NULL DEFAULT 0,
+                    maintenance_progress TEXT,
+                    user_cursor       INTEGER,
+                    external_cursor   INTEGER,
                     metadata          TEXT
                 )
                 """)
-            self._ensure_session_columns()
             self._conn.execute("""
                 CREATE TABLE IF NOT EXISTS messages (
                     id          TEXT PRIMARY KEY,
@@ -68,32 +68,17 @@ class _SessionConnection:
                     tool_chain  TEXT,
                     extra       TEXT,
                     ts          TEXT NOT NULL,
+                    thread_id   TEXT,
+                    sender_role TEXT,
+                    media       TEXT,
+                    external_message_id TEXT,
+                    delivery_status TEXT,
                     UNIQUE (session_key, seq)
                 )
                 """)
             ensure_conversation_schema(self._conn)
             self._ensure_next_seq_values()
             self._ensure_fts()
-
-    def _ensure_session_columns(self) -> None:
-        rows = self._conn.execute("PRAGMA table_info(sessions)").fetchall()
-        existing = {str(row["name"]) for row in rows}
-        if "last_user_at" not in existing:
-            self._conn.execute("ALTER TABLE sessions ADD COLUMN last_user_at TEXT")
-        if "last_proactive_at" not in existing:
-            self._conn.execute("ALTER TABLE sessions ADD COLUMN last_proactive_at TEXT")
-        if "next_seq" not in existing:
-            self._conn.execute(
-                "ALTER TABLE sessions ADD COLUMN next_seq INTEGER NOT NULL DEFAULT 0"
-            )
-        if "maintenance_progress" not in existing:
-            self._conn.execute(
-                "ALTER TABLE sessions ADD COLUMN maintenance_progress TEXT"
-            )
-        # 角色会话按上下文的整理游标（#523）；NULL 表示未迁移，取 last_consolidated。
-        for column in CONTEXT_CURSOR_COLUMNS.values():
-            if column not in existing:
-                self._conn.execute(f"ALTER TABLE sessions ADD COLUMN {column} INTEGER")
 
     def _ensure_next_seq_values(self) -> None:
         rows = self._conn.execute("SELECT key, next_seq FROM sessions").fetchall()

@@ -74,10 +74,6 @@ enabled = false
 enabled = false
 [plugins.desktop_pet]
 enabled = false
-
-[_migrations]
-plugin_default_disabled = ["browser_use", "computer_use"]
-proactive_target_removed = true
 """
 
 # The card fields worth a still; runtime wiring is rewritten for this workspace.

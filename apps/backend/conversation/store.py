@@ -26,7 +26,6 @@ def ensure_conversation_schema(connection: sqlite3.Connection) -> None:
         raise RuntimeError("ensure_conversation_schema requires an open transaction")
     _ensure_base_legacy_tables(connection)
     _ensure_conversation_tables(connection)
-    _ensure_message_columns(connection)
     _ensure_indexes(connection)
     ensure_listening_schema(connection)
 
@@ -51,6 +50,11 @@ def _ensure_base_legacy_tables(connection: sqlite3.Connection) -> None:
             tool_chain  TEXT,
             extra       TEXT,
             ts          TEXT NOT NULL,
+            thread_id   TEXT,
+            sender_role TEXT,
+            media       TEXT,
+            external_message_id TEXT,
+            delivery_status TEXT,
             UNIQUE (session_key, seq)
         )
         """)
@@ -109,21 +113,6 @@ def _ensure_conversation_tables(connection: sqlite3.Connection) -> None:
             updated_at  TEXT NOT NULL
         )
         """)
-
-
-def _ensure_message_columns(connection: sqlite3.Connection) -> None:
-    rows = connection.execute("PRAGMA table_info(messages)").fetchall()
-    existing = {str(row["name"]) for row in rows}
-    additions = {
-        "thread_id": "ALTER TABLE messages ADD COLUMN thread_id TEXT",
-        "sender_role": "ALTER TABLE messages ADD COLUMN sender_role TEXT",
-        "media": "ALTER TABLE messages ADD COLUMN media TEXT",
-        "external_message_id": "ALTER TABLE messages ADD COLUMN external_message_id TEXT",
-        "delivery_status": "ALTER TABLE messages ADD COLUMN delivery_status TEXT",
-    }
-    for name, sql in additions.items():
-        if name not in existing:
-            connection.execute(sql)
 
 
 def _ensure_indexes(connection: sqlite3.Connection) -> None:

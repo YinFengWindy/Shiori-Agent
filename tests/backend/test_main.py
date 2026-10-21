@@ -242,32 +242,20 @@ async def test_inspect_modules_prints_result(
 
     await app_main.inspect_modules(workspace=tmp_path)
 
-    loader.assert_called_once_with("config.toml", workspace=tmp_path)
+    loader.assert_called_once_with("config.toml")
     assert "{'memory': 'ready'}" in capsys.readouterr().out
 
 
 @pytest.mark.asyncio
-async def test_bridge_loads_plugin_settings_using_explicit_workspace(
+async def test_bridge_passes_the_explicit_workspace(
     tmp_path, monkeypatch, capsys: pytest.CaptureFixture[str]
 ):
     # serve_bridge reconfigures sys.stderr to strict UTF-8; capsys keeps that on
     # this test's own stream instead of pytest's session-wide capture file.
     workspace = tmp_path / "workspace"
-    package = tmp_path / "packages/demo"
-    package.mkdir(parents=True)
-    (package / "manifest.yaml").write_text(
-        "api: 2\nid: demo\ncapabilities: []\n", encoding="utf-8"
-    )
-    legacy = workspace / "plugins/demo/plugin_config.json"
-    legacy.parent.mkdir(parents=True)
-    legacy.write_text('{"value":"kept"}', encoding="utf-8")
     path = tmp_path / "elsewhere/config.toml"
     path.parent.mkdir()
     path.write_text("", encoding="utf-8")
-    monkeypatch.setattr(
-        "agent.plugin_config_migration.plugin_roots", lambda: [package.parent]
-    )
-    monkeypatch.setattr("agent.plugin_config_migration.REPOSITORY_ROOT", tmp_path)
     runtime = SimpleNamespace(start=AsyncMock(), shutdown=AsyncMock(), core=object())
     builder = Mock(return_value=runtime)
     monkeypatch.setattr(app_main, "build_app_runtime", builder)
@@ -277,7 +265,6 @@ async def test_bridge_loads_plugin_settings_using_explicit_workspace(
         lambda *args, **kwargs: SimpleNamespace(serve_stdio=AsyncMock()),
     )
     await app_main.serve_bridge(str(path), workspace)
-    assert builder.call_args.args[0].plugins["demo"] == {"value": "kept"}
     assert builder.call_args.kwargs["workspace"] == workspace
     runtime.shutdown.assert_awaited_once()
 

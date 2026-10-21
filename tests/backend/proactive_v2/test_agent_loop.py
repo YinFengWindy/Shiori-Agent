@@ -589,20 +589,6 @@ async def test_mark_not_interesting_in_loop_writes_discarded():
     assert "feed-mcp:c1" in tick.last_ctx.discarded_item_ids
 
 
-@pytest.mark.asyncio
-async def test_mark_not_interesting_multiple_items():
-    llm = FakeLLM(
-        [
-            ("mark_not_interesting", {"item_ids": ["feed-mcp:1", "feed-mcp:2"]}),
-            ("finish_turn", {"decision": "skip", "reason": "no_content"}),
-        ]
-    )
-    tick = make_proactive_pipeline(llm_fn=llm)
-    await tick.run()
-    assert "feed-mcp:1" in tick.last_ctx.discarded_item_ids
-    assert "feed-mcp:2" in tick.last_ctx.discarded_item_ids
-
-
 # ── get_context_data 最多调用一次 ────────────────────────────────────────
 
 

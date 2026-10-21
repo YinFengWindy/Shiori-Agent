@@ -15,7 +15,7 @@ from shiori_sdk.lifecycle import (
 from shiori_sdk.lifecycle import (
     BeforeTurnObservation as BeforeTurnCtx,
 )
-from shiori_sdk.memory.build import MemoryStorage
+from shiori_sdk.storage import plugin_data_dir
 
 if TYPE_CHECKING:
     from shiori_sdk.memory.context import MemoryPluginContext as PluginRuntimeContext
@@ -155,11 +155,8 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
 
     recorder = _DefaultMemoryRecorder(
         active=_is_memory_engine(ctx.memory.engine, "default"),
-        data_path=_data_path(
-            plugin_dir=ctx.plugin_dir,
-            workspace=ctx.memory.workspace,
-            storage=ctx.memory.storage,
-        ),
+        data_path=plugin_data_dir(ctx.memory.workspace, "default_memory")
+        / "recall_inspector.jsonl",
     )
     ctx.lifecycle.contribute("before_turn", [ContextPrepareRecordModule(recorder)])
     ctx.events.on(AfterToolResultCtx, recorder.record_recall_memory)
@@ -177,15 +174,6 @@ def _is_memory_engine(engine: object, name: str) -> bool:
     if not callable(describe):
         return False
     return str(describe().name) == name
-
-
-def _data_path(*, plugin_dir: Path, workspace: Path, storage: MemoryStorage) -> Path:
-    source = workspace / "observe" / "recall_inspector.jsonl"
-    if not source.exists():
-        source = plugin_dir / ".data" / "recall_turns.jsonl"
-    return storage.migrate_data(
-        workspace, "default_memory", "recall_inspector.jsonl", source
-    )
 
 
 def _now_iso() -> str:

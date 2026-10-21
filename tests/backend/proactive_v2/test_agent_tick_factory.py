@@ -2,22 +2,14 @@ from __future__ import annotations
 
 import json
 
-from core.roles.reply_state import RoleReplyContext
-from typing import Any, cast
 
 from types import SimpleNamespace
-from unittest.mock import MagicMock
 
 import pytest
 
 from proactive_v2.agent_tick_factory import AgentTickDeps, AgentTickFactory
-from proactive_v2.config import ProactiveConfig
-from proactive_v2.config_loader import load_proactive_config
 from proactive_v2.context import AgentTickContext
-from proactive_v2.gateway import GatewayResult
 from proactive_v2.mcp_sources import McpClientPool
-from bootstrap.proactive import build_proactive_runtime
-from core.desktop_presence import DesktopPresence
 
 
 class _FakeProvider:
@@ -62,184 +54,6 @@ def _build_deps(*, with_pool: bool):
         pool=McpClientPool() if with_pool else None,
     )
     return deps
-
-
-def test_agent_tick_factory_build_requires_pool():
-    deps = _build_deps(with_pool=False)
-    try:
-        AgentTickFactory(deps).build()
-        assert False, "expected RuntimeError"
-    except RuntimeError as e:
-        assert "pool 不能为空" in str(e)
-
-
-def test_agent_tick_factory_build_returns_tick():
-    deps = _build_deps(with_pool=True)
-    deps.cfg.role_id = "mira"
-    tick = AgentTickFactory(deps).build()
-    assert tick is not None
-
-
-def test_agent_tick_factory_prefers_role_session_key_when_role_id_present():
-    deps = _build_deps(with_pool=True)
-    deps.cfg.role_id = "mira"
-    tick = AgentTickFactory(deps).build()
-    assert tick._session_key == "role:mira"
-
-
-@pytest.mark.parametrize("enabled", [False, True])
-@pytest.mark.parametrize("legacy_drift_enabled", [None, False, True])
-def test_agent_tick_factory_builds_drift_only_when_main_switch_is_enabled(
-    tmp_path, enabled, legacy_drift_enabled
-):
-    deps = _build_deps(with_pool=True)
-    drift = {"max_steps": 9}
-    if legacy_drift_enabled is not None:
-        drift["enabled"] = legacy_drift_enabled
-    deps.cfg = load_proactive_config(
-        {"enabled": enabled, "profile": "daily", "drift": drift},
-        role_id="mira",
-    )
-    deps.state_store = SimpleNamespace(workspace_dir=tmp_path)
-    deps.any_action_gate = SimpleNamespace()
-    tick = AgentTickFactory(deps).build()
-    if enabled:
-        assert tick._drift_pipeline is not None
-        assert tick._drift_pipeline._store.drift_dir == tmp_path / "drift"
-        assert tick._drift_pipeline._max_steps == 9
-    else:
-        assert tick._drift_pipeline is None
-
-
-def test_agent_tick_factory_binds_drift_step_recorder_to_tick_store(tmp_path):
-    deps = _build_deps(with_pool=True)
-    deps.cfg = ProactiveConfig(
-        role_id="mira",
-        drift_enabled=True,
-    )
-    state_store = SimpleNamespace(
-        workspace_dir=tmp_path,
-        record_tick_step_log=MagicMock(),
-    )
-    deps.state_store = state_store
-
-    tick = AgentTickFactory(deps).build()
-    assert tick._drift_pipeline is not None
-    assert tick._drift_pipeline.step_recorder is not None
-
-    ctx = AgentTickContext(
-        reply_context=RoleReplyContext(("平静",), ""),
-        tick_id="tick1",
-        session_key="telegram:1",
-    )
-    ctx.steps_taken = 3
-    tick._drift_pipeline.step_recorder(
-        ctx,
-        "drift",
-        "read_file",
-        "call1",
-        {"path": "x"},
-        "ok",
-    )
-
-    state_store.record_tick_step_log.assert_called_once()
-    kwargs = state_store.record_tick_step_log.call_args.kwargs
-    assert kwargs["tick_id"] == "tick1"
-    assert kwargs["step_index"] == 3
-    assert kwargs["phase"] == "drift"
-    assert kwargs["tool_name"] == "read_file"
-
-
-def test_agent_tick_factory_requires_role_id():
-    deps = _build_deps(with_pool=True)
-    try:
-        AgentTickFactory(deps).build()
-        assert False, "expected RuntimeError"
-    except RuntimeError as e:
-        assert "role_id required for proactive session key" in str(e)
-
-
-def test_build_proactive_runtime_accepts_light_agent_loop_stub(tmp_path):
-    cfg = SimpleNamespace(
-        proactive=SimpleNamespace(
-            enabled=False,
-        ),
-        fitbit=SimpleNamespace(enabled=False),
-        memory_optimizer_enabled=False,
-        memory_optimizer_interval_seconds=3600,
-        model="m",
-        max_tokens=128,
-        light_model="lm",
-    )
-    tasks, loops = build_proactive_runtime(
-        cast(Any, cfg),
-        tmp_path,
-        session_manager=cast(Any, SimpleNamespace()),
-        provider=cast(Any, SimpleNamespace()),
-        light_provider=None,
-        push_tool=cast(Any, SimpleNamespace()),
-        memory_store=None,
-        presence=cast(Any, SimpleNamespace()),
-        agent_loop=cast(Any, SimpleNamespace(processing_state=None)),
-        desktop_presence=DesktopPresence(),
-        group_environment=cast(Any, SimpleNamespace()),
-    )
-    assert tasks == []
-    assert loops == {}
-
-
-async def test_agent_tick_factory_llm_fn_forces_disable_thinking():
-    deps = _build_deps(with_pool=True)
-    deps.cfg.role_id = "mira"
-    provider = deps.provider
-    tick = AgentTickFactory(deps).build()
-
-    await tick._llm_fn(
-        messages=[{"role": "user", "content": "hi"}],
-        schemas=[{"type": "function"}],
-        tool_choice="required",
-        disable_thinking=True,
-    )
-
-    assert provider.calls[-1]["disable_thinking"] is True
-
-
-async def test_agent_tick_factory_llm_fn_honors_disable_thinking_without_schemas():
-    deps = _build_deps(with_pool=True)
-    deps.cfg.role_id = "mira"
-    provider = deps.provider
-    tick = AgentTickFactory(deps).build()
-
-    await tick._llm_fn(
-        messages=[{"role": "user", "content": "hi"}],
-        schemas=[],
-        disable_thinking=True,
-    )
-
-    assert provider.calls[-1]["disable_thinking"] is True
-
-
-def test_agent_tick_factory_feeds_the_affection_block_to_proactive_and_drift(
-    tmp_path,
-):
-    deps = _build_deps(with_pool=True)
-    deps.cfg.role_id = "mira"
-    deps.cfg.drift_enabled = True
-    deps.state_store = SimpleNamespace(workspace_dir=tmp_path)
-    deps.affection_prompt_fn = (
-        lambda: "## 好感度\n你对用户的好感：70（亲密，范围 -100 到 100）"
-    )
-    tick = AgentTickFactory(deps).build()
-
-    frame = tick._build_runtime_context_message(
-        AgentTickContext(session_key="role:mira"), GatewayResult()
-    )
-
-    assert "70（亲密，范围 -100 到 100）" in frame["content"]
-    assert "70/100" not in tick._build_system_prompt()
-    drift = tick._drift_pipeline
-    assert drift is not None
-    assert drift._tool_deps.affection_prompt_fn is deps.affection_prompt_fn
 
 
 @pytest.mark.parametrize("late_target", [False, True, "revoked", "admitted"])

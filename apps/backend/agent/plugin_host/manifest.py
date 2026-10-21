@@ -123,8 +123,6 @@ class PluginManifest:
     # 插件管理页分组（PLUGIN_CATEGORIES 之一），解析时已按 capabilities 补全默认值
     category: str = "feature"
     # ``[plugins.<id>]`` 没有显式 ``enabled`` 时是否启用；显式值始终优先。
-    # 新增 ``false`` 的内置插件要同时登记到 agent/plugin_default_enabled_migration.py，
-    # 否则升级用户的插件会被悄悄停用。
     default_enabled: bool = True
     metadata: dict[str, object] = field(default_factory=dict)
 

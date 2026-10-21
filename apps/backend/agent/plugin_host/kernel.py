@@ -167,10 +167,6 @@ class HostServices:
     plugin_configs: dict[str, dict[str, Any]] = field(default_factory=dict)
     raw_plugin_configs: dict[str, dict[str, Any]] = field(default_factory=dict)
     relationship_runtime: Any = None
-    # 插件包上移到仓库顶层之前的位置（apps/backend/plugins）。gitignore 覆盖的
-    # 本地状态（.kv.json）不会随目录重命名搬走，需要从这里
-    # 一次性迁移；打包形态下该目录不存在，字段为 None 即可。
-    legacy_plugin_root: Path | None = None
     role_runtime_registry: RoleRuntimeRegistry | None = None
     # external_turns capability 的唯一实现，由 bootstrap 以本代 AgentLoop 装配（#721）。
     external_turns: ExternalTurns | None = None
@@ -726,8 +722,6 @@ class PluginKernel:
                         handle.plugin_id, "kv", services.workspace
                     ),
                     plugin_id=handle.plugin_id,
-                    plugin_dir=handle.record.plugin_dir,
-                    legacy_plugin_root=services.legacy_plugin_root,
                 )
                 if "kv" in grants
                 else None

@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from shiori_sdk.memory.build import MemoryStorage
+from shiori_sdk.storage import plugin_data_dir
 
 
 @dataclass(frozen=True)
@@ -115,15 +116,9 @@ def resolve_memory_db_path(
     *,
     workspace: Path,
     default_config: DefaultMemoryConfig,
-    storage: MemoryStorage,
 ) -> Path:
     if not default_config.db_path:
-        return storage.migrate_data(
-            workspace,
-            "default_memory",
-            "memory2.db",
-            workspace / "memory" / "memory2.db",
-        )
+        return plugin_data_dir(workspace, "default_memory") / "memory2.db"
     path = Path(default_config.db_path)
     return path if path.is_absolute() else workspace / path
 

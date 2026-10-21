@@ -287,18 +287,6 @@ class MemoryStore:
                     done_at TEXT NOT NULL,
                     PRIMARY KEY (source_ref, kind)
                 )""")
-            cols = {
-                row[1]
-                for row in conn.execute(
-                    "PRAGMA table_info(consolidation_writes)"
-                ).fetchall()
-            }
-            if "payload" not in cols:
-                conn.execute("ALTER TABLE consolidation_writes ADD COLUMN payload TEXT")
-            if "trailing_blank_line" not in cols:
-                conn.execute(
-                    "ALTER TABLE consolidation_writes ADD COLUMN trailing_blank_line INTEGER NOT NULL DEFAULT 0"
-                )
             conn.commit()
         finally:
             conn.close()

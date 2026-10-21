@@ -80,9 +80,7 @@ async def inspect_modules(
     from core.common.cleanup import run_cleanup_steps
 
     logging.getLogger().setLevel(logging.WARNING)
-    config = Config.load(
-        config_path, workspace=workspace or resolve_default_workspace()
-    )
+    config = Config.load(config_path)
     http_resources = SharedHttpResources()
     runtime = None
     try:
@@ -133,9 +131,7 @@ async def serve_bridge(
             workspace or resolve_default_workspace(), Path(config_path)
         )
         runtime = build_app_runtime(
-            Config.load(
-                config_path, workspace=workspace or resolve_default_workspace()
-            ),
+            Config.load(config_path),
             workspace=workspace or resolve_default_workspace(),
             features=DESKTOP_RUNTIME_FEATURES,
         )

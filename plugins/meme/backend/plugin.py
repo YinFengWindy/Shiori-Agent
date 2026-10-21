@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from shiori_sdk.lifecycle import AfterReasoningCtx, PromptRenderCtx
 from shiori_sdk.prompting import PromptSectionRender
+from shiori_sdk.storage import plugin_data_dir
 from .runtime import (
     MemeCatalog,
     RoleReactionCatalog,
@@ -110,9 +111,7 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
         ctx.sessions,
         ctx.roles,
         ctx.resources,
-        ctx.storage.migrate_data(
-            ctx.workspace, "meme", "library", ctx.workspace / "memes"
-        ),
+        plugin_data_dir(ctx.workspace, "meme") / "library",
     )
     ctx.lifecycle.contribute("prompt_render", [MemePromptModule(reactions)])
     # The scoped event runs inside after_reasoning.emit, before citation's

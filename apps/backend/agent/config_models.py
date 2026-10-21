@@ -134,13 +134,11 @@ class Config:
         ]
 
     @classmethod
-    def load(
-        cls, path: str | Path = "config.toml", *, workspace: Path | None = None
-    ) -> Config:
-        """Loads persisted settings, upgrading plugin data for an explicit workspace."""
+    def load(cls, path: str | Path = "config.toml") -> Config:
+        """Loads persisted settings without rewriting the file."""
         from importlib import import_module
 
-        return import_module("agent.config").load_config(path, workspace=workspace)
+        return import_module("agent.config").load_config(path)
 
 
 __all__ = [

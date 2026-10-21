@@ -9,11 +9,10 @@ import zipfile
 from pathlib import Path, PurePosixPath
 
 from shiori_sdk.roles import Roles
-from shiori_sdk.extensions import PrivateStorage
 
 from .models import RolePetPackage, RolePetState
 from .pet_state import RolePetStateStore
-from .storage import prepare_assets, role_asset_directory
+from .storage import role_asset_directory
 from . import package_archive, package_images
 from shiori_sdk.values import now_iso
 
@@ -23,19 +22,14 @@ _FORMAT = "codex-sprite@1"
 class RolePetPackageService:
     """Handles only complete, self-contained pet packages under the plugin’s private asset root."""
 
-    def __init__(
-        self, role_store: Roles, workspace: Path, storage: PrivateStorage
-    ) -> None:
+    def __init__(self, role_store: Roles, workspace: Path) -> None:
         self._workspace = workspace
-        self._storage = storage
         self._role_store = role_store
-        prepare_assets(role_store, workspace, storage)
         self._state = RolePetStateStore(role_store)
 
     def import_package(self, role_id: str, source: str | Path) -> RolePetPackage:
         """Validates a ZIP first, then atomically promotes it into the plugin’s role-specific directory."""
         with self._role_store.read_scope():
-            prepare_assets(self._role_store, self._workspace, self._storage)
             return self._import_package(role_id, source)
 
     def _import_package(self, role_id: str, source: str | Path) -> RolePetPackage:

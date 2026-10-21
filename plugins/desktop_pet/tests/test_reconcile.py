@@ -3,7 +3,6 @@
 import shutil
 import pytest
 from shiori_sdk.testing.roles import FakeRoles
-from shiori_sdk.testing.memory import FakeMemoryStorage
 from plugins.desktop_pet.backend.models import RolePetPackage
 from plugins.desktop_pet.backend.pet_state import RolePetStateStore
 from plugins.desktop_pet.backend.reconcile import PetStateReconciler
@@ -31,7 +30,7 @@ def test_reconcile_clears_missing_packages_and_deleted_roles(tmp_path):
     orphan = tmp_path / "plugin-data/desktop_pet/pets-deleted"
     orphan.mkdir(parents=True)
     roles.extensions.values["desktop_pet"]["deleted"] = {}
-    reconciler = PetStateReconciler(roles, tmp_path, FakeMemoryStorage())
+    reconciler = PetStateReconciler(roles, tmp_path)
     reconciler.reconcile()
     assert not orphan.exists()
     assert "deleted" not in roles.extensions.read("desktop_pet")
@@ -69,7 +68,7 @@ def test_reconcile_keeps_newest_enabled_role_and_retries_failed_asset_cleanup(
     orphan = tmp_path / "plugin-data/desktop_pet/pets-deleted"
     orphan.mkdir(parents=True)
     (orphan / "leftover.tmp").write_text("interrupted import", encoding="utf-8")
-    reconcile = PetStateReconciler(roles, tmp_path, FakeMemoryStorage())
+    reconcile = PetStateReconciler(roles, tmp_path)
     with monkeypatch.context() as patch:
 
         def fail(_path):
