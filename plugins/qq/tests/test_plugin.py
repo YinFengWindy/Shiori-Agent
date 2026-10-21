@@ -14,8 +14,57 @@ from shiori_sdk.testing.channel_context import (
     FakeChannelDeclarations,
 )
 from plugins.qq.backend.plugin import _cancel, _send_account
+from plugins.qq.backend.plugin import _resolve_account
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
+
+
+async def test_natural_route_is_native_and_read_only_while_send_keeps_legacy_contract(
+    monkeypatch,
+):
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    def via(account_id):
+        if account_id != "qq:101":
+            raise ValueError("unknown account")
+        return {"platform_account_id": "101"}
+
+    runtime = SimpleNamespace(
+        name="qq",
+        via_account=via,
+        send_target=AsyncMock(return_value={"message_id": "receipt"}),
+    )
+    payload = {
+        "account_id": "qq:101",
+        "target_kind": "group",
+        "target_id": "42",
+        "message": "raw payload",
+        "mention_ids": ["902"],
+    }
+    assert await _resolve_account(runtime, payload) == {
+        "channel": "qq",
+        "chat_id": GROUP_PREFIX + "42",
+        "chat_type": "group",
+        "message_thread_id": None,
+    }
+    runtime.send_target.assert_not_awaited()
+    with pytest.raises(ValueError):
+        await _resolve_account(runtime, {**payload, "account_id": "qq:other"})
+    monkeypatch.setattr(
+        "plugins.qq.backend.plugin._resolve_account",
+        AsyncMock(side_effect=AssertionError("ordinary sends must not resolve")),
+    )
+    assert (await _send_account(runtime, payload))["message_id"] == "receipt"
+    runtime.send_target.assert_awaited_once_with(
+        "qq:101",
+        "group",
+        "42",
+        "raw payload",
+        group_id="",
+        mention_ids=("902",),
+        images=(),
+    )
 
 
 def test_manifest_preserves_historical_channel_name() -> None:

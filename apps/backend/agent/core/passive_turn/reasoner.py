@@ -6,7 +6,11 @@ from shiori_sdk.tools import TOOL_ATTACHMENT_SCOPE_KEY, ToolAttachmentScope
 from agent.tools.turn_scope import tool_turn
 from agent.looping.interrupt import in_detached_turn
 from agent.turns.reply_sequence import buffered_reply_scope, presented_tool_chain
-from agent.turns.channel_sequence import supports_channel_sequence
+from agent.turns.channel_sequence import (
+    supports_channel_sequence,
+    channel_sequence_context,
+)
+from agent.turns.reply_interruption import current_reply_interruption
 from agent.account_delivery.turn_state import account_delivery_scope
 
 from core.roles.reply_state import role_mood_catalog
@@ -367,6 +371,12 @@ class DefaultReasoner(
 
             measured_stream_sink = _measure_stream_delta
         disabled_tools = _disabled_tools_from_msg(msg)
+        delivery_context = channel_sequence_context()
+        owned_background_reply = (
+            msg.metadata.get("source") == "background_result"
+            and delivery_context is not None
+            and delivery_context.owner.owns_background(current_reply_interruption())
+        )
         full_tools_allowed = self._tools.allows_full_tools(
             msg, role_id=str(get_session_metadata(session).get("role_id") or "")
         )
@@ -458,9 +468,12 @@ class DefaultReasoner(
                             and bool(msg.metadata.get("request_id"))
                         )
                     )
-                    and not in_detached_turn()
+                    and (not in_detached_turn() or owned_background_reply)
                     and msg.metadata.get("role_work_kind") != "scheduled_job"
-                    and msg.metadata.get("source") != "background_result"
+                    and (
+                        msg.metadata.get("source") != "background_result"
+                        or owned_background_reply
+                    )
                 ),
             )
             prompt_render = await self.render_prompt(render_input)

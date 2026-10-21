@@ -13,6 +13,8 @@ from proactive_v2.context import AgentTickContext
 from proactive_v2.gateway import GatewayResult
 from proactive_v2.tools import TOOL_SCHEMAS, dispatch
 from proactive_v2.reply_output import correct_push_call, reply_schemas
+from agent.turns.reply_interruption import reply_was_invalidated
+from agent.turns.proactive_sequence import current_proactive_reply
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +36,7 @@ class ProactiveJudgeHost(Protocol):
     _llm_fn: Any
     _last_gateway_result: GatewayResult | None
     _tool_executor: Any
+    _turn_orchestrator: Any
     last_ctx: AgentTickContext | None
 
     def _relationship_fallback_style_hint(self) -> str: ...
@@ -224,7 +227,8 @@ async def run_tool_step(
     retry_on_no_tool_call: bool = False,
 ) -> bool:
     """调用模型并执行工具；同场景模式可纠正一次纯文本响应。"""
-
+    if reply_was_invalidated():
+        return False
     active_schemas = reply_schemas(schemas or TOOL_SCHEMAS, ctx)
     shared_tools = getattr(pipeline._tool_deps, "shared_tools", None)
     if schemas is None and shared_tools is not None:
@@ -235,6 +239,8 @@ async def run_tool_step(
     if llm_fn is None:
         return False
     tool_call = await llm_fn(messages, active_schemas, tool_choice)
+    if reply_was_invalidated():
+        return False
     if tool_call is None and retry_on_no_tool_call:
         if (
             ctx.reply_format_corrections
@@ -250,6 +256,8 @@ async def run_tool_step(
         )
         messages.append({"role": "user", "content": _SCENE_TOOL_PROTOCOL_RETRY_PROMPT})
         tool_call = await llm_fn(messages, active_schemas, "required")
+        if reply_was_invalidated():
+            return False
         if tool_call is None:
             ctx.skip_reason = "tool_protocol_error"
             ctx.skip_note = _TOOL_PROTOCOL_ERROR_NOTE
@@ -283,6 +291,8 @@ async def run_tool_step(
         llm_fn=llm_fn,
         remaining_steps=pipeline._cfg.agent_tick_max_steps - ctx.steps_taken - 1,
     )
+    if reply_was_invalidated():
+        return False
     tool_name = tool_call.get("name", "")
     tool_args = tool_call.get("input", {})
     arg_summary = json.dumps(tool_args, ensure_ascii=False)[:200]
@@ -316,6 +326,28 @@ async def run_tool_step(
         ),
         lambda name, args: dispatch(name, args, ctx, pipeline._tool_deps),
     )
+    if current_proactive_reply() is not None:
+        if tool_name not in {"message_push", "finish_turn"}:
+            ctx.tool_chain.append(
+                {
+                    "text": "",
+                    "calls": [
+                        {
+                            "call_id": str(
+                                tool_call.get("id") or f"call_{ctx.steps_taken}"
+                            ),
+                            "name": tool_name,
+                            "arguments": tool_args,
+                            "result": str(exec_result.output),
+                        }
+                    ],
+                }
+            )
+        if tool_name == "message_push" and ctx.account_target is not None:
+            await pipeline._turn_orchestrator.retarget_natural_reply(
+                pipeline._session_key,
+                ctx.account_target,
+            )
     if exec_result.status == "error":
         logger.warning(
             diagnostic_line(
@@ -385,7 +417,7 @@ async def run_tool_step(
         tool_call_id=call_id,
         result=result,
     )
-    return True
+    return not reply_was_invalidated()
 
 
 def append_tool_messages(

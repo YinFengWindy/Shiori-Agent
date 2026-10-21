@@ -90,9 +90,9 @@ def reply_interruption_scope(interruption: ReplyInterruption | None):
 
 
 def current_reply_interruption() -> ReplyInterruption | None:
-    """Return this desktop (ordinary/natural) or admitted channel reply lifetime.
+    """Return the desktop, admitted channel or owned natural report plan.
 
-    Unintegrated and internal turns have no interruption context.
+    Other internal/direct turns have no interruption context.
     """
     return _CURRENT.get()
 

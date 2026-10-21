@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, cast
+from dataclasses import replace
+from agent.background.result_history import commit_background_fact
 
 from agent.core.passive_support import predict_current_user_source_ref
 from agent.core.passive_turn import get_session_metadata
@@ -76,6 +78,45 @@ async def process_spawn_completion_event(
         "禁止在回复中提及 subagent、spawn、job_id、内部事件等内部概念。\n"
         "必要时可读取结果里提到的文件来补充说明。"
     )
+
+    if item.origin is not None:
+        metadata = {
+            **item.origin.metadata,
+            "source": "background_result",
+            "turn_id": f"spawn:{event.job_id}",
+            "omit_user_turn": True,
+            "skip_post_memory": True,
+            "suppress_stream_events": True,
+        }
+        for field in (
+            "external_message_id",
+            "message_id",
+            "reply_to_content",
+            "reply_to_media",
+        ):
+            metadata.pop(field, None)
+        # The completed job is a tool fact even if its subsequent role report
+        # is superseded before sending. Never store an unseen report as history.
+        await commit_background_fact(
+            session_svc.session_manager,
+            key,
+            metadata=metadata,
+            call_id=f"spawn:{event.job_id}",
+            name="spawn",
+            arguments={"task": event.task},
+            result=event.result,
+        )
+        return await pipeline.run(
+            msg=replace(
+                item.origin,
+                content=current_message,
+                timestamp=item.timestamp,
+                metadata=metadata,
+                media=[],
+            ),
+            key=key,
+            dispatch_outbound=dispatch_outbound,
+        )
 
     # 2. 再调用主模型生成用户可见回复。
     session_metadata = get_session_metadata(session)

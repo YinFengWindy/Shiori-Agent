@@ -89,7 +89,7 @@ async def capture(host, channel="desktop", chat_id="role:mira", sender="user"):
                     desktop_thread_id("mira") if channel == "desktop" else USER_DM
                 ),
                 "chat_type": "private",
-                "message_thread_id": 27,
+                "message_thread_id": 27 if channel != "desktop" else None,
             },
         )
     )
@@ -185,6 +185,190 @@ async def test_ordinary_desktop_turn_is_published_once_by_chat_service(host, bri
         (event["payload"]["message"]["role"], event["payload"]["message"]["content"])
         for event in updates
     ] == [("assistant", "reply-1")]
+
+
+@pytest.mark.parametrize("stage", ["generation", "pacing"])
+async def test_natural_background_report_yields_to_desktop_input_without_losing_result(
+    host, bridge, tmp_path, monkeypatch, stage
+):
+    from bootstrap.runtime.generations import RuntimeCandidate
+    from bus.queue import MessageBus
+    from core.common.runtime_scope import bind_runtime
+    from agent.provider import LLMResponse
+    from session.manager import SessionManager
+    from session.manager.models import whole_session
+    from types import SimpleNamespace
+
+    entered, release = asyncio.Event(), asyncio.Event()
+    requests = []
+
+    async def model(**kwargs):
+        if kwargs.get("response_format"):
+            return LLMResponse(content='{"mood":"平静","thought":"我想说明结果。"}')
+        index = len(requests)
+        requests.append(kwargs)
+        if index == 0 and stage == "generation":
+            entered.set()
+            await release.wait()
+        return LLMResponse(
+            content=(
+                "结果前缀\n<message-break/>\n未送达尾段"
+                if index == 0
+                else "补充后的回复"
+            )
+        )
+
+    async def pause(_):
+        entered.set()
+        await release.wait()
+
+    monkeypatch.setattr(host.provider, "chat", model)
+    monkeypatch.setattr("agent.turns.reply_sequence.wait_between_messages", pause)
+    candidate = RuntimeCandidate(1, SimpleNamespace(loop=host.loop), SimpleNamespace())
+    target = await capture(host)
+    # The capability is read when the result is ready, not frozen at capture.
+    host.roles.update_role("mira", runtime_config={"natural_chat_enabled": True})
+    emitted = []
+    bridge.add_event_listener(emitted.append)
+
+    async def report():
+        async with candidate.acquire() as lease:
+            with bind_runtime(lease), candidate.reply_sequences.bind(MessageBus()):
+                return await target.report(
+                    "background:finished", "原始完成事实：产物已验证"
+                )
+
+    reporting = asyncio.create_task(report())
+    await asyncio.wait_for(entered.wait(), 3)
+    async with candidate.acquire() as lease:
+        with bind_runtime(lease):
+            for turn in ("new-1", "new-2"):
+                response = await bridge.handle(
+                    {
+                        "id": turn,
+                        "method": "chat.send",
+                        "payload": {"role_id": "mira", "content": turn},
+                    },
+                    emit_event=emitted.append,
+                )
+                assert response.error is None
+    release.set()
+    assert await asyncio.wait_for(reporting, 3)
+    await asyncio.wait_for(bridge.chat_service._tasks_by_session["role:mira"].task, 3)
+    rows = SessionManager(tmp_path).get_or_create("role:mira").messages
+    assert not any("未送达尾段" in m["content"] for m in rows)
+    assert [m["content"] for m in rows if m["content"] in {"new-1", "new-2"}] == [
+        "new-1",
+        "new-2",
+    ]
+    history = (
+        SessionManager(tmp_path)
+        .get_or_create("role:mira")
+        .get_history(include=whole_session)
+    )
+    assert sum(m.get("content") == "原始完成事实：产物已验证" for m in history) == 1
+    assert any(
+        event["method"] == "chat.done" and event["payload"]["turn_id"] == "new-2"
+        for event in emitted
+    )
+    if stage == "pacing":
+        prefix = next(m for m in rows if m["content"] == "结果前缀")
+        assert any(
+            event["method"] == "session.updated"
+            and event["payload"].get("message", {}).get("id") == prefix["id"]
+            for event in emitted
+        )
+    async with asyncio.timeout(3):
+        while candidate.references:
+            await asyncio.sleep(0)
+
+
+@pytest.mark.parametrize("ordinary_turns", [False, True])
+async def test_natural_report_batch_reloads_and_does_not_change_eligible_undo_turn(
+    host, tmp_path, monkeypatch, ordinary_turns
+):
+    from agent.provider import LLMResponse
+    from agent.turns.channel_sequence import ChannelSequenceOwner
+    from bus.queue import MessageBus
+    from session.manager import SessionManager
+
+    session = host.manager.get_or_create("role:mira")
+    old_last_turn = [str(m["id"]) for m in session.messages[-2:]]
+    if not ordinary_turns:
+        session.clear()
+        host.manager.save(session)
+    target = await capture(host)
+    host.roles.update_role("mira", runtime_config={"natural_chat_enabled": True})
+
+    async def model(**kwargs):
+        return LLMResponse(
+            content=(
+                '{"mood":"平静","thought":"我想说明结果。"}'
+                if kwargs.get("response_format")
+                else "报告第一条\n<message-break/>\n报告第二条"
+            )
+        )
+
+    monkeypatch.setattr(host.provider, "chat", model)
+    monkeypatch.setattr("agent.turns.reply_sequence.wait_between_messages", AsyncMock())
+    with ChannelSequenceOwner().bind(MessageBus()):
+        assert await target.report("report:stable", "真实完成的后台事实")
+    reloaded = SessionManager(tmp_path).get_or_create("role:mira")
+    report_rows = [
+        m
+        for m in reloaded.messages
+        if m.get("metadata", {}).get("source") == "background_result"
+    ]
+    assert len(report_rows) == 3
+    assert [
+        m["metadata"]["reply_sequence_id"] for m in report_rows if m["content"]
+    ] == ["report:stable", "report:stable"]
+    before_ids = {str(m["id"]) for m in report_rows}
+    result = await host.manager.undo_last_turn("role:mira")
+    if ordinary_turns:
+        assert result is not None
+        assert result.deleted_ids == old_last_turn
+    else:
+        assert result is None
+    after = SessionManager(tmp_path).get_or_create("role:mira")
+    assert before_ids.issubset({str(m["id"]) for m in after.messages})
+    assert [m for m in after.messages if str(m["id"]) in before_ids] == report_rows
+
+
+async def test_background_report_reads_disabled_role_without_sequence_protocol(
+    host, monkeypatch
+):
+    from agent.provider import LLMResponse
+    from agent.turns.channel_sequence import ChannelSequenceOwner
+    from bus.queue import MessageBus
+    from prompts.natural_chat import NATURAL_CHAT_PROMPT
+
+    host.roles.update_role("mira", runtime_config={"natural_chat_enabled": True})
+    target = await capture(host)
+    host.roles.update_role("mira", runtime_config={"natural_chat_enabled": False})
+    requests = []
+
+    async def model(**kwargs):
+        requests.append(kwargs)
+        return LLMResponse(
+            content=(
+                '{"content":"普通报告", "mood":"平静", "thought":"我想说明结果。"}'
+                if kwargs.get("response_format")
+                else "普通报告"
+            )
+        )
+
+    monkeypatch.setattr(host.provider, "chat", model)
+    with ChannelSequenceOwner().bind(MessageBus()):
+        assert await target.report("report:off", "已完成")
+    rows = [
+        m
+        for m in host.manager.get_or_create("role:mira").messages
+        if m.get("metadata", {}).get("source") == "background_result"
+    ]
+    assert [m["content"] for m in rows] == ["普通报告"]
+    assert all("reply_sequence_id" not in m.get("metadata", {}) for m in rows)
+    assert not any(NATURAL_CHAT_PROMPT in str(request) for request in requests)
 
 
 async def test_report_waits_for_role_then_uses_original_transport(host):

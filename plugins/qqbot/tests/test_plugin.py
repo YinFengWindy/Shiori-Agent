@@ -36,6 +36,7 @@ async def test_qqbot_plugin_exposes_an_empty_account_channel() -> None:
         assert set(ctx.rpc.handlers) == {
             "account.detail",
             "account.targets",
+            "account.resolve",
             "account.save",
             "account.disconnect",
             "account.send",

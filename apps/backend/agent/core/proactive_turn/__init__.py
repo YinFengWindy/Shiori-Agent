@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import asyncio
 import random as _random_module
 import time
 from datetime import datetime, timezone
@@ -13,6 +14,10 @@ from agent.turns.result import TurnResult
 from core.common.diagnostic_log import diagnostic_context, diagnostic_line
 from proactive_v2.context import AgentTickContext
 from proactive_v2.gateway import GatewayResult
+from agent.turns.proactive_sequence import current_proactive_reply
+from agent.turns.reply_interruption import ReplyInterruption, reply_was_invalidated
+from core.common.cancellation import finish_started
+from prompts.natural_chat import NATURAL_CHAT_DRAFT_PROMPT
 
 from .delivery import (
     deliver_execute as _deliver_execute,
@@ -193,6 +198,47 @@ class ProactiveTurnPipeline:
             )
             return gate.base_score
 
+        orchestrator = self._turn_orchestrator
+        if orchestrator is None or not orchestrator.natural_chat_enabled(
+            self._session_key
+        ):
+            return await self._run_admitted_context(ctx, started, gate)
+
+        interruption = ReplyInterruption()
+
+        async def natural_turn():
+            async with orchestrator.natural_reply_scope(
+                self._session_key,
+                ctx.target_channel,
+                ctx.target_chat_id,
+                turn_id=f"proactive:{ctx.tick_id}",
+                interruption=interruption,
+            ):
+                try:
+                    return await self._run_admitted_context(ctx, started, gate)
+                finally:
+                    await orchestrator.commit_proactive_tool_facts(
+                        self._session_key, ctx.tool_chain
+                    )
+
+        task = asyncio.create_task(
+            natural_turn(), name=f"proactive-reply:{ctx.tick_id}"
+        )
+        try:
+            return await finish_started(task, on_cancel=interruption.invalidate)
+        except asyncio.CancelledError:
+            if asyncio.current_task().cancelling():
+                raise
+            return None
+
+    async def _run_admitted_context(
+        self,
+        ctx: AgentTickContext,
+        started: float,
+        gate: GateResult,
+    ) -> float | None:
+        if reply_was_invalidated():
+            return None
         ctx.context_as_fallback_open = gate.context_as_fallback_open
         ctx.selected_gate = gate.activation
         self.last_ctx = ctx
@@ -219,6 +265,9 @@ class ProactiveTurnPipeline:
         if feed.messages and ctx.terminal_action is None:
             with diagnostic_context(phase="agent_loop"):
                 await self._judge_evaluate(ctx, feed.messages)
+
+        if reply_was_invalidated():
+            return None
 
         with diagnostic_context(phase="resolve"):
             decision = await self._resolve_decide(ctx)
@@ -308,7 +357,10 @@ class ProactiveTurnPipeline:
         )
 
     def _build_system_prompt(self) -> str:
-        return _build_system_prompt(self._role_prompt_fn())
+        prompt = _build_system_prompt(self._role_prompt_fn())
+        if current_proactive_reply() is not None:
+            prompt += "\n\n" + NATURAL_CHAT_DRAFT_PROMPT
+        return prompt
 
     def _build_runtime_context_message(
         self,
@@ -337,6 +389,8 @@ class ProactiveTurnPipeline:
         )
 
     def _relationship_fallback_style_hint(self) -> str:
+        if current_proactive_reply() is not None:
+            return ""
         return _relationship_fallback_style_hint()
 
     def _read_workspace_context_for_prompt(self) -> str:

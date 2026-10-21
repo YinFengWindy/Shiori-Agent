@@ -9,6 +9,7 @@ from shiori_sdk.accounts import (
     response_rules_to_dict,
 )
 from shiori_sdk.accounts.targets import ACCOUNT_SEND_METHOD, ACCOUNT_TARGETS_METHOD
+from shiori_sdk.accounts.routing import ACCOUNT_RESOLVE_METHOD
 from .accounts import QQBotAccountStore
 
 if TYPE_CHECKING:
@@ -50,3 +51,8 @@ async def setup(ctx: "ChannelPluginContext") -> None:
     ctx.rpc.register("account.save", channel.save_and_connect)
     ctx.rpc.register("account.disconnect", channel.disconnect)
     ctx.rpc.register(ACCOUNT_SEND_METHOD, channel.account_send)
+    ctx.rpc.register(
+        ACCOUNT_RESOLVE_METHOD,
+        channel.account_resolve,
+        concurrency=Concurrency.READ_ONLY,
+    )

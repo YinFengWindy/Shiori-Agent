@@ -5,6 +5,8 @@ import pytest
 from agent.policies.delegation import SpawnDecision, SpawnDecisionMeta
 from agent.tools.registry import ToolRegistry
 from agent.tools.spawn import SpawnManageTool, SpawnTool
+from agent.tools.turn_origin import set_tool_origin
+from shiori_sdk.messages import InboundMessage
 
 
 def _make_manager(spawn_return="started", spawn_sync_return="sync-result"):
@@ -15,6 +17,47 @@ def _make_manager(spawn_return="started", spawn_sync_return="sync-result"):
     manager.list_running_jobs = Mock(return_value=[])
     manager.cancel = AsyncMock(return_value=False)
     return manager
+
+
+async def test_role_spawn_carries_only_the_real_snapshotted_source():
+    manager = _make_manager()
+    manager.role_runtime_enabled = True
+    registry = ToolRegistry()
+    registry.set_context(role_id="mira", channel="telegram_one", chat_id="-42")
+    origin = InboundMessage(
+        "telegram_one",
+        "alice",
+        "-42",
+        "真实用户请求",
+        metadata={
+            "role_id": "mira",
+            "account_id": "telegram:one",
+            "chat_type": "group",
+            "message_thread_id": 27,
+            "session_key_override": "role:mira",
+            "thread_id": "thread:mira:telegram_one:-42",
+        },
+    )
+    set_tool_origin(origin)
+    origin.metadata["message_thread_id"] = 28
+    tool = SpawnTool(manager, registry)
+    assert (
+        await tool.execute(task="完成独立任务", label="任务", run_in_background=True)
+        == "started"
+    )
+    captured = manager.spawn.await_args.kwargs["origin"]
+    assert captured.sender == "alice"
+    assert captured.session_key == "role:mira"
+    assert captured.metadata["message_thread_id"] == 27
+    manager.spawn.reset_mock()
+    with pytest.raises(ValueError, match="真实入站身份"):
+        await tool.execute(
+            task="不能改投",
+            run_in_background=True,
+            channel="telegram_other",
+            chat_id="-42",
+        )
+    manager.spawn.assert_not_awaited()
 
 
 @pytest.mark.asyncio

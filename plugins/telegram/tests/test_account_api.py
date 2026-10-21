@@ -66,6 +66,36 @@ def _bots(channels):
     return SimpleNamespace(channel=channels.get, ref_for_account=ref_for_account)
 
 
+async def test_natural_route_resolves_account_topic_without_sending_or_changing_explicit_send(
+    account_api, monkeypatch
+):
+    api, first = account_api
+    payload = {
+        "account_id": "account-first",
+        "target_kind": "group",
+        "target_id": "-1001",
+        "message_thread_id": 7,
+        "message": "raw payload",
+    }
+    assert await api.account_resolve(payload) == {
+        "channel": "telegram_first",
+        "chat_id": "-1001",
+        "chat_type": "group",
+        "message_thread_id": 7,
+    }
+    first.send.assert_not_awaited()
+    first.send_image.assert_not_awaited()
+    with pytest.raises(ValueError):
+        await api.account_resolve({**payload, "account_id": "unknown"})
+    monkeypatch.setattr(
+        api,
+        "account_resolve",
+        AsyncMock(side_effect=AssertionError("ordinary sends must not resolve")),
+    )
+    assert (await api.account_send(payload))["message_id"] == "77"
+    first.send.assert_awaited_once_with("-1001", "raw payload", message_thread_id=7)
+
+
 @pytest.mark.asyncio
 async def test_known_chats_are_per_bot_and_not_a_full_directory(account_api):
     api, _ = account_api

@@ -177,6 +177,9 @@ class ProactiveLoop:
                 event_bus=self._event_bus,
                 account_delivery=shared_account_delivery(self._shared_tools),
                 bound_chat_target=self._target_resolver.bound_chat_target,
+                role_lookup=(
+                    self._role_store.get_role if self._role_store is not None else None
+                ),
             )
         )
 

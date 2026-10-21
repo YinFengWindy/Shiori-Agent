@@ -14,6 +14,7 @@ from shiori_sdk.storage import read_mapping
 
 from shiori_sdk.accounts import VIA_ACCOUNT_KEY
 from shiori_sdk.accounts.conversation import AccountConversation
+from shiori_sdk.accounts.routing import ACCOUNT_RESOLVE_METHOD, AccountRoute
 from shiori_sdk.media import detect_image_mime_from_header
 from shiori_sdk.accounts.targets import (
     ACCOUNT_SEND_METHOD,
@@ -21,6 +22,7 @@ from shiori_sdk.accounts.targets import (
     GROUP_MEMBER_TARGET,
     UncertainDeliveryError,
     account_send_media,
+    AccountTarget,
 )
 from .channel.formatting import mention_markdown
 
@@ -70,6 +72,11 @@ class TelegramAccountApi:
             concurrency=Concurrency.READ_ONLY,
         )
         self._rpc.register(
+            ACCOUNT_RESOLVE_METHOD,
+            self.account_resolve,
+            concurrency=Concurrency.READ_ONLY,
+        )
+        self._rpc.register(
             ACCOUNT_SEND_METHOD,
             self.account_send,
             concurrency=Concurrency.INTEGRATION,
@@ -93,6 +100,28 @@ class TelegramAccountApi:
                 }
             )
         raise ValueError("Telegram 仅支持已知会话和指定成员查询")
+
+    async def account_resolve(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Resolve the same account/chat/topic as sends, without sending."""
+        ref = self._ref_for_account(payload)
+        if payload.get("target_kind") == GROUP_MEMBER_TARGET:
+            raise ValueError("Telegram 不支持群临时会话")
+        target = AccountTarget.from_arguments(payload)
+        if (
+            target.kind not in {"private", "group"}
+            or not target.id.lstrip("-").isdigit()
+            or (int(target.id) < 0) != (target.kind == "group")
+        ):
+            raise ValueError("Telegram 目标类型与会话 ID 不匹配")
+        channel = self._channel({"ref": ref})
+        if not channel.can_send():
+            raise RuntimeError("Telegram Bot is not connected")
+        return AccountRoute(
+            channel.name,
+            str(int(target.id)),
+            "group" if target.kind == "group" else "private",
+            target.message_thread_id,
+        ).to_payload()
 
     async def account_send(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Validate a selected Telegram chat, optional forum topic and mentions.

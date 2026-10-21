@@ -31,6 +31,11 @@ from agent.turns.outbound import PushToolOutboundPort
 from session.manager.models import build_session_message
 from core.roles.reply_state import reply_state_metadata
 from core.identity import UserIdentityStore
+from agent.turns.channel_sequence import ChannelSequenceOwner
+from bus.queue import MessageBus
+from bus.events_lifecycle import ReplyMessageCommitted
+from shiori_sdk.messages import InboundMessage
+from session.manager.models import whole_session
 
 
 class _DummySession:
@@ -544,6 +549,222 @@ async def _send(owner, result):
     return await owner.handle_proactive_turn(
         result=result, session_key="role:mira", channel="desktop", chat_id="role:mira"
     )
+
+
+@pytest.mark.parametrize("stage", ["pacing", "sending"])
+async def test_natural_proactive_keeps_sent_prefix_and_finishes_one_logical_turn(
+    tmp_path, monkeypatch, stage
+):
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("role:mira")
+    session.metadata.update(
+        role_id="mira", role_runtime_config={"natural_chat_enabled": True}
+    )
+    events, sent = [], []
+    entered, release = asyncio.Event(), asyncio.Event()
+    event_bus = EventBus()
+    event_bus.on(ProactiveMessageCommitted, events.append)
+    bubbles = []
+    event_bus.on(ReplyMessageCommitted, bubbles.append)
+
+    async def pause(_):
+        if stage == "pacing":
+            entered.set()
+            await release.wait()
+
+    async def dispatch(message):
+        sent.append(message.content)
+        if stage == "sending":
+            entered.set()
+            await release.wait()
+        return DeliveryReceipt.sent()
+
+    monkeypatch.setattr("agent.turns.reply_sequence.wait_between_messages", pause)
+    presence = SimpleNamespace(record_proactive_sent_by_role=AsyncMock())
+    # Presence is synchronous; retain call counts without an unawaited coroutine.
+    from unittest.mock import Mock
+
+    presence.record_proactive_sent_by_role = Mock()
+    relationship = SimpleNamespace(handle_proactive_sent=Mock())
+    owner = TurnOrchestrator(
+        TurnOrchestratorDeps(
+            session=SessionServices(
+                manager, presence=presence, relationship_runtime=relationship
+            ),
+            outbound=SimpleNamespace(dispatch=dispatch),
+            event_bus=event_bus,
+        )
+    )
+    result = _formal_result(owner, "看完啦。\n<message-break/>\n这是未发送的解释。")
+    success, failure = AsyncMock(), AsyncMock()
+    result.success_side_effects = [SimpleNamespace(run=success)]
+    result.failure_side_effects = [SimpleNamespace(run=failure)]
+    batches = ChannelSequenceOwner()
+
+    async def run():
+        with batches.bind(MessageBus()):
+            async with owner.natural_reply_scope(
+                "role:mira", "desktop", "role:mira", turn_id="tick:one"
+            ):
+                return await _send(owner, result)
+
+    task = asyncio.create_task(run())
+    await asyncio.wait_for(entered.wait(), 2)
+    batches.interrupt_background(
+        InboundMessage(
+            "desktop", "user", "role:mira", "补充", metadata={"role_id": "mira"}
+        )
+    )
+    if stage == "sending":
+        assert not task.done()
+        release.set()
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(task, 2)
+    assert sent == ["看完啦。"]
+    reloaded = SessionManager(tmp_path).get_or_create("role:mira")
+    assert [
+        message["content"]
+        for message in reloaded.get_history(include=whole_session)
+        if message["role"] == "assistant"
+    ] == sent
+    assert len(bubbles) == len(events) == 1
+    assert events[0].assistant_response == "看完啦。"
+    assert bubbles[0].message_ids == (events[0].message_id,)
+    assert not reloaded.metadata.get("current_mood")
+    success.assert_not_awaited()
+    failure.assert_awaited_once()
+    presence.record_proactive_sent_by_role.assert_called_once_with("mira")
+    relationship.handle_proactive_sent.assert_called_once_with("role:mira")
+    await event_bus.aclose()
+
+
+@pytest.mark.parametrize("enabled", [False, True])
+async def test_natural_proactive_reads_role_flag_and_records_state_once(
+    tmp_path, monkeypatch, enabled
+):
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("role:mira")
+    session.metadata.update(
+        role_id="mira", role_runtime_config={"natural_chat_enabled": enabled}
+    )
+    dispatch = AsyncMock(return_value=DeliveryReceipt.sent())
+    event_bus = EventBus()
+    events = []
+    event_bus.on(ProactiveMessageCommitted, events.append)
+    monkeypatch.setattr("agent.turns.reply_sequence.wait_between_messages", AsyncMock())
+    owner = TurnOrchestrator(
+        TurnOrchestratorDeps(
+            session=SessionServices(manager),
+            outbound=SimpleNamespace(dispatch=dispatch),
+            event_bus=event_bus,
+        )
+    )
+    result = _formal_result(owner, "你好。\n<message-break/>\n今天怎么样？")
+    success = AsyncMock()
+    result.success_side_effects = [SimpleNamespace(run=success)]
+    with ChannelSequenceOwner().bind(MessageBus()):
+        async with owner.natural_reply_scope(
+            "role:mira", "desktop", "role:mira", turn_id="tick:one"
+        ):
+            assert await _send(owner, result)
+    contents = [call.args[0].content for call in dispatch.await_args_list]
+    assert contents == (
+        ["你好。", "今天怎么样？"] if enabled else [result.outbound.content]
+    )
+    assert len(events) == 1
+    success.assert_awaited_once()
+    assert manager.get_or_create("role:mira").metadata["current_mood"] == "平静"
+    await event_bus.aclose()
+
+
+async def test_bound_private_natural_batch_uses_known_address_without_resolver_rpc(
+    tmp_path, monkeypatch
+):
+    accounts = AccountRegistry(lambda role_id: role_id == "mira")
+    account = accounts.register(
+        plugin_id="chat",
+        platform="chat",
+        platform_account_id="bot",
+        config_ref="bot",
+        token="live",
+        role_id="mira",
+    )
+    accounts.report(account.record.id, "live", connection="online")
+    sends = []
+
+    async def send(payload):
+        sends.append(payload)
+        return {"message_id": "received-first"}
+
+    def resolve(method):
+        assert method == "plugin.chat.account.send"
+        return "chat", send
+
+    manager = SessionManager(tmp_path)
+    manager.get_or_create("role:mira").metadata.update(
+        role_id="mira", role_runtime_config={"natural_chat_enabled": True}
+    )
+    owner = TurnOrchestrator(
+        TurnOrchestratorDeps(
+            session=SessionServices(manager),
+            outbound=SimpleNamespace(dispatch=AsyncMock()),
+            account_delivery=AccountDelivery(
+                accounts,
+                SimpleNamespace(resolve=resolve),
+                AccountDeliveryLedger(tmp_path),
+                UserIdentityStore(tmp_path),
+            ),
+            bound_chat_target=lambda role_id, channel, chat_id: (
+                "chat",
+                AccountTarget("private", "user42"),
+            ),
+        )
+    )
+    pause = asyncio.Event()
+
+    async def pace(_):
+        pause.set()
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr("agent.turns.reply_sequence.wait_between_messages", pace)
+    batches = ChannelSequenceOwner()
+    result = _formal_result(owner, "已送达前缀\n<message-break/>\n不要发送尾段")
+
+    async def run():
+        with batches.bind(MessageBus()):
+            async with owner.natural_reply_scope(
+                "role:mira", "chat_bot", "canonical-dm", turn_id="private:tick"
+            ):
+                return await owner.handle_proactive_turn(
+                    result=result,
+                    session_key="role:mira",
+                    channel="chat_bot",
+                    chat_id="canonical-dm",
+                )
+
+    task = asyncio.create_task(run())
+    await asyncio.wait_for(pause.wait(), 3)
+    batches.interrupt_background(
+        InboundMessage(
+            "chat_bot",
+            "user42",
+            "canonical-dm",
+            "补充",
+            metadata={
+                "role_id": "mira",
+                "account_id": account.record.id,
+                "chat_type": "private",
+            },
+        )
+    )
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert [m["message"] for m in sends] == ["已送达前缀"]
+    [row] = SessionManager(tmp_path).get_or_create("role:mira").messages
+    assert row["delivery_status"] == "sent"
+    assert row["external_message_id"] == "received-first"
+    assert row["metadata"]["transport_chat_id"] == "canonical-dm"
+    assert row["metadata"]["delivery_account_id"] == account.record.id
 
 
 @pytest.mark.asyncio

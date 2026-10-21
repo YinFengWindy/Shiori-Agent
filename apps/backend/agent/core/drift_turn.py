@@ -16,6 +16,9 @@ DriftTurnPipeline — Drift 空闲时间链路顶层抽象。
 """
 
 from __future__ import annotations
+from agent.turns.reply_interruption import reply_was_invalidated
+from agent.turns.proactive_sequence import current_proactive_reply
+from prompts.natural_chat import NATURAL_CHAT_DRAFT_PROMPT
 
 from agent.tools.turn_scope import tool_turn
 
@@ -198,6 +201,8 @@ class DriftTurnPipeline:
         steps = 0
 
         while steps < self._max_steps and not ctx.drift_finished:
+            if reply_was_invalidated():
+                break
             tool_choice: str | dict = "required"
             schemas = list(base_schemas)
 
@@ -227,6 +232,8 @@ class DriftTurnPipeline:
             else:
                 tool_call = await cast(Any, llm_fn)(messages, schemas, tool_choice)
 
+            if reply_was_invalidated():
+                break
             if tool_call is None:
                 logger.warning("[drift] llm returned no tool call at step=%d", steps)
                 break
@@ -241,6 +248,8 @@ class DriftTurnPipeline:
                 remaining_steps=self._max_steps - steps - 1,
             )
             steps += ctx.reply_format_corrections - corrections_before
+            if reply_was_invalidated():
+                break
 
             tool_name = tool_call.get("name", "")
             tool_args = tool_call.get("input", {})
@@ -272,6 +281,23 @@ class DriftTurnPipeline:
                 ),
                 exec_fn,
             )
+            if current_proactive_reply() is not None and tool_name not in {
+                "message_push",
+                "finish_drift",
+            }:
+                ctx.tool_chain.append(
+                    {
+                        "text": "",
+                        "calls": [
+                            {
+                                "call_id": str(tool_call.get("id") or f"drift_{steps}"),
+                                "name": tool_name,
+                                "arguments": tool_args,
+                                "result": str(result.output),
+                            }
+                        ],
+                    }
+                )
 
             # 3.6 错误处理。
             if result.status == "error":
@@ -465,7 +491,7 @@ class DriftTurnPipeline:
         identity = str(self._role_prompt_fn() or "").strip()
         if not identity:
             raise ValueError("role.system_prompt required for drift generation")
-        return (
+        prompt = (
             f"{identity}\n\n"
             "你现在有一段空闲时间（Drift 模式）。没有外部内容需要推送，\n"
             "你可以自主决定做一件有意义的事。本轮记忆、skill 和工作区信息会在后续 system context frame 里提供。\n\n"
@@ -501,6 +527,9 @@ class DriftTurnPipeline:
             "fetch_messages, search_messages, shell, message_push, finish_drift；"
             "若 context frame 里列出了可挂载外部能力，可用 mount_server 挂载。"
         )
+        if current_proactive_reply() is not None:
+            prompt += "\n\n" + NATURAL_CHAT_DRAFT_PROMPT
+        return prompt
 
     # ── 工具消息追加 ────────────────────────────────────────────────────
 

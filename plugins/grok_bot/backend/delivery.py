@@ -1,6 +1,7 @@
 """The fixed Bot's directory and standard account-send adapter."""
 
 from uuid import uuid4
+from shiori_sdk.accounts.routing import AccountRoute
 from .accounts import GrokAccounts
 from .protocol import BotMessage
 
@@ -45,3 +46,17 @@ class GrokDelivery:
             {"message_id": "shiori:" + uuid4().hex, "text": payload.get("message")}
         )
         return await connection.send(message)
+
+    async def resolve(self, payload: dict[str, object]) -> dict[str, object]:
+        """Validate the configured peer and expose its actual inbound address."""
+        connection = self.accounts.connection_for(payload)
+        if (
+            payload.get("target_kind") != "private"
+            or payload.get("target_id") != connection.config.peer_id
+        ):
+            raise ValueError("Grok 连接仅支持当前配置的 Bot 私聊")
+        if any(
+            payload.get(key) for key in ("group_id", "message_thread_id", "mention_ids")
+        ):
+            raise ValueError("Grok 连接不支持群聊、话题、提及或媒体")
+        return AccountRoute(connection.name, connection.config.chat_id).to_payload()

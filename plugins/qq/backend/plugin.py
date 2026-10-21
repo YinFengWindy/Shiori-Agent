@@ -6,10 +6,14 @@ from typing import TYPE_CHECKING
 
 from shiori_sdk.accounts import VIA_ACCOUNT_KEY, AccountDeletionPlan
 from shiori_sdk.accounts.conversation import AccountConversation
+from shiori_sdk.accounts.routing import ACCOUNT_RESOLVE_METHOD, AccountRoute
+from .accounts_actions import qq_number
+from .channel.formatting import GROUP_PREFIX
 from shiori_sdk.accounts.targets import (
     ACCOUNT_SEND_METHOD,
     ACCOUNT_TARGETS_METHOD,
     account_send_media,
+    AccountTarget,
 )
 
 if TYPE_CHECKING:
@@ -86,6 +90,11 @@ async def setup(ctx: "ChannelPluginContext") -> None:
         concurrency=Concurrency.READ_ONLY,
     )
     ctx.rpc.register(
+        ACCOUNT_RESOLVE_METHOD,
+        lambda payload: _resolve_account(runtime, payload),
+        concurrency=Concurrency.READ_ONLY,
+    )
+    ctx.rpc.register(
         ACCOUNT_SEND_METHOD, lambda payload: _send_account(runtime, payload)
     )
 
@@ -137,6 +146,25 @@ async def _send(runtime, payload: dict) -> dict:
         str(payload["target_id"]),
         str(payload["message"]),
     )
+
+
+async def _resolve_account(runtime, payload: dict) -> dict:
+    """Resolve the actual NapCat inbound address with native target validation."""
+    target = AccountTarget.from_arguments(payload)
+    runtime.via_account(str(payload["account_id"]))
+    if target.message_thread_id is not None:
+        raise ValueError("QQ 不支持话题目标")
+    number = qq_number(target.id, "目标")
+    if target.kind == "group_member":
+        qq_number(target.group_id, "群号")
+    for mention in target.mention_ids:
+        qq_number(mention, "提及成员")
+    group = target.kind == "group"
+    return AccountRoute(
+        runtime.name,
+        f"{GROUP_PREFIX}{number}" if group else number,
+        "group" if group else "private",
+    ).to_payload()
 
 
 async def _send_account(runtime, payload: dict) -> dict:

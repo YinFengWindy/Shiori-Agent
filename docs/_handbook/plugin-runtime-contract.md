@@ -123,6 +123,46 @@ consolidates these additions and the subsequent #847 breaking migration.
 
 <!-- Record the next contract batch here, with PR references and breaking markers. -->
 
+- **Natural proactive replies and background reports (issue #868).** The current
+  role's built-in natural-chat capability also applies to proactive draft
+  `message_push` output, Drift dialogue and captured background-result reports.
+  These use the shared reply-sequence protocol and generation-owned delivery
+  lifetime. A started send and its bookkeeping finish together; failed or
+  uncertain sends stop the batch without retry, and only confirmed dialogue
+  enters subsequent context. Completed tool facts survive invalidation.
+  Proactive success/failure, presence, relationship and committed-turn observers
+  run once for the logical reply; a partial reply publishes only its delivered
+  prefix. Explicit-send tool payloads and system notifications are unchanged.
+- **Read-only account target routes for natural batches (issue #868).** Channel
+  plugins may register `account.resolve`, receiving `account_id` plus the existing
+  `AccountTarget.to_payload()` fields and returning `AccountRoute.to_payload()`:
+  canonical `channel`, `chat_id`, `chat_type` (`private` or `group`) and optional
+  positive integer `message_thread_id`. The channel owns platform parsing,
+  account-instance lookup and supported-target validation; resolution sends
+  nothing and does not grant tools or participation. It is separate from the
+  existing private `AccountConversation` grant/receipt contract. Natural proactive
+  retargeting requires this capability and explicitly fails if it is absent;
+  the host never guesses a platform address. Already selected bound private
+  chats and captured background origins reuse their authoritative address.
+  Ordinary `account.send` / model `account_send` do not call or require the new
+  resolver. The host checks account ownership before and after resolution and
+  pins the same ownership/connection fence for the batch's sends. Bundled
+  Telegram, QQ, QQBot, Feishu and Grok account plugins supply the resolver.
+- **Background origin and ordering (issue #868).** Host-originated spawn results
+  retain their original role, account, chat, topic and real sender; typed legacy
+  completions without an origin retain their existing internal path. Internal
+  results are never reclassified as external user admission. A group proactive
+  reply with no addressee yields to the first admitted, deduplicated request;
+  addressed output yields only to that real sender, while other senders wait in
+  chat order. Channel admission/mention/reply/blacklist policy stays in the
+  channel owner. Desktop input can supersede its natural proactive/report tail.
+  Persisted message and batch IDs survive reload. Proactive messages and internal
+  background reports do not become independently undoable user turns; reports
+  and their tool facts are excluded from passive-turn selection. Existing
+  passive batches still undo as a whole, and an unresolved passive anchor still
+  prevents deletion of an earlier unrelated turn. No SDK version is assigned
+  until this contract batch is released.
+
 - **Desktop and natural-channel supplements (PR #880, issue #867).** Every desktop chat accepts
   supplements, including ordinary streaming replies. On external channels this
   requires the built-in natural-chat capability: admitted and deduplicated input

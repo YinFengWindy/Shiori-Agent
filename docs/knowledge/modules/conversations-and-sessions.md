@@ -38,6 +38,8 @@ related:
 
 ## 修改影响
 
+自然聊天的后台角色报告沿原始 role/thread/account/topic 写入会话，不伪造新的 user 行。报告批次保留稳定 `turn_id`、`reply_sequence_id`、分段索引和每条持久 ID；完成的后台结果另存为工具事实，取消只丢弃未送达的角色正文。`undo_selection.py` 跳过内部 `background_result` 报告及其事实，仍按原规则选择可撤销的被动轮；主动消息和无独立用户锚点的后台报告不新增撤销入口。普通被动批次锚点损坏时仍阻止误删更早的轮。
+
 - 修改消息模型：检查 bus 事件、Session store、Conversation projector、桌面 presenter、渠道格式化与记忆采样。
 - 修改会话键规则：检查 `packages/sdk/python/shiori_sdk/channels/session_key.py`、角色绑定、群聊成员隔离和历史迁移。
 - 修改线程删除或归档：检查 Session 缓存、搜索索引、桌面导航和后台任务引用。

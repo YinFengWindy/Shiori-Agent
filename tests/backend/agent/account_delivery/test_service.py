@@ -14,6 +14,7 @@ from core.accounts import AccountRegistry
 from core.accounts.delivery_ledger import AccountDeliveryLedger
 from shiori_sdk.accounts.targets import AccountTarget, UncertainDeliveryError
 from core.identity import IdentityChat, UserIdentityStore
+from shiori_sdk.accounts.routing import AccountRoute
 
 
 def test_service_import_does_not_initialize_the_plugin_kernel(tmp_path: Path) -> None:
@@ -53,6 +54,13 @@ class _Rpc:
             self.calls.append((name, payload))
             if name.endswith("account.targets"):
                 return {"scope": "known", "items": [{"id": "42"}]}
+            if name.endswith("account.resolve"):
+                return {
+                    "channel": self.plugin_id + "_bot",
+                    "chat_id": "actual:42",
+                    "chat_type": payload["target_kind"],
+                    "message_thread_id": payload.get("message_thread_id"),
+                }
             [latest] = self.ledger.list_for_role("mira")[-1:]
             assert latest.status == "pending"
             if self.failure is not None:
@@ -88,6 +96,83 @@ def _service(tmp_path, plugin_id: str = "chat"):
         ledger,
         account_id,
     )
+
+
+async def test_natural_target_resolves_without_delivery_and_fences_reconnected_account(
+    tmp_path,
+):
+    service, accounts, rpc, ledger, account_id = _service(tmp_path)
+    resolved = await service.resolve_target(
+        "chat", "mira", AccountTarget("group", "42", message_thread_id=27)
+    )
+    assert resolved.route == AccountRoute("chat_bot", "actual:42", "group", 27)
+    assert ledger.list_for_role("mira") == []
+    assert rpc.calls == [
+        (
+            "plugin.chat.account.resolve",
+            {
+                "account_id": account_id,
+                "target_kind": "group",
+                "target_id": "42",
+                "message_thread_id": 27,
+                "group_id": "",
+                "mention_ids": [],
+            },
+        )
+    ]
+    accounts.register(
+        plugin_id="chat",
+        platform="chat",
+        platform_account_id="bot",
+        config_ref="bot",
+        token="new-connection",
+        role_id="mira",
+    )
+    accounts.report(account_id, "new-connection", connection="online")
+    with pytest.raises(PermissionError, match="回复批次"):
+        await service.send(
+            "chat",
+            "mira",
+            resolved.target,
+            "must not be sent",
+            expected_access=resolved.access,
+        )
+    assert len(rpc.calls) == 1
+    assert ledger.list_for_role("mira")[0].status == "failed"
+
+
+async def test_known_bound_private_route_uses_no_new_plugin_rpc(tmp_path):
+    service, _, rpc, _, _ = _service(tmp_path)
+    resolved = await service.resolve_target(
+        "chat",
+        "mira",
+        AccountTarget("private", "user-id"),
+        known_private_route=AccountRoute("chat_bot", "actual:42"),
+    )
+    assert resolved.route.chat_id == "actual:42"
+    assert rpc.calls == []
+    await service.send(
+        "chat", "mira", resolved.target, "hello", expected_access=resolved.access
+    )
+    assert [name for name, _ in rpc.calls] == ["plugin.chat.account.send"]
+
+
+async def test_missing_new_resolver_is_explicit_but_old_account_send_still_works(
+    tmp_path, monkeypatch
+):
+    service, _, rpc, _, _ = _service(tmp_path)
+    resolve = rpc.resolve
+    monkeypatch.setattr(
+        rpc,
+        "resolve",
+        lambda name: None if name.endswith("account.resolve") else resolve(name),
+    )
+    with pytest.raises(RuntimeError, match="未提供此能力"):
+        await service.resolve_target("chat", "mira", AccountTarget("group", "42"))
+    receipt = await service.send(
+        "chat", "mira", AccountTarget("group", "42"), "original"
+    )
+    assert receipt.platform_message_id
 
 
 @pytest.mark.asyncio

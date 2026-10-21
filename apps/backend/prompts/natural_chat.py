@@ -23,3 +23,8 @@ NATURAL_CHAT_PROMPT = (
     f"{NATURAL_CHAT_SEPARATOR}\n"
     "刷到什么了，这么舍不得睡"
 )
+
+# Proactive message_push is a generated reply draft, not the explicit-send tool.
+NATURAL_CHAT_DRAFT_PROMPT = (
+    NATURAL_CHAT_PROMPT + "\n将完整回复写入 message_push 的 message 草稿字段。"
+)

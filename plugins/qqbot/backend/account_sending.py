@@ -9,10 +9,12 @@ from typing import TYPE_CHECKING, Any
 import httpx
 from shiori_sdk.accounts import VIA_ACCOUNT_KEY
 from shiori_sdk.accounts.conversation import AccountConversation
+from shiori_sdk.accounts.routing import AccountRoute
 from shiori_sdk.accounts.targets import (
     GROUP_MEMBER_TARGET,
     UncertainDeliveryError,
     account_send_media,
+    AccountTarget,
 )
 from shiori_sdk.media import detect_image_mime_from_header
 
@@ -28,6 +30,19 @@ class _AccountSendingMixin:
 
     _identity: QQBotAccountIdentity
     _channels: dict[str, QQBotChannel]
+
+    async def account_resolve(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Resolve the application-specific C2C address without a send."""
+        target = AccountTarget.from_arguments(payload)
+        if target.kind != "private" or target.message_thread_id is not None:
+            raise ValueError("QQBot 仅支持私聊发送")
+        app_id = self._identity.app_for_account(payload)
+        channel = self._channels.get(app_id)
+        if channel is None:
+            raise RuntimeError("QQBot 应用账号未连接")
+        if not target.id or ":" in target.id:
+            raise ValueError("无效的 QQBot 用户 OpenID")
+        return AccountRoute(channel.name, channel._chat_id(target.id)).to_payload()
 
     async def account_send(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Adapt the shared account contract to QQBot's C2C OpenID send.

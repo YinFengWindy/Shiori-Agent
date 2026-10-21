@@ -17,7 +17,14 @@ def _is_real_user_message(message: dict[str, Any]) -> bool:
 
 
 def _is_passive_assistant_message(message: dict[str, Any]) -> bool:
-    return message.get("role") == "assistant" and not bool(message.get("proactive"))
+    # An internally produced report and its completed tool facts have no new
+    # user turn to undo. Their batch identity must not hide an older eligible
+    # passive turn or make that turn's input an anchor for deleting the report.
+    return (
+        message.get("role") == "assistant"
+        and not bool(message.get("proactive"))
+        and message.get("metadata", {}).get("source") != "background_result"
+    )
 
 
 def _find_last_passive_turn(

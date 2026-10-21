@@ -25,9 +25,12 @@ class SpawnCompletionItem:
     decision: "SpawnDecision | None" = None
     timestamp: datetime = field(default_factory=datetime.now)
     runtime_lease: RuntimeLease | None = field(default=None, repr=False, compare=False)
+    origin: InboundMessage | None = field(default=None, repr=False)
 
     @property
     def session_key(self) -> str:
+        if self.origin is not None:
+            return self.origin.session_key
         return f"{self.channel}:{self.chat_id}"
 
 

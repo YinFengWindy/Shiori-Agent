@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from shiori_sdk.accounts.targets import ACCOUNT_SEND_METHOD, ACCOUNT_TARGETS_METHOD
+from shiori_sdk.accounts.routing import ACCOUNT_RESOLVE_METHOD
 
 from .account_delivery import FeishuAccountDelivery
 from .accounts import FeishuAccounts
@@ -36,6 +37,11 @@ async def setup(ctx: "ChannelPluginContext") -> None:
     )
     ctx.rpc.register("accounts.send", delivery.send)
     ctx.rpc.register(ACCOUNT_SEND_METHOD, delivery.send_account)
+    ctx.rpc.register(
+        ACCOUNT_RESOLVE_METHOD,
+        delivery.resolve_account,
+        concurrency=Concurrency.READ_ONLY,
+    )
     ctx.rpc.register("accounts.verify", verify, concurrency=Concurrency.INTEGRATION)
     ctx.rpc.register("accounts.save", accounts.save)
     ctx.rpc.register("accounts.disconnect", accounts.disconnect)

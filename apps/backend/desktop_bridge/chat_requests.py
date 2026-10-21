@@ -198,8 +198,7 @@ class DesktopChatRequestHandler:
             raise ValueError("turn_id 不能为空")
         aggregate = await self._role_service.open_role_async(role_id)
         session = aggregate.session
-        if self._chat_service.is_busy(session.key):
-            self._chat_service.supersede_chat_turn(session.key)
+        self._chat_service.supersede_chat_turn(session.key)
 
         reply_to_content = str(payload.get("reply_to_content") or "").strip()
         reply_to_sender = str(payload.get("reply_to_sender") or "").strip()

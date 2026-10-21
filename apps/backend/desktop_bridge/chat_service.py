@@ -1,4 +1,5 @@
 from __future__ import annotations
+from shiori_sdk.messages import InboundMessage
 
 import asyncio
 import logging
@@ -143,13 +144,36 @@ class DesktopChatService:
         acknowledged promptly and each accepted runner keeps its own identity.
         """
         turn = self._tasks_by_session.get(session_key)
-        if not self.is_busy(session_key):
-            return
         # Admission must fail before the handler persists a supplement when
         # busy work has no owner capable of accepting the handoff.
-        if turn is None or turn.reply_interruption is None:
+        if self.is_busy(session_key) and (
+            turn is None or turn.reply_interruption is None
+        ):
             raise ChatTurnBusyError("当前会话已有正在执行的聊天任务")
-        turn.reply_interruption.invalidate()
+        if (
+            self.is_busy(session_key)
+            and turn is not None
+            and turn.reply_interruption is not None
+        ):
+            turn.reply_interruption.invalidate()
+        lease = current_runtime_lease()
+        if lease is not None:
+            lease.reply_sequences.interrupt_background(
+                self._desktop_origin(session_key)
+            )
+
+    def _desktop_origin(self, session_key: str) -> InboundMessage:
+        session = self._session_manager.get_or_create(session_key)
+        return InboundMessage(
+            channel="desktop",
+            chat_id=session_key,
+            sender="user",
+            content="",
+            metadata={
+                "role_id": session.metadata.get("role_id"),
+                "chat_type": "private",
+            },
+        )
 
     def continue_chat_after(self, session_key: str, owner: DesktopChatService) -> None:
         """Chain a new generation's input after the exact old desktop owner.
@@ -629,6 +653,14 @@ class DesktopChatService:
         turn_id: str | None = None,
     ) -> None:
         turn_id = turn_id or request_id
+        admission_lease = current_runtime_lease()
+        background = (
+            admission_lease.reply_sequences.background_tasks(
+                self._desktop_origin(session_key)
+            )
+            if admission_lease is not None
+            else ()
+        )
         previous = self._tasks_by_session.get(session_key)
         if self.is_busy(session_key):
             if (
@@ -668,6 +700,10 @@ class DesktopChatService:
         async def _runner() -> None:
             cancelled = False
             try:
+                if background:
+                    await asyncio.shield(
+                        asyncio.gather(*background, return_exceptions=True)
+                    )
                 if previous is not None:
                     # Cancellation of this queued request cannot cancel a tool
                     # still finishing in the preceding request.

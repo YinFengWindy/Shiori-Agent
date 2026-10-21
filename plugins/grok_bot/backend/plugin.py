@@ -1,6 +1,7 @@
 """Compose the channel group and account-scoped RPC surface."""
 
 from shiori_sdk.accounts.targets import ACCOUNT_SEND_METHOD, ACCOUNT_TARGETS_METHOD
+from shiori_sdk.accounts.routing import ACCOUNT_RESOLVE_METHOD
 from shiori_sdk.channels.context import ChannelPluginContext
 from shiori_sdk.rpc import Concurrency
 
@@ -27,4 +28,7 @@ async def setup(ctx: ChannelPluginContext) -> None:
         ACCOUNT_TARGETS_METHOD, delivery.targets, concurrency=Concurrency.READ_ONLY
     )
     ctx.rpc.register(ACCOUNT_SEND_METHOD, delivery.send)
+    ctx.rpc.register(
+        ACCOUNT_RESOLVE_METHOD, delivery.resolve, concurrency=Concurrency.READ_ONLY
+    )
     await accounts.load()
