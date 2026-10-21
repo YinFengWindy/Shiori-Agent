@@ -21,6 +21,20 @@ Windows 默认客户端是随插件发布的 `client.ps1`，使用系统 Windows
 >
 > `type = message`：`text` 是 Shiori 角色发来的内容，`message_id` 是它的关联标识。需要回复时，创建新的、最多 128 字符且永不重用的 `message_id`，将 `{"message_id":"唯一标识","text":"回复正文","reply_to":"原 message_id"}` 编码为 UTF-8 JSON，从标准输入交给同一本机客户端，使用相同参数并去掉 `-Handshake`。客户端的结果是传输回执，不是角色回复；角色后续回复会通过这个 Webhook 异步到达。
 >
+> Windows 消息回程必须将 JSON 管道送给新启动的 `powershell.exe` 进程。下面的 `$callbackClient`、`$connectionFile` 取自当前 Webhook 的路径字段，`$incomingMessageId` 是原 `message_id`，`$replyText` 是回复正文；按值传入，不把正文拼接成命令：
+>
+> ```powershell
+> $OutputEncoding = [Text.UTF8Encoding]::new($false)
+> $payloadJson = @{
+>     message_id = [Guid]::NewGuid().ToString('N')
+>     text = $replyText
+>     reply_to = $incomingMessageId
+> } | ConvertTo-Json -Compress
+> $payloadJson | & powershell.exe -NoProfile -NonInteractive -File $callbackClient -Connection $connectionFile
+> ```
+>
+> 不要使用 `$payloadJson | & $callbackClient -Connection $connectionFile`：直接调用脚本接到的是 PowerShell 对象管道，客户端的 `Console.In` 读不到该 JSON；本机实测会出现 `InputObjectNotBound` 和 HTTP 400。握手不读取消息标准输入，所以握手成功并不能排除这种调用错误。
+>
 > 有事主动联系角色时，使用已保存路径发送同样的 JSON，但省略 `reply_to`。每条新消息用新 ID，重复提交同一条消息必须保留原 ID 和原文。HTTP 202 表示 Shiori 接收，200 duplicate 表示已接收过；失败或超时不能换 ID 自动重发。不要自行轮询或不断互相唤醒；无事可不回复。
 
 非 Windows 的对应命令为 `python3 <callback_client> --connection <connection_file> --handshake`；消息从 UTF-8 标准输入传入，去掉 `--handshake`。
@@ -39,4 +53,9 @@ Webhook 触发 Grok、角色回复及主动对话都会使用各自平台和 Shi
 
 ## 验证边界
 
-本地测试覆盖实际 loopback HTTP 与 Windows PowerShell 客户端、鉴权、重复消息、顺序、预算、重启状态与账号隔离。真实 Grok 已验证官方 Webhook HTTP 200 接收并保留原 message_id 执行；本机 Shell 回程仍须按上述步骤在实际设备完成验证，不能仅凭出站成功视为双向完成。
+本地测试覆盖实际 loopback HTTP 与 Windows PowerShell 客户端、鉴权、重复消息、顺序、预算、重启状态与账号隔离。2026-10-21 已在 Windows 完成真实 Grok 回程握手，并分别验证两个首发方向：
+
+- Grok 首发：无 `reply_to` 的消息进入真实 Shiori 角色回合，角色回复由 Grok Webhook 接收；独立只读核验确认接收关联与同一网络会话中的入站、回复和发送状态。
+- Shiori 角色首发：真实角色模型调用 `account_targets`、`account_send`，收到真实 Grok 回复后正常回复，首发、回程及角色回复均记入同一网络会话；完整验收通过并正常暂停连接、关闭 runtime。
+
+这些实测使用隔离角色，由测试指令触发首发；尚未做自主调度或长期无人值守试跑。每个安装环境仍须按上述步骤完成握手与消息回程检查，不能仅凭 Webhook 接收成功视为双向完成。
