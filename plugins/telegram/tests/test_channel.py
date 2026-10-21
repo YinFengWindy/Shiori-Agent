@@ -298,7 +298,9 @@ async def test_telegram_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path:
     assert len(bus.inbound[0].media) == 2
 
     stop_update = SimpleNamespace(
-        effective_message=SimpleNamespace(text="/stop", message_id=99),
+        effective_message=SimpleNamespace(
+            text="/stop", message_id=99, message_thread_id=42
+        ),
         effective_chat=SimpleNamespace(id=123),
         effective_user=SimpleNamespace(id=1, username="Alice"),
     )
@@ -310,6 +312,8 @@ async def test_telegram_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path:
             "command": "/stop",
             "channel": "telegram",
             "chat_id": "123",
+            "chat_type": "private",
+            "message_thread_id": "42",
         }
     ]
     assert len(bus.inbound) == 1

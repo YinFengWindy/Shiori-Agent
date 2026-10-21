@@ -16,6 +16,7 @@ from .compaction import (
 )
 from .empty_reply import EmptyReplyError, recovery_diagnostics, response_diagnostics
 from core.compaction import CompactionFailedError
+from agent.turns.reply_interruption import reply_was_invalidated
 
 logger = logging.getLogger("agent.core.passive_turn")
 
@@ -60,6 +61,8 @@ async def complete_reply(
     normalized = await output.finish(response.content)
     facts = response_diagnostics(response, normalized=normalized, fallback_model=model)
     response.content = normalized
+    if reply_was_invalidated():
+        return CompletedReply(response, (response,))
     attempts = [facts]
 
     def recovery_state(outcome: str, retries: int):
@@ -125,6 +128,8 @@ async def complete_reply(
             purpose=call_purpose,
             schemas_for_history=schemas_for_history if allow_tool_calls else None,
         )
+        if reply_was_invalidated():
+            return CompletedReply(response, (response,))
         try:
             retry_response = await budgeted_chat(
                 provider,

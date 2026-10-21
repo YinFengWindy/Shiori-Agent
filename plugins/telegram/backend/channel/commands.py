@@ -64,6 +64,9 @@ class _CommandMixin:
             session_key=session_key,
             sender=sender_id,
             command="/stop",
+            account_id=self._account_id,
+            chat_type=str(getattr(chat, "type", "private") or "private"),
+            message_thread_id=str(getattr(msg, "message_thread_id", None) or ""),
         )
         await _call_send_markdown(
             self._app.bot,

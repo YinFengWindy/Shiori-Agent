@@ -5,6 +5,10 @@ from __future__ import annotations
 from agent.tools.turn_scope import tool_turn
 from agent.turns.channel_sequence_commit import ChannelSequenceDeliveryError
 from agent.turns.channel_sequence import without_channel_sequence
+from agent.turns.reply_interruption import (
+    current_reply_interruption,
+    reply_interruption_scope,
+)
 
 import asyncio
 import time
@@ -50,11 +54,23 @@ class _ProcessingMixin:
             await self.process_inbound(item)
 
     async def process_inbound(self, item: InboundItem) -> None:
-        """Processes one dequeued transport item using this captured runtime."""
+        """Processes queued input or a typed internal completion on this runtime."""
         key = item.session_key
         if await self._compact_command(item, key, dispatch_outbound=True) is not None:
             return
-        tracking_key = turn_tracking_key(key, item.channel, item.chat_id)
+        # Typed internal completions keep their own session identity. Their
+        # channel/chat is a return destination, not an admitted external origin.
+        tracking_key = key
+        if isinstance(item, InboundMessage):
+            metadata = item.metadata
+            tracking_key = turn_tracking_key(
+                key,
+                item.channel,
+                item.chat_id,
+                account_id=str(metadata.get("account_id") or ""),
+                chat_type=str(metadata.get("chat_type") or ""),
+                message_thread_id=str(metadata.get("message_thread_id") or ""),
+            )
         self._active_turn_states[tracking_key] = self._build_initial_turn_state(
             item, key
         )
@@ -202,6 +218,12 @@ class _ProcessingMixin:
                 dispatch_outbound=dispatch_outbound,
             )
 
+        interruption = current_reply_interruption()
+        if interruption is not None:
+            interruption.role_lookup = lambda: registry.repository.store.get_role(
+                context.role_id
+            )
+
         async def operation() -> OutboundMessage:
             return await self._process(
                 item,
@@ -261,7 +283,14 @@ class _ProcessingMixin:
         if command is not None:
             return command.content
         self._active_turn_states[key] = self._build_initial_turn_state(msg, key)
-        with without_channel_sequence():
+        with (
+            without_channel_sequence(),
+            reply_interruption_scope(
+                current_reply_interruption()
+                if channel == "desktop" and merged_metadata.get("turn_id")
+                else None
+            ),
+        ):
             task = asyncio.create_task(
                 run_turn_task(
                     lambda: self._process_role_scoped(

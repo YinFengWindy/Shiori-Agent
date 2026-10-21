@@ -562,3 +562,167 @@ async def test_enable_intent_from_an_older_dialog_still_uses_normal_hot_enable(
     finally:
         await service.aclose()
         await app.shutdown()
+
+
+@pytest.mark.parametrize("natural", [False, True])
+async def test_channel_trust_swaps_keep_supplement_chain_and_exact_cancel_owner(
+    tmp_path, monkeypatch, natural
+):
+    from unittest.mock import AsyncMock
+    from agent.provider import LLMProvider, LLMResponse
+    from session.manager import SessionManager
+
+    registration = "00000000-0000-4000-a000-000000000001"
+    (tmp_path / "config.toml").write_text(
+        "[[llm.registrations]]\nmodel_context_window = 128000\n"
+        f'id = "{registration}"\nprovider = "openai"\nmodel = "test"\napi_key = "fake"\n'
+        "[agent.maintenance]\nmemory_optimizer_enabled = false\n",
+        encoding="utf-8",
+    )
+    _stage(tmp_path, "first_channel", channels=True)
+    _stage(tmp_path, "second_channel", channels=True)
+    monkeypatch.setattr(
+        "core.roles.self_initializer.RoleSelfInitializer.ensure_seeded", AsyncMock()
+    )
+    started, release = asyncio.Event(), asyncio.Event()
+    latest_started, latest_release = asyncio.Event(), asyncio.Event()
+    calls, events = [], []
+
+    async def model(self, **kwargs):
+        if kwargs.get("response_format"):
+            return LLMResponse(content='{"mood":"平静","thought":"继续聊。"}')
+        index = len(calls)
+        calls.append(kwargs)
+        if index == 0:
+            started.set()
+            await release.wait()
+            return LLMResponse(content="unseen old reply")
+        latest_started.set()
+        await latest_release.wait()
+        return LLMResponse(content="latest reply")
+
+    monkeypatch.setattr(LLMProvider, "chat", model)
+    app, service = await _start(tmp_path, monkeypatch)
+    service.add_event_listener(events.append)
+
+    async def request(method, payload):
+        response = await service.handle(
+            {
+                "id": str(payload.get("turn_id", method)),
+                "method": method,
+                "payload": payload,
+            },
+            emit_event=events.append,
+        )
+        assert response.error is None, response.error
+        return response.payload
+
+    try:
+        await request(
+            "roles.create",
+            {
+                "role_id": "mira",
+                "name": "Mira",
+                "system_prompt": "test",
+                "runtime_config": {
+                    "natural_chat_enabled": natural,
+                    "dialogue_model_registration_id": registration,
+                },
+            },
+        )
+        await request("chat.send", {"role_id": "mira", "turn_id": "a", "content": "a"})
+        await asyncio.wait_for(started.wait(), 5)
+        owners = [service._current.service.chat_service._tasks_by_session["role:mira"]]
+        generation = app.generation
+        cancelling = None
+        for plugin_id, turn_id in (("first_channel", "b"), ("second_channel", "c")):
+            row = next(
+                row
+                for row in (await request("plugins.list", {}))["plugins"]
+                if row["id"] == plugin_id
+            )
+            await asyncio.wait_for(
+                request(
+                    "plugins.trust",
+                    {
+                        "candidate_id": row["candidate_id"],
+                        "fingerprint": row["trust_fingerprint"],
+                        "operation_id": plugin_id,
+                    },
+                ),
+                3,
+            )
+            generation += 1
+            assert app.generation == generation
+            await asyncio.wait_for(
+                request(
+                    "chat.send",
+                    {
+                        "role_id": "mira",
+                        "turn_id": turn_id,
+                        "content": turn_id,
+                    },
+                ),
+                1,
+            )
+            owner = service._current.service.chat_service._tasks_by_session["role:mira"]
+            assert owner.previous is owners[-1]
+            owners.append(owner)
+            if turn_id == "b":
+                cancelling = asyncio.create_task(
+                    request(
+                        "chat.cancel",
+                        {
+                            "session_key": "role:mira",
+                            "turn_id": "b",
+                        },
+                    )
+                )
+                await asyncio.sleep(0)
+                assert not cancelling.done()
+        assert len(calls) == 1
+        # The second generation swap reconstructs the already trusted first
+        # channel as well as activating the newly approved second channel.
+        assert (tmp_path / "executed.txt").read_text(
+            encoding="utf-8"
+        ) == "executed\n" * 3
+        release.set()
+        await asyncio.wait_for(latest_started.wait(), 5)
+        stale = await request(
+            "chat.cancel", {"session_key": "role:mira", "turn_id": "a"}
+        )
+        assert stale["status"] in {"idle", "mismatch"}
+        assert not owners[-1].task.done()
+        latest_release.set()
+        assert cancelling is not None
+        assert (await cancelling)["status"] == "interrupted"
+        await asyncio.wait_for(service._current.service.chat_service.drain(), 5)
+        assert len(calls) == 2
+        rows = SessionManager(tmp_path).get_or_create("role:mira").messages
+        assert [row["content"] for row in rows if row["role"] == "user"] == [
+            "a",
+            "b",
+            "c",
+        ]
+        assert [row["content"] for row in rows if row["role"] == "assistant"] == [
+            "latest reply"
+        ]
+        assert not any("unseen old reply" in str(row) for row in calls[-1]["messages"])
+        assert [
+            (event["method"], event["payload"]["turn_id"])
+            for event in events
+            if event["method"] in {"chat.done", "chat.cancelled", "chat.error"}
+        ] == [
+            ("chat.cancelled", "a"),
+            ("chat.cancelled", "b"),
+            ("chat.done", "c"),
+        ]
+        assert (
+            len([event for event in events if event["method"] == "runtime.applied"])
+            == 2
+        )
+    finally:
+        release.set()
+        latest_release.set()
+        await service.aclose()
+        await app.shutdown()

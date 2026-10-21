@@ -199,7 +199,7 @@ class DesktopChatRequestHandler:
         aggregate = await self._role_service.open_role_async(role_id)
         session = aggregate.session
         if self._chat_service.is_busy(session.key):
-            raise ChatTurnBusyError("当前会话已有正在执行的聊天任务")
+            self._chat_service.supersede_chat_turn(session.key)
 
         reply_to_content = str(payload.get("reply_to_content") or "").strip()
         reply_to_sender = str(payload.get("reply_to_sender") or "").strip()

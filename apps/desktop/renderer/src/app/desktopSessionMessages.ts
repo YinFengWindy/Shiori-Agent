@@ -16,10 +16,10 @@ export function createDesktopSessionMessages({
   activeSessionRef, pendingUserMessagesRef, commitActiveSession,
   updateCommittedActiveSession, cacheRoleSession, readCachedRoleSession,
 }: Args) {
-  function commitSessionMessageUpdate(roleId: string, update: SessionMessageUpdatePayload) {
+  function commitSessionMessageUpdate(roleId: string, update: SessionMessageUpdatePayload, { preserveSummary = false } = {}) {
     const visible = activeSessionRef.current?.key === update.session.key;
     const current = visible ? activeSessionRef.current : readCachedRoleSession(roleId);
-    const next = mergeSessionSummaryAndMessage(current, update.session, update.message, update.messages);
+    const next = mergeSessionSummaryAndMessage(current, preserveSummary && current ? current : update.session, update.message, update.messages);
     if (visible) commitActiveSession(next);
     else cacheRoleSession(roleId, next);
   }
