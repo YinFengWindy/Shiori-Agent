@@ -130,6 +130,9 @@ consolidates these additions and the subsequent #847 breaking migration.
   hooks run, and the host parses boundaries outside fenced code and publishes
   complete messages serially. Each stored message has its own ID and shares
   `turn_id` / `reply_sequence_id`, with a zero-based `reply_sequence_index`.
+  Desktop attempts also carry `trigger_user_message_id`, the stable persisted
+  user row shared by initial sends and retries. Sequence undo resolves that exact
+  row within the same thread; an unresolved anchor never selects an earlier turn.
   The desktop receives intermediate `chat.message` events with the same session
   update payload shape as `session.updated`; they do not finish the turn.
   `chat.done`, `chat.error` and `chat.cancelled` remain the terminal events.

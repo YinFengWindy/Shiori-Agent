@@ -52,6 +52,7 @@ async def test_complete_messages_are_published_during_turn_and_survive_reload(
         metadata={"turn_id": "turn-1"},
     )
     manager.save(session)
+    trigger_user_message_id = session.messages[-1]["id"]
     raw = (
         "one\n<message-break/>\ntwo\n<message-break/>\nthree"
         if mode != "disabled"
@@ -247,7 +248,10 @@ async def test_complete_messages_are_published_during_turn_and_survive_reload(
         session_key=session.key,
         content="hi",
         media=[],
-        metadata={"turn_id": "turn-1"},
+        metadata={
+            "turn_id": "turn-1",
+            "trigger_user_message_id": trigger_user_message_id,
+        },
         omit_user_turn=True,
         emit_event=collect,
         turn_id="turn-1",

@@ -31,6 +31,18 @@ def test_message_boundary_preserves_first_line_indentation_and_trailing_spaces()
     assert result.messages == ("前一句  ", '    print("hello")  ')
 
 
+@pytest.mark.parametrize("indent", ["    ", "\t", " \t", "  \t", "   \t", "\t "])
+def test_markdown_four_column_indentation_keeps_separator_as_code(indent):
+    content = f"{indent}<message-break/>\n"
+    assert parse_reply_sequence(content, POLICY).messages == (content.rstrip("\n"),)
+
+
+@pytest.mark.parametrize("indent", ["", " ", "  ", "   "])
+def test_separator_at_zero_to_three_columns_splits_messages(indent):
+    result = parse_reply_sequence(f"one\n{indent}<message-break/>\ntwo", POLICY)
+    assert result.messages == ("one", "two")
+
+
 @pytest.mark.parametrize(
     "content",
     [

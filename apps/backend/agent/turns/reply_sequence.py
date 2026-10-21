@@ -76,9 +76,8 @@ def parse_reply_sequence(content: str, policy: ReplySequencePolicy) -> ReplySequ
             lines.append(line)
         elif (
             not fence
-            and len(stripped) - len(stripped.lstrip(" ")) < 4
-            and not stripped.startswith("\t")
-            and stripped.strip() == policy.separator
+            and _indent_columns(stripped) < 4
+            and stripped.strip(" \t") == policy.separator
         ):
             part = _without_boundary_blank_lines(lines)
             if not part.strip():
@@ -91,6 +90,20 @@ def parse_reply_sequence(content: str, policy: ReplySequencePolicy) -> ReplySequ
     if parts and not tail.strip():
         raise ValueError("回复不能以消息分隔符结束")
     return ReplySequence(tuple([*parts, tail]))
+
+
+def _indent_columns(line: str) -> int:
+    # CommonMark expands each tab to the next four-column stop, including
+    # mixed space/tab prefixes; four columns introduce an indented code block.
+    columns = 0
+    for char in line:
+        if char == " ":
+            columns += 1
+        elif char == "\t":
+            columns += 4 - columns % 4
+        else:
+            break
+    return columns
 
 
 def _without_boundary_blank_lines(lines: list[str]) -> str:
