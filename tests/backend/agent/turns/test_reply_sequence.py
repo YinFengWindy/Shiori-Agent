@@ -30,6 +30,15 @@ def test_only_explicit_boundaries_split_and_preserve_markdown():
     assert parse_reply_sequence("", POLICY).messages == ("",)
 
 
+def test_validated_message_list_cannot_silently_lose_its_boundaries():
+    policy = ReplySequencePolicy("<host-boundary/>", message_count=2)
+    with pytest.raises(ValueError, match="丢失边界"):
+        parse_reply_sequence("第一条\n\n第二条", policy)
+    assert parse_reply_sequence(
+        "```python\n未闭合代码\n<host-boundary/>\n另一条消息", policy
+    ).messages == ("```python\n未闭合代码", "另一条消息")
+
+
 def test_message_boundary_preserves_first_line_indentation_and_trailing_spaces():
     result = parse_reply_sequence(
         '\n前一句  \n\n<message-break/>\n\n    print("hello")  \n\n', POLICY

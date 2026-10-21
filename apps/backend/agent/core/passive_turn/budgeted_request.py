@@ -17,6 +17,7 @@ async def budgeted_chat(
     *,
     schemas_for_history: Callable[[list[str]], list[dict]] | None = None,
     prepare_request: Callable[[list[dict], bool], None] | None = None,
+    reply_tool: dict | None = None,
     **kwargs,
 ):
     """Send at most three requests: original, ordinary compaction, one minimal.
@@ -27,8 +28,25 @@ async def budgeted_chat(
     from agent.provider import ContextLengthError, LocalBudgetExceeded
 
     def prepare_messages():
+        if reply_tool is not None:
+            # A final answer is an output contract, not a business capability.
+            # Minimal requests disable business tools but still need this schema.
+            tools = kwargs.setdefault("tools", [])
+            if scope is not None and scope.degraded:
+                tools.clear()
+            name = reply_tool["function"]["name"]
+            # The caller reads this same list after compaction to determine
+            # which business capabilities were actually sent to the provider.
+            tools[:] = [tool for tool in tools if tool["function"]["name"] != name] + [
+                reply_tool
+            ]
         tools_enabled = (
-            bool(kwargs.get("tools")) and kwargs.get("tool_choice") != "none"
+            any(
+                reply_tool is None
+                or tool["function"]["name"] != reply_tool["function"]["name"]
+                for tool in kwargs.get("tools") or []
+            )
+            and kwargs.get("tool_choice") != "none"
         )
         prepare_attachment_hints(kwargs["messages"], tools_enabled=tools_enabled)
         if prepare_request is not None:
@@ -87,7 +105,10 @@ async def budgeted_chat(
             max_tokens=kwargs["max_tokens"],
             call_purpose=kwargs.get("call_purpose", "default"),
         )
-        if scope.degraded and response.tool_calls:
+        if scope.degraded and any(
+            reply_tool is None or call.name != reply_tool["function"]["name"]
+            for call in response.tool_calls
+        ):
             result = await scope.observe_request(
                 budget,
                 error=RuntimeError("本次工具已禁用，但模型仍返回工具调用"),

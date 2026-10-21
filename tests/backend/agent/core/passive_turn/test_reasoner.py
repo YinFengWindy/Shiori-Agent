@@ -2,6 +2,7 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
+import json
 
 import pytest
 
@@ -19,6 +20,21 @@ from shiori_sdk.channels.message_source import SENDER_IS_USER_KEY, MessageSource
 from session.manager import SessionManager
 from session.manager.consolidation import ConsolidationCommitRequest
 from shiori_sdk.tools import Tool
+from agent.core.passive_turn.natural_reply import NaturalReply
+from agent.turns.reply_sequence import ReplySequencePolicy, parse_reply_sequence
+
+
+def natural_metadata(content, policy):
+    if policy is None:
+        return {}
+    sequence = parse_reply_sequence(content, policy)
+    return {
+        "natural_reply": NaturalReply(
+            sequence,
+            json.dumps({"messages": sequence.messages}, ensure_ascii=False),
+            policy,
+        )
+    }
 
 
 @pytest.mark.parametrize("enabled", [False, True])
@@ -42,7 +58,7 @@ async def test_reply_policy_filters_visible_tokens_but_preserves_thinking(
     reasoner.render_prompt = AsyncMock(
         return_value=PromptRenderResult(
             messages=[{"role": "user", "content": "hi"}],
-            reply_sequence=policy,
+            natural_chat=enabled,
         )
     )
     seen = []
@@ -71,7 +87,10 @@ async def test_reply_policy_filters_visible_tokens_but_preserves_thinking(
         return ReasonerResult(
             reply="one\n<message-break/>\ntwo",
             streamed=True,
-            metadata={"tool_chain": original_chain},
+            metadata={
+                "tool_chain": original_chain,
+                **natural_metadata("one\n<message-break/>\ntwo", policy),
+            },
         )
 
     reasoner.run = AsyncMock(side_effect=run)
@@ -142,7 +161,7 @@ async def test_builtin_natural_chat_controls_prompt_and_stream_on_supported_tran
     from agent.context import ContextBuilder
     from core.roles import RoleStore
     from core.roles.services import RoleSessionService
-    from prompts.natural_chat import NATURAL_CHAT_SEPARATOR
+    from prompts.natural_chat import FINISH_REPLY_TOOL_NAME
     from agent.turns.reply_sequence import reply_is_buffered
     from conversation.context_scope import turn_context_view
     from conversation.service import desktop_thread_id
@@ -174,7 +193,7 @@ async def test_builtin_natural_chat_controls_prompt_and_stream_on_supported_tran
         session_manager=manager,
     )
     visible = []
-    reply = f"第一句\n{NATURAL_CHAT_SEPARATOR}\n下一句"
+    reply = "第一句\n<message-break/>\n下一句"
 
     async def sink(delta):
         visible.append(delta)
@@ -183,13 +202,19 @@ async def test_builtin_natural_chat_controls_prompt_and_stream_on_supported_tran
 
     async def run(messages, **kwargs):
         rendered = str(messages)
-        assert (NATURAL_CHAT_SEPARATOR in rendered) is selected
+        assert (FINISH_REPLY_TOOL_NAME in rendered) is selected
         assert "保持原有性格" in rendered
         assert reply_is_buffered() is selected
         await kwargs["on_content_delta"](
             {"content_delta": reply, "thinking_delta": "思考"}
         )
-        return ReasonerResult(reply=reply, streamed=True)
+        return ReasonerResult(
+            reply=reply,
+            streamed=True,
+            metadata=natural_metadata(
+                reply, ReplySequencePolicy("<message-break/>") if selected else None
+            ),
+        )
 
     reasoner.run = AsyncMock(side_effect=run)
     from agent.turns.channel_sequence import ChannelSequenceOwner

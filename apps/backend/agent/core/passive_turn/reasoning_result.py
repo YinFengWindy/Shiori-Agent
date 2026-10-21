@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import replace
 from typing import Any
 
 import agent.core.passive_support as support
@@ -13,6 +14,7 @@ from agent.core.reply_completion import fetch_role_mood
 from agent.core.reply_output import RoleReplyOutput
 from .reply_recovery import complete_reply
 from .budgeted_request import budgeted_chat
+from .natural_reply import NaturalReplyProtocol, finish_reply_schema
 from .compaction import ensure_request_budget
 from core.roles.reply_state import RoleReply
 from shiori_sdk.channel_events import ToolCallCompleted, ToolCallStarted
@@ -100,6 +102,7 @@ class _PassiveReasoningResultMixin:
         reply_moods: tuple[str, ...] | None = None,
         session: str = "",
         channel: str = "",
+        natural_reply: NaturalReplyProtocol | None = None,
     ) -> tuple[str, int | None, RoleReply | None, dict[str, Any] | None]:
         # 1. 先构造收尾总结 prompt；正文始终是纯文本，不再为 reply_moods 特判。
         summary_prompt = (
@@ -136,20 +139,37 @@ class _PassiveReasoningResultMixin:
             model=self._llm_config.model,
             max_tokens=summary_cap,
             call_purpose=purpose,
+            **(
+                {
+                    "reply_tool": finish_reply_schema(),
+                    "defer_tool_argument_errors": True,
+                }
+                if natural_reply
+                else {}
+            ),
         )
-        completion = await complete_reply(
-            response,
-            output=RoleReplyOutput(None, enabled=reply_moods is not None),
-            messages=summary_messages,
-            provider=self._llm.provider,
-            model=self._llm_config.model,
-            max_tokens=summary_cap,
-            role_reply=reply_moods is not None,
-            session=session,
-            channel=channel,
-            iteration=iteration,
-            call_purpose=purpose,
-        )
+        if natural_reply is not None:
+            completion = await natural_reply.complete(
+                response,
+                messages=summary_messages,
+                provider=self._llm.provider,
+                model=self._llm_config.model,
+                max_tokens=summary_cap,
+            )
+        else:
+            completion = await complete_reply(
+                response,
+                output=RoleReplyOutput(None, enabled=reply_moods is not None),
+                messages=summary_messages,
+                provider=self._llm.provider,
+                model=self._llm_config.model,
+                max_tokens=summary_cap,
+                role_reply=reply_moods is not None,
+                session=session,
+                channel=channel,
+                iteration=iteration,
+                call_purpose=purpose,
+            )
         content = completion.response.content
         assert content is not None
         role_reply = None
@@ -184,6 +204,7 @@ class _PassiveReasoningResultMixin:
         role_reply: RoleReply | None = None,
         role_reply_mood_fresh: bool = False,
         reply_recovery: dict[str, Any] | None = None,
+        natural_reply: NaturalReplyProtocol | None = None,
     ) -> ReasonerResult:
         # 1. 先把 tool_chain 扁平化成 invocations。
         invocations: list[LLMToolCall] = []
@@ -236,6 +257,15 @@ class _PassiveReasoningResultMixin:
 
         if reply_recovery is not None:
             metadata["reply_recovery"] = reply_recovery
+
+        if natural_reply is not None:
+            if natural_reply.reply is None:
+                raise RuntimeError("自然聊天缺少已校验的完成回复")
+            metadata["natural_reply"] = natural_reply.reply
+            metadata["natural_reply_corrected"] = natural_reply.corrected
+            reply = natural_reply.reply.decorated_input
+            if role_reply is not None:
+                metadata["role_reply"] = replace(role_reply, content=reply)
 
         # 3. 最后返回标准 ReasonerResult。
         return ReasonerResult(

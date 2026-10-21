@@ -21,6 +21,9 @@ class ReplySequencePolicy:
     """Host-owned boundary format for complete, separately delivered messages."""
 
     separator: str
+    # A validated list uses literal host boundaries, including inside unfinished
+    # fences. Its count detects decorators accidentally removing those boundaries.
+    message_count: int | None = None
 
     def __post_init__(self) -> None:
         if (
@@ -31,6 +34,8 @@ class ReplySequencePolicy:
             or self.separator.startswith(("```", "~~~"))
         ):
             raise ValueError("消息分隔符必须是非空的独立单行标记")
+        if self.message_count is not None and self.message_count < 1:
+            raise ValueError("已校验消息列表不能为空")
 
 
 @contextmanager
@@ -79,7 +84,13 @@ def parse_reply_sequence(content: str, policy: ReplySequencePolicy) -> ReplySequ
     for line in content.splitlines(keepends=True):
         stripped = line.rstrip("\r\n")
         match = _FENCE.match(line.rstrip("\r\n"))
-        if match:
+        if policy.message_count is not None and stripped == policy.separator:
+            part = _without_boundary_blank_lines(lines)
+            if not part.strip():
+                raise ValueError("消息分隔符之间不能是空消息")
+            parts.append(part)
+            lines = []
+        elif match:
             marker, suffix = match.groups()
             if not fence:
                 if marker[0] != "`" or "`" not in suffix:
@@ -106,7 +117,10 @@ def parse_reply_sequence(content: str, policy: ReplySequencePolicy) -> ReplySequ
     tail = _without_boundary_blank_lines(lines)
     if parts and not tail.strip():
         raise ValueError("回复不能以消息分隔符结束")
-    return ReplySequence(tuple([*parts, tail]))
+    messages = tuple([*parts, tail])
+    if policy.message_count is not None and len(messages) != policy.message_count:
+        raise ValueError("消息列表在输出处理中丢失边界")
+    return ReplySequence(messages)
 
 
 def _indent_columns(line: str) -> int:

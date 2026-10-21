@@ -81,6 +81,37 @@ class ToolCall:
     id: str
     name: str
     arguments: dict
+    # Opt-in recovery can inspect malformed arguments without executing them.
+    raw_arguments: str | None = None
+    arguments_error: str | None = None
+
+
+def _parse_tool_call(
+    call_id: str,
+    name: str,
+    raw: str,
+    *,
+    defer_errors: bool,
+    model: str,
+    finish_reason: str | None,
+) -> ToolCall:
+    try:
+        arguments = json.loads(raw)
+        if not isinstance(arguments, dict):
+            raise ValueError("工具参数必须是 JSON 对象")
+    except ValueError as exc:
+        logger.warning(
+            "[LLM工具参数解析失败] model=%s finish_reason=%s tool=%s err=%s raw=%s",
+            model,
+            finish_reason,
+            name,
+            exc,
+            summarize_llm_output_for_log(raw),
+        )
+        if not defer_errors:
+            raise
+        return ToolCall(call_id, name, {}, raw, str(exc))
+    return ToolCall(call_id, name, arguments, raw)
 
 
 @dataclass
@@ -380,6 +411,15 @@ class LLMProvider:
         """Releases HTTP connections after all owning runtime tasks have drained."""
         await self._client.close()
 
+    @property
+    def supports_strict_tools(self) -> bool:
+        """Only opt into schema enforcement on documented native endpoints."""
+        endpoint = urlsplit(self._base_url)
+        return endpoint.hostname == "api.openai.com" or (
+            endpoint.hostname == "api.deepseek.com"
+            and endpoint.path.rstrip("/") == "/beta"
+        )
+
     def _prepare_request(
         self,
         *,
@@ -516,6 +556,7 @@ class LLMProvider:
         response_format: dict[str, str] | None = None,
         call_purpose: LLMCallPurpose = "default",
         auxiliary_max_tokens: int | None = None,
+        defer_tool_argument_errors: bool = False,
     ) -> LLMResponse:
         """Generates a reply; auxiliary work opts out of configured reasoning.
 
@@ -527,6 +568,10 @@ class LLMProvider:
         providers only drop reasoning options; they preserve the original budget
         because their thinking defaults and off switches are unknown. Default
         calls ignore the auxiliary cap.
+
+        ``defer_tool_argument_errors`` retains malformed arguments for a bounded
+        output-format repair. Such calls carry ``arguments_error`` and must be
+        validated by the caller before any business-tool execution.
         """
         kwargs, strategy = self._prepare_request(
             messages=messages,
@@ -557,6 +602,7 @@ class LLMProvider:
                     on_content_delta,
                     strategy,
                     payload_snapshot_enabled=payload_snapshot_enabled,
+                    defer_tool_argument_errors=defer_tool_argument_errors,
                 )
                 return self._finalize_response(
                     response, budget, anchors, ticket, call_purpose
@@ -576,21 +622,15 @@ class LLMProvider:
             tool_calls = []
             if msg.tool_calls:
                 for tc in msg.tool_calls:
-                    try:
-                        arguments = json.loads(tc.function.arguments)
-                    except json.JSONDecodeError as exc:
-                        logger.warning(
-                            "[LLM工具参数解析失败] model=%s finish_reason=%s tool=%s err=%s "
-                            "raw=%s",
-                            model,
-                            finish_reason,
-                            tc.function.name,
-                            exc,
-                            summarize_llm_output_for_log(tc.function.arguments),
-                        )
-                        raise
                     tool_calls.append(
-                        ToolCall(id=tc.id, name=tc.function.name, arguments=arguments)
+                        _parse_tool_call(
+                            tc.id,
+                            tc.function.name,
+                            tc.function.arguments,
+                            defer_errors=defer_tool_argument_errors,
+                            model=model,
+                            finish_reason=finish_reason,
+                        )
                     )
 
             raw, thinking, provider_fields = strategy.extract_message(msg, msg.content)
@@ -658,6 +698,7 @@ class LLMProvider:
         strategy: ProviderStrategy,
         *,
         payload_snapshot_enabled: bool | None = None,
+        defer_tool_argument_errors: bool = False,
     ) -> LLMResponse:
         stream = cast(
             Any,
@@ -759,24 +800,14 @@ class LLMProvider:
         for idx in sorted(tool_call_chunks):
             item = tool_call_chunks[idx]
             raw_args = item.get("arguments", "") or "{}"
-            try:
-                arguments = json.loads(raw_args)
-            except json.JSONDecodeError as exc:
-                logger.warning(
-                    "[LLM工具参数解析失败] model=%s finish_reason=%s tool=%s err=%s "
-                    "raw=%s",
-                    kwargs.get("model"),
-                    finish_reason,
-                    item.get("name", ""),
-                    exc,
-                    summarize_llm_output_for_log(raw_args),
-                )
-                raise
             tool_calls.append(
-                ToolCall(
-                    id=item.get("id", ""),
-                    name=item.get("name", ""),
-                    arguments=arguments,
+                _parse_tool_call(
+                    item.get("id", ""),
+                    item.get("name", ""),
+                    raw_args,
+                    defer_errors=defer_tool_argument_errors,
+                    model=str(kwargs.get("model", "")),
+                    finish_reason=finish_reason,
                 )
             )
 
