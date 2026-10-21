@@ -52,7 +52,6 @@ async def test_natural_route_reuses_private_chat_lookup_and_does_not_change_send
         "channel": channel.name,
         "chat_id": "oc_a",
         "chat_type": "private",
-        "message_thread_id": None,
     }
     channel.send.assert_not_awaited()
     with pytest.raises(RuntimeError):

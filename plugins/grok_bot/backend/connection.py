@@ -8,7 +8,7 @@ from uuid import uuid4
 
 import httpx
 from shiori_sdk.accounts import ConnectionState, ViaAccount, account_id_for
-from shiori_sdk.accounts.conversation import AccountConversation
+from shiori_sdk.accounts.routing import AccountRoute
 from shiori_sdk.accounts.targets import UncertainDeliveryError
 from shiori_sdk.channels import ChannelContext, ChannelStatus
 from shiori_sdk.channels.errors import NonRetryableDeliveryError
@@ -69,7 +69,6 @@ class GrokConnection:
         self._receiving = asyncio.Lock()
         self._submitted: set[str] = set()
         self._recovery: asyncio.Task[None] | None = None
-        self.last_error = ""
         self._outbound = self._on_response
         self._committed = self._on_committed
         self._cancelled = self._on_cancelled
@@ -198,7 +197,6 @@ class GrokConnection:
                 try:
                     await self._intake.submit(self._inbound(message))
                 except Exception:
-                    self.last_error = "待处理消息恢复失败"
                     self._report()
                     logger.exception("Grok 连接的待处理消息恢复失败")
                     break
@@ -224,7 +222,6 @@ class GrokConnection:
             try:
                 await self._intake.submit(self._inbound(message))
             except Exception:
-                self.last_error = "入站消息未能确认入队，请保留原消息 ID"
                 self._report()
                 raise
         return 202, {"status": "accepted", "message_id": message.message_id}
@@ -252,7 +249,7 @@ class GrokConnection:
         routed = hub.route_account_inbound(message)
         message_id = str(message.metadata["external_message_id"])
         if routed is None:
-            self.journal.finish(message_id, "failed", "角色响应规则拒收")
+            self.journal.finish(message_id, "failed")
             raise CallbackError(403, "角色响应规则拒收")
         if routed.metadata.get("conversation_duplicate"):
             self._settle_committed(message_id)
@@ -262,26 +259,21 @@ class GrokConnection:
 
     async def _retry_notice(self, chat_id: str, text: str) -> None:
         # A transport-control notice must not wake the Bot into a new chat loop.
-        self.last_error = text
         self._report()
 
     def _on_committed(self, event: TurnCommitted) -> None:
         if event.channel == self.name and event.chat_id == self.config.chat_id:
-            self._settle_committed(
-                event.external_message_id, will_dispatch=event.will_dispatch
-            )
+            self._settle_committed(event.external_message_id)
 
-    def _settle_committed(
-        self, message_id: str, *, will_dispatch: bool = False
-    ) -> None:
+    def _settle_committed(self, message_id: str) -> None:
         assert self._ctx is not None
         receipt = self.journal.state.messages.get(message_id)
         if receipt is None or receipt.state != "queued":
             self._submitted.discard(message_id)
             return
-        # Commit precedes normal dispatch. Recovery instead checks the host's
-        # actual queue, so suppressed replies finish and queued ones stay protected.
-        if will_dispatch or self._ctx.bus.has_pending_outbound(
+        # Recovery checks the host queue. A reply already queued stays protected;
+        # a suppressed turn finishes so reconnect does not replay it.
+        if self._ctx.bus.has_pending_outbound(
             self.name, self.config.chat_id, message_id
         ):
             self._submitted.add(message_id)
@@ -295,8 +287,7 @@ class GrokConnection:
         receipt = self.journal.state.messages.get(event.external_message_id)
         if receipt is not None and receipt.direction == "in":
             self._submitted.discard(event.external_message_id)
-            self.journal.finish(event.external_message_id, "failed", "角色处理已取消")
-            self.last_error = "角色处理已取消"
+            self.journal.finish(event.external_message_id, "failed")
             self._report()
 
     async def send(self, message: BotMessage) -> dict[str, object]:
@@ -330,32 +321,19 @@ class GrokConnection:
                         }
                     )
                 except (asyncio.CancelledError, UncertainDeliveryError):
-                    self.journal.finish(
-                        message.message_id, "uncertain", "发送结果不确定"
-                    )
-                    self.last_error = "发送结果不确定，请勿自动重发"
+                    self.journal.finish(message.message_id, "uncertain")
                     self._report()
                     raise
-                except Exception as error:
-                    self.journal.finish(
-                        message.message_id, "failed", "Webhook 拒绝发送"
-                    )
-                    self.last_error = (
-                        str(error)
-                        if isinstance(error, WebhookRejectedError)
-                        else "Webhook 发送失败"
-                    )
+                except Exception:
+                    self.journal.finish(message.message_id, "failed")
                     self._report()
                     raise
-                self.journal.finish(
-                    message.message_id, "accepted", "Grok 已接收，等待回复"
-                )
+                self.journal.finish(message.message_id, "accepted")
                 self.journal.complete_parent(message.reply_to)
-                self.last_error = ""
                 self._report()
             return {
                 "accepted": True,
-                "conversation": AccountConversation(
+                "conversation": AccountRoute(
                     self.name, self.config.chat_id
                 ).to_payload(),
                 "via_account": self.via_account(),

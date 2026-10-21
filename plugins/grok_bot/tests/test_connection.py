@@ -141,20 +141,16 @@ async def test_failed_intake_same_id_retry_is_recovered_once_without_restart(
     assert connection.journal.state.exchanges["retry-same-id"].count == 1
 
 
-@pytest.mark.parametrize(
-    "will_dispatch, already_queued", [(True, False), (False, True)]
-)
 async def test_committed_response_keeps_its_parent_pending_until_channel_delivery(
-    harness, will_dispatch, already_queued
+    harness,
 ):
     connection = harness.connection
     await connection.receive(
         "messages", {"message_id": "waiting-for-delivery", "text": "hello"}
     )
-    if already_queued:
-        harness.bus.pending_outbound.add(
-            (connection.name, connection.config.chat_id, "waiting-for-delivery")
-        )
+    harness.bus.pending_outbound.add(
+        (connection.name, connection.config.chat_id, "waiting-for-delivery")
+    )
     await harness.events.emit(
         TurnCommitted(
             session_key="role:mira",
@@ -165,7 +161,6 @@ async def test_committed_response_keeps_its_parent_pending_until_channel_deliver
             assistant_response="reply",
             tools_used=[],
             external_message_id="waiting-for-delivery",
-            will_dispatch=will_dispatch,
         )
     )
     assert [message.message_id for message in connection.journal.pending()] == [
@@ -266,7 +261,6 @@ async def test_uncertain_send_is_visible_and_replay_never_reposts(harness, monke
         await connection.send(message)
     assert connection.journal.state.messages[message.message_id].state == "uncertain"
     assert connection.status()["detail"] == ""
-    assert "不确定" in connection.journal.state.last_status
     with pytest.raises(CallbackError):
         await connection.send(message)
     post.assert_awaited_once()

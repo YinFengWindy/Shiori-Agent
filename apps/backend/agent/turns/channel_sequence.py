@@ -75,7 +75,6 @@ class ChannelSequenceOwner:
     """Cancels pending suffixes before their runtime's channels are replaced."""
 
     def __init__(self) -> None:
-        self._tasks: set[asyncio.Task] = set()
         self._stopped = False
         self._replies: dict[tuple[str, ...], ReplyInterruption] = {}
         self._plans: set[ReplyInterruption] = set()
@@ -205,21 +204,8 @@ class ChannelSequenceOwner:
         finally:
             _CURRENT.reset(token)
 
-    @contextmanager
-    def delivering(self):
-        """Register the cancellable batch, never the shielded per-message task."""
-        if self._stopped:
-            raise asyncio.CancelledError
-        task = asyncio.current_task()
-        assert task is not None
-        self._tasks.add(task)
-        try:
-            yield
-        finally:
-            self._tasks.discard(task)
-
     def stop(self) -> None:
-        """Refuse old-runtime batches and cancel the unstarted suffix of active ones."""
+        """Refuse old-runtime batches and invalidate their unstarted suffixes."""
         if self._stopped:
             return
         self._stopped = True
@@ -227,8 +213,6 @@ class ChannelSequenceOwner:
             reply.invalidate()
         self._replies.clear()
         self._plans.clear()
-        for task in tuple(self._tasks):
-            task.cancel()
 
     def resume(self) -> None:
         """Restore admission after an unsuccessful runtime replacement."""

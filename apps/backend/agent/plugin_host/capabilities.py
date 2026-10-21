@@ -27,7 +27,7 @@ if TYPE_CHECKING:
     from shiori_sdk.rpc import Concurrency
     from shiori_sdk.channels import Channel
     from core.accounts import AccountRegistry
-    from shiori_sdk.accounts.conversation import AccountConversation
+    from shiori_sdk.accounts.routing import AccountRoute
     from shiori_sdk.accounts.models import (
         AccountDeleteHandler,
         AccountResponseRules,
@@ -446,7 +446,7 @@ class AccountsCapability:
         connection: "ConnectionState",
         capabilities: frozenset[str] = frozenset(),
         error: str = "",
-        tool_conversation: "AccountConversation | None" = None,
+        tool_conversation: "AccountRoute | None" = None,
     ) -> "AccountSnapshot":
         """Reports connection, authentication, capability, or failure changes."""
         self._effects.ensure_active(f"account:{account_id}:report")

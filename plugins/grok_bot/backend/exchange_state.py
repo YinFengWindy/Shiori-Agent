@@ -32,11 +32,12 @@ class ExchangeState(BaseModel):
     version: Literal[2] = 2
     exchanges: dict[str, ExchangeBudget] = Field(default_factory=dict)
     messages: dict[str, Receipt] = Field(default_factory=dict)
-    last_status: str = ""
 
 
 def read_exchange_state(value: object) -> ExchangeState:
     """Read a version-2 exchange graph. Unreleased shapes are rejected."""
+    if isinstance(value, dict):
+        value = {key: item for key, item in value.items() if key != "last_status"}
     try:
         state = ExchangeState.model_validate(value)
         for receipt in state.messages.values():

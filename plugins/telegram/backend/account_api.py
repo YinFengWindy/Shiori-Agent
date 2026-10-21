@@ -13,8 +13,8 @@ from shiori_sdk.rpc import Concurrency
 from shiori_sdk.storage import read_mapping
 
 from shiori_sdk.accounts import VIA_ACCOUNT_KEY
-from shiori_sdk.accounts.conversation import AccountConversation
-from shiori_sdk.accounts.routing import ACCOUNT_RESOLVE_METHOD, AccountRoute
+from shiori_sdk.accounts.routing import AccountRoute
+from shiori_sdk.accounts.routing import ACCOUNT_RESOLVE_METHOD
 from shiori_sdk.media import detect_image_mime_from_header
 from shiori_sdk.accounts.targets import (
     ACCOUNT_SEND_METHOD,
@@ -158,7 +158,7 @@ class TelegramAccountApi:
             }
         )
         if target_kind == "private":
-            result["conversation"] = AccountConversation(
+            result["conversation"] = AccountRoute(
                 channel.name, result["chat_id"]
             ).to_payload()
         return {**result, VIA_ACCOUNT_KEY: via}

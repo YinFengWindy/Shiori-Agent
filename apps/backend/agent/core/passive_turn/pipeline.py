@@ -3,7 +3,6 @@ from __future__ import annotations
 import hashlib
 import logging
 import time
-from contextlib import ExitStack
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -22,7 +21,6 @@ from agent.lifecycle.phases.after_reasoning import (
 )
 from agent.lifecycle.phases.after_turn import (
     AfterTurnFrame,
-    will_dispatch_outbound,
     default_after_turn_modules,
 )
 from agent.lifecycle.phases.before_reasoning import (
@@ -49,7 +47,6 @@ from agent.turns.outbound import (
     DeliveryReceipt,
     OutboundDispatch,
     OutboundPort,
-    PreparesOutbound,
 )
 from bus.event_bus import EventBus
 from shiori_sdk.messages import InboundMessage, OutboundMessage
@@ -454,101 +451,83 @@ class PassiveTurnPipeline:
         *,
         started: float | None = None,
     ) -> OutboundMessage:
-        """Keep originating correlation from the first history write through enqueue."""
+        """Commit history, then fan out and dispatch the resulting reply."""
         started = time.perf_counter() if started is None else started
         key = state.session_key
         turn_id = _turn_log_id(key, state.msg)
-        with ExitStack() as preparation:
-            if isinstance(self._outbound_port, PreparesOutbound):
-                # Reserve routing identity before either commit path can expose
-                # history. The actual message is only constructed after commit.
-                preparation.enter_context(
-                    self._outbound_port.prepare(
-                        OutboundMessage(
-                            channel=state.msg.channel,
-                            chat_id=state.msg.chat_id,
-                            content="",
-                            metadata=dict(state.msg.metadata or {}),
-                        )
-                    )
+        try:
+            # Phase 5: AfterReasoning 模块链（parse、AfterReasoning 事件、持久化、出站消息）。
+            with diagnostic_context(phase="after_reasoning"):
+                after_reasoning = await self._after_reasoning.current().run(
+                    AfterReasoningInput(state=state, turn_result=turn_result)
                 )
-            try:
-                # Phase 5: AfterReasoning 模块链（parse、AfterReasoning 事件、持久化、出站消息）。
-                with diagnostic_context(phase="after_reasoning"):
-                    after_reasoning = await self._after_reasoning.current().run(
-                        AfterReasoningInput(state=state, turn_result=turn_result)
-                    )
-            except Exception as exc:
-                logger.exception(
-                    diagnostic_line(
-                        "PassiveTurnPipeline.run",
-                        event="phase_error",
-                        flow="passive",
-                        phase="after_reasoning",
-                        session=key,
-                        turn=turn_id,
-                        action="fail",
-                        reason="invalid_output",
-                        duration_ms=int((time.perf_counter() - started) * 1000),
-                        error_type=type(exc).__name__,
-                        note=str(exc)[:160],
-                    )
-                )
-                raise
-            logger.info(
+        except Exception as exc:
+            logger.exception(
                 diagnostic_line(
                     "PassiveTurnPipeline.run",
-                    event="end",
+                    event="phase_error",
                     flow="passive",
                     phase="after_reasoning",
                     session=key,
                     turn=turn_id,
-                    action="continue",
+                    action="fail",
+                    reason="invalid_output",
                     duration_ms=int((time.perf_counter() - started) * 1000),
+                    error_type=type(exc).__name__,
+                    note=str(exc)[:160],
                 )
             )
+            raise
+        logger.info(
+            diagnostic_line(
+                "PassiveTurnPipeline.run",
+                event="end",
+                flow="passive",
+                phase="after_reasoning",
+                session=key,
+                turn=turn_id,
+                action="continue",
+                duration_ms=int((time.perf_counter() - started) * 1000),
+            )
+        )
 
-            snapshot = TurnSnapshot(
-                state=state, outbound=after_reasoning.outbound, ctx=after_reasoning.ctx
-            )
-            if not will_dispatch_outbound(snapshot):
-                # Sequence delivery may have finished during the commit phase;
-                # suppressed replies must not observe their own preparation as queued.
-                preparation.close()
-            try:
-                # Phase 6: AfterTurn 模块链（TurnCommitted fanout、AfterTurn fanout、dispatch）。
-                with diagnostic_context(phase="after_turn"):
-                    outbound = await self._after_turn.current().run(snapshot)
-            except Exception as exc:
-                logger.exception(
-                    diagnostic_line(
-                        "PassiveTurnPipeline.run",
-                        event="phase_error",
-                        flow="passive",
-                        phase="after_turn",
-                        session=key,
-                        turn=turn_id,
-                        action="fail",
-                        reason="write_error",
-                        duration_ms=int((time.perf_counter() - started) * 1000),
-                        error_type=type(exc).__name__,
-                        note=str(exc)[:160],
-                    )
-                )
-                raise
-            logger.info(
+        snapshot = TurnSnapshot(
+            state=state, outbound=after_reasoning.outbound, ctx=after_reasoning.ctx
+        )
+        try:
+            # Phase 6: AfterTurn 模块链（TurnCommitted fanout、AfterTurn fanout、dispatch）。
+            with diagnostic_context(phase="after_turn"):
+                outbound = await self._after_turn.current().run(snapshot)
+        except Exception as exc:
+            logger.exception(
                 diagnostic_line(
                     "PassiveTurnPipeline.run",
-                    event="end",
+                    event="phase_error",
                     flow="passive",
                     phase="after_turn",
                     session=key,
                     turn=turn_id,
-                    action="done",
+                    action="fail",
+                    reason="write_error",
                     duration_ms=int((time.perf_counter() - started) * 1000),
+                    error_type=type(exc).__name__,
+                    note=str(exc)[:160],
                 )
             )
-            return outbound
+            raise
+        logger.info(
+            diagnostic_line(
+                "PassiveTurnPipeline.run",
+                event="end",
+                flow="passive",
+                phase="after_turn",
+                session=key,
+                turn=turn_id,
+                action="done",
+                duration_ms=int((time.perf_counter() - started) * 1000),
+            )
+        )
+        return outbound
 
     # 供外部调用方（如 spawn completion）复用 AfterReasoning + dispatch 流程。
     async def post_reasoning(

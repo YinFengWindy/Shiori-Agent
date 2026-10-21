@@ -29,19 +29,25 @@ class GrokDelivery:
             ],
         }
 
-    async def send(self, payload: dict[str, object]) -> dict[str, object]:
-        """Refuse other targets and unsupported media before causing side effects."""
+    def _configured_peer(self, payload: dict[str, object]):
+        """Reject anything other than this account's single private Bot."""
         connection = self.accounts.connection_for(payload)
         if (
             payload.get("target_kind") != "private"
             or payload.get("target_id") != connection.config.peer_id
+            or any(
+                payload.get(key)
+                for key in ("group_id", "message_thread_id", "mention_ids")
+            )
         ):
             raise ValueError("Grok 连接仅支持当前配置的 Bot 私聊")
-        if any(
-            payload.get(key)
-            for key in ("group_id", "message_thread_id", "mention_ids", "media")
-        ):
-            raise ValueError("Grok 连接不支持群聊、话题、提及或媒体")
+        return connection
+
+    async def send(self, payload: dict[str, object]) -> dict[str, object]:
+        """Refuse other targets and unsupported media before causing side effects."""
+        connection = self._configured_peer(payload)
+        if payload.get("media"):
+            raise ValueError("Grok 连接不支持媒体")
         message = BotMessage.parse(
             {"message_id": "shiori:" + uuid4().hex, "text": payload.get("message")}
         )
@@ -49,14 +55,5 @@ class GrokDelivery:
 
     async def resolve(self, payload: dict[str, object]) -> dict[str, object]:
         """Validate the configured peer and expose its actual inbound address."""
-        connection = self.accounts.connection_for(payload)
-        if (
-            payload.get("target_kind") != "private"
-            or payload.get("target_id") != connection.config.peer_id
-        ):
-            raise ValueError("Grok 连接仅支持当前配置的 Bot 私聊")
-        if any(
-            payload.get(key) for key in ("group_id", "message_thread_id", "mention_ids")
-        ):
-            raise ValueError("Grok 连接不支持群聊、话题、提及或媒体")
+        connection = self._configured_peer(payload)
         return AccountRoute(connection.name, connection.config.chat_id).to_payload()

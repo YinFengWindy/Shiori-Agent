@@ -9,6 +9,7 @@ from bootstrap.app import AppRuntime, RuntimeFeatures
 from bootstrap.runtime.generations import RuntimeRetention
 from core.common.runtime_scope import bind_runtime
 from shiori_sdk.messages import OutboundMessage
+from agent.turns.reply_interruption import ReplyInterruption
 from core.common.cancellation import finish_started
 
 
@@ -28,7 +29,11 @@ async def test_publication_cancels_batch_suffix_but_retains_started_receipt(
 
     async def batch():
         async with app.acquire() as lease:
-            with lease.reply_sequences.delivering():
+            interruption = ReplyInterruption()
+            with (
+                lease.reply_sequences.track(interruption),
+                interruption.delivering(),
+            ):
                 await finish_started(started_send())
                 seen.append("unstarted-suffix")
 

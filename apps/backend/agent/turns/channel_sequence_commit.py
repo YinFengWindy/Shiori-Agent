@@ -142,7 +142,7 @@ async def commit_channel_reply_sequence(
         # on their own messages, including tools and usage.
         await publish_final_role_state(manager, session.key, state_kwargs)
 
-    with context.owner.delivering(), interruptible_reply_delivery():
+    with interruptible_reply_delivery():
         await deliver_sequence(
             sequence.messages, publish, on_last, on_cancel=cancel_pending
         )

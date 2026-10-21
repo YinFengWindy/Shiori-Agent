@@ -15,7 +15,7 @@ from shiori_sdk.accounts import (
     stored_response_rules,
 )
 from shiori_sdk.channels.context import ChannelPluginContext
-from shiori_sdk.accounts.conversation import AccountConversation
+from shiori_sdk.accounts.routing import AccountRoute
 from shiori_sdk.channels.group import AccountChannelGroup
 from shiori_sdk.storage import plugin_data_dir
 
@@ -70,7 +70,7 @@ class GrokAccounts:
             connection=state,
             error=error,
             tool_conversation=(
-                AccountConversation(config.channel_name, config.chat_id)
+                AccountRoute(config.channel_name, config.chat_id)
                 if config is not None
                 else None
             ),

@@ -31,7 +31,6 @@ async def test_resolver_uses_configured_connection_without_sending(monkeypatch):
         "channel": "grok_bot_one",
         "chat_id": "dm:peer",
         "chat_type": "private",
-        "message_thread_id": None,
     }
     connection.send.assert_not_awaited()
     with pytest.raises(ValueError):

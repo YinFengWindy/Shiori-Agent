@@ -152,9 +152,11 @@ consolidates these additions and the subsequent #847 breaking migration.
   `AccountTarget.to_payload()` fields and returning `AccountRoute.to_payload()`:
   canonical `channel`, `chat_id`, `chat_type` (`private` or `group`) and optional
   positive integer `message_thread_id`. The channel owns platform parsing,
-  account-instance lookup and supported-target validation; resolution sends
-  nothing and does not grant tools or participation. It is separate from the
-  existing private `AccountConversation` grant/receipt contract. Natural proactive
+  account-instance lookup and supported-target validation;   resolution sends
+  nothing and does not grant tools or participation. A confirmed private send
+  and a full-tool grant use the same `AccountRoute`; `for_private` rejects
+  groups and topics. `AccountConversation` was never part of published SDK
+  3.1.2. Natural proactive
   retargeting requires this capability and explicitly fails if it is absent;
   the host never guesses a platform address. Already selected bound private
   chats and captured background origins reuse their authoritative address.
@@ -192,22 +194,18 @@ consolidates these additions and the subsequent #847 breaking migration.
   and reject unsupported rule mutations; the capability alone does not bypass
   the host's admission or authorization checks. Grok is the initial consumer.
 
-- **Committed reply dispatch intent (PR #893, issue #891).**
-  `TurnCommitted.will_dispatch` is an additive boolean defaulting to false. It
-  reports the host's normal-reply dispatch decision before that reply is queued,
-  accounting for disabled dispatch and prior explicit account delivery. The same
-  decision supplies `AfterTurnCtx.will_dispatch` and the actual dispatch gate.
-  Channels can retain inbound correlation for a planned reply without guessing
-  from nonempty text or tool names. `MessageBus.has_pending_outbound` now includes
-  the host-owned preparation lifetime before enqueue, as well as queued and
-  dispatching replies. Both pipeline entry points reserve the originating
-  correlation before history can become durable, covering post-commit effects,
-  segmented delivery and observer fanout. The pipeline releases preparation
-  before committed observers when normal dispatch is suppressed or already
-  completed by a sequence, and releases it on return, failure or cancellation;
-  successful enqueue keeps queued ownership continuously through the handoff.
-  Nonqueued outbound ports retain their dispatch-only contract. This intent is not a
-  delivery receipt and does not claim that a remote peer accepted a message.
+- **Reply-chain ownership stays in the channel journal (issue #895).**
+  Grok does not keep a write-only connection error or journal status string.
+  Its receipt table never expires a chain that still has queued, sending or
+  uncertain work. A `reply_to` whose parent was already expired starts a new
+  chain instead of failing or inheriting the old budget. The host no longer
+  reserves outbound identity before enqueue: `PreparesOutbound`,
+  `MessageBus.prepare_outbound` and `TurnCommitted.will_dispatch` are removed.
+  `AfterTurnCtx.will_dispatch` remains the observer-facing dispatch gate.
+  `ReplyInterruption` is the only cancellation owner; `ChannelSequenceOwner`
+  registers the current generation's plans and invalidates them on replacement.
+  One `NaturalReplyRequest` carries the optional finish_reply protocol through
+  a reasoning run.
 
 - **Account media supplements (PR #889, issue #886).** Host/plugin calls to `account_send.execute`
   may supply protected `push_proactive=False` and `push_chat_id` with
@@ -273,7 +271,7 @@ consolidates these additions and the subsequent #847 breaking migration.
   the `full_tools` capability expose the per-account switch. The channel hub drops
   plugin-supplied `account_full_tools` metadata before asserting its own admission
   flag; tool consumers also check the current live account, role and thread.
-  `accounts.report(tool_conversation=AccountConversation(...))` names the current
+  `accounts.report(tool_conversation=AccountRoute(...))` names the current
   canonical private route eligible for this grant. The host validates it against
   the reporting account. Missing routes grant nothing; changed routes reject old
   queued messages and background targets even if the account's plugin token is
@@ -291,7 +289,7 @@ consolidates these additions and the subsequent #847 breaking migration.
   absent/ambiguous receipts remain uncertain. Existing `message_id` receipts keep
   their behavior. A run/task ID must not be presented as a platform message ID.
   A confirmed private send may also include `conversation: {channel, chat_id,
-  chat_type: "private"}` using `shiori_sdk.accounts.conversation.AccountConversation`.
+  chat_type: "private"}` using `shiori_sdk.accounts.routing.AccountRoute`.
   This must be the canonical inbound address resolved by the sending plugin,
   not a guessed chat ID derived from its target ID. The host validates the
   channel against the account platform and records `account_send` in this network

@@ -24,7 +24,7 @@ from shiori_sdk.channels.threads import network_thread_id
 from core.accounts import AccountRegistry
 from core.accounts.delivery_ledger import AccountDeliveryLedger
 from shiori_sdk.accounts.targets import AccountTarget
-from shiori_sdk.accounts.conversation import AccountConversation
+from shiori_sdk.accounts.routing import AccountRoute
 from core.identity import IdentityChat, UserIdentityStore
 from session.manager import SessionManager
 
@@ -160,7 +160,7 @@ async def test_private_bot_first_contact_is_recorded_in_canonical_network_thread
         return {
             "message_id": message_id,
             "accepted": True,
-            "conversation": AccountConversation(transport, chat_id).to_payload(),
+            "conversation": AccountRoute(transport, chat_id).to_payload(),
         }
 
     ledger = AccountDeliveryLedger(tmp_path)

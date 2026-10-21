@@ -5,8 +5,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from shiori_sdk.accounts import VIA_ACCOUNT_KEY, AccountDeletionPlan
-from shiori_sdk.accounts.conversation import AccountConversation
-from shiori_sdk.accounts.routing import ACCOUNT_RESOLVE_METHOD, AccountRoute
+from shiori_sdk.accounts.routing import AccountRoute
+from shiori_sdk.accounts.routing import ACCOUNT_RESOLVE_METHOD
 from .accounts_actions import qq_number
 from .channel.formatting import GROUP_PREFIX
 from shiori_sdk.accounts.targets import (
@@ -188,7 +188,7 @@ async def _send_account(runtime, payload: dict) -> dict:
         images=account_send_media(payload),
     )
     if payload["target_kind"] == "private":
-        result["conversation"] = AccountConversation(
+        result["conversation"] = AccountRoute(
             runtime.name, result["chat_id"]
         ).to_payload()
     return {**result, VIA_ACCOUNT_KEY: via}

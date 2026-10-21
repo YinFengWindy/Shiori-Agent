@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 from typing import Protocol
-from .conversation import AccountConversation
+from .routing import AccountRoute
 from .models import (
     AccountDeleteHandler,
     AccountResponseRules,
@@ -98,7 +98,7 @@ class AccountsCapability(Protocol):
         connection: "ConnectionState",
         capabilities: frozenset[str] = frozenset(),
         error: str = "",
-        tool_conversation: AccountConversation | None = None,
+        tool_conversation: AccountRoute | None = None,
     ) -> "AccountSnapshot":
         """Report runtime state and the current private route eligible for tools.
 

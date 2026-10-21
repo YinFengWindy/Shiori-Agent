@@ -997,17 +997,14 @@ async def test_preparation_spans_first_sequence_commit_effect_and_all_segments(
     async def no_pause(_):
         assert sent == ["one"]
         assert bus.outbound_size == 0
-        assert bus.has_pending_outbound(message.channel, message.chat_id, "parent")
+        assert not bus.has_pending_outbound(message.channel, message.chat_id, "parent")
 
     monkeypatch.setattr("agent.turns.reply_sequence.wait_between_messages", no_pause)
     bus.subscribe_outbound(message.channel, deliver, supports_reply_sequence=True)
     runtime.bus.on(
         TurnCommitted,
         lambda event: observed.append(
-            (
-                event.will_dispatch,
-                bus.has_pending_outbound(message.channel, message.chat_id, "parent"),
-            )
+            bus.has_pending_outbound(message.channel, message.chat_id, "parent")
         ),
     )
     pipeline = runtime.pipeline(reasoning, outbound_port=BusOutboundPort(bus))
@@ -1022,12 +1019,12 @@ async def test_preparation_spans_first_sequence_commit_effect_and_all_segments(
         await asyncio.wait_for(entered.wait(), 2)
         assert observed == []
         assert bus.outbound_size == 0
-        assert bus.has_pending_outbound(message.channel, message.chat_id, "parent")
+        assert not bus.has_pending_outbound(message.channel, message.chat_id, "parent")
         dispatcher = asyncio.create_task(bus.dispatch_outbound())
         release.set()
         await asyncio.wait_for(task, 2)
         assert sent == ["one", "two"]
-        assert observed == [(False, False)]
+        assert observed == [False]
         assert not bus.has_pending_outbound(message.channel, message.chat_id, "parent")
     finally:
         task.cancel()

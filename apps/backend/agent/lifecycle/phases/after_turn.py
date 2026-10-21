@@ -218,7 +218,6 @@ class _BuildTurnCommittedModule:
             external_message_id=str(
                 (msg.metadata or {}).get("external_message_id") or ""
             ).strip(),
-            will_dispatch=will_dispatch_outbound(snap),
             total_tokens=(
                 value
                 if isinstance((value := turn_metrics.get("total_tokens")), int)

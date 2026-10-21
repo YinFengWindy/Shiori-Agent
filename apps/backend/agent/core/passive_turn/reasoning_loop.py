@@ -34,7 +34,11 @@ from .tool_visibility import initial_tool_order
 from .reply_recovery import complete_reply
 from .budgeted_request import budgeted_chat
 from .compaction import ensure_request_budget, request_tools_disabled
-from .natural_reply import NaturalReplyProtocol, finish_reply_schema
+from .natural_reply import (
+    NaturalReplyProtocol,
+    NaturalReplyRequest,
+    finish_reply_schema,
+)
 from agent.turns.reply_interruption import reply_was_invalidated
 
 logger = logging.getLogger("agent.core.passive_turn")
@@ -101,7 +105,10 @@ class _PassiveReasoningLoopMixin:
     ) -> ReasonerResult:
         # 1. 初始化消息上下文、本轮工具轨迹。
         messages = initial_messages
-        natural_reply = NaturalReplyProtocol() if natural_chat else None
+        reply_request = NaturalReplyRequest(
+            NaturalReplyProtocol() if natural_chat else None
+        )
+        natural_reply = reply_request.protocol
         tools_used: list[str] = []
         tools_unlocked: list[str] = []
         tool_chain: list[dict[str, Any]] = []
@@ -169,7 +176,7 @@ class _PassiveReasoningLoopMixin:
                         tools_used=tools_used,
                         session=tool_event_session_key,
                         channel=tool_event_channel,
-                        natural_reply=natural_reply,
+                        reply_request=reply_request,
                         **(
                             {"reply_moods": reply_moods}
                             if reply_moods is not None
@@ -289,7 +296,7 @@ class _PassiveReasoningLoopMixin:
                     role_reply=summary_role_reply,
                     role_reply_mood_fresh=summary_role_reply_fresh,
                     reply_recovery=reply_recovery,
-                    natural_reply=natural_reply,
+                    reply_request=reply_request,
                 )
             # 4. 调用 LLM，带上当前可见工具 schema。
             react_input_samples.append(step_ctx.input_tokens_estimate)
@@ -587,7 +594,7 @@ class _PassiveReasoningLoopMixin:
                                 role_reply=summary_role_reply,
                                 role_reply_mood_fresh=summary_role_reply_fresh,
                                 reply_recovery=reply_recovery,
-                                natural_reply=natural_reply,
+                                reply_request=reply_request,
                             )
                         logger.warning(
                             "[工具未解锁] LLM 尝试调用 '%s'，但该工具 schema 不可见，引导模型先 tool_search",
@@ -820,7 +827,7 @@ class _PassiveReasoningLoopMixin:
                             role_reply=summary_role_reply,
                             role_reply_mood_fresh=summary_role_reply_fresh,
                             reply_recovery=reply_recovery,
-                            natural_reply=natural_reply,
+                            reply_request=reply_request,
                         )
 
                 # 7. 本轮工具执行完后，记录 tool_chain。
@@ -886,7 +893,7 @@ class _PassiveReasoningLoopMixin:
                         role_reply=summary_role_reply,
                         role_reply_mood_fresh=summary_role_reply_fresh,
                         reply_recovery=reply_recovery,
-                        natural_reply=natural_reply,
+                        reply_request=reply_request,
                     )
                 continue
 
@@ -958,7 +965,7 @@ class _PassiveReasoningLoopMixin:
                 role_reply=role_reply,
                 role_reply_mood_fresh=role_reply_mood_fresh,
                 reply_recovery=reply_recovery,
-                natural_reply=natural_reply,
+                reply_request=reply_request,
             )
 
         # 9. 达到最大迭代次数后，生成不完整进展总结。
@@ -988,5 +995,5 @@ class _PassiveReasoningLoopMixin:
             role_reply=summary_role_reply,
             role_reply_mood_fresh=summary_role_reply_fresh,
             reply_recovery=reply_recovery,
-            natural_reply=natural_reply,
+            reply_request=reply_request,
         )

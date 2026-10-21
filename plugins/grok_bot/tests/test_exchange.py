@@ -7,7 +7,7 @@ from plugins.grok_bot.backend.protocol import BotMessage, CallbackError
 def deliver(journal, message_id, direction, reply_to="", limit=12):
     message = BotMessage(message_id, "hello", reply_to)
     assert journal.begin(message, direction, limit)
-    journal.finish(message_id, "accepted" if direction == "out" else "complete", "done")
+    journal.finish(message_id, "accepted" if direction == "out" else "complete")
 
 
 def test_interleaved_chains_keep_independent_budgets_through_restart():
@@ -47,8 +47,6 @@ def test_duplicate_conflict_correlation_and_unknown_send_never_replay():
     journal.begin(original, "out", 12)
     restored = ExchangeJournal(kv, "c", "b")
     assert restored.state.messages["sent"].state == "uncertain"
-    assert "不确定" in restored.state.last_status
-    assert ExchangeJournal(kv, "c", "b").state.last_status == restored.state.last_status
     assert restored.pending() == []
     with pytest.raises(CallbackError, match="不确定"):
         restored.begin(original, "out", 12)
@@ -56,8 +54,8 @@ def test_duplicate_conflict_correlation_and_unknown_send_never_replay():
     assert not restored.begin(BotMessage("reply", "yes", "sent"), "in", 12)
     with pytest.raises(CallbackError, match="其他内容"):
         restored.begin(BotMessage("reply", "changed", "sent"), "in", 12)
-    with pytest.raises(CallbackError, match="不存在"):
-        restored.begin(BotMessage("wrong", "hi", "foreign"), "in", 12)
+    assert restored.begin(BotMessage("wrong", "hi", "foreign"), "in", 12)
+    assert restored.state.messages["wrong"].exchange_id == "wrong"
 
 
 def test_retention_expires_whole_settled_chains_without_reducing_live_budget(
@@ -72,8 +70,8 @@ def test_retention_expires_whole_settled_chains_without_reducing_live_budget(
     deliver(journal, "b-third", "out", "b-reply")
     assert "a" not in journal.state.exchanges
     assert "a-reply" not in journal.state.messages
-    with pytest.raises(CallbackError, match="不存在"):
-        journal.begin(BotMessage("late", "hello", "a"), "in", 12)
+    assert journal.begin(BotMessage("late", "hello", "a"), "in", 12)
+    assert journal.state.messages["late"].exchange_id == "late"
     assert journal.state.exchanges["b"].count == 3
     journal = ExchangeJournal(kv, "c", "b")
     deliver(journal, "b-fourth", "in", "b-third", limit=4)
@@ -89,7 +87,7 @@ def test_retention_preserves_pending_and_uncertain_work_and_refuses_overflow(
     journal.begin(BotMessage("queued", "hello"), "in", 12)
     journal.begin(BotMessage("sending", "hello"), "out", 12)
     journal.begin(BotMessage("uncertain", "hello"), "out", 12)
-    journal.finish("uncertain", "uncertain", "unknown")
+    journal.finish("uncertain", "uncertain")
     with pytest.raises(CallbackError, match="待处理交流"):
         journal.begin(BotMessage("new", "hello"), "out", 12)
     assert set(journal.state.messages) == {"queued", "sending", "uncertain"}

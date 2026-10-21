@@ -89,6 +89,13 @@ def _validate(response: LLMResponse) -> NaturalReply:
     )
 
 
+@dataclass(frozen=True)
+class NaturalReplyRequest:
+    """The optional finish_reply protocol for one reasoning run."""
+
+    protocol: NaturalReplyProtocol | None = None
+
+
 class NaturalReplyProtocol:
     """Own one bounded format correction, independent of business-tool execution."""
 
