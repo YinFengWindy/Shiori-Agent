@@ -142,6 +142,18 @@ test("full tool permission defaults off and a failed revocation keeps the host g
   } finally { await view.cleanup(); }
 });
 
+test("fixed-peer accounts use activation for admission and retain only the tool grant", async () => {
+  const view = await mountEditor({ ...account, capabilities: ["fixed_peer", "full_tools"] });
+  try {
+    assert.doesNotMatch(view.container.textContent ?? "", /私聊启用|群聊启用|黑名单/);
+    assert.equal(view.container.querySelector("textarea"), null);
+    await act(async () => permission(view.container).click());
+    assert.deepEqual(view.calls[0].payload.response_rules, { private_enabled: true, group_enabled: true, blocked_sender_ids: [], allow_full_tools: true });
+    await view.publish(account);
+    assert.match(view.container.textContent ?? "", /私聊启用.*黑名单成员 ID/);
+  } finally { await view.cleanup(); }
+});
+
 test("a same-ID host revocation replaces the baseline without losing a dirty blacklist", async () => {
   const initial = grantedAccount();
   const view = await mountEditor(initial);

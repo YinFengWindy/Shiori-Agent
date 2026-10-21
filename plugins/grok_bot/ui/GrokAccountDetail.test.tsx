@@ -30,22 +30,26 @@ it("saves only this role's webhook and clears credentials after saving", async (
   }
 });
 
-it("refreshes the real budget after continuing while the account stays online", async () => {
-  let count = 12;
+it("shows activation and routine setup without message monitoring or reset controls", async () => {
+  const requests: string[] = [];
+  const routine = "本机配置 C:/plugin/client.ps1 C:/workspace/client.json";
   const client = createFakePluginClient({ call: async <T,>(method: string) => {
-    if (method === "account.reset_exchange") count = 0;
-    return (method === "account.detail" ? { webhook_url: "https://example.test/hook", has_key: true, enabled: true, verified: true, max_messages: 12, exchange_count: count, last_status: "", client_path: "client.ps1", connection_file: "client.json" } : { account_id: "grok_bot:one" }) as T;
+    requests.push(method);
+    return { webhook_url: "https://example.test/hook", has_key: true, enabled: true, max_messages: 12, routine_config: routine,
+      last_status: "Grok 已接收，等待回复", exchange_count: 12, verified: true } as T;
   } });
   const account: AccountSnapshot = {
-    id: "grok_bot:one", pluginId: "grok_bot", platform: "grok_bot", platformAccountId: "one", configRef: "one", displayName: "Grok Bot", avatarUrl: "", roleId: "mira", runtimeActive: true, connection: "online", capabilities: ["private"], error: "",
+    id: "grok_bot:one", pluginId: "grok_bot", platform: "grok_bot", platformAccountId: "one", configRef: "one", displayName: "Grok Bot", avatarUrl: "", roleId: "mira", runtimeActive: true, connection: "online", capabilities: ["fixed_peer", "full_tools", "private"], error: "",
     responseRules: { privateEnabled: true, groupEnabled: false, blockedSenderIds: [] },
   };
   const view = await mountTestComponent(<GrokAccountDetail account={account} roleId="mira" client={client} host={createFakeHostServices().host} onChanged={() => undefined} />);
   try {
-    assert.match(document.body.textContent ?? "", /12 \/ 12/);
-    await act(async () => Array.from(document.querySelectorAll("button")).find((button) => button.textContent === "继续新一轮交流")?.click());
-    assert.match(document.body.textContent ?? "", /0 \/ 12/);
+    assert.match(document.body.textContent ?? "", /已启用/);
+    assert.match(document.body.textContent ?? "", /单次交流消息上限/);
+    assert.doesNotMatch(document.body.textContent ?? "", /回程已验证|等待回程|等待回复|继续新一轮|12 \/ 12/);
+    assert.equal(document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Routine 配置内容"]')?.value, routine);
     assert.equal(document.querySelector<HTMLInputElement>('input[type="password"]')?.value, "");
+    assert.deepEqual(requests, ["account.detail"]);
   } finally {
     await view.cleanup();
     await client.dispose();

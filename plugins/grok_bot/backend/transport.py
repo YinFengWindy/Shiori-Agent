@@ -7,6 +7,23 @@ import httpx
 from shiori_sdk.accounts.targets import UncertainDeliveryError
 
 
+class WebhookRejectedError(ValueError):
+    """A safe HTTP failure category without request or response secrets."""
+
+    def __init__(self, status: int) -> None:
+        if status in {401, 403}:
+            reason = "认证失败"
+        elif status == 404:
+            reason = "地址不存在"
+        elif status == 429:
+            reason = "请求过于频繁"
+        elif status >= 500:
+            reason = "服务暂不可用"
+        else:
+            reason = "拒绝请求"
+        super().__init__(f"Grok Webhook {reason}（HTTP {status}）")
+
+
 class WebhookTransport:
     """Own a no-retry client for a transport with no documented idempotency key."""
 
@@ -47,8 +64,14 @@ class WebhookTransport:
                     headers={"Authorization": f"Bearer {self._key}"},
                 ) as response:
                     if response.status_code != 200:
-                        raise ValueError(
-                            f"Grok Webhook 拒绝请求（HTTP {response.status_code}）"
-                        )
-        except (httpx.TransportError, TimeoutError):
+                        raise WebhookRejectedError(response.status_code)
+        except (httpx.TimeoutException, TimeoutError):
+            raise UncertainDeliveryError(
+                "Grok Webhook 请求超时，接收结果不确定"
+            ) from None
+        except httpx.ConnectError:
+            raise UncertainDeliveryError(
+                "无法连接 Grok Webhook，接收结果不确定"
+            ) from None
+        except httpx.TransportError:
             raise UncertainDeliveryError("Grok 发送连接中断，接收结果不确定") from None

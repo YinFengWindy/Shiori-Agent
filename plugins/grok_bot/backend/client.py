@@ -15,11 +15,9 @@ from urllib.parse import urlsplit
 MAX_BYTES = 65536
 
 
-def submit(config_file: Path, payload: object, *, handshake: bool = False):
+def submit(config_file: Path, payload: object):
     """Send exactly once to the authenticated loopback endpoint in a local file."""
     config = json.loads(config_file.read_text(encoding="utf-8"))
-    if handshake:
-        payload = {"protocol": "shiori-grok/1", "challenge": config["challenge"]}
     base = str(config["callback_url"])
     parsed = urlsplit(base)
     if (
@@ -34,7 +32,7 @@ def submit(config_file: Path, payload: object, *, handshake: bool = False):
     if len(data) > MAX_BYTES:
         raise ValueError("消息过长")
     request = urllib.request.Request(
-        base + ("handshake" if handshake else "messages"),
+        base + "messages",
         data=data,
         headers={
             "Content-Type": "application/json",
@@ -70,17 +68,13 @@ def main() -> int:
     """Read one message from stdin and print only the non-secret receipt."""
     parser = argparse.ArgumentParser(description="向 Shiori 角色发送消息")
     parser.add_argument("--connection", type=Path, required=True)
-    parser.add_argument("--handshake", action="store_true")
     args = parser.parse_args()
     try:
-        if args.handshake:
-            payload = {"protocol": "shiori-grok/1"}
-        else:
-            raw = sys.stdin.buffer.read(MAX_BYTES + 1)
-            if len(raw) > MAX_BYTES:
-                raise ValueError("消息过长")
-            payload = json.loads(raw)
-        result = submit(args.connection, payload, handshake=args.handshake)
+        raw = sys.stdin.buffer.read(MAX_BYTES + 1)
+        if len(raw) > MAX_BYTES:
+            raise ValueError("消息过长")
+        payload = json.loads(raw)
+        result = submit(args.connection, payload)
     except (OSError, ValueError, KeyError, RuntimeError) as error:
         # Never include config contents or token-bearing HTTP request details.
         print(f"回程失败：{type(error).__name__}", file=sys.stderr)

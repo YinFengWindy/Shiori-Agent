@@ -39,7 +39,8 @@ export function AccountResponseRulesEditor({ account, disabled, onChanged }: {
   const rules = pending?.account === account ? { ...account.responseRules, ...pending.patch } : account.responseRules;
   const blockedText = blockedDraft ?? account.responseRules.blockedSenderIds.join("\n");
   // The group toggle only applies to accounts that serve group chats; the blacklist also covers private chats.
-  const showGroups = account.capabilities.includes("groups");
+  const fixedPeer = account.capabilities.includes("fixed_peer");
+  const showGroups = !fixedPeer && account.capabilities.includes("groups");
 
   async function save(patch: Partial<AccountResponseRules>) {
     if (busy || latest.current.disabled) return;
@@ -77,18 +78,18 @@ export function AccountResponseRulesEditor({ account, disabled, onChanged }: {
   return <section className="grid gap-4" aria-label="响应规则" aria-busy={busy || undefined}>
     <h3 className="m-0 text-body font-medium text-ink">响应规则</h3>
     {error ? <InlineError message={error} /> : null}
-    <label className="flex items-center gap-3 text-body-sm text-ink-secondary">
+    {!fixedPeer ? <label className="flex items-center gap-3 text-body-sm text-ink-secondary">
       <input type="checkbox" checked={rules.privateEnabled} disabled={locked} onChange={(event) => toggle("privateEnabled", event.target.checked)} />私聊启用
-    </label>
+    </label> : null}
     {showGroups ? <label className="flex items-center gap-3 text-body-sm text-ink-secondary">
       <input type="checkbox" checked={rules.groupEnabled} disabled={locked} onChange={(event) => toggle("groupEnabled", event.target.checked)} />群聊启用
     </label> : null}
     {account.capabilities.includes("full_tools") ? <SettingsToggleField label="允许完整工具权限"
       checked={rules.allowFullTools === true} disabled={locked}
       onChange={(checked) => toggle("allowFullTools", checked)} /> : null}
-    <label className="grid gap-2 text-body-sm text-ink-secondary">黑名单成员 ID
+    {!fixedPeer ? <label className="grid gap-2 text-body-sm text-ink-secondary">黑名单成员 ID
       <textarea className={textareaClass} rows={3} value={blockedText} disabled={locked}
         onChange={(event) => setBlockedDraft(event.target.value)} onBlur={commitBlocked} />
-    </label>
+    </label> : null}
   </section>;
 }

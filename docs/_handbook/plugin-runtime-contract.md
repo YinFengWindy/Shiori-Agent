@@ -123,6 +123,15 @@ consolidates these additions and the subsequent #847 breaking migration.
 
 <!-- Record the next contract batch here, with PR references and breaking markers. -->
 
+- **Fixed-peer account settings (issue #891; PR reference added at delivery).**
+  Account reports may include `fixed_peer` to declare that connection activation
+  controls admission to one fixed peer. The host hides private/group enable
+  switches and sender blacklist controls for this capability; `full_tools` still
+  controls the separate explicit tool grant. Other accounts keep their existing
+  settings. Providers must normalize legacy admission rules before registration
+  and reject unsupported rule mutations; the capability alone does not bypass
+  the host's admission or authorization checks. Grok is the initial consumer.
+
 - **Account media supplements (PR #889, issue #886).** Host/plugin calls to `account_send.execute`
   may supply protected `push_proactive=False` and `push_chat_id` with
   `target_kind="user"`. Here `channel` is the original transport channel; the host

@@ -30,7 +30,12 @@ export type AccountSnapshot = {
   roleId: string;
   runtimeActive: boolean;
   connection: "unknown" | "connecting" | "online" | "offline" | "login_required" | "error";
-  /** `groups` means this account can receive group conversations; other capabilities remain plugin-defined. */
+  /**
+   * `groups` enables group settings; `full_tools` exposes the explicit tool grant.
+   * `fixed_peer` uses connection activation for admission, hiding private/group
+   * switches and sender lists. Its plugin must normalize/reject unsupported rules.
+   * Other capabilities remain plugin-defined.
+   */
   capabilities: string[];
   error: string;
   responseRules: AccountResponseRules;
