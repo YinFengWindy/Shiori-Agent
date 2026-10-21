@@ -15,6 +15,7 @@ from agent.plugin_host.package_contract import validate_package
 from agent.plugin_host.package_paths import contained_file
 from agent.plugin_host.package_fingerprint import inspect_package_content
 from agent.plugin_host.trust_store import PluginTrustStore
+from agent.plugin_host.execution_identity import PluginExecutionIdentity
 
 logger = logging.getLogger(__name__)
 
@@ -242,6 +243,37 @@ def _check_external_dependencies(
             break
 
 
+def refresh_dependency_admission(
+    records: list[PluginRecord], trust: PluginTrustStore
+) -> None:
+    """Recheck existing blocked candidates without discovering or approving new code."""
+    by_id: dict[str, list[PluginRecord]] = defaultdict(list)
+    for record in records:
+        by_id[record.manifest.id].append(record)
+        if (
+            record.source == "workspace"
+            and record.fingerprint
+            and record.admission is not None
+            and record.admission.code
+            in {"dependency_unavailable", "missing_dependency"}
+        ):
+            record.admission = (
+                None
+                if trust.is_trusted(
+                    record.plugin_dir, record.fingerprint, activation=True
+                )
+                else PluginDiagnostic(
+                    "trust_required",
+                    "trust",
+                    "source",
+                    "外部插件尚未获得信任",
+                    str(record.plugin_dir),
+                    "UNTRUSTED",
+                )
+            )
+    _check_external_dependencies(records, by_id)
+
+
 def _read_candidate(
     child: Path,
     root: Path,
@@ -318,6 +350,17 @@ def _read_candidate(
             fingerprint = content.fingerprint
             trust_directory = content.directory
             content_hashes = content.hashes
+            if trust is not None and not PluginExecutionIdentity(
+                trust.workspace
+            ).matches(manifest.id, child, fingerprint):
+                diagnostic = PluginDiagnostic(
+                    "executed_content_changed",
+                    "trust",
+                    "content",
+                    "此插件已在本次运行执行过其他内容，请重启 Shiori 后重新确认",
+                    str(child),
+                    "RESTART_REQUIRED",
+                )
         except PackageContractError as exc:
             diagnostic = exc.diagnostic
         if (

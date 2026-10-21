@@ -5,9 +5,11 @@ import { mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import { resetPluginEnabledStateForTests } from "./pluginEnabledStateStore";
 
 let PluginManagementSection: typeof import("./PluginManagementSection").PluginManagementSection;
+let PluginTrustHost: typeof import("./PluginTrustHost").PluginTrustHost;
 before(async () => {
   const environment = await mountTestComponent(null);
   ({ PluginManagementSection } = await import("./PluginManagementSection"));
+  ({ PluginTrustHost } = await import("./PluginTrustHost"));
   await environment.cleanup();
 });
 
@@ -259,20 +261,21 @@ it("renders each conflicting directory and disables every unsafe candidate", asy
   }
 });
 
-it("requires explicit trust confirmation and then shows pending restart without stale trust errors", async () => {
+it("manual trust preserves a disabled plugin and clears stale trust errors", async () => {
   resetPluginEnabledStateForTests();
   const view = await mountTestComponent(null);
   const requests: Array<{ method: string; payload: Record<string, unknown> }> = [];
   let trusted = false;
   Object.defineProperty(window, "miraDesktop", { configurable: true, value: {
     onEvent: () => () => undefined,
+    applicationSessionId: async () => "management-trust",
     invoke: async (request: { method: string; payload: Record<string, unknown> }) => {
       requests.push(request);
       if (request.method === "plugins.trust") trusted = true;
       return { id: "1", type: "response", method: request.method, error: null, payload: { plugins: [{
         id: "manual", name: "Manual", version: "1.0.0", candidate_id: "C:/workspace/plugins/manual", directory: "C:/workspace/plugins/manual", source: "workspace", description: "",
-        state: "UNTRUSTED", enabled: true, can_toggle: false, can_trust: !trusted, trust_fingerprint: "fingerprint", trust_directory: "C:/workspace/plugins/manual", trust_pending_restart: trusted,
-        error: "外部插件尚未获得信任", diagnostic: { code: "trust_required", stage: "trust", field: "source", reason: "外部插件尚未获得信任", path: "", state: "UNTRUSTED" }, has_config_schema: false, capabilities: [], channels: [], supports_hot_unload: true,
+        state: trusted ? "DISABLED" : "UNTRUSTED", enabled: false, can_toggle: trusted, can_trust: !trusted, trusted, trust_fingerprint: trusted ? null : "fingerprint", content_fingerprint: "fingerprint", trust_directory: "C:/workspace/plugins/manual", trust_pending_restart: false,
+        error: trusted ? "" : "外部插件尚未获得信任", diagnostic: trusted ? null : { code: "trust_required", stage: "trust", field: "source", reason: "外部插件尚未获得信任", path: "", state: "UNTRUSTED" }, has_config_schema: false, capabilities: [], channels: [], supports_hot_unload: true,
       }] } };
     },
   } });
@@ -282,19 +285,23 @@ it("requires explicit trust confirmation and then shows pending restart without 
     return found;
   };
   try {
-    await view.render(<PluginManagementSection />);
-    assert.equal(view.container.querySelector<HTMLButtonElement>('[role="switch"]')?.disabled, true);
+    await view.render(<><PluginManagementSection /><PluginTrustHost ready /></>);
+    assert.equal(view.container.querySelector<HTMLButtonElement>('[role="switch"]')?.disabled, false);
     await act(async () => button("信任…").click());
     assert.ok(document.querySelector('[role="dialog"]')?.textContent?.includes("可读写你的工作区、访问网络并执行任意前端代码"));
     await act(async () => button("取消").click());
     assert.equal(requests.filter((request) => request.method === "plugins.trust").length, 0);
     await act(async () => button("信任…").click());
     await act(async () => button("确认信任").click());
-    assert.deepEqual(requests.find((request) => request.method === "plugins.trust")?.payload, { candidate_id: "C:/workspace/plugins/manual", fingerprint: "fingerprint" });
-    assert.ok(view.container.textContent?.includes("待重启"));
-    assert.ok(view.container.textContent?.includes("重启 Shiori 后加载"));
+    const confirmation = requests.find((request) => request.method === "plugins.trust")?.payload;
+    assert.equal(confirmation?.candidate_id, "C:/workspace/plugins/manual");
+    assert.equal(confirmation?.fingerprint, "fingerprint");
+    assert.equal(confirmation?.enable, false);
+    assert.equal(typeof confirmation?.operation_id, "string");
+    assert.equal(view.container.textContent?.includes("待重启"), false);
     assert.equal(view.container.textContent?.includes("尚未获得信任"), false);
-    assert.equal(view.container.querySelector<HTMLButtonElement>('[role="switch"]')?.disabled, true);
+    assert.equal(view.container.querySelector<HTMLButtonElement>('[role="switch"]')?.disabled, false);
+    assert.equal(view.container.querySelector<HTMLButtonElement>('[role="switch"]')?.getAttribute("aria-checked"), "false");
   } finally { await view.cleanup(); resetPluginEnabledStateForTests(); }
 });
 

@@ -8,6 +8,7 @@ from functools import partial
 import logging
 
 from agent.config_models import Config
+from agent.plugin_host.handle import PluginRecord
 from bootstrap.runtime.events import RuntimeEventBus
 from bootstrap.runtime.generations import RuntimeCandidate, RuntimeRetention
 from bootstrap.tools import build_core_runtime
@@ -49,10 +50,15 @@ class RuntimeReloadMixin:
         """Defers new operations while a process-global channel identity changes."""
         await self._generation_manager.wait_for_admission()
 
-    async def prepare(self, config: Config) -> RuntimeCandidate:
+    async def prepare(
+        self,
+        config: Config,
+        *,
+        plugin_discovery_snapshot: list[PluginRecord] | None = None,
+    ) -> RuntimeCandidate:
         """Prepares isolated capabilities while the active runtime stays available."""
         current = self._generation_manager.require_running()
-        if config == self.config:
+        if config == self.config and plugin_discovery_snapshot is None:
             return current
         current.core.assert_hot_unloadable()
         validate_memory_transition(self.config, config, self.workspace)
@@ -68,6 +74,7 @@ class RuntimeReloadMixin:
             agent_loop_provider=lambda: self._dispatcher,
             process_resources=self._plugin_process_resources,
             background_result_runner=self._dispatcher.process_background_result,
+            plugin_discovery_snapshot=plugin_discovery_snapshot,
         )
         candidate = RuntimeCandidate(self.generation + 1, core, snapshot)
         try:

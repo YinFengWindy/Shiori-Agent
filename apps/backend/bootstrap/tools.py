@@ -9,6 +9,7 @@ from uuid import uuid4
 
 if TYPE_CHECKING:
     from agent.plugin_host import PluginKernel
+    from agent.plugin_host.handle import PluginRecord
 
 from agent.config_models import Config, WiringConfig
 from agent.core.proactive_turn.gates import ProactiveGate
@@ -453,6 +454,7 @@ def build_core_runtime(
     event_outlet: EventBus | None = None,
     process_resources: ProcessResourceOwner | None = None,
     background_result_runner: ResultRunner | None = None,
+    plugin_discovery_snapshot: list["PluginRecord"] | None = None,
 ) -> CoreRuntime:
     """Builds version-owned capabilities around stable transport and state owners."""
     bus = shared.bus if shared is not None else MessageBus()
@@ -667,9 +669,13 @@ def build_core_runtime(
         plugin_dirs=_resolve_plugin_dirs(workspace),
         external_plugin_dirs=[workspace / "plugins"],
         discovery_snapshot=(
-            shared.plugin_manager.discover()
-            if shared is not None and shared.plugin_manager is not None
-            else None
+            plugin_discovery_snapshot
+            if plugin_discovery_snapshot is not None
+            else (
+                shared.plugin_manager.discover()
+                if shared is not None and shared.plugin_manager is not None
+                else None
+            )
         ),
         services=HostServices(
             event_bus=event_bus,
