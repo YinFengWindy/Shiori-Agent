@@ -67,7 +67,7 @@ export function PluginRow({
         ) : null}
         <SettingsToggleCard
           checked={plugin.enabled && (plugin.canToggle || Boolean(plugin.pendingOperation))}
-          disabled={pending || !plugin.canToggle}
+          disabled={pending || (!plugin.canToggle && !plugin.canTrust)}
           ariaLabel={`启用 ${name}`}
           onChange={onToggle}
         />

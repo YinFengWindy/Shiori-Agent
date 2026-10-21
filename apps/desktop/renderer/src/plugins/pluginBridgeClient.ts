@@ -155,7 +155,11 @@ export type PluginSummary = {
   pendingRendererKinds: string[];
   /** Manual trust is bound to the displayed candidate and complete content fingerprint. */
   canTrust?: boolean;
+  /** The host has explicitly approved this exact external package content. */
+  trusted?: boolean;
   trustFingerprint?: string | null;
+  /** Authoritative admitted bytes, retained after the trust prompt disappears. */
+  contentFingerprint?: string | null;
   trustDirectory?: string;
   trustPendingRestart?: boolean;
   /** Approved code changes applied only at the next application startup. */
@@ -203,7 +207,7 @@ function invokePluginPayload<T>(invoke: DesktopInvoke, method: string, payload: 
 
 /** Calls the `plugin.config.*` and `plugins.*` management bridge contracts. */
 export interface PluginBridgeClient {
-  trustPlugin(candidateId: string, fingerprint: string): Promise<void>;
+  trustPlugin(candidateId: string, fingerprint: string, options?: { enable?: boolean; operationId: string }): Promise<void>;
   getConfig(pluginId: string): Promise<PluginConfigSnapshot>;
   setConfig(
     pluginId: string,
@@ -242,8 +246,11 @@ export interface PluginBridgeClient {
 export function createPluginBridgeClient(invoke?: DesktopInvoke): PluginBridgeClient {
   const resolveInvoke = () => invoke ?? window.miraDesktop.invoke;
   return {
-    async trustPlugin(candidateId, fingerprint) {
-      await invokePluginPayload(resolveInvoke(), "plugins.trust", { candidate_id: candidateId, fingerprint });
+    async trustPlugin(candidateId, fingerprint, options) {
+      await invokePluginPayload(resolveInvoke(), "plugins.trust", {
+        candidate_id: candidateId, fingerprint,
+        ...(options ? { enable: options.enable ?? false, operation_id: options.operationId } : {}),
+      });
     },
     async getConfig(pluginId) {
       const payload = await invokePluginPayload<{
@@ -267,7 +274,7 @@ export function createPluginBridgeClient(invoke?: DesktopInvoke): PluginBridgeCl
         renderer_ui?: RuntimePluginUi;
         renderer_background?: RuntimePluginUi;
         renderer_surface?: RuntimePluginUi;
-        can_trust?: boolean; trust_fingerprint?: string | null; trust_directory?: string; trust_pending_restart?: boolean;
+        can_trust?: boolean; trusted?: boolean; trust_fingerprint?: string | null; content_fingerprint?: string | null; trust_directory?: string; trust_pending_restart?: boolean;
         enabled: boolean; state: string; error: string; has_config_schema: boolean; supports_hot_unload: boolean;
         pending_renderer_kinds?: string[];
         capabilities: string[]; channels: PluginChannelDeclarationPayload[]; category: PluginCategory;
@@ -291,7 +298,9 @@ export function createPluginBridgeClient(invoke?: DesktopInvoke): PluginBridgeCl
         rendererBackground: item.renderer_background,
         rendererSurface: item.renderer_surface,
         canTrust: item.can_trust,
+        trusted: item.trusted,
         trustFingerprint: item.trust_fingerprint,
+        contentFingerprint: item.content_fingerprint,
         trustDirectory: item.trust_directory,
         trustPendingRestart: item.trust_pending_restart,
         pendingOperation: item.pending_operation,

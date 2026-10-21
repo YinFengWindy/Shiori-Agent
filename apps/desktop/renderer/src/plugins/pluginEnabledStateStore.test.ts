@@ -4,6 +4,7 @@ import type { PluginSummary } from "./pluginBridgeClient";
 import {
   ensurePluginEnabledStateLoaded,
   getPluginEnabledPredicate,
+  getPluginRosterSnapshot,
   isPluginEnabled,
   resetPluginEnabledStateForTests,
   setPluginEnabledSnapshot,
@@ -112,5 +113,23 @@ describe("pluginEnabledStateStore", () => {
 
     assert.equal(notifications, 2);
     unsubscribe();
+  });
+
+  it("shares one stable full roster across equal host refreshes and publishes real changes", async () => {
+    const plugin: PluginSummary = {
+      id: "one", candidateId: "workspace/one", source: "workspace", directory: "workspace/one", name: "One", version: "1", description: "",
+      enabled: false, canToggle: true, state: "DISABLED", error: "", diagnostic: null, hasConfigSchema: false,
+      capabilities: [], channels: [], category: "feature", supportsHotUnload: true, pendingRendererKinds: [],
+    };
+    const client = { listPlugins: async () => [structuredClone(plugin)] };
+    await refreshPluginEnabledState(client);
+    const first = getPluginRosterSnapshot();
+    await refreshPluginEnabledState(client);
+    assert.equal(getPluginRosterSnapshot(), first);
+    plugin.enabled = true;
+    plugin.state = "ACTIVE";
+    await refreshPluginEnabledState(client);
+    assert.notEqual(getPluginRosterSnapshot(), first);
+    assert.equal(getPluginRosterSnapshot()?.[0].enabled, true);
   });
 });
