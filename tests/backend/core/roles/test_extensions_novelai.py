@@ -69,6 +69,12 @@ async def test_cg_draft_commits_with_role_save_and_survives_unload(tmp_path):
     assert roles.extensions.project("mira") == {
         "novelai": {"autoSceneCgEnabled": False}
     }
+    roles.extensions.update(
+        "novelai",
+        lambda data: data.update(
+            {"mira": {"auto_scene_cg_prompt_instructions": "保留猫耳"}}
+        ),
+    )
 
     roles.update_role(
         "mira", name="After", plugin_drafts={"novelai": {"autoSceneCgEnabled": True}}
@@ -80,4 +86,12 @@ async def test_cg_draft_commits_with_role_save_and_survives_unload(tmp_path):
     assert roles.extensions.project("mira") == {"novelai": {"autoSceneCgEnabled": True}}
     assert await kernel.unload("novelai") == []
     roles.update_role("mira", description="Edited while disabled")
-    assert roles.extensions.read("novelai") == {"mira": {"auto_scene_cg_enabled": True}}
+    assert roles.extensions.read("novelai") == {
+        "mira": {
+            "auto_scene_cg_enabled": True,
+            "auto_scene_cg_prompt_instructions": "保留猫耳",
+        }
+    }
+    assert RoleStore(tmp_path).extensions.read("novelai") == roles.extensions.read(
+        "novelai"
+    )

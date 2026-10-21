@@ -18,6 +18,7 @@ from shiori_sdk.lifecycle import (
     AfterToolResultCtx,
 )
 from shiori_sdk.role_events import RoleDeleted, SceneObservationCommitted
+from shiori_sdk.rpc import Concurrency
 
 from .auto_cg import AutoCgPolicy
 from .api import ImageGenerationAPI
@@ -28,6 +29,7 @@ from .models import NovelAISettings
 from .prompt_tags import PromptTagStore
 from .rpc import NovelAIRpcHandlers
 from .role_state import NovelAIRoleState
+from .role_settings_rpc import NovelAIRoleSettingsRpc
 from .service import NovelAIService
 from .store import NovelAIStore
 from .tool import GenerateImageTool
@@ -110,6 +112,11 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
             "novelai", NovelAIRoleState.write_draft, NovelAIRoleState.project
         ),
     )
+    role_settings = NovelAIRoleSettingsRpc(role_state)
+    ctx.rpc.register(
+        "role_settings.get", role_settings.get, concurrency=Concurrency.READ_ONLY
+    )
+    ctx.rpc.register("role_settings.set", role_settings.set)
     novelai_store = NovelAIStore(
         workspace, storage=ctx.storage, original_media=ctx.sessions.original_media_path
     )
@@ -194,12 +201,6 @@ def _load_settings(ctx: "PluginRuntimeContext") -> NovelAISettings:
 
 
 def _register_rpc(ctx: "PluginRuntimeContext", handlers: NovelAIRpcHandlers) -> None:
-    # Local import: RPC concurrency policy types live in the desktop bridge;
-    # deferring the import to setup() keeps the plugin's module-load path from
-    # requiring the desktop bridge dependency chain (matches the discipline
-    # documented on agent.plugin_host.capabilities.RpcCapability.register).
-    from shiori_sdk.rpc import Concurrency
-
     ctx.rpc.register("generate", handlers.generate, concurrency=Concurrency.INTEGRATION)
     ctx.rpc.register(
         "regenerateMessageMedia",
