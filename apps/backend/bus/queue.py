@@ -144,7 +144,7 @@ class MessageBus:
     def has_pending_outbound(
         self, channel: str, chat_id: str, external_message_id: str
     ) -> bool:
-        """Whether this turn has a preparing, queued or dispatching reply."""
+        """Whether this turn has a queued or dispatching reply."""
         return (
             self._pending_outbound.get((channel, chat_id, external_message_id), 0) > 0
         )

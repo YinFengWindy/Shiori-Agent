@@ -452,7 +452,8 @@ async def test_sdk_report_connection_fence_survives_generation_and_queued_delive
             if any(
                 message.get("content") == "private SDK report" for message in messages
             ):
-                assert bus.has_pending_outbound("qq", "902", "")
+                # History is durable here; the reply is not queued yet. The
+                # captured connection fence is attached when it is published.
                 assert bus.outbound_size == 0
                 entered.set()
                 await release.wait()
