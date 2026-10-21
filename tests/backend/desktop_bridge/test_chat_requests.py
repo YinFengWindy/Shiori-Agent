@@ -25,7 +25,7 @@ async def test_failed_send_retry_and_undo_keep_original_turn_and_other_threads(
     from session.manager import SessionManager
     from shiori_sdk.channels.threads import network_thread_id
     from shiori_sdk.messages import InboundMessage
-    from shiori_sdk.reply_sequence import ReplySequencePolicy
+    from agent.turns.reply_sequence import ReplySequencePolicy
 
     manager, bus, roles = SessionManager(tmp_path), EventBus(), RoleStore(tmp_path)
     roles.create_role(role_id="mira", name="Mira", system_prompt="test")

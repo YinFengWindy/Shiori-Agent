@@ -31,7 +31,7 @@ async def test_complete_messages_are_published_during_turn_and_survive_reload(
     from core.roles.reply_state import RoleReply
     from shiori_sdk.lifecycle import AfterReasoningCtx
     from shiori_sdk.memory.committed import TurnCommitted
-    from shiori_sdk.reply_sequence import ReplySequencePolicy
+    from agent.turns.reply_sequence import ReplySequencePolicy
     from agent.lifecycle.facade import TurnLifecycle
     from agent.turns.reply_sequence import buffered_reply_scope
     from bootstrap.wiring import wire_turn_lifecycle

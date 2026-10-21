@@ -31,7 +31,7 @@ from session.manager.models import whole_session
 from agent.turns.channel_sequence import ChannelSequenceOwner
 from bus.queue import MessageBus
 from shiori_sdk.messages import DeliveryOutcome
-from shiori_sdk.reply_sequence import ReplySequencePolicy
+from agent.turns.reply_sequence import ReplySequencePolicy
 
 
 async def test_external_sequence_sends_each_committed_row_once_with_first_only_extras(

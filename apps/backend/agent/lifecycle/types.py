@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 from shiori_sdk.prompting import PromptSectionRender
 from shiori_sdk.messages import InboundMessage, OutboundMessage
-from shiori_sdk.reply_sequence import ReplySequencePolicy
+from agent.turns.reply_sequence import ReplySequencePolicy
 from conversation.context_scope import source_belongs_to_user
 from shiori_sdk.channels.message_source import MessageSource
 from shiori_sdk.lifecycle import (

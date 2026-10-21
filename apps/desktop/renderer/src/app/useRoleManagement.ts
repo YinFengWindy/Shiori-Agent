@@ -1,4 +1,4 @@
-import { buildPluginRoleDraftUpdates, notifyPluginRoleSaved, writePluginRoleSettings } from "../plugins/pluginRoleSettings";
+import { buildPluginRoleDraftUpdates, notifyPluginRoleSaved } from "../plugins/pluginRoleSettings";
 import type React from "react";
 import { useRolePluginRefresh } from "./useRolePluginRefresh";
 import { waitForMinimumRoleCardBusy } from "./appState";
@@ -6,8 +6,7 @@ import type { RoleAssetCategory, RoleRecord, SessionPayload } from "@yinfengwind
 import type { RoleFormState, PendingRoleCardAction } from "../shared/types";
 import type { AppMainView } from "../shared/types";
 import type { NavigationEntry } from "./appState";
-import { writeRoleMoodConfigToRuntimeConfig } from "../roles/roleMoodConfig";
-import { buildRoleProactiveConfig } from "../roles/roleFormState";
+import { buildRoleProactiveConfig, buildRoleRuntimeConfig } from "../roles/roleFormState";
 import type { FeedbackReporter } from "../shared/feedback/feedbackStore";
 
 type UseRoleManagementArgs = {
@@ -112,13 +111,7 @@ export function useRoleManagement({
         description: nextRoleForm.description,
         system_prompt: nextRoleForm.systemPrompt,
         profile: nextRoleForm.profile,
-        runtime_config: writeRoleMoodConfigToRuntimeConfig(
-          {
-            ...writePluginRoleSettings(detailRole?.runtime_config ?? {}, nextRoleForm.pluginSettings),
-            nsfw_memory_enabled: nextRoleForm.nsfwMemoryEnabled,
-          },
-          nextRoleForm,
-        ),
+        runtime_config: buildRoleRuntimeConfig(detailRole, nextRoleForm),
         proactive: buildRoleProactiveConfig(detailRole, nextRoleForm),
         plugin_drafts: buildPluginRoleDraftUpdates(nextRoleForm.pluginSettings, detailRole?.plugin_state),
         avatar_source: nextRoleForm.avatarSource || undefined,
@@ -177,11 +170,8 @@ export function useRoleManagement({
         clear_avatar: hasAvatarSelection && !avatarAsset,
         clear_chat_background: hasChatBackgroundSelection && !chatBackground,
         runtime_config: nextMoodIllustrationBindings
-          ? writeRoleMoodConfigToRuntimeConfig(
-            {
-              ...writePluginRoleSettings(detailRole?.runtime_config ?? {}, roleFormRef.current.pluginSettings),
-              nsfw_memory_enabled: roleFormRef.current.nsfwMemoryEnabled,
-            },
+          ? buildRoleRuntimeConfig(
+            detailRole,
             {
               ...roleFormRef.current,
               moodIllustrationBindings: nextMoodIllustrationBindings,

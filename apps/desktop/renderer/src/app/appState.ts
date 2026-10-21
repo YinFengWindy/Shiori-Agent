@@ -117,6 +117,7 @@ export function createEmptyRoleForm(): RoleFormState {
     systemPrompt: "",
     profile: createEmptyRoleProfile(),
     nsfwMemoryEnabled: false,
+    naturalChatEnabled: false,
     pluginSettings: readPluginRoleSettings(),
     ...createDefaultRoleProactiveForm(),
     avatarSource: "",
