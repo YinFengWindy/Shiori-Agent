@@ -123,7 +123,7 @@ consolidates these additions and the subsequent #847 breaking migration.
 
 <!-- Record the next contract batch here, with PR references and breaking markers. -->
 
-- **Explicit account-send acceptance and canonical private conversations (#869).**
+- **Explicit account-send acceptance and canonical private conversations (PR #872, issue #869).**
   `account.send` may return `accepted: true` when the transport accepts a task but
   provides no platform message ID. Only the boolean `true` permits an empty ID;
   absent/ambiguous receipts remain uncertain. Existing `message_id` receipts keep
