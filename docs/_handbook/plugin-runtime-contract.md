@@ -123,7 +123,7 @@ consolidates these additions and the subsequent #847 breaking migration.
 
 <!-- Record the next contract batch here, with PR references and breaking markers. -->
 
-- **Natural proactive replies and background reports (issue #868).** The current
+- **Natural proactive replies and background reports (PR #894, issue #868).** The current
   role's built-in natural-chat capability also applies to proactive draft
   `message_push` output, Drift dialogue and captured background-result reports.
   Natural internal drafts use the shared `messages` schema/validator and at most
@@ -137,7 +137,7 @@ consolidates these additions and the subsequent #847 breaking migration.
   Proactive success/failure, presence, relationship and committed-turn observers
   run once for the logical reply; a partial reply publishes only its delivered
   prefix. Explicit-send tool payloads and system notifications are unchanged.
-- **Read-only account target routes for natural batches (issue #868).** Channel
+- **Read-only account target routes for natural batches (PR #894, issue #868).** Channel
   plugins may register `account.resolve`, receiving `account_id` plus the existing
   `AccountTarget.to_payload()` fields and returning `AccountRoute.to_payload()`:
   canonical `channel`, `chat_id`, `chat_type` (`private` or `group`) and optional
@@ -152,7 +152,7 @@ consolidates these additions and the subsequent #847 breaking migration.
   resolver. The host checks account ownership before and after resolution and
   pins the same ownership/connection fence for the batch's sends. Bundled
   Telegram, QQ, QQBot, Feishu and Grok account plugins supply the resolver.
-- **Background origin and ordering (issue #868).** Host-originated spawn results
+- **Background origin and ordering (PR #894, issue #868).** Host-originated spawn results
   retain their original role, account, chat, topic and real sender; typed legacy
   completions without an origin retain their existing internal path. Internal
   results are never reclassified as external user admission. A group proactive
