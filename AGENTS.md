@@ -34,7 +34,7 @@ Shiori 是一个以角色为基底进行角色扮演的 Agent 助手：Python �
 | 范围 | 命令 |
 |---|---|
 | Python 格式与 lint | `.venv\Scripts\black.exe --check .`、`.venv\Scripts\ruff.exe check .` |
-| Python 测试 | `.venv\Scripts\pytest.exe <路径>`（testpaths：`tests/backend`、`plugins`、`packages/sdk/tests`；开了 `-W error`，任何警告都算失败） |
+| Python 测试 | 默认 `.venv\Scripts\pytest.exe` 只跑 `tests/backend` 里约 1000 条宿主契约（`-W error`）。其余宿主用例 `pytest --extended`。插件：`pytest plugins/<id>/tests`（CI 为 `verify_plugin_tests`）。SDK：`pytest packages/sdk/tests`（CI 为 `verify_sdk`） |
 | Python 类型 | pyright：源码 `pyrightconfig.json`，测试 `--project pyrightconfig.tests.json` |
 | 桌面端 / TypeScript | `pnpm lint`、`pnpm typecheck`、`pnpm test`（插件 UI：`pnpm desktop:test:plugin-ui`） |
 

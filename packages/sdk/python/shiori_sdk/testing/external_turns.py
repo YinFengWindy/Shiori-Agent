@@ -1,4 +1,8 @@
-"""Scripted external-turn submissions for plugin tests; no role turn runs."""
+"""Scripted external-turn submissions for plugin tests; no role turn runs.
+
+Host tests that need a real AgentLoop use ``tests.support.host_external_turns``
+instead of this fake. Plugin suites must not import that module.
+"""
 
 from collections.abc import Awaitable, Callable, Iterable
 

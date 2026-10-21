@@ -16,12 +16,12 @@ from conversation.service import (
     LegacySessionDescriptor,
     desktop_thread_id,
 )
-from tests.support.external_turns import ExternalTurnHost, USER_DM
+from tests.support.host_external_turns import ExternalTurnHost, USER_DM
 from desktop_bridge.service import DesktopBridgeService
 from core.channels.hub import ChannelHub
 from shiori_sdk.accounts import AccountResponseRules
 from shiori_sdk.accounts.conversation import AccountConversation
-from tests.support.external_turns import SECRETS, request_text
+from tests.support.host_external_turns import SECRETS, request_text
 
 
 @pytest.fixture

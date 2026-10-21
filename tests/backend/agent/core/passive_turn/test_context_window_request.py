@@ -8,7 +8,7 @@ from core.channels.hub import ChannelHub
 from shiori_sdk.accounts import AccountResponseRules
 from shiori_sdk.accounts.conversation import AccountConversation
 from shiori_sdk.messages import InboundMessage
-from tests.support.external_turns import ExternalTurnHost, SECRETS
+from tests.support.host_external_turns import ExternalTurnHost, SECRETS
 
 
 async def test_idle_schema_rechecks_revoked_account_without_importing_user_history(

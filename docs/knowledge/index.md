@@ -32,6 +32,7 @@ related:
 - [当前后端架构](architecture/current-backend.md)：Python 后端的装配、运行时换代、RoleRuntime、插件内核与关闭顺序。
 - [被动回合流程](flows/passive-turn.md)、[启动与关闭流程](flows/startup-and-shutdown.md)：两条关键时序。
 - [改动影响索引](impact/change-impact-index.md)：从准备修改的对象反查联动模块。
+- 专题手册（长文，所有权仍以本目录的模块页为准）：[插件运行时契约](../_handbook/plugin-runtime-contract.md)、[插件教程](../_handbook/plugins-tutorial.md)、[渠道插件](../_handbook/channel-plugins.md)、[设计系统](../_handbook/design-system.md)、[主动推送](../_handbook/proactive-guide.md)、[Drift](../_handbook/drift-guide.md)、[Markdown 记忆](../_handbook/memory-markdown.md)、[模型输入预算](../_handbook/context-budget.md)、[打包插件验收](../_handbook/packaged-plugin-acceptance.md)。现行主动行为以 [主动行为与 Drift](modules/proactive-and-drift.md) 为准，不以两篇长文代替模块页。
 
 ## 完整验收问题矩阵
 
@@ -43,7 +44,7 @@ related:
 | 主动行为 | [主动行为与 Drift](modules/proactive-and-drift.md) | tick 如何触发；presence、裁定和投递如何连接 |
 | Drift | [主动行为与 Drift](modules/proactive-and-drift.md) | Drift 状态如何持久化；与普通被动回合有何区别 |
 | NovelAI 与自动 CG | [NovelAI 与自动 CG](modules/novelai-and-auto-cg.md) | 自动 CG 何时触发；冷却、去重、重试、消息回写如何工作 |
-| 渠道 | [渠道系统](modules/channels.md) | Telegram、QQ、QQ Bot、飞书等渠道插件和统一 Channel 合约如何连接消息总线 |
+| 渠道 | [渠道系统](modules/channels.md) | Telegram、QQ、QQ Bot、飞书、Grok Bot 等渠道插件和统一 Channel 合约如何连接消息总线 |
 | Agent、工具、插件、MCP | [Agent 生命周期与工具](modules/agent-lifecycle-and-tools.md) | 一个回合经历哪些 phase；工具怎样注册、搜索、执行和拦截 |
 | 桌面端与桥接 | [桌面端与桥接](modules/desktop-and-bridge.md) | Electron、React 和 Python 服务如何通信；状态由谁装配 |
 | Story 模拟 | [桌面端与桥接](modules/desktop-and-bridge.md) | Story 数据库、桥接命令和桌面剧情界面如何连接 |
@@ -54,3 +55,8 @@ related:
 ## 使用原则
 
 知识页是源码核验后的摘要，不是冻结的规范。遇到细节问题，先用仓库搜索缩小范围，再读取 `source_paths` 中的源码。若文档与源码冲突，以源码和实际测试为准，并立即修正文档。
+
+## 不要当成现行实现
+
+- [LiteLLM 选型笔记](litellm-context-compaction-capabilities.md) 写于引入上下文压缩之前。#64 已落地，且没有 LiteLLM 依赖。预算与压缩以源码和 [模型输入预算](../_handbook/context-budget.md) 为准。
+- `docs/research/` 是供应商和角色创作的调研笔记，不是模块说明。

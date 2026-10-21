@@ -49,9 +49,10 @@ jobs:
         env:
           PYTHONWARNINGS: "ignore:.*AbstractEventLoopPolicy.*:DeprecationWarning"
         run: |
-          # 不显式传路径：显式路径会覆盖 pytest.ini 的 testpaths
-          # （宿主、plugins/*/tests/ 与 packages/sdk/tests），
-          # 避免遗漏插件或公开 SDK 的用例（#178、#215）。
+          # 不显式传路径：显式路径会覆盖 pytest.ini 的 testpaths。
+          # 默认只收集 tests/backend 的契约集（约 1000 条，#882）。
+          # 其余宿主用例：pytest --extended
+          # 插件用例由 plugin-isolation 执行；SDK 用例由 sdk-artifacts 执行。
           .venv/bin/pytest -q -W error
 
       - name: Verify the installed host wheel and runtime resources

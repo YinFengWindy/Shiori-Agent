@@ -1,9 +1,11 @@
-"""A real AgentLoop for plugin-submitted external turns (#721).
+"""Host harness that runs a real AgentLoop for plugin-submitted external turns.
 
-Only the model provider, the role model resolver and the memory engine are
-stand-ins; sessions, roles, routing, prompts and the turn pipeline are the
-host's own. The desktop user is bound on QQ (902), and the role session holds
-identifiable user-context content that an external turn must never see.
+This is not ``shiori_sdk.testing.external_turns.FakeExternalTurns``. That fake
+only records submissions for plugin tests. Here the model provider, the role
+model resolver and the memory engine are stand-ins; sessions, roles, routing,
+prompts and the turn pipeline are the host's own (#721). The desktop user is
+bound on QQ (902), and the role session holds identifiable user-context content
+that an external turn must never see.
 """
 
 from __future__ import annotations

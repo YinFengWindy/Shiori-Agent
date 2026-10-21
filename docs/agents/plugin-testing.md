@@ -13,7 +13,17 @@ uv run pytest plugins/example/tests
 
 `uv.lock` 安装真实宿主、默认记忆及 `shiori-host-testing`，用于宿主开发和集成验证。requirements 入口为 `apps/backend/requirements/development.txt`，其本地相对路径从仓库根目录解析。Python 验证统一使用仓库虚拟环境。
 
+三套测试支持各做一件事，不要混用：
+
+| 层 | 位置 | 做什么 |
+| --- | --- | --- |
+| SDK fake | `shiori_sdk.testing` | 插件单测的假上下文、假渠道、`FakeExternalTurns`。不导入宿主 |
+| 宿主集成 fixture | `shiori_host_testing` | `plugin_runtime` 启动真实 `AppRuntime`；`FakeMemoryEngine` 可接宿主记忆库。只装在宿主开发环境 |
+| 宿主场景 | `tests/support/` | 调度、插件内核、真实 AgentLoop（`host_external_turns`）。插件不得导入 |
+
 `tests/conftest.py` 与 `tests/support/` 只提供宿主 fixture；插件不得导入宿主测试树，也不得从源文件父目录推导原仓库资源。插件自己的资源可相对 `__file__` 定位；已声明兄弟插件通过 `shiori_sdk.testing.packages.plugin_directory()` 定位。整包暂存统一调用 `stage_plugin_package(source, target)`，排除虚拟环境、构建缓存和运行状态。SDK 支持测试位于 `packages/sdk/tests/testing/`；真实 AppRuntime fixture 和 workspace-backed memory fake 位于 `packages/shiori-host-testing/src/shiori_host_testing/`，对应测试位于 `tests/backend/shiori_host_testing/`。
+
+默认 `pytest`（Ubuntu `check-and-test`）只收集 `tests/backend` 里 `tests/support/default_suite.py` 列出的宿主契约，大约 1000 条参数化用例。其余宿主文件留在树上，标记 `extended`，用 `pytest --extended` 收集。`plugins/*/tests` 不进这条默认路径，由下面的仓库外隔离作业执行；显式 `pytest plugins/<id>/tests` 仍然只跑该插件。`packages/sdk/tests` 由 `verify_sdk` 在仓库外执行，显式 `pytest packages/sdk/tests` 在检出里跑同一套。Windows 进程作业仍按自己的路径列表运行，不受默认契约集过滤。
 
 `shiori-host-testing` 的 pytest 入口仅在明确安装此私有宿主包时注册。SDK 自己的 pytest 入口允许仅安装基础 SDK 的消费者正常收集、运行无关测试；需要 fake 时会提示安装 testing extra。测试 TLS 上下文按参数和证书环境变量缓存，测试不得修改共享 SSL 上下文。
 
@@ -24,7 +34,7 @@ uv run pytest plugins/example/tests
 - `shiori-host-testing` 提供真实宿主集成能力，只安装在宿主开发环境。
 - 插件 wheel 只包含本包后端、明确打包的 testing helper 与资源。Story→NovelAI、Meme→citation 为公开运行时依赖；status_commands 的 test extra→Observe 是显式测试依赖。没有声明的兄弟插件不会被注入。
 
-公开 SDK 的 npm 包为 `@yinfengwindy/shiori-sdk`，PyPI 包为 `shiori-sdk`；SDK 与 Runtime API 当前版本均为 3.1.1（npm 与 PyPI 均已发布），注册表安装与 testing extra 用法见 [SDK README](../../packages/sdk/README.md)。`shiori-agent`、`shiori-host-testing` 和插件 wheel 仍只构建为本地/CI 产物，不随 SDK 发布到 npm 或 PyPI。
+公开 SDK 的 npm 包为 `@yinfengwindy/shiori-sdk`，PyPI 包为 `shiori-sdk`；SDK 与 Runtime API 当前版本均为 3.1.2（npm 与 PyPI 均已发布），注册表安装与 testing extra 用法见 [SDK README](../../packages/sdk/README.md)。`shiori-agent`、`shiori-host-testing` 和插件 wheel 仍只构建为本地/CI 产物，不随 SDK 发布到 npm 或 PyPI。
 
 ## 插件副本运行
 
