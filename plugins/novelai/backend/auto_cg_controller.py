@@ -44,6 +44,7 @@ class ScenePromptProvider(Protocol):
         *,
         model: str,
         event: SceneObservationCommitted,
+        prompt_instructions: str = "",
     ) -> dict[str, str]: ...
 
 
@@ -96,15 +97,23 @@ class AutoCgController:
         session = self._session_manager.get_or_create(event.session_key)
         role_id = str(event.role_id or session.metadata.get("role_id") or "").strip()
         role = self._role_store.get_role(role_id) if role_id else None
-        if role is None or not NovelAIRoleState(self._role_store).enabled(role_id):
+        role_state = NovelAIRoleState(self._role_store)
+        if role is None or not role_state.enabled(role_id):
             return
         if "generate_image" in event.tools_used:
             return
         required = event.transition in _REQUIRED_TRANSITIONS
         if not required and self._policy.cooldown_remaining(event.session_key) > 0:
             return
+        # Capture the role preference before spawning: edits affect the next CG.
+        prompt_instructions = role_state.prompt_instructions(role_id)
         task = self._background.spawn_runtime(
-            self._run(event, role_id=role_id, bypass_cooldown=required),
+            self._run(
+                event,
+                role_id=role_id,
+                bypass_cooldown=required,
+                prompt_instructions=prompt_instructions,
+            ),
             name=f"novelai_auto_cg:{event.session_key}",
         )
         self._tasks[event.session_key] = task
@@ -133,6 +142,7 @@ class AutoCgController:
         *,
         role_id: str,
         bypass_cooldown: bool,
+        prompt_instructions: str = "",
     ) -> None:
         prepared = self._policy.guard(
             event.session_key,
@@ -157,6 +167,7 @@ class AutoCgController:
             self._light_provider,
             model=self._light_model,
             event=event,
+            prompt_instructions=prompt_instructions,
         )
         prepared = self._policy.guard(
             event.session_key,

@@ -14,6 +14,7 @@ from shiori_sdk.testing.storage import FakeKV
 from shiori_sdk.role_events import SceneObservationCommitted
 from plugins.novelai.backend.auto_cg import AutoCgPolicy
 from plugins.novelai.backend.auto_cg_controller import AutoCgController
+from plugins.novelai.backend.role_state import NovelAIRoleState
 from shiori_sdk.testing.roles import FakeRoles
 
 
@@ -386,3 +387,75 @@ async def test_cg_work_is_spawned_as_runtime_retaining_background(tmp_path: Path
     await controller.terminate()
 
     assert background.runtime_names == ["novelai_auto_cg:role:mira"]
+
+
+@pytest.mark.asyncio
+async def test_schedule_freezes_each_roles_instructions_and_reuses_generated_prompt(
+    tmp_path,
+):
+    roles = _roles(tmp_path)
+    roles.create_role(role_id="rina", name="Rina", system_prompt="test")
+    roles.extensions.update(
+        "novelai",
+        lambda data: NovelAIRoleState.write_draft(
+            "rina", {"autoSceneCgEnabled": True}, data
+        ),
+    )
+    state = NovelAIRoleState(roles)
+    state.save_prompt_instructions("mira", "保留猫耳")
+    state.save_prompt_instructions("rina", "全身构图")
+    prompt = AsyncMock(
+        return_value={
+            "prompt": "1girl, cat ears",
+            "negative_prompt": "",
+            "size_preset": "portrait",
+        }
+    )
+    generate = AsyncMock(
+        side_effect=[RuntimeError("retry"), *['{"output_paths": ["cg.png"]}'] * 3]
+    )
+    push = SimpleNamespace(execute=AsyncMock(return_value="已发送"))
+    controller = AutoCgController(
+        light_provider=FakeChatProvider(),
+        light_model="light",
+        role_store=roles,
+        policy=AutoCgPolicy(FakeKV()),
+        session_manager=SimpleNamespace(
+            get_or_create=lambda _: SimpleNamespace(metadata={})
+        ),
+        generate_tool=SimpleNamespace(execute=generate),
+        tool_registry=SimpleNamespace(get_tool=lambda _: push),
+        prompt_provider=prompt,
+        background=FakeBackground(FakePluginContext()),
+    )
+    for role_id in ("mira", "rina"):
+        controller.schedule(
+            _observation(
+                role_id=role_id,
+                session_key=f"role:{role_id}",
+                transition="started",
+                visual_description="少女站在雨里",
+            )
+        )
+    # Change after scheduling but before the background coroutines start.
+    state.save_prompt_instructions("mira", "新的要求")
+    await asyncio.gather(*controller.tasks.values())
+    assert {
+        call.kwargs["event"].role_id: call.kwargs["prompt_instructions"]
+        for call in prompt.await_args_list
+    } == {"mira": "保留猫耳", "rina": "全身构图"}
+    assert prompt.await_count == 2
+    assert generate.await_count == 3
+    generated_prompts = [call.kwargs["prompt"] for call in generate.await_args_list]
+    assert len(set(generated_prompts)) == 1, "retries reuse the same prepared prompt"
+    assert "1girl, cat ears" in generated_prompts[0]
+    assert all(text not in generated_prompts[0] for text in ("保留猫耳", "全身构图"))
+
+    controller.schedule(
+        _observation(
+            transition="changed", visual_key="new-view", visual_description="少女坐下"
+        )
+    )
+    await asyncio.gather(*controller.tasks.values())
+    assert prompt.await_args.kwargs["prompt_instructions"] == "新的要求"
+    await controller.terminate()

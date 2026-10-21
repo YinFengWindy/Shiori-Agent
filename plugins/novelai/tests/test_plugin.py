@@ -15,6 +15,7 @@ async def test_setup_tracks_generated_media_and_releases_contributions(
     await setup(context.as_capability())
     assert context.exported is context.tools.get_tool("generate_image")
     assert "regenerateMessageMedia" in context.rpc.handlers
+    assert {"role_settings.get", "role_settings.set"} <= context.rpc.handlers.keys()
     assert len(context.scene_observations.predicates) == 1
     image = str(tmp_path / "output.png")
     await context.events.emit(

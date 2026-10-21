@@ -57,3 +57,51 @@ def test_draft_keeps_other_preferences_and_projection_defaults_off(tmp_path):
     state = NovelAIRoleState(roles)
     assert state.enabled("mira")
     assert not state.enabled("missing")
+
+
+def test_prompt_instructions_preserve_switch_and_other_roles_across_saves(tmp_path):
+    roles = FakeRoles(tmp_path)
+    for role_id in ("mira", "rina"):
+        roles.create_role(role_id=role_id, name=role_id, system_prompt="test")
+    roles.extensions.values["novelai"] = {
+        "mira": {"auto_scene_cg_enabled": True, "other": 1},
+        "rina": {"auto_scene_cg_enabled": False},
+    }
+    state = NovelAIRoleState(roles)
+    assert state.prompt_instructions("mira") == ""
+    state.save_prompt_instructions("mira", "保留猫耳\n红色蝴蝶结")
+    state.save_prompt_instructions("rina", "全身构图")
+    roles.extensions.update(
+        "novelai",
+        lambda data: state.write_draft("mira", {"autoSceneCgEnabled": False}, data),
+    )
+    assert state.prompt_instructions("mira") == "保留猫耳\n红色蝴蝶结"
+    assert state.prompt_instructions("rina") == "全身构图"
+    assert state.project("mira", roles.extensions.read("novelai")) == {
+        "autoSceneCgEnabled": False
+    }
+    state.save_prompt_instructions("mira", "")
+    assert not state.enabled("mira")
+    assert state.prompt_instructions("mira") == ""
+    assert state.prompt_instructions("rina") == "全身构图"
+    assert roles.extensions.read("novelai")["mira"] == {
+        "auto_scene_cg_enabled": False,
+        "auto_scene_cg_prompt_instructions": "",
+        "other": 1,
+    }
+
+
+def test_prompt_settings_cannot_create_deleted_roles_and_reconcile_cleans_them(
+    tmp_path,
+):
+    roles = FakeRoles(tmp_path)
+    roles.create_role(role_id="mira", name="Mira", system_prompt="test")
+    state = NovelAIRoleState(roles)
+    state.save_prompt_instructions("mira", "保留猫耳")
+    roles.values.pop("mira")
+    with pytest.raises(ValueError, match="角色不存在"):
+        state.prompt_instructions("mira")
+    with pytest.raises(ValueError, match="角色不存在"):
+        state.save_prompt_instructions("mira", "新的要求")
+    state.reconcile()
+    assert roles.extensions.read("novelai") == {}

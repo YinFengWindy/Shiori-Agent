@@ -71,3 +71,34 @@ async def test_invalid_provider_prompt_is_visible_failure(payload):
     )
     with pytest.raises(ValueError):
         await prepare_scene_prompt(provider, model="light", event=_event())
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("instructions", ["", " \n ", "保留猫耳\n使用柔和光线"])
+async def test_role_instructions_are_model_requirements_not_raw_image_tags(
+    instructions,
+):
+    payload = dict(prompt="1girl, cat ears", negative_prompt="", size_preset="portrait")
+    provider = SimpleNamespace(
+        chat=AsyncMock(
+            return_value=FakeModelResponse(
+                content="",
+                tool_calls=[FakeToolCall("cg", "submit_scene_image_prompt", payload)],
+            )
+        )
+    )
+    await prepare_scene_prompt(provider, model="light", event=_event())
+    default_messages = provider.chat.await_args.kwargs["messages"]
+    result = await prepare_scene_prompt(
+        provider, model="light", event=_event(), prompt_instructions=instructions
+    )
+    messages = provider.chat.await_args.kwargs["messages"]
+    if instructions.strip():
+        assert instructions in messages[0]["content"]
+        assert "绘图补充要求" in messages[0]["content"]
+        assert messages[1] == default_messages[1], "scene facts remain frozen data"
+    else:
+        assert messages == default_messages
+    assert (
+        result == payload
+    ), "user instructions are interpreted, never pasted into tags"
