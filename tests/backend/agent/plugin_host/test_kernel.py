@@ -356,6 +356,7 @@ _EXPECTED_TOP_LEVEL_PLUGINS = {
     "desktop_pet",
     "feishu",
     "gpt_sovits_tts",
+    "grok_bot",
     "herdr",
     "meme",
     "novelai",
