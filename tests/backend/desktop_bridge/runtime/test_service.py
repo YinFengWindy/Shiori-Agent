@@ -3,12 +3,13 @@ from __future__ import annotations
 import asyncio
 import json
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
 from agent.config import load_config_text
-from agent.provider import LLMProvider, LLMResponse
+from agent.provider import LLMProvider, LLMResponse, ToolCall
+from shiori_sdk.tools import Tool
 from bootstrap.app import AppRuntime, RuntimeFeatures
 from core.common.task_collector import TaskCollector
 from core.desktop_presence import DesktopPresence
@@ -17,8 +18,413 @@ from core.roles.store import RoleStore
 from desktop_bridge.runtime.service import ReloadableDesktopService
 from desktop_bridge.runtime.service import _ServiceGeneration
 from session.manager import SessionManager
+from tests.support.chat_replies import chat_reply
 
 _REGISTRATION = "00000000-0000-4000-a000-000000000001"
+
+
+@pytest.mark.parametrize(
+    "natural,stage,streaming",
+    [
+        (natural, stage, streaming)
+        for natural in (True, False)
+        for stage in (
+            "generation",
+            "pacing",
+            "publishing",
+            "queued_cancel",
+            "replacement",
+            "replacement_twice",
+            "replacement_twice_tool",
+            "replacement_twice_cancel",
+            "tool",
+        )
+        for streaming in ((True,) if natural else (True, False))
+        if natural or stage not in ("pacing", "publishing")
+    ],
+)
+async def test_desktop_supplements_acknowledge_immediately_and_keep_turn_ownership(
+    tmp_path, monkeypatch, stage, natural, streaming
+):
+    """Exercise the production reloadable endpoint, service, loop and SQLite."""
+    monkeypatch.setattr("bootstrap.tools._resolve_plugin_dirs", lambda _: [])
+    monkeypatch.setattr(
+        "core.roles.self_initializer.RoleSelfInitializer.ensure_seeded", AsyncMock()
+    )
+    entered, release = asyncio.Event(), asyncio.Event()
+    latest_entered, latest_release = asyncio.Event(), asyncio.Event()
+    calls, events, tool_calls = [], [], []
+
+    async def model(self, **kwargs):
+        if kwargs.get("response_format"):
+            return LLMResponse(content='{"mood":"平静","thought":"我想继续聊。"}')
+        index = len(calls)
+        calls.append(kwargs)
+        if index == 0 and not natural and streaming:
+            await kwargs["on_content_delta"](
+                {"content_delta": "visible prefix", "thinking_delta": "shown thinking"}
+            )
+        if index == 0 and stage in ("tool", "replacement_twice_tool"):
+            return LLMResponse(
+                content="visible prefix",
+                tool_calls=[
+                    ToolCall("once", "interruption_counter", {}),
+                    ToolCall("never", "interruption_counter", {}),
+                ],
+            )
+        if index == 0 and stage in (
+            "generation",
+            "queued_cancel",
+            "replacement",
+            "replacement_twice",
+            "replacement_twice_cancel",
+        ):
+            entered.set()
+            await release.wait()
+            if not natural and streaming:
+                await kwargs["on_content_delta"](
+                    {
+                        "content_delta": "HIDDEN OLD TAIL",
+                        "thinking_delta": "HIDDEN THINKING",
+                    }
+                )
+        if index == 1 and stage == "replacement_twice_cancel":
+            latest_entered.set()
+            await latest_release.wait()
+        return chat_reply(
+            ["prefix", "tail"] if index == 0 else ["new answer"],
+            tools=kwargs.get("tools", []),
+            plain_content=(
+                "prefix\n<message-break/>\ntail" if index == 0 else "new answer"
+            ),
+        )
+
+    async def pause(_):
+        if stage == "pacing":
+            entered.set()
+            await release.wait()
+
+    async def emit(event):
+        if (
+            stage == "publishing"
+            and event["method"] == "chat.message"
+            and event["payload"]["turn_id"] == "first"
+        ):
+            entered.set()
+            await release.wait()
+        events.append(event)
+
+    monkeypatch.setattr(LLMProvider, "chat", model)
+    monkeypatch.setattr("agent.turns.reply_sequence.wait_between_messages", pause)
+    path = tmp_path / "config.toml"
+    streaming_config = (
+        f"\n[desktop.chat]\nstreaming_enabled = {str(streaming).lower()}\n"
+    )
+    path.write_text(_config("test") + streaming_config, encoding="utf-8")
+    app = AppRuntime(
+        load_config_text(_config("test") + streaming_config),
+        tmp_path,
+        features=RuntimeFeatures(enable_message_channels=False, enable_proactive=False),
+    )
+    await app.start()
+
+    class Counter(Tool):
+        name = "interruption_counter"
+        description = "Count a completed tool side effect"
+        parameters = {"type": "object", "properties": {}}
+
+        async def execute(self, **kwargs):
+            tool_calls.append("executed")
+            entered.set()
+            await release.wait()
+            return "completed tool fact"
+
+    app.core.loop.tools.register(Counter(), always_on=True)
+    service = ReloadableDesktopService(app, path, RoleStore(tmp_path))
+
+    async def request(method, payload):
+        response = await service.handle(
+            {
+                "id": str(payload.get("turn_id", "setup")),
+                "method": method,
+                "payload": payload,
+            },
+            emit_event=emit,
+        )
+        assert response.error is None, response.error
+        return response.payload
+
+    try:
+        await request(
+            "roles.create",
+            {
+                "role_id": "mira",
+                "name": "Mira",
+                "system_prompt": "test",
+                "runtime_config": {
+                    "natural_chat_enabled": natural,
+                    "dialogue_model_registration_id": _REGISTRATION,
+                },
+            },
+        )
+        await request(
+            "chat.send", {"role_id": "mira", "content": "first", "turn_id": "first"}
+        )
+        await asyncio.wait_for(entered.wait(), 5)
+        if not natural and streaming:
+            assert any(
+                event["method"] == "chat.delta"
+                and event["payload"]["content_delta"] == "visible prefix"
+                for event in events
+            )
+        first_owner = service._current.service.chat_service._tasks_by_session[
+            "role:mira"
+        ]
+
+        async def replace_generation(model_name):
+            await request(
+                "runtime.apply",
+                {
+                    "config_toml": _config(model_name) + streaming_config,
+                    "operation_id": model_name,
+                    "expected_generation": app.generation,
+                },
+            )
+
+        if stage.startswith("replacement"):
+            await replace_generation("next")
+        cancelling = None
+        owners = [first_owner]
+        for turn in ("second", "third"):
+            if turn == "third" and stage.startswith("replacement_twice"):
+                await replace_generation("latest")
+            # Neither a pending model nor a started commit blocks intake/RPC.
+            await asyncio.wait_for(
+                request(
+                    "chat.send", {"role_id": "mira", "content": turn, "turn_id": turn}
+                ),
+                1,
+            )
+            owner = service._current.service.chat_service._tasks_by_session["role:mira"]
+            assert owner.previous is owners[-1]
+            owners.append(owner)
+            if turn == "second" and stage in (
+                "queued_cancel",
+                "replacement_twice_cancel",
+            ):
+                cancelling = asyncio.create_task(
+                    request(
+                        "chat.cancel", {"session_key": "role:mira", "turn_id": "second"}
+                    )
+                )
+                await asyncio.sleep(0)
+                assert not cancelling.done()
+        chat = service._current.service.chat_service
+        assert chat._tasks_by_session["role:mira"].turn_id == "third"
+        assert len(calls) == 1
+        release.set()
+        if stage == "replacement_twice_cancel":
+            await asyncio.wait_for(latest_entered.wait(), 5)
+            stale = await request(
+                "chat.cancel", {"session_key": "role:mira", "turn_id": "first"}
+            )
+            assert stale["status"] in {"idle", "mismatch"}
+            assert chat._tasks_by_session["role:mira"] is owners[-1]
+            assert not owners[-1].task.done()
+            latest_release.set()
+        await asyncio.wait_for(chat.drain(), 5)
+        if cancelling is not None:
+            assert (await cancelling)["status"] == "interrupted"
+        rows = SessionManager(tmp_path).get_or_create("role:mira").messages
+        assert [row["content"] for row in rows if row["role"] == "user"] == [
+            "first",
+            "second",
+            "third",
+        ]
+        replies = [row["content"] for row in rows if row["role"] == "assistant"]
+        expected_prefix = (
+            ["visible prefix"]
+            if not natural and streaming
+            else (["prefix"] if natural and stage in ("pacing", "publishing") else [])
+        )
+        assert [reply for reply in replies if reply] == [*expected_prefix, "new answer"]
+        assert len(calls) == 2
+        if not natural:
+            assert not any("HIDDEN" in str(event) for event in events)
+            assert not any("HIDDEN" in str(row) for row in rows)
+            assert not any("HIDDEN" in str(message) for message in calls[1]["messages"])
+            assert (
+                any(
+                    "visible prefix" in str(message.get("content"))
+                    for message in calls[1]["messages"]
+                )
+                is streaming
+            )
+        for user_input in ("first", "second", "third"):
+            assert any(
+                message.get("role") == "user"
+                and user_input in str(message.get("content"))
+                for message in calls[1]["messages"]
+            )
+        if stage in ("tool", "replacement_twice_tool"):
+            assert tool_calls == ["executed"]
+            assert any(
+                message.get("role") == "tool"
+                and "completed tool fact" in str(message.get("content"))
+                for message in calls[1]["messages"]
+            )
+        if stage.startswith("replacement"):
+            assert calls[-1]["model"] == (
+                "latest" if stage.startswith("replacement_twice") else "next"
+            )
+        terminals = [
+            (event["method"], event["payload"]["turn_id"])
+            for event in events
+            if event["method"] in ("chat.done", "chat.cancelled", "chat.error")
+        ]
+        assert terminals == [
+            ("chat.cancelled", "first"),
+            ("chat.cancelled", "second"),
+            ("chat.done", "third"),
+        ]
+        assert not chat._tasks_by_session
+        assert not chat._turns
+        assert not service._current.lease.reply_sequences._plans
+    finally:
+        release.set()
+        latest_release.set()
+        await service.aclose()
+        await app.shutdown()
+
+
+@pytest.mark.parametrize("natural", [False, True])
+async def test_invalid_supplements_never_transfer_cancel_ownership_after_reloads(
+    tmp_path, monkeypatch, natural
+):
+    monkeypatch.setattr("bootstrap.tools._resolve_plugin_dirs", lambda _: [])
+    monkeypatch.setattr(
+        "core.roles.self_initializer.RoleSelfInitializer.ensure_seeded", AsyncMock()
+    )
+    entered, release = asyncio.Event(), asyncio.Event()
+    calls, events = [], []
+
+    async def model(self, **kwargs):
+        calls.append(kwargs)
+        entered.set()
+        await release.wait()
+        return LLMResponse(content="old reply")
+
+    monkeypatch.setattr(LLMProvider, "chat", model)
+    path = tmp_path / "config.toml"
+    path.write_text(_config("first"), encoding="utf-8")
+    app = AppRuntime(
+        load_config_text(_config("first")),
+        tmp_path,
+        features=RuntimeFeatures(enable_message_channels=False, enable_proactive=False),
+    )
+    await app.start()
+    service = ReloadableDesktopService(app, path, RoleStore(tmp_path))
+
+    async def request(method, payload):
+        return await service.handle(
+            {
+                "id": str(payload.get("turn_id", "setup")),
+                "method": method,
+                "payload": payload,
+            },
+            emit_event=events.append,
+        )
+
+    try:
+        created = await request(
+            "roles.create",
+            {
+                "role_id": "mira",
+                "name": "Mira",
+                "system_prompt": "test",
+                "runtime_config": {
+                    "natural_chat_enabled": natural,
+                    "dialogue_model_registration_id": _REGISTRATION,
+                },
+            },
+        )
+        assert created.error is None
+        sent = await request(
+            "chat.send",
+            {
+                "role_id": "mira",
+                "content": "first",
+                "turn_id": "first",
+            },
+        )
+        assert sent.error is None
+        await asyncio.wait_for(entered.wait(), 5)
+        actual_owner = service._current.service.chat_service
+        old_loop = app.core.loop
+        actual_interrupt = Mock(wraps=old_loop.request_interrupt)
+        monkeypatch.setattr(old_loop, "request_interrupt", actual_interrupt)
+        borrowed_interrupts = []
+        for model_name in ("next", "latest"):
+            applied = await request(
+                "runtime.apply",
+                {
+                    "config_toml": _config(model_name),
+                    "operation_id": model_name,
+                    "expected_generation": app.generation,
+                },
+            )
+            assert applied.error is None
+            interrupt = Mock(wraps=app.core.loop.request_interrupt)
+            monkeypatch.setattr(app.core.loop, "request_interrupt", interrupt)
+            borrowed_interrupts.append(interrupt)
+            rejected = await request(
+                "chat.send",
+                {
+                    "role_id": "mira",
+                    "turn_id": model_name,
+                    "content": " ",
+                },
+            )
+            assert (
+                rejected.error is not None and rejected.error.code == "invalid_request"
+            )
+            borrowed = service._current.service.chat_service
+            assert borrowed.is_busy("role:mira")
+            assert not borrowed.owns_chat_turn("role:mira", "first")
+            assert actual_owner.owns_chat_turn("role:mira", "first")
+
+        cancelled = await asyncio.wait_for(
+            request(
+                "chat.cancel",
+                {
+                    "session_key": "role:mira",
+                    "turn_id": "first",
+                },
+            ),
+            5,
+        )
+        assert cancelled.error is None and cancelled.payload["status"] == "interrupted"
+        actual_interrupt.assert_called_once_with(
+            "role:mira", sender="desktop", command="/cancel"
+        )
+        for interrupt in borrowed_interrupts:
+            interrupt.assert_not_called()
+        assert len(calls) == 1
+        rows = SessionManager(tmp_path).get_or_create("role:mira").messages
+        assert [row["content"] for row in rows if row["role"] == "user"] == ["first"]
+        assert not any("old reply" in str(row) for row in rows)
+        terminals = [
+            event
+            for event in events
+            if event["method"] in {"chat.done", "chat.cancelled", "chat.error"}
+        ]
+        assert [
+            (event["method"], event["payload"]["turn_id"]) for event in terminals
+        ] == [("chat.cancelled", "first")]
+    finally:
+        release.set()
+        await service.aclose()
+        await app.shutdown()
 
 
 @pytest.mark.asyncio

@@ -1,4 +1,4 @@
-"""NovelAI role preferences participating in the host's single role commit."""
+"""NovelAI role preferences and independently saved CG prompt instructions."""
 
 from shiori_sdk.roles import Roles
 from shiori_sdk.role_events import RoleDeleted
@@ -20,6 +20,34 @@ class NovelAIRoleState:
             return self.project(role_id, self._roles.extensions.read(PLUGIN_ID))[
                 "autoSceneCgEnabled"
             ]
+
+    def prompt_instructions(self, role_id: str) -> str:
+        """Read a role's user-authored instructions for the CG prompt model."""
+        with self._roles.read_scope():
+            self._require_role(role_id)
+            value = _role_preferences(
+                role_id, self._roles.extensions.read(PLUGIN_ID)
+            ).get("auto_scene_cg_prompt_instructions", "")
+            if not isinstance(value, str):
+                raise ValueError("自动场景 CG 补充要求必须是文本")
+            return value
+
+    def save_prompt_instructions(self, role_id: str, instructions: str) -> None:
+        """Save only the private prompt field, preserving the role's switch draft."""
+        with self._roles.read_scope():
+            self._require_role(role_id)
+
+            def save(data: dict[str, object]) -> None:
+                data[role_id] = {
+                    **_role_preferences(role_id, data),
+                    "auto_scene_cg_prompt_instructions": instructions,
+                }
+
+            self._roles.extensions.update(PLUGIN_ID, save)
+
+    def _require_role(self, role_id: str) -> None:
+        if self._roles.get_role(role_id) is None:
+            raise ValueError("角色不存在")
 
     def reconcile(self) -> None:
         """Prune deleted-role preferences, including deletions while disabled."""

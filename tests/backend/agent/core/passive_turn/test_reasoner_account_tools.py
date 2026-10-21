@@ -1,6 +1,11 @@
 """The real turn uses account grants for execution without importing private context."""
 
+import asyncio
+from contextlib import nullcontext
 from unittest.mock import AsyncMock
+
+from agent.turns.channel_sequence import ChannelSequenceOwner
+from agent.turns.reply_interruption import ReplyInterruption, reply_interruption_scope
 
 import pytest
 
@@ -31,12 +36,20 @@ class Retarget(ToolHook):
 
 
 @pytest.mark.parametrize(
-    "granted,disabled", [(False, False), (True, False), (True, True)]
+    "granted,disabled,interrupted",
+    [
+        (False, False, False),
+        (True, False, False),
+        (True, True, False),
+        (True, False, True),
+    ],
 )
 async def test_account_rule_controls_search_dynamic_mcp_and_post_hook_execution(
-    tmp_path, granted, disabled
+    tmp_path, granted, disabled, interrupted
 ):
     host = ExternalTurnHost(tmp_path)
+    if interrupted:
+        host.roles.update_role("mira", runtime_config={"natural_chat_enabled": True})
     accounts = host.roles.accounts
     row = accounts.register(
         plugin_id="grok_bot",
@@ -59,6 +72,7 @@ async def test_account_rule_controls_search_dynamic_mcp_and_post_hook_execution(
     tools.bind_accounts(accounts)
     tools.register(ToolSearchTool(tools), always_on=True, external_allowed=True)
     calls = []
+    interruption = ReplyInterruption() if interrupted else None
 
     class Dynamic(Tool):
         name = "mcp_dynamic"
@@ -85,6 +99,11 @@ async def test_account_rule_controls_search_dynamic_mcp_and_post_hook_execution(
 
         async def execute(self, **kwargs):
             calls.append(kwargs["mode"])
+            if interruption is not None:
+                # A supplement invalidates a tool already executing under its
+                # admitted grant. Finish this effect, then recheck the next turn.
+                interruption.invalidate()
+                accounts.set_response_rules(row.record.id, AccountResponseRules())
             tools.register(Dynamic(), source_type="mcp", source_name="fixture")
             return "registered"
 
@@ -146,11 +165,29 @@ async def test_account_rule_controls_search_dynamic_mcp_and_post_hook_execution(
     routed = hub.route_account_inbound(incoming)
     assert routed is not None
     assert not MessageSource.from_inbound(routed).sender_is_user
-    await host.loop._process_role_scoped(
-        routed, routed.session_key, dispatch_outbound=False
-    )
+    with (
+        ChannelSequenceOwner().bind(host.loop.bus) if interrupted else nullcontext()
+    ), reply_interruption_scope(interruption), (
+        pytest.raises(asyncio.CancelledError) if interrupted else nullcontext()
+    ):
+        await host.loop._process_role_scoped(
+            routed, routed.session_key, dispatch_outbound=False
+        )
+    if interrupted:
+        assert len(host.provider.requests) == 1
+        messages = host.manager.get_or_create("role:mira").messages
+        assert any(message["content"] == "请使用工具" for message in messages)
+        assert "registered" in str(messages)
+        assert "private done" not in str(messages)
+        responses.clear()
     expected_calls = (
-        (["all", "mcp"] if disabled else ["all", "private", "mcp"]) if granted else []
+        ["all"]
+        if interrupted
+        else (
+            (["all", "mcp"] if disabled else ["all", "private", "mcp"])
+            if granted
+            else []
+        )
     )
     assert calls == expected_calls
     assert all(
@@ -188,3 +225,5 @@ async def test_account_rule_controls_search_dynamic_mcp_and_post_hook_execution(
             routed, routed.session_key, dispatch_outbound=False
         )
         assert calls == expected_calls
+        if interrupted:
+            assert "registered" in request_text(host.provider.requests[1])

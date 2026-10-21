@@ -20,7 +20,9 @@ async function mountLifecycle({ cancelling = false, health = "online", viewKind 
   const invokedMethods: string[] = [];
   const openedRoles: string[] = [];
   let roleReads = 0;
+  let sendingClears = 0;
   let unreadCounts: Record<string, number> = {};
+  let latestTurn = "turn-1";
   const ignore = () => {};
   const args: Parameters<typeof useDesktopBridgeLifecycle>[0] = {
     activeRoleId: "mira", activeIllustration: "",
@@ -36,9 +38,10 @@ async function mountLifecycle({ cancelling = false, health = "online", viewKind 
     activeRoleIdRef: { current: "mira" }, activeSessionRef,
     mainViewRef: { current: { kind: viewKind } as never }, rolesRef: { current: [] },
     chooseIllustration: () => "", cacheRoleSession: ignore,
-    clearAllSendingSessions: ignore, clearSessionSending: ignore,
+    clearAllSendingSessions: () => { sendingClears++; }, clearSessionSending: ignore,
     completeChatTurn: (_key, turn) => { completions.push(turn); },
-    isCurrentChatTurn: (key, turn) => key === "role:mira" && turn === "turn-1" && !completions.includes(turn),
+    isLatestChatTurn: (key, turn) => key === "role:mira" && turn === latestTurn,
+    isCurrentChatTurn: (key, turn) => key === "role:mira" && turn === latestTurn && !completions.includes(turn),
     isChatTurnCancelling: () => cancelling,
     commitActiveSession: (session) => { activeSessionRef.current = session; },
     updateCommittedActiveSession: (update) => { activeSessionRef.current = update(activeSessionRef.current); },
@@ -71,7 +74,9 @@ async function mountLifecycle({ cancelling = false, health = "online", viewKind 
     ...view, activeSessionRef, completions, statesAtError, feedback, healthRef, healthChanges, invokedMethods, openedRoles,
     unreadCounts: () => unreadCounts,
     roleReads: () => roleReads,
+    sendingClears: () => sendingClears,
     ready: () => lifecycle.ready,
+    beginTurn: (turnId: string) => { latestTurn = turnId; },
     async emit(method: string, payload: BridgeEvent["payload"] = {}, id = "request-1") {
       await act(async () => listener({ id, type: "event", method, payload: {
         session_key: "role:mira", turn_id: "turn-1", ...payload,
@@ -81,6 +86,32 @@ async function mountLifecycle({ cancelling = false, health = "online", viewKind 
 }
 
 describe("useDesktopBridgeLifecycle", () => {
+  it("keeps delivered old messages without letting delayed old events overwrite the new reply", async () => {
+    const view = await mountLifecycle();
+    try {
+      view.beginTurn("new-turn");
+      await view.emit("chat.delta", { turn_id: "new-turn", content_delta: "new reply" });
+      const current = view.activeSessionRef.current!;
+      current.metadata = { current_mood: "new mood" };
+      for (const method of ["chat.done", "chat.error", "chat.cancelled", "chat.delta"]) {
+        await view.emit(method, { content_delta: "old text", message: "old error" });
+      }
+      const oldMessage = { id: "old-prefix", seq: 2, role: "assistant", content: "delivered prefix", metadata: { turn_id: "turn-1", reply_sequence_index: 0 } };
+      for (const method of ["chat.message", "session.updated", "chat.message"]) {
+        await view.emit(method, { session: { ...current, metadata: { current_mood: "old mood" } }, message: oldMessage });
+      }
+      const messages = view.activeSessionRef.current!.messages;
+      assert.equal(messages.filter((message) => message.id === "old-prefix").length, 1);
+      const streaming = messages.find((message) => message.metadata?.turn_id === "new-turn");
+      assert.equal(streaming?.content, "new reply");
+      assert.equal(streaming?.streaming, true);
+      assert.equal(view.activeSessionRef.current?.metadata.current_mood, "new mood");
+      assert.deepEqual(view.completions, []);
+      await view.emit("chat.done", { turn_id: "new-turn" });
+      assert.deepEqual(view.completions, ["new-turn"]);
+    } finally { await view.cleanup(); }
+  });
+
   for (const doneFirst of [true, false]) for (const deltaAfterPicture of [true, false]) {
     it(`keeps one reply when a picture arrives ${deltaAfterPicture ? "between deltas" : "after the last delta"} and done is ${doneFirst ? "before" : "after"} persistence`, async () => {
       const view = await mountLifecycle();
@@ -374,3 +405,30 @@ for (const [method, payload] of [
     } finally { await view.cleanup(); }
   });
 }
+
+
+it("preserves the current supplement while trust activation refreshes runtime state", async () => {
+  const view = await mountLifecycle();
+  try {
+    view.beginTurn("supplement");
+    await view.emit("chat.delta", { turn_id: "supplement", content_delta: "current reply" });
+    const current = view.activeSessionRef.current;
+    const beforeRoles = view.roleReads();
+    const beforeClears = view.sendingClears();
+    const beforeLists = view.invokedMethods.filter((method) => method === "plugins.list").length;
+    for (const generation of [2, 3]) {
+      await view.emit("runtime.applied", { generation, changed: true }, `trust-${generation}`);
+    }
+    assert.equal(view.roleReads(), beforeRoles + 2);
+    assert.equal(view.invokedMethods.filter((method) => method === "plugins.list").length, beforeLists + 2);
+    assert.equal(view.sendingClears(), beforeClears);
+    assert.equal(view.activeSessionRef.current, current);
+    await view.emit("chat.cancelled", { turn_id: "old-turn" });
+    assert.deepEqual(view.completions, []);
+    await view.emit("chat.delta", { turn_id: "supplement", content_delta: " continued" });
+    assert.equal(view.activeSessionRef.current?.messages.at(-1)?.content, "current reply continued");
+    assert.equal(view.activeSessionRef.current?.messages.at(-1)?.streaming, true);
+    await view.emit("chat.done", { turn_id: "supplement" });
+    assert.deepEqual(view.completions, ["supplement"]);
+  } finally { await view.cleanup(); }
+});

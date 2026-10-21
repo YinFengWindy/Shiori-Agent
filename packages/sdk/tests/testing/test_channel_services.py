@@ -38,3 +38,28 @@ async def test_message_bus_drops_emptied_channels_and_reports_marked_pending() -
     assert bus.has_pending_outbound("chat", "c1", "m1") is False
     bus.pending_outbound.add(("chat", "c1", "m1"))
     assert bus.has_pending_outbound("chat", "c1", "m1") is True
+
+
+def test_interrupt_controller_preserves_complete_transport_scope() -> None:
+    controller = FakeInterruptController()
+    controller.request_interrupt(
+        "role:mira",
+        channel="telegram_one",
+        chat_id="room",
+        sender="alice",
+        account_id="telegram:one",
+        chat_type="supergroup",
+        message_thread_id="11",
+    )
+    assert controller.requests == [
+        {
+            "session_key": "role:mira",
+            "channel": "telegram_one",
+            "chat_id": "room",
+            "sender": "alice",
+            "command": "/stop",
+            "account_id": "telegram:one",
+            "chat_type": "supergroup",
+            "message_thread_id": "11",
+        }
+    ]

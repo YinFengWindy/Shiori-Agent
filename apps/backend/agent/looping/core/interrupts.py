@@ -31,20 +31,39 @@ class _InterruptMixin:
         *,
         channel: str = "",
         chat_id: str = "",
+        account_id: str = "",
+        chat_type: str = "",
+        message_thread_id: str = "",
     ) -> InterruptResult:
         """Channel 层调用的中断入口，不走 MessageBus。"""
-        key = turn_tracking_key(session_key, channel, chat_id)
-        # Legacy callers can still stop the sole active turn for a session.
-        # Ambiguous multi-chat work requires its explicit transport target.
-        if key not in self._active_tasks and not channel:
+        try:
+            key = turn_tracking_key(
+                session_key,
+                channel,
+                chat_id,
+                account_id=account_id,
+                chat_type=chat_type,
+                message_thread_id=message_thread_id,
+            )
+        except ValueError:
+            key = None
+        # Session-only legacy callers may stop sole legacy work. Never infer
+        # an account/topic from a shared role session or a partial chat address.
+        if key not in self._active_tasks and not any(
+            (channel, chat_id, account_id, chat_type, message_thread_id)
+        ):
             matches = [
                 k
                 for k, state in self._active_turn_states.items()
                 if state.session_key == session_key
+                and not any(
+                    state.original_metadata.get(field)
+                    for field in ("account_id", "chat_type", "message_thread_id")
+                )
             ]
             if len(matches) == 1:
                 key = matches[0]
-        task = self._active_tasks.get(key)
+        task = self._active_tasks.get(key) if key is not None else None
         if task is None or task.done():
             return InterruptResult(
                 status="idle",
@@ -52,6 +71,7 @@ class _InterruptMixin:
                 message="当前没有正在执行的任务。",
             )
 
+        assert key is not None
         # 保存中断态（纯内存，不落库）
         active_state = self._active_turn_states.get(key)
         if active_state is None:

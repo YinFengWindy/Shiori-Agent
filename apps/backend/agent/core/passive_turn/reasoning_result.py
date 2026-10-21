@@ -18,6 +18,7 @@ from .natural_reply import NaturalReplyProtocol, finish_reply_schema
 from .compaction import ensure_request_budget
 from core.roles.reply_state import RoleReply
 from shiori_sdk.channel_events import ToolCallCompleted, ToolCallStarted
+from agent.turns.reply_interruption import reply_was_invalidated
 
 logger = logging.getLogger("agent.core.passive_turn")
 
@@ -173,7 +174,7 @@ class _PassiveReasoningResultMixin:
         content = completion.response.content
         assert content is not None
         role_reply = None
-        if reply_moods is not None:
+        if reply_moods is not None and not reply_was_invalidated():
             # The independent mood owner retains its existing best-effort behavior.
             role_reply = await fetch_role_mood(
                 provider=self._llm.provider,
@@ -258,7 +259,7 @@ class _PassiveReasoningResultMixin:
         if reply_recovery is not None:
             metadata["reply_recovery"] = reply_recovery
 
-        if natural_reply is not None:
+        if natural_reply is not None and not reply_was_invalidated():
             if natural_reply.reply is None:
                 raise RuntimeError("自然聊天缺少已校验的完成回复")
             metadata["natural_reply"] = natural_reply.reply

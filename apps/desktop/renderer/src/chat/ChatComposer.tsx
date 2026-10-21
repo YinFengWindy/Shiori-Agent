@@ -8,7 +8,7 @@ import { canSubmitChatMessage } from "./chatComposerState";
 import { insertEmojiIntoChatDraft } from "./chatEmojiState";
 import { PlusIcon, SendIcon } from "../shared/icons";
 import type { ChatSendRequest } from "../shared/types";
-import { AutosizeTextarea, compactPressableClass, cx, errorMessage } from "@yinfengwindy/shiori-sdk";
+import { AutosizeTextarea, compactIconButtonClass, compactPressableClass, cx, errorMessage } from "@yinfengwindy/shiori-sdk";
 import { mascotFeedback as feedback } from "../shared/mascot/mascotFeedback";
 import { appendImportedChatAttachments, getChatDraftKey, submitChatDraft, updateChatDraft } from "./chatDraftStore";
 import { useChatDraft } from "./useChatDraft";
@@ -59,7 +59,8 @@ export const ChatComposer = React.memo(function ChatComposer({
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const context = useChatContext(activeRoleId, sessionKey, bridgeReady, sending);
   const canSubmit = canSubmitChatMessage(draft, pendingAttachments);
-  const composerInputDisabled = !activeRoleId || sending || !bridgeReady;
+  const composerInputDisabled = !activeRoleId || !bridgeReady;
+  const showStop = sending && (!canSubmit || cancelling);
   const limits = getChatComposerLimits(paneHeight);
   const reportHeight = useEffectEvent((height: number) => onHeightChange?.(height));
 
@@ -131,7 +132,7 @@ export const ChatComposer = React.memo(function ChatComposer({
   }
 
   async function submitMessage(): Promise<void> {
-    if (!activeRoleId || !bridgeReady || sending || !canSubmit) {
+    if (composerInputDisabled || cancelling || !canSubmit) {
       return;
     }
     if (isCompactCommand(draft)) {
@@ -182,14 +183,14 @@ export const ChatComposer = React.memo(function ChatComposer({
           {replyTarget ? (
             <ChatComposerReplyTarget
               replyTarget={replyTarget}
-              disabled={sending}
+              disabled={composerInputDisabled}
               onClear={clearReplyTarget}
               onJumpToMessage={onJumpToMessage}
             />
           ) : null}
           <ChatComposerAttachments
             paths={pendingAttachments}
-            disabled={sending}
+            disabled={composerInputDisabled}
             maxHeight={limits.attachmentsMaxHeight}
             onRemove={removePendingAttachment}
           />
@@ -227,17 +228,22 @@ export const ChatComposer = React.memo(function ChatComposer({
               onToggle={() => setEmojiPickerOpen((current) => !current)}
             />
             <ChatContextRing status={context.status} busy={context.busy} notice={context.notice} unavailable={context.unavailable} onCompact={context.compact} />
+            {sending && !showStop ? (
+              <button className={compactIconButtonClass} type="button" aria-label="中止回复" onClick={onCancelChat}>
+                <Stop className="h-4 w-4" aria-hidden="true" />
+              </button>
+            ) : null}
             {/* One button whose icon crossfades between send and stop, so focus and press state survive the swap. */}
             <button
               className={sendButtonClass}
               type="button"
-              aria-label={sending ? "中止回复" : "发送消息"}
-              onClick={sending ? onCancelChat : () => void submitMessage()}
-              disabled={sending ? cancelling : !activeRoleId || !canSubmit || !bridgeReady}
+              aria-label={showStop ? "中止回复" : "发送消息"}
+              onClick={showStop ? onCancelChat : () => void submitMessage()}
+              disabled={showStop ? cancelling : composerInputDisabled || !canSubmit || cancelling}
             >
               <span className="relative grid h-[15px] w-[15px] place-items-center" aria-hidden="true">
-                <SendIcon className={cx("chat-send-icon absolute inset-0 h-[15px] w-[15px] fill-current", sending && "chat-send-icon-hidden")} />
-                <Stop className={cx("chat-send-icon absolute inset-0 h-[15px] w-[15px] fill-current", !sending && "chat-send-icon-hidden")} />
+                <SendIcon className={cx("chat-send-icon absolute inset-0 h-[15px] w-[15px] fill-current", showStop && "chat-send-icon-hidden")} />
+                <Stop className={cx("chat-send-icon absolute inset-0 h-[15px] w-[15px] fill-current", !showStop && "chat-send-icon-hidden")} />
               </span>
             </button>
           </div>

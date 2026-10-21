@@ -6,6 +6,7 @@ from shiori_sdk.tools import TOOL_ATTACHMENT_SCOPE_KEY, ToolAttachmentScope
 from agent.tools.turn_scope import tool_turn
 from agent.looping.interrupt import in_detached_turn
 from agent.turns.reply_sequence import buffered_reply_scope, presented_tool_chain
+from agent.turns.reply_interruption import reply_was_invalidated
 from agent.turns.channel_sequence import supports_channel_sequence
 from agent.account_delivery.turn_state import account_delivery_scope
 
@@ -533,7 +534,11 @@ class DefaultReasoner(
                         natural_chat=buffer_reply,
                     )
                 natural_reply = result.metadata.get("natural_reply")
-                if buffer_reply and not isinstance(natural_reply, NaturalReply):
+                if (
+                    buffer_reply
+                    and not isinstance(natural_reply, NaturalReply)
+                    and not reply_was_invalidated()
+                ):
                     raise RuntimeError("自然聊天未返回已校验的消息列表")
                 tools_used = list(result.metadata.get("tools_used") or [])
                 tool_chain = presented_tool_chain(

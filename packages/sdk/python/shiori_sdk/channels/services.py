@@ -94,7 +94,16 @@ class InterruptController(Protocol):
         *,
         channel: str = "",
         chat_id: str = "",
-    ) -> InterruptResult: ...
+        account_id: str = "",
+        chat_type: str = "",
+        message_thread_id: str = "",
+    ) -> InterruptResult:
+        """Target the receiving account/chat/topic; omitted scope never widens it.
+
+        Pass the inbound chat type and opaque topic ID (empty outside a topic).
+        Session-only calls remain supported for desktop and legacy turns.
+        """
+        ...
 
 
 class ChannelHub(Protocol):

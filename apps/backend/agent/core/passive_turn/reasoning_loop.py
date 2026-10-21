@@ -35,6 +35,7 @@ from .reply_recovery import complete_reply
 from .budgeted_request import budgeted_chat
 from .compaction import ensure_request_budget, request_tools_disabled
 from .natural_reply import NaturalReplyProtocol, finish_reply_schema
+from agent.turns.reply_interruption import reply_was_invalidated
 
 logger = logging.getLogger("agent.core.passive_turn")
 
@@ -121,6 +122,28 @@ class _PassiveReasoningLoopMixin:
         react_total_tokens_seen = False
         reply_recovery = None
 
+        def interrupted_result(calls=None, thinking=None) -> ReasonerResult:
+            # Only completed calls are facts. Proposed calls and private model
+            # text are deliberately absent, and no summarizing call is started.
+            chain = [*tool_chain]
+            if calls:
+                chain.append({"text": "", "calls": list(calls)})
+            return self._build_result(
+                reply="",
+                tools_used=tools_used,
+                tool_chain=chain,
+                visible_names=visible_names,
+                thinking=thinking,
+                streamed=False,
+                react_input_samples=react_input_samples,
+                cache_prompt_tokens=react_cache_prompt_tokens,
+                cache_hit_tokens=react_cache_hit_tokens,
+                cache_seen=react_cache_seen,
+                total_tokens=react_total_tokens,
+                total_tokens_seen=react_total_tokens_seen,
+                tools_unlocked=tools_unlocked,
+            )
+
         def _degraded_role_reply(content: str) -> RoleReply:
             """Fall back to last turn's mood/thought when the mood call
             failed or was skipped, for either the summary or final-reply
@@ -135,18 +158,29 @@ class _PassiveReasoningLoopMixin:
             summary_iteration: int,
         ) -> tuple[str, RoleReply | None, bool]:
             nonlocal react_total_tokens, react_total_tokens_seen, reply_recovery
-            summary, summary_tokens, summary_role_reply, summary_recovery = (
-                await self._summarize_incomplete_progress(
-                    messages,
-                    reason=reason,
-                    iteration=summary_iteration,
-                    tools_used=tools_used,
-                    session=tool_event_session_key,
-                    channel=tool_event_channel,
-                    **({"reply_moods": reply_moods} if reply_moods is not None else {}),
-                    natural_reply=natural_reply,
+            if reply_was_invalidated():
+                return "", None, False
+            try:
+                summary, summary_tokens, summary_role_reply, summary_recovery = (
+                    await self._summarize_incomplete_progress(
+                        messages,
+                        reason=reason,
+                        iteration=summary_iteration,
+                        tools_used=tools_used,
+                        session=tool_event_session_key,
+                        channel=tool_event_channel,
+                        natural_reply=natural_reply,
+                        **(
+                            {"reply_moods": reply_moods}
+                            if reply_moods is not None
+                            else {}
+                        ),
+                    )
                 )
-            )
+            except Exception:
+                if reply_was_invalidated():
+                    return "", None, False
+                raise
             reply_recovery = summary_recovery or reply_recovery
             if summary_tokens is not None:
                 react_total_tokens_seen = True
@@ -208,6 +242,8 @@ class _PassiveReasoningLoopMixin:
 
         iteration = -1
         while True:
+            if reply_was_invalidated():
+                return interrupted_result()
             iteration += 1
             if (
                 self._llm_config.max_iterations > 0
@@ -225,6 +261,8 @@ class _PassiveReasoningLoopMixin:
                     visible_names=visible_names,
                 )
             )
+            if reply_was_invalidated():
+                return interrupted_result()
             if step_ctx.early_stop:
                 summary, summary_role_reply, summary_role_reply_fresh = (
                     await _summarize(
@@ -294,6 +332,8 @@ class _PassiveReasoningLoopMixin:
                 self._llm_config.max_tokens,
                 schemas_for_history=schemas_for_history,
             )
+            if reply_was_invalidated():
+                return interrupted_result()
             if visible_names is not None:
                 visible_order = [schema["function"]["name"] for schema in schemas]
                 visible_names = set(visible_order)
@@ -302,50 +342,61 @@ class _PassiveReasoningLoopMixin:
             reply_output = RoleReplyOutput(
                 on_content_delta, enabled=reply_moods is not None
             )
-            response = await budgeted_chat(
-                self._llm.provider,
-                messages=messages,
-                tools=schemas,
-                model=self._llm_config.model,
-                max_tokens=self._llm_config.max_tokens,
-                tool_choice="auto",
-                on_content_delta=reply_output.callback,
-                schemas_for_history=schemas_for_history,
-                **(
-                    {
-                        "reply_tool": finish_reply_schema(),
-                        "defer_tool_argument_errors": True,
-                    }
-                    if natural_reply
-                    else {}
-                ),
-            )
-            if natural_reply is not None and not natural_reply.pending_work(response):
-                completion = await natural_reply.complete(
-                    response,
+            try:
+                response = await budgeted_chat(
+                    self._llm.provider,
                     messages=messages,
-                    provider=self._llm.provider,
-                    model=self._llm_config.model,
-                    max_tokens=self._llm_config.max_tokens,
-                )
-            else:
-                completion = await complete_reply(
-                    response,
-                    output=reply_output,
-                    messages=messages,
-                    provider=self._llm.provider,
-                    model=self._llm_config.model,
-                    max_tokens=self._llm_config.max_tokens,
-                    role_reply=reply_moods is not None,
-                    on_content_delta=on_content_delta,
-                    session=tool_event_session_key,
-                    channel=tool_event_channel,
-                    iteration=iteration + 1,
-                    allow_tool_calls=not request_tools_disabled(),
                     tools=schemas,
+                    model=self._llm_config.model,
+                    max_tokens=self._llm_config.max_tokens,
                     tool_choice="auto",
+                    on_content_delta=reply_output.callback,
                     schemas_for_history=schemas_for_history,
+                    **(
+                        {
+                            "reply_tool": finish_reply_schema(),
+                            "defer_tool_argument_errors": True,
+                        }
+                        if natural_reply
+                        else {}
+                    ),
                 )
+                if reply_was_invalidated():
+                    return interrupted_result(thinking=response.thinking)
+                if natural_reply is not None and not natural_reply.pending_work(
+                    response
+                ):
+                    completion = await natural_reply.complete(
+                        response,
+                        messages=messages,
+                        provider=self._llm.provider,
+                        model=self._llm_config.model,
+                        max_tokens=self._llm_config.max_tokens,
+                    )
+                else:
+                    completion = await complete_reply(
+                        response,
+                        output=reply_output,
+                        messages=messages,
+                        provider=self._llm.provider,
+                        model=self._llm_config.model,
+                        max_tokens=self._llm_config.max_tokens,
+                        role_reply=reply_moods is not None,
+                        on_content_delta=on_content_delta,
+                        session=tool_event_session_key,
+                        channel=tool_event_channel,
+                        iteration=iteration + 1,
+                        allow_tool_calls=not request_tools_disabled(),
+                        tools=schemas,
+                        tool_choice="auto",
+                        schemas_for_history=schemas_for_history,
+                    )
+                if reply_was_invalidated():
+                    return interrupted_result(thinking=response.thinking)
+            except Exception:
+                if reply_was_invalidated():
+                    return interrupted_result()
+                raise
             # Recovery/provider retries may compact history and its schemas.
             # Dispatch against exactly the capabilities sent on the final request.
             if visible_names is not None:
@@ -390,6 +441,8 @@ class _PassiveReasoningLoopMixin:
                 # 6. 逐个执行本轮工具调用。
                 iter_calls: list[dict[str, Any]] = []
                 for tool_batch_index, tool_call in enumerate(response.tool_calls):
+                    if reply_was_invalidated():
+                        return interrupted_result(iter_calls, response.thinking)
                     # 6.0 受限工具直接回填拦截原因，独立于可见/解锁状态：
                     # 外部上下文受限回合按允许集合与参数限制拦，后台任务按
                     # disabled 拦。
@@ -611,6 +664,8 @@ class _PassiveReasoningLoopMixin:
                             arguments=dict(tool_call.arguments),
                         )
                     )
+                    if reply_was_invalidated():
+                        return interrupted_result(iter_calls, response.thinking)
                     exec_result = await self._tool_executor.execute(
                         ToolExecutionRequest(
                             call_id=tool_call.id,
@@ -726,6 +781,8 @@ class _PassiveReasoningLoopMixin:
                     if _newly_unlocked:
                         call_record["unlocked"] = list(_newly_unlocked)
                     iter_calls.append(call_record)
+                    if reply_was_invalidated():
+                        return interrupted_result(iter_calls, response.thinking)
                     if is_finalize_denial(exec_result):
                         logger.warning(
                             "[插件收尾] hook 截断重复工具调用，进入收尾 (iteration=%d, tool=%s)",

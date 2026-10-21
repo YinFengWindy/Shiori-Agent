@@ -12,6 +12,11 @@ from agent.core.passive_turn.natural_reply import (
 )
 from agent.provider import LLMProvider, LLMResponse, ToolCall
 from agent.turns.reply_sequence import parse_reply_sequence
+from agent.turns.reply_interruption import (
+    ReplyInterruption,
+    ReplyPlanInvalidated,
+    reply_interruption_scope,
+)
 
 
 def completed(messages):
@@ -131,6 +136,31 @@ async def test_cancellation_during_correction_does_not_retry_or_publish():
         )
     assert provider.chat.await_count == 1
     assert protocol.reply is None
+
+
+@pytest.mark.parametrize("already_invalidated", [False, True])
+async def test_superseded_reply_cannot_start_or_finish_a_format_correction(
+    already_invalidated,
+):
+    interruption = ReplyInterruption(invalidated=already_invalidated)
+    provider = AsyncMock()
+
+    async def correct(**kwargs):
+        interruption.invalidate()
+        return completed(["已经过时的回复"])
+
+    provider.chat.side_effect = correct
+    protocol = NaturalReplyProtocol()
+    with reply_interruption_scope(interruption), pytest.raises(ReplyPlanInvalidated):
+        await protocol.complete(
+            LLMResponse(content="第一句\n\n第二句"),
+            messages=[],
+            provider=provider,
+            model="m",
+            max_tokens=100,
+        )
+    assert protocol.reply is None
+    assert provider.chat.await_count == (0 if already_invalidated else 1)
 
 
 @pytest.mark.parametrize(

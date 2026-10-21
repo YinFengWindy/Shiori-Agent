@@ -111,6 +111,52 @@ async def test_natural_reply_correction_keeps_business_effects_and_thinking_once
     assert all("shiori-message" not in str(request) for request in requests)
 
 
+@pytest.mark.parametrize("invalidate_at", [2, 3])
+async def test_natural_reply_interruption_preserves_work_without_mood_or_late_reply(
+    invalidate_at,
+):
+    from agent.turns.reply_interruption import (
+        ReplyInterruption,
+        reply_interruption_scope,
+    )
+
+    interruption = ReplyInterruption()
+    counter = CounterTool()
+    tools = ToolRegistry()
+    tools.register(counter)
+    provider = AsyncMock()
+    responses = [
+        LLMResponse(content="", tool_calls=[ToolCall("work", "counter", {})]),
+        LLMResponse(content="需要格式纠正的正文"),
+        LLMResponse(
+            content="",
+            tool_calls=[ToolCall("reply", "finish_reply", {"messages": ["迟到回复"]})],
+        ),
+    ]
+    calls = 0
+
+    async def chat(**kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == invalidate_at:
+            interruption.invalidate()
+        return responses.pop(0)
+
+    provider.chat.side_effect = chat
+    with reply_interruption_scope(interruption):
+        result = await make_reasoner(provider, tools).run(
+            [{"role": "user", "content": "处理一下"}],
+            reply_moods=("平静",),
+            natural_chat=True,
+        )
+    assert result.reply == ""
+    assert "natural_reply" not in result.metadata
+    assert result.metadata["tools_used"] == ["counter"]
+    assert "done" in str(result.metadata["tool_chain"])
+    assert counter.calls == 1
+    assert provider.chat.await_count == invalidate_at
+
+
 @pytest.mark.parametrize("mixed", [False, True])
 @pytest.mark.parametrize("tool_search_enabled", [False, True])
 @pytest.mark.parametrize("max_iterations", [1, 5])

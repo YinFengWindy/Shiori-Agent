@@ -8,6 +8,7 @@ from agent.provider import LLMProvider
 from agent.prompting.usage_accounting import current_usage, mark_speaking_request
 from core.compaction import CompactionFailedError
 from .compaction import current_request_compaction
+from agent.turns.reply_interruption import ReplyPlanInvalidated, reply_was_invalidated
 
 logger = logging.getLogger("agent.budgeted_request")
 
@@ -53,16 +54,22 @@ async def budgeted_chat(
             prepare_request(kwargs["messages"], tools_enabled)
 
     scope = current_request_compaction()
+    if reply_was_invalidated():
+        raise ReplyPlanInvalidated
     if scope is None or not isinstance(provider, LLMProvider):
         prepare_messages()
         return await provider.chat(**kwargs)
     for attempt in range(3):
+        if reply_was_invalidated():
+            raise ReplyPlanInvalidated
         prepare_messages()
         previous_calls = len(current_usage()["calls"])
         try:
             response = await provider.chat(**kwargs)
         except Exception as exc:
             mark_speaking_request(after=previous_calls)
+            if reply_was_invalidated():
+                raise
             if not isinstance(exc, ContextLengthError):
                 # Provider, network, timeout and safety failures are not budget
                 # failures; the pipeline's error boundary owns them unchanged.

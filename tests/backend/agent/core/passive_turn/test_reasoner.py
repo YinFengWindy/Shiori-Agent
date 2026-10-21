@@ -37,6 +37,61 @@ def natural_metadata(content, policy):
     }
 
 
+async def test_invalidated_natural_turn_returns_work_without_requiring_a_reply(
+    tmp_path,
+):
+    from agent.turns.reply_interruption import (
+        ReplyInterruption,
+        reply_interruption_scope,
+    )
+
+    manager = SessionManager(tmp_path)
+    reasoner = DefaultReasoner(
+        llm=LLMServices(provider=AsyncMock(), light_provider=AsyncMock()),
+        llm_config=LLMConfig(),
+        tools=ToolRegistry(),
+        discovery=ToolDiscoveryState(),
+        tool_search_enabled=False,
+        context=AsyncMock(),
+        session_manager=manager,
+    )
+    reasoner.render_prompt = AsyncMock(
+        return_value=PromptRenderResult(
+            messages=[{"role": "user", "content": "hi"}], natural_chat=True
+        )
+    )
+    interruption = ReplyInterruption()
+
+    async def run(*args, **kwargs):
+        interruption.invalidate()
+        return ReasonerResult(
+            reply="",
+            metadata={
+                "tools_used": ["counter"],
+                "tool_chain": [
+                    {"text": "", "calls": [{"name": "counter", "result": "done"}]}
+                ],
+            },
+        )
+
+    reasoner.run = AsyncMock(side_effect=run)
+    msg = InboundMessage(
+        channel="desktop",
+        sender="user",
+        chat_id="a",
+        content="hi",
+        metadata={"turn_id": "t"},
+    )
+    with reply_interruption_scope(interruption):
+        result = await reasoner.run_turn(
+            msg=msg, session=manager.get_or_create(msg.session_key)
+        )
+    assert result.reply == ""
+    assert result.reply_sequence is None
+    assert result.raw_reply is None
+    assert "done" in str(result.tool_chain)
+
+
 @pytest.mark.parametrize("enabled", [False, True])
 async def test_reply_policy_filters_visible_tokens_but_preserves_thinking(
     tmp_path, enabled

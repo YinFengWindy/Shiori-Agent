@@ -10,6 +10,7 @@ from uuid import uuid4
 from agent.provider import LLMProvider, LLMResponse, is_truncated_finish_reason
 from agent.tool_runtime import append_assistant_tool_calls, append_tool_result
 from agent.turns.reply_sequence import ReplySequence, ReplySequencePolicy
+from agent.turns.reply_interruption import ReplyPlanInvalidated, reply_was_invalidated
 from prompts.natural_chat import FINISH_REPLY_TOOL_NAME
 from .budgeted_request import budgeted_chat
 from .reply_recovery import CompletedReply
@@ -135,6 +136,8 @@ class NaturalReplyProtocol:
         max_tokens: int,
     ) -> CompletedReply:
         """Accept a valid list, or correct only the final format once."""
+        if reply_was_invalidated():
+            raise ReplyPlanInvalidated
         calls = (response,)
         try:
             reply = _validate(response)
@@ -191,6 +194,8 @@ class NaturalReplyProtocol:
                 call_purpose="auxiliary",
                 defer_tool_argument_errors=True,
             )
+            if reply_was_invalidated():
+                raise ReplyPlanInvalidated
             reply = _validate(corrected)
             calls = (response, corrected)
             corrected.thinking = response.thinking or corrected.thinking

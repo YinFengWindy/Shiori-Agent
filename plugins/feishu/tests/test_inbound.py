@@ -186,6 +186,7 @@ async def test_quoting_a_user_image_attaches_it(harness: Any, make_event: Any) -
 async def test_stop_command_interrupts_the_bound_role_session(
     harness: Any, make_event: Any
 ) -> None:
+    harness.channel.account_id = "feishu:cli_app"
     connection = await harness.start()
 
     connection.emit(make_event(content={"text": "/stop"}))
@@ -199,6 +200,8 @@ async def test_stop_command_interrupts_the_bound_role_session(
             "command": "/stop",
             "channel": "feishu",
             "chat_id": "oc_chat",
+            "account_id": "feishu:cli_app",
+            "chat_type": "private",
         }
     ]
     assert harness.api.sent_texts() == ["已停止当前回复。"]

@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import Any, TypeVar
 
 from agent.looping.interrupt import TurnInterruptState
+from agent.turns.reply_interruption import ReplyInterruption
 
 T = TypeVar("T")
 
@@ -29,6 +30,10 @@ class DesktopChatTurn:
     turn_id: str
     session_key: str
     emit_event: EventEmitter
+    reply_interruption: ReplyInterruption | None = None
+    previous: DesktopChatTurn | None = None
+    started: bool = False
+    cancel_requested: bool = False
     task: asyncio.Task[None] = field(init=False)
     #: The session is released; the turn may still be publishing its terminal.
     completed: bool = False
