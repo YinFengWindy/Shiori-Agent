@@ -58,6 +58,30 @@ function renderChatComposer({
 }
 
 describe("ChatComposer", () => {
+  it("sends supplements during ordinary and natural replies while retaining the stop action for an empty draft", async () => {
+    const sent: ChatSendRequest[] = [];
+    let stopped = 0;
+    const view = await mountTestComponent(composerElement("natural-supplements", {
+      sending: true,
+      onSendMessage: async (request) => { sent.push(request); return true; },
+      onCancelChat: () => { stopped += 1; },
+    }), { windowGlobals: { miraDesktop: fakeDesktop() } });
+    try {
+      assert.ok(view.container.querySelector('[aria-label="中止回复"]'));
+      assert.equal(view.container.querySelector<HTMLButtonElement>('[aria-label="添加附件"]')!.disabled, false);
+      await changeInputValue(view.container.querySelector("textarea")!, "补充一句");
+      await act(async () => view.container.querySelector<HTMLButtonElement>('[aria-label="中止回复"]')!.click());
+      assert.equal(stopped, 1);
+      assert.equal(view.container.querySelector("textarea")!.value, "补充一句");
+      await act(async () => view.container.querySelector<HTMLButtonElement>('[aria-label="发送消息"]')!.click());
+      assert.deepEqual(sent.map((request) => request.content), ["补充一句"]);
+      assert.ok(view.container.querySelector('[aria-label="中止回复"]'));
+      await changeInputValue(view.container.querySelector("textarea")!, "再补充");
+      await act(async () => view.container.querySelector("textarea")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+      assert.deepEqual(sent.map((request) => request.content), ["补充一句", "再补充"]);
+    } finally { await view.cleanup(); }
+  });
+
   it("drops multiple images without sending, merges picker duplicates, removes a preview and sends the remainder", async () => {
     const desktop = fakeDesktop();
     const sent: ChatSendRequest[] = [];
@@ -93,7 +117,7 @@ describe("ChatComposer", () => {
     desktop.importChatImages = async () => { imports += 1; return ["/disabled.png"]; };
     const view = await mountTestComponent(composerElement("disabled", { bridgeReady: false }), { windowGlobals: { miraDesktop: desktop } });
     try {
-      for (const props of [{ bridgeReady: false }, { sending: true }, { activeRoleId: "" }]) {
+      for (const props of [{ bridgeReady: false }, { activeRoleId: "" }]) {
         await view.render(composerElement("disabled", props));
         assert.equal((await dropFiles(view, [new File(["a"], "a.png")])).defaultPrevented, true);
         const transfer = { types: ["Files"], dropEffect: "copy" };

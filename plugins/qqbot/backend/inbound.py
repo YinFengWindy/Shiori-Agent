@@ -163,5 +163,7 @@ class _InboundMixin:
             session_key=session_key,
             sender=sender,
             command="/stop",
+            account_id=self._account_id,
+            chat_type="private",
         )
         await self.send(chat_id, result.message)

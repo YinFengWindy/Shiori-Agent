@@ -79,6 +79,30 @@ async function mountSession() {
 }
 
 describe("useDesktopSessionState", () => {
+  it("retains every fast desktop supplement and ignores old terminal ownership", async () => {
+    const view = await mountSession();
+    try {
+      const sends = [view.send(), view.send(), view.send()];
+      assert.equal(view.requests.length, 3);
+      const turns = view.requests.map(({ request }) => String(request.payload.turn_id));
+      view.controller.completeChatTurn("role:mira", turns[0]!);
+      view.controller.completeChatTurn("role:mira", turns[1]!);
+      assert.equal(view.controller.isCurrentChatTurn("role:mira", turns[2]!), true);
+      // Older acknowledgements still reconcile their own optimistic user rows.
+      for (const index of [2, 0, 1]) {
+        const pending = view.requests[index]!;
+        await act(async () => pending.result.resolve(response("chat.send", {
+          session: { ...session(), metadata: { marker: index } },
+          message: { id: `user-${index}`, seq: index + 1, role: "user", content: "hello", metadata: { client_message_id: pending.request.payload.client_message_id } },
+        })));
+      }
+      assert.deepEqual(await Promise.all(sends), [true, true, true]);
+      assert.deepEqual(view.args.activeSessionRef.current?.messages.map((message) => message.id), ["user-0", "user-1", "user-2"]);
+      assert.equal(view.args.activeSessionRef.current?.metadata.marker, 2);
+      assert.equal(view.controller.isCurrentChatTurn("role:mira", turns[2]!), true);
+    } finally { await view.cleanup(); }
+  });
+
   it("reconciles the user acknowledgement after completion and an assistant-only update", async () => {
     const view = await mountSession();
     try {

@@ -11,6 +11,7 @@ import type { createDesktopSessionMessages } from "./desktopSessionMessages";
 import type { createDesktopSessionCache } from "./desktopSessionCache";
 import { canSendSessionState } from "./desktopSendingSessions";
 import { compactChatContext, isCompactCommand } from "../chat/chatContextActions";
+import { interruptChatStream } from "../chat/chatStreamingState";
 type Args = Pick<DesktopSessionStateArgs, "activeRoleIdRef" | "activeSessionRef" | "sendingSessionsRef" | "reportSendFailure">
   & Pick<ReturnType<typeof useDesktopChatTurns>, "pendingUserMessagesRef" | "latestTurnIdsRef" | "markSessionSending" | "isLatestChatTurn" | "isCurrentChatTurn" | "completeChatTurn">
   & Pick<ReturnType<typeof createDesktopSessionSnapshot>, "updateCommittedActiveSession">
@@ -40,8 +41,9 @@ export function createDesktopChatSend({
     const previousSession = activeSessionRef.current;
     const sessionKey = previousSession?.key ?? "";
     if ((!content && media.length === 0) || !roleId || !sessionKey) return false;
-    if (!canSendSessionState(sendingSessionsRef.current, sessionKey)) return false;
+    const wasSending = !canSendSessionState(sendingSessionsRef.current, sessionKey);
     if (isCompactCommand(content)) {
+      if (wasSending) return false;
       try {
         await compactChatContext(roleId, () => activeRoleIdRef.current === roleId && activeSessionRef.current?.key === sessionKey);
       } catch (error) {
@@ -61,6 +63,8 @@ export function createDesktopChatSend({
       clientMessageId,
     );
     pendingUserMessagesRef.current[sessionKey] = pendingUserMessage;
+    const acceptedTurnIds = latestTurnIdsRef.current;
+    const previousTurnId = latestTurnIdsRef.current[sessionKey] ?? "";
     latestTurnIdsRef.current[sessionKey] = turnId;
     markSessionSending(sessionKey, roleId);
     updateCommittedActiveSession((current) =>
@@ -68,7 +72,7 @@ export function createDesktopChatSend({
         ? {
             ...current,
             messages: [
-              ...current.messages,
+              ...interruptChatStream(current, previousTurnId).messages,
               pendingUserMessage,
             ],
           }
@@ -112,9 +116,12 @@ export function createDesktopChatSend({
       if (!update || update.session.key !== sessionKey || !update.message) {
         throw new Error("发送消息响应无效");
       }
-      // Completion can arrive before this continuation. Reconcile its persisted user
-      // message unless a newer turn or bridge reset has superseded the acknowledgement.
-      if (isLatestChatTurn(sessionKey, turnId)) commitSessionMessageUpdate(roleId, update);
+      // A fast supplement may precede its own user's acknowledgement. Reconcile
+      // that exact row within this bridge epoch without restoring an old summary.
+      const latest = isLatestChatTurn(sessionKey, turnId);
+      if (latest || (acceptedTurnIds === latestTurnIdsRef.current && update.message.metadata?.client_message_id === clientMessageId)) {
+        commitSessionMessageUpdate(roleId, update, { preserveSummary: !latest });
+      }
       return true;
     } catch (error) {
       await recoverFailedSend({ message: errorMessage(error, { includeDetail: true }) });

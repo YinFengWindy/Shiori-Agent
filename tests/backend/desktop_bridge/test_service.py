@@ -290,6 +290,109 @@ async def test_chat_send_returns_busy_before_persisting_second_message(
     assert session.messages == []
 
 
+@pytest.mark.parametrize("natural", [False, True])
+async def test_chat_send_validates_before_persisting_or_superseding_real_owner(
+    tmp_path, natural
+):
+    from agent.turns.reply_interruption import current_reply_interruption
+
+    role_store = RoleStore(tmp_path)
+    role_store.create_role(
+        role_id="mira",
+        name="Mira",
+        system_prompt="test",
+        runtime_config={"natural_chat_enabled": natural},
+    )
+    sessions = SessionManager(tmp_path)
+    entered, release = asyncio.Event(), asyncio.Event()
+    calls = []
+
+    async def process_direct(content, **kwargs):
+        calls.append(content)
+        entered.set()
+        await release.wait()
+        reply = current_reply_interruption()
+        if reply is not None and reply.invalidated:
+            raise asyncio.CancelledError
+        return "done"
+
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=role_store,
+        session_manager=sessions,
+        group_listening=GroupListeningControl(
+            ConversationService(sessions), lambda _channel: False
+        ),
+        group_environment=GroupEnvironment(tmp_path, sessions.conversation_store),
+        agent_loop=SimpleNamespace(process_direct=process_direct),
+        event_bus=EventBus(),
+    )
+
+    async def send(turn_id, content):
+        return await service.handle(
+            {
+                "id": turn_id,
+                "method": "chat.send",
+                "payload": {
+                    "role_id": "mira",
+                    "turn_id": turn_id,
+                    "content": content,
+                },
+            },
+            emit_event=Mock(),
+        )
+
+    def stored_content():
+        return [
+            row["content"]
+            for row in SessionManager(tmp_path).get_or_create("role:mira").messages
+        ]
+
+    try:
+        first = await send("first", "first")
+        assert first.error is None
+        await asyncio.wait_for(entered.wait(), 2)
+        chat = service.chat_service
+        owner = chat._tasks_by_session["role:mira"]
+        plan = owner.reply_interruption
+        assert plan is not None and plan.natural_chat is natural
+        assert chat.is_busy("role:mira")
+        assert chat.can_supersede_chat_turn("role:mira")
+        assert stored_content() == ["first"]
+
+        invalid = await send("invalid", " ")
+        assert invalid.error is not None and invalid.error.code == "invalid_request"
+        assert stored_content() == ["first"]
+        assert not plan.invalidated
+        assert chat._tasks_by_session["role:mira"] is owner
+
+        # A legacy/non-supplementable owner still owns real running work.
+        # Rejection must neither add the new user row nor cancel that owner.
+        owner.reply_interruption = None
+        try:
+            rejected = await send("rejected", "must not persist")
+            assert rejected.error is not None and rejected.error.code == "chat_busy"
+            assert stored_content() == ["first"]
+            assert not owner.task.done()
+            assert not plan.invalidated
+        finally:
+            owner.reply_interruption = plan
+
+        accepted = await asyncio.wait_for(send("second", "second"), 1)
+        assert accepted.error is None
+        assert stored_content() == ["first", "second"]
+        assert plan.invalidated
+        successor = chat._tasks_by_session["role:mira"]
+        assert successor.previous is owner and successor.turn_id == "second"
+        assert calls == ["first"]
+        release.set()
+        await asyncio.wait_for(chat.drain(), 2)
+        assert calls == ["first", "second"]
+    finally:
+        release.set()
+        await service.aclose()
+
+
 @pytest.mark.asyncio
 async def test_external_turn_committed_refreshes_summary_without_its_messages(
     tmp_path,

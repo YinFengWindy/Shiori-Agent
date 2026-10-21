@@ -48,6 +48,7 @@ export function useDesktopSessionState(args: DesktopSessionStateArgs) {
     clearAllSendingSessions: turns.clearAllSendingSessions,
     clearSessionSending: turns.clearSessionSending,
     isCurrentChatTurn: turns.isCurrentChatTurn,
+    isLatestChatTurn: turns.isLatestChatTurn,
     isChatTurnCancelling: turns.isChatTurnCancelling,
     completeChatTurn: turns.completeChatTurn,
     ...snapshot,

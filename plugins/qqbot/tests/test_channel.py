@@ -457,7 +457,13 @@ async def test_qqbot_response_marks_media_failure_without_sent_status(
 @pytest.mark.asyncio
 async def test_qqbot_stop_uses_bound_role_session(tmp_path: Path) -> None:
     interrupt = FakeInterruptController(message="已中断")
-    channel = await _started(tmp_path, "app", "secret", interrupt_controller=interrupt)
+    channel = await _started(
+        tmp_path,
+        "app",
+        "secret",
+        interrupt_controller=interrupt,
+        account_id="qqbot:app",
+    )
     channel.send = AsyncMock()
 
     await channel._handle_stop("c2c:app:user-1", "user-1")
@@ -469,6 +475,8 @@ async def test_qqbot_stop_uses_bound_role_session(tmp_path: Path) -> None:
             "command": "/stop",
             "channel": "qqbot",
             "chat_id": "c2c:app:user-1",
+            "account_id": "qqbot:app",
+            "chat_type": "private",
         }
     ]
     channel.send.assert_awaited_once_with("c2c:app:user-1", "已中断")

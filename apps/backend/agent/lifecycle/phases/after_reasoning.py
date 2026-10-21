@@ -36,8 +36,12 @@ from agent.lifecycle.types import AfterReasoningInput, AfterReasoningResult
 from shiori_sdk.lifecycle import AfterReasoningCtx
 from bus.event_bus import EventBus
 from shiori_sdk.messages import OutboundMessage
-from agent.turns.reply_sequence import parse_reply_sequence
-from agent.turns.reply_sequence_commit import commit_reply_sequence
+from agent.turns.reply_sequence import ReplySequence, parse_reply_sequence
+from agent.turns.reply_interruption import reply_was_invalidated
+from agent.turns.reply_sequence_commit import (
+    commit_invalidated_reply,
+    commit_reply_sequence,
+)
 
 if TYPE_CHECKING:
     from agent.looping.ports import LLMConfig, LLMServices
@@ -123,7 +127,11 @@ class _BuildAfterReasoningCtxModule:
         tool_chain = cast(list[dict[str, object]], turn_result.tool_chain)
         session = input.state.session
         mention_ids: tuple[str, ...] = ()
-        if session is not None and turn_result.context_retry.get("formal_role_reply"):
+        if reply_was_invalidated():
+            parsed = ParsedResponse(
+                clean_text="", metadata=ResponseMetadata(raw_text="")
+            )
+        elif session is not None and turn_result.context_retry.get("formal_role_reply"):
             # The reasoner already produced content plus a validated (or
             # degraded, previous-turn) RoleReply; no JSON parsing here. Kept
             # off `context_retry`, which gets snapshotted verbatim into
@@ -149,6 +157,7 @@ class _BuildAfterReasoningCtxModule:
             frame.slots["reply:private"] = (
                 "reply:state" in frame.slots
                 or turn_result.reply_sequence is not None
+                or reply_was_invalidated()
                 or bool(input.state.turn_pushes and input.state.turn_pushes.messages)
             )
         raw_turn_metrics = turn_result.context_retry.get("turn_metrics")
@@ -307,13 +316,17 @@ class _PersistAssistantMessageModule:
         if drafts is not None:
             frame.slots["reply:messages"].extend(drafts.messages)
         policy = frame.input.turn_result.reply_sequence
-        if policy is not None:
+        if policy is not None or reply_was_invalidated():
             if not ctx.outbound_metadata.get("turn_id") and not (
                 channel_sequence_context() is not None
                 and ctx.outbound_metadata.get("request_id")
             ):
                 raise ValueError("消息序列需要可投递的交互回合标识")
-            sequence = parse_reply_sequence(ctx.reply, policy)
+            if reply_was_invalidated():
+                sequence = ReplySequence(("",))
+            else:
+                assert policy is not None
+                sequence = parse_reply_sequence(ctx.reply, policy)
             frame.slots["reply:sequence"] = sequence
             # Diagnostic observers need the original raw_text; only visible
             # dialogue should drop the message-boundary protocol.
@@ -350,7 +363,7 @@ class _PersistAssistantMessageModule:
                 session=session,
             )
         )
-        if policy is not None:
+        if policy is not None or reply_was_invalidated():
             for index, content in enumerate(sequence.messages):
                 metadata = {
                     **assistant_metadata,
@@ -502,6 +515,20 @@ class _AppendMessagesModule:
             }
         try:
             sequence = frame.slots.get("reply:sequence")
+            if sequence is not None and reply_was_invalidated():
+                await commit_invalidated_reply(
+                    manager=self._session_services.session_manager,
+                    bus=self._bus,
+                    session=session,
+                    messages=owned_messages,
+                    sequence=sequence,
+                    desktop=state.msg.channel == "desktop",
+                    on_first_commit=(
+                        state.turn_pushes.committed
+                        if state.turn_pushes is not None
+                        else None
+                    ),
+                )
             if sequence is not None and state.msg.channel != "desktop":
                 ctx = cast(AfterReasoningCtx, frame.slots[_CTX_SLOT])
                 extra_media: list[str] = []

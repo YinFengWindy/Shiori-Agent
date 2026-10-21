@@ -135,6 +135,40 @@ consolidates these additions and the subsequent #847 breaking migration.
   NovelAI records generation cooldown/dedup before invoking delivery, so a failed
   or cancelled send cannot cause the next observation to regenerate the image.
 
+- **Desktop and natural-channel supplements (PR #880, issue #867).** Every desktop chat accepts
+  supplements, including ordinary streaming replies. On external channels this
+  requires the built-in natural-chat capability: admitted and deduplicated input
+  invalidates only the same role, receiving
+  account, channel, chat type, chat, topic and real sender's reply plan. Other
+  group senders retain chat order; unaddressed or blocked messages do not enter
+  this boundary. The dispatcher invalidates before waiting for the previous
+  chat task. Generation stops at its next model/tool completion boundary,
+  persists accepted input and completed tool facts, and starts no further tool
+  calls or summary requests for the invalidated plan. A started delivery and
+  its bookkeeping finish; confirmed prefixes remain and unstarted tails are
+  discarded. Desktop `chat.send` acknowledges supplements without waiting for
+  old generation, while each queued runner waits for predecessor cleanup.
+  Ordinary desktop replies freeze their already published stream prefix and
+  thinking, stop publishing further deltas immediately, and persist that prefix
+  with completed tool facts before the next runner starts. Ordinary runtime
+  reload behavior remains unchanged until a supplement invalidates its owner.
+  Turn-owned `session.updated` events also carry `turn_id`; old persisted
+  messages are still reconciled by ID without changing the current turn or
+  reverting its session summary. Internal/proactive entrypoints remain outside
+  this behavior. `InterruptController.request_interrupt` accepts the receiving
+  `account_id`, `chat_type` and opaque `message_thread_id` alongside channel/chat.
+  Channel `/stop` uses that exact origin; partial legacy addresses never select
+  a scoped account/topic by a unique-match fallback. Partially supplied external
+  origins return idle; missing transport or chat type never implies desktop or
+  private-chat ownership. Across runtime generations, supplements chain to the
+  latest actually owned turn; borrowed predecessor references cannot receive
+  turn-ID cancellation or impersonate a generation's accepted work. Desktop session-only and
+  unscoped legacy task calls remain compatible. **breaking** for external
+  integrations targeting account-scoped turns: session-only or partially
+  addressed `request_interrupt` calls no longer infer that target; callers must
+  pass its receiving channel, chat, account, chat type and topic. Bundled channel
+  callers are migrated. SDK/runtime versions are unchanged.
+
 - **External plugin trust before execution (PR #884, issue #878).** The desktop prompts
   for enabled, valid, untrusted startup candidates using its shared persona
   confirmation dialog. `plugins.trust` accepts an optional explicit `enable`
