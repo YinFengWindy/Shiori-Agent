@@ -315,8 +315,9 @@ class _PersistAssistantMessageModule:
                 raise ValueError("消息序列需要可投递的交互回合标识")
             sequence = parse_reply_sequence(ctx.reply, policy)
             frame.slots["reply:sequence"] = sequence
+            # Diagnostic observers need the original raw_text; only visible
+            # dialogue should drop the message-boundary protocol.
             ctx.reply = sequence.content
-            ctx.response_metadata.raw_text = sequence.content
         assistant_kwargs: dict[str, Any] = {
             "tools_used": list(ctx.tools_used) if ctx.tools_used else None,
             "tool_chain": list(ctx.tool_chain) if ctx.tool_chain else None,
