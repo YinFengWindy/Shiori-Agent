@@ -123,7 +123,7 @@ consolidates these additions and the subsequent #847 breaking migration.
 
 <!-- Record the next contract batch here, with PR references and breaking markers. -->
 
-- **External plugin trust before execution (issue #878).** The desktop prompts
+- **External plugin trust before execution (PR #884, issue #878).** The desktop prompts
   for enabled, valid, untrusted startup candidates using its shared persona
   confirmation dialog. `plugins.trust` accepts an optional explicit `enable`
   intent and `operation_id`, revalidates the displayed directory and content,
