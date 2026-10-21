@@ -123,7 +123,7 @@ consolidates these additions and the subsequent #847 breaking migration.
 
 <!-- Record the next contract batch here, with PR references and breaking markers. -->
 
-- **Account media supplements (issue #886).** Host/plugin calls to `account_send.execute`
+- **Account media supplements (PR #889, issue #886).** Host/plugin calls to `account_send.execute`
   may supply protected `push_proactive=False` and `push_chat_id` with
   `target_kind="user"`. Here `channel` is the original transport channel; the host
   resolves its exact canonical private chat against current user bindings and the
