@@ -949,3 +949,271 @@ async def test_a_failed_affection_write_is_logged_and_the_turn_still_completes(
     ]
     stored = runtime.manager._store.fetch_session_messages(runtime.session.key)
     assert [row["content"] for row in stored] == ["send to desktop", "first", "done"]
+
+
+@pytest.mark.parametrize("entry", ["run", "post_reasoning"])
+@pytest.mark.parametrize(
+    "outcome", ["normal", "suppressed", "disabled", "failure", "cancel"]
+)
+async def test_reply_preparation_spans_durable_commit_effects_and_reconnect(
+    runtime, tmp_path, monkeypatch, entry, outcome
+):
+    from uuid import uuid4
+    import httpx
+    from agent.turns.outbound import BusOutboundPort
+    from bus.queue import MessageBus
+    from plugins.grok_bot.backend.config import ConnectionConfig
+    from plugins.grok_bot.backend.connection import GrokConnection
+    from plugins.grok_bot.backend.protocol import BotMessage
+    from session.manager.models import build_session_message
+    from shiori_sdk.memory.committed import TurnCommitted
+    from shiori_sdk.testing.channel_context import fake_channel_context
+    from shiori_sdk.testing.channel_hub import FakeChannelHub
+    from shiori_sdk.testing.storage import FakeKV
+
+    session_key = runtime.session.key if entry == "run" else "grok-test:peer"
+    bus, hub, kv = (
+        MessageBus(),
+        FakeChannelHub(role_id="mira", session_key=session_key),
+        FakeKV(),
+    )
+    config = ConnectionConfig(
+        connection_id=uuid4().hex,
+        peer_id=uuid4().hex,
+        role_id="mira",
+        webhook_url="https://example.test/hook",
+        webhook_key="test-key",
+        callback_token="x" * 32,
+    )
+    sent, commits = [], []
+    entered, release = asyncio.Event(), asyncio.Event()
+
+    def post(request):
+        sent.append(json.loads(request.content))
+        return httpx.Response(200)
+
+    def make_connection():
+        return GrokConnection(
+            config,
+            kv,
+            tmp_path / "grok",
+            tmp_path / "client.ps1",
+            config_changed=lambda value: None,
+            status_changed=lambda state, error: None,
+            transport=httpx.MockTransport(post),
+        )
+
+    async def after_commit():
+        persisted = runtime.manager._store.fetch_session_messages(session_key)
+        assert any(row.get("external_message_id") == "parent" for row in persisted)
+        entered.set()
+        await release.wait()
+        if outcome == "failure":
+            raise RuntimeError("post-commit delivery failed")
+
+    result = TurnRunResult(
+        reply="nonempty reply",
+        context_retry={"account_delivery_sent": outcome == "suppressed"},
+    )
+
+    async def reasoning(**_kwargs):
+        drafts = current_turn_pushes(runtime.session.key)
+        assert drafts is not None
+        drafts.append(
+            build_session_message(
+                "assistant", "desktop push", thread_id=desktop_thread_id("mira")
+            ),
+            owner="delayed-desktop",
+            after_commit=after_commit,
+        )
+        return result
+
+    # post_reasoning has no reasoning-owned pushes. Pause its actual append only
+    # after SQL publication to exercise the same earliest-visible-history boundary.
+    if entry == "post_reasoning":
+        append = runtime.manager.append_messages
+
+        async def append_and_pause(session, messages, **kwargs):
+            await append(session, messages, **kwargs)
+            if any(
+                message.get("external_message_id") == "parent" for message in messages
+            ):
+                await after_commit()
+
+        monkeypatch.setattr(runtime.manager, "append_messages", append_and_pause)
+
+    def observe(event: TurnCommitted):
+        commits.append(
+            (
+                event.will_dispatch,
+                bus.has_pending_outbound(config.channel_name, config.chat_id, "parent"),
+            )
+        )
+
+    runtime.bus.on(TurnCommitted, observe)
+    context = fake_channel_context(
+        tmp_path, bus=bus, event_bus=runtime.bus, channel_hub=hub
+    )
+    connection = make_connection()
+    await connection.start(context)
+    await connection.receive("messages", {"message_id": "parent", "text": "hello"})
+    incoming = await bus.consume_inbound()
+    pipeline = runtime.pipeline(reasoning, outbound_port=BusOutboundPort(bus))
+    operation = (
+        pipeline.run(
+            incoming, runtime.session.key, dispatch_outbound=outcome != "disabled"
+        )
+        if entry == "run"
+        else pipeline.post_reasoning(
+            incoming,
+            session_key,
+            result,
+            dispatch_outbound=outcome != "disabled",
+        )
+    )
+    task = asyncio.create_task(operation)
+    dispatcher = None
+    try:
+        await asyncio.wait_for(entered.wait(), 2)
+        assert commits == []
+        assert bus.outbound_size == 0
+        assert bus.has_pending_outbound(connection.name, config.chat_id, "parent")
+        await connection.stop()
+
+        connection = make_connection()
+        await connection.start(context)
+        assert connection._recovery is not None
+        await connection._recovery
+        assert [message.message_id for message in connection.journal.pending()] == [
+            "parent"
+        ]
+        monkeypatch.setattr("plugins.grok_bot.backend.exchange.MAX_RECORDS", 4)
+        for index in range(4):
+            await connection.send(BotMessage(f"other-{index}", "new topic"))
+        assert "parent" in connection.journal.state.messages
+        if outcome == "cancel":
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+        elif outcome == "failure":
+            release.set()
+            with pytest.raises(RuntimeError, match="post-commit delivery failed"):
+                await task
+        else:
+            release.set()
+            await task
+            assert commits == [(outcome == "normal", outcome == "normal")]
+        if outcome == "normal":
+            assert bus.has_pending_outbound(connection.name, config.chat_id, "parent")
+            dispatcher = asyncio.create_task(bus.dispatch_outbound())
+            await asyncio.wait_for(bus._outbound.join(), 2)
+            assert sent[-1]["text"] == "nonempty reply"
+            assert sent[-1]["reply_to"] == "parent"
+            assert hub.deliveries[-1]["delivery_status"] == "sent"
+        else:
+            assert len(sent) == 4
+            assert bus.outbound_size == 0
+        assert not bus.has_pending_outbound(connection.name, config.chat_id, "parent")
+        if outcome in {"failure", "cancel"}:
+            await connection.stop()
+            connection = make_connection()
+            await connection.start(context)
+            assert connection._recovery is not None
+            await connection._recovery
+        assert connection.journal.pending() == []
+        assert "parent" not in connection._submitted
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        bus.stop()
+        if dispatcher is not None:
+            dispatcher.cancel()
+            await asyncio.gather(dispatcher, return_exceptions=True)
+        await connection.stop()
+
+
+async def test_preparation_spans_first_sequence_commit_effect_and_all_segments(
+    runtime, monkeypatch
+):
+    from agent.turns.channel_sequence import ChannelSequenceOwner
+    from agent.turns.outbound import BusOutboundPort
+    from agent.turns.reply_sequence import ReplySequencePolicy
+    from bus.queue import MessageBus
+    from session.manager.models import build_session_message
+    from shiori_sdk.memory.committed import TurnCommitted
+    from shiori_sdk.messages import DeliveryOutcome
+
+    bus = MessageBus()
+    entered, release = asyncio.Event(), asyncio.Event()
+    message = incoming()
+    message.metadata.update({"external_message_id": "parent", "request_id": "sequence"})
+    sent, observed = [], []
+
+    async def after_commit():
+        persisted = runtime.manager._store.fetch_session_messages(runtime.session.key)
+        assert any(row.get("external_message_id") == "parent" for row in persisted)
+        entered.set()
+        await release.wait()
+
+    async def reasoning(**_kwargs):
+        drafts = current_turn_pushes(runtime.session.key)
+        assert drafts is not None
+        drafts.append(
+            build_session_message(
+                "assistant", "desktop push", thread_id=desktop_thread_id("mira")
+            ),
+            owner="delayed-desktop",
+            after_commit=after_commit,
+        )
+        return TurnRunResult(
+            reply="one\n<message-break/>\ntwo",
+            reply_sequence=ReplySequencePolicy("<message-break/>"),
+        )
+
+    async def deliver(outbound):
+        assert bus.has_pending_outbound(message.channel, message.chat_id, "parent")
+        sent.append(outbound.content)
+        outbound.delivery_outcome = DeliveryOutcome("sent", str(len(sent)))
+
+    async def no_pause(_):
+        assert sent == ["one"]
+        assert bus.outbound_size == 0
+        assert bus.has_pending_outbound(message.channel, message.chat_id, "parent")
+
+    monkeypatch.setattr("agent.turns.reply_sequence.wait_between_messages", no_pause)
+    bus.subscribe_outbound(message.channel, deliver, supports_reply_sequence=True)
+    runtime.bus.on(
+        TurnCommitted,
+        lambda event: observed.append(
+            (
+                event.will_dispatch,
+                bus.has_pending_outbound(message.channel, message.chat_id, "parent"),
+            )
+        ),
+    )
+    pipeline = runtime.pipeline(reasoning, outbound_port=BusOutboundPort(bus))
+
+    async def run():
+        with ChannelSequenceOwner().bind(bus):
+            return await pipeline.run(message, runtime.session.key)
+
+    task = asyncio.create_task(run())
+    dispatcher = None
+    try:
+        await asyncio.wait_for(entered.wait(), 2)
+        assert observed == []
+        assert bus.outbound_size == 0
+        assert bus.has_pending_outbound(message.channel, message.chat_id, "parent")
+        dispatcher = asyncio.create_task(bus.dispatch_outbound())
+        release.set()
+        await asyncio.wait_for(task, 2)
+        assert sent == ["one", "two"]
+        assert observed == [(False, False)]
+        assert not bus.has_pending_outbound(message.channel, message.chat_id, "parent")
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        bus.stop()
+        if dispatcher is not None:
+            dispatcher.cancel()
+            await asyncio.gather(dispatcher, return_exceptions=True)

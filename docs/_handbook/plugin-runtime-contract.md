@@ -140,9 +140,12 @@ consolidates these additions and the subsequent #847 breaking migration.
   Channels can retain inbound correlation for a planned reply without guessing
   from nonempty text or tool names. `MessageBus.has_pending_outbound` now includes
   the host-owned preparation lifetime before enqueue, as well as queued and
-  dispatching replies, so connection handover during observer fanout retains
-  correlation. The after-turn owner releases preparation on return, failure or
-  cancellation; successful enqueue keeps the queued ownership continuously.
+  dispatching replies. Both pipeline entry points reserve the originating
+  correlation before history can become durable, covering post-commit effects,
+  segmented delivery and observer fanout. The pipeline releases preparation
+  before committed observers when normal dispatch is suppressed or already
+  completed by a sequence, and releases it on return, failure or cancellation;
+  successful enqueue keeps queued ownership continuously through the handoff.
   Nonqueued outbound ports retain their dispatch-only contract. This intent is not a
   delivery receipt and does not claim that a remote peer accepted a message.
 

@@ -83,7 +83,7 @@ class OutboundPort(Protocol):
 
 @runtime_checkable
 class PreparesOutbound(Protocol):
-    """Optional queued-transport lifetime covering observers before dispatch."""
+    """Optional queued-transport lifetime from durable commit through dispatch."""
 
     def prepare(self, outbound: OutboundMessage) -> AbstractContextManager[None]:
         """Keep the originating turn pending until enqueue or scope failure."""
