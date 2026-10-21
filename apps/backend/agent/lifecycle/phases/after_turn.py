@@ -55,6 +55,13 @@ _EXTRA_PREFIX = "turn:extra:"
 _TELEMETRY_PREFIX = "turn:telemetry:"
 
 
+def will_dispatch_outbound(snapshot: TurnSnapshot) -> bool:
+    """Share the actual normal-reply decision with pre-dispatch observers."""
+    return snapshot.state.dispatch_outbound and not snapshot.outbound.metadata.get(
+        "account_delivery_sent"
+    )
+
+
 class _BuildTurnWorkModule:
     slot = "after_turn.build_work"
     requires: tuple[str, ...] = ()
@@ -211,6 +218,7 @@ class _BuildTurnCommittedModule:
             external_message_id=str(
                 (msg.metadata or {}).get("external_message_id") or ""
             ).strip(),
+            will_dispatch=will_dispatch_outbound(snap),
             total_tokens=(
                 value
                 if isinstance((value := turn_metrics.get("total_tokens")), int)
@@ -284,7 +292,7 @@ class _BuildAfterTurnCtxModule:
             reply=snap.outbound.content,
             tools_used=snap.ctx.tools_used,
             thinking=snap.ctx.thinking,
-            will_dispatch=state.dispatch_outbound,
+            will_dispatch=will_dispatch_outbound(snap),
         )
         return frame
 
@@ -324,9 +332,7 @@ class _DispatchOutboundModule:
     async def run(self, frame: AfterTurnFrame) -> AfterTurnFrame:
         snap = frame.input
         outbound = snap.outbound
-        if snap.state.dispatch_outbound and not outbound.metadata.get(
-            "account_delivery_sent"
-        ):
+        if will_dispatch_outbound(snap):
             _ = await self._outbound.dispatch(
                 OutboundDispatch(
                     channel=outbound.channel,

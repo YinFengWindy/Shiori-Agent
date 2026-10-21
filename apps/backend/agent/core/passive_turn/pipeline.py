@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import time
+from contextlib import ExitStack
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -19,7 +20,11 @@ from agent.lifecycle.phases.after_reasoning import (
     AfterReasoningFrame,
     default_after_reasoning_modules,
 )
-from agent.lifecycle.phases.after_turn import AfterTurnFrame, default_after_turn_modules
+from agent.lifecycle.phases.after_turn import (
+    AfterTurnFrame,
+    will_dispatch_outbound,
+    default_after_turn_modules,
+)
 from agent.lifecycle.phases.before_reasoning import (
     BeforeReasoningFrame,
     default_before_reasoning_modules,
@@ -40,7 +45,12 @@ from agent.lifecycle.types import (
     TurnState,
 )
 from agent.turns.turn_pushes import TurnPushDrafts
-from agent.turns.outbound import DeliveryReceipt, OutboundDispatch, OutboundPort
+from agent.turns.outbound import (
+    DeliveryReceipt,
+    OutboundDispatch,
+    OutboundPort,
+    PreparesOutbound,
+)
 from bus.event_bus import EventBus
 from shiori_sdk.messages import InboundMessage, OutboundMessage
 from bus.events_lifecycle import TurnFailed
@@ -435,6 +445,33 @@ class PassiveTurnPipeline:
                     ),
                 )
 
+            return await self._commit_and_dispatch(state, turn_result, started=started)
+
+    async def _commit_and_dispatch(
+        self,
+        state: TurnState,
+        turn_result: "TurnRunResult",
+        *,
+        started: float | None = None,
+    ) -> OutboundMessage:
+        """Keep originating correlation from the first history write through enqueue."""
+        started = time.perf_counter() if started is None else started
+        key = state.session_key
+        turn_id = _turn_log_id(key, state.msg)
+        with ExitStack() as preparation:
+            if isinstance(self._outbound_port, PreparesOutbound):
+                # Reserve routing identity before either commit path can expose
+                # history. The actual message is only constructed after commit.
+                preparation.enter_context(
+                    self._outbound_port.prepare(
+                        OutboundMessage(
+                            channel=state.msg.channel,
+                            chat_id=state.msg.chat_id,
+                            content="",
+                            metadata=dict(state.msg.metadata or {}),
+                        )
+                    )
+                )
             try:
                 # Phase 5: AfterReasoning 模块链（parse、AfterReasoning 事件、持久化、出站消息）。
                 with diagnostic_context(phase="after_reasoning"):
@@ -471,16 +508,17 @@ class PassiveTurnPipeline:
                 )
             )
 
+            snapshot = TurnSnapshot(
+                state=state, outbound=after_reasoning.outbound, ctx=after_reasoning.ctx
+            )
+            if not will_dispatch_outbound(snapshot):
+                # Sequence delivery may have finished during the commit phase;
+                # suppressed replies must not observe their own preparation as queued.
+                preparation.close()
             try:
                 # Phase 6: AfterTurn 模块链（TurnCommitted fanout、AfterTurn fanout、dispatch）。
                 with diagnostic_context(phase="after_turn"):
-                    outbound = await self._after_turn.current().run(
-                        TurnSnapshot(
-                            state=state,
-                            outbound=after_reasoning.outbound,
-                            ctx=after_reasoning.ctx,
-                        )
-                    )
+                    outbound = await self._after_turn.current().run(snapshot)
             except Exception as exc:
                 logger.exception(
                     diagnostic_line(
@@ -527,16 +565,7 @@ class PassiveTurnPipeline:
             dispatch_outbound=dispatch_outbound,
             session=self._session.session_manager.get_or_create(session_key),
         )
-        after_reasoning = await self._after_reasoning.current().run(
-            AfterReasoningInput(state=state, turn_result=turn_result)
-        )
-        return await self._after_turn.current().run(
-            TurnSnapshot(
-                state=state,
-                outbound=after_reasoning.outbound,
-                ctx=after_reasoning.ctx,
-            )
-        )
+        return await self._commit_and_dispatch(state, turn_result)
 
     # abort / 错误路径的统一 dispatch helper，只有 dispatch_outbound=True 时才发送。
     async def _control_outbound(

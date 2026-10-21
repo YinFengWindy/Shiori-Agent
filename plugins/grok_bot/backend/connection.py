@@ -255,7 +255,7 @@ class GrokConnection:
             self.journal.finish(message_id, "failed", "角色响应规则拒收")
             raise CallbackError(403, "角色响应规则拒收")
         if routed.metadata.get("conversation_duplicate"):
-            self.journal.finish(message_id, "complete", "消息已在角色会话中")
+            self._settle_committed(message_id)
             return
         await self._ctx.bus.publish_inbound(routed)
         self._submitted.add(message_id)
@@ -267,11 +267,27 @@ class GrokConnection:
 
     def _on_committed(self, event: TurnCommitted) -> None:
         if event.channel == self.name and event.chat_id == self.config.chat_id:
-            # A committed response may still be queued for channel delivery.
-            # Keep its parent protected from retention until that send settles.
-            if not event.assistant_response:
-                self.journal.complete_parent(event.external_message_id)
-                self._submitted.discard(event.external_message_id)
+            self._settle_committed(
+                event.external_message_id, will_dispatch=event.will_dispatch
+            )
+
+    def _settle_committed(
+        self, message_id: str, *, will_dispatch: bool = False
+    ) -> None:
+        assert self._ctx is not None
+        receipt = self.journal.state.messages.get(message_id)
+        if receipt is None or receipt.state != "queued":
+            self._submitted.discard(message_id)
+            return
+        # Commit precedes normal dispatch. Recovery instead checks the host's
+        # actual queue, so suppressed replies finish and queued ones stay protected.
+        if will_dispatch or self._ctx.bus.has_pending_outbound(
+            self.name, self.config.chat_id, message_id
+        ):
+            self._submitted.add(message_id)
+            return
+        self.journal.complete_parent(message_id)
+        self._submitted.discard(message_id)
 
     def _on_cancelled(self, event: TurnCancelled) -> None:
         if event.channel != self.name or event.chat_id != self.config.chat_id:

@@ -1,9 +1,9 @@
 import asyncio
 import logging
 from collections import deque
+from collections.abc import Awaitable, Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
-from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 
 from bus.events import InboundItem
@@ -116,6 +116,16 @@ class MessageBus:
         self._pending_outbound[key] = self._pending_outbound.get(key, 0) + 1
         await self._outbound.put(msg)
 
+    @contextmanager
+    def prepare_outbound(self, msg: OutboundMessage) -> Iterator[None]:
+        """Keep planned reply correlation alive until enqueue or preparation failure."""
+        key = self._outbound_key(msg)
+        self._pending_outbound[key] = self._pending_outbound.get(key, 0) + 1
+        try:
+            yield
+        finally:
+            self._release_pending(key)
+
     async def deliver_outbound(self, msg: OutboundMessage) -> DeliveryOutcome:
         """Queue one message and await its actual, non-retryable platform outcome.
 
@@ -144,7 +154,7 @@ class MessageBus:
     def has_pending_outbound(
         self, channel: str, chat_id: str, external_message_id: str
     ) -> bool:
-        """Whether this originating message has a queued or dispatching reply."""
+        """Whether this turn has a preparing, queued or dispatching reply."""
         return (
             self._pending_outbound.get((channel, chat_id, external_message_id), 0) > 0
         )
@@ -331,13 +341,15 @@ class MessageBus:
 
     def _settle(self, msg: OutboundMessage) -> None:
         self._outbound_checks.pop(id(msg), None)
-        key = self._outbound_key(msg)
+        self._release_pending(self._outbound_key(msg))
+        self._outbound.task_done()
+
+    def _release_pending(self, key: tuple[str, str, str]) -> None:
         remaining = self._pending_outbound[key] - 1
         if remaining:
             self._pending_outbound[key] = remaining
         else:
             self._pending_outbound.pop(key)
-        self._outbound.task_done()
 
     async def _dispatch_message(self, msg: OutboundMessage) -> None:
         """投递一条消息：可重试的失败退避后重试一次，仍失败则发送降级通知。

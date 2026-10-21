@@ -665,9 +665,10 @@ async def test_natural_background_completion_keeps_shared_correction_raw_thinkin
 
 
 @pytest.mark.parametrize("enabled", [False, True])
-@pytest.mark.parametrize("stage", ["generation", "outbound"])
+@pytest.mark.parametrize("reconnect", [False, True])
+@pytest.mark.parametrize("stage", ["generation", "outbound", "post_commit"])
 async def test_sdk_report_connection_fence_survives_generation_and_queued_delivery(
-    host, monkeypatch, enabled, stage
+    host, monkeypatch, enabled, stage, reconnect
 ):
     from agent.provider import LLMResponse
     from agent.turns.channel_sequence import ChannelSequenceOwner
@@ -700,6 +701,21 @@ async def test_sdk_report_connection_fence_survives_generation_and_queued_delive
         return chat_reply(["private SDK report"], tools=kwargs.get("tools", []))
 
     monkeypatch.setattr(host.provider, "chat", chat)
+    if stage == "post_commit":
+        append = host.manager.append_messages
+
+        async def append_and_pause(session, messages, **kwargs):
+            result = await append(session, messages, **kwargs)
+            if any(
+                message.get("content") == "private SDK report" for message in messages
+            ):
+                assert bus.has_pending_outbound("qq", "902", "")
+                assert bus.outbound_size == 0
+                entered.set()
+                await release.wait()
+            return result
+
+        monkeypatch.setattr(host.manager, "append_messages", append_and_pause)
     if stage == "outbound":
         await bus.transport_lock.acquire()
     dispatcher = asyncio.create_task(bus.dispatch_outbound())
@@ -708,29 +724,37 @@ async def test_sdk_report_connection_fence_survives_generation_and_queued_delive
             reporting = asyncio.create_task(
                 target.report("sdk:revoked", "private completed fact")
             )
-            if stage == "generation":
+            if stage in {"generation", "post_commit"}:
                 await asyncio.wait_for(entered.wait(), 3)
             else:
                 async with asyncio.timeout(3):
                     while not bus.outbound_size:
                         await asyncio.sleep(0)
-            accounts.release("qq:101", "fixture")
-            new = accounts.register(
-                plugin_id="qq",
-                platform="qq",
-                platform_account_id="101",
-                config_ref="101",
-                role_id="mira",
-                token="replacement",
-            )
-            accounts.report(new.record.id, "replacement", connection="online")
+            if reconnect:
+                accounts.release("qq:101", "fixture")
+                new = accounts.register(
+                    plugin_id="qq",
+                    platform="qq",
+                    platform_account_id="101",
+                    config_ref="101",
+                    role_id="mira",
+                    token="replacement",
+                )
+                accounts.report(new.record.id, "replacement", connection="online")
             release.set()
             if stage == "outbound":
                 bus.transport_lock.release()
             [result] = await asyncio.gather(reporting, return_exceptions=True)
-            assert result is True or isinstance(result, ChannelSequenceDeliveryError)
+            if enabled and reconnect:
+                assert isinstance(result, ChannelSequenceDeliveryError)
+            else:
+                assert result is True
             await asyncio.wait_for(bus.drain_outbound(), 3)
-        assert delivered == []
+        assert delivered == ([] if reconnect else ["private SDK report"])
+        assert not bus._pending_outbound
+        assert not bus._outbound_checks
+        assert not bus._acknowledgements
+        assert not bus._ack_started
     finally:
         release.set()
         if stage == "outbound" and bus.transport_lock.locked():
