@@ -23,7 +23,6 @@ async def setup(ctx: ChannelPluginContext) -> None:
     )
     ctx.rpc.register("account.save", accounts.save)
     ctx.rpc.register("account.disconnect", accounts.disconnect)
-    ctx.rpc.register("account.reset_exchange", accounts.reset_exchange)
     ctx.rpc.register(
         ACCOUNT_TARGETS_METHOD, delivery.targets, concurrency=Concurrency.READ_ONLY
     )

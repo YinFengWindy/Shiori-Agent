@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -41,6 +42,8 @@ async def test_complete_messages_are_published_during_turn_and_survive_reload(
     from agent.core.types import ReasonerResult
     from agent.lifecycle.types import PromptRenderResult
     from agent.looping.ports import LLMConfig, LLMServices
+    from agent.core.passive_turn.natural_reply import NaturalReply
+    from agent.turns.reply_sequence import ReplySequence
 
     manager, bus = SessionManager(tmp_path), EventBus()
     session = manager.get_or_create("role:mira")
@@ -53,13 +56,16 @@ async def test_complete_messages_are_published_during_turn_and_survive_reload(
     )
     manager.save(session)
     trigger_user_message_id = session.messages[-1]["id"]
-    raw = (
-        "one\n<message-break/>\ntwo\n<message-break/>\nthree"
+    natural = (
+        NaturalReply(
+            ReplySequence(("one", "two", "three")),
+            json.dumps({"messages": ["one", "two", "three"]}),
+            ReplySequencePolicy("<host-boundary/>", message_count=3),
+        )
         if mode != "disabled"
-        else "one\ntwo"
+        else None
     )
-    if mode == "malformed":
-        raw = "one\n<message-break/>"
+    raw = natural.decorated_input if natural else "one\ntwo"
     result = TurnRunResult(
         reply=raw,
         thinking="thinking",
@@ -67,15 +73,16 @@ async def test_complete_messages_are_published_during_turn_and_survive_reload(
         role_reply=RoleReply(raw, "new", "我想继续聊"),
         role_reply_mood_fresh=True,
         context_retry={"formal_role_reply": True, "turn_metrics": {"total_tokens": 42}},
-        reply_sequence=(
-            ReplySequencePolicy("<message-break/>") if mode != "disabled" else None
-        ),
+        reply_sequence=natural.policy if natural else None,
     )
     summaries = []
     bus.on(TurnCommitted, summaries.append)
 
     def attach_media(ctx: AfterReasoningCtx):
         ctx.media.append("image.png")
+        if mode == "malformed":
+            # A decorator dropping validated boundaries must fail before commit.
+            ctx.reply = "one"
 
     bus.on(AfterReasoningCtx, attach_media)
     ready_to_cancel = asyncio.Event()
@@ -111,7 +118,7 @@ async def test_complete_messages_are_published_during_turn_and_survive_reload(
     default_reasoner.render_prompt = AsyncMock(
         return_value=PromptRenderResult(
             messages=[{"role": "user", "content": "hi"}],
-            reply_sequence=result.reply_sequence,
+            natural_chat=natural is not None,
         )
     )
     default_reasoner.run = AsyncMock(
@@ -124,6 +131,7 @@ async def test_complete_messages_are_published_during_turn_and_survive_reload(
                 "role_reply": result.role_reply,
                 "role_reply_mood_fresh": True,
                 "react_stats": {"total_tokens": 42},
+                **({"natural_reply": natural} if natural else {}),
             },
         )
     )

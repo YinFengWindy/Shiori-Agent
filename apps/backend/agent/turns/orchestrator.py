@@ -30,7 +30,6 @@ from session.manager.models import build_session_message
 from agent.account_delivery.service import ResolvedAccountTarget
 from agent.turns.channel_sequence import channel_sequence_context
 from agent.turns.reply_interruption import ReplyInterruption, reply_interruption_scope
-from agent.turns.reply_sequence import ReplySequencePolicy, parse_reply_sequence
 from agent.turns.proactive_sequence import (
     ProactiveReplyPlan,
     current_proactive_reply,
@@ -39,7 +38,6 @@ from agent.turns.proactive_sequence import (
 )
 from core.common.runtime_scope import current_runtime_lease
 from core.common.cancellation import finish_started
-from prompts.natural_chat import NATURAL_CHAT_SEPARATOR
 from shiori_sdk.messages import InboundMessage
 
 if TYPE_CHECKING:
@@ -170,6 +168,8 @@ class TurnOrchestrator:
             with reply_interruption_scope(interruption):
                 yield
             return
+        from agent.core.passive_turn.natural_reply import NaturalReplyProtocol
+
         lease = current_runtime_lease()
         binding = (
             lease.reply_sequences.bind(lease.core.loop.bus)
@@ -191,7 +191,7 @@ class TurnOrchestrator:
                 origin, reply, senders=None
             ) as registration:
                 plan = ProactiveReplyPlan(
-                    ReplySequencePolicy(NATURAL_CHAT_SEPARATOR), registration, resolved
+                    NaturalReplyProtocol(), registration, resolved
                 )
                 with proactive_reply_scope(plan), reply_interruption_scope(reply):
                     yield
@@ -375,7 +375,15 @@ class TurnOrchestrator:
         plan: ProactiveReplyPlan,
         state_kwargs: dict[str, Any],
     ) -> bool:
-        sequence = parse_reply_sequence(template["content"], plan.policy)
+        reply = plan.protocol.reply
+        if reply is None:
+            raise ValueError("主动自然回复尚未通过消息列表校验")
+        # Proactive drafts have no content decorators. Consume the validated
+        # messages directly, keeping opaque passive-hook boundaries out of
+        # proactive logs, duplicate keys and subsequent tool requests.
+        if template["content"] != reply.sequence.content:
+            raise ValueError("主动草稿与已校验消息列表不一致")
+        sequence = reply.sequence
         delivered: list[dict[str, Any]] = []
         complete = False
         await self._run_effects(result.side_effects)

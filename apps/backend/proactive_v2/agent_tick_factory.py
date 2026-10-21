@@ -13,6 +13,8 @@ from agent.tools.registry import ToolRegistry
 from agent.tools.web_fetch import WebFetchTool
 from agent.turns.result import TurnOutbound, TurnResult, TurnTrace
 from agent.turns.orchestrator import TurnOrchestrator
+from agent.turns.proactive_sequence import current_proactive_reply
+from proactive_v2.reply_output import complete_natural_push
 from proactive_v2 import mcp_sources
 from proactive_v2.mcp_sources import McpClientPool
 from agent.core.proactive_turn import ProactiveTurnPipeline, ProactiveTurnPipelineDeps
@@ -131,14 +133,24 @@ class AgentTickFactory:
         ) -> dict | None:
             # ProactiveTurnPipeline 自己维护 messages 和工具 schema；
             # factory 这里只负责把 provider.chat 包成“返回首个 tool_call”的薄适配层。
+            natural = current_proactive_reply() is not None
             resp = await provider.chat(
                 messages=messages,
                 tools=schemas,
                 model=self._deps.model,
                 max_tokens=self._deps.max_tokens,
-                tool_choice=tool_choice,
-                disable_thinking=True,
+                tool_choice="auto" if natural else tool_choice,
+                disable_thinking=not natural,
+                **({"defer_tool_argument_errors": True} if natural else {}),
             )
+            if natural:
+                resp = await complete_natural_push(
+                    resp,
+                    messages=messages,
+                    provider=provider,
+                    model=self._deps.model,
+                    max_tokens=self._deps.max_tokens,
+                )
             if not resp.tool_calls:
                 text = (resp.content or "").strip()
                 logger.warning(

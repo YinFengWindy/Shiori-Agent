@@ -227,7 +227,7 @@ class DriftTurnPipeline:
                     messages,
                     schemas,
                     tool_choice,
-                    disable_thinking=True,
+                    disable_thinking=current_proactive_reply() is None,
                 )
             else:
                 tool_call = await cast(Any, llm_fn)(messages, schemas, tool_choice)

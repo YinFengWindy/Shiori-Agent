@@ -1,5 +1,7 @@
 """The return path preserves original role/thread and rechecks user authority."""
 
+from tests.support.chat_replies import chat_reply
+
 import asyncio
 from unittest.mock import AsyncMock
 
@@ -210,12 +212,9 @@ async def test_natural_background_report_yields_to_desktop_input_without_losing_
         if index == 0 and stage == "generation":
             entered.set()
             await release.wait()
-        return LLMResponse(
-            content=(
-                "结果前缀\n<message-break/>\n未送达尾段"
-                if index == 0
-                else "补充后的回复"
-            )
+        return chat_reply(
+            ["结果前缀", "未送达尾段"] if index == 0 else ["补充后的回复"],
+            tools=kwargs.get("tools", []),
         )
 
     async def pause(_):
@@ -301,13 +300,9 @@ async def test_natural_report_batch_reloads_and_does_not_change_eligible_undo_tu
     host.roles.update_role("mira", runtime_config={"natural_chat_enabled": True})
 
     async def model(**kwargs):
-        return LLMResponse(
-            content=(
-                '{"mood":"平静","thought":"我想说明结果。"}'
-                if kwargs.get("response_format")
-                else "报告第一条\n<message-break/>\n报告第二条"
-            )
-        )
+        if kwargs.get("response_format"):
+            return LLMResponse(content='{"mood":"平静","thought":"我想说明结果。"}')
+        return chat_reply(["报告第一条", "报告第二条"], tools=kwargs.get("tools", []))
 
     monkeypatch.setattr(host.provider, "chat", model)
     monkeypatch.setattr("agent.turns.reply_sequence.wait_between_messages", AsyncMock())
@@ -589,3 +584,78 @@ async def test_old_bot_background_result_stays_revoked_after_new_bot_is_granted(
     with pytest.raises(PermissionError, match="连接或工具授权"):
         await target.report("old-bot-result", "不能恢复旧Bot的权限")
     assert host.provider.requests == []
+
+
+async def test_natural_background_completion_keeps_shared_correction_raw_thinking_and_usage(
+    host, monkeypatch
+):
+    from agent.lifecycle.facade import TurnLifecycle
+    from agent.provider import LLMResponse, ToolCall
+    from agent.turns.channel_sequence import ChannelSequenceOwner
+    from bus.queue import MessageBus
+    from session.manager.models import whole_session
+
+    target = await capture(host)
+    host.roles.update_role("mira", runtime_config={"natural_chat_enabled": True})
+    requests, observed = [], []
+    raw = '{ "messages" : ["检查完成。", "原始结果已经保存。"] }'
+    tool = host.loop.tools.get_tool("public")
+    execute = AsyncMock(return_value="已经完成的检查事实")
+    monkeypatch.setattr(tool, "execute", execute)
+
+    async def chat(**kwargs):
+        if kwargs.get("response_format"):
+            return LLMResponse('{"mood":"平静","thought":"我想说明结果。"}')
+        requests.append(kwargs)
+        if len(requests) == 1:
+            return LLMResponse("", [ToolCall("work", "public", {})], total_tokens=3)
+        if len(requests) == 2:
+            return LLMResponse(
+                "",
+                [ToolCall("draft", "finish_reply", {"messages": []})],
+                thinking="完成报告的正常思考",
+                total_tokens=5,
+            )
+        assert len(requests) == 3
+        assert [tool["function"]["name"] for tool in kwargs["tools"]] == [
+            "finish_reply"
+        ]
+        return LLMResponse(
+            "",
+            [
+                ToolCall(
+                    "fixed",
+                    "finish_reply",
+                    {"messages": ["检查完成。", "原始结果已经保存。"]},
+                    raw,
+                )
+            ],
+            total_tokens=7,
+        )
+
+    monkeypatch.setattr(host.provider, "chat", chat)
+    monkeypatch.setattr("agent.turns.reply_sequence.wait_between_messages", AsyncMock())
+    TurnLifecycle(host.loop._event_bus).on_after_reasoning(observed.append)
+    with ChannelSequenceOwner().bind(MessageBus()):
+        assert await target.report(
+            "background:shared-protocol", "后台工作只执行一次的原始产物"
+        )
+    execute.assert_awaited_once()
+    assert len(requests) == 3
+    assert requests[2]["call_purpose"] == "auxiliary"
+    assert any(
+        "已经完成的检查事实" in str(message) for message in requests[2]["messages"]
+    )
+    [ctx] = observed
+    assert ctx.response_metadata.raw_text == raw
+    assert ctx.thinking == "完成报告的正常思考"
+    assert ctx.outbound_metadata["turn_metrics"]["total_tokens"] == 15
+    history = host.manager.get_or_create("role:mira").get_history(include=whole_session)
+    assert sum(m.get("content") == "后台工作只执行一次的原始产物" for m in history) == 1
+    assert any(m.get("content") == "已经完成的检查事实" for m in history)
+    assert [
+        m["content"]
+        for m in host.manager.get_or_create("role:mira").messages
+        if m.get("metadata", {}).get("reply_sequence_id")
+        == "background:shared-protocol"
+    ] == ["检查完成。", "原始结果已经保存。"]

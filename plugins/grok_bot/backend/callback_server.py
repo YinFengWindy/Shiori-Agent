@@ -125,7 +125,7 @@ class CallbackServer:
                 if not target.startswith(self._prefix):
                     raise CallbackError(404, "连接不存在")
                 operation = target.removeprefix(self._prefix)
-                if operation not in {"messages", "handshake"}:
+                if operation != "messages":
                     raise CallbackError(404, "操作不存在")
                 if (
                     headers.get(b"content-type", b"").split(b";", 1)[0]

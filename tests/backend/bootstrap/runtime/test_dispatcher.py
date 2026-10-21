@@ -19,6 +19,7 @@ from core.roles import RoleAggregateService
 from shiori_sdk.accounts.models import AccountResponseRules
 from agent.provider import LLMResponse, ToolCall
 from tests.support.external_turns import ExternalTurnHost
+from tests.support.chat_replies import chat_reply
 from session.manager import SessionManager
 
 
@@ -34,6 +35,9 @@ async def proactive_task(
     channel="qq",
     target_id="room",
     desktop=False,
+    draft_messages=None,
+    correction_response=None,
+    invalidate_draft=False,
 ):
     """A real proactive draft tool loop, account receipt ledger and role dispatcher."""
     from agent.account_delivery import AccountDelivery
@@ -113,7 +117,11 @@ async def proactive_task(
             (
                 "message_push",
                 {
-                    "message": "主动前缀\n<message-break/>\n主动尾段",
+                    "messages": (
+                        ["主动前缀", "主动尾段"]
+                        if draft_messages is None
+                        else draft_messages
+                    ),
                     "mood": "平静",
                     "thought": "我想和你说说。",
                     "evidence": [],
@@ -134,11 +142,51 @@ async def proactive_task(
         ]
     )
 
-    async def model(*args, **kwargs):
+    corrections = []
+
+    async def provider_chat(**kwargs):
+        if [t["function"]["name"] for t in kwargs["tools"]] == ["finish_reply"]:
+            corrections.append(kwargs)
+            assert correction_response is not None
+            return correction_response
         if stage == "generation" and not llm.calls:
             env.started.set()
             await env.release.wait()
-        return await llm(*args, **kwargs)
+        call = await llm(kwargs["messages"], kwargs["tools"], kwargs["tool_choice"])
+        assert call is not None
+        if invalidate_draft and call["name"] == "message_push":
+            from agent.turns.reply_interruption import current_reply_interruption
+
+            interruption = current_reply_interruption()
+            assert interruption is not None
+            interruption.invalidate()
+        return LLMResponse(
+            content="",
+            tool_calls=[
+                ToolCall(f"proactive-{len(llm.calls)}", call["name"], call["input"])
+            ],
+        )
+
+    from proactive_v2.agent_tick_factory import AgentTickDeps, AgentTickFactory
+
+    model = AgentTickFactory(
+        AgentTickDeps(
+            cfg=None,
+            sense=None,
+            presence=None,
+            provider=SimpleNamespace(chat=provider_chat),
+            model="test",
+            max_tokens=2048,
+            memory=None,
+            state_store=None,
+            any_action_gate=None,
+            passive_busy_fn=None,
+            deduper=None,
+            rng=None,
+            workspace_context_fn=lambda: "",
+            role_prompt_fn=lambda: "",
+        )
+    )._build_llm_fn()
 
     async def recent_chat(**_):
         if stage == "tool":
@@ -173,8 +221,76 @@ async def proactive_task(
 
     task = asyncio.create_task(run())
     return SimpleNamespace(
-        task=task, sent=sent, events=events, pipeline=pipeline, llm=llm
+        task=task,
+        sent=sent,
+        events=events,
+        pipeline=pipeline,
+        llm=llm,
+        corrections=corrections,
     )
+
+
+@pytest.mark.parametrize("correction_kind", ["valid", "business_tool", "invalidated"])
+async def test_proactive_format_correction_never_replays_completed_work(
+    tmp_path, monkeypatch, correction_kind
+):
+    from agent.core.passive_turn.natural_reply import NaturalReplyCorrectionError
+    from session.manager.models import whole_session
+
+    response = LLMResponse(
+        "",
+        [
+            (
+                ToolCall("correction", "public", {})
+                if correction_kind == "business_tool"
+                else ToolCall(
+                    "correction",
+                    "finish_reply",
+                    {"messages": ["整理好了。", "后续细节"]},
+                )
+            )
+        ],
+    )
+    async with natural_dispatcher(tmp_path, monkeypatch) as env:
+        env.release.set()
+        proactive = await proactive_task(
+            env,
+            tmp_path,
+            draft_messages=[],
+            correction_response=response,
+            invalidate_draft=correction_kind == "invalidated",
+        )
+        if correction_kind == "business_tool":
+            with pytest.raises(NaturalReplyCorrectionError):
+                await proactive.task
+        else:
+            await proactive.task
+        assert [m["message"] for m in proactive.sent] == (
+            ["整理好了。", "后续细节"] if correction_kind == "valid" else []
+        )
+        assert len(proactive.corrections) == (
+            0 if correction_kind == "invalidated" else 1
+        )
+        if proactive.corrections:
+            request = proactive.corrections[0]
+            assert request["call_purpose"] == "auxiliary"
+            assert [t["function"]["name"] for t in request["tools"]] == ["finish_reply"]
+            assert any("已执行的查询事实" in str(m) for m in request["messages"])
+        rows = SessionManager(tmp_path).get_or_create("role:mira").messages
+        facts = [m for m in rows if m.get("tool_chain")]
+        assert len(facts) == 1
+        assert [c["name"] for g in facts[0]["tool_chain"] for c in g["calls"]] == [
+            "get_recent_chat"
+        ]
+        assert not env.tool_calls
+        assert len(proactive.llm.calls) == (3 if correction_kind == "valid" else 2)
+        assert len(proactive.events) == int(correction_kind == "valid")
+        assert not any(
+            "finish_reply" in str(m)
+            for m in SessionManager(tmp_path)
+            .get_or_create("role:mira")
+            .get_history(include=whole_session)
+        )
 
 
 @pytest.mark.parametrize("stage", ["pacing", "sending"])
@@ -316,7 +432,9 @@ async def test_addressed_proactive_supplement_stops_before_other_sender_fifo(
             if kwargs.get("response_format"):
                 return LLMResponse(content='{"mood":"平静","thought":"我想继续聊。"}')
             env.requests.append(kwargs)
-            return LLMResponse(content=f"reply-{len(env.requests)}")
+            return chat_reply(
+                [f"reply-{len(env.requests)}"], tools=kwargs.get("tools", [])
+            )
 
         monkeypatch.setattr(env.host.provider, "chat", single_reply)
         proactive = await proactive_task(env, tmp_path, addressed=True)
@@ -335,7 +453,7 @@ async def test_addressed_proactive_supplement_stops_before_other_sender_fifo(
 
 
 @pytest.mark.parametrize("failure_at", [1, 2])
-@pytest.mark.parametrize("unknown", [False, True])
+@pytest.mark.parametrize("unknown", [False, True, "native_timeout"])
 async def test_proactive_failed_or_unknown_send_stops_without_retry_and_keeps_only_receipts(
     tmp_path, monkeypatch, failure_at, unknown
 ):
@@ -343,7 +461,11 @@ async def test_proactive_failed_or_unknown_send_stops_without_retry_and_keeps_on
     from session.manager.models import whole_session
 
     failure = (
-        UncertainDeliveryError("lost receipt") if unknown else ValueError("refused")
+        TimeoutError("channel request deadline")
+        if unknown == "native_timeout"
+        else (
+            UncertainDeliveryError("lost receipt") if unknown else ValueError("refused")
+        )
     )
     async with natural_dispatcher(tmp_path, monkeypatch) as env:
         env.release.set()
@@ -526,12 +648,9 @@ async def test_spawn_report_uses_original_role_account_topic_and_keeps_completed
                         ToolCall("unstarted-tool", "public", {}),
                     ],
                 )
-            return LLMResponse(
-                content=(
-                    "回报前缀\n<message-break/>\n回报尾段"
-                    if number == 0
-                    else "结合补充的新回复"
-                )
+            return chat_reply(
+                ["回报前缀", "回报尾段"] if number == 0 else ["结合补充的新回复"],
+                tools=kwargs.get("tools", []),
             )
 
         monkeypatch.setattr(env.host.provider, "chat", model)
@@ -671,10 +790,12 @@ async def natural_dispatcher(tmp_path, monkeypatch, *, stage="pacing", enabled=T
                         ToolCall("must-not-run", "public", {}),
                     ],
                 )
-            return LLMResponse(
-                content=(
+            return chat_reply(
+                ["prefix", "tail"] if not number else [f"next-{number}"],
+                tools=kwargs.get("tools", []),
+                plain_content=(
                     "prefix\n<message-break/>\ntail" if not number else f"next-{number}"
-                )
+                ),
             )
         finally:
             running -= 1

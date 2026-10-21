@@ -15,7 +15,7 @@ from agent.lifecycle.phases.prompt_render import (
 from agent.lifecycle.types import PromptRenderInput
 from bus.event_bus import EventBus
 from core.roles import RoleStore
-from prompts.natural_chat import NATURAL_CHAT_PROMPT, NATURAL_CHAT_SEPARATOR
+from prompts.natural_chat import NATURAL_CHAT_PROMPT
 
 
 @pytest.mark.parametrize(
@@ -67,7 +67,5 @@ async def test_natural_chat_is_host_owned_and_excludes_previews_and_minimal_requ
             minimal_request=minimal,
         )
     )
-    assert (result.reply_sequence is not None) is selected
+    assert result.natural_chat is selected
     assert (NATURAL_CHAT_PROMPT in str(result.messages[0]["content"])) is selected
-    if result.reply_sequence is not None:
-        assert result.reply_sequence.separator == NATURAL_CHAT_SEPARATOR

@@ -4,7 +4,6 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 from shiori_sdk.prompting import PromptSectionRender
 from shiori_sdk.messages import InboundMessage, OutboundMessage
-from agent.turns.reply_sequence import ReplySequencePolicy
 from conversation.context_scope import source_belongs_to_user
 from shiori_sdk.channels.message_source import MessageSource
 from shiori_sdk.lifecycle import (
@@ -176,7 +175,8 @@ class PromptRenderResult:
     messages: list[dict[str, Any]]
     # The envelope owner's input, before any trailing plugin hints.
     current_message: dict[str, Any] | None = None
-    reply_sequence: ReplySequencePolicy | None = None
+    # Actual message boundaries are supplied by the validated completion tool.
+    natural_chat: bool = False
 
 
 @dataclass(frozen=True)

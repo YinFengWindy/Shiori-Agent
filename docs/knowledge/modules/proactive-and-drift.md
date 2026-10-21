@@ -69,6 +69,8 @@ Drift 是独立于普通被动消息的特殊回合模式。`DriftStateStore` �
 - 修改主动消息：检查 Session/Conversation 同步与目标选择（`target_selection.py`，`roles.proactive.target` 预览共用），以及账号在线状态与用户身份绑定对候选集合的影响。
 - 修改 Drift 状态：检查状态迁移、工具可见性、恢复逻辑和普通回合互斥。
 
+自然聊天开启时，内部主动 `message_push` 草稿的正文改为 `messages` 列表，沿用被动回复的 `NaturalReplyProtocol` 校验与最多一次 completion-only `finish_reply` 纠正；证据、目标与 `finish_turn` / `finish_drift` 控制保留。显式发送工具不接入这条生成协议。主动路径直接投递已校验消息数组；没有被动正文装饰器，不把临时分隔标记写入日志或去重键。账号请求截止时间由各渠道原生 transport 拥有。
+
 ## 不变量
 
 - 无状态变化时 store 更新应返回旧状态，避免循环触发。

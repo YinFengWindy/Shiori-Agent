@@ -2,6 +2,7 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
+import json
 
 import pytest
 
@@ -19,6 +20,145 @@ from shiori_sdk.channels.message_source import SENDER_IS_USER_KEY, MessageSource
 from session.manager import SessionManager
 from session.manager.consolidation import ConsolidationCommitRequest
 from shiori_sdk.tools import Tool
+from agent.core.passive_turn.natural_reply import NaturalReply
+from agent.turns.reply_sequence import ReplySequencePolicy, parse_reply_sequence
+
+
+def natural_metadata(content, policy):
+    if policy is None:
+        return {}
+    sequence = parse_reply_sequence(content, policy)
+    return {
+        "natural_reply": NaturalReply(
+            sequence,
+            json.dumps({"messages": sequence.messages}, ensure_ascii=False),
+            policy,
+        )
+    }
+
+
+@pytest.mark.parametrize(
+    "error",
+    [TimeoutError("correction timed out"), ContentSafetyError("correction rejected")],
+)
+@pytest.mark.parametrize("with_tool", [False, True])
+async def test_natural_correction_failure_is_terminal_after_original_work(
+    tmp_path, error, with_tool
+):
+    from agent.core.passive_turn.natural_reply import NaturalReplyCorrectionError
+    from agent.provider import LLMResponse, ToolCall
+
+    class Counter(Tool):
+        name = "counter"
+        description = "Record a side effect"
+        parameters = {"type": "object", "properties": {}}
+
+        def __init__(self):
+            self.calls = 0
+
+        async def execute(self, **kwargs):
+            self.calls += 1
+            return "operation completed"
+
+    manager = SessionManager(tmp_path)
+    counter = Counter()
+    registry = ToolRegistry()
+    registry.register(counter)
+    provider = AsyncMock()
+    original = LLMResponse(
+        content="done", thinking="original thinking", total_tokens=30
+    )
+    provider.chat.side_effect = [
+        *(
+            [LLMResponse(content="", tool_calls=[ToolCall("work", "counter", {})])]
+            if with_tool
+            else []
+        ),
+        original,
+        error,
+        LLMResponse(content="must not restart the turn"),
+    ]
+    reasoner = DefaultReasoner(
+        llm=LLMServices(provider=provider, light_provider=provider),
+        llm_config=LLMConfig(),
+        tools=registry,
+        discovery=ToolDiscoveryState(),
+        tool_search_enabled=False,
+        context=AsyncMock(),
+        session_manager=manager,
+    )
+    reasoner.render_prompt = AsyncMock(
+        return_value=PromptRenderResult(
+            messages=[{"role": "user", "content": "help"}], natural_chat=True
+        )
+    )
+    msg = InboundMessage(channel="desktop", sender="user", chat_id="a", content="help")
+    with pytest.raises(NaturalReplyCorrectionError) as caught:
+        await reasoner.run_turn(msg=msg, session=manager.get_or_create(msg.session_key))
+    assert caught.value.__cause__ is error
+    assert provider.chat.await_count == (3 if with_tool else 2)
+    assert counter.calls == int(with_tool)
+    # The terminal error carries original facts, rather than replacing them with
+    # a successful timeout fallback or restarting a safety-rejected turn.
+    assert caught.value.response is original
+    assert caught.value.response.thinking == "original thinking"
+    assert caught.value.response.total_tokens == 30
+    assert ("operation completed" in str(caught.value.messages)) is with_tool
+
+
+async def test_invalidated_natural_turn_returns_work_without_requiring_a_reply(
+    tmp_path,
+):
+    from agent.turns.reply_interruption import (
+        ReplyInterruption,
+        reply_interruption_scope,
+    )
+
+    manager = SessionManager(tmp_path)
+    reasoner = DefaultReasoner(
+        llm=LLMServices(provider=AsyncMock(), light_provider=AsyncMock()),
+        llm_config=LLMConfig(),
+        tools=ToolRegistry(),
+        discovery=ToolDiscoveryState(),
+        tool_search_enabled=False,
+        context=AsyncMock(),
+        session_manager=manager,
+    )
+    reasoner.render_prompt = AsyncMock(
+        return_value=PromptRenderResult(
+            messages=[{"role": "user", "content": "hi"}], natural_chat=True
+        )
+    )
+    interruption = ReplyInterruption()
+
+    async def run(*args, **kwargs):
+        interruption.invalidate()
+        return ReasonerResult(
+            reply="",
+            metadata={
+                "tools_used": ["counter"],
+                "tool_chain": [
+                    {"text": "", "calls": [{"name": "counter", "result": "done"}]}
+                ],
+            },
+        )
+
+    reasoner.run = AsyncMock(side_effect=run)
+    msg = InboundMessage(
+        channel="desktop",
+        sender="user",
+        chat_id="a",
+        content="hi",
+        metadata={"turn_id": "t"},
+    )
+    with reply_interruption_scope(interruption):
+        result = await reasoner.run_turn(
+            msg=msg, session=manager.get_or_create(msg.session_key)
+        )
+    assert result.reply == ""
+    assert result.reply_sequence is None
+    assert result.raw_reply is None
+    assert "done" in str(result.tool_chain)
 
 
 @pytest.mark.parametrize("enabled", [False, True])
@@ -42,7 +182,7 @@ async def test_reply_policy_filters_visible_tokens_but_preserves_thinking(
     reasoner.render_prompt = AsyncMock(
         return_value=PromptRenderResult(
             messages=[{"role": "user", "content": "hi"}],
-            reply_sequence=policy,
+            natural_chat=enabled,
         )
     )
     seen = []
@@ -71,7 +211,10 @@ async def test_reply_policy_filters_visible_tokens_but_preserves_thinking(
         return ReasonerResult(
             reply="one\n<message-break/>\ntwo",
             streamed=True,
-            metadata={"tool_chain": original_chain},
+            metadata={
+                "tool_chain": original_chain,
+                **natural_metadata("one\n<message-break/>\ntwo", policy),
+            },
         )
 
     reasoner.run = AsyncMock(side_effect=run)
@@ -142,7 +285,7 @@ async def test_builtin_natural_chat_controls_prompt_and_stream_on_supported_tran
     from agent.context import ContextBuilder
     from core.roles import RoleStore
     from core.roles.services import RoleSessionService
-    from prompts.natural_chat import NATURAL_CHAT_SEPARATOR
+    from prompts.natural_chat import FINISH_REPLY_TOOL_NAME
     from agent.turns.reply_sequence import reply_is_buffered
     from conversation.context_scope import turn_context_view
     from conversation.service import desktop_thread_id
@@ -174,7 +317,7 @@ async def test_builtin_natural_chat_controls_prompt_and_stream_on_supported_tran
         session_manager=manager,
     )
     visible = []
-    reply = f"第一句\n{NATURAL_CHAT_SEPARATOR}\n下一句"
+    reply = "第一句\n<message-break/>\n下一句"
 
     async def sink(delta):
         visible.append(delta)
@@ -183,13 +326,19 @@ async def test_builtin_natural_chat_controls_prompt_and_stream_on_supported_tran
 
     async def run(messages, **kwargs):
         rendered = str(messages)
-        assert (NATURAL_CHAT_SEPARATOR in rendered) is selected
+        assert (FINISH_REPLY_TOOL_NAME in rendered) is selected
         assert "保持原有性格" in rendered
         assert reply_is_buffered() is selected
         await kwargs["on_content_delta"](
             {"content_delta": reply, "thinking_delta": "思考"}
         )
-        return ReasonerResult(reply=reply, streamed=True)
+        return ReasonerResult(
+            reply=reply,
+            streamed=True,
+            metadata=natural_metadata(
+                reply, ReplySequencePolicy("<message-break/>") if selected else None
+            ),
+        )
 
     reasoner.run = AsyncMock(side_effect=run)
     from agent.turns.channel_sequence import ChannelSequenceOwner

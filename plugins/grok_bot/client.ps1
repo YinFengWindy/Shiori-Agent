@@ -1,7 +1,6 @@
 # Authenticated, text-only local callback. Credentials are read from the saved file.
 param(
-    [Parameter(Mandatory = $true)][string]$Connection,
-    [switch]$Handshake
+    [Parameter(Mandatory = $true)][string]$Connection
 )
 $ErrorActionPreference = 'Stop'
 [Console]::InputEncoding = [Text.UTF8Encoding]::new($false)
@@ -12,17 +11,11 @@ try {
     if ($callback.Scheme -ne 'http' -or $callback.Host -ne '127.0.0.1' -or $callback.UserInfo -or $callback.Query -or $callback.Fragment) {
         throw 'Invalid local callback address'
     }
-    if ($Handshake) {
-        $payload = @{ protocol = $settings.protocol; challenge = $settings.challenge } | ConvertTo-Json -Compress
-        $operation = 'handshake'
-    } else {
-        $payload = [Console]::In.ReadToEnd()
-        $operation = 'messages'
-    }
+    $payload = [Console]::In.ReadToEnd()
     $bytes = [Text.Encoding]::UTF8.GetBytes($payload)
     if ($bytes.Length -gt 65536) { throw 'Message too large' }
     # HttpWebRequest avoids user proxy settings and never follows redirects.
-    $request = [Net.HttpWebRequest]::Create($callback.AbsoluteUri + $operation)
+    $request = [Net.HttpWebRequest]::Create($callback.AbsoluteUri + 'messages')
     $request.Proxy = $null
     $request.AllowAutoRedirect = $false
     $request.Method = 'POST'

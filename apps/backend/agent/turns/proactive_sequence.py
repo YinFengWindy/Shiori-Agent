@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import asyncio
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, replace
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from agent.account_delivery.service import AccountDelivery, ResolvedAccountTarget
 from agent.turns.channel_sequence import BackgroundReply, channel_sequence_context
@@ -16,7 +15,6 @@ from agent.turns.reply_interruption import (
 )
 from agent.turns.reply_sequence import (
     ReplySequence,
-    ReplySequencePolicy,
     deliver_reply_sequence,
 )
 from bus.event_bus import EventBus
@@ -26,14 +24,19 @@ from session.manager.models import build_session_message
 from shiori_sdk.accounts.targets import UncertainDeliveryError
 from shiori_sdk.messages import InboundMessage
 
+if TYPE_CHECKING:
+    from agent.core.passive_turn.natural_reply import NaturalReplyProtocol
+    from agent.core.passive_turn.reply_recovery import CompletedReply
+
 
 @dataclass
 class ProactiveReplyPlan:
     """A model-authored reply bound to its current real destination and account."""
 
-    policy: ReplySequencePolicy
+    protocol: NaturalReplyProtocol
     registration: BackgroundReply
     account_target: ResolvedAccountTarget | None = None
+    completion: CompletedReply | None = None
 
     @property
     def origin(self) -> InboundMessage:
@@ -103,6 +106,10 @@ async def commit_proactive_sequence(
             media=template.get("media") if index == 0 else None,
             metadata=metadata,
         )
+        if index == 0 and plan.completion is not None:
+            thinking = plan.completion.response.thinking
+            if thinking is not None:
+                message["reasoning_content"] = thinking
         resolved = plan.account_target
         if resolved is not None:
             if account_delivery is None:
@@ -110,21 +117,20 @@ async def commit_proactive_sequence(
             message["delivery_status"] = "pending"
             await manager.append_messages(session, [message], pending_messages=True)
             try:
-                # The deadline bounds the shielded send/accounting operation.
-                async with asyncio.timeout(90):
-                    receipt = await account_delivery.send(
-                        resolved.channel,
-                        resolved.role_id,
-                        (
-                            resolved.target
-                            if index == 0
-                            else replace(resolved.target, mention_ids=())
-                        ),
-                        content,
-                        media=message.get("media"),
-                        source="proactive",
-                        expected_access=resolved.access,
-                    )
+                # Native account transports own request deadlines and uncertainty.
+                receipt = await account_delivery.send(
+                    resolved.channel,
+                    resolved.role_id,
+                    (
+                        resolved.target
+                        if index == 0
+                        else replace(resolved.target, mention_ids=())
+                    ),
+                    content,
+                    media=message.get("media"),
+                    source="proactive",
+                    expected_access=resolved.access,
+                )
             except (TimeoutError, ConnectionError, OSError, UncertainDeliveryError):
                 manager.mark_message_delivery(
                     session.key,

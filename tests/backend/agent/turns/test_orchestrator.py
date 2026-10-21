@@ -545,6 +545,25 @@ def _formal_result(owner, content="hello", media=None):
     )
 
 
+async def _natural_result(owner, messages):
+    from agent.turns.proactive_sequence import current_proactive_reply
+    from agent.core.passive_turn.natural_reply import finish_reply_schema
+    from tests.support.chat_replies import chat_reply
+
+    plan = current_proactive_reply()
+    if plan is None:
+        return _formal_result(owner, "\n\n".join(messages))
+    await plan.protocol.complete(
+        chat_reply(messages, tools=[finish_reply_schema()]),
+        messages=[],
+        provider=cast(Any, None),
+        model="test",
+        max_tokens=256,
+    )
+    assert plan.protocol.reply is not None
+    return _formal_result(owner, plan.protocol.reply.sequence.content)
+
+
 async def _send(owner, result):
     return await owner.handle_proactive_turn(
         result=result, session_key="role:mira", channel="desktop", chat_id="role:mira"
@@ -595,10 +614,7 @@ async def test_natural_proactive_keeps_sent_prefix_and_finishes_one_logical_turn
             event_bus=event_bus,
         )
     )
-    result = _formal_result(owner, "看完啦。\n<message-break/>\n这是未发送的解释。")
     success, failure = AsyncMock(), AsyncMock()
-    result.success_side_effects = [SimpleNamespace(run=success)]
-    result.failure_side_effects = [SimpleNamespace(run=failure)]
     batches = ChannelSequenceOwner()
 
     async def run():
@@ -606,6 +622,11 @@ async def test_natural_proactive_keeps_sent_prefix_and_finishes_one_logical_turn
             async with owner.natural_reply_scope(
                 "role:mira", "desktop", "role:mira", turn_id="tick:one"
             ):
+                result = await _natural_result(
+                    owner, ["看完啦。", "这是未发送的解释。"]
+                )
+                result.success_side_effects = [SimpleNamespace(run=success)]
+                result.failure_side_effects = [SimpleNamespace(run=failure)]
                 return await _send(owner, result)
 
     task = asyncio.create_task(run())
@@ -659,13 +680,13 @@ async def test_natural_proactive_reads_role_flag_and_records_state_once(
             event_bus=event_bus,
         )
     )
-    result = _formal_result(owner, "你好。\n<message-break/>\n今天怎么样？")
     success = AsyncMock()
-    result.success_side_effects = [SimpleNamespace(run=success)]
     with ChannelSequenceOwner().bind(MessageBus()):
         async with owner.natural_reply_scope(
             "role:mira", "desktop", "role:mira", turn_id="tick:one"
         ):
+            result = await _natural_result(owner, ["你好。", "今天怎么样？"])
+            result.success_side_effects = [SimpleNamespace(run=success)]
             assert await _send(owner, result)
     contents = [call.args[0].content for call in dispatch.await_args_list]
     assert contents == (
@@ -728,13 +749,13 @@ async def test_bound_private_natural_batch_uses_known_address_without_resolver_r
 
     monkeypatch.setattr("agent.turns.reply_sequence.wait_between_messages", pace)
     batches = ChannelSequenceOwner()
-    result = _formal_result(owner, "已送达前缀\n<message-break/>\n不要发送尾段")
 
     async def run():
         with batches.bind(MessageBus()):
             async with owner.natural_reply_scope(
                 "role:mira", "chat_bot", "canonical-dm", turn_id="private:tick"
             ):
+                result = await _natural_result(owner, ["已送达前缀", "不要发送尾段"])
                 return await owner.handle_proactive_turn(
                     result=result,
                     session_key="role:mira",

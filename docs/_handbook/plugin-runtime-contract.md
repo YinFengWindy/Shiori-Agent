@@ -126,9 +126,13 @@ consolidates these additions and the subsequent #847 breaking migration.
 - **Natural proactive replies and background reports (issue #868).** The current
   role's built-in natural-chat capability also applies to proactive draft
   `message_push` output, Drift dialogue and captured background-result reports.
-  These use the shared reply-sequence protocol and generation-owned delivery
-  lifetime. A started send and its bookkeeping finish together; failed or
-  uncertain sends stop the batch without retry, and only confirmed dialogue
+  Natural internal drafts use the shared `messages` schema/validator and at most
+  one completion-only `finish_reply` correction; target/evidence/finish controls
+  stay on the existing proactive draft. Ordinary `message_push` string payloads
+  are unchanged. Generation-owned delivery uses the same reply-sequence owner.
+  Native account transports retain ownership of request deadlines; the host adds
+  no fixed segment timeout. A started send and its bookkeeping finish together;
+  failed or uncertain sends stop the batch without retry, and only confirmed dialogue
   enters subsequent context. Completed tool facts survive invalidation.
   Proactive success/failure, presence, relationship and committed-turn observers
   run once for the logical reply; a partial reply publishes only its delivered
@@ -162,6 +166,27 @@ consolidates these additions and the subsequent #847 breaking migration.
   passive batches still undo as a whole, and an unresolved passive anchor still
   prevents deletion of an earlier unrelated turn. No SDK version is assigned
   until this contract batch is released.
+
+- **Fixed-peer account settings (PR #892, issue #891).**
+  Account reports may include `fixed_peer` to declare that connection activation
+  controls admission to one fixed peer. The host hides private/group enable
+  switches and sender blacklist controls for this capability; `full_tools` still
+  controls the separate explicit tool grant. Other accounts keep their existing
+  settings. Providers must normalize legacy admission rules before registration
+  and reject unsupported rule mutations; the capability alone does not bypass
+  the host's admission or authorization checks. Grok is the initial consumer.
+
+- **Account media supplements (PR #889, issue #886).** Host/plugin calls to `account_send.execute`
+  may supply protected `push_proactive=False` and `push_chat_id` with
+  `target_kind="user"`. Here `channel` is the original transport channel; the host
+  resolves its exact canonical private chat against current user bindings and the
+  role's owned accounts before using the account plugin's sender. It never guesses
+  a target from a chat ID or redirects to another bound chat. Both arguments are
+  absent from model schemas and protected by execution-context precedence.
+  `ExternalTextPushed.proactive` defaults to true; false persists the supplement
+  without proactive classification while retaining the existing commit broadcast.
+  NovelAI records generation cooldown/dedup before invoking delivery, so a failed
+  or cancelled send cannot cause the next observation to regenerate the image.
 
 - **Desktop and natural-channel supplements (PR #880, issue #867).** Every desktop chat accepts
   supplements, including ordinary streaming replies. On external channels this

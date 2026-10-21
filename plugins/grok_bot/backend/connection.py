@@ -23,7 +23,7 @@ from .config import CHANNEL, PROTOCOL, ConnectionConfig
 from .exchange import ExchangeJournal
 from .protocol import BotMessage, CallbackError
 from .store import write_private_json
-from .transport import WebhookTransport
+from .transport import WebhookRejectedError, WebhookTransport
 
 logger = logging.getLogger(__name__)
 type ConfigChanged = Callable[[ConnectionConfig], None]
@@ -65,7 +65,6 @@ class GrokConnection:
         self._intake: ChannelIntake | None = None
         self._paused = True
         self._owns_file = False
-        self._challenge = ""
         self._sending = asyncio.Lock()
         self._receiving = asyncio.Lock()
         self._submitted: set[str] = set()
@@ -101,7 +100,6 @@ class GrokConnection:
                 "protocol": PROTOCOL,
                 "callback_url": self.callback_url,
                 "token": self.config.callback_token,
-                "challenge": self._challenge,
             },
         )
         self._owns_file = True
@@ -112,11 +110,9 @@ class GrokConnection:
 
     def _report(self) -> None:
         state: ConnectionState = (
-            "offline"
-            if self._ctx is None or not self.config.enabled
-            else "online" if self.config.verified else "connecting"
+            "offline" if self._ctx is None or not self.config.enabled else "online"
         )
-        self._status_changed(state, self.last_error)
+        self._status_changed(state, "")
 
     async def start(self, ctx: ChannelContext) -> None:
         """Start the authenticated local endpoint and subscribe exactly once."""
@@ -187,7 +183,6 @@ class GrokConnection:
     def _recover(self) -> None:
         if (
             self._ctx is not None
-            and self.config.verified
             and not self._paused
             and (self._recovery is None or self._recovery.done())
         ):
@@ -208,47 +203,14 @@ class GrokConnection:
                     logger.exception("Grok 连接的待处理消息恢复失败")
                     break
 
-    async def probe(self) -> None:
-        """Ask the configured Bot to prove the local return path once."""
-        if self._ctx is None:
-            raise RuntimeError("连接尚未启动")
-        self._challenge = uuid4().hex
-        self._update(verified=False)
-        self._write_client_file()
-        self.last_error = ""
-        self._report()
-        await self._transport.post(
-            {
-                "protocol": PROTOCOL,
-                "type": "connection_check",
-                "message_id": self._challenge,
-                "callback_client": str(self.client_path),
-                "connection_file": str(self.client_file),
-            }
-        )
-
     async def receive(
         self, operation: str, payload: object
     ) -> tuple[int, dict[str, object]]:
         """Handle authenticated input; role and sender come only from this binding."""
         if self._ctx is None or self._paused or not self.config.enabled:
             raise CallbackError(409, "连接已暂停或正在切换")
-        if operation == "handshake":
-            if (
-                not isinstance(payload, dict)
-                or set(payload) != {"protocol", "challenge"}
-                or payload["protocol"] != PROTOCOL
-                or not self._challenge
-                or payload["challenge"] != self._challenge
-            ):
-                raise CallbackError(400, "连接验证已过期或不匹配")
-            self._update(verified=True)
-            self.last_error = ""
-            self._report()
-            self._recover()
-            return 200, {"status": "connected"}
-        if not self.config.verified:
-            raise CallbackError(409, "请先完成回程验证")
+        if operation != "messages":
+            raise CallbackError(404, "操作不存在")
         message = BotMessage.parse(payload)
         async with self._receiving:
             if not self.journal.begin(message, "in", self.config.max_messages):
@@ -305,8 +267,11 @@ class GrokConnection:
 
     def _on_committed(self, event: TurnCommitted) -> None:
         if event.channel == self.name and event.chat_id == self.config.chat_id:
-            self.journal.complete_parent(event.external_message_id)
-            self._submitted.discard(event.external_message_id)
+            # A committed response may still be queued for channel delivery.
+            # Keep its parent protected from retention until that send settles.
+            if not event.assistant_response:
+                self.journal.complete_parent(event.external_message_id)
+                self._submitted.discard(event.external_message_id)
 
     def _on_cancelled(self, event: TurnCancelled) -> None:
         if event.channel != self.name or event.chat_id != self.config.chat_id:
@@ -328,7 +293,7 @@ class GrokConnection:
                     "reply_to": message.reply_to,
                 }
             )
-            if self._ctx is None or not self.config.enabled or not self.config.verified:
+            if self._ctx is None or not self.config.enabled:
                 raise RuntimeError("Grok 连接未就绪")
             fresh = self.journal.begin(message, "out", self.config.max_messages)
             if fresh:
@@ -338,7 +303,9 @@ class GrokConnection:
                             "protocol": PROTOCOL,
                             "type": "message",
                             "message_id": message.message_id,
-                            "exchange_id": self.journal.state.exchange_id,
+                            "exchange_id": self.journal.state.messages[
+                                message.message_id
+                            ].exchange_id,
                             "role_id": self.config.role_id,
                             "text": message.text,
                             "reply_to": message.reply_to,
@@ -353,11 +320,15 @@ class GrokConnection:
                     self.last_error = "发送结果不确定，请勿自动重发"
                     self._report()
                     raise
-                except Exception:
+                except Exception as error:
                     self.journal.finish(
                         message.message_id, "failed", "Webhook 拒绝发送"
                     )
-                    self.last_error = "Webhook 拒绝发送，请检查地址与密钥"
+                    self.last_error = (
+                        str(error)
+                        if isinstance(error, WebhookRejectedError)
+                        else "Webhook 发送失败"
+                    )
                     self._report()
                     raise
                 self.journal.finish(
@@ -373,13 +344,6 @@ class GrokConnection:
                 ).to_payload(),
                 "via_account": self.via_account(),
             }
-
-    async def continue_exchange(self) -> None:
-        """Reset only after active inbound and outbound admission have settled."""
-        async with self._receiving, self._sending:
-            self.journal.reset()
-            self.last_error = ""
-            self._report()
 
     async def _on_response(self, message: OutboundMessage) -> None:
         assert self._ctx is not None
@@ -400,9 +364,16 @@ class GrokConnection:
             status = "sent"
         except Exception as error:
             raise NonRetryableDeliveryError(
-                "Grok 回复未能确认送达，请检查连接状态"
+                str(error)
+                if isinstance(
+                    error, (WebhookRejectedError, UncertainDeliveryError, CallbackError)
+                )
+                else "Grok 回复未能确认送达，请检查连接状态"
             ) from error
         finally:
+            parent_id = str(message.metadata.get("external_message_id") or "")
+            self.journal.complete_parent(parent_id)
+            self._submitted.discard(parent_id)
             hub.mark_delivery(
                 message,
                 default_channel=self.name,
@@ -413,9 +384,9 @@ class GrokConnection:
     def status(self) -> ChannelStatus:
         """Expose actual callback readiness and transport state without credentials."""
         return {
-            "connected": self._ctx is not None and self.config.verified,
+            "connected": self._ctx is not None and self.config.enabled,
             "account": self.config.peer_name,
-            "detail": self.last_error or self.journal.state.last_status,
+            "detail": "",
         }
 
     def system_prompt_hint(self, chat_id: str) -> str:

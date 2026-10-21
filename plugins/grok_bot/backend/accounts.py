@@ -23,6 +23,7 @@ from .config import CHANNEL, ConnectionConfig, read_connection
 from .connection import GrokConnection
 from .exchange import ExchangeJournal
 from .store import ConnectionStore
+from .routine import routine_config
 
 
 class GrokAccounts:
@@ -74,9 +75,11 @@ class GrokAccounts:
                 else None
             ),
             capabilities=(
-                frozenset({"full_tools", "private", "known_targets", "send"})
+                frozenset(
+                    {"fixed_peer", "full_tools", "private", "known_targets", "send"}
+                )
                 if state == "online"
-                else frozenset({"full_tools"})
+                else frozenset({"fixed_peer", "full_tools"})
             ),
         )
 
@@ -111,7 +114,7 @@ class GrokAccounts:
                     continue
                 if not self._register(config, saved=True):
                     continue
-                self.configs[connection_id] = config
+                self._changed(config)
                 if config.enabled:
                     connection = self._make_connection(
                         config, self._resolve_key(config)
@@ -185,7 +188,6 @@ class GrokAccounts:
                         else token_urlsafe(32)
                     ),
                     "enabled": True,
-                    "verified": False,
                     "max_messages": payload.get(
                         "max_messages", previous.max_messages if previous else 12
                     ),
@@ -217,13 +219,6 @@ class GrokAccounts:
                 ExchangeJournal.purge_saved(
                     self.ctx.kv, previous.connection_id, previous.peer_id
                 )
-            try:
-                await candidate.probe()
-            except Exception:
-                candidate.last_error = (
-                    "连接验证未能完成，请检查 Webhook、密钥与 Bot 的本地执行能力"
-                )
-                self._report(connection_id, "error", candidate.last_error)
             return {"account_id": account_id_for(CHANNEL, connection_id)}
 
     async def _disconnect(self, connection_id: str) -> None:
@@ -267,7 +262,11 @@ class GrokAccounts:
         return AccountDeletionPlan(disconnect=disconnect, purge=purge)
 
     def save_rules(self, config_ref: str, rules: AccountResponseRules) -> None:
-        """Keep the host's response rules through reloads."""
+        """Save tool grants; hidden legacy filters cannot re-enter the host index."""
+        if not rules.private_enabled or rules.blocked_sender_ids:
+            raise ValueError(
+                "固定对端账号由连接启停控制收发，不支持私聊开关或成员黑名单"
+            )
         config = self.configs[config_ref].model_copy(
             update={"response_rules": response_rules_to_dict(rules)}
         )
@@ -278,25 +277,15 @@ class GrokAccounts:
     async def detail(self, payload: dict[str, object]) -> dict[str, object]:
         """Return settings and real transport state without disclosing secrets."""
         config = self._config_for(payload)
-        connection = self.connections.get(config.connection_id)
-        journal = (
-            connection.journal
-            if connection
-            else ExchangeJournal(self.ctx.kv, config.connection_id, config.peer_id)
-        )
+        connection_file = self.data_dir / config.connection_id / "client.json"
         return {
             "webhook_url": config.webhook_url,
             "has_key": bool(config.webhook_key),
             "enabled": config.enabled,
-            "verified": config.verified,
             "max_messages": config.max_messages,
-            "exchange_count": journal.state.count,
-            "last_status": (connection.last_error if connection else "")
-            or journal.state.last_status,
             "client_path": str(self.client_path),
-            "connection_file": str(
-                self.data_dir / config.connection_id / "client.json"
-            ),
+            "connection_file": str(connection_file),
+            "routine_config": routine_config(self.client_path, connection_file),
         }
 
     def connection_for(self, payload: dict[str, object]) -> GrokConnection:
@@ -306,9 +295,3 @@ class GrokAccounts:
         if connection is None:
             raise ValueError("Grok 连接已暂停")
         return connection
-
-    async def reset_exchange(self, payload: dict[str, object]) -> dict[str, object]:
-        """Explicit UI continuation permits a new exchange budget."""
-        connection = self.connection_for(payload)
-        await connection.continue_exchange()
-        return {"account_id": connection.account_id}

@@ -10,7 +10,10 @@ from agent.turns.channel_sequence import (
     supports_channel_sequence,
     channel_sequence_context,
 )
-from agent.turns.reply_interruption import current_reply_interruption
+from agent.turns.reply_interruption import (
+    current_reply_interruption,
+    reply_was_invalidated,
+)
 from agent.account_delivery.turn_state import account_delivery_scope
 
 from core.roles.reply_state import role_mood_catalog
@@ -53,6 +56,7 @@ from agent.prompting.usage_anchor import turn_usage_context
 from agent.prompting.listening_block import HeardLine, turn_heard
 from .reasoning_loop import _PassiveReasoningLoopMixin
 from .reasoning_result import _PassiveReasoningResultMixin
+from .natural_reply import NaturalReply
 from agent.core.runtime_support import ToolDiscoveryState
 from agent.core.types import ReasonerResult
 from agent.lifecycle.phase import Phase
@@ -128,6 +132,7 @@ class Reasoner(ABC):
         tool_execution_context: dict[str, Any] | None = None,
         disabled_tools: set[str] | None = None,
         external_restricted: bool = False,
+        natural_chat: bool = False,
     ) -> ReasonerResult:
         """执行多轮 tool loop，并返回本轮结果。
 
@@ -477,7 +482,7 @@ class DefaultReasoner(
                 ),
             )
             prompt_render = await self.render_prompt(render_input)
-            buffer_reply = prompt_render.reply_sequence is not None
+            buffer_reply = prompt_render.natural_chat
             from .minimal_request import current_input, replace_current_input
 
             owned_current = current_input(
@@ -541,7 +546,15 @@ class DefaultReasoner(
                         previous_thought=str(
                             role_metadata.get("current_thought") or ""
                         ),
+                        natural_chat=buffer_reply,
                     )
+                natural_reply = result.metadata.get("natural_reply")
+                if (
+                    buffer_reply
+                    and not isinstance(natural_reply, NaturalReply)
+                    and not reply_was_invalidated()
+                ):
+                    raise RuntimeError("自然聊天未返回已校验的消息列表")
                 tools_used = list(result.metadata.get("tools_used") or [])
                 tool_chain = presented_tool_chain(
                     result.metadata.get("tool_chain") or [], buffered=buffer_reply
@@ -568,6 +581,10 @@ class DefaultReasoner(
                 )
                 if "reply_recovery" in result.metadata:
                     retry_trace["reply_recovery"] = result.metadata["reply_recovery"]
+                if buffer_reply:
+                    retry_trace["natural_reply_corrected"] = bool(
+                        result.metadata.get("natural_reply_corrected")
+                    )
                 if account_delivery_state.get("sent"):
                     retry_trace["account_delivery_sent"] = True
                 thinking_finished_at = first_content_at or time.perf_counter()
@@ -599,7 +616,16 @@ class DefaultReasoner(
                     role_reply_mood_fresh=bool(
                         result.metadata.get("role_reply_mood_fresh")
                     ),
-                    reply_sequence=prompt_render.reply_sequence,
+                    reply_sequence=(
+                        natural_reply.policy
+                        if isinstance(natural_reply, NaturalReply)
+                        else None
+                    ),
+                    raw_reply=(
+                        natural_reply.raw_text
+                        if isinstance(natural_reply, NaturalReply)
+                        else None
+                    ),
                 )
             except ContentSafetyError:
                 prefix_length = (

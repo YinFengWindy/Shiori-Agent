@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from core.roles.reply_state import RoleReplyContext
 from typing import Any, cast
 
@@ -238,3 +240,132 @@ def test_agent_tick_factory_feeds_the_affection_block_to_proactive_and_drift(
     drift = tick._drift_pipeline
     assert drift is not None
     assert drift._tool_deps.affection_prompt_fn is deps.affection_prompt_fn
+
+
+@pytest.mark.parametrize("needs_correction", [False, True])
+async def test_natural_drift_uses_shared_messages_and_preserves_thinking(
+    tmp_path, monkeypatch, needs_correction
+):
+    from unittest.mock import AsyncMock, Mock
+    from agent.provider import LLMResponse, ToolCall
+    from agent.looping.ports import SessionServices
+    from agent.turns.channel_sequence import ChannelSequenceOwner
+    from agent.turns.orchestrator import TurnOrchestrator, TurnOrchestratorDeps
+    from agent.turns.outbound import DeliveryReceipt
+    from agent.turns.proactive_sequence import current_proactive_reply
+    from bus.queue import MessageBus
+    from proactive_v2.tools import ToolDeps
+    from session.manager import SessionManager
+
+    manager = SessionManager(tmp_path)
+    manager.get_or_create("role:mira").metadata.update(
+        role_id="mira", role_runtime_config={"natural_chat_enabled": True}
+    )
+    dispatch = AsyncMock(return_value=DeliveryReceipt.sent())
+    owner = TurnOrchestrator(
+        TurnOrchestratorDeps(
+            session=SessionServices(manager),
+            outbound=SimpleNamespace(dispatch=dispatch),
+        )
+    )
+    deps = _build_deps(with_pool=True)
+    deps.cfg.role_id = "mira"
+    deps.cfg.drift_enabled = True
+    deps.sense.target_transport = lambda: ("desktop", "role:mira")
+    deps.state_store = SimpleNamespace(workspace_dir=tmp_path, mark_delivery=Mock())
+    deps.turn_orchestrator = owner
+    expected = [
+        "刚想到你。",
+        "示例里的 <message-break/> 是原文。\n```python\nprint('hello')",
+    ]
+    raw = '{"messages":' + json.dumps(expected, ensure_ascii=False) + "}"
+    requests = []
+
+    async def chat(**kwargs):
+        requests.append(kwargs)
+        names = [tool["function"]["name"] for tool in kwargs["tools"]]
+        if names == ["finish_reply"]:
+            return LLMResponse(
+                "",
+                [ToolCall("fixed", "finish_reply", {"messages": expected}, raw)],
+                total_tokens=7,
+            )
+        if len(requests) == 1:
+            return LLMResponse(
+                "",
+                [
+                    ToolCall(
+                        "draft",
+                        "message_push",
+                        {
+                            "messages": [] if needs_correction else expected,
+                            "mood": "平静",
+                            "thought": "我想和你分享。",
+                        },
+                        raw if not needs_correction else None,
+                    )
+                ],
+                thinking="保留正常思考",
+                total_tokens=11,
+            )
+        return LLMResponse(
+            "",
+            [
+                ToolCall(
+                    "done",
+                    "finish_drift",
+                    {
+                        "skill_used": "meme-manage",
+                        "one_line": "已分享",
+                        "next": "等待新想法",
+                        "message_result": "sent",
+                    },
+                )
+            ],
+        )
+
+    deps.provider = SimpleNamespace(chat=chat)
+    factory = AgentTickFactory(deps)
+    drift = factory._build_drift_pipeline(ToolDeps())
+    assert drift is not None
+    ctx = AgentTickContext(
+        session_key="role:mira", reply_context=owner.capture_reply_context("role:mira")
+    )
+    monkeypatch.setattr("agent.turns.reply_sequence.wait_between_messages", AsyncMock())
+    with ChannelSequenceOwner().bind(MessageBus()):
+        async with owner.natural_reply_scope(
+            "role:mira", "desktop", "role:mira", turn_id="drift:test"
+        ):
+            assert await drift.run(ctx, factory._build_llm_fn())
+            plan = current_proactive_reply()
+            assert plan is not None and plan.completion is not None
+            assert plan.protocol.reply is not None
+            assert plan.protocol.reply.raw_text == raw
+            assert plan.completion.response.thinking == "保留正常思考"
+            assert plan.completion.total_tokens == (18 if needs_correction else 11)
+    assert ctx.drift_finished and ctx.drift_message_sent
+    assert [call.args[0].content for call in dispatch.await_args_list] == expected
+    rows = SessionManager(tmp_path).get_or_create("role:mira").messages
+    assert [row["content"] for row in rows] == expected
+    assert rows[0]["reasoning_content"] == "保留正常思考"
+    assert "reasoning_content" not in rows[1]
+    assert len({row["metadata"]["reply_sequence_id"] for row in rows}) == 1
+    deps.state_store.mark_delivery.assert_called_once()
+    normal = [r for r in requests if r.get("call_purpose") != "auxiliary"]
+    assert len(normal) == 2
+    assert all(
+        r["disable_thinking"] is False and r["tool_choice"] == "auto" for r in normal
+    )
+    corrections = [r for r in requests if r.get("call_purpose") == "auxiliary"]
+    assert len(corrections) == int(needs_correction)
+    assert all(
+        [t["function"]["name"] for t in r["tools"]] == ["finish_reply"]
+        for r in corrections
+    )
+    schema = next(
+        t["function"]
+        for t in requests[0]["tools"]
+        if t["function"]["name"] == "message_push"
+    )
+    assert "messages" in schema["parameters"]["required"]
+    assert "message" not in schema["parameters"]["properties"]

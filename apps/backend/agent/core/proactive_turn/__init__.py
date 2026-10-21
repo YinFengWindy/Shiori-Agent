@@ -15,7 +15,11 @@ from core.common.diagnostic_log import diagnostic_context, diagnostic_line
 from proactive_v2.context import AgentTickContext
 from proactive_v2.gateway import GatewayResult
 from agent.turns.proactive_sequence import current_proactive_reply
-from agent.turns.reply_interruption import ReplyInterruption, reply_was_invalidated
+from agent.turns.reply_interruption import (
+    ReplyPlanInvalidated,
+    ReplyInterruption,
+    reply_was_invalidated,
+)
 from core.common.cancellation import finish_started
 from prompts.natural_chat import NATURAL_CHAT_DRAFT_PROMPT
 
@@ -216,6 +220,9 @@ class ProactiveTurnPipeline:
             ):
                 try:
                     return await self._run_admitted_context(ctx, started, gate)
+                except ReplyPlanInvalidated:
+                    # Shared completion correction stops at the same safe boundary.
+                    return None
                 finally:
                     await orchestrator.commit_proactive_tool_facts(
                         self._session_key, ctx.tool_chain
@@ -357,7 +364,9 @@ class ProactiveTurnPipeline:
         )
 
     def _build_system_prompt(self) -> str:
-        prompt = _build_system_prompt(self._role_prompt_fn())
+        prompt = _build_system_prompt(
+            self._role_prompt_fn(), natural_chat=current_proactive_reply() is not None
+        )
         if current_proactive_reply() is not None:
             prompt += "\n\n" + NATURAL_CHAT_DRAFT_PROMPT
         return prompt

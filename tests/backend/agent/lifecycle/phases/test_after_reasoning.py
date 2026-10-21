@@ -1,6 +1,7 @@
 """Successful role replies commit state with messages; failures keep prior state."""
 
 import asyncio
+import json
 import sqlite3
 from datetime import datetime, timezone
 from types import SimpleNamespace
@@ -34,8 +35,9 @@ from shiori_sdk.messages import DeliveryOutcome
 from agent.turns.reply_sequence import ReplySequencePolicy
 
 
+@pytest.mark.parametrize("structured", [False, True])
 async def test_external_sequence_sends_each_committed_row_once_with_first_only_extras(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, structured
 ):
     manager = SessionManager(tmp_path)
     session = role_session(manager)
@@ -54,6 +56,12 @@ async def test_external_sequence_sends_each_committed_row_once_with_first_only_e
         }
     )
     request.turn_result.reply_sequence = ReplySequencePolicy("<message-break/>")
+    if structured:
+        request.turn_result.reply = "one\n<host-boundary/>\ntwo"
+        request.turn_result.reply_sequence = ReplySequencePolicy(
+            "<host-boundary/>", message_count=2
+        )
+        request.turn_result.raw_reply = json.dumps({"messages": ["one", "two"]})
     request.turn_result.role_reply = RoleReply(
         content=request.turn_result.reply,
         mood="平静",
@@ -87,7 +95,9 @@ async def test_external_sequence_sends_each_committed_row_once_with_first_only_e
         assert not request.state.dispatch_outbound
         assert len(request.state.committed_message_ids) == 3
         assert result.ctx.reply == "one\n\ntwo"
-        assert result.ctx.response_metadata.raw_text == request.turn_result.reply
+        assert result.ctx.response_metadata.raw_text == (
+            request.turn_result.raw_reply or request.turn_result.reply
+        )
         assert [
             message["content"]
             for message in SessionManager(tmp_path)

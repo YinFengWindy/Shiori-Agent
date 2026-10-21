@@ -9,28 +9,26 @@ from shiori_sdk.accounts.targets import UncertainDeliveryError
 from plugins.grok_bot.backend.protocol import BotMessage, CallbackError
 
 
-async def handshake(connection):
-    await connection.probe()
-    settings = json.loads(connection.client_file.read_text(encoding="utf-8"))
-    return await connection.receive(
-        "handshake",
-        {"protocol": settings["protocol"], "challenge": settings["challenge"]},
-    )
-
-
-async def test_probe_is_not_online_until_authenticated_handshake(harness):
+async def test_start_is_ready_without_probe_and_messages_still_require_auth(harness):
     connection = harness.connection
-    assert not connection.status()["connected"]
-    with pytest.raises(CallbackError, match="回程验证"):
-        await connection.receive("messages", {"message_id": "in", "text": "hello"})
-    await connection.probe()
-    assert not connection.status()["connected"]
-    with pytest.raises(CallbackError, match="过期"):
-        await connection.receive(
-            "handshake", {"protocol": "shiori-grok/1", "challenge": "old"}
-        )
-    assert await handshake(connection) == (200, {"status": "connected"})
     assert connection.status()["connected"]
+    assert harness.requests == []
+    settings = json.loads(connection.client_file.read_text(encoding="utf-8"))
+    assert set(settings) == {"protocol", "callback_url", "token"}
+    async with httpx.AsyncClient(trust_env=False) as client:
+        response = await client.post(
+            settings["callback_url"] + "messages",
+            json={"message_id": "blocked", "text": "hello"},
+        )
+        assert response.status_code == 401
+        removed = await client.post(
+            settings["callback_url"] + "handshake",
+            json={},
+            headers={"Authorization": f"Bearer {settings['token']}"},
+        )
+        assert removed.status_code == 404
+    await connection.send(BotMessage("first", "hello"))
+    assert [request["type"] for request in harness.requests] == ["message"]
     assert "token" not in json.dumps(harness.requests)
 
 
@@ -38,7 +36,6 @@ async def test_private_inbound_duplicate_normal_reply_and_proactive_use_one_conv
     harness,
 ):
     connection = harness.connection
-    await handshake(connection)
     settings = json.loads(connection.client_file.read_text(encoding="utf-8"))
     async with httpx.AsyncClient(
         trust_env=False, headers={"Authorization": f"Bearer {settings['token']}"}
@@ -87,7 +84,6 @@ async def test_private_inbound_duplicate_normal_reply_and_proactive_use_one_conv
 
 async def test_callbacks_are_serialized_and_bind_peer_identity(harness):
     connection = harness.connection
-    await handshake(connection)
     await asyncio.gather(
         *(
             connection.receive(
@@ -106,7 +102,6 @@ async def test_no_reply_committed_turn_releases_pending_input_without_network_re
     harness,
 ):
     connection = harness.connection
-    await handshake(connection)
     await connection.receive("messages", {"message_id": "silent", "text": "不用回复"})
     assert len(connection.journal.pending()) == 1
     await harness.events.emit(
@@ -122,16 +117,14 @@ async def test_no_reply_committed_turn_releases_pending_input_without_network_re
         )
     )
     assert connection.journal.pending() == []
-    connection.journal.reset()
-    assert connection.journal.state.count == 0
-    assert all(request["type"] == "connection_check" for request in harness.requests)
+    assert connection.journal.state.exchanges["silent"].count == 1
+    assert harness.requests == []
 
 
 async def test_failed_intake_same_id_retry_is_recovered_once_without_restart(
     harness, monkeypatch
 ):
     connection = harness.connection
-    await handshake(connection)
     intake = connection._intake
     original = intake.submit
     monkeypatch.setattr(
@@ -145,19 +138,81 @@ async def test_failed_intake_same_id_retry_is_recovered_once_without_restart(
     assert (await connection.receive("messages", payload))[0] == 202
     assert (await connection.receive("messages", payload))[1]["status"] == "duplicate"
     assert len(harness.bus.inbound) == 1
-    assert connection.journal.state.count == 1
+    assert connection.journal.state.exchanges["retry-same-id"].count == 1
+
+
+async def test_committed_response_keeps_its_parent_pending_until_channel_delivery(
+    harness,
+):
+    connection = harness.connection
+    await connection.receive(
+        "messages", {"message_id": "waiting-for-delivery", "text": "hello"}
+    )
+    await harness.events.emit(
+        TurnCommitted(
+            session_key="role:mira",
+            channel=connection.name,
+            chat_id=connection.config.chat_id,
+            input_message="hello",
+            persisted_user_message="hello",
+            assistant_response="reply",
+            tools_used=[],
+            external_message_id="waiting-for-delivery",
+        )
+    )
+    assert [message.message_id for message in connection.journal.pending()] == [
+        "waiting-for-delivery"
+    ]
+    await harness.bus.publish_outbound(
+        OutboundMessage(
+            channel=connection.name,
+            chat_id=connection.config.chat_id,
+            content="reply",
+            metadata={"external_message_id": "waiting-for-delivery"},
+            committed_message_id="response",
+        )
+    )
+    assert connection.journal.pending() == []
 
 
 async def test_uncertain_send_is_visible_and_replay_never_reposts(harness, monkeypatch):
     connection = harness.connection
-    await handshake(connection)
     post = AsyncMock(side_effect=UncertainDeliveryError("uncertain"))
     monkeypatch.setattr(connection._transport, "post", post)
     message = BotMessage("uncertain", "hello")
     with pytest.raises(UncertainDeliveryError):
         await connection.send(message)
     assert connection.journal.state.messages[message.message_id].state == "uncertain"
-    assert "不确定" in connection.status()["detail"]
+    assert connection.status()["detail"] == ""
+    assert "不确定" in connection.journal.state.last_status
     with pytest.raises(CallbackError):
         await connection.send(message)
     post.assert_awaited_once()
+
+
+async def test_interleaved_reply_chains_send_with_their_own_budget_and_correlation(
+    harness,
+):
+    connection = harness.connection
+    for index in range(8):
+        parent = f"a{index - 1}" if index else ""
+        if index % 2:
+            await connection.send(BotMessage(f"a{index}", "reply", parent))
+        else:
+            await connection.receive(
+                "messages",
+                {"message_id": f"a{index}", "text": "hello", "reply_to": parent},
+            )
+    await connection.send(BotMessage("b0", "new topic"))
+    await connection.receive(
+        "messages", {"message_id": "a8", "text": "hello", "reply_to": "a7"}
+    )
+    await connection.send(BotMessage("a9", "reply", "a8"))
+    await connection.receive(
+        "messages", {"message_id": "b1", "text": "hello", "reply_to": "b0"}
+    )
+    assert (await connection.send(BotMessage("b2", "reply", "b1")))["accepted"]
+    assert harness.requests[-1]["exchange_id"] == "b0"
+    assert harness.requests[-1]["reply_to"] == "b1"
+    assert connection.journal.state.exchanges["a0"].count == 10
+    assert connection.journal.state.exchanges["b0"].count == 3

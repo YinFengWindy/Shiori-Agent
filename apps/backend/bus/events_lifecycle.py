@@ -93,7 +93,7 @@ class ProactiveMessageCommitted:
 
 @dataclass(frozen=True)
 class ExternalTextPushed:
-    """One text delivered through an external channel by a model tool.
+    """Text/media delivered through an account by a model or host background task.
 
     Raised by ``account_send`` through ``record_delivered_push``;
     ``message_push`` never raises it, because a role may only use it for the
@@ -107,6 +107,8 @@ class ExternalTextPushed:
     ``message_metadata`` is stored with the recorded message over the push
     defaults; it supplies the chat type and the account delivery facts
     (attempt, account, target and the ``ViaAccount`` snapshot).
+    ``proactive`` defaults to true for model-requested sends; host supplements
+    set it false so image delivery is not treated as a new proactive contact.
     """
 
     session_key: str
@@ -119,3 +121,5 @@ class ExternalTextPushed:
     external_message_id: str = ""
     media: tuple[str, ...] = ()
     message_metadata: dict[str, Any] = field(default_factory=_empty_metadata)
+    # Host background media supplements are recorded without proactive contact.
+    proactive: bool = True

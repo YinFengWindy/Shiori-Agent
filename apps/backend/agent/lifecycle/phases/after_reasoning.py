@@ -151,6 +151,8 @@ class _BuildAfterReasoningCtxModule:
             frame.slots["reply:state"] = reply
         else:
             parsed = parse_response(raw_reply, tool_chain=tool_chain)
+        if turn_result.raw_reply is not None and not reply_was_invalidated():
+            parsed.metadata.raw_text = turn_result.raw_reply
         if session is not None:
             frame.slots["reply:previous_metadata"] = dict(session.metadata)
             frame.slots["reply:messages"] = []

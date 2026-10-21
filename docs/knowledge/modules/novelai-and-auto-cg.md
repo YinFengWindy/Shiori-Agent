@@ -55,20 +55,20 @@ NovelAI 与故事的业务回归分别随 `plugins/novelai/tests/`、`plugins/st
 2. `apps/backend/core/scene/decision.py` 使用独立观察器 system prompt，并强制模型调用内部函数 `submit_scene_observation`，将结果归为 `started`、`same`、`changed`、`closed` 或 `none`。观察结果同时携带持续场景 `scene_key` 与可见定格 `visual_key`。
 3. 核心场景服务对函数参数执行协议和语义校验；有效结果才会持久化这两个键并发布 `SceneObservationCommitted`。`scene_key` 供场景追问保持连续性，`visual_key` 供图片生成判断重复。
 4. NovelAI 插件通过 `scene_observations` capability 登记角色消费需求，订阅场景事件。`AutoCgController` 独立检查自动 CG 开关、视觉去重、冷却与手动生成抑制；通过后才由 `scene_prompt.py` 使用既有 light 模型把冻结的中立场景事实转换为 NovelAI tags 和画幅，并校验供应商参数。角色能力中的自动场景 CG 卡片通过齿轮弹层编辑中文或多行「补充要求」，独立自动保存至 `plugin_data.novelai.<role_id>.auto_scene_cg_prompt_instructions`；开关仍跟随角色页保存，两种保存只修改各自字段。控制器在调度时读取要求快照，提示词模型将其作为绘图要求理解，空白时不注入；后续编辑影响下一次自动 CG，不改变手动生图、Story 或历史图片的请求重放。删除角色时随该角色的 NovelAI 偏好一同清理。
-5. 成功图片通过消息推送发送，并同步回权威角色会话。
+5. 图片生成成功后立即记录冷却和视觉去重，再执行非主动补发。桌面通过 `message_push`，外部渠道通过 `account_send` 的宿主补发参数，由账号投递服务匹配原始 transport/channel 与 chat ID 对应的当前绑定用户私聊，并同步回权威角色会话；绑定消失或地址变化时明确拒绝，不改发其他用户或会话。
 
 `AfterTurnCtx.will_dispatch` 只表示核心消息总线是否还需下发回复，不表示回合是否完成。桌面桥接直接取得回复时该值为 `false`，场景观察仍必须处理这个有效回合。
 
 ## 防重复与失败处理
 
-- 自动生成冷却为 5 个用户回合。
+- 普通自动生成冷却为 5 个用户回合；`started` / `changed` 跳过冷却，但仍执行视觉去重。
 - `scene_key` 表示持续场景；`visual_key` 表示当前可见定格。自动 CG 使用 `visual_key` 去重，因此同一场景中的动作、姿势、人物位置关系、构图、服装、道具或光线变化可以生成新的 CG。
 - `same` 配合新的 `visual_key` 表示持续场景不变但视觉定格变化；NovelAI 自行在普通 5 回合冷却结束后生成。核心事件不含生图决策、供应商提示词或尺寸。
 - 重复定格的策略日志使用 `scene_cg_duplicate_visual`，不再把持续场景本身标记为重复。
 - 当前回合若已经调用 `generate_image`，不再追加自动 CG。
 - 场景协议无效时，观察器会携带校验原因请求一次修复；控制器不再对同一请求做无反馈重试。
 - 修复后仍无效时，不发布场景事件，也不写入场景状态；日志只记录工具调用数量、工具名、参数键和文本长度等响应形态。
-- 图片生成保留自身重试；主回复不因后台自动 CG 失败而失败。
+- 图片生成保留一次重试；生成失败不记成功冷却。生成成功后的推送异常或取消保留已写入的冷却和视觉去重，避免后续观察再次生图；推送错误照常记录，主回复不因后台自动 CG 失败而失败。
 - `started` 建立首个场景，`same` 延续当前场景，`changed` 建立新场景，`closed` 关闭场景状态，`none` 表示当前没有可观测场景。
 - 可见场景携带 `scene_key`、`visual_key` 和中立自然语言 `visual_description`；事件冻结该回合的角色描述、用户内容和回复，异步提示词模型不会读取之后改变的会话。`closed` 和 `none` 的场景键与视觉描述为空。
 

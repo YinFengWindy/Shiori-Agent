@@ -571,6 +571,7 @@ async def test_channel_trust_swaps_keep_supplement_chain_and_exact_cancel_owner(
     from unittest.mock import AsyncMock
     from agent.provider import LLMProvider, LLMResponse
     from session.manager import SessionManager
+    from tests.support.chat_replies import chat_reply
 
     registration = "00000000-0000-4000-a000-000000000001"
     (tmp_path / "config.toml").write_text(
@@ -596,10 +597,10 @@ async def test_channel_trust_swaps_keep_supplement_chain_and_exact_cancel_owner(
         if index == 0:
             started.set()
             await release.wait()
-            return LLMResponse(content="unseen old reply")
+            return chat_reply(["unseen old reply"], tools=kwargs.get("tools", []))
         latest_started.set()
         await latest_release.wait()
-        return LLMResponse(content="latest reply")
+        return chat_reply(["latest reply"], tools=kwargs.get("tools", []))
 
     monkeypatch.setattr(LLMProvider, "chat", model)
     app, service = await _start(tmp_path, monkeypatch)

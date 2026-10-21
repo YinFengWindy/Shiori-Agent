@@ -10,11 +10,6 @@ from plugins.grok_bot.backend.client import submit
 
 async def test_python_client_reads_credentials_and_supports_unicode_multiline(harness):
     connection = harness.connection
-    await connection.probe()
-    result = await asyncio.to_thread(
-        submit, connection.client_file, None, handshake=True
-    )
-    assert result == {"status": "connected"}
     payload = {"message_id": "client-1", "text": "你好\n第二行"}
     result = await asyncio.to_thread(submit, connection.client_file, payload)
     assert result == {"status": "accepted", "message_id": "client-1"}
@@ -26,7 +21,6 @@ async def test_windows_powershell_client_runs_without_python_or_sdk(harness):
     if powershell is None:
         pytest.skip("Windows PowerShell is not installed on this platform")
     connection = harness.connection
-    await connection.probe()
     script = Path(__file__).resolve().parents[1] / "client.ps1"
 
     def invoke(*arguments, payload=""):
@@ -49,9 +43,6 @@ async def test_windows_powershell_client_runs_without_python_or_sdk(harness):
             check=False,
         )
 
-    result = await asyncio.to_thread(invoke, "-Handshake")
-    assert result.returncode == 0, result.stderr
-    assert json.loads(result.stdout) == {"status": "connected"}
     result = await asyncio.to_thread(
         invoke,
         payload=json.dumps(

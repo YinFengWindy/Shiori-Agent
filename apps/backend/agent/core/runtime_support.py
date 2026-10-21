@@ -114,6 +114,8 @@ class TurnRunResult:
     role_reply: RoleReply | None = None
     role_reply_mood_fresh: bool = False
     reply_sequence: ReplySequencePolicy | None = None
+    # Structured replies retain original tool arguments for diagnostic observers.
+    raw_reply: str | None = None
 
 
 class WindowTurnRunner(Protocol):
