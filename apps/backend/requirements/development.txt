@@ -7,6 +7,7 @@ ruff>=0.15
 pyright>=1.1.403
 pytest>=9.0.0
 pytest-asyncio>=1.3.0
+# 只给临时报告用。覆盖率不是合并条件，不要加 fail_under。
 pytest-cov>=6.0.0
 pyinstaller>=6.18.0
 

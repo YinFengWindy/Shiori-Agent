@@ -11,6 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+# Plugin-facing fake. The real AgentLoop harness is host_external_turns.
 from shiori_sdk.testing.external_turns import FakeExternalTurns
 
 # 预热 agent.core 导入链，避免 agent.lifecycle.types 触发循环导入

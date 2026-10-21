@@ -167,7 +167,7 @@ def init_workspace(
 
     _ensure_config(config_path, force=force, summary=summary)
 
-    config = Config.load(config_path, workspace=workspace)
+    config = Config.load(config_path)
     _ensure_workspace_text_assets(workspace, force=force, summary=summary)
     _ensure_workspace_json_assets(workspace, force=force, summary=summary)
     _ensure_workspace_directories(workspace, summary=summary)

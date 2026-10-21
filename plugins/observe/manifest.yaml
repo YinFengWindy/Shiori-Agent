@@ -10,4 +10,3 @@ capabilities:
   - events
   - background
   - diagnostics
-  - storage

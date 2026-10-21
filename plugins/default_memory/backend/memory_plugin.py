@@ -33,7 +33,7 @@ class MemoryPlugin:
             workspace=workspace, storage=storage
         )
         db_path = resolve_memory_db_path(
-            workspace=workspace, default_config=default_config, storage=storage
+            workspace=workspace, default_config=default_config
         )
         existed = db_path.exists()
         DefaultMemoryEngine.ensure_workspace_storage(
@@ -54,7 +54,6 @@ class MemoryPlugin:
             default_config=load_default_memory_config(
                 workspace=workspace, storage=storage
             ),
-            storage=storage,
         )
         if not path.exists():
             return

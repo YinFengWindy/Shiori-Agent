@@ -21,7 +21,7 @@ from shiori_sdk.accounts.conversation import AccountConversation
 from shiori_sdk.channels.message_source import MessageSource
 from shiori_sdk.messages import InboundMessage
 from shiori_sdk.tools import Tool
-from tests.support.external_turns import ExternalTurnHost, SECRETS, request_text
+from tests.support.host_external_turns import ExternalTurnHost, SECRETS, request_text
 
 
 class Retarget(ToolHook):

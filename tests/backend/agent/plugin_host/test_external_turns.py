@@ -24,7 +24,7 @@ from desktop_bridge.session_presenter import DesktopSessionPresenter
 from prompts.agent import EXTERNAL_TURN_RULES_PROMPT
 from session.manager import SessionManager
 from shiori_sdk.external_turns import ExternalTurnMessage
-from tests.support.external_turns import (
+from tests.support.host_external_turns import (
     ROOM,
     ROOM_TITLE,
     SECRETS,

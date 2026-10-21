@@ -5,11 +5,9 @@ from __future__ import annotations
 import hashlib
 import json
 import mimetypes
-import sqlite3
 import threading
 from pathlib import Path
 
-from infra.persistence.sqlite_transaction import immediate_transaction
 from shiori_sdk.files.text import atomic_save_text
 from shiori_sdk.files.assets import copy_owned_asset
 
@@ -65,26 +63,3 @@ def original_media_path(workspace: Path, value: str) -> str:
         return value
     metadata = path.parent / "source.json"
     return str(json.loads(metadata.read_text(encoding="utf-8"))["path"])
-
-
-def adopt_persisted_media(connection: sqlite3.Connection, workspace: Path) -> None:
-    """Migrate message references atomically after all required copies exist."""
-    with immediate_transaction(connection):
-        connection.execute(
-            "CREATE TABLE IF NOT EXISTS media_migrations (version INTEGER PRIMARY KEY)"
-        )
-        if connection.execute(
-            "SELECT 1 FROM media_migrations WHERE version = 1"
-        ).fetchone():
-            return
-        rows = connection.execute(
-            "SELECT id, media FROM messages WHERE media IS NOT NULL"
-        ).fetchall()
-        updates = []
-        for row in rows:
-            old = json.loads(row["media"])
-            new = preserve_media(workspace, old)
-            if new != old:
-                updates.append((json.dumps(new, ensure_ascii=False), row["id"]))
-        connection.executemany("UPDATE messages SET media = ? WHERE id = ?", updates)
-        connection.execute("INSERT INTO media_migrations VALUES (1)")

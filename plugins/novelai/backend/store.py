@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import Any, cast
 
 from .storage import storage_root
-from shiori_sdk.extensions import PrivateStorage
 from collections.abc import Callable
 
 from .models import (
@@ -26,11 +25,10 @@ class NovelAIStore:
         self,
         workspace: Path,
         *,
-        storage: PrivateStorage,
         original_media: Callable[[str], str],
     ) -> None:
         self._workspace = workspace
-        self._root = storage_root(workspace, storage)
+        self._root = storage_root(workspace)
         self._original_media = original_media
         self._outputs_root = self._root / "outputs"
         self._records_path = self._root / "records.jsonl"

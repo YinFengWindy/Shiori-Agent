@@ -29,7 +29,7 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
     from .reconcile import PetStateReconciler
 
     role_store = ctx.roles
-    reconciler = PetStateReconciler(role_store, ctx.workspace, ctx.storage)
+    reconciler = PetStateReconciler(role_store, ctx.workspace)
     reconciler.reconcile()
     ctx.effect(
         "role_settings",
@@ -54,9 +54,7 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
         always_on=True,
         search_hint="桌宠 移动 位置 动作 挥手 跳跃",
     )
-    handlers = DesktopPetRpcHandlers(
-        role_store=role_store, workspace=ctx.workspace, storage=ctx.storage
-    )
+    handlers = DesktopPetRpcHandlers(role_store=role_store, workspace=ctx.workspace)
     register_bubble_rpc(ctx.rpc)
     # The one live-reply output of this setup (it owns the outcome RPC); the
     # live engine emits replies through it and paces on their outcomes.

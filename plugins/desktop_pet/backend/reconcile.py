@@ -6,27 +6,24 @@ import shutil
 
 from shiori_sdk.role_events import RoleDeleted
 from shiori_sdk.roles import Roles
-from shiori_sdk.extensions import PrivateStorage
 from pathlib import Path
 
 from .pet_state import PLUGIN_ID, RolePetStateStore
 from .models import RolePetState
-from .storage import prepare_assets, role_asset_directory, asset_path
+from .storage import role_asset_directory, asset_path
 from shiori_sdk.storage import plugin_data_dir
 
 
 class PetStateReconciler:
     """Cleans deleted roles even if their deletion happened while disabled."""
 
-    def __init__(self, roles: Roles, workspace: Path, storage: PrivateStorage) -> None:
+    def __init__(self, roles: Roles, workspace: Path) -> None:
         self._workspace = workspace
-        self._storage = storage
         self._roles = roles
 
     def reconcile(self) -> None:
         """Prunes missing roles and orphan package directories under one lock."""
         with self._roles.read_scope():
-            prepare_assets(self._roles, self._workspace, self._storage)
             roles = self._roles.list_roles()
             role_ids = {role.id for role in roles}
 

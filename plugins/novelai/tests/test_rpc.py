@@ -1,5 +1,4 @@
 from __future__ import annotations
-from shiori_sdk.testing.memory import FakeMemoryStorage
 
 import asyncio
 import json
@@ -29,11 +28,8 @@ def _handlers(
     return NovelAIRpcHandlers(
         novelai_service=novelai_service,
         novelai_store=novelai_store
-        or NovelAIStore(
-            tmp_path, storage=FakeMemoryStorage(), original_media=lambda value: value
-        ),
-        prompt_tag_store=prompt_tag_store
-        or PromptTagStore(tmp_path, storage=FakeMemoryStorage()),
+        or NovelAIStore(tmp_path, original_media=lambda value: value),
+        prompt_tag_store=prompt_tag_store or PromptTagStore(tmp_path),
         session_manager=session_manager or FakeSessions(),
     )
 
@@ -69,9 +65,7 @@ async def test_generate_derives_session_key_from_role_id(tmp_path: Path) -> None
 
 
 def test_history_filters_by_role(tmp_path: Path) -> None:
-    store = NovelAIStore(
-        tmp_path, storage=FakeMemoryStorage(), original_media=lambda value: value
-    )
+    store = NovelAIStore(tmp_path, original_media=lambda value: value)
     output_path = tmp_path / "private_runtime" / "novelai" / "outputs" / "out.png"
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_bytes(b"png")
@@ -180,7 +174,6 @@ def _regeneration_fixture(
     sessions = FakeSessions()
     store = NovelAIStore(
         tmp_path,
-        storage=FakeMemoryStorage(),
         original_media=sessions.original_media_path,
     )
     original = tmp_path / "outputs" / "source-record" / "output-1.png"

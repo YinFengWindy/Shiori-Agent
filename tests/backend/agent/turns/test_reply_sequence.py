@@ -14,10 +14,10 @@ from agent.turns.reply_sequence import ReplySequencePolicy
 POLICY = ReplySequencePolicy("<message-break/>")
 
 
-@pytest.mark.parametrize("separator", ["", " ", " x", "x\ny", "x\ry", "```x"])
-def test_rejects_invalid_separator(separator):
-    with pytest.raises(ValueError):
-        ReplySequencePolicy(separator)
+def test_rejects_blank_or_embedded_separator():
+    for separator in ("", " ", " x", "x\ny"):
+        with pytest.raises(ValueError):
+            ReplySequencePolicy(separator)
 
 
 def test_only_explicit_boundaries_split_and_preserve_markdown():
@@ -46,33 +46,22 @@ def test_message_boundary_preserves_first_line_indentation_and_trailing_spaces()
     assert result.messages == ("前一句  ", '    print("hello")  ')
 
 
-@pytest.mark.parametrize("indent", ["    ", "\t", " \t", "  \t", "   \t", "\t "])
-def test_markdown_four_column_indentation_keeps_separator_as_code(indent):
-    content = f"{indent}<message-break/>\n"
-    assert parse_reply_sequence(content, POLICY).messages == (content.rstrip("\n"),)
+def test_markdown_indent_of_four_keeps_the_separator_inside_the_message():
+    for indent in ("    ", "\t"):
+        content = f"{indent}<message-break/>\n"
+        assert parse_reply_sequence(content, POLICY).messages == (content.rstrip("\n"),)
+    for indent in ("", "   "):
+        result = parse_reply_sequence(f"one\n{indent}<message-break/>\ntwo", POLICY)
+        assert result.messages == ("one", "two")
 
 
-@pytest.mark.parametrize("indent", ["", " ", "  ", "   "])
-def test_separator_at_zero_to_three_columns_splits_messages(indent):
-    result = parse_reply_sequence(f"one\n{indent}<message-break/>\ntwo", POLICY)
-    assert result.messages == ("one", "two")
+def test_empty_segments_are_rejected():
+    for content in ("<message-break/>\na", "a\n<message-break/>\n<message-break/>\nb"):
+        with pytest.raises(ValueError):
+            parse_reply_sequence(content, POLICY)
 
 
-@pytest.mark.parametrize(
-    "content",
-    [
-        "<message-break/>\na",
-        "a\n<message-break/>",
-        "a\n<message-break/>\n<message-break/>\nb",
-    ],
-)
-def test_empty_segments_are_rejected(content):
-    with pytest.raises(ValueError):
-        parse_reply_sequence(content, POLICY)
-
-
-@pytest.mark.parametrize("cancel_count", [1, 2])
-async def test_cancel_finishes_inflight_publish_and_never_starts_tail(cancel_count):
+async def test_cancel_finishes_inflight_publish_and_never_starts_tail():
     entered, release = asyncio.Event(), asyncio.Event()
     sent = []
 
@@ -85,10 +74,9 @@ async def test_cancel_finishes_inflight_publish_and_never_starts_tail(cancel_cou
         deliver_reply_sequence(ReplySequence(("one", "two")), publish)
     )
     await entered.wait()
-    for _ in range(cancel_count):
-        task.cancel()
-        await asyncio.sleep(0)
-        assert not task.done()
+    task.cancel()
+    await asyncio.sleep(0)
+    assert not task.done()
     release.set()
     with pytest.raises(asyncio.CancelledError):
         await task

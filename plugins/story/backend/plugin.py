@@ -21,7 +21,6 @@ async def setup(ctx: PluginRuntimeContext) -> None:
     handler = StorySimulationHandler(
         workspace=ctx.workspace,
         role_store=ctx.roles,
-        storage=ctx.storage,
         background=ctx.background,
         models=ctx.models,
         image_tool=novelai,

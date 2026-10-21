@@ -13,6 +13,7 @@ source_paths:
   - plugins/feishu/
   - plugins/telegram/
   - plugins/qq/
+  - plugins/grok_bot/
   - apps/backend/bootstrap/channels.py
   - apps/backend/bootstrap/channel_host.py
   - apps/backend/desktop_bridge/runtime/channel_listing.py
@@ -33,6 +34,7 @@ related:
 | `plugins/qq/`（QQ（NapCat）） | `qq`（私聊、群聊，声明 `group_listening`） | 每个账号使用插件私有的托管 NapCat 进程和登录目录；仅在验证出 QQ 号后写入 `plugin-data/qq/accounts.json`（归属、响应规则和内部 OneBot endpoint/令牌），扫码中的临时连接关闭时清理，异常退出的残留目录在下次加载时清理 |
 | `plugins/qqbot/` | `qqbot`（仅私聊，chat_id 前缀 `c2c:`） | `channel.py` 只做组合与启停，Gateway（`gateway.py`）、C2C 入站（`inbound.py`）、HTTP/媒体出站（`outbound.py`）、live stream（`streaming.py` / `stream_delivery.py`）分属各 mixin |
 | `plugins/feishu/` | `feishu`（仅私聊） | lark-oapi 长连接跑在独立线程和私有事件循环（`ws.py`），回调只去重并交回宿主循环；REST 在 `api.py`，入站解析在 `inbound.py`，CardKit 流式卡片在 `streaming.py` |
+| `plugins/grok_bot/` | `grok_bot`（仅私聊，chat_id 前缀 `dm:`） | 角色与 Grok Bot 的双向私聊；默认停用（`default_enabled: false`） |
 
 QQ 群会话的规范 chat_id 是 `gqq:<群号>`，裸号一律是私聊。渠道插件配置位于 `[plugins.<id>]`；旧的 `[channels.telegram]` / `[channels.qq]` 配置已移除，不再自动迁移。新增渠道的写法见 `docs/_handbook/channel-plugins.md`。
 

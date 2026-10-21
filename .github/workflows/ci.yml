@@ -45,14 +45,46 @@ jobs:
           .venv/bin/pyright --project pyrightconfig.tests.json --level error
 
       - name: Run pytest
-        timeout-minutes: 10
+        timeout-minutes: 20
         env:
           PYTHONWARNINGS: "ignore:.*AbstractEventLoopPolicy.*:DeprecationWarning"
         run: |
-          # 不显式传路径：显式路径会覆盖 pytest.ini 的 testpaths
-          # （宿主、plugins/*/tests/ 与 packages/sdk/tests），
-          # 避免遗漏插件或公开 SDK 的用例（#178、#215）。
-          .venv/bin/pytest -q -W error
+          # select_tests keeps the ~1000 allowlist and adds neighbor paths
+          # from the merge-base diff. Lockfiles, workflows, pytest.ini,
+          # default_suite, this mapper, and unrecognized paths print
+          # mode=extended. plugin-isolation and sdk-artifacts stay unconditional.
+          set -euo pipefail
+          plan_file="$(mktemp)"
+          .venv/bin/python -m scripts.select_tests --base origin/main > "$plan_file"
+          echo "pytest selection:"
+          cat "$plan_file"
+          mode=""
+          also=()
+          external=()
+          while IFS= read -r line || [[ -n "$line" ]]; do
+            case "$line" in
+              mode=*) mode="${line#mode=}" ;;
+              also=*) also+=("${line#also=}") ;;
+              external=*) external+=("${line#external=}") ;;
+              "") ;;
+              *) echo "unrecognized select_tests line: $line" >&2; exit 1 ;;
+            esac
+          done < "$plan_file"
+          if [[ "$mode" == "extended" ]]; then
+            .venv/bin/pytest -q -W error --extended
+          elif [[ "$mode" == "default" || "$mode" == "selected" ]]; then
+            args=()
+            for path in "${also[@]}"; do
+              args+=(--also "$path")
+            done
+            .venv/bin/pytest -q -W error "${args[@]}"
+            if [[ ${#external[@]} -gt 0 ]]; then
+              .venv/bin/pytest -q -W error "${external[@]}"
+            fi
+          else
+            echo "unrecognized select_tests mode: ${mode}" >&2
+            exit 1
+          fi
 
       - name: Verify the installed host wheel and runtime resources
         run: .venv/bin/python -m scripts.verify_host_distribution

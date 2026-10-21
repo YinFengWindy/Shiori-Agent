@@ -92,57 +92,6 @@ async def test_multiple_roles_isolate_credentials_pause_rules_reload_and_delete(
         await ctx.aclose()
 
 
-async def test_legacy_filters_are_removed_before_registration_and_cannot_be_resaved(
-    tmp_path, config
-):
-    ctx = FakeChannelPluginContext("grok_bot", Path(__file__).resolve().parents[1])
-    ctx.workspace = tmp_path
-    rules = {
-        "private_enabled": False,
-        "group_enabled": False,
-        "blocked_sender_ids": [config.peer_id],
-        "allow_full_tools": True,
-    }
-    ctx.kv.set(
-        "connections",
-        {
-            config.connection_id: {
-                **config.model_dump(),
-                "verified": False,
-                "enabled": False,
-                "response_rules": rules,
-            }
-        },
-    )
-    accounts = GrokAccounts(ctx, ctx.channels.group("grok_bot"))
-    try:
-        await accounts.load()
-        account = ctx.accounts.records[account_id_for("grok_bot", config.connection_id)]
-        assert account.record.response_rules.private_enabled
-        assert account.record.response_rules.blocked_sender_ids == ()
-        assert account.record.response_rules.allow_full_tools
-        assert "fixed_peer" in account.capabilities
-        saved = accounts.store.rows()[config.connection_id]
-        assert isinstance(saved, dict)
-        assert "verified" not in saved
-        for rejected in (
-            AccountResponseRules(private_enabled=False),
-            AccountResponseRules(blocked_sender_ids=(config.peer_id,)),
-        ):
-            with pytest.raises(ValueError, match="固定对端"):
-                accounts.save_rules(config.connection_id, rejected)
-        assert (
-            accounts.store.get(config.connection_id).response_rules["allow_full_tools"]
-            is True
-        )
-        accounts.save_rules(config.connection_id, AccountResponseRules())
-        assert not accounts.store.get(config.connection_id).response_rules.get(
-            "allow_full_tools", False
-        )
-    finally:
-        await ctx.aclose()
-
-
 async def test_save_keeps_secret_reference_and_stable_identity_but_rotates_new_bot(
     tmp_path, config, monkeypatch
 ):

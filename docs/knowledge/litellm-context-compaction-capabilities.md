@@ -1,5 +1,7 @@
 # LiteLLM 上下文预算与 Compaction 能力核验
 
+> 历史调研，不是现行架构。#64 已自行实现上下文预算，仓库没有 LiteLLM 依赖。不要按下文「建议复用」引入 LiteLLM。现行入口是 `docs/knowledge/index.md` 与 `docs/_handbook/context-budget.md`。
+
 > 核验日期：2026-08-10。来源限定为 LiteLLM 官方文档与 `BerriAI/litellm` 官方仓库。
 >
 > 现状（核对至 `bdfdae59`）：本文是 Issue #64 实施前的选型调研。#64 已落地，最终未引入 LiteLLM 依赖，上下文预算与压缩均由 Shiori 自行实现：模型注册字段 `model_context_window` / `model_auto_compact_token_limit`（`apps/backend/agent/config_models.py`）、输入预算 `apps/backend/agent/prompting/input_budget.py`、`CompactionController`（`apps/backend/core/compaction.py`）、回合内压缩 `apps/backend/agent/core/passive_turn/compaction.py`，手动 `/compact` 由 `apps/backend/desktop_bridge/chat_requests.py` 与 `apps/backend/agent/looping/core/context_window.py` 处理。下文关于 LiteLLM 的结论仅作外部能力参考，未随 LiteLLM 后续版本重新核验。

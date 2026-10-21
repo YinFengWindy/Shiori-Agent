@@ -6,7 +6,6 @@ import pytest
 from plugins.desktop_pet.backend.pet_state import RolePetStateStore
 
 from shiori_sdk.testing.roles import FakeRoles
-from shiori_sdk.testing.memory import FakeMemoryStorage
 from plugins.desktop_pet.backend.models import RolePetPackage
 from plugins.desktop_pet.backend.rpc import DesktopPetRpcHandlers
 
@@ -16,9 +15,7 @@ def test_pet_import_passes_staged_source_to_service_and_refuses_outside_before_i
 ):
     roles = FakeRoles(tmp_path)
     roles.create_role(role_id="mira", name="Mira", system_prompt="test")
-    handlers = DesktopPetRpcHandlers(
-        role_store=roles, workspace=tmp_path, storage=FakeMemoryStorage()
-    )
+    handlers = DesktopPetRpcHandlers(role_store=roles, workspace=tmp_path)
     staging = (
         tmp_path / "private_runtime" / "imports" / "desktop_pet-pets" / "selection"
     )
@@ -83,9 +80,7 @@ def _bind_pet(workspace, *, enabled=True, with_file=True, store):
 
 
 def _handlers(workspace, roles):
-    return DesktopPetRpcHandlers(
-        role_store=roles, workspace=workspace, storage=FakeMemoryStorage()
-    )
+    return DesktopPetRpcHandlers(role_store=roles, workspace=workspace)
 
 
 def _resolve(handlers, method):

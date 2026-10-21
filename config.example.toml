@@ -73,12 +73,3 @@ engine = ""
 model = "text-embedding-v3"
 api_key = "sk-..."
 base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-
-# =============================================================================
-# 配置升级记录（由程序维护，请勿修改）
-# 这里列出的插件已按当前的默认启停状态初始化。
-# =============================================================================
-
-[_migrations]
-plugin_default_disabled = ["browser_use", "computer_use", "novelai"]
-proactive_target_removed = true

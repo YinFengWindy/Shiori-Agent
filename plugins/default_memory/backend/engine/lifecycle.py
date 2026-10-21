@@ -115,7 +115,6 @@ class DefaultMemoryEngine(
         db_path = resolve_memory_db_path(
             workspace=workspace,
             default_config=default_config,
-            storage=storage,
         )
         embedding = config.embedding
         retrieval = default_config.retrieval
@@ -180,7 +179,6 @@ class DefaultMemoryEngine(
         db_path = resolve_memory_db_path(
             workspace=workspace,
             default_config=default_config,
-            storage=storage,
         )
         store = MemoryStore2(db_path, open_database=storage.open_database)
         store.close()

@@ -58,17 +58,6 @@ class _StoreConnection:
         self._db.executescript(SCHEMA)
         self._db.commit()
 
-        cols = {r[1] for r in self._db.execute("PRAGMA table_info(memory_items)")}
-        if "status" not in cols:
-            self._db.execute(
-                "ALTER TABLE memory_items ADD COLUMN status TEXT NOT NULL DEFAULT 'active'"
-            )
-            self._db.commit()
-        if "emotional_weight" not in cols:
-            self._db.execute(
-                "ALTER TABLE memory_items ADD COLUMN emotional_weight INTEGER NOT NULL DEFAULT 0"
-            )
-            self._db.commit()
         self._db.execute(
             "CREATE INDEX IF NOT EXISTS ix_items_status ON memory_items (status)"
         )

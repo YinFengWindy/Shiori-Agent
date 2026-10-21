@@ -15,7 +15,7 @@ from shiori_sdk.messages import InboundMessage, OutboundMessage
 from shiori_sdk.channel_events import TurnCancelled
 from shiori_sdk.channels.message_source import MessageSource
 from conversation.service import desktop_thread_id
-from tests.support.external_turns import ROOM, ExternalTurnHost, room_message
+from tests.support.host_external_turns import ROOM, ExternalTurnHost, room_message
 from tests.support.tool_hooks import (
     FinalizeOnCallHook,
     DummyTool,

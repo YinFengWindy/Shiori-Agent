@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from agent.prompting.input_budget import BudgetPolicy
 
-import logging
 import os
 import re
 import tomllib
@@ -22,56 +21,15 @@ from agent.config_models import (
     ModelRegistration,
     WiringConfig,
 )
-from agent.scene_preferences import load_scene_preferences, migrate_scene_preferences
+from agent.scene_preferences import load_scene_preferences
 from core.common.workspace import resolve_default_workspace
 from proactive_v2.config import ProactiveConfig
 from proactive_v2.config_loader import ProactiveConfigError, load_proactive_config
 
-logger = logging.getLogger(__name__)
 
-
-def load_config(
-    path: str | Path = "config.toml", *, workspace: Path | None = None
-) -> Config:
-    """Loads and validates the persisted TOML configuration.
-
-    Runs the one-time ``[integrations.novelai]`` -> ``[plugins.novelai]``
-    migration (issue #180), the removal of channel plugin ``allow_from``
-    whitelists (issue #398), the
-    removal of the global ``[proactive]`` delivery target (issue #399) and the
-    default-disabled plugin pinning (``agent/plugin_default_enabled_migration.py``)
-    against the real file before parsing, so an upgrading user's existing
-    settings show up under the plugin's own config channel with no action
-    required. ``load_config_text`` deliberately does not run these: it
-    promises never to touch the persisted file.
-    """
-    resolved_path = Path(path)
-    data = _load_config_data(resolved_path)
-    data = _migrate_legacy_novelai_config(resolved_path, data)
-    from agent.proactive_preferences import migrate_proactive_preferences
-
-    data = migrate_proactive_preferences(resolved_path, data)
-    from agent.proactive_target_migration import remove_proactive_target
-
-    data = remove_proactive_target(resolved_path, data)
-    data = migrate_scene_preferences(resolved_path, data)
-    if workspace is not None:
-        from agent.plugin_config_migration import migrate_plugin_config
-
-        data = migrate_plugin_config(resolved_path, data, workspace=workspace)
-    # 放在旧 JSON 插件设置迁入之后：那份 qqbot 设置也可能带着 allow_from。
-    from agent.channel_allowlist_migration import remove_channel_allowlists
-
-    data = remove_channel_allowlists(resolved_path, data)
-    from agent.plugin_preferences import migrate_plugin_preferences
-
-    data = migrate_plugin_preferences(resolved_path, data)
-    # 放在 plugin.disabled 标记迁移之后：标记已写成显式 enabled = false 的插件
-    # 不会再被这里改成启用。
-    from agent.plugin_default_enabled_migration import migrate_plugin_default_enabled
-
-    data = migrate_plugin_default_enabled(resolved_path, data)
-    return load_config_data(data)
+def load_config(path: str | Path = "config.toml") -> Config:
+    """Loads and validates the persisted TOML configuration without rewriting it."""
+    return load_config_data(_load_config_data(path))
 
 
 def load_config_data(data: dict[str, Any]) -> Config:
@@ -272,44 +230,6 @@ def _load_memory_config(data: dict) -> MemoryConfig:
             output_dimensionality=output_dimensionality,
         ),
     )
-
-
-def _migrate_legacy_novelai_config(path: Path, data: dict[str, Any]) -> dict[str, Any]:
-    """One-time, idempotent move of ``[integrations.novelai]`` into ``[plugins.novelai]``.
-
-    Issue #180: novelai's settings moved from the removed ``Config.novelai``
-    field to the generic plugin config channel. Older config files still have
-    the values under ``[integrations.novelai]``; this rewrites the file once
-    so an upgrading user keeps their token/settings with no action required.
-
-    Idempotent by construction, not by a marker: once migrated,
-    ``[integrations.novelai]`` is gone from the file, so the guard below finds
-    nothing to do on every subsequent load (including a second call in the
-    same process). Never overwrites an existing ``[plugins.novelai]`` table
-    entry-by-entry — before this ticket the only field that table could ever
-    hold is the host-owned ``enabled`` flag (set by the plugin management
-    toggle), which is preserved as-is; every other field is not something a
-    pre-#180 build could have written there.
-    """
-    integrations = _as_dict(data.get("integrations"))
-    legacy_values = integrations.get("novelai")
-    if not isinstance(legacy_values, dict) or not legacy_values:
-        return data
-    # Local import: keeps this rarely-hit migration path from pulling the
-    # desktop bridge's TOML text-splicing module into every config load.
-    from desktop_bridge.plugin_config_text import merge_plugin_table, remove_table
-
-    plugins = _as_dict(data.get("plugins"))
-    existing = _as_dict(plugins.get("novelai"))
-    merged_values: dict[str, Any] = dict(legacy_values)
-    if "enabled" in existing:
-        merged_values["enabled"] = existing["enabled"]
-    text = path.read_text(encoding="utf-8")
-    migrated_text = merge_plugin_table(text, "novelai", merged_values)
-    migrated_text = remove_table(migrated_text, ["integrations", "novelai"])
-    path.write_text(migrated_text, encoding="utf-8")
-    logger.info("已将 [integrations.novelai] 一次性迁移至 [plugins.novelai]")
-    return tomllib.loads(migrated_text)
 
 
 def _load_wiring_config(data: dict) -> WiringConfig:

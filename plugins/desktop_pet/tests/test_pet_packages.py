@@ -9,7 +9,6 @@ import pytest
 from PIL import Image
 
 from shiori_sdk.testing.roles import FakeRoles
-from shiori_sdk.testing.memory import FakeMemoryStorage
 from plugins.desktop_pet.backend.pet_packages import RolePetPackageService
 from plugins.desktop_pet.backend import package_images
 from plugins.desktop_pet.backend.pet_state import RolePetStateStore
@@ -37,7 +36,7 @@ def test_import_pet_package_accepts_a_single_wrapper_directory(
         archive.writestr("feibi/preview.webp", b"preview")
     store = FakeRoles(tmp_path / "workspace")
     role = store.create_role(role_id="mira", name="菲比", system_prompt="fixture")
-    service = RolePetPackageService(store, tmp_path / "workspace", FakeMemoryStorage())
+    service = RolePetPackageService(store, tmp_path / "workspace")
     monkeypatch.setattr(package_images, "validate_atlas", lambda _data: None)
     monkeypatch.setattr(package_images, "validate_preview", lambda _data: ".webp")
 
@@ -70,7 +69,7 @@ def test_import_pet_package_rejects_unknown_action_state(
         archive.writestr("spritesheet.webp", b"fixture")
     store = FakeRoles(tmp_path / "workspace")
     role = store.create_role(role_id="mira", name="Invalid", system_prompt="fixture")
-    service = RolePetPackageService(store, tmp_path / "workspace", FakeMemoryStorage())
+    service = RolePetPackageService(store, tmp_path / "workspace")
     monkeypatch.setattr(package_images, "validate_atlas", lambda _data: None)
 
     with pytest.raises(ValueError, match="动作状态无效"):
@@ -99,7 +98,7 @@ def test_import_pet_package_rejects_system_action_state(
     role = store.create_role(
         role_id="mira", name="System action", system_prompt="fixture"
     )
-    service = RolePetPackageService(store, tmp_path / "workspace", FakeMemoryStorage())
+    service = RolePetPackageService(store, tmp_path / "workspace")
     monkeypatch.setattr(package_images, "validate_atlas", lambda _data: None)
 
     with pytest.raises(ValueError, match="动作状态无效"):
@@ -125,7 +124,7 @@ def test_import_pet_package_accepts_a_package_without_preview(
         archive.writestr("spritesheet.webp", b"fixture")
     store = FakeRoles(tmp_path / "workspace")
     role = store.create_role(role_id="mira", name="Legacy", system_prompt="fixture")
-    service = RolePetPackageService(store, tmp_path / "workspace", FakeMemoryStorage())
+    service = RolePetPackageService(store, tmp_path / "workspace")
     monkeypatch.setattr(package_images, "validate_atlas", lambda _data: None)
 
     package = service.import_package(role.id, archive_path)
@@ -160,7 +159,7 @@ def test_import_pet_package_uses_the_preview_image_format_for_its_extension(
     role = store.create_role(
         role_id="mira", name="PNG preview", system_prompt="fixture"
     )
-    service = RolePetPackageService(store, tmp_path / "workspace", FakeMemoryStorage())
+    service = RolePetPackageService(store, tmp_path / "workspace")
     monkeypatch.setattr(package_images, "validate_atlas", lambda _data: None)
 
     package = service.import_package(role.id, archive_path)
@@ -178,7 +177,7 @@ def test_selecting_a_pet_package_is_role_local_and_removal_clears_selection(
 ) -> None:
     store = FakeRoles(tmp_path / "workspace")
     role = store.create_role(role_id="mira", name="菲比", system_prompt="fixture")
-    service = RolePetPackageService(store, tmp_path / "workspace", FakeMemoryStorage())
+    service = RolePetPackageService(store, tmp_path / "workspace")
     monkeypatch.setattr(package_images, "validate_atlas", lambda _data: None)
     monkeypatch.setattr(package_images, "validate_preview", lambda _data: ".webp")
 
