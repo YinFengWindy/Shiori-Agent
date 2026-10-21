@@ -9,6 +9,46 @@ from bootstrap.app import AppRuntime, RuntimeFeatures
 from bootstrap.runtime.generations import RuntimeRetention
 from core.common.runtime_scope import bind_runtime
 from shiori_sdk.messages import OutboundMessage
+from core.common.cancellation import finish_started
+
+
+@pytest.mark.parametrize("reuse", [False, True])
+async def test_publication_cancels_batch_suffix_but_retains_started_receipt(
+    runtime_channels, reuse
+):
+    runtime_channels.reuse = reuse
+    app = await runtime_channels.start()
+    entered, release = asyncio.Event(), asyncio.Event()
+    seen = []
+
+    async def started_send():
+        entered.set()
+        await release.wait()
+        seen.append("platform-receipt-and-bookkeeping")
+
+    async def batch():
+        async with app.acquire() as lease:
+            with lease.reply_sequences.delivering():
+                await finish_started(started_send())
+                seen.append("unstarted-suffix")
+
+    delivery = asyncio.create_task(batch())
+    await entered.wait()
+    candidate = await app.prepare(replace(app.config, max_tokens=2048))
+    publishing = asyncio.create_task(app.publish(candidate))
+    try:
+        await asyncio.sleep(0)
+        assert not delivery.done()
+        release.set()
+        with pytest.raises(asyncio.CancelledError):
+            await delivery
+        await publishing
+        assert seen == ["platform-receipt-and-bookkeeping"]
+        assert candidate.published
+    finally:
+        release.set()
+        await asyncio.gather(delivery, publishing, return_exceptions=True)
+        await app.shutdown()
 
 
 @pytest.mark.asyncio

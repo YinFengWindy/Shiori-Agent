@@ -71,7 +71,9 @@ class QQBotAccountsChannel(
     async def start(self, ctx: ChannelContext) -> None:
         """Register one public channel, then start each configured gateway."""
         self._runtime = ctx
-        ctx.bus.subscribe_outbound(CHANNEL, self._on_response)
+        ctx.bus.subscribe_outbound(
+            CHANNEL, self._on_response, supports_reply_sequence=True
+        )
         for event_type, handler in self._event_bindings:
             ctx.event_bus.on(event_type, handler)
         for row in self._store.list():

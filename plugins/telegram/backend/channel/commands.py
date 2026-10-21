@@ -59,6 +59,8 @@ class _CommandMixin:
             )
         )
         result = self._interrupt_controller.request_interrupt(
+            channel=self._channel,
+            chat_id=str(chat.id),
             session_key=session_key,
             sender=sender_id,
             command="/stop",

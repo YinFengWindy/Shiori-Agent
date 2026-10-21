@@ -90,6 +90,8 @@ export type RoleFormState = {
   systemPrompt: string;
   profile?: RoleProfileDraft;
   nsfwMemoryEnabled: boolean;
+  /** Presents model-authored messages with natural chat pacing. */
+  naturalChatEnabled: boolean;
   /** Draft values owned by registered role-setting plugins. */
   pluginSettings: import("../plugins/pluginRoleSettings").PluginRoleSettingsDraft;
   /** Enables both proactive messages and idle activity for this role. */

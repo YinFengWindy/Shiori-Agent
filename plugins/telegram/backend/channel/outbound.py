@@ -6,10 +6,19 @@ import asyncio
 import logging
 
 from telegram.constants import ChatAction
-from telegram.error import Conflict, InvalidToken, NetworkError, TelegramError, TimedOut
+from telegram.error import (
+    BadRequest,
+    Forbidden,
+    Conflict,
+    InvalidToken,
+    NetworkError,
+    TelegramError,
+    TimedOut,
+)
 from telegram.ext import ContextTypes
 
-from shiori_sdk.messages import OutboundMessage
+from shiori_sdk.channels.delivery import bounded_reply_delivery, reply_failure_status
+from shiori_sdk.messages import DeliveryOutcome, OutboundMessage
 from shiori_sdk.channels.chat_types import REPLY_MENTION_IDS_KEY, is_group_chat_type
 from shiori_sdk.channels.session_key import resolve_outbound_session_key
 
@@ -123,6 +132,9 @@ class _OutboundMixin:
         delivery_status: str,
         external_message_id: str | None = None,
     ) -> None:
+        msg.delivery_outcome = DeliveryOutcome(
+            delivery_status, external_message_id or ""
+        )
         if self._channel_hub is None:
             return
         self._channel_hub.mark_delivery(
@@ -139,6 +151,10 @@ class _OutboundMixin:
         )
 
     async def _on_response(self, msg: OutboundMessage) -> None:
+        # One logical message includes length chunks, media and its receipt.
+        await bounded_reply_delivery(msg, self._send_response, timeout_seconds=90)
+
+    async def _send_response(self, msg: OutboundMessage) -> None:
         preview = msg.content[:60] + "..." if len(msg.content) > 60 else msg.content
         logger.info(f"[telegram] 发送回复  chat_id={msg.chat_id}  内容: {preview!r}")
         cid = int(self._resolve_chat_id(msg.chat_id))
@@ -209,12 +225,18 @@ class _OutboundMixin:
                     str(msg.chat_id), image, message_thread_id=message_thread_id
                 )
                 first_id = first_id or image_id
-        except BaseException:
+        except BaseException as error:
             # A later chunk/edit can fail after an earlier message was accepted.
             first_id = first_id or (stream.message_id if stream is not None else None)
             first_id = first_id or next(iter(receipts), None)
             self._record_delivery_status(
-                msg, delivery_status="failed", external_message_id=first_id
+                msg,
+                delivery_status=reply_failure_status(
+                    msg,
+                    rejected=isinstance(error, (BadRequest, Forbidden, InvalidToken)),
+                    external_message_id=first_id,
+                ),
+                external_message_id=first_id,
             )
             raise
         else:

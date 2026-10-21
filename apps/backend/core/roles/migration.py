@@ -4,11 +4,11 @@ from typing import Any
 
 from .profile_models import RoleProfile
 
-CURRENT_MANIFEST_VERSION = 9
+CURRENT_MANIFEST_VERSION = 10
 
 
 def migrate_manifest_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], bool]:
-    """Normalize a legacy role manifest into v9 without dropping role-owned data."""
+    """Normalize a legacy role manifest into v10 without dropping role-owned data."""
 
     version = int(payload.get("version") or 0)
     roles = payload.get("roles")
@@ -25,10 +25,10 @@ def migrate_manifest_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], b
         any(key in role for key in legacy_fields)
         or "auto_scene_cg_enabled" in (role.get("runtime_config") or {})
         for role in roles
-    )
+    ) or "natural_chat" in (payload.get("plugin_data") or {})
     if version == CURRENT_MANIFEST_VERSION and not has_legacy_fields:
         return dict(payload), False
-    if version not in {2, 3, 4, 5, 6, 7, 8, CURRENT_MANIFEST_VERSION}:
+    if version not in {2, 3, 4, 5, 6, 7, 8, 9, CURRENT_MANIFEST_VERSION}:
         raise ValueError(
             f"角色清单版本不支持：需要版本 {CURRENT_MANIFEST_VERSION}，实际为 {version}"
         )
@@ -46,6 +46,19 @@ def migrate_manifest_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], b
     # when the plugin is disabled. One atomic manifest replacement contains both
     # the destination namespace and removal of the legacy source fields.
     plugin_data = dict(payload.get("plugin_data") or {})
+    natural_chat = plugin_data.pop("natural_chat", {})
+    if not isinstance(natural_chat, dict):
+        raise ValueError("自然聊天角色设置必须是对象")
+    for role in migrated_roles:
+        legacy = natural_chat.get(str(role["id"]))
+        if legacy is None:
+            continue
+        if not isinstance(legacy, dict):
+            raise ValueError("自然聊天角色设置必须是对象")
+        runtime = dict(role.get("runtime_config") or {})
+        # An explicit new value, including False, always wins over stale imports.
+        runtime.setdefault("natural_chat_enabled", legacy.get("enabled") is True)
+        role["runtime_config"] = runtime
     pet_data = dict(plugin_data.get("desktop_pet") or {})
     for role in migrated_roles:
         if any(key in role for key in legacy_fields):

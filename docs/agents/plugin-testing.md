@@ -46,7 +46,7 @@ uv 会缓存 `--find-links` 中同名同版本的 wheel，重新构建后不加 
 uv run python -m scripts.verify_plugin_tests --output /absolute/path/outside-repository/plugin-isolation
 ```
 
-输出必须是仓库外的新目录；省略时创建系统临时目录。`--plugins novelai story` 选择目标，省略时发现所有有 Python 测试的插件；`--jobs N` 控制并发，默认 CPU 数。不存在迁移豁免、白名单或宿主安装分支。当前 23 个插件为 browser_use、citation、computer_use、context_pressure、default_memory、desktop_pet、feishu、gpt_sovits_tts、herdr、meme、novelai、observe、plugin_undo、qq、qqbot、screen_perception、sensevoice_asr、shell_restore、shell_safety、status_commands、story、telegram、tool_loop_guard；新增插件自动纳入发现（`plugins/` 下 `tests/` 含 `test_*.py` 的目录）。
+输出必须是仓库外的新目录；省略时创建系统临时目录。`--plugins novelai story` 选择目标，省略时发现所有有 Python 测试的插件；`--jobs N` 控制并发，默认 CPU 数。不存在迁移豁免、白名单或宿主安装分支。内置插件包括 browser_use、citation、computer_use、context_pressure、default_memory、desktop_pet、feishu、gpt_sovits_tts、herdr、meme、novelai、observe、plugin_undo、qq、qqbot、screen_perception、sensevoice_asr、shell_restore、shell_safety、status_commands、story、telegram、tool_loop_guard；新增插件自动纳入发现（`plugins/` 下 `tests/` 含 `test_*.py` 的目录）。
 
 脚本在仓库外暂存插件并构建普通 wheel，每个目标使用独立 venv，只安装目标 `[test]`、SDK/testing 与显式依赖。所有 `shiori-*` 包（SDK、目标与兄弟插件）以 `--no-index --no-deps` 从本地 wheelhouse 的 wheel 文件安装，闭包中缺少本地 wheel 即失败，不会回退到公网同名包；这一步同时加 `--no-cache --reinstall`，uv 缓存或环境中同名同版本的旧构建不能顶替刚构建的 wheel；其余第三方依赖单独从索引解析，最后以 `uv pip check` 校验整体依赖，来源探针还要求每个 `shiori-*` 分发记录的来源是 wheelhouse 内的 wheel 文件，且已安装文件与该 wheel 内容逐字节一致、不含 wheel 之外的包文件。`verify_sdk`、`verify_host_distribution` 使用同一安装方式。闭包合并运行时和目标 test extra，传递兄弟依赖只启用依赖边显式请求的 extra，marker 按执行解释器求值。不会默认加入 default_memory 或宿主；任何选中的宿主依赖直接失败。静态守护还检查所有未选中的 optional extra。
 

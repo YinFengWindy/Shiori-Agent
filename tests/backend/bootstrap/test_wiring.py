@@ -822,6 +822,36 @@ async def test_wire_turn_lifecycle_registers_afterstep_progress_handler():
     assert state.tool_chain_partial == [{"text": "tool", "calls": []}]
 
 
+async def test_buffered_progress_retains_tools_without_claiming_unsent_dialogue():
+    from agent.turns.reply_sequence import buffered_reply_scope
+
+    bus = EventBus()
+    state = TurnInterruptState("role:a", "hello")
+    wire_turn_lifecycle(TurnLifecycle(bus), active_turn_states={"role:a": state})
+    with buffered_reply_scope(True):
+        await bus.emit(
+            AfterStepCtx(
+                session_key="role:a",
+                channel="desktop",
+                chat_id="role:a",
+                iteration=0,
+                context_tokens_estimate=0,
+                tools_called=("lookup",),
+                partial_reply="未发送\n<message-break/>\n尾部",
+                tools_used_so_far=("lookup",),
+                tool_chain_partial=(
+                    {"text": "未发送铺垫", "calls": [{"name": "lookup"}]},
+                ),
+                partial_thinking="thinking",
+                has_more=False,
+            )
+        )
+    assert state.partial_reply == ""
+    assert state.partial_thinking == "thinking"
+    assert state.tools_used == ["lookup"]
+    assert state.tool_chain_partial == [{"text": "", "calls": [{"name": "lookup"}]}]
+
+
 def test_build_registered_tools_without_mcp_toolset_still_returns_empty_registry(
     monkeypatch, tmp_path: Path
 ):

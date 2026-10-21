@@ -4,10 +4,12 @@ import asyncio
 import base64
 import logging
 import time
+import httpx
 from pathlib import Path
 from typing import Any
 
-from shiori_sdk.messages import OutboundMessage
+from shiori_sdk.channels.delivery import bounded_reply_delivery, reply_failure_status
+from shiori_sdk.messages import DeliveryOutcome, OutboundMessage
 from shiori_sdk.channels.errors import NonRetryableDeliveryError
 from shiori_sdk.media import detect_image_mime_from_header
 from shiori_sdk.channels.session_key import resolve_outbound_session_key
@@ -21,6 +23,10 @@ class _OutboundMixin:
     """Owns QQBot C2C text, image, stream, and delivery-status output."""
 
     async def _on_response(self, msg: OutboundMessage) -> None:
+        # One logical message includes length chunks, media and its receipt.
+        await bounded_reply_delivery(msg, self._send_response, timeout_seconds=90)
+
+    async def _send_response(self, msg: OutboundMessage) -> None:
         turn_key = (
             resolve_outbound_session_key(msg, default_channel=CHANNEL),
             msg.chat_id,
@@ -57,7 +63,20 @@ class _OutboundMixin:
             await self._cleanup_cancelled_stream(state)
             raise
         except Exception as exc:
-            self._record_delivery_status(msg, "failed", first_id)
+            self._record_delivery_status(
+                msg,
+                reply_failure_status(
+                    msg,
+                    rejected=isinstance(exc, ValueError)
+                    or (
+                        isinstance(exc, httpx.HTTPStatusError)
+                        and 400 <= exc.response.status_code < 500
+                        and exc.response.status_code != 408
+                    ),
+                    external_message_id=first_id,
+                ),
+                first_id,
+            )
             # This boundary has already exhausted safe stream recovery. A bus
             # replay can duplicate a preview, a fallback, or an earlier image.
             raise NonRetryableDeliveryError(
@@ -76,6 +95,7 @@ class _OutboundMixin:
         via_account: dict[str, str] | None = None,
     ) -> None:
         """Marks the reply; ``via_account`` is given only for a sent one."""
+        msg.delivery_outcome = DeliveryOutcome(status, external_message_id or "")
         if self._channel_hub is None:
             return
         self._channel_hub.mark_delivery(

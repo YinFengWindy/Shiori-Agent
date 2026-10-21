@@ -3,6 +3,7 @@ import { chatTerminalEventMethods } from "@yinfengwindy/shiori-sdk";
 const synchronousDesktopBridgeEvents = new Set<string>([
   "bridge.exit",
   "chat.delta",
+  "chat.message",
   "chat.tool.started",
   "chat.tool.completed",
   ...chatTerminalEventMethods,

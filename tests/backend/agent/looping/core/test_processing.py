@@ -9,6 +9,8 @@ import pytest
 from agent.looping.core import AgentLoop
 from agent.provider import LLMResponse, ToolCall
 from bus.event_bus import EventBus
+from bus.queue import MessageBus
+from agent.turns.channel_sequence import ChannelSequenceOwner, channel_sequence_context
 from shiori_sdk.messages import InboundMessage, OutboundMessage
 from shiori_sdk.channel_events import TurnCancelled
 from shiori_sdk.channels.message_source import MessageSource
@@ -21,6 +23,25 @@ from tests.support.tool_hooks import (
     StrictProvider,
     make_agent_loop_with_tools,
 )
+
+
+async def test_direct_child_turn_does_not_inherit_channel_reply_transport():
+    loop = object.__new__(AgentLoop)
+    loop._active_tasks = {}
+    loop._active_turn_states = {}
+    loop._compact_command = AsyncMock(return_value=None)
+
+    async def process(*args, **kwargs):
+        assert channel_sequence_context() is None
+        return OutboundMessage("qqbot", "one", "internal result")
+
+    loop._process_role_scoped = process
+    with ChannelSequenceOwner().bind(MessageBus()):
+        assert (
+            await loop.process_direct("internal work", channel="qqbot", chat_id="one")
+            == "internal result"
+        )
+        assert channel_sequence_context() is not None
 
 
 @pytest.mark.asyncio

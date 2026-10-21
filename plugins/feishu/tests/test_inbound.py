@@ -193,7 +193,13 @@ async def test_stop_command_interrupts_the_bound_role_session(
 
     assert harness.bus.inbound == []
     assert harness.interrupts.requests == [
-        {"session_key": "role:mira", "sender": OPEN_ID, "command": "/stop"}
+        {
+            "session_key": "role:mira",
+            "sender": OPEN_ID,
+            "command": "/stop",
+            "channel": "feishu",
+            "chat_id": "oc_chat",
+        }
     ]
     assert harness.api.sent_texts() == ["已停止当前回复。"]
 

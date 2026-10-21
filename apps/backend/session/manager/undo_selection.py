@@ -3,6 +3,7 @@
 from typing import Any
 
 from shiori_sdk.prompting import is_context_frame
+from .models import message_thread_id
 
 
 def _is_context_frame_message(message: dict[str, Any]) -> bool:
@@ -25,6 +26,14 @@ def _find_last_passive_turn(
     for assistant_index in range(len(messages) - 1, -1, -1):
         if not _is_passive_assistant_message(messages[assistant_index]):
             continue
+        sequence_id = str(
+            messages[assistant_index].get("metadata", {}).get("reply_sequence_id") or ""
+        )
+        if sequence_id:
+            # An unresolvable latest batch must never fall through to deleting
+            # an earlier unrelated turn. Retries use a new turn ID but retain
+            # the stable original user-message anchor.
+            return _find_reply_sequence_turn(messages, assistant_index, sequence_id)
         user_index = assistant_index - 1
         while user_index >= 0 and _is_context_frame_message(messages[user_index]):
             user_index -= 1
@@ -33,6 +42,45 @@ def _find_last_passive_turn(
         delete_indices = list(range(user_index, assistant_index + 1))
         context_index = user_index - 1
         while context_index >= 0 and _is_context_frame_message(messages[context_index]):
+            delete_indices.insert(0, context_index)
+            context_index -= 1
+        return delete_indices, user_index, assistant_index
+    return None
+
+
+def _find_reply_sequence_turn(
+    messages: list[dict[str, Any]], assistant_index: int, sequence_id: str
+) -> tuple[list[int], int, int] | None:
+    assistant = messages[assistant_index]
+    user_id = assistant.get("metadata", {}).get("trigger_user_message_id")
+    thread_id = message_thread_id(assistant)
+    if not isinstance(user_id, str) or not user_id or not thread_id:
+        return None
+    sequence_indices = [
+        index
+        for index, message in enumerate(messages[: assistant_index + 1])
+        if _is_passive_assistant_message(message)
+        and message.get("metadata", {}).get("reply_sequence_id") == sequence_id
+        and message.get("metadata", {}).get("trigger_user_message_id") == user_id
+        and message_thread_id(message) == thread_id
+    ]
+    if not sequence_indices:
+        return None
+    for user_index in range(sequence_indices[0] - 1, -1, -1):
+        user = messages[user_index]
+        if (
+            not _is_real_user_message(user)
+            or str(user.get("id") or "") != user_id
+            or message_thread_id(user) != thread_id
+        ):
+            continue
+        delete_indices = [user_index, *sequence_indices]
+        context_index = user_index - 1
+        while (
+            context_index >= 0
+            and _is_context_frame_message(messages[context_index])
+            and message_thread_id(messages[context_index]) == thread_id
+        ):
             delete_indices.insert(0, context_index)
             context_index -= 1
         return delete_indices, user_index, assistant_index

@@ -1,5 +1,5 @@
 import { PluginRoleSettingsSlot } from "../plugins/PluginRoleSettingsSlot";
-import { BellRinging, Brain } from "@phosphor-icons/react";
+import { BellRinging, Brain, Chats } from "@phosphor-icons/react";
 import {
   SettingsToggleCard,
   type RoleRecord,
@@ -28,6 +28,12 @@ export function RoleCapabilitiesPanel({ activeRole, bridgeReady, roleForm, onUpd
     <div className="grid gap-7 text-body text-ink">
       <RoleEditorSection title="运行能力">
         <div className="grid gap-4 sm:grid-cols-2">
+          <RoleCapabilityCard
+            icon={<Chats className="h-5 w-5" weight="duotone" />}
+            title="自然聊天"
+            status={roleToggleStatus(roleForm.naturalChatEnabled)}
+            control={<SettingsToggleCard checked={roleForm.naturalChatEnabled} ariaLabel="自然聊天" onChange={(checked) => onUpdate((current) => ({ ...current, naturalChatEnabled: checked }))} />}
+          />
           <RoleCapabilityCard
             icon={<Brain className="h-5 w-5" weight="duotone" />}
             title="NSFW 记忆"

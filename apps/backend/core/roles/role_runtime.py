@@ -14,6 +14,7 @@ from bus.events_context import ContextWindowChanged
 
 from .services import RoleRepository
 from .store import RoleRecord
+from .turn_gate import role_turn_gate
 
 if TYPE_CHECKING:
     from .model_runtime import ModelPurpose, RoleModelRuntime, RoleModelSnapshot
@@ -219,7 +220,7 @@ class RoleRuntime:
                 raise RoleBusyError("当前角色正在回复或整理上下文，请稍后重试")
             self._execution.claims += 1
             try:
-                async with self._execution.turn_lock:
+                async with role_turn_gate(self._execution.turn_lock):
                     self._validate_context(context)
                     self._execution.active_work += 1
                     task = asyncio.current_task()

@@ -7,6 +7,7 @@ import pytest
 
 from core.roles.manifest import RoleManifestRepository
 from core.roles.models import RoleRecord
+from core.roles.migration import CURRENT_MANIFEST_VERSION
 
 
 def _legacy(path: Path):
@@ -125,3 +126,30 @@ def test_disabled_novelai_upgrade_survives_ordinary_role_save(tmp_path, enabled)
     saved = json.loads(roles.manifest_path.read_text(encoding="utf-8"))
     assert saved["plugin_data"]["novelai"]["mira"]["auto_scene_cg_enabled"] is enabled
     assert "auto_scene_cg_enabled" not in saved["roles"][0]["runtime_config"]
+
+
+@pytest.mark.parametrize("enabled", [False, True])
+def test_natural_chat_upgrade_and_role_save_need_no_plugin(tmp_path, enabled):
+    from core.roles.store import RoleStore
+
+    roles = RoleStore(tmp_path)
+    original = _legacy(roles.manifest_path)
+    original["version"] = 9
+    original["plugin_data"]["natural_chat"] = {"mira": {"enabled": enabled}}
+    roles.manifest_path.write_text(json.dumps(original), encoding="utf-8")
+
+    updated = roles.update_role("mira", name="Edited after upgrade")
+    assert updated.runtime_config["natural_chat_enabled"] is enabled
+    saved = json.loads(roles.manifest_path.read_text(encoding="utf-8"))
+    assert saved["version"] == CURRENT_MANIFEST_VERSION
+    assert "natural_chat" not in saved["plugin_data"]
+    assert saved["plugin_data"]["other"] == {"opaque": 42}
+    updated = roles.update_role(
+        "mira", runtime_config={**updated.runtime_config, "natural_chat_enabled": False}
+    )
+    reopened = RoleStore(tmp_path).get_role("mira")
+    assert reopened is not None and reopened.runtime_config == updated.runtime_config
+    assert reopened.runtime_config["natural_chat_enabled"] is False
+    before = roles.manifest_path.read_bytes()
+    roles.list_roles()
+    assert roles.manifest_path.read_bytes() == before

@@ -134,7 +134,12 @@ class DesktopChatRequestHandler:
         )
         metadata: dict[str, object] = dict(stored_metadata)
         metadata.update(
-            {"request_id": request_id, "delivery_key": request_id, "turn_id": turn_id}
+            {
+                "request_id": request_id,
+                "delivery_key": request_id,
+                "turn_id": turn_id,
+                "trigger_user_message_id": user_message_id,
+            }
         )
         reply_to_content = str(metadata.get("reply_to_content") or "").strip()
         inbound_content = (
@@ -220,6 +225,9 @@ class DesktopChatRequestHandler:
             media=media,
             metadata=metadata,
         )
+        # Attempts may change turn_id (chat.retry), but every reply keeps the
+        # exact original user row as its anchor. Do not rewrite that row's IDs.
+        metadata = {**metadata, "trigger_user_message_id": str(persisted_message["id"])}
         self._start_chat_turn(
             request_id=request_id,
             turn_id=turn_id,
