@@ -123,7 +123,7 @@ consolidates these additions and the subsequent #847 breaking migration.
 
 <!-- Record the next contract batch here, with PR references and breaking markers. -->
 
-- **Fixed-peer account settings (issue #891; PR reference added at delivery).**
+- **Fixed-peer account settings (PR #892, issue #891).**
   Account reports may include `fixed_peer` to declare that connection activation
   controls admission to one fixed peer. The host hides private/group enable
   switches and sender blacklist controls for this capability; `full_tools` still
