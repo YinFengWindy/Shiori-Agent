@@ -123,7 +123,7 @@ consolidates these additions and the subsequent #847 breaking migration.
 
 <!-- Record the next contract batch here, with PR references and breaking markers. -->
 
-- **Complete reply sequences (#865).** `shiori_sdk.reply_sequence.ReplySequencePolicy`
+- **Complete reply sequences (#865 / #871).** `shiori_sdk.reply_sequence.ReplySequencePolicy`
   supplies an explicit separator line through `PromptRenderCtx.reply_sequence`.
   Plugins opt in only when the host-owned `supports_reply_sequence` is true
   (currently interactive desktop turns). Model text is buffered, existing reply
