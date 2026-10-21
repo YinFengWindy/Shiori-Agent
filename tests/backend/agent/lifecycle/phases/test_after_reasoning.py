@@ -87,6 +87,14 @@ async def test_external_sequence_sends_each_committed_row_once_with_first_only_e
         assert not request.state.dispatch_outbound
         assert len(request.state.committed_message_ids) == 3
         assert result.ctx.reply == "one\n\ntwo"
+        assert result.ctx.response_metadata.raw_text == request.turn_result.reply
+        assert [
+            message["content"]
+            for message in SessionManager(tmp_path)
+            .get_or_create(session.key)
+            .get_history(include=whole_session)
+            if message["role"] == "assistant"
+        ] == ["one", "two"]
     finally:
         dispatch.cancel()
         await asyncio.gather(dispatch, return_exceptions=True)
