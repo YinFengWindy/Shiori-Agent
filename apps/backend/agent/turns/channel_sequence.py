@@ -8,6 +8,22 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 
 from bus.queue import MessageBus
+from agent.turns.reply_interruption import ReplyInterruption
+from shiori_sdk.messages import InboundMessage
+from shiori_sdk.channels.chat_types import is_group_chat_type
+
+
+def channel_reply_scope(message: InboundMessage) -> tuple[str, ...]:
+    """Exact receiving chat, independent of its shared role session and speaker."""
+    metadata = message.metadata
+    return (
+        str(metadata.get("role_id") or message.session_key),
+        message.channel,
+        str(metadata.get("account_id") or ""),
+        "group" if is_group_chat_type(metadata.get("chat_type")) else "private",
+        message.chat_id,
+        str(metadata.get("message_thread_id") or ""),
+    )
 
 
 @dataclass(frozen=True)
@@ -50,6 +66,44 @@ class ChannelSequenceOwner:
     def __init__(self) -> None:
         self._tasks: set[asyncio.Task] = set()
         self._stopped = False
+        self._replies: dict[tuple[str, ...], ReplyInterruption] = {}
+        self._plans: set[ReplyInterruption] = set()
+
+    def admit(self, message: InboundMessage) -> ReplyInterruption:
+        """Invalidate the same real sender's plan at accepted queue admission.
+
+        Queued requests retain their own token and still commit their input;
+        repeated supplements cannot cancel a new task through a stale lookup.
+        Other group members retain the dispatcher's chat order.
+        """
+        key = (*channel_reply_scope(message), message.sender)
+        previous = self._replies.get(key)
+        if previous is not None:
+            previous.invalidate()
+        reply = ReplyInterruption(invalidated=self._stopped)
+        self._replies[key] = reply
+        self._plans.add(reply)
+        return reply
+
+    def forget(self, message: InboundMessage, reply: ReplyInterruption) -> None:
+        """Release only this exact registration; an older turn owns no successor."""
+        key = (*channel_reply_scope(message), message.sender)
+        if self._replies.get(key) is reply:
+            self._replies.pop(key)
+        self._plans.discard(reply)
+
+    @contextmanager
+    def track(self, reply: ReplyInterruption | None):
+        """Retain desktop natural sequences; ordinary reload behavior is unchanged."""
+        if reply is not None and reply.natural_chat:
+            if self._stopped:
+                reply.invalidate()
+            self._plans.add(reply)
+        try:
+            yield
+        finally:
+            if reply is not None:
+                self._plans.discard(reply)
 
     @contextmanager
     def bind(self, bus: MessageBus):
@@ -75,7 +129,13 @@ class ChannelSequenceOwner:
 
     def stop(self) -> None:
         """Refuse old-runtime batches and cancel the unstarted suffix of active ones."""
+        if self._stopped:
+            return
         self._stopped = True
+        for reply in tuple(self._plans):
+            reply.invalidate()
+        self._replies.clear()
+        self._plans.clear()
         for task in tuple(self._tasks):
             task.cancel()
 

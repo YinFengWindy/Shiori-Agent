@@ -43,6 +43,7 @@ type UseDesktopBridgeLifecycleArgs = {
   clearSessionSending: (sessionKey: string) => void;
   completeChatTurn: (sessionKey: string, turnId: string) => void;
   isCurrentChatTurn: (sessionKey: string, turnId: string) => boolean;
+  isLatestChatTurn: (sessionKey: string, turnId: string) => boolean;
   isChatTurnCancelling: (sessionKey: string, turnId: string) => boolean;
   commitActiveSession: (nextSession: SessionPayload | null) => void;
   updateCommittedActiveSession: (updater: (current: SessionPayload | null) => SessionPayload | null) => void;
@@ -79,6 +80,7 @@ export function useDesktopBridgeLifecycle({
   clearSessionSending,
   completeChatTurn,
   isCurrentChatTurn,
+  isLatestChatTurn,
   isChatTurnCancelling,
   commitActiveSession,
   updateCommittedActiveSession,
@@ -98,6 +100,7 @@ export function useDesktopBridgeLifecycle({
     clearSessionSending,
     completeChatTurn,
     isCurrentChatTurn,
+  isLatestChatTurn,
     isChatTurnCancelling,
     commitActiveSession,
     loadRolesFromBridge,
@@ -254,9 +257,11 @@ export function useDesktopBridgeLifecycle({
           const currentSession = activeSessionRef.current;
           const currentView = mainViewRef.current;
           const isActiveSession = currentSession?.key === update.session.key;
+          const updateTurnId = String(event.payload.turn_id ?? "");
+          const staleTurn = updateTurnId && !callbacks.isLatestChatTurn(update.session.key, updateTurnId);
           const session = mergeSessionSummaryAndMessage(
             isActiveSession ? currentSession : null,
-            update.session,
+            staleTurn && isActiveSession ? currentSession : update.session,
             update.message,
             update.messages,
           );

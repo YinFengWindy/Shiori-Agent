@@ -8,6 +8,10 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from agent.turns.channel_sequence import channel_sequence_context
+from agent.turns.reply_interruption import (
+    interruptible_reply_delivery,
+    reply_was_invalidated,
+)
 from agent.turns import reply_sequence as pacing
 from agent.turns.outbound import sanitize_user_visible_content
 from core.common.cancellation import finish_started
@@ -151,7 +155,7 @@ async def commit_channel_reply_sequence(
             ):
                 await manager.append_messages(current, [], **state_kwargs)
 
-    with context.owner.delivering():
+    with context.owner.delivering(), interruptible_reply_delivery():
         for index in range(len(replies)):
             if index:
                 await wait_outside_role_gate(
@@ -159,4 +163,6 @@ async def commit_channel_reply_sequence(
                         pacing.message_pause(sequence.messages[index - 1])
                     )
                 )
+            if reply_was_invalidated():
+                raise asyncio.CancelledError
             await finish_started(publish(index), on_cancel=cancel_pending)

@@ -12,6 +12,380 @@ from bootstrap.runtime.dispatcher import RuntimeDispatcher
 from bootstrap.runtime.generations import RuntimeCandidate
 from bus.queue import MessageBus
 from shiori_sdk.messages import InboundMessage
+from shiori_sdk.messages import DeliveryOutcome
+from contextlib import asynccontextmanager
+from core.channels import ChannelHub
+from core.roles import RoleAggregateService
+from shiori_sdk.accounts.models import AccountResponseRules
+from agent.provider import LLMResponse, ToolCall
+from tests.support.external_turns import ExternalTurnHost
+from session.manager import SessionManager
+
+
+async def until(predicate):
+    async def wait():
+        while not predicate():
+            await asyncio.sleep(0)
+
+    await asyncio.wait_for(wait(), 3)
+
+
+@asynccontextmanager
+async def natural_dispatcher(tmp_path, monkeypatch, *, stage="pacing", enabled=True):
+    """Real admission, dispatcher, role gate, reasoner, bus acknowledgements and DB."""
+    host = ExternalTurnHost(tmp_path)
+    host.roles.update_role("mira", runtime_config={"natural_chat_enabled": enabled})
+    host.roles.create_role(
+        role_id="other",
+        name="Other",
+        system_prompt="test",
+        runtime_config={"natural_chat_enabled": enabled},
+    )
+    bus = MessageBus()
+    host.loop.bus = bus
+    host.loop._agent_core.pipeline._outbound_port._bus = bus
+    service = RoleAggregateService.from_runtime(
+        workspace=tmp_path, role_store=host.roles, session_manager=host.manager
+    )
+    hub = ChannelHub(service)
+    accounts = {}
+    for channel, suffix, role in (
+        ("qq", "one", "mira"),
+        ("qq", "two", "mira"),
+        ("telegram", "one", "mira"),
+        ("qq", "three", "other"),
+    ):
+        record = host.roles.accounts.register(
+            plugin_id=channel + ("_alternative" if suffix == "two" else ""),
+            platform=channel,
+            platform_account_id=suffix,
+            config_ref=suffix,
+            token="live",
+            role_id=role,
+            response_rules=AccountResponseRules(
+                group_enabled=True, blocked_sender_ids=("blocked",)
+            ),
+        )
+        host.roles.accounts.report(record.record.id, "live", connection="online")
+        accounts[(channel, suffix)] = record.record.id
+    started, release = asyncio.Event(), asyncio.Event()
+    sent, requests, tool_calls = [], [], []
+    running = 0
+    max_running = 0
+
+    async def model(**kwargs):
+        nonlocal running, max_running
+        if kwargs.get("response_format"):
+            return LLMResponse(content='{"mood":"平静","thought":"我想继续聊。"}')
+        running += 1
+        max_running = max(running, max_running)
+        number = len(requests)
+        requests.append(kwargs)
+        try:
+            if not number and stage == "generation":
+                started.set()
+                await release.wait()
+            if not number and stage == "tool":
+                return LLMResponse(
+                    content="private tool preamble",
+                    tool_calls=[
+                        ToolCall("first-tool", "public", {}),
+                        ToolCall("must-not-run", "public", {}),
+                    ],
+                )
+            return LLMResponse(
+                content=(
+                    "prefix\n<message-break/>\ntail" if not number else f"next-{number}"
+                )
+            )
+        finally:
+            running -= 1
+
+    monkeypatch.setattr(host.provider, "chat", model)
+
+    async def execute(**kwargs):
+        tool_calls.append("executed")
+        started.set()
+        await release.wait()
+        return "durable tool fact"
+
+    monkeypatch.setattr(host.loop.tools.get_tool("public"), "execute", execute)
+
+    async def pause(_):
+        if stage == "pacing":
+            started.set()
+            await release.wait()
+
+    monkeypatch.setattr("agent.turns.reply_sequence.wait_between_messages", pause)
+
+    async def send(message):
+        sent.append(message)
+        if len(sent) == 1 and stage == "sending":
+            started.set()
+            await release.wait()
+        message.delivery_outcome = DeliveryOutcome("sent", f"sent-{len(sent)}")
+
+    for channel in ("qq", "telegram"):
+        bus.subscribe_outbound(channel, send, supports_reply_sequence=True)
+    candidate = RuntimeCandidate(
+        1,
+        SimpleNamespace(
+            loop=host.loop, role_runtime_registry=host.loop.role_runtime_registry
+        ),
+        SimpleNamespace(),
+    )
+    bus.bind_runtime_admission(candidate.acquire)
+    app = SimpleNamespace(
+        bus=bus, wait_for_admission=AsyncMock(), acquire=candidate.acquire
+    )
+    inbound = asyncio.create_task(RuntimeDispatcher(app).run())
+    outbound = asyncio.create_task(bus.dispatch_outbound())
+
+    async def receive(
+        text,
+        *,
+        sender="alice",
+        chat="gqq:room",
+        channel="qq",
+        account="one",
+        chat_type="group",
+        mentioned=True,
+        external_id=None,
+        topic="",
+    ):
+        message = InboundMessage(
+            channel,
+            sender,
+            chat,
+            text,
+            metadata={
+                "account_id": accounts[channel, account],
+                "chat_type": chat_type,
+                "mentioned": mentioned,
+                "external_message_id": external_id or text,
+                "message_thread_id": topic,
+            },
+        )
+        routed = hub.route_account_inbound(message)
+        if routed is not None:
+            await bus.publish_inbound(routed)
+        return routed
+
+    try:
+        yield SimpleNamespace(
+            host=host,
+            bus=bus,
+            candidate=candidate,
+            receive=receive,
+            started=started,
+            release=release,
+            sent=sent,
+            requests=requests,
+            tool_calls=tool_calls,
+            max_running=lambda: max_running,
+        )
+    finally:
+        release.set()
+        inbound.cancel()
+        await asyncio.gather(inbound, return_exceptions=True)
+        outbound.cancel()
+        await asyncio.gather(outbound, return_exceptions=True)
+        await host.loop._event_bus.aclose()
+
+
+@pytest.mark.parametrize("stage", ["pacing", "generation", "sending"])
+@pytest.mark.parametrize("chat_type", ["private", "group"])
+async def test_admitted_supplements_stop_only_unsent_reply_and_keep_all_input(
+    tmp_path, monkeypatch, stage, chat_type
+):
+    async with natural_dispatcher(tmp_path, monkeypatch, stage=stage) as env:
+        await env.receive("first", chat_type=chat_type)
+        await asyncio.wait_for(env.started.wait(), 3)
+        await env.receive("second", chat_type=chat_type)
+        await env.receive("third", chat_type=chat_type)
+        await until(lambda: env.bus.inbound_size == 0)
+        if stage == "sending":
+            assert env.candidate.references > 0
+            assert [m.content for m in env.sent] == ["prefix"]
+        env.release.set()
+        await until(lambda: env.candidate.references == 0)
+        assert "tail" not in [m.content for m in env.sent]
+        assert (
+            "prefix" in [m.content for m in env.sent]
+            if stage != "generation"
+            else not any(m.content == "prefix" for m in env.sent)
+        )
+        session = SessionManager(tmp_path).get_or_create("role:mira")
+        assert [
+            m["content"]
+            for m in session.messages
+            if m["role"] == "user" and m["content"] in ("first", "second", "third")
+        ] == ["first", "second", "third"]
+        assert not any("tail" in m["content"] for m in session.messages)
+        assert env.max_running() == 1
+        assert env.candidate.reply_sequences._replies == {}
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        "sender",
+        "chat",
+        "account",
+        "channel",
+        "role",
+        "topic",
+        "chat_type",
+        "sidechat",
+        "blacklist",
+        "duplicate",
+    ],
+)
+async def test_group_admission_and_exact_origin_do_not_cancel_other_reply(
+    tmp_path, monkeypatch, change
+):
+    async with natural_dispatcher(tmp_path, monkeypatch) as env:
+        await env.receive("first", channel="telegram" if change == "topic" else "qq")
+        await asyncio.wait_for(env.started.wait(), 3)
+        changes = {
+            "sender": {"sender": "bob"},
+            "chat": {"chat": "gqq:other"},
+            "account": {"account": "two"},
+            "channel": {"channel": "telegram"},
+            "role": {"account": "three"},
+            "topic": {"channel": "telegram", "topic": "42"},
+            "chat_type": {"chat_type": "private"},
+            "sidechat": {"mentioned": False},
+            "blacklist": {"sender": "blocked"},
+            "duplicate": {"external_id": "first"},
+        }
+        await env.receive("second", **changes[change])
+        await until(lambda: env.bus.inbound_size == 0)
+        if change in ("sender", "sidechat", "blacklist", "duplicate"):
+            assert len(env.requests) == 1
+        else:
+            # Other receiving chats may generate while the first chat paces.
+            await until(lambda: len(env.requests) == 2)
+        env.release.set()
+        await until(lambda: env.candidate.references == 0)
+        assert [m.content for m in env.sent if m.content in ("prefix", "tail")] == [
+            "prefix",
+            "tail",
+        ]
+        expected = 1 if change in ("sidechat", "blacklist", "duplicate") else 2
+        assert len(env.requests) == expected
+        assert env.max_running() == 1
+
+
+async def test_inflight_duplicate_does_not_invalidate_generation(tmp_path, monkeypatch):
+    async with natural_dispatcher(tmp_path, monkeypatch, stage="generation") as env:
+        await env.receive("first")
+        await asyncio.wait_for(env.started.wait(), 3)
+        await env.receive("replayed", external_id="first")
+        await until(lambda: env.bus.inbound_size == 0)
+        env.release.set()
+        await until(lambda: env.candidate.references == 0)
+        assert [m.content for m in env.sent] == ["prefix", "tail"]
+        assert len(env.requests) == 1
+
+
+async def test_current_group_sender_cuts_pause_before_other_senders_fifo_requests(
+    tmp_path, monkeypatch
+):
+    async with natural_dispatcher(tmp_path, monkeypatch) as env:
+        await env.receive("alice-first")
+        await asyncio.wait_for(env.started.wait(), 3)
+        await env.receive("bob-request", sender="bob")
+        await env.receive("alice-supplement")
+        # The first pacing wait remains blocked forever. Admission must cancel
+        # it before awaiting that chat's tail, so both queued requests can run.
+        await until(lambda: env.bus.inbound_size == 0 and env.candidate.references == 0)
+        assert not env.release.is_set()
+        assert [message.content for message in env.sent] == [
+            "prefix",
+            "next-1",
+            "next-2",
+        ]
+        rows = SessionManager(tmp_path).get_or_create("role:mira").messages
+        assert [
+            row["content"]
+            for row in rows
+            if row["role"] == "user"
+            and row["content"] in ("alice-first", "bob-request", "alice-supplement")
+        ] == ["alice-first", "bob-request", "alice-supplement"]
+
+
+async def test_flag_off_keeps_ordinary_serial_chat_behavior(tmp_path, monkeypatch):
+    async with natural_dispatcher(
+        tmp_path, monkeypatch, stage="generation", enabled=False
+    ) as env:
+        await env.receive("first")
+        await asyncio.wait_for(env.started.wait(), 3)
+        await env.receive("second")
+        await until(lambda: env.bus.inbound_size == 0)
+        env.release.set()
+        await until(lambda: env.candidate.references == 0)
+        await env.bus.drain_outbound()
+        assert len(env.requests) == 2
+        assert [m.content for m in env.sent] == [
+            "prefix\n<message-break/>\ntail",
+            "next-1",
+        ]
+
+
+async def test_supplement_finishes_only_started_tool_and_next_turn_sees_its_fact(
+    tmp_path, monkeypatch
+):
+    async with natural_dispatcher(tmp_path, monkeypatch, stage="tool") as env:
+        await env.receive("first")
+        await asyncio.wait_for(env.started.wait(), 3)
+        await env.receive("second")
+        await until(lambda: env.bus.inbound_size == 0)
+        assert len(env.requests) == 1
+        assert env.tool_calls == ["executed"]
+        env.release.set()
+        await until(lambda: env.candidate.references == 0)
+        assert env.tool_calls == ["executed"]
+        assert len(env.requests) == 2
+        history = env.requests[1]["messages"]
+        assert any(
+            m.get("role") == "tool" and "durable tool fact" in str(m.get("content"))
+            for m in history
+        )
+        assert not any(
+            "private tool preamble" in str(m.get("content")) for m in history
+        )
+        assert [m.content for m in env.sent] == ["next-1"]
+        rows = SessionManager(tmp_path).get_or_create("role:mira").messages
+        calls = [
+            call
+            for row in rows
+            for group in row.get("tool_chain") or []
+            for call in group.get("calls") or []
+        ]
+        assert [call["call_id"] for call in calls] == ["first-tool"]
+
+
+@pytest.mark.parametrize("lifecycle", ["disable", "delete", "generation"])
+async def test_lifecycle_discards_tail_and_cleans_registration(
+    tmp_path, monkeypatch, lifecycle
+):
+    async with natural_dispatcher(tmp_path, monkeypatch) as env:
+        await env.receive("first")
+        await asyncio.wait_for(env.started.wait(), 3)
+        if lifecycle == "disable":
+            env.host.roles.update_role(
+                "mira", runtime_config={"natural_chat_enabled": False}
+            )
+        elif lifecycle == "delete":
+            env.host.roles.delete_role("mira")
+        else:
+            env.candidate.reply_sequences.stop()
+        env.release.set()
+        await until(lambda: env.candidate.references == 0)
+        assert [m.content for m in env.sent] == ["prefix"]
+        assert not env.candidate.reply_sequences._replies
+        assert not env.candidate.reply_sequences._plans
 
 
 async def test_background_result_runs_on_new_loop_and_releases_short_lease(

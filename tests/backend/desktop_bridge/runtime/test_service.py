@@ -8,7 +8,8 @@ from unittest.mock import AsyncMock
 import pytest
 
 from agent.config import load_config_text
-from agent.provider import LLMProvider, LLMResponse
+from agent.provider import LLMProvider, LLMResponse, ToolCall
+from shiori_sdk.tools import Tool
 from bootstrap.app import AppRuntime, RuntimeFeatures
 from core.common.task_collector import TaskCollector
 from core.desktop_presence import DesktopPresence
@@ -19,6 +20,235 @@ from desktop_bridge.runtime.service import _ServiceGeneration
 from session.manager import SessionManager
 
 _REGISTRATION = "00000000-0000-4000-a000-000000000001"
+
+
+@pytest.mark.parametrize(
+    "natural,stage,streaming",
+    [
+        (natural, stage, streaming)
+        for natural in (True, False)
+        for stage in (
+            "generation",
+            "pacing",
+            "publishing",
+            "queued_cancel",
+            "replacement",
+            "tool",
+        )
+        for streaming in ((True,) if natural else (True, False))
+        if natural or stage not in ("pacing", "publishing")
+    ],
+)
+async def test_desktop_supplements_acknowledge_immediately_and_keep_turn_ownership(
+    tmp_path, monkeypatch, stage, natural, streaming
+):
+    """Exercise the production reloadable endpoint, service, loop and SQLite."""
+    monkeypatch.setattr("bootstrap.tools._resolve_plugin_dirs", lambda _: [])
+    monkeypatch.setattr(
+        "core.roles.self_initializer.RoleSelfInitializer.ensure_seeded", AsyncMock()
+    )
+    entered, release = asyncio.Event(), asyncio.Event()
+    calls, events, tool_calls = [], [], []
+
+    async def model(self, **kwargs):
+        if kwargs.get("response_format"):
+            return LLMResponse(content='{"mood":"平静","thought":"我想继续聊。"}')
+        index = len(calls)
+        calls.append(kwargs)
+        if index == 0 and not natural and streaming:
+            await kwargs["on_content_delta"](
+                {"content_delta": "visible prefix", "thinking_delta": "shown thinking"}
+            )
+        if index == 0 and stage == "tool":
+            return LLMResponse(
+                content="visible prefix",
+                tool_calls=[
+                    ToolCall("once", "interruption_counter", {}),
+                    ToolCall("never", "interruption_counter", {}),
+                ],
+            )
+        if index == 0 and stage in ("generation", "queued_cancel", "replacement"):
+            entered.set()
+            await release.wait()
+            if not natural and streaming:
+                await kwargs["on_content_delta"](
+                    {
+                        "content_delta": "HIDDEN OLD TAIL",
+                        "thinking_delta": "HIDDEN THINKING",
+                    }
+                )
+        return LLMResponse(
+            content="prefix\n<message-break/>\ntail" if index == 0 else "new answer"
+        )
+
+    async def pause(_):
+        if stage == "pacing":
+            entered.set()
+            await release.wait()
+
+    async def emit(event):
+        if (
+            stage == "publishing"
+            and event["method"] == "chat.message"
+            and event["payload"]["turn_id"] == "first"
+        ):
+            entered.set()
+            await release.wait()
+        events.append(event)
+
+    monkeypatch.setattr(LLMProvider, "chat", model)
+    monkeypatch.setattr("agent.turns.reply_sequence.wait_between_messages", pause)
+    path = tmp_path / "config.toml"
+    streaming_config = (
+        f"\n[desktop.chat]\nstreaming_enabled = {str(streaming).lower()}\n"
+    )
+    path.write_text(_config("test") + streaming_config, encoding="utf-8")
+    app = AppRuntime(
+        load_config_text(_config("test") + streaming_config),
+        tmp_path,
+        features=RuntimeFeatures(enable_message_channels=False, enable_proactive=False),
+    )
+    await app.start()
+
+    class Counter(Tool):
+        name = "interruption_counter"
+        description = "Count a completed tool side effect"
+        parameters = {"type": "object", "properties": {}}
+
+        async def execute(self, **kwargs):
+            tool_calls.append("executed")
+            entered.set()
+            await release.wait()
+            return "completed tool fact"
+
+    app.core.loop.tools.register(Counter(), always_on=True)
+    service = ReloadableDesktopService(app, path, RoleStore(tmp_path))
+
+    async def request(method, payload):
+        response = await service.handle(
+            {
+                "id": str(payload.get("turn_id", "setup")),
+                "method": method,
+                "payload": payload,
+            },
+            emit_event=emit,
+        )
+        assert response.error is None, response.error
+        return response.payload
+
+    try:
+        await request(
+            "roles.create",
+            {
+                "role_id": "mira",
+                "name": "Mira",
+                "system_prompt": "test",
+                "runtime_config": {
+                    "natural_chat_enabled": natural,
+                    "dialogue_model_registration_id": _REGISTRATION,
+                },
+            },
+        )
+        await request(
+            "chat.send", {"role_id": "mira", "content": "first", "turn_id": "first"}
+        )
+        await asyncio.wait_for(entered.wait(), 5)
+        if not natural and streaming:
+            assert any(
+                event["method"] == "chat.delta"
+                and event["payload"]["content_delta"] == "visible prefix"
+                for event in events
+            )
+        if stage == "replacement":
+            await request(
+                "runtime.apply",
+                {
+                    "config_toml": _config("next") + streaming_config,
+                    "operation_id": "next",
+                    "expected_generation": app.generation,
+                },
+            )
+        cancelling = None
+        for turn in ("second", "third"):
+            # Neither a pending model nor a started commit blocks intake/RPC.
+            await asyncio.wait_for(
+                request(
+                    "chat.send", {"role_id": "mira", "content": turn, "turn_id": turn}
+                ),
+                1,
+            )
+            if turn == "second" and stage == "queued_cancel":
+                cancelling = asyncio.create_task(
+                    request(
+                        "chat.cancel", {"session_key": "role:mira", "turn_id": "second"}
+                    )
+                )
+                await asyncio.sleep(0)
+                assert not cancelling.done()
+        chat = service._current.service.chat_service
+        assert chat._tasks_by_session["role:mira"].turn_id == "third"
+        assert len(calls) == 1
+        release.set()
+        await asyncio.wait_for(chat.drain(), 5)
+        if cancelling is not None:
+            assert (await cancelling)["status"] == "interrupted"
+        rows = SessionManager(tmp_path).get_or_create("role:mira").messages
+        assert [row["content"] for row in rows if row["role"] == "user"] == [
+            "first",
+            "second",
+            "third",
+        ]
+        replies = [row["content"] for row in rows if row["role"] == "assistant"]
+        expected_prefix = (
+            ["visible prefix"]
+            if not natural and streaming
+            else (["prefix"] if natural and stage in ("pacing", "publishing") else [])
+        )
+        assert [reply for reply in replies if reply] == [*expected_prefix, "new answer"]
+        assert len(calls) == 2
+        if not natural:
+            assert not any("HIDDEN" in str(event) for event in events)
+            assert not any("HIDDEN" in str(row) for row in rows)
+            assert not any("HIDDEN" in str(message) for message in calls[1]["messages"])
+            assert (
+                any(
+                    "visible prefix" in str(message.get("content"))
+                    for message in calls[1]["messages"]
+                )
+                is streaming
+            )
+        for user_input in ("first", "second", "third"):
+            assert any(
+                message.get("role") == "user"
+                and user_input in str(message.get("content"))
+                for message in calls[1]["messages"]
+            )
+        if stage == "tool":
+            assert tool_calls == ["executed"]
+            assert any(
+                message.get("role") == "tool"
+                and "completed tool fact" in str(message.get("content"))
+                for message in calls[1]["messages"]
+            )
+        if stage == "replacement":
+            assert calls[-1]["model"] == "next"
+        terminals = [
+            (event["method"], event["payload"]["turn_id"])
+            for event in events
+            if event["method"] in ("chat.done", "chat.cancelled", "chat.error")
+        ]
+        assert terminals == [
+            ("chat.cancelled", "first"),
+            ("chat.cancelled", "second"),
+            ("chat.done", "third"),
+        ]
+        assert not chat._tasks_by_session
+        assert not chat._turns
+        assert not service._current.lease.reply_sequences._plans
+    finally:
+        release.set()
+        await service.aclose()
+        await app.shutdown()
 
 
 @pytest.mark.asyncio

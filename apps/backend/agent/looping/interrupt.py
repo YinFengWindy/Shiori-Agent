@@ -24,10 +24,17 @@ _DETACHED_TURN: ContextVar[bool] = ContextVar("detached_turn", default=False)
 _TRACKING_KEY: ContextVar[str] = ContextVar("turn_tracking_key", default="")
 
 
-def turn_tracking_key(session_key: str, channel: str = "", chat_id: str = "") -> str:
+def turn_tracking_key(
+    session_key: str,
+    channel: str = "",
+    chat_id: str = "",
+    *,
+    origin: tuple[str, ...] = (),
+) -> str:
     """Identify external chat work while retaining the desktop session key API."""
     if channel and channel != "desktop" and chat_id:
-        return f"{session_key}\x1f{channel}\x1f{chat_id}"
+        base = f"{session_key}\x1f{channel}\x1f{chat_id}"
+        return "\x1f".join((base, *origin)) if origin else base
     return session_key
 
 
@@ -49,6 +56,11 @@ async def run_turn_task[T](
     """
     _DETACHED_TURN.set(detached)
     _TRACKING_KEY.set(tracking_key)
+    if detached:
+        from agent.turns.reply_interruption import reply_interruption_scope
+
+        with reply_interruption_scope(None):
+            return await operation()
     return await operation()
 
 

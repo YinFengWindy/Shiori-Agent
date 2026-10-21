@@ -36,11 +36,12 @@ class _InterruptMixin:
         key = turn_tracking_key(session_key, channel, chat_id)
         # Legacy callers can still stop the sole active turn for a session.
         # Ambiguous multi-chat work requires its explicit transport target.
-        if key not in self._active_tasks and not channel:
+        if key not in self._active_tasks:
             matches = [
                 k
                 for k, state in self._active_turn_states.items()
                 if state.session_key == session_key
+                and (not channel or k.startswith(f"{key}\x1f"))
             ]
             if len(matches) == 1:
                 key = matches[0]

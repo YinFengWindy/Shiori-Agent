@@ -274,22 +274,37 @@ class ReloadableDesktopService:
                 error=BridgeError("runtime_reloading", "正在更新渠道配置，请稍后重试"),
             )
         entry = self._owner(policy.owner_routing, payload)
+        predecessors = []
         if method in ("chat.send", "chat.retry"):
             session_key = f"role:{payload.get('role_id', '')}"
-            if any(
-                item.service.chat_service.is_busy(session_key) for item in self._entries
-            ):
+            busy = [
+                item
+                for item in self._entries
+                if item.service.chat_service.is_busy(session_key)
+            ]
+            supplement = method == "chat.send" and all(
+                item.service.chat_service.can_supersede_chat_turn(session_key)
+                for item in busy
+            )
+            if busy and not supplement:
                 return BridgeResponse(
                     request_id,
                     "response",
                     method,
                     error=BridgeError("chat_busy", "当前会话已有正在执行的聊天任务"),
                 )
+            predecessors = [owner for owner in busy if owner is not entry]
         entry.requests += 1
         entry.idle.clear()
         try:
             async with entry.lease.retain() as lease:
                 with bind_runtime(lease):
+                    for owner in predecessors:
+                        # The new runner awaits exact old cleanup; admission and
+                        # invalid-request validation remain prompt and synchronous.
+                        entry.service.chat_service.continue_chat_after(
+                            session_key, owner.service.chat_service
+                        )
                     return await entry.service.handle(request, emit_event=emit_event)
         finally:
             entry.requests -= 1

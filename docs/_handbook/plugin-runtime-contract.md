@@ -123,6 +123,28 @@ consolidates these additions and the subsequent #847 breaking migration.
 
 <!-- Record the next contract batch here, with PR references and breaking markers. -->
 
+- **Desktop and natural-channel supplements (#867).** Every desktop chat accepts
+  supplements, including ordinary streaming replies. On external channels this
+  requires the built-in natural-chat capability: admitted and deduplicated input
+  invalidates only the same role, receiving
+  account, channel, chat type, chat, topic and real sender's reply plan. Other
+  group senders retain chat order; unaddressed or blocked messages do not enter
+  this boundary. The dispatcher invalidates before waiting for the previous
+  chat task. Generation stops at its next model/tool completion boundary,
+  persists accepted input and completed tool facts, and starts no further tool
+  calls or summary requests for the invalidated plan. A started delivery and
+  its bookkeeping finish; confirmed prefixes remain and unstarted tails are
+  discarded. Desktop `chat.send` acknowledges supplements without waiting for
+  old generation, while each queued runner waits for predecessor cleanup.
+  Ordinary desktop replies freeze their already published stream prefix and
+  thinking, stop publishing further deltas immediately, and persist that prefix
+  with completed tool facts before the next runner starts. Ordinary runtime
+  reload behavior remains unchanged until a supplement invalidates its owner.
+  Turn-owned `session.updated` events also carry `turn_id`; old persisted
+  messages are still reconciled by ID without changing the current turn or
+  reverting its session summary. Internal/proactive entrypoints remain outside
+  this behavior. SDK/runtime versions are unchanged.
+
 - **Acknowledged channel reply sequences (#866 / #876).** Ordinary channel turns may
   select the host-owned `ReplySequencePolicy` when the live transport registers with
   `subscribe_outbound(..., supports_reply_sequence=True)`. Telegram, QQ, QQBot

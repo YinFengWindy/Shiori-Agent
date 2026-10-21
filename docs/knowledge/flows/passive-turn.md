@@ -49,6 +49,10 @@ flowchart TD
 - `chat.error`：统一错误边界。
 - `chat.cancelled`：回合被按 turn_id 取消或 bridge 关闭时的终止事件，只带 session_key 与 turn_id；按 turn_id 取消时先持久化中断回复并发 `session.updated`。
 
+桌面普通模式与自然聊天都可在旧回复生成或连发期间通过 `chat.send` 接收补充。后端先使旧计划失效，再持久化并确认新输入，按接纳顺序等待旧回合安全收尾；不会让 RPC 等待完整模型回复。普通模式立即停止旧增量的继续发布，已展示的正文/思考前缀与已完成工具事实持久化，新一轮结合这些事实及全部已接纳输入重新回答；自然模式仅保留已发送气泡。回合发布的 `session.updated` 同样带 `turn_id`。renderer 按当前 turn 隔离终止、增量和工具状态，迟到的已发 `chat.message` 仍按持久 ID 合并，但不能回滚新回合的会话摘要。外部渠道的自动补充插话仍只在自然聊天开启时生效。
+
+输入框在回复期间可以编辑、添加附件并发送补充。无草稿时主按钮为中止；有草稿时同时保留中止和发送，手动中止不会清掉正在编辑的草稿。
+
 ## 异常分支
 
 - BeforeTurn/BeforeReasoning abort：结束当前回合并走 abort outbound。

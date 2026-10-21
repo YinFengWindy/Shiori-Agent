@@ -8,6 +8,9 @@ from typing import TYPE_CHECKING
 from bootstrap.runtime.generations import RuntimeLease
 
 from core.common.runtime_scope import bind_runtime, current_runtime_lease
+from agent.turns.channel_sequence import channel_reply_scope
+from agent.turns.reply_interruption import reply_interruption_scope
+from shiori_sdk.messages import InboundMessage
 
 if TYPE_CHECKING:
     from bootstrap.app import AppRuntime
@@ -26,7 +29,8 @@ class RuntimeDispatcher:
         item retains its admission lease, including while waiting behind its chat.
         """
         pending: set[RuntimeLease] = set()
-        tails: dict[tuple[str, str, str], asyncio.Task] = {}
+        tails: dict[tuple[str, ...], asyncio.Task] = {}
+        accepted: set[tuple[str, ...]] = set()
         try:
             async with asyncio.TaskGroup() as group:
                 while True:
@@ -41,15 +45,64 @@ class RuntimeDispatcher:
                     if inherited is None:
                         await self._app.wait_for_admission()
                     lease = inherited or self._app.acquire()
-                    key = (item.session_key, item.channel, item.chat_id)
                     pending.add(lease)
+                    key = (
+                        channel_reply_scope(item)
+                        if isinstance(item, InboundMessage)
+                        else (item.session_key, item.channel, item.chat_id)
+                    )
+                    message_id = str(
+                        getattr(item, "metadata", {}).get("external_message_id") or ""
+                    )
+                    dedupe = (*key, message_id) if message_id else None
+                    if getattr(item, "metadata", {}).get("conversation_duplicate") or (
+                        dedupe is not None and dedupe in accepted
+                    ):
+                        await lease.release()
+                        pending.discard(lease)
+                        continue
+                    if dedupe is not None:
+                        accepted.add(dedupe)
+                    interruption = None
+                    if (
+                        isinstance(item, InboundMessage)
+                        and item.metadata.get("role_id")
+                        and self._app.bus.supports_reply_sequence(item.channel)
+                    ):
+                        role = (
+                            lease.core.role_runtime_registry.repository.store.get_role(
+                                str(item.metadata["role_id"])
+                            )
+                        )
+                        if role is None:
+                            # A role may be removed after its channel accepted
+                            # input. Retire that input without stopping other chats.
+                            await lease.release()
+                            pending.discard(lease)
+                            if dedupe is not None:
+                                accepted.discard(dedupe)
+                            continue
+                        if role.runtime_config.get("natural_chat_enabled") is True:
+                            interruption = lease.reply_sequences.admit(item)
                     task = group.create_task(
-                        self._process_inbound(item, lease, tails.get(key), pending)
+                        self._process_inbound(
+                            item, lease, tails.get(key), pending, interruption
+                        )
                     )
                     tails[key] = task
                     task.add_done_callback(
                         lambda done, key=key: self._forget_tail(tails, key, done)
                     )
+                    if dedupe is not None:
+                        task.add_done_callback(
+                            lambda _, dedupe=dedupe: accepted.discard(dedupe)
+                        )
+                    if interruption is not None and isinstance(item, InboundMessage):
+                        task.add_done_callback(
+                            lambda _, item=item, owner=lease.reply_sequences, reply=interruption: owner.forget(
+                                item, reply
+                            )
+                        )
         finally:
             # Tasks cancelled before their first step never entered their lease.
             for lease in pending:
@@ -66,6 +119,7 @@ class RuntimeDispatcher:
         lease: RuntimeLease,
         previous: asyncio.Task | None,
         pending: set[RuntimeLease],
+        interruption=None,
     ) -> None:
         async with lease:
             pending.discard(lease)
@@ -73,8 +127,16 @@ class RuntimeDispatcher:
                 await asyncio.shield(asyncio.gather(previous, return_exceptions=True))
             bus = self._app.bus
             assert bus is not None
-            with bind_runtime(lease), lease.reply_sequences.bind(bus):
-                await lease.core.loop.process_inbound(item)
+            try:
+                with (
+                    bind_runtime(lease),
+                    lease.reply_sequences.bind(bus),
+                    reply_interruption_scope(interruption),
+                ):
+                    await lease.core.loop.process_inbound(item)
+            finally:
+                if interruption is not None:
+                    lease.reply_sequences.forget(item, interruption)
 
     async def process_direct(self, *args, **kwargs):
         """Keeps scheduled child turns on their parent operation's runtime."""
