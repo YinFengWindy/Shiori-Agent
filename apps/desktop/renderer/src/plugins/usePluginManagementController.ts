@@ -1,8 +1,9 @@
 import { errorFeedback } from "@yinfengwindy/shiori-sdk/host-internal";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { createPluginBridgeClient, type PluginSummary } from "./pluginBridgeClient";
-import { refreshPluginEnabledState } from "./pluginEnabledStateStore";
+import { getPluginRosterSnapshot, refreshPluginEnabledState, subscribePluginEnabledState } from "./pluginEnabledStateStore";
 import { pluginRosterChanged } from "./pluginRuntimeChanged";
+import { pluginTrustQueue } from "./pluginTrustQueue";
 
 /**
  * Loads the plugin roster and lets the caller hot toggle one plugin at a
@@ -11,17 +12,15 @@ import { pluginRosterChanged } from "./pluginRuntimeChanged";
  * this hook) hide a disabled plugin's UI entries immediately.
  */
 export function usePluginManagementController() {
-  const [plugins, setPlugins] = useState<PluginSummary[] | null>(null);
+  const plugins = useSyncExternalStore(subscribePluginEnabledState, getPluginRosterSnapshot);
   const [error, setError] = useState("");
   const [errorDetail, setErrorDetail] = useState("");
   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
-  const [trustCandidate, setTrustCandidate] = useState<PluginSummary | null>(null);
   const client = useMemo(() => createPluginBridgeClient(), []);
 
   const reload = useCallback(async () => {
     try {
-      const list = await refreshPluginEnabledState(client);
-      setPlugins(list);
+      await refreshPluginEnabledState(client);
       setError("");
       return true;
     } catch (loadError) {
@@ -66,18 +65,19 @@ export function usePluginManagementController() {
     }
   }, [reload]);
 
-  const setEnabled = useCallback((pluginId: string, enabled: boolean) => runMutation(pluginId, () => client.setEnabled(pluginId, enabled, { operationId: crypto.randomUUID() })), [client, runMutation]);
-
-  const confirmTrust = useCallback(async () => {
-    if (!trustCandidate?.trustFingerprint) return;
-    const candidate = trustCandidate;
-    if (await runMutation(candidate.id, () => client.trustPlugin(candidate.candidateId, candidate.trustFingerprint!))) setTrustCandidate(null);
-  }, [client, runMutation, trustCandidate]);
+  const setEnabled = useCallback((pluginId: string, enabled: boolean) => {
+    const plugin = plugins?.find((candidate) => candidate.id === pluginId);
+    if (enabled && plugin?.canTrust) {
+      pluginTrustQueue.request(plugin, true);
+      return Promise.resolve(false);
+    }
+    return runMutation(pluginId, () => client.setEnabled(pluginId, enabled, { operationId: crypto.randomUUID() }));
+  }, [client, plugins, runMutation]);
 
   const requestTrust = useCallback((candidate: PluginSummary) => {
     setError("");
-    setTrustCandidate(candidate);
+    pluginTrustQueue.request(candidate);
   }, []);
 
-  return { plugins, error, errorDetail, pendingIds, setEnabled, reload, runMutation, trustCandidate, requestTrust, confirmTrust, closeTrust: () => setTrustCandidate(null) };
+  return { plugins, error, errorDetail, pendingIds, setEnabled, reload, runMutation, requestTrust };
 }

@@ -15,7 +15,7 @@ export function bridgeRequestTimeoutMs(method: string, requestedTimeoutMs?: numb
   // plugin config save waits for the settings lock, that plugin's in-flight
   // calls (bounded by the backend's drain timeout), its setup or restore, or a
   // full generation swap, none of which has a fixed bound.
-  if (method === "runtime.apply" || method === "plugin.config.set" || method === "chat.context.compact" || method === "plugins.communication.services.call") return null;
+  if (method === "runtime.apply" || method === "plugin.config.set" || method === "plugins.trust" || method === "chat.context.compact" || method === "plugins.communication.services.call") return null;
   if (requestedTimeoutMs !== undefined) {
     if (!Number.isInteger(requestedTimeoutMs) || requestedTimeoutMs <= 0 || requestedTimeoutMs > 2_147_483_647) {
       throw new Error("请求超时必须是有效的正整数毫秒数");

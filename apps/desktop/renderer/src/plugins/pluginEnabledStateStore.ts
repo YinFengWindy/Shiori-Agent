@@ -2,6 +2,7 @@ import { createPluginBridgeClient, type PluginBridgeClient, type PluginSummary }
 import { activePluginIds } from "./activePluginIds";
 import { synchronizePluginSettingsAutoRegistration } from "./pluginSettingsAutoRegistration";
 import type { RuntimePluginUi } from "../../../src/plugins/uiContract";
+import { pluginTrustQueue } from "./pluginTrustQueue";
 
 type Listener = () => void;
 
@@ -17,6 +18,7 @@ export type PluginEnabledPredicate = (pluginId: string) => boolean;
 // narrowest thing that lets all of them agree on one answer immediately
 // after a toggle, matching "停用后其 UI 入口...立即消失" (issue #174 AC 3).
 let cache: Map<string, boolean> | null = null;
+let roster: PluginSummary[] | null = null;
 let inflight: Promise<void> | null = null;
 const listeners = new Set<Listener>();
 let synchronizeUi: ((entries: RuntimePluginUi[]) => Promise<Map<string, string>>) | undefined;
@@ -38,6 +40,8 @@ export function refreshPluginEnabledState(client: Pick<PluginBridgeClient, "list
     // subtab — see pluginSettingsAutoRegistration.ts (issue #230 AC 5/6).
     synchronizePluginSettingsAutoRegistration(plugins);
     const snapshot = plugins.map((plugin) => ({ ...plugin, rendererError: failures?.get(plugin.id) }));
+    if (JSON.stringify(roster) !== JSON.stringify(snapshot)) roster = snapshot;
+    pluginTrustQueue.synchronize(snapshot);
     setPluginEnabledSnapshot(snapshot);
     return snapshot;
   });
@@ -90,6 +94,11 @@ export function getPluginEnabledPredicate(): PluginEnabledPredicate {
   return predicate;
 }
 
+/** The full shared roster keeps settings and startup trust on the same host snapshot. */
+export function getPluginRosterSnapshot(): PluginSummary[] | null {
+  return roster;
+}
+
 /**
  * Whether the roster has loaded at least once, so a caller can tell "not yet
  * known" apart from "disabled". A `useSyncExternalStore` snapshot getter
@@ -119,7 +128,9 @@ export function subscribePluginEnabledState(listener: Listener): () => void {
 
 /** Test-only: clears memoized state so each test starts from a clean cache. */
 export function resetPluginEnabledStateForTests(): void {
+  pluginTrustQueue.reset();
   cache = null;
+  roster = null;
   inflight = null;
   predicate = createPredicate();
   synchronizeUi = undefined;

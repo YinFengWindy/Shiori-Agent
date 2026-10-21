@@ -51,7 +51,7 @@ class RuntimePluginManagement:
     def __init__(self, app: AppRuntime, settings: RuntimeSettingsApplication) -> None:
         self._app = app
         self._settings = settings
-        self.trust = RuntimePluginTrust(app)
+        self.trust = RuntimePluginTrust(app, settings)
         self.packages = RuntimePluginPackages(self, app.workspace)
         self.channels = RuntimeChannelListing(app, self._enabled)
 

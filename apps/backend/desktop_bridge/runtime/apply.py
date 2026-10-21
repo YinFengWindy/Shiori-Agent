@@ -8,7 +8,7 @@ import json
 import logging
 import tomllib
 from collections import OrderedDict
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
@@ -149,6 +149,9 @@ class DerivedWrite:
     # Set with ``reload_plugin`` when the write flips the plugin's enabled flag:
     # the plugin is loaded or unloaded within the generation instead.
     toggle: bool = False
+    # Explicit trust transitions validate and admit one startup candidate inside
+    # this same operation lock, before normal loading or generation publication.
+    prepare_plugin_admission: Callable[[], Awaitable[str | None]] | None = None
 
 
 # (operation_id, generation, reloaded plugin ids) of one applied in-generation reload.
@@ -237,6 +240,9 @@ class RuntimeSettingsApplication:
                 fingerprint,
                 reload_plugin=derive.reload_plugin if derive is not None else None,
                 toggle=derive is not None and derive.toggle,
+                prepare_plugin_admission=(
+                    derive.prepare_plugin_admission if derive is not None else None
+                ),
             )
 
     @staticmethod
@@ -290,6 +296,7 @@ class RuntimeSettingsApplication:
         *,
         reload_plugin: str | None = None,
         toggle: bool = False,
+        prepare_plugin_admission: Callable[[], Awaitable[str | None]] | None = None,
     ) -> dict[str, Any]:
         text = payload["config_toml"]
         updates = payload.get("role_model_updates", [])
@@ -310,7 +317,10 @@ class RuntimeSettingsApplication:
             )
         except (ValueError, TypeError) as exc:
             raise RuntimeApplyError("runtime_config_invalid", str(exc)) from exc
-        if config == self.app.config:
+        admitted_plugin = (
+            await prepare_plugin_admission() if prepare_plugin_admission else None
+        )
+        if config == self.app.config and admitted_plugin is None:
             with self.roles.lock:
                 self._commit(
                     text,
@@ -323,6 +333,7 @@ class RuntimeSettingsApplication:
             result = {"generation": generation, "changed": bool(updates)}
             self._remember(operation_id, fingerprint, result)
             return result
+        reload_plugin = admitted_plugin or reload_plugin
         if reload_plugin is not None and not updates:
             reloaded = await self._reload_plugin(
                 reload_plugin, config, text, operation_id, fingerprint, toggle=toggle
@@ -332,7 +343,15 @@ class RuntimeSettingsApplication:
         candidate = None
         service = None
         try:
-            candidate = await self.app.prepare(config)
+            kernel = self.app.core.plugin_manager if self.app.core is not None else None
+            candidate = await self.app.prepare(
+                config,
+                **(
+                    {"plugin_discovery_snapshot": kernel.discover()}
+                    if admitted_plugin is not None and kernel is not None
+                    else {}
+                ),
+            )
             service = prepare_service(candidate.core)
 
             def commit() -> None:
