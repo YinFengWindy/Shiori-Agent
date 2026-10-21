@@ -331,6 +331,7 @@ class _PassiveReasoningLoopMixin:
                 self._llm_config.model,
                 self._llm_config.max_tokens,
                 schemas_for_history=schemas_for_history,
+                reply_tool=finish_reply_schema() if natural_reply else None,
             )
             if reply_was_invalidated():
                 return interrupted_result()

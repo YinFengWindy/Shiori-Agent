@@ -132,6 +132,7 @@ class _PassiveReasoningResultMixin:
             self._llm_config.model,
             summary_cap,
             purpose=purpose,
+            reply_tool=finish_reply_schema() if natural_reply else None,
         )
         response = await budgeted_chat(
             self._llm.provider,

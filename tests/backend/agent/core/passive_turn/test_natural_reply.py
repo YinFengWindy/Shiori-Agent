@@ -2,6 +2,8 @@
 
 import asyncio
 import json
+from copy import deepcopy
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -188,5 +190,126 @@ async def test_correction_uses_strict_schema_only_on_supported_endpoint(
         function = provider.chat.call_args.kwargs["tools"][0]["function"]
         assert function.get("strict", False) is strict
         assert function["parameters"]["required"] == ["messages"]
+    finally:
+        await provider.aclose()
+
+
+@pytest.mark.parametrize("minimal", [False, True])
+async def test_correction_preflights_full_request_and_keeps_compacted_prefix(
+    memory_harness, minimal
+):
+    from agent.core.passive_turn.compaction import (
+        RequestCompaction,
+        request_compaction_scope,
+    )
+    from agent.core.passive_turn.natural_reply import finish_reply_schema
+    from agent.prompting.input_budget import BudgetPolicy
+    from agent.prompting.usage_accounting import turn_usage
+    from core.compaction import CompactionController, CompactionPolicy
+    from core.compaction_summary import WorkingSummary
+
+    h = memory_harness
+    session = h.manager.get_or_create("cli:natural-correction-budget")
+    session.metadata["role_id"] = "mira"
+    session.add_message("user", "old task")
+    session.add_message("assistant", "noted")
+    h.manager.save(session)
+    prefix = [{"role": "system", "content": "history " * 400}]
+    tail = [
+        {"role": "user", "content": "current task"},
+        {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {
+                    "id": "work",
+                    "type": "function",
+                    "function": {"name": "counter", "arguments": "{}"},
+                }
+            ],
+        },
+        {"role": "tool", "tool_call_id": "work", "content": "done"},
+    ]
+    messages = deepcopy(prefix + tail)
+    compacted = [{"role": "system", "content": "compacted history"}]
+    provider = LLMProvider(
+        api_key="test",
+        model_context_window=2400,
+        default_max_tokens=100,
+        budget_policy=BudgetPolicy(safety_margin_tokens=20),
+    )
+    transport = AsyncMock(
+        return_value=SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content="",
+                        tool_calls=[
+                            SimpleNamespace(
+                                id="reply",
+                                function=SimpleNamespace(
+                                    name="finish_reply",
+                                    arguments='{"messages":["done"]}',
+                                ),
+                            )
+                        ],
+                    ),
+                    finish_reason="tool_calls",
+                )
+            ],
+            usage=None,
+        )
+    )
+    provider._create_with_retry = transport
+    controller = CompactionController(
+        h.manager,
+        h.maintenance,
+        SimpleNamespace(
+            model_name="m",
+            generate=AsyncMock(
+                side_effect=lambda prepared: WorkingSummary(
+                    "old task done", prepared.removed_message_ids
+                )
+            ),
+        ),
+    )
+    scope = RequestCompaction(
+        controller,
+        session.key,
+        None,
+        CompactionPolicy(0),
+        2,
+        1,
+        AsyncMock(return_value=prefix if minimal else compacted),
+        lambda _: [],
+        render_minimal=AsyncMock(return_value=compacted),
+    )
+    try:
+        initial = provider.input_budget(
+            messages=messages, tools=[finish_reply_schema()], model="m", max_tokens=100
+        )
+        assert initial is not None and not initial.needs_trim
+        with request_compaction_scope(scope), turn_usage():
+            result = await NaturalReplyProtocol().complete(
+                LLMResponse(content="draft " * 550, thinking="original thinking"),
+                messages=messages,
+                provider=provider,
+                model="m",
+                max_tokens=100,
+            )
+        transport.assert_awaited_once()
+        request = transport.await_args.args[0]
+        assert request["tools"][0]["function"]["name"] == "finish_reply"
+        assert request["messages"][0] == compacted[0]
+        assert "done" in str(request["messages"])
+        assert "draft " in str(request["messages"])
+        assert scope.degraded is minimal
+        assert scope.last_result is not None
+        assert scope.results[-1]["final_budget"]["schema_tokens"] > 0
+        assert messages[0] == compacted[0]
+        assert "done" in str(messages)
+        assert "draft " not in str(messages)
+        assert "回复格式纠正" not in str(messages)
+        assert result.response.thinking == "original thinking"
     finally:
         await provider.aclose()

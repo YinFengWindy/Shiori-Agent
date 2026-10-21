@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from dataclasses import dataclass, replace
 from typing import Any
 from uuid import uuid4
@@ -13,11 +14,23 @@ from agent.turns.reply_sequence import ReplySequence, ReplySequencePolicy
 from agent.turns.reply_interruption import ReplyPlanInvalidated, reply_was_invalidated
 from prompts.natural_chat import FINISH_REPLY_TOOL_NAME
 from .budgeted_request import budgeted_chat
+from .compaction import current_request_compaction, ensure_request_budget
+from .minimal_request import completed_tool_results
 from .reply_recovery import CompletedReply
+from core.compaction import CompactionFailedError
 
 
 class InvalidNaturalReply(ValueError):
     """A natural-chat turn has no validated, deliverable message list."""
+
+
+class NaturalReplyCorrectionError(InvalidNaturalReply):
+    """Terminal correction failure retaining the original response and tool facts."""
+
+    def __init__(self, response: LLMResponse, messages: list[dict]) -> None:
+        self.response = response
+        self.messages = deepcopy(messages)
+        super().__init__("自然聊天格式纠正失败，本轮已终止，未发送未经校验的回复")
 
 
 @dataclass(frozen=True)
@@ -177,26 +190,52 @@ class NaturalReplyProtocol:
                 isinstance(provider, LLMProvider) and provider.supports_strict_tools
             )
             tool = finish_reply_schema(strict=strict)
-            corrected = await budgeted_chat(
-                provider,
-                messages=correction,
-                tools=[tool],
-                reply_tool=tool,
-                tool_choice={
-                    "type": "function",
-                    "function": {"name": FINISH_REPLY_TOOL_NAME},
-                },
-                model=model,
-                max_tokens=max_tokens,
-                # DeepSeek thinking does not support forcing a named tool.
-                # Only this format correction is auxiliary; original thinking
-                # and the role's normal reasoning configuration stay intact.
-                call_purpose="auxiliary",
-                defer_tool_argument_errors=True,
-            )
-            if reply_was_invalidated():
-                raise ReplyPlanInvalidated
-            reply = _validate(corrected)
+            schemas = [tool]
+            scope = current_request_compaction()
+            tail = messages[scope.prefix_length :] if scope is not None else []
+            try:
+                await ensure_request_budget(
+                    correction,
+                    schemas,
+                    provider,
+                    model,
+                    max_tokens,
+                    purpose="auxiliary",
+                    reply_tool=tool,
+                )
+                corrected = await budgeted_chat(
+                    provider,
+                    messages=correction,
+                    tools=schemas,
+                    reply_tool=tool,
+                    tool_choice={
+                        "type": "function",
+                        "function": {"name": FINISH_REPLY_TOOL_NAME},
+                    },
+                    model=model,
+                    max_tokens=max_tokens,
+                    # DeepSeek thinking does not support forcing a named tool.
+                    # Only this format correction is auxiliary; original thinking
+                    # and the role's normal reasoning configuration stay intact.
+                    call_purpose="auxiliary",
+                    defer_tool_argument_errors=True,
+                )
+                if reply_was_invalidated():
+                    raise ReplyPlanInvalidated
+                reply = _validate(corrected)
+            except (CompactionFailedError, ReplyPlanInvalidated):
+                raise
+            except Exception as error:
+                # A correction cannot restart the business turn or become a
+                # successful timeout fallback with its original facts discarded.
+                raise NaturalReplyCorrectionError(response, messages) from error
+            finally:
+                if scope is not None:
+                    # Share the compacted prefix with later mood/finalization calls,
+                    # without leaking transient correction instructions into them.
+                    messages[:] = correction[: scope.prefix_length] + (
+                        completed_tool_results(tail) if scope.degraded else tail
+                    )
             calls = (response, corrected)
             corrected.thinking = response.thinking or corrected.thinking
             response = corrected

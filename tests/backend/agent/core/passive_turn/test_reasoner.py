@@ -37,6 +37,75 @@ def natural_metadata(content, policy):
     }
 
 
+@pytest.mark.parametrize(
+    "error",
+    [TimeoutError("correction timed out"), ContentSafetyError("correction rejected")],
+)
+@pytest.mark.parametrize("with_tool", [False, True])
+async def test_natural_correction_failure_is_terminal_after_original_work(
+    tmp_path, error, with_tool
+):
+    from agent.core.passive_turn.natural_reply import NaturalReplyCorrectionError
+    from agent.provider import LLMResponse, ToolCall
+
+    class Counter(Tool):
+        name = "counter"
+        description = "Record a side effect"
+        parameters = {"type": "object", "properties": {}}
+
+        def __init__(self):
+            self.calls = 0
+
+        async def execute(self, **kwargs):
+            self.calls += 1
+            return "operation completed"
+
+    manager = SessionManager(tmp_path)
+    counter = Counter()
+    registry = ToolRegistry()
+    registry.register(counter)
+    provider = AsyncMock()
+    original = LLMResponse(
+        content="done", thinking="original thinking", total_tokens=30
+    )
+    provider.chat.side_effect = [
+        *(
+            [LLMResponse(content="", tool_calls=[ToolCall("work", "counter", {})])]
+            if with_tool
+            else []
+        ),
+        original,
+        error,
+        LLMResponse(content="must not restart the turn"),
+    ]
+    reasoner = DefaultReasoner(
+        llm=LLMServices(provider=provider, light_provider=provider),
+        llm_config=LLMConfig(),
+        tools=registry,
+        discovery=ToolDiscoveryState(),
+        tool_search_enabled=False,
+        context=AsyncMock(),
+        session_manager=manager,
+    )
+    reasoner.render_prompt = AsyncMock(
+        return_value=PromptRenderResult(
+            messages=[{"role": "user", "content": "help"}], natural_chat=True
+        )
+    )
+    msg = InboundMessage(channel="desktop", sender="user", chat_id="a", content="help")
+    with pytest.raises(NaturalReplyCorrectionError) as caught:
+        await reasoner.run_turn(msg=msg, session=manager.get_or_create(msg.session_key))
+    assert caught.value.__cause__ is error
+    assert provider.chat.await_count == (3 if with_tool else 2)
+    assert counter.calls == int(with_tool)
+    # The terminal error carries original facts, rather than replacing them with
+    # a successful timeout fallback or restarting a safety-rejected turn.
+    assert caught.value.response is original
+    assert caught.value.response.thinking == "original thinking"
+    assert caught.value.response.total_tokens == 30
+    assert ("operation completed" in str(caught.value.messages)) is with_tool
+
+
 async def test_invalidated_natural_turn_returns_work_without_requiring_a_reply(
     tmp_path,
 ):

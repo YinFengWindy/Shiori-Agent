@@ -7,7 +7,7 @@ from agent.prompting.attachment_hints import prepare_attachment_hints
 from agent.provider import LLMProvider
 from agent.prompting.usage_accounting import current_usage, mark_speaking_request
 from core.compaction import CompactionFailedError
-from .compaction import current_request_compaction
+from .compaction import current_request_compaction, prepare_request_schemas
 from agent.turns.reply_interruption import ReplyPlanInvalidated, reply_was_invalidated
 
 logger = logging.getLogger("agent.budgeted_request")
@@ -32,15 +32,13 @@ async def budgeted_chat(
         if reply_tool is not None:
             # A final answer is an output contract, not a business capability.
             # Minimal requests disable business tools but still need this schema.
-            tools = kwargs.setdefault("tools", [])
-            if scope is not None and scope.degraded:
-                tools.clear()
-            name = reply_tool["function"]["name"]
             # The caller reads this same list after compaction to determine
             # which business capabilities were actually sent to the provider.
-            tools[:] = [tool for tool in tools if tool["function"]["name"] != name] + [
-                reply_tool
-            ]
+            prepare_request_schemas(
+                kwargs.setdefault("tools", []),
+                reply_tool,
+                tools_disabled=scope is not None and scope.degraded,
+            )
         tools_enabled = (
             any(
                 reply_tool is None
@@ -99,9 +97,8 @@ async def budgeted_chat(
                     schemas_for_history=schemas_for_history,
                     force=True,
                     minimal_only=attempt == 1,
+                    reply_tool=reply_tool,
                 )
-                if scope.degraded:
-                    kwargs["tools"] = []
                 continue
             raise CompactionFailedError(result) from exc
         mark_speaking_request(after=previous_calls)
