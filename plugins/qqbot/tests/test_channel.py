@@ -463,7 +463,13 @@ async def test_qqbot_stop_uses_bound_role_session(tmp_path: Path) -> None:
     await channel._handle_stop("c2c:app:user-1", "user-1")
 
     assert interrupt.requests == [
-        {"session_key": "role:mira", "sender": "user-1", "command": "/stop"}
+        {
+            "session_key": "role:mira",
+            "sender": "user-1",
+            "command": "/stop",
+            "channel": "qqbot",
+            "chat_id": "c2c:app:user-1",
+        }
     ]
     channel.send.assert_awaited_once_with("c2c:app:user-1", "已中断")
     await channel.stop()

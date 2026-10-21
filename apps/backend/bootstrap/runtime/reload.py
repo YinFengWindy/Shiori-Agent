@@ -98,7 +98,7 @@ class RuntimeReloadMixin:
         candidate: RuntimeCandidate,
         commit: Callable[[], None] | None = None,
     ) -> None:
-        """Commits persistence immediately before publishing the prepared pointer."""
+        """Replace a runtime after cancelling its pending channel reply suffixes."""
         current = self._generation_manager.require_running()
         if candidate is current:
             if commit is not None:
@@ -111,6 +111,23 @@ class RuntimeReloadMixin:
         ):
             raise RuntimeError("Runtime candidate is stale or already consumed")
         current.core.assert_hot_unloadable()
+        accepted = self._generation_manager.tracked
+        for generation in accepted:
+            generation.reply_sequences.stop()
+        try:
+            await self._publish_candidate(candidate, commit)
+        finally:
+            if not candidate.published:
+                for generation in accepted:
+                    generation.reply_sequences.resume()
+
+    async def _publish_candidate(
+        self,
+        candidate: RuntimeCandidate,
+        commit: Callable[[], None] | None = None,
+    ) -> None:
+        """Commits persistence immediately before publishing the prepared pointer."""
+        current = self._generation_manager.require_running()
         if self.channel_host is None or candidate.channel_host is None:
             self._publish_pointer(candidate, commit)
             await self._drain_plugin_process_resources()

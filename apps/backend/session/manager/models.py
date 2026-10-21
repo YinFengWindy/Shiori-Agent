@@ -30,13 +30,25 @@ CONTEXT_TURN_STARTED_AT = "context_turn_started_at"
 HistoryFilter = Callable[[Mapping[str, Any]], bool]
 
 
+def delivered_history(message: Mapping[str, Any]) -> bool:
+    """Exclude unconfirmed natural-reply text from every model/history reader.
+
+    Legacy ordinary replies keep their existing history semantics. A sequence
+    row is visible only once its own platform acknowledgement says sent.
+    """
+    metadata = message.get("metadata") or {}
+    return not metadata.get("reply_sequence_id") or message.get(
+        "delivery_status", metadata.get("delivery_status")
+    ) not in {"pending", "failed", "uncertain"}
+
+
 def whole_session(message: Mapping[str, Any]) -> bool:
     """History filter for readers that deliberately span every thread.
 
     Memory consolidation works on the whole role session; model-facing
     history reads pass a context view's filter instead.
     """
-    return True
+    return delivered_history(message)
 
 
 def message_thread_id(message: Mapping[str, Any]) -> str:
@@ -268,6 +280,10 @@ class Session:
         """
         if include is None and is_role_session_key(self.key):
             raise ValueError(f"角色共享会话 {self.key} 读取历史必须指定上下文筛选")
+
+        def visible_message(message: Mapping[str, Any]) -> bool:
+            return delivered_history(message) and (include is None or include(message))
+
         if start_index is not None:
             if max_messages <= 0:
                 return []
@@ -284,13 +300,9 @@ class Session:
         elif max_messages <= 0:
             return []
         else:
-            visible = (
-                self.messages
-                if include is None
-                else [m for m in self.messages if include(m)]
-            )
+            visible = [m for m in self.messages if visible_message(m)]
             return visible[-max_messages:]
-        return messages if include is None else [m for m in messages if include(m)]
+        return [m for m in messages if visible_message(m)]
 
     def clear(self) -> None:
         self.messages = []

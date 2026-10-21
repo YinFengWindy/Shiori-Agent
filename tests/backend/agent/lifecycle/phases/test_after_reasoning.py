@@ -28,6 +28,68 @@ from core.roles.reply_state import AffectionChange, InvalidRoleReply, RoleReply
 from proactive_v2.presence import PresenceStore
 from session.manager import SessionManager, ConsolidationCommitRequest
 from session.manager.models import whole_session
+from agent.turns.channel_sequence import ChannelSequenceOwner
+from bus.queue import MessageBus
+from shiori_sdk.messages import DeliveryOutcome
+from shiori_sdk.reply_sequence import ReplySequencePolicy
+
+
+async def test_external_sequence_sends_each_committed_row_once_with_first_only_extras(
+    tmp_path, monkeypatch
+):
+    manager = SessionManager(tmp_path)
+    session = role_session(manager)
+    request = turn(session, content="one\n<message-break/>\ntwo")
+    request.state.msg.channel = "qq"
+    request.state.msg.chat_id = "gqq:123"
+    request.state.msg.metadata.update(
+        {
+            "role_id": "yin",
+            "request_id": "external-request",
+            "external_message_id": "incoming",
+            "thread_id": network_thread_id("yin", "qq", "gqq:123"),
+            "account_id": "qq:bot",
+            "sender_id": "456",
+            "chat_type": "group",
+        }
+    )
+    request.turn_result.reply_sequence = ReplySequencePolicy("<message-break/>")
+    request.turn_result.role_reply = RoleReply(
+        content=request.turn_result.reply,
+        mood="平静",
+        thought="思考",
+        mention_ids=("789",),
+    )
+    bus = MessageBus()
+    sent = []
+
+    async def send(message):
+        sent.append(message)
+        assert message.committed_message_id in {m["id"] for m in session.messages}
+        message.delivery_outcome = DeliveryOutcome("sent", str(len(sent)))
+
+    async def pause(_):
+        pass
+
+    monkeypatch.setattr("agent.turns.reply_sequence.wait_between_messages", pause)
+    bus.subscribe_outbound("qq", send, supports_reply_sequence=True)
+    dispatch = asyncio.create_task(bus.dispatch_outbound())
+    try:
+        with ChannelSequenceOwner().bind(bus):
+            result = await phase(manager).run(request)
+        assert [m.content for m in sent] == ["one", "two"]
+        assert [m.metadata.get("mention_ids") for m in sent] == [["789"], None]
+        assert [m.metadata["external_message_id"] for m in sent] == [
+            "incoming",
+            "incoming",
+        ]
+        assert [m.thinking for m in sent] == ["mood 平静", None]
+        assert not request.state.dispatch_outbound
+        assert len(request.state.committed_message_ids) == 3
+        assert result.ctx.reply == "one\n\ntwo"
+    finally:
+        dispatch.cancel()
+        await asyncio.gather(dispatch, return_exceptions=True)
 
 
 def phase(manager):

@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import logging
 
-from shiori_sdk.messages import OutboundMessage
+from shiori_sdk.channels.delivery import bounded_reply_delivery, reply_failure_status
+from shiori_sdk.messages import DeliveryOutcome, OutboundMessage
 from shiori_sdk.channels.chat_types import REPLY_MENTION_IDS_KEY
 from shiori_sdk.channels import ChannelContext
 
@@ -67,6 +68,10 @@ class QQOutboundAdapter:
         return account_id
 
     async def _on_response(self, msg: OutboundMessage) -> None:
+        # One logical message includes length chunks, media and its receipt.
+        await bounded_reply_delivery(msg, self._send_response, timeout_seconds=90)
+
+    async def _send_response(self, msg: OutboundMessage) -> None:
         """Sends a role reply; a group reply @s its trigger and chosen members.
 
         The reply's images go in the same QQ message as its text, so an
@@ -94,8 +99,15 @@ class QQOutboundAdapter:
                     images=tuple(msg.media),
                 )
             )["message_id"]
-        except Exception:
-            self._mark_delivery(msg, "failed")
+        except Exception as error:
+            self._mark_delivery(
+                msg,
+                reply_failure_status(
+                    msg,
+                    rejected=isinstance(error, ValueError)
+                    or type(error) is OneBotError,
+                ),
+            )
             raise
         self._mark_delivery(msg, "sent", message_id, via)
 
@@ -106,6 +118,7 @@ class QQOutboundAdapter:
         message_id: str = "",
         via_account: dict[str, str] | None = None,
     ) -> None:
+        msg.delivery_outcome = DeliveryOutcome(status, message_id)
         hub = self._ctx.channel_hub if self._ctx else None
         if hub is not None:
             hub.mark_delivery(

@@ -33,7 +33,13 @@ class FakeMessageBus:
         """Number of messages not consumed by a test."""
         return self._inbound.qsize()
 
-    def subscribe_outbound(self, channel: str, callback: OutboundHandler) -> None:
+    def subscribe_outbound(
+        self,
+        channel: str,
+        callback: OutboundHandler,
+        *,
+        supports_reply_sequence: bool = False,
+    ) -> None:
         """Register a connection's reply callback."""
         self.outbound.setdefault(channel, []).append(callback)
 
@@ -94,11 +100,22 @@ class FakeInterruptController:
         self.requests: list[dict[str, str]] = []
 
     def request_interrupt(
-        self, session_key: str, sender: str = "", command: str = "/stop"
+        self,
+        session_key: str,
+        sender: str = "",
+        command: str = "/stop",
+        *,
+        channel: str = "",
+        chat_id: str = "",
     ) -> FakeInterruptResult:
         """Record the request; the reply text is the fixture's ``message``."""
         self.requests.append(
-            {"session_key": session_key, "sender": sender, "command": command}
+            {
+                "session_key": session_key,
+                "sender": sender,
+                "command": command,
+                **({"channel": channel, "chat_id": chat_id} if channel else {}),
+            }
         )
         return FakeInterruptResult(
             status=self.status, session_key=session_key, message=self.message

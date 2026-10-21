@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from shiori_sdk.messages import OutboundMessage
+from shiori_sdk.messages import DeliveryOutcome, OutboundMessage
 from shiori_sdk.testing.channel_context import fake_channel_context
 from shiori_sdk.testing.channel_hub import FakeChannelHub
 from plugins.qq.backend.accounts_actions import qq_image_segment
@@ -54,6 +54,33 @@ def _reply(
         metadata={"account_id": "qq:101", "sender_id": "902", **metadata},
         committed_message_id="committed",
     )
+
+
+async def test_natural_messages_keep_account_target_and_distinct_receipts(tmp_path):
+    adapter = _Adapter(tmp_path)
+    adapter.send_target.side_effect = [
+        {"message_id": "first"},
+        {"message_id": "second"},
+    ]
+    messages = [
+        _reply(
+            "gqq:777",
+            content=content,
+            reply_sequence_id="turn",
+            reply_sequence_index=index,
+        )
+        for index, content in enumerate(("one", "two"))
+    ]
+    for message in messages:
+        await adapter._on_response(message)
+    assert [message.delivery_outcome for message in messages] == [
+        DeliveryOutcome("sent", "first"),
+        DeliveryOutcome("sent", "second"),
+    ]
+    assert [call.args[:4] for call in adapter.send_target.await_args_list] == [
+        ("qq:101", "group", "777", "one"),
+        ("qq:101", "group", "777", "two"),
+    ]
 
 
 @pytest.mark.asyncio

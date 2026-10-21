@@ -5,8 +5,9 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 
 from bus.events import InboundItem
-from shiori_sdk.messages import OutboundMessage
+from shiori_sdk.messages import DeliveryOutcome, OutboundMessage
 from shiori_sdk.channels.errors import NonRetryableDeliveryError
+from bus.acknowledged import deliver_acknowledged, finish_started
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +43,9 @@ class MessageBus:
         self._lease_factory: Callable | None = None
         self._lanes: dict[str, _Lane] = {}
         self.transport_lock = asyncio.Lock()
+        self._acknowledgements: dict[int, asyncio.Future[DeliveryOutcome]] = {}
+        self._ack_started: set[int] = set()
+        self._sequence_transports: set[tuple[str, Callable]] = set()
 
     def bind_runtime_admission(self, lease_factory: Callable) -> None:
         """Captures the accepting runtime for queued channel messages and their replies."""
@@ -77,6 +81,23 @@ class MessageBus:
         self._pending_outbound[key] = self._pending_outbound.get(key, 0) + 1
         await self._outbound.put(msg)
 
+    async def deliver_outbound(self, msg: OutboundMessage) -> DeliveryOutcome:
+        """Queue one message and await its actual, non-retryable platform outcome.
+
+        Cancellation before the lane starts withdraws this message. Once started,
+        the lane finishes the channel callback even if the awaiting turn stops.
+        """
+        future = asyncio.get_running_loop().create_future()
+        self._acknowledgements[id(msg)] = future
+        await self.publish_outbound(msg)
+        return await future
+
+    def cancel_waiting_outbound(self, msg: OutboundMessage) -> None:
+        """Withdraw an acknowledged message only before its platform callback starts."""
+        future = self._acknowledgements.get(id(msg))
+        if future is not None and id(msg) not in self._ack_started:
+            future.cancel()
+
     @staticmethod
     def _outbound_key(msg: OutboundMessage) -> tuple[str, str, str]:
         return (
@@ -97,11 +118,22 @@ class MessageBus:
         self,
         channel: str,
         callback: Callable[[OutboundMessage], Awaitable[None]],
+        *,
+        supports_reply_sequence: bool = False,
     ) -> None:
         """订阅某 channel 的出站消息"""
         subscribers = self._subscribers.setdefault(channel, [])
         if callback not in subscribers:
             subscribers.append(callback)
+        if supports_reply_sequence:
+            self._sequence_transports.add((channel, callback))
+
+    def supports_reply_sequence(self, channel: str) -> bool:
+        """Whether the sole live channel transport acknowledges bounded sends."""
+        callbacks = self._subscribers.get(channel, [])
+        return (
+            len(callbacks) == 1 and (channel, callbacks[0]) in self._sequence_transports
+        )
 
     def unsubscribe_outbound(
         self,
@@ -110,6 +142,7 @@ class MessageBus:
     ) -> None:
         """Removes a transport callback before replacing or stopping its connection."""
         subscribers = self._subscribers.get(channel, [])
+        self._sequence_transports.discard((channel, callback))
         self._subscribers[channel] = [item for item in subscribers if item != callback]
         if not self._subscribers[channel]:
             self._subscribers.pop(channel, None)
@@ -278,6 +311,26 @@ class MessageBus:
         MessagePushTool.push 的消息可能先于这条重试的回复送达（可接受的取舍）。
         渠道明确禁止重试时仅记录错误，避免重复发送已被接收的消息。
         """
+        acknowledgement = self._acknowledgements.get(id(msg))
+        if acknowledgement is not None:
+
+            async def deliver() -> None:
+                try:
+                    async with self.transport_lock:
+                        if acknowledgement.cancelled():
+                            return
+                        self._ack_started.add(id(msg))
+                        receipt = await deliver_acknowledged(
+                            msg, tuple(self._subscribers.get(msg.channel, []))
+                        )
+                    if not acknowledgement.done():
+                        acknowledgement.set_result(receipt)
+                finally:
+                    self._acknowledgements.pop(id(msg), None)
+                    self._ack_started.discard(id(msg))
+
+            await finish_started(deliver())
+            return
         async with self.transport_lock:
             attempted = tuple(self._subscribers.get(msg.channel, []))
             failed: list[Callable[[OutboundMessage], Awaitable[None]]] = []

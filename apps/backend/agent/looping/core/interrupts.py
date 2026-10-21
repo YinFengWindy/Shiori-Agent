@@ -8,6 +8,8 @@ from ..interrupt import (
     InterruptResult,
     TurnInterruptState,
     in_detached_turn,
+    turn_tracking_key,
+    current_tracking_key,
 )
 from bus.events import InboundItem, SpawnCompletionItem
 from shiori_sdk.messages import InboundMessage
@@ -26,9 +28,23 @@ class _InterruptMixin:
         session_key: str,
         sender: str = "",
         command: str = "/stop",
+        *,
+        channel: str = "",
+        chat_id: str = "",
     ) -> InterruptResult:
         """Channel 层调用的中断入口，不走 MessageBus。"""
-        task = self._active_tasks.get(session_key)
+        key = turn_tracking_key(session_key, channel, chat_id)
+        # Legacy callers can still stop the sole active turn for a session.
+        # Ambiguous multi-chat work requires its explicit transport target.
+        if key not in self._active_tasks and not channel:
+            matches = [
+                k
+                for k, state in self._active_turn_states.items()
+                if state.session_key == session_key
+            ]
+            if len(matches) == 1:
+                key = matches[0]
+        task = self._active_tasks.get(key)
         if task is None or task.done():
             return InterruptResult(
                 status="idle",
@@ -37,7 +53,7 @@ class _InterruptMixin:
             )
 
         # 保存中断态（纯内存，不落库）
-        active_state = self._active_turn_states.get(session_key)
+        active_state = self._active_turn_states.get(key)
         if active_state is None:
             active_state = TurnInterruptState(
                 session_key=session_key,
@@ -51,7 +67,7 @@ class _InterruptMixin:
             interrupted_by=command,
             interrupted_at=time.monotonic(),
         )
-        self._interrupt_states[session_key] = snapshot
+        self._interrupt_states[key] = snapshot
         task.cancel()
         logger.info(
             f"Turn interrupted  session_key={session_key}  "
@@ -71,8 +87,9 @@ class _InterruptMixin:
     ) -> None:
         """Drops a snapshot after its channel has durably persisted it."""
 
-        if self._interrupt_states.get(session_key) is state:
-            _ = self._interrupt_states.pop(session_key, None)
+        for key, value in tuple(self._interrupt_states.items()):
+            if value is state:
+                self._interrupt_states.pop(key)
 
     def _get_interrupt_state(self, session_key: str) -> TurnInterruptState | None:
         """读取中断态（含 TTL 过期检查），不提前消费。"""
@@ -119,7 +136,8 @@ class _InterruptMixin:
         # A detached external turn never resumes another turn's interruption.
         if msg.channel == "desktop" or in_detached_turn():
             return msg, False
-        interrupted = self._get_interrupt_state(key)
+        tracking_key = current_tracking_key(key)
+        interrupted = self._get_interrupt_state(tracking_key)
         if interrupted is None:
             return msg, False
 
@@ -134,7 +152,7 @@ class _InterruptMixin:
             metadata={**(msg.metadata or {}), "resumed_from_interrupt": True},
         )
         logger.info(f"Resuming interrupted turn for {key}")
-        self._active_turn_states[key] = TurnInterruptState(
+        self._active_turn_states[tracking_key] = TurnInterruptState(
             session_key=key,
             original_user_message=resumed.content,
             original_metadata=dict(resumed.metadata or {}),

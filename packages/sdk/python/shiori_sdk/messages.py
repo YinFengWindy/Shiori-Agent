@@ -58,6 +58,18 @@ class InboundMessage:
         return str(self.metadata.get("context_chat_id") or self.chat_id).strip()
 
 
+@dataclass(frozen=True)
+class DeliveryOutcome:
+    """A channel's actual platform outcome, separate from queue acceptance.
+
+    ``uncertain`` means the platform may have accepted the request. Such a
+    message must not be automatically replayed, even without a platform id.
+    """
+
+    status: str
+    external_message_id: str = ""
+
+
 @dataclass
 class OutboundMessage:
     """agent 发出的消息"""
@@ -73,3 +85,6 @@ class OutboundMessage:
     # 兜底/降级通知等未落库的出站消息必须留空，投递标记据此判断能否落到具体消息上，
     # 不得回退成"猜最新一条"。
     committed_message_id: str | None = None
+    # Filled by the channel after its platform operation and bookkeeping.
+    # This is transient transport state, never outbound metadata or history.
+    delivery_outcome: DeliveryOutcome | None = field(default=None, repr=False)

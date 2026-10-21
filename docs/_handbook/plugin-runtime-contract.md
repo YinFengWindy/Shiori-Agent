@@ -123,10 +123,31 @@ consolidates these additions and the subsequent #847 breaking migration.
 
 <!-- Record the next contract batch here, with PR references and breaking markers. -->
 
+- **Acknowledged channel reply sequences (#866).** Ordinary channel turns may
+  select `ReplySequencePolicy` when the live transport registers with
+  `subscribe_outbound(..., supports_reply_sequence=True)`. Telegram, QQ, QQBot
+  and Feishu opt in. `OutboundMessage.delivery_outcome` carries a transient
+  `DeliveryOutcome(status, external_message_id)` after a channel operation;
+  queue acceptance is never a sent receipt. Each current segment has its own
+  persisted ID and platform receipt; unstarted suffixes remain private. Failed
+  or unknown outcomes stop the batch without bus retries. Pending, failed and
+  uncertain sequence rows are excluded from shared model and memory history;
+  executed tool traces remain separate facts. Channel callbacks bound one
+  logical segment (length chunks, attachments and bookkeeping) to 90 seconds;
+  a deadline records uncertainty. Pacing holds neither the transport lock nor
+  the role's generation/state gate. Other chats can progress while same-chat
+  requests retain admission order. Runtime replacement cancels old suffixes
+  and retains already started sends through their final bookkeeping. Explicit
+  `InterruptController.request_interrupt` accepts optional `channel` / `chat_id`
+  keywords so `/stop` targets its chat; default single-session callers remain
+  compatible. Automatic new-input interruption and internal/proactive replies
+  are not enabled by this change. SDK/runtime version remains unchanged until
+  the release batch is assigned.
+
 - **Complete reply sequences (#865 / #871).** `shiori_sdk.reply_sequence.ReplySequencePolicy`
   supplies an explicit separator line through `PromptRenderCtx.reply_sequence`.
   Plugins opt in only when the host-owned `supports_reply_sequence` is true
-  (currently interactive desktop turns). Model text is buffered, existing reply
+  (interactive desktop turns; opted-in channels are added in #866). Model text is buffered, existing reply
   hooks run, and the host parses boundaries outside fenced code and publishes
   complete messages serially. Each stored message has its own ID and shares
   `turn_id` / `reply_sequence_id`, with a zero-based `reply_sequence_index`.

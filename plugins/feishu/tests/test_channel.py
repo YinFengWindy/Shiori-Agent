@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 import httpx
 
-from shiori_sdk.messages import OutboundMessage
+from shiori_sdk.messages import DeliveryOutcome, OutboundMessage
 from plugins.feishu.backend import api as feishu_api
 from plugins.feishu.backend.channel import FeishuChannel, resolve_receive_id
 from shiori_sdk.testing.avatars import FakeAvatars
@@ -22,6 +22,49 @@ CHAT_ID = "oc_chat"
 # The sender of ``make_event`` and their name in the fake contact directory.
 OPEN_ID = "ou_user"
 CONTACT_NAME = "小王"
+
+
+async def test_natural_messages_keep_distinct_receipts(harness):
+    await harness.start()
+    messages = [
+        OutboundMessage(
+            "feishu",
+            CHAT_ID,
+            content,
+            metadata={"reply_sequence_id": "turn", "reply_sequence_index": index},
+            committed_message_id=f"row-{index}",
+        )
+        for index, content in enumerate(("one", "two"))
+    ]
+    for message in messages:
+        await harness.channel._on_response(message)
+    assert harness.api.keys() == ["send", "send"]
+    assert [message.delivery_outcome for message in messages] == [
+        DeliveryOutcome("sent", receipt) for receipt in harness.api.sent_ids
+    ]
+    assert [entry["message_id"] for entry in harness.hub.deliveries] == [
+        "row-0",
+        "row-1",
+    ]
+
+
+async def test_natural_reply_unknown_outcome_never_falls_back(harness):
+    await harness.start()
+    harness.channel._api.reply_message = AsyncMock(
+        side_effect=httpx.ReadTimeout("unknown")
+    )
+    harness.channel._api.send_message = AsyncMock()
+    message = OutboundMessage(
+        "feishu",
+        CHAT_ID,
+        "one",
+        reply_to="incoming",
+        metadata={"reply_sequence_id": "turn"},
+    )
+    with pytest.raises(httpx.ReadTimeout):
+        await harness.channel._on_response(message)
+    harness.channel._api.reply_message.assert_awaited_once()
+    harness.channel._api.send_message.assert_not_awaited()
 
 
 @pytest.mark.parametrize(
