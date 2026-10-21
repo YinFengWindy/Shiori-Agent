@@ -18,6 +18,7 @@ def _png(tmp_path) -> str:
 
 class _Sending(_AccountSendingMixin):
     def __init__(self, channel):
+        channel.name = "qqbot"
         self._channels = {"100": channel}
         self._identity = SimpleNamespace(
             app_for_account=lambda payload: (
@@ -42,6 +43,11 @@ async def test_send_returns_official_receipt_from_selected_application():
     assert result == {
         "message_id": "platform-message-id",
         "chat_id": "c2c:100:opaque",
+        "conversation": {
+            "channel": "qqbot",
+            "chat_id": "c2c:100:opaque",
+            "chat_type": "private",
+        },
     }
     assert sent == [("c2c:100:opaque", "hello")]
 
@@ -55,6 +61,7 @@ async def test_send_returns_official_receipt_from_selected_application():
     )
     assert shared["message_id"] == "platform-message-id"
     assert shared["via_account"] == {"platform_account_id": "100"}
+    assert shared["conversation"] == result["conversation"]
     assert sent[-1] == ("c2c:100:opaque", "again")
     legacy = await _Sending(channel).account_send(
         {"account_id": "account-100", "user_openid": "opaque", "content": "old"}
@@ -150,6 +157,11 @@ async def test_images_follow_the_text_as_separate_c2c_messages(tmp_path):
         }
     )
     assert result["message_id"] == "text-id"
+    assert result["conversation"] == {
+        "channel": "qqbot",
+        "chat_id": "c2c:100:opaque",
+        "chat_type": "private",
+    }
     assert sent == [
         ("text", "看天空"),
         ("image", sky),

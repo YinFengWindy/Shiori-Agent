@@ -107,6 +107,14 @@ class AccountDeliveryLedger:
             raise ValueError("平台回执不能为空")
         self._finish(attempt_id, status="sent", platform_message_id=platform_message_id)
 
+    def mark_accepted(self, attempt_id: str) -> None:
+        """Record explicit transport acceptance without inventing a platform ID.
+
+        Some webhook transports confirm acceptance but issue no message ID.
+        ``sent`` describes that confirmed transport fact, never a Bot reply.
+        """
+        self._finish(attempt_id, status="sent")
+
     def mark_failed(self, attempt_id: str, error: str) -> None:
         """Record a definite failure; uncertain transport outcomes stay pending."""
         self._finish(attempt_id, status="failed", error=error)

@@ -24,6 +24,10 @@ from shiori_sdk.accounts.targets import (
     AccountTarget,
     UncertainDeliveryError,
 )
+from shiori_sdk.accounts.conversation import (
+    ACCOUNT_CONVERSATION_KEY,
+    AccountConversation,
+)
 from core.identity import IdentityChat, UserIdentityStore, identities_for_account
 
 if TYPE_CHECKING:
@@ -36,11 +40,13 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class AccountSendReceipt:
-    """Selected target and platform receipt for one explicit send attempt.
+    """Selected target and accepted transport outcome for one explicit send attempt.
 
     ``via_account`` is the sending plugin's ``ViaAccount`` snapshot, stored
     as-is with any message recorded for this send; None if it gave none or
     gave an invalid one (logged, never failing the completed send).
+    ``platform_message_id`` stays empty when explicit acceptance has no platform ID.
+    ``conversation`` is the plugin-resolved private address for history recording.
     """
 
     attempt_id: str
@@ -51,6 +57,7 @@ class AccountSendReceipt:
     platform_message_id: str
     ownership_current: bool
     via_account: dict[str, str] | None = None
+    conversation: AccountConversation | None = None
 
     def message_metadata(self) -> dict[str, Any]:
         """The delivery facts stored with the session message recording this send."""
@@ -232,7 +239,7 @@ class AccountDelivery:
         source: str = "passive_tool",
         media: list[str] | None = None,
     ) -> AccountSendReceipt:
-        """Persist an attempt before sending, then record a real receipt or failure.
+        """Persist an attempt before sending, then record acceptance or failure.
 
         ``media`` holds image attachments (local paths or http(s) URLs) that
         the plugin sends with the text; either may be empty, not both.
@@ -293,14 +300,37 @@ class AccountDelivery:
         except Exception as exc:
             self._ledger.mark_failed(attempt.attempt_id, type(exc).__name__)
             raise
-        if not isinstance(result, dict) or not (
-            message_id := str(result.get("message_id") or "").strip()
+        message_id = (
+            str(result.get("message_id") or "").strip()
+            if isinstance(result, dict)
+            else ""
+        )
+        if not isinstance(result, dict) or (
+            not message_id and result.get("accepted") is not True
         ):
             mark_account_delivery_sent()
             self._ledger.mark_uncertain(attempt.attempt_id, "MissingReceipt")
             raise RuntimeError("平台未返回回执，发送结果不确定")
         mark_account_delivery_sent()
-        self._ledger.mark_sent(attempt.attempt_id, message_id)
+        if message_id:
+            self._ledger.mark_sent(attempt.attempt_id, message_id)
+        else:
+            self._ledger.mark_accepted(attempt.attempt_id)
+        conversation = None
+        if (
+            target.kind == "private"
+            and result.get(ACCOUNT_CONVERSATION_KEY) is not None
+        ):
+            try:
+                conversation = AccountConversation.for_account(
+                    result[ACCOUNT_CONVERSATION_KEY], account.record
+                )
+            except ValueError:
+                # Acceptance is already confirmed. A broken plugin address
+                # must not make the model retry the side effect.
+                logger.error(
+                    "插件 %s 返回了无效的投递会话地址", account.record.plugin_id
+                )
         return AccountSendReceipt(
             attempt_id=attempt.attempt_id,
             account_id=account_id,
@@ -312,4 +342,5 @@ class AccountDelivery:
             via_account=delivered_via_account(
                 result.get(VIA_ACCOUNT_KEY), account.record
             ),
+            conversation=conversation,
         )

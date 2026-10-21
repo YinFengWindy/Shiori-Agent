@@ -60,6 +60,11 @@ async def test_shared_account_rpc_uses_selected_private_application() -> None:
     assert await handlers["account.send"](request) == {
         "message_id": "om_9",
         "via_account": member.via_account(),
+        "conversation": {
+            "channel": member.name,
+            "chat_id": "oc_chat",
+            "chat_type": "private",
+        },
     }
     assert member.via_account()["platform_account_id"] == "feishu:cli_a"
     member.send.assert_awaited_once_with("oc_chat", "hello")

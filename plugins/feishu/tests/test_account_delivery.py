@@ -58,7 +58,9 @@ async def test_profile_and_targets_stay_scoped_to_the_selected_account() -> None
 async def test_account_send_requires_private_target_and_certain_receipt() -> None:
     via = {"platform": "feishu", "platform_account_id": "feishu:app"}
     channel = SimpleNamespace(
-        send=AsyncMock(return_value="om_1"), via_account=lambda: via
+        name="feishu:feishu:app",
+        send=AsyncMock(return_value="om_1"),
+        via_account=lambda: via,
     )
     accounts = SimpleNamespace(
         channel=lambda ref: channel if ref == "feishu:app" else None,
@@ -75,6 +77,11 @@ async def test_account_send_requires_private_target_and_certain_receipt() -> Non
     assert await delivery.send_account(payload) == {
         "message_id": "om_1",
         "via_account": via,
+        "conversation": {
+            "channel": "feishu:feishu:app",
+            "chat_id": "oc_a",
+            "chat_type": "private",
+        },
     }
     channel.send.assert_awaited_once_with("oc_a", "hello")
     with pytest.raises(ValueError, match="仅支持私聊"):
@@ -87,6 +94,15 @@ async def test_account_send_requires_private_target_and_certain_receipt() -> Non
     with pytest.raises(ValueError, match="群临时会话"):
         await delivery.send_account({**payload, "target_kind": "group_member"})
     channel.send.assert_awaited_once()
+    by_user = await delivery.send_account({**payload, "target_id": "feishu:ou_a"})
+    assert by_user["conversation"] == {
+        "channel": "feishu:feishu:app",
+        "chat_id": "oc_a",
+        "chat_type": "private",
+    }
+    channel.send.assert_awaited_with("oc_a", "hello")
+    with pytest.raises(ValueError, match="无法确定"):
+        await delivery.send_account({**payload, "target_id": "ou_unknown"})
     channel.send.return_value = None
     with pytest.raises(UncertainDeliveryError, match="未返回回执"):
         await delivery.send_account(payload)
@@ -99,6 +115,7 @@ async def test_account_send_requires_private_target_and_certain_receipt() -> Non
 async def test_account_send_delivers_images_after_the_text(tmp_path) -> None:
     sky = _png(tmp_path)
     channel = SimpleNamespace(
+        name="feishu:feishu:app",
         send=AsyncMock(return_value="om_text"),
         send_image=AsyncMock(return_value="om_image"),
         via_account=lambda: {},
@@ -119,6 +136,11 @@ async def test_account_send_delivers_images_after_the_text(tmp_path) -> None:
     channel.send_image.assert_awaited_once_with("oc_a", sky)
     only_image = await delivery.send_account({**payload, "message": ""})
     assert only_image["message_id"] == "om_image"
+    assert only_image["conversation"] == {
+        "channel": "feishu:feishu:app",
+        "chat_id": "oc_a",
+        "chat_type": "private",
+    }
     channel.send.assert_awaited_once()
 
     # The text already reached the chat: a failed image leaves it uncertain.
@@ -132,6 +154,7 @@ async def test_account_send_delivers_images_after_the_text(tmp_path) -> None:
 @pytest.mark.asyncio
 async def test_invalid_local_image_is_refused_before_any_send(tmp_path) -> None:
     channel = SimpleNamespace(
+        name="feishu:feishu:app",
         send=AsyncMock(return_value="om_text"),
         send_image=AsyncMock(return_value="om_image"),
         via_account=lambda: {},

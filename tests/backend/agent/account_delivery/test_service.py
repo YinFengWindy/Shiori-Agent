@@ -46,6 +46,7 @@ class _Rpc:
         self.failure: BaseException | None = None
         self.missing_receipt = False
         self.via: dict | None = None
+        self.custom_receipt: dict | None = None
 
     def resolve(self, name: str):
         async def handle(payload: dict):
@@ -58,6 +59,8 @@ class _Rpc:
                 raise self.failure
             if self.missing_receipt:
                 return {}
+            if self.custom_receipt is not None:
+                return self.custom_receipt
             receipt = {"message_id": f"receipt-{len(self.calls)}"}
             return receipt if self.via is None else {**receipt, "via_account": self.via}
 
@@ -125,6 +128,60 @@ _VIA = {
     "display_name": "Mira Bot",
     "prefix": "Chat 机器人「Mira Bot」",
 }
+
+
+@pytest.mark.asyncio
+async def test_explicit_transport_acceptance_keeps_no_fabricated_platform_id(tmp_path):
+    service, _accounts, rpc, ledger, _account_id = _service(tmp_path)
+    rpc.custom_receipt = {
+        "accepted": True,
+        "conversation": {
+            "channel": "chat_bot",
+            "chat_id": "dm:canonical",
+            "chat_type": "private",
+        },
+    }
+    receipt = await service.send(
+        "chat", "mira", AccountTarget("private", "peer-id"), "hi"
+    )
+    assert receipt.platform_message_id == ""
+    assert receipt.conversation is not None
+    assert receipt.conversation.chat_id == "dm:canonical"
+    restored = AccountDeliveryLedger(tmp_path).get(receipt.attempt_id)
+    assert restored.status == "sent"
+    assert not restored.platform_message_id
+    assert ledger.get(receipt.attempt_id).error is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("value", [False, 1, "true", None])
+async def test_missing_message_receipt_requires_exact_explicit_acceptance(
+    tmp_path, value
+):
+    service, _accounts, rpc, ledger, _account_id = _service(tmp_path)
+    rpc.custom_receipt = {"accepted": value}
+    with pytest.raises(RuntimeError, match="不确定"):
+        await service.send("chat", "mira", AccountTarget("private", "peer-id"), "hi")
+    [attempt] = ledger.list_for_role("mira")
+    assert attempt.status == "pending"
+    assert attempt.error == "MissingReceipt"
+
+
+@pytest.mark.asyncio
+async def test_invalid_conversation_cannot_write_other_platform_but_send_stays_confirmed(
+    tmp_path,
+):
+    service, _accounts, rpc, ledger, _account_id = _service(tmp_path)
+    rpc.custom_receipt = {
+        "message_id": "real-id",
+        "conversation": {"channel": "other", "chat_id": "dm:x", "chat_type": "private"},
+    }
+    receipt = await service.send(
+        "chat", "mira", AccountTarget("private", "peer-id"), "hi"
+    )
+    assert receipt.conversation is None
+    assert receipt.platform_message_id == "real-id"
+    assert ledger.get(receipt.attempt_id).status == "sent"
 
 
 @pytest.mark.asyncio
