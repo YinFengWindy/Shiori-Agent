@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING, Any
 
 import httpx
 from shiori_sdk.accounts import VIA_ACCOUNT_KEY
-from shiori_sdk.accounts.conversation import AccountConversation
 from shiori_sdk.accounts.routing import AccountRoute
 from shiori_sdk.accounts.targets import (
     GROUP_MEMBER_TARGET,
@@ -108,7 +107,7 @@ class _AccountSendingMixin:
         return {
             "message_id": receipt,
             "chat_id": chat_id,
-            "conversation": AccountConversation(channel.name, chat_id).to_payload(),
+            "conversation": AccountRoute(channel.name, chat_id).to_payload(),
         }
 
 

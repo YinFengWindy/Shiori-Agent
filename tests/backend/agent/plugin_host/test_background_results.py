@@ -21,7 +21,7 @@ from tests.support.host_external_turns import ExternalTurnHost, USER_DM
 from desktop_bridge.service import DesktopBridgeService
 from core.channels.hub import ChannelHub
 from shiori_sdk.accounts import AccountResponseRules
-from shiori_sdk.accounts.conversation import AccountConversation
+from shiori_sdk.accounts.routing import AccountRoute
 
 
 @pytest.fixture
@@ -299,7 +299,7 @@ async def capture_bot(host):
         "bot-live",
         connection="online",
         capabilities=frozenset({"full_tools"}),
-        tool_conversation=AccountConversation("grok_bot_one", "dm:peer"),
+        tool_conversation=AccountRoute("grok_bot_one", "dm:peer"),
     )
     host.loop.tools.bind_accounts(accounts)
     hub = ChannelHub.from_workspace(
@@ -452,7 +452,8 @@ async def test_sdk_report_connection_fence_survives_generation_and_queued_delive
             if any(
                 message.get("content") == "private SDK report" for message in messages
             ):
-                assert bus.has_pending_outbound("qq", "902", "")
+                # History is durable here; the reply is not queued yet. The
+                # captured connection fence is attached when it is published.
                 assert bus.outbound_size == 0
                 entered.set()
                 await release.wait()

@@ -13,7 +13,7 @@ from dataclasses import asdict, dataclass
 from typing import Literal, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .conversation import AccountConversation
+    from .routing import AccountRoute
 
 logger = logging.getLogger(__name__)
 
@@ -186,7 +186,7 @@ class AccountSnapshot:
     capabilities: frozenset[str]
     error: str = ""
     # Current private route eligible for an explicit full-tool grant.
-    tool_conversation: AccountConversation | None = None
+    tool_conversation: AccountRoute | None = None
 
 
 @dataclass(frozen=True)

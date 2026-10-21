@@ -25,7 +25,6 @@ class ExchangeJournal:
         for receipt in self.state.messages.values():
             if receipt.state == "sending":
                 receipt.state = "uncertain"
-                self.state.last_status = "上次发送结果不确定，请勿自动重发"
         if self.state.model_dump() != saved:
             self._save()
 
@@ -33,8 +32,8 @@ class ExchangeJournal:
         self._kv.set(self._key, self.state.model_dump())
 
     def _make_room(self, protected_exchange: str) -> None:
-        # Expire whole settled chains, never individual ancestors or counters.
-        # Replies to expired chains fail instead of receiving a fresh budget.
+        # Expire whole settled chains, never a chain with queued, sending or
+        # uncertain work, and never individual ancestors or counters.
         while len(self.state.messages) >= MAX_RECORDS:
             pending = {
                 receipt.exchange_id
@@ -76,16 +75,17 @@ class ExchangeJournal:
         budget = ExchangeBudget()
         if message.reply_to:
             parent = self.state.messages.get(message.reply_to)
-            if (
-                parent is None
-                or parent.direction == direction
-                or parent.state == "failed"
-            ):
+            if parent is None:
+                # A settled chain may have been expired. The message starts a
+                # new chain instead of failing or inheriting the old budget.
+                pass
+            elif parent.direction == direction or parent.state == "failed":
                 raise CallbackError(409, "回复对应的消息不存在或交流已结束")
-            exchange_id = parent.exchange_id
-            budget = self.state.exchanges[exchange_id]
-            if budget.closed:
-                raise CallbackError(409, "回复对应的交流已过期")
+            else:
+                exchange_id = parent.exchange_id
+                budget = self.state.exchanges[exchange_id]
+                if budget.closed:
+                    raise CallbackError(409, "回复对应的交流已过期")
         elif exchange_id in self.state.exchanges:
             raise CallbackError(409, "消息标识已被使用或交流已过期")
         if budget.count >= limit:
@@ -108,7 +108,6 @@ class ExchangeJournal:
         )
         budget.count += 1
         self.state.exchanges[exchange_id] = budget
-        self.state.last_status = "等待角色处理" if direction == "in" else "正在发送"
         self._save()
         return True
 
@@ -116,13 +115,11 @@ class ExchangeJournal:
         self,
         message_id: str,
         state: Literal["accepted", "complete", "failed", "uncertain"],
-        status: str,
     ) -> None:
         """Persist confirmation without retrying a potentially visible message."""
         receipt = self.state.messages[message_id]
         receipt.state = state
         receipt.text = ""
-        self.state.last_status = status
         self._save()
 
     def complete_parent(self, message_id: str) -> None:

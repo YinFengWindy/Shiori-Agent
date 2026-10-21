@@ -47,7 +47,6 @@ async def test_natural_route_preserves_application_address_without_affecting_sen
         "channel": "qqbot",
         "chat_id": "c2c:100:opaque",
         "chat_type": "private",
-        "message_thread_id": None,
     }
     channel.send.assert_not_awaited()
     with pytest.raises(RuntimeError):

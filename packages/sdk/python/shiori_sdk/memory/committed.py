@@ -35,6 +35,3 @@ class TurnCommitted:
     thinking_duration_ms: int | None = None
     # Stable inbound identity, including turns that intentionally produce no reply.
     external_message_id: str = ""
-    # Host-owned pre-dispatch intent; the normal reply has not been enqueued yet.
-    # False when explicit account delivery already handled/suppressed that reply.
-    will_dispatch: bool = False

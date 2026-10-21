@@ -163,10 +163,9 @@ async def test_commit_observers_receive_actual_dispatch_intent_before_enqueue(
     bus, events = MessageBus(), EventBus()
     observed = []
 
-    def observe(committed: TurnCommitted) -> None:
+    def observe(_committed: TurnCommitted) -> None:
         observed.append(
             (
-                committed.will_dispatch,
                 bus.has_pending_outbound(message.channel, message.chat_id, "bot-input"),
                 bus.outbound_size,
             )
@@ -175,7 +174,7 @@ async def test_commit_observers_receive_actual_dispatch_intent_before_enqueue(
     events.on(TurnCommitted, observe)
     await _BuildTurnCommittedModule().run(frame)
     await _FanoutTurnCommittedModule(events).run(frame)
-    assert observed == [(expected, False, 0)]
+    assert observed == [(False, 0)]
     await _BuildAfterTurnCtxModule().run(frame)
     assert frame.slots["turn:ctx"].will_dispatch is expected
     await _DispatchOutboundModule(BusOutboundPort(bus)).run(frame)

@@ -17,7 +17,7 @@ from agent.tools.external_access import ExternalArgumentLimit
 from agent.tools.tool_search import ToolSearchTool
 from core.channels.hub import ChannelHub
 from shiori_sdk.accounts import AccountResponseRules
-from shiori_sdk.accounts.conversation import AccountConversation
+from shiori_sdk.accounts.routing import AccountRoute
 from shiori_sdk.channels.message_source import MessageSource
 from shiori_sdk.messages import InboundMessage
 from shiori_sdk.tools import Tool
@@ -66,7 +66,7 @@ async def test_account_rule_controls_search_dynamic_mcp_and_post_hook_execution(
         "live",
         connection="online",
         capabilities=frozenset({"full_tools"}),
-        tool_conversation=AccountConversation("grok_bot_one", "dm:peer"),
+        tool_conversation=AccountRoute("grok_bot_one", "dm:peer"),
     )
     tools = host.loop.tools
     tools.bind_accounts(accounts)

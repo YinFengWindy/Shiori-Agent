@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from collections import deque
-from collections.abc import Awaitable, Callable, Iterator
+from collections.abc import Awaitable, Callable
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
@@ -116,16 +116,6 @@ class MessageBus:
         self._pending_outbound[key] = self._pending_outbound.get(key, 0) + 1
         await self._outbound.put(msg)
 
-    @contextmanager
-    def prepare_outbound(self, msg: OutboundMessage) -> Iterator[None]:
-        """Keep planned reply correlation alive until enqueue or preparation failure."""
-        key = self._outbound_key(msg)
-        self._pending_outbound[key] = self._pending_outbound.get(key, 0) + 1
-        try:
-            yield
-        finally:
-            self._release_pending(key)
-
     async def deliver_outbound(self, msg: OutboundMessage) -> DeliveryOutcome:
         """Queue one message and await its actual, non-retryable platform outcome.
 
@@ -154,7 +144,7 @@ class MessageBus:
     def has_pending_outbound(
         self, channel: str, chat_id: str, external_message_id: str
     ) -> bool:
-        """Whether this turn has a preparing, queued or dispatching reply."""
+        """Whether this turn has a queued or dispatching reply."""
         return (
             self._pending_outbound.get((channel, chat_id, external_message_id), 0) > 0
         )

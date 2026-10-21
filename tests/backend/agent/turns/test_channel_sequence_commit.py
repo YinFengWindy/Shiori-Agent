@@ -12,6 +12,7 @@ from agent.turns.channel_sequence_commit import (
     ChannelSequenceDeliveryError,
     commit_channel_reply_sequence,
 )
+from agent.turns.reply_interruption import ReplyInterruption, reply_interruption_scope
 from agent.turns.reply_sequence import ReplySequence
 from bus.queue import MessageBus
 from conversation.context_scope import ContextView, UserContextThreads
@@ -85,7 +86,12 @@ async def batch(
     )
     if tool_chain:
         messages[1]["tool_chain"] = tool_chain
-    with owner.bind(bus):
+    interruption = ReplyInterruption()
+    with (
+        owner.bind(bus),
+        owner.track(interruption),
+        reply_interruption_scope(interruption),
+    ):
         await commit_channel_reply_sequence(
             manager=manager,
             session=session,

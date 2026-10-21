@@ -46,7 +46,6 @@ async def test_natural_route_is_native_and_read_only_while_send_keeps_legacy_con
         "channel": "qq",
         "chat_id": GROUP_PREFIX + "42",
         "chat_type": "group",
-        "message_thread_id": None,
     }
     runtime.send_target.assert_not_awaited()
     with pytest.raises(ValueError):

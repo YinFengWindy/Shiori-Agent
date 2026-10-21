@@ -7,7 +7,7 @@ from uuid import uuid4
 
 import pytest
 from shiori_sdk.accounts import AccountResponseRules, account_id_for
-from shiori_sdk.accounts.conversation import AccountConversation
+from shiori_sdk.accounts.routing import AccountRoute
 from shiori_sdk.testing.channel_context import (
     FakeChannelPluginContext,
     fake_channel_context,
@@ -112,7 +112,7 @@ async def test_save_keeps_secret_reference_and_stable_identity_but_rotates_new_b
             }
         )
         [original] = accounts.configs.values()
-        original_route = AccountConversation(original.channel_name, original.chat_id)
+        original_route = AccountRoute(original.channel_name, original.chat_id)
         assert (
             ctx.accounts.records[result["account_id"]].tool_conversation
             == original_route
@@ -144,9 +144,7 @@ async def test_save_keeps_secret_reference_and_stable_identity_but_rotates_new_b
         assert not changed.response_rules.get("allow_full_tools", False)
         assert ctx.accounts.records[
             result["account_id"]
-        ].tool_conversation == AccountConversation(
-            changed.channel_name, changed.chat_id
-        )
+        ].tool_conversation == AccountRoute(changed.channel_name, changed.chat_id)
         assert (
             ctx.accounts.records[result["account_id"]].tool_conversation
             != original_route

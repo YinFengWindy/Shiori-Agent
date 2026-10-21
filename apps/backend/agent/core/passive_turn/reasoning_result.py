@@ -14,7 +14,7 @@ from agent.core.reply_completion import fetch_role_mood
 from agent.core.reply_output import RoleReplyOutput
 from .reply_recovery import complete_reply
 from .budgeted_request import budgeted_chat
-from .natural_reply import NaturalReplyProtocol, finish_reply_schema
+from .natural_reply import NaturalReplyRequest, finish_reply_schema
 from .compaction import ensure_request_budget
 from core.roles.reply_state import RoleReply
 from shiori_sdk.channel_events import ToolCallCompleted, ToolCallStarted
@@ -103,7 +103,7 @@ class _PassiveReasoningResultMixin:
         reply_moods: tuple[str, ...] | None = None,
         session: str = "",
         channel: str = "",
-        natural_reply: NaturalReplyProtocol | None = None,
+        reply_request: NaturalReplyRequest | None = None,
     ) -> tuple[str, int | None, RoleReply | None, dict[str, Any] | None]:
         # 1. 先构造收尾总结 prompt；正文始终是纯文本，不再为 reply_moods 特判。
         summary_prompt = (
@@ -125,6 +125,7 @@ class _PassiveReasoningResultMixin:
             else min(_SUMMARY_MAX_TOKENS, self._llm_config.max_tokens)
         )
         purpose = "default" if reply_moods is not None else "auxiliary"
+        protocol = None if reply_request is None else reply_request.protocol
         await ensure_request_budget(
             summary_messages,
             [],
@@ -132,7 +133,7 @@ class _PassiveReasoningResultMixin:
             self._llm_config.model,
             summary_cap,
             purpose=purpose,
-            reply_tool=finish_reply_schema() if natural_reply else None,
+            reply_tool=finish_reply_schema() if protocol else None,
         )
         response = await budgeted_chat(
             self._llm.provider,
@@ -146,12 +147,12 @@ class _PassiveReasoningResultMixin:
                     "reply_tool": finish_reply_schema(),
                     "defer_tool_argument_errors": True,
                 }
-                if natural_reply
+                if protocol
                 else {}
             ),
         )
-        if natural_reply is not None:
-            completion = await natural_reply.complete(
+        if protocol is not None:
+            completion = await protocol.complete(
                 response,
                 messages=summary_messages,
                 provider=self._llm.provider,
@@ -206,7 +207,7 @@ class _PassiveReasoningResultMixin:
         role_reply: RoleReply | None = None,
         role_reply_mood_fresh: bool = False,
         reply_recovery: dict[str, Any] | None = None,
-        natural_reply: NaturalReplyProtocol | None = None,
+        reply_request: NaturalReplyRequest | None = None,
     ) -> ReasonerResult:
         # 1. 先把 tool_chain 扁平化成 invocations。
         invocations: list[LLMToolCall] = []
@@ -260,12 +261,13 @@ class _PassiveReasoningResultMixin:
         if reply_recovery is not None:
             metadata["reply_recovery"] = reply_recovery
 
-        if natural_reply is not None and not reply_was_invalidated():
-            if natural_reply.reply is None:
+        protocol = None if reply_request is None else reply_request.protocol
+        if protocol is not None and not reply_was_invalidated():
+            if protocol.reply is None:
                 raise RuntimeError("自然聊天缺少已校验的完成回复")
-            metadata["natural_reply"] = natural_reply.reply
-            metadata["natural_reply_corrected"] = natural_reply.corrected
-            reply = natural_reply.reply.sequence.content
+            metadata["natural_reply"] = protocol.reply
+            metadata["natural_reply_corrected"] = protocol.corrected
+            reply = protocol.reply.sequence.content
             if role_reply is not None:
                 metadata["role_reply"] = replace(role_reply, content=reply)
 

@@ -25,12 +25,12 @@ from shiori_sdk.accounts.targets import (
     AccountTarget,
     UncertainDeliveryError,
 )
-from shiori_sdk.accounts.conversation import (
+from shiori_sdk.accounts.routing import (
     ACCOUNT_CONVERSATION_KEY,
-    AccountConversation,
+    ACCOUNT_RESOLVE_METHOD,
+    AccountRoute,
 )
 from core.identity import IdentityChat, UserIdentityStore, identities_for_account
-from shiori_sdk.accounts.routing import ACCOUNT_RESOLVE_METHOD, AccountRoute
 
 if TYPE_CHECKING:
     # The registry is injected; importing its package here initializes the kernel
@@ -59,7 +59,7 @@ class AccountSendReceipt:
     platform_message_id: str
     ownership_current: bool
     via_account: dict[str, str] | None = None
-    conversation: AccountConversation | None = None
+    conversation: AccountRoute | None = None
 
     def message_metadata(self) -> dict[str, Any]:
         """The delivery facts stored with the session message recording this send."""
@@ -409,7 +409,7 @@ class AccountDelivery:
             and result.get(ACCOUNT_CONVERSATION_KEY) is not None
         ):
             try:
-                conversation = AccountConversation.for_account(
+                conversation = AccountRoute.for_private(
                     result[ACCOUNT_CONVERSATION_KEY], account.record
                 )
             except ValueError:

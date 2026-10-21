@@ -12,7 +12,7 @@ from shiori_sdk.accounts.models import (
     AccountSnapshot,
     ConnectionState,
 )
-from shiori_sdk.accounts.conversation import AccountConversation
+from shiori_sdk.accounts.routing import AccountRoute
 
 DIRECT_GENERATION = "direct"
 _CONNECTION_STATES = frozenset(
@@ -26,7 +26,7 @@ class _LiveReport:
     connection: ConnectionState
     capabilities: frozenset[str]
     error: str
-    tool_conversation: AccountConversation | None = None
+    tool_conversation: AccountRoute | None = None
 
 
 @dataclass
@@ -128,7 +128,7 @@ class AccountRuntimeState:
         connection: ConnectionState,
         capabilities: frozenset[str],
         error: str,
-        tool_conversation: AccountConversation | None = None,
+        tool_conversation: AccountRoute | None = None,
     ) -> AccountRecord:
         """Updates only the account currently owned by this plugin instance."""
         if connection not in _CONNECTION_STATES:
