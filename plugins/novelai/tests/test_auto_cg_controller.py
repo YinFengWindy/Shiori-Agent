@@ -109,8 +109,10 @@ async def test_new_observation_cancels_stale_in_flight_task(tmp_path: Path) -> N
 
 
 @pytest.mark.asyncio
-async def test_controller_records_state_only_after_image_push_succeeds(
+@pytest.mark.parametrize("failure", [RuntimeError, asyncio.CancelledError])
+async def test_generated_cg_keeps_cooldown_and_dedup_after_delivery_fails(
     tmp_path: Path,
+    failure,
 ) -> None:
     policy = AutoCgPolicy(FakeKV())
     push_tool = SimpleNamespace(
@@ -121,9 +123,13 @@ async def test_controller_records_state_only_after_image_push_succeeds(
     )
 
     class GenerateTool:
+        calls = 0
+
         async def execute(self, **_kwargs: Any) -> str:
+            self.calls += 1
             return '{"output_paths": ["cg.png"]}'
 
+    generate_tool = GenerateTool()
     controller = AutoCgController(
         light_provider=FakeChatProvider(),
         light_model="light",
@@ -134,10 +140,12 @@ async def test_controller_records_state_only_after_image_push_succeeds(
                 "size_preset": "portrait",
             }
         ),
-        role_store=cast(Any, None),
+        role_store=_roles(tmp_path),
         policy=policy,
-        session_manager=cast(Any, None),
-        generate_tool=cast(Any, GenerateTool()),
+        session_manager=SimpleNamespace(
+            get_or_create=lambda _: SimpleNamespace(metadata={})
+        ),
+        generate_tool=cast(Any, generate_tool),
         tool_registry=registry,
         background=FakeBackground(FakePluginContext()),
     )
@@ -146,18 +154,62 @@ async def test_controller_records_state_only_after_image_push_succeeds(
         visual_description="少女站在雨里",
     )
 
-    push_tool.execute.side_effect = RuntimeError("desktop unavailable")
-    with pytest.raises(RuntimeError, match="desktop unavailable"):
+    push_tool.execute.side_effect = failure("desktop unavailable")
+    with pytest.raises(failure, match="desktop unavailable"):
         await controller._run(event, role_id="mira", bypass_cooldown=True)
 
-    assert policy.cooldown_remaining("role:mira") == 0
-
-    # Success is "message_push returned", whatever its model-facing wording.
-    push_tool.execute.side_effect = None
-    push_tool.execute.return_value = "图片已排队，回合成功后发送"
-    await controller._run(event, role_id="mira", bypass_cooldown=True)
-
     assert policy.cooldown_remaining("role:mira") > 0
+
+    # A new visual in the same scene stays in cooldown, even after failed delivery.
+    controller.schedule(
+        _observation(visual_key="rain-seated", visual_description="少女坐在雨里")
+    )
+    await asyncio.gather(*controller.tasks.values())
+    # Scene starts bypass cooldown, but must not regenerate this successful image.
+    await controller._run(event, role_id="mira", bypass_cooldown=True)
+    assert generate_tool.calls == 1
+    push_tool.execute.assert_awaited_once()
+    await controller.terminate()
+
+
+@pytest.mark.asyncio
+async def test_external_cg_uses_original_chat_account_supplement() -> None:
+    account_tool = SimpleNamespace(execute=AsyncMock(return_value="accepted"))
+    desktop_tool = SimpleNamespace(execute=AsyncMock())
+    tools = {"account_send": account_tool, "message_push": desktop_tool}
+    controller = AutoCgController(
+        light_provider=FakeChatProvider(),
+        light_model="light",
+        prompt_provider=AsyncMock(return_value={"prompt": "1girl, rain"}),
+        role_store=cast(Any, None),
+        policy=AutoCgPolicy(FakeKV()),
+        session_manager=cast(Any, None),
+        generate_tool=cast(
+            Any,
+            SimpleNamespace(
+                execute=AsyncMock(return_value='{"output_paths":["cg.png"]}')
+            ),
+        ),
+        tool_registry=SimpleNamespace(get_tool=tools.get),
+        background=FakeBackground(FakePluginContext()),
+    )
+    await controller._run(
+        _observation(
+            channel="qqbot", chat_id="c2c:bot:peer", visual_description="少女站在雨里"
+        ),
+        role_id="mira",
+        bypass_cooldown=True,
+    )
+    account_tool.execute.assert_awaited_once_with(
+        channel="qqbot",
+        target_kind="user",
+        role_id="mira",
+        session_key="role:mira",
+        push_chat_id="c2c:bot:peer",
+        push_proactive=False,
+        media=["cg.png"],
+    )
+    desktop_tool.execute.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -233,6 +285,7 @@ async def test_controller_abandons_after_one_generation_retry(
             raise RuntimeError("upstream unavailable")
 
     generate_tool = GenerateTool()
+    policy = AutoCgPolicy(FakeKV())
     controller = AutoCgController(
         light_provider=FakeChatProvider(),
         light_model="light",
@@ -244,7 +297,7 @@ async def test_controller_abandons_after_one_generation_retry(
             }
         ),
         role_store=cast(Any, None),
-        policy=AutoCgPolicy(FakeKV()),
+        policy=policy,
         session_manager=cast(Any, None),
         generate_tool=cast(Any, generate_tool),
         tool_registry=cast(Any, None),
@@ -252,13 +305,14 @@ async def test_controller_abandons_after_one_generation_retry(
     )
 
     with caplog.at_level("ERROR"):
-        media = await controller._generate_media_with_retry(
-            {"prompt": "rain"},
-            session_key="role:mira",
+        await controller._run(
+            _observation(visual_description="少女站在雨里"),
+            role_id="mira",
+            bypass_cooldown=True,
         )
 
-    assert media == []
     assert generate_tool.calls == 2
+    assert policy.cooldown_remaining("role:mira") == 0
     assert "已重试 1 次" in caplog.text
 
 

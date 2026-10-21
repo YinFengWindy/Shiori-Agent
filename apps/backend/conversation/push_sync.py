@@ -103,9 +103,9 @@ class ExternalPushSyncService:
             "assistant",
             event.text,
             media=list(event.media) or None,
-            # Always proactive: the only sender, account_send, is a send the role
-            # chose to make, never the reply to an inbound message.
-            proactive=True,
+            # Model-requested sends are proactive; host media supplements retain
+            # the reply's non-proactive classification.
+            proactive=event.proactive,
             tools_used=[event.tool],
             thread_id=thread.id,
             sender_role="assistant",
