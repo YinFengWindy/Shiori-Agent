@@ -241,10 +241,15 @@ async def test_desktop_bridge_chat_send_merges_reply_context_for_agent(tmp_path:
         "【你当前新消息】\n"
         "再展开一点"
     )
+    session = session_manager.get_or_create("role:mira")
+    user_message = session.messages[0]
+    assert user_message["role"] == "user"
+    assert user_message["id"] != "message-1"
     assert seen["metadata"] == {
         "request_id": "1",
         "delivery_key": "1",
         "turn_id": "1",
+        "trigger_user_message_id": user_message["id"],
         "reply_to_message_id": "message-1",
         "reply_to_sender": "Mira",
         "reply_to_content": "她沉默了很久。",
@@ -259,8 +264,6 @@ async def test_desktop_bridge_chat_send_merges_reply_context_for_agent(tmp_path:
         "transport_chat_id": "role:mira",
     }
     assert seen["omit_user_turn"] is True
-    session = session_manager.get_or_create("role:mira")
-    user_message = session.messages[0]
     assert user_message["content"] == "再展开一点"
     assert user_message["metadata"]["reply_to_message_id"] == "message-1"
     assert user_message["metadata"]["reply_to_content"] == "她沉默了很久。"

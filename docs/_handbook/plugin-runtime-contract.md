@@ -123,6 +123,24 @@ consolidates these additions and the subsequent #847 breaking migration.
 
 <!-- Record the next contract batch here, with PR references and breaking markers. -->
 
+- **Complete reply sequences (#865 / #871).** `shiori_sdk.reply_sequence.ReplySequencePolicy`
+  supplies an explicit separator line through `PromptRenderCtx.reply_sequence`.
+  Plugins opt in only when the host-owned `supports_reply_sequence` is true
+  (currently interactive desktop turns). Model text is buffered, existing reply
+  hooks run, and the host parses boundaries outside fenced code and publishes
+  complete messages serially. Each stored message has its own ID and shares
+  `turn_id` / `reply_sequence_id`, with a zero-based `reply_sequence_index`.
+  Desktop attempts also carry `trigger_user_message_id`, the stable persisted
+  user row shared by initial sends and retries. Sequence undo resolves that exact
+  row within the same thread; an unresolved anchor never selects an earlier turn.
+  The desktop receives intermediate `chat.message` events with the same session
+  update payload shape as `session.updated`; they do not finish the turn.
+  `chat.done`, `chat.error` and `chat.cancelled` remain the terminal events.
+  Cancellation retains the published prefix and abandons the pending suffix;
+  no policy retains the existing single-message streaming behavior. The bundled
+  `natural_chat` plugin exposes a default-off role capability and contributes
+  only the instant-chat setting and separator instructions.
+
 - **In-generation plugin reload (host groundwork, #856 / #860).** The plugin kernel can
   reload one plugin and its hard dependents without replacing the runtime generation;
   the bridge starts using it with #857. Plugin-observable semantics:

@@ -4,6 +4,8 @@ from shiori_sdk.channels.message_source import MessageSource
 from shiori_sdk.messages import TEXT_ATTACHMENT_TOOL_KEY
 from shiori_sdk.tools import TOOL_ATTACHMENT_SCOPE_KEY, ToolAttachmentScope
 from agent.tools.turn_scope import tool_turn
+from agent.looping.interrupt import in_detached_turn
+from agent.turns.reply_sequence import buffered_reply_scope, presented_tool_chain
 from agent.account_delivery.turn_state import account_delivery_scope
 
 from core.roles.reply_state import role_mood_catalog
@@ -345,6 +347,7 @@ class DefaultReasoner(
             else None
         )
         measured_stream_sink = stream_sink
+        buffer_reply = False
         if stream_sink is not None:
 
             async def _measure_stream_delta(delta: dict[str, str] | str) -> None:
@@ -352,7 +355,14 @@ class DefaultReasoner(
                 payload = {"content_delta": delta} if isinstance(delta, str) else delta
                 if payload.get("content_delta") and first_content_at is None:
                     first_content_at = time.perf_counter()
-                await stream_sink(delta)
+                if buffer_reply:
+                    # Thinking remains live; complete dialogue is published only
+                    # after reply hooks and the sequence protocol have succeeded.
+                    thinking = payload.get("thinking_delta", "")
+                    if thinking:
+                        await stream_sink({"thinking_delta": thinking})
+                else:
+                    await stream_sink(delta)
 
             measured_stream_sink = _measure_stream_delta
         disabled_tools = _disabled_tools_from_msg(msg)
@@ -429,8 +439,16 @@ class DefaultReasoner(
                 ),
                 thread_id=inbound_thread_id(msg),
                 window_sources=window_sources,
+                supports_reply_sequence=(
+                    msg.channel == "desktop"
+                    and bool(msg.metadata.get("turn_id"))
+                    and not in_detached_turn()
+                    and msg.metadata.get("role_work_kind") != "scheduled_job"
+                    and msg.metadata.get("source") != "background_result"
+                ),
             )
             prompt_render = await self.render_prompt(render_input)
+            buffer_reply = prompt_render.reply_sequence is not None
             from .minimal_request import current_input, replace_current_input
 
             owned_current = current_input(
@@ -467,6 +485,7 @@ class DefaultReasoner(
                 with (
                     account_delivery_scope(account_delivery_state),
                     request_compaction_scope(compaction),
+                    buffered_reply_scope(buffer_reply),
                 ):
                     result = await self.run(
                         initial_messages,
@@ -495,7 +514,9 @@ class DefaultReasoner(
                         ),
                     )
                 tools_used = list(result.metadata.get("tools_used") or [])
-                tool_chain = list(result.metadata.get("tool_chain") or [])
+                tool_chain = presented_tool_chain(
+                    result.metadata.get("tool_chain") or [], buffered=buffer_reply
+                )
                 retry_trace["selected_plan"] = plan["name"]
                 retry_trace["trimmed_sections"] = sorted(plan["disabled_sections"])
                 if attempt > 0:
@@ -541,7 +562,7 @@ class DefaultReasoner(
                     tools_used=tools_used,
                     tool_chain=tool_chain,
                     thinking=result.thinking,
-                    streamed=result.streamed,
+                    streamed=result.streamed and not buffer_reply,
                     context_retry=retry_trace,
                     # Kept off `context_retry`: that dict is snapshotted verbatim
                     # into persisted message/outbound metadata (JSON-only).
@@ -549,6 +570,7 @@ class DefaultReasoner(
                     role_reply_mood_fresh=bool(
                         result.metadata.get("role_reply_mood_fresh")
                     ),
+                    reply_sequence=prompt_render.reply_sequence,
                 )
             except ContentSafetyError:
                 prefix_length = (

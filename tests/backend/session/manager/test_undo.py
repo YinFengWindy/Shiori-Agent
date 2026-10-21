@@ -12,6 +12,86 @@ from session.manager import SessionManager
 _FRAME = '<system-reminder data-system-context-frame="true">内部</system-reminder>'
 
 
+async def test_undo_complete_reply_sequence_preserves_interleaved_background_message(
+    tmp_path,
+):
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("role:a")
+    thread_id = "thread:a:desktop"
+    session.add_message(
+        "user", "hello", thread_id=thread_id, metadata={"turn_id": "turn-1"}
+    )
+    manager.save(session)
+    user_id = session.messages[-1]["id"]
+    session.add_message(
+        "assistant",
+        "one",
+        thread_id=thread_id,
+        metadata={
+            "turn_id": "turn-1",
+            "reply_sequence_id": "turn-1",
+            "reply_sequence_index": 0,
+            "trigger_user_message_id": user_id,
+        },
+    )
+    session.add_message("assistant", "background", proactive=True)
+    session.add_message(
+        "assistant",
+        "two",
+        thread_id=thread_id,
+        metadata={
+            "turn_id": "turn-1",
+            "reply_sequence_id": "turn-1",
+            "reply_sequence_index": 1,
+            "trigger_user_message_id": user_id,
+        },
+    )
+    manager.save(session)
+    result = await manager.undo_last_turn(session.key)
+    assert result is not None and len(result.deleted_ids) == 3
+    reloaded = SessionManager(tmp_path).get_or_create(session.key)
+    assert [row["content"] for row in reloaded.messages] == ["background"]
+
+
+@pytest.mark.parametrize("anchor_case", ["missing", "unknown", "other_thread"])
+async def test_unresolvable_latest_sequence_never_undoes_an_earlier_turn(
+    tmp_path, anchor_case
+):
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("role:a")
+    thread_id = "thread:a:desktop"
+    session.add_message("user", "earlier user", thread_id=thread_id)
+    session.add_message("assistant", "earlier reply", thread_id=thread_id)
+    session.add_message(
+        "user",
+        "current user",
+        thread_id="thread:a:qq:group" if anchor_case == "other_thread" else thread_id,
+        metadata={"turn_id": "current"},
+    )
+    manager.save(session)
+    user_id = session.messages[-1]["id"]
+    anchor = {"missing": None, "unknown": "unknown-id", "other_thread": user_id}[
+        anchor_case
+    ]
+    session.add_message(
+        "assistant",
+        "latest sequence",
+        thread_id=thread_id,
+        metadata={
+            "turn_id": "current",
+            "reply_sequence_id": "current",
+            "trigger_user_message_id": anchor,
+        },
+    )
+    manager.save(session)
+    before_ids = [row["id"] for row in session.messages]
+    assert await manager.undo_last_turn(session.key) is None
+    assert [
+        row["id"]
+        for row in SessionManager(tmp_path).get_or_create(session.key).messages
+    ] == before_ids
+
+
 def _run(coro):
     return asyncio.run(coro)
 

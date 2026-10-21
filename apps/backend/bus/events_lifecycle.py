@@ -50,6 +50,15 @@ NOT_USER_AUTHORED_KEY = "not_user_authored"
 
 
 @dataclass(frozen=True)
+class ReplyMessageCommitted:
+    """An intermediate complete desktop message; the owning turn is still busy."""
+
+    session_key: str
+    turn_id: str
+    message_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class TurnFailed:
     """A passive turn failed before any reply was committed.
 

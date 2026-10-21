@@ -43,6 +43,7 @@ flowchart TD
 ## 对外事件契约
 
 - `chat.delta`：可见文本增量或 thinking 增量。
+- `chat.message`：自然聊天模式中的完整已持久化消息，复用 `session.updated` 的消息载荷；立即显示但不结束回合，后续仍以 `chat.done` / `chat.error` / `chat.cancelled` 收尾。模型自主给出分隔位置，正文生成期间只透传 thinking，不展示未发送正文。
 - `chat.tool.started` / `chat.tool.completed`：工具调用生命周期。
 - `chat.done`：reply、thinking、tools_used、token usage 和耗时。
 - `chat.error`：统一错误边界。
