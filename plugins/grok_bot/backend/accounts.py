@@ -105,6 +105,7 @@ class GrokAccounts:
     async def load(self) -> None:
         """Restore valid independent accounts; reject corrupt records individually."""
         for connection_id, row in self.store.rows().items():
+            registered = False
             try:
                 config = read_connection(row)
                 if connection_id != config.connection_id:
@@ -114,17 +115,20 @@ class GrokAccounts:
                     continue
                 if not self._register(config, saved=True):
                     continue
+                registered = True
                 self._changed(config)
+                self._report(connection_id, "offline")
                 if config.enabled:
                     connection = self._make_connection(
                         config, self._resolve_key(config)
                     )
                     self.connections[connection_id] = connection
                     await self.group.add(connection_id, connection)
-                else:
-                    self._report(connection_id, "offline")
             except ValueError as error:
-                self.ctx.accounts.reject(connection_id, str(error))
+                if registered:
+                    self._report(connection_id, "error", str(error))
+                else:
+                    self.ctx.accounts.reject(connection_id, str(error))
 
     def _config_for(self, payload: dict[str, object]) -> ConnectionConfig:
         account_id = str(payload.get("account_id") or "")

@@ -141,13 +141,20 @@ async def test_failed_intake_same_id_retry_is_recovered_once_without_restart(
     assert connection.journal.state.exchanges["retry-same-id"].count == 1
 
 
+@pytest.mark.parametrize(
+    "will_dispatch, already_queued", [(True, False), (False, True)]
+)
 async def test_committed_response_keeps_its_parent_pending_until_channel_delivery(
-    harness,
+    harness, will_dispatch, already_queued
 ):
     connection = harness.connection
     await connection.receive(
         "messages", {"message_id": "waiting-for-delivery", "text": "hello"}
     )
+    if already_queued:
+        harness.bus.pending_outbound.add(
+            (connection.name, connection.config.chat_id, "waiting-for-delivery")
+        )
     await harness.events.emit(
         TurnCommitted(
             session_key="role:mira",
@@ -158,6 +165,7 @@ async def test_committed_response_keeps_its_parent_pending_until_channel_deliver
             assistant_response="reply",
             tools_used=[],
             external_message_id="waiting-for-delivery",
+            will_dispatch=will_dispatch,
         )
     )
     assert [message.message_id for message in connection.journal.pending()] == [
@@ -173,6 +181,80 @@ async def test_committed_response_keeps_its_parent_pending_until_channel_deliver
         )
     )
     assert connection.journal.pending() == []
+
+
+async def test_suppressed_nonempty_committed_reply_releases_parent_without_channel_send(
+    harness,
+):
+    connection = harness.connection
+    await connection.receive(
+        "messages", {"message_id": "tool-delivered", "text": "hello"}
+    )
+    await harness.events.emit(
+        TurnCommitted(
+            session_key="role:mira",
+            channel=connection.name,
+            chat_id=connection.config.chat_id,
+            input_message="hello",
+            persisted_user_message="hello",
+            assistant_response="sent using account_send",
+            tools_used=[],
+            external_message_id="tool-delivered",
+        )
+    )
+    assert connection.journal.pending() == []
+    assert "tool-delivered" not in connection._submitted
+    assert harness.requests == []
+
+
+@pytest.mark.parametrize("pending_reply", [False, True])
+async def test_reconnect_keeps_only_replies_still_queued_on_host_bus(
+    harness, monkeypatch, pending_reply
+):
+    from plugins.grok_bot.backend.connection import GrokConnection
+
+    old = harness.connection
+    await old.receive("messages", {"message_id": "parent", "text": "hello"})
+    ctx = old._ctx
+    assert ctx is not None
+    if pending_reply:
+        harness.bus.pending_outbound.add((old.name, old.config.chat_id, "parent"))
+    await old.stop()
+    restored = GrokConnection(
+        old.config,
+        old.journal._kv,
+        old.client_file.parent.parent,
+        old.client_path,
+        config_changed=lambda value: None,
+        status_changed=lambda state, error: None,
+        transport=httpx.MockTransport(lambda request: httpx.Response(200)),
+    )
+    harness.connection = restored
+    try:
+        await restored.start(ctx)
+        assert restored._recovery is not None
+        await restored._recovery
+        assert len(harness.bus.inbound) == 1
+        assert bool(restored.journal.pending()) is pending_reply
+        assert ("parent" in restored._submitted) is pending_reply
+        monkeypatch.setattr("plugins.grok_bot.backend.exchange.MAX_RECORDS", 4)
+        for index in range(4):
+            await restored.send(BotMessage(f"other-{index}", "new topic"))
+        assert ("parent" in restored.journal.state.messages) is pending_reply
+        if pending_reply:
+            await harness.bus.publish_outbound(
+                OutboundMessage(
+                    channel=restored.name,
+                    chat_id=restored.config.chat_id,
+                    content="queued reply",
+                    metadata={"external_message_id": "parent"},
+                    committed_message_id="response",
+                )
+            )
+            assert harness.hub.deliveries[-1]["delivery_status"] == "sent"
+            assert restored.journal.pending() == []
+    finally:
+        await restored.stop()
 
 
 async def test_uncertain_send_is_visible_and_replay_never_reposts(harness, monkeypatch):
