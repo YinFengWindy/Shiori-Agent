@@ -8,6 +8,7 @@ from tests.support.default_suite import (
     REPO_ROOT,
     count_default_cases,
     is_default_test,
+    path_covered_by_also,
     selection_is_default_root,
     should_ignore_collect,
 )
@@ -35,6 +36,17 @@ def test_extended_host_file_is_ignored_on_the_default_root() -> None:
     assert not should_ignore_collect("tests/backend/conftest.py", is_dir=False)
     assert should_ignore_collect("tests/backend/benchmarks", is_dir=True)
     assert not should_ignore_collect("tests/backend/agent/lifecycle", is_dir=True)
+
+
+def test_also_covers_the_extra_file_and_its_parents() -> None:
+    extra = "tests/backend/agent/core/passive_turn/test_reasoning_loop.py"
+    assert path_covered_by_also(extra, [extra])
+    assert path_covered_by_also("tests/backend/agent/core/passive_turn", [extra])
+    assert path_covered_by_also("tests/backend", [extra])
+    assert not path_covered_by_also(
+        "tests/backend/agent/core/passive_turn/test_pipeline.py", [extra]
+    )
+    assert not path_covered_by_also("tests/backend/benchmarks", [extra])
 
 
 def test_explicit_path_is_not_the_default_root() -> None:

@@ -23,7 +23,9 @@ uv run pytest plugins/example/tests
 
 `tests/conftest.py` 与 `tests/support/` 只提供宿主 fixture；插件不得导入宿主测试树，也不得从源文件父目录推导原仓库资源。插件自己的资源可相对 `__file__` 定位；已声明兄弟插件通过 `shiori_sdk.testing.packages.plugin_directory()` 定位。整包暂存统一调用 `stage_plugin_package(source, target)`，排除虚拟环境、构建缓存和运行状态。SDK 支持测试位于 `packages/sdk/tests/testing/`；真实 AppRuntime fixture 和 workspace-backed memory fake 位于 `packages/shiori-host-testing/src/shiori_host_testing/`，对应测试位于 `tests/backend/shiori_host_testing/`。
 
-默认 `pytest`（Ubuntu `check-and-test`）只收集 `tests/backend` 里 `tests/support/default_suite.py` 列出的宿主契约，大约 1000 条参数化用例。其余宿主文件留在树上，标记 `extended`，用 `pytest --extended` 收集。`plugins/*/tests` 不进这条默认路径，由下面的仓库外隔离作业执行；显式 `pytest plugins/<id>/tests` 仍然只跑该插件。`packages/sdk/tests` 由 `verify_sdk` 在仓库外执行，显式 `pytest packages/sdk/tests` 在检出里跑同一套。Windows 进程作业仍按自己的路径列表运行，不受默认契约集过滤。
+默认 `pytest`（Ubuntu `check-and-test`）先收集 `tests/backend` 里 `tests/support/default_suite.py` 列出的宿主契约，大约 1000 条参数化用例。`python -m scripts.select_tests` 再按相对 `main` 的 merge-base 补邻居：记忆改动额外收集 `tests/backend/core/memory` 和 `tests/backend/agent`，agent 与 `desktop_bridge` 互相带上对方，SDK 改动额外收集 `packages/sdk/tests` 和有测试目录的 `plugins/*/tests`。锁文件、`.github/workflows/`、`pytest.ini`、`tests/support/default_suite.py`、`scripts/select_tests.py`，以及无法归类的非文档路径，改为 `pytest --extended`。归类不了就加宽，不缩窄。只改文档或 `apps/desktop/` 时仍只有默认契约集。`plugin-isolation` 与 `verify_sdk` 不随这张表开关。其余宿主文件留在树上，标记 `extended`。显式 `pytest plugins/<id>/tests` 仍然只跑该插件。Windows 进程作业仍按自己的路径列表运行，不受默认契约集过滤。
+
+**NEVER** 为了覆盖率加测试，覆盖率也不是合并条件。不要新增 `fail_under` 或覆盖率作业。新用例只写能单独抓住一种失败的行为契约，并优先补已有文件。不要新增 mock 接线、提示词子串、构造回声或同义矩阵。
 
 `shiori-host-testing` 的 pytest 入口仅在明确安装此私有宿主包时注册。SDK 自己的 pytest 入口允许仅安装基础 SDK 的消费者正常收集、运行无关测试；需要 fake 时会提示安装 testing extra。测试 TLS 上下文按参数和证书环境变量缓存，测试不得修改共享 SSL 上下文。
 

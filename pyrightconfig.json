@@ -35,6 +35,7 @@
     "scripts/sdk_repository_layout.py",
     "scripts/sdk_module_names.py",
     "scripts/commands.py",
+    "scripts/select_tests.py",
     "apps/site/scripts/showcase_workspace.py",
     "scripts/wheelhouse.py",
     "scripts/isolation_probe.py",

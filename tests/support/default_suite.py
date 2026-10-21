@@ -1,8 +1,9 @@
 """Default host pytest selection (about 1000 parametrized cases).
 
 ``pytest`` with no path arguments collects this set from ``tests/backend``.
-Everything else that remains under ``tests/backend`` is marked ``extended``
-when collected, and is collected with ``pytest --extended``.
+``pytest --also <path>`` keeps this set and also collects those host paths.
+Everything else under ``tests/backend`` is marked ``extended``.
+``scripts/select_tests.py`` decides when CI passes ``--also`` or ``--extended``.
 
 Not on this path:
 
@@ -21,6 +22,7 @@ not filtered by this list.
 from __future__ import annotations
 
 import ast
+from collections.abc import Iterable
 from pathlib import Path
 
 # Whole directories whose tests are host-owned and small enough to keep.
@@ -94,6 +96,7 @@ DEFAULT_FILES: frozenset[str] = frozenset(
         "tests/backend/scripts/test_sdk_path_sinks.py",
         "tests/backend/scripts/test_commands.py",
         "tests/backend/scripts/test_default_suite.py",
+        "tests/backend/scripts/test_select_tests.py",
     }
 )
 
@@ -122,6 +125,23 @@ def directory_has_default_test(rel: str) -> bool:
     ):
         return True
     return any(path.startswith(prefix) for path in DEFAULT_FILES)
+
+
+def path_covered_by_also(rel: str, extras: Iterable[str]) -> bool:
+    """Return whether ``rel`` is an ``--also`` path, inside one, or a parent of one.
+
+    Parents must stay visible. Ignoring a directory skips the whole tree and
+    would hide an extended file requested underneath it.
+    """
+    for extra in extras:
+        normalized = extra.replace("\\", "/").strip("/")
+        if not normalized:
+            continue
+        if rel == normalized or rel.startswith(normalized + "/"):
+            return True
+        if normalized.startswith(rel + "/"):
+            return True
+    return False
 
 
 def should_ignore_collect(rel: str, *, is_dir: bool) -> bool:

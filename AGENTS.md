@@ -34,12 +34,12 @@ Shiori 是一个以角色为基底进行角色扮演的 Agent 助手：Python �
 | 范围 | 命令 |
 |---|---|
 | Python 格式与 lint | `.venv\Scripts\black.exe --check .`、`.venv\Scripts\ruff.exe check .` |
-| Python 测试 | 默认 `.venv\Scripts\pytest.exe` 只跑 `tests/backend` 里约 1000 条宿主契约（`-W error`）。其余宿主用例 `pytest --extended`。插件：`pytest plugins/<id>/tests`（CI 为 `verify_plugin_tests`）。SDK：`pytest packages/sdk/tests`（CI 为 `verify_sdk`） |
+| Python 测试 | 默认 `.venv\Scripts\pytest.exe` 跑 `tests/support/default_suite.py` 的约 1000 条宿主契约（`-W error`）。Ubuntu `check-and-test` 调用 `python -m scripts.select_tests`：始终包含这份契约集，再按相对 `main` 的 merge-base 补邻居（记忆↔agent、桥接↔agent、SDK→插件测试）。锁文件、CI workflow、`pytest.ini`、`default_suite`、`select_tests` 或无法归类的路径改为 `pytest --extended`。插件仍是 `verify_plugin_tests`，SDK 仍是 `verify_sdk`，这两条作业不按差异关掉。只改文档或 `apps/desktop/` 时仍只有默认契约集。 |
 | Python 类型 | pyright：源码 `pyrightconfig.json`，测试 `--project pyrightconfig.tests.json` |
 | 桌面端 / TypeScript | `pnpm lint`、`pnpm typecheck`、`pnpm test`（插件 UI：`pnpm desktop:test:plugin-ui`） |
 
 - Python 一律用仓库 `.venv`（跨平台文档与脚本写 `uv run ...`），不要用 PATH 里的裸 `python` / `pytest` / `ruff` / `pyright`。
-- 测试要能证明问题真实存在，不写「会通过但证明不了什么」的测试。
+- 写测试的硬规则见下文。覆盖率不是合并条件。
 
 ## 代码原则
 
@@ -85,6 +85,13 @@ Shiori 是一个以角色为基底进行角色扮演的 Agent 助手：Python �
 | 宿主测试 fixture 包 | 包在 `packages/shiori-host-testing/`，测试在 `tests/backend/shiori_host_testing/` |
 
 每个测试文件只测对应源文件的行为。
+
+## 写测试
+
+- **NEVER** 为了提高覆盖率加测试。覆盖率上升不能作为新增用例或合并的理由。PR 若只因覆盖率上升而加测试，不要加。仓库没有覆盖率门槛；`pytest-cov` 只是开发依赖，**NEVER** 添加 `fail_under` 或覆盖率 CI。
+- 新用例必须能单独抓住一种失败：行为、顺序、参数、真实装配或隔离边界。**NEVER** 加只检查 mock 是否被调用、提示词子串、构造参数回声、或同义词/输入矩阵的测试。
+- 优先补进已有测试文件。默认契约集是故意收窄的；不要把新文件写进 `tests/support/default_suite.py`，除非每次 CI 都必须守住这条宿主契约。
+- 选择模型在 `tests/support/default_suite.py` 和 `scripts/select_tests.py`。归类不了就加宽到 `pytest --extended`，不要缩成更少的路径。
 
 ## 平台与编码
 
