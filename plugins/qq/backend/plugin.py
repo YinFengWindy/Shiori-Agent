@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from shiori_sdk.accounts import VIA_ACCOUNT_KEY, AccountDeletionPlan
+from shiori_sdk.accounts.conversation import AccountConversation
 from shiori_sdk.accounts.targets import (
     ACCOUNT_SEND_METHOD,
     ACCOUNT_TARGETS_METHOD,
@@ -158,4 +159,8 @@ async def _send_account(runtime, payload: dict) -> dict:
         mention_ids=tuple(payload.get("mention_ids") or ()),
         images=account_send_media(payload),
     )
+    if payload["target_kind"] == "private":
+        result["conversation"] = AccountConversation(
+            runtime.name, result["chat_id"]
+        ).to_payload()
     return {**result, VIA_ACCOUNT_KEY: via}

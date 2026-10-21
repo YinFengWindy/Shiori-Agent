@@ -35,7 +35,8 @@ async def test_actions_query_fresh_lists_and_require_actual_send_receipt():
 
     socket.call.return_value = {"message_id": 88}
     assert await actions.send_target("account-a", "private", "902", "hi") == {
-        "message_id": "88"
+        "message_id": "88",
+        "chat_id": "902",
     }
     socket.call.assert_awaited_with(
         "send_private_msg", {"user_id": 902, "message": "hi"}
@@ -124,7 +125,7 @@ async def test_images_follow_the_text_in_one_napcat_message(tmp_path):
         "看天空",
         images=(str(image), "https://x.test/a.png?w=1,h=2"),
     )
-    assert receipt == {"message_id": "91"}
+    assert receipt == {"message_id": "91", "chat_id": "902"}
     socket.call.assert_awaited_once_with(
         "send_private_msg",
         {
@@ -196,7 +197,8 @@ async def test_many_line_private_text_is_one_merged_forward():
     text = "\n".join(str(line) for line in range(11))
 
     assert await actions.send_target("account-a", "private", "902", text) == {
-        "message_id": "72"
+        "message_id": "72",
+        "chat_id": "902",
     }
     socket.call.assert_awaited_once_with(
         "send_private_forward_msg",

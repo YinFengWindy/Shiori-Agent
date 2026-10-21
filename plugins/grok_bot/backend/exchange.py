@@ -65,6 +65,7 @@ class ExchangeJournal:
                 receipt.state = "uncertain"
                 changed = True
         if changed:
+            self.state.last_status = "上次发送结果不确定，请勿自动重发"
             self._save()
 
     def _save(self) -> None:

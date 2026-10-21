@@ -25,6 +25,8 @@ def test_duplicate_conflict_correlation_and_unknown_send_never_replay():
     journal.begin(original, "out", 12)
     restored = ExchangeJournal(kv, "c", "b")
     assert restored.state.messages["sent"].state == "uncertain"
+    assert "不确定" in restored.state.last_status
+    assert ExchangeJournal(kv, "c", "b").state.last_status == restored.state.last_status
     assert restored.pending() == []
     with pytest.raises(CallbackError, match="不确定"):
         restored.begin(original, "out", 12)

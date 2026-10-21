@@ -72,10 +72,13 @@ class GrokAccounts:
             ),
         )
 
-    def _make_connection(self, config: ConnectionConfig) -> GrokConnection:
+    def _resolve_key(self, config: ConnectionConfig) -> str:
         secret = self.ctx.config.resolve_reference(config.webhook_key)
         if not secret or secret.startswith("${"):
             raise ValueError("Webhook 密钥未配置或环境变量未解析")
+        return secret
+
+    def _make_connection(self, config: ConnectionConfig, secret: str) -> GrokConnection:
         return GrokConnection(
             config,
             self.ctx.kv,
@@ -102,7 +105,9 @@ class GrokAccounts:
                     continue
                 self.configs[connection_id] = config
                 if config.enabled:
-                    connection = self._make_connection(config)
+                    connection = self._make_connection(
+                        config, self._resolve_key(config)
+                    )
                     self.connections[connection_id] = connection
                     await self.group.add(connection_id, connection)
                 else:
@@ -168,13 +173,15 @@ class GrokAccounts:
                     ),
                 }
             )
-            candidate = self._make_connection(config)
+            secret = self._resolve_key(config)
             old = self.connections.get(connection_id)
             await self.group.remove(connection_id)
-            self._register(config)
-            self._changed(config)
-            self.connections[connection_id] = candidate
             try:
+                # Read the persisted journal only after all old sends have drained.
+                candidate = self._make_connection(config, secret)
+                self._register(config)
+                self._changed(config)
+                self.connections[connection_id] = candidate
                 await self.group.add(connection_id, candidate)
             except Exception:
                 await self.group.remove(connection_id)
@@ -185,7 +192,7 @@ class GrokAccounts:
                     if old is not None:
                         self.connections[connection_id] = old
                         await self.group.add(connection_id, old)
-                else:
+                elif connection_id in self.configs:
                     self._report(connection_id, "error", "回程监听启动失败")
                 raise
             if previous is not None and previous.peer_id != config.peer_id:

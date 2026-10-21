@@ -32,6 +32,7 @@ def account_api():
         },
     }.get(key, default)
     first = SimpleNamespace(
+        name="telegram_first",
         _config_ref="first",
         _account_id="account-first",
         can_send=Mock(return_value=True),
@@ -42,7 +43,10 @@ def account_api():
         via_account=Mock(return_value={"platform_account_id": "123"}),
     )
     second = SimpleNamespace(
-        _account_id="account-second", can_send=Mock(return_value=True), bot=Mock()
+        name="telegram_second",
+        _account_id="account-second",
+        can_send=Mock(return_value=True),
+        bot=Mock(),
     )
     return (
         TelegramAccountApi(_bots({"first": first, "second": second}), Mock(), store),
@@ -129,6 +133,7 @@ async def test_shared_account_contract_preserves_bot_and_topic(account_api):
     )
     assert receipt["message_id"] == "77"
     assert receipt["via_account"] == {"platform_account_id": "123"}
+    assert "conversation" not in receipt
     first.send.assert_awaited_once_with("-1001", "hello", message_thread_id=42)
     with pytest.raises(ValueError, match="目标类型"):
         await api.account_send(
@@ -154,6 +159,48 @@ async def test_missing_telegram_receipt_is_uncertain(account_api):
                 "message": "hello",
             }
         )
+
+
+@pytest.mark.asyncio
+async def test_whitespace_cannot_route_a_private_target_to_a_group(account_api):
+    api, first = account_api
+    with pytest.raises(ValueError, match="目标类型"):
+        await api.account_send(
+            {
+                "account_id": "account-first",
+                "target_kind": "private",
+                "target_id": " -1001 ",
+                "message": "hello",
+            }
+        )
+    first.send.assert_not_awaited()
+    first.send_image.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_private_send_returns_canonical_numeric_chat_for_text_and_media(
+    account_api,
+):
+    api, first = account_api
+    result = await api.account_send(
+        {
+            "account_id": "account-first",
+            "target_kind": "private",
+            "target_id": "000123",
+            "message": "hello",
+            "media": ["https://example.test/image.png"],
+        }
+    )
+    assert result["conversation"] == {
+        "channel": "telegram_first",
+        "chat_id": "123",
+        "chat_type": "private",
+    }
+    assert result["message_id"] == "77"
+    first.send.assert_awaited_once_with("123", "hello", message_thread_id=None)
+    first.send_image.assert_awaited_once_with(
+        "123", "https://example.test/image.png", message_thread_id=None
+    )
 
 
 @pytest.mark.asyncio

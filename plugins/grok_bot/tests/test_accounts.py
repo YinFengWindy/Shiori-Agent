@@ -1,4 +1,5 @@
 import json
+import asyncio
 from pathlib import Path
 from unittest.mock import AsyncMock
 from uuid import uuid4
@@ -13,6 +14,7 @@ from plugins.grok_bot.backend.accounts import GrokAccounts
 from plugins.grok_bot.backend.connection import GrokConnection
 from plugins.grok_bot.backend.config import ConnectionConfig
 from plugins.grok_bot.backend.store import ConnectionStore
+from plugins.grok_bot.backend.protocol import BotMessage
 
 
 async def test_multiple_roles_isolate_credentials_pause_rules_reload_and_delete(
@@ -204,4 +206,101 @@ async def test_delete_plan_can_be_recreated_after_each_cleanup_failure(
         await completed.disconnect()
         await completed.purge()
     finally:
+        await ctx.aclose()
+
+
+async def test_reconnect_keeps_all_inflight_send_receipts_and_reply_correlation(
+    tmp_path: Path, config: ConnectionConfig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ctx = FakeChannelPluginContext("grok_bot", Path(__file__).resolve().parents[1])
+    ctx.workspace = tmp_path
+    group = ctx.channels.group("grok_bot")
+    accounts = GrokAccounts(ctx, group)
+    accounts.store.save(config.model_copy(update={"verified": True}))
+    await accounts.load()
+    await group.start(fake_channel_context(tmp_path))
+    old = accounts.connections[config.connection_id]
+    entered, release = asyncio.Event(), asyncio.Event()
+
+    async def delayed_post(payload: dict[str, object]) -> None:
+        entered.set()
+        await release.wait()
+
+    monkeypatch.setattr(old._transport, "post", delayed_post)
+    monkeypatch.setattr(GrokConnection, "probe", AsyncMock())
+    tasks: list[asyncio.Task[dict[str, object]]] = []
+    try:
+        async with asyncio.timeout(5):
+            tasks.append(asyncio.create_task(old.send(BotMessage("out-1", "first"))))
+            await entered.wait()
+            tasks.append(asyncio.create_task(old.send(BotMessage("out-2", "second"))))
+            await asyncio.sleep(0)
+            tasks.append(
+                asyncio.create_task(
+                    accounts.save(
+                        {"role_id": config.role_id, "webhook_url": config.webhook_url}
+                    )
+                )
+            )
+            while group.member(config.connection_id) is not None:
+                await asyncio.sleep(0)
+            release.set()
+            await asyncio.gather(*tasks)
+        current = accounts.connections[config.connection_id]
+        assert current is not old
+        assert current.journal.state.count == 2
+        assert {
+            key: value.state for key, value in current.journal.state.messages.items()
+        } == {"out-1": "accepted", "out-2": "accepted"}
+        # Correlation to the second real send survives the handover too.
+        assert current.journal.begin(BotMessage("reply", "received", "out-2"), "in", 12)
+    finally:
+        release.set()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        await group.stop()
+        await ctx.aclose()
+
+
+async def test_reconnect_validates_credentials_before_retiring_and_restores_on_failure(
+    tmp_path: Path, config: ConnectionConfig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ctx = FakeChannelPluginContext("grok_bot", Path(__file__).resolve().parents[1])
+    ctx.workspace = tmp_path
+    group = ctx.channels.group("grok_bot")
+    accounts = GrokAccounts(ctx, group)
+    accounts.store.save(config.model_copy(update={"verified": True}))
+    await accounts.load()
+    await group.start(fake_channel_context(tmp_path))
+    old = accounts.connections[config.connection_id]
+    try:
+        with pytest.raises(ValueError, match="未解析"):
+            await accounts.save(
+                {"role_id": config.role_id, "webhook_key": "${MISSING}"}
+            )
+        assert group.member(config.connection_id) is old
+        assert old.client_file.exists()
+
+        def failed_connection(
+            candidate: ConnectionConfig, secret: str
+        ) -> GrokConnection:
+            raise ValueError("journal unavailable")
+
+        monkeypatch.setattr(accounts, "_make_connection", failed_connection)
+        with pytest.raises(ValueError, match="journal unavailable"):
+            await accounts.save({"role_id": config.role_id})
+        assert group.member(config.connection_id) is old
+        assert old.status()["connected"]
+        assert old.client_file.exists()
+        assert accounts.store.get(config.connection_id).verified
+        with pytest.raises(ValueError, match="journal unavailable"):
+            await accounts.save(
+                {
+                    "role_id": "other",
+                    "webhook_url": config.webhook_url,
+                    "webhook_key": config.webhook_key,
+                }
+            )
+        assert len(accounts.configs) == 1
+    finally:
+        await group.stop()
         await ctx.aclose()

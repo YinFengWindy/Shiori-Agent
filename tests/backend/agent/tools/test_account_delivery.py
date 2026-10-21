@@ -125,21 +125,51 @@ _VIA = {
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "channel,transport,target_id,chat_id,message_id",
+    [
+        ("grok_bot", "grok_bot_bridge", "peer-id", "dm:peer-id", ""),
+        ("qq", "qq", "902", "902", "qq-1"),
+        ("telegram", "telegram_first", "123", "123", "tg-1"),
+        ("qqbot", "qqbot", "opaque", "c2c:100:opaque", "qqbot-1"),
+        ("feishu", "feishu:feishu:app", "ou_a", "oc_a", "om-1"),
+    ],
+)
 async def test_private_bot_first_contact_is_recorded_in_canonical_network_thread(
     tmp_path,
+    channel,
+    transport,
+    target_id,
+    chat_id,
+    message_id,
 ):
     """A bot does not need to be paired as the desktop user to have a history."""
-    receipt = AccountSendReceipt(
-        attempt_id="attempt-bot",
-        account_id="grok_bot:bridge",
-        channel="grok_bot",
-        target_kind="private",
-        target_id="peer-id",
-        platform_message_id="",
-        ownership_current=True,
-        conversation=AccountConversation("grok_bot_bridge", "dm:peer-id"),
+    accounts = AccountRegistry(lambda role_id: role_id == "mira")
+    account = accounts.register(
+        plugin_id=channel,
+        platform=channel,
+        platform_account_id="bridge",
+        config_ref="bridge",
+        token="live",
+        role_id="mira",
     )
-    delivery = SimpleNamespace(send=AsyncMock(return_value=receipt))
+    accounts.report(account.record.id, "live", connection="online")
+
+    async def send(payload):
+        assert payload["target_id"] == target_id
+        return {
+            "message_id": message_id,
+            "accepted": True,
+            "conversation": AccountConversation(transport, chat_id).to_payload(),
+        }
+
+    ledger = AccountDeliveryLedger(tmp_path)
+    delivery = AccountDelivery(
+        accounts,
+        SimpleNamespace(resolve=lambda name: (channel, send)),
+        ledger,
+        UserIdentityStore(tmp_path),
+    )
     sessions = SessionManager(tmp_path)
     sessions.open_role_session("mira", role_name="Mira")
     bus = EventBus()
@@ -148,19 +178,18 @@ async def test_private_bot_first_contact_is_recorded_in_canonical_network_thread
     )
     tool = AccountSendTool(delivery, bus)
     await tool.execute(
-        channel="grok_bot",
+        channel=channel,
         role_id="mira",
         target_kind="private",
-        target_id="peer-id",
+        target_id=target_id,
         message="我先来找你",
     )
     [stored] = sessions._store.fetch_session_messages("role:mira")
     assert stored["content"] == "我先来找你"
-    assert stored["thread_id"] == network_thread_id(
-        "mira", "grok_bot_bridge", "dm:peer-id"
-    )
-    assert not stored["metadata"].get("external_message_id")
-    assert stored["metadata"]["delivery_attempt_id"] == "attempt-bot"
+    assert stored["thread_id"] == network_thread_id("mira", transport, chat_id)
+    assert (stored["metadata"].get("external_message_id") or "") == message_id
+    [attempt] = ledger.list_for_role("mira")
+    assert stored["metadata"]["delivery_attempt_id"] == attempt.attempt_id
 
 
 def _user_send_setup(
