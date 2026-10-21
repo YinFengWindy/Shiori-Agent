@@ -10,10 +10,10 @@ Not on this path:
   ``pytest plugins/<id>/tests``
 - ``packages/sdk/tests`` — ``scripts.verify_sdk`` and
   ``pytest packages/sdk/tests``
-- Heavy host scenarios (reasoner loops, drift novels, per-plugin kernel
-  files, desktop-bridge integration, benchmarks) — ``pytest --extended``
+- Remaining host scenarios (reasoner loop, proactive agent loop, shell
+  and message tools, role and memory writes) — ``pytest --extended``
 
-An explicit path such as ``pytest tests/backend/proactive_v2/test_drift.py``
+An explicit path such as ``pytest tests/backend/agent/core/passive_turn/test_reasoning_loop.py``
 still collects that file. The Windows CI job passes explicit paths and is
 not filtered by this list.
 """

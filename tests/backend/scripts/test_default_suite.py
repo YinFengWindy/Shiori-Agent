@@ -27,7 +27,7 @@ def test_default_case_count_stays_near_one_thousand() -> None:
 
 def test_extended_host_file_is_ignored_on_the_default_root() -> None:
     assert should_ignore_collect(
-        "tests/backend/proactive_v2/test_drift.py", is_dir=False
+        "tests/backend/agent/core/passive_turn/test_reasoning_loop.py", is_dir=False
     )
     assert not should_ignore_collect(
         "tests/backend/agent/plugin_host/test_kernel.py", is_dir=False
@@ -42,7 +42,9 @@ def test_explicit_path_is_not_the_default_root() -> None:
     assert selection_is_default_root([], cwd=root, root=root)
     assert selection_is_default_root(["tests/backend"], cwd=root, root=root)
     assert not selection_is_default_root(
-        ["tests/backend/proactive_v2/test_drift.py"], cwd=root, root=root
+        ["tests/backend/agent/core/passive_turn/test_reasoning_loop.py"],
+        cwd=root,
+        root=root,
     )
     assert not selection_is_default_root(["plugins/qq/tests"], cwd=root, root=root)
 
@@ -50,7 +52,7 @@ def test_explicit_path_is_not_the_default_root() -> None:
 def test_kernel_contract_stays_on_the_default_path() -> None:
     assert is_default_test("tests/backend/agent/plugin_host/test_kernel.py")
     assert not is_default_test(
-        "tests/backend/agent/plugin_host/test_kernel_desktop_pet.py"
+        "tests/backend/agent/core/passive_turn/test_reasoning_loop.py"
     )
 
 

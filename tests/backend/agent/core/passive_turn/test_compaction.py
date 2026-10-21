@@ -360,3 +360,54 @@ async def test_auto_failure_within_hard_limit_sends_original_and_records_it(
         scope.render_minimal.assert_not_awaited()
     finally:
         await provider.aclose()
+
+
+async def test_degraded_budgeted_chat_offers_only_the_reply_schema(memory_harness):
+    """A degraded request must not execute a business tool under the reply schema."""
+    from agent.core.passive_turn.budgeted_request import budgeted_chat
+    from agent.core.passive_turn.compaction import request_compaction_scope
+    from agent.core.passive_turn.natural_reply import finish_reply_schema
+    from agent.provider import LLMResponse, ToolCall
+    from core.compaction import CompactionFailedError
+
+    h = memory_harness
+    session = h.manager.get_or_create("cli:degraded-reply-only")
+    provider = LLMProvider(api_key="test", max_retries=0)
+    provider.chat = AsyncMock(
+        return_value=LLMResponse(
+            content="",
+            tool_calls=[ToolCall("reply", "counter", {"messages": ["完成"]})],
+        )
+    )
+    scope = RequestCompaction(
+        CompactionController(
+            h.manager,
+            h.maintenance,
+            SimpleNamespace(model_name="m", generate=AsyncMock()),
+        ),
+        session.key,
+        None,
+        CompactionPolicy(),
+        0,
+        1,
+        AsyncMock(),
+        lambda _: [],
+    )
+    scope.degraded = True
+    reply_tool = finish_reply_schema()
+    schemas = [{"type": "function", "function": {"name": "counter"}}]
+    try:
+        with request_compaction_scope(scope):
+            request = budgeted_chat(
+                provider,
+                messages=[{"role": "user", "content": "当前任务"}],
+                tools=schemas,
+                reply_tool=reply_tool,
+                model="m",
+                max_tokens=100,
+            )
+            with pytest.raises(CompactionFailedError):
+                await request
+        assert provider.chat.call_args.kwargs["tools"] == [reply_tool]
+    finally:
+        await provider.aclose()
