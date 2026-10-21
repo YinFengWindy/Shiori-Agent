@@ -467,3 +467,124 @@ async def test_chat_lanes_preserve_order_and_release_accepted_leases_on_shutdown
         await task
     assert candidate.references == 0
     assert seen == ["a1", "b1"]
+
+
+@pytest.mark.parametrize(
+    "channel,chat_id", [("desktop", "role:mira"), ("telegram", "42")]
+)
+async def test_spawn_completion_keeps_internal_tracking_and_dispatcher_alive(
+    tmp_path, channel, chat_id
+):
+    from unittest.mock import Mock
+    from agent.background.subagent_manager import SubagentManager
+    from agent.looping.core import AgentLoop
+    from agent.looping.interrupt import current_tracking_key
+    from agent.turns.reply_interruption import current_reply_interruption
+    from bus.event_bus import EventBus
+    from bus.events import SpawnCompletionItem
+    from core.common.runtime_scope import bind_runtime
+    from shiori_sdk.messages import OutboundMessage
+
+    bus = MessageBus()
+    loop = object.__new__(AgentLoop)
+    loop.bus = bus
+    loop._event_bus = EventBus()
+    loop._processing_state = None
+    loop._active_tasks = {}
+    loop._active_turn_states = {}
+    loop._interrupt_states = {}
+    entered, release, following = (asyncio.Event() for _ in range(3))
+    seen = []
+
+    async def process(item, key, *, dispatch_outbound):
+        seen.append(
+            (item, key, current_tracking_key(key), current_reply_interruption())
+        )
+        if isinstance(item, SpawnCompletionItem):
+            loop._append_partial_thinking(key, "internal progress")
+            entered.set()
+            await release.wait()
+        else:
+            following.set()
+        return OutboundMessage(item.channel, item.chat_id, "handled")
+
+    loop._core_runner = SimpleNamespace(process=process)
+    candidate = RuntimeCandidate(1, SimpleNamespace(loop=loop), SimpleNamespace())
+    bus.bind_runtime_admission(candidate.acquire)
+    bus.subscribe_outbound(channel, AsyncMock(), supports_reply_sequence=True)
+    app = SimpleNamespace(
+        bus=bus, wait_for_admission=AsyncMock(), acquire=candidate.acquire
+    )
+    producer = SubagentManager(
+        provider=Mock(),
+        workspace=tmp_path,
+        bus=bus,
+        model="test",
+        max_tokens=256,
+        fetch_requester=object(),
+    )
+    existing_input = InboundMessage(
+        channel,
+        "alice",
+        chat_id,
+        "ordinary request",
+        metadata={
+            "role_id": "mira",
+            "account_id": "fixture",
+            "chat_type": "private",
+        },
+    )
+    existing_reply = candidate.reply_sequences.admit(existing_input)
+    dispatcher = asyncio.create_task(RuntimeDispatcher(app).run())
+    try:
+        async with candidate.acquire() as lease:
+            with bind_runtime(lease):
+                await producer._announce_result(
+                    job_id="job",
+                    label="report",
+                    task="original task",
+                    origin_channel=channel,
+                    origin_chat_id=chat_id,
+                    status="completed",
+                    exit_reason="completed",
+                    result="completed fact",
+                    decision=None,
+                )
+        await until(lambda: entered.is_set() or dispatcher.done())
+        if dispatcher.done():
+            await dispatcher
+        [(item, key, tracking, interruption)] = seen
+        assert isinstance(item, SpawnCompletionItem)
+        assert item.event.result == "completed fact"
+        assert key == item.session_key == f"{channel}:{chat_id}"
+        assert tracking == key
+        assert interruption is None
+        assert loop._active_turn_states[key].partial_thinking == "internal progress"
+        assert (
+            loop._active_turn_states[key].original_user_message
+            == "[后台任务完成] report"
+        )
+        assert key in loop._active_tasks
+        assert not existing_reply.invalidated
+        assert candidate.reply_sequences._plans == {existing_reply}
+        assert candidate.references == 1
+
+        # A typed completion must not terminate the global consumer or block a
+        # different chat while its own processing is still pending.
+        await bus.publish_inbound(
+            InboundMessage("telegram", "bob", "other", "following")
+        )
+        await asyncio.wait_for(following.wait(), 2)
+        release.set()
+        await until(lambda: candidate.references == 0)
+        assert not dispatcher.done()
+        assert loop._active_tasks == {}
+        assert loop._active_turn_states == {}
+        assert not existing_reply.invalidated
+        assert len(seen) == 2
+    finally:
+        release.set()
+        dispatcher.cancel()
+        await asyncio.gather(dispatcher, return_exceptions=True)
+        candidate.reply_sequences.forget(existing_input, existing_reply)
+        await loop._event_bus.aclose()

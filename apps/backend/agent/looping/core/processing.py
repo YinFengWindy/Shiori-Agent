@@ -54,19 +54,23 @@ class _ProcessingMixin:
             await self.process_inbound(item)
 
     async def process_inbound(self, item: InboundItem) -> None:
-        """Processes one dequeued transport item using this captured runtime."""
+        """Processes queued input or a typed internal completion on this runtime."""
         key = item.session_key
         if await self._compact_command(item, key, dispatch_outbound=True) is not None:
             return
-        metadata = item.metadata if isinstance(item, InboundMessage) else {}
-        tracking_key = turn_tracking_key(
-            key,
-            item.channel,
-            item.chat_id,
-            account_id=str(metadata.get("account_id") or ""),
-            chat_type=str(metadata.get("chat_type") or ""),
-            message_thread_id=str(metadata.get("message_thread_id") or ""),
-        )
+        # Typed internal completions keep their own session identity. Their
+        # channel/chat is a return destination, not an admitted external origin.
+        tracking_key = key
+        if isinstance(item, InboundMessage):
+            metadata = item.metadata
+            tracking_key = turn_tracking_key(
+                key,
+                item.channel,
+                item.chat_id,
+                account_id=str(metadata.get("account_id") or ""),
+                chat_type=str(metadata.get("chat_type") or ""),
+                message_thread_id=str(metadata.get("message_thread_id") or ""),
+            )
         self._active_turn_states[tracking_key] = self._build_initial_turn_state(
             item, key
         )
