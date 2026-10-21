@@ -13,6 +13,7 @@ from shiori_sdk.rpc import Concurrency
 from shiori_sdk.storage import read_mapping
 
 from shiori_sdk.accounts import VIA_ACCOUNT_KEY
+from shiori_sdk.accounts.conversation import AccountConversation
 from shiori_sdk.media import detect_image_mime_from_header
 from shiori_sdk.accounts.targets import (
     ACCOUNT_SEND_METHOD,
@@ -102,7 +103,7 @@ class TelegramAccountApi:
         """
         ref = self._ref_for_account(payload)
         target_kind = str(payload.get("target_kind") or "")
-        target_id = str(payload.get("target_id") or "")
+        target_id = str(payload.get("target_id") or "").strip()
         if target_kind == GROUP_MEMBER_TARGET:
             raise ValueError("Telegram 不支持群临时会话")
         if target_kind not in {"private", "group"} or (
@@ -116,7 +117,8 @@ class TelegramAccountApi:
                 raise ValueError("Telegram 只有群消息可以提及成员")
             text = mention_markdown(mentions) + text
         # Taken before sending so a completed send always returns its snapshot.
-        via = self._channel({"ref": ref}).via_account()
+        channel = self._channel({"ref": ref})
+        via = channel.via_account()
         result = await self.send_target(
             {
                 "ref": ref,
@@ -126,6 +128,10 @@ class TelegramAccountApi:
                 "media": list(account_send_media(payload)),
             }
         )
+        if target_kind == "private":
+            result["conversation"] = AccountConversation(
+                channel.name, result["chat_id"]
+            ).to_payload()
         return {**result, VIA_ACCOUNT_KEY: via}
 
     def _channel(self, payload: dict[str, Any]) -> TelegramChannel:
@@ -202,6 +208,8 @@ class TelegramAccountApi:
             not isinstance(topic, int) or topic <= 0 or not chat_id.startswith("-")
         ):
             raise ValueError("A group topic requires a positive message_thread_id")
+        # Inbound Telegram chat IDs are the platform integer serialized as text.
+        chat_id = str(int(chat_id))
         for image in media:
             _check_image(image)
         # Text, then each image as a photo in the same topic; the first ID is

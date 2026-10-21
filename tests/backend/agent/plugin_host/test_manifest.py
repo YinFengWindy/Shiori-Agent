@@ -418,7 +418,10 @@ def test_builtin_default_disabled_plugins_match_the_upgrade_migration():
     default_disabled = {
         manifest.id
         for manifest in manifests
-        if manifest and not manifest.default_enabled
+        # External sources are installed separately and never enter builtin migration.
+        if manifest
+        and manifest.distribution == "builtin"
+        and not manifest.default_enabled
     }
     assert not _DEFAULT_DISABLED_SINCE_BUILTIN & set(DEFAULT_DISABLED_PLUGINS)
     assert default_disabled - _DEFAULT_DISABLED_SINCE_BUILTIN == set(

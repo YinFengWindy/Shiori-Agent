@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from agent.tools.turn_scope import tool_turn
 from agent.turns.channel_sequence_commit import ChannelSequenceDeliveryError
-from agent.turns.channel_sequence import without_channel_sequence, channel_reply_scope
+from agent.turns.channel_sequence import without_channel_sequence
 from agent.turns.reply_interruption import (
     current_reply_interruption,
     reply_interruption_scope,
@@ -58,12 +58,15 @@ class _ProcessingMixin:
         key = item.session_key
         if await self._compact_command(item, key, dispatch_outbound=True) is not None:
             return
-        origin = (
-            channel_reply_scope(item)[2:]
-            if isinstance(item, InboundMessage) and item.metadata.get("account_id")
-            else ()
+        metadata = item.metadata if isinstance(item, InboundMessage) else {}
+        tracking_key = turn_tracking_key(
+            key,
+            item.channel,
+            item.chat_id,
+            account_id=str(metadata.get("account_id") or ""),
+            chat_type=str(metadata.get("chat_type") or ""),
+            message_thread_id=str(metadata.get("message_thread_id") or ""),
         )
-        tracking_key = turn_tracking_key(key, item.channel, item.chat_id, origin=origin)
         self._active_turn_states[tracking_key] = self._build_initial_turn_state(
             item, key
         )

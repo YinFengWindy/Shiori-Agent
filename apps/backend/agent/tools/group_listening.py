@@ -5,6 +5,7 @@
 - 用户上下文（桌面、用户的私聊）：可以开关角色任意一个可旁听的群。
 - 外部上下文：只有用户本人触发的回合拿得到这个工具（未声明外部可用，群友触发的
   回合由 #489 的白名单排除），并且只能开关当前这个群。
+- 获完整工具授权的账号回合可以设置角色自己的可旁听群，不改变发送者身份。
 
 开关记录的操作方记为角色。
 """
@@ -43,9 +44,9 @@ class SetGroupListeningTool(Tool):
     name = "set_group_listening"
     description = (
         "打开或关闭你对一个群的旁听。旁听时你会看到这个群里的所有消息（仍然只在被 @ "
-        "或被回复时开口）。只在你的用户要求时使用。"
+        "或被回复时开口）。用户或获完整工具授权的对方可以要求你使用。"
         "channel 和 chat_id 取自群消息来源里的 channel 与 chat_id；在群里时省略即指当前群，"
-        "且在群里只能设置当前群。目标不是可旁听的群时，报错会列出可以旁听的群。"
+        "普通群回合只能设置当前群；完整工具授权可设置你的其他群。目标不是可旁听的群时，报错会列出可以旁听的群。"
     )
     parameters = {
         "type": "object",
@@ -66,7 +67,13 @@ class SetGroupListeningTool(Tool):
         "required": ["enabled"],
     }
     context_precedence = frozenset(
-        {"role_id", "thread_id", "context_scope", "sender_is_user"}
+        {
+            "role_id",
+            "thread_id",
+            "context_scope",
+            "sender_is_user",
+            "account_full_tools",
+        }
     )
 
     def __init__(self, listening: GroupListeningControl) -> None:
@@ -85,7 +92,11 @@ class SetGroupListeningTool(Tool):
         scope = kwargs.get("context_scope")
         # 失败即关：只有用户上下文，或用户本人在群里对当前群的操作才放行；
         # 上下文缺失或无法判定（非角色会话、后台回传）一律拒绝。
-        if scope == "external" and kwargs.get("sender_is_user") == "true":
+        if scope == "external" and kwargs.get("account_full_tools") == "true":
+            # Full tool permission covers the role's own groups; the owning
+            # listening service still validates the role and target below.
+            pass
+        elif scope == "external" and kwargs.get("sender_is_user") == "true":
             if target != kwargs.get("thread_id"):
                 raise PermissionError("在群里只能设置当前这个群的旁听")
         elif scope != "user":

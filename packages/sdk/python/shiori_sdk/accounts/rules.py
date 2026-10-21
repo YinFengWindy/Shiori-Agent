@@ -29,10 +29,14 @@ def response_rules_from_dict(value: Any) -> AccountResponseRules:
     ):
         raise ValueError("Invalid account response rules")
     blocked = _ids(value.get("blocked_sender_ids"), "Invalid account response rules")
+    full_tools = value.get("allow_full_tools", False)
+    if type(full_tools) is not bool:
+        raise ValueError("Invalid account tool permission")
     return AccountResponseRules(
         private_enabled=value["private_enabled"],
         group_enabled=value["group_enabled"],
         blocked_sender_ids=blocked,
+        allow_full_tools=full_tools,
     )
 
 
@@ -47,4 +51,5 @@ def response_rules_to_dict(rules: AccountResponseRules) -> dict[str, Any]:
         "private_enabled": rules.private_enabled,
         "group_enabled": rules.group_enabled,
         "blocked_sender_ids": list(rules.blocked_sender_ids),
+        **({"allow_full_tools": True} if rules.allow_full_tools else {}),
     }

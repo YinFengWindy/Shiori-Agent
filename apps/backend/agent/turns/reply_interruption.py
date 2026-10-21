@@ -90,7 +90,10 @@ def reply_interruption_scope(interruption: ReplyInterruption | None):
 
 
 def current_reply_interruption() -> ReplyInterruption | None:
-    """Return this task's reply lifetime, absent for ordinary/internal turns."""
+    """Return this desktop (ordinary/natural) or admitted channel reply lifetime.
+
+    Unintegrated and internal turns have no interruption context.
+    """
     return _CURRENT.get()
 
 

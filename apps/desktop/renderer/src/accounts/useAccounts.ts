@@ -13,8 +13,8 @@ function accountsMayHaveChanged(event: BridgeEvent) {
 
 /** Keeps account snapshots current across plugin lifecycle changes, account reports, and mutations. */
 export function useAccounts() {
-  const { value: accounts, error, refresh: reload } = useBridgeRefreshedValue({
+  const { value: accounts, error, loading, refresh: reload } = useBridgeRefreshedValue({
     load: loadAccounts, refreshEvents: accountsMayHaveChanged, refreshOnFocus: false, keepValueOnError: true,
   });
-  return { accounts, error, reload, client };
+  return { accounts, error, loading, reload, client };
 }

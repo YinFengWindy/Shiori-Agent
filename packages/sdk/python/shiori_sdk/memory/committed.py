@@ -33,3 +33,5 @@ class TurnCommitted:
     thread_id: str = ""
     total_tokens: int | None = None
     thinking_duration_ms: int | None = None
+    # Stable inbound identity, including turns that intentionally produce no reply.
+    external_message_id: str = ""

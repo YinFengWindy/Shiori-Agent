@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=80", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "shiori-plugin-grok-bot"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = ["shiori-sdk>=3.1.2,<4", "httpx>=0.28.1", "pydantic>=2.11", "h11>=0.16"]
+
+[project.optional-dependencies]
+test = ["shiori-sdk[testing]>=3.1.2,<4"]
+
+[tool.setuptools]
+include-package-data = false
+packages = ["plugins.grok_bot", "plugins.grok_bot.backend"]
+package-dir = {"plugins.grok_bot" = "."}
+
+[tool.setuptools.package-data]
+"plugins.grok_bot" = ["manifest.yaml", "README.md", "TESTING.md", "client.ps1"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-W error --import-mode=importlib"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+required_plugins = ["pytest-asyncio", "shiori-sdk"]

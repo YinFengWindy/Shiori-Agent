@@ -367,9 +367,19 @@ class DefaultReasoner(
 
             measured_stream_sink = _measure_stream_delta
         disabled_tools = _disabled_tools_from_msg(msg)
+        full_tools_allowed = self._tools.allows_full_tools(
+            msg, role_id=str(get_session_metadata(session).get("role_id") or "")
+        )
+        # Hooks can await between initial context setup and reasoning. Capture
+        # one current decision for schemas, execution and internal tool gates.
+        self._tools.set_context(
+            account_full_tools="true" if full_tools_allowed else "false"
+        )
         # 外部上下文里非用户本人发起的回合只能用允许集合内的工具（#489）。
         external_restricted = external_tools_restricted(
-            context_view, MessageSource.from_inbound(msg)
+            context_view,
+            MessageSource.from_inbound(msg),
+            full_tools_allowed=full_tools_allowed,
         )
         tool_execution_context: dict[str, Any] = {
             **self._tools.get_context(),

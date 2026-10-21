@@ -183,7 +183,7 @@ async def stop(self):
 - `account.send` 收到 `account_id`、`message`、`media`，以及 `AccountTarget.to_payload()`：`target_kind`、`target_id`、`message_thread_id`（整数或 `None`）、`group_id`（仅 `group_member`，否则为空字符串）、`mention_ids`（仅 `group`，可为空列表）。
 - 宿主只校验形状：`mention_ids` 只能用于 `target_kind="group"`；`target_kind="group_member"`（群临时会话，`target_id` 为成员 ID）必须带 `group_id`。平台能不能做由插件判断，做不到时明确报错，例如 QQBot、飞书没有群聊，收到 `mention_ids` 或 `group_member` 直接拒绝；Telegram 支持提及但没有群临时会话。
 - `media` 是要随消息发送的图片列表（按顺序，可为空列表），每项是本地图片路径或 http(s) URL，与主动推送、`message_push` 产出的形式相同；用 `account_send_media(payload)` 读取。`message` 与 `media` 可以有一个为空，但不会都为空。插件用自己平台的图片发送能力投递：能把文字和图片放进同一条消息的平台（如 QQ 的 CQ 图片码）发一条；否则由插件自己先发文字再逐张发图，已有部分送达后再失败时抛 `UncertainDeliveryError`（用户已收到一部分，不能记为未发送）。
-- 返回平台真实的 `message_id`（文字和图片分条发送时取第一条）；拿不到回执时抛 `UncertainDeliveryError`，宿主把尝试记为「不确定」。
+- 通常返回平台真实的 `message_id`（文字和图片分条发送时取第一条）。平台明确确认接收、但不提供消息 ID 时，可以返回 `{"accepted": true}`；不能用 `runUuid` 等任务运行 ID 冒充消息 ID。既没有真实消息回执，也没有明确接收确认时，抛 `UncertainDeliveryError`，宿主把尝试记为「不确定」。详见 [账号发送回执契约](plugin-runtime-contract.md#unreleased)。
 
 ## 6. 可选钩子
 

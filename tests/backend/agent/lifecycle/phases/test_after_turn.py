@@ -12,6 +12,7 @@ from agent.lifecycle.phases.after_turn import (
     _ApplyTurnAffectionModule,
     _DispatchOutboundModule,
     _memory_extra,
+    _BuildTurnCommittedModule,
 )
 from agent.lifecycle.types import TurnState
 from agent.account_delivery import AccountDelivery
@@ -21,12 +22,62 @@ from conversation.context_scope import turn_context_view
 from shiori_sdk.channels.threads import network_thread_id
 from core.accounts import AccountRegistry
 from shiori_sdk.accounts.targets import AccountTarget
+from shiori_sdk.memory.committed import TurnCommitted
 from core.accounts.delivery_ledger import AccountDeliveryLedger
 from core.identity import UserIdentityStore
 from core.roles import RoleRelationshipRuntimeService, RoleStore
 from core.roles.reply_state import AffectionChange
 from proactive_v2.presence import PresenceStore
 from session.manager import SessionManager
+
+
+@pytest.mark.asyncio
+async def test_silent_committed_turn_keeps_its_original_inbound_message_id(tmp_path):
+    session = SessionManager(tmp_path).get_or_create("role:mira")
+    session.metadata["role_id"] = "mira"
+    state = TurnState(
+        msg=InboundMessage(
+            channel="grok_bot_a",
+            sender="peer",
+            chat_id="dm:peer",
+            content="不用回复",
+            metadata={
+                "external_message_id": "bot-input",
+                "thread_id": "network-thread",
+            },
+        ),
+        session_key=session.key,
+        dispatch_outbound=False,
+        session=session,
+    )
+    frame = AfterTurnFrame(
+        input=SimpleNamespace(
+            state=state,
+            ctx=SimpleNamespace(
+                reply="",
+                tools_used=[],
+                thinking=None,
+                response_metadata=SimpleNamespace(raw_text=""),
+                meme_tag=None,
+                media=[],
+                outbound_metadata={},
+            ),
+        )
+    )
+    frame.slots.update(
+        {
+            "turn:tool_chain": [],
+            "turn:omit_user_turn": False,
+            "turn:budget": {},
+            "turn:react_stats": {},
+            "turn:extra": {},
+        }
+    )
+    await _BuildTurnCommittedModule().run(frame)
+    committed = frame.slots["turn:committed"]
+    assert isinstance(committed, TurnCommitted)
+    assert committed.external_message_id == "bot-input"
+    assert committed.assistant_response == ""
 
 
 @pytest.mark.asyncio

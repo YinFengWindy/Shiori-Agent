@@ -13,6 +13,8 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Protocol
 
+from shiori_sdk.channels.chat_types import is_group_chat_type
+
 _DEFAULT_TTL_S = 1800  # 30 分钟
 
 # 插件提交的外部回合（#721）与同一角色的桌面/渠道回合共用角色会话的 session_key，
@@ -29,12 +31,24 @@ def turn_tracking_key(
     channel: str = "",
     chat_id: str = "",
     *,
-    origin: tuple[str, ...] = (),
+    account_id: str = "",
+    chat_type: str = "",
+    message_thread_id: str = "",
 ) -> str:
     """Identify external chat work while retaining the desktop session key API."""
     if channel and channel != "desktop" and chat_id:
         base = f"{session_key}\x1f{channel}\x1f{chat_id}"
-        return "\x1f".join((base, *origin)) if origin else base
+        if account_id or chat_type or message_thread_id:
+            return "\x1f".join(
+                (
+                    base,
+                    account_id,
+                    "group" if is_group_chat_type(chat_type) else "private",
+                    chat_id,
+                    message_thread_id,
+                )
+            )
+        return base
     return session_key
 
 
@@ -123,4 +137,7 @@ class InterruptController(Protocol):
         *,
         channel: str = "",
         chat_id: str = "",
+        account_id: str = "",
+        chat_type: str = "",
+        message_thread_id: str = "",
     ) -> InterruptResult: ...

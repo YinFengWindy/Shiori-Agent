@@ -27,7 +27,7 @@ from shiori_sdk.channels.message_source import (
 )
 from core.identity import IdentityChat, UserIdentityStore
 from shiori_sdk.channels.identity import IdentityScope
-from shiori_sdk.channels.projection import plugin_metadata
+from shiori_sdk.channels.projection import ACCOUNT_FULL_TOOLS_KEY, plugin_metadata
 from core.channels.role_routing import RoleTurnRouter
 from core.roles.services import RoleAggregateService
 from core.roles.store import RoleStore
@@ -199,6 +199,8 @@ class ChannelHub:
         reply_to = str(metadata.get(REPLY_TO_SENDER_ID_KEY) or "").strip()
         if reply_to and self._identities.match(account.record, reply_to) is not None:
             metadata[REPLY_TO_SENDER_IS_USER_KEY] = True
+        if rules.allow_full_tools is True and "full_tools" in account.capabilities:
+            metadata[ACCOUNT_FULL_TOOLS_KEY] = True
         return self._router.route(message, role_id, metadata)
 
     def _live_owned_account(

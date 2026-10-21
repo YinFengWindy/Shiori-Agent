@@ -10,7 +10,7 @@ type SelectedAccount = { pluginId: string; accountId: string | null };
 
 /** The role page's 账号 tab: one row per channel, each opening its account detail. */
 export function RoleAccountsPanel({ roleId }: { roleId: string }) {
-  const { accounts, error, reload } = useAccounts();
+  const { accounts, error, loading, reload } = useAccounts();
   const isPluginEnabled = usePluginEnabledState();
   const [selected, setSelected] = useState<SelectedAccount | null>(null);
   const owned = accounts?.filter((item) => item.roleId === roleId) ?? null;
@@ -22,11 +22,14 @@ export function RoleAccountsPanel({ roleId }: { roleId: string }) {
       account={owned?.find((account) => account.id === selected.accountId) ?? null}
       pluginId={selected.pluginId}
       roleId={roleId}
+      loading={loading}
+      error={error}
+      onRefresh={() => void reload()}
       onClose={() => setSelected(null)}
-      onChanged={(accountId) => {
+      onChanged={async (accountId) => {
         // A created account turns the add dialog into that account's detail.
         if (accountId) setSelected({ pluginId: selected.pluginId, accountId });
-        void reload();
+        await reload();
       }}
     /> : null}
   </div>;

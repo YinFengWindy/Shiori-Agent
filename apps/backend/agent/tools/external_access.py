@@ -3,7 +3,8 @@
 外部上下文（群聊、陌生私聊）里，发送者不是已绑定用户的回合只能使用允许集合内的
 工具。允许集合只有一个来源：注册时声明 ``external_allowed`` 的工具（见
 ``ToolRegistry.is_external_allowed``），每次都查当前注册表。已绑定用户本人的
-消息即使在群里也不受限。
+消息即使在群里也不受限；宿主验证过的账号完整工具授权同样可解除限制，
+但不改变发送者身份或上下文范围。
 
 声明时还可以附带 ``ExternalArgumentLimit``，让工具在受限回合里只接受某个参数的
 部分取值（#522）：工具仍然可见，发给模型的 schema 与执行拦截两层都按这条限制
@@ -53,15 +54,20 @@ class ExternalArgumentLimit:
 
 
 def external_tools_restricted(
-    context_view: "ContextView | None", source: "MessageSource"
+    context_view: "ContextView | None",
+    source: "MessageSource",
+    *,
+    full_tools_allowed: bool = False,
 ) -> bool:
     """本回合是否只能使用外部上下文允许的工具。
 
-    条件是回合落在外部上下文、且发送者不是已绑定用户。没有上下文视图的会话
+    条件是回合落在外部上下文、且发送者不是已绑定用户或当前获完整工具授权的账号。
+    full_tools_allowed 必须来自宿主对当前账号的校验，不从历史来源推断。没有上下文视图的会话
     （非角色共享会话）不划分上下文，不受限。
     """
     return (
         context_view is not None
         and context_view.is_external
         and not source.sender_is_user
+        and full_tools_allowed is not True
     )

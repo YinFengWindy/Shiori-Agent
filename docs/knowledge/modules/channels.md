@@ -46,6 +46,8 @@ SDK 的 `shiori_sdk.channels.session_key`、`shiori_sdk.channels.reply_context` 
 
 「谁能和角色说话」由接收账号的响应规则决定（私聊/群聊开关、黑名单，均为账号级设置，所有群聊共用），规则连同账号身份、所属角色和凭据保存在账号所属插件自己的存储里，宿主只在内存里按已加载插件登记的账号建索引（#450）。入站准入由 `ChannelHub.route_account_inbound` 统一判断：接收账号属于某个角色、其插件已加载且在线、对应私聊/群聊开关打开，发送者不在账号黑名单里即放行；黑名单条目按发送者 ID 精确匹配，或按渠道别名（Telegram 用户名）忽略大小写匹配；`/stop` 走同一准入。群聊里只有「点名」账号的消息（SDK `addresses_account`：插件标记了 @ 本账号，或上报的被回复者 `reply_to_sender_id` 等于账号自己的平台 ID）才开启回合（#537）；未点名的群消息在角色旁听该群时存进旁听记录（#538，渠道需在 manifest 声明 `group_listening`，目前只有 QQ），否则丢弃。`reply_to_sender_id` 目前只有 QQ 上报，Telegram 只认 @。
 
+渠道 `/stop` 通过 `InterruptController.request_interrupt` 控制面传入接收账号 `account_id`、`chat_type`、`message_thread_id` 和渠道/chat；宿主与入站回合共用 `turn_tracking_key` 精确定位，Telegram 的不同话题不会因为共享 chat ID 而互相停止。只有未携带来源扩展的旧任务保留 session-only 唯一任务兼容，部分来源不能兜底匹配到账号/话题任务。桌面按原 session/turn 所有权停止（#867 / PR #880）。
+
 发送者若是桌面用户已绑定的平台身份（`core/identity/`，用户在私聊里向角色账号发送一次性配对码完成绑定，SDK `pairing_command.answer_pairing_code` 处理），宿主会在元数据里标记 `sender_is_user`（引用到用户时标记 `reply_to_sender_is_user`），插件不能自行声明；与用户的私聊会被记住，作为主动消息经该账号送达用户的落点。`/chatid`（旧别名 `/myid`）由渠道插件在入站处理中识别（与 `/stop` 同层、早于 hub 准入），交给 SDK `chat_id_command.answer_chat_id_command` 回复会话类型与号码，不进入角色对话；目前 Telegram、QQBot、飞书接入了该命令，QQ（NapCat）插件未接入。
 
 ## 修改影响

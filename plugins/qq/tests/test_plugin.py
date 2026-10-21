@@ -90,6 +90,39 @@ async def test_shared_account_send_adapts_target_and_rejects_topic() -> None:
 
 
 @pytest.mark.asyncio
+async def test_private_account_send_returns_the_inbound_chat_after_confirmed_send():
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+    from plugins.qq.backend.accounts_actions import QQAccountActions
+
+    socket = AsyncMock()
+    socket.call.return_value = {"message_id": 91}
+    actions = QQAccountActions(
+        lambda account_id: socket, AsyncMock(), lambda account_id: ("101", "Mira")
+    )
+    runtime = SimpleNamespace(
+        name="qq", send_target=actions.send_target, via_account=lambda account_id: {}
+    )
+    result = await _send_account(
+        runtime,
+        {
+            "account_id": "account-a",
+            "target_kind": "private",
+            "target_id": " 902 ",
+            "message": "first contact",
+            "media": ["https://example.test/image.png"],
+        },
+    )
+    assert result["conversation"] == {
+        "channel": "qq",
+        "chat_id": "902",
+        "chat_type": "private",
+    }
+    assert result["message_id"] == "91"
+    assert socket.call.await_args.args[1]["user_id"] == 902
+
+
+@pytest.mark.asyncio
 async def test_temporary_login_cancel_forwards_role_to_runtime() -> None:
     from types import SimpleNamespace
     from unittest.mock import AsyncMock

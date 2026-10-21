@@ -20,6 +20,7 @@ from bus.event_bus import EventBus
 from core.roles import RoleStore
 from shiori_sdk.messages import InboundMessage
 from shiori_sdk.memory.committed import TurnCommitted
+from agent.tools.registry import ToolRegistry
 
 
 class _DummySession:
@@ -114,7 +115,7 @@ async def test_context_store_commit_persists_commits_and_dispatches():
             )
         )
     )
-    tools = SimpleNamespace(set_context=MagicMock())
+    tools = ToolRegistry()
     agent_core = AgentCore(
         AgentCoreDeps(
             session=cast(
@@ -224,10 +225,7 @@ async def test_turn_committed_omits_user_message_when_user_turn_not_persisted():
             ),
             context_store=cast(Any, context_store),
             context=cast(Any, context),
-            tools=cast(
-                Any,
-                SimpleNamespace(set_context=MagicMock()),
-            ),
+            tools=ToolRegistry(),
             reasoner=cast(Any, reasoner),
             event_bus=event_bus,
             outbound_port=cast(
@@ -330,7 +328,7 @@ async def test_new_chain_after_reasoning_persists_meme_and_fires_turn_committed(
     context = SimpleNamespace(
         render=MagicMock(return_value=SimpleNamespace(system_prompt="p", messages=[])),
     )
-    tools = SimpleNamespace(set_context=MagicMock())
+    tools = ToolRegistry()
     reasoner = SimpleNamespace(
         run_turn=AsyncMock(
             return_value=TurnRunResult(

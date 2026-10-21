@@ -123,7 +123,7 @@ consolidates these additions and the subsequent #847 breaking migration.
 
 <!-- Record the next contract batch here, with PR references and breaking markers. -->
 
-- **Desktop and natural-channel supplements (#867).** Every desktop chat accepts
+- **Desktop and natural-channel supplements (PR #880, issue #867).** Every desktop chat accepts
   supplements, including ordinary streaming replies. On external channels this
   requires the built-in natural-chat capability: admitted and deduplicated input
   invalidates only the same role, receiving
@@ -143,7 +143,48 @@ consolidates these additions and the subsequent #847 breaking migration.
   Turn-owned `session.updated` events also carry `turn_id`; old persisted
   messages are still reconciled by ID without changing the current turn or
   reverting its session summary. Internal/proactive entrypoints remain outside
-  this behavior. SDK/runtime versions are unchanged.
+  this behavior. `InterruptController.request_interrupt` accepts the receiving
+  `account_id`, `chat_type` and opaque `message_thread_id` alongside channel/chat.
+  Channel `/stop` uses that exact origin; partial legacy addresses never select
+  a scoped account/topic by a unique-match fallback. Desktop session-only and
+  unscoped legacy task calls remain compatible. **breaking** for external
+  integrations targeting account-scoped turns: session-only or partially
+  addressed `request_interrupt` calls no longer infer that target; callers must
+  pass its receiving channel, chat, account, chat type and topic. Bundled channel
+  callers are migrated. SDK/runtime versions are unchanged.
+
+- **Explicit account tool permission (PR #873, issue #870).** `AccountResponseRules.allow_full_tools`
+  defaults to false, including when absent in saved JSON. Only accounts declaring
+  the `full_tools` capability expose the per-account switch. The channel hub drops
+  plugin-supplied `account_full_tools` metadata before asserting its own admission
+  flag; tool consumers also check the current live account, role and thread.
+  `accounts.report(tool_conversation=AccountConversation(...))` names the current
+  canonical private route eligible for this grant. The host validates it against
+  the reporting account. Missing routes grant nothing; changed routes reject old
+  queued messages and background targets even if the account's plugin token is
+  unchanged and the new peer later receives full tool permission.
+  This grants the role's enabled tools without changing `MessageSource`, user
+  identity, automatic history or memory scope. Queued turns recheck saved policy,
+  and background result targets revalidate original account ownership, runtime
+  access and current authorization both before queueing and inside the role gate.
+  `allowFullTools` is optional in TypeScript snapshots; absent means false. Rule
+  serializers omit the disabled field for compatibility with older payloads.
+
+- **Explicit account-send acceptance and canonical private conversations (PR #872, issue #869).**
+  `account.send` may return `accepted: true` when the transport accepts a task but
+  provides no platform message ID. Only the boolean `true` permits an empty ID;
+  absent/ambiguous receipts remain uncertain. Existing `message_id` receipts keep
+  their behavior. A run/task ID must not be presented as a platform message ID.
+  A confirmed private send may also include `conversation: {channel, chat_id,
+  chat_type: "private"}` using `shiori_sdk.accounts.conversation.AccountConversation`.
+  This must be the canonical inbound address resolved by the sending plugin,
+  not a guessed chat ID derived from its target ID. The host validates the
+  channel against the account platform and records `account_send` in this network
+  thread even when the peer is not the desktop user. Invalid optional addresses
+  are logged and omitted without retrying an already accepted side effect.
+  `TurnCommitted.external_message_id` now carries the original inbound ID (default
+  empty for non-transport turns), so channels can finish durable input even when
+  the role intentionally sends no reply.
 
 - **Acknowledged channel reply sequences (#866 / #876).** Ordinary channel turns may
   select the host-owned `ReplySequencePolicy` when the live transport registers with
@@ -1161,10 +1202,10 @@ from the shipped host code. Changing the manifest in the dev server invalidates
 those imports and reloads the page. Installed workspace packages always undergo
 the existing contract, duplicate-ID and exact-content trust checks regardless of
 this field. The declaration never grants trust, overrides a builtin, or installs
-anything automatically. No repository plugin currently declares it: the
-SenseVoice and GPT-SoVITS providers that introduced it became bundled builtin
-plugins (default disabled) in #693; the build smoke and distribution tests below
-generate their own external sources.
+anything automatically. Grok Bot declares external distribution and provides a
+repository example of an installable channel. SenseVoice and GPT-SoVITS remain
+bundled builtin plugins (default disabled) since #693; the build smoke and
+distribution tests below also generate their own external sources.
 
 The frozen host collects the complete SDK runtime independently of these plugin
 sources, including implicit namespace directories such as `shiori_sdk.files`.

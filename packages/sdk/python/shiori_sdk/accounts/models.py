@@ -10,7 +10,10 @@ from __future__ import annotations
 import logging
 from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import asdict, dataclass
-from typing import Literal
+from typing import Literal, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .conversation import AccountConversation
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +33,8 @@ class AccountResponseRules:
     private_enabled: bool = True
     group_enabled: bool = True
     blocked_sender_ids: tuple[str, ...] = ()
+    # Explicit tool authorization; never changes the peer's user identity.
+    allow_full_tools: bool = False
 
 
 def account_id_for(plugin_id: str, platform_account_id: str) -> str:
@@ -180,6 +185,8 @@ class AccountSnapshot:
     connection: ConnectionState
     capabilities: frozenset[str]
     error: str = ""
+    # Current private route eligible for an explicit full-tool grant.
+    tool_conversation: AccountConversation | None = None
 
 
 @dataclass(frozen=True)

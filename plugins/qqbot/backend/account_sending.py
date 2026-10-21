@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 import httpx
 from shiori_sdk.accounts import VIA_ACCOUNT_KEY
+from shiori_sdk.accounts.conversation import AccountConversation
 from shiori_sdk.accounts.targets import (
     GROUP_MEMBER_TARGET,
     UncertainDeliveryError,
@@ -89,7 +90,11 @@ class _AccountSendingMixin:
                     "QQBot 消息已部分送达，后续图片发送失败"
                 ) from exc
             receipt = receipt or message_id
-        return {"message_id": receipt, "chat_id": chat_id}
+        return {
+            "message_id": receipt,
+            "chat_id": chat_id,
+            "conversation": AccountConversation(channel.name, chat_id).to_payload(),
+        }
 
 
 async def _confirmed(sending: Awaitable[str | None]) -> str:

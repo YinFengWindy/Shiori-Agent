@@ -10,6 +10,7 @@ import httpx
 from shiori_sdk.storage import read_mapping
 
 from shiori_sdk.accounts import VIA_ACCOUNT_KEY
+from shiori_sdk.accounts.conversation import AccountConversation
 from shiori_sdk.accounts.targets import (
     GROUP_MEMBER_TARGET,
     UncertainDeliveryError,
@@ -18,6 +19,7 @@ from shiori_sdk.accounts.targets import (
 from shiori_sdk.media import detect_image_mime_from_header
 
 from .accounts import FeishuAccounts
+from .channel import resolve_receive_id
 
 if TYPE_CHECKING:
     from shiori_sdk.channels.context import ChannelPluginContext
@@ -112,15 +114,35 @@ class FeishuAccountDelivery:
             raise RuntimeError("飞书账号未连接")
         # Taken before sending so a completed send always returns its snapshot.
         via = channel.via_account()
+        chat_id = self._private_chat(ref, str(payload.get("target_id") or ""))
         result = await self.send(
             {
                 "ref": ref,
-                "chat_id": payload.get("target_id"),
+                "chat_id": chat_id,
                 "message": payload.get("message"),
                 "media": list(account_send_media(payload)),
             }
         )
-        return {**result, VIA_ACCOUNT_KEY: via}
+        return {
+            **result,
+            VIA_ACCOUNT_KEY: via,
+            "conversation": AccountConversation(channel.name, chat_id).to_payload(),
+        }
+
+    def _private_chat(self, ref: str, target: str) -> str:
+        """Resolve a user OpenID to the same observed chat used on inbound turns."""
+        receive_id, kind = resolve_receive_id(target)
+        if kind == "chat_id":
+            return receive_id
+        known = read_mapping(self._ctx.kv, f"targets:{ref}")
+        chats = [
+            chat
+            for chat, sender in known.items()
+            if kind == "open_id" and sender == receive_id
+        ]
+        if len(chats) != 1:
+            raise ValueError("无法确定该飞书用户的已交互私聊会话")
+        return chats[0]
 
 
 async def _confirmed(sending: Awaitable[str | None]) -> str:

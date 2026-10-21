@@ -883,6 +883,31 @@ def test_plugins_cannot_claim_the_user_flag(tmp_path: Path) -> None:
     assert routed is not None and "sender_is_user" not in routed.metadata
 
 
+def test_full_tool_grant_is_from_account_rules_and_does_not_pair_the_sender(tmp_path):
+    hub, store, account_id = _hub_with_qq_account(tmp_path)
+    incoming = _private(
+        account_id, "hello", account_full_tools=True, sender_is_user=True
+    )
+    denied = hub.route_account_inbound(incoming)
+    assert denied is not None and "account_full_tools" not in denied.metadata
+    store.accounts.set_rules_handler("qq", lambda *_: None)
+    store.accounts.set_response_rules(
+        account_id, AccountResponseRules(allow_full_tools=True)
+    )
+    store.accounts.report(
+        account_id, "live", connection="online", capabilities=frozenset({"full_tools"})
+    )
+    granted = hub.route_account_inbound(incoming)
+    assert granted is not None and granted.metadata["account_full_tools"] is True
+    assert "sender_is_user" not in granted.metadata
+    assert store.identities.list() == []
+    store.accounts.set_response_rules(account_id, AccountResponseRules())
+    denied_again = hub.route_account_inbound(incoming)
+    assert (
+        denied_again is not None and "account_full_tools" not in denied_again.metadata
+    )
+
+
 def test_quoted_user_is_marked_by_the_hub_not_the_plugin(tmp_path: Path) -> None:
     hub, store, account_id = _hub_with_qq_account(tmp_path)
     assert hub.claim_pairing(

@@ -208,6 +208,9 @@ class _BuildTurnCommittedModule:
             role_id=role_id,
             request_id=str((msg.metadata or {}).get("request_id") or "").strip(),
             thread_id=str((msg.metadata or {}).get("thread_id") or "").strip(),
+            external_message_id=str(
+                (msg.metadata or {}).get("external_message_id") or ""
+            ).strip(),
             total_tokens=(
                 value
                 if isinstance((value := turn_metrics.get("total_tokens")), int)

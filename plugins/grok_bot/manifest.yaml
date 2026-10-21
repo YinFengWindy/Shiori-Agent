@@ -1,0 +1,38 @@
+api: 2
+package_contract: 1
+distribution: external
+entry: backend/plugin.py
+runtime_api: '>=3.1.2 <4.0.0'
+id: grok_bot
+display_name: Grok Bot
+version: '0.1.0'
+desc: 角色与 Grok Bot 的双向私聊
+category: channel
+default_enabled: false
+host_dependencies:
+  python: [httpx, h11, pydantic]
+peer_dependencies:
+  react: '>=19.2.0 <20.0.0'
+  react-dom: '>=19.2.0 <20.0.0'
+renderer:
+  ui:
+    entry: renderer/ui.mjs
+    css: []
+assets:
+  - client.ps1
+capabilities:
+  - channels
+  - accounts
+  - config
+  - kv
+  - rpc
+  - workspace
+channels:
+  - name: grok_bot
+    instance_prefix: grok_bot_
+    label: Grok Bot
+    chat_types:
+      - type: private
+        label: 私聊
+        chat_id_label: Bot
+        prefix: 'dm:'

@@ -648,6 +648,7 @@ async def test_closed_scope_rejects_contributions_before_mutating_registries():
 async def test_account_hooks_and_accounts_live_and_leave_with_the_plugin_instance():
     from core.accounts import AccountRegistry
     from shiori_sdk.accounts.models import AccountDeletionPlan, AccountResponseRules
+    from shiori_sdk.accounts.conversation import AccountConversation
 
     registry = AccountRegistry({"mira", "other"}.__contains__)
     registry.publish_generation("g1")
@@ -656,6 +657,22 @@ async def test_account_hooks_and_accounts_live_and_leave_with_the_plugin_instanc
     account = accounts.register(
         platform="demo", platform_account_id="7", config_ref="a", role_id="mira"
     )
+    route = AccountConversation("demo", "dm:current")
+    accounts.report(
+        account.record.id,
+        connection="online",
+        capabilities=frozenset({"full_tools"}),
+        tool_conversation=route,
+    )
+    assert registry.get(account.record.id).tool_conversation == route
+    with pytest.raises(ValueError, match="账号不一致"):
+        accounts.report(
+            account.record.id,
+            connection="online",
+            tool_conversation=AccountConversation("another", "dm:current"),
+        )
+    accounts.report(account.record.id, connection="online")
+    assert registry.get(account.record.id).tool_conversation is None
     # A saved account the host refuses is reported, not raised.
     assert (
         accounts.register_saved(

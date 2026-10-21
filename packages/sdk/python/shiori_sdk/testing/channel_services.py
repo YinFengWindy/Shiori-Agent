@@ -91,7 +91,7 @@ class FakeInterruptResult:
 class FakeInterruptController:
     """Record interrupt requests and answer with a fixture-selected reply.
 
-    The host interrupts the turn running on ``session_key``; this fake only
+    The host matches the session and exact transport origin; this fake only
     records the request, so tests assert who asked and what the channel sent.
     """
 
@@ -107,6 +107,9 @@ class FakeInterruptController:
         *,
         channel: str = "",
         chat_id: str = "",
+        account_id: str = "",
+        chat_type: str = "",
+        message_thread_id: str = "",
     ) -> FakeInterruptResult:
         """Record the request; the reply text is the fixture's ``message``."""
         self.requests.append(
@@ -115,6 +118,13 @@ class FakeInterruptController:
                 "sender": sender,
                 "command": command,
                 **({"channel": channel, "chat_id": chat_id} if channel else {}),
+                **({"account_id": account_id} if account_id else {}),
+                **({"chat_type": chat_type} if chat_type else {}),
+                **(
+                    {"message_thread_id": message_thread_id}
+                    if message_thread_id
+                    else {}
+                ),
             }
         )
         return FakeInterruptResult(

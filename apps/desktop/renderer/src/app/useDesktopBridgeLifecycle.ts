@@ -100,7 +100,7 @@ export function useDesktopBridgeLifecycle({
     clearSessionSending,
     completeChatTurn,
     isCurrentChatTurn,
-  isLatestChatTurn,
+    isLatestChatTurn,
     isChatTurnCancelling,
     commitActiveSession,
     loadRolesFromBridge,

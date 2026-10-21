@@ -132,3 +132,35 @@ async def test_turns_that_are_not_the_user_cannot_switch_listening(
 
     assert "只有你的用户能让你设置旁听" in str(result)
     assert listening.store.switches.settings(threads["g1"]).enabled is False
+
+
+@pytest.mark.asyncio
+async def test_account_grant_allows_owned_group_but_model_cannot_forge_it(tmp_path):
+    tools, listening, threads = _groups(tmp_path)
+    context = {
+        "role_id": "mira",
+        "thread_id": "grok-private",
+        "context_scope": "external",
+        "sender_is_user": "false",
+    }
+    arguments = {
+        "channel": "qq",
+        "chat_id": "g2",
+        "enabled": True,
+        "account_full_tools": "true",
+    }
+    denied = await tools.execute("set_group_listening", arguments, context=context)
+    assert "只有你的用户" in str(denied)
+    allowed = await tools.execute(
+        "set_group_listening",
+        arguments,
+        context={**context, "account_full_tools": "true"},
+    )
+    assert '"listening": true' in str(allowed)
+    assert listening.store.switches.settings(threads["g2"]).enabled
+    foreign = await tools.execute(
+        "set_group_listening",
+        {**arguments, "role_id": "other", "chat_id": "foreign"},
+        context={**context, "account_full_tools": "true"},
+    )
+    assert "不是你可以旁听的群" in str(foreign)

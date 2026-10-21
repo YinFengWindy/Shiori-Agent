@@ -602,6 +602,8 @@ class FeishuChannel:
             session_key=session_key,
             sender=sender,
             command=STOP_COMMAND,
+            account_id=self.account_id,
+            chat_type="private",
         )
         await self.send(chat_id, result.message)
 

@@ -170,10 +170,20 @@ class RuntimeDispatcher:
         *,
         channel: str = "",
         chat_id: str = "",
+        account_id: str = "",
+        chat_type: str = "",
+        message_thread_id: str = "",
     ):
         """Cancels the original task through the shared interrupt registry."""
         return self._app.agent_loop.request_interrupt(
-            session_key, sender, command, channel=channel, chat_id=chat_id
+            session_key,
+            sender,
+            command,
+            channel=channel,
+            chat_id=chat_id,
+            account_id=account_id,
+            chat_type=chat_type,
+            message_thread_id=message_thread_id,
         )
 
     def discard_interrupt_state(self, session_key, state):

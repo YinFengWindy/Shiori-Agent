@@ -287,6 +287,7 @@ class QQAccountActions:
         if not message.strip() and not images:
             raise ValueError("消息和图片不能都为空")
         number = int(qq_number(target_id, "目标 ID"))
+        private_chat = {"chat_id": str(number)} if kind == "private" else {}
         if mention_ids and kind != "group":
             raise ValueError("QQ 只有群消息可以 @ 成员")
         if group_id and kind != "group_member":
@@ -316,7 +317,7 @@ class QQAccountActions:
             message_id = await _send_with_receipt(
                 socket, action, {**params, "message": content}
             )
-            return {"message_id": message_id}
+            return {"message_id": message_id, **private_chat}
         nodes = _forward_nodes(message, image_segments, self._sender_for(account_id))
         if mentions:
             # A forward cannot @ anyone, so the @s go first on their own; if
@@ -325,4 +326,4 @@ class QQAccountActions:
         message_id = await _send_with_receipt(
             socket, _FORWARD_ACTIONS[action], {**params, "messages": nodes}
         )
-        return {"message_id": message_id}
+        return {"message_id": message_id, **private_chat}
