@@ -6,6 +6,7 @@ from uuid import uuid4
 
 import pytest
 from shiori_sdk.accounts import AccountResponseRules, account_id_for
+from shiori_sdk.accounts.conversation import AccountConversation
 from shiori_sdk.testing.channel_context import (
     FakeChannelPluginContext,
     fake_channel_context,
@@ -54,13 +55,28 @@ async def test_multiple_roles_isolate_credentials_pause_rules_reload_and_delete(
                 {"account_id": first.account_id, "role_id": "other"}
             )
         accounts.save_rules(
-            one.connection_id, AccountResponseRules(private_enabled=False)
+            one.connection_id,
+            AccountResponseRules(private_enabled=False, allow_full_tools=True),
         )
         await accounts.disconnect({"account_id": first.account_id, "role_id": "mira"})
         assert not first.client_file.exists()
         assert second.client_file.exists()
         assert store.get(one.connection_id).enabled is False
         assert store.get(one.connection_id).response_rules["private_enabled"] is False
+        assert store.get(one.connection_id).response_rules["allow_full_tools"] is True
+        assert not (store.get(two.connection_id).response_rules or {}).get(
+            "allow_full_tools", False
+        )
+        assert "full_tools" in ctx.accounts.records[first.account_id].capabilities
+        restored = GrokAccounts(ctx, ctx.channels.group("grok_bot"))
+        await restored.load()
+        assert ctx.accounts.records[
+            first.account_id
+        ].record.response_rules.allow_full_tools
+        restored.save_rules(one.connection_id, AccountResponseRules())
+        assert not store.get(one.connection_id).response_rules.get(
+            "allow_full_tools", False
+        )
         plan = accounts.delete_plan(two.connection_id)
         await plan.disconnect()
         await plan.purge()
@@ -90,6 +106,14 @@ async def test_save_keeps_secret_reference_and_stable_identity_but_rotates_new_b
             }
         )
         [original] = accounts.configs.values()
+        original_route = AccountConversation(original.channel_name, original.chat_id)
+        assert (
+            ctx.accounts.records[result["account_id"]].tool_conversation
+            == original_route
+        )
+        accounts.save_rules(
+            original.connection_id, AccountResponseRules(allow_full_tools=True)
+        )
         await accounts.disconnect({**result, "role_id": "mira"})
         await accounts.save(
             {**result, "role_id": "mira", "webhook_url": config.webhook_url}
@@ -98,6 +122,11 @@ async def test_save_keeps_secret_reference_and_stable_identity_but_rotates_new_b
         assert resumed.connection_id == original.connection_id
         assert resumed.peer_id == original.peer_id
         assert resumed.webhook_key == "${GROK_SECRET}"
+        assert resumed.response_rules["allow_full_tools"] is True
+        assert (
+            ctx.accounts.records[result["account_id"]].tool_conversation
+            == original_route
+        )
         await accounts.save(
             {**result, "role_id": "mira", "webhook_url": "https://example.test/other"}
         )
@@ -106,6 +135,27 @@ async def test_save_keeps_secret_reference_and_stable_identity_but_rotates_new_b
         assert changed.peer_id != original.peer_id
         assert changed.callback_token != original.callback_token
         assert changed.verified is False
+        assert not changed.response_rules.get("allow_full_tools", False)
+        assert ctx.accounts.records[
+            result["account_id"]
+        ].tool_conversation == AccountConversation(
+            changed.channel_name, changed.chat_id
+        )
+        assert (
+            ctx.accounts.records[result["account_id"]].tool_conversation
+            != original_route
+        )
+        accounts.save_rules(
+            changed.connection_id, AccountResponseRules(allow_full_tools=True)
+        )
+        accounts._register(accounts.configs[changed.connection_id])
+        assert ctx.accounts.records[
+            result["account_id"]
+        ].record.response_rules.allow_full_tools
+        assert (
+            ctx.accounts.records[result["account_id"]].tool_conversation
+            != original_route
+        )
     finally:
         await group.stop()
         await ctx.aclose()

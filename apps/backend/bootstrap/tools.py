@@ -250,6 +250,8 @@ def build_registered_tools(
     # ── 第一阶段：建服务（依赖无顺序陷阱）────────────────────────────────────
     wiring = getattr(config, "wiring", WiringConfig())
     tools = tools or ToolRegistry()
+    if role_runtime_registry is not None:
+        tools.bind_accounts(role_runtime_registry.repository.store.accounts)
     multimodal = getattr(config, "multimodal", True)
     readonly_tools = build_readonly_tools(http_resources, multimodal=multimodal)
     store = session_store or SessionStore(workspace / "sessions.db")

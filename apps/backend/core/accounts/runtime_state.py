@@ -12,6 +12,7 @@ from shiori_sdk.accounts.models import (
     AccountSnapshot,
     ConnectionState,
 )
+from shiori_sdk.accounts.conversation import AccountConversation
 
 DIRECT_GENERATION = "direct"
 _CONNECTION_STATES = frozenset(
@@ -25,6 +26,7 @@ class _LiveReport:
     connection: ConnectionState
     capabilities: frozenset[str]
     error: str
+    tool_conversation: AccountConversation | None = None
 
 
 @dataclass
@@ -96,6 +98,7 @@ class AccountRuntimeState:
             live.connection if live else "unknown",
             live.capabilities if live else frozenset(),
             live.error if live else "",
+            live.tool_conversation if live else None,
         )
 
     def ensure_registration_allowed(
@@ -125,6 +128,7 @@ class AccountRuntimeState:
         connection: ConnectionState,
         capabilities: frozenset[str],
         error: str,
+        tool_conversation: AccountConversation | None = None,
     ) -> AccountRecord:
         """Updates only the account currently owned by this plugin instance."""
         if connection not in _CONNECTION_STATES:
@@ -134,7 +138,7 @@ class AccountRuntimeState:
         if live is None or live.token != token:
             raise RuntimeError("Account registration is no longer active")
         state.live[account_id] = _LiveReport(
-            token, connection, frozenset(capabilities), error
+            token, connection, frozenset(capabilities), error, tool_conversation
         )
         return state.records[account_id]
 

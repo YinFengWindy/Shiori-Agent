@@ -74,8 +74,9 @@ async def test_agent_core_process_runs_prepare_prompt_run_commit_in_order():
         return SimpleNamespace(system_prompt="system prompt", messages=[])
 
     context = SimpleNamespace(render=MagicMock(side_effect=_render))
-    tools = SimpleNamespace(
-        set_context=MagicMock(side_effect=lambda **kwargs: order.append("tool_context"))
+    tools = ToolRegistry()
+    tools.set_context = MagicMock(
+        side_effect=lambda **kwargs: order.append("tool_context")
     )
     reasoner = SimpleNamespace(
         run_turn=AsyncMock(
@@ -138,6 +139,7 @@ async def test_agent_core_process_runs_prepare_prompt_run_commit_in_order():
         delivery_key="",
         sender_id="hua",
         sender_is_user="true",
+        account_full_tools="false",
         context_scope="",
         current_user_source_ref="telegram:123:0",
         current_timestamp="2026-04-04T22:00:00",
@@ -182,10 +184,7 @@ async def test_agent_core_process_coerces_empty_reply_before_commit():
                     ),
                 ),
             ),
-            tools=cast(
-                ToolRegistry,
-                SimpleNamespace(set_context=MagicMock()),
-            ),
+            tools=ToolRegistry(),
             reasoner=cast(
                 Reasoner,
                 SimpleNamespace(
@@ -217,7 +216,7 @@ async def test_agent_core_before_reasoning_can_patch_context():
             return_value=SimpleNamespace(system_prompt="prompt", messages=[])
         )
     )
-    tools = SimpleNamespace(set_context=MagicMock())
+    tools = ToolRegistry()
     reasoner = SimpleNamespace(
         run_turn=AsyncMock(return_value=TurnRunResult(reply="ok")),
     )
@@ -287,7 +286,7 @@ async def test_before_turn_abort_skips_reasoner_and_commit_and_dispatches():
     context = SimpleNamespace(
         render=MagicMock(return_value=SimpleNamespace(system_prompt="p", messages=[])),
     )
-    tools = SimpleNamespace(set_context=MagicMock())
+    tools = ToolRegistry()
     reasoner = SimpleNamespace(run_turn=AsyncMock())
     event_bus = EventBus()
     dispatch_port = AsyncMock(return_value=True)
@@ -339,7 +338,7 @@ async def test_before_reasoning_abort_skips_reasoner_and_commit_and_dispatches()
     context = SimpleNamespace(
         render=MagicMock(return_value=SimpleNamespace(system_prompt="p", messages=[])),
     )
-    tools = SimpleNamespace(set_context=MagicMock())
+    tools = ToolRegistry()
     reasoner = SimpleNamespace(run_turn=AsyncMock())
     event_bus = EventBus()
     dispatch_port = AsyncMock(return_value=True)
@@ -389,7 +388,7 @@ async def test_abort_does_not_dispatch_when_dispatch_outbound_false():
     context = SimpleNamespace(
         render=MagicMock(return_value=SimpleNamespace(system_prompt="p", messages=[])),
     )
-    tools = SimpleNamespace(set_context=MagicMock())
+    tools = ToolRegistry()
     reasoner = SimpleNamespace(run_turn=AsyncMock())
     event_bus = EventBus()
     dispatch_port = AsyncMock(return_value=True)
@@ -437,7 +436,7 @@ async def test_reasoner_exception_turn_returns_control_outbound():
     context = SimpleNamespace(
         render=MagicMock(return_value=SimpleNamespace(system_prompt="p", messages=[])),
     )
-    tools = SimpleNamespace(set_context=MagicMock())
+    tools = ToolRegistry()
     reasoner = SimpleNamespace(
         run_turn=AsyncMock(side_effect=RuntimeError("budget guard")),
     )
@@ -502,7 +501,7 @@ async def test_memory_consolidation_failure_propagates_to_transport_error():
             ),
             context_store=cast(ContextStore, context_store),
             context=cast(ContextBuilder, SimpleNamespace()),
-            tools=cast(ToolRegistry, SimpleNamespace()),
+            tools=ToolRegistry(),
             reasoner=cast(Reasoner, reasoner),
             history_window=20,
             memory_consolidator=_FailedConsolidator(),
@@ -531,7 +530,7 @@ async def test_after_turn_dispatch_exception_is_not_wrapped_by_control_outbound(
     context = SimpleNamespace(
         render=MagicMock(return_value=SimpleNamespace(system_prompt="p", messages=[])),
     )
-    tools = SimpleNamespace(set_context=MagicMock())
+    tools = ToolRegistry()
     reasoner = SimpleNamespace(
         run_turn=AsyncMock(
             return_value=TurnRunResult(

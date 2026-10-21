@@ -35,3 +35,16 @@ def test_rejects_malformed_rules(change):
     }
     with pytest.raises(ValueError, match="Invalid account response rules"):
         response_rules_from_dict(payload)
+
+
+def test_tool_grant_is_explicit_and_old_saved_rules_default_to_restricted():
+    payload = {"private_enabled": True, "group_enabled": True, "blocked_sender_ids": []}
+    assert not response_rules_from_dict(payload).allow_full_tools
+    enabled = response_rules_from_dict({**payload, "allow_full_tools": True})
+    assert response_rules_from_dict(response_rules_to_dict(enabled)).allow_full_tools
+    assert not response_rules_from_dict(
+        {**payload, "allow_full_tools": False}
+    ).allow_full_tools
+    for value in (1, "true", None, []):
+        with pytest.raises(ValueError, match="tool permission"):
+            response_rules_from_dict({**payload, "allow_full_tools": value})

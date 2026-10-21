@@ -13,6 +13,7 @@ from shiori_sdk.accounts import (
     account_id_for,
 )
 from shiori_sdk.accounts.capability import AccountsCapability
+from shiori_sdk.accounts.conversation import AccountConversation
 
 
 class FakeAccounts:
@@ -137,8 +138,13 @@ class FakeAccounts:
         connection: ConnectionState,
         capabilities: frozenset[str] = frozenset(),
         error: str = "",
+        tool_conversation: AccountConversation | None = None,
     ) -> AccountSnapshot:
         """Record exactly the identity and status reported by the plugin."""
+        if tool_conversation is not None:
+            tool_conversation = AccountConversation.for_account(
+                tool_conversation.to_payload(), self.records[account_id].record
+            )
         self.reports.append(
             (
                 account_id,
@@ -146,6 +152,11 @@ class FakeAccounts:
                     "connection": connection,
                     "capabilities": capabilities,
                     "error": error,
+                    **(
+                        {"tool_conversation": tool_conversation}
+                        if tool_conversation is not None
+                        else {}
+                    ),
                 },
             )
         )
@@ -154,6 +165,7 @@ class FakeAccounts:
             connection=connection,
             capabilities=capabilities,
             error=error,
+            tool_conversation=tool_conversation,
         )
         return self.records[account_id]
 

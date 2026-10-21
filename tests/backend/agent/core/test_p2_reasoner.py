@@ -201,6 +201,7 @@ def test_default_reasoner_run_turn_uses_tool_context_snapshot(tmp_path):
         role_id="mira",
         channel="telegram",
         chat_id="123",
+        account_full_tools="true",
     )
     reasoner.render_prompt = AsyncMock(
         side_effect=lambda _input: (
@@ -233,6 +234,7 @@ def test_default_reasoner_run_turn_uses_tool_context_snapshot(tmp_path):
             "role_id": "mira",
             "channel": "telegram",
             "chat_id": "123",
+            "account_full_tools": "false",
         }
     ]
 

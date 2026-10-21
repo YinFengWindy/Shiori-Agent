@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 from typing import Protocol
+from .conversation import AccountConversation
 from .models import (
     AccountDeleteHandler,
     AccountResponseRules,
@@ -97,8 +98,14 @@ class AccountsCapability(Protocol):
         connection: "ConnectionState",
         capabilities: frozenset[str] = frozenset(),
         error: str = "",
+        tool_conversation: AccountConversation | None = None,
     ) -> "AccountSnapshot":
-        """Reports connection, authentication, capability, or failure changes."""
+        """Report runtime state and the current private route eligible for tools.
+
+        Full tool grants require this canonical address. A changed Bot must
+        report its new address so old queued turns and results lose access.
+        Omitting it clears the route; an old report cannot remain authoritative.
+        """
         ...
 
     def unregister(self, account_id: str) -> None:

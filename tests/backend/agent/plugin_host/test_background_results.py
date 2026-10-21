@@ -18,6 +18,10 @@ from conversation.service import (
 )
 from tests.support.external_turns import ExternalTurnHost, USER_DM
 from desktop_bridge.service import DesktopBridgeService
+from core.channels.hub import ChannelHub
+from shiori_sdk.accounts import AccountResponseRules
+from shiori_sdk.accounts.conversation import AccountConversation
+from tests.support.external_turns import SECRETS, request_text
 
 
 @pytest.fixture
@@ -264,3 +268,140 @@ async def test_result_model_turn_cannot_capture_a_new_authorized_task(host):
     host.provider.tool_steps = 1
     assert await target.report("run-1", "任务结果")
     assert calls == ["capture"]
+
+
+@tool_turn
+async def capture_bot(host):
+    accounts = host.roles.accounts
+    row = accounts.register(
+        plugin_id="grok_bot",
+        platform="grok_bot",
+        platform_account_id="one",
+        config_ref="one",
+        token="bot-live",
+        role_id="mira",
+        response_rules=AccountResponseRules(allow_full_tools=True),
+    )
+    accounts.set_rules_handler("grok_bot", lambda *_: None)
+    accounts.report(
+        row.record.id,
+        "bot-live",
+        connection="online",
+        capabilities=frozenset({"full_tools"}),
+        tool_conversation=AccountConversation("grok_bot_one", "dm:peer"),
+    )
+    host.loop.tools.bind_accounts(accounts)
+    hub = ChannelHub.from_workspace(
+        host.roles.workspace, session_manager=host.manager, role_store=host.roles
+    )
+    origin = hub.route_account_inbound(
+        InboundMessage(
+            channel="grok_bot_one",
+            sender="peer",
+            chat_id="dm:peer",
+            content="后台处理",
+            metadata={"account_id": row.record.id, "chat_type": "private"},
+        )
+    )
+    assert origin is not None
+    host.loop.tools.set_context(
+        role_id="mira",
+        thread_id=origin.metadata["thread_id"],
+        sender_id="peer",
+        sender_is_user="false",
+        account_full_tools="true",
+    )
+    set_tool_origin(origin)
+    target = HostBackgroundResults(
+        host.loop.tools,
+        host.roles,
+        ConversationService(host.manager),
+        host.loop.process_background_result,
+    ).capture()
+    return target, row.record.id
+
+
+async def test_authorized_bot_background_result_keeps_external_identity_and_history(
+    host,
+):
+    target, _ = await capture_bot(host)
+    assert await target.report("bot-result", "完成了")
+    sent = host.loop.bus.publish_outbound.call_args.args[0]
+    assert (sent.channel, sent.chat_id) == ("grok_bot_one", "dm:peer")
+    assert not sent.metadata.get("sender_is_user")
+    assert all(
+        secret not in request_text(host.provider.requests[-1]) for secret in SECRETS
+    )
+
+
+@pytest.mark.parametrize("revoke", ["permission", "disconnect", "reload"])
+async def test_bot_result_rechecks_current_permission_connection_and_generation(
+    host, revoke
+):
+    target, account_id = await capture_bot(host)
+    if revoke == "permission":
+        host.roles.accounts.set_response_rules(account_id, AccountResponseRules())
+    elif revoke == "disconnect":
+        host.roles.accounts.report(
+            account_id,
+            "bot-live",
+            connection="offline",
+            capabilities=frozenset({"full_tools"}),
+        )
+    else:
+        host.roles.accounts.release(account_id, "bot-live")
+        host.roles.accounts.register(
+            plugin_id="grok_bot",
+            platform="grok_bot",
+            platform_account_id="one",
+            config_ref="one",
+            token="new-generation",
+            role_id="mira",
+            response_rules=AccountResponseRules(allow_full_tools=True),
+        )
+        host.roles.accounts.report(
+            account_id,
+            "new-generation",
+            connection="online",
+            capabilities=frozenset({"full_tools"}),
+            tool_conversation=AccountConversation("grok_bot_one", "dm:peer"),
+        )
+    with pytest.raises(PermissionError, match="连接或工具授权"):
+        await target.report("late-result", "不能发")
+    assert host.provider.requests == []
+
+
+async def test_bot_revocation_while_waiting_is_checked_inside_the_role_gate(host):
+    target, account_id = await capture_bot(host)
+    gate = asyncio.Event()
+    host.provider.gates.append(gate)
+    foreground = host.desktop_turn("继续聊")
+    await host.provider.started.wait()
+    report = asyncio.create_task(target.report("late-result", "完成"))
+    await asyncio.sleep(0)
+    host.roles.accounts.set_response_rules(account_id, AccountResponseRules())
+    gate.set()
+    await foreground
+    with pytest.raises(PermissionError, match="连接或工具授权"):
+        await report
+    assert len(host.provider.requests) == 1
+
+
+async def test_old_bot_background_result_stays_revoked_after_new_bot_is_granted(host):
+    target, account_id = await capture_bot(host)
+    accounts = host.roles.accounts
+    accounts.set_response_rules(account_id, AccountResponseRules())
+    accounts.report(
+        account_id,
+        "bot-live",
+        connection="online",
+        capabilities=frozenset({"full_tools"}),
+        tool_conversation=AccountConversation("grok_bot_one", "dm:replacement"),
+    )
+    accounts.set_response_rules(account_id, AccountResponseRules(allow_full_tools=True))
+    assert target.account_access is not None and accounts.validate_access(
+        target.account_access
+    )
+    with pytest.raises(PermissionError, match="连接或工具授权"):
+        await target.report("old-bot-result", "不能恢复旧Bot的权限")
+    assert host.provider.requests == []

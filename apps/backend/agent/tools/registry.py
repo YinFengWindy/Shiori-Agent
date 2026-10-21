@@ -8,6 +8,9 @@ from typing import Any, TypedDict, cast
 from shiori_sdk.tools import TOOL_ATTACHMENT_SCOPE_KEY, Tool, ToolResult
 from agent.tools.external_access import EXTERNAL_TOOL_DENIED, ExternalArgumentLimit
 from agent.tools.search_backend import KeywordSearchBackend, SearchBackend
+from core.accounts import AccountRegistry
+from core.accounts.tool_access import account_allows_full_tools
+from shiori_sdk.messages import InboundMessage
 
 logger = logging.getLogger(__name__)
 
@@ -130,6 +133,7 @@ class ToolRegistry:
     """管理所有可用工具"""
 
     def __init__(self, backend: SearchBackend | None = None) -> None:
+        self._accounts: AccountRegistry | None = None
         self._tools: dict[str, Tool] = {}
         self._metadata: dict[str, ToolMeta] = {}
         self._documents: dict[str, ToolDocument] = {}
@@ -138,6 +142,14 @@ class ToolRegistry:
             default={},
         )
         self._backend: SearchBackend = backend or KeywordSearchBackend()
+
+    def bind_accounts(self, accounts: AccountRegistry) -> None:
+        """Use the owning runtime's live account rules for external tool grants."""
+        self._accounts = accounts
+
+    def allows_full_tools(self, message: InboundMessage, *, role_id: str = "") -> bool:
+        """Validate this turn's account grant without changing its sender identity."""
+        return account_allows_full_tools(self._accounts, message, role_id=role_id)
 
     def set_context(self, **kwargs: str) -> None:
         """设置当前会话上下文（channel、chat_id 等），供工具按需读取。"""

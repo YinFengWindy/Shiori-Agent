@@ -90,6 +90,7 @@ async def process_spawn_completion_event(
         # 回传没有发送者，也不属于任何上下文：按需收窄的工具（如设置旁听）一律拒绝。
         sender_id="",
         sender_is_user="false",
+        account_full_tools="false",
         context_scope="",
         role_id=str(session_metadata.get("role_id") or "").strip(),
         current_timestamp=item.timestamp.isoformat(),

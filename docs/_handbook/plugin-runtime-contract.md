@@ -123,6 +123,23 @@ consolidates these additions and the subsequent #847 breaking migration.
 
 <!-- Record the next contract batch here, with PR references and breaking markers. -->
 
+- **Explicit account tool permission (PR #873, issue #870).** `AccountResponseRules.allow_full_tools`
+  defaults to false, including when absent in saved JSON. Only accounts declaring
+  the `full_tools` capability expose the per-account switch. The channel hub drops
+  plugin-supplied `account_full_tools` metadata before asserting its own admission
+  flag; tool consumers also check the current live account, role and thread.
+  `accounts.report(tool_conversation=AccountConversation(...))` names the current
+  canonical private route eligible for this grant. The host validates it against
+  the reporting account. Missing routes grant nothing; changed routes reject old
+  queued messages and background targets even if the account's plugin token is
+  unchanged and the new peer later receives full tool permission.
+  This grants the role's enabled tools without changing `MessageSource`, user
+  identity, automatic history or memory scope. Queued turns recheck saved policy,
+  and background result targets revalidate original account ownership, runtime
+  access and current authorization both before queueing and inside the role gate.
+  `allowFullTools` is optional in TypeScript snapshots; absent means false. Rule
+  serializers omit the disabled field for compatibility with older payloads.
+
 - **Explicit account-send acceptance and canonical private conversations (PR #872, issue #869).**
   `account.send` may return `accepted: true` when the transport accepts a task but
   provides no platform message ID. Only the boolean `true` permits an empty ID;
@@ -1155,10 +1172,10 @@ from the shipped host code. Changing the manifest in the dev server invalidates
 those imports and reloads the page. Installed workspace packages always undergo
 the existing contract, duplicate-ID and exact-content trust checks regardless of
 this field. The declaration never grants trust, overrides a builtin, or installs
-anything automatically. No repository plugin currently declares it: the
-SenseVoice and GPT-SoVITS providers that introduced it became bundled builtin
-plugins (default disabled) in #693; the build smoke and distribution tests below
-generate their own external sources.
+anything automatically. Grok Bot declares external distribution and provides a
+repository example of an installable channel. SenseVoice and GPT-SoVITS remain
+bundled builtin plugins (default disabled) since #693; the build smoke and
+distribution tests below also generate their own external sources.
 
 The frozen host collects the complete SDK runtime independently of these plugin
 sources, including implicit namespace directories such as `shiori_sdk.files`.

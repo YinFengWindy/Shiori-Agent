@@ -10,6 +10,8 @@ from agent.tools.turn_origin import current_tool_origin
 from conversation.service import ConversationService
 from core.roles.role_runtime import RoleExecutionContext
 from core.roles.store import RoleStore
+from core.accounts.tool_access import account_allows_full_tools
+from shiori_sdk.accounts import AccountAccess
 from shiori_sdk.background_results import BackgroundResultTarget
 from shiori_sdk.messages import InboundMessage
 
@@ -30,6 +32,7 @@ class _Target:
     conversations: ConversationService
     run: ResultRunner
     metadata: dict[str, Any]
+    account_access: AccountAccess | None = None
     attempted: set[str] = field(default_factory=set)
 
     def validate(self) -> None:
@@ -44,7 +47,21 @@ class _Target:
             raise ValueError("后台结果的原会话已失效")
         if self.roles.get_role(self.role_id) is None:
             raise ValueError("后台结果的原角色已删除")
-        if self.channel != "desktop" and not self.roles.bound_user_senders(
+        if self.account_access is not None:
+            origin = InboundMessage(
+                channel=self.channel,
+                chat_id=self.chat_id,
+                sender=self.sender_id,
+                content="",
+                metadata=self.metadata,
+            )
+            if not self.roles.accounts.validate_access(
+                self.account_access
+            ) or not account_allows_full_tools(
+                self.roles.accounts, origin, role_id=self.role_id
+            ):
+                raise PermissionError("后台结果的原连接或工具授权已失效")
+        elif self.channel != "desktop" and not self.roles.bound_user_senders(
             self.role_id
         ).recognises(self.channel, self.sender_id):
             raise PermissionError("后台结果的原用户绑定已失效")
@@ -76,7 +93,7 @@ class _Target:
                 chat_id=self.chat_id,
                 sender=self.sender_id,
                 content=(
-                    "[后台任务结果] 请以你的角色向用户汇报以下结果、验证与阻塞。"
+                    "[后台任务结果] 请以你的角色向发起方汇报以下结果、验证与阻塞。"
                     "不要把待确认、仍在运行或缺失产物描述为完成；不要自动重试任务。\n\n"
                     + text
                 ),
@@ -113,17 +130,25 @@ class HostBackgroundResults:
         self._run = run
 
     def capture(self) -> BackgroundResultTarget:
-        """Only a live authenticated user turn may originate background work."""
+        """Only a live user or explicitly authorized account turn may start work."""
         _ = current_tool_turn()
         context = self._tools.get_context()
-        if context.get("sender_is_user") != "true":
-            raise PermissionError("后台任务必须由用户本人发起")
+        if (
+            context.get("sender_is_user") != "true"
+            and context.get("account_full_tools") != "true"
+        ):
+            raise PermissionError("后台任务必须由用户本人或获完整工具授权的连接发起")
         role_id, thread_id, sender_id = (
             context.get(key, "") for key in ("role_id", "thread_id", "sender_id")
         )
         if not all((role_id, thread_id, sender_id)):
             raise ValueError("后台任务缺少原角色、线程或渠道身份")
         origin = current_tool_origin()
+        is_user = context.get("sender_is_user") == "true"
+        if not is_user and not account_allows_full_tools(
+            self._roles.accounts, origin, role_id=role_id
+        ):
+            raise PermissionError("后台任务需要用户身份或完整工具授权")
         if (
             origin.metadata.get("role_id") != role_id
             or origin.metadata.get("thread_id") != thread_id
@@ -153,6 +178,11 @@ class HostBackgroundResults:
             self._conversations,
             self._run,
             metadata,
+            account_access=(
+                self._roles.accounts.authorize(str(metadata["account_id"]), role_id)
+                if not is_user
+                else None
+            ),
         )
         target.validate()
         return target
