@@ -123,7 +123,7 @@ consolidates these additions and the subsequent #847 breaking migration.
 
 <!-- Record the next contract batch here, with PR references and breaking markers. -->
 
-- **Explicit account tool permission (#870).** `AccountResponseRules.allow_full_tools`
+- **Explicit account tool permission (PR #873, issue #870).** `AccountResponseRules.allow_full_tools`
   defaults to false, including when absent in saved JSON. Only accounts declaring
   the `full_tools` capability expose the per-account switch. The channel hub drops
   plugin-supplied `account_full_tools` metadata before asserting its own admission
