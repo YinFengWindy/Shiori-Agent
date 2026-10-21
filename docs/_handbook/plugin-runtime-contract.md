@@ -132,7 +132,7 @@ consolidates these additions and the subsequent #847 breaking migration.
   and reject unsupported rule mutations; the capability alone does not bypass
   the host's admission or authorization checks. Grok is the initial consumer.
 
-- **Committed reply dispatch intent (PR #892, issue #891).**
+- **Committed reply dispatch intent (PR #893, issue #891).**
   `TurnCommitted.will_dispatch` is an additive boolean defaulting to false. It
   reports the host's normal-reply dispatch decision before that reply is queued,
   accounting for disabled dispatch and prior explicit account delivery. The same
