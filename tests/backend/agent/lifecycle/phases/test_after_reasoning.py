@@ -87,6 +87,14 @@ async def test_external_sequence_sends_each_committed_row_once_with_first_only_e
         assert not request.state.dispatch_outbound
         assert len(request.state.committed_message_ids) == 3
         assert result.ctx.reply == "one\n\ntwo"
+        assert result.ctx.response_metadata.raw_text == request.turn_result.reply
+        assert [
+            message["content"]
+            for message in SessionManager(tmp_path)
+            .get_or_create(session.key)
+            .get_history(include=whole_session)
+            if message["role"] == "assistant"
+        ] == ["one", "two"]
     finally:
         dispatch.cancel()
         await asyncio.gather(dispatch, return_exceptions=True)
@@ -739,3 +747,27 @@ async def test_a_turn_whose_commit_fails_leaves_affection_unchanged(
         await run(request)
 
     assert request.state.affection_change is None
+
+
+async def test_desktop_sequence_preserves_raw_reply_while_committing_clean_bubbles(
+    tmp_path, monkeypatch
+):
+    manager = SessionManager(tmp_path)
+    session = role_session(manager)
+    raw = "  one\n<message-break/>\ntwo  "
+    request = turn(session, content=raw)
+    request.state.msg.metadata["turn_id"] = "desktop-sequence"
+    request.turn_result.reply_sequence = ReplySequencePolicy("<message-break/>")
+    monkeypatch.setattr("agent.turns.reply_sequence.wait_between_messages", AsyncMock())
+
+    result = await phase(manager).run(request)
+
+    assert result.ctx.response_metadata.raw_text == raw
+    assert result.ctx.reply == "  one\n\ntwo  "
+    stored = SessionManager(tmp_path).get_or_create(session.key)
+    assert [
+        row["content"] for row in stored.messages if row["role"] == "assistant"
+    ] == [
+        "  one",
+        "two  ",
+    ]

@@ -176,7 +176,17 @@ class ReloadableDesktopService:
                 if method == "channels.list":
                     return self.plugin_management.channels.list(payload)
                 if method == "plugins.trust":
-                    return self.plugin_management.trust.confirm(payload)
+                    result = await self.plugin_management.trust.confirm(
+                        payload,
+                        prepare_service=self._prepare,
+                        publish_service=self._publish,
+                    )
+                    await self._announce_plugin_write(
+                        request_id,
+                        {**payload, "operation_id": result["operation_id"]},
+                        result,
+                    )
+                    return result
                 if (
                     method.startswith("plugins.install.")
                     or method == "plugins.uninstall"

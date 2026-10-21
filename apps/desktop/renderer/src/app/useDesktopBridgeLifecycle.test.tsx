@@ -20,6 +20,7 @@ async function mountLifecycle({ cancelling = false, health = "online", viewKind 
   const invokedMethods: string[] = [];
   const openedRoles: string[] = [];
   let roleReads = 0;
+  let sendingClears = 0;
   let unreadCounts: Record<string, number> = {};
   let latestTurn = "turn-1";
   const ignore = () => {};
@@ -37,7 +38,7 @@ async function mountLifecycle({ cancelling = false, health = "online", viewKind 
     activeRoleIdRef: { current: "mira" }, activeSessionRef,
     mainViewRef: { current: { kind: viewKind } as never }, rolesRef: { current: [] },
     chooseIllustration: () => "", cacheRoleSession: ignore,
-    clearAllSendingSessions: ignore, clearSessionSending: ignore,
+    clearAllSendingSessions: () => { sendingClears++; }, clearSessionSending: ignore,
     completeChatTurn: (_key, turn) => { completions.push(turn); },
     isLatestChatTurn: (key, turn) => key === "role:mira" && turn === latestTurn,
     isCurrentChatTurn: (key, turn) => key === "role:mira" && turn === latestTurn && !completions.includes(turn),
@@ -73,6 +74,7 @@ async function mountLifecycle({ cancelling = false, health = "online", viewKind 
     ...view, activeSessionRef, completions, statesAtError, feedback, healthRef, healthChanges, invokedMethods, openedRoles,
     unreadCounts: () => unreadCounts,
     roleReads: () => roleReads,
+    sendingClears: () => sendingClears,
     ready: () => lifecycle.ready,
     beginTurn: (turnId: string) => { latestTurn = turnId; },
     async emit(method: string, payload: BridgeEvent["payload"] = {}, id = "request-1") {
@@ -403,3 +405,30 @@ for (const [method, payload] of [
     } finally { await view.cleanup(); }
   });
 }
+
+
+it("preserves the current supplement while trust activation refreshes runtime state", async () => {
+  const view = await mountLifecycle();
+  try {
+    view.beginTurn("supplement");
+    await view.emit("chat.delta", { turn_id: "supplement", content_delta: "current reply" });
+    const current = view.activeSessionRef.current;
+    const beforeRoles = view.roleReads();
+    const beforeClears = view.sendingClears();
+    const beforeLists = view.invokedMethods.filter((method) => method === "plugins.list").length;
+    for (const generation of [2, 3]) {
+      await view.emit("runtime.applied", { generation, changed: true }, `trust-${generation}`);
+    }
+    assert.equal(view.roleReads(), beforeRoles + 2);
+    assert.equal(view.invokedMethods.filter((method) => method === "plugins.list").length, beforeLists + 2);
+    assert.equal(view.sendingClears(), beforeClears);
+    assert.equal(view.activeSessionRef.current, current);
+    await view.emit("chat.cancelled", { turn_id: "old-turn" });
+    assert.deepEqual(view.completions, []);
+    await view.emit("chat.delta", { turn_id: "supplement", content_delta: " continued" });
+    assert.equal(view.activeSessionRef.current?.messages.at(-1)?.content, "current reply continued");
+    assert.equal(view.activeSessionRef.current?.messages.at(-1)?.streaming, true);
+    await view.emit("chat.done", { turn_id: "supplement" });
+    assert.deepEqual(view.completions, ["supplement"]);
+  } finally { await view.cleanup(); }
+});

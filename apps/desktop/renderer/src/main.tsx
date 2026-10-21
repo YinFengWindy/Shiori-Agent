@@ -46,6 +46,7 @@ import { registerRendererGlobalDiagnostics } from "./diagnostics/rendererGlobalD
 // into pluginUiRegistry before any component (nav rail, settings sidebar) reads it.
 import "./plugins/pluginUiModules";
 import { initializeRuntimePluginUi } from "./plugins/runtimePluginUiBootstrap";
+import { PluginTrustHost } from "./plugins/PluginTrustHost";
 import { createRoleFormFromRole } from "./roles/roleFormState";
 import { closeRoleDetailWithTransition, openRoleDetailWithTransition } from "./roles/roleViewTransition";
 import { type RoleWorkspaceSectionId } from "./roles/RoleWorkspaceSidebar";
@@ -761,6 +762,7 @@ function App(): React.ReactElement {
       {startupSplash.phase ? (
         <StartupSplash phase={startupSplash.phase} leaving={startupSplash.leaving} windowMaximized={windowMaximized} onRestart={bridgeLifecycle.restartBridge} />
       ) : null}
+      <PluginTrustHost ready={health === "online" && !startupSplash.phase} />
     </>
   );
 }

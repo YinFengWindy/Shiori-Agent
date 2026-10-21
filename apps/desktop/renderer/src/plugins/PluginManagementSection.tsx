@@ -9,7 +9,6 @@ import {
 } from "@yinfengwindy/shiori-sdk";
 import { InlineError } from "../shared/feedback/InlineError";
 import { usePluginManagementController } from "./usePluginManagementController";
-import { PluginTrustDialog } from "./PluginTrustDialog";
 import { PluginRow } from "./PluginRow";
 import { PluginGroupSection } from "./PluginGroupSection";
 import { PluginPackageDialogs } from "./PluginPackageDialogs";
@@ -31,7 +30,7 @@ const PLUGINS_SECTION_ID = "plugins";
  * action that opens that page through `onSelectSubsection`.
  */
 export function PluginManagementSection({ onSelectSubsection }: Partial<StandaloneSettingsSectionProps> = {}) {
-  const { plugins, error, errorDetail, pendingIds, setEnabled, reload, runMutation, trustCandidate, requestTrust, confirmTrust, closeTrust } = usePluginManagementController();
+  const { plugins, error, errorDetail, pendingIds, setEnabled, reload, runMutation, requestTrust } = usePluginManagementController();
   const packages = usePluginPackageController(runMutation);
   const [detailsCandidateId, setDetailsCandidateId] = useState<string | null>(null);
   const detailsPopupRef = useRef<HTMLDivElement>(null);
@@ -83,7 +82,6 @@ export function PluginManagementSection({ onSelectSubsection }: Partial<Standalo
       onUpdate={() => { if (details) void packages.pickPackage(details); }}
       onUninstall={() => { if (details) packages.requestUninstall(details); }} />
     <PluginPackageDialogs controller={packages} error={dialogError} detailsPopupRef={detailsPopupRef} />
-    <PluginTrustDialog plugin={trustCandidate} busy={Boolean(trustCandidate && pendingIds.has(trustCandidate.id))} error={dialogError} onClose={closeTrust} onConfirm={() => void confirmTrust()} />
     </Dialog.Root>
   );
 }

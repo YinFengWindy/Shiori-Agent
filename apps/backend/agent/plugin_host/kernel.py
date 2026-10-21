@@ -62,6 +62,7 @@ from agent.plugin_host.discovery import (
     ExternalSourceDiagnostic,
     discover_plugins,
     find_uninstalled_external_sources,
+    refresh_dependency_admission,
 )
 from agent.plugin_host.call_gate import PluginCallGate
 from agent.plugin_host.effects import EffectScope
@@ -89,6 +90,7 @@ from agent.plugin_host.runtime_context import PluginRuntimeContext, PluginSetupC
 from agent.plugin_host.runtime_lifecycle import PluginRuntimeLifecycle
 from agent.plugin_host.scene_observations import SceneObservationsCapability
 from agent.plugin_host.trust_store import PluginTrustStore
+from agent.plugin_host.execution_identity import PluginExecutionIdentity
 from agent.plugin_host.trusted_imports import TrustedPluginImports
 from agent.plugin_host.process_resources import ResourceRetention
 from agent.plugin_host.reload import (
@@ -264,6 +266,80 @@ class PluginKernel:
             ),
         )
 
+    async def admit_trusted_candidate(self, candidate: PluginRecord) -> None:
+        """Admit only one verified startup candidate; execution stays in normal loading."""
+        async with self._transition_lock:
+            previous = self._find_record(candidate.candidate_id)
+            if (
+                self._retired
+                or previous is None
+                or previous.source != "workspace"
+                or previous.fingerprint != candidate.fingerprint
+                or previous.manifest.id != candidate.manifest.id
+                or candidate.admission is not None
+            ):
+                raise ValueError("插件候选已变化，请重新读取后确认")
+            handle = self._handles.get(candidate.candidate_id)
+            if handle is not None and handle.state not in {
+                PluginState.UNTRUSTED,
+                PluginState.BLOCKED,
+                PluginState.DISABLED,
+            }:
+                raise ValueError("插件已执行或状态已变化，请重新读取后操作")
+            records = self.discover()
+            previous_admissions = {
+                record.candidate_id: record.admission for record in records
+            }
+            records[records.index(previous)] = candidate
+            workspace = self._services.workspace
+            if workspace is None:
+                raise ValueError("插件工作区不可用")
+            refresh_dependency_admission(records, PluginTrustStore(workspace))
+            self._records = records
+            for record in records:
+                target = record.candidate_id == candidate.candidate_id
+                if (
+                    not target
+                    and record.admission == previous_admissions[record.candidate_id]
+                ):
+                    continue
+                current = self._handles.get(record.candidate_id)
+                if current is not None and current.state in {
+                    PluginState.UNTRUSTED,
+                    PluginState.BLOCKED,
+                    PluginState.DISABLED,
+                }:
+                    current.record = record
+                    if target:
+                        current.error = None
+                        current.state = PluginState.DISABLED
+                    elif record.admission is not None:
+                        current.error = RuntimeError(record.admission.reason)
+                        current.state = PluginState[record.admission.state]
+                    # Clearing static admission does not disable a waiting consumer.
+                    # Keep its runtime BLOCKED state/cause so the normal enable
+                    # closure can recover it when its approved provider starts.
+
+    async def fail_admission_activation(
+        self, candidate_id: str, fingerprint: str, error: Exception
+    ) -> None:
+        """Keep a saved grant distinct from a first activation that could not publish."""
+        async with self._transition_lock:
+            handle = self._handles.get(candidate_id)
+            if (
+                handle is None
+                or handle.record.fingerprint != fingerprint
+                or handle.record.admission is not None
+                or handle.state is not PluginState.DISABLED
+            ):
+                return
+            handle.error = error
+            handle.state = (
+                PluginState.RESTART_REQUIRED
+                if getattr(error, "code", "") == "plugin_restart_required"
+                else PluginState.FAILED
+            )
+
     def uninstalled_external_sources(self) -> list[ExternalSourceDiagnostic]:
         """Display-only reports for external sources this generation did not discover."""
         return find_uninstalled_external_sources(
@@ -413,16 +489,25 @@ class PluginKernel:
                     raise PackageContractError(
                         "trust_changed", "trust", "插件内容已变化，请重启并重新确认信任"
                     )
+                if self._services.workspace is not None:
+                    PluginExecutionIdentity(self._services.workspace).record(
+                        record.manifest.id, record.plugin_dir, content.fingerprint
+                    )
             except PackageContractError as exc:
+                execution_changed = exc.diagnostic.code == "executed_content_changed"
                 record.admission = PluginDiagnostic(
-                    "trust_changed",
+                    (
+                        "executed_content_changed"
+                        if execution_changed
+                        else "trust_changed"
+                    ),
                     "trust",
                     "content",
                     str(exc),
                     str(record.plugin_dir),
-                    "UNTRUSTED",
+                    "RESTART_REQUIRED" if execution_changed else "UNTRUSTED",
                 )
-                handle.state = PluginState.UNTRUSTED
+                handle.state = PluginState[record.admission.state]
                 handle.error = exc
                 return
         handle.effects.add_subscription(

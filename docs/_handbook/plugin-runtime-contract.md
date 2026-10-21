@@ -157,6 +157,19 @@ consolidates these additions and the subsequent #847 breaking migration.
   pass its receiving channel, chat, account, chat type and topic. Bundled channel
   callers are migrated. SDK/runtime versions are unchanged.
 
+- **External plugin trust before execution (PR #884, issue #878).** The desktop prompts
+  for enabled, valid, untrusted startup candidates using its shared persona
+  confirmation dialog. `plugins.trust` accepts an optional explicit `enable`
+  intent and `operation_id`, revalidates the displayed directory and content,
+  and admits only that startup candidate. First approval can activate within
+  the current application through the normal plugin lifecycle; channels retain
+  the existing generation-swap boundary. `plugins.list.trusted` describes an
+  actual exact-content grant separately from `can_trust` and runtime state.
+  Cancelled candidates remain inactive and are not prompted again in the same
+  desktop session; manual retry remains available. A session execution ledger
+  prevents bridge reconnects from replacing already executed backend contents;
+  the existing renderer code-identity boundary remains unchanged.
+
 - **Explicit account tool permission (PR #873, issue #870).** `AccountResponseRules.allow_full_tools`
   defaults to false, including when absent in saved JSON. Only accounts declaring
   the `full_tools` capability expose the per-account switch. The channel hub drops
@@ -1206,10 +1219,12 @@ from the shipped host code. Changing the manifest in the dev server invalidates
 those imports and reloads the page. Installed workspace packages always undergo
 the existing contract, duplicate-ID and exact-content trust checks regardless of
 this field. The declaration never grants trust, overrides a builtin, or installs
-anything automatically. Grok Bot declares external distribution and provides a
-repository example of an installable channel. SenseVoice and GPT-SoVITS remain
-bundled builtin plugins (default disabled) since #693; the build smoke and
-distribution tests below also generate their own external sources.
+anything automatically. Grok Bot is bundled and default disabled since #877;
+its source UI and callback client use the host's builtin build paths, while its
+existing plugin ID, configuration and workspace data paths remain unchanged.
+SenseVoice and GPT-SoVITS remain bundled builtin plugins (default disabled) since
+#693. The build smoke and distribution tests below generate their own external
+sources rather than relying on a shipped plugin to remain external.
 
 The frozen host collects the complete SDK runtime independently of these plugin
 sources, including implicit namespace directories such as `shiori_sdk.files`.
@@ -1288,12 +1303,18 @@ then reports the failure to the backend (#262), which rolls the plugin back to
 `FAILED`/`RESTART_REQUIRED` and republishes the roster. Other plugins continue
 loading and are never affected by one plugin's rollback.
 
-Workspace packages start `UNTRUSTED`. Settings → Plugins offers **信任…** only for
-valid, non-conflicting packages. The dialog shows the package name, version and
-actual path, and explicitly warns that plugin code receives the same permissions
-as Shiori. Cancel writes nothing. Confirm persists approval and displays **待重启**;
-only the next application launch can activate it. Restarting the bridge within
-the same desktop session does not activate a newly approved package.
+Workspace packages start `UNTRUSTED`. Enabled, valid, non-conflicting candidates
+are prompted after the desktop workspace opens, without visiting Settings.
+Disabled candidates wait until the user enables them or chooses **信任…** in
+Settings → Plugins. The shared persona dialog shows the package name, version,
+actual path and full host-permission disclosure. Cancel grants nothing, skips
+only that candidate and is remembered for this desktop session, including
+renderer refreshes and bridge reconnects. Manual retry remains available.
+Confirm persists the exact approval and activates a first-time enabled candidate
+in the current application through normal loading or a safe generation swap.
+Trust-only confirmation preserves a disabled preference; **信任并启用** explicitly
+requests enablement. Activation failures remain visible independently of the
+saved grant. Invalid, conflicting or missing-artifact packages cannot be trusted.
 
 The host atomically stores approval in `private_runtime/plugin-trust.json`, outside
 plugin directories. Approval binds the candidate path and a SHA-256 identity of
@@ -1302,6 +1323,14 @@ rechecks static validation, ID conflicts and content against the displayed
 fingerprint; changed or replaced candidates must be reviewed again after restart.
 Any published source, manifest, JavaScript, CSS or asset change invalidates trust.
 Trust does not modify the separately persisted enabled/disabled preference.
+Explicit enablement during confirmation is a separate intent in the same
+serialized operation. Existing startup candidates can have their dependency
+diagnostics rechecked after a provider is approved, but each external dependency
+requires its own grant. New directories are never admitted by that recheck.
+`private_runtime/plugin-executions.json` records which external package ID and
+directory has executed in the current Electron application session. Changed
+executed contents require an application restart, including after a bridge
+reconnect; this record is not an authorization grant.
 
 Trust snapshots reject package-content symlinks/junctions, including contained
 links, rather than expanding the approved tree through aliases. Only regular
@@ -1403,8 +1432,9 @@ pnpm exec tsx --tsconfig apps/desktop/renderer/tsconfig.json apps/desktop/tests/
 ```
 
 The real workspace flow uses the production main process, preload and backend in
-an isolated QA home. It verifies cancel, confirmation, pending status across bridge
-reconnection, app restart activation, React hooks and RPC, content-change approval,
+an isolated QA home. It verifies automatic persona confirmation, zero execution
+before approval, cancellation across bridge reconnection, immediate React hooks
+and RPC, remembered approval after restart, content-change approval,
 and removal without residual UI, CSS or plugin errors. Screenshots are retained in
 `.test-tmp-root/plugin-trust-real-*`. This uses the repository `.venv` by default;
 set `SHIORI_QA_RUNTIME_EXE` to an existing frozen runtime executable to verify that
@@ -1438,10 +1468,10 @@ Host state vocabulary extends the existing lifecycle enum:
 | `DISCOVERED`, `DISABLED`, `LOADING`, `ACTIVE`, `UNLOADING`, `DISPOSED` | existing runtime lifecycle |
 
 Workspace discovery (#211) reports `UNTRUSTED` until the exact content has a valid
-approval from a previous app session, and marks every candidate with a duplicate
-manifest ID `CONFLICT`. Both states prevent execution and enable actions.
-`RESTART_REQUIRED` remains the code-change boundary for downstream hosts; manual
-approval exposes a separate pending-restart flag while backend state stays untrusted.
+approval, and marks every candidate with a duplicate manifest ID `CONFLICT`.
+Both states prevent execution; enabling an eligible untrusted candidate opens
+the host confirmation rather than bypassing admission. `RESTART_REQUIRED`
+remains the boundary for replacing code already executed in this application.
 Enabled/disabled preferences remain separate from code
 version/restart state. Updates must not silently re-enable disabled plugins.
 
