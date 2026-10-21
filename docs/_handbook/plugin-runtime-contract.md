@@ -123,7 +123,7 @@ consolidates these additions and the subsequent #847 breaking migration.
 
 <!-- Record the next contract batch here, with PR references and breaking markers. -->
 
-- **Acknowledged channel reply sequences (#866).** Ordinary channel turns may
+- **Acknowledged channel reply sequences (#866 / #876).** Ordinary channel turns may
   select `ReplySequencePolicy` when the live transport registers with
   `subscribe_outbound(..., supports_reply_sequence=True)`. Telegram, QQ, QQBot
   and Feishu opt in. `OutboundMessage.delivery_outcome` carries a transient
