@@ -57,6 +57,7 @@ Shiori 是一个以角色为基底进行角色扮演的 Agent 助手：Python �
 - 入口与顶层容器（`main.tsx`、页面根组件）只做状态装配、依赖拼接与视图分发，业务细节下放到独立 hook / module。
 - 一个文件里的职责明显可以分开时就拆，沿天然边界拆（如 `XxxState` / `XxxActions` / `XxxSelectors`）；不要把大文件问题从页面平移到一个「万能 hook」。
 - 路过时发现超过 600 行的业务文件，在答复里提一句「这个文件偏大、可能值得拆」即可，是否拆由用户决定，不自行发起大重构。
+- 插件系统四层重构期间（`docs/decisions/2026-10-22-plugin-system-four-layer-refactor.md`）冻结扩展面：不新增 capability、phase 或层。
 
 ## React
 
