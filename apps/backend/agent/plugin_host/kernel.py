@@ -11,7 +11,7 @@ import importlib.util
 import itertools
 import logging
 import sys
-from collections.abc import Awaitable, Callable, Iterable, Mapping
+from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from copy import deepcopy
 from dataclasses import dataclass, field, replace
 from importlib.abc import Loader
@@ -35,7 +35,6 @@ from agent.plugin_host.process_resources import ProcessResourceOwner
 from agent.plugin_host.avatars import AvatarsCapability
 from agent.plugin_host.config import PluginConfig
 from agent.plugin_host.storage import PluginStorage
-from core.common.diagnostics import HostDiagnostics
 from session.manager import SessionManager
 from agent.plugin_host.capabilities import (
     AccountsCapability,
@@ -47,6 +46,13 @@ from agent.plugin_host.capabilities import (
     RpcCapability,
     ToolHooksCapability,
     ToolsCapability,
+)
+from agent.plugin_host.core_keys import (
+    HOST_CONFIG_REFERENCES,
+    CoreModule,
+    PluginBinding,
+    bind_core_capabilities,
+    required_core_key,
 )
 from agent.plugin_host.config_schema import (
     PluginConfigSchemaRegistry,
@@ -210,11 +216,17 @@ class PluginKernel:
         plugin_dirs: list[Path],
         *,
         services: HostServices,
+        core: Sequence[CoreModule],
         namespace: str = "",
         strict: bool = False,
         external_plugin_dirs: list[Path] | None = None,
         discovery_snapshot: list[PluginRecord] | None = None,
     ) -> None:
+        """``core`` lists the core modules providing their keys to this generation.
+
+        They provide before any plugin is planned; one that raises aborts the
+        construction, and with it startup (§8.5), unlike a plugin's setup failure.
+        """
         self._dirs = plugin_dirs
         self._external_dirs = external_plugin_dirs or []
         self._services = services
@@ -237,6 +249,11 @@ class PluginKernel:
         self._strict = strict
         self._handles: dict[str, PluginHandle] = {}
         self._kernel = Kernel()
+        for module in core:
+            module(self._kernel.provide)
+        self._resolve_reference = required_core_key(
+            self._kernel.get, HOST_CONFIG_REFERENCES
+        )
         # Package content inspected before setup, handed to the setup adapter.
         self._contents: dict[str, PackageContent | None] = {}
         # Serializes load/unload/reload/drain/terminate so a reload never
@@ -684,6 +701,17 @@ class PluginKernel:
         grants = handle.record.manifest.capabilities
         services = self._services
         require_host_services(handle.plugin_id, grants, services)
+        core_capabilities = bind_core_capabilities(
+            grants,
+            self._kernel.get,
+            PluginBinding(
+                plugin_id=handle.plugin_id,
+                namespace=self._namespace,
+                scope=handle.effects,
+                contributions=handle.contributions,
+                calls=handle.calls,
+            ),
+        )
         rpc = (
             RpcCapability(
                 self.rpc,
@@ -742,6 +770,7 @@ class PluginKernel:
             workspace=self._services.workspace,
             config=PluginConfig(
                 self._services.plugin_configs.get(handle.plugin_id, {}),
+                resolve_reference=self._resolve_reference,
                 raw_values=self._services.raw_plugin_configs.get(handle.plugin_id),
             ),
             tool_hooks=ToolHooksCapability(
@@ -755,12 +784,6 @@ class PluginKernel:
             ),
             background=BackgroundCapability(handle.effects, handle.plugin_id),
             storage=PluginStorage(),
-            diagnostics=HostDiagnostics(
-                [
-                    (f"plugins/{record.name}", record.plugin_dir.resolve())
-                    for record in self.discover()
-                ]
-            ),
             session_manager=self._services.session_manager,
             memory_engine=self._services.memory_engine,
             roles=(
@@ -862,6 +885,7 @@ class PluginKernel:
                 else None
             ),
             publish_api=lambda api: setattr(handle, "instance", api),
+            **core_capabilities,
         )
         context.as_service_provider_context()
         context.as_hook_context()

@@ -26,7 +26,7 @@ _original_thread: ThreadExceptHook | None = None
 _original_loop_handlers: dict[asyncio.AbstractEventLoop, LoopExceptHandler | None] = {}
 
 
-def install_global_hooks(
+def _install_global_hooks(
     owner: object,
     handler: logging.Handler,
     system: SysExceptHook,
@@ -57,7 +57,7 @@ def install_global_hooks(
     )
 
 
-def uninstall_global_hooks(owner: object) -> None:
+def _uninstall_global_hooks(owner: object) -> None:
     """Removes any retired owner without restoring another retired collector."""
     index = next(
         (index for index, item in enumerate(_owners) if item.owner is owner), None
@@ -83,3 +83,14 @@ def uninstall_global_hooks(owner: object) -> None:
                 )
     if not _owners:
         _original_loop_handlers.clear()
+
+
+class ProcessCrashReporting:
+    """The ``CRASH_REPORTING`` core service (D13b) over the process-wide hook stack.
+
+    Every instance shares the module-level stack above, because the hooks it
+    arbitrates are process globals.
+    """
+
+    install = staticmethod(_install_global_hooks)
+    uninstall = staticmethod(_uninstall_global_hooks)

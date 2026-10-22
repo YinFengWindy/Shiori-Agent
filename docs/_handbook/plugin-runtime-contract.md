@@ -146,6 +146,15 @@ consolidates these additions and the subsequent #847 breaking migration.
   tool hooks, phase modules, channels and bot commands) are aggregated in
   kernel order — dependency depth, then plugin id — instead of discovery and
   load order, so the order stays the same after a reload.
+- **Core service `CRASH_REPORTING` (issue #901, refactor P2, D13b).** New
+  `shiori_sdk.core` package for core socket contracts; its first module
+  `shiori_sdk.core.crash_reporting` defines the `CrashReporting` protocol
+  (`install(owner, handler, system, thread, loop, loop_handler)` returning the
+  original hooks, `uninstall(owner)`) and `CRASH_REPORTING = Key("crash_reporting")`.
+  The host provides it as a core service that arbitrates `sys.excepthook`,
+  `threading.excepthook` and the loop exception handler; the v2 `diagnostics`
+  capability now installs through it, with unchanged behavior. Plugins cannot
+  inject it yet: observe switches to `inject: [crash_reporting]` in P3.
 
 - **Natural proactive replies and background reports (PR #894, issue #868).** The current
   role's built-in natural-chat capability also applies to proactive draft

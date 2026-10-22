@@ -97,12 +97,12 @@ def load_config_data(data: dict[str, Any]) -> Config:
             )
         ),
         light_model=str(llm_fast.get("model") or data.get("light_model", "")),
-        light_api_key=_resolve(
+        light_api_key=resolve_config_reference(
             str(llm_fast.get("api_key") or data.get("light_api_key", ""))
         ),
         light_base_url=str(llm_fast.get("base_url") or data.get("light_base_url", "")),
         agent_model=str(llm_agent.get("model") or data.get("agent_model", "")),
-        agent_api_key=_resolve(
+        agent_api_key=resolve_config_reference(
             str(llm_agent.get("api_key") or data.get("agent_api_key", ""))
         ),
         agent_base_url=str(llm_agent.get("base_url") or data.get("agent_base_url", "")),
@@ -170,7 +170,7 @@ def _parse_model_registration(payload: dict[str, Any]) -> ModelRegistration:
         id=str(payload.get("id") or "").strip(),
         provider=str(payload.get("provider") or "openai").strip(),
         base_url=str(payload.get("base_url") or "").strip(),
-        api_key=_resolve(str(payload.get("api_key") or "")),
+        api_key=resolve_config_reference(str(payload.get("api_key") or "")),
         model=str(payload.get("model") or "").strip(),
         effort=cast(Any, effort),
         # Legacy context_window_tokens migrates; legacy max_output_tokens is dropped.
@@ -225,7 +225,7 @@ def _load_memory_config(data: dict) -> MemoryConfig:
         engine=str(memory.get("engine", "") or ""),
         embedding=MemoryEmbeddingConfig(
             model=str(embedding.get("model", "text-embedding-v3")),
-            api_key=_resolve(str(embedding.get("api_key", ""))),
+            api_key=resolve_config_reference(str(embedding.get("api_key", ""))),
             base_url=str(embedding.get("base_url", "")),
             output_dimensionality=output_dimensionality,
         ),
@@ -295,7 +295,7 @@ def resolve_config_references(value: object) -> object:
     the secret lands in config.toml as plaintext and the reference is lost.
     """
     if isinstance(value, str):
-        return _resolve(value)
+        return resolve_config_reference(value)
     if isinstance(value, list):
         return [resolve_config_references(item) for item in value]
     if isinstance(value, dict):
@@ -316,7 +316,11 @@ def has_config_reference(value: object) -> bool:
     return False
 
 
-def _resolve(value: str) -> str:
+def resolve_config_reference(value: str) -> str:
+    """Expands the ``${NAME}`` references in one string (see above).
+
+    Plugins resolve their stored credentials through it (``host.config_references``).
+    """
     resolved = _CONFIG_REFERENCE.sub(
         lambda m: os.environ.get(m.group(1), m.group(0)), value
     )
@@ -353,5 +357,6 @@ __all__ = [
     "load_config",
     "load_config_data",
     "load_config_text",
+    "resolve_config_reference",
     "resolve_config_references",
 ]

@@ -1,15 +1,25 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 
 class PluginConfig:
-    """Snapshot of the plugin values granted by the host configuration."""
+    """Snapshot of the plugin values granted by the host configuration.
+
+    ``resolve_reference`` is the host's ``${NAME}`` expansion, provided by the
+    configuration core module under ``host.config_references``.
+    """
 
     def __init__(
-        self, values: dict[str, Any], *, raw_values: dict[str, Any] | None = None
+        self,
+        values: dict[str, Any],
+        *,
+        resolve_reference: Callable[[str], str],
+        raw_values: dict[str, Any] | None = None,
     ) -> None:
         self._values = dict(values)
+        self._resolve_reference = resolve_reference
         self._raw_values = dict(raw_values) if raw_values is not None else dict(values)
 
     def get(self, key: str, default: Any = None) -> Any:
@@ -26,9 +36,7 @@ class PluginConfig:
 
     def resolve_reference(self, value: str) -> str:
         """Resolve plugin-stored credentials using the host's configuration policy."""
-        from agent.config import resolve_config_references
-
-        return str(resolve_config_references(value))
+        return self._resolve_reference(value)
 
     def __getattr__(self, key: str) -> Any:
         try:

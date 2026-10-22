@@ -1,5 +1,7 @@
 """Runtime diagnostic attribution with explicit installed-code roots."""
 
+import asyncio
+import logging
 import traceback
 from collections.abc import Sequence
 from pathlib import Path
@@ -7,13 +9,19 @@ from types import TracebackType
 
 from importlib.util import find_spec
 from core.error_context import current_session_key
-from core.common import global_hook_stack
+from shiori_sdk.core.crash_reporting import CrashReporting
+from shiori_sdk.diagnostics import LoopExceptHandler, SysExceptHook, ThreadExceptHook
 
 
 class HostDiagnostics:
-    """Own global hook dispatch and identify host or external-plugin traceback frames."""
+    """Route global hooks through ``CRASH_REPORTING`` and attribute traceback frames."""
 
-    def __init__(self, plugin_roots: Sequence[tuple[str, Path]] = ()) -> None:
+    def __init__(
+        self,
+        crash_reporting: CrashReporting,
+        plugin_roots: Sequence[tuple[str, Path]] = (),
+    ) -> None:
+        self._crash_reporting = crash_reporting
         self._roots = list(plugin_roots)
         # Package locations remain valid in a source tree, wheel or frozen layout.
         for name in (
@@ -55,5 +63,20 @@ class HostDiagnostics:
             else "?"
         )
 
-    install_global_hooks = staticmethod(global_hook_stack.install_global_hooks)
-    uninstall_global_hooks = staticmethod(global_hook_stack.uninstall_global_hooks)
+    def install_global_hooks(
+        self,
+        owner: object,
+        handler: logging.Handler,
+        system: SysExceptHook,
+        thread: ThreadExceptHook,
+        loop: asyncio.AbstractEventLoop | None,
+        loop_handler: LoopExceptHandler,
+    ) -> tuple[SysExceptHook | None, ThreadExceptHook | None, LoopExceptHandler | None]:
+        """Installs the collector through the crash-reporting core service."""
+        return self._crash_reporting.install(
+            owner, handler, system, thread, loop, loop_handler
+        )
+
+    def uninstall_global_hooks(self, owner: object) -> None:
+        """Retires the collector through the crash-reporting core service."""
+        self._crash_reporting.uninstall(owner)
