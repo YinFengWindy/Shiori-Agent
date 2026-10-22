@@ -154,8 +154,9 @@ class PluginGenerationSettings:
     workspace: Path | None = None
     plugin_configs: dict[str, dict[str, Any]] = field(default_factory=dict)
     raw_plugin_configs: dict[str, dict[str, Any]] = field(default_factory=dict)
-    # The process-level owner whose attachments this generation publishes and
-    # retains across in-generation reloads.
+    # The process-level owner, the same one as ``PluginCoreInputs.process_resources``:
+    # here the generation publishes its attachments and retains them across
+    # in-generation reloads; the core hands each plugin its attachment.
     process_resources: ProcessResourceOwner | None = None
     is_reload: bool = False
     previously_active_plugins: frozenset[str] = frozenset()

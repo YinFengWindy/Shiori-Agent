@@ -5,16 +5,20 @@ from __future__ import annotations
 import asyncio
 import shutil
 from pathlib import Path
+from types import SimpleNamespace
+from typing import cast
 
 import pytest
 
 from agent.plugin_host import PluginState
 from agent.plugin_host import PluginGenerationSettings, PluginRpcRegistry
+from agent.plugin_host.core_keys import PluginBinding, bind_core_capabilities
 from agent.plugin_host.manifest import group_listening_channels
 from agent.plugin_host.package_fingerprint import inspect_package_content
 from agent.plugin_host.trust_store import PluginTrustStore
 from agent.plugin_host.trusted_imports import TrustedPluginImports
 from shiori_sdk.storage import plugin_data_dir
+from shiori_sdk.runtime import HostServiceUnavailable
 from core.roles.store import RoleStore
 from agent.tools.registry import ToolRegistry
 from conversation.plugin_capability import active_plugin_bot_commands
@@ -806,6 +810,13 @@ async def test_v2_plugin_reads_host_service_references(tmp_path: Path):
         "light_provider": light_provider,
         "light_model": "light-model-x",
     }
+    # memory_engine 可以合法地为 None，但核心根本没 provide 它时仍然失败。
+    with pytest.raises(HostServiceUnavailable, match="host.memory_engine"):
+        bind_core_capabilities(
+            ["memory_engine"],
+            lambda _key: None,
+            cast(PluginBinding, SimpleNamespace(plugin_id="hostrefs")),
+        )
 
 
 @pytest.mark.asyncio

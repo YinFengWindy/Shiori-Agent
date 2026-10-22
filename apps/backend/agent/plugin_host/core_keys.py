@@ -173,7 +173,20 @@ HOST_WORKSPACE: Key[Path] = Key("host.workspace")
 HOST_HTTP: Key[HttpClient] = Key("host.http")
 """The ``http`` capability: the host's shared external HTTP requester."""
 
-HOST_MEMORY_ENGINE: Key[MemoryEngine | None] = Key("host.memory_engine")
+
+@dataclass(frozen=True)
+class Nullable[T]:
+    """A provided value that may legitimately be None (``CoreCapability.nullable``).
+
+    The kernel's ``get`` answers None both for a key nobody provided and for a
+    provided None; boxing the value keeps "provided" observable, so a missing
+    provide still fails instead of reaching the plugin as None.
+    """
+
+    value: T | None
+
+
+HOST_MEMORY_ENGINE: Key[Nullable[MemoryEngine]] = Key("host.memory_engine")
 """The ``memory_engine`` capability: the generation's engine, None when memory is off."""
 
 HOST_PROCESS_RESOURCES: Key[PluginCapabilityBinder[PluginProcessResources]] = Key(
@@ -253,8 +266,8 @@ class CoreCapability:
     ``per_plugin`` marks a key whose provider is a ``PluginCapabilityBinder``;
     the plugin then gets ``for_plugin(binding)``. Otherwise the provided
     instance itself is the capability, shared by every plugin. ``nullable``
-    marks a capability for which None is a valid host state (the plugin gets
-    None) rather than a missing service.
+    marks a capability for which None is a valid host state: its key provides
+    a ``Nullable`` box and the plugin gets the boxed value, None included.
     """
 
     key: Key[Any]
@@ -307,21 +320,24 @@ def bind_core_capabilities(
 
     ``provided`` looks a key up in the kernel (``Kernel.get``). A declared
     capability whose key nobody provides fails before setup, like a missing
-    host service, unless the row is ``nullable``.
+    host service; that includes a ``nullable`` row, whose provided box may
+    hold None.
     """
     arguments: dict[str, Any] = {}
     for capability in capabilities:
         if (row := CORE_CAPABILITIES.get(capability)) is None:
             continue
         value: Any = provided(row.key)
-        if value is None and row.nullable:
-            arguments[capability] = None
-            continue
         if value is None:
             raise HostServiceUnavailable.for_capability(
                 binding.plugin_id, capability, [row.key.name]
             )
-        arguments[capability] = value.for_plugin(binding) if row.per_plugin else value
+        if row.nullable:
+            arguments[capability] = value.value
+        elif row.per_plugin:
+            arguments[capability] = value.for_plugin(binding)
+        else:
+            arguments[capability] = value
     return arguments
 
 

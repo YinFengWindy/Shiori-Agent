@@ -157,7 +157,7 @@ consolidates these additions and the subsequent #847 breaking migration.
   inject it yet: observe switches to `inject: [crash_reporting]` in P3.
 
 - **breaking: capabilities `role_store`, `role_runtime_registry` and
-  `relationship_runtime` removed (issue #901, refactor P2).** None of the three
+  `relationship_runtime` removed (PR #921, issue #901, refactor P2).** None of the three
   had a user; `roles` and `models` cover what plugins read from roles. They
   leave `shiori_sdk.runtime.KNOWN_CAPABILITIES` and the `capabilities` enum of
   `manifest.schema.json`, and the host no longer exposes `ctx.role_store`,

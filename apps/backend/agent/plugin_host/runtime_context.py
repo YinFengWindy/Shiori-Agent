@@ -175,10 +175,12 @@ class PluginSetupContext:
         return tuple(sorted(set(self.manifest.capabilities)))
 
     def _core_capability[T](self, capability: str, value: T | None) -> T:
-        """A capability filled from ``core_keys.CORE_CAPABILITIES``.
+        """A declared capability's value, or ``CapabilityNotGranted``.
 
-        ``bind_core_capabilities`` fails setup when a declared one has no core
-        provider, so ``value`` is None only when the plugin did not declare it.
+        The kernel fails setup before a declared capability could be left
+        without a value (``bind_core_capabilities`` for core keys, the kernel's
+        own builders for the rest), so ``value`` is None only when the plugin
+        did not declare it.
         """
         if capability not in self.granted or value is None:
             raise CapabilityNotGranted(f"Plugin did not request {capability}")
@@ -328,9 +330,7 @@ class PluginSetupContext:
     @property
     def kv(self) -> PluginKVStore:
         """Return the explicitly granted kv SDK capability."""
-        if "kv" not in self.granted or self._kv is None:
-            raise CapabilityNotGranted("Plugin did not request kv")
-        return self._kv
+        return self._core_capability("kv", self._kv)
 
     @property
     def http(self) -> HttpClient:

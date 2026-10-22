@@ -52,6 +52,7 @@ from agent.plugin_host.core_keys import (
     HOST_WORKSPACE,
     CoreModule,
     CoreProvide,
+    Nullable,
 )
 from agent.tool_hooks.plugin_capability import PluginToolHooks
 from agent.tools.plugin_capability import PluginTools
@@ -122,6 +123,9 @@ class PluginCoreInputs:
     event_bus: EventBus
     rpc: PluginRpcRegistry[MethodPolicy]
     scene_observations: SceneObservationDemand
+    # The same directory as ``PluginGenerationSettings.workspace``: there the
+    # kernel's trust store, execution identity and KV root; here the
+    # ``workspace``, ``memory`` and ``sessions`` capabilities.
     workspace: Path | None
     tools: ToolRegistry | None
     role_store: RoleStore | None
@@ -134,18 +138,14 @@ class PluginCoreInputs:
     external_turns: ExternalTurns | None
     background_results: BackgroundResults | None
     http: HttpClient | None
+    # The same owner as ``PluginGenerationSettings.process_resources``: there
+    # the kernel publishes and retains the generation's attachments; here
+    # each plugin gets its attachment (``process_resources``).
     process_resources: ProcessResourceOwner | None
 
 
 def plugin_core_modules(inputs: PluginCoreInputs) -> tuple[CoreModule, ...]:
     """The core provide list, in provide order, for one runtime generation."""
-    tools = inputs.tools
-    role_store = inputs.role_store
-    session_manager = inputs.session_manager
-    workspace = inputs.workspace
-    role_runtime_registry = inputs.role_runtime_registry
-    event_bus = inputs.event_bus
-    rpc = inputs.rpc
     roots = [("plugins", directory.resolve()) for directory in inputs.plugin_dirs]
 
     def provide_diagnostics(provide: CoreProvide) -> None:
@@ -160,34 +160,39 @@ def plugin_core_modules(inputs: PluginCoreInputs) -> tuple[CoreModule, ...]:
 
     def provide_tools(provide: CoreProvide) -> None:
         """Plugin tools, tool hooks and the current tool turn (``agent.tools``)."""
-        if tools is not None:
-            provide(HOST_TOOLS, PluginTools(tools))
+        if inputs.tools is not None:
+            provide(HOST_TOOLS, PluginTools(inputs.tools))
         provide(HOST_TOOL_HOOKS, PluginToolHooks())
         provide(HOST_TOOL_TURN, current_tool_turn)
 
     def provide_channels(provide: CoreProvide) -> None:
         """Plugin channels, and the accounts and avatars they serve (``core.channels``)."""
         provide(HOST_CHANNELS, PluginChannels())
-        if role_store is not None:
-            provide(HOST_ACCOUNTS, PluginAccounts(role_store.accounts))
-            provide(HOST_AVATARS, PluginAvatars(role_store.avatars))
+        if inputs.role_store is not None:
+            provide(HOST_ACCOUNTS, PluginAccounts(inputs.role_store.accounts))
+            provide(HOST_AVATARS, PluginAvatars(inputs.role_store.avatars))
 
     def provide_sessions(provide: CoreProvide) -> None:
         """The session manager and the session operations over it (``session``)."""
-        if session_manager is None:
+        if inputs.session_manager is None:
             return
-        provide(HOST_SESSION_MANAGER, session_manager)
-        if workspace is not None:
+        provide(HOST_SESSION_MANAGER, inputs.session_manager)
+        if inputs.workspace is not None:
             presenter = DesktopSessionPresenter(None, inputs.relationship_runtime)
-            sessions = HostPluginSessions(session_manager, workspace, presenter)
+            sessions = HostPluginSessions(
+                inputs.session_manager, inputs.workspace, presenter
+            )
             provide(HOST_SESSIONS, sessions.as_capability())
 
     def provide_roles(provide: CoreProvide) -> None:
         """Roles, their models and the light model plugins use (``core.roles``)."""
-        if role_store is not None:
-            provide(HOST_ROLES, HostRoles(role_store).as_capability())
-        if role_runtime_registry is not None:
-            provide(HOST_MODELS, HostRoleModels(role_runtime_registry).as_capability())
+        if inputs.role_store is not None:
+            provide(HOST_ROLES, HostRoles(inputs.role_store).as_capability())
+        if inputs.role_runtime_registry is not None:
+            provide(
+                HOST_MODELS,
+                HostRoleModels(inputs.role_runtime_registry).as_capability(),
+            )
         if inputs.light_provider is not None:
             provide(HOST_LIGHT_PROVIDER, inputs.light_provider)
         if inputs.light_model is not None:
@@ -206,11 +211,13 @@ def plugin_core_modules(inputs: PluginCoreInputs) -> tuple[CoreModule, ...]:
         The surface is ``bootstrap.memory_capabilities``; the engine is None
         when memory is disabled.
         """
-        provide(HOST_MEMORY_ENGINE, inputs.memory_engine)
-        if workspace is not None and role_store is not None:
+        provide(HOST_MEMORY_ENGINE, Nullable(inputs.memory_engine))
+        if inputs.workspace is not None and inputs.role_store is not None:
             provide(
                 HOST_MEMORY,
-                HostMemoryCapability(workspace, role_store, inputs.memory_engine),
+                HostMemoryCapability(
+                    inputs.workspace, inputs.role_store, inputs.memory_engine
+                ),
             )
 
     def provide_processes(provide: CoreProvide) -> None:
@@ -243,17 +250,17 @@ def plugin_core_modules(inputs: PluginCoreInputs) -> tuple[CoreModule, ...]:
 
     def provide_bridge(provide: CoreProvide) -> None:
         """The plugin RPC registry and the ``rpc`` capability over it (bridge)."""
-        provide(HOST_BRIDGE, rpc)
-        provide(HOST_RPC, PluginRpc(rpc, event_bus))
+        provide(HOST_BRIDGE, inputs.rpc)
+        provide(HOST_RPC, PluginRpc(inputs.rpc, inputs.event_bus))
 
     def provide_events(provide: CoreProvide) -> None:
         """Plugin-scoped views of the event bus (``bus``)."""
-        provide(HOST_EVENTS, PluginEvents(event_bus))
+        provide(HOST_EVENTS, PluginEvents(inputs.event_bus))
 
     def provide_host_passthrough(provide: CoreProvide) -> None:
         """The workspace directory and the shared external HTTP requester."""
-        if workspace is not None:
-            provide(HOST_WORKSPACE, workspace)
+        if inputs.workspace is not None:
+            provide(HOST_WORKSPACE, inputs.workspace)
         if inputs.http is not None:
             provide(HOST_HTTP, inputs.http)
 
