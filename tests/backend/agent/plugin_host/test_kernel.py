@@ -17,6 +17,7 @@ from agent.plugin_host.trusted_imports import TrustedPluginImports
 from shiori_sdk.storage import plugin_data_dir
 from core.roles.store import RoleStore
 from agent.tools.registry import ToolRegistry
+from conversation.plugin_capability import active_plugin_bot_commands
 from core.channels.plugin_capability import active_plugin_channels
 from bus.event_bus import EventBus
 import sys
@@ -717,9 +718,9 @@ async def test_bot_commands_are_scoped_contributions_only(tmp_path: Path):
     (package / "manifest.yaml").write_text(_V2_BOT_COMMANDS_MANIFEST, encoding="utf-8")
     kernel = make_kernel([tmp_path], event_bus=EventBus())
     await kernel.load_all()
-    assert kernel.bot_commands == [("chatid", "查看我的 chat_id")]
+    assert active_plugin_bot_commands(kernel) == [("chatid", "查看我的 chat_id")]
     await kernel.unload("v2cmds")
-    assert kernel.bot_commands == []
+    assert active_plugin_bot_commands(kernel) == []
 
 
 _RPC_PLUGIN = """
@@ -887,9 +888,9 @@ capabilities: {capabilities}
         if capability == "external_turns"
         else FakeBackgroundResults()
     )
-    services = HostServices(event_bus=EventBus())
-    setattr(services, capability, turns)
-    kernel = host_kernel([tmp_path], services=services)
+    kernel = host_kernel(
+        [tmp_path], services=HostServices(event_bus=EventBus()), **{capability: turns}
+    )
     await kernel.load_all()
 
     captured = {
@@ -908,8 +909,8 @@ capabilities: {capabilities}
         ("roles", "host.roles", True),
         ("models", "host.models", True),
         ("sessions", "host.sessions", True),
-        ("external_turns", "external_turns", True),
-        ("background_results", "background_results", True),
+        ("external_turns", "host.external_turns", True),
+        ("background_results", "host.background_results", True),
         ("memory", "host.memory", True),
         ("memory", "host.memory", False),
         ("http", "http", True),

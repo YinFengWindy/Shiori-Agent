@@ -4,17 +4,13 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
 
-import asyncio
 from typing import TYPE_CHECKING, Any
-from collections.abc import Coroutine
-from core.common.runtime_tasks import create_runtime_task
 from shiori_sdk.lifecycle import PHASE_SLOTS, require_phase_slot
 
 from agent.plugin_host.call_gate import PluginCallGate
 from shiori_sdk.kernel import Scope
 
 if TYPE_CHECKING:
-    from agent.core.proactive_turn.gates import ProactiveGate
     from agent.plugin_host.rpc import PluginRpcRegistry, RpcHandler
     from shiori_sdk.rpc import Concurrency
 
@@ -24,8 +20,6 @@ class PluginContributions:
 
     def __init__(self) -> None:
         self.phase_modules: dict[str, list[object]] = {slot: [] for slot in PHASE_SLOTS}
-        self.proactive_gates: list[ProactiveGate] = []
-        self.bot_commands: list[tuple[str, str]] = []
 
 
 def contribute_to_list[T](
@@ -103,38 +97,6 @@ class LifecycleCapability:
         _ = self._effects.effect(remove_contributed, f"phase:{slot}:{len(modules)}")
 
 
-class ProactiveGatesCapability:
-    """贡献参与主动 tick 准入的 gate；不允许直接投递消息。"""
-
-    def __init__(self, contributions: PluginContributions, effects: Scope) -> None:
-        self._contributions = contributions
-        self._effects = effects
-
-    def add(self, gate: "ProactiveGate") -> None:
-        contribute_to_list(
-            self._contributions.proactive_gates,
-            gate,
-            effects=self._effects,
-            label=f"proactive_gate:{getattr(gate, 'name', gate)}",
-        )
-
-
-class BotCommandsCapability:
-    """贡献 bot 命令（如 Telegram `/xxx`）；卸载时随 effect 从聚合列表摘除。"""
-
-    def __init__(self, contributions: PluginContributions, effects: Scope) -> None:
-        self._contributions = contributions
-        self._effects = effects
-
-    def add(self, command: str, description: str) -> None:
-        contribute_to_list(
-            self._contributions.bot_commands,
-            (command, description),
-            effects=self._effects,
-            label=f"bot_command:{command}",
-        )
-
-
 class RpcCapability:
     """ctx.rpc：向 ``plugin.<id>.<method>`` 命名空间登记桥接可调用方法。
 
@@ -199,65 +161,3 @@ class RpcCapability:
         _ = self._effects.effect(
             lambda: self._registry.unregister(full_name), f"rpc:{full_name}"
         )
-
-
-class BackgroundCapability:
-    """启动可取消后台任务；插件卸载时任务被取消并等待退出。"""
-
-    def __init__(self, effects: Scope, plugin_id: str) -> None:
-        self._effects = effects
-        self._plugin_id = plugin_id
-
-    def spawn_runtime[T](
-        self, coro: Coroutine[object, object, T], *, name: str
-    ) -> asyncio.Task[T]:
-        """Retain the current runtime until work finishes; own cancellation on unload."""
-        return self._spawn(coro, name=name, retain_runtime=True)
-
-    def spawn[T](
-        self, coro: Coroutine[object, object, T], *, name: str
-    ) -> asyncio.Task[T]:
-        """启动作用域任务；开始卸载后拒绝启动并关闭尚未运行的协程。"""
-        return self._spawn(
-            coro, name=f"plugin:{self._plugin_id}:{name}", retain_runtime=False
-        )
-
-    def _spawn[T](
-        self,
-        coro: Coroutine[object, object, T],
-        *,
-        name: str,
-        retain_runtime: bool,
-    ) -> asyncio.Task[T]:
-        try:
-            self._effects.ensure_active(f"background:{name}")
-            task = (
-                create_runtime_task(coro, name=name)
-                if retain_runtime
-                else asyncio.create_task(coro, name=name)
-            )
-        except BaseException:
-            coro.close()
-            raise
-        try:
-            # Register at the actual spawn point to preserve LIFO ordering with
-            # each task's resources, and release completed results immediately.
-            release = self._effects.effect(
-                lambda: self._cancel(task), f"background:{name}"
-            )
-        except BaseException:
-            task.cancel()
-            raise
-        # Business errors remain with the caller or asyncio's error handler.
-        task.add_done_callback(lambda _completed: release())
-        return task
-
-    @staticmethod
-    async def _cancel(task: asyncio.Task[object]) -> None:
-        if task.done():
-            return
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass

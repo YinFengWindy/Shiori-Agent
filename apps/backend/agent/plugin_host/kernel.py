@@ -21,22 +21,18 @@ from uuid import uuid4
 
 from agent.plugin_host.services import ScopedPluginServices
 from shiori_sdk.http import HttpClient
-from shiori_sdk.external_turns import ExternalTurns
-from shiori_sdk.background_results import BackgroundResults
 from agent.plugin_host.process_resources import ProcessResourceOwner
 from agent.plugin_host.config import PluginConfig
 from agent.plugin_host.storage import PluginStorage
 from agent.plugin_host.capabilities import (
-    BackgroundCapability,
-    BotCommandsCapability,
     LifecycleCapability,
-    ProactiveGatesCapability,
     RpcCapability,
 )
 from agent.plugin_host.core_keys import (
     HOST_ACCOUNTS,
     HOST_CONFIG_REFERENCES,
     HOST_TOOL_HOOKS,
+    ActiveContributions,
     CoreModule,
     PluginBinding,
     bind_core_capabilities,
@@ -169,9 +165,6 @@ class HostServices:
     plugin_configs: dict[str, dict[str, Any]] = field(default_factory=dict)
     raw_plugin_configs: dict[str, dict[str, Any]] = field(default_factory=dict)
     relationship_runtime: Any = None
-    # external_turns capability 的唯一实现，由 bootstrap 以本代 AgentLoop 装配（#721）。
-    external_turns: ExternalTurns | None = None
-    background_results: BackgroundResults | None = None
     process_resources: ProcessResourceOwner | None = None
     is_reload: bool = False
     previously_active_plugins: frozenset[str] = frozenset()
@@ -726,18 +719,13 @@ class PluginKernel:
                 resolve_reference=self._resolve_reference,
                 raw_values=self._services.raw_plugin_configs.get(handle.plugin_id),
             ),
-            bot_commands=BotCommandsCapability(handle.contributions, handle.effects),
             dependencies=PluginDependencies(
                 handle.record.manifest.dependencies,
                 self._dependency_api,
                 optional_declared=handle.record.manifest.optional_dependencies,
             ),
-            background=BackgroundCapability(handle.effects, handle.plugin_id),
             storage=PluginStorage(),
             memory_engine=self._services.memory_engine,
-            external_turns=(
-                services.external_turns if "external_turns" in grants else None
-            ),
             process_resources=(
                 services.process_resources.for_plugin(
                     self._namespace, handle.plugin_id, handle.effects
@@ -745,9 +733,6 @@ class PluginKernel:
                 if "process_resources" in grants
                 and services.process_resources is not None
                 else None
-            ),
-            background_results=(
-                services.background_results if "background_results" in grants else None
             ),
             kv=(
                 open_plugin_kv(
@@ -814,9 +799,7 @@ class PluginKernel:
             "tools": lambda: None,
             "lifecycle": lambda: None,
             "tool_hooks": lambda: None,
-            "proactive_gates": lambda: ProactiveGatesCapability(
-                handle.contributions, handle.effects
-            ),
+            "proactive_gates": lambda: None,
             "channels": lambda: None,
             "accounts": lambda: None,
             "avatars": lambda: None,
@@ -1363,13 +1346,14 @@ class PluginKernel:
         """Plugin ids of the ACTIVE plugins in kernel order (stable across reloads)."""
         return [handle.plugin_id for handle in self._active_handles()]
 
-    def core_service[T](self, key: Key[T]) -> T:
-        """The service a core module provided to this generation under ``key``.
+    def active_contributions[T](self, key: Key[ActiveContributions[T]]) -> list[T]:
+        """What the ACTIVE plugins contributed to the core service under ``key``.
 
-        For host wiring that reads what the generation's plugins contributed
-        to a core service, in ``active_plugin_ids`` order.
+        In ``active_plugin_ids`` order; host wiring (channels, bot commands,
+        tool hooks, proactive gates) reads the generation's plugins through it.
         """
-        return required_core_key(self._kernel.get, key)
+        source = required_core_key(self._kernel.get, key)
+        return list(source.active(self.active_plugin_ids))
 
     @property
     def tool_hooks(self) -> list[Any]:
@@ -1378,25 +1362,7 @@ class PluginKernel:
         Only the ``PluginContributionSource`` adapter; the phase modules above
         still live here until P3 turns both into events.
         """
-        source = required_core_key(self._kernel.get, HOST_TOOL_HOOKS)
-        return list(source.active(self.active_plugin_ids))
-
-    @property
-    def proactive_gates(self) -> list[Any]:
-        return [
-            g
-            for handle in self._active_handles()
-            for g in handle.contributions.proactive_gates
-        ]
-
-    @property
-    def bot_commands(self) -> list[tuple[str, str]]:
-        """Returns active plugins' scoped bot-command contributions."""
-        return [
-            command
-            for handle in self._active_handles()
-            for command in handle.contributions.bot_commands
-        ]
+        return self.active_contributions(HOST_TOOL_HOOKS)
 
 
 def _import_module(module_name: str, path: Path, loader: Loader | None = None) -> None:

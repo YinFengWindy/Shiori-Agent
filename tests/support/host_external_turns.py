@@ -20,7 +20,7 @@ from unittest.mock import MagicMock
 from agent.lifecycle.facade import TurnLifecycle
 from agent.looping.core import AgentLoop
 from agent.looping.ports import AgentLoopConfig, AgentLoopDeps, MemoryServices
-from agent.plugin_host.external_turns import HostExternalTurns
+from conversation.plugin_capability import HostExternalTurns
 from agent.provider import LLMProvider, LLMResponse, ToolCall
 from agent.tools.registry import ToolRegistry
 from bootstrap.wiring import wire_turn_lifecycle

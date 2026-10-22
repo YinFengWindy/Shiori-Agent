@@ -95,7 +95,7 @@ from conversation.push_sync import ExternalPushSyncService
 from proactive_v2.presence import PresenceStore
 from session.manager import SessionManager
 from agent.plugin_host.process_resources import ProcessResourceOwner
-from agent.plugin_host.background_results import ResultRunner
+from conversation.plugin_capability import ResultRunner
 
 logger = logging.getLogger(__name__)
 
@@ -617,10 +617,10 @@ def build_core_runtime(
 
     from agent.plugin_host import HostServices, PluginKernel
     from bootstrap.plugin_core import plugin_core_modules
-    from agent.plugin_host.external_turns import HostExternalTurns
-    from agent.plugin_host.background_results import HostBackgroundResults
+    from conversation.plugin_capability import HostBackgroundResults, HostExternalTurns
     from conversation.service import ConversationService
     from core.channels.role_routing import RoleTurnRouter
+    from shiori_sdk.background_results import BackgroundResults
     from shiori_sdk.external_turns import ExternalTurns
 
     plugin_light_provider, plugin_light_model = _resolve_plugin_llm_dependencies(
@@ -655,7 +655,8 @@ def build_core_runtime(
         ),
         event_bus,
     )
-    # Typed as the plugin contract, so pyright checks the host implementation.
+    # external_turns and background_results are typed as the plugin contracts,
+    # so pyright checks both host implementations.
     external_turns: ExternalTurns = HostExternalTurns(
         RoleTurnRouter.from_workspace(
             workspace,
@@ -665,6 +666,12 @@ def build_core_runtime(
         ),
         loop.process_external_turn,
         channel_directory=channel_directory,
+    )
+    background_results: BackgroundResults = HostBackgroundResults(
+        tools,
+        role_store,
+        ConversationService(session_manager),
+        background_result_runner or loop.process_background_result,
     )
     plugin_dirs = _resolve_plugin_dirs(workspace)
     plugin_manager = PluginKernel(
@@ -689,14 +696,7 @@ def build_core_runtime(
             plugin_configs=config.plugins,
             raw_plugin_configs=config.raw_plugin_configs,
             relationship_runtime=relationship_runtime,
-            external_turns=external_turns,
             process_resources=process_resources,
-            background_results=HostBackgroundResults(
-                tools,
-                role_store,
-                ConversationService(session_manager),
-                background_result_runner or loop.process_background_result,
-            ),
             is_reload=shared is not None,
             previously_active_plugins=(
                 frozenset(
@@ -722,6 +722,8 @@ def build_core_runtime(
             light_model=plugin_light_model,
             scene_observations=scene_demand,
             memory_engine=memory_runtime.engine,
+            external_turns=external_turns,
+            background_results=background_results,
         ),
     )
     account_delivery = AccountDelivery(

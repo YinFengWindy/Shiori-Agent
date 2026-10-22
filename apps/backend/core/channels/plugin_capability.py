@@ -35,7 +35,7 @@ class PluginChannels(ContributionsByPlugin[Channel]):
 
 def active_plugin_channels(kernel: PluginKernel) -> list[Channel]:
     """The channels the generation's active plugins contributed, in kernel order."""
-    return list(kernel.core_service(HOST_CHANNELS).active(kernel.active_plugin_ids))
+    return kernel.active_contributions(HOST_CHANNELS)
 
 
 class ChannelsCapability:
