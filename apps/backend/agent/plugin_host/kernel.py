@@ -32,6 +32,7 @@ from agent.plugin_host.core_keys import (
     HOST_ACCOUNTS,
     HOST_CONFIG_REFERENCES,
     HOST_TOOL_HOOKS,
+    ActiveContributions,
     CoreModule,
     PluginBinding,
     bind_core_capabilities,
@@ -1345,13 +1346,14 @@ class PluginKernel:
         """Plugin ids of the ACTIVE plugins in kernel order (stable across reloads)."""
         return [handle.plugin_id for handle in self._active_handles()]
 
-    def core_service[T](self, key: Key[T]) -> T:
-        """The service a core module provided to this generation under ``key``.
+    def active_contributions[T](self, key: Key[ActiveContributions[T]]) -> list[T]:
+        """What the ACTIVE plugins contributed to the core service under ``key``.
 
-        For host wiring that reads what the generation's plugins contributed
-        to a core service, in ``active_plugin_ids`` order.
+        In ``active_plugin_ids`` order; host wiring (channels, bot commands,
+        tool hooks, proactive gates) reads the generation's plugins through it.
         """
-        return required_core_key(self._kernel.get, key)
+        source = required_core_key(self._kernel.get, key)
+        return list(source.active(self.active_plugin_ids))
 
     @property
     def tool_hooks(self) -> list[Any]:
@@ -1360,8 +1362,7 @@ class PluginKernel:
         Only the ``PluginContributionSource`` adapter; the phase modules above
         still live here until P3 turns both into events.
         """
-        source = required_core_key(self._kernel.get, HOST_TOOL_HOOKS)
-        return list(source.active(self.active_plugin_ids))
+        return self.active_contributions(HOST_TOOL_HOOKS)
 
 
 def _import_module(module_name: str, path: Path, loader: Loader | None = None) -> None:

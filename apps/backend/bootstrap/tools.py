@@ -655,7 +655,8 @@ def build_core_runtime(
         ),
         event_bus,
     )
-    # Typed as the plugin contract, so pyright checks the host implementation.
+    # external_turns and background_results are typed as the plugin contracts,
+    # so pyright checks both host implementations.
     external_turns: ExternalTurns = HostExternalTurns(
         RoleTurnRouter.from_workspace(
             workspace,

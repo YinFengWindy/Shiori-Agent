@@ -301,8 +301,7 @@ class PluginBotCommands(ContributionsByPlugin[tuple[str, str]]):
 
 def active_plugin_bot_commands(kernel: PluginKernel) -> list[tuple[str, str]]:
     """The bot commands the generation's active plugins contributed, in kernel order."""
-    source = kernel.core_service(HOST_BOT_COMMANDS)
-    return list(source.active(kernel.active_plugin_ids))
+    return kernel.active_contributions(HOST_BOT_COMMANDS)
 
 
 class BotCommandsCapability:

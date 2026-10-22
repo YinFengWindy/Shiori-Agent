@@ -27,8 +27,7 @@ class PluginProactiveGates(ContributionsByPlugin[ProactiveGate]):
 
 def active_plugin_proactive_gates(kernel: PluginKernel) -> list[ProactiveGate]:
     """The gates the generation's active plugins contributed, in kernel order."""
-    source = kernel.core_service(HOST_PROACTIVE_GATES)
-    return list(source.active(kernel.active_plugin_ids))
+    return kernel.active_contributions(HOST_PROACTIVE_GATES)
 
 
 class ProactiveGatesCapability:
