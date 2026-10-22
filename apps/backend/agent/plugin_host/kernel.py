@@ -426,12 +426,15 @@ class PluginKernel:
             for record in selected.values()
             if self._runnable(record)
         }
-        # Disabled plugins are planned too: enabling one later keeps the order,
-        # and the kernel computes its enable closure and restart refusal.
+        # Disabled and admission-failed (untrusted, invalid contract) plugins
+        # are planned too but never activated: enabling one later keeps the
+        # order, the kernel computes its enable closure and restart refusal,
+        # and a dependent learns it exists ("未启用或加载失败", not "不存在").
+        # Only conflicting candidates stay out: their id is ambiguous.
         order = await self._kernel.plan(
             self._spec(record)
             for record in selected.values()
-            if record.admission is None
+            if records.get(record.manifest.id) is record
         )
         for record in selected.values():
             if record.manifest.id not in runnable:
@@ -496,6 +499,9 @@ class PluginKernel:
                 raise
             ctx.provide(plugin_key(manifest.id), handle.instance)
 
+        # ``requires`` must keep the order of ``manifest.dependencies``:
+        # ``_dependency_error`` reports the kernel's ``inject[i]`` field as
+        # ``dependencies[i]``.
         return PluginSpec(
             manifest.id,
             setup,
