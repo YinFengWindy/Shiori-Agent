@@ -312,9 +312,9 @@ async def test_new_chain_after_reasoning_persists_meme_and_fires_turn_committed(
         services=HostServices(
             event_bus=event_bus,
             workspace=tmp_path,
-            session_manager=session_manager,
             role_store=RoleStore(tmp_path),
         ),
+        session_manager=session_manager,
     )
     await kernel.load_all()
     assert kernel.loaded_count == 2

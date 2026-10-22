@@ -18,6 +18,8 @@ from agent.plugin_host.core_keys import (
     HOST_CHANNELS,
     HOST_CONFIG_REFERENCES,
     HOST_DIAGNOSTICS,
+    HOST_SESSION_MANAGER,
+    HOST_SESSIONS,
     HOST_TOOL_HOOKS,
     HOST_TOOL_TURN,
     HOST_TOOLS,
@@ -33,6 +35,9 @@ from core.channels.plugin_capability import PluginAvatars, PluginChannels
 from core.common.diagnostics import HostDiagnostics
 from core.common.global_hook_stack import ProcessCrashReporting
 from core.roles.store import RoleStore
+from desktop_bridge.session_presenter import DesktopSessionPresenter
+from session.manager import SessionManager
+from session.plugin_capability import HostPluginSessions
 from shiori_sdk.core.crash_reporting import CRASH_REPORTING
 
 
@@ -41,6 +46,9 @@ def plugin_core_modules(
     *,
     tools: ToolRegistry | None,
     role_store: RoleStore | None,
+    session_manager: SessionManager | None,
+    workspace: Path | None,
+    relationship_runtime: object,
 ) -> tuple[CoreModule, ...]:
     """The core provide list, in provide order, for one runtime generation.
 
@@ -50,7 +58,9 @@ def plugin_core_modules(
     generation's tool registry and ``role_store`` the host's canonical role
     store, whose account index and avatar cache back ``accounts`` and
     ``avatars``; without one (host tests) a plugin declaring a capability
-    over it fails before setup.
+    over it fails before setup. ``session_manager`` backs ``session_manager``
+    and, with the ``workspace`` holding session media, ``sessions``, whose
+    payloads the desktop presenter projects with ``relationship_runtime``.
     """
     roots = [("plugins", directory.resolve()) for directory in plugin_dirs]
 
@@ -78,9 +88,20 @@ def plugin_core_modules(
             provide(HOST_ACCOUNTS, PluginAccounts(role_store.accounts))
             provide(HOST_AVATARS, PluginAvatars(role_store.avatars))
 
+    def provide_sessions(provide: CoreProvide) -> None:
+        """The session manager and the session operations over it (``session``)."""
+        if session_manager is None:
+            return
+        provide(HOST_SESSION_MANAGER, session_manager)
+        if workspace is not None:
+            presenter = DesktopSessionPresenter(None, relationship_runtime)
+            sessions = HostPluginSessions(session_manager, workspace, presenter)
+            provide(HOST_SESSIONS, sessions.as_capability())
+
     return (
         provide_diagnostics,
         provide_config_references,
         provide_tools,
         provide_channels,
+        provide_sessions,
     )

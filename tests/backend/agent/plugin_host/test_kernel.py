@@ -907,7 +907,7 @@ capabilities: {capabilities}
     [
         ("roles", "role_store", True),
         ("models", "role_runtime_registry", True),
-        ("sessions", "session_manager", True),
+        ("sessions", "host.sessions", True),
         ("external_turns", "external_turns", True),
         ("background_results", "background_results", True),
         ("memory", "role_store", True),

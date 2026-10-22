@@ -683,7 +683,6 @@ def build_core_runtime(
             event_bus=event_bus,
             workspace=workspace,
             role_store=role_store,
-            session_manager=session_manager,
             memory_engine=memory_runtime.engine,
             app_config=config,
             light_provider=plugin_light_provider,
@@ -715,7 +714,14 @@ def build_core_runtime(
         ),
         namespace=uuid4().hex,
         strict=shared is not None,
-        core=plugin_core_modules(plugin_dirs, tools=tools, role_store=role_store),
+        core=plugin_core_modules(
+            plugin_dirs,
+            tools=tools,
+            role_store=role_store,
+            session_manager=session_manager,
+            workspace=workspace,
+            relationship_runtime=relationship_runtime,
+        ),
     )
     account_delivery = AccountDelivery(
         role_store.accounts,

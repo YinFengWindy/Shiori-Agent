@@ -122,7 +122,14 @@ def test_core_module_provide_failure_aborts_startup(tmp_path: Path) -> None:
             [tmp_path],
             services=HostServices(event_bus=EventBus()),
             core=(
-                *plugin_core_modules([tmp_path], tools=None, role_store=None),
+                *plugin_core_modules(
+                    [tmp_path],
+                    tools=None,
+                    role_store=None,
+                    session_manager=None,
+                    workspace=None,
+                    relationship_runtime=None,
+                ),
                 broken_core_module,
             ),
         )
