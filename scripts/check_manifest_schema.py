@@ -17,24 +17,25 @@ ROOT = Path(__file__).resolve().parents[1]
 SCHEMA = ROOT / "packages/sdk/manifest.schema.json"
 
 
-def violations(root: Path, schema: dict[str, object]) -> list[str]:
-    """Schema errors of every plugin manifest below ``root/plugins``."""
+def violations(root: Path, schema: dict[str, object]) -> tuple[list[str], int]:
+    """Schema errors of the plugin manifests below ``root/plugins`` and their count."""
     validator = Draft202012Validator(schema)
+    manifests = sorted((root / "plugins").glob("*/manifest.yaml"))
     errors: list[str] = []
-    for manifest in sorted((root / "plugins").glob("*/manifest.yaml")):
+    for manifest in manifests:
         name = manifest.relative_to(root).as_posix()
         raw = yaml.safe_load(manifest.read_text(encoding="utf-8"))
         for error in validator.iter_errors(raw):
             location = ".".join(str(part) for part in error.absolute_path) or "<root>"
             errors.append(f"{name}: {location}: {error.message}")
-    return errors
+    return errors, len(manifests)
 
 
 def main() -> None:
     """Fail on a malformed schema, capability drift or a nonconforming manifest."""
     schema = json.loads(SCHEMA.read_text(encoding="utf-8"))
     Draft202012Validator.check_schema(schema)
-    errors = violations(ROOT, schema)
+    errors, count = violations(ROOT, schema)
     listed = set(schema["properties"]["capabilities"]["items"]["enum"])
     if listed != KNOWN_CAPABILITIES:
         errors.append(
@@ -44,7 +45,6 @@ def main() -> None:
         )
     if errors:
         raise SystemExit("\n".join(errors))
-    count = len(list((ROOT / "plugins").glob("*/manifest.yaml")))
     print(f"{count} plugin manifests match packages/sdk/manifest.schema.json")
 
 

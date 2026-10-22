@@ -36,15 +36,24 @@ def declared_plugins(plugins_dir: Path) -> dict[str, frozenset[str]]:
 def undeclared_imports(
     graph: ImportGraph, declared: dict[str, frozenset[str]]
 ) -> list[dict[str, object]]:
-    """Direct imports from one plugin into another plugin it does not declare."""
+    """Direct imports from one plugin into another plugin it does not declare.
+
+    Raises ``ValueError`` for a module below a plugins directory without a
+    manifest: its allowed imports are unknown, so it cannot be judged.
+    """
     found: list[dict[str, object]] = []
     for importer in sorted(graph.find_descendants(PLUGINS_PACKAGE)):
         owner = importer.split(".")[1]
+        if owner not in declared:
+            raise ValueError(
+                f"{PLUGINS_PACKAGE}/{owner} holds module {importer} "
+                "but has no manifest.yaml"
+            )
         for imported in sorted(graph.find_modules_directly_imported_by(importer)):
             parts = imported.split(".")
             if parts[0] != PLUGINS_PACKAGE or len(parts) < 2:
                 continue
-            if parts[1] in declared.get(owner, frozenset({owner})):
+            if parts[1] in declared[owner]:
                 continue
             for detail in graph.get_import_details(
                 importer=importer, imported=imported

@@ -468,4 +468,4 @@ D2 已定 proactive 是可禁用的系统插件、核心不依赖它。本节是
 
 ### 8.8 内核 LOC 重估（R9）
 
-§8 / D24–D25 增加：watch 串行队列、on_drain 编排、fail_open/closed、`Veto`、replaces/conflicts、环检测、链后校验钩子。原「约 460 / 预算 500」余量不足。**修订目标**：`shiori_sdk.kernel` **≤700 LOC**（注释/docstring 不计入 CI）；超出部分下沉宿主装配层，装配层须有同等契约测。P1/P8 按此门禁。
+§8 / D24–D25 增加：watch 串行队列、on_drain 编排、fail_open/closed、`Veto`、replaces/conflicts、环检测、链后校验钩子。原「约 460 / 预算 500」余量不足。**修订目标**：`shiori_sdk.kernel` **≤700 LOC**（空行、注释和 docstring 不计入 CI）；超出部分下沉宿主装配层，装配层须有同等契约测。P1/P8 按此门禁。

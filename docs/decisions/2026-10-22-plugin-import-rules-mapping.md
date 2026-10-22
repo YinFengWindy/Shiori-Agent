@@ -18,7 +18,7 @@ P0 只新增 import-linter 分层报告（`pyproject.toml` 的 `[tool.importlint
 
 | # | 规则 | 位置 | 结论 | 说明 |
 |---|---|---|---|---|
-| A1 | SDK 和插件不得 `import` / `from … import` 宿主包，含函数内、类内和 `TYPE_CHECKING` 块里的 import | `host_imports` | **覆盖** | 契约「SDK 和插件不 import 宿主」。grimp 收集所有作用域的 import，默认也计入 `TYPE_CHECKING` 块。插件测试（`plugins.<id>.tests`）在图里。 |
+| A1 | SDK 和插件不得 `import` / `from … import` 宿主包，含函数内、类内和 `TYPE_CHECKING` 块里的 import | `host_imports` | **覆盖** | 契约「SDK 和插件不 import 宿主」。grimp 收集所有作用域的 import，默认也计入 `TYPE_CHECKING` 块。插件测试（`plugins.<id>.tests`）在图里。旧检查也扫描 `.pyi`，grimp 不分析 stub；目前仓库里没有 `.pyi`，以后引入 stub 时要另行覆盖。 |
 | A2 | SDK 不得 import `plugins` | `scan` 对 SDK 加 `plugins` | **覆盖** | 契约「SDK 不 import 插件」。 |
 | A3 | 禁止集合按 `apps/backend` 下含 `.py` 的目录和模块动态发现，新增宿主包自动受约束 | `host_roots` | **保留** | import-linter 的 `root_packages` 是静态列表，新增宿主包必须手工加入。替换时保留 `host_roots`（`isolation_probe` / `verify_plugin_tests` 本来也在用），加一个小检查：`root_packages` 必须包含 `host_roots` 里的全部包。`main.py` 是入口模块，不会被 import，不进图。 |
 | A4 | 禁止 `memory2`、`shiori_plugin_testkit` | `host_roots` 附加项 | **放弃** | 两者都已删除，无法安装也无法 import；如果有人在 `apps/backend` 下重建同名包，A3 的动态发现会自动纳入。 |
@@ -64,6 +64,7 @@ import-linter 只分析 import 图，下面这些规则全部看不到。它们�
 | 核心模块不 import 插件 | core 不 import `plugins.*` | 全部宿主包 → `plugins`。宿主通过 `importlib` 动态加载插件，不在静态图里。 |
 | 插件只 import manifest 声明的依赖插件 | 插件只能 import SDK 和已声明依赖的插件 | 自定义契约 `scripts/plugin_import_contract.py`：允许集合是插件自身加上 manifest 的 `dependencies` / `optional_dependencies`。「只能 import SDK」中禁止宿主的部分由 A1 的契约覆盖。 |
 | `shiori_sdk.kernel` 只 import `shiori_sdk`，且不 import 核心契约模块 | 同左 | **P1 建包时加入**：import-linter 遇到不存在的模块会直接报错退出。 |
+| 前端：eslint `no-restricted-imports`，插件 ui 只能 import `@yinfengwindy/shiori-sdk` 和 react | 同左 | **P0 不实现，延后到 P7（#908，前端入口统一时）**：P0 的 ticket 范围是 import-linter（Python import 图）；前端插件入口的形态（一个 frontend 入口 + 具名导出）要到 P7 才定下来，现在按 renderer 三种 kind 写规则，P7 还得重写。 |
 
 所有契约只检查直接 import（`allow_indirect_imports = true`）。内核搬进 `shiori_sdk.kernel` 后，「只许 import SDK」本身就是传递约束。
 

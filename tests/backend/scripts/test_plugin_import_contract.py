@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+import pytest
 from grimp import ImportGraph
 
 from scripts.plugin_import_contract import declared_plugins, undeclared_imports
@@ -49,3 +50,14 @@ def test_only_imports_missing_from_the_importer_manifest_are_reported(
             "line_number": 3,
         }
     ]
+
+
+def test_a_plugins_directory_without_manifest_is_an_error(tmp_path: Path) -> None:
+    (tmp_path / "story").mkdir()
+    (tmp_path / "story" / "manifest.yaml").write_text("id: story\n", encoding="utf-8")
+    graph = ImportGraph()
+    for module in ("plugins", "plugins.story.plugin", "plugins.shared.util"):
+        graph.add_module(module)
+
+    with pytest.raises(ValueError, match="plugins/shared .* no manifest.yaml"):
+        undeclared_imports(graph, declared_plugins(tmp_path))
