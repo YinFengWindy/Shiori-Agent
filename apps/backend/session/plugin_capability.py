@@ -1,6 +1,6 @@
 """The ``sessions`` plugin capability: session operations the host owns (#901 P2).
 
-``HostPluginSessions`` is the ``host.sessions`` core service, shared by every
+``HostSessions`` is the ``host.sessions`` core service, shared by every
 plugin: persistence stays with the ``SessionManager`` and the payloads it
 returns use the desktop session projection.
 """
@@ -10,7 +10,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from shiori_sdk.sessions import PluginSessions
 
 from session.manager import SessionManager
 from session.media_assets import original_media_path
@@ -19,7 +18,7 @@ if TYPE_CHECKING:
     from desktop_bridge.session_presenter import DesktopSessionPresenter
 
 
-class HostPluginSessions:
+class HostSessions:
     """Allow media regeneration without exporting session storage/presenter internals."""
 
     def __init__(
@@ -74,7 +73,3 @@ class HostPluginSessions:
             "session": self._presenter.serialize_summary(session),
             "message": self._presenter.serialize_message(message),
         }
-
-    def as_capability(self) -> PluginSessions:
-        """Check the real owner adapter against the plugin contract."""
-        return self

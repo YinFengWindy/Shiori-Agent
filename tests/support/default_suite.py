@@ -50,7 +50,7 @@ DEFAULT_FILES: frozenset[str] = frozenset(
         "tests/backend/agent/plugin_host/test_kernel_reload.py",
         "tests/backend/agent/plugin_host/test_package_contract.py",
         "tests/backend/agent/plugin_host/test_host_contract.py",
-        "tests/backend/agent/plugin_host/test_external_turns.py",
+        "tests/backend/conversation/test_external_turns.py",
         "tests/backend/bootstrap/test_wiring.py",
         "tests/backend/bootstrap/test_app.py",
         "tests/backend/bootstrap/runtime/test_reload.py",

@@ -9,7 +9,6 @@ import sys
 from pathlib import Path
 from typing import BinaryIO
 
-from shiori_sdk.processes import Processes
 
 from agent.mcp.client import McpClient
 from infra.process.owned_spawn import popen_owned, spawn_owned
@@ -51,10 +50,6 @@ class HostProcesses:
         return await spawn_owned(
             *command, env=env, cwd=cwd, stdin=stdin, stdout=stdout, stderr=stderr
         )
-
-    def as_capability(self) -> Processes:
-        """Check MCP and process results at their real construction point."""
-        return self
 
     def popen(
         self,

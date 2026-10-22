@@ -13,8 +13,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
-from shiori_sdk.models import ModelSnapshot, RoleModels
-from shiori_sdk.roles import Roles
+from shiori_sdk.models import ModelSnapshot
 
 if TYPE_CHECKING:
     from core.roles import RoleStore
@@ -60,10 +59,6 @@ class HostRoles:
         """Opaque plugin namespaces use the same canonical manifest transaction."""
         return self._store.extensions
 
-    def as_capability(self) -> Roles:
-        """Check the real implementation at the host injection boundary."""
-        return self
-
 
 class HostRoleModels:
     """Expose model snapshots without exporting runtime registry internals."""
@@ -79,7 +74,3 @@ class HostRoleModels:
         runtime = await self._registry.get(role_id)
         with runtime.activate_model(purpose) as snapshot:
             yield snapshot
-
-    def as_capability(self) -> RoleModels:
-        """Validate the actual adapter against the SDK protocol."""
-        return self

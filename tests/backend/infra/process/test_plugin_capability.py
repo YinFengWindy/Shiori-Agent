@@ -19,16 +19,12 @@ def test_sync_spawn_uses_existing_host_owned_tree_boundary(
     command = ["node.exe", "index.js"]
     environment = {"NAPCAT_WORKDIR": str(tmp_path)}
     with (tmp_path / "process.log").open("ab") as log:
-        result = (
-            processes.HostProcesses()
-            .as_capability()
-            .popen(
-                command,
-                cwd=tmp_path,
-                env=environment,
-                stdout=log,
-                stderr=subprocess.STDOUT,
-            )
+        result = processes.HostProcesses().popen(
+            command,
+            cwd=tmp_path,
+            env=environment,
+            stdout=log,
+            stderr=subprocess.STDOUT,
         )
         assert result == (child, owner)
         spawn.assert_called_once_with(

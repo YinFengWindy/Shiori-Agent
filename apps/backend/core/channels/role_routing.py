@@ -1,7 +1,7 @@
 """Turns admitted external input into a role turn through its source thread.
 
 Channel account intake (``ChannelHub``) and plugin-submitted external turns
-(``conversation.plugin_capability``) share this one implementation: the
+(``conversation.external_turns``) share this one implementation: the
 source thread, the projection onto the role's session and the role execution
 context are built the same way, so both are judged and stored identically.
 """
