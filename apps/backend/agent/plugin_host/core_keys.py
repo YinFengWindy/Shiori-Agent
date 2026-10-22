@@ -23,8 +23,9 @@ from shiori_sdk.channels import Channel
 from shiori_sdk.channels.avatars import AvatarsCapability
 from shiori_sdk.channels.context import ChannelsCapability
 from shiori_sdk.diagnostics import Diagnostics
+from shiori_sdk.memory.context import MemoryCapability
 from shiori_sdk.models import ChatProvider, RoleModels
-from shiori_sdk.processes import ToolTurn
+from shiori_sdk.processes import Processes, Resources, ToolTurn
 from shiori_sdk.roles import Roles, SceneObservations
 from shiori_sdk.sessions import PluginSessions, SessionUndo
 from shiori_sdk.tool_hooks import ToolHooksCapability
@@ -171,6 +172,15 @@ HOST_SCENE_OBSERVATIONS: Key[PluginCapabilityBinder[SceneObservations]] = Key(
 )
 """The ``scene_observations`` capability over the shared demand (``core.scene``)."""
 
+HOST_MEMORY: Key[MemoryCapability] = Key("host.memory")
+"""The ``memory`` capability: the memory plugin's surface (``bootstrap.memory_capabilities``)."""
+
+HOST_PROCESSES: Key[Processes] = Key("host.processes")
+"""The ``processes`` capability: host-owned native processes (``infra.process``)."""
+
+HOST_RESOURCES: Key[Resources] = Key("host.resources")
+"""The ``resources`` capability: host-distributed resources (``bootstrap.plugin_capability``)."""
+
 HOST_CONFIG_REFERENCES: Key[Callable[[str], str]] = Key("host.config_references")
 """Expands ``${NAME}`` references for ``config.resolve_reference``.
 
@@ -214,6 +224,9 @@ CORE_CAPABILITIES: Mapping[str, CoreCapability] = {
     "light_provider": CoreCapability(HOST_LIGHT_PROVIDER),
     "light_model": CoreCapability(HOST_LIGHT_MODEL),
     "scene_observations": CoreCapability(HOST_SCENE_OBSERVATIONS, per_plugin=True),
+    "memory": CoreCapability(HOST_MEMORY),
+    "processes": CoreCapability(HOST_PROCESSES),
+    "resources": CoreCapability(HOST_RESOURCES),
 }
 
 

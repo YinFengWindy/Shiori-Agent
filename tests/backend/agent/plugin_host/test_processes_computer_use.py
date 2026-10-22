@@ -41,7 +41,7 @@ async def test_real_controlled_window(tmp_path, monkeypatch):
     native = Path(os.environ["SHIORI_COMPUTER_USE_RUNTIME"]).resolve()
     assert native.parent.name == "native" and native.name == "computer-use", native
     monkeypatch.setattr(
-        "agent.plugin_host.processes.resource_root", lambda: native.parent.parent
+        "bootstrap.plugin_capability.resource_root", lambda: native.parent.parent
     )
     evidence = Path(
         os.environ.get("SHIORI_COMPUTER_USE_EVIDENCE", str(tmp_path / "evidence"))

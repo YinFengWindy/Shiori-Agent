@@ -5,7 +5,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from agent.plugin_host import processes
+from infra.process import plugin_capability as processes
 
 
 @pytest.mark.parametrize("platform,owned", [("win32", True), ("linux", False)])

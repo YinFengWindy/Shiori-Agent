@@ -167,6 +167,7 @@ def test_core_module_provide_failure_aborts_startup(tmp_path: Path) -> None:
                     light_provider=None,
                     light_model=None,
                     scene_observations=SceneObservationDemand(),
+                    memory_engine=None,
                 ),
                 broken_core_module,
             ),

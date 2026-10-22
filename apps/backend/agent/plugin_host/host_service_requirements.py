@@ -16,7 +16,6 @@ CAPABILITY_HOST_SERVICES: Mapping[str, tuple[str, ...]] = {
     "workspace": ("workspace",),
     "kv": ("workspace",),
     "role_store": ("role_store",),
-    "memory": ("workspace", "role_store"),
     "external_turns": ("external_turns",),
     "background_results": ("background_results",),
     "process_resources": ("process_resources",),

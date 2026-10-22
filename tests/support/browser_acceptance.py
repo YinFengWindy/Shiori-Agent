@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from agent.plugin_host.processes import HostProcesses
+from infra.process.plugin_capability import HostProcesses
 from scripts.browser_acceptance import BrowserAcceptanceEvidence
 from shiori_sdk.processes import ProcessOwner
 

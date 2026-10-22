@@ -21,7 +21,10 @@ from agent.plugin_host.core_keys import (
     HOST_DIAGNOSTICS,
     HOST_LIGHT_MODEL,
     HOST_LIGHT_PROVIDER,
+    HOST_MEMORY,
     HOST_MODELS,
+    HOST_PROCESSES,
+    HOST_RESOURCES,
     HOST_ROLE_RUNTIME_REGISTRY,
     HOST_ROLES,
     HOST_SCENE_OBSERVATIONS,
@@ -37,6 +40,8 @@ from agent.tool_hooks.plugin_capability import PluginToolHooks
 from agent.tools.plugin_capability import PluginTools
 from agent.tools.registry import ToolRegistry
 from agent.tools.turn_scope import current_tool_turn
+from bootstrap.memory_capabilities import HostMemoryCapability
+from bootstrap.plugin_capability import HostResources
 from core.accounts.plugin_capability import PluginAccounts
 from core.channels.plugin_capability import PluginAvatars, PluginChannels
 from core.common.diagnostics import HostDiagnostics
@@ -47,9 +52,12 @@ from core.roles.store import RoleStore
 from core.scene.demand import SceneObservationDemand
 from core.scene.plugin_capability import PluginSceneObservations
 from desktop_bridge.session_presenter import DesktopSessionPresenter
+from infra.process.plugin_capability import HostProcesses
 from session.manager import SessionManager
 from session.plugin_capability import HostPluginSessions
 from shiori_sdk.core.crash_reporting import CRASH_REPORTING
+from shiori_sdk.memory.engine import MemoryEngine
+from shiori_sdk.processes import Resources
 
 
 def plugin_core_modules(
@@ -64,6 +72,7 @@ def plugin_core_modules(
     light_provider: LLMProvider | None,
     light_model: str | None,
     scene_observations: SceneObservationDemand,
+    memory_engine: MemoryEngine | None,
 ) -> tuple[CoreModule, ...]:
     """The core provide list, in provide order, for one runtime generation.
 
@@ -79,7 +88,8 @@ def plugin_core_modules(
     ``role_store`` also backs ``roles``, and ``role_runtime_registry`` backs
     ``models`` and its own passthrough; ``light_provider`` and ``light_model``
     are the plugins' light model. ``scene_observations`` is the generation's
-    demand registry the scene controller reads.
+    demand registry the scene controller reads. ``memory_engine`` (None when
+    memory is disabled) goes into ``memory`` with the workspace and role store.
     """
     roots = [("plugins", directory.resolve()) for directory in plugin_dirs]
 
@@ -133,6 +143,21 @@ def plugin_core_modules(
         """Plugin demand for scene observations (``core.scene``)."""
         provide(HOST_SCENE_OBSERVATIONS, PluginSceneObservations(scene_observations))
 
+    def provide_memory(provide: CoreProvide) -> None:
+        """The memory plugin's setup surface (``bootstrap.memory_capabilities``)."""
+        if workspace is not None and role_store is not None:
+            provide(
+                HOST_MEMORY,
+                HostMemoryCapability(workspace, role_store, memory_engine),
+            )
+
+    def provide_processes(provide: CoreProvide) -> None:
+        """Host-owned native processes and distributed resources."""
+        provide(HOST_PROCESSES, HostProcesses().as_capability())
+        # Typed as the plugin contract, so pyright checks the host implementation.
+        resources: Resources = HostResources()
+        provide(HOST_RESOURCES, resources)
+
     return (
         provide_diagnostics,
         provide_config_references,
@@ -141,4 +166,6 @@ def plugin_core_modules(
         provide_sessions,
         provide_roles,
         provide_scene,
+        provide_memory,
+        provide_processes,
     )

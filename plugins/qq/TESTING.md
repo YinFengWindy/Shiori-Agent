@@ -10,4 +10,4 @@ uv run --no-project --python .venv python -m pytest -c pyproject.toml tests
 
 安装不使用 editable，不设置原仓库 `PYTHONPATH`，不复制根 conftest。可用 `shiori_sdk.testing.packages.stage_plugin_package` 暂存插件。账号/HTTP/头像/进程使用 SDK fake；真实 NapCat 不会被单测安装或启动，私有 profile、端口、二维码、账号、OneBot 与发送/附件规则仍在插件内验证。
 
-重启加载、孤儿清理与规则持久化在本插件 `tests/test_plugin.py` 验证；投递账本、头像缓存、角色删除等宿主协议由宿主的中性测试覆盖。同步进程能力验证在 `tests/backend/agent/plugin_host/test_processes.py`，与原 `infra/process` WindowsJob 清理及 QQ 管理进程单测一起加入 Windows CI。真机 NapCat 登录需 Windows x64；NapCat Windows Node 包自带 QQNT 运行时，不依赖本机安装的 QQ 及其版本。
+重启加载、孤儿清理与规则持久化在本插件 `tests/test_plugin.py` 验证；投递账本、头像缓存、角色删除等宿主协议由宿主的中性测试覆盖。同步进程能力验证在 `tests/backend/infra/process/test_plugin_capability.py`，与原 `infra/process` WindowsJob 清理及 QQ 管理进程单测一起加入 Windows CI。真机 NapCat 登录需 Windows x64；NapCat Windows Node 包自带 QQNT 运行时，不依赖本机安装的 QQ 及其版本。

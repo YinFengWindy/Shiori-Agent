@@ -20,7 +20,6 @@ from typing import Any, cast
 from uuid import uuid4
 
 from agent.plugin_host.services import ScopedPluginServices
-from agent.plugin_host.processes import HostProcesses, HostResources
 from shiori_sdk.http import HttpClient
 from shiori_sdk.external_turns import ExternalTurns
 from shiori_sdk.background_results import BackgroundResults
@@ -66,7 +65,6 @@ from agent.plugin_host.manifest import (
     ManifestError,
     PluginManifest,
 )
-from agent.plugin_host.memory import HostMemoryCapability
 from agent.plugin_host.package_fingerprint import (
     PackageContent,
     inspect_package_content,
@@ -721,17 +719,6 @@ class PluginKernel:
                 if "events" in handle.record.manifest.capabilities
                 else None
             ),
-            memory=(
-                HostMemoryCapability(
-                    self._services.workspace,
-                    self._services.role_store,
-                    self._services.memory_engine,
-                )
-                if "memory" in handle.record.manifest.capabilities
-                and self._services.workspace is not None
-                and self._services.role_store is not None
-                else None
-            ),
             rpc=rpc,
             workspace=self._services.workspace,
             config=PluginConfig(
@@ -773,8 +760,6 @@ class PluginKernel:
                 else None
             ),
             http=services.http if "http" in grants else None,
-            resources=HostResources().as_capability(),
-            processes=HostProcesses().as_capability(),
             runtime=PluginRuntimeLifecycle(
                 services.is_reload or reactivated,
                 handle.effects.drainers,
