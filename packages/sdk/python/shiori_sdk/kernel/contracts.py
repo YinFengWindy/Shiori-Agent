@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Awaitable, Callable, Iterable, Mapping
 from dataclasses import dataclass, field
+from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
@@ -19,6 +21,25 @@ type FailurePolicy = Literal["fail_open", "fail_closed"]
 ``fail_closed`` stops the chain and makes ``emit`` return a ``Veto``. An event
 type declares it as the class attribute ``on_error: ClassVar[FailurePolicy]``.
 """
+
+
+class KernelState(StrEnum):
+    """Lifecycle states the kernel assigns to a plugin.
+
+    ``PluginDiagnostic.state`` stores the value; hosts may add states of their
+    own (trust, admission) in diagnostics the kernel never produces.
+    """
+
+    ACTIVE = "ACTIVE"
+    FAILED = "FAILED"
+    BLOCKED = "BLOCKED"
+    REPLACED = "REPLACED"
+    STOPPED = "STOPPED"
+
+
+def plugin_logger(plugin_id: str) -> logging.Logger:
+    """The logger behind ``ctx.log``; kernel reports about a plugin go here too."""
+    return logging.getLogger(f"shiori.plugin.{plugin_id}")
 
 
 class Key[T]:
@@ -104,19 +125,14 @@ class PluginStopped:
 class KernelError(RuntimeError):
     """A kernel rule rejected an operation; ``plugin_ids`` names who is involved.
 
-    Nothing changed when it is raised; ``diagnostic.state`` is the state the
-    named plugins are in (``ACTIVE`` for a refused reload).
+    Nothing changed when it is raised, so ``diagnostic.state`` is ``ACTIVE``:
+    the refusal itself moves no plugin to another state.
     """
 
     def __init__(
-        self,
-        code: str,
-        stage: str,
-        field: str,
-        reason: str,
-        ids: Iterable[str],
-        state: str = "ACTIVE",
+        self, code: str, stage: str, field: str, reason: str, ids: Iterable[str]
     ) -> None:
+        state = KernelState.ACTIVE
         self.diagnostic = PluginDiagnostic(code, stage, field, reason, state=state)
         self.plugin_ids: tuple[str, ...] = tuple(ids)
         super().__init__(reason)

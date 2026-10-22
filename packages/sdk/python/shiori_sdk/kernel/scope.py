@@ -4,15 +4,14 @@ from __future__ import annotations
 
 import asyncio
 import inspect
-import logging
 from collections.abc import Awaitable, Callable, Coroutine, Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any
 
-type Dispose = Callable[[], Awaitable[object] | object]
+from .contracts import plugin_logger
 
-logger = logging.getLogger("shiori_sdk.kernel")
+type Dispose = Callable[[], Awaitable[object] | object]
 
 WATCH_GRACE = 1.0
 """Seconds a closing scope lets queued ``watch`` deliveries finish before cancelling."""
@@ -97,7 +96,8 @@ class Scope:
         self._tasks.discard(task)
         self._workers.discard(task)
         if not task.cancelled() and (error := task.exception()) is not None:
-            logger.error("插件 %s 的任务异常结束", self.owner, exc_info=error)
+            log = plugin_logger(self.owner)
+            log.error("插件 %s 的任务异常结束", self.owner, exc_info=error)
 
     @contextmanager
     def busy(self) -> Generator[None]:
@@ -128,9 +128,8 @@ class Scope:
         self._closing = True
         async with self._lock:
             errors: list[Exception] = []
-            for entry in [
-                entry for entry in reversed(self._entries) if entry.subscription
-            ]:
+            subscriptions = [e for e in reversed(self._entries) if e.subscription]
+            for entry in subscriptions:
                 await self._release(entry, errors)
             if self._workers:
                 _ = await asyncio.wait(set(self._workers), timeout=WATCH_GRACE)
@@ -150,5 +149,6 @@ class Scope:
             if inspect.isawaitable(result):
                 await result
         except Exception as error:
-            logger.warning("插件 %s 清理 %s 失败: %s", self.owner, entry.label, error)
+            message = "插件 %s 清理 %s 失败: %s"
+            plugin_logger(self.owner).warning(message, self.owner, entry.label, error)
             errors.append(error)

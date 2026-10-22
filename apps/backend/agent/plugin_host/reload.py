@@ -21,7 +21,6 @@ from agent.plugin_host.process_resources import ResourceRetention
 from agent.plugin_host.unload import (
     PluginReloadFailed,
     PluginReloadTimeout,
-    PluginReloadUnsupported,
 )
 
 logger = logging.getLogger(__name__)
@@ -84,21 +83,6 @@ def hot_unload_blockers(handles: Iterable[PluginHandle]) -> list[str]:
         for handle in handles
         if not handle.record.manifest.supports_hot_unload
     ]
-
-
-def refuse_generation_only(closure: list[PluginHandle]) -> None:
-    """Rejects closures whose plugins only a generation swap may load or unload."""
-    channels = [
-        handle.plugin_id
-        for handle in closure
-        if "channels" in handle.record.manifest.capabilities
-        or handle.record.manifest.channels
-        or handle.contributions.channels
-    ]
-    if channels:
-        raise PluginReloadUnsupported(channels, "channels")
-    if unsafe := hot_unload_blockers(closure):
-        raise PluginReloadUnsupported(unsafe, "hot_unload")
 
 
 async def reload_closure(

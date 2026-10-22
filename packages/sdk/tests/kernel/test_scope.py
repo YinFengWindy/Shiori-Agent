@@ -4,7 +4,7 @@ import asyncio
 
 import pytest
 
-from shiori_sdk.kernel import Scope
+from shiori_sdk.kernel import Scope, scope as scope_module
 
 
 async def test_close_releases_subscriptions_then_tasks_then_effects_lifo() -> None:
@@ -53,7 +53,7 @@ async def test_failing_effect_is_reported_and_the_rest_still_runs() -> None:
     assert closed == ["first"]
 
 
-async def test_drain_waits_for_handlers_in_flight_then_runs_on_drain() -> None:
+async def test_on_drain_runs_after_the_handlers_in_flight() -> None:
     scope = Scope("demo")
     release = asyncio.Event()
     steps: list[str] = []
@@ -66,20 +66,39 @@ async def test_drain_waits_for_handlers_in_flight_then_runs_on_drain() -> None:
     async def on_drain() -> None:
         steps.append("on_drain")
 
-    resident = scope.spawn(asyncio.Event().wait())
     running = asyncio.create_task(handler())
     scope.drainers.append(on_drain)
     await asyncio.sleep(0)
     draining = asyncio.create_task(scope.drain())
     await asyncio.sleep(0.01)
-    assert not draining.done()
+    assert steps == []
 
     release.set()
     await asyncio.wait_for(draining, 1)
-
-    # The resident task is not waited for; only ``close`` ends it.
-    assert steps == ["handler done", "on_drain"]
-    assert not resident.done()
     await running
-    _ = await scope.close()
-    assert resident.cancelled()
+    assert steps == ["handler done", "on_drain"]
+
+
+async def test_close_lets_watch_deliveries_finish_within_grace_then_cancels(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(scope_module, "WATCH_GRACE", 0.05)
+    scope = Scope("demo")
+    delivered: list[str] = []
+
+    async def quick() -> None:
+        await asyncio.sleep(0.01)
+        delivered.append("quick")
+
+    async def stuck() -> None:
+        await asyncio.Event().wait()
+
+    finishing = scope.spawn(quick(), worker=True)
+    hanging = scope.spawn(stuck(), worker=True)
+    await asyncio.sleep(0)
+
+    assert await scope.close() == []
+
+    assert delivered == ["quick"]
+    assert finishing.done() and not finishing.cancelled()
+    assert hanging.cancelled()

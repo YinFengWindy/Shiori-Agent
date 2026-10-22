@@ -10,6 +10,7 @@ from shiori_sdk.kernel import (
     Context,
     Kernel,
     KernelError,
+    KernelState,
     Key,
     PluginFailed,
     PluginSpec,
@@ -59,9 +60,9 @@ async def test_setup_failure_blocks_requirers_and_optional_consumers_get_none() 
 
     failed = kernel.status("provider")
     blocked = kernel.status("hard")
-    assert failed is not None and failed.state == "FAILED"
+    assert failed is not None and failed.state is KernelState.FAILED
     assert failed.diagnostic is not None and "cannot start" in failed.diagnostic.reason
-    assert blocked is not None and blocked.state == "BLOCKED"
+    assert blocked is not None and blocked.state is KernelState.BLOCKED
     assert blocked.diagnostic is not None and "service" in blocked.diagnostic.reason
     assert seen == {"soft": None}
     assert kernel.get(SERVICE) is None
@@ -113,7 +114,7 @@ async def test_require_and_provide_must_be_declared_in_the_manifest() -> None:
 
     for plugin_id in ("sneaky", "over"):
         status = kernel.status(plugin_id)
-        assert status is not None and status.state == "FAILED"
+        assert status is not None and status.state is KernelState.FAILED
         assert isinstance(status.error, KernelError)
         assert status.error.diagnostic.code == "undeclared_key"
 
@@ -260,7 +261,7 @@ async def test_drain_timeout_abandons_the_reload_and_keeps_the_old_instance() ->
     assert "保留旧实例" in aborted.value.diagnostic.reason
     assert aborted.value.plugin_ids == ("slow",)
     status = kernel.status("slow")
-    assert status is not None and status.state == "ACTIVE"
+    assert status is not None and status.state is KernelState.ACTIVE
     assert kernel.get(SERVICE) == "old"
     assert disposed == []
     stuck.set()
@@ -324,3 +325,24 @@ async def test_next_get_after_reload_returns_the_new_provider_generation() -> No
 
     assert seen_by_consumer == [1, 2]
     assert kernel.get(key) == Generation(2)
+
+
+async def test_closure_takes_optional_consumers_only_for_a_reload() -> None:
+    kernel = Kernel()
+    await kernel.start(
+        [
+            _chain_member("provider", provides=("base",)),
+            _chain_member("hard", requires=("base",)),
+            PluginSpec("soft", _idle, optional=("base",)),
+            _chain_member("other"),
+        ]
+    )
+
+    assert set(kernel.closure("provider", optional=False)) == {"provider", "hard"}
+    assert set(kernel.closure("provider", optional=True)) == {
+        "provider",
+        "hard",
+        "soft",
+    }
+    # Dependents first: the provider is disposed last and set up first.
+    assert kernel.closure("provider", optional=False)[-1] == "provider"

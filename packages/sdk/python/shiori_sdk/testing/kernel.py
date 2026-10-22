@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Mapping
 from typing import Any
 
@@ -33,7 +34,13 @@ class KernelHarness:
 
     async def idle(self) -> None:
         """Waits until every queued ``watch`` delivery has run."""
-        await self.kernel._events.idle()  # pyright: ignore[reportPrivateUsage]
+        queues = self.kernel._events._queues  # pyright: ignore[reportPrivateUsage]
+        while busy := [
+            queue.worker
+            for queue in queues.values()
+            if queue.worker is not None and not queue.worker.done()
+        ]:
+            _ = await asyncio.gather(*busy, return_exceptions=True)
 
     async def stop(self) -> list[Exception]:
         """Stops every running plugin; returns the cleanup errors."""

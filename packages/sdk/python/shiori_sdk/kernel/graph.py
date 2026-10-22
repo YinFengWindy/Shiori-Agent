@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 
-from .contracts import KernelError, PluginSpec
+from .contracts import KernelError, KernelState, PluginSpec
 from .diagnostics import PluginDiagnostic
 
 
@@ -23,7 +23,9 @@ class Plan:
     owners: dict[str, str]
 
 
-def _refused(code: str, field: str, reason: str, state: str = "BLOCKED"):
+def _refused(
+    code: str, field: str, reason: str, state: str = KernelState.BLOCKED
+) -> PluginDiagnostic:
     return PluginDiagnostic(code, "dependency", field, reason, state=state)
 
 
@@ -41,7 +43,9 @@ def plan(specs: Sequence[PluginSpec], core: Collection[str]) -> Plan:
     for spec in live:
         for other in set(spec.replaces) & ids:
             reason = f"插件 {other} 已被 {spec.id} 替换"
-            excluded[other] = _refused("replaced", "replaces", reason, "REPLACED")
+            excluded[other] = _refused(
+                "replaced", "replaces", reason, KernelState.REPLACED
+            )
     replaced = set(excluded)
     for spec in live:
         for other in set(spec.conflicts) & (ids - replaced - {spec.id}):
@@ -116,12 +120,16 @@ def _cycles(deps: Mapping[str, Sequence[str]]) -> list[tuple[str, ...]]:
 
 
 def dependents(
-    target: str, specs: Mapping[str, PluginSpec], owners: Mapping[str, str]
+    target: str,
+    specs: Mapping[str, PluginSpec],
+    owners: Mapping[str, str],
+    optional: bool,
 ) -> set[str]:
     """``target`` plus every plugin in ``specs`` that (transitively) injects from it.
 
-    Optional injection counts too: a consumer of a reloaded provider is reset
-    with it, so it never keeps a reference to the old instance (§8.2).
+    With ``optional`` the consumers through ``optional_inject`` count too: a
+    reload resets them with their provider, so none keeps the old instance
+    (§8.2); disabling only takes the ``requires`` dependents.
     """
     found = {target}
     grew = True
@@ -129,7 +137,8 @@ def dependents(
         grew = False
         for spec in specs.values():
             if spec.id not in found and any(
-                owners.get(name) in found for name in (*spec.requires, *spec.optional)
+                owners.get(name) in found
+                for name in (*spec.requires, *(spec.optional if optional else ()))
             ):
                 found.add(spec.id)
                 grew = True

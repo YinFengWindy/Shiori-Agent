@@ -10,8 +10,8 @@ from pathlib import Path
 from typing import Any
 
 from . import graph
-from .contracts import Key, KernelError, PluginFailed, PluginSpec, PluginStarted
-from .contracts import PluginStopped, Veto
+from .contracts import Key, KernelError, KernelState, PluginFailed, PluginSpec
+from .contracts import PluginStarted, PluginStopped, Veto, plugin_logger
 from .diagnostics import PluginDiagnostic
 from .events import WATCH_LIMIT, Check, EventHub, OnHandler, WatchHandler
 from .scope import Dispose, Scope
@@ -33,7 +33,7 @@ class PluginStatus:
     plugin's scope reported (after a failed setup or a stop).
     """
 
-    state: str
+    state: KernelState
     diagnostic: PluginDiagnostic | None = None
     error: BaseException | None = None
     cleanup_errors: tuple[Exception, ...] = ()
@@ -46,7 +46,7 @@ class Context:
         self.plugin_id = spec.id
         self.data_dir: Path | None = spec.data_dir
         self.config: Mapping[str, object] = spec.config
-        self.log = logging.getLogger(f"shiori.plugin.{spec.id}")
+        self.log = plugin_logger(spec.id)
         self._kernel = kernel
         self._spec = spec
         self._scope = scope
@@ -73,9 +73,8 @@ class Context:
     def _declared(self, key: Key[Any], names: tuple[str, ...], field: str) -> None:
         if key.name not in names:
             reason = f"插件 {self.plugin_id} 未在 manifest {field} 中声明 {key.name}"
-            raise KernelError(
-                "undeclared_key", "setup", field, reason, [self.plugin_id]
-            )
+            code, ids = "undeclared_key", [self.plugin_id]
+            raise KernelError(code, "setup", field, reason, ids)
 
     def on[E](self, event_type: type[E], handler: OnHandler[E]) -> None:
         """Joins the ordered chain; return the (replaced) event or ``Veto``."""
@@ -145,7 +144,13 @@ class Kernel:
         """The plugin's latest status, None when the kernel never saw it."""
         return self._status.get(plugin_id)
 
-    def _register(self, key: Key[Any], impl: object, owner: str, scope: Scope | None):
+    def order(self) -> tuple[str, ...]:
+        """Every planned plugin in setup order: dependency depth, then id (§8.1)."""
+        return tuple(self._rank)
+
+    def _register(
+        self, key: Key[Any], impl: object, owner: str, scope: Scope | None
+    ) -> None:
         if scope is not None:
             scope.ensure_active(f"provide:{key.name}")
         if key.name in self._providers:
@@ -179,7 +184,8 @@ class Kernel:
         for plugin_id, excluded in plan.excluded.items():
             known = getattr(self._status.get(plugin_id), "diagnostic", None)
             if plugin_id not in self._scopes and known != excluded:
-                _ = await self._settle(plugin_id, excluded.state, excluded)
+                state = KernelState(excluded.state)
+                _ = await self._settle(plugin_id, state, excluded)
         return plan.order
 
     def scope(self, plugin_id: str) -> Scope:
@@ -196,28 +202,31 @@ class Kernel:
             reason = f"插件 {plugin_id} 依赖的 {'、'.join(missing)} 不可用"
             code = "dependency_unavailable"
             blocked = PluginDiagnostic(code, "dependency", "inject", reason)
-            return await self._settle(plugin_id, "BLOCKED", blocked)
+            return await self._settle(plugin_id, KernelState.BLOCKED, blocked)
         scope = self._scopes[plugin_id] = Scope(plugin_id)
         try:
             await spec.setup(Context(self, spec, scope))
         except BaseException as error:
             errors = tuple(await self._release(plugin_id))
             reason = f"插件 {plugin_id} 启动失败: {str(error) or type(error).__name__}"
+            state = KernelState.FAILED
             failed = PluginDiagnostic(
-                "setup_failed", "setup", "setup", reason, "", "FAILED"
+                "setup_failed", "setup", "setup", reason, "", state
             )
             if not isinstance(error, Exception):
-                self._status[plugin_id] = PluginStatus("FAILED", failed, error, errors)
+                self._status[plugin_id] = PluginStatus(state, failed, error, errors)
                 raise
-            return await self._settle(plugin_id, "FAILED", failed, error, errors)
-        return await self._settle(plugin_id, "ACTIVE")
+            return await self._settle(plugin_id, state, failed, error, errors)
+        return await self._settle(plugin_id, KernelState.ACTIVE)
 
     async def deactivate(self, plugin_id: str) -> list[Exception]:
         """Releases a plugin's scope (stopped or failed) and marks it STOPPED."""
         if plugin_id not in self._scopes:
             return []
         errors = await self._release(plugin_id)
-        _ = await self._settle(plugin_id, "STOPPED", None, None, tuple(errors))
+        _ = await self._settle(
+            plugin_id, KernelState.STOPPED, None, None, tuple(errors)
+        )
         return errors
 
     async def _release(self, plugin_id: str) -> list[Exception]:
@@ -231,25 +240,49 @@ class Kernel:
     async def _settle(
         self,
         plugin_id: str,
-        state: str,
+        state: KernelState,
         problem: PluginDiagnostic | None = None,
         error: BaseException | None = None,
         cleanup: tuple[Exception, ...] = (),
     ) -> PluginStatus:
         status = self._status[plugin_id] = PluginStatus(state, problem, error, cleanup)
-        if state == "ACTIVE":
+        if state is KernelState.ACTIVE:
             _ = await self.emit(PluginStarted(plugin_id))
-        elif state == "STOPPED":
+        elif state is KernelState.STOPPED:
             _ = await self.emit(PluginStopped(plugin_id))
-        elif problem is not None and state in ("FAILED", "BLOCKED"):
+        elif problem is not None and state in (KernelState.FAILED, KernelState.BLOCKED):
             _ = await self.emit(PluginFailed(plugin_id, problem))
         return status
 
-    def closure(self, plugin_id: str) -> list[str]:
-        """``plugin_id`` and its running dependents, dependents first (§8.2)."""
-        running = {pid: self._specs[pid] for pid in self._scopes}
-        found = graph.dependents(plugin_id, running, self._owners)
+    def closure(
+        self, plugin_id: str, *, optional: bool, among: Iterable[str] | None = None
+    ) -> list[str]:
+        """``plugin_id`` and its dependents in ``among``, dependents first.
+
+        ``among`` defaults to the running plugins; ``optional`` also takes
+        ``optional_inject`` consumers (a reload set, §8.2), otherwise only
+        ``requires`` dependents (what disabling a provider takes down).
+        """
+        pool = {plugin_id, *(self._scopes if among is None else among)}
+        members = {pid: self._specs[pid] for pid in pool}
+        found = graph.dependents(plugin_id, members, self._owners, optional)
         return sorted(found, key=lambda pid: self._rank.get(pid, -1), reverse=True)
+
+    def restart_only(self, plugin_ids: Iterable[str]) -> KernelError | None:
+        """The refusal for plugins only a restart may change (D14), or None.
+
+        ``diagnostic.field`` says why: ``channels`` (checked first) or
+        ``supports_hot_unload``; ``plugin_ids`` names the plugins.
+        """
+        specs = [self._specs[pid] for pid in plugin_ids]
+        for field, ids in (
+            ("channels", sorted(s.id for s in specs if s.channels)),
+            ("supports_hot_unload", sorted(s.id for s in specs if not s.hot_reload)),
+        ):
+            if ids:
+                reason = f"插件 {'、'.join(ids)} 不可代内重载，需重启"
+                return KernelError("restart_required", "reload", field, reason, ids)
+        return None
 
     def reload_closure(self, plugin_id: str) -> list[str]:
         """The reload set of ``plugin_id``, dependents first, or ``KernelError``.
@@ -257,18 +290,17 @@ class Kernel:
         Refused when the plugin is not running or the set holds a plugin only
         a restart can change (D14: channels or ``hot_reload=False``).
         """
-        if getattr(self._status.get(plugin_id), "state", None) != "ACTIVE":
+        if getattr(self._status.get(plugin_id), "state", None) != KernelState.ACTIVE:
             reason = f"插件 {plugin_id} 未在运行，无法重载"
             raise KernelError("not_active", "reload", "state", reason, [plugin_id])
-        members = self.closure(plugin_id)
-        specs = [self._specs[pid] for pid in members]
-        if fixed := sorted(s.id for s in specs if s.channels or not s.hot_reload):
-            reason = f"插件 {'、'.join(fixed)} 不可代内重载，需重启"
-            code, field = "restart_required", "supports_hot_unload"
-            raise KernelError(code, "reload", field, reason, fixed)
+        members = self.closure(plugin_id, optional=True)
+        if refusal := self.restart_only(members):
+            raise refusal
         return members
 
-    async def reload(self, plugin_id: str, *, timeout: float | None = None):
+    async def reload(
+        self, plugin_id: str, *, timeout: float | None = None
+    ) -> tuple[str, ...]:
         """Drains, disposes and sets up again the ``reload_closure``.
 
         Abandoned with the old instances kept when draining exceeds
@@ -311,12 +343,9 @@ class Kernel:
         waiting = asyncio.ensure_future(staged())
         try:
             if not (await asyncio.wait({waiting}, timeout=limit))[0]:
-                reason = (
-                    f"插件 {current} 未能在 {limit:g} 秒内排空，重载已中止，保留旧实例"
-                )
-                raise KernelError(
-                    "drain_timeout", "reload", "on_drain", reason, [current]
-                )
+                reason = f"插件 {current} 排空超时（{limit:g} 秒），保留旧实例"
+                code, field = "drain_timeout", "on_drain"
+                raise KernelError(code, "reload", field, reason, [current])
             waiting.result()
         except BaseException:
             abandoned = True

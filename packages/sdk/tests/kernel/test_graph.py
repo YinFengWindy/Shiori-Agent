@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 
-from shiori_sdk.kernel import KernelError, PluginSpec
+from shiori_sdk.kernel import KernelError, KernelState, PluginSpec
 from shiori_sdk.kernel.graph import plan
 
 
@@ -46,7 +46,7 @@ def test_replaced_plugin_is_excluded_and_its_key_goes_to_the_replacement() -> No
         core=(),
     )
 
-    assert planned.excluded["default_memory"].state == "REPLACED"
+    assert planned.excluded["default_memory"].state == KernelState.REPLACED
     assert "vector_memory" in planned.excluded["default_memory"].reason
     assert planned.owners["memory_engine"] == "vector_memory"
     assert planned.order == ("vector_memory", "reader")
