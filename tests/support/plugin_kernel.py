@@ -28,19 +28,27 @@ def host_kernel(
     *,
     services: HostServices,
     tools: ToolRegistry | None = None,
+    session_manager: Any = None,
     **options: Any,
 ) -> PluginKernel:
     """A kernel over ``services`` with the same core provide list as bootstrap.
 
     ``tools`` is the tool registry the core provides (none: plugins declaring
-    ``tools`` fail before setup); the core's role store is ``services.role_store``. ``options`` are the remaining ``PluginKernel``
-    keyword arguments.
+    ``tools`` fail before setup) and ``session_manager`` the session manager
+    (or a test double); the core's role store, workspace and relationship
+    runtime are those of ``services``. ``options`` are the remaining
+    ``PluginKernel`` keyword arguments.
     """
     return PluginKernel(
         plugin_dirs,
         services=services,
         core=plugin_core_modules(
-            plugin_dirs, tools=tools, role_store=services.role_store
+            plugin_dirs,
+            tools=tools,
+            role_store=services.role_store,
+            session_manager=session_manager,
+            workspace=services.workspace,
+            relationship_runtime=services.relationship_runtime,
         ),
         **options,
     )
@@ -74,13 +82,13 @@ def make_kernel(
             event_bus=event_bus,
             plugin_configs=plugin_configs or {},
             workspace=resolved_workspace,
-            session_manager=session_manager,
             memory_engine=memory_engine,
             light_provider=light_provider,
             light_model=light_model,
             relationship_runtime=relationship_runtime,
         ),
         tools=tools,
+        session_manager=session_manager,
         namespace=namespace,
         strict=strict,
     )

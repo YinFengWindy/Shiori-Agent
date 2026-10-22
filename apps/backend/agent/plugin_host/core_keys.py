@@ -24,6 +24,7 @@ from shiori_sdk.channels.avatars import AvatarsCapability
 from shiori_sdk.channels.context import ChannelsCapability
 from shiori_sdk.diagnostics import Diagnostics
 from shiori_sdk.processes import ToolTurn
+from shiori_sdk.sessions import PluginSessions, SessionUndo
 from shiori_sdk.tool_hooks import ToolHooksCapability
 from shiori_sdk.tools import ToolsCapability
 from shiori_sdk.kernel import Key, Scope
@@ -142,6 +143,12 @@ HOST_ACCOUNTS: Key[GenerationAccounts] = Key("host.accounts")
 HOST_AVATARS: Key[PluginCapabilityBinder[AvatarsCapability]] = Key("host.avatars")
 """The ``avatars`` capability over the shared avatar cache (``core.channels``)."""
 
+HOST_SESSIONS: Key[PluginSessions] = Key("host.sessions")
+"""The ``sessions`` capability over the host ``SessionManager`` (``session``)."""
+
+HOST_SESSION_MANAGER: Key[SessionUndo] = Key("host.session_manager")
+"""The ``session_manager`` capability: the host ``SessionManager`` itself."""
+
 HOST_CONFIG_REFERENCES: Key[Callable[[str], str]] = Key("host.config_references")
 """Expands ``${NAME}`` references for ``config.resolve_reference``.
 
@@ -177,6 +184,8 @@ CORE_CAPABILITIES: Mapping[str, CoreCapability] = {
     "channels": CoreCapability(HOST_CHANNELS, per_plugin=True),
     "accounts": CoreCapability(HOST_ACCOUNTS, per_plugin=True),
     "avatars": CoreCapability(HOST_AVATARS, per_plugin=True),
+    "sessions": CoreCapability(HOST_SESSIONS),
+    "session_manager": CoreCapability(HOST_SESSION_MANAGER),
 }
 
 

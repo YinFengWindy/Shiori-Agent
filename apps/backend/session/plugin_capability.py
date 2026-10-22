@@ -1,16 +1,22 @@
-"""Session operations whose persistence and desktop projection belong to the host."""
+"""The ``sessions`` plugin capability: session operations the host owns (#901 P2).
+
+``HostPluginSessions`` is the ``host.sessions`` core service, shared by every
+plugin: persistence stays with the ``SessionManager`` and the payloads it
+returns use the desktop session projection.
+"""
 
 from __future__ import annotations
-
 
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from desktop_bridge.session_presenter import DesktopSessionPresenter
+from shiori_sdk.sessions import PluginSessions
+
 from session.manager import SessionManager
 from session.media_assets import original_media_path
-from shiori_sdk.sessions import PluginSessions
+
+if TYPE_CHECKING:
+    from desktop_bridge.session_presenter import DesktopSessionPresenter
 
 
 class HostPluginSessions:

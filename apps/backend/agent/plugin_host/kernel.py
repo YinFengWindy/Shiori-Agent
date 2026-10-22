@@ -22,7 +22,6 @@ from uuid import uuid4
 from agent.plugin_host.services import ScopedPluginServices
 from agent.plugin_host.roles import HostRoles
 from agent.plugin_host.models import HostRoleModels
-from agent.plugin_host.sessions import HostPluginSessions
 from agent.plugin_host.processes import HostProcesses, HostResources
 from core.roles.role_runtime import RoleRuntimeRegistry
 from agent.provider import LLMProvider
@@ -32,7 +31,6 @@ from shiori_sdk.background_results import BackgroundResults
 from agent.plugin_host.process_resources import ProcessResourceOwner
 from agent.plugin_host.config import PluginConfig
 from agent.plugin_host.storage import PluginStorage
-from session.manager import SessionManager
 from agent.plugin_host.capabilities import (
     BackgroundCapability,
     BotCommandsCapability,
@@ -171,7 +169,6 @@ class HostServices:
     # role_store capability 拿到的必须是它本身，见 shiori_sdk.runtime.KNOWN_CAPABILITIES
     # 里那段注释：另起一个实例就是另起一把写锁。
     role_store: RoleStore | None = None
-    session_manager: SessionManager | None = None
     memory_engine: MemoryEngine | None = None
     app_config: Any = None
     light_provider: LLMProvider | None = None
@@ -721,21 +718,6 @@ class PluginKernel:
             else None
         )
         capabilities = self._build_capabilities(handle, rpc=rpc)
-        sessions = None
-        if (
-            "sessions" in grants
-            and services.session_manager is not None
-            and services.workspace is not None
-        ):
-            # Presentation belongs to runtime assembly: importing the desktop
-            # package while bootstrap.app imports the kernel creates a cycle.
-            from desktop_bridge.session_presenter import DesktopSessionPresenter
-
-            sessions = HostPluginSessions(
-                services.session_manager,
-                services.workspace,
-                DesktopSessionPresenter(None, services.relationship_runtime),
-            ).as_capability()
         context: PluginSetupContext = PluginRuntimeContext(
             plugin_id=handle.plugin_id,
             plugin_dir=handle.record.plugin_dir,
@@ -778,7 +760,6 @@ class PluginKernel:
             ),
             background=BackgroundCapability(handle.effects, handle.plugin_id),
             storage=PluginStorage(),
-            session_manager=self._services.session_manager,
             memory_engine=self._services.memory_engine,
             roles=(
                 HostRoles(services.role_store).as_capability()
@@ -790,7 +771,6 @@ class PluginKernel:
                 if services.role_runtime_registry is not None
                 else None
             ),
-            sessions=sessions,
             external_turns=(
                 services.external_turns if "external_turns" in grants else None
             ),
@@ -888,13 +868,13 @@ class PluginKernel:
             "rpc": lambda: rpc,
             "dependencies": lambda: None,
             "runtime": lambda: None,
+            "session_manager": lambda: None,
             "role_runtime_registry": lambda: services.role_runtime_registry,
             # 直传引用，无需 effect 包装：宿主拥有这些服务的生命周期，插件只读，
             # 卸载时无需撤销任何登记。
             "workspace": lambda: services.workspace,
             "role_store": lambda: services.role_store,
             "memory_engine": lambda: services.memory_engine,
-            "session_manager": lambda: services.session_manager,
             "light_provider": lambda: services.light_provider,
             "light_model": lambda: services.light_model,
             "relationship_runtime": lambda: services.relationship_runtime,

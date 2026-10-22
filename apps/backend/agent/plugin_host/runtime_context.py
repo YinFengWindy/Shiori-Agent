@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
-from session.manager import SessionManager
 
 from agent.plugin_host.capabilities import LifecycleCapability, RpcCapability
 from shiori_sdk.kernel import Scope
@@ -39,7 +38,7 @@ from shiori_sdk.runtime import (
 from shiori_sdk.plugin_services import ServicePluginContext, RuntimeLifecycle
 from shiori_sdk.roles import Roles, SceneObservations
 from shiori_sdk.models import ChatProvider, RoleModels
-from shiori_sdk.sessions import PluginSessions
+from shiori_sdk.sessions import PluginSessions, SessionUndo
 from shiori_sdk.external_turns import ExternalTurns
 from shiori_sdk.background_results import BackgroundResults
 from shiori_sdk.process_resources import PluginProcessResources
@@ -81,7 +80,7 @@ class PluginSetupContext:
         background: BackgroundTasks | None = None,
         storage: PrivateStorage | None = None,
         diagnostics: Diagnostics | None = None,
-        session_manager: SessionManager | None = None,
+        session_manager: SessionUndo | None = None,
         memory_engine: MemoryEngine | None = None,
         roles: Roles | None = None,
         models: RoleModels | None = None,
@@ -280,9 +279,9 @@ class PluginSetupContext:
         return self._core_capability("diagnostics", self._diagnostics)
 
     @property
-    def session_manager(self) -> SessionManager:
+    def session_manager(self) -> SessionUndo:
         """Return the explicitly granted session_manager capability."""
-        return self._provided("session_manager", self._session_manager)
+        return self._core_capability("session_manager", self._session_manager)
 
     @property
     def memory_engine(self) -> MemoryEngine | None:
@@ -320,7 +319,7 @@ class PluginSetupContext:
     @property
     def sessions(self) -> PluginSessions:
         """Return the explicitly granted sessions SDK capability."""
-        return self._provided("sessions", self._sessions)
+        return self._core_capability("sessions", self._sessions)
 
     @property
     def process_resources(self) -> PluginProcessResources:
