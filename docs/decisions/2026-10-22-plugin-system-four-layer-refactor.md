@@ -33,7 +33,7 @@
 | D11 | **内置工具留核心（显式例外）+ 链后固定安全校验（R1）** | 工具仍留核心。**安全不变量**：核心内置**最小** shell 拦截；`shell_safety` 只叠加更严规则。最小拦截与 citation 去标签**不是** `on` 链上可被改写的 handler，而是 **`ToolCalling` / `ReasoningFinished` 链跑完之后的固定校验步骤**——插件改写危险参数或再插入协议标签仍会被拦下（契约测守住）。禁用 shell_safety 不裸奔 | P9 取消；§8.1 同步 |
 | D12 | **renderer 的 voice、affection UI 搬进各自插件的前端** | `renderer/src/voice`（321 行）：录音控制进 sensevoice_asr 的 frontend，播放控制进 gpt_sovits_tts 的 frontend；两边共用的少量音频工具（预计不到 60 行）放进 TS SDK。`renderer/src/affection`（792 行）和散落的好感度 UI 进 `plugins/affection/ui`。插件挂在 renderer 已有的具名插槽上；缺插槽时由 renderer 新增一个具名插槽，不新增 kind | affection UI 在 P6a 随插件搬走；voice 在 P7。renderer 里不再有任何插件专属 UI |
 | D13 | **拆分 diagnostics（回应 PR #897 / S4）** | **(a) 失败状态契约保留**：`PluginDiagnostic` / `PackageContractError` / `RendererActivationError`（现 `agent/plugin_host/diagnostics.py`）放在 **`shiori_sdk.kernel`（或 SDK 契约包）**，不作 bridge 私有类型（否则内核事件载荷要 import bridge）；设置页 BLOCKED 列表依赖它；与 observe 是否启用无关。**(b) 进程崩溃钩子改为核心服务**：新增核心 Key `CRASH_REPORTING`（仲裁 `sys.excepthook` / `threading.excepthook` / loop handler，取代 `shiori_sdk.diagnostics.install_global_hooks` 的宿主特权面）；observe **只** `inject: [crash_reporting]` 注册 collector，不再直接改写全局钩子。**(c) 删除「diagnostics capability = 遥测」的旧叙事**：内核只保留 `ctx.log` + `PluginStarted`/`PluginFailed`/`PluginStopped`（载荷可带 `PluginDiagnostic`）；遥测由 observe `watch` 事件。 | 不再整段删除 diagnostics；失败契约 ≠ 遥测 ≠ 崩溃钩子。P3/Harness 相应更新 |
-| D14 | **保留热重载；`supports_hot_unload` 收紧举例（R8）** | 默认 `true`。**TTS/ASR（`gpt_sovits_tts` / `sensevoice_asr`）保持默认可热重载**（靠 process 资源清理，不默认标 false）。**`qq` 文档化为 `supports_hot_unload: false`**，因为现网 `reload.py` 对含 `channels` 的插件已拒绝代内重载——与现状对齐，不是新退步。仅对**证实无法卸载**的原生扩展才标 false。**规则**：reload 闭包若含任一 `false` 插件 → **整体拒绝**，诊断「需重启」。文档：`AGENTS.md` + 插件编写/schema。Harness：true → 无残留+顺序=冷启动；false → 需重启断言 | 回应第二轮 R8；装配层仍负责 re-import / on_drain |
+| D14 | **保留热重载；渠道插件由内核判定为不可代内重载（R8 / T1，2026-10-22 维护者确认）** | `supports_hot_unload` 默认 `true`。**声明了 `contributes.channels`（D18）的插件由内核一律视为不可代内重载**，不在 manifest 里逐个手写：现网 `reload.py:101–109` 对用到 channels 的插件已拒绝代内重载，覆盖 qq、qqbot、telegram、feishu、grok_bot 五个。这些插件启用、禁用、重载都提示「需重启」，维护者已接受这个体验。TTS/ASR（`gpt_sovits_tts` / `sensevoice_asr`）保持默认可热重载，靠进程资源清理。其他插件只有**证实无法卸载**的原生扩展才手标 `false`。**规则**：reload 闭包里只要有不可重载的插件，**整体拒绝**，诊断「需重启」。文档写进 `AGENTS.md` 和插件编写文档/schema。Harness：可重载的插件测「无残留 + 顺序与冷启动一致」，不可重载的插件测「需重启」路径 | 回应 R8 / T1；装配层仍负责 re-import / on_drain |
 | D15 | **事件新增并行只读监听 `ctx.watch`** | `on` = 顺序传递，可改写；`watch` = 并行只读，**fire-and-forget**：顺序链跑完后，内核把最终事件（frozen dataclass）交给每个 watcher，作为该插件 scope 上的任务运行；`emit` 不等待，watcher 抛错只记日志，不影响主链，插件 dispose 时一并取消 | 选 fire-and-forget 而不是 awaited-gather：observe 这类监听不应该拖慢回合。测试里用 `shiori_sdk.testing` 的 `await harness.idle()` 等 watcher 跑完（只在测试 harness 里，不进 ctx）。内核约增 25 行 |
 | D16 | **保留 zip trust_store** | `agent/plugin_host/trust_store.py`（88 行）和 `desktop_bridge/runtime/plugin_trust.py`（214 行）保留，P8 搬进 bridge 安装器但不删除。安装 v4 外部 zip 时仍弹信任提示；3.x zip 在信任提示之前就被拒绝（D4） | P8 少删约 0.3k |
 | D17 | **scheduler 做成独立系统插件 `schedule`**（不进核心，也不并入 proactive；以本条为准） | `plugins/schedule` 包含：scheduler 服务（`agent/scheduler.py` 733 + `scheduler_cron` 137，provide `SCHEDULER`）、schedule 工具（`agent/tools/schedule.py` 267 + `bootstrap/toolsets/schedule.py`，由插件注册到核心 `TOOLS`）、桌面角色定时任务（`desktop_bridge/schedule_role_task_service.py` 96 改成插件 rpc，前端 `RoleTaskScheduleFields` 等搬进插件 frontend）。定时任务 JSON（JobStore）路径和格式不变 | 理由：schedule 是用户或角色事先约好的定时触发，proactive 是角色自己决定什么时候找你，触发方不同。两者互不依赖：proactive `optional_inject: [schedule]`，没有也能工作；禁用 proactive 不影响 schedule；禁用 schedule 时 schedule 工具不注册、角色任务里的定时任务区块不显示，proactive 照常。角色任务面板本身还列出 subagent 和记忆任务，所以面板外壳留在核心 renderer，schedule 通过前端具名插槽 `roleTasks` 挂入自己的区块（⚑ 新增一个 UI 插槽，不需要后端插座；D21 已确认）。新增阶段 P6s |
@@ -44,9 +44,9 @@
 | D22 | **版本策略（修订，回应 R3）** | **大版本 = 破坏性**。manifest `api: 4` + sdk 最低约束（peer）。SDK 独立 semver；**废除** Unreleased/sync 批次。同大版本内：**禁止**给已有 Key/Protocol **新增方法**；新能力一律以**新 Key**（或新 Event）出现。缺 Key → setup 失败 + `PluginDiagnostic`。D10/D19 的新方法必须在进 4.0 前并入基线契约，4.0 之后只能开新 Key。现行 `runtime_api` 删除 | P5；改 AGENTS.md |
 | D23 | **发布边界** | 桌面发版**仅在 P1–P8 全部完成后**随 SDK 4.0 一起发。P1–P8 期间**不从 main 发桌面版**（「不发没事」，见 D26）。已装 3.x/`api:2` → 启动 BLOCKED、不迁移、保留文件配置。不要求可降级。0.5.x 用户数据正向兼容仍按 D4′ | P4/P8；D13 Diagnostic |
 | D24 | **`conflicts` / `replaces`（修订，回应 R5）** | `replaces: [other_id]` = **被替换插件整体不加载**（强于只盖 Key；UI 显示「已被 X 替换」）。`conflicts: [other_id]` = 不可同时启用。未声明关系的双 provide 同一 Key → **启动失败**，点名双方 | 避免 default_memory 被替后仍注册工具/handler |
-| D25 | **热重载排空：`ctx.on_drain`，不用活代理（R2）** | `require`/`get` 返回原始对象。排空靠插件（及核心消费方）实现 **`ctx.on_drain`**（写入 ctx API）：seal 表述删除。reload：先调闭包内各插件 `on_drain`（超时沿用现网量级）→ dispose → re-setup。**核心不得长持** provider 实例；`on_drain`/重载后必须重新 `get`。契约测：provider 带代际 id，重载后下一次调用必须是新代际 | §8.2；P1 |
-| D26 | **重构期不发桌面版；停用自动发版（R4）** | P1–P8 期间不需要也不应发桌面版。**禁用**仓库自动桌面发版：`.github/workflows/windows-release.yml` 的 `schedule` cron 已在 PR #897 注释掉。`apps/desktop/scripts/daily-release.mjs` 仍留在仓库，日程恢复后 plan/publish 还走它。`v*` tag / `workflow_dispatch` 保留但重构期不用。无需 `release/0.5.x` 热修分支 | 「不发没事」 |
-| D27 | **配置外迁：一次性幂等迁移（R7）** | 从宿主 `config.toml` 搬进插件的模块（proactive、memory_optimizer、affection、natural_chat、scene 等）：启动时**一次性幂等迁移**到插件配置存储，可重复执行。**不是**给内置插件开命名段特权读取。与 D4′ 关系：迁移只动「配置键的存放位置」；`plugin_data/`、kv、启用状态等 0.5.x 路径格式仍不变。memory_optimizer：**插件启用** ∧ **`memory_optimizer_enabled`（迁移后的插件配置）** 均为真才跑循环；任一为假则跳过（真值表见 §8.6） | P6 前写成契约；各外迁 PR 填迁移表 |
+| D25 | **热重载排空：`ctx.on_drain`，不用活代理（R2 / T3）** | `require`/`get` 返回原始对象，删掉 seal 的说法。reload 时先排空闭包里的每个插件，再 dispose，再 re-setup。**默认排空（不注册 `on_drain` 也生效）**：内核等该插件 `spawn` 出去的任务，以及正在执行的 `on`/`watch` handler 结束。注册了 **`ctx.on_drain`** 的插件，再额外执行自己的排空逻辑。总超时 60 秒，超时则中止这次 reload、保留旧实例并产出诊断。**核心不得长期持有** provider 实例，每次使用都重新 `get`。契约测试：provider 带代际 id，重载后下一次调用必须拿到新代际；另测「未注册 `on_drain`」的默认排空路径 | §8.2；P1 |
+| D26 | **重构期不发桌面版；停用自动发版（R4）** | P1–P8 期间不发桌面版。仓库的自动桌面发版已停用：`.github/workflows/windows-release.yml` 的 `schedule` cron 随 PR #897 注释掉，**必须在任何 P1 代码 PR 之前合入 main**（GitHub 定时任务只认默认分支）。`apps/desktop/scripts/daily-release.mjs` 留在仓库，恢复日程后发布流程仍走它。`v*` tag 和 `workflow_dispatch` 保留，但重构期不用。**不设 `release/0.5.x` 热修分支**：维护者确认目前没有需要热修的 bug，接受重构期 0.5.x 不出修复版的风险 | 「不发没事」 |
+| D27 | **配置外迁：只迁缺失的键，迁完从 `config.toml` 删掉（R7 / T2，2026-10-22 维护者确认）** | 从宿主 `config.toml` 搬进插件的配置，在启动时迁入插件配置存储。规则：**只有插件配置里还没有这个键时才迁入**；迁入成功后，**从 `config.toml` 删掉已迁移的键**，插件此后只读插件配置，避免 toml 旧值覆盖用户在设置页的修改，也避免用户改了旧键却静默不生效。迁移失败时不删 toml 键，并产出诊断；重复执行是安全的（插件配置里已有的键不覆盖、toml 里已经没有的键不处理）。**不**给内置插件开读取 toml 命名段的特权。迁移清单（以 976f920 源码为准）：proactive 配置段、`memory_optimizer_enabled`、`scene_observation_enabled`。`natural_chat_enabled` 存在角色 JSON 的 `runtime_config` 里，不在本条范围。与 D4′ 的关系：只改配置键的存放位置；`plugin_data/`、kv、启用状态等 0.5.x 路径和格式不变。memory_optimizer 要「插件启用」和 `memory_optimizer_enabled` 同时为真才运行（真值表见 §8.6） | P6 各外迁 PR 填写「现位置 → 新位置」表 |
 
 ## 1. 目标架构
 
@@ -111,7 +111,7 @@ default_enabled: true
 api: 4                    # 取代 runtime_api 范围、package_contract、api: 2
 entry: backend/plugin.py
 inject: [roles, sessions, conversation]     # 取代 capabilities
-optional_inject: [memory_engine]  # 勿用裸 memory 指引擎
+optional_inject: [memory_engine]  # 引擎插座统一叫 memory_engine，不用裸 memory
 provides: [affection]                       # 用于依赖图和 CI 校验
 config_model: backend.config:Config          # 可选
 frontend:                                    # 可选，取代 renderer.{ui,background,surface}
@@ -120,7 +120,7 @@ contributes:                                 # 可选，只放静态元数据（
   channels: []                               # 渠道插件填 id/名称/图标/账号表单 schema，禁用时账号页也能列出
 ```
 
-删除的字段：`capabilities`、`runtime_api`、`package_contract`、`renderer` 三种 kind、`supports_hot_unload`（**保留字段**，默认 true；qq 因 channels 文档化为 false，TTS/ASR 默认可热重载，D14）、`host_dependencies`/`peer_dependencies`（依赖交给 pyproject/package.json）。
+删除的字段：`capabilities`、`runtime_api`、`package_contract`、`renderer` 三种 kind、`supports_hot_unload`（**保留字段**，默认 true；声明了 `contributes.channels` 的插件由内核判定为不可代内重载，TTS/ASR 默认可热重载，D14）、`host_dependencies`/`peer_dependencies`（依赖交给 pyproject/package.json）。
 
 ## 2. 盘点
 
@@ -252,7 +252,7 @@ py/fe 为非测试 LOC。"默认关"取自 manifest 的 `default_enabled: false`
 | **P8 安装器裁剪 + 内核达标** | 打包和信任移到 bridge 安装器并裁剪：删 versions、host_contract、data_migration 和其他旧 api 相关代码（D4）；**trust_store 保留**（D16）；热重载按 D14（`supports_hot_unload` 保留）；文档写入 AGENTS.md + 插件编写指南；CI：`shiori_sdk.kernel` ≤700 LOC（§8.8）；确认 P1–P8 齐套后才允许桌面发版（D23） | +250 / −2000 | 低中 | 无；发版门闩 = 本阶段完成 |
 | P9 内置工具外移（已取消） | **已取消（D11）**：shell/fs、web、skills、subagent 留在核心；scene 和 mcp 并入 P6a；scheduler 做成独立系统插件 `schedule`（D17，P6s） | — | — | — |
 
-合计（估，2026-10-22 按 D1–D24 重算；D20 改插件化不改净 LOC 量级）：删除约 2.24 万，新增约 0.69 万，净减约 1.55 万 LOC（上一版净减约 1.6 万）。本轮变化：P6s +350 / −300（schedule 独立成插件，D17）；P1 +70（watch、单插件 reload）；P3 +80 / −50（两个回滚方法；删 diagnostics）；P6a +250 / −300（scene、mcp 从 P9 并入）；P6b +100 / −100（核心侧通用化）；P7 +350 / −350（voice UI 搬进插件）；P8 +50 / −300 少删（保留 trust_store）；P9 取消。plugin_host 7.3k → `shiori_sdk.kernel` 预算 **700 LOC**（§8.8，原 500 不够）+ 宿主装配层/bridge 约 1.2k–1.5k（含 on_drain/reload、trust_store）。早先的变化来源：D1 多删约 0.3k 记忆引擎专用加载代码；D3 让 P5 少写约 0.3k 镜像；D4 在 P4 和 P8 多删约 0.7k 兼容代码。
+合计（估，2026-10-22 按 D1–D24 重算，D25–D27 未重估，P1 新增的 on_drain 与链后校验会让内核侧略增，见 §8.8；D20 改插件化不改净 LOC 量级）：删除约 2.24 万，新增约 0.69 万，净减约 1.55 万 LOC（上一版净减约 1.6 万）。本轮变化：P6s +350 / −300（schedule 独立成插件，D17）；P1 +70（watch、单插件 reload）；P3 +80 / −50（两个回滚方法；删 diagnostics）；P6a +250 / −300（scene、mcp 从 P9 并入）；P6b +100 / −100（核心侧通用化）；P7 +350 / −350（voice UI 搬进插件）；P8 +50 / −300 少删（保留 trust_store）；P9 取消。plugin_host 7.3k → `shiori_sdk.kernel` 预算 **700 LOC**（§8.8，原 500 不够）+ 宿主装配层/bridge 约 1.2k–1.5k（含 on_drain/reload、trust_store）。早先的变化来源：D1 多删约 0.3k 记忆引擎专用加载代码；D3 让 P5 少写约 0.3k 镜像；D4 在 P4 和 P8 多删约 0.7k 兼容代码。
 
 依赖顺序：P0 → P1 → P2 → P3 → P4 → P5；P6a/P6s/P6b 依赖 P3，P6s 放在 P6b 之前；P7 依赖 P4；P8 放在最后。
 
@@ -420,7 +420,7 @@ D2 已定 proactive 是可禁用的系统插件、核心不依赖它。本节是
 ### 8.2 `get` / 热重载引用（D25）
 
 - **返回原始对象**，不用活代理；删除「seal 拒新调用」表述（与禁止缓存/无代理矛盾，R2）。
-- **`ctx.on_drain`**：列入 ctx API。reload 时对闭包内插件先 `on_drain`（超时沿用现网量级，如 60s）→ 成功后再 dispose → re-setup；超时则中止 reload、保留旧实例并诊断。
+- **排空**：reload 时先排空闭包里的插件，再 dispose，再 re-setup。默认排空不依赖插件注册任何东西：内核等该插件 `spawn` 的任务和正在执行的 `on`/`watch` handler 结束；注册了 `ctx.on_drain` 的插件额外执行自己的逻辑。总超时 60 秒，超时则中止 reload、保留旧实例并产出诊断（D25）。
 - **reload 集合**：该插件 + require 下游 + 已加载且 optional 用过该 Key 的插件；闭包含 `supports_hot_unload: false` → **整体拒绝**，需重启（D14）。
 - **核心不得长持** provider：每次使用重新 `get`；`on_drain` 时清掉持有的引用。不引入 `ProviderChanged` 事件（已选禁长持）。
 - **契约测**：provider 带代际 id；重载后消费方下一次调用必须看到新代际。
@@ -444,7 +444,7 @@ D2 已定 proactive 是可禁用的系统插件、核心不依赖它。本节是
 
 ### 8.6 命名与 D10 / 配置 / 前端
 
-- **`Key.name` ≡ manifest 字符串**；引擎插座统一 `memory_engine`。示例 manifest 勿再写 `optional_inject: [memory_engine]  # 勿用裸 memory 指引擎` 指引擎。
+- **`Key.name` ≡ manifest 字符串**；引擎插座统一叫 `memory_engine`，示例 manifest 不要用裸 `memory` 指代引擎插座。
 - **`PluginDiagnostic`** 定义在 SDK/内核，不在 bridge（D13）。
 - **D10 回滚**：先 memory `rollback_turn`（可重试），再 sessions；`RollbackResult.turn_id`；测第二步失败。
 - **配置外迁（D27）**：一次性幂等迁移宿主 `config.toml` → 插件配置存储；非命名段特权读。各 P6 PR 填「现位置 → 新位置 → 迁移函数」表。`plugin_data` 等路径仍按 D4′ 不变。
