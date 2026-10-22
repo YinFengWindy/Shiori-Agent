@@ -29,6 +29,8 @@ dev = [
     "black>=26.0.0",
     "ruff>=0.15",
     "pyright>=1.1.403",
+    "import-linter==2.15",
+    "jsonschema==4.26.0",
     "pytest-cov>=6.0.0",
     "pyinstaller>=6.18.0",
 ]
@@ -40,3 +42,102 @@ shiori-sdk = { path = "packages/sdk", editable = true }
 shiori-plugin-default-memory = { path = "plugins/default_memory", editable = true }
 
 shiori-plugin-herdr = { path = "plugins/herdr", editable = true }
+
+# 四层分层契约（docs/decisions/2026-10-22-plugin-system-four-layer-refactor.md §5.4），
+# P0 只报告：CI 输出违规但不阻塞。阻塞仍由 scripts.check_sdk_imports 负责，两者的
+# 规则对照见 docs/decisions/2026-10-22-plugin-import-rules-mapping.md。
+# 只查直接 import：间接链在内核搬进 shiori_sdk.kernel 后由「只许 import SDK」收紧。
+# shiori_sdk.kernel 尚不存在（import-linter 拒绝不存在的模块），它的契约在 P1 建包时加。
+# 宿主包列表与 setup.py 的 HOST_PACKAGES 一致（shiori_runtime_resources 只放资源）。
+[tool.importlinter]
+root_packages = [
+    "agent",
+    "bootstrap",
+    "bus",
+    "conversation",
+    "core",
+    "desktop_bridge",
+    "infra",
+    "proactive_v2",
+    "prompts",
+    "session",
+    "utils",
+    "plugins",
+    "shiori_sdk",
+    "shiori_host_testing",
+    "tests",
+]
+contract_types = [
+    "manifest_dependencies: scripts.plugin_import_contract.ManifestDependencyContract",
+]
+
+[[tool.importlinter.contracts]]
+name = "内核（现 agent.plugin_host）不 import 宿主业务模块和插件"
+type = "forbidden"
+source_modules = ["agent.plugin_host"]
+forbidden_modules = [
+    "agent.*",
+    "bootstrap",
+    "bus",
+    "conversation",
+    "core",
+    "desktop_bridge",
+    "infra",
+    "proactive_v2",
+    "prompts",
+    "session",
+    "utils",
+    "plugins",
+]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "核心模块不 import 插件"
+type = "forbidden"
+source_modules = [
+    "agent",
+    "bootstrap",
+    "bus",
+    "conversation",
+    "core",
+    "desktop_bridge",
+    "infra",
+    "proactive_v2",
+    "prompts",
+    "session",
+    "utils",
+]
+forbidden_modules = ["plugins"]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "SDK 和插件不 import 宿主"
+type = "forbidden"
+source_modules = ["shiori_sdk", "plugins"]
+forbidden_modules = [
+    "shiori_host_testing",
+    "tests",
+    "agent",
+    "bootstrap",
+    "bus",
+    "conversation",
+    "core",
+    "desktop_bridge",
+    "infra",
+    "proactive_v2",
+    "prompts",
+    "session",
+    "utils",
+]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "SDK 不 import 插件"
+type = "forbidden"
+source_modules = ["shiori_sdk"]
+forbidden_modules = ["plugins"]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "插件只 import manifest 声明的依赖插件"
+type = "manifest_dependencies"

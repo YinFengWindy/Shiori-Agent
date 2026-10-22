@@ -1,0 +1,232 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/YinFengWindy/Shiori-Agent/blob/main/packages/sdk/manifest.schema.json",
+  "title": "Shiori plugin manifest (api: 2)",
+  "description": "plugins/<id>/manifest.yaml 的现行格式。字段与取值以 apps/backend/agent/plugin_host/manifest.py（所有插件）和 package_contract.py / renderer_contract.py（声明 package_contract 的外部包）为准。schema 只描述字段形状；跨字段规则（渠道名与会话类型不重复、前缀互不包含、dependencies 与 optional_dependencies 不重叠、入口文件存在且可解析、版本范围与宿主兼容）仍由解析代码判定。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["api", "capabilities"],
+  "properties": {
+    "api": {
+      "description": "插件 API 版本，只接受整数 2。",
+      "type": "integer",
+      "const": 2
+    },
+    "package_contract": {
+      "description": "外部包契约版本。声明后按外部包规则校验（package_contract.py）。",
+      "type": "integer",
+      "const": 1
+    },
+    "id": {
+      "description": "插件 ID，与插件目录名一致。",
+      "$ref": "#/$defs/portableName"
+    },
+    "display_name": { "$ref": "#/$defs/nonEmptyString" },
+    "version": {
+      "description": "插件自身版本（SemVer），与 pyproject.toml 一致。",
+      "type": "string",
+      "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(-[0-9A-Za-z.-]+)?(\\+[0-9A-Za-z.-]+)?$"
+    },
+    "desc": { "type": "string" },
+    "author": { "type": "string" },
+    "distribution": {
+      "description": "builtin 随宿主加载；external 只在安装到工作区后加载。",
+      "enum": ["builtin", "external"],
+      "default": "builtin"
+    },
+    "category": {
+      "description": "插件管理页分组。省略时声明 channels capability 即 channel，否则 feature。",
+      "enum": ["feature", "channel", "system"]
+    },
+    "default_enabled": { "type": "boolean", "default": true },
+    "supports_hot_unload": { "type": "boolean", "default": true },
+    "runtime_api": {
+      "description": "兼容的 Runtime API 版本范围，例如 \">=3.1.0 <4.0.0\"。",
+      "$ref": "#/$defs/nonEmptyString"
+    },
+    "entry": {
+      "description": "后端入口，相对插件目录。",
+      "type": "string",
+      "default": "backend/plugin.py"
+    },
+    "config_model": {
+      "description": "配置模型，形如 \"模块:类名\"，模块相对 backend/。",
+      "type": "string"
+    },
+    "capabilities": {
+      "description": "插件 setup 可用的宿主 capability，取值与 shiori_sdk.runtime.KNOWN_CAPABILITIES 一致。",
+      "type": "array",
+      "items": {
+        "enum": [
+          "accounts",
+          "avatars",
+          "background",
+          "background_results",
+          "bot_commands",
+          "channels",
+          "config",
+          "dependencies",
+          "diagnostics",
+          "events",
+          "external_turns",
+          "http",
+          "kv",
+          "lifecycle",
+          "light_model",
+          "light_provider",
+          "memory",
+          "memory_engine",
+          "models",
+          "proactive_gates",
+          "process_resources",
+          "processes",
+          "relationship_runtime",
+          "resources",
+          "role_runtime_registry",
+          "role_store",
+          "roles",
+          "rpc",
+          "runtime",
+          "scene_observations",
+          "services",
+          "session_manager",
+          "sessions",
+          "storage",
+          "tool_hooks",
+          "tool_turn",
+          "tools",
+          "workspace"
+        ]
+      }
+    },
+    "channels": {
+      "description": "静态渠道声明；非空时 capabilities 必须含 channels。",
+      "type": "array",
+      "items": { "$ref": "#/$defs/channel" }
+    },
+    "dependencies": { "$ref": "#/$defs/pluginIds" },
+    "optional_dependencies": { "$ref": "#/$defs/pluginIds" },
+    "renderer": {
+      "description": "外部包的已编译前端入口（renderer_contract.py）。",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ui": { "$ref": "#/$defs/rendererEntry" },
+        "background": { "$ref": "#/$defs/rendererEntry" },
+        "surface": { "$ref": "#/$defs/rendererEntry" }
+      }
+    },
+    "assets": {
+      "description": "外部包随附的静态文件，相对插件目录。",
+      "type": "array",
+      "items": { "$ref": "#/$defs/nonEmptyString" }
+    },
+    "host_dependencies": {
+      "description": "外部包要求宿主提供的 Python 发行包。",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "python": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/nonEmptyString" }
+        }
+      }
+    },
+    "peer_dependencies": {
+      "description": "声明 renderer 的外部包必须同时给出 react 与 react-dom 的版本范围。",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "react": { "$ref": "#/$defs/nonEmptyString" },
+        "react-dom": { "$ref": "#/$defs/nonEmptyString" }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": ["channels"],
+        "properties": { "channels": { "minItems": 1 } }
+      },
+      "then": {
+        "properties": { "capabilities": { "contains": { "const": "channels" } } }
+      }
+    },
+    {
+      "if": { "required": ["package_contract"] },
+      "then": { "required": ["id", "version", "runtime_api", "entry"] }
+    }
+  ],
+  "$defs": {
+    "nonEmptyString": {
+      "type": "string",
+      "pattern": "\\S"
+    },
+    "portableName": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{0,63}$"
+    },
+    "pluginIds": {
+      "description": "插件 ID 列表。",
+      "type": "array",
+      "items": { "$ref": "#/$defs/nonEmptyString" }
+    },
+    "channel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "label", "chat_types"],
+      "properties": {
+        "name": {
+          "description": "渠道基础名；desktop 为宿主保留。",
+          "allOf": [
+            { "$ref": "#/$defs/portableName" },
+            { "not": { "const": "desktop" } }
+          ]
+        },
+        "label": { "$ref": "#/$defs/nonEmptyString" },
+        "contact_label": { "$ref": "#/$defs/nonEmptyString" },
+        "instance_prefix": {
+          "description": "账号实例名前缀，必须以 \"<name>_\" 开头。",
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "group_listening": { "type": "boolean", "default": false },
+        "chat_types": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/chatType" }
+        }
+      }
+    },
+    "chatType": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "label", "chat_id_label"],
+      "properties": {
+        "type": { "enum": ["private", "group"] },
+        "label": { "$ref": "#/$defs/nonEmptyString" },
+        "chat_id_label": { "$ref": "#/$defs/nonEmptyString" },
+        "chat_id_hint": { "$ref": "#/$defs/nonEmptyString" },
+        "prefix": {
+          "description": "拼到用户输入号码前的会话 ID 前缀，不能含首尾空白。",
+          "type": "string",
+          "pattern": "^\\S([\\s\\S]*\\S)?$"
+        }
+      }
+    },
+    "rendererEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entry", "css"],
+      "properties": {
+        "entry": {
+          "type": "string",
+          "pattern": "\\.mjs$"
+        },
+        "css": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "\\.css$" }
+        }
+      }
+    }
+  }
+}

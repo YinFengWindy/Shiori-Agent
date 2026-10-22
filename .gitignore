@@ -10,6 +10,8 @@ __pycache__/
 *.py[cod]
 *.pyo
 .venv/
+# lint-imports 本地运行的图缓存
+.import_linter_cache/
 
 # Node.js
 node_modules/
