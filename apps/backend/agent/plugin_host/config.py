@@ -19,8 +19,7 @@ class PluginConfig:
         raw_values: dict[str, Any] | None = None,
     ) -> None:
         self._values = dict(values)
-        # Plugin-stored credentials resolve with the host's configuration policy.
-        self.resolve_reference = resolve_reference
+        self._resolve_reference = resolve_reference
         self._raw_values = dict(raw_values) if raw_values is not None else dict(values)
 
     def get(self, key: str, default: Any = None) -> Any:
@@ -34,6 +33,10 @@ class PluginConfig:
     def raw_as_dict(self) -> dict[str, Any]:
         """Returns unexpanded plugin values for reference-preserving migrations."""
         return dict(self._raw_values)
+
+    def resolve_reference(self, value: str) -> str:
+        """Resolve plugin-stored credentials using the host's configuration policy."""
+        return self._resolve_reference(value)
 
     def __getattr__(self, key: str) -> Any:
         try:
