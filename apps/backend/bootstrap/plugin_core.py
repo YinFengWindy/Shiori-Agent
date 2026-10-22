@@ -12,17 +12,23 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from agent.config import resolve_config_reference
+from agent.core.proactive_turn.plugin_capability import PluginProactiveGates
 from agent.provider import LLMProvider
 from agent.plugin_host.core_keys import (
     HOST_ACCOUNTS,
     HOST_AVATARS,
+    HOST_BACKGROUND,
+    HOST_BACKGROUND_RESULTS,
+    HOST_BOT_COMMANDS,
     HOST_CHANNELS,
     HOST_CONFIG_REFERENCES,
     HOST_DIAGNOSTICS,
+    HOST_EXTERNAL_TURNS,
     HOST_LIGHT_MODEL,
     HOST_LIGHT_PROVIDER,
     HOST_MEMORY,
     HOST_MODELS,
+    HOST_PROACTIVE_GATES,
     HOST_PROCESSES,
     HOST_RESOURCES,
     HOST_ROLE_RUNTIME_REGISTRY,
@@ -42,10 +48,12 @@ from agent.tools.registry import ToolRegistry
 from agent.tools.turn_scope import current_tool_turn
 from bootstrap.memory_capabilities import HostMemoryCapability
 from bootstrap.plugin_capability import HostResources
+from conversation.plugin_capability import PluginBotCommands
 from core.accounts.plugin_capability import PluginAccounts
 from core.channels.plugin_capability import PluginAvatars, PluginChannels
 from core.common.diagnostics import HostDiagnostics
 from core.common.global_hook_stack import ProcessCrashReporting
+from core.common.plugin_capability import PluginBackground
 from core.roles.plugin_capability import HostRoleModels, HostRoles
 from core.roles.role_runtime import RoleRuntimeRegistry
 from core.roles.store import RoleStore
@@ -55,7 +63,9 @@ from desktop_bridge.session_presenter import DesktopSessionPresenter
 from infra.process.plugin_capability import HostProcesses
 from session.manager import SessionManager
 from session.plugin_capability import HostPluginSessions
+from shiori_sdk.background_results import BackgroundResults
 from shiori_sdk.core.crash_reporting import CRASH_REPORTING
+from shiori_sdk.external_turns import ExternalTurns
 from shiori_sdk.memory.engine import MemoryEngine
 from shiori_sdk.processes import Resources
 
@@ -73,6 +83,8 @@ def plugin_core_modules(
     light_model: str | None,
     scene_observations: SceneObservationDemand,
     memory_engine: MemoryEngine | None,
+    external_turns: ExternalTurns | None,
+    background_results: BackgroundResults | None,
 ) -> tuple[CoreModule, ...]:
     """The core provide list, in provide order, for one runtime generation.
 
@@ -90,6 +102,8 @@ def plugin_core_modules(
     are the plugins' light model. ``scene_observations`` is the generation's
     demand registry the scene controller reads. ``memory_engine`` (None when
     memory is disabled) goes into ``memory`` with the workspace and role store.
+    ``external_turns`` and ``background_results`` are the generation's
+    conversation services, built over its agent loop.
     """
     roots = [("plugins", directory.resolve()) for directory in plugin_dirs]
 
@@ -158,6 +172,22 @@ def plugin_core_modules(
         resources: Resources = HostResources()
         provide(HOST_RESOURCES, resources)
 
+    def provide_conversation(provide: CoreProvide) -> None:
+        """External turns, background results and bot commands (``conversation``)."""
+        if external_turns is not None:
+            provide(HOST_EXTERNAL_TURNS, external_turns)
+        if background_results is not None:
+            provide(HOST_BACKGROUND_RESULTS, background_results)
+        provide(HOST_BOT_COMMANDS, PluginBotCommands())
+
+    def provide_background(provide: CoreProvide) -> None:
+        """Plugin-scoped background tasks (``core.common``)."""
+        provide(HOST_BACKGROUND, PluginBackground())
+
+    def provide_proactive_gates(provide: CoreProvide) -> None:
+        """Plugin proactive gates (``agent.core.proactive_turn``; P3 deletes them)."""
+        provide(HOST_PROACTIVE_GATES, PluginProactiveGates())
+
     return (
         provide_diagnostics,
         provide_config_references,
@@ -168,4 +198,7 @@ def plugin_core_modules(
         provide_scene,
         provide_memory,
         provide_processes,
+        provide_conversation,
+        provide_background,
+        provide_proactive_gates,
     )

@@ -34,13 +34,16 @@ def host_kernel(
     light_model: str | None = None,
     role_runtime_registry: Any = None,
     scene_observations: SceneObservationDemand | None = None,
+    external_turns: Any = None,
+    background_results: Any = None,
     **options: Any,
 ) -> PluginKernel:
     """A kernel over ``services`` with the same core provide list as bootstrap.
 
     ``tools`` is the tool registry the core provides (none: plugins declaring
     ``tools`` fail before setup); ``session_manager``, ``light_provider``,
-    ``light_model`` and ``role_runtime_registry`` are what the core provides
+    ``light_model``, ``role_runtime_registry``, ``external_turns`` and
+    ``background_results`` are what the core provides
     (real services or test doubles; none: plugins declaring them fail before
     setup), and ``scene_observations`` the demand registry (a fresh one by
     default). The core's role store, workspace and relationship runtime are
@@ -66,6 +69,8 @@ def host_kernel(
                 else SceneObservationDemand()
             ),
             memory_engine=services.memory_engine,
+            external_turns=external_turns,
+            background_results=background_results,
         ),
         **options,
     )

@@ -99,6 +99,7 @@ class PluginSetupContext:
         light_provider: ChatProvider | None = None,
         light_model: str | None = None,
         role_runtime_registry: object = None,
+        proactive_gates: Any = None,
         channels: ChannelsCapability | None = None,
         accounts: AccountsCapability | None = None,
         avatars: AvatarsCapability | None = None,
@@ -141,6 +142,7 @@ class PluginSetupContext:
         self._light_provider = light_provider
         self._light_model = light_model
         self._role_runtime_registry = role_runtime_registry
+        self._proactive_gates = proactive_gates
         self._channels = channels
         self._accounts = accounts
         self._avatars = avatars
@@ -250,9 +252,7 @@ class PluginSetupContext:
     @property
     def bot_commands(self) -> BotCommands:
         """Return the explicitly granted bot_commands capability."""
-        if "bot_commands" not in self.granted or self._bot_commands is None:
-            raise CapabilityNotGranted("Plugin did not request bot_commands")
-        return self._bot_commands
+        return self._core_capability("bot_commands", self._bot_commands)
 
     @property
     def dependencies(self) -> Dependencies:
@@ -264,9 +264,7 @@ class PluginSetupContext:
     @property
     def background(self) -> BackgroundTasks:
         """Return the explicitly granted background capability."""
-        if "background" not in self.granted or self._background is None:
-            raise CapabilityNotGranted("Plugin did not request background")
-        return self._background
+        return self._core_capability("background", self._background)
 
     @property
     def storage(self) -> PrivateStorage:
@@ -331,12 +329,12 @@ class PluginSetupContext:
     @property
     def background_results(self) -> BackgroundResults:
         """Capture role-bound background result destinations."""
-        return self._provided("background_results", self._background_results)
+        return self._core_capability("background_results", self._background_results)
 
     @property
     def external_turns(self) -> ExternalTurns:
         """Return the explicitly granted external-turn submission capability."""
-        return self._provided("external_turns", self._external_turns)
+        return self._core_capability("external_turns", self._external_turns)
 
     @property
     def tools(self) -> SdkToolsCapability:
@@ -389,6 +387,11 @@ class PluginSetupContext:
     def light_model(self) -> str:
         """Return the explicitly granted light_model SDK capability."""
         return self._core_capability("light_model", self._light_model)
+
+    @property
+    def proactive_gates(self) -> Any:
+        """Return the explicitly granted proactive gate contributions (P3 deletes it)."""
+        return self._core_capability("proactive_gates", self._proactive_gates)
 
     @property
     def role_runtime_registry(self) -> object:

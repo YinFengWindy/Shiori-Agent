@@ -19,10 +19,13 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 from shiori_sdk.accounts.capability import AccountsCapability
+from shiori_sdk.background_results import BackgroundResults
 from shiori_sdk.channels import Channel
 from shiori_sdk.channels.avatars import AvatarsCapability
 from shiori_sdk.channels.context import ChannelsCapability
 from shiori_sdk.diagnostics import Diagnostics
+from shiori_sdk.extensions import BackgroundTasks, BotCommands
+from shiori_sdk.external_turns import ExternalTurns
 from shiori_sdk.memory.context import MemoryCapability
 from shiori_sdk.models import ChatProvider, RoleModels
 from shiori_sdk.processes import Processes, Resources, ToolTurn
@@ -181,6 +184,27 @@ HOST_PROCESSES: Key[Processes] = Key("host.processes")
 HOST_RESOURCES: Key[Resources] = Key("host.resources")
 """The ``resources`` capability: host-distributed resources (``bootstrap.plugin_capability``)."""
 
+HOST_EXTERNAL_TURNS: Key[ExternalTurns] = Key("host.external_turns")
+"""The ``external_turns`` capability (``conversation``)."""
+
+HOST_BACKGROUND_RESULTS: Key[BackgroundResults] = Key("host.background_results")
+"""The ``background_results`` capability (``conversation``)."""
+
+HOST_BOT_COMMANDS: Key[PluginContributionService[BotCommands, tuple[str, str]]] = Key(
+    "host.bot_commands"
+)
+"""The ``bot_commands`` capability: command-menu entries (``conversation``)."""
+
+HOST_BACKGROUND: Key[PluginCapabilityBinder[BackgroundTasks]] = Key("host.background")
+"""The ``background`` capability: plugin-scoped tasks (``core.common``)."""
+
+# The gate type (``agent.core.proactive_turn.gates.ProactiveGate``) is a host
+# module this layer may not import; ``PluginProactiveGates`` types it exactly.
+HOST_PROACTIVE_GATES: Key[PluginContributionService[Any, Any]] = Key(
+    "host.proactive_gates"
+)
+"""The ``proactive_gates`` capability (``agent.core.proactive_turn``; P3 deletes it)."""
+
 HOST_CONFIG_REFERENCES: Key[Callable[[str], str]] = Key("host.config_references")
 """Expands ``${NAME}`` references for ``config.resolve_reference``.
 
@@ -227,6 +251,11 @@ CORE_CAPABILITIES: Mapping[str, CoreCapability] = {
     "memory": CoreCapability(HOST_MEMORY),
     "processes": CoreCapability(HOST_PROCESSES),
     "resources": CoreCapability(HOST_RESOURCES),
+    "external_turns": CoreCapability(HOST_EXTERNAL_TURNS),
+    "background_results": CoreCapability(HOST_BACKGROUND_RESULTS),
+    "bot_commands": CoreCapability(HOST_BOT_COMMANDS, per_plugin=True),
+    "background": CoreCapability(HOST_BACKGROUND, per_plugin=True),
+    "proactive_gates": CoreCapability(HOST_PROACTIVE_GATES, per_plugin=True),
 }
 
 

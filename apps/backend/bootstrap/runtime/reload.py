@@ -13,6 +13,7 @@ from bootstrap.runtime.events import RuntimeEventBus
 from bootstrap.runtime.generations import RuntimeCandidate, RuntimeRetention
 from bootstrap.tools import build_core_runtime
 from bootstrap.channels import start_channels
+from conversation.plugin_capability import active_plugin_bot_commands
 from core.channels.plugin_capability import active_plugin_channels
 from bootstrap.runtime.memory import validate_memory_transition
 from bootstrap.runtime.construction import prepare_core_runtime
@@ -88,7 +89,7 @@ class RuntimeReloadMixin:
                 http_resources=self.http_resources,
                 event_bus=self.event_bus,
                 interrupt_controller=self._dispatcher,
-                bot_commands=plugins.bot_commands if plugins else None,
+                bot_commands=active_plugin_bot_commands(plugins) if plugins else None,
                 plugin_channels=active_plugin_channels(plugins) if plugins else None,
                 enable_message_channels=self.features.enable_message_channels,
                 previous_host=self.channel_host,
