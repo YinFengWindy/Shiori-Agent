@@ -189,8 +189,7 @@ async def _kernel(
     consumer_capabilities: str = "",
     consumer_manifest: str = "",
     configs: dict[str, dict] | None = None,
-    rpc: PluginRpcRegistry[Any] | None = None,
-) -> tuple[PluginKernel, HostServices, ToolRegistry]:
+) -> tuple[PluginKernel, HostServices, ToolRegistry, PluginRpcRegistry[Any]]:
     _write(
         tmp_path,
         "provider",
@@ -213,10 +212,11 @@ async def _kernel(
         raw_plugin_configs={key: dict(value) for key, value in configs.items()},
         process_resources=ProcessResourceOwner(),
     )
+    rpc = PluginRpcRegistry(EventBus())
     kernel = host_kernel([tmp_path], services=services, tools=tools, rpc=rpc)
     await kernel.load_all()
     kernel.publish_process_resources()
-    return kernel, services, tools
+    return kernel, services, tools, rpc
 
 
 def _reload(kernel: PluginKernel, label: str, timeout: float = 5):
@@ -242,7 +242,7 @@ async def _echo(rpc: PluginRpcRegistry[Any]) -> dict[str, object] | None:
 
 @pytest.mark.asyncio
 async def test_reload_reruns_only_the_closure_with_new_config(probe, tmp_path):
-    kernel, services, _ = await _kernel(tmp_path)
+    kernel, services, _, _ = await _kernel(tmp_path)
     probe.events.clear()
 
     result = await _reload(kernel, "v2")
@@ -273,8 +273,7 @@ async def test_reload_reruns_only_the_closure_with_new_config(probe, tmp_path):
 async def test_reload_waits_for_closure_calls_only_and_rejects_new_ones(
     probe, tmp_path
 ):
-    rpc = PluginRpcRegistry(EventBus())
-    kernel, _, tools = await _kernel(tmp_path, rpc=rpc)
+    kernel, _, tools, rpc = await _kernel(tmp_path)
     old_tool = tools.get_tool("provider_slow")
     resolved = rpc.resolve("plugin.provider.echo")
     assert old_tool is not None and resolved is not None
@@ -321,7 +320,7 @@ async def test_reload_waits_for_closure_calls_only_and_rejects_new_ones(
 async def test_dependent_in_flight_work_can_still_call_its_provider_while_draining(
     probe, tmp_path
 ):
-    kernel, _, tools = await _kernel(tmp_path)
+    kernel, _, tools, _ = await _kernel(tmp_path)
     probe.release.set()
     relay = asyncio.create_task(tools.execute("consumer_relay", {}))
     await _until(probe, ("relay-start",))
@@ -341,8 +340,7 @@ async def test_dependent_in_flight_work_can_still_call_its_provider_while_draini
 
 @pytest.mark.asyncio
 async def test_drain_timeout_abandons_the_reload_unchanged(probe, tmp_path):
-    rpc = PluginRpcRegistry(EventBus())
-    kernel, services, tools = await _kernel(tmp_path, rpc=rpc)
+    kernel, services, tools, rpc = await _kernel(tmp_path)
     in_flight = asyncio.create_task(tools.execute("provider_slow", {}))
     await _until(probe, ("call-start", "v1"))
 
@@ -372,7 +370,7 @@ async def test_drain_timeout_abandons_the_reload_unchanged(probe, tmp_path):
 async def test_rollback_waits_for_calls_admitted_by_a_discarded_new_instance(
     probe, tmp_path
 ):
-    kernel, services, _ = await _kernel(tmp_path)
+    kernel, services, _, _ = await _kernel(tmp_path)
     reload = asyncio.create_task(_reload(kernel, "consumer-fails"))
     await _until(probe, ("call-start", "consumer-fails"))
     for _ in range(20):
@@ -397,7 +395,7 @@ async def test_rollback_waits_for_calls_admitted_by_a_discarded_new_instance(
 async def test_rollback_drain_timeout_is_reported_and_disposal_proceeds(
     probe, tmp_path
 ):
-    kernel, _, _ = await _kernel(tmp_path)
+    kernel, _, _, _ = await _kernel(tmp_path)
 
     with pytest.raises(PluginReloadFailed) as caught:
         await _reload(kernel, "consumer-fails", timeout=0.05)
@@ -494,8 +492,7 @@ async def test_retired_generation_gate_never_admits_a_shared_tool_call(probe, tm
 async def test_cancelling_the_caller_while_draining_reopens_the_old_instance(
     probe, tmp_path
 ):
-    rpc = PluginRpcRegistry(EventBus())
-    kernel, services, tools = await _kernel(tmp_path, rpc=rpc)
+    kernel, services, tools, rpc = await _kernel(tmp_path)
     in_flight = asyncio.create_task(tools.execute("provider_slow", {}))
     await _until(probe, ("call-start", "v1"))
     reload = asyncio.create_task(_reload(kernel, "v2"))
@@ -516,8 +513,7 @@ async def test_cancelling_the_caller_while_draining_reopens_the_old_instance(
 
 @pytest.mark.asyncio
 async def test_cancelling_the_caller_during_setup_completes_the_reload(probe, tmp_path):
-    rpc = PluginRpcRegistry(EventBus())
-    kernel, services, _ = await _kernel(tmp_path, rpc=rpc)
+    kernel, services, _, rpc = await _kernel(tmp_path)
     reload = asyncio.create_task(_reload(kernel, "slow-setup"))
     await _until(probe, ("setup-waiting",))
 
@@ -541,7 +537,7 @@ async def test_cancelling_the_caller_during_setup_completes_the_reload(probe, tm
 
 @pytest.mark.asyncio
 async def test_failed_reload_restores_the_old_config_instance(probe, tmp_path):
-    kernel, services, tools = await _kernel(tmp_path)
+    kernel, services, tools, _ = await _kernel(tmp_path)
     old_tables = services.plugin_configs["provider"]
     probe.events.clear()
 
@@ -583,7 +579,7 @@ async def test_failed_reload_restores_the_old_config_instance(probe, tmp_path):
 async def test_reload_refuses_generation_only_closures_before_any_change(
     probe, tmp_path, consumer_manifest, reason
 ):
-    kernel, services, _ = await _kernel(
+    kernel, services, _, _ = await _kernel(
         tmp_path,
         consumer_capabilities="channels" if reason == "channels" else "",
         consumer_manifest=consumer_manifest,
@@ -609,7 +605,7 @@ async def test_reload_refuses_generation_only_closures_before_any_change(
 async def test_reload_refuses_an_inactive_target_by_state(
     probe, tmp_path, config, reason
 ):
-    kernel, services, _ = await _kernel(tmp_path, configs={"provider": config})
+    kernel, services, _, _ = await _kernel(tmp_path, configs={"provider": config})
 
     with pytest.raises(PluginReloadUnsupported) as caught:
         await _reload(kernel, "v2")
@@ -621,7 +617,7 @@ async def test_reload_refuses_an_inactive_target_by_state(
 
 @pytest.mark.asyncio
 async def test_reload_values_cannot_disable_the_target(probe, tmp_path):
-    kernel, services, _ = await _kernel(tmp_path)
+    kernel, services, _, _ = await _kernel(tmp_path)
     probe.events.clear()
 
     with pytest.raises(ValueError, match="停用"):
@@ -641,7 +637,7 @@ async def test_reload_values_cannot_disable_the_target(probe, tmp_path):
 async def test_terminate_waits_for_a_reload_and_later_reloads_are_refused(
     probe, tmp_path
 ):
-    kernel, _, tools = await _kernel(tmp_path)
+    kernel, _, tools, _ = await _kernel(tmp_path)
     in_flight = asyncio.create_task(tools.execute("provider_slow", {}))
     await _until(probe, ("call-start", "v1"))
     reload = asyncio.create_task(_reload(kernel, "v2"))
@@ -836,8 +832,7 @@ def _states(kernel: PluginKernel) -> dict[str, str]:
 async def test_disable_and_enable_only_touch_the_closure_within_the_generation(
     probe, tmp_path
 ):
-    rpc = PluginRpcRegistry(EventBus())
-    kernel, services, tools = await _kernel(tmp_path, rpc=rpc)
+    kernel, services, tools, rpc = await _kernel(tmp_path)
     in_flight = asyncio.create_task(tools.execute("provider_slow", {}))
     await _until(probe, ("call-start", "v1"))
     probe.events.clear()
@@ -882,7 +877,7 @@ async def test_disable_and_enable_only_touch_the_closure_within_the_generation(
 
 @pytest.mark.asyncio
 async def test_failed_toggle_commit_restores_the_previous_states(probe, tmp_path):
-    kernel, services, _ = await _kernel(tmp_path)
+    kernel, services, _, _ = await _kernel(tmp_path)
     probe.events.clear()
 
     def fail(_plugin_ids):
@@ -917,7 +912,7 @@ async def test_failed_toggle_commit_restores_the_previous_states(probe, tmp_path
 
 @pytest.mark.asyncio
 async def test_enabling_a_plugin_whose_setup_fails_keeps_it_failed(probe, tmp_path):
-    kernel, services, _ = await _kernel(
+    kernel, services, _, _ = await _kernel(
         tmp_path, configs={"provider": {"label": "broken", "enabled": False}}
     )
     committed = []
@@ -940,7 +935,7 @@ async def test_enabling_a_plugin_whose_setup_fails_keeps_it_failed(probe, tmp_pa
 async def test_toggle_refuses_closures_only_a_generation_swap_can_change(
     probe, tmp_path
 ):
-    kernel, services, _ = await _kernel(
+    kernel, services, _, _ = await _kernel(
         tmp_path,
         consumer_capabilities="channels",
         consumer_manifest=(
@@ -963,7 +958,7 @@ async def test_toggle_refuses_closures_only_a_generation_swap_can_change(
 
 @pytest.mark.asyncio
 async def test_enable_refuses_a_dependency_only_a_swap_can_retry(probe, tmp_path):
-    kernel, _, _ = await _kernel(
+    kernel, _, _, _ = await _kernel(
         tmp_path,
         configs={"provider": {"label": "broken"}, "consumer": {"enabled": False}},
     )

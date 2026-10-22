@@ -124,13 +124,13 @@ class CoreRuntime:
     group_environment: GroupEnvironment
     # 群聊旁听的开关（#538）：设置旁听的工具与桌面小手机共用这一个实例（#540）。
     group_listening: GroupListeningControl
+    # The generation's plugin RPC registry, shared by the kernel (``host.bridge``),
+    # account delivery and the desktop bridge's dispatch.
+    plugin_rpc: PluginRpcRegistry[MethodPolicy]
     scene_service: SceneObservationService | None = None
     image_sync_service: ExternalPushSyncService | None = None
     agent_provider: LLMProvider | None = None
     plugin_manager: "PluginKernel | None" = None
-    # The generation's plugin RPC registry, shared by the kernel (``host.bridge``),
-    # account delivery and the desktop bridge's dispatch.
-    plugin_rpc: "PluginRpcRegistry[MethodPolicy] | None" = None
     memory_optimizer: Any | None = None
     additional_providers: list[LLMProvider] = field(default_factory=list)
     proactive_motives: list[ProactiveGate] = field(default_factory=list)

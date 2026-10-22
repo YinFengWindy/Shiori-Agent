@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
 
-
 from shiori_sdk.lifecycle import PHASE_SLOTS, require_phase_slot
 
 from agent.plugin_host.call_gate import PluginCallGate

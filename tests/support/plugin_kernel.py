@@ -101,8 +101,7 @@ def make_kernel(
 ) -> PluginKernel:
     """Creates a kernel over real host services for the given plugin roots.
 
-    ``rpc`` is the plugin RPC registry to use (by default a new one over
-    ``event_bus``); pass one to read what plugins registered.
+    ``event_bus`` and ``rpc`` are passed on to ``host_kernel``.
     """
     # 独立 workspace 确保 KV 测试能发现错误的插件目录写入。
     resolved_workspace = workspace
