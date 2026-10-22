@@ -8,7 +8,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from zipfile import BadZipFile, ZipFile
 
-from agent.plugin_host.diagnostics import PackageContractError
+from shiori_sdk.kernel import PackageContractError
 from agent.plugin_host.host_contract import HostRuntimeContract
 from agent.plugin_host.package_contract import ValidatedPackage, validate_package
 from agent.plugin_host.package_paths import package_path

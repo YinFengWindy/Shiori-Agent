@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from agent.plugin_host.diagnostics import PackageContractError
+from shiori_sdk.kernel import PackageContractError
 from agent.plugin_host.versions import satisfies
 
 

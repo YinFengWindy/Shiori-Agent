@@ -1,0 +1,337 @@
+"""The plugin kernel: provide/require, ordered setup, scoped disposal and reload."""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+from collections.abc import Awaitable, Callable, Coroutine, Iterable, Mapping, Sequence
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+from . import graph
+from .contracts import Key, KernelError, PluginFailed, PluginSpec, PluginStarted
+from .contracts import PluginStopped, Veto
+from .diagnostics import PluginDiagnostic
+from .events import WATCH_LIMIT, Check, EventHub, OnHandler, WatchHandler
+from .scope import Dispose, Scope
+
+logger = logging.getLogger("shiori_sdk.kernel")
+
+CORE = ""
+"""Owner recorded for keys the host provides directly (core modules)."""
+
+DRAIN_TIMEOUT = 60.0
+"""Seconds a reload waits for its closure to drain before giving up (D25)."""
+
+
+@dataclass(frozen=True)
+class PluginStatus:
+    """Where one plugin stands: ACTIVE, FAILED, BLOCKED, REPLACED or STOPPED.
+
+    ``error`` is the setup failure and ``cleanup_errors`` what releasing the
+    plugin's scope reported (after a failed setup or a stop).
+    """
+
+    state: str
+    diagnostic: PluginDiagnostic | None = None
+    error: BaseException | None = None
+    cleanup_errors: tuple[Exception, ...] = ()
+
+
+class Context:
+    """Everything a plugin's ``setup`` receives from the kernel."""
+
+    def __init__(self, kernel: Kernel, spec: PluginSpec, scope: Scope) -> None:
+        self.plugin_id = spec.id
+        self.data_dir: Path | None = spec.data_dir
+        self.config: Mapping[str, object] = spec.config
+        self.log = logging.getLogger(f"shiori.plugin.{spec.id}")
+        self._kernel = kernel
+        self._spec = spec
+        self._scope = scope
+
+    def provide[T](self, key: Key[T], impl: T) -> None:
+        """Publishes ``impl`` under a key this plugin declares in ``provides``."""
+        self._declared(key, self._spec.provides, "provides")
+        self._kernel._register(key, impl, self.plugin_id, self._scope)
+
+    def require[T](self, key: Key[T]) -> T:
+        """The current provider of a key declared in ``inject``."""
+        self._declared(key, self._spec.requires, "inject")
+        if (found := self._kernel._providers.get(key.name)) is None:
+            reason = f"插件 {self.plugin_id} 依赖的 {key.name} 当前没有提供方"
+            code, ids = "provider_unavailable", [self.plugin_id]
+            raise KernelError(code, "dependency", "inject", reason, ids)
+        return found[1]
+
+    def get[T](self, key: Key[T]) -> T | None:
+        """The current provider of a key declared in ``optional_inject``, or None."""
+        self._declared(key, self._spec.optional, "optional_inject")
+        return self._kernel.get(key)
+
+    def _declared(self, key: Key[Any], names: tuple[str, ...], field: str) -> None:
+        if key.name not in names:
+            reason = f"插件 {self.plugin_id} 未在 manifest {field} 中声明 {key.name}"
+            raise KernelError(
+                "undeclared_key", "setup", field, reason, [self.plugin_id]
+            )
+
+    def on[E](self, event_type: type[E], handler: OnHandler[E]) -> None:
+        """Joins the ordered chain; return the (replaced) event or ``Veto``."""
+        self._kernel._events.on(self.plugin_id, self._scope, event_type, handler)
+
+    def watch[E](self, event_type: type[E], handler: WatchHandler[E]) -> None:
+        """Listens read-only to the final event, serially, without delaying emit."""
+        self._kernel._events.watch(self.plugin_id, self._scope, event_type, handler)
+
+    async def emit[E](self, event: E) -> E | Veto:
+        """Emits through the kernel; see ``Kernel.emit``."""
+        return await self._kernel.emit(event)
+
+    def effect(self, dispose: Dispose) -> None:
+        """Registers cleanup, run LIFO after subscriptions and tasks are gone."""
+        _ = self._scope.effect(dispose)
+
+    def spawn[T](self, coro: Coroutine[Any, Any, T]) -> asyncio.Task[T]:
+        """Runs a task owned by this plugin; disposal cancels it (not drained, D25)."""
+        return self._scope.spawn(coro, name=f"plugin:{self.plugin_id}")
+
+    def on_drain(self, callback: Callable[[], Awaitable[None]]) -> None:
+        """Adds plugin-specific draining to the default one before a reload (D25)."""
+        self._scope.ensure_active("on_drain")
+        self._scope.drainers.append(callback)
+
+
+class Kernel:
+    """Loads plugin specs in dependency order and owns their scopes.
+
+    The host provides core keys with ``provide`` and adds post-chain checks
+    with ``check`` before ``start``; ``reload`` and ``stop`` complete the host
+    surface. ``activate`` / ``deactivate`` / ``drain`` are the steps those
+    compose, for hosts that orchestrate enabling and rollback themselves.
+    """
+
+    def __init__(
+        self, *, drain_timeout: float = DRAIN_TIMEOUT, watch_limit: int = WATCH_LIMIT
+    ) -> None:
+        self.drain_timeout = drain_timeout
+        self._specs: dict[str, PluginSpec] = {}
+        self._status: dict[str, PluginStatus] = {}
+        self._scopes: dict[str, Scope] = {}
+        self._providers: dict[str, tuple[str, Any]] = {}
+        self._owners: dict[str, str] = {}
+        self._rank: dict[str, int] = {}
+        self._events = EventHub(lambda pid: self._rank.get(pid, -1), watch_limit)
+
+    def provide[T](self, key: Key[T], impl: T) -> None:
+        """Publishes a core service; a duplicate is an error (startup fails)."""
+        self._register(key, impl, CORE, None)
+
+    def get[T](self, key: Key[T]) -> T | None:
+        """The current provider of ``key``; consumers look it up on every use."""
+        found = self._providers.get(key.name)
+        return None if found is None else found[1]
+
+    def check[E](self, event_type: type[E], check: Check[E]) -> None:
+        """Adds a fixed core check run on the final event of each ``on`` chain."""
+        self._events.check(event_type, check)
+
+    async def emit[E](self, event: E) -> E | Veto:
+        """``on`` chain by rank, then core checks, then watchers (not awaited)."""
+        return await self._events.emit(event)
+
+    def status(self, plugin_id: str) -> PluginStatus | None:
+        """The plugin's latest status, None when the kernel never saw it."""
+        return self._status.get(plugin_id)
+
+    def _register(self, key: Key[Any], impl: object, owner: str, scope: Scope | None):
+        if scope is not None:
+            scope.ensure_active(f"provide:{key.name}")
+        if key.name in self._providers:
+            holder = self._providers[key.name][0]
+            names = [holder or "核心", owner or "核心"]
+            reason = f"{key.name} 已由 {names[0]} 提供，{names[1]} 不能重复提供"
+            raise KernelError("duplicate_provider", "setup", "provides", reason, names)
+        self._providers[key.name] = (owner, impl)
+
+    async def start(self, specs: Iterable[PluginSpec]) -> None:
+        """Plans ``specs`` and sets up every planned plugin that is not running.
+
+        A plugin whose required key is unavailable becomes BLOCKED, one whose
+        setup raises FAILED, and its ``require`` dependents BLOCKED in turn.
+        """
+        for plugin_id in await self.plan(specs):
+            if plugin_id not in self._scopes:
+                _ = await self.activate(plugin_id)
+
+    async def plan(self, specs: Iterable[PluginSpec]) -> tuple[str, ...]:
+        """Adds ``specs``, re-plans all known specs and returns the setup order.
+
+        Excluded plugins (see ``graph.plan``) get their status here and never
+        run. Raises ``KernelError`` when a plugin declares a core key.
+        """
+        self._specs.update((spec.id, spec) for spec in specs)
+        core = {name for name, (owner, _) in self._providers.items() if owner == CORE}
+        plan = graph.plan(list(self._specs.values()), core)
+        self._rank = {plugin_id: rank for rank, plugin_id in enumerate(plan.order)}
+        self._owners = plan.owners
+        for plugin_id, excluded in plan.excluded.items():
+            known = getattr(self._status.get(plugin_id), "diagnostic", None)
+            if plugin_id not in self._scopes and known != excluded:
+                _ = await self._settle(plugin_id, excluded.state, excluded)
+        return plan.order
+
+    def scope(self, plugin_id: str) -> Scope:
+        """The scope of a running (or setting up) plugin, for host adapters."""
+        return self._scopes[plugin_id]
+
+    async def activate(self, plugin_id: str) -> PluginStatus:
+        """Runs one planned plugin's setup; on failure releases what it registered.
+
+        Cancellation also releases the scope, then propagates.
+        """
+        spec = self._specs[plugin_id]
+        if missing := [name for name in spec.requires if name not in self._providers]:
+            reason = f"插件 {plugin_id} 依赖的 {'、'.join(missing)} 不可用"
+            code = "dependency_unavailable"
+            blocked = PluginDiagnostic(code, "dependency", "inject", reason)
+            return await self._settle(plugin_id, "BLOCKED", blocked)
+        scope = self._scopes[plugin_id] = Scope(plugin_id)
+        try:
+            await spec.setup(Context(self, spec, scope))
+        except BaseException as error:
+            errors = tuple(await self._release(plugin_id))
+            reason = f"插件 {plugin_id} 启动失败: {str(error) or type(error).__name__}"
+            failed = PluginDiagnostic(
+                "setup_failed", "setup", "setup", reason, "", "FAILED"
+            )
+            if not isinstance(error, Exception):
+                self._status[plugin_id] = PluginStatus("FAILED", failed, error, errors)
+                raise
+            return await self._settle(plugin_id, "FAILED", failed, error, errors)
+        return await self._settle(plugin_id, "ACTIVE")
+
+    async def deactivate(self, plugin_id: str) -> list[Exception]:
+        """Releases a plugin's scope (stopped or failed) and marks it STOPPED."""
+        if plugin_id not in self._scopes:
+            return []
+        errors = await self._release(plugin_id)
+        _ = await self._settle(plugin_id, "STOPPED", None, None, tuple(errors))
+        return errors
+
+    async def _release(self, plugin_id: str) -> list[Exception]:
+        for name, (owner, _) in list(self._providers.items()):
+            if owner == plugin_id:
+                del self._providers[name]
+        errors = await self._scopes[plugin_id].close()
+        del self._scopes[plugin_id]
+        return errors
+
+    async def _settle(
+        self,
+        plugin_id: str,
+        state: str,
+        problem: PluginDiagnostic | None = None,
+        error: BaseException | None = None,
+        cleanup: tuple[Exception, ...] = (),
+    ) -> PluginStatus:
+        status = self._status[plugin_id] = PluginStatus(state, problem, error, cleanup)
+        if state == "ACTIVE":
+            _ = await self.emit(PluginStarted(plugin_id))
+        elif state == "STOPPED":
+            _ = await self.emit(PluginStopped(plugin_id))
+        elif problem is not None and state in ("FAILED", "BLOCKED"):
+            _ = await self.emit(PluginFailed(plugin_id, problem))
+        return status
+
+    def closure(self, plugin_id: str) -> list[str]:
+        """``plugin_id`` and its running dependents, dependents first (§8.2)."""
+        running = {pid: self._specs[pid] for pid in self._scopes}
+        found = graph.dependents(plugin_id, running, self._owners)
+        return sorted(found, key=lambda pid: self._rank.get(pid, -1), reverse=True)
+
+    def reload_closure(self, plugin_id: str) -> list[str]:
+        """The reload set of ``plugin_id``, dependents first, or ``KernelError``.
+
+        Refused when the plugin is not running or the set holds a plugin only
+        a restart can change (D14: channels or ``hot_reload=False``).
+        """
+        if getattr(self._status.get(plugin_id), "state", None) != "ACTIVE":
+            reason = f"插件 {plugin_id} 未在运行，无法重载"
+            raise KernelError("not_active", "reload", "state", reason, [plugin_id])
+        members = self.closure(plugin_id)
+        specs = [self._specs[pid] for pid in members]
+        if fixed := sorted(s.id for s in specs if s.channels or not s.hot_reload):
+            reason = f"插件 {'、'.join(fixed)} 不可代内重载，需重启"
+            code, field = "restart_required", "supports_hot_unload"
+            raise KernelError(code, "reload", field, reason, fixed)
+        return members
+
+    async def reload(self, plugin_id: str, *, timeout: float | None = None):
+        """Drains, disposes and sets up again the ``reload_closure``.
+
+        Abandoned with the old instances kept when draining exceeds
+        ``timeout`` (default ``drain_timeout``). Returns the reloaded ids in
+        setup order; ``status`` tells each outcome.
+        """
+        members = self.reload_closure(plugin_id)
+        await self.drain(members, timeout)
+        for pid in members:
+            _ = await self.deactivate(pid)
+        for pid in reversed(members):
+            _ = await self.activate(pid)
+        return tuple(reversed(members))
+
+    async def drain(
+        self,
+        plugin_ids: Sequence[str],
+        timeout: float | None = None,
+        prepare: Callable[[str], Awaitable[None]] | None = None,
+    ) -> None:
+        """Drains the plugins one after another within one total timeout.
+
+        ``prepare`` (host hook) runs before each plugin's drain. A timeout
+        raises ``KernelError`` naming the plugin being drained; then, as on an
+        ``on_drain`` error or cancellation, the remaining plugins are skipped
+        while the drain in progress finishes in the background (it only waits).
+        """
+        limit = self.drain_timeout if timeout is None else timeout
+        abandoned, current = False, ""
+
+        async def staged() -> None:
+            nonlocal current
+            for current in plugin_ids:
+                if prepare is not None and not abandoned:
+                    await prepare(current)
+                if abandoned:
+                    return
+                await self._scopes[current].drain()
+
+        waiting = asyncio.ensure_future(staged())
+        try:
+            if not (await asyncio.wait({waiting}, timeout=limit))[0]:
+                reason = (
+                    f"插件 {current} 未能在 {limit:g} 秒内排空，重载已中止，保留旧实例"
+                )
+                raise KernelError(
+                    "drain_timeout", "reload", "on_drain", reason, [current]
+                )
+            waiting.result()
+        except BaseException:
+            abandoned = True
+            if not waiting.done():
+                waiting.add_done_callback(_log_abandoned)
+            raise
+
+    async def stop(self) -> list[Exception]:
+        """Releases every plugin scope, dependents first; returns the cleanup errors."""
+        errors: list[Exception] = []
+        for pid in sorted(self._scopes, key=lambda pid: -self._rank.get(pid, -1)):
+            errors.extend(await self.deactivate(pid))
+        return errors
+
+
+def _log_abandoned(task: asyncio.Future[None]) -> None:
+    if not task.cancelled() and (error := task.exception()) is not None:
+        logger.error("已放弃的插件排空以异常结束", exc_info=error)

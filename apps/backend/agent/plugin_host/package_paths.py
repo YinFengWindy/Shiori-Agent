@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from pathlib import Path, PurePosixPath
 
-from agent.plugin_host.diagnostics import PackageContractError
+from shiori_sdk.kernel import PackageContractError
 
 _RESERVED = re.compile(r"(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\..*)?", re.I)
 

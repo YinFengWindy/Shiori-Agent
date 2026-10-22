@@ -8,7 +8,7 @@ from pathlib import Path
 
 from shiori_sdk.files.text import atomic_save_text
 
-from .diagnostics import PackageContractError
+from shiori_sdk.kernel import PackageContractError
 
 
 class PluginExecutionIdentity:

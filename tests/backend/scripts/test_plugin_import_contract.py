@@ -5,7 +5,11 @@ from pathlib import Path
 import pytest
 from grimp import ImportGraph
 
-from scripts.plugin_import_contract import declared_plugins, undeclared_imports
+from scripts.plugin_import_contract import (
+    declared_plugins,
+    kernel_escapes,
+    undeclared_imports,
+)
 
 
 def test_only_imports_missing_from_the_importer_manifest_are_reported(
@@ -61,3 +65,40 @@ def test_a_plugins_directory_without_manifest_is_an_error(tmp_path: Path) -> Non
 
     with pytest.raises(ValueError, match="plugins/shared .* no manifest.yaml"):
         undeclared_imports(graph, declared_plugins(tmp_path))
+
+
+def test_kernel_may_import_only_itself_and_the_standard_library() -> None:
+    graph = ImportGraph()
+    for module in (
+        "shiori_sdk",
+        "shiori_sdk.tools",
+        "shiori_sdk.kernel",
+        "shiori_sdk.kernel.kernel",
+        "shiori_sdk.kernel.scope",
+        "agent.tools",
+    ):
+        graph.add_module(module)
+    graph.add_module("asyncio", is_squashed=True)
+    graph.add_module("httpx", is_squashed=True)
+    for line, imported in enumerate(
+        (
+            "shiori_sdk.kernel.scope",
+            "asyncio",
+            "shiori_sdk.tools",
+            "httpx",
+            "agent.tools",
+        ),
+        start=1,
+    ):
+        graph.add_import(
+            importer="shiori_sdk.kernel.kernel",
+            imported=imported,
+            line_number=line,
+            line_contents=f"import {imported}",
+        )
+
+    assert [row["imported"] for row in kernel_escapes(graph)] == [
+        "agent.tools",
+        "httpx",
+        "shiori_sdk.tools",
+    ]

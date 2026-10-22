@@ -43,8 +43,8 @@
 | D21 | **角色任务面板外壳留在核心，schedule 通过 `roleTasks` 插槽挂入** | 核心 renderer 保留面板外壳，继续列出 subagent 和记忆任务；schedule 插件前端挂入定时任务区块 | 只新增一个前端插槽，不需要后端插座；在 P6s 完成 |
 | D22 | **版本策略（修订，回应 R3）** | **大版本 = 破坏性**。manifest `api: 4` + sdk 最低约束（peer）。SDK 独立 semver；**废除** Unreleased/sync 批次。同大版本内：**禁止**给已有 Key/Protocol **新增方法**；新能力一律以**新 Key**（或新 Event）出现。缺 Key → setup 失败 + `PluginDiagnostic`。D10/D19 的新方法必须在进 4.0 前并入基线契约，4.0 之后只能开新 Key。现行 `runtime_api` 删除 | P5；改 AGENTS.md |
 | D23 | **发布边界** | 桌面发版**仅在 P1–P8 全部完成后**随 SDK 4.0 一起发。P1–P8 期间**不从 main 发桌面版**（「不发没事」，见 D26）。已装 3.x/`api:2` → 启动 BLOCKED、不迁移、保留文件配置。不要求可降级。0.5.x 用户数据正向兼容仍按 D4′ | P4/P8；D13 Diagnostic |
-| D24 | **`conflicts` / `replaces`（修订，回应 R5）** | `replaces: [other_id]` = **被替换插件整体不加载**（强于只盖 Key；UI 显示「已被 X 替换」）。`conflicts: [other_id]` = 不可同时启用。未声明关系的双 provide 同一 Key → **启动失败**，点名双方 | 避免 default_memory 被替后仍注册工具/handler |
-| D25 | **热重载排空：`ctx.on_drain`，不用活代理（R2 / T3）** | `require`/`get` 返回原始对象，删掉 seal 的说法。reload 时先排空闭包里的每个插件，再 dispose，再 re-setup。**默认排空（不注册 `on_drain` 也生效）**：内核等该插件 `spawn` 出去的任务，以及正在执行的 `on`/`watch` handler 结束。注册了 **`ctx.on_drain`** 的插件，再额外执行自己的排空逻辑。总超时 60 秒，超时则中止这次 reload、保留旧实例并产出诊断。**核心不得长期持有** provider 实例，每次使用都重新 `get`。契约测试：provider 带代际 id，重载后下一次调用必须拿到新代际；另测「未注册 `on_drain`」的默认排空路径 | §8.2；P1 |
+| D24 | **`conflicts` / `replaces`（修订，回应 R5）** | `replaces: [other_id]` = **被替换插件整体不加载**（强于只盖 Key；UI 显示「已被 X 替换」）。`conflicts: [other_id]` = 不可同时启用。未声明关系的双 provide 同一 Key → **双方都标 BLOCKED**，诊断互相点名，其他插件照常启动；插件与核心 provide 同一个 Key 时整个启动失败（2026-10-22 维护者在 P1 实现时确认） | 避免 default_memory 被替后仍注册工具/handler |
+| D25 | **热重载排空：`ctx.on_drain`，不用活代理（R2 / T3）** | `require`/`get` 返回原始对象，删掉 seal 的说法。reload 时先排空闭包里的每个插件，再 dispose，再 re-setup。**默认排空（不注册 `on_drain` 也生效）**：内核只等该插件正在执行的 `on`/`watch` handler 结束；`spawn` 出去的任务不参与排空，dispose 时按 §8.4 的顺序直接取消（2026-10-22 维护者在 P1 实现时确认：常驻循环永远不会结束，等它会让每次 reload 都超时）。注册了 **`ctx.on_drain`** 的插件，再额外执行自己的排空逻辑。总超时 60 秒，超时则中止这次 reload、保留旧实例并产出诊断。**核心不得长期持有** provider 实例，每次使用都重新 `get`。契约测试：provider 带代际 id，重载后下一次调用必须拿到新代际；另测「未注册 `on_drain`」的默认排空路径 | §8.2；P1 |
 | D26 | **重构期不发桌面版；停用自动发版（R4）** | P1–P8 期间不发桌面版。仓库的自动桌面发版已停用：`.github/workflows/windows-release.yml` 的 `schedule` cron 随 PR #897 注释掉，**必须在任何 P1 代码 PR 之前合入 main**（GitHub 定时任务只认默认分支）。`apps/desktop/scripts/daily-release.mjs` 留在仓库，恢复日程后发布流程仍走它。`v*` tag 和 `workflow_dispatch` 保留，但重构期不用。**不设 `release/0.5.x` 热修分支**：维护者确认目前没有需要热修的 bug，接受重构期 0.5.x 不出修复版的风险 | 「不发没事」 |
 | D27 | **配置外迁：只迁缺失的键，迁完从 `config.toml` 删掉（R7 / T2，2026-10-22 维护者确认）** | 从宿主 `config.toml` 搬进插件的配置，在启动时迁入插件配置存储。规则：**只有插件配置里还没有这个键时才迁入**；迁入成功后，**从 `config.toml` 删掉已迁移的键**，插件此后只读插件配置，避免 toml 旧值覆盖用户在设置页的修改，也避免用户改了旧键却静默不生效。迁移失败时不删 toml 键，并产出诊断；重复执行是安全的（插件配置里已有的键不覆盖、toml 里已经没有的键不处理）。**不**给内置插件开读取 toml 命名段的特权。迁移清单（以 976f920 源码为准）：proactive 配置段、`memory_optimizer_enabled`、`scene_observation_enabled`。`natural_chat_enabled` 存在角色 JSON 的 `runtime_config` 里，不在本条范围。与 D4′ 的关系：只改配置键的存放位置；`plugin_data/`、kv、启用状态等 0.5.x 路径和格式不变。memory_optimizer 要「插件启用」和 `memory_optimizer_enabled` 同时为真才运行（真值表见 §8.6） | P6 各外迁 PR 填写「现位置 → 新位置」表 |
 
@@ -277,7 +277,7 @@ py/fe 为非测试 LOC。"默认关"取自 manifest 的 `default_enabled: false`
    - 声明的 provides 都实际 provide 了；
    - dispose 后没有残留注册和任务；
    - **热重载契约**（D14 修订）：对 `supports_hot_unload: true`（默认）——setup → `reload` → 断言 provide/on/watch/effect/任务**数量与注册顺序**与冷启动一致（不只比数量），下游 require 者也 re-setup；dispose 后归零。对 `supports_hot_unload: false`——断言启用/禁用/reload 走「需重启」路径并产生明确诊断/UI 提示，不强制无残留；
-   - **重复 provide**（D24）：`replaces` / `conflicts` 行为单测；未声明关系的双 provide → 启动失败点名双方；
+   - **重复 provide**（D24）：`replaces` / `conflicts` 行为单测；未声明关系的双 provide → 双方 BLOCKED、互相点名（与核心重复 provide → 启动失败，见 D24）；
    - 声明了 `contributes.channels` 的插件，运行时都注册了对应渠道（D18）；
    - 有 frontend 的插件，入口能解析出具名导出。
 3. **core-only 冒烟测试**（D1/D2/D8）：禁用全部系统插件和外部插件（包括 default_memory、proactive、natural_chat、memory_optimizer），只启动核心模块，用假 LLM 跑完一轮对话（含一次多消息 finish_reply），并断言没有 `MEMORY_ENGINE` 时照常回复、回复中不残留引用标签（citation 在核心，D9）。这条测试就是"拔掉还能聊"规则的执行器。
@@ -420,7 +420,7 @@ D2 已定 proactive 是可禁用的系统插件、核心不依赖它。本节是
 ### 8.2 `get` / 热重载引用（D25）
 
 - **返回原始对象**，不用活代理；删除「seal 拒新调用」表述（与禁止缓存/无代理矛盾，R2）。
-- **排空**：reload 时先排空闭包里的插件，再 dispose，再 re-setup。默认排空不依赖插件注册任何东西：内核等该插件 `spawn` 的任务和正在执行的 `on`/`watch` handler 结束；注册了 `ctx.on_drain` 的插件额外执行自己的逻辑。总超时 60 秒，超时则中止 reload、保留旧实例并产出诊断（D25）。
+- **排空**：reload 时先排空闭包里的插件，再 dispose，再 re-setup。默认排空不依赖插件注册任何东西：内核只等正在执行的 `on`/`watch` handler 结束，`spawn` 的任务不参与排空、dispose 时直接取消（2026-10-22 维护者在 P1 实现时确认，理由是常驻循环永远不会结束）；注册了 `ctx.on_drain` 的插件额外执行自己的逻辑。总超时 60 秒，超时则中止 reload、保留旧实例并产出诊断（D25）。
 - **reload 集合**：该插件 + require 下游 + 已加载且 optional 用过该 Key 的插件；闭包含 `supports_hot_unload: false` → **整体拒绝**，需重启（D14）。
 - **核心不得长持** provider：每次使用重新 `get`；`on_drain` 时清掉持有的引用。不引入 `ProviderChanged` 事件（已选禁长持）。
 - **契约测**：provider 带代际 id；重载后消费方下一次调用必须看到新代际。
@@ -440,7 +440,7 @@ D2 已定 proactive 是可禁用的系统插件、核心不依赖它。本节是
 ### 8.5 失败传播与环
 
 - setup 失败 → 该插件 `FAILED`/`BLOCKED`（带 `PluginDiagnostic`）；`require` 下游连带 BLOCKED；`optional_inject` 消费方降级为 None；**核心 provide 失败 → 启动失败**。
-- 依赖图有环 → 加载前检测并拒绝，诊断列出环上插件 id。
+- 依赖图有环 → 加载前检测并拒绝，诊断列出环上插件 id。只看 `requires`；optional 的互相依赖不算环，排序时跳过会成环的 optional 边（P1 实现时确定：现有插件存在 optional 双向依赖）。
 
 ### 8.6 命名与 D10 / 配置 / 前端
 

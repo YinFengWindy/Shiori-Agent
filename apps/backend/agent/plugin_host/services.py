@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from shiori_sdk.rpc import PluginRpcError
 from shiori_sdk.services import ServiceHandler
 from agent.plugin_host.call_gate import PluginCallGate
-from agent.plugin_host.effects import EffectScope
+from shiori_sdk.kernel import Scope
 
 
 def _name(value: str) -> str:
@@ -20,7 +20,7 @@ def _name(value: str) -> str:
 class _Service:
     descriptor: dict[str, object]
     methods: dict[str, ServiceHandler]
-    scope: EffectScope
+    scope: Scope
 
 
 class PluginServiceRegistry:
@@ -38,7 +38,7 @@ class PluginServiceRegistry:
         label: str,
         methods: Mapping[str, ServiceHandler],
         metadata: Mapping[str, object] | None,
-        scope: EffectScope,
+        scope: Scope,
     ) -> None:
         """Capture published methods and metadata for this precise plugin instance."""
         scope.ensure_active("service:register")
@@ -65,7 +65,7 @@ class PluginServiceRegistry:
             if self._entries.get(key) is entry:
                 self._entries.pop(key)
 
-        scope.add(f"service:{service_id}", remove)
+        _ = scope.effect(remove, f"service:{service_id}")
 
     def list(self, contract: str) -> list[dict[str, object]]:
         """Return detached public descriptors for one exact contract."""
@@ -116,7 +116,7 @@ class ScopedPluginServices:
         self,
         registry: PluginServiceRegistry,
         plugin_id: str,
-        scope: EffectScope,
+        scope: Scope,
         calls: PluginCallGate,
     ):
         self._registry, self._plugin_id, self._scope = registry, plugin_id, scope

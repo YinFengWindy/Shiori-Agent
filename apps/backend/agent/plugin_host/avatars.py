@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from agent.plugin_host.effects import EffectScope
+from shiori_sdk.kernel import Scope
 from core.channel_avatars import AvatarKey, ChannelAvatarStore
 from shiori_sdk.channels.avatars import AvatarFetch
 
@@ -24,7 +24,7 @@ class AvatarsCapability:
     """
 
     def __init__(
-        self, store: ChannelAvatarStore, effects: EffectScope, plugin_id: str
+        self, store: ChannelAvatarStore, effects: Scope, plugin_id: str
     ) -> None:
         self._store = store
         self._effects = effects
@@ -49,7 +49,7 @@ class AvatarsCapability:
         if not self._store.claim(key, plugin_id=self._plugin_id):
             return None
         if not self._cancel_registered:
-            self._effects.add("avatars:refresh", self._cancel_pending)
+            _ = self._effects.effect(self._cancel_pending, "avatars:refresh")
             self._cancel_registered = True
         task = asyncio.create_task(
             self._refresh(key, fetch), name=f"plugin:{self._plugin_id}:avatar"

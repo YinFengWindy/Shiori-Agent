@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from agent.plugin_host.diagnostics import PackageContractError
+from shiori_sdk.kernel import PackageContractError
 from agent.plugin_host.host_contract import HostRuntimeContract
 from agent.plugin_host.manifest import ManifestError, PluginManifest, load_manifest
 from agent.plugin_host.package_paths import contained_file, package_path

@@ -6,18 +6,18 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 from pathlib import Path
 from typing import Any
-from collections.abc import Awaitable, Callable
 
-from agent.plugin_host.call_gate import PluginCallGate
-from agent.plugin_host.capabilities import PluginContributions
-from agent.plugin_host.effects import EffectScope
-from agent.plugin_host.manifest import PluginManifest
-from agent.plugin_host.diagnostics import (
-    ChannelDeclarationError,
+from shiori_sdk.kernel import (
     PackageContractError,
     PluginDiagnostic,
     RendererActivationError,
+    Scope,
 )
+
+from agent.plugin_host.call_gate import PluginCallGate
+from agent.plugin_host.capabilities import PluginContributions
+from agent.plugin_host.manifest import PluginManifest
+from agent.plugin_host.diagnostics import ChannelDeclarationError
 from agent.plugin_host.dependencies import PluginDependencyError
 
 
@@ -35,7 +35,7 @@ class PluginState(Enum):
     UNTRUSTED = auto()
     CONFLICT = auto()
     # An accepted load/rollback left effects that could not be fully disposed
-    # (``EffectScope.dispose_all()`` reported errors) — see
+    # (the kernel scope's ``close()`` reported errors) — see
     # ``PluginKernel._rollback_failed_load`` (#262). Retrying without a
     # process restart cannot guarantee a clean slate, so this is a distinct,
     # non-``can_toggle`` terminal state rather than a plain ``FAILED`` that
@@ -71,12 +71,15 @@ class PluginHandle:
 
     record: PluginRecord
     state: PluginState = PluginState.DISCOVERED
-    effects: EffectScope = field(default_factory=lambda: EffectScope("unbound"))
+    # The kernel scope of the current instance (``shiori_sdk.kernel``); a fresh
+    # placeholder until the kernel runs this handle's setup.
+    effects: Scope = field(default_factory=lambda: Scope("unbound"))
     # Admission for host-routed calls into this instance (tools, services, RPC).
     calls: PluginCallGate = field(default_factory=lambda: PluginCallGate("unbound"))
     contributions: PluginContributions = field(default_factory=PluginContributions)
     instance: Any = None
-    drainers: list[Callable[[], Awaitable[None]]] = field(default_factory=list)
+    # Whether this setup reactivates an instance an in-generation reload replaced.
+    reactivated: bool = False
     error: BaseException | None = None
     # Required renderer contribution points not yet confirmed ready by their
     # owning renderer process (#262); populated once, when the handle becomes

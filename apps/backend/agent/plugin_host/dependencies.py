@@ -3,7 +3,7 @@
 from collections.abc import Callable
 from typing import Any
 
-from agent.plugin_host.diagnostics import PluginDiagnostic
+from shiori_sdk.kernel import PluginDiagnostic
 
 
 class PluginDependencyError(RuntimeError):

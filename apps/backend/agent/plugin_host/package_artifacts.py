@@ -6,7 +6,7 @@ import ast
 import re
 from pathlib import Path
 
-from agent.plugin_host.diagnostics import PackageContractError
+from shiori_sdk.kernel import PackageContractError
 from agent.plugin_host.package_paths import contained_file
 
 # Lexical format checks deliberately do not claim to be a JavaScript parser.

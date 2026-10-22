@@ -6,12 +6,12 @@ import inspect
 from typing import Any
 from shiori_sdk.runtime import EventHandler
 
-from agent.plugin_host.effects import EffectScope
+from shiori_sdk.kernel import Scope
 from bus.event_bus import EventBus
 
 
 class _Subscription:
-    def __init__(self, event_type: type, handler: Any, effects: EffectScope) -> None:
+    def __init__(self, event_type: type, handler: Any, effects: Scope) -> None:
         self.event_type = event_type
         self.handler = handler
         self._effects = effects
@@ -28,12 +28,12 @@ class _Subscription:
 class ScopedEventBus:
     """插件视角的事件总线代理。
 
-    on/off 被拦截并登记进 EffectScope，卸载先停止接收事件、统一解绑，
+    on/off 被拦截并登记进内核 Scope，卸载先停止接收事件、统一解绑，
     再清理其它 effect；已开始执行的 handler 由插件自己的资源清理等待或取消。
     其余方法（emit/observe/fanout/enqueue 等）原样委托真实 EventBus。
     """
 
-    def __init__(self, bus: EventBus, effects: EffectScope) -> None:
+    def __init__(self, bus: EventBus, effects: Scope) -> None:
         self._bus = bus
         self._effects = effects
         self._subscriptions: list[_Subscription] = []
@@ -51,7 +51,7 @@ class ScopedEventBus:
         subscription = _Subscription(event_type, handler, self._effects)
         self._bus.on(event_type, subscription)
         self._subscriptions.append(subscription)
-        self._effects.add_subscription(label, lambda: self._unsubscribe(subscription))
+        self._effects.subscribe(lambda: self._unsubscribe(subscription), label)
 
     def off[EventT](
         self, event_type: type[EventT], handler: EventHandler[EventT]
