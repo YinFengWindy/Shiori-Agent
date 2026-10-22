@@ -26,10 +26,10 @@ from agent.plugin_host.config import PluginConfig
 from agent.plugin_host.storage import PluginStorage
 from agent.plugin_host.capabilities import (
     LifecycleCapability,
-    RpcCapability,
 )
 from agent.plugin_host.core_keys import (
     HOST_ACCOUNTS,
+    HOST_BRIDGE,
     HOST_CONFIG_REFERENCES,
     HOST_TOOL_HOOKS,
     ActiveContributions,
@@ -50,7 +50,6 @@ from agent.plugin_host.discovery import (
     refresh_dependency_admission,
 )
 from agent.plugin_host.call_gate import PluginCallGate
-from agent.plugin_host.events import ScopedEventBus
 from agent.plugin_host.handle import PluginHandle, PluginRecord, PluginState
 from agent.plugin_host.host_service_requirements import (
     provided_service,
@@ -68,7 +67,6 @@ from agent.plugin_host.package_fingerprint import (
 from agent.plugin_host.plugin_data import (
     open_plugin_kv,
 )
-from agent.plugin_host.rpc import PluginRpcRegistry
 from agent.plugin_host.runtime_context import PluginRuntimeContext, PluginSetupContext
 from agent.plugin_host.runtime_lifecycle import PluginRuntimeLifecycle
 from agent.plugin_host.trust_store import PluginTrustStore
@@ -88,7 +86,6 @@ from agent.plugin_host.unload import (
     PluginReloadUnsupported,
     PluginRestartRequired,
 )
-from bus.event_bus import EventBus
 from core.roles import RoleStore
 from shiori_sdk import PluginRuntimeContext as SdkRuntimeContext
 from shiori_sdk.kernel import (
@@ -151,7 +148,6 @@ def plugin_key(plugin_id: str) -> Key[Any]:
 class HostServices:
     """宿主提供给插件装配的服务集合；capability 只暴露其中被声明的切面。"""
 
-    event_bus: EventBus
     workspace: Path | None = None
     # 宿主唯一的 RoleStore 实例（bootstrap 里的 canonical 那个）。插件经
     # role_store capability 拿到的必须是它本身，见 shiori_sdk.runtime.KNOWN_CAPABILITIES
@@ -228,11 +224,11 @@ class PluginKernel:
         # interleaves with another transition or the generation's retirement.
         self._transition_lock = asyncio.Lock()
         self._retired = False
-        # 每个内核（= 每个 runtime generation）独立一份 RPC/配置 schema 注册表
-        self.rpc = PluginRpcRegistry()
-        self.rpc.communication.configure(
-            self._communication_dependencies, services.event_bus
-        )
+        # 每个 runtime generation 独立一份 RPC 注册表（bootstrap 创建，经
+        # host.bridge 提供）与配置 schema 注册表；内核只绑定 communication 的
+        # 依赖解析，并在插件卸载时撤销它的 renderer communication。
+        self._rpc = required_core_key(self._kernel.get, HOST_BRIDGE)
+        self._rpc.communication.bind_resolver(self._communication_dependencies)
         self.config_schemas = PluginConfigSchemaRegistry()
 
     def _communication_dependencies(self, plugin_id: str) -> tuple[str, ...] | None:
@@ -472,7 +468,7 @@ class PluginKernel:
             handle = self._handles[record.candidate_id]
             handle.effects = self._kernel.scope(manifest.id)
             handle.effects.subscribe(
-                lambda: self.rpc.communication.remove_plugin(manifest.id),
+                lambda: self._rpc.communication.remove_plugin(manifest.id),
                 "renderer-communication",
             )
             try:
@@ -684,18 +680,7 @@ class PluginKernel:
                 calls=handle.calls,
             ),
         )
-        rpc = (
-            RpcCapability(
-                self.rpc,
-                handle.effects,
-                handle.plugin_id,
-                handle.calls,
-                self._services.event_bus,
-            )
-            if "rpc" in handle.record.manifest.capabilities
-            else None
-        )
-        capabilities = self._build_capabilities(handle, rpc=rpc)
+        capabilities = self._build_capabilities(handle)
         context: PluginSetupContext = PluginRuntimeContext(
             plugin_id=handle.plugin_id,
             plugin_dir=handle.record.plugin_dir,
@@ -707,12 +692,6 @@ class PluginKernel:
                 if "lifecycle" in handle.record.manifest.capabilities
                 else None
             ),
-            events=(
-                ScopedEventBus(self._services.event_bus, handle.effects)
-                if "events" in handle.record.manifest.capabilities
-                else None
-            ),
-            rpc=rpc,
             workspace=self._services.workspace,
             config=PluginConfig(
                 self._services.plugin_configs.get(handle.plugin_id, {}),
@@ -753,7 +732,7 @@ class PluginKernel:
             ),
             services=(
                 ScopedPluginServices(
-                    self.rpc.services, handle.plugin_id, handle.effects, handle.calls
+                    self._rpc.services, handle.plugin_id, handle.effects, handle.calls
                 )
                 if "services" in grants
                 else None
@@ -773,9 +752,7 @@ class PluginKernel:
             else context.as_sdk_context()
         )
 
-    def _build_capabilities(
-        self, handle: PluginHandle, *, rpc: RpcCapability | None
-    ) -> dict[str, Any]:
+    def _build_capabilities(self, handle: PluginHandle) -> dict[str, Any]:
         services = self._services
         builders: dict[str, Any] = {
             "services": lambda: None,
@@ -805,7 +782,7 @@ class PluginKernel:
             "avatars": lambda: None,
             "background": lambda: None,
             "bot_commands": lambda: None,
-            "rpc": lambda: rpc,
+            "rpc": lambda: None,
             "dependencies": lambda: None,
             "runtime": lambda: None,
             "session_manager": lambda: None,

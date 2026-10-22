@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 from shiori_sdk.lifecycle import AfterToolResultCtx
-from agent.plugin_host import HostServices, PluginKernel
+from agent.plugin_host import HostServices, PluginKernel, PluginRpcRegistry
 from tests.support.plugin_kernel import host_kernel
 from bus.event_bus import EventBus
 from core.roles import RoleStore
@@ -22,21 +22,23 @@ PLUGIN_DIR = Path(__file__).resolve().parents[4] / "plugins/default_memory"
 
 def _load_default_memory_kernel(
     *, tmp_path: Path, memory_engine: object, workspace: Path
-) -> tuple[PluginKernel, EventBus]:
+) -> tuple[PluginKernel, EventBus, PluginRpcRegistry[Any]]:
     root = tmp_path / "plugins"
     root.mkdir()
     stage_plugin_package(PLUGIN_DIR, root / "default_memory")
     bus = EventBus()
+    rpc = PluginRpcRegistry(bus)
     kernel = host_kernel(
         [root],
         services=HostServices(
-            event_bus=bus,
             workspace=workspace,
             role_store=RoleStore(workspace),
             memory_engine=memory_engine,
         ),
+        event_bus=bus,
+        rpc=rpc,
     )
-    return kernel, bus
+    return kernel, bus, rpc
 
 
 @pytest.mark.asyncio
@@ -50,13 +52,13 @@ async def test_markdown_rpc_is_read_only_and_unloads_with_plugin(
     root = workspace / "roles" / "mira" / "memory"
     root.mkdir(parents=True)
     (root / "SELF.md").write_text("# Mira", encoding="utf-8")
-    kernel, _ = _load_default_memory_kernel(
+    kernel, _, rpc = _load_default_memory_kernel(
         tmp_path=tmp_path, memory_engine=None, workspace=workspace
     )
     await kernel.load_all()
     method = "plugin.default_memory.roles.memory.documents"
-    assert kernel.rpc.policy_for(method).concurrency is Concurrency.READ_ONLY
-    resolved = kernel.rpc.resolve(method)
+    assert rpc.policy_for(method).concurrency is Concurrency.READ_ONLY
+    resolved = rpc.resolve(method)
     assert resolved is not None
     assert resolved[0] == "default_memory"
     result = await resolved[1]({"role_id": "mira"})
@@ -69,7 +71,7 @@ async def test_markdown_rpc_is_read_only_and_unloads_with_plugin(
     with pytest.raises(ValueError, match="role not found"):
         await resolved[1]({"role_id": "missing"})
     await kernel.unload("default_memory")
-    assert kernel.rpc.resolve(method) is None
+    assert rpc.resolve(method) is None
 
 
 @pytest.mark.asyncio
@@ -80,7 +82,7 @@ async def test_setup_wires_before_turn_module_and_tool_result_event(
     并把 recall_memory 工具结果记录经 AFTER_TOOL_RESULT 事件接线。"""
     workspace = tmp_path / "workspace"
     workspace.mkdir()
-    kernel, bus = _load_default_memory_kernel(
+    kernel, bus, _ = _load_default_memory_kernel(
         tmp_path=tmp_path,
         memory_engine=SimpleNamespace(describe=lambda: SimpleNamespace(name="default")),
         workspace=workspace,
@@ -131,7 +133,7 @@ async def test_setup_still_wires_module_but_recorder_is_inactive_for_other_engin
     """引擎不是 default 时模块仍会贡献（对齐旧行为），但记录内部被抑制。"""
     workspace = tmp_path / "workspace"
     workspace.mkdir()
-    kernel, bus = _load_default_memory_kernel(
+    kernel, bus, _ = _load_default_memory_kernel(
         tmp_path=tmp_path,
         memory_engine=SimpleNamespace(
             describe=lambda: SimpleNamespace(name="disabled")

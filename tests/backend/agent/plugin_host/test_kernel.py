@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from agent.plugin_host import PluginState
-from agent.plugin_host import HostServices
+from agent.plugin_host import HostServices, PluginRpcRegistry
 from agent.plugin_host.manifest import group_listening_channels
 from agent.plugin_host.package_fingerprint import inspect_package_content
 from agent.plugin_host.trust_store import PluginTrustStore
@@ -67,9 +67,7 @@ async def test_account_test_plugin_reports_and_withdraws_live_state(tmp_path):
         role_store.create_role(role_id=role_id, name=role_id, system_prompt=role_id)
     first_kernel = host_kernel(
         [tmp_path],
-        services=HostServices(
-            event_bus=EventBus(), workspace=workspace, role_store=role_store
-        ),
+        services=HostServices(workspace=workspace, role_store=role_store),
     )
     await first_kernel.load_all()
     assert first_kernel.loaded_count == 1
@@ -81,7 +79,6 @@ async def test_account_test_plugin_reports_and_withdraws_live_state(tmp_path):
     discarded = host_kernel(
         [tmp_path],
         services=HostServices(
-            event_bus=EventBus(),
             workspace=workspace,
             role_store=role_store,
             plugin_configs={"account_demo": {"enabled": False}},
@@ -96,7 +93,6 @@ async def test_account_test_plugin_reports_and_withdraws_live_state(tmp_path):
     replacement = host_kernel(
         [tmp_path],
         services=HostServices(
-            event_bus=EventBus(),
             workspace=workspace,
             role_store=role_store,
             is_reload=True,
@@ -116,7 +112,6 @@ async def test_account_test_plugin_reports_and_withdraws_live_state(tmp_path):
     disabled = host_kernel(
         [tmp_path],
         services=HostServices(
-            event_bus=EventBus(),
             workspace=workspace,
             role_store=role_store,
             plugin_configs={"account_demo": {"enabled": False}},
@@ -146,9 +141,7 @@ async def test_failed_account_plugin_setup_discards_unpublished_identity(tmp_pat
     role_store.create_role(role_id="mira", name="Mira", system_prompt="Mira")
     kernel = host_kernel(
         [tmp_path],
-        services=HostServices(
-            event_bus=EventBus(), workspace=workspace, role_store=role_store
-        ),
+        services=HostServices(workspace=workspace, role_store=role_store),
     )
     await kernel.load_all()
     assert kernel.loaded_count == 0
@@ -165,7 +158,7 @@ async def test_external_source_import_boundary_is_reclaimed_with_plugin_effects(
     kernel = host_kernel(
         [tmp_path],
         external_plugin_dirs=[tmp_path],
-        services=HostServices(event_bus=EventBus(), workspace=tmp_path),
+        services=HostServices(workspace=tmp_path),
     )
     before = set(sys.meta_path)
     try:
@@ -741,10 +734,12 @@ async def test_v2_plugin_rpc_method_callable_then_gone_after_unload(tmp_path: Pa
     (plugin_dir / "backend").mkdir(parents=True)
     (plugin_dir / "backend" / "plugin.py").write_text(_RPC_PLUGIN, encoding="utf-8")
     (plugin_dir / "manifest.yaml").write_text(_RPC_MANIFEST, encoding="utf-8")
-    kernel = make_kernel([tmp_path], event_bus=EventBus())
+    bus = EventBus()
+    rpc = PluginRpcRegistry(bus)
+    kernel = make_kernel([tmp_path], event_bus=bus, rpc=rpc)
     await kernel.load_all()
 
-    resolved = kernel.rpc.resolve("plugin.rpcdemo.ping")
+    resolved = rpc.resolve("plugin.rpcdemo.ping")
     assert resolved is not None
     _, handler = resolved
     assert await handler({"value": 1}) == {"pong": 1}
@@ -752,7 +747,7 @@ async def test_v2_plugin_rpc_method_callable_then_gone_after_unload(tmp_path: Pa
     _ = await kernel.unload("rpcdemo")
 
     # 插件卸载后其 RPC 方法立即不可调用
-    assert kernel.rpc.resolve("plugin.rpcdemo.ping") is None
+    assert rpc.resolve("plugin.rpcdemo.ping") is None
 
 
 _HOST_SERVICES_PLUGIN = """
@@ -888,9 +883,7 @@ capabilities: {capabilities}
         if capability == "external_turns"
         else FakeBackgroundResults()
     )
-    kernel = host_kernel(
-        [tmp_path], services=HostServices(event_bus=EventBus()), **{capability: turns}
-    )
+    kernel = host_kernel([tmp_path], services=HostServices(), **{capability: turns})
     await kernel.load_all()
 
     captured = {
@@ -937,7 +930,6 @@ async def test_declared_capability_without_host_service_fails_before_setup(
     kernel = host_kernel(
         [root],
         services=HostServices(
-            event_bus=EventBus(),
             workspace=tmp_path / "workspace" if with_workspace else None,
         ),
     )
@@ -1349,7 +1341,6 @@ async def test_contract_package_uses_explicit_host_build_inventory(contract_pack
     kernel = host_kernel(
         [contract_package.parent],
         services=HostServices(
-            event_bus=EventBus(),
             plugin_runtime_contract=HostRuntimeContract(
                 python_dependencies=frozenset({"host-build-library"})
             ),
@@ -1437,9 +1428,7 @@ async def test_external_package_never_executes_even_with_config_enablement(
         [contract_package.parent],
         external_plugin_dirs=[contract_package.parent],
         strict=True,
-        services=HostServices(
-            event_bus=EventBus(), plugin_configs={"external_demo": {"enabled": enabled}}
-        ),
+        services=HostServices(plugin_configs={"external_demo": {"enabled": enabled}}),
     )
     await kernel.load_all()
     first = kernel.states()
@@ -1483,7 +1472,7 @@ async def test_rejected_provider_and_dependents_never_execute(tmp_path, conflict
     kernel = host_kernel(
         [builtin, external],
         external_plugin_dirs=[external],
-        services=HostServices(event_bus=EventBus()),
+        services=HostServices(),
         strict=True,
     )
     await kernel.load_all()
@@ -1515,7 +1504,7 @@ async def test_identical_directory_names_keep_independent_runtime_handles(tmp_pa
         (package / "backend/plugin.py").write_text(
             "async def setup(ctx): pass\n", encoding="utf-8"
         )
-    kernel = host_kernel(roots, services=HostServices(event_bus=EventBus()))
+    kernel = host_kernel(roots, services=HostServices())
     await kernel.load_all()
     assert kernel.loaded_count == 2
     with pytest.raises(ManifestError, match="不唯一"):
@@ -1540,7 +1529,8 @@ async def test_discovery_snapshot_preserves_admission_without_sharing_runtime_st
     await first.load_all()
     successor = host_kernel(
         [tmp_path],
-        services=HostServices(event_bus=next_bus),
+        services=HostServices(),
+        event_bus=next_bus,
         discovery_snapshot=first.discover(),
     )
     first_record, next_record = first.discover()[0], successor.discover()[0]
@@ -1574,7 +1564,7 @@ async def test_empty_startup_snapshot_does_not_rescan_new_packages(tmp_path):
     stage_plugin_package(PLUGIN_FIXTURES / "hello", tmp_path / "hello")
     successor = host_kernel(
         [tmp_path],
-        services=HostServices(event_bus=EventBus()),
+        services=HostServices(),
         discovery_snapshot=first.discover(),
     )
     await successor.load_all()
@@ -1950,7 +1940,6 @@ async def test_citation_setup_contributes_expected_phase_modules_via_kernel(
     """
     from shiori_sdk.testing.packages import stage_plugin_package
     from agent.plugin_host import HostServices
-    from bus.event_bus import EventBus
 
     root = tmp_path / "plugins"
     root.mkdir()
@@ -1965,7 +1954,7 @@ async def test_citation_setup_contributes_expected_phase_modules_via_kernel(
     assert (root / "citation/backend/plugin.py").is_file()
     assert (root / "citation/manifest.yaml").is_file()
     assert not (root / "citation/.venv").exists()
-    kernel = host_kernel([root], services=HostServices(event_bus=EventBus()))
+    kernel = host_kernel([root], services=HostServices())
     await kernel.load_all()
 
     assert kernel.prompt_render_modules == []
@@ -1989,7 +1978,6 @@ async def test_setup_contributes_after_step_module_via_kernel(tmp_path: Path) ->
     """
     from shiori_sdk.testing.packages import stage_plugin_package
     from agent.plugin_host import HostServices
-    from bus.event_bus import EventBus
 
     root = tmp_path / "plugins"
     root.mkdir()
@@ -1997,7 +1985,7 @@ async def test_setup_contributes_after_step_module_via_kernel(tmp_path: Path) ->
         Path(__file__).resolve().parents[4] / "plugins/context_pressure",
         root / "context_pressure",
     )
-    kernel = host_kernel([root], services=HostServices(event_bus=EventBus()))
+    kernel = host_kernel([root], services=HostServices())
     await kernel.load_all()
 
     assert [type(m).__name__ for m in kernel.after_step_modules] == [

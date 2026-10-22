@@ -6,6 +6,7 @@ import asyncio
 import sys
 from pathlib import Path
 from types import ModuleType
+from typing import Any
 
 import pytest
 from shiori_sdk.rpc import PluginRpcError
@@ -13,6 +14,7 @@ from shiori_sdk.rpc import PluginRpcError
 from agent.plugin_host import (
     HostServices,
     PluginKernel,
+    PluginRpcRegistry,
     PluginReloadFailed,
     PluginReloadTimeout,
     PluginReloadUnsupported,
@@ -187,6 +189,7 @@ async def _kernel(
     consumer_capabilities: str = "",
     consumer_manifest: str = "",
     configs: dict[str, dict] | None = None,
+    rpc: PluginRpcRegistry[Any] | None = None,
 ) -> tuple[PluginKernel, HostServices, ToolRegistry]:
     _write(
         tmp_path,
@@ -205,13 +208,12 @@ async def _kernel(
     tools = ToolRegistry()
     configs = configs or {"provider": {"label": "v1"}}
     services = HostServices(
-        event_bus=EventBus(),
         workspace=tmp_path / "workspace",
         plugin_configs=configs,
         raw_plugin_configs={key: dict(value) for key, value in configs.items()},
         process_resources=ProcessResourceOwner(),
     )
-    kernel = host_kernel([tmp_path], services=services, tools=tools)
+    kernel = host_kernel([tmp_path], services=services, tools=tools, rpc=rpc)
     await kernel.load_all()
     kernel.publish_process_resources()
     return kernel, services, tools
@@ -232,8 +234,8 @@ async def _until(probe: ModuleType, event: tuple) -> None:
             await asyncio.sleep(0)
 
 
-async def _echo(kernel: PluginKernel) -> dict[str, object] | None:
-    resolved = kernel.rpc.resolve("plugin.provider.echo")
+async def _echo(rpc: PluginRpcRegistry[Any]) -> dict[str, object] | None:
+    resolved = rpc.resolve("plugin.provider.echo")
     assert resolved is not None
     return await resolved[1]({})
 
@@ -271,9 +273,10 @@ async def test_reload_reruns_only_the_closure_with_new_config(probe, tmp_path):
 async def test_reload_waits_for_closure_calls_only_and_rejects_new_ones(
     probe, tmp_path
 ):
-    kernel, _, tools = await _kernel(tmp_path)
+    rpc = PluginRpcRegistry(EventBus())
+    kernel, _, tools = await _kernel(tmp_path, rpc=rpc)
     old_tool = tools.get_tool("provider_slow")
-    resolved = kernel.rpc.resolve("plugin.provider.echo")
+    resolved = rpc.resolve("plugin.provider.echo")
     assert old_tool is not None and resolved is not None
     old_rpc = resolved[1]
     bystander = asyncio.create_task(tools.execute("bystander_busy", {}))
@@ -292,7 +295,7 @@ async def test_reload_waits_for_closure_calls_only_and_rejects_new_ones(
     with pytest.raises(PluginRpcError, match="正在重载"):
         await old_rpc({})
     with pytest.raises(PluginRpcError) as service:
-        await kernel.rpc.services.call(
+        await rpc.services.call(
             "provider", "labels", "echo", {}, caller_active=lambda: True
         )
     assert service.value.code == "plugin_unavailable"
@@ -306,7 +309,7 @@ async def test_reload_waits_for_closure_calls_only_and_rejects_new_ones(
         ("drain", "provider", "v1")
     )
     assert await tools.execute("provider_slow", {}) == "v2"
-    assert await kernel.rpc.services.call(
+    assert await rpc.services.call(
         "provider", "labels", "echo", {}, caller_active=lambda: True
     ) == {"label": "v2"}
     probe.bystander_release.set()
@@ -338,7 +341,8 @@ async def test_dependent_in_flight_work_can_still_call_its_provider_while_draini
 
 @pytest.mark.asyncio
 async def test_drain_timeout_abandons_the_reload_unchanged(probe, tmp_path):
-    kernel, services, tools = await _kernel(tmp_path)
+    rpc = PluginRpcRegistry(EventBus())
+    kernel, services, tools = await _kernel(tmp_path, rpc=rpc)
     in_flight = asyncio.create_task(tools.execute("provider_slow", {}))
     await _until(probe, ("call-start", "v1"))
 
@@ -357,7 +361,7 @@ async def test_drain_timeout_abandons_the_reload_unchanged(probe, tmp_path):
     await _until(probe, ("relay-start",))
     probe.relay_gate.set()
     assert services.plugin_configs["provider"] == {"label": "v1"}
-    assert await _echo(kernel) == {"label": "v1"}
+    assert await _echo(rpc) == {"label": "v1"}
     probe.release.set()
     assert await in_flight == "v1"
     assert await relay == "v1"
@@ -451,7 +455,6 @@ async def test_retired_generation_gate_never_admits_a_shared_tool_call(probe, tm
         kernel = host_kernel(
             [tmp_path],
             services=HostServices(
-                event_bus=EventBus(),
                 workspace=tmp_path / "workspace",
                 process_resources=owner,
             ),
@@ -491,7 +494,8 @@ async def test_retired_generation_gate_never_admits_a_shared_tool_call(probe, tm
 async def test_cancelling_the_caller_while_draining_reopens_the_old_instance(
     probe, tmp_path
 ):
-    kernel, services, tools = await _kernel(tmp_path)
+    rpc = PluginRpcRegistry(EventBus())
+    kernel, services, tools = await _kernel(tmp_path, rpc=rpc)
     in_flight = asyncio.create_task(tools.execute("provider_slow", {}))
     await _until(probe, ("call-start", "v1"))
     reload = asyncio.create_task(_reload(kernel, "v2"))
@@ -502,7 +506,7 @@ async def test_cancelling_the_caller_while_draining_reopens_the_old_instance(
     with pytest.raises(asyncio.CancelledError):
         await reload
 
-    assert await _echo(kernel) == {"label": "v1"}
+    assert await _echo(rpc) == {"label": "v1"}
     assert services.plugin_configs["provider"] == {"label": "v1"}
     probe.release.set()
     assert await in_flight == "v1"
@@ -512,7 +516,8 @@ async def test_cancelling_the_caller_while_draining_reopens_the_old_instance(
 
 @pytest.mark.asyncio
 async def test_cancelling_the_caller_during_setup_completes_the_reload(probe, tmp_path):
-    kernel, services, _ = await _kernel(tmp_path)
+    rpc = PluginRpcRegistry(EventBus())
+    kernel, services, _ = await _kernel(tmp_path, rpc=rpc)
     reload = asyncio.create_task(_reload(kernel, "slow-setup"))
     await _until(probe, ("setup-waiting",))
 
@@ -526,7 +531,7 @@ async def test_cancelling_the_caller_during_setup_completes_the_reload(probe, tm
     states = {row["id"]: row["state"] for row in kernel.states()}
     assert states == {"provider": "ACTIVE", "consumer": "ACTIVE", "bystander": "ACTIVE"}
     assert services.plugin_configs["provider"] == {"label": "slow-setup"}
-    assert await _echo(kernel) == {"label": "slow-setup"}
+    assert await _echo(rpc) == {"label": "slow-setup"}
     assert probe.resources[0] is probe.resources[-1]
     assert probe.resources[0].closed == 0
     # The transition lock was released only after completion.
@@ -725,7 +730,6 @@ async def _hooked_kernel(tmp_path: Path) -> PluginKernel:
     kernel = host_kernel(
         [tmp_path],
         services=HostServices(
-            event_bus=EventBus(),
             plugin_configs=configs,
             raw_plugin_configs={"hooked": {"label": "v1"}},
         ),
@@ -832,7 +836,8 @@ def _states(kernel: PluginKernel) -> dict[str, str]:
 async def test_disable_and_enable_only_touch_the_closure_within_the_generation(
     probe, tmp_path
 ):
-    kernel, services, tools = await _kernel(tmp_path)
+    rpc = PluginRpcRegistry(EventBus())
+    kernel, services, tools = await _kernel(tmp_path, rpc=rpc)
     in_flight = asyncio.create_task(tools.execute("provider_slow", {}))
     await _until(probe, ("call-start", "v1"))
     probe.events.clear()
@@ -851,7 +856,7 @@ async def test_disable_and_enable_only_touch_the_closure_within_the_generation(
     }
     assert services.plugin_configs["provider"] == {"label": "v1", "enabled": False}
     assert tools.get_tool("provider_slow") is None
-    assert kernel.rpc.resolve("plugin.provider.echo") is None
+    assert rpc.resolve("plugin.provider.echo") is None
     # Nothing re-acquires the provider's process resource, so it is closed.
     assert probe.resources[0].closed == 1
     probe.release.set()
@@ -870,7 +875,7 @@ async def test_disable_and_enable_only_touch_the_closure_within_the_generation(
     assert all(state == "ACTIVE" for state in _states(kernel).values())
     new_provider = kernel._dependency_api("provider")
     assert kernel._dependency_api("consumer")["provider"] is new_provider
-    assert await _echo(kernel) == {"label": "v1"}
+    assert await _echo(rpc) == {"label": "v1"}
     assert probe.resources[-1] is not probe.resources[0]
     await kernel.terminate_all(force=True)
 

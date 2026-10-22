@@ -33,22 +33,20 @@ class PluginCommunication:
     not authentication in the shared-process trust model.
     """
 
-    def __init__(self, registry: "PluginRpcRegistry") -> None:
+    def __init__(self, registry: "PluginRpcRegistry[Any]", event_bus: Any) -> None:
         self.generation = uuid4().hex
         self._registry = registry
         self._resolve: Callable[[str], tuple[str, ...] | None] = lambda _id: None
-        self._event_bus: Any = None
+        self._event_bus = event_bus
         self._active = True
         self._owners: dict[str, str] = {}
         self._renderers: dict[str, str] = {}
         self._handlers: dict[tuple[str, str], str] = {}
         self._requests = RendererRequests()
 
-    def configure(
-        self, resolve: Callable[[str], tuple[str, ...] | None], event_bus: Any
-    ) -> None:
+    def bind_resolver(self, resolve: Callable[[str], tuple[str, ...] | None]) -> None:
         """Binds authoritative active-plugin declarations supplied by the kernel."""
-        self._resolve, self._event_bus = resolve, event_bus
+        self._resolve = resolve
 
     def authorize(self, caller: str, target: str, generation: str) -> bool:
         """Checks caller lifetime and declared ownership without activating targets."""

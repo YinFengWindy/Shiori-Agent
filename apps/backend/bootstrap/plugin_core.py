@@ -13,6 +13,7 @@ from pathlib import Path
 
 from agent.config import resolve_config_reference
 from agent.core.proactive_turn.plugin_capability import PluginProactiveGates
+from agent.plugin_host.rpc import PluginRpcRegistry
 from agent.provider import LLMProvider
 from agent.plugin_host.core_keys import (
     HOST_ACCOUNTS,
@@ -20,9 +21,11 @@ from agent.plugin_host.core_keys import (
     HOST_BACKGROUND,
     HOST_BACKGROUND_RESULTS,
     HOST_BOT_COMMANDS,
+    HOST_BRIDGE,
     HOST_CHANNELS,
     HOST_CONFIG_REFERENCES,
     HOST_DIAGNOSTICS,
+    HOST_EVENTS,
     HOST_EXTERNAL_TURNS,
     HOST_LIGHT_MODEL,
     HOST_LIGHT_PROVIDER,
@@ -31,6 +34,7 @@ from agent.plugin_host.core_keys import (
     HOST_PROACTIVE_GATES,
     HOST_PROCESSES,
     HOST_RESOURCES,
+    HOST_RPC,
     HOST_ROLE_RUNTIME_REGISTRY,
     HOST_ROLES,
     HOST_SCENE_OBSERVATIONS,
@@ -48,6 +52,8 @@ from agent.tools.registry import ToolRegistry
 from agent.tools.turn_scope import current_tool_turn
 from bootstrap.memory_capabilities import HostMemoryCapability
 from bootstrap.plugin_capability import HostResources
+from bus.event_bus import EventBus
+from bus.plugin_capability import PluginEvents
 from conversation.plugin_capability import PluginBotCommands
 from core.accounts.plugin_capability import PluginAccounts
 from core.channels.plugin_capability import PluginAvatars, PluginChannels
@@ -59,6 +65,8 @@ from core.roles.role_runtime import RoleRuntimeRegistry
 from core.roles.store import RoleStore
 from core.scene.demand import SceneObservationDemand
 from core.scene.plugin_capability import PluginSceneObservations
+from desktop_bridge.method_policy import MethodPolicy
+from desktop_bridge.plugin_capability import PluginRpc
 from desktop_bridge.session_presenter import DesktopSessionPresenter
 from infra.process.plugin_capability import HostProcesses
 from session.manager import SessionManager
@@ -85,6 +93,8 @@ def plugin_core_modules(
     memory_engine: MemoryEngine | None,
     external_turns: ExternalTurns | None,
     background_results: BackgroundResults | None,
+    event_bus: EventBus,
+    rpc: PluginRpcRegistry[MethodPolicy],
 ) -> tuple[CoreModule, ...]:
     """The core provide list, in provide order, for one runtime generation.
 
@@ -103,7 +113,9 @@ def plugin_core_modules(
     demand registry the scene controller reads. ``memory_engine`` (None when
     memory is disabled) goes into ``memory`` with the workspace and role store.
     ``external_turns`` and ``background_results`` are the generation's
-    conversation services, built over its agent loop.
+    conversation services, built over its agent loop. ``event_bus`` is the
+    generation's event bus and ``rpc`` its plugin RPC registry, created by
+    bootstrap over that bus.
     """
     roots = [("plugins", directory.resolve()) for directory in plugin_dirs]
 
@@ -188,7 +200,18 @@ def plugin_core_modules(
         """Plugin proactive gates (``agent.core.proactive_turn``; P3 deletes them)."""
         provide(HOST_PROACTIVE_GATES, PluginProactiveGates())
 
+    def provide_bridge(provide: CoreProvide) -> None:
+        """The plugin RPC registry and the ``rpc`` capability over it (bridge)."""
+        provide(HOST_BRIDGE, rpc)
+        provide(HOST_RPC, PluginRpc(rpc, event_bus))
+
+    def provide_events(provide: CoreProvide) -> None:
+        """Plugin-scoped views of the event bus (``bus``)."""
+        provide(HOST_EVENTS, PluginEvents(event_bus))
+
     return (
+        provide_bridge,
+        provide_events,
         provide_diagnostics,
         provide_config_references,
         provide_tools,

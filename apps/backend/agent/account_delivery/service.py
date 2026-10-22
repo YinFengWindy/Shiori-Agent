@@ -114,7 +114,7 @@ class AccountDelivery:
     def __init__(
         self,
         accounts: AccountRegistry,
-        rpc: PluginRpcRegistry,
+        rpc: PluginRpcRegistry[Any],
         ledger: AccountDeliveryLedger,
         identities: UserIdentityStore,
     ) -> None:

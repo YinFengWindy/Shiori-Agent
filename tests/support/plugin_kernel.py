@@ -14,7 +14,7 @@ from typing import Any
 # 预热 agent.core 导入链，避免 agent.lifecycle.types 触发循环导入
 from agent.core.passive_turn import ContextStore as _  # noqa: F401
 from agent.lifecycle.types import BeforeTurnCtx
-from agent.plugin_host import HostServices, PluginKernel
+from agent.plugin_host import HostServices, PluginKernel, PluginRpcRegistry
 from agent.tools.registry import ToolRegistry
 from bootstrap.plugin_core import plugin_core_modules
 from bus.event_bus import EventBus
@@ -36,6 +36,8 @@ def host_kernel(
     scene_observations: SceneObservationDemand | None = None,
     external_turns: Any = None,
     background_results: Any = None,
+    event_bus: EventBus | None = None,
+    rpc: PluginRpcRegistry[Any] | None = None,
     **options: Any,
 ) -> PluginKernel:
     """A kernel over ``services`` with the same core provide list as bootstrap.
@@ -46,10 +48,13 @@ def host_kernel(
     ``background_results`` are what the core provides
     (real services or test doubles; none: plugins declaring them fail before
     setup), and ``scene_observations`` the demand registry (a fresh one by
-    default). The core's role store, workspace and relationship runtime are
-    those of ``services``. ``options`` are the remaining ``PluginKernel``
-    keyword arguments.
+    default). ``event_bus`` (a fresh one by default) is the generation's bus and
+    ``rpc`` its plugin RPC registry (by default a new one over that bus); pass
+    one to read what plugins registered. The core's role store, workspace and
+    relationship runtime are those of ``services``. ``options`` are the
+    remaining ``PluginKernel`` keyword arguments.
     """
+    bus = event_bus if event_bus is not None else EventBus()
     return PluginKernel(
         plugin_dirs,
         services=services,
@@ -71,6 +76,8 @@ def host_kernel(
             memory_engine=services.memory_engine,
             external_turns=external_turns,
             background_results=background_results,
+            event_bus=bus,
+            rpc=rpc if rpc is not None else PluginRpcRegistry(bus),
         ),
         **options,
     )
@@ -90,8 +97,13 @@ def make_kernel(
     light_provider: object = None,
     light_model: str | None = None,
     relationship_runtime: object = None,
+    rpc: PluginRpcRegistry[Any] | None = None,
 ) -> PluginKernel:
-    """Creates a kernel over real host services for the given plugin roots."""
+    """Creates a kernel over real host services for the given plugin roots.
+
+    ``rpc`` is the plugin RPC registry to use (by default a new one over
+    ``event_bus``); pass one to read what plugins registered.
+    """
     # 独立 workspace 确保 KV 测试能发现错误的插件目录写入。
     resolved_workspace = workspace
     if resolved_workspace is None:
@@ -101,7 +113,6 @@ def make_kernel(
     return host_kernel(
         plugin_dirs,
         services=HostServices(
-            event_bus=event_bus,
             plugin_configs=plugin_configs or {},
             workspace=resolved_workspace,
             memory_engine=memory_engine,
@@ -111,6 +122,8 @@ def make_kernel(
         session_manager=session_manager,
         light_provider=light_provider,
         light_model=light_model,
+        event_bus=event_bus,
+        rpc=rpc,
         namespace=namespace,
         strict=strict,
     )

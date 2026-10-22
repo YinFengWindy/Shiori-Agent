@@ -30,15 +30,17 @@ from shiori_sdk.memory.context import MemoryCapability
 from shiori_sdk.models import ChatProvider, RoleModels
 from shiori_sdk.processes import Processes, Resources, ToolTurn
 from shiori_sdk.roles import Roles, SceneObservations
+from shiori_sdk.rpc import RpcCapability
 from shiori_sdk.sessions import PluginSessions, SessionUndo
 from shiori_sdk.tool_hooks import ToolHooksCapability
 from shiori_sdk.tools import ToolsCapability
 from shiori_sdk.kernel import Key, Scope
-from shiori_sdk.runtime import HostServiceUnavailable
+from shiori_sdk.runtime import EventsCapability, HostServiceUnavailable
 
 from agent.plugin_host.call_gate import PluginCallGate
 from agent.plugin_host.capabilities import PluginContributions
 from agent.plugin_host.manifest import PluginManifest
+from agent.plugin_host.rpc import PluginRpcRegistry
 
 
 @dataclass(frozen=True)
@@ -205,6 +207,22 @@ HOST_PROACTIVE_GATES: Key[PluginContributionService[Any, Any]] = Key(
 )
 """The ``proactive_gates`` capability (``agent.core.proactive_turn``; P3 deletes it)."""
 
+HOST_EVENTS: Key[PluginCapabilityBinder[EventsCapability]] = Key("host.events")
+"""The ``events`` capability: a plugin-scoped view of the event bus (``bus``)."""
+
+HOST_RPC: Key[PluginCapabilityBinder[RpcCapability]] = Key("host.rpc")
+"""The ``rpc`` capability: bridge-callable plugin methods (``desktop_bridge``)."""
+
+# The policy type (``desktop_bridge.method_policy.MethodPolicy``) is a host
+# module this layer may not import; the kernel only binds and withdraws.
+HOST_BRIDGE: Key[PluginRpcRegistry[Any]] = Key("host.bridge")
+"""The generation's plugin RPC registry, created by bootstrap (``desktop_bridge``).
+
+Not a capability row: the kernel binds renderer communication to it and the
+``services`` capability uses its service registry, so each generation requires
+it when it is constructed.
+"""
+
 HOST_CONFIG_REFERENCES: Key[Callable[[str], str]] = Key("host.config_references")
 """Expands ``${NAME}`` references for ``config.resolve_reference``.
 
@@ -256,6 +274,8 @@ CORE_CAPABILITIES: Mapping[str, CoreCapability] = {
     "bot_commands": CoreCapability(HOST_BOT_COMMANDS, per_plugin=True),
     "background": CoreCapability(HOST_BACKGROUND, per_plugin=True),
     "proactive_gates": CoreCapability(HOST_PROACTIVE_GATES, per_plugin=True),
+    "events": CoreCapability(HOST_EVENTS, per_plugin=True),
+    "rpc": CoreCapability(HOST_RPC, per_plugin=True),
 }
 
 

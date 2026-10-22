@@ -10,6 +10,8 @@ from uuid import uuid4
 if TYPE_CHECKING:
     from agent.plugin_host import PluginKernel
     from agent.plugin_host.handle import PluginRecord
+    from agent.plugin_host.rpc import PluginRpcRegistry
+    from desktop_bridge.method_policy import MethodPolicy
 
 from agent.config_models import Config, WiringConfig
 from agent.core.proactive_turn.gates import ProactiveGate
@@ -126,6 +128,9 @@ class CoreRuntime:
     image_sync_service: ExternalPushSyncService | None = None
     agent_provider: LLMProvider | None = None
     plugin_manager: "PluginKernel | None" = None
+    # The generation's plugin RPC registry, shared by the kernel (``host.bridge``),
+    # account delivery and the desktop bridge's dispatch.
+    plugin_rpc: "PluginRpcRegistry[MethodPolicy] | None" = None
     memory_optimizer: Any | None = None
     additional_providers: list[LLMProvider] = field(default_factory=list)
     proactive_motives: list[ProactiveGate] = field(default_factory=list)
@@ -615,7 +620,7 @@ def build_core_runtime(
         active_turn_states=loop.active_turn_states,
     )
 
-    from agent.plugin_host import HostServices, PluginKernel
+    from agent.plugin_host import HostServices, PluginKernel, PluginRpcRegistry
     from bootstrap.plugin_core import plugin_core_modules
     from conversation.plugin_capability import HostBackgroundResults, HostExternalTurns
     from conversation.service import ConversationService
@@ -673,6 +678,7 @@ def build_core_runtime(
         ConversationService(session_manager),
         background_result_runner or loop.process_background_result,
     )
+    plugin_rpc: PluginRpcRegistry[MethodPolicy] = PluginRpcRegistry(event_bus)
     plugin_dirs = _resolve_plugin_dirs(workspace)
     plugin_manager = PluginKernel(
         plugin_dirs=plugin_dirs,
@@ -687,7 +693,6 @@ def build_core_runtime(
             )
         ),
         services=HostServices(
-            event_bus=event_bus,
             workspace=workspace,
             role_store=role_store,
             memory_engine=memory_runtime.engine,
@@ -724,11 +729,13 @@ def build_core_runtime(
             memory_engine=memory_runtime.engine,
             external_turns=external_turns,
             background_results=background_results,
+            event_bus=event_bus,
+            rpc=plugin_rpc,
         ),
     )
     account_delivery = AccountDelivery(
         role_store.accounts,
-        plugin_manager.rpc,
+        plugin_rpc,
         AccountDeliveryLedger(workspace),
         role_store.identities,
     )
@@ -775,6 +782,7 @@ def build_core_runtime(
         group_environment=group_environment,
         group_listening=group_listening,
         plugin_manager=plugin_manager,
+        plugin_rpc=plugin_rpc,
         scene_service=scene_service,
         channel_directory=channel_directory,
         proactive_motives=[
