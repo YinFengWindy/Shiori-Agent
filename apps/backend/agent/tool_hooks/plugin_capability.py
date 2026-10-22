@@ -9,14 +9,11 @@ from __future__ import annotations
 
 import inspect
 import logging
-from collections.abc import Iterable
 from typing import Any, cast
 
-from shiori_sdk.kernel import Scope
 from shiori_sdk.tool_hooks import HookOutcome, PreToolCtx
 
-from agent.plugin_host.call_gate import PluginCallGate
-from agent.plugin_host.capabilities import contribute_to_list
+from agent.plugin_host.capabilities import ContributionsByPlugin, contribute_to_list
 from agent.plugin_host.core_keys import PluginBinding
 from agent.tool_hooks.base import ToolHook
 from agent.tool_hooks.types import HookContext
@@ -24,24 +21,12 @@ from agent.tool_hooks.types import HookContext
 logger = logging.getLogger(__name__)
 
 
-class PluginToolHooks:
+class PluginToolHooks(ContributionsByPlugin[ToolHook]):
     """The ``host.tool_hooks`` core service of one plugin kernel generation."""
-
-    def __init__(self) -> None:
-        self._hooks: dict[str, list[ToolHook]] = {}
 
     def for_plugin(self, binding: PluginBinding) -> ToolHooksCapability:
         """The tool hooks capability of the plugin ``binding`` describes."""
-        return ToolHooksCapability(
-            self._hooks.setdefault(binding.plugin_id, []),
-            binding.scope,
-            binding.plugin_id,
-            binding.calls,
-        )
-
-    def active(self, plugin_ids: Iterable[str]) -> list[ToolHook]:
-        """The hooks of ``plugin_ids`` (the active plugins), in that order."""
-        return [hook for pid in plugin_ids for hook in self._hooks.get(pid, ())]
+        return ToolHooksCapability(self.of(binding.plugin_id), binding)
 
 
 def build_hook_name(plugin_id: str, handler_name: str) -> str:
@@ -105,23 +90,15 @@ class ToolHooksCapability:
     其余 hook 直接放行。
     """
 
-    def __init__(
-        self,
-        hooks: list[ToolHook],
-        effects: Scope,
-        plugin_id: str,
-        calls: PluginCallGate,
-    ) -> None:
+    def __init__(self, hooks: list[ToolHook], binding: PluginBinding) -> None:
         self._hooks = hooks
-        self._effects = effects
-        self._plugin_id = plugin_id
-        self._calls = calls
+        self._binding = binding
 
     def add(self, hook: ToolHook) -> None:
         label = f"tool_hook:{getattr(hook, 'name', hook)}"
-        self._effects.ensure_active(label)
-        self._calls.guard_tool_hook(hook)
-        contribute_to_list(self._hooks, hook, effects=self._effects, label=label)
+        self._binding.scope.ensure_active(label)
+        self._binding.calls.guard_tool_hook(hook)
+        contribute_to_list(self._hooks, hook, effects=self._binding.scope, label=label)
 
     def add_handler(
         self,
@@ -138,7 +115,7 @@ class ToolHooksCapability:
         """
         resolved_name = handler_name or getattr(handler, "__name__", repr(handler))
         hook = PluginToolHook(
-            name=build_hook_name(self._plugin_id, resolved_name),
+            name=build_hook_name(self._binding.plugin_id, resolved_name),
             handler=handler,
             tool_name_filter=tool_name_filter,
         )

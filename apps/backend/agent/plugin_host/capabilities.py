@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 
 import asyncio
 import logging
@@ -42,7 +42,6 @@ class PluginContributions:
         self.phase_modules: dict[str, list[object]] = {slot: [] for slot in PHASE_SLOTS}
         self.proactive_gates: list[ProactiveGate] = []
         self.channels: list[Channel] = []
-        self.tool_names: list[str] = []
         self.bot_commands: list[tuple[str, str]] = []
 
 
@@ -66,6 +65,26 @@ def contribute_to_list[T](
             target.remove(item)
 
     _ = effects.effect(discard, label)
+
+
+class ContributionsByPlugin[T]:
+    """Each plugin's contributed objects, read back in a given plugin order.
+
+    The storage behind a ``PluginContributionService``: a plugin's view adds to
+    ``of(plugin_id)`` with ``contribute_to_list`` (so disposal withdraws it), and
+    ``active`` returns what the active plugins contributed.
+    """
+
+    def __init__(self) -> None:
+        self._by_plugin: dict[str, list[T]] = {}
+
+    def of(self, plugin_id: str) -> list[T]:
+        """The (live) list holding ``plugin_id``'s contributions."""
+        return self._by_plugin.setdefault(plugin_id, [])
+
+    def active(self, plugin_ids: Iterable[str]) -> list[T]:
+        """The contributions of ``plugin_ids``, plugin by plugin in that order."""
+        return [item for pid in plugin_ids for item in self._by_plugin.get(pid, ())]
 
 
 class LifecycleCapability:

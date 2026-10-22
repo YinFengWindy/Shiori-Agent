@@ -8,11 +8,8 @@ from __future__ import annotations
 
 from shiori_sdk.tools import Tool
 
-from agent.plugin_host.call_gate import PluginCallGate
-from agent.plugin_host.capabilities import PluginContributions
 from agent.plugin_host.core_keys import PluginBinding
 from agent.tools.registry import ToolRegistry
-from shiori_sdk.kernel import Scope
 
 
 class PluginTools:
@@ -23,13 +20,7 @@ class PluginTools:
 
     def for_plugin(self, binding: PluginBinding) -> ToolsCapability:
         """The tools capability of the plugin ``binding`` describes."""
-        return ToolsCapability(
-            self._registry,
-            binding.scope,
-            binding.contributions,
-            binding.plugin_id,
-            binding.calls,
-        )
+        return ToolsCapability(self._registry, binding)
 
 
 class ToolsCapability:
@@ -38,19 +29,9 @@ class ToolsCapability:
     每个工具的执行都经过插件实例的调用闸门，代内重载据此排空在途调用。
     """
 
-    def __init__(
-        self,
-        registry: ToolRegistry,
-        effects: Scope,
-        contributions: PluginContributions,
-        plugin_id: str,
-        calls: PluginCallGate,
-    ) -> None:
+    def __init__(self, registry: ToolRegistry, binding: PluginBinding) -> None:
         self._registry = registry
-        self._effects = effects
-        self._contributions = contributions
-        self._plugin_id = plugin_id
-        self._calls = calls
+        self._binding = binding
 
     def register(
         self,
@@ -67,8 +48,9 @@ class ToolsCapability:
         回合也能使用此工具；默认不可用。
         """
         name = str(tool.name)
-        self._effects.ensure_active(f"tool:{name}")
-        self._calls.guard_tool(tool)
+        scope = self._binding.scope
+        scope.ensure_active(f"tool:{name}")
+        self._binding.calls.guard_tool(tool)
         self._registry.register(
             tool,
             risk=risk,
@@ -76,16 +58,9 @@ class ToolsCapability:
             search_hint=search_hint,
             source_type="plugin",
             external_allowed=external_allowed,
-            source_name=self._plugin_id,
+            source_name=self._binding.plugin_id,
         )
-        # 工具除了从贡献清单移除，还要反注册出 ToolRegistry，故不复用列表 helper
-        self._contributions.tool_names.append(name)
-        _ = self._effects.effect(lambda: self._unregister(name), f"tool:{name}")
-
-    def _unregister(self, name: str) -> None:
-        self._registry.unregister(name)
-        if name in self._contributions.tool_names:
-            self._contributions.tool_names.remove(name)
+        _ = scope.effect(lambda: self._registry.unregister(name), f"tool:{name}")
 
     def get_tool(self, name: str) -> Tool | None:
         """Looks up another tool by name (e.g. to invoke it directly).

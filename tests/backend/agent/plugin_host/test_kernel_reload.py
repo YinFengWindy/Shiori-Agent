@@ -19,6 +19,7 @@ from agent.plugin_host import (
     PluginState,
 )
 from tests.support.plugin_kernel import host_kernel
+from agent.plugin_host.core_keys import HOST_TOOL_HOOKS, required_core_key
 from agent.plugin_host.process_resources import ProcessResourceOwner
 from agent.tools.registry import ToolRegistry
 from bus.event_bus import EventBus
@@ -800,6 +801,12 @@ async def test_reload_waits_for_a_running_tool_hook_and_fails_closed_meanwhile(
     assert (await old.run(None)).decision == "deny"
     assert (await new.run(None)).reason == "v2"
     assert (await new_note.run(None)).extra_message == "v2"
+    # Unloading withdraws the hooks from the service itself, not only from the
+    # active view.
+    _ = await kernel.unload("hooked")
+    assert kernel.tool_hooks == []
+    hooks = required_core_key(kernel._kernel.get, HOST_TOOL_HOOKS)
+    assert hooks.active(["hooked"]) == []
     await kernel.terminate_all(force=True)
 
 

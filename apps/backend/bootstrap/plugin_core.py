@@ -21,7 +21,7 @@ from agent.plugin_host.core_keys import (
     CoreModule,
     CoreProvide,
 )
-from agent.tool_hooks.plugin import PluginToolHooks
+from agent.tool_hooks.plugin_capability import PluginToolHooks
 from agent.tools.plugin_capability import PluginTools
 from agent.tools.registry import ToolRegistry
 from agent.tools.turn_scope import current_tool_turn
