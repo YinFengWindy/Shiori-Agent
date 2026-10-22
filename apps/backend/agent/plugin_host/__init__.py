@@ -19,7 +19,6 @@ from agent.plugin_host.manifest import (
 from agent.plugin_host.reload import PluginReloadResult
 from agent.plugin_host.rpc import PluginRpcRegistry
 from agent.plugin_host.runtime_context import PluginRuntimeContext
-from agent.plugin_host.tool_hooks import PluginToolHook
 from agent.plugin_host.unload import (
     PluginReloadFailed,
     PluginReloadTimeout,
@@ -47,7 +46,6 @@ __all__ = [
     "PluginRpcRegistry",
     "PluginRuntimeContext",
     "PluginState",
-    "PluginToolHook",
     "ScopedEventBus",
     "load_manifest",
     "resolve_config_model",

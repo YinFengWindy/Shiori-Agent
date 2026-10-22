@@ -24,8 +24,6 @@ from agent.plugin_host.roles import HostRoles
 from agent.plugin_host.models import HostRoleModels
 from agent.plugin_host.sessions import HostPluginSessions
 from agent.plugin_host.processes import HostProcesses, HostResources
-from agent.tools.turn_scope import current_tool_turn
-from agent.tools.registry import ToolRegistry
 from core.roles.role_runtime import RoleRuntimeRegistry
 from agent.provider import LLMProvider
 from shiori_sdk.http import HttpClient
@@ -44,11 +42,10 @@ from agent.plugin_host.capabilities import (
     LifecycleCapability,
     ProactiveGatesCapability,
     RpcCapability,
-    ToolHooksCapability,
-    ToolsCapability,
 )
 from agent.plugin_host.core_keys import (
     HOST_CONFIG_REFERENCES,
+    HOST_TOOL_HOOKS,
     CoreModule,
     PluginBinding,
     bind_core_capabilities,
@@ -171,7 +168,6 @@ class HostServices:
     """宿主提供给插件装配的服务集合；capability 只暴露其中被声明的切面。"""
 
     event_bus: EventBus
-    tool_registry: ToolRegistry | None = None
     workspace: Path | None = None
     # 宿主唯一的 RoleStore 实例（bootstrap 里的 canonical 那个）。插件经
     # role_store capability 拿到的必须是它本身，见 shiori_sdk.runtime.KNOWN_CAPABILITIES
@@ -773,9 +769,6 @@ class PluginKernel:
                 resolve_reference=self._resolve_reference,
                 raw_values=self._services.raw_plugin_configs.get(handle.plugin_id),
             ),
-            tool_hooks=ToolHooksCapability(
-                handle.contributions, handle.effects, handle.plugin_id, handle.calls
-            ),
             bot_commands=BotCommandsCapability(handle.contributions, handle.effects),
             dependencies=PluginDependencies(
                 handle.record.manifest.dependencies,
@@ -811,17 +804,6 @@ class PluginKernel:
             background_results=(
                 services.background_results if "background_results" in grants else None
             ),
-            tools=(
-                ToolsCapability(
-                    services.tool_registry,
-                    handle.effects,
-                    handle.contributions,
-                    handle.plugin_id,
-                    handle.calls,
-                )
-                if services.tool_registry is not None
-                else None
-            ),
             kv=(
                 open_plugin_kv(
                     workspace=provided_service(
@@ -835,7 +817,6 @@ class PluginKernel:
             http=services.http if "http" in grants else None,
             resources=HostResources().as_capability(),
             processes=HostProcesses().as_capability(),
-            tool_turn=current_tool_turn,
             runtime=PluginRuntimeLifecycle(
                 services.is_reload or reactivated,
                 handle.effects.drainers,
@@ -1470,12 +1451,19 @@ class PluginKernel:
         return self._collect_phase("after_turn")
 
     @property
+    def active_plugin_ids(self) -> list[str]:
+        """Plugin ids of the ACTIVE plugins in kernel order (stable across reloads)."""
+        return [handle.plugin_id for handle in self._active_handles()]
+
+    @property
     def tool_hooks(self) -> list[Any]:
-        return [
-            h
-            for handle in self._active_handles()
-            for h in handle.contributions.tool_hooks
-        ]
+        """The active plugins' tool hooks, kept by the ``host.tool_hooks`` service.
+
+        Only the ``PluginContributionSource`` adapter; the phase modules above
+        still live here until P3 turns both into events.
+        """
+        source = required_core_key(self._kernel.get, HOST_TOOL_HOOKS)
+        return list(source.active(self.active_plugin_ids))
 
     @property
     def channels(self) -> list[Any]:

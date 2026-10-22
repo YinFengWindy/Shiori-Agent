@@ -205,13 +205,12 @@ async def _kernel(
     configs = configs or {"provider": {"label": "v1"}}
     services = HostServices(
         event_bus=EventBus(),
-        tool_registry=tools,
         workspace=tmp_path / "workspace",
         plugin_configs=configs,
         raw_plugin_configs={key: dict(value) for key, value in configs.items()},
         process_resources=ProcessResourceOwner(),
     )
-    kernel = host_kernel([tmp_path], services=services)
+    kernel = host_kernel([tmp_path], services=services, tools=tools)
     await kernel.load_all()
     kernel.publish_process_resources()
     return kernel, services, tools
@@ -452,10 +451,10 @@ async def test_retired_generation_gate_never_admits_a_shared_tool_call(probe, tm
             [tmp_path],
             services=HostServices(
                 event_bus=EventBus(),
-                tool_registry=tools,
                 workspace=tmp_path / "workspace",
                 process_resources=owner,
             ),
+            tools=tools,
         )
         await kernel.load_all()
         kernel.publish_process_resources()

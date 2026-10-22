@@ -681,7 +681,6 @@ def build_core_runtime(
         ),
         services=HostServices(
             event_bus=event_bus,
-            tool_registry=tools,
             workspace=workspace,
             role_store=role_store,
             session_manager=session_manager,
@@ -716,7 +715,7 @@ def build_core_runtime(
         ),
         namespace=uuid4().hex,
         strict=shared is not None,
-        core=plugin_core_modules(plugin_dirs),
+        core=plugin_core_modules(plugin_dirs, tools=tools),
     )
     account_delivery = AccountDelivery(
         role_store.accounts,

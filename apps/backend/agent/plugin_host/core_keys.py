@@ -11,11 +11,14 @@ row in ``CORE_CAPABILITIES`` and the provide call in ``bootstrap.plugin_core``.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
 
 from shiori_sdk.diagnostics import Diagnostics
+from shiori_sdk.processes import ToolTurn
+from shiori_sdk.tool_hooks import ToolHooksCapability
+from shiori_sdk.tools import ToolsCapability
 from shiori_sdk.kernel import Key, Scope
 from shiori_sdk.runtime import HostServiceUnavailable
 
@@ -60,6 +63,24 @@ CoreModule = Callable[[CoreProvide], None]
 HOST_DIAGNOSTICS: Key[Diagnostics] = Key("host.diagnostics")
 """The ``diagnostics`` capability, built over ``CRASH_REPORTING``."""
 
+HOST_TOOLS: Key[PluginCapabilityBinder[ToolsCapability]] = Key("host.tools")
+"""The ``tools`` capability over the host ``ToolRegistry`` (``agent.tools``)."""
+
+
+class PluginToolHookSource(PluginCapabilityBinder[ToolHooksCapability], Protocol):
+    """``host.tool_hooks``: each plugin's hook view, and the executor's hook list."""
+
+    def active(self, plugin_ids: Iterable[str]) -> Sequence[Any]:
+        """The hooks contributed by ``plugin_ids``, in that order."""
+        ...
+
+
+HOST_TOOL_HOOKS: Key[PluginToolHookSource] = Key("host.tool_hooks")
+"""The ``tool_hooks`` capability (``agent.tool_hooks``)."""
+
+HOST_TOOL_TURN: Key[Callable[[], ToolTurn]] = Key("host.tool_turn")
+"""The ``tool_turn`` capability: the tool turn running in the current task."""
+
 HOST_CONFIG_REFERENCES: Key[Callable[[str], str]] = Key("host.config_references")
 """Expands ``${NAME}`` references for ``config.resolve_reference``.
 
@@ -89,6 +110,9 @@ class CoreCapability:
 # exist until then.
 CORE_CAPABILITIES: Mapping[str, CoreCapability] = {
     "diagnostics": CoreCapability(HOST_DIAGNOSTICS),
+    "tools": CoreCapability(HOST_TOOLS, per_plugin=True),
+    "tool_hooks": CoreCapability(HOST_TOOL_HOOKS, per_plugin=True),
+    "tool_turn": CoreCapability(HOST_TOOL_TURN),
 }
 
 

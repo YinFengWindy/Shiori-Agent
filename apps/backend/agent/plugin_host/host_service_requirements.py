@@ -13,7 +13,6 @@ from shiori_sdk.runtime import HostServiceUnavailable
 # role_store / workspace / session_manager / role_runtime_registry 这几项是
 # 直传型 capability，经旧上下文的 __getattr__ 原样交给插件，同样必须预检。
 CAPABILITY_HOST_SERVICES: Mapping[str, tuple[str, ...]] = {
-    "tools": ("tool_registry",),
     "workspace": ("workspace",),
     "kv": ("workspace",),
     "role_store": ("role_store",),

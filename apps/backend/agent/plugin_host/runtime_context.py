@@ -334,7 +334,9 @@ class PluginSetupContext:
     @property
     def tools(self) -> SdkToolsCapability:
         """Return the explicitly granted tools SDK capability."""
-        return self._provided("tools", self._tools)
+        if "tools" not in self.granted or self._tools is None:
+            raise CapabilityNotGranted("Plugin did not request tools")
+        return self._tools
 
     @property
     def kv(self) -> PluginKVStore:

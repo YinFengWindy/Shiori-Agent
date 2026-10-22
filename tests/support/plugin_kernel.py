@@ -11,9 +11,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-# Plugin-facing fake. The real AgentLoop harness is host_external_turns.
-from shiori_sdk.testing.external_turns import FakeExternalTurns
-
 # 预热 agent.core 导入链，避免 agent.lifecycle.types 触发循环导入
 from agent.core.passive_turn import ContextStore as _  # noqa: F401
 from agent.lifecycle.types import BeforeTurnCtx
@@ -21,22 +18,29 @@ from agent.plugin_host import HostServices, PluginKernel
 from agent.tools.registry import ToolRegistry
 from bootstrap.plugin_core import plugin_core_modules
 from bus.event_bus import EventBus
-from core.roles.store import RoleStore
-from session.manager import SessionManager
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 PLUGIN_FIXTURES = REPOSITORY_ROOT / "tests/fixtures/plugins"
 
 
 def host_kernel(
-    plugin_dirs: list[Path], *, services: HostServices, **options: Any
+    plugin_dirs: list[Path],
+    *,
+    services: HostServices,
+    tools: ToolRegistry | None = None,
+    **options: Any,
 ) -> PluginKernel:
     """A kernel over ``services`` with the same core provide list as bootstrap.
 
-    ``options`` are the remaining ``PluginKernel`` keyword arguments.
+    ``tools`` is the tool registry the core provides (none: plugins declaring
+    ``tools`` fail before setup). ``options`` are the remaining ``PluginKernel``
+    keyword arguments.
     """
     return PluginKernel(
-        plugin_dirs, services=services, core=plugin_core_modules(plugin_dirs), **options
+        plugin_dirs,
+        services=services,
+        core=plugin_core_modules(plugin_dirs, tools=tools),
+        **options,
     )
 
 
@@ -66,7 +70,6 @@ def make_kernel(
         plugin_dirs,
         services=HostServices(
             event_bus=event_bus,
-            tool_registry=tools,
             plugin_configs=plugin_configs or {},
             workspace=resolved_workspace,
             session_manager=session_manager,
@@ -75,28 +78,10 @@ def make_kernel(
             light_model=light_model,
             relationship_runtime=relationship_runtime,
         ),
+        tools=tools,
         namespace=namespace,
         strict=strict,
     )
-
-
-def role_host_services(store: RoleStore, **overrides: Any) -> HostServices:
-    """Host services for role-owning plugins such as ``desktop_pet``.
-
-    Mirrors what bootstrap always provides to them: a role store with its
-    workspace and session manager, a tool registry, and ``external_turns``
-    (desktop_pet's live engine declares it; nothing here submits a turn).
-    ``overrides`` replace or add individual services.
-    """
-    services: dict[str, Any] = {
-        "event_bus": EventBus(),
-        "tool_registry": ToolRegistry(),
-        "workspace": store.workspace,
-        "role_store": store,
-        "session_manager": SessionManager(store.workspace),
-        "external_turns": FakeExternalTurns(),
-    }
-    return HostServices(**{**services, **overrides})
 
 
 def before_turn_ctx(**overrides: object) -> BeforeTurnCtx:

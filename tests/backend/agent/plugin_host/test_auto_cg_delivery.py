@@ -107,12 +107,12 @@ async def test_cg_reaches_the_bound_qq_chat_through_account_delivery(
             light_provider=_prompt_provider(),
             light_model="light",
             event_bus=bus,
-            tool_registry=registry,
             workspace=tmp_path,
             role_store=roles,
             session_manager=sessions,
             plugin_configs={"novelai": {"enabled": True, "token": "novel-token"}},
         ),
+        tools=registry,
     )
     await kernel.load_all()
     generate = registry.get_tool("generate_image")
