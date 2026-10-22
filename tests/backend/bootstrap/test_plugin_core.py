@@ -7,6 +7,8 @@ import io
 import sys
 import threading
 from pathlib import Path
+from types import SimpleNamespace
+from typing import cast
 
 import pytest
 from PIL import Image
@@ -14,7 +16,9 @@ from PIL import Image
 from agent.plugin_host import HostServices, PluginKernel, PluginState
 from bootstrap.plugin_core import plugin_core_modules
 from bus.event_bus import EventBus
+from core.roles.models import RoleRecord
 from core.roles.store import RoleStore
+from core.scene.demand import SceneObservationDemand
 from tests.support.plugin_kernel import host_kernel, make_kernel
 
 
@@ -108,6 +112,36 @@ async def test_avatars_capability_caches_into_the_host_role_store(
         await kernel.terminate_all(force=True)
 
 
+@pytest.mark.asyncio
+async def test_scene_observation_requests_reach_the_generation_demand(
+    tmp_path: Path,
+) -> None:
+    """scene_observations 由核心 scene 模块提供：插件的观测需求登记进本代宿主共用的那份 demand。"""
+    package = tmp_path / "plugins" / "scene_probe"
+    (package / "backend").mkdir(parents=True)
+    (package / "manifest.yaml").write_text(
+        "api: 2\nid: scene_probe\ncapabilities: [scene_observations]\n",
+        encoding="utf-8",
+    )
+    (package / "backend/plugin.py").write_text(
+        "async def setup(ctx):\n"
+        "    ctx.scene_observations.request(lambda role: role.id == 'mira')\n",
+        encoding="utf-8",
+    )
+    demand = SceneObservationDemand()
+    kernel = host_kernel(
+        [tmp_path / "plugins"],
+        services=HostServices(event_bus=EventBus()),
+        scene_observations=demand,
+    )
+    await kernel.load_all()
+    try:
+        assert [state["state"] for state in kernel.states()] == ["ACTIVE"]
+        assert demand.needed(cast(RoleRecord, SimpleNamespace(id="mira")))
+    finally:
+        await kernel.terminate_all(force=True)
+
+
 def test_core_module_provide_failure_aborts_startup(tmp_path: Path) -> None:
     """§8.5：核心模块自身 provide 失败时整个启动失败，不像插件 setup 失败那样记为 FAILED。"""
 
@@ -129,6 +163,10 @@ def test_core_module_provide_failure_aborts_startup(tmp_path: Path) -> None:
                     session_manager=None,
                     workspace=None,
                     relationship_runtime=None,
+                    role_runtime_registry=None,
+                    light_provider=None,
+                    light_model=None,
+                    scene_observations=SceneObservationDemand(),
                 ),
                 broken_core_module,
             ),

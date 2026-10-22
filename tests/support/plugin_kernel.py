@@ -18,6 +18,7 @@ from agent.plugin_host import HostServices, PluginKernel
 from agent.tools.registry import ToolRegistry
 from bootstrap.plugin_core import plugin_core_modules
 from bus.event_bus import EventBus
+from core.scene.demand import SceneObservationDemand
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 PLUGIN_FIXTURES = REPOSITORY_ROOT / "tests/fixtures/plugins"
@@ -29,15 +30,22 @@ def host_kernel(
     services: HostServices,
     tools: ToolRegistry | None = None,
     session_manager: Any = None,
+    light_provider: Any = None,
+    light_model: str | None = None,
+    role_runtime_registry: Any = None,
+    scene_observations: SceneObservationDemand | None = None,
     **options: Any,
 ) -> PluginKernel:
     """A kernel over ``services`` with the same core provide list as bootstrap.
 
     ``tools`` is the tool registry the core provides (none: plugins declaring
-    ``tools`` fail before setup) and ``session_manager`` the session manager
-    (or a test double); the core's role store, workspace and relationship
-    runtime are those of ``services``. ``options`` are the remaining
-    ``PluginKernel`` keyword arguments.
+    ``tools`` fail before setup); ``session_manager``, ``light_provider``,
+    ``light_model`` and ``role_runtime_registry`` are what the core provides
+    (real services or test doubles; none: plugins declaring them fail before
+    setup), and ``scene_observations`` the demand registry (a fresh one by
+    default). The core's role store, workspace and relationship runtime are
+    those of ``services``. ``options`` are the remaining ``PluginKernel``
+    keyword arguments.
     """
     return PluginKernel(
         plugin_dirs,
@@ -49,6 +57,14 @@ def host_kernel(
             session_manager=session_manager,
             workspace=services.workspace,
             relationship_runtime=services.relationship_runtime,
+            role_runtime_registry=role_runtime_registry,
+            light_provider=light_provider,
+            light_model=light_model,
+            scene_observations=(
+                scene_observations
+                if scene_observations is not None
+                else SceneObservationDemand()
+            ),
         ),
         **options,
     )
@@ -83,12 +99,12 @@ def make_kernel(
             plugin_configs=plugin_configs or {},
             workspace=resolved_workspace,
             memory_engine=memory_engine,
-            light_provider=light_provider,
-            light_model=light_model,
             relationship_runtime=relationship_runtime,
         ),
         tools=tools,
         session_manager=session_manager,
+        light_provider=light_provider,
+        light_model=light_model,
         namespace=namespace,
         strict=strict,
     )

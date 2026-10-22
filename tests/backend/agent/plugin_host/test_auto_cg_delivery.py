@@ -104,8 +104,6 @@ async def test_cg_reaches_the_bound_qq_chat_through_account_delivery(
         [tmp_path / "plugins"],
         services=HostServices(
             http=FakeHttp(),
-            light_provider=_prompt_provider(),
-            light_model="light",
             event_bus=bus,
             workspace=tmp_path,
             role_store=roles,
@@ -113,6 +111,8 @@ async def test_cg_reaches_the_bound_qq_chat_through_account_delivery(
         ),
         tools=registry,
         session_manager=sessions,
+        light_provider=_prompt_provider(),
+        light_model="light",
     )
     await kernel.load_all()
     generate = registry.get_tool("generate_image")

@@ -12,12 +12,19 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from agent.config import resolve_config_reference
+from agent.provider import LLMProvider
 from agent.plugin_host.core_keys import (
     HOST_ACCOUNTS,
     HOST_AVATARS,
     HOST_CHANNELS,
     HOST_CONFIG_REFERENCES,
     HOST_DIAGNOSTICS,
+    HOST_LIGHT_MODEL,
+    HOST_LIGHT_PROVIDER,
+    HOST_MODELS,
+    HOST_ROLE_RUNTIME_REGISTRY,
+    HOST_ROLES,
+    HOST_SCENE_OBSERVATIONS,
     HOST_SESSION_MANAGER,
     HOST_SESSIONS,
     HOST_TOOL_HOOKS,
@@ -34,7 +41,11 @@ from core.accounts.plugin_capability import PluginAccounts
 from core.channels.plugin_capability import PluginAvatars, PluginChannels
 from core.common.diagnostics import HostDiagnostics
 from core.common.global_hook_stack import ProcessCrashReporting
+from core.roles.plugin_capability import HostRoleModels, HostRoles
+from core.roles.role_runtime import RoleRuntimeRegistry
 from core.roles.store import RoleStore
+from core.scene.demand import SceneObservationDemand
+from core.scene.plugin_capability import PluginSceneObservations
 from desktop_bridge.session_presenter import DesktopSessionPresenter
 from session.manager import SessionManager
 from session.plugin_capability import HostPluginSessions
@@ -49,6 +60,10 @@ def plugin_core_modules(
     session_manager: SessionManager | None,
     workspace: Path | None,
     relationship_runtime: object,
+    role_runtime_registry: RoleRuntimeRegistry | None,
+    light_provider: LLMProvider | None,
+    light_model: str | None,
+    scene_observations: SceneObservationDemand,
 ) -> tuple[CoreModule, ...]:
     """The core provide list, in provide order, for one runtime generation.
 
@@ -61,6 +76,10 @@ def plugin_core_modules(
     over it fails before setup. ``session_manager`` backs ``session_manager``
     and, with the ``workspace`` holding session media, ``sessions``, whose
     payloads the desktop presenter projects with ``relationship_runtime``.
+    ``role_store`` also backs ``roles``, and ``role_runtime_registry`` backs
+    ``models`` and its own passthrough; ``light_provider`` and ``light_model``
+    are the plugins' light model. ``scene_observations`` is the generation's
+    demand registry the scene controller reads.
     """
     roots = [("plugins", directory.resolve()) for directory in plugin_dirs]
 
@@ -98,10 +117,28 @@ def plugin_core_modules(
             sessions = HostPluginSessions(session_manager, workspace, presenter)
             provide(HOST_SESSIONS, sessions.as_capability())
 
+    def provide_roles(provide: CoreProvide) -> None:
+        """Roles, their models and the light model plugins use (``core.roles``)."""
+        if role_store is not None:
+            provide(HOST_ROLES, HostRoles(role_store).as_capability())
+        if role_runtime_registry is not None:
+            provide(HOST_ROLE_RUNTIME_REGISTRY, role_runtime_registry)
+            provide(HOST_MODELS, HostRoleModels(role_runtime_registry).as_capability())
+        if light_provider is not None:
+            provide(HOST_LIGHT_PROVIDER, light_provider)
+        if light_model is not None:
+            provide(HOST_LIGHT_MODEL, light_model)
+
+    def provide_scene(provide: CoreProvide) -> None:
+        """Plugin demand for scene observations (``core.scene``)."""
+        provide(HOST_SCENE_OBSERVATIONS, PluginSceneObservations(scene_observations))
+
     return (
         provide_diagnostics,
         provide_config_references,
         provide_tools,
         provide_channels,
         provide_sessions,
+        provide_roles,
+        provide_scene,
     )

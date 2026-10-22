@@ -905,15 +905,15 @@ capabilities: {capabilities}
 @pytest.mark.parametrize(
     ("capability", "service", "with_workspace"),
     [
-        ("roles", "role_store", True),
-        ("models", "role_runtime_registry", True),
+        ("roles", "host.roles", True),
+        ("models", "host.models", True),
         ("sessions", "host.sessions", True),
         ("external_turns", "external_turns", True),
         ("background_results", "background_results", True),
         ("memory", "role_store", True),
         ("memory", "workspace", False),
         ("http", "http", True),
-        ("light_model", "light_model", True),
+        ("light_model", "host.light_model", True),
         ("tools", "host.tools", True),
         ("kv", "workspace", False),
     ],
