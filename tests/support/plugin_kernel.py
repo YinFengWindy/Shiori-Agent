@@ -33,13 +33,15 @@ def host_kernel(
     """A kernel over ``services`` with the same core provide list as bootstrap.
 
     ``tools`` is the tool registry the core provides (none: plugins declaring
-    ``tools`` fail before setup). ``options`` are the remaining ``PluginKernel``
+    ``tools`` fail before setup); the core's role store is ``services.role_store``. ``options`` are the remaining ``PluginKernel``
     keyword arguments.
     """
     return PluginKernel(
         plugin_dirs,
         services=services,
-        core=plugin_core_modules(plugin_dirs, tools=tools),
+        core=plugin_core_modules(
+            plugin_dirs, tools=tools, role_store=services.role_store
+        ),
         **options,
     )
 

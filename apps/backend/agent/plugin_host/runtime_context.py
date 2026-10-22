@@ -400,14 +400,12 @@ class PluginSetupContext:
     @property
     def channels(self) -> ChannelsCapability:
         """Return statically checked channel contribution services."""
-        if "channels" not in self.granted or self._channels is None:
-            raise CapabilityNotGranted("Plugin did not request channels")
-        return self._channels
+        return self._core_capability("channels", self._channels)
 
     @property
     def accounts(self) -> AccountsCapability:
         """Return statically checked account registration and lifecycle services."""
-        return self._provided("accounts", self._accounts)
+        return self._core_capability("accounts", self._accounts)
 
     def as_channel_context(self) -> ChannelPluginContext:
         """Check the actual setup boundary without dynamic legacy attributes."""
@@ -416,7 +414,7 @@ class PluginSetupContext:
     @property
     def avatars(self) -> AvatarsCapability:
         """Return the explicitly granted shared avatar-cache contract."""
-        return self._provided("avatars", self._avatars)
+        return self._core_capability("avatars", self._avatars)
 
 
 class PluginRuntimeContext(PluginSetupContext):

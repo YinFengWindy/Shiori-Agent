@@ -715,7 +715,7 @@ def build_core_runtime(
         ),
         namespace=uuid4().hex,
         strict=shared is not None,
-        core=plugin_core_modules(plugin_dirs, tools=tools),
+        core=plugin_core_modules(plugin_dirs, tools=tools, role_store=role_store),
     )
     account_delivery = AccountDelivery(
         role_store.accounts,

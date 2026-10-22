@@ -17,6 +17,7 @@ from agent.plugin_host.trusted_imports import TrustedPluginImports
 from shiori_sdk.storage import plugin_data_dir
 from core.roles.store import RoleStore
 from agent.tools.registry import ToolRegistry
+from bootstrap.plugin_core import active_plugin_channels
 from bus.event_bus import EventBus
 import sys
 
@@ -1896,7 +1897,7 @@ async def test_declared_channels_are_contributed(tmp_path: Path):
     kernel = make_kernel([tmp_path], event_bus=EventBus())
     await kernel.load_all()
     try:
-        assert [channel.name for channel in kernel.channels] == [
+        assert [channel.name for channel in active_plugin_channels(kernel)] == [
             "declared",
             "also_declared",
         ]
@@ -1910,7 +1911,7 @@ async def test_undeclared_channel_fails_activation_with_diagnostic(tmp_path: Pat
     kernel = make_kernel([tmp_path], event_bus=EventBus())
     await kernel.load_all()
     try:
-        assert kernel.channels == []
+        assert active_plugin_channels(kernel) == []
         [state] = kernel.states()
         assert state["state"] == "FAILED"
         assert state["diagnostic"]["code"] == "undeclared_channel"
@@ -1928,7 +1929,7 @@ async def test_plugins_declaring_one_channel_both_stay_inactive(tmp_path: Path):
     await kernel.load_all()
     try:
         assert kernel.loaded_count == 0
-        assert kernel.channels == []
+        assert active_plugin_channels(kernel) == []
         assert {state["state"] for state in kernel.states()} == {"CONFLICT"}
         assert {state["diagnostic"]["code"] for state in kernel.states()} == {
             "duplicate_channel"

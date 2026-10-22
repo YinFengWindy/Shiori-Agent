@@ -18,6 +18,10 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from shiori_sdk.accounts.capability import AccountsCapability
+from shiori_sdk.channels import Channel
+from shiori_sdk.channels.avatars import AvatarsCapability
+from shiori_sdk.channels.context import ChannelsCapability
 from shiori_sdk.diagnostics import Diagnostics
 from shiori_sdk.processes import ToolTurn
 from shiori_sdk.tool_hooks import ToolHooksCapability
@@ -27,6 +31,7 @@ from shiori_sdk.runtime import HostServiceUnavailable
 
 from agent.plugin_host.call_gate import PluginCallGate
 from agent.plugin_host.capabilities import PluginContributions
+from agent.plugin_host.manifest import PluginManifest
 
 
 @dataclass(frozen=True)
@@ -36,11 +41,13 @@ class PluginBinding:
     ``scope`` releases what the capability registered when the plugin stops,
     ``contributions`` collects the objects the host aggregates across plugins,
     and ``calls`` admits or refuses calls into the plugin. ``namespace`` is the
-    kernel generation's import namespace.
+    kernel generation's import namespace; ``manifest`` is the plugin's parsed
+    manifest, for the static declarations a capability checks against.
     """
 
     plugin_id: str
     namespace: str
+    manifest: PluginManifest
     scope: Scope
     contributions: PluginContributions
     calls: PluginCallGate
@@ -99,6 +106,35 @@ HOST_TOOL_HOOKS: Key[PluginContributionService[ToolHooksCapability, Any]] = Key(
 HOST_TOOL_TURN: Key[Callable[[], ToolTurn]] = Key("host.tool_turn")
 """The ``tool_turn`` capability: the tool turn running in the current task."""
 
+HOST_CHANNELS: Key[PluginContributionService[ChannelsCapability, Channel]] = Key(
+    "host.channels"
+)
+"""The ``channels`` capability: transports plugins contribute (``core.channels``)."""
+
+
+class GenerationAccounts(PluginCapabilityBinder[AccountsCapability], Protocol):
+    """The ``host.accounts`` service: one kernel generation's account index.
+
+    Plugins register into the generation's own index; ``publish`` makes it the
+    one routing, sending and the UI see, and ``drop`` discards it once the
+    generation is retired or abandoned.
+    """
+
+    def publish(self) -> None:
+        """Makes this generation's account reports authoritative."""
+        ...
+
+    def drop(self) -> None:
+        """Discards this generation's account index."""
+        ...
+
+
+HOST_ACCOUNTS: Key[GenerationAccounts] = Key("host.accounts")
+"""The ``accounts`` capability over the ``AccountRegistry`` (``core.accounts``)."""
+
+HOST_AVATARS: Key[PluginCapabilityBinder[AvatarsCapability]] = Key("host.avatars")
+"""The ``avatars`` capability over the shared avatar cache (``core.channels``)."""
+
 HOST_CONFIG_REFERENCES: Key[Callable[[str], str]] = Key("host.config_references")
 """Expands ``${NAME}`` references for ``config.resolve_reference``.
 
@@ -131,6 +167,9 @@ CORE_CAPABILITIES: Mapping[str, CoreCapability] = {
     "tools": CoreCapability(HOST_TOOLS, per_plugin=True),
     "tool_hooks": CoreCapability(HOST_TOOL_HOOKS, per_plugin=True),
     "tool_turn": CoreCapability(HOST_TOOL_TURN),
+    "channels": CoreCapability(HOST_CHANNELS, per_plugin=True),
+    "accounts": CoreCapability(HOST_ACCOUNTS, per_plugin=True),
+    "avatars": CoreCapability(HOST_AVATARS, per_plugin=True),
 }
 
 
