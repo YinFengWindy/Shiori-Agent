@@ -9,7 +9,6 @@ from typing import Any
 from agent.plugin_host.capabilities import LifecycleCapability
 from shiori_sdk.rpc import RpcCapability
 from shiori_sdk.kernel import Scope
-from agent.plugin_host.host_service_requirements import provided_service
 from shiori_sdk.services import PluginServices, ServiceProviderContext
 from shiori_sdk.runtime import Dispose
 from agent.plugin_host.manifest import PluginManifest
@@ -67,7 +66,6 @@ class PluginSetupContext:
         plugin_dir: Path,
         manifest: PluginManifest,
         effects: Scope,
-        capabilities: dict[str, Any],
         publish_api: Callable[[object], None] | None = None,
         lifecycle: LifecycleCapability | None = None,
         events: EventsCapability | None = None,
@@ -99,7 +97,6 @@ class PluginSetupContext:
         scene_observations: SceneObservations | None = None,
         light_provider: ChatProvider | None = None,
         light_model: str | None = None,
-        role_runtime_registry: object = None,
         proactive_gates: Any = None,
         channels: ChannelsCapability | None = None,
         accounts: AccountsCapability | None = None,
@@ -110,7 +107,6 @@ class PluginSetupContext:
         self.plugin_dir = plugin_dir
         self.manifest = manifest
         self._effects = effects
-        self._capabilities = capabilities
         self._publish_api = publish_api
         self._lifecycle = lifecycle
         self._events = events
@@ -142,7 +138,6 @@ class PluginSetupContext:
         self._scene_observations = scene_observations
         self._light_provider = light_provider
         self._light_model = light_model
-        self._role_runtime_registry = role_runtime_registry
         self._proactive_gates = proactive_gates
         self._channels = channels
         self._accounts = accounts
@@ -176,8 +171,8 @@ class PluginSetupContext:
 
     @property
     def granted(self) -> tuple[str, ...]:
-        """Returns granted capability names, for diagnostics."""
-        return tuple(sorted(self._capabilities))
+        """Returns granted capability names (the manifest's), for diagnostics."""
+        return tuple(sorted(set(self.manifest.capabilities)))
 
     def _core_capability[T](self, capability: str, value: T | None) -> T:
         """A capability filled from ``core_keys.CORE_CAPABILITIES``.
@@ -188,12 +183,6 @@ class PluginSetupContext:
         if capability not in self.granted or value is None:
             raise CapabilityNotGranted(f"Plugin did not request {capability}")
         return value
-
-    def _provided[T](self, capability: str, value: T | None) -> T:
-        """Separates an undeclared capability from a host that lacks its service."""
-        if capability not in self.granted:
-            raise CapabilityNotGranted(f"Plugin did not request {capability}")
-        return provided_service(self.plugin_id, capability, value)
 
     def effect(self, label: str, dispose: Dispose) -> None:
         """登记资源清理；卸载先停用/退订 ctx.events.on，再逆序撤销其它 effect。
@@ -230,7 +219,7 @@ class PluginSetupContext:
     @property
     def workspace(self) -> Path:
         """Return the explicitly granted workspace capability."""
-        return self._provided("workspace", self._workspace)
+        return self._core_capability("workspace", self._workspace)
 
     @property
     def config(self) -> ConfigValues:
@@ -319,7 +308,7 @@ class PluginSetupContext:
     @property
     def process_resources(self) -> PluginProcessResources:
         """Access process-owned resources through this generation attachment."""
-        return self._provided("process_resources", self._process_resources)
+        return self._core_capability("process_resources", self._process_resources)
 
     @property
     def background_results(self) -> BackgroundResults:
@@ -339,12 +328,14 @@ class PluginSetupContext:
     @property
     def kv(self) -> PluginKVStore:
         """Return the explicitly granted kv SDK capability."""
-        return self._provided("kv", self._kv)
+        if "kv" not in self.granted or self._kv is None:
+            raise CapabilityNotGranted("Plugin did not request kv")
+        return self._kv
 
     @property
     def http(self) -> HttpClient:
         """Return the explicitly granted http SDK capability."""
-        return self._provided("http", self._http)
+        return self._core_capability("http", self._http)
 
     @property
     def resources(self) -> Resources:
@@ -388,13 +379,6 @@ class PluginSetupContext:
         """Return the explicitly granted proactive gate contributions (P3 deletes it)."""
         return self._core_capability("proactive_gates", self._proactive_gates)
 
-    @property
-    def role_runtime_registry(self) -> object:
-        """Return the explicitly granted role runtime registry, passed through."""
-        return self._core_capability(
-            "role_runtime_registry", self._role_runtime_registry
-        )
-
     def as_service_context(self) -> ServicePluginContext:
         """Check service injection without the legacy dynamic attribute path."""
         return self
@@ -420,15 +404,17 @@ class PluginSetupContext:
 
 
 class PluginRuntimeContext(PluginSetupContext):
-    """Legacy capabilities for plugins awaiting migration; absent from SDK typing."""
+    """The context the kernel hands to ``setup``; unknown attributes name the grants.
+
+    Every capability is a typed property above; any other attribute a plugin
+    reaches for raises ``CapabilityNotGranted`` listing what it was granted.
+    """
 
     def __getattr__(self, name: str) -> Any:
         try:
-            capabilities = object.__getattribute__(self, "_capabilities")
+            _ = object.__getattribute__(self, "manifest")
         except AttributeError as e:  # 构造未完成时保持原始 AttributeError 语义
             raise AttributeError(name) from e
-        if name in capabilities:
-            return capabilities[name]
         raise CapabilityNotGranted(
             f"插件 {self.plugin_id} 未声明 capability {name!r}；"
             f"已授予: {', '.join(self.granted) or '无'}"

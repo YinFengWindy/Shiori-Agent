@@ -38,10 +38,9 @@ jobs:
         run: .venv/bin/python -m scripts.check_sdk_imports
       - name: Validate plugin manifests against the manifest schema
         run: .venv/bin/python -m scripts.check_manifest_schema
-      # Plugin refactor P0 (#899): the layer contracts and the kernel budget only
-      # report. A broken contract marks this step failed without failing the job.
-      - name: Report layer contracts (import-linter, non-blocking)
-        continue-on-error: true
+      # Plugin refactor (#899 P0, #901 P2): every layer contract holds, so a
+      # broken one fails the job. The kernel LOC budget still only reports (P8).
+      - name: Enforce layer contracts (import-linter)
         run: .venv/bin/lint-imports --no-cache
       - name: Report kernel LOC budget (non-blocking)
         run: .venv/bin/python -m scripts.kernel_loc_budget

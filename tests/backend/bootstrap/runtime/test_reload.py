@@ -391,7 +391,7 @@ async def test_publish_rechecks_hot_unload_before_handover_or_commit(
     try:
         # An active unsafe instance can appear after preparation; publication
         # must recheck the live owner, not rely solely on the initial check.
-        original.plugin_manager._services.plugin_configs = {
+        original.plugin_manager._settings.plugin_configs = {
             "restart_required": {"enabled": True}
         }
         original.plugin_manager._handles.pop(

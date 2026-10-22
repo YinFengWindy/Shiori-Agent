@@ -620,8 +620,12 @@ def build_core_runtime(
         active_turn_states=loop.active_turn_states,
     )
 
-    from agent.plugin_host import HostServices, PluginKernel, PluginRpcRegistry
-    from bootstrap.plugin_core import plugin_core_modules
+    from agent.plugin_host import (
+        PluginGenerationSettings,
+        PluginKernel,
+        PluginRpcRegistry,
+    )
+    from bootstrap.plugin_core import PluginCoreInputs, plugin_core_modules
     from conversation.plugin_capability import HostBackgroundResults, HostExternalTurns
     from conversation.service import ConversationService
     from core.channels.role_routing import RoleTurnRouter
@@ -692,15 +696,10 @@ def build_core_runtime(
                 else None
             )
         ),
-        services=HostServices(
+        settings=PluginGenerationSettings(
             workspace=workspace,
-            role_store=role_store,
-            memory_engine=memory_runtime.engine,
-            app_config=config,
-            http=http_resources.external_default,
             plugin_configs=config.plugins,
             raw_plugin_configs=config.raw_plugin_configs,
-            relationship_runtime=relationship_runtime,
             process_resources=process_resources,
             is_reload=shared is not None,
             previously_active_plugins=(
@@ -716,21 +715,25 @@ def build_core_runtime(
         namespace=uuid4().hex,
         strict=shared is not None,
         core=plugin_core_modules(
-            plugin_dirs,
-            tools=tools,
-            role_store=role_store,
-            session_manager=session_manager,
-            workspace=workspace,
-            relationship_runtime=relationship_runtime,
-            role_runtime_registry=role_runtime_registry,
-            light_provider=plugin_light_provider,
-            light_model=plugin_light_model,
-            scene_observations=scene_demand,
-            memory_engine=memory_runtime.engine,
-            external_turns=external_turns,
-            background_results=background_results,
-            event_bus=event_bus,
-            rpc=plugin_rpc,
+            PluginCoreInputs(
+                plugin_dirs=tuple(plugin_dirs),
+                event_bus=event_bus,
+                rpc=plugin_rpc,
+                scene_observations=scene_demand,
+                workspace=workspace,
+                tools=tools,
+                role_store=role_store,
+                session_manager=session_manager,
+                relationship_runtime=relationship_runtime,
+                role_runtime_registry=role_runtime_registry,
+                light_provider=plugin_light_provider,
+                light_model=plugin_light_model,
+                memory_engine=memory_runtime.engine,
+                external_turns=external_turns,
+                background_results=background_results,
+                http=http_resources.external_default,
+                process_resources=process_resources,
+            )
         ),
     )
     account_delivery = AccountDelivery(

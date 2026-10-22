@@ -156,6 +156,17 @@ consolidates these additions and the subsequent #847 breaking migration.
   capability now installs through it, with unchanged behavior. Plugins cannot
   inject it yet: observe switches to `inject: [crash_reporting]` in P3.
 
+- **breaking: capabilities `role_store`, `role_runtime_registry` and
+  `relationship_runtime` removed (issue #901, refactor P2).** None of the three
+  had a user; `roles` and `models` cover what plugins read from roles. They
+  leave `shiori_sdk.runtime.KNOWN_CAPABILITIES` and the `capabilities` enum of
+  `manifest.schema.json`, and the host no longer exposes `ctx.role_store`,
+  `ctx.role_runtime_registry` or `ctx.relationship_runtime`. A third-party
+  manifest that still declares one of them is rejected at discovery and
+  package validation as an unknown capability, so the plugin does not load;
+  remove the name from `capabilities` (using `roles` / `models` instead) to
+  load it again.
+
 - **Natural proactive replies and background reports (PR #894, issue #868).** The current
   role's built-in natural-chat capability also applies to proactive draft
   `message_push` output, Drift dialogue and captured background-result reports.

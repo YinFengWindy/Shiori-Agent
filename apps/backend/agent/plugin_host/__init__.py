@@ -7,7 +7,7 @@ from agent.plugin_host.config_schema import (
     resolve_config_model,
 )
 from agent.plugin_host.handle import PluginHandle, PluginRecord, PluginState
-from agent.plugin_host.kernel import HostServices, PluginKernel
+from agent.plugin_host.kernel import PluginGenerationSettings, PluginKernel
 from agent.plugin_host.manifest import (
     DEFAULT_ENTRY,
     ChannelDeclaration,
@@ -29,10 +29,10 @@ __all__ = [
     "ChannelDeclaration",
     "ConfigModelError",
     "DEFAULT_ENTRY",
-    "HostServices",
     "ManifestError",
     "PluginConfigSchemaRegistry",
     "PluginContributions",
+    "PluginGenerationSettings",
     "PluginHandle",
     "PluginKernel",
     "PluginManifest",

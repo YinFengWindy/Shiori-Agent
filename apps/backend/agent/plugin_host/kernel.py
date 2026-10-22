@@ -20,9 +20,9 @@ from typing import Any, cast
 from uuid import uuid4
 
 from agent.plugin_host.services import ScopedPluginServices
-from shiori_sdk.http import HttpClient
 from agent.plugin_host.process_resources import ProcessResourceOwner
 from agent.plugin_host.config import PluginConfig
+from agent.plugin_host.kv import PluginKVStore
 from agent.plugin_host.storage import PluginStorage
 from agent.plugin_host.capabilities import (
     LifecycleCapability,
@@ -51,10 +51,6 @@ from agent.plugin_host.discovery import (
 )
 from agent.plugin_host.call_gate import PluginCallGate
 from agent.plugin_host.handle import PluginHandle, PluginRecord, PluginState
-from agent.plugin_host.host_service_requirements import (
-    provided_service,
-    require_host_services,
-)
 from agent.plugin_host.host_contract import HostRuntimeContract
 from agent.plugin_host.manifest import (
     ManifestError,
@@ -86,8 +82,8 @@ from agent.plugin_host.unload import (
     PluginReloadUnsupported,
     PluginRestartRequired,
 )
-from core.roles import RoleStore
 from shiori_sdk import PluginRuntimeContext as SdkRuntimeContext
+from shiori_sdk.runtime import HostServiceUnavailable
 from shiori_sdk.kernel import (
     Context,
     Kernel,
@@ -99,7 +95,6 @@ from shiori_sdk.kernel import (
     PluginSpec,
     RendererActivationError,
 )
-from shiori_sdk.memory.engine import MemoryEngine
 
 logger = logging.getLogger(__name__)
 
@@ -145,22 +140,22 @@ def plugin_key(plugin_id: str) -> Key[Any]:
 
 
 @dataclass
-class HostServices:
-    """宿主提供给插件装配的服务集合；capability 只暴露其中被声明的切面。"""
+class PluginGenerationSettings:
+    """What one kernel generation itself runs on; services plugins use come from core.
 
+    ``plugin_configs`` / ``raw_plugin_configs`` are the live ``[plugins.<id>]``
+    tables: an in-generation reload or toggle swaps and rolls back entries in
+    place. ``previously_active_plugins`` shrinks when a plugin is disabled
+    within the generation, so a later re-enable is a fresh start.
+    """
+
+    # Trust store, execution identity and plugin KV root; None in host tests
+    # without a workspace (a plugin declaring ``kv`` then fails before setup).
     workspace: Path | None = None
-    # 宿主唯一的 RoleStore 实例（bootstrap 里的 canonical 那个）。插件经
-    # role_store capability 拿到的必须是它本身，见 shiori_sdk.runtime.KNOWN_CAPABILITIES
-    # 里那段注释：另起一个实例就是另起一把写锁。
-    role_store: RoleStore | None = None
-    memory_engine: MemoryEngine | None = None
-    app_config: Any = None
-    # http capability 的唯一来源：bootstrap 注入共享 external_default 请求器，
-    # 内核不再回退到进程级默认实例；缺失时声明 http 的插件 setup 前失败。
-    http: HttpClient | None = None
     plugin_configs: dict[str, dict[str, Any]] = field(default_factory=dict)
     raw_plugin_configs: dict[str, dict[str, Any]] = field(default_factory=dict)
-    relationship_runtime: Any = None
+    # The process-level owner whose attachments this generation publishes and
+    # retains across in-generation reloads.
     process_resources: ProcessResourceOwner | None = None
     is_reload: bool = False
     previously_active_plugins: frozenset[str] = frozenset()
@@ -180,7 +175,7 @@ class PluginKernel:
         self,
         plugin_dirs: list[Path],
         *,
-        services: HostServices,
+        settings: PluginGenerationSettings,
         core: Sequence[CoreModule],
         namespace: str = "",
         strict: bool = False,
@@ -194,7 +189,7 @@ class PluginKernel:
         """
         self._dirs = plugin_dirs
         self._external_dirs = external_plugin_dirs or []
-        self._services = services
+        self._settings = settings
         self._namespace = namespace or f"g{next(_KERNEL_NAMESPACE_COUNTER)}"
         # Settings generations retain the application's startup admission, but
         # own independent descriptors and import namespaces. Only a fresh app
@@ -258,10 +253,10 @@ class PluginKernel:
             external_roots=self._external_dirs,
             namespace=self._namespace,
             strict=self._strict,
-            host=self._services.plugin_runtime_contract,
+            host=self._settings.plugin_runtime_contract,
             trust=(
-                PluginTrustStore(self._services.workspace)
-                if self._services.workspace is not None
+                PluginTrustStore(self._settings.workspace)
+                if self._settings.workspace is not None
                 else None
             ),
         )
@@ -291,7 +286,7 @@ class PluginKernel:
                 record.candidate_id: record.admission for record in records
             }
             records[records.index(previous)] = candidate
-            workspace = self._services.workspace
+            workspace = self._settings.workspace
             if workspace is None:
                 raise ValueError("插件工作区不可用")
             refresh_dependency_admission(records, PluginTrustStore(workspace))
@@ -350,13 +345,13 @@ class PluginKernel:
 
     async def load_all(self) -> None:
         await self._load_records(self.discover())
-        if not self._services.is_reload:
+        if not self._settings.is_reload:
             self.publish_accounts()
 
     def publish_process_resources(self) -> None:
         """Activate current plugin attachments after runtime pointer publication."""
-        if self._services.process_resources is not None:
-            self._services.process_resources.publish(self._namespace)
+        if self._settings.process_resources is not None:
+            self._settings.process_resources.publish(self._namespace)
 
     def publish_accounts(self) -> None:
         """Makes this prepared generation's account reports authoritative.
@@ -514,7 +509,7 @@ class PluginKernel:
             return False
         async with self._transition_lock:
             await self._load_records([record])
-        if not self._services.is_reload:
+        if not self._settings.is_reload:
             self.publish_accounts()
         handle = self._handles.get(record.candidate_id)
         return handle is not None and handle.state is PluginState.ACTIVE
@@ -554,8 +549,8 @@ class PluginKernel:
                     raise PackageContractError(
                         "trust_changed", "trust", "插件内容已变化，请重启并重新确认信任"
                     )
-                if self._services.workspace is not None:
-                    PluginExecutionIdentity(self._services.workspace).record(
+                if self._settings.workspace is not None:
+                    PluginExecutionIdentity(self._settings.workspace).record(
                         record.manifest.id, record.plugin_dir, content.fingerprint
                     )
             except PackageContractError as exc:
@@ -618,7 +613,7 @@ class PluginKernel:
     def _config_enabled(self, manifest: PluginManifest) -> bool:
         """Reads the authoritative enable flag; absent falls back to the manifest."""
         return plugin_enabled(
-            manifest, self._services.plugin_configs.get(manifest.id, {})
+            manifest, self._settings.plugin_configs.get(manifest.id, {})
         )
 
     def _import_entry(
@@ -666,8 +661,7 @@ class PluginKernel:
             )
         setup_fn = cast("Callable[[SdkRuntimeContext], Awaitable[None]]", setup)
         grants = handle.record.manifest.capabilities
-        services = self._services
-        require_host_services(handle.plugin_id, grants, services)
+        settings = self._settings
         core_capabilities = bind_core_capabilities(
             grants,
             self._kernel.get,
@@ -680,23 +674,20 @@ class PluginKernel:
                 calls=handle.calls,
             ),
         )
-        capabilities = self._build_capabilities(handle)
         context: PluginSetupContext = PluginRuntimeContext(
             plugin_id=handle.plugin_id,
             plugin_dir=handle.record.plugin_dir,
             manifest=handle.record.manifest,
             effects=handle.effects,
-            capabilities=capabilities,
             lifecycle=(
                 LifecycleCapability(handle.contributions, handle.effects, handle.calls)
                 if "lifecycle" in handle.record.manifest.capabilities
                 else None
             ),
-            workspace=self._services.workspace,
             config=PluginConfig(
-                self._services.plugin_configs.get(handle.plugin_id, {}),
+                self._settings.plugin_configs.get(handle.plugin_id, {}),
                 resolve_reference=self._resolve_reference,
-                raw_values=self._services.raw_plugin_configs.get(handle.plugin_id),
+                raw_values=self._settings.raw_plugin_configs.get(handle.plugin_id),
             ),
             dependencies=PluginDependencies(
                 handle.record.manifest.dependencies,
@@ -704,31 +695,12 @@ class PluginKernel:
                 optional_declared=handle.record.manifest.optional_dependencies,
             ),
             storage=PluginStorage(),
-            memory_engine=self._services.memory_engine,
-            process_resources=(
-                services.process_resources.for_plugin(
-                    self._namespace, handle.plugin_id, handle.effects
-                )
-                if "process_resources" in grants
-                and services.process_resources is not None
-                else None
-            ),
-            kv=(
-                open_plugin_kv(
-                    workspace=provided_service(
-                        handle.plugin_id, "kv", services.workspace
-                    ),
-                    plugin_id=handle.plugin_id,
-                )
-                if "kv" in grants
-                else None
-            ),
-            http=services.http if "http" in grants else None,
+            kv=self._open_kv(handle.plugin_id) if "kv" in grants else None,
             runtime=PluginRuntimeLifecycle(
-                services.is_reload or reactivated,
+                settings.is_reload or reactivated,
                 handle.effects.drainers,
                 was_active=reactivated
-                or handle.plugin_id in services.previously_active_plugins,
+                or handle.plugin_id in settings.previously_active_plugins,
             ),
             services=(
                 ScopedPluginServices(
@@ -752,55 +724,16 @@ class PluginKernel:
             else context.as_sdk_context()
         )
 
-    def _build_capabilities(self, handle: PluginHandle) -> dict[str, Any]:
-        services = self._services
-        builders: dict[str, Any] = {
-            "services": lambda: None,
-            "scene_observations": lambda: None,
-            "events": lambda: None,
-            "diagnostics": lambda: None,
-            "roles": lambda: None,
-            "models": lambda: None,
-            "sessions": lambda: None,
-            "external_turns": lambda: None,
-            "background_results": lambda: None,
-            "process_resources": lambda: None,
-            "http": lambda: None,
-            "resources": lambda: None,
-            "processes": lambda: None,
-            "tool_turn": lambda: None,
-            "storage": lambda: None,
-            "memory": lambda: None,
-            "kv": lambda: None,
-            "config": lambda: None,
-            "tools": lambda: None,
-            "lifecycle": lambda: None,
-            "tool_hooks": lambda: None,
-            "proactive_gates": lambda: None,
-            "channels": lambda: None,
-            "accounts": lambda: None,
-            "avatars": lambda: None,
-            "background": lambda: None,
-            "bot_commands": lambda: None,
-            "rpc": lambda: None,
-            "dependencies": lambda: None,
-            "runtime": lambda: None,
-            "session_manager": lambda: None,
-            "role_runtime_registry": lambda: None,
-            "light_provider": lambda: None,
-            "light_model": lambda: None,
-            # 直传引用，无需 effect 包装：宿主拥有这些服务的生命周期，插件只读，
-            # 卸载时无需撤销任何登记。
-            "workspace": lambda: services.workspace,
-            "role_store": lambda: services.role_store,
-            "memory_engine": lambda: services.memory_engine,
-            "relationship_runtime": lambda: services.relationship_runtime,
-        }
-        return {
-            name: builders[name]()
-            for name in handle.record.manifest.capabilities
-            if name in builders
-        }
+    def _open_kv(self, plugin_id: str) -> PluginKVStore:
+        """The plugin's KV store under the generation's workspace (``kv``).
+
+        Without a workspace a plugin declaring ``kv`` fails before setup rather
+        than falling back to its package directory (#209).
+        """
+        workspace = self._settings.workspace
+        if workspace is None:
+            raise HostServiceUnavailable.for_capability(plugin_id, "kv", ["workspace"])
+        return open_plugin_kv(workspace=workspace, plugin_id=plugin_id)
 
     async def _rollback_failed_load(
         self, handle: PluginHandle, error: BaseException
@@ -997,7 +930,7 @@ class PluginKernel:
         """Re-runs setup of an ACTIVE plugin with new config, within this generation.
 
         ``values``/``raw_values`` replace the plugin table in
-        ``HostServices.plugin_configs``/``raw_plugin_configs`` (the live
+        ``PluginGenerationSettings.plugin_configs``/``raw_plugin_configs`` (the live
         generation config); the enable flag inside them must stay on
         (``ValueError`` otherwise). The closure (target plus ACTIVE plugins
         that hard-depend on it) is sealed, drained within ``drain_timeout``
@@ -1030,7 +963,7 @@ class PluginKernel:
                 values=values,
                 raw_values=raw_values,
                 tables=ConfigTables(
-                    self._services.plugin_configs, self._services.raw_plugin_configs
+                    self._settings.plugin_configs, self._settings.raw_plugin_configs
                 ),
                 steps=self._reload_steps(),
                 drain_timeout=drain_timeout,
@@ -1153,7 +1086,7 @@ class PluginKernel:
                 raise PluginReloadUnsupported([plugin_id], "failed")
             enabled = plugin_enabled(record.manifest, values)
             tables = ConfigTables(
-                self._services.plugin_configs, self._services.raw_plugin_configs
+                self._settings.plugin_configs, self._settings.raw_plugin_configs
             )
             if enabled:
                 closure = (
@@ -1185,7 +1118,7 @@ class PluginKernel:
             )
             if not enabled:
                 # A later re-enable within this generation is a fresh start.
-                self._services.previously_active_plugins -= frozenset(result.plugin_ids)
+                self._settings.previously_active_plugins -= frozenset(result.plugin_ids)
             return result
 
     async def _activate_reloaded(
@@ -1197,7 +1130,7 @@ class PluginKernel:
     def _retain_process_resources(
         self, plugin_ids: tuple[str, ...]
     ) -> ResourceRetention | None:
-        owner = self._services.process_resources
+        owner = self._settings.process_resources
         return None if owner is None else owner.retain(self._namespace, plugin_ids)
 
     async def _dispose_handle(self, handle: PluginHandle) -> list[Exception]:

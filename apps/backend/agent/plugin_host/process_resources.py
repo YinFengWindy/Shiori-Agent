@@ -9,6 +9,8 @@ from shiori_sdk.process_resources import ProcessResource
 
 from shiori_sdk.kernel import Scope
 
+from agent.plugin_host.core_keys import PluginBinding
+
 
 class ProcessResourceOwner:
     """Own resources independently of provider/channel configuration lifetimes."""
@@ -178,3 +180,20 @@ class ResourceRetention:
         for the next ``drain()``.
         """
         return await self._owner.end_retention(self._held)
+
+
+class ProcessResourceAttachments:
+    """The ``host.process_resources`` core service over the process-level owner.
+
+    Each plugin gets this generation's private attachment (keyed by the kernel
+    namespace), released with the plugin scope.
+    """
+
+    def __init__(self, owner: ProcessResourceOwner) -> None:
+        self._owner = owner
+
+    def for_plugin(self, binding: PluginBinding) -> "_Attachment":
+        """The attachment of the plugin ``binding`` describes, in its generation."""
+        return self._owner.for_plugin(
+            binding.namespace, binding.plugin_id, binding.scope
+        )

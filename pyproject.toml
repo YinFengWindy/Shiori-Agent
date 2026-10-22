@@ -44,8 +44,9 @@ shiori-plugin-default-memory = { path = "plugins/default_memory", editable = tru
 shiori-plugin-herdr = { path = "plugins/herdr", editable = true }
 
 # 四层分层契约（docs/decisions/2026-10-22-plugin-system-four-layer-refactor.md §5.4），
-# P0 只报告：CI 输出违规但不阻塞。阻塞仍由 scripts.check_sdk_imports 负责，两者的
-# 规则对照见 docs/decisions/2026-10-22-plugin-import-rules-mapping.md。
+# P2（#901）起在 CI 阻塞：契约全部保持，任何新违规都会让 CI 失败。不得用
+# ignore_imports 按迁移豁免。scripts.check_sdk_imports 仍阻塞它覆盖不到的规则，
+# 两者的规则对照见 docs/decisions/2026-10-22-plugin-import-rules-mapping.md。
 # 只查直接 import：间接链由 shiori_sdk.kernel 的「只许 import 内核自身和标准库」收紧。
 # include_external_packages 让第三方包进图，内核契约据此拒绝 import 任何第三方包。
 # 宿主包列表与 setup.py 的 HOST_PACKAGES 一致（shiori_runtime_resources 只放资源）。

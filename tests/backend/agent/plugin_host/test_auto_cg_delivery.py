@@ -14,7 +14,7 @@ from shiori_sdk.testing.http import FakeHttp
 from shiori_sdk.testing.packages import plugin_directory, stage_plugin_package
 
 from agent.account_delivery import AccountDelivery
-from agent.plugin_host import HostServices
+from agent.plugin_host import PluginGenerationSettings
 from tests.support.plugin_kernel import host_kernel
 from agent.provider import LLMResponse, ToolCall
 from agent.tools.account_delivery import AccountSendTool
@@ -102,12 +102,12 @@ async def test_cg_reaches_the_bound_qq_chat_through_account_delivery(
     stage_plugin_package(plugin_directory("novelai"), tmp_path / "plugins/novelai")
     kernel = host_kernel(
         [tmp_path / "plugins"],
-        services=HostServices(
-            http=FakeHttp(),
+        settings=PluginGenerationSettings(
             workspace=tmp_path,
-            role_store=roles,
             plugin_configs={"novelai": {"enabled": True, "token": "novel-token"}},
         ),
+        http=FakeHttp(),
+        role_store=roles,
         tools=registry,
         session_manager=sessions,
         light_provider=_prompt_provider(),
