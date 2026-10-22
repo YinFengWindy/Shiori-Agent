@@ -15,6 +15,7 @@ from shiori_sdk.testing.packages import plugin_directory, stage_plugin_package
 
 from agent.account_delivery import AccountDelivery
 from agent.plugin_host import HostServices, PluginKernel
+from bootstrap.plugin_core import plugin_core_modules
 from agent.provider import LLMResponse, ToolCall
 from agent.tools.account_delivery import AccountSendTool
 from agent.tools.message_push import MessagePushTool
@@ -112,6 +113,7 @@ async def test_cg_reaches_the_bound_qq_chat_through_account_delivery(
             session_manager=sessions,
             plugin_configs={"novelai": {"enabled": True, "token": "novel-token"}},
         ),
+        core=plugin_core_modules(),
     )
     await kernel.load_all()
     generate = registry.get_tool("generate_image")

@@ -305,6 +305,14 @@ def resolve_config_references(value: object) -> object:
     return value
 
 
+def resolve_config_reference(value: str) -> str:
+    """Expands the ``${NAME}`` references in one string (see above).
+
+    Plugins resolve their stored credentials through it (``host.config_references``).
+    """
+    return _resolve(value)
+
+
 def has_config_reference(value: object) -> bool:
     """Returns whether a TOML value contains a ``${NAME}`` reference anywhere."""
     if isinstance(value, str):

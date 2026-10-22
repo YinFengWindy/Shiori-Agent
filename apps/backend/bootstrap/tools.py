@@ -616,6 +616,7 @@ def build_core_runtime(
     )
 
     from agent.plugin_host import HostServices, PluginKernel
+    from bootstrap.plugin_core import plugin_core_modules
     from agent.plugin_host.external_turns import HostExternalTurns
     from agent.plugin_host.background_results import HostBackgroundResults
     from conversation.service import ConversationService
@@ -714,6 +715,7 @@ def build_core_runtime(
         ),
         namespace=uuid4().hex,
         strict=shared is not None,
+        core=plugin_core_modules(),
     )
     account_delivery = AccountDelivery(
         role_store.accounts,

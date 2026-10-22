@@ -19,6 +19,7 @@ from agent.core.passive_turn import ContextStore as _  # noqa: F401
 from agent.lifecycle.types import BeforeTurnCtx
 from agent.plugin_host import HostServices, PluginKernel
 from agent.tools.registry import ToolRegistry
+from bootstrap.plugin_core import plugin_core_modules
 from bus.event_bus import EventBus
 from core.roles.store import RoleStore
 from session.manager import SessionManager
@@ -64,6 +65,7 @@ def make_kernel(
         ),
         namespace=namespace,
         strict=strict,
+        core=plugin_core_modules(),
     )
 
 

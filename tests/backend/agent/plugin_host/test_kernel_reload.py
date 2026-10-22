@@ -18,6 +18,7 @@ from agent.plugin_host import (
     PluginReloadUnsupported,
     PluginState,
 )
+from bootstrap.plugin_core import plugin_core_modules
 from agent.plugin_host.process_resources import ProcessResourceOwner
 from agent.tools.registry import ToolRegistry
 from bus.event_bus import EventBus
@@ -210,7 +211,7 @@ async def _kernel(
         raw_plugin_configs={key: dict(value) for key, value in configs.items()},
         process_resources=ProcessResourceOwner(),
     )
-    kernel = PluginKernel([tmp_path], services=services)
+    kernel = PluginKernel([tmp_path], services=services, core=plugin_core_modules())
     await kernel.load_all()
     kernel.publish_process_resources()
     return kernel, services, tools
@@ -455,6 +456,7 @@ async def test_retired_generation_gate_never_admits_a_shared_tool_call(probe, tm
                 workspace=tmp_path / "workspace",
                 process_resources=owner,
             ),
+            core=plugin_core_modules(),
         )
         await kernel.load_all()
         kernel.publish_process_resources()
@@ -728,6 +730,7 @@ async def _hooked_kernel(tmp_path: Path) -> PluginKernel:
             plugin_configs=configs,
             raw_plugin_configs={"hooked": {"label": "v1"}},
         ),
+        core=plugin_core_modules(),
     )
     await kernel.load_all()
     return kernel

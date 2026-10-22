@@ -83,3 +83,14 @@ def uninstall_global_hooks(owner: object) -> None:
                 )
     if not _owners:
         _original_loop_handlers.clear()
+
+
+class ProcessCrashReporting:
+    """The ``CRASH_REPORTING`` core service (D13b) over the process-wide hook stack.
+
+    Every instance shares the module-level stack above, because the hooks it
+    arbitrates are process globals.
+    """
+
+    install = staticmethod(install_global_hooks)
+    uninstall = staticmethod(uninstall_global_hooks)

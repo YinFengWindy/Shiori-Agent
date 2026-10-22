@@ -15,6 +15,7 @@ from agent.core.runtime_support import TurnRunResult
 from agent.core.types import ContextBundle
 from agent.lifecycle.facade import TurnLifecycle
 from agent.plugin_host import HostServices, PluginKernel
+from bootstrap.plugin_core import plugin_core_modules
 from bootstrap.wiring import wire_turn_lifecycle
 from bus.event_bus import EventBus
 from core.roles import RoleStore
@@ -314,6 +315,7 @@ async def test_new_chain_after_reasoning_persists_meme_and_fires_turn_committed(
             session_manager=session_manager,
             role_store=RoleStore(tmp_path),
         ),
+        core=plugin_core_modules(),
     )
     await kernel.load_all()
     assert kernel.loaded_count == 2
