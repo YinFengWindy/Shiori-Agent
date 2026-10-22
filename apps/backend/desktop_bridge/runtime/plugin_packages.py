@@ -7,7 +7,7 @@ from pathlib import Path
 import re
 
 from agent.plugin_host.package_archive import extract_package_zip
-from agent.plugin_host.diagnostics import PackageContractError
+from shiori_sdk.kernel import PackageContractError
 from agent.plugin_host.package_fingerprint import inspect_package_content
 from desktop_bridge.runtime.apply import RuntimeApplyError
 from desktop_bridge.runtime.plugin_uninstall import schedule_plugin_uninstall

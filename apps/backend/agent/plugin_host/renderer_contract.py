@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from pathlib import Path
 
-from agent.plugin_host.diagnostics import PackageContractError
+from shiori_sdk.kernel import PackageContractError
 from agent.plugin_host.host_contract import HostRuntimeContract
 from agent.plugin_host.package_artifacts import validate_artifact
 from agent.plugin_host.package_schema import object_field, string_list, compatible_range

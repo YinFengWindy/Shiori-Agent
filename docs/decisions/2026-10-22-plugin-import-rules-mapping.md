@@ -63,7 +63,7 @@ import-linter 只分析 import 图，下面这些规则全部看不到。它们�
 | 内核（现 `agent.plugin_host`）不 import 宿主业务模块和插件 | kernel 不 import core / bootstrap / desktop_bridge / plugins | `shiori_sdk.kernel` 在 P1 才建，现在以 `agent.plugin_host` 为内核。目标是内核不懂任何业务，所以禁止集合取全部宿主业务包（`agent` 下除 `plugin_host` 以外的子包、`bootstrap`、`bus`、`conversation`、`core`、`desktop_bridge`、`infra`、`proactive_v2`、`prompts`、`session`、`utils`）加上 `plugins`。 |
 | 核心模块不 import 插件 | core 不 import `plugins.*` | 全部宿主包 → `plugins`。宿主通过 `importlib` 动态加载插件，不在静态图里。 |
 | 插件只 import manifest 声明的依赖插件 | 插件只能 import SDK 和已声明依赖的插件 | 自定义契约 `scripts/plugin_import_contract.py`：允许集合是插件自身加上 manifest 的 `dependencies` / `optional_dependencies`。「只能 import SDK」中禁止宿主的部分由 A1 的契约覆盖。 |
-| `shiori_sdk.kernel` 只 import `shiori_sdk`，且不 import 核心契约模块 | 同左 | **P1 建包时加入**：import-linter 遇到不存在的模块会直接报错退出。 |
+| `shiori_sdk.kernel` 只 import `shiori_sdk`，且不 import 核心契约模块 | 同左 | **P1（#900）已加入**，取更严的形式：自定义契约 `kernel_isolation`（`scripts/plugin_import_contract.py`）只允许内核 import 自身和标准库，SDK 其他模块（含以后的核心契约）、宿主、插件和第三方包一律不允许。为看到第三方包，`[tool.importlinter]` 打开了 `include_external_packages`。 |
 | 前端：eslint `no-restricted-imports`，插件 ui 只能 import `@yinfengwindy/shiori-sdk` 和 react | 同左 | **P0 不实现，延后到 P7（#908，前端入口统一时）**：P0 的 ticket 范围是 import-linter（Python import 图）；前端插件入口的形态（一个 frontend 入口 + 具名导出）要到 P7 才定下来，现在按 renderer 三种 kind 写规则，P7 还得重写。 |
 
 所有契约只检查直接 import（`allow_indirect_imports = true`）。内核搬进 `shiori_sdk.kernel` 后，「只许 import SDK」本身就是传递约束。

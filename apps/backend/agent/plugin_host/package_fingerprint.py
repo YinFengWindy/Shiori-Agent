@@ -7,7 +7,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from agent.plugin_host.diagnostics import PackageContractError
+from shiori_sdk.kernel import PackageContractError
 
 
 @dataclass(frozen=True)

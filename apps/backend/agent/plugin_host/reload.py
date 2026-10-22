@@ -1,9 +1,11 @@
-"""In-generation reload of one plugin and the ACTIVE plugins that hard-depend on it.
+"""In-generation reload and toggling of a plugin closure, with config rollback.
 
-The kernel decides *which* handles form the closure and owns loading and
-disposal; this module owns the transition itself: seal and drain the closure
-(abandoning unchanged on timeout or cancellation), then replace it under a
-process-resource hold, rolling back to the old config if the new one fails.
+``shiori_sdk.kernel`` decides which plugins form a reload closure (target,
+dependents and optional consumers) and owns draining, disposal and setup;
+this module composes those steps with the host's config tables: drain the
+closure (abandoning unchanged on timeout or cancellation), then replace it
+under a process-resource hold, rolling back to the old config if the new
+one fails.
 """
 
 from __future__ import annotations
@@ -19,7 +21,6 @@ from agent.plugin_host.process_resources import ResourceRetention
 from agent.plugin_host.unload import (
     PluginReloadFailed,
     PluginReloadTimeout,
-    PluginReloadUnsupported,
 )
 
 logger = logging.getLogger(__name__)
@@ -39,6 +40,10 @@ class PluginReloadResult:
 class ReloadSteps:
     """Kernel operations a reload composes; the kernel keeps owning handles."""
 
+    # Drains the closure (dependents first) within the timeout through the
+    # kernel; abandons with every instance unchanged on timeout, ``on_drain``
+    # failure or cancellation (``PluginReloadTimeout`` on timeout).
+    drain: Callable[[list[PluginHandle], float], Awaitable[None]]
     # Disposes one handle and drops it from the kernel; returns cleanup errors.
     dispose: Callable[[PluginHandle], Awaitable[list[Exception]]]
     # Loads one record (after its dependencies) as a reactivation of the given
@@ -80,44 +85,6 @@ def hot_unload_blockers(handles: Iterable[PluginHandle]) -> list[str]:
     ]
 
 
-def refuse_reload(
-    plugin_id: str,
-    target: PluginHandle | None,
-    closure: list[PluginHandle],
-    *,
-    retired: bool,
-) -> None:
-    """Rejects reloads only a generation swap (or no reload) may serve."""
-    if retired:
-        raise PluginReloadUnsupported([plugin_id], "retired")
-    if target is None or target.state is not PluginState.ACTIVE:
-        disabled = target is not None and target.state is PluginState.DISABLED
-        raise PluginReloadUnsupported([plugin_id], "disabled" if disabled else "failed")
-    refuse_generation_only(closure)
-
-
-def refuse_generation_only(closure: list[PluginHandle]) -> None:
-    """Rejects closures whose plugins only a generation swap may load or unload."""
-    channels = [
-        handle.plugin_id
-        for handle in closure
-        if "channels" in handle.record.manifest.capabilities
-        or handle.record.manifest.channels
-        or handle.contributions.channels
-    ]
-    if channels:
-        raise PluginReloadUnsupported(channels, "channels")
-    if unsafe := hot_unload_blockers(closure):
-        raise PluginReloadUnsupported(unsafe, "hot_unload")
-
-
-async def run_drainers(handles: Iterable[PluginHandle]) -> None:
-    """Awaits each handle's ``on_drain`` callbacks in order; a failure propagates."""
-    for handle in handles:
-        for callback in handle.drainers:
-            await callback()
-
-
 async def reload_closure(
     closure: list[PluginHandle],
     *,
@@ -136,7 +103,7 @@ async def reload_closure(
     runs to completion even if the caller is cancelled meanwhile, including
     ``commit`` (see ``PluginKernel.reload``).
     """
-    await _drain(closure, drain_timeout)
+    await steps.drain(closure, drain_timeout)
     plugin_ids = frozenset(handle.plugin_id for handle in closure)
     replacement = asyncio.create_task(
         _replace(
@@ -196,64 +163,6 @@ async def toggle_closure(
         )
     )
     return await _run_to_completion(replacement)
-
-
-async def _drain(closure: list[PluginHandle], timeout: float) -> None:
-    """Drains the closure stage by stage, dependents first.
-
-    Each stage seals one plugin, waits for its admitted calls and runs its
-    ``on_drain``; its providers stay open meanwhile, so a dependent's accepted
-    work can still call them (and those calls are waited for when the provider
-    is sealed in turn).
-
-    When the drain is abandoned (timeout, ``on_drain`` failure, cancellation)
-    every instance stays as it was: ``on_drain`` of stages that already
-    finished has run, which is harmless because ``on_drain`` only waits for
-    accepted work, and an ``on_drain`` still in progress finishes in the
-    background.
-    """
-    current: list[PluginHandle] = []
-    abandoned = False
-
-    async def staged() -> None:
-        for handle in closure:
-            if abandoned:
-                return
-            current[:] = [handle]
-            handle.calls.seal()
-            await handle.calls.wait_idle()
-            if abandoned:
-                return
-            await run_drainers((handle,))
-        current.clear()
-
-    # Waiting runs as its own task that is never cancelled: on_drain callbacks
-    # may await (gather) the plugin's own work, and cancelling them would
-    # cancel that work, while an abandoned reload must leave it running.
-    waiting = asyncio.create_task(staged())
-    try:
-        done, _ = await asyncio.wait({waiting}, timeout=timeout)
-        if not done:
-            raise PluginReloadTimeout(
-                tuple(handle.plugin_id for handle in current), timeout
-            )
-        waiting.result()
-    except BaseException:
-        # Stop the remaining stages before reopening what was sealed so far.
-        abandoned = True
-        _reopen(closure)
-        waiting.add_done_callback(_log_abandoned_drain)
-        raise
-
-
-def _log_abandoned_drain(task: asyncio.Task[None]) -> None:
-    if not task.cancelled() and (error := task.exception()) is not None:
-        logger.error("已放弃的插件重载排空以异常结束", exc_info=error)
-
-
-def _reopen(closure: list[PluginHandle]) -> None:
-    for handle in closure:
-        handle.calls.reopen()
 
 
 async def _run_to_completion(

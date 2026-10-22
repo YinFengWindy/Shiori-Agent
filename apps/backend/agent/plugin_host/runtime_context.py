@@ -8,7 +8,7 @@ from typing import Any
 from session.manager import SessionManager
 
 from agent.plugin_host.capabilities import LifecycleCapability, RpcCapability
-from agent.plugin_host.effects import EffectScope
+from shiori_sdk.kernel import Scope
 from agent.plugin_host.host_service_requirements import provided_service
 from shiori_sdk.services import PluginServices, ServiceProviderContext
 from shiori_sdk.runtime import Dispose
@@ -66,7 +66,7 @@ class PluginSetupContext:
         plugin_id: str,
         plugin_dir: Path,
         manifest: PluginManifest,
-        effects: EffectScope,
+        effects: Scope,
         capabilities: dict[str, Any],
         publish_api: Callable[[object], None] | None = None,
         lifecycle: LifecycleCapability | None = None,
@@ -187,7 +187,7 @@ class PluginSetupContext:
         disposer 可同步或异步；单项失败仍继续清理。事件订阅与 effect 的登记
         先后不影响退订优先规则；开始清理后拒绝新登记。
         """
-        self._effects.add(f"custom:{label}", dispose)
+        _ = self._effects.effect(dispose, f"custom:{label}")
 
     @property
     def lifecycle(self) -> LifecycleCapability:

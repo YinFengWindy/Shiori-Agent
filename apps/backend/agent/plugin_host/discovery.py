@@ -7,7 +7,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
-from agent.plugin_host.diagnostics import PackageContractError, PluginDiagnostic
+from shiori_sdk.kernel import PackageContractError, PluginDiagnostic
 from agent.plugin_host.handle import PluginRecord
 from agent.plugin_host.host_contract import HostRuntimeContract
 from agent.plugin_host.manifest import ManifestError, PluginManifest, load_manifest

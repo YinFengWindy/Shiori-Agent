@@ -123,6 +123,30 @@ consolidates these additions and the subsequent #847 breaking migration.
 
 <!-- Record the next contract batch here, with PR references and breaking markers. -->
 
+- **Plugin kernel `shiori_sdk.kernel` (issue #900, refactor P1).** New SDK
+  package holding the kernel the host now runs on: `Key[T]`, `PluginSpec`,
+  `Kernel` (`start` / `reload` / `stop`, host steps `plan` / `activate` /
+  `deactivate` / `drain`) and the plugin `Context` (`provide` / `require` /
+  `get`, `on` / `watch` / `emit`, `effect` / `spawn` / `on_drain`), `Veto`,
+  `fail_open` / `fail_closed` via `on_error`, post-chain core checks, and the
+  `PluginStarted` / `PluginFailed` / `PluginStopped` events. `PluginDiagnostic`,
+  `PackageContractError` and `RendererActivationError` move here from the host.
+  `shiori_sdk.testing.kernel.KernelHarness` runs specs on the real kernel and
+  offers `await harness.idle()` for watchers. Existing v2 plugin contexts are
+  unchanged; plugins do not receive the kernel `Context` yet (P4).
+  Kernel semantics fixed during P1 (the first two confirmed by the maintainer):
+  the default reload drain
+  waits only for `on` / `watch` handlers in flight, while spawned tasks are
+  cancelled on dispose; two plugins providing one key without `replaces` /
+  `conflicts` are both BLOCKED (a plugin duplicating a core key fails startup);
+  only `requires` can form a dependency cycle.
+  **Behavior visible to existing plugins:** an in-generation reload now also
+  reloads the running plugins that list the target in `optional_dependencies`
+  (disable/unload still takes only hard dependents), and active plugins (their
+  tool hooks, phase modules, channels and bot commands) are aggregated in
+  kernel order — dependency depth, then plugin id — instead of discovery and
+  load order, so the order stays the same after a reload.
+
 - **Natural proactive replies and background reports (PR #894, issue #868).** The current
   role's built-in natural-chat capability also applies to proactive draft
   `message_push` output, Drift dialogue and captured background-result reports.

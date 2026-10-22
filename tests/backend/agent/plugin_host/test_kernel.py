@@ -1358,10 +1358,19 @@ async def test_contract_package_uses_explicit_host_build_inventory(contract_pack
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("provider_present", [False, True])
-@pytest.mark.parametrize("contract", [False, True])
+@pytest.mark.parametrize(
+    ("provider", "contract"),
+    [
+        ("missing", True),
+        ("disabled", True),
+        # Installed but not admitted (invalid contract): it exists, so the
+        # dependent reads "unavailable", not "missing".
+        ("unadmitted", True),
+        ("disabled", False),
+    ],
+)
 async def test_plugin_dependency_rejection_keeps_contract_diagnostic(
-    contract_package, provider_present, contract
+    contract_package, provider, contract
 ):
     import yaml
 
@@ -1371,11 +1380,13 @@ async def test_plugin_dependency_rejection_keeps_contract_diagnostic(
     if not contract:
         del raw["package_contract"]
     path.write_text(yaml.safe_dump(raw), encoding="utf-8")
-    if provider_present:
-        provider = contract_package.parent / "provider"
-        provider.mkdir()
-        (provider / "manifest.yaml").write_text(
-            "api: 2\nid: provider\ncapabilities: []\n", encoding="utf-8"
+    if provider != "missing":
+        package = contract_package.parent / "provider"
+        package.mkdir()
+        contract_line = "package_contract: 1\n" if provider == "unadmitted" else ""
+        (package / "manifest.yaml").write_text(
+            f"api: 2\n{contract_line}id: provider\ncapabilities: []\n",
+            encoding="utf-8",
         )
     marker = contract_package / "executed.txt"
     (contract_package / "backend/plugin.py").write_text(
@@ -1395,7 +1406,7 @@ async def test_plugin_dependency_rejection_keeps_contract_diagnostic(
     assert state["state"] == "BLOCKED"
     if contract:
         assert state["diagnostic"]["code"] == (
-            "dependency_unavailable" if provider_present else "missing_dependency"
+            "missing_dependency" if provider == "missing" else "dependency_unavailable"
         )
         assert state["diagnostic"]["stage"] == "dependency"
         assert state["diagnostic"]["field"] == "dependencies[0]"

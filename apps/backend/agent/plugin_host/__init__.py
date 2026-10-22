@@ -6,7 +6,6 @@ from agent.plugin_host.config_schema import (
     PluginConfigSchemaRegistry,
     resolve_config_model,
 )
-from agent.plugin_host.effects import EffectScope
 from agent.plugin_host.events import ScopedEventBus
 from agent.plugin_host.handle import PluginHandle, PluginRecord, PluginState
 from agent.plugin_host.kernel import HostServices, PluginKernel
@@ -32,7 +31,6 @@ __all__ = [
     "ChannelDeclaration",
     "ConfigModelError",
     "DEFAULT_ENTRY",
-    "EffectScope",
     "HostServices",
     "ManifestError",
     "PluginConfigSchemaRegistry",

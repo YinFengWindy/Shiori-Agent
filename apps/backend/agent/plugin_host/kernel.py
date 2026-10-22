@@ -11,7 +11,7 @@ import importlib.util
 import itertools
 import logging
 import sys
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Iterable, Mapping
 from copy import deepcopy
 from dataclasses import dataclass, field, replace
 from importlib.abc import Loader
@@ -53,11 +53,6 @@ from agent.plugin_host.config_schema import (
     resolve_config_model,
 )
 from agent.plugin_host.dependencies import PluginDependencies, PluginDependencyError
-from agent.plugin_host.diagnostics import (
-    PackageContractError,
-    PluginDiagnostic,
-    RendererActivationError,
-)
 from agent.plugin_host.discovery import (
     ExternalSourceDiagnostic,
     discover_plugins,
@@ -65,7 +60,6 @@ from agent.plugin_host.discovery import (
     refresh_dependency_admission,
 )
 from agent.plugin_host.call_gate import PluginCallGate
-from agent.plugin_host.effects import EffectScope
 from agent.plugin_host.events import ScopedEventBus
 from agent.plugin_host.handle import PluginHandle, PluginRecord, PluginState
 from agent.plugin_host.host_service_requirements import (
@@ -98,17 +92,29 @@ from agent.plugin_host.reload import (
     PluginReloadResult,
     ReloadSteps,
     hot_unload_blockers,
-    refuse_generation_only,
-    refuse_reload,
     reload_closure,
-    run_drainers,
     toggle_closure,
 )
-from agent.plugin_host.unload import PluginReloadUnsupported, PluginRestartRequired
+from agent.plugin_host.unload import (
+    PluginReloadTimeout,
+    PluginReloadUnsupported,
+    PluginRestartRequired,
+)
 from bus.event_bus import EventBus
 from core.roles import RoleStore
 from core.scene.demand import SceneObservationDemand
 from shiori_sdk import PluginRuntimeContext as SdkRuntimeContext
+from shiori_sdk.kernel import (
+    Context,
+    Kernel,
+    KernelError,
+    KernelState,
+    Key,
+    PackageContractError,
+    PluginDiagnostic,
+    PluginSpec,
+    RendererActivationError,
+)
 from shiori_sdk.memory.engine import MemoryEngine
 
 logger = logging.getLogger(__name__)
@@ -142,6 +148,16 @@ _KERNEL_NAMESPACE_COUNTER = itertools.count(1)
 # still rolls the whole plugin back via ``fail_renderer_entry`` — it is just
 # not part of the initial admission gate.
 _RENDERER_GATED_KINDS: tuple[str, ...] = ("ui", "background")
+
+
+def plugin_key(plugin_id: str) -> Key[Any]:
+    """Kernel key under which a plugin provides the API it exposes (``ctx.expose``).
+
+    Manifest ``dependencies`` / ``optional_dependencies`` become kernel
+    ``requires`` / ``optional`` on these keys, so the kernel orders setup,
+    blocks dependents of an unavailable plugin and builds reload closures.
+    """
+    return Key(f"plugin:{plugin_id}")
 
 
 @dataclass
@@ -182,7 +198,12 @@ class HostServices:
 
 
 class PluginKernel:
-    """通过作用域 effect 回滚与 capability 注入装配插件，聚合其宿主贡献。"""
+    """宿主装配层：发现、准入、信任与 capability 注入，生命周期交给 ``shiori_sdk.kernel``。
+
+    每个插件句柄对应内核里的一个 ``PluginSpec``：内核负责依赖排序、setup、
+    作用域（订阅 → 任务 → LIFO effect）释放、失败传播与排空；这里只做宿主
+    专有的部分（启停配置、信任、调用闸门、配置回滚、渲染入口）。
+    """
 
     def __init__(
         self,
@@ -215,7 +236,9 @@ class PluginKernel:
         )
         self._strict = strict
         self._handles: dict[str, PluginHandle] = {}
-        self._active_order: list[str] = []
+        self._kernel = Kernel()
+        # Package content inspected before setup, handed to the setup adapter.
+        self._contents: dict[str, PackageContent | None] = {}
         # Serializes load/unload/reload/drain/terminate so a reload never
         # interleaves with another transition or the generation's retirement.
         self._transition_lock = asyncio.Lock()
@@ -345,9 +368,7 @@ class PluginKernel:
     # ── 加载 ──────────────────────────────────────────────────────────────
 
     async def load_all(self) -> None:
-        records = self._records_by_id()
-        for record in self.discover():
-            await self._load_dependencies(record, records, ())
+        await self._load_records(self.discover())
         if not self._services.is_reload:
             self.publish_accounts()
 
@@ -372,73 +393,124 @@ class PluginKernel:
             if record.admission is None or record.admission.state != "CONFLICT"
         }
 
-    async def _load_dependencies(
+    async def _load_records(
         self,
-        record: PluginRecord,
-        records: dict[str, PluginRecord],
-        trail: tuple[str, ...],
+        wanted: list[PluginRecord],
         reactivating: frozenset[str] = frozenset(),
     ) -> None:
-        """Loads ``record`` after its dependencies.
+        """Loads ``wanted`` plus the enabled hard dependencies they pull in.
 
-        ``reactivating`` names plugins being brought back by an in-generation
-        reload; their setup sees ``was_active`` and ``is_reload`` as True.
+        Runnable records (admitted and enabled) are planned by the kernel and
+        set up in its order: dependency depth, then plugin id (§8.1). A
+        disabled plugin never loads its dependencies as a side effect; a
+        dependency cycle blocks its members before any setup (§8.5).
+        ``reactivating`` names plugins brought back by an in-generation reload;
+        their setup sees ``was_active`` and ``is_reload`` as True.
         """
-        existing = self._handles.get(record.candidate_id)
-        if existing is not None and existing.state in {
-            PluginState.ACTIVE,
-            PluginState.DISABLED,
-            PluginState.BLOCKED,
-            PluginState.CONFLICT,
-            PluginState.UNTRUSTED,
-        }:
+        records = self._records_by_id()
+        selected: dict[str, PluginRecord] = {}
+        pending = list(wanted)
+        while pending:
+            record = pending.pop(0)
+            if record.candidate_id in selected:
+                continue
+            selected[record.candidate_id] = record
+            if self._runnable(record):
+                pending.extend(
+                    records[dependency]
+                    for dependency in record.manifest.dependencies
+                    if dependency in records
+                )
+        runnable = {
+            record.manifest.id: record
+            for record in selected.values()
+            if self._runnable(record)
+        }
+        # Disabled and admission-failed (untrusted, invalid contract) plugins
+        # are planned too but never activated: enabling one later keeps the
+        # order, the kernel computes its enable closure and restart refusal,
+        # and a dependent learns it exists ("未启用或加载失败", not "不存在").
+        # Only conflicting candidates stay out: their id is ambiguous.
+        order = await self._kernel.plan(
+            self._spec(record)
+            for record in selected.values()
+            if records.get(record.manifest.id) is record
+        )
+        for record in selected.values():
+            if record.manifest.id not in runnable:
+                await self._load_one(record, reactivated=False)
+            elif record.manifest.id not in order:
+                self._block_excluded(record)
+        for plugin_id in order:
+            if (record := runnable.get(plugin_id)) is not None:
+                await self._load_one(record, reactivated=plugin_id in reactivating)
+
+    def _runnable(self, record: PluginRecord) -> bool:
+        return record.admission is None and self._config_enabled(record.manifest)
+
+    def _block_excluded(self, record: PluginRecord) -> None:
+        """Records the kernel's refusal (a dependency cycle) as a BLOCKED handle."""
+        if record.candidate_id in self._handles:
             return
-        if record.admission is not None:
-            self._handles[record.candidate_id] = PluginHandle(
-                record=record,
-                state=PluginState[record.admission.state],
-                error=RuntimeError(record.admission.reason),
+        status = self._kernel.status(record.manifest.id)
+        assert status is not None and status.diagnostic is not None
+        self._handles[record.candidate_id] = PluginHandle(
+            record=record,
+            state=PluginState.BLOCKED,
+            error=self._dependency_error(record, status.diagnostic),
+        )
+
+    def _dependency_error(
+        self, record: PluginRecord, blocked: PluginDiagnostic
+    ) -> PluginDependencyError:
+        """Wraps the kernel's BLOCKED diagnostic as the handle's error.
+
+        Package-contract plugins surface it on the Plugins page. The kernel
+        names the first unavailable ``requires`` entry ``inject[i]``; the
+        adapter's ``requires`` mirror manifest ``dependencies``, so the field
+        is reported under the manifest's name.
+        """
+        error = PluginDependencyError(blocked.reason)
+        if "package_contract" in record.manifest.metadata:
+            field = blocked.field.replace("inject", "dependencies", 1)
+            error.diagnostic = replace(blocked, field=field)
+        return error
+
+    def _spec(self, record: PluginRecord) -> PluginSpec:
+        """Adapts one runnable record to a kernel spec whose setup is the v2 setup."""
+        manifest = record.manifest
+
+        async def setup(ctx: Context) -> None:
+            handle = self._handles[record.candidate_id]
+            handle.effects = self._kernel.scope(manifest.id)
+            handle.effects.subscribe(
+                lambda: self.rpc.communication.remove_plugin(manifest.id),
+                "renderer-communication",
             )
-            return
-        plugin_id = record.manifest.id
-        if plugin_id in trail:
-            raise PluginDependencyError(
-                "插件循环依赖: " + " -> ".join((*trail, plugin_id))
-            )
-        # A disabled plugin must not load its dependencies as a side effect.
-        if self._config_enabled(record.manifest):
-            for index, dependency in enumerate(record.manifest.dependencies):
-                target = records.get(dependency)
-                try:
-                    if target is None:
-                        raise PluginDependencyError(
-                            f"插件 {plugin_id} 缺少依赖 {dependency}"
-                        )
-                    await self._load_dependencies(
-                        target, records, (*trail, plugin_id), reactivating
-                    )
-                    loaded = self._handles.get(target.candidate_id)
-                    if loaded is None or loaded.state is not PluginState.ACTIVE:
-                        raise PluginDependencyError(
-                            f"插件 {plugin_id} 的依赖 {dependency} 未启用或加载失败"
-                        )
-                except PluginDependencyError as exc:
-                    if "package_contract" in record.manifest.metadata:
-                        exc.diagnostic = PluginDiagnostic(
-                            code=(
-                                "missing_dependency"
-                                if target is None
-                                else "dependency_unavailable"
-                            ),
-                            stage="dependency",
-                            field=f"dependencies[{index}]",
-                            reason=str(exc),
-                        )
-                    self._handles[record.candidate_id] = PluginHandle(
-                        record=record, state=PluginState.BLOCKED, error=exc
-                    )
-                    return
-        await self._load_one(record, reactivated=plugin_id in reactivating)
+            try:
+                content = self._contents.pop(record.candidate_id, None)
+                self._import_entry(handle, content)
+                self._register_config_schema(handle)
+                await self._setup_v2(handle, reactivated=handle.reactivated)
+            except BaseException:
+                # A rolled-back instance never admits calls again, even via
+                # stale references; the kernel then releases its scope.
+                handle.calls.retire()
+                raise
+            ctx.provide(plugin_key(manifest.id), handle.instance)
+
+        # ``requires`` must keep the order of ``manifest.dependencies``:
+        # ``_dependency_error`` reports the kernel's ``inject[i]`` field as
+        # ``dependencies[i]``.
+        return PluginSpec(
+            manifest.id,
+            setup,
+            requires=tuple(plugin_key(d).name for d in manifest.dependencies),
+            optional=tuple(plugin_key(d).name for d in manifest.optional_dependencies),
+            provides=(plugin_key(manifest.id).name,),
+            hot_reload=manifest.supports_hot_unload,
+            channels=_declares_channels(record),
+        )
 
     def _find_record(self, name: str) -> PluginRecord | None:
         exact = [record for record in self.discover() if record.candidate_id == name]
@@ -457,7 +529,7 @@ class PluginKernel:
         if record is None:
             return False
         async with self._transition_lock:
-            await self._load_dependencies(record, self._records_by_id(), ())
+            await self._load_records([record])
         if not self._services.is_reload:
             self.publish_accounts()
         handle = self._handles.get(record.candidate_id)
@@ -465,12 +537,25 @@ class PluginKernel:
 
     async def _load_one(self, record: PluginRecord, *, reactivated: bool) -> None:
         existing = self._handles.get(record.candidate_id)
-        if existing is not None and existing.state is PluginState.ACTIVE:
+        if existing is not None and existing.state in {
+            PluginState.ACTIVE,
+            PluginState.DISABLED,
+            PluginState.BLOCKED,
+            PluginState.CONFLICT,
+            PluginState.UNTRUSTED,
+        }:
+            return
+        if record.admission is not None:
+            self._handles[record.candidate_id] = PluginHandle(
+                record=record,
+                state=PluginState[record.admission.state],
+                error=RuntimeError(record.admission.reason),
+            )
             return
         handle = PluginHandle(
             record=record,
-            effects=EffectScope(record.manifest.id),
             calls=PluginCallGate(record.manifest.id),
+            reactivated=reactivated,
         )
         self._handles[record.candidate_id] = handle
         if not self._config_enabled(record.manifest):
@@ -506,37 +591,35 @@ class PluginKernel:
                 handle.state = PluginState[record.admission.state]
                 handle.error = exc
                 return
-        handle.effects.add_subscription(
-            "renderer-communication",
-            lambda: self.rpc.communication.remove_plugin(handle.plugin_id),
-        )
         handle.state = PluginState.LOADING
+        self._contents[record.candidate_id] = content
         try:
-            self._import_entry(handle, content)
-            self._register_config_schema(handle)
-            await self._setup_v2(handle, reactivated=reactivated)
-        except asyncio.CancelledError as e:
-            # A cancelled setup owns registrations even before it becomes ACTIVE.
-            await self._rollback_failed_load(handle, e)
+            # The kernel blocks the plugin when a required plugin key is not
+            # provided, otherwise runs the setup adapter (``_spec``) and, when
+            # it fails, releases the plugin's scope before returning.
+            status = await self._kernel.activate(record.manifest.id)
+        except BaseException as error:
+            # Cancelled setup: the kernel released the scope unless the release
+            # itself was interrupted, which a later disposal then finishes.
+            status = self._kernel.status(record.manifest.id)
+            if status is not None and status.error is error:
+                self._after_rollback(handle, error, status.cleanup_errors)
             raise
-        except Exception as e:
-            # Deliberately unconditional (#262): before this change, a hot
-            # settings apply constructed this kernel with ``strict=True``
-            # (``bootstrap/tools.py``'s ``strict=shared is not None``), and
-            # this branch re-raised here, which propagated out through
-            # ``load_all()`` -> ``CoreRuntime.start()`` -> ``AppRuntime.prepare()``
-            # and discarded the *entire* candidate generation over one
-            # plugin's failure — a real change to ``runtime.apply``'s
-            # atomicity contract, not the removal of a no-op. Now a single
-            # plugin's setup() failure never aborts the sweep, on cold boot
-            # or a hot apply alike (#262 AC3 — "其他插件继续正常运行").
-            # ``self._strict`` still governs discovery-time builtin-manifest
-            # validation (see ``discover()``/``discovery.py``), a distinct,
-            # unrelated concern this branch no longer consults.
-            await self._rollback_failed_load(handle, e)
+        finally:
+            _ = self._contents.pop(record.candidate_id, None)
+        if status.state is KernelState.BLOCKED:
+            handle.state = PluginState.BLOCKED
+            assert status.diagnostic is not None
+            handle.error = self._dependency_error(record, status.diagnostic)
+            return
+        if status.state is not KernelState.ACTIVE:
+            # Deliberately not re-raised (#262): one plugin's setup failure
+            # never aborts the sweep, on cold boot or a hot apply alike.
+            assert status.error is not None
+            logger.warning("插件 %s 加载失败，回滚: %s", record.name, status.error)
+            self._after_rollback(handle, status.error, status.cleanup_errors)
             return
         handle.state = PluginState.ACTIVE
-        self._active_order.append(record.candidate_id)
         # Gates the Plugins page's displayed status, not the contributions
         # already registered above — see ``PluginHandle.pending_renderer_kinds``.
         handle.pending_renderer_kinds = _required_renderer_kinds(record)
@@ -565,7 +648,7 @@ class PluginKernel:
         else:
             imports = TrustedPluginImports(record.import_path, content.sources)
             imports.install()
-            handle.effects.add("trusted-source-imports", imports.remove)
+            _ = handle.effects.effect(imports.remove, "trusted-source-imports")
             _import_module(
                 record.import_path,
                 record.entry_file,
@@ -732,7 +815,7 @@ class PluginKernel:
             tool_turn=current_tool_turn,
             runtime=PluginRuntimeLifecycle(
                 services.is_reload or reactivated,
-                handle.drainers,
+                handle.effects.drainers,
                 was_active=reactivated
                 or handle.plugin_id in services.previously_active_plugins,
             ),
@@ -849,16 +932,23 @@ class PluginKernel:
     async def _rollback_failed_load(
         self, handle: PluginHandle, error: BaseException
     ) -> None:
+        """Rolls an ACTIVE plugin back to FAILED through the kernel (renderer failure)."""
         logger.warning("插件 %s 加载失败，回滚: %s", handle.record.name, error)
         # A rolled-back instance never admits calls again, even via stale references.
         handle.calls.retire()
-        if handle.record.candidate_id in self._active_order:
-            self._active_order.remove(handle.record.candidate_id)
-        cleanup_errors = await handle.effects.dispose_all()
+        cleanup_errors = await self._kernel.deactivate(handle.plugin_id)
+        self._after_rollback(handle, error, cleanup_errors)
+
+    def _after_rollback(
+        self,
+        handle: PluginHandle,
+        error: BaseException,
+        cleanup_errors: tuple[Exception, ...] | list[Exception],
+    ) -> None:
+        """Host bookkeeping once the kernel released a failed instance's scope."""
         _purge_modules(handle.record.import_path)
         handle.contributions = type(handle.contributions)()
         handle.instance = None
-        handle.drainers.clear()
         handle.pending_renderer_kinds = frozenset()
         handle.activation_token = ""
         # A rollback that could not fully dispose its own effects cannot
@@ -963,7 +1053,9 @@ class PluginKernel:
         handle = self._handles.get(record.candidate_id) if record else None
         if handle is None or handle.state is not PluginState.ACTIVE:
             return []
-        return _dependent_closure(handle, self._active_handles())
+        return self._handles_by_id(
+            self._kernel.closure(handle.plugin_id, optional=False)
+        )
 
     def _enable_closure(self, target: PluginHandle) -> list[PluginHandle]:
         """A DISABLED target plus the plugins its absence blocks, dependents first.
@@ -982,16 +1074,20 @@ class PluginKernel:
             }:
                 raise PluginReloadUnsupported([dependency], "failed")
         blocked = [
-            handle
+            handle.plugin_id
             for handle in self._handles.values()
             if handle.state is PluginState.BLOCKED and handle.record.admission is None
         ]
-        return _dependent_closure(target, blocked)
+        return self._handles_by_id(
+            self._kernel.closure(target.plugin_id, optional=False, among=blocked)
+        )
 
     def _disable_closure(self, target: PluginHandle) -> list[PluginHandle] | None:
         """Handles to unload when disabling ``target``; None when its state stays."""
         if target.state is PluginState.ACTIVE:
-            return _dependent_closure(target, self._active_handles())
+            return self._handles_by_id(
+                self._kernel.closure(target.plugin_id, optional=False)
+            )
         if target.record.admission is None and target.state in {
             PluginState.FAILED,
             PluginState.BLOCKED,
@@ -1053,9 +1149,7 @@ class PluginKernel:
             record = self._find_record(name)
             if record is None:
                 raise LookupError(f"未找到插件: {name}")
-            target = self._handles.get(record.candidate_id)
-            closure = self._unload_closure(name)
-            refuse_reload(record.manifest.id, target, closure, retired=self._retired)
+            closure = self._reload_closure(record)
             if not plugin_enabled(record.manifest, values):
                 raise ValueError(f"重载不能停用插件 {record.manifest.id}")
             return await reload_closure(
@@ -1065,14 +1159,80 @@ class PluginKernel:
                 tables=ConfigTables(
                     self._services.plugin_configs, self._services.raw_plugin_configs
                 ),
-                steps=ReloadSteps(
-                    dispose=self._dispose_handle,
-                    activate=self._activate_reloaded,
-                    retain=self._retain_process_resources,
-                ),
+                steps=self._reload_steps(),
                 drain_timeout=drain_timeout,
                 commit=commit,
             )
+
+    def _reload_closure(self, record: PluginRecord) -> list[PluginHandle]:
+        """The kernel's reload set for ``record``, dependents first, or a refusal.
+
+        Besides hard dependents it holds the running plugins that optionally
+        inject the target (§8.2). Refused when only a generation swap applies:
+        retired generation, inactive target, or a closure member declaring
+        channels or ``supports_hot_unload: false`` (D14).
+        """
+        plugin_id = record.manifest.id
+        if self._retired:
+            raise PluginReloadUnsupported([plugin_id], "retired")
+        target = self._handles.get(record.candidate_id)
+        if target is None or target.state is not PluginState.ACTIVE:
+            disabled = target is not None and target.state is PluginState.DISABLED
+            raise PluginReloadUnsupported(
+                [plugin_id], "disabled" if disabled else "failed"
+            )
+        try:
+            members = self._kernel.reload_closure(plugin_id)
+        except KernelError as error:
+            raise _restart_only(error) from error
+        return self._handles_by_id(members)
+
+    def _refuse_restart_only(self, closure: list[PluginHandle]) -> None:
+        """Refuses a toggle the kernel says only a restart may apply (D14)."""
+        ids = [handle.plugin_id for handle in closure]
+        if (refusal := self._kernel.restart_only(ids)) is not None:
+            raise _restart_only(refusal) from refusal
+
+    def _handles_by_id(self, plugin_ids: Iterable[str]) -> list[PluginHandle]:
+        """The admitted handles of kernel plugin ids, in the given order."""
+        by_id = {
+            handle.plugin_id: handle
+            for handle in self._handles.values()
+            if handle.record.admission is None
+        }
+        return [by_id[plugin_id] for plugin_id in plugin_ids]
+
+    def _reload_steps(self) -> ReloadSteps:
+        return ReloadSteps(
+            drain=self._drain_closure,
+            dispose=self._dispose_handle,
+            activate=self._activate_reloaded,
+            retain=self._retain_process_resources,
+        )
+
+    async def _drain_closure(self, closure: list[PluginHandle], timeout: float) -> None:
+        """Drains ``closure`` through the kernel, sealing each call gate first.
+
+        Each stage seals one plugin's gate and waits for its admitted calls,
+        then the kernel runs its default drain and ``on_drain``; providers stay
+        open meanwhile, so a dependent's accepted work can still call them.
+        When the drain is abandoned (timeout, ``on_drain`` failure,
+        cancellation) every gate reopens and every instance stays as it was.
+        """
+        gates = {handle.plugin_id: handle.calls for handle in closure}
+
+        async def seal(plugin_id: str) -> None:
+            gates[plugin_id].seal()
+            await gates[plugin_id].wait_idle()
+
+        try:
+            await self._kernel.drain(list(gates), timeout, seal)
+        except BaseException as error:
+            for gate in gates.values():
+                gate.reopen()
+            if isinstance(error, KernelError):
+                raise PluginReloadTimeout(error.plugin_ids, timeout) from error
+            raise
 
     async def set_enabled(
         self,
@@ -1139,18 +1299,14 @@ class PluginKernel:
                     _ = tables.swap(plugin_id, *previous)
                     raise
                 return PluginReloadResult((), ())
-            refuse_generation_only(closure)
+            self._refuse_restart_only(closure)
             result = await toggle_closure(
                 closure,
                 enabled=enabled,
                 values=values,
                 raw_values=raw_values,
                 tables=tables,
-                steps=ReloadSteps(
-                    dispose=self._dispose_handle,
-                    activate=self._activate_reloaded,
-                    retain=self._retain_process_resources,
-                ),
+                steps=self._reload_steps(),
                 drain_timeout=drain_timeout,
                 commit=commit,
             )
@@ -1162,7 +1318,7 @@ class PluginKernel:
     async def _activate_reloaded(
         self, record: PluginRecord, reactivating: frozenset[str]
     ) -> PluginHandle | None:
-        await self._load_dependencies(record, self._records_by_id(), (), reactivating)
+        await self._load_records([record], reactivating)
         return self._handles.get(record.candidate_id)
 
     def _retain_process_resources(
@@ -1176,17 +1332,16 @@ class PluginKernel:
         # so stale references to a disposed instance are rejected.
         handle.calls.retire()
         handle.state = PluginState.UNLOADING
-        errors = await handle.effects.dispose_all()
+        # The kernel releases subscriptions, tasks, then effects LIFO; a
+        # failed instance whose release was interrupted finishes here.
+        errors = await self._kernel.deactivate(handle.plugin_id)
         # 配置 schema 的生命周期绑定在 handle 本身（真正被卸载/整代被处置时），
         # 不是 setup 回滚 effect 的一部分：见 _register_config_schema 的文档。
         self.config_schemas.unregister(handle.plugin_id)
         _purge_modules(handle.record.import_path)
         handle.contributions = type(handle.contributions)()
         handle.instance = None
-        handle.drainers.clear()
         handle.state = PluginState.DISPOSED
-        if handle.record.candidate_id in self._active_order:
-            self._active_order.remove(handle.record.candidate_id)
         self._handles.pop(handle.record.candidate_id, None)
         return errors
 
@@ -1211,11 +1366,12 @@ class PluginKernel:
             raise ExceptionGroup("Plugin cleanup failed", errors)
 
     def _dependency_api(self, plugin_id: str, optional: bool = False) -> Any:
-        for handle in self._active_handles():
-            if handle.plugin_id == plugin_id and handle.state is PluginState.ACTIVE:
-                if handle.instance is None and not optional:
-                    raise PluginDependencyError(f"插件 {plugin_id} 未导出接口")
-                return handle.instance
+        """The API an ACTIVE plugin provides under its kernel key (``plugin_key``)."""
+        if any(handle.plugin_id == plugin_id for handle in self._active_handles()):
+            api = self._kernel.get(plugin_key(plugin_id))
+            if api is None and not optional:
+                raise PluginDependencyError(f"插件 {plugin_id} 未导出接口")
+            return api
         if optional:
             return None
         raise PluginDependencyError(f"插件 {plugin_id} 不可用")
@@ -1225,13 +1381,26 @@ class PluginKernel:
         # Holding the transition lock keeps a reload from interleaving with the
         # retirement drain; no caller re-enters the kernel from on_drain.
         async with self._transition_lock:
-            await run_drainers(reversed(self._active_handles()))
+            for handle in reversed(self._active_handles()):
+                await handle.effects.drain()
 
     # ── 聚合面（供宿主接线） ────────────────
 
     @property
     def loaded_count(self) -> int:
         return len(self._active_order)
+
+    @property
+    def _active_order(self) -> list[str]:
+        """Candidate ids of ACTIVE plugins in kernel order (stable across reloads)."""
+        active = [
+            handle
+            for handle in self._handles.values()
+            if handle.state is PluginState.ACTIVE
+        ]
+        order = {plugin_id: rank for rank, plugin_id in enumerate(self._kernel.order())}
+        active.sort(key=lambda handle: order.get(handle.plugin_id, -1))
+        return [handle.record.candidate_id for handle in active]
 
     def states(self) -> list[dict[str, Any]]:
         """Returns per-plugin lifecycle snapshots for diagnostics."""
@@ -1331,24 +1500,16 @@ def _purge_modules(import_path: str) -> None:
             _ = sys.modules.pop(module_name, None)
 
 
-def _dependent_closure(
-    handle: PluginHandle, members: list[PluginHandle]
-) -> list[PluginHandle]:
-    """``handle`` plus the ``members`` that hard-depend on it, dependents first."""
-    closure: list[PluginHandle] = []
-    seen: set[str] = set()
+def _restart_only(error: KernelError) -> PluginReloadUnsupported:
+    """Maps the kernel's restart-only refusal to the host's reload error."""
+    assert error.diagnostic.code == "restart_required", error
+    reason = "channels" if error.diagnostic.field == "channels" else "hot_unload"
+    return PluginReloadUnsupported(list(error.plugin_ids), reason)
 
-    def visit(target: PluginHandle) -> None:
-        if target.plugin_id in seen:
-            return
-        seen.add(target.plugin_id)
-        for dependent in reversed(members):
-            if target.plugin_id in dependent.record.manifest.dependencies:
-                visit(dependent)
-        closure.append(target)
 
-    visit(handle)
-    return closure
+def _declares_channels(record: PluginRecord) -> bool:
+    """Whether a plugin declares channels, which only a restart may change (D14)."""
+    return "channels" in record.manifest.capabilities or bool(record.manifest.channels)
 
 
 def _required_renderer_kinds(record: PluginRecord) -> frozenset[str]:

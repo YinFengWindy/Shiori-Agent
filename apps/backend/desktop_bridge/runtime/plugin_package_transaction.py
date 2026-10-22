@@ -6,7 +6,7 @@ import json
 import logging
 from pathlib import Path
 
-from agent.plugin_host.diagnostics import PackageContractError
+from shiori_sdk.kernel import PackageContractError
 from agent.plugin_host.discovery import discover_plugins
 from agent.plugin_host.package_contract import validate_package
 from agent.plugin_host.package_fingerprint import inspect_package_content

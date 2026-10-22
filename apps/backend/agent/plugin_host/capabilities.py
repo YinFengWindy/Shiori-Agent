@@ -16,7 +16,7 @@ from uuid import uuid4
 
 from agent.plugin_host.call_gate import PluginCallGate
 from agent.plugin_host.diagnostics import ChannelDeclarationError
-from agent.plugin_host.effects import EffectScope
+from shiori_sdk.kernel import Scope
 from agent.plugin_host.manifest import matches_channel_instance
 from agent.plugin_host.tool_hooks import PluginToolHook, build_hook_name
 
@@ -55,7 +55,7 @@ def contribute_to_list[T](
     target: list[T],
     item: T,
     *,
-    effects: EffectScope,
+    effects: Scope,
     label: str,
 ) -> None:
     """把一项贡献登记进目标列表，并登记"从列表移除"的可回滚 effect。
@@ -70,7 +70,7 @@ def contribute_to_list[T](
         if item in target:
             target.remove(item)
 
-    effects.add(label, discard)
+    _ = effects.effect(discard, label)
 
 
 class ToolsCapability:
@@ -82,7 +82,7 @@ class ToolsCapability:
     def __init__(
         self,
         registry: ToolRegistry,
-        effects: EffectScope,
+        effects: Scope,
         contributions: PluginContributions,
         plugin_id: str,
         calls: PluginCallGate,
@@ -121,7 +121,7 @@ class ToolsCapability:
         )
         # 工具除了从贡献清单移除，还要反注册出 ToolRegistry，故不复用列表 helper
         self._contributions.tool_names.append(name)
-        self._effects.add(f"tool:{name}", lambda: self._unregister(name))
+        _ = self._effects.effect(lambda: self._unregister(name), f"tool:{name}")
 
     def _unregister(self, name: str) -> None:
         self._registry.unregister(name)
@@ -133,7 +133,7 @@ class ToolsCapability:
 
         Read-only passthrough to the underlying ``ToolRegistry`` — unlike
         ``register``, there is no lifecycle to own here, so this does not need
-        an ``EffectScope`` entry. Registration itself must still go through
+        a ``Scope`` entry. Registration itself must still go through
         ``register`` above so the tool is reclaimed on unload; this only lets
         a plugin look up and call a tool (its own or another's).
         """
@@ -154,7 +154,7 @@ class LifecycleCapability:
     def __init__(
         self,
         contributions: PluginContributions,
-        effects: EffectScope,
+        effects: Scope,
         calls: PluginCallGate,
     ) -> None:
         self._contributions = contributions
@@ -174,7 +174,7 @@ class LifecycleCapability:
                 if module in target:
                     target.remove(module)
 
-        self._effects.add(f"phase:{slot}:{len(modules)}", remove_contributed)
+        _ = self._effects.effect(remove_contributed, f"phase:{slot}:{len(modules)}")
 
 
 class ToolHooksCapability:
@@ -188,7 +188,7 @@ class ToolHooksCapability:
     def __init__(
         self,
         contributions: PluginContributions,
-        effects: EffectScope,
+        effects: Scope,
         plugin_id: str,
         calls: PluginCallGate,
     ) -> None:
@@ -231,9 +231,7 @@ class ToolHooksCapability:
 class ProactiveGatesCapability:
     """贡献参与主动 tick 准入的 gate；不允许直接投递消息。"""
 
-    def __init__(
-        self, contributions: PluginContributions, effects: EffectScope
-    ) -> None:
+    def __init__(self, contributions: PluginContributions, effects: Scope) -> None:
         self._contributions = contributions
         self._effects = effects
 
@@ -256,7 +254,7 @@ class ChannelsCapability:
     def __init__(
         self,
         contributions: PluginContributions,
-        effects: EffectScope,
+        effects: Scope,
         *,
         plugin_id: str,
         declared: frozenset[str],
@@ -315,7 +313,7 @@ class AccountsCapability:
     def __init__(
         self,
         registry: "AccountRegistry",
-        effects: EffectScope,
+        effects: Scope,
         plugin_id: str,
         generation: str,
     ) -> None:
@@ -363,11 +361,11 @@ class AccountsCapability:
         account_id = snapshot.record.id
         if account_id not in self._registered:
             self._registered.add(account_id)
-            self._effects.add(
-                f"account:{account_id}",
+            _ = self._effects.effect(
                 lambda: self._registry.release(
                     account_id, self._token, generation=self._generation
                 ),
+                f"account:{account_id}",
             )
         return snapshot
 
@@ -481,11 +479,11 @@ class AccountsCapability:
         self._registry.set_delete_handler(
             self._plugin_id, handler, generation=self._generation
         )
-        self._effects.add(
-            "account:delete_hook",
+        _ = self._effects.effect(
             lambda: self._registry.clear_delete_handler(
                 self._plugin_id, handler, generation=self._generation
             ),
+            "account:delete_hook",
         )
 
     def on_rules_change(self, handler: "AccountRulesHandler") -> None:
@@ -498,20 +496,18 @@ class AccountsCapability:
         self._registry.set_rules_handler(
             self._plugin_id, handler, generation=self._generation
         )
-        self._effects.add(
-            "account:rules_hook",
+        _ = self._effects.effect(
             lambda: self._registry.clear_rules_handler(
                 self._plugin_id, handler, generation=self._generation
             ),
+            "account:rules_hook",
         )
 
 
 class BotCommandsCapability:
     """贡献 bot 命令（如 Telegram `/xxx`）；卸载时随 effect 从聚合列表摘除。"""
 
-    def __init__(
-        self, contributions: PluginContributions, effects: EffectScope
-    ) -> None:
+    def __init__(self, contributions: PluginContributions, effects: Scope) -> None:
         self._contributions = contributions
         self._effects = effects
 
@@ -529,13 +525,13 @@ class RpcCapability:
 
     并发/准入语义复用桌面桥接的 ``MethodPolicy``；未声明时回落到保守默认
     （非只读并发、非豁免准入），由插件按需通过参数放宽。卸载/回滚时经
-    EffectScope 反注册，使方法可调用性与插件在架状态严格同步。
+    Scope 反注册，使方法可调用性与插件在架状态严格同步。
     """
 
     def __init__(
         self,
         registry: "PluginRpcRegistry",
-        effects: EffectScope,
+        effects: Scope,
         plugin_id: str,
         calls: PluginCallGate,
         event_bus: Any = None,
@@ -585,15 +581,15 @@ class RpcCapability:
         self._registry.register(
             full_name, self._plugin_id, self._calls.guard(handler), policy
         )
-        self._effects.add(
-            f"rpc:{full_name}", lambda: self._registry.unregister(full_name)
+        _ = self._effects.effect(
+            lambda: self._registry.unregister(full_name), f"rpc:{full_name}"
         )
 
 
 class BackgroundCapability:
     """启动可取消后台任务；插件卸载时任务被取消并等待退出。"""
 
-    def __init__(self, effects: EffectScope, plugin_id: str) -> None:
+    def __init__(self, effects: Scope, plugin_id: str) -> None:
         self._effects = effects
         self._plugin_id = plugin_id
 
@@ -631,8 +627,8 @@ class BackgroundCapability:
         try:
             # Register at the actual spawn point to preserve LIFO ordering with
             # each task's resources, and release completed results immediately.
-            release = self._effects.add(
-                f"background:{name}", lambda: self._cancel(task)
+            release = self._effects.effect(
+                lambda: self._cancel(task), f"background:{name}"
             )
         except BaseException:
             task.cancel()

@@ -7,7 +7,7 @@ from typing import cast
 
 from shiori_sdk.process_resources import ProcessResource
 
-from .effects import EffectScope
+from shiori_sdk.kernel import Scope
 
 
 class ProcessResourceOwner:
@@ -24,10 +24,10 @@ class ProcessResourceOwner:
         self._errors: list[BaseException] = []
         self._closed = False
 
-    def for_plugin(self, generation: str, plugin: str, effects: EffectScope):
+    def for_plugin(self, generation: str, plugin: str, effects: Scope):
         """Return one generation's private attachment and register its rollback."""
         scope = _Attachment(self, generation, plugin, effects)
-        effects.add("process_resources", scope.close)
+        _ = effects.effect(scope.close, "process_resources")
         return scope
 
     def retain(self, generation: str, plugins: Iterable[str]) -> "ResourceRetention":
@@ -111,7 +111,7 @@ class _Attachment:
         owner: ProcessResourceOwner,
         generation: str,
         plugin: str,
-        effects: EffectScope,
+        effects: Scope,
     ):
         self.owner, self.generation, self.plugin = owner, generation, plugin
         self.effects = effects

@@ -1,12 +1,20 @@
-"""import-linter contract: a plugin imports only the plugins its manifest declares.
+"""Custom import-linter contracts for the plugin layers.
 
-Declared means the plugin itself plus ``dependencies`` and ``optional_dependencies``
-of ``plugins/<id>/manifest.yaml``. The manifests stay the single source, so the
-contract needs no per-plugin configuration. Only direct imports are checked.
+``manifest_dependencies``: a plugin imports only the plugins its manifest
+declares, meaning the plugin itself plus ``dependencies`` and
+``optional_dependencies`` of ``plugins/<id>/manifest.yaml``. The manifests stay
+the single source, so the contract needs no per-plugin configuration.
+
+``kernel_isolation``: ``shiori_sdk.kernel`` imports only its own modules and
+the standard library, so it knows no business, no core contract and no
+third-party package (refactor plan §5.4, D3).
+
+Only direct imports are checked.
 """
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import yaml
@@ -15,6 +23,31 @@ from importlinter import Contract, ContractCheck, output
 
 ROOT = Path(__file__).resolve().parents[1]
 PLUGINS_PACKAGE = "plugins"
+KERNEL_PACKAGE = "shiori_sdk.kernel"
+
+
+def _import_lines(
+    graph: ImportGraph, importer: str, imported: str
+) -> list[dict[str, object]]:
+    """One report row per source line where ``importer`` imports ``imported``."""
+    return [
+        {
+            "importer": importer,
+            "imported": imported,
+            "line_number": detail["line_number"],
+        }
+        for detail in graph.get_import_details(importer=importer, imported=imported)
+    ]
+
+
+def _render(check: ContractCheck, problem: str) -> None:
+    for item in check.metadata["imports"]:
+        output.print_error(
+            f"-   {item['importer']} -> {item['imported']} "
+            f"(l.{item['line_number']}): {problem}",
+            bold=False,
+        )
+    output.new_line()
 
 
 def declared_plugins(plugins_dir: Path) -> dict[str, frozenset[str]]:
@@ -55,16 +88,7 @@ def undeclared_imports(
                 continue
             if parts[1] in declared[owner]:
                 continue
-            for detail in graph.get_import_details(
-                importer=importer, imported=imported
-            ):
-                found.append(
-                    {
-                        "importer": importer,
-                        "imported": imported,
-                        "line_number": detail["line_number"],
-                    }
-                )
+            found.extend(_import_lines(graph, importer, imported))
     return found
 
 
@@ -76,10 +100,33 @@ class ManifestDependencyContract(Contract):
         return ContractCheck(kept=not found, metadata={"imports": found})
 
     def render_broken_contract(self, check: ContractCheck) -> None:
-        for item in check.metadata["imports"]:
-            output.print_error(
-                f"-   {item['importer']} -> {item['imported']} "
-                f"(l.{item['line_number']}): not declared in the manifest",
-                bold=False,
-            )
-        output.new_line()
+        _render(check, "not declared in the manifest")
+
+
+def kernel_escapes(
+    graph: ImportGraph, kernel: str = KERNEL_PACKAGE
+) -> list[dict[str, object]]:
+    """Direct imports from the kernel package to anything but itself and the stdlib.
+
+    Third-party packages only appear when the graph includes external packages.
+    """
+    found: list[dict[str, object]] = []
+    for importer in sorted({kernel, *graph.find_descendants(kernel)}):
+        for imported in sorted(graph.find_modules_directly_imported_by(importer)):
+            if imported == kernel or imported.startswith(kernel + "."):
+                continue
+            if imported.split(".")[0] in sys.stdlib_module_names:
+                continue
+            found.extend(_import_lines(graph, importer, imported))
+    return found
+
+
+class KernelIsolationContract(Contract):
+    """Reports kernel imports that leave the kernel package and the stdlib."""
+
+    def check(self, graph: ImportGraph, verbose: bool) -> ContractCheck:
+        found = kernel_escapes(graph)
+        return ContractCheck(kept=not found, metadata={"imports": found})
+
+    def render_broken_contract(self, check: ContractCheck) -> None:
+        _render(check, "the kernel imports only itself and the standard library")

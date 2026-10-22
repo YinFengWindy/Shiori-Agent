@@ -35,7 +35,7 @@ class PluginRpcRegistry:
     """维护 ``plugin.<id>.<method>`` 全名 -> (plugin_id, handler, policy)。
 
     生命周期与单个 runtime generation 的 PluginKernel 一一对应；插件卸载或
-    加载失败回滚时经 EffectScope 反注册（见 capabilities.RpcCapability），
+    加载失败回滚时经内核 Scope 反注册（见 capabilities.RpcCapability），
     保证桥接分发器看到的可调用方法与插件的在架状态严格同步。
     """
 
