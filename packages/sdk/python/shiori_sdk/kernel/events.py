@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import dataclasses
 import functools
 import itertools
 from collections import deque
@@ -33,6 +32,20 @@ class _Subscription:
 class _Queue(deque[tuple[Callable[[Any], Awaitable[Any]], object]]):
     worker: asyncio.Task[None] | None = None
     dropped = 0
+
+
+def _require_payload(event_type: type, event: object = None) -> None:
+    """Events are frozen dataclasses whose top-level fields hold no list/dict/set.
+
+    Frozen is shallow, so a mutable container would let one handler or
+    watcher change what the next one sees (§8.3). ``event`` None checks the
+    type alone (``watch`` registration).
+    """
+    if not getattr(getattr(event_type, "__dataclass_params__", None), "frozen", False):
+        raise TypeError(f"事件须为 frozen dataclass: {event_type}")
+    names = getattr(event_type, "__dataclass_fields__") if event is not None else ()
+    if any(isinstance(getattr(event, name), (list, dict, set)) for name in names):
+        raise TypeError(f"事件的容器字段须为 tuple/只读 mapping: {event!r}")
 
 
 class EventHub:
@@ -65,9 +78,7 @@ class EventHub:
         handler: WatchHandler[E],
     ) -> None:
         """Adds a read-only listener; only frozen dataclass events can be watched."""
-        params = getattr(event_type, "__dataclass_params__", None)
-        if not getattr(params, "frozen", False):
-            raise TypeError(f"watch 只接受 frozen dataclass 事件: {event_type}")
+        _require_payload(event_type)
         self._subscribe(self._watch, plugin_id, scope, event_type, handler)
         key = (plugin_id, event_type)
         _ = self._queues.setdefault(key, _Queue())
@@ -99,13 +110,14 @@ class EventHub:
         )
 
     async def emit[E](self, event: E) -> E | Veto:
-        """Runs ``on`` handlers, then core checks, then queues the result for watchers.
+        """Checks the payload, runs ``on`` handlers, then core checks, then watchers.
 
         A handler returns the same event type (replacement) or ``Veto``;
         anything else counts as its error. Errors follow the event type's
         ``on_error`` policy. A vetoed event reaches neither checks nor watchers.
         """
         event_type = type(event)
+        _require_payload(event_type, event)
         for sub in self._ordered(self._on, event_type):
             if not sub.scope.active:
                 continue
@@ -127,14 +139,9 @@ class EventHub:
             if isinstance(result, Veto):
                 return result
             event = result
-        watchers = [s for s in self._ordered(self._watch, event_type) if s.scope.active]
-        # Frozen is shallow: a list/dict/set field would let one watcher change
-        # what the next one sees (§8.3), so such an event is rejected.
-        fields = dataclasses.fields(event) if watchers else ()  # type: ignore[arg-type]
-        if any(isinstance(getattr(event, f.name), (list, dict, set)) for f in fields):
-            raise TypeError(f"watch 事件的容器字段须为 tuple/只读 mapping: {event!r}")
-        for sub in watchers:
-            self._enqueue(sub, event)
+        for sub in self._ordered(self._watch, event_type):
+            if sub.scope.active:
+                self._enqueue(sub, event)
         return event
 
     def _enqueue(self, sub: _Subscription, event: object) -> None:

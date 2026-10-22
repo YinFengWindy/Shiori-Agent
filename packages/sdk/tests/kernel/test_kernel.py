@@ -55,6 +55,7 @@ async def test_setup_failure_blocks_requirers_and_optional_consumers_get_none() 
             PluginSpec("provider", broken, provides=("service",)),
             PluginSpec("hard", hard, requires=("service",)),
             PluginSpec("soft", soft, optional=("service",)),
+            PluginSpec("orphan", hard, requires=("nobody",)),
         ]
     )
 
@@ -63,7 +64,14 @@ async def test_setup_failure_blocks_requirers_and_optional_consumers_get_none() 
     assert failed is not None and failed.state is KernelState.FAILED
     assert failed.diagnostic is not None and "cannot start" in failed.diagnostic.reason
     assert blocked is not None and blocked.state is KernelState.BLOCKED
-    assert blocked.diagnostic is not None and "service" in blocked.diagnostic.reason
+    # The two BLOCKED causes read differently: enable the provider vs install it.
+    assert blocked.diagnostic is not None
+    assert blocked.diagnostic.code == "dependency_unavailable"
+    assert blocked.diagnostic.reason == "插件 hard 依赖的 service 未启用或加载失败"
+    orphan = kernel.status("orphan")
+    assert orphan is not None and orphan.diagnostic is not None
+    assert orphan.diagnostic.code == "missing_dependency"
+    assert orphan.diagnostic.reason == "插件 orphan 依赖的 nobody 不存在"
     assert seen == {"soft": None}
     assert kernel.get(SERVICE) is None
 

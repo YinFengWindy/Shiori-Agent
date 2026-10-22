@@ -21,6 +21,7 @@ logger = logging.getLogger("shiori_sdk.kernel")
 CORE = ""
 """Owner recorded for keys the host provides directly (core modules)."""
 
+_DRAIN_TIMEOUT = "插件 {} 排空超时（{:g} 秒），重载已中止，保留旧实例"
 DRAIN_TIMEOUT = 60.0
 """Seconds a reload waits for its closure to drain before giving up (D25)."""
 
@@ -47,9 +48,7 @@ class Context:
         self.data_dir: Path | None = spec.data_dir
         self.config: Mapping[str, object] = spec.config
         self.log = plugin_logger(spec.id)
-        self._kernel = kernel
-        self._spec = spec
-        self._scope = scope
+        self._kernel, self._spec, self._scope = kernel, spec, scope
 
     def provide[T](self, key: Key[T], impl: T) -> None:
         """Publishes ``impl`` under a key this plugin declares in ``provides``."""
@@ -199,9 +198,13 @@ class Kernel:
         """
         spec = self._specs[plugin_id]
         if missing := [name for name in spec.requires if name not in self._providers]:
-            reason = f"插件 {plugin_id} 依赖的 {'、'.join(missing)} 不可用"
-            code = "dependency_unavailable"
-            blocked = PluginDiagnostic(code, "dependency", "inject", reason)
+            # ``field`` names the first missing ``requires`` entry by index; a
+            # key no spec declares is missing, a declared one is unavailable.
+            name, field = missing[0], f"inject[{spec.requires.index(missing[0])}]"
+            known = name in self._owners
+            code = "dependency_unavailable" if known else "missing_dependency"
+            reason = f"插件 {plugin_id} 依赖的 {name} {'未启用或加载失败' if known else '不存在'}"
+            blocked = PluginDiagnostic(code, "dependency", field, reason)
             return await self._settle(plugin_id, KernelState.BLOCKED, blocked)
         scope = self._scopes[plugin_id] = Scope(plugin_id)
         try:
@@ -343,7 +346,7 @@ class Kernel:
         waiting = asyncio.ensure_future(staged())
         try:
             if not (await asyncio.wait({waiting}, timeout=limit))[0]:
-                reason = f"插件 {current} 排空超时（{limit:g} 秒），保留旧实例"
+                reason = _DRAIN_TIMEOUT.format(current, limit)
                 code, field = "drain_timeout", "on_drain"
                 raise KernelError(code, "reload", field, reason, [current])
             waiting.result()

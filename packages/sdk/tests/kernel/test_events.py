@@ -249,16 +249,19 @@ async def test_watcher_cannot_change_the_frozen_event() -> None:
         events.watch("observer", Scope("observer"), Mutable, tamper)  # type: ignore[arg-type]
 
 
-async def test_watched_event_with_a_mutable_container_field_is_rejected() -> None:
-    events = hub("observer")
-    seen: list[Listed] = []
+async def test_emit_rejects_a_mutable_container_field_before_any_handler() -> None:
+    events = hub("rewriter")
+    called: list[Listed] = []
 
-    async def record(event: Listed) -> None:
-        seen.append(event)
+    async def rewrite(event: Listed) -> Listed:
+        called.append(event)
+        return event
 
-    events.watch("observer", Scope("observer"), Listed, record)
+    events.on("rewriter", Scope("rewriter"), Listed, rewrite)
 
+    # No watcher is registered: the payload rule holds for every event.
     with pytest.raises(TypeError, match="tuple"):
         _ = await events.emit(Listed(["a"]))
-    await settle(events)
-    assert seen == []
+    assert called == []
+    with pytest.raises(TypeError, match="frozen"):
+        _ = await events.emit(Mutable(1))

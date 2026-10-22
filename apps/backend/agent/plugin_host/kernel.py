@@ -454,36 +454,24 @@ class PluginKernel:
         self._handles[record.candidate_id] = PluginHandle(
             record=record,
             state=PluginState.BLOCKED,
-            error=PluginDependencyError(status.diagnostic.reason),
+            error=self._dependency_error(record, status.diagnostic),
         )
 
-    def _dependency_error(self, record: PluginRecord) -> PluginDependencyError:
-        """Explains a kernel BLOCKED status by the first unavailable dependency."""
-        plugin_id = record.manifest.id
-        records = self._records_by_id()
-        for index, dependency in enumerate(record.manifest.dependencies):
-            target = records.get(dependency)
-            loaded = self._handles.get(target.candidate_id) if target else None
-            if loaded is not None and loaded.state is PluginState.ACTIVE:
-                continue
-            error = PluginDependencyError(
-                f"插件 {plugin_id} 缺少依赖 {dependency}"
-                if target is None
-                else f"插件 {plugin_id} 的依赖 {dependency} 未启用或加载失败"
-            )
-            if "package_contract" in record.manifest.metadata:
-                error.diagnostic = PluginDiagnostic(
-                    code=(
-                        "missing_dependency"
-                        if target is None
-                        else "dependency_unavailable"
-                    ),
-                    stage="dependency",
-                    field=f"dependencies[{index}]",
-                    reason=str(error),
-                )
-            return error
-        raise AssertionError(f"内核阻塞了插件 {plugin_id}，但它的依赖都已启动")
+    def _dependency_error(
+        self, record: PluginRecord, blocked: PluginDiagnostic
+    ) -> PluginDependencyError:
+        """Wraps the kernel's BLOCKED diagnostic as the handle's error.
+
+        Package-contract plugins surface it on the Plugins page. The kernel
+        names the first unavailable ``requires`` entry ``inject[i]``; the
+        adapter's ``requires`` mirror manifest ``dependencies``, so the field
+        is reported under the manifest's name.
+        """
+        error = PluginDependencyError(blocked.reason)
+        if "package_contract" in record.manifest.metadata:
+            field = blocked.field.replace("inject", "dependencies", 1)
+            error.diagnostic = replace(blocked, field=field)
+        return error
 
     def _spec(self, record: PluginRecord) -> PluginSpec:
         """Adapts one runnable record to a kernel spec whose setup is the v2 setup."""
@@ -615,7 +603,8 @@ class PluginKernel:
             _ = self._contents.pop(record.candidate_id, None)
         if status.state is KernelState.BLOCKED:
             handle.state = PluginState.BLOCKED
-            handle.error = self._dependency_error(record)
+            assert status.diagnostic is not None
+            handle.error = self._dependency_error(record, status.diagnostic)
             return
         if status.state is not KernelState.ACTIVE:
             # Deliberately not re-raised (#262): one plugin's setup failure
