@@ -1,7 +1,11 @@
 # Windows 发版
 
-`.github/workflows/windows-release.yml` 每天北京时间 12:00（UTC 04:00）检查
-`main`。GitHub 的定时任务可能排队延迟，工作流只在默认分支生效。
+每日自动发版已暂停。`.github/workflows/windows-release.yml` 的 `schedule`
+（每天北京时间 12:00 / UTC 04:00 检查 `main`）在插件系统重构 P1–P8 期间关掉
+（D26，见
+[`docs/decisions/2026-10-22-plugin-system-four-layer-refactor.md`](../decisions/2026-10-22-plugin-system-four-layer-refactor.md)）。
+`workflow_dispatch` 和推送 `v*` 标签仍然会构建。恢复自动发版前不要重新打开这段
+cron。GitHub 定时任务只在默认分支生效，排队可能延迟。
 
 ## 自动发布规则
 
