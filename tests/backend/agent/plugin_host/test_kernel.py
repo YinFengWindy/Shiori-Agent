@@ -5,20 +5,17 @@ from __future__ import annotations
 import asyncio
 import shutil
 from pathlib import Path
-from types import SimpleNamespace
-from typing import cast
 
 import pytest
 
 from agent.plugin_host import PluginState
 from agent.plugin_host import PluginGenerationSettings, PluginRpcRegistry
-from agent.plugin_host.core_keys import PluginBinding, bind_core_capabilities
+from agent.plugin_host.core_keys import HOST_MEMORY_ENGINE
 from agent.plugin_host.manifest import group_listening_channels
 from agent.plugin_host.package_fingerprint import inspect_package_content
 from agent.plugin_host.trust_store import PluginTrustStore
 from agent.plugin_host.trusted_imports import TrustedPluginImports
 from shiori_sdk.storage import plugin_data_dir
-from shiori_sdk.runtime import HostServiceUnavailable
 from core.roles.store import RoleStore
 from agent.tools.registry import ToolRegistry
 from conversation.plugin_capability import active_plugin_bot_commands
@@ -810,13 +807,23 @@ async def test_v2_plugin_reads_host_service_references(tmp_path: Path):
         "light_provider": light_provider,
         "light_model": "light-model-x",
     }
-    # memory_engine 可以合法地为 None，但核心根本没 provide 它时仍然失败。
-    with pytest.raises(HostServiceUnavailable, match="host.memory_engine"):
-        bind_core_capabilities(
-            ["memory_engine"],
-            lambda _key: None,
-            cast(PluginBinding, SimpleNamespace(plugin_id="hostrefs")),
-        )
+    # memory_engine 可以合法地为 None，但核心根本没 provide 它时仍在 setup 前失败。
+    withheld_root = tmp_path / "withheld"
+    engine_plugin = withheld_root / "needs_engine"
+    (engine_plugin / "backend").mkdir(parents=True)
+    (engine_plugin / "backend" / "plugin.py").write_text(
+        "async def setup(ctx):\n    raise AssertionError('setup must not run')\n",
+        encoding="utf-8",
+    )
+    (engine_plugin / "manifest.yaml").write_text(
+        "api: 2\nid: needs_engine\ncapabilities:\n  - memory_engine\n",
+        encoding="utf-8",
+    )
+    withheld = host_kernel([withheld_root], withheld=frozenset({HOST_MEMORY_ENGINE}))
+    await withheld.load_all()
+    [state] = withheld.states()
+    assert state["state"] == "FAILED"
+    assert "宿主未提供服务 host.memory_engine" in state["error"]
 
 
 @pytest.mark.asyncio

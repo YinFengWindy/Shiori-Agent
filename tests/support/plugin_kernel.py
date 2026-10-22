@@ -9,7 +9,7 @@ from __future__ import annotations
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 # 预热 agent.core 导入链，避免 agent.lifecycle.types 触发循环导入
 from agent.core.passive_turn import ContextStore as _  # noqa: F401
@@ -19,10 +19,12 @@ from agent.plugin_host import (
     PluginKernel,
     PluginRpcRegistry,
 )
+from agent.plugin_host.core_keys import CoreModule, CoreProvide
 from agent.tools.registry import ToolRegistry
 from bootstrap.plugin_core import PluginCoreInputs, plugin_core_modules
 from bus.event_bus import EventBus
 from core.scene.demand import SceneObservationDemand
+from shiori_sdk.kernel import Key
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 PLUGIN_FIXTURES = REPOSITORY_ROOT / "tests/fixtures/plugins"
@@ -46,6 +48,7 @@ def host_kernel(
     background_results: Any = None,
     event_bus: EventBus | None = None,
     rpc: PluginRpcRegistry[Any] | None = None,
+    withheld: frozenset[Key[Any]] = frozenset(),
     **options: Any,
 ) -> PluginKernel:
     """A kernel over ``settings`` with the same core provide list as bootstrap.
@@ -56,8 +59,9 @@ def host_kernel(
     before setup. The core's ``workspace`` and ``process_resources`` are those
     of ``settings``; ``scene_observations`` and ``event_bus`` default to fresh
     ones and ``rpc`` to a new registry over that bus (pass one to read what
-    plugins registered). ``options`` are the remaining ``PluginKernel``
-    keyword arguments.
+    plugins registered). ``withheld`` keys are dropped from the core
+    provide list, as if no core module provided them. ``options`` are the
+    remaining ``PluginKernel`` keyword arguments.
     """
     generation = settings if settings is not None else PluginGenerationSettings()
     bus = event_bus if event_bus is not None else EventBus()
@@ -87,9 +91,24 @@ def host_kernel(
     return PluginKernel(
         plugin_dirs,
         settings=generation,
-        core=plugin_core_modules(inputs),
+        core=tuple(
+            _withholding(module, withheld) for module in plugin_core_modules(inputs)
+        ),
         **options,
     )
+
+
+def _withholding(module: CoreModule, withheld: frozenset[Key[Any]]) -> CoreModule:
+    """``module`` providing everything except the ``withheld`` keys."""
+
+    def provide_except(provide: CoreProvide) -> None:
+        def guarded(key: Key[Any], impl: Any) -> None:
+            if key not in withheld:
+                provide(key, impl)
+
+        module(cast(CoreProvide, guarded))
+
+    return provide_except
 
 
 def make_kernel(
