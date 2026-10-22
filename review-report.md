@@ -1,6 +1,20 @@
 # 审查报告：《Shiori 插件系统四层重构方案》
 
-- 被审文档：<https://shiori-j5wk.pages.grok.bot/>（标题「Shiori 插件系统四层重构方案（盘点 + 分阶段计划 + Harness）」，文内日期 2026-10-22，含决策 D1–D21、第 0–7 节）
+## 对照修订（2026-10-22）
+
+维护者已按本报告修订方案，全文在 [`docs/plugin-system-four-layer-refactor.md`](docs/plugin-system-four-layer-refactor.md)（决策 D1–D24，含 §8 内核语义规范）。严重项的落地如下。下文保留审查原文。
+
+| 项 | 修订 |
+|---|---|
+| **S1** | §8.1 写死 `on` 链：依赖拓扑序 + 插件 id 稳定次序（不依赖注册时刻）；核心 handler 固定在插件之前；返回同型事件为替换，否决用显式 `Veto`（不用 `None` 表示删除）；事件类型声明 `fail_open` / `fail_closed`，`ToolCalling` 固定 fail_closed。热重载后顺序须与冷启动一致。 |
+| **S2** | §8.2：禁止跨调用缓存 `get` / `require`；reload 覆盖 require 下游，以及已经 `get` 到该 Key 的 optional 下游；核心消费插座禁止长持实例；排空协议为 seal → drain → dispose。**D14** 保留 `supports_hot_unload`（默认 true）。子进程 / 原生扩展插件（`qq`、`gpt_sovits_tts`、`sensevoice_asr` 及同类）可声明 `false`，启用、禁用、重载只在 runtime 重启后生效。 |
+| **S3** | **D22**：大版本表示破坏性变更，不再「只认大版本」。manifest `api: 4` 另加最低 SDK 约束（例如 `>=4.0.0`）。SDK 独立 semver，与 `api` 解耦。同大版本新增 Key / Event 靠运行时 `inject` / `optional_inject` 发现，缺 Key 则 setup 失败并产出 `PluginDiagnostic`。 |
+| **S4** | **D13 拆分**：`PluginDiagnostic`（及 `PackageContractError` / `RendererActivationError`）留在内核或 bridge，与 observe 是否启用无关。进程崩溃钩子改为核心服务 `CRASH_REPORTING`。observe **只** `inject: [crash_reporting]` 注册 collector，不再直接改写全局钩子。 |
+| **S5** | **D23**：桌面发版仅在 P1–P8 全部完成后随 SDK 4.0 一起发。已安装的 3.x / `api: 2` 外部插件启动时 `BLOCKED`，提示升级到 api:4；不迁移，保留文件与配置。 |
+
+另外：**D20** 从「进核心」翻转为系统插件 `memory_optimizer`（证据：只在后台重写 `MEMORY.md` / `SELF.md`，回合路径零引用）。**D24** 规定重复 provide 必须声明 `conflicts` 或 `replaces`；双方都未声明则启动失败并点名双方。
+
+- 被审文档：<https://shiori-j5wk.pages.grok.bot/>（标题「Shiori 插件系统四层重构方案（盘点 + 分阶段计划 + Harness）」，文内日期 2026-10-22，含决策 D1–D21、第 0–7 节）。修订稿见上文链接。
 - 取正文方式：页面正文在 sandbox iframe `/__cursor/frame?v=9918bac08bad` 里。普通 GET 返回 404；带上 `Sec-Fetch-Dest: iframe` / `Sec-Fetch-Mode: navigate` / `Sec-Fetch-Site: same-origin` 请求头后返回 200。响应里的 `__sharedCanvasPayload.appJsB64` 是 gzip+base64 的 bundle，解开后 `userModule` 中的 `const MD = '...'` 就是方案 Markdown 全文（约 3.7 万字符），本报告基于这份全文。
 - 事实核对基线：方案自称基于 `main @ 976f920`。下文凡是写「源码核实」的地方，都用 `git grep` / `git show 976f920:<path>` 核对过。
 
