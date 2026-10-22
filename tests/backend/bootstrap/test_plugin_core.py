@@ -81,5 +81,5 @@ def test_core_module_provide_failure_aborts_startup(tmp_path: Path) -> None:
         _ = PluginKernel(
             [tmp_path],
             services=HostServices(event_bus=EventBus()),
-            core=(*plugin_core_modules([tmp_path]), broken_core_module),
+            core=(*plugin_core_modules([tmp_path], tools=None), broken_core_module),
         )

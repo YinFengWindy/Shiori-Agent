@@ -913,7 +913,7 @@ capabilities: {capabilities}
         ("memory", "workspace", False),
         ("http", "http", True),
         ("light_model", "light_model", True),
-        ("tools", "tool_registry", True),
+        ("tools", "host.tools", True),
         ("kv", "workspace", False),
     ],
 )

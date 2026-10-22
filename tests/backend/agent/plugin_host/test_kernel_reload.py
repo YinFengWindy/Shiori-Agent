@@ -19,6 +19,7 @@ from agent.plugin_host import (
     PluginState,
 )
 from tests.support.plugin_kernel import host_kernel
+from agent.plugin_host.core_keys import HOST_TOOL_HOOKS, required_core_key
 from agent.plugin_host.process_resources import ProcessResourceOwner
 from agent.tools.registry import ToolRegistry
 from bus.event_bus import EventBus
@@ -205,13 +206,12 @@ async def _kernel(
     configs = configs or {"provider": {"label": "v1"}}
     services = HostServices(
         event_bus=EventBus(),
-        tool_registry=tools,
         workspace=tmp_path / "workspace",
         plugin_configs=configs,
         raw_plugin_configs={key: dict(value) for key, value in configs.items()},
         process_resources=ProcessResourceOwner(),
     )
-    kernel = host_kernel([tmp_path], services=services)
+    kernel = host_kernel([tmp_path], services=services, tools=tools)
     await kernel.load_all()
     kernel.publish_process_resources()
     return kernel, services, tools
@@ -452,10 +452,10 @@ async def test_retired_generation_gate_never_admits_a_shared_tool_call(probe, tm
             [tmp_path],
             services=HostServices(
                 event_bus=EventBus(),
-                tool_registry=tools,
                 workspace=tmp_path / "workspace",
                 process_resources=owner,
             ),
+            tools=tools,
         )
         await kernel.load_all()
         kernel.publish_process_resources()
@@ -801,6 +801,12 @@ async def test_reload_waits_for_a_running_tool_hook_and_fails_closed_meanwhile(
     assert (await old.run(None)).decision == "deny"
     assert (await new.run(None)).reason == "v2"
     assert (await new_note.run(None)).extra_message == "v2"
+    # Unloading withdraws the hooks from the service itself, not only from the
+    # active view.
+    _ = await kernel.unload("hooked")
+    assert kernel.tool_hooks == []
+    hooks = required_core_key(kernel._kernel.get, HOST_TOOL_HOOKS)
+    assert hooks.active(["hooked"]) == []
     await kernel.terminate_all(force=True)
 
 

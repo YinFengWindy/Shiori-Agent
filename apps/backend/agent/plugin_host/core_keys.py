@@ -6,16 +6,22 @@ assembly layer builds each plugin's v2 context without importing them. The
 will inject by manifest name in P4 (``shiori_sdk.core``).
 
 Wiring one capability to a core module takes three edits: its key here, its
-row in ``CORE_CAPABILITIES`` and the provide call in ``bootstrap.plugin_core``.
+row in ``CORE_CAPABILITIES`` and the provide call in ``bootstrap.plugin_core``;
+the v2 context property then reads it through ``_core_capability``. A
+capability whose contributions the host aggregates is a
+``PluginContributionService`` over ``capabilities.ContributionsByPlugin``.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
 
 from shiori_sdk.diagnostics import Diagnostics
+from shiori_sdk.processes import ToolTurn
+from shiori_sdk.tool_hooks import ToolHooksCapability
+from shiori_sdk.tools import ToolsCapability
 from shiori_sdk.kernel import Key, Scope
 from shiori_sdk.runtime import HostServiceUnavailable
 
@@ -48,6 +54,25 @@ class PluginCapabilityBinder[T](Protocol):
         ...
 
 
+class ActiveContributions[T](Protocol):
+    """Objects plugins contributed, read back for the active plugins only."""
+
+    def active(self, plugin_ids: Iterable[str]) -> Sequence[T]:
+        """The contributions of ``plugin_ids`` (kernel order), in that order."""
+        ...
+
+
+class PluginContributionService[C, T](
+    PluginCapabilityBinder[C], ActiveContributions[T], Protocol
+):
+    """A per-plugin capability ``C`` whose contributions ``T`` the host aggregates.
+
+    Each plugin adds through its own ``for_plugin`` view; consumers read the
+    active plugins' contributions with ``active``.
+    ``capabilities.ContributionsByPlugin`` is the shared storage behind it.
+    """
+
+
 class CoreProvide(Protocol):
     """What a core module is given to publish its services: ``Kernel.provide``."""
 
@@ -59,6 +84,20 @@ CoreModule = Callable[[CoreProvide], None]
 
 HOST_DIAGNOSTICS: Key[Diagnostics] = Key("host.diagnostics")
 """The ``diagnostics`` capability, built over ``CRASH_REPORTING``."""
+
+HOST_TOOLS: Key[PluginCapabilityBinder[ToolsCapability]] = Key("host.tools")
+"""The ``tools`` capability over the host ``ToolRegistry`` (``agent.tools``)."""
+
+
+# The hook type (``agent.tool_hooks.ToolHook``) is a host module this layer may
+# not import, so the key leaves it open; ``PluginToolHooks`` types it exactly.
+HOST_TOOL_HOOKS: Key[PluginContributionService[ToolHooksCapability, Any]] = Key(
+    "host.tool_hooks"
+)
+"""The ``tool_hooks`` capability (``agent.tool_hooks``)."""
+
+HOST_TOOL_TURN: Key[Callable[[], ToolTurn]] = Key("host.tool_turn")
+"""The ``tool_turn`` capability: the tool turn running in the current task."""
 
 HOST_CONFIG_REFERENCES: Key[Callable[[str], str]] = Key("host.config_references")
 """Expands ``${NAME}`` references for ``config.resolve_reference``.
@@ -89,6 +128,9 @@ class CoreCapability:
 # exist until then.
 CORE_CAPABILITIES: Mapping[str, CoreCapability] = {
     "diagnostics": CoreCapability(HOST_DIAGNOSTICS),
+    "tools": CoreCapability(HOST_TOOLS, per_plugin=True),
+    "tool_hooks": CoreCapability(HOST_TOOL_HOOKS, per_plugin=True),
+    "tool_turn": CoreCapability(HOST_TOOL_TURN),
 }
 
 

@@ -2,28 +2,24 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 
 import asyncio
 import logging
 from typing import TYPE_CHECKING, Any
 from collections.abc import Coroutine
 from core.common.runtime_tasks import create_runtime_task
-from agent.tools.registry import ToolRegistry
 from shiori_sdk.lifecycle import PHASE_SLOTS, require_phase_slot
-from shiori_sdk.tools import Tool
 from uuid import uuid4
 
 from agent.plugin_host.call_gate import PluginCallGate
 from agent.plugin_host.diagnostics import ChannelDeclarationError
 from shiori_sdk.kernel import Scope
 from agent.plugin_host.manifest import matches_channel_instance
-from agent.plugin_host.tool_hooks import PluginToolHook, build_hook_name
 
 if TYPE_CHECKING:
     from agent.core.proactive_turn.gates import ProactiveGate
     from agent.plugin_host.rpc import PluginRpcRegistry, RpcHandler
-    from agent.tool_hooks.base import ToolHook
     from shiori_sdk.rpc import Concurrency
     from shiori_sdk.channels import Channel
     from core.accounts import AccountRegistry
@@ -44,10 +40,8 @@ class PluginContributions:
 
     def __init__(self) -> None:
         self.phase_modules: dict[str, list[object]] = {slot: [] for slot in PHASE_SLOTS}
-        self.tool_hooks: list[ToolHook] = []
         self.proactive_gates: list[ProactiveGate] = []
         self.channels: list[Channel] = []
-        self.tool_names: list[str] = []
         self.bot_commands: list[tuple[str, str]] = []
 
 
@@ -73,75 +67,24 @@ def contribute_to_list[T](
     _ = effects.effect(discard, label)
 
 
-class ToolsCapability:
-    """注册插件工具到 ToolRegistry；卸载时通过 effect 反注册。
+class ContributionsByPlugin[T]:
+    """Each plugin's contributed objects, read back in a given plugin order.
 
-    每个工具的执行都经过插件实例的调用闸门，代内重载据此排空在途调用。
+    The storage behind a ``PluginContributionService``: a plugin's view adds to
+    ``of(plugin_id)`` with ``contribute_to_list`` (so disposal withdraws it), and
+    ``active`` returns what the active plugins contributed.
     """
 
-    def __init__(
-        self,
-        registry: ToolRegistry,
-        effects: Scope,
-        contributions: PluginContributions,
-        plugin_id: str,
-        calls: PluginCallGate,
-    ) -> None:
-        self._registry = registry
-        self._effects = effects
-        self._contributions = contributions
-        self._plugin_id = plugin_id
-        self._calls = calls
+    def __init__(self) -> None:
+        self._by_plugin: dict[str, list[T]] = {}
 
-    def register(
-        self,
-        tool: Tool,
-        *,
-        risk: str = "read-write",
-        always_on: bool = False,
-        search_hint: str | None = None,
-        external_allowed: bool = False,
-    ) -> None:
-        """注册插件工具。
+    def of(self, plugin_id: str) -> list[T]:
+        """The (live) list holding ``plugin_id``'s contributions."""
+        return self._by_plugin.setdefault(plugin_id, [])
 
-        external_allowed: 显式声明外部上下文（群聊、陌生私聊）里非用户本人发起的
-        回合也能使用此工具；默认不可用。
-        """
-        name = str(tool.name)
-        self._effects.ensure_active(f"tool:{name}")
-        self._calls.guard_tool(tool)
-        self._registry.register(
-            tool,
-            risk=risk,
-            always_on=always_on,
-            search_hint=search_hint,
-            source_type="plugin",
-            external_allowed=external_allowed,
-            source_name=self._plugin_id,
-        )
-        # 工具除了从贡献清单移除，还要反注册出 ToolRegistry，故不复用列表 helper
-        self._contributions.tool_names.append(name)
-        _ = self._effects.effect(lambda: self._unregister(name), f"tool:{name}")
-
-    def _unregister(self, name: str) -> None:
-        self._registry.unregister(name)
-        if name in self._contributions.tool_names:
-            self._contributions.tool_names.remove(name)
-
-    def get_tool(self, name: str) -> Tool | None:
-        """Looks up another tool by name (e.g. to invoke it directly).
-
-        Read-only passthrough to the underlying ``ToolRegistry`` — unlike
-        ``register``, there is no lifecycle to own here, so this does not need
-        a ``Scope`` entry. Registration itself must still go through
-        ``register`` above so the tool is reclaimed on unload; this only lets
-        a plugin look up and call a tool (its own or another's).
-        """
-        return self._registry.get_tool(name)
-
-    def get_context(self) -> dict[str, str]:
-        """Returns the current tool-call context (read-only passthrough)."""
-        return self._registry.get_context()
+    def active(self, plugin_ids: Iterable[str]) -> list[T]:
+        """The contributions of ``plugin_ids``, plugin by plugin in that order."""
+        return [item for pid in plugin_ids for item in self._by_plugin.get(pid, ())]
 
 
 class LifecycleCapability:
@@ -175,57 +118,6 @@ class LifecycleCapability:
                     target.remove(module)
 
         _ = self._effects.effect(remove_contributed, f"phase:{slot}:{len(modules)}")
-
-
-class ToolHooksCapability:
-    """贡献工具执行前置 hook（ToolExecutor pre_hook 链）。
-
-    hook 的 ``run`` 经过插件实例的调用闸门：代内重载会等待已进入的这一次执行；
-    闸门关闭后 pre_tool_use hook 拒绝本次工具调用（不在无守卫时执行），
-    其余 hook 直接放行。
-    """
-
-    def __init__(
-        self,
-        contributions: PluginContributions,
-        effects: Scope,
-        plugin_id: str,
-        calls: PluginCallGate,
-    ) -> None:
-        self._contributions = contributions
-        self._effects = effects
-        self._plugin_id = plugin_id
-        self._calls = calls
-
-    def add(self, hook: "ToolHook") -> None:
-        label = f"tool_hook:{getattr(hook, 'name', hook)}"
-        self._effects.ensure_active(label)
-        self._calls.guard_tool_hook(hook)
-        contribute_to_list(
-            self._contributions.tool_hooks, hook, effects=self._effects, label=label
-        )
-
-    def add_handler(
-        self,
-        handler: Any,
-        *,
-        tool_name_filter: str | None = None,
-        handler_name: str | None = None,
-    ) -> None:
-        """把函数式 pre-tool handler 包装为 PluginToolHook 并登记。
-
-        hook 名统一在这里生成（``build_hook_name``），插件不再需要各自导入宿主的
-        ``PluginToolHook``、手写 f-string 拼接或维护 ``_PLUGIN_NAME`` 常量（#182 评审）。
-        包装函数或 partial 可以显式提供 ``handler_name``，保持公开诊断名称稳定。
-        """
-        resolved_name = handler_name or getattr(handler, "__name__", repr(handler))
-        hook = PluginToolHook(
-            name=build_hook_name(self._plugin_id, resolved_name),
-            handler=handler,
-            tool_name_filter=tool_name_filter,
-        )
-        self.add(hook)
-        logger.info("插件 tool hook 已注册: %s", hook.name)
 
 
 class ProactiveGatesCapability:

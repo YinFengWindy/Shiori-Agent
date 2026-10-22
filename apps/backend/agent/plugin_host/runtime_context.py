@@ -175,6 +175,16 @@ class PluginSetupContext:
         """Returns granted capability names, for diagnostics."""
         return tuple(sorted(self._capabilities))
 
+    def _core_capability[T](self, capability: str, value: T | None) -> T:
+        """A capability filled from ``core_keys.CORE_CAPABILITIES``.
+
+        ``bind_core_capabilities`` fails setup when a declared one has no core
+        provider, so ``value`` is None only when the plugin did not declare it.
+        """
+        if capability not in self.granted or value is None:
+            raise CapabilityNotGranted(f"Plugin did not request {capability}")
+        return value
+
     def _provided[T](self, capability: str, value: T | None) -> T:
         """Separates an undeclared capability from a host that lacks its service."""
         if capability not in self.granted:
@@ -234,9 +244,7 @@ class PluginSetupContext:
     @property
     def tool_hooks(self) -> ToolHooksCapability:
         """Return the explicitly granted tool_hooks capability."""
-        if "tool_hooks" not in self.granted or self._tool_hooks is None:
-            raise CapabilityNotGranted("Plugin did not request tool_hooks")
-        return self._tool_hooks
+        return self._core_capability("tool_hooks", self._tool_hooks)
 
     @property
     def bot_commands(self) -> BotCommands:
@@ -269,9 +277,7 @@ class PluginSetupContext:
     @property
     def diagnostics(self) -> Diagnostics:
         """Return the explicitly granted diagnostics capability."""
-        if "diagnostics" not in self.granted or self._diagnostics is None:
-            raise CapabilityNotGranted("Plugin did not request diagnostics")
-        return self._diagnostics
+        return self._core_capability("diagnostics", self._diagnostics)
 
     @property
     def session_manager(self) -> SessionManager:
@@ -334,7 +340,7 @@ class PluginSetupContext:
     @property
     def tools(self) -> SdkToolsCapability:
         """Return the explicitly granted tools SDK capability."""
-        return self._provided("tools", self._tools)
+        return self._core_capability("tools", self._tools)
 
     @property
     def kv(self) -> PluginKVStore:
@@ -363,9 +369,7 @@ class PluginSetupContext:
     @property
     def tool_turn(self) -> Callable[[], ToolTurn]:
         """Return the explicitly granted tool_turn SDK capability."""
-        if "tool_turn" not in self.granted or self._tool_turn is None:
-            raise CapabilityNotGranted("Plugin did not request tool_turn")
-        return self._tool_turn
+        return self._core_capability("tool_turn", self._tool_turn)
 
     @property
     def runtime(self) -> RuntimeLifecycle:
