@@ -68,18 +68,14 @@ KNOWN_CAPABILITIES = frozenset(
         "rpc",
         "dependencies",
         "runtime",
-        "role_runtime_registry",
         # 直传宿主服务引用，供渠道/事件/记忆壳插件读取（#183）；这些字段没有
         # 装配/回滚语义，宿主直接透传同名服务，不各建 Capability 类。
         "workspace",
-        # 共享宿主那一个 RoleStore 实例：写锁按实例持有，插件自建实例会丢更新。
-        "role_store",
         "memory_engine",
         "memory",
         "session_manager",
         "light_provider",
         "light_model",
-        "relationship_runtime",
     }
 )
 

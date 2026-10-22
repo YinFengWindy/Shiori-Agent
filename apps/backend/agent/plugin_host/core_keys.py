@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Protocol
 
 from shiori_sdk.accounts.capability import AccountsCapability
@@ -26,8 +27,11 @@ from shiori_sdk.channels.context import ChannelsCapability
 from shiori_sdk.diagnostics import Diagnostics
 from shiori_sdk.extensions import BackgroundTasks, BotCommands
 from shiori_sdk.external_turns import ExternalTurns
+from shiori_sdk.http import HttpClient
 from shiori_sdk.memory.context import MemoryCapability
+from shiori_sdk.memory.engine import MemoryEngine
 from shiori_sdk.models import ChatProvider, RoleModels
+from shiori_sdk.process_resources import PluginProcessResources
 from shiori_sdk.processes import Processes, Resources, ToolTurn
 from shiori_sdk.roles import Roles, SceneObservations
 from shiori_sdk.rpc import RpcCapability
@@ -163,8 +167,32 @@ HOST_ROLES: Key[Roles] = Key("host.roles")
 HOST_MODELS: Key[RoleModels] = Key("host.models")
 """The ``models`` capability over the ``RoleRuntimeRegistry`` (``core.roles``)."""
 
-HOST_ROLE_RUNTIME_REGISTRY: Key[object] = Key("host.role_runtime_registry")
-"""The ``role_runtime_registry`` capability: the registry itself, passed through."""
+HOST_WORKSPACE: Key[Path] = Key("host.workspace")
+"""The ``workspace`` capability: the host workspace directory, passed through."""
+
+HOST_HTTP: Key[HttpClient] = Key("host.http")
+"""The ``http`` capability: the host's shared external HTTP requester."""
+
+
+@dataclass(frozen=True)
+class Nullable[T]:
+    """A provided value that may legitimately be None (``CoreCapability.nullable``).
+
+    The kernel's ``get`` answers None both for a key nobody provided and for a
+    provided None; boxing the value keeps "provided" observable, so a missing
+    provide still fails instead of reaching the plugin as None.
+    """
+
+    value: T | None
+
+
+HOST_MEMORY_ENGINE: Key[Nullable[MemoryEngine]] = Key("host.memory_engine")
+"""The ``memory_engine`` capability: the generation's engine, None when memory is off."""
+
+HOST_PROCESS_RESOURCES: Key[PluginCapabilityBinder[PluginProcessResources]] = Key(
+    "host.process_resources"
+)
+"""The ``process_resources`` capability: process-owned resources (``plugin_host``)."""
 
 HOST_LIGHT_PROVIDER: Key[ChatProvider] = Key("host.light_provider")
 """The ``light_provider`` capability: the host's light chat provider."""
@@ -237,19 +265,20 @@ class CoreCapability:
 
     ``per_plugin`` marks a key whose provider is a ``PluginCapabilityBinder``;
     the plugin then gets ``for_plugin(binding)``. Otherwise the provided
-    instance itself is the capability, shared by every plugin.
+    instance itself is the capability, shared by every plugin. ``nullable``
+    marks a capability for which None is a valid host state: its key provides
+    a ``Nullable`` box and the plugin gets the boxed value, None included.
     """
 
     key: Key[Any]
     per_plugin: bool = False
+    nullable: bool = False
 
 
 # v2 capability name (which is also the plugin context argument it fills) ->
-# the core key behind it. Rows move here from ``CAPABILITY_HOST_SERVICES``
-# (``host_service_requirements.py``) as 2b–2f give each capability a core
-# provider; 2g deletes that table together with ``HostServices``. They cannot
-# merge earlier: the other table names ``HostServices`` attributes, which only
-# exist until then.
+# the core key behind it. The capabilities missing here are kernel-native: the
+# assembly layer builds them itself (lifecycle, config, dependencies, runtime,
+# kv, storage, services).
 CORE_CAPABILITIES: Mapping[str, CoreCapability] = {
     "diagnostics": CoreCapability(HOST_DIAGNOSTICS),
     "tools": CoreCapability(HOST_TOOLS, per_plugin=True),
@@ -262,7 +291,6 @@ CORE_CAPABILITIES: Mapping[str, CoreCapability] = {
     "session_manager": CoreCapability(HOST_SESSION_MANAGER),
     "roles": CoreCapability(HOST_ROLES),
     "models": CoreCapability(HOST_MODELS),
-    "role_runtime_registry": CoreCapability(HOST_ROLE_RUNTIME_REGISTRY),
     "light_provider": CoreCapability(HOST_LIGHT_PROVIDER),
     "light_model": CoreCapability(HOST_LIGHT_MODEL),
     "scene_observations": CoreCapability(HOST_SCENE_OBSERVATIONS, per_plugin=True),
@@ -276,6 +304,10 @@ CORE_CAPABILITIES: Mapping[str, CoreCapability] = {
     "proactive_gates": CoreCapability(HOST_PROACTIVE_GATES, per_plugin=True),
     "events": CoreCapability(HOST_EVENTS, per_plugin=True),
     "rpc": CoreCapability(HOST_RPC, per_plugin=True),
+    "workspace": CoreCapability(HOST_WORKSPACE),
+    "http": CoreCapability(HOST_HTTP),
+    "memory_engine": CoreCapability(HOST_MEMORY_ENGINE, nullable=True),
+    "process_resources": CoreCapability(HOST_PROCESS_RESOURCES, per_plugin=True),
 }
 
 
@@ -288,7 +320,8 @@ def bind_core_capabilities(
 
     ``provided`` looks a key up in the kernel (``Kernel.get``). A declared
     capability whose key nobody provides fails before setup, like a missing
-    host service.
+    host service; that includes a ``nullable`` row, whose provided box may
+    hold None.
     """
     arguments: dict[str, Any] = {}
     for capability in capabilities:
@@ -299,7 +332,12 @@ def bind_core_capabilities(
             raise HostServiceUnavailable.for_capability(
                 binding.plugin_id, capability, [row.key.name]
             )
-        arguments[capability] = value.for_plugin(binding) if row.per_plugin else value
+        if row.nullable:
+            arguments[capability] = value.value
+        elif row.per_plugin:
+            arguments[capability] = value.for_plugin(binding)
+        else:
+            arguments[capability] = value
     return arguments
 
 

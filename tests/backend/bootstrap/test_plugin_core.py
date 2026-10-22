@@ -14,12 +14,12 @@ import pytest
 from PIL import Image
 
 from agent.plugin_host import (
-    HostServices,
+    PluginGenerationSettings,
     PluginKernel,
     PluginRpcRegistry,
     PluginState,
 )
-from bootstrap.plugin_core import plugin_core_modules
+from bootstrap.plugin_core import PluginCoreInputs, plugin_core_modules
 from bus.event_bus import EventBus
 from core.roles.models import RoleRecord
 from core.roles.store import RoleStore
@@ -103,10 +103,8 @@ async def test_avatars_capability_caches_into_the_host_role_store(
     role_store = RoleStore(tmp_path / "workspace")
     kernel = host_kernel(
         [tmp_path / "plugins"],
-        services=HostServices(
-            workspace=tmp_path / "workspace",
-            role_store=role_store,
-        ),
+        settings=PluginGenerationSettings(workspace=tmp_path / "workspace"),
+        role_store=role_store,
     )
     await kernel.load_all()
     try:
@@ -135,7 +133,6 @@ async def test_scene_observation_requests_reach_the_generation_demand(
     demand = SceneObservationDemand()
     kernel = host_kernel(
         [tmp_path / "plugins"],
-        services=HostServices(),
         scene_observations=demand,
     )
     await kernel.load_all()
@@ -159,24 +156,28 @@ def test_core_module_provide_failure_aborts_startup(tmp_path: Path) -> None:
     with pytest.raises(CoreServiceBroken):
         _ = PluginKernel(
             [tmp_path],
-            services=HostServices(),
+            settings=PluginGenerationSettings(),
             core=(
                 *plugin_core_modules(
-                    [tmp_path],
-                    tools=None,
-                    role_store=None,
-                    session_manager=None,
-                    workspace=None,
-                    relationship_runtime=None,
-                    role_runtime_registry=None,
-                    light_provider=None,
-                    light_model=None,
-                    scene_observations=SceneObservationDemand(),
-                    memory_engine=None,
-                    external_turns=None,
-                    background_results=None,
-                    event_bus=bus,
-                    rpc=PluginRpcRegistry(bus),
+                    PluginCoreInputs(
+                        plugin_dirs=(tmp_path,),
+                        event_bus=bus,
+                        rpc=PluginRpcRegistry(bus),
+                        scene_observations=SceneObservationDemand(),
+                        workspace=None,
+                        tools=None,
+                        role_store=None,
+                        session_manager=None,
+                        relationship_runtime=None,
+                        role_runtime_registry=None,
+                        light_provider=None,
+                        light_model=None,
+                        memory_engine=None,
+                        external_turns=None,
+                        background_results=None,
+                        http=None,
+                        process_resources=None,
+                    )
                 ),
                 broken_core_module,
             ),

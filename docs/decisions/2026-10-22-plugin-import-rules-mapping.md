@@ -2,7 +2,7 @@
 
 > 对应四层重构 P0（#899），见 [`2026-10-22-plugin-system-four-layer-refactor.md`](2026-10-22-plugin-system-four-layer-refactor.md) §4 P0、§5.4、§5.11。基线 `main` @ `13442bd`。
 
-P0 只新增 import-linter 分层报告（`pyproject.toml` 的 `[tool.importlinter]`，CI 步骤 `Report layer contracts`，不阻塞），**不删除也不修改**现有检查：`python -m scripts.check_sdk_imports` 继续阻塞 CI。本表把现有检查的每条规则归为三类之一，供以后替换时直接执行：
+P0 只新增 import-linter 分层报告（`pyproject.toml` 的 `[tool.importlinter]`），**不删除也不修改**现有检查：`python -m scripts.check_sdk_imports` 继续阻塞 CI。P2（#901）清零内核违规后，CI 步骤改为 `Enforce layer contracts`，契约违规会让 CI 失败；`check_sdk_imports` 仍照常阻塞。本表把现有检查的每条规则归为三类之一，供以后替换时直接执行：
 
 - **覆盖**：由 import-linter 契约覆盖，替换时可删。
 - **放弃**：主动放弃，写明理由。
@@ -71,3 +71,5 @@ import-linter 只分析 import 图，下面这些规则全部看不到。它们�
 ## P0 基线报告
 
 在 `13442bd` 上运行 `lint-imports`：5 条契约里 4 条保持，「内核不 import 宿主业务模块和插件」不成立，共 49 条直接 import，涉及 `agent.config`、`agent.core`、`agent.mcp`、`agent.provider`、`agent.tool_hooks`、`agent.tools`、`bootstrap`、`bus`、`conversation`、`core`、`desktop_bridge`、`infra`、`session`。这些正是 P1 / P2 要从内核搬出的部分。核心 → 插件、SDK / 插件 → 宿主、插件间未声明依赖，均为 0。
+
+P2（#901）收尾时 6 条契约全部保持（违规 0），lint-imports 随之改为阻塞。

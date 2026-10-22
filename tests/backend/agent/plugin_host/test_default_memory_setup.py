@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 from shiori_sdk.lifecycle import AfterToolResultCtx
-from agent.plugin_host import HostServices, PluginKernel, PluginRpcRegistry
+from agent.plugin_host import PluginGenerationSettings, PluginKernel, PluginRpcRegistry
 from tests.support.plugin_kernel import host_kernel
 from bus.event_bus import EventBus
 from core.roles import RoleStore
@@ -30,11 +30,9 @@ def _load_default_memory_kernel(
     rpc = PluginRpcRegistry(bus)
     kernel = host_kernel(
         [root],
-        services=HostServices(
-            workspace=workspace,
-            role_store=RoleStore(workspace),
-            memory_engine=memory_engine,
-        ),
+        settings=PluginGenerationSettings(workspace=workspace),
+        role_store=RoleStore(workspace),
+        memory_engine=memory_engine,
         event_bus=bus,
         rpc=rpc,
     )

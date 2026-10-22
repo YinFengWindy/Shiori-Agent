@@ -1,7 +1,7 @@
 """Real plugin-kernel assembly shared by host integration tests.
 
-Builds a ``PluginKernel`` over real ``HostServices`` so tests load plugin
-packages only through the kernel's public entry points.
+Builds a ``PluginKernel`` over real generation settings and core inputs so
+tests load plugin packages only through the kernel's public entry points.
 """
 
 from __future__ import annotations
@@ -9,16 +9,22 @@ from __future__ import annotations
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 # 预热 agent.core 导入链，避免 agent.lifecycle.types 触发循环导入
 from agent.core.passive_turn import ContextStore as _  # noqa: F401
 from agent.lifecycle.types import BeforeTurnCtx
-from agent.plugin_host import HostServices, PluginKernel, PluginRpcRegistry
+from agent.plugin_host import (
+    PluginGenerationSettings,
+    PluginKernel,
+    PluginRpcRegistry,
+)
+from agent.plugin_host.core_keys import CoreModule, CoreProvide
 from agent.tools.registry import ToolRegistry
-from bootstrap.plugin_core import plugin_core_modules
+from bootstrap.plugin_core import PluginCoreInputs, plugin_core_modules
 from bus.event_bus import EventBus
 from core.scene.demand import SceneObservationDemand
+from shiori_sdk.kernel import Key
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 PLUGIN_FIXTURES = REPOSITORY_ROOT / "tests/fixtures/plugins"
@@ -27,8 +33,12 @@ PLUGIN_FIXTURES = REPOSITORY_ROOT / "tests/fixtures/plugins"
 def host_kernel(
     plugin_dirs: list[Path],
     *,
-    services: HostServices,
+    settings: PluginGenerationSettings | None = None,
     tools: ToolRegistry | None = None,
+    role_store: Any = None,
+    memory_engine: Any = None,
+    http: Any = None,
+    relationship_runtime: Any = None,
     session_manager: Any = None,
     light_provider: Any = None,
     light_model: str | None = None,
@@ -38,49 +48,67 @@ def host_kernel(
     background_results: Any = None,
     event_bus: EventBus | None = None,
     rpc: PluginRpcRegistry[Any] | None = None,
+    withheld: frozenset[Key[Any]] = frozenset(),
     **options: Any,
 ) -> PluginKernel:
-    """A kernel over ``services`` with the same core provide list as bootstrap.
+    """A kernel over ``settings`` with the same core provide list as bootstrap.
 
-    ``tools`` is the tool registry the core provides (none: plugins declaring
-    ``tools`` fail before setup); ``session_manager``, ``light_provider``,
-    ``light_model``, ``role_runtime_registry``, ``external_turns`` and
-    ``background_results`` are what the core provides
-    (real services or test doubles; none: plugins declaring them fail before
-    setup), and ``scene_observations`` the demand registry (a fresh one by
-    default). ``event_bus`` (a fresh one by default) is the generation's bus and
-    ``rpc`` its plugin RPC registry (by default a new one over that bus); pass
-    one to read what plugins registered. The core's role store, workspace and
-    relationship runtime are those of ``services``. ``options`` are the
+    ``settings`` defaults to an empty generation (no workspace). The remaining
+    keywords are the ``PluginCoreInputs`` fields, real services or test
+    doubles; one left None makes a plugin declaring a capability over it fail
+    before setup. The core's ``workspace`` and ``process_resources`` are those
+    of ``settings``; ``scene_observations`` and ``event_bus`` default to fresh
+    ones and ``rpc`` to a new registry over that bus (pass one to read what
+    plugins registered). ``withheld`` keys are dropped from the core
+    provide list, as if no core module provided them. ``options`` are the
     remaining ``PluginKernel`` keyword arguments.
     """
+    generation = settings if settings is not None else PluginGenerationSettings()
     bus = event_bus if event_bus is not None else EventBus()
+    inputs = PluginCoreInputs(
+        plugin_dirs=tuple(plugin_dirs),
+        event_bus=bus,
+        rpc=rpc if rpc is not None else PluginRpcRegistry(bus),
+        scene_observations=(
+            scene_observations
+            if scene_observations is not None
+            else SceneObservationDemand()
+        ),
+        workspace=generation.workspace,
+        tools=tools,
+        role_store=role_store,
+        session_manager=session_manager,
+        relationship_runtime=relationship_runtime,
+        role_runtime_registry=role_runtime_registry,
+        light_provider=light_provider,
+        light_model=light_model,
+        memory_engine=memory_engine,
+        external_turns=external_turns,
+        background_results=background_results,
+        http=http,
+        process_resources=generation.process_resources,
+    )
     return PluginKernel(
         plugin_dirs,
-        services=services,
-        core=plugin_core_modules(
-            plugin_dirs,
-            tools=tools,
-            role_store=services.role_store,
-            session_manager=session_manager,
-            workspace=services.workspace,
-            relationship_runtime=services.relationship_runtime,
-            role_runtime_registry=role_runtime_registry,
-            light_provider=light_provider,
-            light_model=light_model,
-            scene_observations=(
-                scene_observations
-                if scene_observations is not None
-                else SceneObservationDemand()
-            ),
-            memory_engine=services.memory_engine,
-            external_turns=external_turns,
-            background_results=background_results,
-            event_bus=bus,
-            rpc=rpc if rpc is not None else PluginRpcRegistry(bus),
+        settings=generation,
+        core=tuple(
+            _withholding(module, withheld) for module in plugin_core_modules(inputs)
         ),
         **options,
     )
+
+
+def _withholding(module: CoreModule, withheld: frozenset[Key[Any]]) -> CoreModule:
+    """``module`` providing everything except the ``withheld`` keys."""
+
+    def provide_except(provide: CoreProvide) -> None:
+        def guarded(key: Key[Any], impl: Any) -> None:
+            if key not in withheld:
+                provide(key, impl)
+
+        module(cast(CoreProvide, guarded))
+
+    return provide_except
 
 
 def make_kernel(
@@ -111,12 +139,11 @@ def make_kernel(
         )
     return host_kernel(
         plugin_dirs,
-        services=HostServices(
-            plugin_configs=plugin_configs or {},
-            workspace=resolved_workspace,
-            memory_engine=memory_engine,
-            relationship_runtime=relationship_runtime,
+        settings=PluginGenerationSettings(
+            plugin_configs=plugin_configs or {}, workspace=resolved_workspace
         ),
+        memory_engine=memory_engine,
+        relationship_runtime=relationship_runtime,
         tools=tools,
         session_manager=session_manager,
         light_provider=light_provider,

@@ -8,11 +8,15 @@ here, since bootstrap already imports both the core and the assembly layer.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
 
 from agent.config import resolve_config_reference
 from agent.core.proactive_turn.plugin_capability import PluginProactiveGates
+from agent.plugin_host.process_resources import (
+    ProcessResourceAttachments,
+    ProcessResourceOwner,
+)
 from agent.plugin_host.rpc import PluginRpcRegistry
 from agent.provider import LLMProvider
 from agent.plugin_host.core_keys import (
@@ -25,17 +29,19 @@ from agent.plugin_host.core_keys import (
     HOST_CHANNELS,
     HOST_CONFIG_REFERENCES,
     HOST_DIAGNOSTICS,
+    HOST_HTTP,
     HOST_EVENTS,
     HOST_EXTERNAL_TURNS,
     HOST_LIGHT_MODEL,
     HOST_LIGHT_PROVIDER,
     HOST_MEMORY,
+    HOST_MEMORY_ENGINE,
     HOST_MODELS,
     HOST_PROACTIVE_GATES,
+    HOST_PROCESS_RESOURCES,
     HOST_PROCESSES,
     HOST_RESOURCES,
     HOST_RPC,
-    HOST_ROLE_RUNTIME_REGISTRY,
     HOST_ROLES,
     HOST_SCENE_OBSERVATIONS,
     HOST_SESSION_MANAGER,
@@ -43,8 +49,10 @@ from agent.plugin_host.core_keys import (
     HOST_TOOL_HOOKS,
     HOST_TOOL_TURN,
     HOST_TOOLS,
+    HOST_WORKSPACE,
     CoreModule,
     CoreProvide,
+    Nullable,
 )
 from agent.tool_hooks.plugin_capability import PluginToolHooks
 from agent.tools.plugin_capability import PluginTools
@@ -74,50 +82,71 @@ from session.plugin_capability import HostPluginSessions
 from shiori_sdk.background_results import BackgroundResults
 from shiori_sdk.core.crash_reporting import CRASH_REPORTING
 from shiori_sdk.external_turns import ExternalTurns
+from shiori_sdk.http import HttpClient
 from shiori_sdk.memory.engine import MemoryEngine
 from shiori_sdk.processes import Resources
 
 
-def plugin_core_modules(
-    plugin_dirs: Sequence[Path],
-    *,
-    tools: ToolRegistry | None,
-    role_store: RoleStore | None,
-    session_manager: SessionManager | None,
-    workspace: Path | None,
-    relationship_runtime: object,
-    role_runtime_registry: RoleRuntimeRegistry | None,
-    light_provider: LLMProvider | None,
-    light_model: str | None,
-    scene_observations: SceneObservationDemand,
-    memory_engine: MemoryEngine | None,
-    external_turns: ExternalTurns | None,
-    background_results: BackgroundResults | None,
-    event_bus: EventBus,
-    rpc: PluginRpcRegistry[MethodPolicy],
-) -> tuple[CoreModule, ...]:
-    """The core provide list, in provide order, for one runtime generation.
+@dataclass(frozen=True, kw_only=True)
+class PluginCoreInputs:
+    """What one runtime generation's core modules provide to its plugin kernel.
 
     ``plugin_dirs`` are the generation's plugin discovery roots: every plugin
     is a directory directly under one, which is how diagnostics attributes a
-    traceback frame to ``plugins/<directory>/...``. ``tools`` is the
-    generation's tool registry and ``role_store`` the host's canonical role
-    store, whose account index and avatar cache back ``accounts`` and
-    ``avatars``; without one (host tests) a plugin declaring a capability
-    over it fails before setup. ``session_manager`` backs ``session_manager``
-    and, with the ``workspace`` holding session media, ``sessions``, whose
-    payloads the desktop presenter projects with ``relationship_runtime``.
-    ``role_store`` also backs ``roles``, and ``role_runtime_registry`` backs
-    ``models`` and its own passthrough; ``light_provider`` and ``light_model``
-    are the plugins' light model. ``scene_observations`` is the generation's
-    demand registry the scene controller reads. ``memory_engine`` (None when
-    memory is disabled) goes into ``memory`` with the workspace and role store.
-    ``external_turns`` and ``background_results`` are the generation's
-    conversation services, built over its agent loop. ``event_bus`` is the
-    generation's event bus and ``rpc`` its plugin RPC registry, created by
-    bootstrap over that bus.
+    traceback frame to ``plugins/<directory>/...``. ``event_bus`` is the
+    generation's event bus and ``rpc`` its plugin RPC registry, created over
+    that bus. ``scene_observations`` is the demand registry the scene
+    controller reads.
+
+    The rest back capabilities; when one is None (host tests), a plugin
+    declaring a capability over it fails before setup:
+
+    - ``tools``: the generation's tool registry.
+    - ``role_store``: the canonical role store, behind ``roles``, ``accounts``
+      and ``avatars`` (its account index and avatar cache) and, with the
+      ``workspace``, ``memory``.
+    - ``session_manager``: ``session_manager`` and, with the ``workspace``
+      holding session media, ``sessions``, whose payloads the desktop
+      presenter projects with ``relationship_runtime``.
+    - ``role_runtime_registry``: ``models``.
+    - ``light_provider`` / ``light_model``: the plugins' light model.
+    - ``memory_engine``: ``memory_engine`` and part of ``memory``; None is the
+      valid state of a host with memory disabled, not a missing service.
+    - ``external_turns`` / ``background_results``: the conversation services,
+      built over the generation's agent loop.
+    - ``workspace`` and ``http``: passed through as they are.
+    - ``process_resources``: the process-level owner whose per-generation
+      attachments plugins get.
     """
-    roots = [("plugins", directory.resolve()) for directory in plugin_dirs]
+
+    plugin_dirs: tuple[Path, ...]
+    event_bus: EventBus
+    rpc: PluginRpcRegistry[MethodPolicy]
+    scene_observations: SceneObservationDemand
+    # The same directory as ``PluginGenerationSettings.workspace``: there the
+    # kernel's trust store, execution identity and KV root; here the
+    # ``workspace``, ``memory`` and ``sessions`` capabilities.
+    workspace: Path | None
+    tools: ToolRegistry | None
+    role_store: RoleStore | None
+    session_manager: SessionManager | None
+    relationship_runtime: object
+    role_runtime_registry: RoleRuntimeRegistry | None
+    light_provider: LLMProvider | None
+    light_model: str | None
+    memory_engine: MemoryEngine | None
+    external_turns: ExternalTurns | None
+    background_results: BackgroundResults | None
+    http: HttpClient | None
+    # The same owner as ``PluginGenerationSettings.process_resources``: there
+    # the kernel publishes and retains the generation's attachments; here
+    # each plugin gets its attachment (``process_resources``).
+    process_resources: ProcessResourceOwner | None
+
+
+def plugin_core_modules(inputs: PluginCoreInputs) -> tuple[CoreModule, ...]:
+    """The core provide list, in provide order, for one runtime generation."""
+    roots = [("plugins", directory.resolve()) for directory in inputs.plugin_dirs]
 
     def provide_diagnostics(provide: CoreProvide) -> None:
         """``CRASH_REPORTING`` and the ``diagnostics`` capability over it (D13b)."""
@@ -131,65 +160,84 @@ def plugin_core_modules(
 
     def provide_tools(provide: CoreProvide) -> None:
         """Plugin tools, tool hooks and the current tool turn (``agent.tools``)."""
-        if tools is not None:
-            provide(HOST_TOOLS, PluginTools(tools))
+        if inputs.tools is not None:
+            provide(HOST_TOOLS, PluginTools(inputs.tools))
         provide(HOST_TOOL_HOOKS, PluginToolHooks())
         provide(HOST_TOOL_TURN, current_tool_turn)
 
     def provide_channels(provide: CoreProvide) -> None:
         """Plugin channels, and the accounts and avatars they serve (``core.channels``)."""
         provide(HOST_CHANNELS, PluginChannels())
-        if role_store is not None:
-            provide(HOST_ACCOUNTS, PluginAccounts(role_store.accounts))
-            provide(HOST_AVATARS, PluginAvatars(role_store.avatars))
+        if inputs.role_store is not None:
+            provide(HOST_ACCOUNTS, PluginAccounts(inputs.role_store.accounts))
+            provide(HOST_AVATARS, PluginAvatars(inputs.role_store.avatars))
 
     def provide_sessions(provide: CoreProvide) -> None:
         """The session manager and the session operations over it (``session``)."""
-        if session_manager is None:
+        if inputs.session_manager is None:
             return
-        provide(HOST_SESSION_MANAGER, session_manager)
-        if workspace is not None:
-            presenter = DesktopSessionPresenter(None, relationship_runtime)
-            sessions = HostPluginSessions(session_manager, workspace, presenter)
+        provide(HOST_SESSION_MANAGER, inputs.session_manager)
+        if inputs.workspace is not None:
+            presenter = DesktopSessionPresenter(None, inputs.relationship_runtime)
+            sessions = HostPluginSessions(
+                inputs.session_manager, inputs.workspace, presenter
+            )
             provide(HOST_SESSIONS, sessions.as_capability())
 
     def provide_roles(provide: CoreProvide) -> None:
         """Roles, their models and the light model plugins use (``core.roles``)."""
-        if role_store is not None:
-            provide(HOST_ROLES, HostRoles(role_store).as_capability())
-        if role_runtime_registry is not None:
-            provide(HOST_ROLE_RUNTIME_REGISTRY, role_runtime_registry)
-            provide(HOST_MODELS, HostRoleModels(role_runtime_registry).as_capability())
-        if light_provider is not None:
-            provide(HOST_LIGHT_PROVIDER, light_provider)
-        if light_model is not None:
-            provide(HOST_LIGHT_MODEL, light_model)
+        if inputs.role_store is not None:
+            provide(HOST_ROLES, HostRoles(inputs.role_store).as_capability())
+        if inputs.role_runtime_registry is not None:
+            provide(
+                HOST_MODELS,
+                HostRoleModels(inputs.role_runtime_registry).as_capability(),
+            )
+        if inputs.light_provider is not None:
+            provide(HOST_LIGHT_PROVIDER, inputs.light_provider)
+        if inputs.light_model is not None:
+            provide(HOST_LIGHT_MODEL, inputs.light_model)
 
     def provide_scene(provide: CoreProvide) -> None:
         """Plugin demand for scene observations (``core.scene``)."""
-        provide(HOST_SCENE_OBSERVATIONS, PluginSceneObservations(scene_observations))
+        provide(
+            HOST_SCENE_OBSERVATIONS,
+            PluginSceneObservations(inputs.scene_observations),
+        )
 
     def provide_memory(provide: CoreProvide) -> None:
-        """The memory plugin's setup surface (``bootstrap.memory_capabilities``)."""
-        if workspace is not None and role_store is not None:
+        """The memory engine and the memory plugin's surface.
+
+        The surface is ``bootstrap.memory_capabilities``; the engine is None
+        when memory is disabled.
+        """
+        provide(HOST_MEMORY_ENGINE, Nullable(inputs.memory_engine))
+        if inputs.workspace is not None and inputs.role_store is not None:
             provide(
                 HOST_MEMORY,
-                HostMemoryCapability(workspace, role_store, memory_engine),
+                HostMemoryCapability(
+                    inputs.workspace, inputs.role_store, inputs.memory_engine
+                ),
             )
 
     def provide_processes(provide: CoreProvide) -> None:
-        """Host-owned native processes and distributed resources."""
+        """Native processes, process-owned resources and distributed resources."""
         provide(HOST_PROCESSES, HostProcesses().as_capability())
+        if inputs.process_resources is not None:
+            provide(
+                HOST_PROCESS_RESOURCES,
+                ProcessResourceAttachments(inputs.process_resources),
+            )
         # Typed as the plugin contract, so pyright checks the host implementation.
         resources: Resources = HostResources()
         provide(HOST_RESOURCES, resources)
 
     def provide_conversation(provide: CoreProvide) -> None:
         """External turns, background results and bot commands (``conversation``)."""
-        if external_turns is not None:
-            provide(HOST_EXTERNAL_TURNS, external_turns)
-        if background_results is not None:
-            provide(HOST_BACKGROUND_RESULTS, background_results)
+        if inputs.external_turns is not None:
+            provide(HOST_EXTERNAL_TURNS, inputs.external_turns)
+        if inputs.background_results is not None:
+            provide(HOST_BACKGROUND_RESULTS, inputs.background_results)
         provide(HOST_BOT_COMMANDS, PluginBotCommands())
 
     def provide_background(provide: CoreProvide) -> None:
@@ -202,12 +250,19 @@ def plugin_core_modules(
 
     def provide_bridge(provide: CoreProvide) -> None:
         """The plugin RPC registry and the ``rpc`` capability over it (bridge)."""
-        provide(HOST_BRIDGE, rpc)
-        provide(HOST_RPC, PluginRpc(rpc, event_bus))
+        provide(HOST_BRIDGE, inputs.rpc)
+        provide(HOST_RPC, PluginRpc(inputs.rpc, inputs.event_bus))
 
     def provide_events(provide: CoreProvide) -> None:
         """Plugin-scoped views of the event bus (``bus``)."""
-        provide(HOST_EVENTS, PluginEvents(event_bus))
+        provide(HOST_EVENTS, PluginEvents(inputs.event_bus))
+
+    def provide_host_passthrough(provide: CoreProvide) -> None:
+        """The workspace directory and the shared external HTTP requester."""
+        if inputs.workspace is not None:
+            provide(HOST_WORKSPACE, inputs.workspace)
+        if inputs.http is not None:
+            provide(HOST_HTTP, inputs.http)
 
     return (
         provide_bridge,
@@ -224,4 +279,5 @@ def plugin_core_modules(
         provide_conversation,
         provide_background,
         provide_proactive_gates,
+        provide_host_passthrough,
     )
