@@ -13,7 +13,7 @@ from bootstrap.runtime.events import RuntimeEventBus
 from bootstrap.runtime.generations import RuntimeCandidate, RuntimeRetention
 from bootstrap.tools import build_core_runtime
 from bootstrap.channels import start_channels
-from bootstrap.plugin_core import active_plugin_channels
+from core.channels.plugin_capability import active_plugin_channels
 from bootstrap.runtime.memory import validate_memory_transition
 from bootstrap.runtime.construction import prepare_core_runtime
 from bootstrap.runtime.channel_barrier import channel_handover_barrier

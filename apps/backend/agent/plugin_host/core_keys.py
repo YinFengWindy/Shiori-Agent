@@ -43,6 +43,10 @@ class PluginBinding:
     and ``calls`` admits or refuses calls into the plugin. ``namespace`` is the
     kernel generation's import namespace; ``manifest`` is the plugin's parsed
     manifest, for the static declarations a capability checks against.
+
+    Only the plugin's identity and static declarations (manifest), its scope
+    and its call gate belong here. Data one capability alone needs stays with
+    that capability's core service, never in this shared binding.
     """
 
     plugin_id: str
@@ -112,6 +116,9 @@ HOST_CHANNELS: Key[PluginContributionService[ChannelsCapability, Channel]] = Key
 """The ``channels`` capability: transports plugins contribute (``core.channels``)."""
 
 
+# Deliberately accounts-only, not a generic "generation lifecycle" protocol:
+# accounts is the only core service with per-generation publish/drop, and P4
+# moves publishing and dropping out of the kernel altogether (#903).
 class GenerationAccounts(PluginCapabilityBinder[AccountsCapability], Protocol):
     """The ``host.accounts`` service: one kernel generation's account index.
 

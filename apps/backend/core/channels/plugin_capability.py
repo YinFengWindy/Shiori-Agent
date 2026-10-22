@@ -15,8 +15,9 @@ import logging
 from shiori_sdk.channels import Channel
 from shiori_sdk.channels.avatars import AvatarFetch
 
+from agent.plugin_host import PluginKernel
 from agent.plugin_host.capabilities import ContributionsByPlugin, contribute_to_list
-from agent.plugin_host.core_keys import PluginBinding
+from agent.plugin_host.core_keys import HOST_CHANNELS, PluginBinding
 from agent.plugin_host.diagnostics import ChannelDeclarationError
 from agent.plugin_host.manifest import matches_channel_instance
 from core.channel_avatars import AvatarKey, ChannelAvatarStore
@@ -30,6 +31,11 @@ class PluginChannels(ContributionsByPlugin[Channel]):
     def for_plugin(self, binding: PluginBinding) -> ChannelsCapability:
         """The channels capability of the plugin ``binding`` describes."""
         return ChannelsCapability(self.of(binding.plugin_id), binding)
+
+
+def active_plugin_channels(kernel: PluginKernel) -> list[Channel]:
+    """The channels the generation's active plugins contributed, in kernel order."""
+    return list(kernel.core_service(HOST_CHANNELS).active(kernel.active_plugin_ids))
 
 
 class ChannelsCapability:
@@ -52,6 +58,12 @@ class ChannelsCapability:
         )
 
     def add(self, channel: Channel) -> None:
+        """Hands ``channel`` to the channel host until the plugin stops.
+
+        Raises ``ChannelDeclarationError`` when its name is not a channel the
+        manifest declares, an allowed instance prefix, or an account instance
+        of a declared channel.
+        """
         name = getattr(channel, "name", None)
         prefixed_instance = any(
             matches_channel_instance(name, prefix) for prefix in self._instance_prefixes

@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 from agent.config_models import Config
 from bootstrap.channel_host import ChannelHost
 from bootstrap.channels import start_channels
-from bootstrap.plugin_core import active_plugin_channels
+from core.channels.plugin_capability import active_plugin_channels
 from bootstrap.tools import CoreRuntime, build_core_runtime
 from bootstrap.runtime.dispatcher import RuntimeDispatcher
 from agent.plugin_host.process_resources import ProcessResourceOwner

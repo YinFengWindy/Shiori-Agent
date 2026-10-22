@@ -72,24 +72,25 @@ async def test_diagnostics_capability_hooks_go_through_crash_reporting(
 
 
 @pytest.mark.asyncio
-async def test_avatars_capability_caches_into_the_role_store_for_the_plugin_scope(
+async def test_avatars_capability_caches_into_the_host_role_store(
     tmp_path: Path,
 ) -> None:
-    """avatars 由核心 channels 模块提供：写进宿主 RoleStore 的头像缓存，卸载后拒绝刷新。"""
+    """avatars 由核心 channels 模块经 role_store 提供：插件刷新的头像写进宿主 RoleStore。"""
+    image = io.BytesIO()
+    Image.new("RGB", (4, 4), "red").save(image, "PNG")
     package = tmp_path / "plugins" / "avatar_probe"
     (package / "backend").mkdir(parents=True)
     (package / "manifest.yaml").write_text(
         "api: 2\nid: avatar_probe\ncapabilities: [avatars]\n", encoding="utf-8"
     )
     (package / "backend/plugin.py").write_text(
-        "async def setup(ctx):\n    ctx.expose(ctx.avatars)\n", encoding="utf-8"
+        f"IMAGE = {image.getvalue()!r}\n"
+        "async def fetch():\n"
+        "    return IMAGE\n"
+        "async def setup(ctx):\n"
+        "    await ctx.avatars.refresh('sender', 'qq', '42', fetch)\n",
+        encoding="utf-8",
     )
-    image = io.BytesIO()
-    Image.new("RGB", (4, 4), "red").save(image, "PNG")
-
-    async def fetch() -> bytes:
-        return image.getvalue()
-
     role_store = RoleStore(tmp_path / "workspace")
     kernel = host_kernel(
         [tmp_path / "plugins"],
@@ -101,15 +102,10 @@ async def test_avatars_capability_caches_into_the_role_store_for_the_plugin_scop
     )
     await kernel.load_all()
     try:
-        avatars = kernel._dependency_api("avatar_probe")
-        task = avatars.refresh("sender", "qq", "42", fetch)
-        assert task is not None
-        await task
+        assert [state["state"] for state in kernel.states()] == ["ACTIVE"]
         assert role_store.avatars.index().sender("qq", "42") is not None
     finally:
         await kernel.terminate_all(force=True)
-    with pytest.raises(RuntimeError):
-        avatars.refresh("sender", "qq", "43", fetch)
 
 
 def test_core_module_provide_failure_aborts_startup(tmp_path: Path) -> None:

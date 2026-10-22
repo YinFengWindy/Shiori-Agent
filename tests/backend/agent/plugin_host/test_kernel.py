@@ -17,7 +17,7 @@ from agent.plugin_host.trusted_imports import TrustedPluginImports
 from shiori_sdk.storage import plugin_data_dir
 from core.roles.store import RoleStore
 from agent.tools.registry import ToolRegistry
-from bootstrap.plugin_core import active_plugin_channels
+from core.channels.plugin_capability import active_plugin_channels
 from bus.event_bus import EventBus
 import sys
 

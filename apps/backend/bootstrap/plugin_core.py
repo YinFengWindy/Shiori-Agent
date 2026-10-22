@@ -12,7 +12,6 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from agent.config import resolve_config_reference
-from agent.plugin_host import PluginKernel
 from agent.plugin_host.core_keys import (
     HOST_ACCOUNTS,
     HOST_AVATARS,
@@ -34,7 +33,6 @@ from core.channels.plugin_capability import PluginAvatars, PluginChannels
 from core.common.diagnostics import HostDiagnostics
 from core.common.global_hook_stack import ProcessCrashReporting
 from core.roles.store import RoleStore
-from shiori_sdk.channels import Channel
 from shiori_sdk.core.crash_reporting import CRASH_REPORTING
 
 
@@ -86,8 +84,3 @@ def plugin_core_modules(
         provide_tools,
         provide_channels,
     )
-
-
-def active_plugin_channels(kernel: PluginKernel) -> list[Channel]:
-    """The channels the generation's active plugins contributed, in kernel order."""
-    return list(kernel.core_service(HOST_CHANNELS).active(kernel.active_plugin_ids))
