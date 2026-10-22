@@ -685,13 +685,10 @@ def build_core_runtime(
             role_store=role_store,
             memory_engine=memory_runtime.engine,
             app_config=config,
-            light_provider=plugin_light_provider,
-            light_model=plugin_light_model,
             http=http_resources.external_default,
             plugin_configs=config.plugins,
             raw_plugin_configs=config.raw_plugin_configs,
             relationship_runtime=relationship_runtime,
-            role_runtime_registry=role_runtime_registry,
             external_turns=external_turns,
             process_resources=process_resources,
             background_results=HostBackgroundResults(
@@ -700,7 +697,6 @@ def build_core_runtime(
                 ConversationService(session_manager),
                 background_result_runner or loop.process_background_result,
             ),
-            scene_observations=scene_demand,
             is_reload=shared is not None,
             previously_active_plugins=(
                 frozenset(
@@ -721,6 +717,10 @@ def build_core_runtime(
             session_manager=session_manager,
             workspace=workspace,
             relationship_runtime=relationship_runtime,
+            role_runtime_registry=role_runtime_registry,
+            light_provider=plugin_light_provider,
+            light_model=plugin_light_model,
+            scene_observations=scene_demand,
         ),
     )
     account_delivery = AccountDelivery(

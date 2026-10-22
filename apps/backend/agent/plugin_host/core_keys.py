@@ -23,7 +23,9 @@ from shiori_sdk.channels import Channel
 from shiori_sdk.channels.avatars import AvatarsCapability
 from shiori_sdk.channels.context import ChannelsCapability
 from shiori_sdk.diagnostics import Diagnostics
+from shiori_sdk.models import ChatProvider, RoleModels
 from shiori_sdk.processes import ToolTurn
+from shiori_sdk.roles import Roles, SceneObservations
 from shiori_sdk.sessions import PluginSessions, SessionUndo
 from shiori_sdk.tool_hooks import ToolHooksCapability
 from shiori_sdk.tools import ToolsCapability
@@ -149,6 +151,26 @@ HOST_SESSIONS: Key[PluginSessions] = Key("host.sessions")
 HOST_SESSION_MANAGER: Key[SessionUndo] = Key("host.session_manager")
 """The ``session_manager`` capability: the host ``SessionManager`` itself."""
 
+HOST_ROLES: Key[Roles] = Key("host.roles")
+"""The ``roles`` capability over the canonical ``RoleStore`` (``core.roles``)."""
+
+HOST_MODELS: Key[RoleModels] = Key("host.models")
+"""The ``models`` capability over the ``RoleRuntimeRegistry`` (``core.roles``)."""
+
+HOST_ROLE_RUNTIME_REGISTRY: Key[object] = Key("host.role_runtime_registry")
+"""The ``role_runtime_registry`` capability: the registry itself, passed through."""
+
+HOST_LIGHT_PROVIDER: Key[ChatProvider] = Key("host.light_provider")
+"""The ``light_provider`` capability: the host's light chat provider."""
+
+HOST_LIGHT_MODEL: Key[str] = Key("host.light_model")
+"""The ``light_model`` capability: the model name to use with ``light_provider``."""
+
+HOST_SCENE_OBSERVATIONS: Key[PluginCapabilityBinder[SceneObservations]] = Key(
+    "host.scene_observations"
+)
+"""The ``scene_observations`` capability over the shared demand (``core.scene``)."""
+
 HOST_CONFIG_REFERENCES: Key[Callable[[str], str]] = Key("host.config_references")
 """Expands ``${NAME}`` references for ``config.resolve_reference``.
 
@@ -186,6 +208,12 @@ CORE_CAPABILITIES: Mapping[str, CoreCapability] = {
     "avatars": CoreCapability(HOST_AVATARS, per_plugin=True),
     "sessions": CoreCapability(HOST_SESSIONS),
     "session_manager": CoreCapability(HOST_SESSION_MANAGER),
+    "roles": CoreCapability(HOST_ROLES),
+    "models": CoreCapability(HOST_MODELS),
+    "role_runtime_registry": CoreCapability(HOST_ROLE_RUNTIME_REGISTRY),
+    "light_provider": CoreCapability(HOST_LIGHT_PROVIDER),
+    "light_model": CoreCapability(HOST_LIGHT_MODEL),
+    "scene_observations": CoreCapability(HOST_SCENE_OBSERVATIONS, per_plugin=True),
 }
 
 

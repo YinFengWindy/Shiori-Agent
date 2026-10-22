@@ -20,11 +20,7 @@ from typing import Any, cast
 from uuid import uuid4
 
 from agent.plugin_host.services import ScopedPluginServices
-from agent.plugin_host.roles import HostRoles
-from agent.plugin_host.models import HostRoleModels
 from agent.plugin_host.processes import HostProcesses, HostResources
-from core.roles.role_runtime import RoleRuntimeRegistry
-from agent.provider import LLMProvider
 from shiori_sdk.http import HttpClient
 from shiori_sdk.external_turns import ExternalTurns
 from shiori_sdk.background_results import BackgroundResults
@@ -81,7 +77,6 @@ from agent.plugin_host.plugin_data import (
 from agent.plugin_host.rpc import PluginRpcRegistry
 from agent.plugin_host.runtime_context import PluginRuntimeContext, PluginSetupContext
 from agent.plugin_host.runtime_lifecycle import PluginRuntimeLifecycle
-from agent.plugin_host.scene_observations import SceneObservationsCapability
 from agent.plugin_host.trust_store import PluginTrustStore
 from agent.plugin_host.execution_identity import PluginExecutionIdentity
 from agent.plugin_host.trusted_imports import TrustedPluginImports
@@ -101,7 +96,6 @@ from agent.plugin_host.unload import (
 )
 from bus.event_bus import EventBus
 from core.roles import RoleStore
-from core.scene.demand import SceneObservationDemand
 from shiori_sdk import PluginRuntimeContext as SdkRuntimeContext
 from shiori_sdk.kernel import (
     Context,
@@ -171,23 +165,16 @@ class HostServices:
     role_store: RoleStore | None = None
     memory_engine: MemoryEngine | None = None
     app_config: Any = None
-    light_provider: LLMProvider | None = None
-    # None = 宿主未提供轻量模型名；bootstrap 总会解析出一个（缺省回落到主模型）。
-    light_model: str | None = None
     # http capability 的唯一来源：bootstrap 注入共享 external_default 请求器，
     # 内核不再回退到进程级默认实例；缺失时声明 http 的插件 setup 前失败。
     http: HttpClient | None = None
     plugin_configs: dict[str, dict[str, Any]] = field(default_factory=dict)
     raw_plugin_configs: dict[str, dict[str, Any]] = field(default_factory=dict)
     relationship_runtime: Any = None
-    role_runtime_registry: RoleRuntimeRegistry | None = None
     # external_turns capability 的唯一实现，由 bootstrap 以本代 AgentLoop 装配（#721）。
     external_turns: ExternalTurns | None = None
     background_results: BackgroundResults | None = None
     process_resources: ProcessResourceOwner | None = None
-    scene_observations: SceneObservationDemand = field(
-        default_factory=SceneObservationDemand
-    )
     is_reload: bool = False
     previously_active_plugins: frozenset[str] = frozenset()
     # Frozen hosts may supply their build's dependency inventory and renderer ABI.
@@ -761,16 +748,6 @@ class PluginKernel:
             background=BackgroundCapability(handle.effects, handle.plugin_id),
             storage=PluginStorage(),
             memory_engine=self._services.memory_engine,
-            roles=(
-                HostRoles(services.role_store).as_capability()
-                if services.role_store is not None
-                else None
-            ),
-            models=(
-                HostRoleModels(services.role_runtime_registry).as_capability()
-                if services.role_runtime_registry is not None
-                else None
-            ),
             external_turns=(
                 services.external_turns if "external_turns" in grants else None
             ),
@@ -804,11 +781,6 @@ class PluginKernel:
                 was_active=reactivated
                 or handle.plugin_id in services.previously_active_plugins,
             ),
-            scene_observations=SceneObservationsCapability(
-                services.scene_observations, handle.effects
-            ),
-            light_provider=services.light_provider,
-            light_model=services.light_model,
             services=(
                 ScopedPluginServices(
                     self.rpc.services, handle.plugin_id, handle.effects, handle.calls
@@ -869,14 +841,14 @@ class PluginKernel:
             "dependencies": lambda: None,
             "runtime": lambda: None,
             "session_manager": lambda: None,
-            "role_runtime_registry": lambda: services.role_runtime_registry,
+            "role_runtime_registry": lambda: None,
+            "light_provider": lambda: None,
+            "light_model": lambda: None,
             # 直传引用，无需 effect 包装：宿主拥有这些服务的生命周期，插件只读，
             # 卸载时无需撤销任何登记。
             "workspace": lambda: services.workspace,
             "role_store": lambda: services.role_store,
             "memory_engine": lambda: services.memory_engine,
-            "light_provider": lambda: services.light_provider,
-            "light_model": lambda: services.light_model,
             "relationship_runtime": lambda: services.relationship_runtime,
         }
         return {

@@ -98,6 +98,7 @@ class PluginSetupContext:
         scene_observations: SceneObservations | None = None,
         light_provider: ChatProvider | None = None,
         light_model: str | None = None,
+        role_runtime_registry: object = None,
         channels: ChannelsCapability | None = None,
         accounts: AccountsCapability | None = None,
         avatars: AvatarsCapability | None = None,
@@ -139,6 +140,7 @@ class PluginSetupContext:
         self._scene_observations = scene_observations
         self._light_provider = light_provider
         self._light_model = light_model
+        self._role_runtime_registry = role_runtime_registry
         self._channels = channels
         self._accounts = accounts
         self._avatars = avatars
@@ -309,12 +311,12 @@ class PluginSetupContext:
     @property
     def roles(self) -> Roles:
         """Return the explicitly granted roles SDK capability."""
-        return self._provided("roles", self._roles)
+        return self._core_capability("roles", self._roles)
 
     @property
     def models(self) -> RoleModels:
         """Return the explicitly granted models SDK capability."""
-        return self._provided("models", self._models)
+        return self._core_capability("models", self._models)
 
     @property
     def sessions(self) -> PluginSessions:
@@ -380,17 +382,24 @@ class PluginSetupContext:
     @property
     def scene_observations(self) -> SceneObservations:
         """Return the explicitly granted scene_observations SDK capability."""
-        return self._provided("scene_observations", self._scene_observations)
+        return self._core_capability("scene_observations", self._scene_observations)
 
     @property
     def light_provider(self) -> ChatProvider:
         """Return the explicitly granted light_provider SDK capability."""
-        return self._provided("light_provider", self._light_provider)
+        return self._core_capability("light_provider", self._light_provider)
 
     @property
     def light_model(self) -> str:
         """Return the explicitly granted light_model SDK capability."""
-        return self._provided("light_model", self._light_model)
+        return self._core_capability("light_model", self._light_model)
+
+    @property
+    def role_runtime_registry(self) -> object:
+        """Return the explicitly granted role runtime registry, passed through."""
+        return self._core_capability(
+            "role_runtime_registry", self._role_runtime_registry
+        )
 
     def as_service_context(self) -> ServicePluginContext:
         """Check service injection without the legacy dynamic attribute path."""

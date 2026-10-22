@@ -1,14 +1,24 @@
-"""Narrow role/asset access backed by the canonical role store."""
+"""The ``roles`` and ``models`` plugin capabilities over the role owners (#901 P2).
+
+``HostRoles`` is the ``host.roles`` core service over the canonical ``RoleStore``
+and ``HostRoleModels`` the ``host.models`` one over the ``RoleRuntimeRegistry``.
+Each is one instance per kernel generation, shared by every plugin: neither
+keeps anything per plugin.
+"""
 
 from __future__ import annotations
 
-
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
+
+from shiori_sdk.models import ModelSnapshot, RoleModels
+from shiori_sdk.roles import Roles
 
 if TYPE_CHECKING:
     from core.roles import RoleStore
-from shiori_sdk.roles import Roles
+    from core.roles.role_runtime import RoleRuntimeRegistry
 
 
 class HostRoles:
@@ -52,4 +62,24 @@ class HostRoles:
 
     def as_capability(self) -> Roles:
         """Check the real implementation at the host injection boundary."""
+        return self
+
+
+class HostRoleModels:
+    """Expose model snapshots without exporting runtime registry internals."""
+
+    def __init__(self, registry: RoleRuntimeRegistry):
+        self._registry = registry
+
+    @asynccontextmanager
+    async def activate(
+        self, role_id: str, purpose: Literal["chat", "vision"]
+    ) -> AsyncIterator[ModelSnapshot]:
+        """Hold the exact owner-selected snapshot for the whole awaited operation."""
+        runtime = await self._registry.get(role_id)
+        with runtime.activate_model(purpose) as snapshot:
+            yield snapshot
+
+    def as_capability(self) -> RoleModels:
+        """Validate the actual adapter against the SDK protocol."""
         return self

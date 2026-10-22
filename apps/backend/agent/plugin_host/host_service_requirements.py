@@ -10,22 +10,16 @@ from shiori_sdk.runtime import HostServiceUnavailable
 # 其中任一服务时，setup 前就以 HostServiceUnavailable 失败，而不是让插件拿到
 # None 或误报“插件未申请能力”。内核预检与运行时上下文属性都只从这里取服务名。
 # memory_engine 不在表内：配置关闭记忆时宿主本就没有引擎，None 是合法状态。
-# role_store / workspace / role_runtime_registry 这几项是
-# 直传型 capability，经旧上下文的 __getattr__ 原样交给插件，同样必须预检。
+# role_store / workspace 这两项是直传型 capability，
+# 经旧上下文的 __getattr__ 原样交给插件，同样必须预检。
 CAPABILITY_HOST_SERVICES: Mapping[str, tuple[str, ...]] = {
     "workspace": ("workspace",),
     "kv": ("workspace",),
     "role_store": ("role_store",),
-    "roles": ("role_store",),
     "memory": ("workspace", "role_store"),
     "external_turns": ("external_turns",),
     "background_results": ("background_results",),
     "process_resources": ("process_resources",),
-    "role_runtime_registry": ("role_runtime_registry",),
-    "models": ("role_runtime_registry",),
-    "light_provider": ("light_provider",),
-    "light_model": ("light_model",),
-    "scene_observations": ("scene_observations",),
     "http": ("http",),
 }
 
