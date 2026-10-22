@@ -14,7 +14,7 @@ from pathlib import Path
 from agent.config import resolve_config_reference
 from agent.core.proactive_turn.plugin_capability import PluginProactiveGates
 from agent.plugin_host.process_resources import (
-    ProcessResourceAttachments,
+    PluginProcessResourceAttachments,
     ProcessResourceOwner,
 )
 from agent.plugin_host.rpc import PluginRpcRegistry
@@ -78,13 +78,16 @@ from desktop_bridge.plugin_capability import PluginRpc
 from desktop_bridge.session_presenter import DesktopSessionPresenter
 from infra.process.plugin_capability import HostProcesses
 from session.manager import SessionManager
-from session.plugin_capability import HostPluginSessions
+from session.plugin_capability import HostSessions
 from shiori_sdk.background_results import BackgroundResults
 from shiori_sdk.core.crash_reporting import CRASH_REPORTING
 from shiori_sdk.external_turns import ExternalTurns
 from shiori_sdk.http import HttpClient
 from shiori_sdk.memory.engine import MemoryEngine
-from shiori_sdk.processes import Resources
+from shiori_sdk.models import RoleModels
+from shiori_sdk.processes import Processes, Resources
+from shiori_sdk.roles import Roles
+from shiori_sdk.sessions import PluginSessions
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -179,20 +182,21 @@ def plugin_core_modules(inputs: PluginCoreInputs) -> tuple[CoreModule, ...]:
         provide(HOST_SESSION_MANAGER, inputs.session_manager)
         if inputs.workspace is not None:
             presenter = DesktopSessionPresenter(None, inputs.relationship_runtime)
-            sessions = HostPluginSessions(
+            # Typed as the plugin contract, so pyright checks the host implementation.
+            sessions: PluginSessions = HostSessions(
                 inputs.session_manager, inputs.workspace, presenter
             )
-            provide(HOST_SESSIONS, sessions.as_capability())
+            provide(HOST_SESSIONS, sessions)
 
     def provide_roles(provide: CoreProvide) -> None:
         """Roles, their models and the light model plugins use (``core.roles``)."""
+        # Typed as the plugin contracts, so pyright checks the host implementations.
         if inputs.role_store is not None:
-            provide(HOST_ROLES, HostRoles(inputs.role_store).as_capability())
+            roles: Roles = HostRoles(inputs.role_store)
+            provide(HOST_ROLES, roles)
         if inputs.role_runtime_registry is not None:
-            provide(
-                HOST_MODELS,
-                HostRoleModels(inputs.role_runtime_registry).as_capability(),
-            )
+            models: RoleModels = HostRoleModels(inputs.role_runtime_registry)
+            provide(HOST_MODELS, models)
         if inputs.light_provider is not None:
             provide(HOST_LIGHT_PROVIDER, inputs.light_provider)
         if inputs.light_model is not None:
@@ -222,13 +226,14 @@ def plugin_core_modules(inputs: PluginCoreInputs) -> tuple[CoreModule, ...]:
 
     def provide_processes(provide: CoreProvide) -> None:
         """Native processes, process-owned resources and distributed resources."""
-        provide(HOST_PROCESSES, HostProcesses().as_capability())
+        # Typed as the plugin contracts, so pyright checks the host implementations.
+        processes: Processes = HostProcesses()
+        provide(HOST_PROCESSES, processes)
         if inputs.process_resources is not None:
             provide(
                 HOST_PROCESS_RESOURCES,
-                ProcessResourceAttachments(inputs.process_resources),
+                PluginProcessResourceAttachments(inputs.process_resources),
             )
-        # Typed as the plugin contract, so pyright checks the host implementation.
         resources: Resources = HostResources()
         provide(HOST_RESOURCES, resources)
 

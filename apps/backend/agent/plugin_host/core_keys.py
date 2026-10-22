@@ -10,6 +10,12 @@ row in ``CORE_CAPABILITIES`` and the provide call in ``bootstrap.plugin_core``;
 the v2 context property then reads it through ``_core_capability``. A
 capability whose contributions the host aggregates is a
 ``PluginContributionService`` over ``capabilities.ContributionsByPlugin``.
+
+Core service classes are named by what the key holds. ``Plugin*`` (such as
+``PluginTools`` or ``PluginChannels``) is a binder with ``for_plugin``, or an
+aggregating service over ``ContributionsByPlugin``: each plugin gets its own
+view. ``Host*`` (such as ``HostRoles`` or ``HostSessions``) is itself the
+capability, one instance per generation shared by every plugin.
 """
 
 from __future__ import annotations

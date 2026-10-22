@@ -182,7 +182,7 @@ class ResourceRetention:
         return await self._owner.end_retention(self._held)
 
 
-class ProcessResourceAttachments:
+class PluginProcessResourceAttachments:
     """The ``host.process_resources`` core service over the process-level owner.
 
     Each plugin gets this generation's private attachment (keyed by the kernel

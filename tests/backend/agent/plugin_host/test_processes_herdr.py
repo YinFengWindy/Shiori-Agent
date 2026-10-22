@@ -29,7 +29,7 @@ def batch_cli(tmp_path):
     )
     batch = directory / "validation.cmd"
     batch.write_text(f'@echo off\n"{sys.executable}" "{script}" %*\n', encoding="utf-8")
-    cli = HerdrCli(HerdrConfig(), HostProcesses().as_capability(), tmp_path)
+    cli = HerdrCli(HerdrConfig(), HostProcesses(), tmp_path)
     return cli, batch, directory / "started"
 
 

@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from conversation.plugin_capability import HostBackgroundResults
+from conversation.background_results import HostBackgroundResults
 from agent.tools.turn_scope import tool_turn
 from agent.tools.turn_origin import set_tool_origin
 from shiori_sdk.messages import InboundMessage

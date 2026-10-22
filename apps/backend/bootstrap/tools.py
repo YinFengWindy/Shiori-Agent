@@ -97,7 +97,7 @@ from conversation.push_sync import ExternalPushSyncService
 from proactive_v2.presence import PresenceStore
 from session.manager import SessionManager
 from agent.plugin_host.process_resources import ProcessResourceOwner
-from conversation.plugin_capability import ResultRunner
+from conversation.background_results import ResultRunner
 
 logger = logging.getLogger(__name__)
 
@@ -626,7 +626,8 @@ def build_core_runtime(
         PluginRpcRegistry,
     )
     from bootstrap.plugin_core import PluginCoreInputs, plugin_core_modules
-    from conversation.plugin_capability import HostBackgroundResults, HostExternalTurns
+    from conversation.background_results import HostBackgroundResults
+    from conversation.external_turns import HostExternalTurns
     from conversation.service import ConversationService
     from core.channels.role_routing import RoleTurnRouter
     from shiori_sdk.background_results import BackgroundResults
