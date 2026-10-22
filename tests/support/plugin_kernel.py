@@ -28,6 +28,18 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 PLUGIN_FIXTURES = REPOSITORY_ROOT / "tests/fixtures/plugins"
 
 
+def host_kernel(
+    plugin_dirs: list[Path], *, services: HostServices, **options: Any
+) -> PluginKernel:
+    """A kernel over ``services`` with the same core provide list as bootstrap.
+
+    ``options`` are the remaining ``PluginKernel`` keyword arguments.
+    """
+    return PluginKernel(
+        plugin_dirs, services=services, core=plugin_core_modules(plugin_dirs), **options
+    )
+
+
 def make_kernel(
     plugin_dirs: list[Path],
     *,
@@ -50,7 +62,7 @@ def make_kernel(
         resolved_workspace = Path(
             tempfile.mkdtemp(prefix="shiori-plugin-host-test-workspace-")
         )
-    return PluginKernel(
+    return host_kernel(
         plugin_dirs,
         services=HostServices(
             event_bus=event_bus,
@@ -65,7 +77,6 @@ def make_kernel(
         ),
         namespace=namespace,
         strict=strict,
-        core=plugin_core_modules(),
     )
 
 

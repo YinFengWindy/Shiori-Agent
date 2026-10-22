@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 from shiori_sdk.lifecycle import AfterToolResultCtx
 from agent.plugin_host import HostServices, PluginKernel
-from bootstrap.plugin_core import plugin_core_modules
+from tests.support.plugin_kernel import host_kernel
 from bus.event_bus import EventBus
 from core.roles import RoleStore
 from shiori_sdk.rpc import Concurrency
@@ -27,7 +27,7 @@ def _load_default_memory_kernel(
     root.mkdir()
     stage_plugin_package(PLUGIN_DIR, root / "default_memory")
     bus = EventBus()
-    kernel = PluginKernel(
+    kernel = host_kernel(
         [root],
         services=HostServices(
             event_bus=bus,
@@ -35,7 +35,6 @@ def _load_default_memory_kernel(
             role_store=RoleStore(workspace),
             memory_engine=memory_engine,
         ),
-        core=plugin_core_modules(),
     )
     return kernel, bus
 

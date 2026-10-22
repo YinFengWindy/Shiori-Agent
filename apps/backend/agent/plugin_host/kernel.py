@@ -49,10 +49,10 @@ from agent.plugin_host.capabilities import (
 )
 from agent.plugin_host.core_keys import (
     HOST_CONFIG_REFERENCES,
-    HOST_DIAGNOSTICS,
     CoreModule,
     PluginBinding,
-    require_core_keys,
+    bind_core_capabilities,
+    required_core_key,
 )
 from agent.plugin_host.config_schema import (
     PluginConfigSchemaRegistry,
@@ -216,11 +216,11 @@ class PluginKernel:
         plugin_dirs: list[Path],
         *,
         services: HostServices,
+        core: Sequence[CoreModule],
         namespace: str = "",
         strict: bool = False,
         external_plugin_dirs: list[Path] | None = None,
         discovery_snapshot: list[PluginRecord] | None = None,
-        core: Sequence[CoreModule] = (),
     ) -> None:
         """``core`` lists the core modules providing their keys to this generation.
 
@@ -251,6 +251,9 @@ class PluginKernel:
         self._kernel = Kernel()
         for module in core:
             module(self._kernel.provide)
+        self._resolve_reference = required_core_key(
+            self._kernel.get, HOST_CONFIG_REFERENCES
+        )
         # Package content inspected before setup, handed to the setup adapter.
         self._contents: dict[str, PackageContent | None] = {}
         # Serializes load/unload/reload/drain/terminate so a reload never
@@ -698,16 +701,15 @@ class PluginKernel:
         grants = handle.record.manifest.capabilities
         services = self._services
         require_host_services(handle.plugin_id, grants, services)
-        require_core_keys(handle.plugin_id, grants, self._kernel.get)
-        binding = PluginBinding(
-            plugin_id=handle.plugin_id,
-            namespace=self._namespace,
-            scope=handle.effects,
-            contributions=handle.contributions,
-            calls=handle.calls,
-            plugin_roots=tuple(
-                (f"plugins/{record.name}", record.plugin_dir.resolve())
-                for record in self.discover()
+        core_capabilities = bind_core_capabilities(
+            grants,
+            self._kernel.get,
+            PluginBinding(
+                plugin_id=handle.plugin_id,
+                namespace=self._namespace,
+                scope=handle.effects,
+                contributions=handle.contributions,
+                calls=handle.calls,
             ),
         )
         rpc = (
@@ -766,14 +768,10 @@ class PluginKernel:
             ),
             rpc=rpc,
             workspace=self._services.workspace,
-            config=(
-                PluginConfig(
-                    self._services.plugin_configs.get(handle.plugin_id, {}),
-                    resolve_reference=self._core(HOST_CONFIG_REFERENCES),
-                    raw_values=self._services.raw_plugin_configs.get(handle.plugin_id),
-                )
-                if "config" in grants
-                else None
+            config=PluginConfig(
+                self._services.plugin_configs.get(handle.plugin_id, {}),
+                resolve_reference=self._resolve_reference,
+                raw_values=self._services.raw_plugin_configs.get(handle.plugin_id),
             ),
             tool_hooks=ToolHooksCapability(
                 handle.contributions, handle.effects, handle.plugin_id, handle.calls
@@ -786,11 +784,6 @@ class PluginKernel:
             ),
             background=BackgroundCapability(handle.effects, handle.plugin_id),
             storage=PluginStorage(),
-            diagnostics=(
-                self._core(HOST_DIAGNOSTICS).for_plugin(binding)
-                if "diagnostics" in grants
-                else None
-            ),
             session_manager=self._services.session_manager,
             memory_engine=self._services.memory_engine,
             roles=(
@@ -892,6 +885,7 @@ class PluginKernel:
                 else None
             ),
             publish_api=lambda api: setattr(handle, "instance", api),
+            **core_capabilities,
         )
         context.as_service_provider_context()
         context.as_hook_context()
@@ -904,12 +898,6 @@ class PluginKernel:
             if "memory" in handle.record.manifest.capabilities
             else context.as_sdk_context()
         )
-
-    def _core[T](self, key: Key[T]) -> T:
-        """A core key ``require_core_keys`` already found provided."""
-        found = self._kernel.get(key)
-        assert found is not None, key.name
-        return found
 
     def _build_capabilities(
         self, handle: PluginHandle, *, rpc: RpcCapability | None

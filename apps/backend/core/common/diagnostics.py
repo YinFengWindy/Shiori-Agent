@@ -6,15 +6,11 @@ import traceback
 from collections.abc import Sequence
 from pathlib import Path
 from types import TracebackType
-from typing import TYPE_CHECKING
 
 from importlib.util import find_spec
 from core.error_context import current_session_key
 from shiori_sdk.core.crash_reporting import CrashReporting
 from shiori_sdk.diagnostics import LoopExceptHandler, SysExceptHook, ThreadExceptHook
-
-if TYPE_CHECKING:
-    from agent.plugin_host.core_keys import PluginBinding
 
 
 class HostDiagnostics:
@@ -84,14 +80,3 @@ class HostDiagnostics:
     def uninstall_global_hooks(self, owner: object) -> None:
         """Retires the collector through the crash-reporting core service."""
         self._crash_reporting.uninstall(owner)
-
-
-class PluginDiagnosticsBinder:
-    """The ``host.diagnostics`` core service: each plugin's ``diagnostics`` view."""
-
-    def __init__(self, crash_reporting: CrashReporting) -> None:
-        self._crash_reporting = crash_reporting
-
-    def for_plugin(self, binding: "PluginBinding") -> HostDiagnostics:
-        """Diagnostics attributing frames to the binding's discovered plugins."""
-        return HostDiagnostics(self._crash_reporting, binding.plugin_roots)

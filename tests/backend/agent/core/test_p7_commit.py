@@ -14,8 +14,8 @@ from agent.core.response_parser import parse_response
 from agent.core.runtime_support import TurnRunResult
 from agent.core.types import ContextBundle
 from agent.lifecycle.facade import TurnLifecycle
-from agent.plugin_host import HostServices, PluginKernel
-from bootstrap.plugin_core import plugin_core_modules
+from agent.plugin_host import HostServices
+from tests.support.plugin_kernel import host_kernel
 from bootstrap.wiring import wire_turn_lifecycle
 from bus.event_bus import EventBus
 from core.roles import RoleStore
@@ -307,7 +307,7 @@ async def test_new_chain_after_reasoning_persists_meme_and_fires_turn_committed(
     plugin_root = tmp_path / "plugins"
     for plugin_id in ("citation", "meme"):
         stage_plugin_package(plugin_directory(plugin_id), plugin_root / plugin_id)
-    kernel = PluginKernel(
+    kernel = host_kernel(
         [plugin_root],
         services=HostServices(
             event_bus=event_bus,
@@ -315,7 +315,6 @@ async def test_new_chain_after_reasoning_persists_meme_and_fires_turn_committed(
             session_manager=session_manager,
             role_store=RoleStore(tmp_path),
         ),
-        core=plugin_core_modules(),
     )
     await kernel.load_all()
     assert kernel.loaded_count == 2

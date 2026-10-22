@@ -666,8 +666,9 @@ def build_core_runtime(
         loop.process_external_turn,
         channel_directory=channel_directory,
     )
+    plugin_dirs = _resolve_plugin_dirs(workspace)
     plugin_manager = PluginKernel(
-        plugin_dirs=_resolve_plugin_dirs(workspace),
+        plugin_dirs=plugin_dirs,
         external_plugin_dirs=[workspace / "plugins"],
         discovery_snapshot=(
             plugin_discovery_snapshot
@@ -715,7 +716,7 @@ def build_core_runtime(
         ),
         namespace=uuid4().hex,
         strict=shared is not None,
-        core=plugin_core_modules(),
+        core=plugin_core_modules(plugin_dirs),
     )
     account_delivery = AccountDelivery(
         role_store.accounts,
