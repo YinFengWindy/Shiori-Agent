@@ -1,4 +1,9 @@
-"""Typed host adapters injected into memory engines and their setup surface."""
+"""Typed host adapters injected into memory engines and their setup surface.
+
+``HostMemoryCapability`` is the ``host.memory`` core service (#901 P2): the
+memory plugin's setup surface, one per kernel generation and shared by every
+plugin declaring ``memory``.
+"""
 
 from pathlib import Path
 
@@ -6,9 +11,12 @@ from agent.config_models import Config
 from agent.plugin_host.storage import PluginStorage
 from agent.plugin_host.local_config import resolve_local_config
 from core.roles import RoleStore
+from core.roles.memory_document_requests import RoleMemoryDocumentReader
+from core.roles.memory_service import RoleMemoryService
 from core.roles.policy import is_shared_memory_enabled
 from infra.persistence.sqlite_lifecycle import open_owned_database
 from shiori_sdk.memory.build import EmbeddingConfig, MemoryBuildConfig
+from shiori_sdk.memory.engine import MemoryEngine
 
 
 class HostMemoryStorage(PluginStorage):
@@ -44,6 +52,23 @@ class HostMemoryRoles:
 
     def shared_memory_enabled(self, role_id: str) -> bool:
         return is_shared_memory_enabled(self._roles.get_role(role_id))
+
+
+class HostMemoryCapability:
+    """Explicitly typed setup surface for memory plugins."""
+
+    def __init__(
+        self, workspace: Path, roles: RoleStore, engine: MemoryEngine | None
+    ) -> None:
+        self.workspace = workspace
+        self.engine = engine
+        self.roles = HostMemoryRoles(roles)
+        self.storage = HostMemoryStorage()
+        self._documents = RoleMemoryDocumentReader(roles, RoleMemoryService(workspace))
+
+    async def read_documents(self, payload: dict[str, object]) -> dict[str, object]:
+        """Validates the role and reads shared Markdown documents without mutation."""
+        return await self._documents.read(payload)
 
 
 def memory_build_config(config: Config) -> MemoryBuildConfig:

@@ -173,13 +173,13 @@ HOST_SCENE_OBSERVATIONS: Key[PluginCapabilityBinder[SceneObservations]] = Key(
 """The ``scene_observations`` capability over the shared demand (``core.scene``)."""
 
 HOST_MEMORY: Key[MemoryCapability] = Key("host.memory")
-"""The ``memory`` capability: the memory plugin's surface (``bootstrap``)."""
+"""The ``memory`` capability: the memory plugin's surface (``bootstrap.memory_capabilities``)."""
 
 HOST_PROCESSES: Key[Processes] = Key("host.processes")
 """The ``processes`` capability: host-owned native processes (``infra.process``)."""
 
 HOST_RESOURCES: Key[Resources] = Key("host.resources")
-"""The ``resources`` capability: host-distributed resources (``bootstrap``)."""
+"""The ``resources`` capability: host-distributed resources (``bootstrap.plugin_capability``)."""
 
 HOST_CONFIG_REFERENCES: Key[Callable[[str], str]] = Key("host.config_references")
 """Expands ``${NAME}`` references for ``config.resolve_reference``.

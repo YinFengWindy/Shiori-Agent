@@ -40,7 +40,8 @@ from agent.tool_hooks.plugin_capability import PluginToolHooks
 from agent.tools.plugin_capability import PluginTools
 from agent.tools.registry import ToolRegistry
 from agent.tools.turn_scope import current_tool_turn
-from bootstrap.plugin_capability import HostMemoryCapability, HostResources
+from bootstrap.memory_capabilities import HostMemoryCapability
+from bootstrap.plugin_capability import HostResources
 from core.accounts.plugin_capability import PluginAccounts
 from core.channels.plugin_capability import PluginAvatars, PluginChannels
 from core.common.diagnostics import HostDiagnostics
@@ -56,6 +57,7 @@ from session.manager import SessionManager
 from session.plugin_capability import HostPluginSessions
 from shiori_sdk.core.crash_reporting import CRASH_REPORTING
 from shiori_sdk.memory.engine import MemoryEngine
+from shiori_sdk.processes import Resources
 
 
 def plugin_core_modules(
@@ -152,7 +154,9 @@ def plugin_core_modules(
     def provide_processes(provide: CoreProvide) -> None:
         """Host-owned native processes and distributed resources."""
         provide(HOST_PROCESSES, HostProcesses().as_capability())
-        provide(HOST_RESOURCES, HostResources().as_capability())
+        # Typed as the plugin contract, so pyright checks the host implementation.
+        resources: Resources = HostResources()
+        provide(HOST_RESOURCES, resources)
 
     return (
         provide_diagnostics,
