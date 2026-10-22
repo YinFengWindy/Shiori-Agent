@@ -463,16 +463,14 @@ class ReloadableDesktopService:
         """Resolves dispatch policy, consulting the active generation's RPC registry."""
         return resolve_plugin_method_policy(method, self._plugin_rpc_registry)
 
-    def _plugin_rpc_registry(self) -> "PluginRpcRegistry | None":
-        """Returns the active generation's plugin RPC registry, if any.
+    def _plugin_rpc_registry(self) -> "PluginRpcRegistry[MethodPolicy]":
+        """Returns the active generation's plugin RPC registry.
 
         Only called for ``plugin.<id>.<method>`` requests (see
         ``resolve_plugin_method_policy``); other methods never touch
         ``self.app.core``.
         """
-        core = self.app.core
-        kernel = core.plugin_manager if core is not None else None
-        return kernel.rpc if kernel is not None else None
+        return self.app.core.plugin_rpc
 
     def _prepare(self, core):
         service = build_desktop_service(core, self.roles, activate_transport=False)

@@ -95,7 +95,7 @@ class DesktopBridgeService:
         card_import_service: Any | None = None,
         activate_transport: bool = True,
         model_resolver: RoleModelRuntime | None = None,
-        plugin_rpc_registry: PluginRpcRegistry | None = None,
+        plugin_rpc_registry: PluginRpcRegistry[MethodPolicy] | None = None,
         group_listening: GroupListeningControl,
     ) -> None:
         """``group_listening`` is the runtime's listening control (#538), shared

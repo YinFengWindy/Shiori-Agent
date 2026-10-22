@@ -309,12 +309,9 @@ async def test_new_chain_after_reasoning_persists_meme_and_fires_turn_committed(
         stage_plugin_package(plugin_directory(plugin_id), plugin_root / plugin_id)
     kernel = host_kernel(
         [plugin_root],
-        services=HostServices(
-            event_bus=event_bus,
-            workspace=tmp_path,
-            role_store=RoleStore(tmp_path),
-        ),
+        services=HostServices(workspace=tmp_path, role_store=RoleStore(tmp_path)),
         session_manager=session_manager,
+        event_bus=event_bus,
     )
     await kernel.load_all()
     assert kernel.loaded_count == 2

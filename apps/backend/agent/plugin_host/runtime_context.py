@@ -6,7 +6,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from agent.plugin_host.capabilities import LifecycleCapability, RpcCapability
+from agent.plugin_host.capabilities import LifecycleCapability
+from shiori_sdk.rpc import RpcCapability
 from shiori_sdk.kernel import Scope
 from agent.plugin_host.host_service_requirements import provided_service
 from shiori_sdk.services import PluginServices, ServiceProviderContext
@@ -214,11 +215,7 @@ class PluginSetupContext:
     @property
     def events(self) -> EventsCapability:
         """Returns the explicitly typed scoped event bus granted by the kernel."""
-        if self._events is None:
-            raise CapabilityNotGranted(
-                f"插件 {self.plugin_id} 未声明 capability 'events'"
-            )
-        return self._events
+        return self._core_capability("events", self._events)
 
     @property
     def memory(self) -> MemoryCapability:
@@ -228,9 +225,7 @@ class PluginSetupContext:
     @property
     def rpc(self) -> RpcCapability:
         """Returns scoped RPC registration without a dynamic capability escape."""
-        if self._rpc is None:
-            raise CapabilityNotGranted("Plugin did not request rpc capability")
-        return self._rpc
+        return self._core_capability("rpc", self._rpc)
 
     @property
     def workspace(self) -> Path:

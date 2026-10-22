@@ -16,9 +16,8 @@ from enum import Enum
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    # Only for type annotations: avoids pulling desktop_bridge's dependency
-    # chain into the core plugin runtime at import time (mirrors the same
-    # discipline agent.plugin_host.rpc already applies in the other direction).
+    # Only for type annotations: keeps the plugin kernel package out of this
+    # module's import chain.
     from agent.plugin_host.rpc import PluginRpcRegistry
 
 
@@ -211,7 +210,7 @@ _PLUGIN_CONFIG_METHOD_PREFIX = "plugin.config."
 
 def resolve_plugin_method_policy(
     method: str,
-    registry_provider: "Callable[[], PluginRpcRegistry | None]",
+    registry_provider: "Callable[[], PluginRpcRegistry[MethodPolicy] | None]",
 ) -> MethodPolicy:
     """Resolves dispatcher policy for one request, consulting a plugin RPC registry.
 

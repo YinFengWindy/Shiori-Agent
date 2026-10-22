@@ -11,12 +11,13 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from agent.plugin_host.rpc import PluginRpcRegistry
+    from desktop_bridge.method_policy import MethodPolicy
 
 
 class DesktopPluginRequestHandler:
     """路由 ``plugin.<id>.<method>`` 到内核 RPC 注册表登记的处理函数。"""
 
-    def __init__(self, registry: "PluginRpcRegistry | None") -> None:
+    def __init__(self, registry: "PluginRpcRegistry[MethodPolicy] | None") -> None:
         self._registry = registry
 
     async def handle(

@@ -13,7 +13,12 @@ from typing import cast
 import pytest
 from PIL import Image
 
-from agent.plugin_host import HostServices, PluginKernel, PluginState
+from agent.plugin_host import (
+    HostServices,
+    PluginKernel,
+    PluginRpcRegistry,
+    PluginState,
+)
 from bootstrap.plugin_core import plugin_core_modules
 from bus.event_bus import EventBus
 from core.roles.models import RoleRecord
@@ -99,7 +104,6 @@ async def test_avatars_capability_caches_into_the_host_role_store(
     kernel = host_kernel(
         [tmp_path / "plugins"],
         services=HostServices(
-            event_bus=EventBus(),
             workspace=tmp_path / "workspace",
             role_store=role_store,
         ),
@@ -131,7 +135,7 @@ async def test_scene_observation_requests_reach_the_generation_demand(
     demand = SceneObservationDemand()
     kernel = host_kernel(
         [tmp_path / "plugins"],
-        services=HostServices(event_bus=EventBus()),
+        services=HostServices(),
         scene_observations=demand,
     )
     await kernel.load_all()
@@ -151,10 +155,11 @@ def test_core_module_provide_failure_aborts_startup(tmp_path: Path) -> None:
     def broken_core_module(provide: object) -> None:
         raise CoreServiceBroken("核心服务初始化失败")
 
+    bus = EventBus()
     with pytest.raises(CoreServiceBroken):
         _ = PluginKernel(
             [tmp_path],
-            services=HostServices(event_bus=EventBus()),
+            services=HostServices(),
             core=(
                 *plugin_core_modules(
                     [tmp_path],
@@ -170,6 +175,8 @@ def test_core_module_provide_failure_aborts_startup(tmp_path: Path) -> None:
                     memory_engine=None,
                     external_turns=None,
                     background_results=None,
+                    event_bus=bus,
+                    rpc=PluginRpcRegistry(bus),
                 ),
                 broken_core_module,
             ),

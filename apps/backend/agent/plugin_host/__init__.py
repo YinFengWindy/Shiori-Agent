@@ -6,7 +6,6 @@ from agent.plugin_host.config_schema import (
     PluginConfigSchemaRegistry,
     resolve_config_model,
 )
-from agent.plugin_host.events import ScopedEventBus
 from agent.plugin_host.handle import PluginHandle, PluginRecord, PluginState
 from agent.plugin_host.kernel import HostServices, PluginKernel
 from agent.plugin_host.manifest import (
@@ -46,7 +45,6 @@ __all__ = [
     "PluginRpcRegistry",
     "PluginRuntimeContext",
     "PluginState",
-    "ScopedEventBus",
     "load_manifest",
     "resolve_config_model",
 ]

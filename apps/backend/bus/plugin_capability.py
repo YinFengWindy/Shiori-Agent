@@ -1,13 +1,31 @@
-"""作用域事件总线：拦截订阅并登记为 effect，修复插件直接 on() 后卸载不解绑的缺陷。"""
+"""The ``events`` plugin capability: a plugin-scoped view of the event bus (#901 P2).
+
+``PluginEvents`` is the ``host.events`` core service over the generation's
+``EventBus``; each plugin's ``ScopedEventBus`` registers its subscriptions in
+the plugin scope, so unloading stops delivery and unsubscribes them all.
+"""
 
 from __future__ import annotations
 
 import inspect
 from typing import Any
-from shiori_sdk.runtime import EventHandler
 
 from shiori_sdk.kernel import Scope
+from shiori_sdk.runtime import EventHandler
+
+from agent.plugin_host.core_keys import PluginBinding
 from bus.event_bus import EventBus
+
+
+class PluginEvents:
+    """The ``host.events`` core service over one ``EventBus``."""
+
+    def __init__(self, bus: EventBus) -> None:
+        self._bus = bus
+
+    def for_plugin(self, binding: PluginBinding) -> ScopedEventBus:
+        """The scoped event bus of the plugin ``binding`` describes."""
+        return ScopedEventBus(self._bus, binding.scope)
 
 
 class _Subscription:
