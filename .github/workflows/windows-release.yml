@@ -1,9 +1,10 @@
 name: Windows release
 
 on:
-  schedule:
-    # GitHub cron uses UTC: 04:00 is 12:00 in Asia/Shanghai.
-    - cron: "0 4 * * *"
+  # Daily auto-release is paused during the plugin-system refactor (P1–P8 / D26).
+  # schedule:
+  #   # GitHub cron uses UTC: 04:00 is 12:00 in Asia/Shanghai.
+  #   - cron: "0 4 * * *"
   workflow_dispatch:
   push:
     tags:

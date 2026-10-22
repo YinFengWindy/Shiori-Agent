@@ -34,7 +34,7 @@ related:
 
 Windows packaged desktop uses an Electron-builder NSIS bundle with a PyInstaller onedir runtime under `resources/runtime`. The main process resolves packaged resources from `process.resourcesPath`, keeps the workspace and `config.toml` under `%USERPROFILE%\.shiori\workspace`, and starts the sidecar with explicit `bridge`, `--workspace`, and `--config` arguments. Release tags provide the application version and CI emits `SHA256SUMS.txt` alongside the installer; clean Windows installation, upgrade, uninstall, and feature smoke remain release-owner acceptance work.
 
-Windows 自动发版每天北京时间 12:00 检查 main，以 `v0.5.0` 起最近正式版本累计至少 5 个 commit 为门槛；版本按十进位递增，所有校验与上传成功后才公开。固定 SHA、失败草稿恢复和手动发版入口见 [Windows 发版](../../agents/windows-releases.md)。
+Windows 自动发版的每日检查已暂停（插件系统重构 P1–P8 / D26）。恢复后仍以 `v0.5.0` 起最近正式版本累计至少 5 个 commit 为门槛；版本按十进位递增，所有校验与上传成功后才公开。固定 SHA、失败草稿恢复和手动发版入口见 [Windows 发版](../../agents/windows-releases.md)。
 
 `SHIORI_DESKTOP_WORKSPACE` 可显式覆盖工作区与配置根；`SHIORI_DESKTOP_USER_DATA_DIR` 在单实例锁前选择设备 profile。真实打包版外部插件验收流程与自动化/桌面观察边界见 [打包版插件验收](../../_handbook/packaged-plugin-acceptance.md)。外部 renderer 的 React peers 在各自 UI、background、surface 文档内初始化，不能依赖主窗口曾先加载插件。
 
