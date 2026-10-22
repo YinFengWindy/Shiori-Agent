@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 from agent.config_models import Config
 from bootstrap.channel_host import ChannelHost
 from bootstrap.channels import start_channels
+from core.channels.plugin_capability import active_plugin_channels
 from bootstrap.tools import CoreRuntime, build_core_runtime
 from bootstrap.runtime.dispatcher import RuntimeDispatcher
 from agent.plugin_host.process_resources import ProcessResourceOwner
@@ -191,7 +192,9 @@ class AppRuntime(RuntimeReloadMixin, RuntimeBackgroundMixin, RuntimeShutdownMixi
                 event_bus=event_bus,
                 bot_commands=plugin_manager.bot_commands if plugin_manager else None,
                 interrupt_controller=self._dispatcher,
-                plugin_channels=plugin_manager.channels if plugin_manager else None,
+                plugin_channels=(
+                    active_plugin_channels(plugin_manager) if plugin_manager else None
+                ),
                 enable_message_channels=self.features.enable_message_channels,
                 channel_directory=self.core.channel_directory,
                 role_store=self.core.role_runtime_registry.repository.store,

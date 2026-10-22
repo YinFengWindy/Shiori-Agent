@@ -3,16 +3,19 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import sys
 import threading
 from pathlib import Path
 
 import pytest
+from PIL import Image
 
 from agent.plugin_host import HostServices, PluginKernel, PluginState
 from bootstrap.plugin_core import plugin_core_modules
 from bus.event_bus import EventBus
-from tests.support.plugin_kernel import make_kernel
+from core.roles.store import RoleStore
+from tests.support.plugin_kernel import host_kernel, make_kernel
 
 
 @pytest.mark.asyncio
@@ -68,6 +71,43 @@ async def test_diagnostics_capability_hooks_go_through_crash_reporting(
     assert restored == originals
 
 
+@pytest.mark.asyncio
+async def test_avatars_capability_caches_into_the_host_role_store(
+    tmp_path: Path,
+) -> None:
+    """avatars 由核心 channels 模块经 role_store 提供：插件刷新的头像写进宿主 RoleStore。"""
+    image = io.BytesIO()
+    Image.new("RGB", (4, 4), "red").save(image, "PNG")
+    package = tmp_path / "plugins" / "avatar_probe"
+    (package / "backend").mkdir(parents=True)
+    (package / "manifest.yaml").write_text(
+        "api: 2\nid: avatar_probe\ncapabilities: [avatars]\n", encoding="utf-8"
+    )
+    (package / "backend/plugin.py").write_text(
+        f"IMAGE = {image.getvalue()!r}\n"
+        "async def fetch():\n"
+        "    return IMAGE\n"
+        "async def setup(ctx):\n"
+        "    await ctx.avatars.refresh('sender', 'qq', '42', fetch)\n",
+        encoding="utf-8",
+    )
+    role_store = RoleStore(tmp_path / "workspace")
+    kernel = host_kernel(
+        [tmp_path / "plugins"],
+        services=HostServices(
+            event_bus=EventBus(),
+            workspace=tmp_path / "workspace",
+            role_store=role_store,
+        ),
+    )
+    await kernel.load_all()
+    try:
+        assert [state["state"] for state in kernel.states()] == ["ACTIVE"]
+        assert role_store.avatars.index().sender("qq", "42") is not None
+    finally:
+        await kernel.terminate_all(force=True)
+
+
 def test_core_module_provide_failure_aborts_startup(tmp_path: Path) -> None:
     """§8.5：核心模块自身 provide 失败时整个启动失败，不像插件 setup 失败那样记为 FAILED。"""
 
@@ -81,5 +121,8 @@ def test_core_module_provide_failure_aborts_startup(tmp_path: Path) -> None:
         _ = PluginKernel(
             [tmp_path],
             services=HostServices(event_bus=EventBus()),
-            core=(*plugin_core_modules([tmp_path], tools=None), broken_core_module),
+            core=(
+                *plugin_core_modules([tmp_path], tools=None, role_store=None),
+                broken_core_module,
+            ),
         )

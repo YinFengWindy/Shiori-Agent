@@ -17,8 +17,6 @@ CAPABILITY_HOST_SERVICES: Mapping[str, tuple[str, ...]] = {
     "kv": ("workspace",),
     "role_store": ("role_store",),
     "roles": ("role_store",),
-    "accounts": ("role_store",),
-    "avatars": ("role_store",),
     "memory": ("workspace", "role_store"),
     "session_manager": ("session_manager",),
     "sessions": ("session_manager", "workspace"),

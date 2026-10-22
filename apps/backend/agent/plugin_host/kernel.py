@@ -30,20 +30,18 @@ from shiori_sdk.http import HttpClient
 from shiori_sdk.external_turns import ExternalTurns
 from shiori_sdk.background_results import BackgroundResults
 from agent.plugin_host.process_resources import ProcessResourceOwner
-from agent.plugin_host.avatars import AvatarsCapability
 from agent.plugin_host.config import PluginConfig
 from agent.plugin_host.storage import PluginStorage
 from session.manager import SessionManager
 from agent.plugin_host.capabilities import (
-    AccountsCapability,
     BackgroundCapability,
     BotCommandsCapability,
-    ChannelsCapability,
     LifecycleCapability,
     ProactiveGatesCapability,
     RpcCapability,
 )
 from agent.plugin_host.core_keys import (
+    HOST_ACCOUNTS,
     HOST_CONFIG_REFERENCES,
     HOST_TOOL_HOOKS,
     CoreModule,
@@ -226,7 +224,6 @@ class PluginKernel:
         self._dirs = plugin_dirs
         self._external_dirs = external_plugin_dirs or []
         self._services = services
-        self._account_generation = uuid4().hex
         self._namespace = namespace or f"g{next(_KERNEL_NAMESPACE_COUNTER)}"
         # Settings generations retain the application's startup admission, but
         # own independent descriptors and import namespaces. Only a fresh app
@@ -391,11 +388,14 @@ class PluginKernel:
             self._services.process_resources.publish(self._namespace)
 
     def publish_accounts(self) -> None:
-        """Makes this prepared generation's account reports authoritative."""
-        if self._services.role_store is not None:
-            self._services.role_store.accounts.publish_generation(
-                self._account_generation
-            )
+        """Makes this prepared generation's account reports authoritative.
+
+        The ``host.accounts`` core service owns the generation's account index;
+        the kernel only knows when it publishes: after loading the first
+        generation, and for a reload when the runtime publishes it.
+        """
+        if (accounts := self._kernel.get(HOST_ACCOUNTS)) is not None:
+            accounts.publish()
 
     def _records_by_id(self) -> dict[str, PluginRecord]:
         # Conflicts remain visible as separate handles, but cannot be resolved
@@ -703,6 +703,7 @@ class PluginKernel:
             PluginBinding(
                 plugin_id=handle.plugin_id,
                 namespace=self._namespace,
+                manifest=handle.record.manifest,
                 scope=handle.effects,
                 contributions=handle.contributions,
                 calls=handle.calls,
@@ -828,36 +829,6 @@ class PluginKernel:
             ),
             light_provider=services.light_provider,
             light_model=services.light_model,
-            channels=ChannelsCapability(
-                handle.contributions,
-                handle.effects,
-                plugin_id=handle.plugin_id,
-                declared=frozenset(
-                    declaration.name for declaration in handle.record.manifest.channels
-                ),
-                instance_prefixes=tuple(
-                    declaration.instance_prefix
-                    for declaration in handle.record.manifest.channels
-                    if declaration.instance_prefix
-                ),
-            ),
-            accounts=(
-                AccountsCapability(
-                    services.role_store.accounts,
-                    handle.effects,
-                    handle.plugin_id,
-                    self._account_generation,
-                )
-                if "accounts" in grants and services.role_store is not None
-                else None
-            ),
-            avatars=(
-                AvatarsCapability(
-                    services.role_store.avatars, handle.effects, handle.plugin_id
-                )
-                if "avatars" in grants and services.role_store is not None
-                else None
-            ),
             services=(
                 ScopedPluginServices(
                     self.rpc.services, handle.plugin_id, handle.effects, handle.calls
@@ -1365,8 +1336,8 @@ class PluginKernel:
         # Failed/interrupted loads may own effects without an active-order entry.
         for handle in reversed(list(self._handles.values())):
             errors.extend(await self._dispose_handle(handle))
-        if self._services.role_store is not None:
-            self._services.role_store.accounts.drop_generation(self._account_generation)
+        if (accounts := self._kernel.get(HOST_ACCOUNTS)) is not None:
+            accounts.drop()
         if errors:
             raise ExceptionGroup("Plugin cleanup failed", errors)
 
@@ -1455,6 +1426,14 @@ class PluginKernel:
         """Plugin ids of the ACTIVE plugins in kernel order (stable across reloads)."""
         return [handle.plugin_id for handle in self._active_handles()]
 
+    def core_service[T](self, key: Key[T]) -> T:
+        """The service a core module provided to this generation under ``key``.
+
+        For host wiring that reads what the generation's plugins contributed
+        to a core service, in ``active_plugin_ids`` order.
+        """
+        return required_core_key(self._kernel.get, key)
+
     @property
     def tool_hooks(self) -> list[Any]:
         """The active plugins' tool hooks, kept by the ``host.tool_hooks`` service.
@@ -1464,14 +1443,6 @@ class PluginKernel:
         """
         source = required_core_key(self._kernel.get, HOST_TOOL_HOOKS)
         return list(source.active(self.active_plugin_ids))
-
-    @property
-    def channels(self) -> list[Any]:
-        return [
-            c
-            for handle in self._active_handles()
-            for c in handle.contributions.channels
-        ]
 
     @property
     def proactive_gates(self) -> list[Any]:
