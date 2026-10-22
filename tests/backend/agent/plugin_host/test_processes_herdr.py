@@ -5,7 +5,7 @@ import sys
 
 import pytest
 
-from agent.plugin_host.processes import HostProcesses
+from infra.process.plugin_capability import HostProcesses
 from plugins.herdr.backend.cli import CommandError, HerdrCli
 from plugins.herdr.backend.config import HerdrConfig
 

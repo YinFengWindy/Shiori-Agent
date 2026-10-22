@@ -65,6 +65,7 @@ def host_kernel(
                 if scene_observations is not None
                 else SceneObservationDemand()
             ),
+            memory_engine=services.memory_engine,
         ),
         **options,
     )

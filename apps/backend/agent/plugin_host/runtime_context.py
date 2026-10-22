@@ -221,7 +221,7 @@ class PluginSetupContext:
     @property
     def memory(self) -> MemoryCapability:
         """Returns the typed memory surface granted to this plugin."""
-        return self._provided("memory", self._memory)
+        return self._core_capability("memory", self._memory)
 
     @property
     def rpc(self) -> RpcCapability:
@@ -356,16 +356,12 @@ class PluginSetupContext:
     @property
     def resources(self) -> Resources:
         """Return the explicitly granted resources SDK capability."""
-        if "resources" not in self.granted or self._resources is None:
-            raise CapabilityNotGranted("Plugin did not request resources")
-        return self._resources
+        return self._core_capability("resources", self._resources)
 
     @property
     def processes(self) -> Processes:
         """Return the explicitly granted processes SDK capability."""
-        if "processes" not in self.granted or self._processes is None:
-            raise CapabilityNotGranted("Plugin did not request processes")
-        return self._processes
+        return self._core_capability("processes", self._processes)
 
     @property
     def tool_turn(self) -> Callable[[], ToolTurn]:

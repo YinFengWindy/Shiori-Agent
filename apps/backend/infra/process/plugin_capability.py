@@ -1,12 +1,18 @@
-"""Host-owned native services; plugins supply commands and own their policy."""
+"""The ``processes`` plugin capability: host-owned native processes (#901 P2).
 
-from pathlib import Path
+``HostProcesses`` is the ``host.processes`` core service, one per kernel
+generation and shared by every plugin: plugins supply the commands and own
+their policy, the host owns spawning (owned spawn, Windows Job) and MCP clients.
+"""
+
 import sys
+from pathlib import Path
 from typing import BinaryIO
+
+from shiori_sdk.processes import Processes
+
 from agent.mcp.client import McpClient
-from bootstrap.paths import common_emojis_paths, resource_root
-from infra.process.owned_spawn import spawn_owned, popen_owned
-from shiori_sdk.processes import Processes, Resources
+from infra.process.owned_spawn import popen_owned, spawn_owned
 
 
 class HostProcesses:
@@ -68,20 +74,3 @@ class HostProcesses:
             stdout=stdout,
             stderr=stderr,
         )
-
-
-class HostResources:
-    """Resolve host-distributed resources in source and frozen installations."""
-
-    @property
-    def root(self) -> Path:
-        """Return the configured host resource root."""
-        return resource_root()
-
-    def common_emojis(self, workspace: Path) -> tuple[Path, ...]:
-        """Return user overrides followed by the packaged emoji resource."""
-        return tuple(common_emojis_paths(workspace))
-
-    def as_capability(self) -> Resources:
-        """Validate source/frozen path access without exporting bootstrap modules."""
-        return self

@@ -87,7 +87,7 @@ async def test_fixed_runtime_local_page_multimodal_persistence_and_cancellation(
     native = Path(os.environ["SHIORI_BROWSER_USE_RUNTIME"]).resolve()
     assert native.parent.name == "native" and native.name == "browser-use", native
     monkeypatch.setattr(
-        "agent.plugin_host.processes.resource_root", lambda: native.parent.parent
+        "bootstrap.plugin_capability.resource_root", lambda: native.parent.parent
     )
     metadata = json.loads((native / "native-runtime.json").read_text(encoding="utf-8"))
     expected = json.loads(

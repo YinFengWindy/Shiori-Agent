@@ -721,6 +721,7 @@ def build_core_runtime(
             light_provider=plugin_light_provider,
             light_model=plugin_light_model,
             scene_observations=scene_demand,
+            memory_engine=memory_runtime.engine,
         ),
     )
     account_delivery = AccountDelivery(
