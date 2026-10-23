@@ -42,7 +42,6 @@ KNOWN_CAPABILITIES = frozenset(
         "services",
         "tools",
         "lifecycle",
-        "tool_hooks",
         "channels",
         "accounts",
         # 渠道发送者与群的头像缓存（#514）

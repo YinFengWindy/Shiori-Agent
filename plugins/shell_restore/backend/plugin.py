@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from functools import partial
 import logging
 import os
 import shlex
+from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from shiori_sdk.tool_hooks import PreToolCtx
+from shiori_sdk.core.tools import ToolCalling
 
 if TYPE_CHECKING:
     from shiori_sdk.extensions import HookPluginContext as PluginRuntimeContext
@@ -27,7 +27,7 @@ def _restore_dir(workspace: Path) -> str:
 def rewrite_command(command: str, *, restore_dir: str) -> str | None:
     """把 `rm ...` 命令改写为 `mv -- targets... restore_dir`；非 rm 命令返回 None。
 
-    模块级纯函数，供本插件的 pre-tool hook 与测试 fixture 共用同一份改写逻辑。
+    模块级纯函数，供本插件的 ``ToolCalling`` 处理器与测试 fixture 共用同一份改写逻辑。
     """
     try:
         tokens = shlex.split(command, posix=True)
@@ -73,28 +73,27 @@ def rewrite_command(command: str, *, restore_dir: str) -> str | None:
     return shlex.join(parts)
 
 
-async def rewrite_rm_to_mv(
-    event: PreToolCtx, *, restore_dir: str
-) -> dict[str, object] | None:
-    """shell 工具的 pre-tool hook：命中 rm 时改写为 mv 并确保 restore 目录存在。"""
-    command = str(event.arguments.get("command", "")).strip()
-    rewritten = rewrite_command(command, restore_dir=restore_dir)
-    if rewritten is None:
-        return None
-    Path(restore_dir).mkdir(parents=True, exist_ok=True)
-    # logger 已按插件命名（"plugin.shell_restore"），日志消息里不再重复插件名
-    logger.info("[rewrite_rm_to_mv] rm → mv: %r", rewritten)
-    return dict(event.arguments, command=rewritten)
+class _RmRewriter:
+    """shell 工具调用的 ``ToolCalling`` 处理器：命中 rm 时改写为 mv。"""
+
+    def __init__(self, restore_dir: str) -> None:
+        self._restore_dir = restore_dir
+
+    async def rewrite_rm_to_mv(self, event: ToolCalling) -> ToolCalling:
+        """命中 rm 时改写为 mv 并确保 restore 目录存在；其余调用原样透传。"""
+        if event.tool_name != "shell":
+            return event
+        command = str(event.arguments.get("command", "")).strip()
+        rewritten = rewrite_command(command, restore_dir=self._restore_dir)
+        if rewritten is None:
+            return event
+        Path(self._restore_dir).mkdir(parents=True, exist_ok=True)
+        # logger 已按插件命名（"plugin.shell_restore"），日志消息里不再重复插件名
+        logger.info("[rewrite_rm_to_mv] rm → mv: %r", rewritten)
+        return replace(event, arguments={**event.arguments, "command": rewritten})
 
 
 async def setup(ctx: "PluginRuntimeContext") -> None:
-    """装配 shell_restore：注册 shell 工具的 rm→mv pre-tool hook。
-
-    hook 名由 ToolHooksCapability 统一生成（plugin:{plugin_id}:{handler.__name__}），
-    插件不再直接引用宿主的 PluginToolHook 或自行拼接 hook 名（#182 评审）。
-    """
-    ctx.tool_hooks.add_handler(
-        partial(rewrite_rm_to_mv, restore_dir=_restore_dir(ctx.workspace)),
-        tool_name_filter="shell",
-        handler_name="rewrite_rm_to_mv",
-    )
+    """装配 shell_restore：在 ``ToolCalling`` 上把 shell 工具的 rm 改写为 mv。"""
+    rewriter = _RmRewriter(_restore_dir(ctx.workspace))
+    ctx.on(ToolCalling, rewriter.rewrite_rm_to_mv)

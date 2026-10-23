@@ -8,10 +8,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
-from shiori_sdk.lifecycle import (
-    AfterToolResultCtx,
-    LifecycleFrame,
-)
+from shiori_sdk.core.tools import ToolCalled
+from shiori_sdk.lifecycle import LifecycleFrame
 from shiori_sdk.lifecycle import (
     BeforeTurnObservation as BeforeTurnCtx,
 )
@@ -86,7 +84,13 @@ class _DefaultMemoryRecorder:
             }
         )
 
-    async def record_recall_memory(self, event: AfterToolResultCtx) -> None:
+    async def record_recall_memory(self, event: ToolCalled) -> ToolCalled:
+        """Records a passive turn's ``recall_memory`` result; the event passes unchanged."""
+        if event.source == "passive":
+            self._record_recall_memory(event)
+        return event
+
+    def _record_recall_memory(self, event: ToolCalled) -> None:
         if not self._active or event.tool_name != "recall_memory":
             return
         turn_id = self._active_turns.get(event.session_key)
@@ -94,7 +98,7 @@ class _DefaultMemoryRecorder:
             turn_id = _turn_id(
                 event.session_key,
                 _now_iso(),
-                json.dumps(event.arguments, ensure_ascii=False),
+                json.dumps(dict(event.arguments), ensure_ascii=False),
             )
         payload = _safe_json(event.result)
         raw_items: object = payload.get("items")
@@ -159,7 +163,7 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
         / "recall_inspector.jsonl",
     )
     ctx.lifecycle.contribute("before_turn", [ContextPrepareRecordModule(recorder)])
-    ctx.events.on(AfterToolResultCtx, recorder.record_recall_memory)
+    ctx.on(ToolCalled, recorder.record_recall_memory)
 
 
 def _turn_id(session_key: str, timestamp: str, content: str) -> str:

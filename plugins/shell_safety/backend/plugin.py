@@ -4,8 +4,7 @@ import shlex
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from shiori_sdk.tool_hooks import PreToolCtx
-from shiori_sdk.tool_hooks import HookOutcome
+from shiori_sdk.core.tools import ToolCalling, ToolVeto
 
 if TYPE_CHECKING:
     from shiori_sdk.extensions import HookPluginContext as PluginRuntimeContext
@@ -31,14 +30,18 @@ PACKAGE_WRITE_OPTIONS = {
 class _ShellSafetyGuard:
     """阻止 shell 工具执行容易卡住的交互式命令；v2 插件不再继承旧 Plugin ABC。"""
 
-    async def block_interactive_shell(self, event: PreToolCtx) -> HookOutcome | None:
+    async def block_interactive_shell(
+        self, event: ToolCalling
+    ) -> ToolCalling | ToolVeto:
+        if event.tool_name != "shell":
+            return event
         command = str(event.arguments.get("command") or "").strip()
         if not command:
-            return None
+            return event
         reason = self._deny_reason(command)
         if not reason:
-            return None
-        return HookOutcome(decision="deny", reason=reason)
+            return event
+        return ToolVeto(reason)
 
     def _deny_reason(self, command: str) -> str:
         try:
@@ -125,10 +128,9 @@ class _ShellSafetyGuard:
 
 
 async def setup(ctx: "PluginRuntimeContext") -> None:
-    """装配 shell_safety：注册 shell 工具的 pre-tool hook。
+    """装配 shell_safety：在 ``ToolCalling`` 上拦截 shell 工具的交互式命令。
 
-    hook 名由 ToolHooksCapability 统一生成（plugin:{plugin_id}:{handler.__name__}），
-    插件不再直接引用宿主的 PluginToolHook 或自行拼接 hook 名（#182 评审）。
+    核心在链后另有最小破坏性命令拦截（D11），本插件只叠加更严的规则。
     """
     guard = _ShellSafetyGuard()
-    ctx.tool_hooks.add_handler(guard.block_interactive_shell, tool_name_filter="shell")
+    ctx.on(ToolCalling, guard.block_interactive_shell)

@@ -7,7 +7,8 @@ from typing import TYPE_CHECKING, Callable
 from agent.config_models import Config
 from agent.looping.core import AgentLoop
 from agent.provider import LLMProvider
-from agent.tool_hooks import ToolHookSource, no_tool_hooks
+from agent.core.turn_events import core_kernel
+from agent.tools.execution import KernelSource
 from agent.core.proactive_turn.gates import ProactiveGate
 from agent.core.prompt_block import build_role_user_identities_prompt
 from agent.tools.message_push import MessagePushTool
@@ -62,7 +63,7 @@ def build_proactive_runtime(
     memory_store: "MemoryRuntime | None",
     presence: PresenceStore,
     agent_loop: AgentLoop,
-    tool_hooks: ToolHookSource = no_tool_hooks,
+    kernel: KernelSource = core_kernel,
     proactive_motives: list[ProactiveGate] | None = None,
     event_bus: "EventBus | None" = None,
     provider_consumer: Callable[[LLMProvider], None] | None = None,
@@ -112,7 +113,7 @@ def build_proactive_runtime(
                 else None
             ),
             shared_tools=getattr(agent_loop, "tools", None),
-            tool_hooks=tool_hooks,
+            kernel=kernel,
             proactive_motives=proactive_motives,
             event_bus=event_bus,
             role_prompt_fn=_build_role_prompt_resolver(

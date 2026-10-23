@@ -35,12 +35,8 @@ from typing import TYPE_CHECKING, Any, Awaitable, Callable, cast
 from agent.core.prompt_block import strip_recent_turns
 from agent.prompting import build_context_frame_content, build_context_frame_message
 from shiori_sdk.prompting import PromptSectionRender
-from agent.tool_hooks import (
-    ToolExecutionRequest,
-    ToolExecutor,
-    ToolHookSource,
-    no_tool_hooks,
-)
+from agent.core.turn_events import core_kernel
+from agent.tools.execution import KernelSource, ToolExecutionRequest, ToolExecutor
 from proactive_v2.context import AgentTickContext
 from proactive_v2.drift_state import DriftStateStore, SkillMeta
 from proactive_v2.drift_tools import (
@@ -68,7 +64,7 @@ class DriftTurnPipelineDeps:
     role_prompt_fn: Callable[[], str]
     max_steps: int = 20
     step_recorder: StepRecorder | None = None
-    tool_hooks: ToolHookSource = no_tool_hooks
+    kernel: KernelSource = core_kernel
 
 
 # ── 主 Pipeline ─────────────────────────────────────────────────────────
@@ -97,7 +93,7 @@ class DriftTurnPipeline:
         self._role_prompt_fn = deps.role_prompt_fn
         self._max_steps = deps.max_steps
         self.step_recorder = deps.step_recorder
-        self._tool_executor = ToolExecutor(deps.tool_hooks)
+        self._tool_executor = ToolExecutor(deps.kernel)
 
     # ── 入口 ──────────────────────────────────────────────────────────
 

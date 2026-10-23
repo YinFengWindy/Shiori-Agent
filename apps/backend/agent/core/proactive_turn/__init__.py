@@ -9,7 +9,7 @@ import time
 from datetime import datetime, timezone
 from typing import Any
 
-from agent.tool_hooks import ToolExecutor
+from agent.tools.execution import ToolExecutor
 from agent.turns.result import TurnResult
 from core.common.diagnostic_log import diagnostic_context, diagnostic_line
 from proactive_v2.context import AgentTickContext
@@ -105,7 +105,7 @@ class ProactiveTurnPipeline:
         self._drift_pipeline = deps.drift_pipeline
         self._target_transport_fn = deps.target_transport_fn
         self._proactive_gates = deps.proactive_gates or ProactiveGateChain()
-        self._tool_executor = ToolExecutor(deps.tool_hooks)
+        self._tool_executor = ToolExecutor(deps.kernel)
 
         if (
             self._drift_pipeline is not None

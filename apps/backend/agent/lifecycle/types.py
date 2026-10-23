@@ -222,12 +222,3 @@ class TurnSnapshot:
     state: TurnState
     outbound: OutboundMessage
     ctx: AfterReasoningCtx
-
-
-@dataclass(frozen=True)
-class BeforeToolCallCtx:
-    session_key: str
-    channel: str
-    chat_id: str
-    tool_name: str
-    arguments: dict[str, Any]

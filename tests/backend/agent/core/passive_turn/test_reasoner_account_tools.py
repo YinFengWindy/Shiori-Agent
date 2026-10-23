@@ -9,30 +9,27 @@ from agent.turns.reply_interruption import ReplyInterruption, reply_interruption
 
 import pytest
 
+from dataclasses import replace
+
 from agent.lifecycle.plugin_contributions import StaticPluginContributions
 from agent.provider import LLMResponse, ToolCall
-from agent.tool_hooks.base import ToolHook, HookOutcome
-from agent.tool_hooks.types import HookContext
 from agent.tools.external_access import ExternalArgumentLimit
 from agent.tools.tool_search import ToolSearchTool
 from core.channels.hub import ChannelHub
 from shiori_sdk.accounts import AccountResponseRules
 from shiori_sdk.accounts.routing import AccountRoute
+from shiori_sdk.core.tools import ToolCalling
 from shiori_sdk.channels.message_source import MessageSource
 from shiori_sdk.messages import InboundMessage
 from shiori_sdk.tools import Tool
 from tests.support.host_external_turns import ExternalTurnHost, SECRETS, request_text
+from tests.support.tool_calls import kernel_with
 
 
-class Retarget(ToolHook):
-    name = "test:retarget"
-    event = "pre_tool_use"
-
-    def matches(self, ctx: HookContext) -> bool:
-        return ctx.request.tool_name == "public"
-
-    async def run(self, ctx: HookContext) -> HookOutcome:
-        return HookOutcome(updated_input={"mode": "all"})
+async def retarget(event: ToolCalling) -> ToolCalling:
+    if event.tool_name != "public":
+        return event
+    return replace(event, arguments={"mode": "all"})
 
 
 @pytest.mark.parametrize(
@@ -44,7 +41,7 @@ class Retarget(ToolHook):
         (True, False, True),
     ],
 )
-async def test_account_rule_controls_search_dynamic_mcp_and_post_hook_execution(
+async def test_account_rule_controls_search_dynamic_mcp_and_rewritten_call_execution(
     tmp_path, granted, disabled, interrupted
 ):
     host = ExternalTurnHost(tmp_path)
@@ -117,7 +114,7 @@ async def test_account_rule_controls_search_dynamic_mcp_and_post_hook_execution(
         ),
     )
     host.loop.bind_plugin_contributions(
-        StaticPluginContributions(tool_hooks=[Retarget()])
+        StaticPluginContributions(kernel=kernel_with(retarget))
     )
     original_chat = host.provider.chat
     responses = [

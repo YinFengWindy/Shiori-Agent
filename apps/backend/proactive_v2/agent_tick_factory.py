@@ -8,7 +8,8 @@ from pathlib import Path
 from typing import Any, Awaitable, Callable
 
 from agent.skills import BUILTIN_SKILLS_DIR
-from agent.tool_hooks import ToolHookSource, no_tool_hooks
+from agent.core.turn_events import core_kernel
+from agent.tools.execution import KernelSource
 from agent.tools.registry import ToolRegistry
 from agent.tools.web_fetch import WebFetchTool
 from agent.turns.result import TurnOutbound, TurnResult, TurnTrace
@@ -63,7 +64,7 @@ class AgentTickDeps:
     shared_tools: ToolRegistry | None = None
     turn_orchestrator: TurnOrchestrator | None = None
     pool: McpClientPool | None = None
-    tool_hooks: ToolHookSource = no_tool_hooks
+    kernel: KernelSource = core_kernel
     proactive_gates: ProactiveGateChain | None = None
     # 群环境层（#497）：主动与发呆回合注入各外部会话的最近动态。
     group_environment: GroupEnvironment | None = None
@@ -110,7 +111,7 @@ class AgentTickFactory:
                 recent_proactive_fn=recent_proactive_fn,
                 drift_pipeline=drift_pipeline,
                 target_transport_fn=self._deps.sense.target_transport,
-                tool_hooks=self._deps.tool_hooks,
+                kernel=self._deps.kernel,
                 proactive_gates=self._deps.proactive_gates,
             )
         )
@@ -284,7 +285,7 @@ class AgentTickFactory:
                 ),
                 role_prompt_fn=self._deps.role_prompt_fn,
                 max_steps=getattr(self._deps.cfg, "drift_max_steps", 20),
-                tool_hooks=self._deps.tool_hooks,
+                kernel=self._deps.kernel,
             )
         )
 

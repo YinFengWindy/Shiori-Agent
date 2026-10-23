@@ -12,7 +12,7 @@ import asyncio
 from collections.abc import Coroutine
 from typing import Any, Protocol
 
-from agent.tool_hooks import no_tool_hooks
+from agent.core.turn_events import core_kernel
 from bootstrap.proactive import build_memory_optimizer_task, build_proactive_runtime
 from bootstrap.runtime.generations import RuntimeCandidate
 from core.common.runtime_scope import bind_runtime
@@ -59,10 +59,8 @@ class RuntimeBackground:
                 agent_loop=core.loop,
                 # Read the kernel live so plugins unloaded or loaded within this
                 # generation take effect on the next tool call or tick.
-                tool_hooks=(
-                    (lambda: manager.tool_hooks)
-                    if manager is not None
-                    else no_tool_hooks
+                kernel=(
+                    (lambda: manager.kernel) if manager is not None else core_kernel
                 ),
                 proactive_motives=core.proactive_motives,
                 event_bus=core.event_bus,

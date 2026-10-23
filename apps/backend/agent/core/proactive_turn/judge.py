@@ -6,7 +6,7 @@ import json
 import logging
 from typing import Any, Protocol
 
-from agent.tool_hooks import ToolExecutionRequest
+from agent.tools.execution import ToolExecutionRequest
 from .gates import ProactiveMode
 from core.common.diagnostic_log import diagnostic_line
 from proactive_v2.context import AgentTickContext

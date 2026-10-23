@@ -21,8 +21,8 @@ from agent.core.types import ContextBundle, ReasonerResult
 from agent.lifecycle.types import PromptRenderResult
 from agent.looping.ports import LLMConfig, LLMServices
 from agent.provider import LLMResponse, ToolCall
-from agent.tool_hooks import ToolExecutionRequest
-from agent.tool_hooks.executor import ToolExecutor
+from agent.core.turn_events import core_kernel
+from agent.tools.execution import ToolExecutionRequest, ToolExecutor
 from agent.account_delivery import AccountSendReceipt, UserChatTarget
 from agent.tools.account_delivery import AccountSendTool
 from agent.tools.message_push import MessagePushTool
@@ -99,7 +99,7 @@ async def runtime(tmp_path):
     bridge.add_event_listener(emitted.append)
 
     async def call(**payload):
-        result = await ToolExecutor().execute(
+        result = await ToolExecutor(core_kernel).execute(
             ToolExecutionRequest(
                 call_id="push",
                 tool_name="message_push",
@@ -113,7 +113,7 @@ async def runtime(tmp_path):
 
     async def send_to_user(channel, **payload):
         # The role's external send of a turn: account_send to the bound user.
-        result = await ToolExecutor().execute(
+        result = await ToolExecutor(core_kernel).execute(
             ToolExecutionRequest(
                 call_id="account-send",
                 tool_name="account_send",

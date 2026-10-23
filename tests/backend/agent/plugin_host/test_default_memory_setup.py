@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from shiori_sdk.lifecycle import AfterToolResultCtx
+from shiori_sdk.core.tools import ToolCalled
 from agent.plugin_host import PluginGenerationSettings, PluginKernel, PluginRpcRegistry
 from tests.support.plugin_kernel import host_kernel
 from bus.event_bus import EventBus
@@ -77,10 +77,10 @@ async def test_setup_wires_before_turn_module_and_tool_result_event(
     tmp_path: Path,
 ) -> None:
     """setup(ctx) 必须与旧 DefaultMemoryInspector 等价：贡献 before_turn 模块，
-    并把 recall_memory 工具结果记录经 AFTER_TOOL_RESULT 事件接线。"""
+    并把 recall_memory 工具结果记录接到本代内核的 ``ToolCalled`` 事件上。"""
     workspace = tmp_path / "workspace"
     workspace.mkdir()
-    kernel, bus, _ = _load_default_memory_kernel(
+    kernel, _, _ = _load_default_memory_kernel(
         tmp_path=tmp_path,
         memory_engine=SimpleNamespace(describe=lambda: SimpleNamespace(name="default")),
         workspace=workspace,
@@ -92,15 +92,17 @@ async def test_setup_wires_before_turn_module_and_tool_result_event(
     ]
 
     data_path = workspace / "plugin-data" / "default_memory" / "recall_inspector.jsonl"
-    _ = await bus.emit(
-        AfterToolResultCtx(
+    _ = await kernel.kernel.emit(
+        ToolCalled(
             session_key="cli:1",
             channel="cli",
             chat_id="1",
+            source="passive",
+            call_id="c1",
             tool_name="recall_memory",
             arguments={"query": "q"},
+            status="success",
             result=json.dumps({"items": []}),
-            status="ok",
         )
     )
     rows = _read_jsonl(data_path)
@@ -110,15 +112,17 @@ async def test_setup_wires_before_turn_module_and_tool_result_event(
     # 卸载后贡献必须整体撤回，证明 phase 槽位与事件订阅都挂在插件作用域上
     _ = await kernel.unload("default_memory")
     assert kernel.before_turn_modules == []
-    _ = await bus.emit(
-        AfterToolResultCtx(
+    _ = await kernel.kernel.emit(
+        ToolCalled(
             session_key="cli:1",
             channel="cli",
             chat_id="1",
+            source="passive",
+            call_id="c1",
             tool_name="recall_memory",
             arguments={},
+            status="success",
             result="{}",
-            status="ok",
         )
     )
     assert len(_read_jsonl(data_path)) == 1
@@ -131,7 +135,7 @@ async def test_setup_still_wires_module_but_recorder_is_inactive_for_other_engin
     """引擎不是 default 时模块仍会贡献（对齐旧行为），但记录内部被抑制。"""
     workspace = tmp_path / "workspace"
     workspace.mkdir()
-    kernel, bus, _ = _load_default_memory_kernel(
+    kernel, _, _ = _load_default_memory_kernel(
         tmp_path=tmp_path,
         memory_engine=SimpleNamespace(
             describe=lambda: SimpleNamespace(name="disabled")
@@ -144,15 +148,17 @@ async def test_setup_still_wires_module_but_recorder_is_inactive_for_other_engin
         "ContextPrepareRecordModule"
     ]
 
-    _ = await bus.emit(
-        AfterToolResultCtx(
+    _ = await kernel.kernel.emit(
+        ToolCalled(
             session_key="cli:1",
             channel="cli",
             chat_id="1",
+            source="passive",
+            call_id="c1",
             tool_name="recall_memory",
             arguments={},
+            status="success",
             result="{}",
-            status="ok",
         )
     )
     assert not (

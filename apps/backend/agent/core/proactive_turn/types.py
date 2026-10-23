@@ -6,7 +6,8 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from ..drift_turn import DriftTurnPipeline
-from agent.tool_hooks import ToolHookSource, no_tool_hooks
+from agent.core.turn_events import core_kernel
+from agent.tools.execution import KernelSource
 from agent.turns.orchestrator import TurnOrchestrator
 from agent.turns.result import TurnResult
 from proactive_v2.config import ProactiveConfig
@@ -65,5 +66,5 @@ class ProactiveTurnPipelineDeps:
     # Selects this tick's single delivery target; None means no candidate session.
     target_transport_fn: Callable[[], tuple[str, str] | None] | None = None
     # 每次工具调用都重新读取，插件代内启停后下一次调用即生效。
-    tool_hooks: ToolHookSource = no_tool_hooks
+    kernel: KernelSource = core_kernel
     proactive_gates: ProactiveGateChain | None = None

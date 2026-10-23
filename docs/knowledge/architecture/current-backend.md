@@ -111,8 +111,8 @@ LLM 调用由 `apps/backend/agent/provider.py` 封装，使用官方 `openai` SD
 
 - `ToolRegistry` 保存工具、schema、风险、always-on、搜索索引和 source metadata；MCP 工具也同步到该 registry。内置 toolset 由 `apps/backend/bootstrap/toolsets/` 注册。
 - 记忆契约 `MemoryEngine`、`MemoryQuery`、`MemoryQueryResult`、`MemoryMutation` 定义在 SDK 的 `packages/sdk/python/shiori_sdk/memory/`；`apps/backend/core/memory/` 的 `MemoryRuntime` 组合宿主 Markdown 记忆与所选 engine，默认 engine 位于 `plugins/default_memory/backend/`，由 `bootstrap/wiring.py` 的 `resolve_memory_plugin()` 加载。
-- `PluginKernel` 同时负责 discover/import/config/context 注入、EventBus handler、tool、tool hook、phase module、proactive gate、channel、bot command、RPC、服务注册、initialize rollback、drain 和 terminate。
-- 插件的 phase module 与 tool hook 不在启动时复制：`CoreRuntime.start()` 把本代 `PluginKernel` 绑定给 `AgentLoop.bind_plugin_contributions()` 与 spawn 的 `SubagentManager.bind_tool_hooks()`，主动循环（`RuntimeBackground`）同样传入读取内核的 hook 与 proactive gate 来源。被动回合各阶段、`ProactiveGateChain`（均经 `core/common/live_contributions.py` 的 `LiveContributions`）与 `ToolExecutor` 每次使用时读取当前 ACTIVE 插件的贡献，插件在代内卸载或新加载后下一次回合/工具调用/主动 tick 即生效；阶段与 gate 链只在贡献集合变化时重建并重新校验（启动时的集合在接线处即校验）。
+- `PluginKernel` 同时负责 discover/import/config/context 注入、EventBus handler、tool、phase module、channel、bot command、RPC、服务注册、initialize rollback、drain 和 terminate。
+- 插件的 phase module 与工具事件处理不在启动时复制：`CoreRuntime.start()` 把本代 `PluginKernel` 绑定给 `AgentLoop.bind_plugin_contributions()` 与 spawn 的 `SubagentManager.bind_kernel()`，主动循环（`RuntimeBackground`）同样传入读取本代内核的来源。被动回合各阶段（经 `core/common/live_contributions.py` 的 `LiveContributions`）与 `ToolExecutor` 每次使用时读取当前 ACTIVE 插件的贡献与内核，插件在代内卸载或新加载后下一次回合/工具调用/主动 tick 即生效；阶段只在贡献集合变化时重建并重新校验（启动时的集合在接线处即校验）。
 - `ScopedEventBus` 将每个事件订阅注册到所属 `EffectScope`，插件卸载和初始化回滚会撤销贡献；已经开始的 handler 由插件 disposer 等待或取消。
 
 ## 持久化边界

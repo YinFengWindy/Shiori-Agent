@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from shiori_sdk.testing.storage import FakeKV
-from shiori_sdk.tool_hooks import HookOutcome
+from shiori_sdk.core.tools import ToolVeto
 from plugins.novelai.backend.auto_cg import AutoCgPolicy
 
 
@@ -34,7 +34,7 @@ def test_auto_cg_policy_enforces_cooldown_dedup_and_manual_bypass(
         session_key,
         {"intent": "scene_cg", "scene_key": "new scene"},
     )
-    assert isinstance(cooldown, HookOutcome)
+    assert isinstance(cooldown, ToolVeto)
     assert cooldown.reason == "scene_cg_cooldown"
     assert policy.guard(session_key, {"intent": "user_requested"}) is None
 
@@ -58,7 +58,7 @@ def test_auto_cg_policy_enforces_cooldown_dedup_and_manual_bypass(
             "visual_key": "ROOFTOP-STANDING",
         },
     )
-    assert isinstance(duplicate, HookOutcome)
+    assert isinstance(duplicate, ToolVeto)
     assert duplicate.reason == "scene_cg_duplicate_visual"
 
 
@@ -77,7 +77,7 @@ def test_auto_cg_policy_requires_scene_key_and_isolates_sessions(
     assert sessions["role:mira"] == {"turn": 2}
     assert sessions["role:yuki"] == {"turn": 1}
     missing_key = policy.guard("role:mira", {"intent": "scene_cg"})
-    assert isinstance(missing_key, HookOutcome)
+    assert isinstance(missing_key, ToolVeto)
     assert missing_key.reason == "scene_cg_missing_scene_key"
 
 
@@ -111,7 +111,7 @@ def test_auto_cg_policy_allows_new_visual_beat_after_cooldown(
             "visual_key": "bedroom-lying-down",
         },
     )
-    assert isinstance(blocked, HookOutcome)
+    assert isinstance(blocked, ToolVeto)
     assert blocked.reason == "scene_cg_cooldown"
 
     for _ in range(6):

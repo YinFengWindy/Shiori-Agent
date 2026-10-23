@@ -30,7 +30,7 @@ flowchart TD
   G --> H[Prompt render / input budget / tool discovery]
   H --> I[LLM provider]
   I --> J{function call?}
-  J -- yes --> K[ToolExecutor + hooks]
+  J -- yes --> K[ToolExecutor: ToolCalling / core checks / tool / ToolCalled]
   K --> I
   J -- no --> L[AfterReasoning]
   L --> M[parse / persist / outbound]

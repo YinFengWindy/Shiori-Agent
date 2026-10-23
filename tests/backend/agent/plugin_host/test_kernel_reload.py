@@ -21,7 +21,6 @@ from agent.plugin_host import (
     PluginState,
 )
 from tests.support.plugin_kernel import host_kernel
-from agent.plugin_host.core_keys import HOST_TOOL_HOOKS, required_core_key
 from agent.plugin_host.process_resources import ProcessResourceOwner
 from agent.tools.registry import ToolRegistry
 from bus.event_bus import EventBus
@@ -664,7 +663,6 @@ async def test_terminate_waits_for_a_reload_and_later_reloads_are_refused(
 
 _HOOKED = """
 import sys
-from shiori_sdk.tool_hooks import HookOutcome
 
 probe = sys.modules["reload_probe"]
 
@@ -681,48 +679,14 @@ class Stamp:
         return [*frame, self.label]
 
 
-class Guard:
-    name = "plugin:hooked:guard"
-    event = "pre_tool_use"
-
-    def __init__(self, label):
-        self.label = label
-
-    def matches(self, ctx):
-        return True
-
-    async def run(self, ctx):
-        probe.events.append(("hook-start", self.label))
-        await probe.release.wait()
-        return HookOutcome(decision="deny", reason=self.label)
-
-
-class Note:
-    name = "plugin:hooked:note"
-    event = "post_tool_use"
-
-    def __init__(self, label):
-        self.label = label
-
-    def matches(self, ctx):
-        return True
-
-    async def run(self, ctx):
-        return HookOutcome(extra_message=self.label)
-
-
 async def setup(ctx):
     label = ctx.config.get("label")
     ctx.lifecycle.contribute("before_turn", [Stamp(label)])
-    ctx.tool_hooks.add(Guard(label))
-    ctx.tool_hooks.add(Note(label))
 """
 
 
 async def _hooked_kernel(tmp_path: Path) -> PluginKernel:
-    _write(
-        tmp_path, "hooked", "capabilities: [lifecycle, tool_hooks, config]\n", _HOOKED
-    )
+    _write(tmp_path, "hooked", "capabilities: [lifecycle, config]\n", _HOOKED)
     configs = {"hooked": {"label": "v1"}}
     kernel = host_kernel(
         [tmp_path],
@@ -772,41 +736,6 @@ async def test_reload_waits_for_a_running_phase_module_and_skips_stale_runs(
         ("module-start", "v1"),
         ("module-start", "v2"),
     ]
-    await kernel.terminate_all(force=True)
-
-
-@pytest.mark.asyncio
-async def test_reload_waits_for_a_running_tool_hook_and_fails_closed_meanwhile(
-    probe, tmp_path
-):
-    kernel = await _hooked_kernel(tmp_path)
-    old, old_note = kernel.tool_hooks
-    running = asyncio.create_task(old.run(None))
-    await _until(probe, ("hook-start", "v1"))
-
-    reload = asyncio.create_task(_reload_hooked(kernel))
-    for _ in range(20):
-        await asyncio.sleep(0)
-    assert not reload.done()
-    # A sealed pre-tool guard denies instead of letting the call run unguarded;
-    # a post hook cannot affect admission and passes.
-    sealed = await old.run(None)
-    assert sealed.decision == "deny" and "正在重载" in sealed.reason
-    assert (await old_note.run(None)).extra_message == ""
-
-    probe.release.set()
-    assert (await running).reason == "v1"
-    await asyncio.wait_for(reload, 1)
-    new, new_note = kernel.tool_hooks
-    assert (await old.run(None)).decision == "deny"
-    assert (await new.run(None)).reason == "v2"
-    assert (await new_note.run(None)).extra_message == "v2"
-    # Unloading withdraws the hooks from the service itself, not only from the
-    # active view.
-    _ = await kernel.unload("hooked")
-    assert kernel.tool_hooks == []
-    hooks = required_core_key(kernel._kernel.get, HOST_TOOL_HOOKS)
-    assert hooks.active(["hooked"]) == []
     await kernel.terminate_all(force=True)
 
 

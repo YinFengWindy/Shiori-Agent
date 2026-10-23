@@ -14,7 +14,6 @@ from .sessions import PluginSessions
 from .external_turns import ExternalTurns
 from .background_results import BackgroundResults
 from .process_resources import PluginProcessResources
-from .tool_hooks import ToolHooksCapability
 from .storage import KeyValueStore
 from pathlib import Path
 
@@ -73,8 +72,6 @@ class ServicePluginContext(PluginRuntimeContext, Protocol):
     def runtime(self) -> RuntimeLifecycle: ...
     @property
     def scene_observations(self) -> SceneObservations: ...
-    @property
-    def tool_hooks(self) -> ToolHooksCapability: ...
     @property
     def light_provider(self) -> ChatProvider: ...
     @property
