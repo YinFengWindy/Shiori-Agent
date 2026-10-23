@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 from .context import ContextStore
 from .empty_reply import EmptyReplyError
 from .reasoner import Reasoner
+from agent.core.turn_events import TurnEvents
 from agent.lifecycle.phase import Phase
 from agent.lifecycle.plugin_contributions import (
     NO_PLUGIN_CONTRIBUTIONS,
@@ -156,6 +157,8 @@ class PassiveTurnPipeline:
 
         # 插件模块每回合从当前插件来源读取，贡献变化时才重建阶段（#855）。
         self._plugins = NO_PLUGIN_CONTRIBUTIONS
+        # 回合事件经当前来源的内核发出（未接插件时是只带核心校验的裸内核）。
+        self._events = TurnEvents(bus, lambda: self._plugins.kernel)
         self._before_turn = LiveContributions(
             lambda: self._plugins.before_turn_modules,
             self._build_before_turn_phase,
@@ -189,6 +192,7 @@ class PassiveTurnPipeline:
         return Phase(
             default_before_turn_modules(
                 self._bus,
+                self._events,
                 self._session.session_manager,
                 self._context_store,
                 keep_count=self._history_window,
@@ -205,6 +209,7 @@ class PassiveTurnPipeline:
         return Phase(
             default_before_reasoning_modules(
                 self._bus,
+                self._events,
                 self._tools,
                 self._session.session_manager,
                 self._context,
@@ -220,6 +225,7 @@ class PassiveTurnPipeline:
         return Phase(
             default_after_reasoning_modules(
                 self._bus,
+                self._events,
                 self._session,
                 self._llm,
                 self._llm_config,
@@ -235,6 +241,7 @@ class PassiveTurnPipeline:
         return Phase(
             default_after_turn_modules(
                 self._bus,
+                self._events,
                 self._outbound_port,
                 self._context,
                 self._history_window,

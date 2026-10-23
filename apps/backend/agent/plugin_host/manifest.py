@@ -115,6 +115,11 @@ class PluginManifest:
     dependencies: tuple[str, ...] = ()
     # Optional APIs never cause provider activation or dependent teardown.
     optional_dependencies: tuple[str, ...] = ()
+    # Kernel service keys (``Key.name``): required through ``ctx.require``,
+    # optional through ``ctx.get``, and published through ``ctx.provide``.
+    inject: tuple[str, ...] = ()
+    optional_inject: tuple[str, ...] = ()
+    provides: tuple[str, ...] = ()
     api: int = 2
     # External source packages are excluded from host-owned roots; this never grants trust.
     distribution: str = "builtin"
@@ -198,6 +203,10 @@ def _parse_manifest(
         raise ManifestError(
             "插件依赖不能同时声明为 dependencies 和 optional_dependencies"
         )
+    inject = _parse_keys(raw, "inject")
+    optional_inject = _parse_keys(raw, "optional_inject")
+    if set(inject) & set(optional_inject):
+        raise ManifestError("服务 Key 不能同时声明为 inject 和 optional_inject")
     return PluginManifest(
         id=plugin_id,
         display_name=_optional_str(raw.get("display_name")),
@@ -210,6 +219,9 @@ def _parse_manifest(
         config_model=_optional_str(raw.get("config_model")),
         dependencies=dependencies,
         optional_dependencies=optional_dependencies,
+        inject=inject,
+        optional_inject=optional_inject,
+        provides=_parse_keys(raw, "provides"),
         api=api,
         distribution=distribution,
         supports_hot_unload=supports_hot_unload,
@@ -435,4 +447,14 @@ def _parse_dependencies(raw: dict[str, object], field: str) -> tuple[str, ...]:
         not isinstance(item, str) or not item.strip() for item in value
     ):
         raise ManifestError(f"{field} 必须是非空插件 ID 的列表")
+    return tuple(dict.fromkeys(value))
+
+
+def _parse_keys(raw: dict[str, object], field: str) -> tuple[str, ...]:
+    """A list of service key names, as ``shiori_sdk.kernel.Key`` accepts them."""
+    value = raw.get(field, [])
+    if not isinstance(value, list) or any(
+        not isinstance(item, str) or not item or item != item.strip() for item in value
+    ):
+        raise ManifestError(f"{field} 必须是服务 Key 名称的列表（非空、无首尾空白）")
     return tuple(dict.fromkeys(value))

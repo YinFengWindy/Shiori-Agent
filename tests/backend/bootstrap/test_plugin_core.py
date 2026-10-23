@@ -19,6 +19,7 @@ from agent.plugin_host import (
     PluginRpcRegistry,
     PluginState,
 )
+from agent.core.turn_events import install_core_checks
 from bootstrap.plugin_core import PluginCoreInputs, plugin_core_modules
 from bus.event_bus import EventBus
 from core.roles.models import RoleRecord
@@ -181,4 +182,5 @@ def test_core_module_provide_failure_aborts_startup(tmp_path: Path) -> None:
                 ),
                 broken_core_module,
             ),
+            core_checks=install_core_checks,
         )

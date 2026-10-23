@@ -4,12 +4,14 @@ from dataclasses import dataclass, replace
 from typing import TypeAlias, cast
 
 from bus.event_bus import EventBus
+from agent.core.turn_events import TurnEvents, read_only
 from agent.lifecycle.phase import (
     PhaseFrame,
     PhaseModule,
     collect_prefixed_slots,
     topo_sort_modules,
 )
+from shiori_sdk.core.conversation import StepFinished
 from shiori_sdk.lifecycle import AfterStepCtx
 
 
@@ -41,13 +43,47 @@ class _FanoutAfterStepCtxModule:
     slot = "after_step.fanout"
     requires = ("after_step.collect_pre", _CTX_SLOT)
 
-    def __init__(self, bus: EventBus) -> None:
+    def __init__(self, bus: EventBus, events: TurnEvents) -> None:
         self._bus = bus
+        self._events = events
 
     async def run(self, frame: AfterStepFrame) -> AfterStepFrame:
         ctx = cast(AfterStepCtx, frame.slots[_CTX_SLOT])
-        await self._bus.fanout(ctx)
+
+        def apply(event: StepFinished) -> None:
+            frame.slots[_CTX_SLOT] = replace(
+                ctx,
+                early_stop=event.early_stop,
+                early_stop_reason=event.early_stop_reason,
+                extra_metadata=dict(event.extra_metadata),
+            )
+
+        # StepFinished handlers see the stop the step modules requested; core
+        # listeners then see the final one (progress reporting).
+        await self._events.emit(_step_finished(ctx), apply)
+        await self._bus.fanout(frame.slots[_CTX_SLOT])
         return frame
+
+
+def _step_finished(ctx: AfterStepCtx) -> StepFinished:
+    """The ``StepFinished`` projection of the step's context."""
+    return StepFinished(
+        session_key=ctx.session_key,
+        channel=ctx.channel,
+        chat_id=ctx.chat_id,
+        iteration=ctx.iteration,
+        context_tokens_estimate=ctx.context_tokens_estimate,
+        input_limit_tokens=ctx.input_limit_tokens,
+        tools_called=ctx.tools_called,
+        partial_reply=ctx.partial_reply,
+        partial_thinking=ctx.partial_thinking,
+        tools_used_so_far=ctx.tools_used_so_far,
+        tool_chain_partial=tuple(read_only(group) for group in ctx.tool_chain_partial),
+        has_more=ctx.has_more,
+        early_stop=ctx.early_stop,
+        early_stop_reason=ctx.early_stop_reason,
+        extra_metadata=read_only(ctx.extra_metadata),
+    )
 
 
 class _CollectAfterStepExportSlotsModule:
@@ -95,6 +131,7 @@ class _ReturnAfterStepCtxModule:
 
 def default_after_step_modules(
     bus: EventBus,
+    events: TurnEvents,
     plugin_modules: AfterStepModules | None = None,
 ) -> AfterStepModules:
     builtins: AfterStepModules = [
@@ -104,7 +141,7 @@ def default_after_step_modules(
             slot="after_step.collect_pre",
             requires=("after_step.copy_input", _CTX_SLOT),
         ),
-        _FanoutAfterStepCtxModule(bus),
+        _FanoutAfterStepCtxModule(bus, events),
         _CollectAfterStepExportSlotsModule(
             slot="after_step.collect_post",
             requires=("after_step.fanout", _CTX_SLOT),

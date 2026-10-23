@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Protocol, TypeAlias, cast
 from shiori_sdk.commands import CommandInput
 from agent.lifecycle.commands import abort_command
 from bus.event_bus import EventBus
+from agent.core.turn_events import TurnEvents, freeze_top_level, read_only
 from session.manager.models import consolidation_cursor
 from agent.core.runtime_support import SessionLike
 from agent.core.types import ContextBundle
@@ -21,6 +22,8 @@ from agent.lifecycle.types import BeforeTurnCtx, TurnState
 from conversation.context_scope import (
     session_context_view,
 )
+from shiori_sdk.core.conversation import ConversationMessage, TurnStarting
+from shiori_sdk.kernel import Veto
 
 if TYPE_CHECKING:
     from agent.core.passive_turn import ContextStore
@@ -259,13 +262,49 @@ class _EmitBeforeTurnCtxModule:
     requires = ("before_turn.build_ctx", _CTX_SLOT)
     produces = (_CTX_SLOT,)
 
-    def __init__(self, bus: EventBus) -> None:
+    def __init__(self, bus: EventBus, events: TurnEvents) -> None:
         self._bus = bus
+        self._events = events
 
     async def run(self, frame: BeforeTurnFrame) -> BeforeTurnFrame:
-        ctx = cast(BeforeTurnCtx, frame.slots[_CTX_SLOT])
-        frame.slots[_CTX_SLOT] = await self._bus.emit(ctx)
+        ctx = await self._bus.emit(cast(BeforeTurnCtx, frame.slots[_CTX_SLOT]))
+        frame.slots[_CTX_SLOT] = ctx
+
+        def apply(event: TurnStarting) -> None:
+            ctx.skill_names[:] = event.skill_names
+            ctx.extra_hints[:] = event.extra_hints
+            ctx.extra_metadata = dict(event.extra_metadata)
+
+        def vetoed(veto: Veto) -> None:
+            ctx.abort, ctx.abort_reply = True, veto.reason
+
+        await self._events.emit(_turn_starting(ctx), apply, vetoed)
         return frame
+
+
+def _turn_starting(ctx: BeforeTurnCtx) -> TurnStarting:
+    """The ``TurnStarting`` projection of the turn's context."""
+    return TurnStarting(
+        session_key=ctx.session_key,
+        channel=ctx.channel,
+        chat_id=ctx.chat_id,
+        content=ctx.content,
+        timestamp=ctx.timestamp,
+        context_scope=ctx.context_scope,
+        history=tuple(
+            ConversationMessage(
+                role=message.role,
+                content=message.content,
+                tools_used=tuple(message.tools_used),
+            )
+            for message in ctx.history_messages
+        ),
+        retrieved_memory_block=ctx.retrieved_memory_block,
+        retrieval_trace=freeze_top_level(ctx.retrieval_trace_raw),
+        skill_names=tuple(ctx.skill_names),
+        extra_hints=tuple(ctx.extra_hints),
+        extra_metadata=read_only(ctx.extra_metadata),
+    )
 
 
 class _ReturnBeforeTurnCtxModule:
@@ -297,6 +336,7 @@ class _CollectBeforeTurnExportSlotsModule:
 
 def default_before_turn_modules(
     bus: EventBus,
+    events: TurnEvents,
     session_manager: SessionManager,
     context_store: ContextStore,
     *,
@@ -313,7 +353,7 @@ def default_before_turn_modules(
         ),
         _PrepareContextModule(context_store),
         _BuildBeforeTurnCtxModule(),
-        _EmitBeforeTurnCtxModule(bus),
+        _EmitBeforeTurnCtxModule(bus, events),
         _CollectBeforeTurnExportSlotsModule(),
         _ReturnBeforeTurnCtxModule(),
     ]

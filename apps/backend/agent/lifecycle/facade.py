@@ -4,6 +4,7 @@ from collections.abc import Awaitable, Callable
 
 from bus.event_bus import EventBus
 from agent.lifecycle.types import BeforeReasoningCtx, BeforeStepCtx, BeforeTurnCtx
+from shiori_sdk.core.conversation import StepFinished
 from shiori_sdk.lifecycle import (
     AfterReasoningCtx,
     AfterStepCtx,
@@ -77,3 +78,10 @@ class TurnLifecycle:
         handler: Callable[[AfterTurnCtx], Awaitable[None] | None],
     ) -> None:
         self._bus.on(AfterTurnCtx, handler)
+
+    def on_step_finished(
+        self,
+        handler: Callable[[StepFinished], Awaitable[None] | None],
+    ) -> None:
+        """Listens to the final ``StepFinished`` the turn fans out to the core bus."""
+        self._bus.on(StepFinished, handler)

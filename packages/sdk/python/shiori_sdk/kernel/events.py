@@ -113,7 +113,8 @@ class EventHub:
         """Checks the payload, runs ``on`` handlers, then core checks, then watchers.
 
         A handler returns the same event type (replacement) or ``Veto``;
-        anything else counts as its error. Errors follow the event type's
+        anything else, or a replacement breaking the payload rule, counts as
+        its error. Errors follow the event type's
         ``on_error`` policy. A vetoed event reaches neither checks nor watchers.
         """
         event_type = type(event)
@@ -128,6 +129,7 @@ class EventHub:
                     return result
                 if type(result) is not event_type:
                     raise TypeError(f"on 处理器须返回 {event_type} 或 Veto: {result!r}")
+                _require_payload(event_type, result)
                 event = result
             except Exception as error:
                 problem = f"插件 {sub.plugin_id} 处理 {event_type.__name__} 失败"

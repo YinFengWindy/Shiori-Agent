@@ -32,7 +32,7 @@ def reply_is_buffered() -> bool:
 
 
 def presented_tool_chain(
-    groups: Sequence[dict[str, Any]], *, buffered: bool
+    groups: Sequence[Mapping[str, Any]], *, buffered: bool
 ) -> list[dict[str, Any]]:
     """Retain tool facts and thinking while hiding dialogue never published.
 

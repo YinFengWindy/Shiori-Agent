@@ -9,8 +9,11 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol
+
+from agent.core.turn_events import core_kernel
+from shiori_sdk.kernel import Kernel
 
 if TYPE_CHECKING:
     from agent.tool_hooks.base import ToolHook
@@ -43,10 +46,18 @@ class PluginContributionSource(Protocol):
     @property
     def tool_hooks(self) -> Sequence["ToolHook"]: ...
 
+    @property
+    def kernel(self) -> Kernel:
+        """The kernel turn events go through (the generation's, with core checks)."""
+        ...
+
 
 @dataclass(frozen=True)
 class StaticPluginContributions:
-    """内容固定的插件贡献来源；默认实例即未接插件内核时的空来源。"""
+    """内容固定的插件贡献来源；默认实例即未接插件内核时的空来源。
+
+    回合事件经裸内核发出：没有插件，只有核心校验（``core_kernel``）。
+    """
 
     before_turn_modules: Sequence[object] = ()
     before_reasoning_modules: Sequence[object] = ()
@@ -56,6 +67,7 @@ class StaticPluginContributions:
     after_reasoning_modules: Sequence[object] = ()
     after_turn_modules: Sequence[object] = ()
     tool_hooks: Sequence["ToolHook"] = ()
+    kernel: Kernel = field(default_factory=core_kernel)
 
 
 NO_PLUGIN_CONTRIBUTIONS: PluginContributionSource = StaticPluginContributions()

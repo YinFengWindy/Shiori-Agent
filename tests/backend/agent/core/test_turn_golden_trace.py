@@ -50,7 +50,7 @@ from core.common.channel_directory import ChannelDirectory
 from core.roles import RoleRepository, RoleRuntimeRegistry, RoleStore
 from prompts.natural_chat import FINISH_REPLY_TOOL_NAME, NATURAL_CHAT_PROMPT
 from session.manager import SessionManager
-from shiori_sdk.lifecycle import AfterStepCtx
+from shiori_sdk.core.conversation import StepFinished
 from shiori_sdk.memory.engine import MemoryQueryResult
 from shiori_sdk.storage import plugin_data_dir
 from shiori_sdk.testing.http import FakeHttp
@@ -248,16 +248,16 @@ class GoldenHost:
 def observe_steps(bus: EventBus, steps: list[StepSeen]) -> None:
     """Listens to finished tool steps as a core listener does (progress reporting)."""
 
-    def seen(ctx: AfterStepCtx) -> None:
+    def seen(event: StepFinished) -> None:
         steps.append(
             StepSeen(
-                early_stop=ctx.early_stop,
-                early_stop_reason=ctx.early_stop_reason,
-                telemetry=dict(ctx.extra_metadata),
+                early_stop=event.early_stop,
+                early_stop_reason=event.early_stop_reason,
+                telemetry=dict(event.extra_metadata),
             )
         )
 
-    TurnLifecycle(bus).on_after_step(seen)
+    TurnLifecycle(bus).on_step_finished(seen)
 
 
 @pytest.fixture(scope="module")

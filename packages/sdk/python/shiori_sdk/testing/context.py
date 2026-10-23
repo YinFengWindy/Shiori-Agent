@@ -3,6 +3,8 @@
 import inspect
 from pathlib import Path
 
+from shiori_sdk.kernel import Context, Kernel, Key, PluginSpec, Scope, Veto
+from shiori_sdk.kernel.events import OnHandler, WatchHandler
 from shiori_sdk.runtime import (
     CapabilityNotGranted,
     Dispose,
@@ -19,6 +21,11 @@ class FakePluginContext:
     ``sdk_context`` fixture); names unknown to the host are rejected like the host
     does. Only ``lifecycle`` and ``events`` have fakes here; other declared names
     are recorded in ``granted`` for specialized fakes.
+
+    The kernel members (``provide`` / ``require`` / ``get``, ``on`` / ``watch``
+    / ``emit``) run on a real ``Kernel``: ``kernel`` (a fresh one by default)
+    with ``inject`` / ``optional_inject`` / ``provides`` as the manifest
+    declares them. Provide core stubs on ``kernel`` before calling setup.
     """
 
     def __init__(
@@ -27,6 +34,10 @@ class FakePluginContext:
         plugin_dir: Path = Path("."),
         *,
         capabilities: tuple[str, ...] = ("lifecycle", "events"),
+        kernel: Kernel | None = None,
+        inject: tuple[str, ...] = (),
+        optional_inject: tuple[str, ...] = (),
+        provides: tuple[str, ...] = (),
     ) -> None:
         require_known_capabilities(capabilities, f"FakePluginContext({plugin_id})")
         self.plugin_id = plugin_id
@@ -37,6 +48,16 @@ class FakePluginContext:
         self._events = FakeEvents()
         self._effects: list[tuple[str, Dispose]] = []
         self._closed = False
+        self.kernel = kernel if kernel is not None else Kernel()
+        self._scope = Scope(plugin_id)
+        spec = PluginSpec(
+            plugin_id,
+            _no_setup,
+            requires=inject,
+            optional=optional_inject,
+            provides=provides,
+        )
+        self._kernel_context = Context(self.kernel, spec, self._scope)
 
     def _check(self, name: str) -> None:
         if self._closed:
@@ -64,6 +85,30 @@ class FakePluginContext:
             raise RuntimeError("Plugin scope is closed")
         self.exported = api
 
+    def provide[T](self, key: Key[T], impl: T) -> None:
+        """Publishes ``impl`` on ``kernel`` under a declared ``provides`` key."""
+        self._kernel_context.provide(key, impl)
+
+    def require[T](self, key: Key[T]) -> T:
+        """The provider of a declared ``inject`` key on ``kernel``."""
+        return self._kernel_context.require(key)
+
+    def get[T](self, key: Key[T]) -> T | None:
+        """The provider of a declared ``optional_inject`` key on ``kernel``, or None."""
+        return self._kernel_context.get(key)
+
+    def on[E](self, event_type: type[E], handler: OnHandler[E]) -> None:
+        """Joins ``kernel``'s ordered chain of ``event_type``."""
+        self._kernel_context.on(event_type, handler)
+
+    def watch[E](self, event_type: type[E], handler: WatchHandler[E]) -> None:
+        """Listens read-only to ``event_type`` on ``kernel``."""
+        self._kernel_context.watch(event_type, handler)
+
+    async def emit[E](self, event: E) -> E | Veto:
+        """Emits through ``kernel``."""
+        return await self._kernel_context.emit(event)
+
     def effect(self, label: str, dispose: Dispose) -> None:
         """Records custom cleanup in registration order."""
         if self._closed:
@@ -75,7 +120,7 @@ class FakePluginContext:
         self._closed = True
         self._events.close()
         self._lifecycle.close()
-        errors: list[Exception] = []
+        errors: list[Exception] = await self._scope.close()
         while self._effects:
             _, dispose = self._effects.pop()
             try:
@@ -86,3 +131,7 @@ class FakePluginContext:
                 errors.append(error)
         if errors:
             raise ExceptionGroup("Plugin cleanup failed", errors)
+
+
+async def _no_setup(context: Context) -> None:
+    """The fake's spec is never set up by the kernel; setup runs in the test."""

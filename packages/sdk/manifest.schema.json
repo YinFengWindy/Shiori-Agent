@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/YinFengWindy/Shiori-Agent/blob/main/packages/sdk/manifest.schema.json",
   "title": "Shiori plugin manifest (api: 2)",
-  "description": "plugins/<id>/manifest.yaml 的现行格式。字段与取值以 apps/backend/agent/plugin_host/manifest.py（所有插件）和 package_contract.py / renderer_contract.py（声明 package_contract 的外部包）为准。schema 只描述字段形状；跨字段规则（渠道名与会话类型不重复、前缀互不包含、dependencies 与 optional_dependencies 不重叠、入口文件存在且可解析、版本范围与宿主兼容）仍由解析代码判定。",
+  "description": "plugins/<id>/manifest.yaml 的现行格式。字段与取值以 apps/backend/agent/plugin_host/manifest.py（所有插件）和 package_contract.py / renderer_contract.py（声明 package_contract 的外部包）为准。schema 只描述字段形状；跨字段规则（渠道名与会话类型不重复、前缀互不包含、dependencies 与 optional_dependencies、inject 与 optional_inject 不重叠、入口文件存在且可解析、版本范围与宿主兼容）仍由解析代码判定。",
   "type": "object",
   "additionalProperties": false,
   "required": ["api", "capabilities"],
@@ -102,6 +102,18 @@
     },
     "dependencies": { "$ref": "#/$defs/pluginIds" },
     "optional_dependencies": { "$ref": "#/$defs/pluginIds" },
+    "inject": {
+      "description": "setup 里经 ctx.require 取用的服务 Key 名称；缺少提供方时插件 BLOCKED。",
+      "$ref": "#/$defs/keyNames"
+    },
+    "optional_inject": {
+      "description": "setup 里经 ctx.get 取用的服务 Key 名称；没有提供方时得到 None。不能与 inject 重叠。",
+      "$ref": "#/$defs/keyNames"
+    },
+    "provides": {
+      "description": "插件经 ctx.provide 发布的服务 Key 名称。",
+      "$ref": "#/$defs/keyNames"
+    },
     "renderer": {
       "description": "外部包的已编译前端入口（renderer_contract.py）。",
       "type": "object",
@@ -166,6 +178,11 @@
       "description": "插件 ID 列表。",
       "type": "array",
       "items": { "$ref": "#/$defs/nonEmptyString" }
+    },
+    "keyNames": {
+      "description": "服务 Key 名称列表（shiori_sdk.kernel.Key.name）：非空、无首尾空白。",
+      "type": "array",
+      "items": { "type": "string", "pattern": "^\\S(.*\\S)?$" }
     },
     "channel": {
       "type": "object",

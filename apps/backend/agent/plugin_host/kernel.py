@@ -178,6 +178,7 @@ class PluginKernel:
         *,
         settings: PluginGenerationSettings,
         core: Sequence[CoreModule],
+        core_checks: Callable[[Kernel], None],
         namespace: str = "",
         strict: bool = False,
         external_plugin_dirs: list[Path] | None = None,
@@ -187,6 +188,9 @@ class PluginKernel:
 
         They provide before any plugin is planned; one that raises aborts the
         construction, and with it startup (§8.5), unlike a plugin's setup failure.
+        ``core_checks`` installs the core's post-chain checks on the kernel
+        (``agent.core.turn_events.install_core_checks``; this layer may not
+        import the core).
         """
         self._dirs = plugin_dirs
         self._external_dirs = external_plugin_dirs or []
@@ -211,6 +215,7 @@ class PluginKernel:
         self._kernel = Kernel()
         for module in core:
             module(self._kernel.provide)
+        core_checks(self._kernel)
         self._resolve_reference = required_core_key(
             self._kernel.get, HOST_CONFIG_REFERENCES
         )
@@ -447,13 +452,14 @@ class PluginKernel:
 
         Package-contract plugins surface it on the Plugins page. The kernel
         names the first unavailable ``requires`` entry ``inject[i]``; the
-        adapter's ``requires`` mirror manifest ``dependencies``, so the field
-        is reported under the manifest's name.
+        adapter's ``requires`` are manifest ``dependencies`` followed by
+        ``inject``, so the field is reported under the manifest's own name.
         """
         error = PluginDependencyError(blocked.reason)
         if "package_contract" in record.manifest.metadata:
-            field = blocked.field.replace("inject", "dependencies", 1)
-            error.diagnostic = replace(blocked, field=field)
+            error.diagnostic = replace(
+                blocked, field=_manifest_requires_field(record.manifest, blocked.field)
+            )
         return error
 
     def _spec(self, record: PluginRecord) -> PluginSpec:
@@ -471,7 +477,7 @@ class PluginKernel:
                 content = self._contents.pop(record.candidate_id, None)
                 self._import_entry(handle, content)
                 self._register_config_schema(handle)
-                await self._setup_v2(handle, reactivated=handle.reactivated)
+                await self._setup_v2(handle, ctx, reactivated=handle.reactivated)
             except BaseException:
                 # A rolled-back instance never admits calls again, even via
                 # stale references; the kernel then releases its scope.
@@ -479,15 +485,21 @@ class PluginKernel:
                 raise
             ctx.provide(plugin_key(manifest.id), handle.instance)
 
-        # ``requires`` must keep the order of ``manifest.dependencies``:
-        # ``_dependency_error`` reports the kernel's ``inject[i]`` field as
-        # ``dependencies[i]``.
+        # ``requires`` lists ``manifest.dependencies`` first, then ``inject``,
+        # each in manifest order: ``_dependency_error`` maps the kernel's
+        # ``inject[i]`` field back to the manifest entry by that order.
         return PluginSpec(
             manifest.id,
             setup,
-            requires=tuple(plugin_key(d).name for d in manifest.dependencies),
-            optional=tuple(plugin_key(d).name for d in manifest.optional_dependencies),
-            provides=(plugin_key(manifest.id).name,),
+            requires=(
+                *(plugin_key(d).name for d in manifest.dependencies),
+                *manifest.inject,
+            ),
+            optional=(
+                *(plugin_key(d).name for d in manifest.optional_dependencies),
+                *manifest.optional_inject,
+            ),
+            provides=(plugin_key(manifest.id).name, *manifest.provides),
             hot_reload=manifest.supports_hot_unload,
             channels=_declares_channels(record),
         )
@@ -653,7 +665,9 @@ class PluginKernel:
             return
         self.config_schemas.register(handle.plugin_id, model_cls)
 
-    async def _setup_v2(self, handle: PluginHandle, *, reactivated: bool) -> None:
+    async def _setup_v2(
+        self, handle: PluginHandle, kernel_context: Context, *, reactivated: bool
+    ) -> None:
         module = sys.modules[handle.record.import_path]
         setup = getattr(module, "setup", None)
         if not callable(setup):
@@ -711,6 +725,7 @@ class PluginKernel:
                 else None
             ),
             publish_api=lambda api: setattr(handle, "instance", api),
+            kernel_context=kernel_context,
             **core_capabilities,
         )
         context.as_service_provider_context()
@@ -1253,6 +1268,11 @@ class PluginKernel:
         return self._collect_phase("after_turn")
 
     @property
+    def kernel(self) -> Kernel:
+        """The generation's kernel, with the core checks; turn events go through it."""
+        return self._kernel
+
+    @property
     def active_plugin_ids(self) -> list[str]:
         """Plugin ids of the ACTIVE plugins in kernel order (stable across reloads)."""
         return [handle.plugin_id for handle in self._active_handles()]
@@ -1295,6 +1315,17 @@ def _purge_modules(import_path: str) -> None:
     for module_name in tuple(sys.modules):
         if module_name == import_path or module_name.startswith(import_path + "."):
             _ = sys.modules.pop(module_name, None)
+
+
+def _manifest_requires_field(manifest: PluginManifest, field: str) -> str:
+    """The manifest entry behind the kernel's ``inject[i]`` field of a ``_spec``."""
+    if not field.startswith("inject["):
+        return field
+    index = int(field.removeprefix("inject[").removesuffix("]"))
+    dependencies = len(manifest.dependencies)
+    if index < dependencies:
+        return f"dependencies[{index}]"
+    return f"inject[{index - dependencies}]"
 
 
 def _restart_only(error: KernelError) -> PluginReloadUnsupported:
