@@ -189,17 +189,11 @@ class ProactiveTurnPipeline:
                     session=self._session_key,
                     tick=ctx.tick_id,
                     action="skip",
-                    reason=gate.gate_reason or gate.reason,
+                    reason=gate.reason,
                     duration_ms=int((time.perf_counter() - started) * 1000),
                 )
             )
-            self._record_tick_log_finish(
-                ctx,
-                gate_exit=gate.reason,
-                gate_name=gate.gate_name,
-                gate_reason=gate.gate_reason,
-                gate_metadata=gate.gate_metadata,
-            )
+            self._record_tick_log_finish(ctx, gate_exit=gate.reason)
             return gate.base_score
 
         orchestrator = self._turn_orchestrator
@@ -428,9 +422,6 @@ class ProactiveTurnPipeline:
         ctx: AgentTickContext,
         *,
         gate_exit: str | None = None,
-        gate_name: str = "",
-        gate_reason: str = "",
-        gate_metadata: dict[str, object] | None = None,
         result: TurnResult | None = None,
     ) -> None:
         _record_tick_log_finish(
@@ -438,9 +429,6 @@ class ProactiveTurnPipeline:
             session_key=self._session_key,
             ctx=ctx,
             gate_exit=gate_exit,
-            gate_name=gate_name,
-            gate_reason=gate_reason,
-            gate_metadata=gate_metadata,
             result=result,
         )
         self._last_log_result = result

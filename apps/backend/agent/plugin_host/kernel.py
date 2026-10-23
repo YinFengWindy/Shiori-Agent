@@ -1261,7 +1261,7 @@ class PluginKernel:
         """What the ACTIVE plugins contributed to the core service under ``key``.
 
         In ``active_plugin_ids`` order; host wiring (channels, bot commands,
-        tool hooks, proactive gates) reads the generation's plugins through it.
+        tool hooks) reads the generation's plugins through it.
         """
         source = required_core_key(self._kernel.get, key)
         return list(source.active(self.active_plugin_ids))

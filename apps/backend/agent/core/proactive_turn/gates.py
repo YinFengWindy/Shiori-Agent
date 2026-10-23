@@ -1,15 +1,12 @@
-"""Global admission followed by independently evaluated core proactive motives."""
+"""Independently evaluated core proactive motives that may claim a tick."""
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
 from time import perf_counter
 from typing import Literal, Mapping, Protocol, Sequence, cast, runtime_checkable
-
-from core.common.live_contributions import LiveContributions
 
 
 class ProactiveMode(StrEnum):
@@ -45,19 +42,6 @@ class ProactiveGateDecision:
     ) -> "ProactiveGateDecision":
         """Records a non-trigger without denying other motives or sources."""
         return cls(kind="continue", reason=reason, metadata=dict(metadata or {}))
-
-    @classmethod
-    def block(
-        cls,
-        reason: str,
-        *,
-        metadata: Mapping[str, object] | None = None,
-    ) -> "ProactiveGateDecision":
-        return cls(
-            kind="block",
-            reason=reason,
-            metadata=dict(metadata or {}),
-        )
 
     @classmethod
     def activate(
@@ -130,11 +114,9 @@ class ProactiveGateTraceItem:
 class ProactiveGateResult:
     """The GateChain's complete result for one proactive tick."""
 
-    blocked: bool
     reason: str
     activation: ProactiveGateActivation | None
     trace: tuple[ProactiveGateTraceItem, ...]
-    blocked_gate_name: str | None = None
 
 
 @runtime_checkable
@@ -159,59 +141,34 @@ class ProactiveGateAdapter:
         _ = completion
 
 
-# Global gate source, read on every evaluation so plugins unloaded or loaded
-# within a generation take effect on the next tick.
-ProactiveGateSource = Callable[[], Sequence[ProactiveGate]]
-
-
-def no_proactive_gates() -> Sequence[ProactiveGate]:
-    """Gate source used when no plugin kernel is wired."""
-    return ()
-
-
 class ProactiveGateChain:
-    """Evaluates global gates before core motives and routes selected-mode completion.
+    """Evaluates core motives by priority and routes selected-mode completion.
 
-    ``gates`` is read on every evaluation; the chain is re-validated and re-sorted
-    only when the gate set changes, and once at construction so duplicate names
-    in the startup set fail where the chain is wired.
+    Names are validated once at construction, so duplicates fail where the
+    chain is wired. A motive may claim the tick but never block it.
     """
 
-    def __init__(
-        self,
-        gates: ProactiveGateSource = no_proactive_gates,
-        *,
-        motives: Sequence[ProactiveGate] = (),
-    ) -> None:
-        self._motives = tuple(motives)
-        self._motive_names = {gate.name for gate in motives}
-        self._ordered = LiveContributions(gates, self._order)
-
-    def _order(self, gates: list[ProactiveGate]) -> tuple[ProactiveGate, ...]:
-        """Validates names and orders global gates ahead of core motives."""
+    def __init__(self, *, motives: Sequence[ProactiveGate] = ()) -> None:
         names: set[str] = set()
-        for gate in [*gates, *self._motives]:
+        for gate in motives:
             name = str(gate.name).strip()
             if not name:
                 raise ValueError("Proactive gate name must not be empty")
             if name in names:
                 raise ValueError(f"Duplicate proactive gate name: {name}")
             names.add(name)
-        # Global admission always runs before core motives, regardless of priority.
-        return tuple(
-            sorted(gates, key=lambda gate: (-int(gate.priority), gate.name))
-        ) + tuple(
-            sorted(self._motives, key=lambda gate: (-int(gate.priority), gate.name))
+        self._ordered = tuple(
+            sorted(motives, key=lambda gate: (-int(gate.priority), gate.name))
         )
 
     def evaluate(self, ctx: ProactiveGateContext) -> ProactiveGateResult:
         trace: list[ProactiveGateTraceItem] = []
-        for gate in self._ordered.current():
+        for gate in self._ordered:
             started = perf_counter()
             decision = gate.evaluate(ctx)
             duration_ms = int((perf_counter() - started) * 1000)
             self._validate_decision(gate, decision)
-            if gate.name in self._motive_names and decision.kind == "block":
+            if decision.kind == "block":
                 raise ValueError(
                     f"Core motive {gate.name} cannot block global admission"
                 )
@@ -225,20 +182,11 @@ class ProactiveGateChain:
                     duration_ms=duration_ms,
                 )
             )
-            if decision.kind == "block":
-                return ProactiveGateResult(
-                    blocked=True,
-                    reason=decision.reason or gate.name,
-                    activation=None,
-                    trace=tuple(trace),
-                    blocked_gate_name=gate.name,
-                )
             if decision.kind == "activate":
                 # _validate_decision 已保证 activate 分支下 mode 不为空；
                 # 这里仅做静态类型收窄，不再重复运行期校验。
                 mode = cast(ProactiveMode, decision.mode)
                 return ProactiveGateResult(
-                    blocked=False,
                     reason=decision.reason or gate.name,
                     activation=ProactiveGateActivation(
                         gate_name=gate.name,
@@ -250,7 +198,6 @@ class ProactiveGateChain:
                     trace=tuple(trace),
                 )
         return ProactiveGateResult(
-            blocked=False,
             reason="passed",
             activation=None,
             trace=tuple(trace),

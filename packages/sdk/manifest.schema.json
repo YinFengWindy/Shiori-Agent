@@ -77,7 +77,6 @@
           "memory",
           "memory_engine",
           "models",
-          "proactive_gates",
           "process_resources",
           "processes",
           "resources",

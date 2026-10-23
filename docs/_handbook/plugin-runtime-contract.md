@@ -167,6 +167,17 @@ consolidates these additions and the subsequent #847 breaking migration.
   remove the name from `capabilities` (using `roles` / `models` instead) to
   load it again.
 
+- **breaking: capability `proactive_gates` removed (PR #<待定>, issue #902,
+  refactor P3-1, D19).** No plugin contributed a gate. It leaves
+  `shiori_sdk.runtime.KNOWN_CAPABILITIES` and the `capabilities` enum of
+  `manifest.schema.json`, and the host no longer exposes `ctx.proactive_gates`.
+  A third-party manifest that still declares it is rejected at discovery and
+  package validation as an unknown capability, so the plugin does not load;
+  remove the name from `capabilities` to load it again. Proactive admission now
+  runs only the core motives (scene follow-up, relationship fallback), in the
+  same order and with the same rule that a motive may claim a tick but never
+  block it.
+
 - **Natural proactive replies and background reports (PR #894, issue #868).** The current
   role's built-in natural-chat capability also applies to proactive draft
   `message_push` output, Drift dialogue and captured background-result reports.

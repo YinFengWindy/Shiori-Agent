@@ -24,9 +24,6 @@ class GateResult:
     base_score: float | None
     context_as_fallback_open: bool = False
     activation: ProactiveGateActivation | None = None
-    gate_name: str = ""
-    gate_reason: str = ""
-    gate_metadata: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass

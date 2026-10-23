@@ -53,7 +53,6 @@ def test_missing_relationship_preserves_diagnostics_and_does_not_block(reason):
     result = ProactiveGateChain(
         motives=[SceneFollowupStrategy(runtime), RelationshipStrategy(runtime)]
     ).evaluate(_context())
-    assert not result.blocked
     assert result.activation is None
     assert result.trace[0].reason == "not_due"
     assert result.trace[1].metadata == {"reason": reason, "loneliness_value": 20}

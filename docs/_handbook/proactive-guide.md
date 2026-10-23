@@ -275,7 +275,7 @@ ProactiveLoop.run()
        │    ├── _fetch_content()           # 调 MCP tool: get_proactive_events(kind=content) → 并行 web_fetch 正文
        │    └── _fetch_context()           # 调 MCP tool: get_context / get_sleep_context / get_steam_context
        ├── ProactiveTurnPipeline（agent/core/proactive_turn/）
-       │    ├── Pre-gate（ProactiveGateChain：全局准入 + 各动机 gate，如场景跟进、关系兜底；被拦下就跳过本轮）
+       │    ├── Pre-gate（ProactiveGateChain：各核心动机 gate，如场景跟进、关系兜底；动机只能认领本轮，不能拦下）
        │    ├── 无 alert/content 时：关系兜底或 drift（见上文）
        │    ├── agent loop（LLM 逐条评分分类 → mark_interesting/mark_not_interesting → message_push → finish_turn）
        │    ├── Classification completeness check（未分类条目强制补完）

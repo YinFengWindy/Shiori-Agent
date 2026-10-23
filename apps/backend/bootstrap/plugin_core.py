@@ -12,7 +12,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from agent.config import resolve_config_reference
-from agent.core.proactive_turn.plugin_capability import PluginProactiveGates
 from agent.plugin_host.process_resources import (
     PluginProcessResourceAttachments,
     ProcessResourceOwner,
@@ -37,7 +36,6 @@ from agent.plugin_host.core_keys import (
     HOST_MEMORY,
     HOST_MEMORY_ENGINE,
     HOST_MODELS,
-    HOST_PROACTIVE_GATES,
     HOST_PROCESS_RESOURCES,
     HOST_PROCESSES,
     HOST_RESOURCES,
@@ -249,10 +247,6 @@ def plugin_core_modules(inputs: PluginCoreInputs) -> tuple[CoreModule, ...]:
         """Plugin-scoped background tasks (``core.common``)."""
         provide(HOST_BACKGROUND, PluginBackground())
 
-    def provide_proactive_gates(provide: CoreProvide) -> None:
-        """Plugin proactive gates (``agent.core.proactive_turn``; P3 deletes them)."""
-        provide(HOST_PROACTIVE_GATES, PluginProactiveGates())
-
     def provide_bridge(provide: CoreProvide) -> None:
         """The plugin RPC registry and the ``rpc`` capability over it (bridge)."""
         provide(HOST_BRIDGE, inputs.rpc)
@@ -283,6 +277,5 @@ def plugin_core_modules(inputs: PluginCoreInputs) -> tuple[CoreModule, ...]:
         provide_processes,
         provide_conversation,
         provide_background,
-        provide_proactive_gates,
         provide_host_passthrough,
     )
