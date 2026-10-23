@@ -79,6 +79,8 @@ DEFAULT_FILES: frozenset[str] = frozenset(
         "tests/backend/agent/core/passive_turn/test_reply_recovery.py",
         "tests/backend/agent/core/passive_turn/test_compaction.py",
         "tests/backend/agent/core/test_turn_pipelines.py",
+        # P3 golden trace，维护者 2026-10-23 确认，#902。
+        "tests/backend/agent/core/test_turn_golden_trace.py",
         "tests/backend/agent/core/test_response_parser.py",
         "tests/backend/agent/core/test_safety_retry.py",
         "tests/backend/agent/core/test_p7_commit.py",
@@ -101,7 +103,8 @@ DEFAULT_FILES: frozenset[str] = frozenset(
 
 # Parametrized cases. The guard test fails outside this band.
 DEFAULT_CASE_MIN = 950
-DEFAULT_CASE_MAX = 1050
+# P3 golden trace，维护者 2026-10-23 确认，#902：上限从 1050 上调到正好容纳它的 8 条用例。
+DEFAULT_CASE_MAX = 1058
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
