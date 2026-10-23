@@ -40,6 +40,7 @@ def test_catastrophic_commands_are_refused(command: str) -> None:
         "rm -rf ~/.cache/pip",
         "dd if=/dev/zero of=disk.img bs=1M count=10",
         "echo 'rm -rf /'",
+        "mv a.txt ~",  # 移进受保护目录不算移走：目标不算源
     ],
 )
 def test_ordinary_commands_pass(command: str) -> None:
