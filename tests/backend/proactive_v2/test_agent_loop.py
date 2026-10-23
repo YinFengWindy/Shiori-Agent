@@ -168,6 +168,14 @@ async def test_loop_with_no_llm_fn_executes_nothing():
     assert len(tick._state_store.tick_log_starts) == 1
     assert len(tick._state_store.tick_log_finishes) == 1
     assert tick._state_store.tick_log_finishes[0]["terminal_action"] == "skip"
+    # The motive that claimed the tick is logged as gate diagnostics, not an exit.
+    finish = tick._state_store.tick_log_finishes[0]
+    assert (
+        finish["gate_exit"],
+        finish["gate_name"],
+        finish["gate_reason"],
+        finish["gate_metadata"],
+    ) == (None, "relationship.loneliness", "loneliness", {"reason": "threshold"})
 
 
 # ── 终止工具立即结束 loop ─────────────────────────────────────────────────

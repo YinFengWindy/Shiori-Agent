@@ -97,7 +97,6 @@ class PluginSetupContext:
         scene_observations: SceneObservations | None = None,
         light_provider: ChatProvider | None = None,
         light_model: str | None = None,
-        proactive_gates: Any = None,
         channels: ChannelsCapability | None = None,
         accounts: AccountsCapability | None = None,
         avatars: AvatarsCapability | None = None,
@@ -138,7 +137,6 @@ class PluginSetupContext:
         self._scene_observations = scene_observations
         self._light_provider = light_provider
         self._light_model = light_model
-        self._proactive_gates = proactive_gates
         self._channels = channels
         self._accounts = accounts
         self._avatars = avatars
@@ -373,11 +371,6 @@ class PluginSetupContext:
     def light_model(self) -> str:
         """Return the explicitly granted light_model SDK capability."""
         return self._core_capability("light_model", self._light_model)
-
-    @property
-    def proactive_gates(self) -> Any:
-        """Return the explicitly granted proactive gate contributions (P3 deletes it)."""
-        return self._core_capability("proactive_gates", self._proactive_gates)
 
     def as_service_context(self) -> ServicePluginContext:
         """Check service injection without the legacy dynamic attribute path."""

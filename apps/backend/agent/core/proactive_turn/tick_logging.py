@@ -31,9 +31,6 @@ def record_tick_log_finish(
     session_key: str,
     ctx: AgentTickContext,
     gate_exit: str | None = None,
-    gate_name: str = "",
-    gate_reason: str = "",
-    gate_metadata: dict[str, object] | None = None,
     result: TurnResult | None = None,
 ) -> None:
     """记录主动 tick 的最终裁定与上下文快照。"""
@@ -50,8 +47,10 @@ def record_tick_log_finish(
         final_message = str(result.outbound.content or "")
     elif ctx.final_message:
         final_message = ctx.final_message
-    # A motive miss remains diagnostic data, not a global gate_exit.
-    if not gate_name and ctx.gate_trace:
+    # The last evaluated motive is diagnostic data, not a gate_exit.
+    gate_name, gate_reason = "", ""
+    gate_metadata: dict[str, object] = {}
+    if ctx.gate_trace:
         latest = ctx.gate_trace[-1]
         gate_name, gate_reason = latest.gate_name, latest.reason
         gate_metadata = dict(latest.metadata)
@@ -63,7 +62,7 @@ def record_tick_log_finish(
         gate_exit=gate_exit,
         gate_name=gate_name,
         gate_reason=gate_reason,
-        gate_metadata=dict(gate_metadata or {}),
+        gate_metadata=gate_metadata,
         terminal_action=decision,
         skip_reason=skip_reason,
         steps_taken=ctx.steps_taken,

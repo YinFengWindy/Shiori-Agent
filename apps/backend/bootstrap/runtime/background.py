@@ -10,13 +10,8 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Coroutine
-from functools import partial
 from typing import Any, Protocol
 
-from agent.core.proactive_turn.gates import no_proactive_gates
-from agent.core.proactive_turn.plugin_capability import (
-    active_plugin_proactive_gates,
-)
 from agent.tool_hooks import no_tool_hooks
 from bootstrap.proactive import build_memory_optimizer_task, build_proactive_runtime
 from bootstrap.runtime.generations import RuntimeCandidate
@@ -68,11 +63,6 @@ class RuntimeBackground:
                     (lambda: manager.tool_hooks)
                     if manager is not None
                     else no_tool_hooks
-                ),
-                proactive_gates=(
-                    partial(active_plugin_proactive_gates, manager)
-                    if manager is not None
-                    else no_proactive_gates
                 ),
                 proactive_motives=core.proactive_motives,
                 event_bus=core.event_bus,

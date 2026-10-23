@@ -234,13 +234,6 @@ HOST_BOT_COMMANDS: Key[PluginContributionService[BotCommands, tuple[str, str]]] 
 HOST_BACKGROUND: Key[PluginCapabilityBinder[BackgroundTasks]] = Key("host.background")
 """The ``background`` capability: plugin-scoped tasks (``core.common``)."""
 
-# The gate type (``agent.core.proactive_turn.gates.ProactiveGate``) is a host
-# module this layer may not import; ``PluginProactiveGates`` types it exactly.
-HOST_PROACTIVE_GATES: Key[PluginContributionService[Any, Any]] = Key(
-    "host.proactive_gates"
-)
-"""The ``proactive_gates`` capability (``agent.core.proactive_turn``; P3 deletes it)."""
-
 HOST_EVENTS: Key[PluginCapabilityBinder[EventsCapability]] = Key("host.events")
 """The ``events`` capability: a plugin-scoped view of the event bus (``bus``)."""
 
@@ -307,7 +300,6 @@ CORE_CAPABILITIES: Mapping[str, CoreCapability] = {
     "background_results": CoreCapability(HOST_BACKGROUND_RESULTS),
     "bot_commands": CoreCapability(HOST_BOT_COMMANDS, per_plugin=True),
     "background": CoreCapability(HOST_BACKGROUND, per_plugin=True),
-    "proactive_gates": CoreCapability(HOST_PROACTIVE_GATES, per_plugin=True),
     "events": CoreCapability(HOST_EVENTS, per_plugin=True),
     "rpc": CoreCapability(HOST_RPC, per_plugin=True),
     "workspace": CoreCapability(HOST_WORKSPACE),
