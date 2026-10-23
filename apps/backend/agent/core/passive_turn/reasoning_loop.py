@@ -13,12 +13,10 @@ from agent.core.reply_output import RoleReplyOutput
 from core.roles.reply_state import RoleReply
 from agent.lifecycle.types import BeforeStepInput
 from shiori_sdk.lifecycle import AfterStepCtx
-from agent.tools.execution import (
-    ToolExecutionRequest,
-    append_finalize_skipped_tool_results,
-)
+from agent.tools.execution import ToolExecutionRequest
 from agent.tool_runtime import (
     append_assistant_tool_calls,
+    append_finalize_skipped_tool_results,
     append_tool_result,
     tool_call_batch_snapshot,
 )

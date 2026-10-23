@@ -87,7 +87,7 @@ DEFAULT_FILES: frozenset[str] = frozenset(
         "tests/backend/agent/core/proactive_turn/test_delivery.py",
         "tests/backend/agent/core/proactive_turn/test_strategies.py",
         "tests/backend/agent/tools/test_registry.py",
-        # 工具执行器（ToolCalling/ToolCalled），接替 agent/tool_hooks 目录，#902。
+        # 工具执行器（ToolCalling / 核心链后校验 / ToolCalled）的宿主契约，#902。
         "tests/backend/agent/tools/test_execution.py",
         "tests/backend/agent/tools/test_turn_scope.py",
         "tests/backend/agent/tools/test_message_push.py",

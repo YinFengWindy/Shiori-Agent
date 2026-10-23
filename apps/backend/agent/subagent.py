@@ -10,6 +10,7 @@ SubAgent — 通用子 Agent
         model="deepseek-chat",
         tools=[WebSearchTool(), WebFetchTool()],
         system_prompt="你是中性的后台研究处理器，不扮演角色，也不生成用户可见回复。",
+        kernel=lambda: plugin_kernel.kernel,
     )
     result = await agent.run("调研最新的 agent 相关论文，总结后发给我")
 """
@@ -22,16 +23,15 @@ from typing import Any, Sequence
 from agent.provider import LLMProvider
 from agent.prompting.usage_anchor import independent_usage_context
 from agent.prompting.usage_accounting import current_usage
-from agent.core.turn_events import core_kernel
 from agent.tools.execution import (
     KernelSource,
     ToolExecutionRequest,
     ToolExecutionResult,
     ToolExecutor,
-    append_finalize_skipped_tool_results,
 )
 from agent.tool_runtime import (
     append_assistant_tool_calls,
+    append_finalize_skipped_tool_results,
     append_tool_result,
     prepare_toolset,
     tool_call_batch_snapshot,
@@ -127,7 +127,7 @@ class SubAgent:
         max_iterations: int = 30,
         max_tokens: int = 8192,
         mandatory_exit_tools: Sequence[str] = (),
-        kernel: KernelSource = core_kernel,
+        kernel: KernelSource,
     ) -> None:
         """``kernel`` 在每次工具调用时读取，插件变化对运行中的子任务即时生效。"""
         self._provider = provider
@@ -242,7 +242,7 @@ class SubAgent:
                 )
                 if exec_result.finalize:
                     logger.warning(
-                        "[subagent] hook 截断重复工具调用 tool=%s，提前收尾",
+                        "[subagent] 插件否决并要求收尾 tool=%s，提前收尾",
                         tc.name,
                     )
                     self.last_exit_reason = "tool_loop"

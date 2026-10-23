@@ -170,6 +170,7 @@ async def proactive_task(
             ],
         )
 
+    from agent.core.turn_events import core_kernel
     from proactive_v2.agent_tick_factory import AgentTickDeps, AgentTickFactory
 
     model = AgentTickFactory(
@@ -188,6 +189,7 @@ async def proactive_task(
             rng=None,
             workspace_context_fn=lambda: "",
             role_prompt_fn=lambda: "",
+            kernel=core_kernel,
         )
     )._build_llm_fn()
 

@@ -147,3 +147,25 @@ async def test_a_generation_with_shell_safety_disabled_still_refuses_a_wipe(
     )
     assert shell.commands == []
     await kernel.terminate_all()
+
+
+async def test_shell_restore_turning_a_home_wipe_into_a_move_is_still_refused(
+    tmp_path: Path,
+) -> None:
+    """shell_restore rewrites ``rm -rf <home>`` into ``mv <home> <recovery>``."""
+    root = tmp_path / "plugins"
+    _ = stage_plugin_package(plugin_directory("shell_restore"), root / "shell_restore")
+    workspace = tmp_path / "workspace"
+    kernel = host_kernel([root], settings=PluginGenerationSettings(workspace=workspace))
+    await kernel.load_all()
+    shell = _Shell()
+    executor = ToolExecutor(lambda: kernel.kernel)
+
+    wipe = await executor.execute(_shell(f"rm -rf {Path.home().as_posix()}"), shell)
+    tidy = await executor.execute(_shell("rm notes.txt"), shell)
+
+    assert wipe.status == "denied"
+    assert str(wipe.output).startswith("核心安全拦截")
+    assert tidy.status == "success"
+    assert [command.split()[0] for command in shell.commands] == ["mv"]
+    await kernel.terminate_all()

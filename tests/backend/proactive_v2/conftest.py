@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from typing import Any, Callable, cast
 from unittest.mock import AsyncMock, MagicMock
 
+from agent.core.turn_events import core_kernel
 from proactive_v2.config import ProactiveConfig
 from proactive_v2.gateway import GatewayDeps
 from proactive_v2.tools import ToolDeps
@@ -376,6 +377,7 @@ def make_proactive_pipeline(
             recent_proactive_fn=recent_proactive_fn,
             workspace_context_fn=workspace_context_fn,
             drift_pipeline=drift_pipeline,
+            kernel=core_kernel,
             target_transport_fn=target_transport_fn,
             proactive_gates=proactive_gates,
         )

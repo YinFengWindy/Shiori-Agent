@@ -6,7 +6,7 @@ arguments or reject the call, the core checks of ``check_tool_call`` then judge
 the final arguments, the tool runs, and the ``ToolCalled`` chain may rewrite
 the result. A veto ends the call as ``denied`` with its reason as the result;
 a ``ToolVeto`` with ``finalize`` asks the loop to close (see
-``append_finalize_skipped_tool_results``).
+``agent.tool_runtime.append_finalize_skipped_tool_results``).
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from agent.tool_runtime import append_tool_result
+from agent.tools.shell.constants import SHELL_TOOL_NAME
 from agent.tools.shell.guard import destructive_command_reason
 from shiori_sdk.core.tools import (
     ToolCalled,
@@ -36,12 +36,6 @@ KernelSource = Callable[[], Kernel]
 in-generation plugin reload takes effect on the next call."""
 ToolAdmission = Callable[[str, dict[str, Any]], str | None]
 """A loop's own judgement of the final arguments: the refusal reason, or None."""
-
-SHELL_TOOL = "shell"
-
-# LLM 可见、非用户可见的通用收尾提示：任意插件触发结构化收尾意图时，
-# 同一批次里被跳过的后续 tool_call 都用这条统一文案回填 tool result。
-FINALIZE_SKIPPED_TOOL_CALL_MESSAGE = "工具调用已跳过：本轮工具调用已提前收尾。"
 
 # The admission of the call being emitted, read by ``check_tool_call``.
 _admission: ContextVar[ToolAdmission | None] = ContextVar(
@@ -102,7 +96,7 @@ def check_tool_call(
     admission = _admission.get()
     if admission is not None and (reason := admission(event.tool_name, arguments)):
         return Veto(reason)
-    if event.tool_name == SHELL_TOOL:
+    if event.tool_name == SHELL_TOOL_NAME:
         command = str(arguments.get("command") or "")
         reason = destructive_command_reason(command, protected_dirs=protected_dirs)
         if reason is not None:
@@ -222,23 +216,3 @@ class ToolExecutor:
 
 def _result_text(output: Any) -> str:
     return output.text if isinstance(output, ToolResult) else str(output)
-
-
-def append_finalize_skipped_tool_results(
-    messages: list[dict[str, Any]],
-    skipped_tool_calls: Iterable[Any],
-) -> None:
-    """Backfills a tool result for every batch member a finalize skipped.
-
-    Every ``tool_call`` in an assistant message must get a matching ``tool``
-    result message, or a strict provider / session replay chokes on an
-    unresolved ``tool_call_id``. The passive reasoning loop (both branches)
-    and ``SubAgent`` close a truncated batch this way.
-    """
-    for skipped in skipped_tool_calls:
-        append_tool_result(
-            messages,
-            tool_call_id=skipped.id,
-            content=FINALIZE_SKIPPED_TOOL_CALL_MESSAGE,
-            tool_name=skipped.name,
-        )

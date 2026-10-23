@@ -21,7 +21,6 @@ from agent.background.subagent_profiles import (
     SubagentRuntime,
     build_spawn_spec,
 )
-from agent.core.turn_events import core_kernel
 from agent.tools.execution import KernelSource
 from bus.internal_events import (
     SpawnCompletionEvent,
@@ -89,7 +88,8 @@ class SubagentManager:
         self._running_jobs: dict[str, RunningSubagentJob] = {}
         self._origins: dict[str, InboundMessage] = {}
         self._cancel_announced: set[str] = set()
-        self._kernel: KernelSource = core_kernel
+        # Bound by the runtime once the generation's plugin kernel is loaded.
+        self._kernel: KernelSource | None = None
 
     def bind_kernel(self, kernel: KernelSource) -> None:
         """子 Agent 的每次工具调用都经 ``kernel`` 返回的当前插件内核发出事件。"""
@@ -438,6 +438,8 @@ class SubagentManager:
             profile=profile,
             multimodal=self._multimodal,
         )
+        if self._kernel is None:
+            raise RuntimeError("子 Agent 需要本代插件内核，但尚未绑定（bind_kernel）")
         return spec.build(runtime or self._runtime, kernel=self._kernel)
 
     @property

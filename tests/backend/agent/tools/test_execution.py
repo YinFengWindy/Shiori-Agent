@@ -2,15 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from typing import Any
 
-from agent.tools.execution import (
-    FINALIZE_SKIPPED_TOOL_CALL_MESSAGE,
-    ToolExecutionRequest,
-    ToolExecutor,
-    append_finalize_skipped_tool_results,
-)
+from agent.tools.execution import ToolExecutionRequest, ToolExecutor
 from shiori_sdk.core.tools import ToolCalled, ToolCalling, ToolVeto
 from shiori_sdk.kernel import Veto
 from shiori_sdk.tools import ToolResult
@@ -146,22 +141,3 @@ async def test_the_kernel_is_read_again_on_every_call() -> None:
     assert (await executor.execute(_request(), _Tool())).status == "denied"
     kernels.pop(0)
     assert (await executor.execute(_request(), _Tool())).status == "success"
-
-
-@dataclass
-class _Skipped:
-    id: str
-    name: str
-
-
-def test_every_call_a_finalize_skipped_still_gets_a_tool_result() -> None:
-    messages: list[dict[str, Any]] = []
-
-    append_finalize_skipped_tool_results(
-        messages, [_Skipped(id="a", name="read"), _Skipped(id="b", name="write")]
-    )
-
-    assert [item["tool_call_id"] for item in messages] == ["a", "b"]
-    assert {item["content"] for item in messages} == {
-        FINALIZE_SKIPPED_TOOL_CALL_MESSAGE
-    }

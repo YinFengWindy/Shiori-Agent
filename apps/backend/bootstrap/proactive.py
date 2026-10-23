@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING, Callable
 from agent.config_models import Config
 from agent.looping.core import AgentLoop
 from agent.provider import LLMProvider
-from agent.core.turn_events import core_kernel
 from agent.tools.execution import KernelSource
 from agent.core.proactive_turn.gates import ProactiveGate
 from agent.core.prompt_block import build_role_user_identities_prompt
@@ -63,7 +62,7 @@ def build_proactive_runtime(
     memory_store: "MemoryRuntime | None",
     presence: PresenceStore,
     agent_loop: AgentLoop,
-    kernel: KernelSource = core_kernel,
+    kernel: KernelSource,
     proactive_motives: list[ProactiveGate] | None = None,
     event_bus: "EventBus | None" = None,
     provider_consumer: Callable[[LLMProvider], None] | None = None,

@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Any, Awaitable, Callable
 
 from agent.skills import BUILTIN_SKILLS_DIR
-from agent.core.turn_events import core_kernel
 from agent.tools.execution import KernelSource
 from agent.tools.registry import ToolRegistry
 from agent.tools.web_fetch import WebFetchTool
@@ -61,10 +60,11 @@ class AgentTickDeps:
     rng: Any
     workspace_context_fn: Callable[[], str]
     role_prompt_fn: Callable[[], str]
+    # The generation's kernel, read on every tool call (core checks included).
+    kernel: KernelSource
     shared_tools: ToolRegistry | None = None
     turn_orchestrator: TurnOrchestrator | None = None
     pool: McpClientPool | None = None
-    kernel: KernelSource = core_kernel
     proactive_gates: ProactiveGateChain | None = None
     # 群环境层（#497）：主动与发呆回合注入各外部会话的最近动态。
     group_environment: GroupEnvironment | None = None

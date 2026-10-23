@@ -319,9 +319,10 @@ async def run_tool_step(
         arg_summary,
     )
     ctx.steps_taken += 1
+    call_id = str(tool_call.get("id") or f"call_{ctx.steps_taken}")
     exec_result = await pipeline._tool_executor.execute(
         ToolExecutionRequest(
-            call_id=str(tool_call.get("id") or f"call_{ctx.steps_taken}"),
+            call_id=call_id,
             tool_name=tool_name,
             arguments=tool_args,
             source="proactive",
@@ -330,7 +331,7 @@ async def run_tool_step(
         lambda name, args: dispatch(name, args, ctx, pipeline._tool_deps),
     )
     record_proactive_tool_fact(
-        call_id=str(tool_call.get("id") or f"call_{ctx.steps_taken}"),
+        call_id=call_id,
         name=tool_name,
         arguments=tool_args,
         result=str(exec_result.output),
@@ -362,12 +363,11 @@ async def run_tool_step(
             exec_result.output,
         )
         result = str(exec_result.output)
-        call_id = tool_call.get("id") or f"call_{ctx.steps_taken}"
         pipeline._record_tick_step(
             ctx,
             phase=f"{loop_tag}:error",
             tool_name=tool_name,
-            tool_call_id=str(call_id),
+            tool_call_id=call_id,
             tool_args=tool_args,
             tool_result_text=result,
         )
@@ -394,12 +394,11 @@ async def run_tool_step(
             counts=f"step:{ctx.steps_taken}",
         )
     )
-    call_id = tool_call.get("id") or f"call_{ctx.steps_taken}"
     pipeline._record_tick_step(
         ctx,
         phase=loop_tag,
         tool_name=tool_name,
-        tool_call_id=str(call_id),
+        tool_call_id=call_id,
         tool_args=tool_args,
         tool_result_text=result,
     )

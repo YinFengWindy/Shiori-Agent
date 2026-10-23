@@ -10,11 +10,16 @@ stay in the shell_safety and shell_restore plugins.
 
 The three rules, checked on every simple command of the line (split at
 ``;``, ``&&``, ``||``, ``|``, ``&``, parentheses and newlines, after the
-``sudo`` / ``env`` / ``VAR=value`` style prefixes, and inside ``sh -c``):
+``sudo`` / ``env`` / ``VAR=value`` style prefixes, and inside ``sh -c``,
+``pwsh -Command`` and ``cmd /c``, at most two wrappers deep):
 
-1. a delete command (``rm``, ``rmdir``, PowerShell ``Remove-Item`` and its
-   aliases) naming the filesystem root, a drive root, the user's home or the
-   workspace root, or everything directly inside one of them (``/*``);
+1. a protected directory — the filesystem root, a drive root, the user's
+   home or the workspace root, or everything directly inside one of them
+   (``/*``) — removed whole: named by a delete command (``rm``, ``rmdir``,
+   PowerShell ``Remove-Item`` and its aliases) or as the source of a move
+   (``mv``, ``Move-Item`` and its aliases ``mi`` / ``move``). A move counts
+   because it empties the directory just the same, and because a plugin may
+   rewrite a delete into a move (shell_restore does) before this check;
 2. writing a block device: ``dd of=<device>``, a redirection ``> <device>``,
    or ``mkfs`` / ``mke2fs`` on a device;
 3. formatting a drive: PowerShell ``Format-Volume`` / ``Clear-Disk`` and
@@ -30,14 +35,17 @@ import os
 import posixpath
 import re
 import shlex
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
 
 # Delete commands of POSIX sh and PowerShell (``rm``/``del``/``rd``/``ri``/
 # ``erase``/``rmdir`` are aliases of ``Remove-Item`` there).
 _DELETE = frozenset({"rm", "rmdir", "remove-item", "ri", "del", "erase", "rd"})
 _FORMAT_DRIVE = frozenset({"format-volume", "clear-disk"})
+_MOVE = frozenset({"mv", "move-item", "mi", "move"})
 _SHELLS = frozenset({"sh", "bash", "zsh", "dash"})
+_POWERSHELLS = frozenset({"pwsh", "powershell"})
+_CMD_SCRIPT_SWITCHES = frozenset({"/c", "/k", "/r"})
 # Wrappers that run the next word as the command; their options are skipped.
 _PREFIXES = frozenset({"sudo", "doas", "env", "nohup", "time", "exec", "command"})
 _PREFIX_OPTIONS_WITH_VALUE = frozenset({"-u", "-g", "-C", "-D", "-R", "-T", "-h"})
@@ -112,17 +120,18 @@ def _command_reason(
     if found is None:
         return None
     name, arguments = found
-    if name in _SHELLS:
-        script = _shell_script(arguments)
-        if script is None or nesting >= _MAX_NESTING:
+    script = _wrapped_script(name, arguments)
+    if script is not None:
+        if nesting >= _MAX_NESTING:
             return None
         return _line_reason(script, roots, nesting=nesting + 1)
-    if name in _DELETE:
-        for target in _operands(arguments):
+    if name in _DELETE or name in _MOVE:
+        targets = _operands(arguments) if name in _DELETE else _move_sources(arguments)
+        for target in targets:
             if _names_protected_dir(target, roots):
                 return (
                     f"核心安全拦截：{target} 是根目录、用户主目录或工作区根目录，"
-                    "不能删除。"
+                    "不能删除或整个移走。"
                 )
         return None
     if name == "dd":
@@ -167,13 +176,41 @@ def _command_name(token: str) -> str:
     return name.removesuffix(".exe")
 
 
-def _shell_script(arguments: Sequence[str]) -> str | None:
+def _wrapped_script(name: str, arguments: Sequence[str]) -> str | None:
+    """The command line a shell wrapper runs, or None when ``name`` runs none."""
+    if name in _SHELLS:
+        return _sh_script(arguments)
+    if name in _POWERSHELLS:
+        return _rest_after(arguments, _is_powershell_command_switch)
+    if name == "cmd":
+        return _rest_after(arguments, lambda arg: arg.lower() in _CMD_SCRIPT_SWITCHES)
+    return None
+
+
+def _sh_script(arguments: Sequence[str]) -> str | None:
     """The script of ``sh -c <script>`` (also ``-lc`` / ``-ec`` and the like)."""
     for index, argument in enumerate(arguments[:-1]):
         if not argument.startswith("-") or argument.startswith("--"):
             return None
         if "c" in argument[1:]:
             return arguments[index + 1]
+    return None
+
+
+def _is_powershell_command_switch(argument: str) -> bool:
+    """``-Command`` or any unambiguous prefix of it (``-c``, ``-com``)."""
+    lowered = argument.lower()
+    return len(lowered) >= 2 and "-command".startswith(lowered)
+
+
+def _rest_after(
+    arguments: Sequence[str], is_switch: Callable[[str], bool]
+) -> str | None:
+    """The words after the switch that starts the wrapped command, rejoined."""
+    for index, argument in enumerate(arguments):
+        if is_switch(argument):
+            rest = arguments[index + 1 :]
+            return " ".join(rest) if rest else None
     return None
 
 
@@ -190,6 +227,42 @@ def _operands(arguments: Sequence[str]) -> list[str]:
             continue
         operands.append(argument)
     return operands
+
+
+def _move_sources(arguments: Sequence[str]) -> list[str]:
+    """What a move takes away: every operand but the destination.
+
+    The destination is the value of ``-t`` / ``--target-directory=`` (POSIX)
+    or ``-Destination`` (PowerShell, any unambiguous prefix); without one it
+    is the last operand.
+    """
+    sources: list[str] = []
+    explicit_destination = False
+    skip_next = False
+    for argument in arguments:
+        if skip_next:
+            skip_next = False
+            continue
+        lowered = argument.lower()
+        name, colon, value = argument.partition(":")
+        if argument == "-t" or (
+            len(name) > 1 and "-destination".startswith(name.lower())
+        ):
+            explicit_destination = True
+            skip_next = not colon
+            continue
+        if lowered.startswith("--target-directory"):
+            explicit_destination = True
+            skip_next = "=" not in argument
+            continue
+        if argument in ("--", "-"):
+            continue
+        if argument.startswith("-"):
+            if colon and value:
+                sources.append(value)
+            continue
+        sources.append(argument)
+    return sources if explicit_destination else sources[:-1]
 
 
 def _names_protected_dir(target: str, roots: set[str]) -> bool:

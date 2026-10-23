@@ -6,7 +6,6 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from ..drift_turn import DriftTurnPipeline
-from agent.core.turn_events import core_kernel
 from agent.tools.execution import KernelSource
 from agent.turns.orchestrator import TurnOrchestrator
 from agent.turns.result import TurnResult
@@ -63,8 +62,8 @@ class ProactiveTurnPipelineDeps:
     rng: Any | None
     recent_proactive_fn: Callable[[], list] | None
     drift_pipeline: DriftTurnPipeline | None
+    # 本代插件内核，每次工具调用都重新读取，插件代内启停后下一次调用即生效。
+    kernel: KernelSource
     # Selects this tick's single delivery target; None means no candidate session.
     target_transport_fn: Callable[[], tuple[str, str] | None] | None = None
-    # 每次工具调用都重新读取，插件代内启停后下一次调用即生效。
-    kernel: KernelSource = core_kernel
     proactive_gates: ProactiveGateChain | None = None

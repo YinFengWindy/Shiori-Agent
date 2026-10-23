@@ -206,7 +206,7 @@ consolidates these additions and the subsequent #847 breaking migration.
   handler's error under the event's `on_error`). No existing hook, phase,
   capability or event is removed or changes behavior.
 
-- **Tool calls run through `ToolCalling` / `ToolCalled` (PR #<待定>, issue #902,
+- **Tool calls run through `ToolCalling` / `ToolCalled` (PR #926, issue #902,
   refactor P3-3, D11).** Every tool call of a passive turn, a proactive tick, a
   drift tick and a subagent now goes through the generation's kernel: the
   `ToolCalling` chain (plugin order: dependency depth, then id) may return a
@@ -218,11 +218,14 @@ consolidates these additions and the subsequent #847 breaking migration.
   After the chain the core runs fixed checks on the final arguments, which no
   handler can rewrite past and which hold with every plugin disabled: an
   external-context turn's tool limits (unchanged, #522) and a minimal shell guard
-  that refuses only a delete naming the filesystem root, a drive root, the home
-  directory or the workspace root (`rm -rf /`, `Remove-Item -Recurse C:\`,
-  `rm -rf ~`), writing a block device (`dd of=/dev/sda`, `> /dev/nvme0n1`, `mkfs`
+  that refuses only removing the filesystem root, a drive root, the home
+  directory or the workspace root (or everything directly in one) whole, by a
+  delete or as the source of a move (`rm -rf /`, `Remove-Item -Recurse C:\`,
+  `mv ~ …` — so shell_restore rewriting `rm -rf ~` into a move is still refused),
+  writing a block device (`dd of=/dev/sda`, `> /dev/nvme0n1`, `mkfs`
   on a device) and formatting a drive (`Format-Volume`, `Clear-Disk`,
-  `format D:`). Interactive-command refusal and the rm→mv rewrite stay in the
+  `format D:`), also inside `sh -c`, `pwsh -Command` and `cmd /c` (two levels
+  deep). Interactive-command refusal and the rm→mv rewrite stay in the
   shell_safety / shell_restore plugins. `ToolCalled` follows every call that ran or
   was rejected (`status` `success` / `denied` / `error`, the final `arguments`);
   its `result` is the output as text (a `ToolResult`'s `text`). Only a changed
@@ -244,7 +247,7 @@ consolidates these additions and the subsequent #847 breaking migration.
   setting up the new one the plugin's handler is simply absent (the call runs with
   the other plugins and the core checks) instead of being denied.
 - **breaking: capability `tool_hooks` and `shiori_sdk.tool_hooks` removed (PR
-  #<待定>, issue #902, refactor P3-3).** Gone with it: `PreToolCtx`, `HookOutcome`
+  #926, issue #902, refactor P3-3).** Gone with it: `PreToolCtx`, `HookOutcome`
   (including `extra_message`, which the host never consumed), `PreToolHandler`,
   `ToolHooksCapability`, `ctx.tool_hooks` (also on `HookPluginContext` /
   `ServicePluginContext`) and `shiori_sdk.testing.hooks.FakeToolHooks`. The name
@@ -255,13 +258,13 @@ consolidates these additions and the subsequent #847 breaking migration.
   rewrite the arguments, `ToolVeto(reason)` to reject (`finalize=True` to close);
   check `event.tool_name` yourself where `tool_name_filter` was used. Plugin
   tests emit through the fake context: `await ctx.emit(ToolCalling(...))`.
-- **breaking: `shiori_sdk.lifecycle.AfterToolResultCtx` removed (PR #<待定>, issue
+- **breaking: `shiori_sdk.lifecycle.AfterToolResultCtx` removed (PR #926, issue
   #902, refactor P3-3).** Subscribe `ToolCalled` with `ctx.on` and return the event
   unchanged. Unlike `AfterToolResultCtx`, which only passive turns fanned out on the
   event bus, `ToolCalled` also reports proactive, drift and subagent calls; filter on
   `event.source` to keep the old scope.
 - **breaking: tool-chain call records lose `pre_hook_trace` / `post_hook_trace` (PR
-  #<待定>, issue #902, refactor P3-3).** The host persisted them into each turn's
+  #926, issue #902, refactor P3-3).** The host persisted them into each turn's
   `tool_chain` and nothing ever read them. New records omit the two keys; records
   already stored keep them and stay readable, since every reader picks the keys it
   needs.
