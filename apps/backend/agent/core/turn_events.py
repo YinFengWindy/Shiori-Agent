@@ -38,26 +38,17 @@ def core_kernel() -> Kernel:
 
 
 class TurnEvents:
-    """The event outlet of the turn stages: the core bus and the current kernel.
+    """The event outlet of the turn stages: the current kernel, then the core bus.
 
     ``kernel`` returns the kernel to emit through and is read on every emit,
-    so binding another plugin generation takes effect on the next stage;
-    without it the events go through a bare ``core_kernel``. ``bus`` also
-    carries the legacy lifecycle contexts until the phases are removed (P3-6).
+    so binding another plugin generation takes effect on the next stage; a
+    turn without plugins passes ``core_kernel``-backed kernels. ``bus`` only
+    receives the final events for core listeners.
     """
 
-    def __init__(
-        self, bus: EventBus, kernel: Callable[[], Kernel] | None = None
-    ) -> None:
-        self.bus = bus
-        self._source = kernel
-        self._bare = core_kernel() if kernel is None else None
-
-    def _kernel(self) -> Kernel:
-        if self._source is not None:
-            return self._source()
-        assert self._bare is not None
-        return self._bare
+    def __init__(self, bus: EventBus, kernel: Callable[[], Kernel]) -> None:
+        self._bus = bus
+        self._kernel = kernel
 
     async def emit[E](
         self,
@@ -79,7 +70,7 @@ class TurnEvents:
             vetoed(result)
             return
         apply(result)
-        await self.bus.fanout(result)
+        await self._bus.fanout(result)
 
 
 def read_only[K, V](mapping: Mapping[K, V]) -> MappingProxyType[K, V]:
@@ -87,7 +78,7 @@ def read_only[K, V](mapping: Mapping[K, V]) -> MappingProxyType[K, V]:
     return MappingProxyType(dict(mapping))
 
 
-def frozen_value(value: object) -> object:
+def freeze_top_level(value: object) -> object:
     """``value`` for an event field of open type: a top-level container frozen.
 
     A dict becomes a read-only copy, a list a tuple and a set a frozenset;

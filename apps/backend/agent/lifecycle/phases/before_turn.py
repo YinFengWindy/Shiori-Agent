@@ -6,7 +6,8 @@ from typing import TYPE_CHECKING, Protocol, TypeAlias, cast
 
 from shiori_sdk.commands import CommandInput
 from agent.lifecycle.commands import abort_command
-from agent.core.turn_events import TurnEvents, frozen_value, read_only
+from bus.event_bus import EventBus
+from agent.core.turn_events import TurnEvents, freeze_top_level, read_only
 from session.manager.models import consolidation_cursor
 from agent.core.runtime_support import SessionLike
 from agent.core.types import ContextBundle
@@ -261,11 +262,12 @@ class _EmitBeforeTurnCtxModule:
     requires = ("before_turn.build_ctx", _CTX_SLOT)
     produces = (_CTX_SLOT,)
 
-    def __init__(self, events: TurnEvents) -> None:
+    def __init__(self, bus: EventBus, events: TurnEvents) -> None:
+        self._bus = bus
         self._events = events
 
     async def run(self, frame: BeforeTurnFrame) -> BeforeTurnFrame:
-        ctx = await self._events.bus.emit(cast(BeforeTurnCtx, frame.slots[_CTX_SLOT]))
+        ctx = await self._bus.emit(cast(BeforeTurnCtx, frame.slots[_CTX_SLOT]))
         frame.slots[_CTX_SLOT] = ctx
 
         def apply(event: TurnStarting) -> None:
@@ -298,7 +300,7 @@ def _turn_starting(ctx: BeforeTurnCtx) -> TurnStarting:
             for message in ctx.history_messages
         ),
         retrieved_memory_block=ctx.retrieved_memory_block,
-        retrieval_trace=frozen_value(ctx.retrieval_trace_raw),
+        retrieval_trace=freeze_top_level(ctx.retrieval_trace_raw),
         skill_names=tuple(ctx.skill_names),
         extra_hints=tuple(ctx.extra_hints),
         extra_metadata=read_only(ctx.extra_metadata),
@@ -333,6 +335,7 @@ class _CollectBeforeTurnExportSlotsModule:
 
 
 def default_before_turn_modules(
+    bus: EventBus,
     events: TurnEvents,
     session_manager: SessionManager,
     context_store: ContextStore,
@@ -350,7 +353,7 @@ def default_before_turn_modules(
         ),
         _PrepareContextModule(context_store),
         _BuildBeforeTurnCtxModule(),
-        _EmitBeforeTurnCtxModule(events),
+        _EmitBeforeTurnCtxModule(bus, events),
         _CollectBeforeTurnExportSlotsModule(),
         _ReturnBeforeTurnCtxModule(),
     ]

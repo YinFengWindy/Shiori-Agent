@@ -12,6 +12,7 @@ from agent.lifecycle.phase import (
     collect_prefixed_slots,
     topo_sort_modules,
 )
+from bus.event_bus import EventBus
 from agent.core.turn_events import TurnEvents, read_only
 from agent.lifecycle.types import PromptRenderInput, PromptRenderResult
 from prompts.natural_chat import NATURAL_CHAT_PROMPT
@@ -69,18 +70,19 @@ class _EmitPromptRenderCtxModule:
     requires = ("prompt_render.build_ctx", _CTX_SLOT)
     produces = (_CTX_SLOT,)
 
-    def __init__(self, events: TurnEvents) -> None:
+    def __init__(self, bus: EventBus, events: TurnEvents) -> None:
+        self._bus = bus
         self._events = events
 
     async def run(self, frame: PromptRenderFrame) -> PromptRenderFrame:
-        ctx = await self._events.bus.emit(cast(PromptRenderCtx, frame.slots[_CTX_SLOT]))
+        ctx = await self._bus.emit(cast(PromptRenderCtx, frame.slots[_CTX_SLOT]))
         frame.slots[_CTX_SLOT] = ctx
 
         def apply(event: PromptRendering) -> None:
             ctx.system_sections_top[:] = event.system_sections_top
             ctx.system_sections_bottom[:] = event.system_sections_bottom
             ctx.extra_hints[:] = event.extra_hints
-            frame.slots[_REPLY_MODE_SLOT] = event.reply_mode
+            frame.slots[_REPLY_MODE_SLOT] = _rendered_reply_mode(event, frame.input)
 
         await self._events.emit(_prompt_rendering(ctx, frame.input), apply)
         return frame
@@ -114,14 +116,16 @@ def _prompt_rendering(
 
 
 def _role_reply_mode(input: PromptRenderInput) -> ReplyMode:
-    """The role's natural-chat switch, where the request allows a sequence."""
+    """The role's natural-chat switch, the initial ``PromptRendering.reply_mode``."""
     runtime_config = input.session_metadata.get("role_runtime_config") or {}
-    natural_chat = (
-        input.supports_reply_sequence
-        and not input.minimal_request
-        and runtime_config.get("natural_chat_enabled") is True
-    )
-    return "sequence" if natural_chat else "single"
+    enabled = runtime_config.get("natural_chat_enabled") is True
+    return "sequence" if enabled else "single"
+
+
+def _rendered_reply_mode(event: PromptRendering, input: PromptRenderInput) -> ReplyMode:
+    """The final reply mode, a sequence only where the request allows one."""
+    allowed = input.supports_reply_sequence and not input.minimal_request
+    return event.reply_mode if allowed else "single"
 
 
 class _RenderPromptModule:
@@ -135,13 +139,7 @@ class _RenderPromptModule:
     async def run(self, frame: PromptRenderFrame) -> PromptRenderFrame:
         ctx = cast(PromptRenderCtx, frame.slots[_CTX_SLOT])
         minimal = frame.input.minimal_request
-        # PromptRendering handlers may change the role's choice; a sequence
-        # still needs a request that supports one.
-        natural_chat = (
-            frame.input.supports_reply_sequence
-            and not minimal
-            and frame.slots[_REPLY_MODE_SLOT] == "sequence"
-        )
+        natural_chat = frame.slots[_REPLY_MODE_SLOT] == "sequence"
         bottom_sections = list(ctx.system_sections_bottom)
         if natural_chat:
             bottom_sections.append(
@@ -225,13 +223,14 @@ class _ReturnPromptRenderResultModule:
 
 
 def default_prompt_render_modules(
+    bus: EventBus,
     events: TurnEvents,
     context: ContextBuilder,
     plugin_modules: PromptRenderModules | None = None,
 ) -> PromptRenderModules:
     builtins: PromptRenderModules = [
         _BuildPromptRenderCtxModule(),
-        _EmitPromptRenderCtxModule(events),
+        _EmitPromptRenderCtxModule(bus, events),
         _CollectPromptExportSlotsModule(),
         _RenderPromptModule(context),
         _ReturnPromptRenderResultModule(),

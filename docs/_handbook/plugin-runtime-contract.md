@@ -178,7 +178,7 @@ consolidates these additions and the subsequent #847 breaking migration.
   same order and with the same rule that a motive may claim a tick but never
   block it.
 
-- **Turn and tool events, kernel members on the v2 context (PR #<待定>, issue
+- **Turn and tool events, kernel members on the v2 context (PR #925, issue
   #902, refactor P3-2).** New `shiori_sdk.core.conversation` holds the seven
   turn events `TurnStarting`, `ReasoningStarting`, `PromptRendering`,
   `StepStarting`, `StepFinished`, `ReasoningFinished` and `TurnFinished`

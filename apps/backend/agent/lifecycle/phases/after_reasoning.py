@@ -215,12 +215,13 @@ class _EmitAfterReasoningCtxModule:
     requires = ("after_reasoning.build_ctx", _CTX_SLOT)
     produces = (_CTX_SLOT,)
 
-    def __init__(self, events: TurnEvents) -> None:
+    def __init__(self, bus: EventBus, events: TurnEvents) -> None:
+        self._bus = bus
         self._events = events
 
     async def run(self, frame: AfterReasoningFrame) -> AfterReasoningFrame:
         ctx = cast(AfterReasoningCtx, frame.slots[_CTX_SLOT])
-        ctx = await self._events.bus.emit(ctx)
+        ctx = await self._bus.emit(ctx)
         frame.slots[_CTX_SLOT] = ctx
 
         def apply(event: ReasoningFinished) -> None:
@@ -230,22 +231,26 @@ class _EmitAfterReasoningCtxModule:
             ctx.meme_tag = event.meme_tag
             ctx.outbound_metadata = dict(event.outbound_metadata)
 
-        finished = ReasoningFinished(
-            session_key=ctx.session_key,
-            channel=ctx.channel,
-            chat_id=ctx.chat_id,
-            tools_used=ctx.tools_used,
-            tool_chain=tuple(read_only(group) for group in ctx.tool_chain),
-            thinking=ctx.thinking,
-            streamed=ctx.streamed,
-            reply=ctx.reply,
-            reply_messages=ctx.reply_messages,
-            media=tuple(ctx.media),
-            meme_tag=ctx.meme_tag,
-            outbound_metadata=read_only(ctx.outbound_metadata),
-        )
-        await self._events.emit(finished, apply)
+        await self._events.emit(_reasoning_finished(ctx), apply)
         return frame
+
+
+def _reasoning_finished(ctx: AfterReasoningCtx) -> ReasoningFinished:
+    """The ``ReasoningFinished`` projection of the reply's context."""
+    return ReasoningFinished(
+        session_key=ctx.session_key,
+        channel=ctx.channel,
+        chat_id=ctx.chat_id,
+        tools_used=ctx.tools_used,
+        tool_chain=tuple(read_only(group) for group in ctx.tool_chain),
+        thinking=ctx.thinking,
+        streamed=ctx.streamed,
+        reply=ctx.reply,
+        reply_messages=ctx.reply_messages,
+        media=tuple(ctx.media),
+        meme_tag=ctx.meme_tag,
+        outbound_metadata=read_only(ctx.outbound_metadata),
+    )
 
 
 class _PersistUserMessageModule:
@@ -696,6 +701,7 @@ class _ReturnAfterReasoningResultModule:
 
 
 def default_after_reasoning_modules(
+    bus: EventBus,
     events: TurnEvents,
     session_services: SessionServices,
     llm: "LLMServices | None" = None,
@@ -705,11 +711,11 @@ def default_after_reasoning_modules(
     relationship_runtime = getattr(session_services, "relationship_runtime", None)
     builtins: AfterReasoningModules = [
         _BuildAfterReasoningCtxModule(),
-        _EmitAfterReasoningCtxModule(events),
+        _EmitAfterReasoningCtxModule(bus, events),
         _PersistUserMessageModule(session_services),
         _PersistAssistantMessageModule(),
         _UpdateSessionMetadataModule(relationship_runtime),
-        _AppendMessagesModule(session_services, events.bus),
+        _AppendMessagesModule(session_services, bus),
         _BuildOutboundMessageModule(),
         _ReturnAfterReasoningResultModule(),
     ]

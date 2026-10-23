@@ -191,6 +191,7 @@ class PassiveTurnPipeline:
     ) -> Phase[TurnState, BeforeTurnCtx, BeforeTurnFrame]:
         return Phase(
             default_before_turn_modules(
+                self._bus,
                 self._events,
                 self._session.session_manager,
                 self._context_store,
@@ -207,6 +208,7 @@ class PassiveTurnPipeline:
     ) -> Phase[BeforeReasoningInput, BeforeReasoningCtx, BeforeReasoningFrame]:
         return Phase(
             default_before_reasoning_modules(
+                self._bus,
                 self._events,
                 self._tools,
                 self._session.session_manager,
@@ -222,6 +224,7 @@ class PassiveTurnPipeline:
     ) -> Phase[AfterReasoningInput, AfterReasoningResult, AfterReasoningFrame]:
         return Phase(
             default_after_reasoning_modules(
+                self._bus,
                 self._events,
                 self._session,
                 self._llm,
@@ -237,6 +240,7 @@ class PassiveTurnPipeline:
     ) -> Phase[TurnSnapshot, OutboundMessage, AfterTurnFrame]:
         return Phase(
             default_after_turn_modules(
+                self._bus,
                 self._events,
                 self._outbound_port,
                 self._context,

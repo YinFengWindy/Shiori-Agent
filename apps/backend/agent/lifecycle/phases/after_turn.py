@@ -302,25 +302,30 @@ class _FanoutAfterTurnCtxModule:
     slot = "after_turn.fanout_ctx"
     requires = ("after_turn.collect_telemetry", _CTX_SLOT)
 
-    def __init__(self, events: TurnEvents) -> None:
+    def __init__(self, bus: EventBus, events: TurnEvents) -> None:
+        self._bus = bus
         self._events = events
 
     async def run(self, frame: AfterTurnFrame) -> AfterTurnFrame:
         ctx = cast(AfterTurnCtx, frame.slots[_CTX_SLOT])
-        await self._events.bus.fanout(ctx)
-        finished = TurnFinished(
-            session_key=ctx.session_key,
-            channel=ctx.channel,
-            chat_id=ctx.chat_id,
-            reply=ctx.reply,
-            tools_used=ctx.tools_used,
-            thinking=ctx.thinking,
-            will_dispatch=ctx.will_dispatch,
-            extra_metadata=read_only(ctx.extra_metadata),
-        )
+        await self._bus.fanout(ctx)
         # Nothing is writable: the turn is stored, only listeners remain.
-        await self._events.emit(finished, lambda _: None)
+        await self._events.emit(_turn_finished(ctx), lambda _: None)
         return frame
+
+
+def _turn_finished(ctx: AfterTurnCtx) -> TurnFinished:
+    """The ``TurnFinished`` projection of the turn's context."""
+    return TurnFinished(
+        session_key=ctx.session_key,
+        channel=ctx.channel,
+        chat_id=ctx.chat_id,
+        reply=ctx.reply,
+        tools_used=ctx.tools_used,
+        thinking=ctx.thinking,
+        will_dispatch=ctx.will_dispatch,
+        extra_metadata=read_only(ctx.extra_metadata),
+    )
 
 
 class _CollectAfterTurnTelemetrySlotsModule:
@@ -371,6 +376,7 @@ class _ReturnOutboundMessageModule:
 
 
 def default_after_turn_modules(
+    bus: EventBus,
     events: TurnEvents,
     outbound: OutboundPort,
     context: ContextBuilder,
@@ -383,11 +389,11 @@ def default_after_turn_modules(
         _ApplyTurnAffectionModule(relationship_runtime),
         _CollectAfterTurnExtraSlotsModule(),
         _BuildTurnCommittedModule(),
-        _FanoutTurnCommittedModule(events.bus),
+        _FanoutTurnCommittedModule(bus),
         _LogBudgetModule(),
         _BuildAfterTurnCtxModule(),
         _CollectAfterTurnTelemetrySlotsModule(),
-        _FanoutAfterTurnCtxModule(events),
+        _FanoutAfterTurnCtxModule(bus, events),
         _DispatchOutboundModule(outbound),
         _ReturnOutboundMessageModule(),
     ]

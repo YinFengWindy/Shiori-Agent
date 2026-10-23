@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from agent.core.turn_events import TurnEvents
+from agent.core.turn_events import TurnEvents, core_kernel
 from agent.core.runtime_support import TurnRunResult
 from agent.lifecycle.phase import Phase
 from agent.lifecycle.phases.after_reasoning import (
@@ -109,7 +109,8 @@ async def test_external_sequence_sends_each_committed_row_once_with_first_only_e
 def phase(manager):
     return Phase(
         default_after_reasoning_modules(
-            TurnEvents(EventBus()),
+            EventBus(),
+            TurnEvents(EventBus(), core_kernel),
             SimpleNamespace(session_manager=manager, presence=None),
         ),
         frame_factory=AfterReasoningFrame,
@@ -653,7 +654,9 @@ async def test_only_the_users_own_group_message_updates_relationship_state(
     )
 
     await Phase(
-        default_after_reasoning_modules(TurnEvents(EventBus()), services),
+        default_after_reasoning_modules(
+            EventBus(), TurnEvents(EventBus(), core_kernel), services
+        ),
         frame_factory=AfterReasoningFrame,
     ).run(request)
 

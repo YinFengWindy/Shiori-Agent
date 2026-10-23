@@ -265,7 +265,9 @@ class DefaultReasoner(
         plugin_modules: list[Any],
     ) -> Phase[BeforeStepInput, BeforeStepCtx, BeforeStepFrame]:
         return Phase(
-            default_before_step_modules(self._events, plugin_modules=plugin_modules),
+            default_before_step_modules(
+                self._bus, self._events, plugin_modules=plugin_modules
+            ),
             frame_factory=BeforeStepFrame,
         )
 
@@ -274,7 +276,9 @@ class DefaultReasoner(
         plugin_modules: list[Any],
     ) -> Phase[AfterStepCtx, AfterStepCtx, AfterStepFrame]:
         return Phase(
-            default_after_step_modules(self._events, plugin_modules=plugin_modules),
+            default_after_step_modules(
+                self._bus, self._events, plugin_modules=plugin_modules
+            ),
             frame_factory=AfterStepFrame,
         )
 
@@ -285,6 +289,7 @@ class DefaultReasoner(
     ) -> Phase[PromptRenderInput, PromptRenderResult, PromptRenderFrame]:
         return Phase(
             default_prompt_render_modules(
+                self._bus,
                 self._events,
                 context,
                 plugin_modules=plugin_modules,

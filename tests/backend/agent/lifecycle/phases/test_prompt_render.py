@@ -1,5 +1,6 @@
 """Natural chat follows the role snapshot, or the PromptRendering reply mode."""
 
+from collections.abc import Callable
 from dataclasses import replace
 from datetime import datetime, timezone
 from types import SimpleNamespace
@@ -7,7 +8,7 @@ from typing import Any, cast
 
 import pytest
 
-from agent.core.turn_events import TurnEvents
+from agent.core.turn_events import TurnEvents, core_kernel
 from agent.context import ContextBuilder
 from agent.lifecycle.phase import Phase
 from agent.lifecycle.phases.prompt_render import (
@@ -25,7 +26,7 @@ from shiori_sdk.prompting import PromptSectionRender
 
 async def _render(
     tmp_path,
-    events: TurnEvents,
+    kernel: Callable[[], Kernel] = core_kernel,
     *,
     enabled: bool | None = True,
     supported: bool = True,
@@ -39,9 +40,11 @@ async def _render(
         read_recent_context=lambda: "",
         get_memory_context=lambda: "",
     )
+    bus = EventBus()
     phase = Phase(
         default_prompt_render_modules(
-            events,
+            bus,
+            TurnEvents(bus, kernel),
             ContextBuilder(tmp_path, memory=cast(Any, memory), runtime_roles=roles),
         ),
         frame_factory=PromptRenderFrame,
@@ -84,7 +87,6 @@ async def test_natural_chat_is_host_owned_and_excludes_previews_and_minimal_requ
 ):
     result = await _render(
         tmp_path,
-        TurnEvents(EventBus()),
         enabled=enabled,
         supported=supported,
         minimal=minimal,
@@ -105,7 +107,7 @@ async def test_prompt_rendering_handlers_choose_reply_mode_and_add_sections(tmp_
     kernel = Kernel()
     await kernel.start([PluginSpec("probe", setup)])
 
-    result = await _render(tmp_path, TurnEvents(EventBus(), lambda: kernel))
+    result = await _render(tmp_path, lambda: kernel)
 
     # The role enables natural chat; the handler's choice wins.
     assert result.natural_chat is False

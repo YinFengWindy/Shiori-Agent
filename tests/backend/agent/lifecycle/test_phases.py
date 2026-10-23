@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from agent.core.turn_events import TurnEvents
+from agent.core.turn_events import TurnEvents, core_kernel
 from agent.context import ContextBuilder
 from agent.core.passive_support import build_context_hint_message
 from agent.core.passive_turn import ContextStore
@@ -140,7 +140,8 @@ async def test_before_turn_setup_fills_turn_state():
 
     phase = Phase(
         default_before_turn_modules(
-            TurnEvents(bus),
+            bus,
+            TurnEvents(bus, core_kernel),
             cast(SessionManager, session_mgr),
             cast(ContextStore, ctx_store),
         ),
@@ -174,7 +175,8 @@ async def test_before_turn_ctx_carries_context_scope_of_turn_thread(tmp_path):
     ctx_store = SimpleNamespace(prepare=AsyncMock(return_value=ContextBundle()))
     phase = Phase(
         default_before_turn_modules(
-            TurnEvents(EventBus()),
+            EventBus(),
+            TurnEvents(EventBus(), core_kernel),
             cast(SessionManager, session_mgr),
             cast(ContextStore, ctx_store),
         ),
@@ -208,7 +210,8 @@ async def test_before_turn_binds_message_role_id_to_session_before_context_prepa
     ctx_store = SimpleNamespace(prepare=AsyncMock(return_value=ContextBundle()))
     phase = Phase(
         default_before_turn_modules(
-            TurnEvents(bus),
+            bus,
+            TurnEvents(bus, core_kernel),
             cast(SessionManager, session_mgr),
             cast(ContextStore, ctx_store),
         ),
@@ -238,7 +241,8 @@ async def test_before_turn_uses_cli_session_override_context():
     ctx_store = SimpleNamespace(prepare=AsyncMock(return_value=ContextBundle()))
     phase = Phase(
         default_before_turn_modules(
-            TurnEvents(bus),
+            bus,
+            TurnEvents(bus, core_kernel),
             cast(SessionManager, session_mgr),
             cast(ContextStore, ctx_store),
         ),
@@ -284,7 +288,8 @@ async def test_before_turn_chain_can_abort():
 
     phase = Phase(
         default_before_turn_modules(
-            TurnEvents(bus),
+            bus,
+            TurnEvents(bus, core_kernel),
             cast(SessionManager, session_mgr),
             cast(ContextStore, ctx_store),
             plugin_modules=[],
@@ -310,7 +315,8 @@ async def test_before_turn_memory_context_guard_blocks_unconsolidated_tail():
 
     phase = Phase(
         default_before_turn_modules(
-            TurnEvents(bus),
+            bus,
+            TurnEvents(bus, core_kernel),
             cast(SessionManager, session_mgr),
             cast(ContextStore, ctx_store),
             keep_count=20,
@@ -358,7 +364,8 @@ async def test_before_turn_memory_context_guard_counts_only_the_turn_context(tmp
     ctx_store = SimpleNamespace(prepare=AsyncMock(return_value=ContextBundle()))
     phase = Phase(
         default_before_turn_modules(
-            TurnEvents(EventBus()),
+            EventBus(),
+            TurnEvents(EventBus(), core_kernel),
             cast(SessionManager, session_mgr),
             cast(ContextStore, ctx_store),
             keep_count=20,
@@ -409,7 +416,8 @@ async def test_before_turn_memory_context_guard_schedules_consolidation_without_
 
     phase = Phase(
         default_before_turn_modules(
-            TurnEvents(bus),
+            bus,
+            TurnEvents(bus, core_kernel),
             cast(SessionManager, session_mgr),
             cast(ContextStore, ctx_store),
             keep_count=20,
@@ -462,7 +470,8 @@ async def test_before_turn_defers_token_pressure_until_complete_request_is_rende
     consolidator = _Consolidator()
     phase = Phase(
         default_before_turn_modules(
-            TurnEvents(bus),
+            bus,
+            TurnEvents(bus, core_kernel),
             cast(SessionManager, session_mgr),
             cast(ContextStore, ctx_store),
             keep_count=20,
@@ -498,7 +507,8 @@ async def test_before_turn_memory_context_guard_blocks_after_consolidation_failu
 
     phase = Phase(
         default_before_turn_modules(
-            TurnEvents(bus),
+            bus,
+            TurnEvents(bus, core_kernel),
             cast(SessionManager, session_mgr),
             cast(ContextStore, ctx_store),
             keep_count=20,
@@ -538,7 +548,8 @@ async def test_before_turn_memory_context_guard_reports_failure_for_nsfw_role():
 
     phase = Phase(
         default_before_turn_modules(
-            TurnEvents(bus),
+            bus,
+            TurnEvents(bus, core_kernel),
             cast(SessionManager, session_mgr),
             cast(ContextStore, ctx_store),
             keep_count=20,
@@ -588,7 +599,8 @@ async def test_before_turn_accepts_custom_command_module():
 
     phase = Phase(
         default_before_turn_modules(
-            TurnEvents(bus),
+            bus,
+            TurnEvents(bus, core_kernel),
             cast(SessionManager, session_mgr),
             cast(ContextStore, ctx_store),
             plugin_modules=[CustomCommandModule()],
@@ -649,7 +661,8 @@ async def test_before_turn_accepts_plugin_modules():
 
     phase = Phase(
         default_before_turn_modules(
-            TurnEvents(bus),
+            bus,
+            TurnEvents(bus, core_kernel),
             cast(SessionManager, session_mgr),
             cast(ContextStore, ctx_store),
             plugin_modules=[EarlyPluginModule(), LatePluginModule()],
@@ -686,7 +699,8 @@ async def test_before_turn_chain_can_modify_skill_names():
 
     phase = Phase(
         default_before_turn_modules(
-            TurnEvents(bus),
+            bus,
+            TurnEvents(bus, core_kernel),
             cast(SessionManager, session_mgr),
             cast(ContextStore, ctx_store),
         ),
@@ -717,7 +731,8 @@ async def test_before_reasoning_setup_calls_tools_set_context():
 
     phase = Phase(
         default_before_reasoning_modules(
-            TurnEvents(bus),
+            bus,
+            TurnEvents(bus, core_kernel),
             cast(ToolRegistry, tools),
             cast(SessionManager, session_mgr),
             cast(ContextBuilder, context_builder),
@@ -765,7 +780,8 @@ async def test_before_reasoning_requires_session():
 
     phase = Phase(
         default_before_reasoning_modules(
-            TurnEvents(bus),
+            bus,
+            TurnEvents(bus, core_kernel),
             cast(ToolRegistry, tools),
             cast(SessionManager, session_mgr),
             cast(ContextBuilder, context_builder),
@@ -811,7 +827,8 @@ async def test_before_reasoning_finalize_calls_render():
 
     phase = Phase(
         default_before_reasoning_modules(
-            TurnEvents(bus),
+            bus,
+            TurnEvents(bus, core_kernel),
             cast(ToolRegistry, tools),
             cast(SessionManager, session_mgr),
             cast(ContextBuilder, context_builder),
@@ -866,7 +883,8 @@ async def test_before_reasoning_chain_can_add_extra_hints():
 
     phase = Phase(
         default_before_reasoning_modules(
-            TurnEvents(bus),
+            bus,
+            TurnEvents(bus, core_kernel),
             cast(ToolRegistry, tools),
             cast(SessionManager, session_mgr),
             cast(ContextBuilder, context_builder),
@@ -916,7 +934,8 @@ async def test_before_reasoning_collects_export_slots():
 
     phase = Phase(
         default_before_reasoning_modules(
-            TurnEvents(bus),
+            bus,
+            TurnEvents(bus, core_kernel),
             cast(ToolRegistry, tools),
             cast(SessionManager, session_mgr),
             cast(ContextBuilder, context_builder),
@@ -968,7 +987,8 @@ async def test_before_reasoning_chain_modify_skill_names_used_in_finalize_render
 
     phase = Phase(
         default_before_reasoning_modules(
-            TurnEvents(bus),
+            bus,
+            TurnEvents(bus, core_kernel),
             cast(ToolRegistry, tools),
             cast(SessionManager, session_mgr),
             cast(ContextBuilder, context_builder),
@@ -1005,7 +1025,8 @@ async def test_before_reasoning_chain_modify_skill_names_used_in_finalize_render
 async def test_before_step_setup_records_token_estimate():
     bus = EventBus()
     phase = Phase(
-        default_before_step_modules(TurnEvents(bus)), frame_factory=BeforeStepFrame
+        default_before_step_modules(bus, TurnEvents(bus, core_kernel)),
+        frame_factory=BeforeStepFrame,
     )
     messages = [{"role": "user", "content": "hello"}]
 
@@ -1049,7 +1070,7 @@ async def test_prompt_render_chain_appends_bottom_section(tmp_path):
         tmp_path, memory=cast(Any, memory), runtime_roles=RoleStore(tmp_path)
     )
     phase = Phase(
-        default_prompt_render_modules(TurnEvents(bus), context),
+        default_prompt_render_modules(bus, TurnEvents(bus, core_kernel), context),
         frame_factory=PromptRenderFrame,
     )
 
@@ -1104,7 +1125,8 @@ async def test_prompt_render_chain_respects_disabled_sections(tmp_path):
     )
     phase = Phase(
         default_prompt_render_modules(
-            TurnEvents(EventBus()),
+            EventBus(),
+            TurnEvents(EventBus(), core_kernel),
             context,
             plugin_modules=[BottomModule()],
         ),
@@ -1160,7 +1182,8 @@ async def test_prompt_render_collects_export_slots(tmp_path):
     )
     phase = Phase(
         default_prompt_render_modules(
-            TurnEvents(EventBus()),
+            EventBus(),
+            TurnEvents(EventBus(), core_kernel),
             context,
             plugin_modules=[SlotModule()],
         ),
@@ -1200,7 +1223,8 @@ async def test_before_step_finalize_injects_extra_hints():
 
     bus.on(BeforeStepCtx, append_hint)
     phase = Phase(
-        default_before_step_modules(TurnEvents(bus)), frame_factory=BeforeStepFrame
+        default_before_step_modules(bus, TurnEvents(bus, core_kernel)),
+        frame_factory=BeforeStepFrame,
     )
     messages = [{"role": "user", "content": "hello"}]
 
@@ -1232,7 +1256,8 @@ async def test_before_step_collects_export_slots():
 
     phase = Phase(
         default_before_step_modules(
-            TurnEvents(EventBus()),
+            EventBus(),
+            TurnEvents(EventBus(), core_kernel),
             plugin_modules=[SlotModule()],
         ),
         frame_factory=BeforeStepFrame,
@@ -1266,7 +1291,8 @@ async def test_before_step_finalize_early_stop():
 
     bus.on(BeforeStepCtx, stop_early)
     phase = Phase(
-        default_before_step_modules(TurnEvents(bus)), frame_factory=BeforeStepFrame
+        default_before_step_modules(bus, TurnEvents(bus, core_kernel)),
+        frame_factory=BeforeStepFrame,
     )
     messages = [{"role": "user", "content": "hello"}]
 
@@ -1295,7 +1321,8 @@ async def test_after_step_phase_runs_observers():
 
     bus.on(AfterStepCtx, handler)
     phase = Phase(
-        default_after_step_modules(TurnEvents(bus)), frame_factory=AfterStepFrame
+        default_after_step_modules(bus, TurnEvents(bus, core_kernel)),
+        frame_factory=AfterStepFrame,
     )
     await phase.run(
         AfterStepCtx(
@@ -1344,7 +1371,8 @@ async def test_after_step_collects_telemetry_slots_before_fanout():
     bus.on(AfterStepCtx, handler)
     phase = Phase(
         default_after_step_modules(
-            TurnEvents(bus),
+            bus,
+            TurnEvents(bus, core_kernel),
             plugin_modules=[SlotModule(), AfterFanoutSlotModule()],
         ),
         frame_factory=AfterStepFrame,
@@ -1401,7 +1429,8 @@ async def test_after_reasoning_collects_persist_and_outbound_slots():
     )
     phase = Phase(
         default_after_reasoning_modules(
-            TurnEvents(EventBus()),
+            EventBus(),
+            TurnEvents(EventBus(), core_kernel),
             cast(Any, services),
             plugin_modules=[SlotModule()],
         ),
@@ -1453,7 +1482,9 @@ async def test_after_reasoning_carries_the_persisted_assistant_message_id_into_o
         context_retry={},
     )
     phase = Phase(
-        default_after_reasoning_modules(TurnEvents(EventBus()), cast(Any, services)),
+        default_after_reasoning_modules(
+            EventBus(), TurnEvents(EventBus(), core_kernel), cast(Any, services)
+        ),
         frame_factory=AfterReasoningFrame,
     )
 
@@ -1496,7 +1527,9 @@ async def test_after_reasoning_persists_user_display_content_without_internal_me
         context_retry={},
     )
     phase = Phase(
-        default_after_reasoning_modules(TurnEvents(EventBus()), cast(Any, services)),
+        default_after_reasoning_modules(
+            EventBus(), TurnEvents(EventBus(), core_kernel), cast(Any, services)
+        ),
         frame_factory=AfterReasoningFrame,
     )
 
@@ -1541,7 +1574,9 @@ async def test_after_reasoning_copies_thread_id_into_persisted_messages():
         context_retry={},
     )
     phase = Phase(
-        default_after_reasoning_modules(TurnEvents(EventBus()), cast(Any, services)),
+        default_after_reasoning_modules(
+            EventBus(), TurnEvents(EventBus(), core_kernel), cast(Any, services)
+        ),
         frame_factory=AfterReasoningFrame,
     )
 
@@ -1584,7 +1619,9 @@ async def test_after_reasoning_enriches_session_metadata_with_relationship_runti
         context_retry={},
     )
     phase = Phase(
-        default_after_reasoning_modules(TurnEvents(EventBus()), cast(Any, services)),
+        default_after_reasoning_modules(
+            EventBus(), TurnEvents(EventBus(), core_kernel), cast(Any, services)
+        ),
         frame_factory=AfterReasoningFrame,
     )
 
@@ -1649,7 +1686,8 @@ async def test_after_turn_collects_extra_and_telemetry_slots():
     context.last_debug_breakdown = []
     phase = Phase(
         default_after_turn_modules(
-            TurnEvents(bus),
+            bus,
+            TurnEvents(bus, core_kernel),
             _DummyOutbound(),
             cast(ContextBuilder, context),
             plugin_modules=[ExtraModule(), TelemetryModule()],
@@ -1690,7 +1728,8 @@ async def _guard_group_turn(
 ) -> None:
     phase = Phase(
         default_before_turn_modules(
-            TurnEvents(EventBus()),
+            EventBus(),
+            TurnEvents(EventBus(), core_kernel),
             manager,
             cast(
                 ContextStore,
@@ -1780,7 +1819,8 @@ async def test_sdk_command_frame_aborts_before_retrieval_and_keeps_session_metad
     context = SimpleNamespace(prepare=AsyncMock())
     phase = Phase(
         default_before_turn_modules(
-            TurnEvents(EventBus()),
+            EventBus(),
+            TurnEvents(EventBus(), core_kernel),
             cast(SessionManager, SimpleNamespace(get_or_create=lambda key: session)),
             cast(ContextStore, context),
             plugin_modules=[Command()],

@@ -14,6 +14,7 @@ from agent.lifecycle.phase import (
     collect_prefixed_slots,
     topo_sort_modules,
 )
+from bus.event_bus import EventBus
 from agent.core.turn_events import TurnEvents
 from agent.lifecycle.types import BeforeStepCtx, BeforeStepInput
 from shiori_sdk.core.conversation import StepStarting
@@ -61,11 +62,12 @@ class _EmitBeforeStepCtxModule:
     requires = ("before_step.build_ctx", _CTX_SLOT)
     produces = (_CTX_SLOT,)
 
-    def __init__(self, events: TurnEvents) -> None:
+    def __init__(self, bus: EventBus, events: TurnEvents) -> None:
+        self._bus = bus
         self._events = events
 
     async def run(self, frame: BeforeStepFrame) -> BeforeStepFrame:
-        ctx = await self._events.bus.emit(cast(BeforeStepCtx, frame.slots[_CTX_SLOT]))
+        ctx = await self._bus.emit(cast(BeforeStepCtx, frame.slots[_CTX_SLOT]))
         frame.slots[_CTX_SLOT] = ctx
 
         def apply(event: StepStarting) -> None:
@@ -74,17 +76,21 @@ class _EmitBeforeStepCtxModule:
         def vetoed(veto: Veto) -> None:
             ctx.early_stop, ctx.early_stop_reply = True, veto.reason
 
-        starting = StepStarting(
-            session_key=ctx.session_key,
-            channel=ctx.channel,
-            chat_id=ctx.chat_id,
-            iteration=ctx.iteration,
-            input_tokens_estimate=ctx.input_tokens_estimate,
-            visible_tool_names=ctx.visible_tool_names,
-            extra_hints=tuple(ctx.extra_hints),
-        )
-        await self._events.emit(starting, apply, vetoed)
+        await self._events.emit(_step_starting(ctx), apply, vetoed)
         return frame
+
+
+def _step_starting(ctx: BeforeStepCtx) -> StepStarting:
+    """The ``StepStarting`` projection of the step's context."""
+    return StepStarting(
+        session_key=ctx.session_key,
+        channel=ctx.channel,
+        chat_id=ctx.chat_id,
+        iteration=ctx.iteration,
+        input_tokens_estimate=ctx.input_tokens_estimate,
+        visible_tool_names=ctx.visible_tool_names,
+        extra_hints=tuple(ctx.extra_hints),
+    )
 
 
 class _InjectHintsModule:
@@ -131,12 +137,13 @@ class _ReturnBeforeStepCtxModule:
 
 
 def default_before_step_modules(
+    bus: EventBus,
     events: TurnEvents,
     plugin_modules: BeforeStepModules | None = None,
 ) -> BeforeStepModules:
     builtins: BeforeStepModules = [
         _BuildBeforeStepCtxModule(),
-        _EmitBeforeStepCtxModule(events),
+        _EmitBeforeStepCtxModule(bus, events),
         _CollectBeforeStepExportSlotsModule(),
         _InjectHintsModule(),
         _ReturnBeforeStepCtxModule(),
