@@ -29,9 +29,9 @@ class ProactiveGateContext:
 
 @dataclass(frozen=True)
 class ProactiveGateDecision:
-    """A gate either continues, blocks the tick, or claims one core mode."""
+    """A motive either continues or claims one core mode for the tick."""
 
-    kind: Literal["continue", "block", "activate"]
+    kind: Literal["continue", "activate"]
     reason: str = ""
     mode: ProactiveMode | None = None
     metadata: Mapping[str, object] = field(default_factory=dict)
@@ -104,7 +104,7 @@ class ProactiveGateTraceItem:
 
     gate_name: str
     priority: int
-    decision: Literal["continue", "block", "activate"]
+    decision: Literal["continue", "activate"]
     reason: str
     metadata: Mapping[str, object]
     duration_ms: int
@@ -168,10 +168,6 @@ class ProactiveGateChain:
             decision = gate.evaluate(ctx)
             duration_ms = int((perf_counter() - started) * 1000)
             self._validate_decision(gate, decision)
-            if decision.kind == "block":
-                raise ValueError(
-                    f"Core motive {gate.name} cannot block global admission"
-                )
             trace.append(
                 ProactiveGateTraceItem(
                     gate_name=gate.name,
@@ -217,7 +213,7 @@ class ProactiveGateChain:
                 f"Proactive gate {gate.name} returned an invalid decision: "
                 f"{type(decision).__name__}"
             )
-        if decision.kind not in {"continue", "block", "activate"}:
+        if decision.kind not in {"continue", "activate"}:
             raise ValueError(
                 f"Proactive gate {gate.name} returned an unknown decision: "
                 f"{decision.kind}"

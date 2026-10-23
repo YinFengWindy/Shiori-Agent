@@ -48,10 +48,12 @@ def record_tick_log_finish(
     elif ctx.final_message:
         final_message = ctx.final_message
     # The last evaluated motive is diagnostic data, not a gate_exit.
-    latest = ctx.gate_trace[-1] if ctx.gate_trace else None
-    gate_name = latest.gate_name if latest is not None else ""
-    gate_reason = latest.reason if latest is not None else ""
-    gate_metadata = dict(latest.metadata) if latest is not None else {}
+    gate_name, gate_reason = "", ""
+    gate_metadata: dict[str, object] = {}
+    if ctx.gate_trace:
+        latest = ctx.gate_trace[-1]
+        gate_name, gate_reason = latest.gate_name, latest.reason
+        gate_metadata = dict(latest.metadata)
     state_store.record_tick_log_finish(
         tick_id=ctx.tick_id,
         session_key=session_key,

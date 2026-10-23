@@ -167,7 +167,7 @@ consolidates these additions and the subsequent #847 breaking migration.
   remove the name from `capabilities` (using `roles` / `models` instead) to
   load it again.
 
-- **breaking: capability `proactive_gates` removed (PR #<待定>, issue #902,
+- **breaking: capability `proactive_gates` removed (PR #924, issue #902,
   refactor P3-1, D19).** No plugin contributed a gate. It leaves
   `shiori_sdk.runtime.KNOWN_CAPABILITIES` and the `capabilities` enum of
   `manifest.schema.json`, and the host no longer exposes `ctx.proactive_gates`.

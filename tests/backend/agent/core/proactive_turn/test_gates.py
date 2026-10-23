@@ -120,21 +120,6 @@ def test_gate_chain_rejects_unknown_decision_kind():
         )
 
 
-def test_core_motive_cannot_veto_global_admission():
-    chain = ProactiveGateChain(
-        motives=[
-            _Gate(
-                "relationship",
-                0,
-                ProactiveGateDecision(kind="block", reason="cooldown"),
-                [],
-            )
-        ]
-    )
-    with pytest.raises(ValueError, match="cannot block global admission"):
-        chain.evaluate(_ctx())
-
-
 def test_completion_reaches_the_motive_that_claimed_the_tick():
     class _Claiming(ProactiveGateAdapter):
         name = "scene"
