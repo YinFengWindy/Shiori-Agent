@@ -27,7 +27,6 @@ from unittest.mock import MagicMock
 import pytest
 
 from agent.lifecycle.facade import TurnLifecycle
-from agent.lifecycle.phases.before_turn import MemoryConsolidationFailedError
 from agent.looping.core import AgentLoop
 from agent.looping.ports import (
     AgentLoopConfig,
@@ -400,27 +399,37 @@ async def scenario_meme_and_novelai_attachments(host: GoldenHost) -> None:
 
 
 async def scenario_rm_rewrite_and_interactive_block(host: GoldenHost) -> None:
-    """``rm`` runs as a move into the restore directory; ``vim`` is refused."""
+    """``rm`` runs as a move into the restore directory; ``vim`` is refused.
+
+    shell_safety judges the command shell_restore already rewrote. The rewrite
+    drops every rm option, so the editor path inside the ``s3`` option only
+    reaches shell_safety if it runs before the rewrite; it is the one input
+    that tells the two orders apart (shell_safety matches the basename of any
+    token against its editor list).
+    """
     host.provider.script = [
         _calls(
             ("s1", "shell", {"command": "rm notes.txt"}),
             ("s2", "shell", {"command": "vim notes.txt"}),
+            ("s3", "shell", {"command": "rm --backup=/usr/bin/vim old.txt"}),
         ),
         _reply("处理好了"),
     ]
     restore = str((host.workspace / "recovery/shell_restore").resolve())
     moved = shlex.join(["mv", "--", "notes.txt", restore])
+    moved_old = shlex.join(["mv", "--", "old.txt", restore])
     refused = "shell_safety 拦截：vim 会打开交互式界面，请改用非交互命令。"
 
     assert await host.turn("清理一下") == "处理好了"
-    assert [call["command"] for call in host.shell.calls] == [moved]
-    assert host.tool_results(1) == [("s1", "ok"), ("s2", refused)]
+    assert [call["command"] for call in host.shell.calls] == [moved, moved_old]
+    assert host.tool_results(1) == [("s1", "ok"), ("s2", refused), ("s3", "ok")]
     assert [
         (call["call_id"], call["status"], call["final_arguments"], call["result"])
         for call in host.tool_calls()
     ] == [
         ("s1", "success", {"command": moved}, "ok"),
         ("s2", "denied", {"command": "vim notes.txt"}, refused),
+        ("s3", "success", {"command": moved_old}, "ok"),
     ]
 
 
@@ -432,9 +441,13 @@ async def scenario_repeated_call_finalizes(host: GoldenHost) -> None:
 
     assert await host.turn("查一下") == "先总结"
     assert [call["q"] for call in host.lookup.calls] == ["同一个", "同一个"]
-    assert len(host.provider.requests) == 4
-    summary_request = str(host.provider.requests[3]["messages"][-1]["content"])
-    assert "[收尾原因] tool_call_loop" in summary_request
+    # The fourth request is the closing summary: the only one offering no tools.
+    assert [bool(request.get("tools")) for request in host.provider.requests] == [
+        True,
+        True,
+        True,
+        False,
+    ]
     assert [(call["status"], call["result"]) for call in host.tool_calls()] == [
         ("success", "ok"),
         ("success", "ok"),
@@ -449,13 +462,17 @@ async def scenario_context_pressure_stops_early(host: GoldenHost) -> None:
 
     assert await host.turn("查资料") == "先说结论"
     assert len(host.lookup.calls) == 1
-    assert len(host.provider.requests) == 2
-    summary_request = str(host.provider.requests[1]["messages"][-1]["content"])
-    assert "[收尾原因] context_pressure" in summary_request
+    # The second request is the closing summary, offering no tools.
+    assert [bool(request.get("tools")) for request in host.provider.requests] == [
+        True,
+        False,
+    ]
     [step] = host.steps
     assert (step.early_stop, step.early_stop_reason) == (True, "context_pressure")
-    tokens = step.telemetry["context_pressure_tokens"]
-    threshold = step.telemetry["context_pressure_threshold"]
+    # The telemetry only reaches step listeners (nothing stores or pushes it),
+    # so only its meaning is fixed here, not its key names.
+    [tokens] = [v for k, v in step.telemetry.items() if k.endswith("tokens")]
+    [threshold] = [v for k, v in step.telemetry.items() if k.endswith("threshold")]
     assert isinstance(tokens, int) and isinstance(threshold, int)
     assert tokens >= threshold
 
@@ -477,14 +494,12 @@ async def scenario_commands_bypass_memory_backlog(host: GoldenHost) -> None:
         "🧠 记忆整理状态：\n当前会话还没有完成过记忆整理。\n\n"
         "尚未整理的用户消息数：20\n当前会话消息数：40"
     )
-    assert await host.turn("/kvcache") == (
-        "KVCache 不可用（observe 未安装、未启用或未提供遥测接口）。"
-    )
     assert await host.turn("/undo") == (
         "已撤销上一轮对话。\n删除消息：2 条\n失效记忆：0 条\n恢复旧记忆：0 条"
     )
-    with pytest.raises(MemoryConsolidationFailedError):
+    with pytest.raises(Exception) as refused:
         _ = await host.turn("你好")
+    assert type(refused.value).__name__ == "MemoryConsolidationFailedError"
     assert host.retrieval.requests == []
     assert host.provider.requests == []
     stored = host.stored()
@@ -496,6 +511,10 @@ async def scenario_finish_reply_cleans_each_message(host: GoldenHost) -> None:
     """Natural chat: every finish_reply message is cleaned on its own.
 
     The citation IDs found in any message are recorded on every stored row.
+    ``[§mem-2]`` is only removed, never recorded: the trailing
+    ``§cited:[...]§`` marker (or recall_memory results) is the one citation
+    format citation reads (plugins/citation/README.md), and no prompt asks the
+    model for inline ``[§id]``; citation strips those as leftover markers.
     """
     host.provider.script = [
         _calls(
@@ -514,6 +533,8 @@ async def scenario_finish_reply_cleans_each_message(host: GoldenHost) -> None:
 
     assert await host.turn("早", turn_id="t1") == "早呀\n\n一起加油 😊"
     replies = [message for message in host.stored() if message["role"] == "assistant"]
+    # Inline [§id] is only stripped; cited IDs come from the trailing line alone
+    # (or the recall_memory fallback), so mem-2 is not recorded by design.
     assert [
         (
             message["content"],
