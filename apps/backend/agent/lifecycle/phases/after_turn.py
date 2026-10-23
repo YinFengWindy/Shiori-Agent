@@ -20,6 +20,8 @@ from agent.lifecycle.phase import (
     topo_sort_modules,
 )
 from agent.lifecycle.types import TurnSnapshot, TurnState
+from agent.core.turn_events import TurnEvents, read_only
+from shiori_sdk.core.conversation import TurnFinished
 from shiori_sdk.lifecycle import AfterTurnCtx
 from agent.turns.outbound import OutboundDispatch, OutboundPort
 from bus.event_bus import EventBus
@@ -300,11 +302,24 @@ class _FanoutAfterTurnCtxModule:
     slot = "after_turn.fanout_ctx"
     requires = ("after_turn.collect_telemetry", _CTX_SLOT)
 
-    def __init__(self, bus: EventBus) -> None:
-        self._bus = bus
+    def __init__(self, events: TurnEvents) -> None:
+        self._events = events
 
     async def run(self, frame: AfterTurnFrame) -> AfterTurnFrame:
-        await self._bus.fanout(cast(AfterTurnCtx, frame.slots[_CTX_SLOT]))
+        ctx = cast(AfterTurnCtx, frame.slots[_CTX_SLOT])
+        await self._events.bus.fanout(ctx)
+        finished = TurnFinished(
+            session_key=ctx.session_key,
+            channel=ctx.channel,
+            chat_id=ctx.chat_id,
+            reply=ctx.reply,
+            tools_used=ctx.tools_used,
+            thinking=ctx.thinking,
+            will_dispatch=ctx.will_dispatch,
+            extra_metadata=read_only(ctx.extra_metadata),
+        )
+        # Nothing is writable: the turn is stored, only listeners remain.
+        await self._events.emit(finished, lambda _: None)
         return frame
 
 
@@ -356,7 +371,7 @@ class _ReturnOutboundMessageModule:
 
 
 def default_after_turn_modules(
-    bus: EventBus,
+    events: TurnEvents,
     outbound: OutboundPort,
     context: ContextBuilder,
     history_window: int = 500,
@@ -368,11 +383,11 @@ def default_after_turn_modules(
         _ApplyTurnAffectionModule(relationship_runtime),
         _CollectAfterTurnExtraSlotsModule(),
         _BuildTurnCommittedModule(),
-        _FanoutTurnCommittedModule(bus),
+        _FanoutTurnCommittedModule(events.bus),
         _LogBudgetModule(),
         _BuildAfterTurnCtxModule(),
         _CollectAfterTurnTelemetrySlotsModule(),
-        _FanoutAfterTurnCtxModule(bus),
+        _FanoutAfterTurnCtxModule(events),
         _DispatchOutboundModule(outbound),
         _ReturnOutboundMessageModule(),
     ]

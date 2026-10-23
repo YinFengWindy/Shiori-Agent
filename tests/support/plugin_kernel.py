@@ -13,6 +13,7 @@ from typing import Any, cast
 
 # 预热 agent.core 导入链，避免 agent.lifecycle.types 触发循环导入
 from agent.core.passive_turn import ContextStore as _  # noqa: F401
+from agent.core.turn_events import install_core_checks
 from agent.lifecycle.types import BeforeTurnCtx
 from agent.plugin_host import (
     PluginGenerationSettings,
@@ -94,6 +95,7 @@ def host_kernel(
         core=tuple(
             _withholding(module, withheld) for module in plugin_core_modules(inputs)
         ),
+        core_checks=install_core_checks,
         **options,
     )
 

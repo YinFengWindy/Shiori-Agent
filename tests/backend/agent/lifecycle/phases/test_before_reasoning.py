@@ -8,6 +8,7 @@ from unittest.mock import Mock
 
 import pytest
 
+from agent.core.turn_events import TurnEvents
 from agent.context import ContextBuilder
 from agent.core.types import ContextBundle
 from agent.lifecycle.phase import Phase
@@ -39,7 +40,7 @@ async def test_before_reasoning_syncs_session_key_and_role_id_into_tool_context(
     context_builder.render = Mock(return_value=ContextBundle())
     phase = Phase(
         default_before_reasoning_modules(
-            bus,
+            TurnEvents(bus),
             cast(ToolRegistry, tools),
             cast(Any, session_manager),
             cast(ContextBuilder, context_builder),
@@ -126,7 +127,7 @@ async def test_prompt_warmup_renders_external_turn_with_its_group_note(
     tools = Mock(spec=ToolRegistry)
     phase = Phase(
         default_before_reasoning_modules(
-            EventBus(),
+            TurnEvents(EventBus()),
             cast(ToolRegistry, tools),
             cast(
                 Any,

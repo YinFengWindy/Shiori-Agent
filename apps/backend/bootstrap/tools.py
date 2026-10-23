@@ -625,6 +625,7 @@ def build_core_runtime(
         PluginKernel,
         PluginRpcRegistry,
     )
+    from agent.core.turn_events import install_core_checks
     from bootstrap.plugin_core import PluginCoreInputs, plugin_core_modules
     from conversation.background_results import HostBackgroundResults
     from conversation.external_turns import HostExternalTurns
@@ -715,6 +716,7 @@ def build_core_runtime(
         ),
         namespace=uuid4().hex,
         strict=shared is not None,
+        core_checks=install_core_checks,
         core=plugin_core_modules(
             PluginCoreInputs(
                 plugin_dirs=tuple(plugin_dirs),

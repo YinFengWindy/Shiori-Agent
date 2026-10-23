@@ -13,9 +13,11 @@ from agent.lifecycle.phase import (
     collect_prefixed_slots,
     topo_sort_modules,
 )
+from agent.core.turn_events import TurnEvents
 from agent.lifecycle.types import BeforeReasoningCtx, BeforeReasoningInput
-from bus.event_bus import EventBus
 from shiori_sdk.channels.message_source import MessageSource
+from shiori_sdk.core.conversation import ReasoningStarting
+from shiori_sdk.kernel import Veto
 
 if TYPE_CHECKING:
     from agent.context import ContextBuilder
@@ -120,12 +122,33 @@ class _EmitBeforeReasoningCtxModule:
     requires = ("before_reasoning.build_ctx", _CTX_SLOT)
     produces = (_CTX_SLOT,)
 
-    def __init__(self, bus: EventBus) -> None:
-        self._bus = bus
+    def __init__(self, events: TurnEvents) -> None:
+        self._events = events
 
     async def run(self, frame: BeforeReasoningFrame) -> BeforeReasoningFrame:
         ctx = cast(BeforeReasoningCtx, frame.slots[_CTX_SLOT])
-        frame.slots[_CTX_SLOT] = await self._bus.emit(ctx)
+        ctx = await self._events.bus.emit(ctx)
+        frame.slots[_CTX_SLOT] = ctx
+
+        def apply(event: ReasoningStarting) -> None:
+            ctx.skill_names[:] = event.skill_names
+            ctx.retrieved_memory_block = event.retrieved_memory_block
+            ctx.extra_hints[:] = event.extra_hints
+
+        def vetoed(veto: Veto) -> None:
+            ctx.abort, ctx.abort_reply = True, veto.reason
+
+        starting = ReasoningStarting(
+            session_key=ctx.session_key,
+            channel=ctx.channel,
+            chat_id=ctx.chat_id,
+            content=ctx.content,
+            timestamp=ctx.timestamp,
+            skill_names=tuple(ctx.skill_names),
+            retrieved_memory_block=ctx.retrieved_memory_block,
+            extra_hints=tuple(ctx.extra_hints),
+        )
+        await self._events.emit(starting, apply, vetoed)
         return frame
 
 
@@ -192,7 +215,7 @@ class _ReturnBeforeReasoningCtxModule:
 
 
 def default_before_reasoning_modules(
-    bus: EventBus,
+    events: TurnEvents,
     tools: ToolRegistry,
     session_manager: SessionManager,
     context: ContextBuilder,
@@ -201,7 +224,7 @@ def default_before_reasoning_modules(
     builtins: BeforeReasoningModules = [
         _SyncToolContextModule(tools, session_manager),
         _BuildBeforeReasoningCtxModule(),
-        _EmitBeforeReasoningCtxModule(bus),
+        _EmitBeforeReasoningCtxModule(events),
         _CollectBeforeReasoningExportSlotsModule(),
         _PromptWarmupModule(context),
         _ReturnBeforeReasoningCtxModule(),

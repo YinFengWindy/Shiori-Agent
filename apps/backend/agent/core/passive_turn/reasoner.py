@@ -58,6 +58,7 @@ from .reasoning_loop import _PassiveReasoningLoopMixin
 from .reasoning_result import _PassiveReasoningResultMixin
 from .natural_reply import NaturalReply
 from agent.core.runtime_support import ToolDiscoveryState
+from agent.core.turn_events import TurnEvents
 from agent.core.types import ReasonerResult
 from agent.lifecycle.phase import Phase
 from agent.lifecycle.plugin_contributions import (
@@ -231,6 +232,8 @@ class DefaultReasoner(
         ) = None
         bus = event_bus or EventBus()
         self._bus = bus
+        # 步骤与提示词事件经当前插件来源的内核发出（#902）。
+        self._events = TurnEvents(bus, lambda: self._plugins.kernel)
         self._before_step = LiveContributions(
             lambda: self._plugins.before_step_modules,
             self._build_before_step_phase,
@@ -262,7 +265,7 @@ class DefaultReasoner(
         plugin_modules: list[Any],
     ) -> Phase[BeforeStepInput, BeforeStepCtx, BeforeStepFrame]:
         return Phase(
-            default_before_step_modules(self._bus, plugin_modules=plugin_modules),
+            default_before_step_modules(self._events, plugin_modules=plugin_modules),
             frame_factory=BeforeStepFrame,
         )
 
@@ -271,7 +274,7 @@ class DefaultReasoner(
         plugin_modules: list[Any],
     ) -> Phase[AfterStepCtx, AfterStepCtx, AfterStepFrame]:
         return Phase(
-            default_after_step_modules(self._bus, plugin_modules=plugin_modules),
+            default_after_step_modules(self._events, plugin_modules=plugin_modules),
             frame_factory=AfterStepFrame,
         )
 
@@ -282,7 +285,7 @@ class DefaultReasoner(
     ) -> Phase[PromptRenderInput, PromptRenderResult, PromptRenderFrame]:
         return Phase(
             default_prompt_render_modules(
-                self._bus,
+                self._events,
                 context,
                 plugin_modules=plugin_modules,
             ),

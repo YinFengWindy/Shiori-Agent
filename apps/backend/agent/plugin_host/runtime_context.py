@@ -8,7 +8,8 @@ from typing import Any
 
 from agent.plugin_host.capabilities import LifecycleCapability
 from shiori_sdk.rpc import RpcCapability
-from shiori_sdk.kernel import Scope
+from shiori_sdk.kernel import Context, Key, Scope, Veto
+from shiori_sdk.kernel.events import OnHandler, WatchHandler
 from shiori_sdk.services import PluginServices, ServiceProviderContext
 from shiori_sdk.runtime import Dispose
 from agent.plugin_host.manifest import PluginManifest
@@ -57,6 +58,10 @@ class PluginSetupContext:
     通过属性访问已授予的 capability（ctx.tools / ctx.events / ctx.kv / ...）；
     未声明的能力访问时抛 CapabilityNotGranted；已声明但宿主缺少支撑服务时抛
     HostServiceUnavailable（内核在 setup 前已校验，这里是同一规则的属性侧）。
+
+    ``on`` / ``watch`` / ``emit`` 与 ``provide`` / ``require`` / ``get`` 是内核
+    ``Context`` 的同名成员，原样委托给本插件在内核里的上下文（manifest 的
+    ``inject`` / ``optional_inject`` / ``provides`` 声明可用的 Key）。
     """
 
     def __init__(
@@ -66,6 +71,7 @@ class PluginSetupContext:
         plugin_dir: Path,
         manifest: PluginManifest,
         effects: Scope,
+        kernel_context: Context,
         publish_api: Callable[[object], None] | None = None,
         lifecycle: LifecycleCapability | None = None,
         events: EventsCapability | None = None,
@@ -106,6 +112,7 @@ class PluginSetupContext:
         self.plugin_dir = plugin_dir
         self.manifest = manifest
         self._effects = effects
+        self._kernel_context = kernel_context
         self._publish_api = publish_api
         self._lifecycle = lifecycle
         self._events = events
@@ -183,6 +190,30 @@ class PluginSetupContext:
         if capability not in self.granted or value is None:
             raise CapabilityNotGranted(f"Plugin did not request {capability}")
         return value
+
+    def provide[T](self, key: Key[T], impl: T) -> None:
+        """Publishes ``impl`` under a key declared in manifest ``provides``."""
+        self._kernel_context.provide(key, impl)
+
+    def require[T](self, key: Key[T]) -> T:
+        """The current provider of a key declared in manifest ``inject``."""
+        return self._kernel_context.require(key)
+
+    def get[T](self, key: Key[T]) -> T | None:
+        """The current provider of a key declared in ``optional_inject``, or None."""
+        return self._kernel_context.get(key)
+
+    def on[E](self, event_type: type[E], handler: OnHandler[E]) -> None:
+        """Joins the ordered chain; return the (replaced) event or ``Veto``."""
+        self._kernel_context.on(event_type, handler)
+
+    def watch[E](self, event_type: type[E], handler: WatchHandler[E]) -> None:
+        """Listens read-only to the final event, serially, without delaying emit."""
+        self._kernel_context.watch(event_type, handler)
+
+    async def emit[E](self, event: E) -> E | Veto:
+        """Emits through the generation's kernel; see ``Kernel.emit``."""
+        return await self._kernel_context.emit(event)
 
     def effect(self, label: str, dispose: Dispose) -> None:
         """登记资源清理；卸载先停用/退订 ctx.events.on，再逆序撤销其它 effect。

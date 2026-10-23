@@ -54,10 +54,10 @@ def wire_turn_lifecycle(
     active_turn_states: Mapping[str, "TurnInterruptState"],
 ) -> None:
     from agent.looping.interrupt import tracked_turn_state
-    from shiori_sdk.lifecycle import AfterStepCtx
+    from shiori_sdk.core.conversation import StepFinished
     from agent.turns.reply_sequence import presented_tool_chain, reply_is_buffered
 
-    async def _progress_reporter(ctx: AfterStepCtx) -> None:
+    async def _progress_reporter(ctx: StepFinished) -> None:
         state = tracked_turn_state(active_turn_states, ctx.session_key)
         if state is None:
             return
@@ -70,7 +70,7 @@ def wire_turn_lifecycle(
             ctx.tool_chain_partial, buffered=reply_is_buffered()
         )
 
-    lifecycle.on_after_step(_progress_reporter)
+    lifecycle.on_step_finished(_progress_reporter)
 
 
 def resolve_memory_toolset_provider(name: str) -> ToolsetProvider:

@@ -4,6 +4,8 @@ from collections.abc import Awaitable, Callable, Iterable
 from pathlib import Path
 from typing import Protocol, cast
 
+from .kernel import Key, Veto
+from .kernel.events import OnHandler, WatchHandler
 from .lifecycle import LifecycleCapability
 
 type Dispose = Callable[[], Awaitable[None] | None]
@@ -116,7 +118,13 @@ class EventsCapability(Protocol):
 
 
 class PluginRuntimeContext(Protocol):
-    """Public setup context. Undeclared capabilities raise CapabilityNotGranted."""
+    """Public setup context. Undeclared capabilities raise CapabilityNotGranted.
+
+    ``provide`` / ``require`` / ``get`` and ``on`` / ``watch`` / ``emit`` are the
+    kernel ``Context`` members of the same names (``shiori_sdk.kernel``):
+    service keys come from manifest ``provides`` / ``inject`` /
+    ``optional_inject``, events from ``shiori_sdk.core``.
+    """
 
     @property
     def plugin_id(self) -> str: ...
@@ -136,3 +144,27 @@ class PluginRuntimeContext(Protocol):
     def expose(self, api: object) -> None: ...
 
     def effect(self, label: str, dispose: Dispose) -> None: ...
+
+    def provide[T](self, key: Key[T], impl: T) -> None:
+        """Publishes ``impl`` under a key declared in manifest ``provides``."""
+        ...
+
+    def require[T](self, key: Key[T]) -> T:
+        """The current provider of a key declared in manifest ``inject``."""
+        ...
+
+    def get[T](self, key: Key[T]) -> T | None:
+        """The current provider of a key declared in ``optional_inject``, or None."""
+        ...
+
+    def on[E](self, event_type: type[E], handler: OnHandler[E]) -> None:
+        """Joins the ordered chain; return the (replaced) event or ``Veto``."""
+        ...
+
+    def watch[E](self, event_type: type[E], handler: WatchHandler[E]) -> None:
+        """Listens read-only to the final event, serially, without delaying emit."""
+        ...
+
+    async def emit[E](self, event: E) -> E | Veto:
+        """Emits through the kernel: ``on`` chain, core checks, then watchers."""
+        ...

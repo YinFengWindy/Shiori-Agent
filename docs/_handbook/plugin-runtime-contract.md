@@ -178,6 +178,34 @@ consolidates these additions and the subsequent #847 breaking migration.
   same order and with the same rule that a motive may claim a tick but never
   block it.
 
+- **Turn and tool events, kernel members on the v2 context (PR #<待定>, issue
+  #902, refactor P3-2).** New `shiori_sdk.core.conversation` holds the seven
+  turn events `TurnStarting`, `ReasoningStarting`, `PromptRendering`,
+  `StepStarting`, `StepFinished`, `ReasoningFinished` and `TurnFinished`
+  (frozen projections of the turn; each documents its writable fields), the
+  history item `ConversationMessage`, and the `COMMANDS` key with its
+  `Commands` protocol and `CommandHandler` type (provided from P3-5). The host
+  emits all seven through the generation's kernel at the points of the
+  matching lifecycle phases, after the legacy context, and fans the final event
+  out to core listeners; `Veto` aborts the turn on `TurnStarting` /
+  `ReasoningStarting` and ends the tool loop on `StepStarting`, and fails the
+  turn on the others. `PromptRendering.reply_mode` decides the natural-chat
+  prompt (it starts as the role's `natural_chat_enabled`, and the host renders
+  a sequence only when `supports_reply_sequence` and not `minimal_request`).
+  New `shiori_sdk.core.tools` holds `ToolCalling` (`on_error =
+  "fail_closed"`), `ToolCalled` and `ToolVeto(Veto)` with `finalize`; the host
+  emits them from P3-3. The v2 setup context and `PluginRuntimeContext` gain
+  the kernel members `provide` / `require` / `get` and `on` / `watch` / `emit`
+  with the kernel `Context` signatures, backed by the plugin's kernel context;
+  `FakePluginContext` backs them with a real `Kernel` (`kernel=`, `inject=`,
+  `optional_inject=`, `provides=`). Manifests may declare the optional
+  `inject`, `optional_inject` and `provides` lists of service key names
+  (`manifest.schema.json`, package contract); they join the plugin's kernel
+  requirements and provisions. The kernel now also rejects a handler's
+  replacement event holding a list, dict or set field (counted as the
+  handler's error under the event's `on_error`). No existing hook, phase,
+  capability or event is removed or changes behavior.
+
 - **Natural proactive replies and background reports (PR #894, issue #868).** The current
   role's built-in natural-chat capability also applies to proactive draft
   `message_push` output, Drift dialogue and captured background-result reports.

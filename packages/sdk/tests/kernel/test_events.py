@@ -265,3 +265,33 @@ async def test_emit_rejects_a_mutable_container_field_before_any_handler() -> No
     assert called == []
     with pytest.raises(TypeError, match="frozen"):
         _ = await events.emit(Mutable(1))
+
+
+@dataclass(frozen=True)
+class Holding:
+    items: object
+
+
+async def test_a_replacement_holding_a_mutable_container_counts_as_handler_error(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    events = hub("smuggler", "next")
+    seen: list[Holding] = []
+
+    async def smuggle(event: Holding) -> Holding:
+        return Holding(["b"])
+
+    async def record(event: Holding) -> Holding:
+        seen.append(event)
+        return event
+
+    events.on("smuggler", Scope("smuggler"), Holding, smuggle)
+    events.on("next", Scope("next"), Holding, record)
+
+    with caplog.at_level(logging.ERROR):
+        result = await events.emit(Holding(("a",)))
+
+    # fail_open: the bad replacement is dropped and the chain goes on unchanged.
+    assert result == Holding(("a",))
+    assert seen == [Holding(("a",))]
+    assert "smuggler" in caplog.text

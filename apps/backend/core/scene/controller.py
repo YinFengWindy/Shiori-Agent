@@ -4,12 +4,15 @@ import asyncio
 import logging
 from dataclasses import dataclass, replace
 from typing import Any
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 
 from agent.core.passive_support import to_history_messages
 from agent.core.types import HistoryMessage
-from agent.lifecycle.types import BeforeTurnCtx
-from shiori_sdk.lifecycle import AfterTurnCtx
+from shiori_sdk.core.conversation import (
+    ConversationMessage,
+    TurnFinished,
+    TurnStarting,
+)
 from core.scene.state import SceneStateStore
 from core.roles.models import RoleRecord
 from bus.event_bus import EventBus
@@ -81,7 +84,7 @@ class SceneAwarenessController:
 
         return dict(self._tasks)
 
-    def capture_passive_turn(self, ctx: BeforeTurnCtx) -> None:
+    def capture_passive_turn(self, ctx: TurnStarting) -> None:
         """Capture the user-side context needed after passive reasoning completes.
 
         外部上下文的回合不观察：场景状态按角色共享，群聊与陌生私聊会污染用户的
@@ -99,14 +102,14 @@ class SceneAwarenessController:
             role_id="",
             source="passive",
             user_message=ctx.content,
-            history_messages=ctx.history_messages,
+            history_messages=ctx.history,
         )
         if pending is None:
             self._pending_turns.pop(ctx.session_key, None)
             return
         self._pending_turns[ctx.session_key] = pending
 
-    def schedule_passive_turn(self, ctx: AfterTurnCtx) -> None:
+    def schedule_passive_turn(self, ctx: TurnFinished) -> None:
         """Schedule scene observation for one completed passive role turn."""
 
         # 这里不再判断上下文：外部回合开始时 capture_passive_turn 已 pop 掉同一会话
@@ -186,7 +189,7 @@ class SceneAwarenessController:
         role_id: str,
         source: SceneTurnSource,
         user_message: str,
-        history_messages: tuple[HistoryMessage, ...],
+        history_messages: Sequence[HistoryMessage | ConversationMessage],
         tools_used: tuple[str, ...] = (),
     ) -> _PendingTurn | None:
         if not self._can_observe():
@@ -319,7 +322,7 @@ class SceneAwarenessController:
 
 
 def _compact_history(
-    items: tuple[HistoryMessage, ...],
+    items: Sequence[HistoryMessage | ConversationMessage],
 ) -> tuple[dict[str, str], ...]:
     """取最近 ``_RECENT_HISTORY_LIMIT`` 条消息转成 role/content 对。
 

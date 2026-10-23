@@ -15,6 +15,7 @@ async def inspect_core_modules(core: "CoreRuntime") -> str:
     if core.plugin_manager is not None:
         await core.plugin_manager.load_all()
 
+    from agent.core.turn_events import TurnEvents
     from agent.lifecycle.phase import inspect_phase
     from agent.lifecycle.phases.after_reasoning import (
         default_after_reasoning_modules,
@@ -29,6 +30,8 @@ async def inspect_core_modules(core: "CoreRuntime") -> str:
     from agent.lifecycle.phases.prompt_render import default_prompt_render_modules
 
     manager = core.plugin_manager
+    # Only the modules are listed; nothing is emitted through these events.
+    events = TurnEvents(core.event_bus)
     before_turn_modules = manager.before_turn_modules if manager is not None else []
     before_reasoning_modules = (
         manager.before_reasoning_modules if manager is not None else []
@@ -50,7 +53,7 @@ async def inspect_core_modules(core: "CoreRuntime") -> str:
         (
             "before_turn",
             default_before_turn_modules(
-                core.event_bus,
+                events,
                 core.session_manager,
                 cast(Any, getattr(pipeline, "_context_store", None)),
                 plugin_modules=cast(Any, before_turn_modules),
@@ -59,7 +62,7 @@ async def inspect_core_modules(core: "CoreRuntime") -> str:
         (
             "before_reasoning",
             default_before_reasoning_modules(
-                core.event_bus,
+                events,
                 core.tools,
                 core.session_manager,
                 cast(Any, context),
@@ -69,7 +72,7 @@ async def inspect_core_modules(core: "CoreRuntime") -> str:
         (
             "prompt_render",
             default_prompt_render_modules(
-                core.event_bus,
+                events,
                 cast(Any, context),
                 plugin_modules=cast(Any, prompt_render_modules),
             ),
@@ -77,21 +80,21 @@ async def inspect_core_modules(core: "CoreRuntime") -> str:
         (
             "before_step",
             default_before_step_modules(
-                core.event_bus,
+                events,
                 plugin_modules=cast(Any, before_step_modules),
             ),
         ),
         (
             "after_step",
             default_after_step_modules(
-                core.event_bus,
+                events,
                 plugin_modules=cast(Any, after_step_modules),
             ),
         ),
         (
             "after_reasoning",
             default_after_reasoning_modules(
-                core.event_bus,
+                events,
                 cast(Any, getattr(pipeline, "_session", None)),
                 plugin_modules=cast(Any, after_reasoning_modules),
             ),
@@ -99,7 +102,7 @@ async def inspect_core_modules(core: "CoreRuntime") -> str:
         (
             "after_turn",
             default_after_turn_modules(
-                core.event_bus,
+                events,
                 cast(
                     Any, getattr(pipeline, "_outbound_port", BusOutboundPort(core.bus))
                 ),

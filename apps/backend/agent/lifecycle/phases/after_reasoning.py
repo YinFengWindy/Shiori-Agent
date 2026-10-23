@@ -32,9 +32,10 @@ from agent.lifecycle.phase import (
     collect_prefixed_slots,
     topo_sort_modules,
 )
+from agent.core.turn_events import TurnEvents, read_only
 from agent.lifecycle.types import AfterReasoningInput, AfterReasoningResult
+from shiori_sdk.core.conversation import ReasoningFinished
 from shiori_sdk.lifecycle import AfterReasoningCtx
-from bus.event_bus import EventBus
 from shiori_sdk.messages import OutboundMessage
 from agent.turns.reply_sequence import ReplySequence
 from agent.turns.reply_interruption import reply_was_invalidated
@@ -44,6 +45,7 @@ from agent.turns.reply_sequence_commit import (
 )
 
 if TYPE_CHECKING:
+    from bus.event_bus import EventBus
     from agent.looping.ports import LLMConfig, LLMServices
     from agent.looping.ports import SessionServices
     from session.manager import Session
@@ -213,12 +215,36 @@ class _EmitAfterReasoningCtxModule:
     requires = ("after_reasoning.build_ctx", _CTX_SLOT)
     produces = (_CTX_SLOT,)
 
-    def __init__(self, bus: EventBus) -> None:
-        self._bus = bus
+    def __init__(self, events: TurnEvents) -> None:
+        self._events = events
 
     async def run(self, frame: AfterReasoningFrame) -> AfterReasoningFrame:
         ctx = cast(AfterReasoningCtx, frame.slots[_CTX_SLOT])
-        frame.slots[_CTX_SLOT] = await self._bus.emit(ctx)
+        ctx = await self._events.bus.emit(ctx)
+        frame.slots[_CTX_SLOT] = ctx
+
+        def apply(event: ReasoningFinished) -> None:
+            ctx.reply = event.reply
+            ctx.reply_messages = event.reply_messages
+            ctx.media[:] = event.media
+            ctx.meme_tag = event.meme_tag
+            ctx.outbound_metadata = dict(event.outbound_metadata)
+
+        finished = ReasoningFinished(
+            session_key=ctx.session_key,
+            channel=ctx.channel,
+            chat_id=ctx.chat_id,
+            tools_used=ctx.tools_used,
+            tool_chain=tuple(read_only(group) for group in ctx.tool_chain),
+            thinking=ctx.thinking,
+            streamed=ctx.streamed,
+            reply=ctx.reply,
+            reply_messages=ctx.reply_messages,
+            media=tuple(ctx.media),
+            meme_tag=ctx.meme_tag,
+            outbound_metadata=read_only(ctx.outbound_metadata),
+        )
+        await self._events.emit(finished, apply)
         return frame
 
 
@@ -670,7 +696,7 @@ class _ReturnAfterReasoningResultModule:
 
 
 def default_after_reasoning_modules(
-    bus: EventBus,
+    events: TurnEvents,
     session_services: SessionServices,
     llm: "LLMServices | None" = None,
     llm_config: "LLMConfig | None" = None,
@@ -679,11 +705,11 @@ def default_after_reasoning_modules(
     relationship_runtime = getattr(session_services, "relationship_runtime", None)
     builtins: AfterReasoningModules = [
         _BuildAfterReasoningCtxModule(),
-        _EmitAfterReasoningCtxModule(bus),
+        _EmitAfterReasoningCtxModule(events),
         _PersistUserMessageModule(session_services),
         _PersistAssistantMessageModule(),
         _UpdateSessionMetadataModule(relationship_runtime),
-        _AppendMessagesModule(session_services, bus),
+        _AppendMessagesModule(session_services, events.bus),
         _BuildOutboundMessageModule(),
         _ReturnAfterReasoningResultModule(),
     ]

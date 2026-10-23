@@ -1,8 +1,7 @@
 """Publication-scoped ownership of scene intake and background tasks."""
 
-from agent.lifecycle.types import BeforeTurnCtx
-from shiori_sdk.lifecycle import AfterTurnCtx
 from bus.event_bus import EventBus
+from shiori_sdk.core.conversation import TurnFinished, TurnStarting
 from bus.events_lifecycle import ProactiveMessageCommitted
 from core.scene.controller import SceneAwarenessController
 
@@ -25,8 +24,8 @@ class SceneObservationService:
         if self._active:
             return
         self._active = True
-        self._bus.on(BeforeTurnCtx, self._capture)
-        self._bus.on(AfterTurnCtx, self._passive)
+        self._bus.on(TurnStarting, self._capture)
+        self._bus.on(TurnFinished, self._passive)
         self._bus.on(ProactiveMessageCommitted, self._proactive)
 
     def deactivate(self) -> None:
@@ -34,8 +33,8 @@ class SceneObservationService:
         if not self._active:
             return
         self._active = False
-        self._bus.off(BeforeTurnCtx, self._capture)
-        self._bus.off(AfterTurnCtx, self._passive)
+        self._bus.off(TurnStarting, self._capture)
+        self._bus.off(TurnFinished, self._passive)
         self._bus.off(ProactiveMessageCommitted, self._proactive)
 
     async def close(self) -> None:

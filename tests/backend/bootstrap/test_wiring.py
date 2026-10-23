@@ -13,7 +13,7 @@ from agent.config import Config
 from agent.config_models import Config as ConfigModel
 from agent.config_models import WiringConfig
 from agent.lifecycle.facade import TurnLifecycle
-from shiori_sdk.lifecycle import AfterStepCtx
+from shiori_sdk.core.conversation import StepFinished
 from agent.looping.interrupt import TurnInterruptState
 from agent.tools.message_push import MessagePushTool
 from agent.tools.registry import ToolRegistry
@@ -786,7 +786,7 @@ def test_memory_plugin_resolver_propagates_invalid_entry_errors(
 
 
 @pytest.mark.asyncio
-async def test_wire_turn_lifecycle_registers_afterstep_progress_handler():
+async def test_wire_turn_lifecycle_registers_step_finished_progress_handler():
     bus = EventBus()
     states: dict[str, TurnInterruptState] = {
         "telegram:1": TurnInterruptState(
@@ -800,12 +800,13 @@ async def test_wire_turn_lifecycle_registers_afterstep_progress_handler():
     )
 
     await bus.emit(
-        AfterStepCtx(
+        StepFinished(
             session_key="telegram:1",
             channel="telegram",
             chat_id="1",
             iteration=0,
             context_tokens_estimate=0,
+            input_limit_tokens=None,
             tools_called=("noop",),
             partial_reply="部分回复",
             tools_used_so_far=("a", "b"),
@@ -830,12 +831,13 @@ async def test_buffered_progress_retains_tools_without_claiming_unsent_dialogue(
     wire_turn_lifecycle(TurnLifecycle(bus), active_turn_states={"role:a": state})
     with buffered_reply_scope(True):
         await bus.emit(
-            AfterStepCtx(
+            StepFinished(
                 session_key="role:a",
                 channel="desktop",
                 chat_id="role:a",
                 iteration=0,
                 context_tokens_estimate=0,
+                input_limit_tokens=None,
                 tools_called=("lookup",),
                 partial_reply="未发送\n<message-break/>\n尾部",
                 tools_used_so_far=("lookup",),
