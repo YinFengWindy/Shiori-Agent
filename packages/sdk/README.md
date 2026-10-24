@@ -326,15 +326,20 @@ the host's own minimal shell guard runs after every `ToolCalling` chain.
 denial leaves the existing execution flow intact. `HookPluginContext` provides
 granted config and workspace.
 
-Before-turn command modules accept a `CommandFrame`, read its immutable
-`CommandInput`, and call `frame.abort_command(reply)`. The host constructs the
-ordinary abort result, retaining channel, timestamp and context scope and skipping
-retrieval/model calls. `last_consolidated` is memory progress, not model compaction.
+Command plugins declare `inject: [commands]` and register with
+`ctx.require(COMMANDS).register(name, handler, description=...)`
+(`shiori_sdk.core.conversation`), handing the returned removal to `ctx.effect`.
+The host answers `/name` right after acquiring the session, before the memory
+backlog guard: the handler reads an immutable `CommandInput` and returns the reply;
+the host builds the ordinary turn result around it, retaining channel, timestamp
+and context scope and skipping retrieval/model calls. Described registrations form
+the command menu channels receive as `ChannelContext.bot_commands`; aliases pass no
+description. `last_consolidated` is memory progress, not model compaction.
 `SessionUndo` supplies an atomic undo result and invokes a memory source resolver
 before deleting messages. The optional `MemoryUndo` extension supports dry-run and
 real cleanup. A command resolves it from the current memory engine; engines lacking
 that extension keep working without memory undo. `CommandPluginContext` also
-provides command-menu registration and current declared dependency exports.
+provides current declared dependency exports.
 
 Observe uses `ObservePluginContext` with `background`, `storage` and `diagnostics`.
 The migration port is shared with memory construction. The host owns receipt/lease
@@ -350,7 +355,8 @@ reply; reload uses the new export. Consumers do not inspect Observe's database.
 
 `testing.extensions.FakeExtensionContext` (its `emit` runs the plugin's tool event
 handlers on a bare kernel, without the host's checks),
-`testing.commands.FakeCommandFrame` / `FakeSessionUndo` and
+`commands.CommandRegistry` (the host's own `COMMANDS` registry; provide it on the
+fake context's `kernel`), `testing.commands.FakeSessionUndo` and
 `testing.diagnostics.FakeDiagnostics` provide independent contract doubles.
 Diagnostics fakes record callbacks without modifying process-wide handlers. Global
 hook restoration and real lifecycle ordering stay in host integration tests.

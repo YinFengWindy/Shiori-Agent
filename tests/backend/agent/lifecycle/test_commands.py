@@ -1,4 +1,4 @@
-"""Command heads and early replies shared by before-turn contributions."""
+"""Command heads and the early turn result of an answered command."""
 
 from datetime import datetime
 

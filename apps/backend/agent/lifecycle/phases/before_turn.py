@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Protocol, TypeAlias, cast
 
 from shiori_sdk.commands import CommandInput
 from agent.lifecycle.commands import abort_command
+from conversation.commands import generation_commands
 from bus.event_bus import EventBus
 from agent.core.turn_events import TurnEvents, freeze_top_level, read_only
 from session.manager.models import consolidation_cursor
@@ -35,23 +36,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class BeforeTurnFrame(PhaseFrame[TurnState, BeforeTurnCtx]):
-    """Host frame exposing a bounded command view to lifecycle contributors."""
-
-    @property
-    def command(self) -> CommandInput:
-        """Read memory progress without exposing session persistence internals."""
-        session = self.input.session
-        return CommandInput(
-            content=self.input.msg.content,
-            session_key=self.input.session_key,
-            messages=tuple(session.messages) if session is not None else (),
-            last_consolidated=session.last_consolidated if session is not None else 0,
-            has_session=session is not None,
-        )
-
-    def abort_command(self, reply: str) -> None:
-        """Create the ordinary host abort context before any retrieval or LLM call."""
-        self.slots["session:ctx"] = abort_command(self.input, reply)
+    """The before-turn phase's frame."""
 
 
 BeforeTurnModules: TypeAlias = list[PhaseModule[BeforeTurnFrame]]
@@ -114,6 +99,44 @@ class _AcquireSessionModule:
                 thread_id=state.thread_id,
             )
         frame.slots[_SESSION_SLOT] = session
+        return frame
+
+
+class _AnswerCommandModule:
+    """Answers a registered bot command right after the session is acquired.
+
+    It runs before the memory backlog guard and retrieval, so a command still
+    answers when the backlog refuses ordinary turns. The registry is read from
+    the current kernel on every turn: a plugin unloaded since then no longer
+    answers.
+    """
+
+    slot = "before_turn.answer_command"
+    requires = ("before_turn.acquire_session", _SESSION_SLOT)
+    produces = (_CTX_SLOT,)
+
+    def __init__(self, events: TurnEvents) -> None:
+        self._events = events
+
+    async def run(self, frame: BeforeTurnFrame) -> BeforeTurnFrame:
+        if _CTX_SLOT in frame.slots:
+            return frame
+        state = frame.input
+        commands = generation_commands(self._events.kernel)
+        handler = None if commands is None else commands.handler(state.msg.content)
+        if handler is None:
+            return frame
+        session = cast(SessionLike, frame.slots[_SESSION_SLOT])
+        reply = await handler(
+            CommandInput(
+                content=state.msg.content,
+                session_key=state.session_key,
+                messages=tuple(session.messages),
+                last_consolidated=session.last_consolidated,
+            )
+        )
+        logger.info("command answered: session=%s", state.session_key)
+        frame.slots[_CTX_SLOT] = abort_command(state, reply)
         return frame
 
 
@@ -346,6 +369,7 @@ def default_before_turn_modules(
 ) -> BeforeTurnModules:
     builtins: BeforeTurnModules = [
         _AcquireSessionModule(session_manager),
+        _AnswerCommandModule(events),
         _MemoryContextGuardModule(
             session_manager,
             keep_count,

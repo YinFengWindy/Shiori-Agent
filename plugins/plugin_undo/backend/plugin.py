@@ -3,39 +3,14 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from shiori_sdk.commands import CommandFrame, normalize_command
-from shiori_sdk.lifecycle import LifecycleFrame
+from shiori_sdk.commands import CommandInput
+from shiori_sdk.core.conversation import COMMANDS
 from shiori_sdk.sessions import SessionUndo, MemoryUndo
 
 if TYPE_CHECKING:
     from shiori_sdk.extensions import CommandPluginContext as PluginRuntimeContext
 
 logger = logging.getLogger("plugin.undo")
-
-_SESSION_SLOT = "session:session"
-_CTX_SLOT = "session:ctx"
-
-
-class UndoCommandModule:
-    """Handle /undo before any retrieval or reasoning takes place."""
-
-    slot = "plugin_undo.undo"
-    requires = ("before_turn.acquire_session", _SESSION_SLOT)
-    produces = (_CTX_SLOT,)
-
-    def __init__(self, plugin: "PluginUndo") -> None:
-        self._plugin = plugin
-
-    async def run[FrameT: LifecycleFrame](self, frame: FrameT) -> FrameT:
-        """Short-circuit a matching command unless an earlier module handled it."""
-        if _CTX_SLOT in frame.slots or not isinstance(frame, CommandFrame):
-            return frame
-        state = frame.command
-        if normalize_command(state.content) != "/undo":
-            return frame
-        reply = await self._plugin.undo(state.session_key)
-        frame.abort_command(reply)
-        return frame
 
 
 class PluginUndo:
@@ -126,10 +101,14 @@ def _string_list(value: object) -> list[str]:
 
 
 async def setup(ctx: "PluginRuntimeContext") -> None:
-    """Register scoped undo command and before-turn contribution."""
+    """Register the scoped ``/undo`` command."""
     engine = ctx.memory_engine
     plugin = PluginUndo(
         ctx.session_manager, engine if isinstance(engine, MemoryUndo) else None
     )
-    ctx.lifecycle.contribute("before_turn", [UndoCommandModule(plugin)])
-    ctx.bot_commands.add("undo", "撤销上一轮对话")
+
+    async def undo(command: CommandInput) -> str:
+        return await plugin.undo(command.session_key)
+
+    remove = ctx.require(COMMANDS).register("undo", undo, description="撤销上一轮对话")
+    ctx.effect("command:undo", remove)

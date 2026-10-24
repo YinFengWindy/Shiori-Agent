@@ -9,6 +9,9 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from agent.core.turn_events import TurnEvents, core_kernel
+from shiori_sdk.commands import CommandInput, CommandRegistry
+from shiori_sdk.core.conversation import COMMANDS
+from shiori_sdk.kernel import Kernel
 from agent.context import ContextBuilder
 from agent.core.passive_support import build_context_hint_message
 from agent.core.passive_turn import ContextStore
@@ -1796,23 +1799,16 @@ async def test_before_turn_leaves_listening_budget_to_complete_request_preflight
 
 
 @pytest.mark.asyncio
-async def test_sdk_command_frame_aborts_before_retrieval_and_keeps_session_metadata():
-    from shiori_sdk.commands import CommandFrame
+async def test_registered_command_answers_before_retrieval_and_keeps_session():
+    received: list[CommandInput] = []
 
-    class Command:
-        slot = "test.command"
-        requires = ("before_turn.acquire_session", "session:session")
-        produces = ("session:ctx",)
+    async def example(command: CommandInput) -> str:
+        received.append(command)
+        return "neutral command reply"
 
-        async def run(self, frame):
-            assert isinstance(frame, CommandFrame)
-            assert frame.command.content == "/example"
-            assert frame.command.session_key == "telegram:123"
-            assert frame.command.messages == ({"role": "user", "content": "kept"},)
-            assert frame.command.last_consolidated == 1
-            frame.abort_command("neutral command reply")
-            return frame
-
+    kernel, commands = Kernel(), CommandRegistry()
+    kernel.provide(COMMANDS, commands)
+    _ = commands.register("example", example)
     session = _DummySession("telegram:123")
     session.messages = [{"role": "user", "content": "kept"}]
     session.last_consolidated = 1
@@ -1820,19 +1816,26 @@ async def test_sdk_command_frame_aborts_before_retrieval_and_keeps_session_metad
     phase = Phase(
         default_before_turn_modules(
             EventBus(),
-            TurnEvents(EventBus(), core_kernel),
+            TurnEvents(EventBus(), lambda: kernel),
             cast(SessionManager, SimpleNamespace(get_or_create=lambda key: session)),
             cast(ContextStore, context),
-            plugin_modules=[Command()],
         ),
         frame_factory=BeforeTurnFrame,
     )
     message = _inbound()
-    message.content = "/example"
+    message.content = "/Example@bot now"
     result = await phase.run(
         TurnState(msg=message, session_key=session.key, dispatch_outbound=True)
     )
     assert result.abort and result.abort_reply == "neutral command reply"
     assert result.channel == message.channel and result.timestamp == message.timestamp
+    assert received == [
+        CommandInput(
+            "/Example@bot now",
+            "telegram:123",
+            ({"role": "user", "content": "kept"},),
+            1,
+        )
+    ]
     context.prepare.assert_not_called()
     assert len(session.messages) == 1 and session.last_consolidated == 1

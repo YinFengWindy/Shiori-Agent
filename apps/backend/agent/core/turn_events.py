@@ -56,6 +56,11 @@ class TurnEvents:
         self._bus = bus
         self._kernel = kernel
 
+    @property
+    def kernel(self) -> Kernel:
+        """The kernel the next emit goes through, for its core services."""
+        return self._kernel()
+
     async def emit[E](
         self,
         event: E,

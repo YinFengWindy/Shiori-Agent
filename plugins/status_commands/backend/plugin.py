@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from .kvcache import KVCacheCommandModule
-from .memory_status import MemoryStatusCommandModule
+from shiori_sdk.core.conversation import COMMANDS, CommandHandler
+
+from .kvcache import KVCacheCommand
+from .memory_status import memory_status
 
 if TYPE_CHECKING:
     from shiori_sdk.extensions import CommandPluginContext as PluginRuntimeContext
@@ -13,9 +15,15 @@ if TYPE_CHECKING:
 
 async def setup(ctx: PluginRuntimeContext) -> None:
     """Register diagnostic commands independently of optional observe telemetry."""
-    ctx.lifecycle.contribute(
-        "before_turn",
-        [MemoryStatusCommandModule(), KVCacheCommandModule(ctx.dependencies)],
+    kvcache = KVCacheCommand(ctx.dependencies)
+    registrations: tuple[tuple[str, CommandHandler, str | None], ...] = (
+        ("memorystatus", memory_status, "查看记忆整理状态"),
+        ("memory_status", memory_status, None),
+        ("compact_status", memory_status, None),
+        ("kvcache", kvcache, "查看 KVCache 状态"),
+        ("cache_status", kvcache, None),
     )
-    ctx.bot_commands.add("memorystatus", "查看记忆整理状态")
-    ctx.bot_commands.add("kvcache", "查看 KVCache 状态")
+    commands = ctx.require(COMMANDS)
+    for name, handler, description in registrations:
+        remove = commands.register(name, handler, description=description)
+        ctx.effect(f"command:{name}", remove)

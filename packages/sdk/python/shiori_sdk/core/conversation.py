@@ -224,7 +224,11 @@ type CommandHandler = Callable[[CommandInput], Awaitable[str]]
 class Commands(Protocol):
     """Bot commands, answered right after the session is acquired.
 
-    A command turn retrieves no memory and calls no model.
+    A message whose head is ``/name`` (any case, an ``@bot`` suffix and
+    arguments allowed, see ``shiori_sdk.commands.command_name``) is answered by
+    the handler registered under ``name``, ahead of the memory backlog guard; a
+    command turn retrieves no memory and calls no model. Other messages, and
+    commands nobody registered, are ordinary turns.
     """
 
     def register(
@@ -232,12 +236,14 @@ class Commands(Protocol):
     ) -> Callable[[], None]:
         """Answers ``/name`` with ``handler`` and returns the registration's removal.
 
-        ``name`` has no leading slash. ``description`` puts the command in the
-        command menu channels show; an alias leaves it None. Hand the removal
-        to ``ctx.effect`` so unloading the plugin removes the command.
+        ``name`` is lowercase, without the leading slash, whitespace or ``@``;
+        a name already registered raises ``ValueError``. ``description`` puts
+        the command in the command menu channels show; an alias leaves it None.
+        Hand the removal to ``ctx.effect`` so unloading the plugin removes the
+        command.
         """
         ...
 
 
 COMMANDS: Key[Commands] = Key("commands")
-"""Provided by the core conversation module (P3-5)."""
+"""Provided by the core conversation module; plugins declare it in ``inject``."""

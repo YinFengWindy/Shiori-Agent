@@ -288,6 +288,40 @@ consolidates these additions and the subsequent #847 breaking migration.
   ignored. meme no longer depends on citation, so with both at depth 0 it sets up
   before novelai: a reply carrying a meme picture and a generated picture now
   lists the meme picture first.
+- **Bot commands register on `COMMANDS` (PR TBD, issue #902, refactor P3-5).** The
+  core conversation module provides `COMMANDS` (`shiori_sdk.core.conversation`) to
+  every plugin generation as a `shiori_sdk.commands.CommandRegistry`. A plugin
+  declares `inject: [commands]` and calls
+  `ctx.require(COMMANDS).register(name, handler, description=...)`, handing the
+  returned removal to `ctx.effect`. The host answers `/name` (any case, `@bot`
+  suffix and arguments allowed; `shiori_sdk.commands.command_name`) at the same
+  point as before: right after the session is acquired, before the memory backlog
+  guard and retrieval; the handler gets a `CommandInput` and its returned text is
+  the reply of a turn that calls no model. Registering a name that is taken or not
+  lowercase-without-`/`/`@`/whitespace raises `ValueError`, so that plugin's setup
+  fails. The channel command menu (`ChannelContext.bot_commands`) is the described
+  registrations in registration order (setup order, so kernel order when a
+  generation starts); aliases pass no description and stay out of it. The bundled
+  menu is unchanged: `undo`, `memorystatus`, `kvcache`. plugin_undo and
+  status_commands now register this way and no longer declare `lifecycle`.
+  `FakeExtensionContext` gains `kernel=` / `inject=`; plugin tests provide a
+  `CommandRegistry` as `COMMANDS` on that kernel. **Behavior visible to plugins:**
+  a command handler is a core-socket callback, not a gated phase module, so an
+  in-generation reload no longer waits for one in flight (D25: the drain waits for
+  `on` / `watch` handlers only).
+- **breaking: capability `bot_commands` and the before-turn command frame removed
+  (PR TBD, issue #902, refactor P3-5).** Gone: the `bot_commands` capability
+  (`KNOWN_CAPABILITIES`, the `capabilities` enum of `manifest.schema.json`; a
+  manifest still declaring it is rejected at discovery and package validation as an
+  unknown capability), `ctx.bot_commands`, `shiori_sdk.extensions.BotCommands` and
+  `CommandPluginContext.bot_commands`, `shiori_sdk.commands.CommandFrame` (a
+  before-turn module can no longer read `frame.command` or call
+  `frame.abort_command`), `CommandInput.has_session` (commands run only after the
+  session is acquired, so it was always true), and the test doubles
+  `shiori_sdk.testing.commands.FakeCommandFrame` / `FakeCommandReply` and
+  `shiori_sdk.testing.extensions.FakeBotCommands`. Migrate a command module and its
+  `bot_commands.add` to one `COMMANDS.register` per name (aliases without a
+  description).
 
 - **Natural proactive replies and background reports (PR #894, issue #868).** The current
   role's built-in natural-chat capability also applies to proactive draft
@@ -1810,8 +1844,10 @@ code roots are resolved from installed host packages and discovered plugin roots
 The plugin never guesses a repository root. `storage.migrate_data` uses the existing
 host migration receipts and leases. These ports are part of Runtime API 3.0.
 
-Before-turn command contributors read `CommandFrame.command` and request
-`abort_command(reply)`, so abort construction/context preservation remain host-owned.
+Command plugins register on the core `COMMANDS` socket
+(`inject: [commands]`, `shiori_sdk.core.conversation`); the handler reads a
+`CommandInput` and returns the reply, and the host builds the turn result around
+it, so abort construction/context preservation remain host-owned.
 The optional Observe reader is queried through `dependencies.get_optional("observe")`
 each time; availability is scoped to the active provider generation.
 

@@ -1,11 +1,26 @@
 """Undo command business outcomes through SDK session and memory ports."""
 
 import pytest
-from plugins.plugin_undo.backend.plugin import PluginUndo, UndoCommandModule, setup
-from shiori_sdk.commands import CommandInput
+from plugins.plugin_undo.backend.plugin import PluginUndo, setup
+from shiori_sdk.commands import CommandInput, CommandRegistry
+from shiori_sdk.core.conversation import COMMANDS
+from shiori_sdk.kernel import Kernel
 from shiori_sdk.sessions import UndoSessionResult
-from shiori_sdk.testing.commands import FakeCommandFrame, FakeSessionUndo
+from shiori_sdk.testing.commands import FakeSessionUndo
 from shiori_sdk.testing.extensions import FakeExtensionContext
+
+
+def _context(manager, memory=None) -> tuple[FakeExtensionContext, CommandRegistry]:
+    kernel, commands = Kernel(), CommandRegistry()
+    kernel.provide(COMMANDS, commands)
+    ctx = FakeExtensionContext(
+        "plugin_undo",
+        session_manager=manager,
+        memory_engine=memory,
+        kernel=kernel,
+        inject=("commands",),
+    )
+    return ctx, commands
 
 
 class _MemoryEngine:
@@ -36,22 +51,25 @@ async def test_preview_then_session_delete_then_memory_cleanup(failure, caplog):
         UndoSessionResult(["cli:1:0", "cli:1:1"], "cli:1:0", "cli:1:1", 0, 2, 0)
     )
     memory = _MemoryEngine(fail_real_undo=failure)
-    frame = FakeCommandFrame(CommandInput(" /UNDO@Bot ", "cli:1"))
-    await UndoCommandModule(PluginUndo(manager, memory)).run(frame)
-    result = frame.slots["session:ctx"]
-    assert result.abort
+    ctx, commands = _context(manager, memory)
+    await setup(ctx)
+    handler = commands.handler(" /UNDO@Bot ")
+    assert handler is not None
+    reply = await handler(CommandInput(" /UNDO@Bot ", "cli:1"))
+    assert manager.calls == ["cli:1"]
     assert manager.deleted
     assert manager.rollback_sources == ["cli:1:0", "cli:1:1", "cli:1:2"]
     assert [c["dry_run"] for c in memory.calls] == [True, False]
-    assert "已撤销上一轮对话" in result.abort_reply
-    assert ("记忆清理失败" in result.abort_reply) == failure
-    assert "删除消息：2 条" in result.abort_reply
+    assert "已撤销上一轮对话" in reply
+    assert ("记忆清理失败" in reply) == failure
+    assert "删除消息：2 条" in reply
     if failure:
         assert "deleted_ids=['cli:1:0', 'cli:1:1']" in caplog.text
         assert "'affected_ids': ['mem1']" in caplog.text
     else:
-        assert "失效记忆：1 条" in result.abort_reply
-        assert "恢复旧记忆：1 条" in result.abort_reply
+        assert "失效记忆：1 条" in reply
+        assert "恢复旧记忆：1 条" in reply
+    await ctx.aclose()
 
 
 @pytest.mark.asyncio
@@ -84,23 +102,9 @@ async def test_missing_memory_still_undoes_session():
 
 
 @pytest.mark.asyncio
-async def test_setup_and_unload_register_one_command_and_module():
-    ctx = FakeExtensionContext("plugin_undo", session_manager=FakeSessionUndo())
+async def test_setup_and_unload_register_one_command():
+    ctx, commands = _context(FakeSessionUndo())
     await setup(ctx)
-    assert ctx.bot_commands.commands == [("undo", "撤销上一轮对话")]
-    assert len(ctx.lifecycle.modules["before_turn"]) == 1
+    assert commands.menu() == [("undo", "撤销上一轮对话")]
     await ctx.aclose()
-    assert not ctx._lifecycle.modules and not ctx.bot_commands.commands
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("content,prior", [("/help", False), ("/undo", True)])
-async def test_unrelated_and_previously_handled_commands_are_untouched(content, prior):
-    manager = FakeSessionUndo()
-    frame = FakeCommandFrame(CommandInput(content, "cli:1"))
-    sentinel = object()
-    if prior:
-        frame.slots["session:ctx"] = sentinel
-    await UndoCommandModule(PluginUndo(manager, None)).run(frame)
-    assert manager.calls == []
-    assert frame.slots == ({"session:ctx": sentinel} if prior else {})
+    assert commands.menu() == [] and commands.handler("/undo") is None

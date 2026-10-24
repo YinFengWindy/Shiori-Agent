@@ -64,7 +64,6 @@ KNOWN_CAPABILITIES = frozenset(
         "resources",
         "processes",
         "tool_turn",
-        "bot_commands",
         "rpc",
         "dependencies",
         "runtime",

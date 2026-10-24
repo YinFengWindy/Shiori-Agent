@@ -20,7 +20,6 @@ from shiori_sdk.extensions import (
     CommandPluginContext,
     ObservePluginContext,
     ConfigValues,
-    BotCommands,
     Dependencies,
     BackgroundTasks,
     PrivateStorage,
@@ -78,7 +77,6 @@ class PluginSetupContext:
         rpc: RpcCapability | None = None,
         workspace: Path | None = None,
         config: ConfigValues | None = None,
-        bot_commands: BotCommands | None = None,
         dependencies: Dependencies | None = None,
         background: BackgroundTasks | None = None,
         storage: PrivateStorage | None = None,
@@ -118,7 +116,6 @@ class PluginSetupContext:
         self._rpc = rpc
         self._workspace = workspace
         self._config = config
-        self._bot_commands = bot_commands
         self._dependencies = dependencies
         self._background = background
         self._storage = storage
@@ -255,11 +252,6 @@ class PluginSetupContext:
         if "config" not in self.granted or self._config is None:
             raise CapabilityNotGranted("Plugin did not request config")
         return self._config
-
-    @property
-    def bot_commands(self) -> BotCommands:
-        """Return the explicitly granted bot_commands capability."""
-        return self._core_capability("bot_commands", self._bot_commands)
 
     @property
     def dependencies(self) -> Dependencies:

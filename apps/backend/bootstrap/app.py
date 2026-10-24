@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 from agent.config_models import Config
 from bootstrap.channel_host import ChannelHost
 from bootstrap.channels import start_channels
-from conversation.plugin_capability import active_plugin_bot_commands
+from conversation.commands import command_menu
 from core.channels.plugin_capability import active_plugin_channels
 from bootstrap.tools import CoreRuntime, build_core_runtime
 from bootstrap.runtime.dispatcher import RuntimeDispatcher
@@ -192,9 +192,7 @@ class AppRuntime(RuntimeReloadMixin, RuntimeBackgroundMixin, RuntimeShutdownMixi
                 http_resources=self.http_resources,
                 event_bus=event_bus,
                 bot_commands=(
-                    active_plugin_bot_commands(plugin_manager)
-                    if plugin_manager
-                    else None
+                    command_menu(plugin_manager.kernel) if plugin_manager else None
                 ),
                 interrupt_controller=self._dispatcher,
                 plugin_channels=(
