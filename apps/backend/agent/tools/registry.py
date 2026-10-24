@@ -272,7 +272,7 @@ class ToolRegistry:
         """外部上下文受限回合里这次调用的拦截原因；可以执行时返回 None。
 
         未声明外部可用（或未注册）的工具一律拦截；带参数限制的工具按模型给出的
-        参数判断。每次都查当前注册表。回合在模型调用时与 pre hooks 改参后各判一次。
+        参数判断。每次都查当前注册表。回合在模型调用时与 ToolCalling 链跑完后（核心校验，按插件改写后的最终参数）各判一次。
         """
         if not self.is_external_allowed(name):
             return EXTERNAL_TOOL_DENIED

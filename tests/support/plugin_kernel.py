@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import tempfile
 from datetime import datetime
+from functools import partial
 from pathlib import Path
 from typing import Any, cast
 
@@ -95,7 +96,7 @@ def host_kernel(
         core=tuple(
             _withholding(module, withheld) for module in plugin_core_modules(inputs)
         ),
-        core_checks=install_core_checks,
+        core_checks=partial(install_core_checks, workspace=generation.workspace),
         **options,
     )
 

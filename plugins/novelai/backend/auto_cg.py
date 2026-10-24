@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any, cast
 
 from shiori_sdk.storage import KeyValueStore
-from shiori_sdk.tool_hooks import HookOutcome
+from shiori_sdk.core.tools import ToolVeto
 
 _THIRD_PERSON_PROMPT_TERMS = (
     "third-person view",
@@ -51,19 +51,19 @@ class AutoCgPolicy:
         arguments: dict[str, Any],
         *,
         bypass_cooldown: bool = False,
-    ) -> HookOutcome | dict[str, Any] | None:
-        """Enforce cooldown and scene deduplication before an image request."""
+    ) -> ToolVeto | dict[str, Any] | None:
+        """Enforce cooldown and scene deduplication before an image request.
+
+        None leaves a non-scene request alone, a dict is the prepared scene
+        request and a ``ToolVeto`` refuses it.
+        """
 
         intent = str(arguments.get("intent") or "user_requested").strip()
         if intent != "scene_cg":
             return None
         scene_key = normalize_scene_key(arguments.get("scene_key"))
         if not scene_key:
-            return HookOutcome(
-                decision="deny",
-                reason="scene_cg_missing_scene_key",
-                extra_message="自动 CG 缺少 scene_key，请继续文字回复，不要重试。",
-            )
+            return ToolVeto("scene_cg_missing_scene_key")
         visual_key = normalize_scene_key(arguments.get("visual_key") or scene_key)
         state = self._get_session_state(session_key)
         turn = int(state.get("turn", 0))
@@ -73,17 +73,9 @@ class AutoCgPolicy:
             and isinstance(last_turn, int)
             and turn - last_turn <= self._COOLDOWN_TURNS
         ):
-            return HookOutcome(
-                decision="deny",
-                reason="scene_cg_cooldown",
-                extra_message="自动 CG 仍在冷却期，请继续文字回复，不要重试。",
-            )
+            return ToolVeto("scene_cg_cooldown")
         if visual_key == str(state.get("last_visual_key") or ""):
-            return HookOutcome(
-                decision="deny",
-                reason="scene_cg_duplicate_visual",
-                extra_message="该视觉定格已经生成过 CG，请继续文字回复，不要重复生成。",
-            )
+            return ToolVeto("scene_cg_duplicate_visual")
         return {
             **arguments,
             "scene_key": scene_key,

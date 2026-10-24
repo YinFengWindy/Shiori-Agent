@@ -33,8 +33,8 @@ sequenceDiagram
   Core->>Core: providers / sessions / roles / tools / memory
   App->>Core: CoreRuntime.start()
   Core->>Plugin: load_all()
-  Plugin-->>Core: phase modules / tool hooks / gates / channels
-  Core->>Core: AgentLoop / spawn 绑定内核（phase modules、tool hooks 每次使用时读取）
+  Plugin-->>Core: phase modules / event handlers / channels
+  Core->>Core: AgentLoop / spawn 绑定内核（phase modules、工具事件每次使用时读取）
   App->>App: GenerationManager.start(第 1 代)
   App->>App: start_channels() -> ChannelHost.start_all()
   App->>App: RuntimeDispatcher / outbound / scheduler / RuntimeBackground / loneliness heartbeat

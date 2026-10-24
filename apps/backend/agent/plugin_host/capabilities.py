@@ -26,7 +26,7 @@ def contribute_to_list[T](
 ) -> None:
     """把一项贡献登记进目标列表，并登记"从列表移除"的可回滚 effect。
 
-    三类列表型 capability（tool hook / channel / bot command）
+    列表型 capability（channel / bot command）
     共用此实现，保证登记与撤销形状一致；移除守卫使重复处置保持幂等。
     """
     effects.ensure_active(label)

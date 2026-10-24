@@ -1,22 +1,19 @@
 """novelai 插件装配：生图工具、自动 CG、桥接 RPC 与配置全部收拢在这里。
 
 v2 插件（issue #180）：不再继承旧 ``Plugin`` ABC，改为 ``setup(ctx)`` 一次性
-装配。``on_tool_pre`` / ``on_tool_result`` / ``on_after_reasoning`` 三个旧装饰器
-底层都只是把处理函数登记进事件总线（见 ``agent.plugin_host.legacy``），
-v2 下用 ``ctx.events.on`` / ``ctx.tool_hooks.add_handler`` 直接登记，行为完全
-等价，只是登记方式从"扫描装饰器元数据"变成"setup() 里显式调用"。
+装配。生图前的自动 CG 守卫与生图结果的收集挂在工具事件 ``ToolCalling`` /
+``ToolCalled`` 上（#902），附图仍在 ``AfterReasoningCtx`` 上。
 """
 
 from __future__ import annotations
 
 import json
 import logging
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any, cast
 
-from shiori_sdk.lifecycle import (
-    AfterReasoningCtx,
-    AfterToolResultCtx,
-)
+from shiori_sdk.core.tools import ToolCalled, ToolCalling, ToolVeto
+from shiori_sdk.lifecycle import AfterReasoningCtx
 from shiori_sdk.role_events import RoleDeleted, SceneObservationCommitted
 from shiori_sdk.rpc import Concurrency
 
@@ -54,7 +51,15 @@ class _MediaTracker:
         self._auto_cg = auto_cg
         self._pending_media: dict[str, list[str]] = {}
 
-    async def collect_generated_media(self, event: AfterToolResultCtx) -> None:
+    async def track(self, event: ToolCalled) -> ToolCalled:
+        """Passes the result on unchanged; only passive turns' calls are tracked."""
+        # Only a passive turn's reply picks the media up (``attach_generated_media``).
+        if event.source == "passive":
+            self.collect_generated_media(event)
+            self.consume_pushed_media(event)
+        return event
+
+    def collect_generated_media(self, event: ToolCalled) -> None:
         if event.tool_name != "generate_image" or event.status != "success":
             return
         payload = _safe_json(event.result)
@@ -72,7 +77,7 @@ class _MediaTracker:
             )
         self._pending_media.setdefault(event.session_key, []).extend(media)
 
-    async def consume_pushed_media(self, event: AfterToolResultCtx) -> None:
+    def consume_pushed_media(self, event: ToolCalled) -> None:
         if event.tool_name != "message_push" or event.status != "success":
             return
         sent_paths = {
@@ -165,15 +170,20 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
     ctx.events.on(SceneObservationCommitted, auto_cg_controller.schedule)
     ctx.scene_observations.request(lambda role: role_state.enabled(role.id))
 
-    ctx.tool_hooks.add_handler(
-        lambda event: auto_cg.guard(event.session_key, event.arguments),
-        tool_name_filter="generate_image",
-        handler_name="guard_auto_cg",
-    )
+    async def guard_auto_cg(event: ToolCalling) -> ToolCalling | ToolVeto:
+        if event.tool_name != "generate_image":
+            return event
+        prepared = auto_cg.guard(event.session_key, dict(event.arguments))
+        if prepared is None:
+            return event
+        if isinstance(prepared, ToolVeto):
+            return prepared
+        return replace(event, arguments=prepared)
+
+    ctx.on(ToolCalling, guard_auto_cg)
 
     tracker = _MediaTracker(auto_cg)
-    ctx.events.on(AfterToolResultCtx, tracker.collect_generated_media)
-    ctx.events.on(AfterToolResultCtx, tracker.consume_pushed_media)
+    ctx.on(ToolCalled, tracker.track)
     ctx.events.on(AfterReasoningCtx, tracker.attach_generated_media)
 
     _register_rpc(

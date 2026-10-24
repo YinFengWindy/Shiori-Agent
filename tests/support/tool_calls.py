@@ -1,16 +1,17 @@
-"""Neutral tool-hook fixtures for host loop protocol regressions.
+"""Neutral tool-call fixtures for host loop protocol regressions.
 
-Host tests exercise the finalize protocol (deny with ``finalize=True`` ->
-truncate the remaining batch -> closing summary) with a hook that carries no
-plugin policy. Repeat thresholds and exclusions belong to the
-``tool_loop_guard`` plugin's own tests.
+Host tests exercise the finalize protocol (``ToolVeto(finalize=True)`` ->
+truncate the remaining batch -> closing summary) with a ``ToolCalling``
+handler that carries no plugin policy. Repeat thresholds and exclusions belong
+to the ``tool_loop_guard`` plugin's own tests.
 """
 
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any, cast
 from unittest.mock import MagicMock
 
+from agent.core.turn_events import core_kernel
 from agent.looping.core import AgentLoop
 from shiori_host_testing.memory import FakeMemoryEngine
 from agent.looping.ports import (
@@ -20,36 +21,54 @@ from agent.looping.ports import (
     MemoryServices,
 )
 from agent.provider import LLMResponse
-from agent.tool_hooks.base import ToolHook
-from agent.tool_hooks.types import HookContext
-from shiori_sdk.tool_hooks import HookOutcome
+from shiori_sdk.core.tools import ToolCalled, ToolCalling, ToolVeto
+from shiori_sdk.kernel import Context, Kernel, PluginSpec, Scope, Veto
 from shiori_sdk.tools import Tool
 from agent.tools.registry import ToolRegistry
 from agent.lifecycle.plugin_contributions import StaticPluginContributions
 
+type ToolCallingHandler = Callable[[ToolCalling], Awaitable[ToolCalling | Veto]]
+type ToolCalledHandler = Callable[[ToolCalled], Awaitable[ToolCalled]]
 
-class FinalizeOnCallHook(ToolHook):
-    """Denies the listed call ids with ``finalize=True`` and passes the rest.
 
-    The hook has no notion of repetition: tests pick which call triggers the
+def kernel_with(
+    *calling: ToolCallingHandler, called: tuple[ToolCalledHandler, ...] = ()
+) -> Kernel:
+    """A core kernel (core checks installed) running the given tool event handlers.
+
+    Each handler joins under its own stand-in plugin, in the given order:
+    ``calling`` on ``ToolCalling``, ``called`` on ``ToolCalled``.
+    """
+    kernel = core_kernel()
+
+    async def no_setup(_: Context) -> None:
+        return None
+
+    subscriptions = [(ToolCalling, handler) for handler in calling]
+    subscriptions += [(ToolCalled, handler) for handler in called]
+    for index, (event_type, handler) in enumerate(subscriptions):
+        plugin_id = f"test_{index}"
+        context = Context(kernel, PluginSpec(plugin_id, no_setup), Scope(plugin_id))
+        context.on(event_type, handler)  # type: ignore[arg-type]
+    return kernel
+
+
+class FinalizeOnCall:
+    """Vetoes the listed call ids with ``finalize=True`` and passes the rest.
+
+    The handler has no notion of repetition: tests pick which call triggers the
     finalize decision, so they assert only how the host loop consumes it.
     """
-
-    name = "test:finalize_on_call"
-    event = "pre_tool_use"
 
     def __init__(self, *call_ids: str) -> None:
         self._call_ids = frozenset(call_ids)
         self.seen: list[str] = []
 
-    def matches(self, ctx: HookContext) -> bool:
-        return True
-
-    async def run(self, ctx: HookContext) -> HookOutcome:
-        self.seen.append(ctx.request.call_id)
-        if ctx.request.call_id in self._call_ids:
-            return HookOutcome(decision="deny", reason="测试要求收尾", finalize=True)
-        return HookOutcome()
+    async def __call__(self, event: ToolCalling) -> ToolCalling | Veto:
+        self.seen.append(event.call_id)
+        if event.call_id in self._call_ids:
+            return ToolVeto("测试要求收尾", finalize=True)
+        return event
 
 
 class DummyTool(Tool):
@@ -156,10 +175,10 @@ def make_agent_loop_with_tools(
     provider: FakeProvider,
     tools_to_register: list[Tool],
     *,
-    hooks: Sequence[ToolHook] = (),
+    handlers: tuple[ToolCallingHandler, ...] = (),
     tool_search_enabled: bool = False,
 ) -> AgentLoop:
-    """Builds a real ``AgentLoop`` with the given tools and tool hooks."""
+    """Builds a real ``AgentLoop`` with the given tools and ``ToolCalling`` handlers."""
     tools = ToolRegistry()
     for tool in tools_to_register:
         tools.register(tool)
@@ -179,5 +198,7 @@ def make_agent_loop_with_tools(
             )
         ),
     )
-    loop.bind_plugin_contributions(StaticPluginContributions(tool_hooks=hooks))
+    loop.bind_plugin_contributions(
+        StaticPluginContributions(kernel=kernel_with(*handlers))
+    )
     return loop

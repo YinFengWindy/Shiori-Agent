@@ -28,7 +28,7 @@ from bus.event_bus import EventBus
 from core.error_context import current_session_key
 from agent.looping.ports import SessionServices
 from agent.provider import LLMProvider
-from agent.tool_hooks import ToolHookSource, no_tool_hooks
+from agent.tools.execution import KernelSource
 from agent.core.proactive_turn.gates import ProactiveGate, ProactiveGateChain
 from agent.tools.message_push import MessagePushTool
 from agent.tools.registry import ToolRegistry
@@ -77,6 +77,7 @@ class ProactiveLoop:
         push_tool: MessagePushTool,
         config: ProactiveConfig,
         model: str,
+        kernel: KernelSource,
         max_tokens: int = 1024,
         state_store: ProactiveStateStore | None = None,
         state_path: Path | None = None,
@@ -87,7 +88,6 @@ class ProactiveLoop:
         light_model: str = "",
         passive_busy_fn: Callable[[str], bool] | None = None,
         shared_tools: ToolRegistry | None = None,
-        tool_hooks: ToolHookSource = no_tool_hooks,
         proactive_motives: list[ProactiveGate] | None = None,
         tick_dispatcher: Callable[[Callable[[], Any]], Any] | None = None,
         event_bus: EventBus | None = None,
@@ -114,7 +114,7 @@ class ProactiveLoop:
         self._light_model = light_model or (config.model or model)
         self._passive_busy_fn = passive_busy_fn
         self._shared_tools = shared_tools
-        self._tool_hooks = tool_hooks
+        self._kernel = kernel
         self._proactive_gates = ProactiveGateChain(motives=proactive_motives or ())
         self._tick_dispatcher = tick_dispatcher
         self._event_bus = event_bus
@@ -238,7 +238,7 @@ class ProactiveLoop:
                 role_prompt_fn=self._role_prompt_fn,
                 shared_tools=self._shared_tools,
                 pool=self._mcp_pool,
-                tool_hooks=self._tool_hooks,
+                kernel=self._kernel,
                 proactive_gates=self._proactive_gates,
                 group_environment=self._group_environment,
                 # Proactive and drift turns always address the user (the user

@@ -35,12 +35,7 @@ from typing import TYPE_CHECKING, Any, Awaitable, Callable, cast
 from agent.core.prompt_block import strip_recent_turns
 from agent.prompting import build_context_frame_content, build_context_frame_message
 from shiori_sdk.prompting import PromptSectionRender
-from agent.tool_hooks import (
-    ToolExecutionRequest,
-    ToolExecutor,
-    ToolHookSource,
-    no_tool_hooks,
-)
+from agent.tools.execution import KernelSource, ToolExecutionRequest, ToolExecutor
 from proactive_v2.context import AgentTickContext
 from proactive_v2.drift_state import DriftStateStore, SkillMeta
 from proactive_v2.drift_tools import (
@@ -66,9 +61,10 @@ class DriftTurnPipelineDeps:
     store: DriftStateStore
     tool_deps: DriftToolDeps
     role_prompt_fn: Callable[[], str]
+    # The generation's kernel, read on every tool call (core checks included).
+    kernel: KernelSource
     max_steps: int = 20
     step_recorder: StepRecorder | None = None
-    tool_hooks: ToolHookSource = no_tool_hooks
 
 
 # ── 主 Pipeline ─────────────────────────────────────────────────────────
@@ -97,7 +93,7 @@ class DriftTurnPipeline:
         self._role_prompt_fn = deps.role_prompt_fn
         self._max_steps = deps.max_steps
         self.step_recorder = deps.step_recorder
-        self._tool_executor = ToolExecutor(deps.tool_hooks)
+        self._tool_executor = ToolExecutor(deps.kernel)
 
     # ── 入口 ──────────────────────────────────────────────────────────
 
@@ -274,9 +270,10 @@ class DriftTurnPipeline:
                 exec_fn = tools.execute
 
             # 3.5 执行工具。
+            call_id = str(tool_call.get("id") or f"drift_{steps}")
             result = await self._tool_executor.execute(
                 ToolExecutionRequest(
-                    call_id=str(tool_call.get("id") or f"drift_{steps}"),
+                    call_id=call_id,
                     tool_name=tool_name,
                     arguments=tool_args,
                     source="proactive",
@@ -285,7 +282,7 @@ class DriftTurnPipeline:
                 exec_fn,
             )
             record_proactive_tool_fact(
-                call_id=str(tool_call.get("id") or f"drift_{steps}"),
+                call_id=call_id,
                 name=tool_name,
                 arguments=tool_args,
                 result=str(result.output),
@@ -301,7 +298,7 @@ class DriftTurnPipeline:
                         ctx,
                         "drift:error",
                         tool_name,
-                        str(tool_call.get("id") or f"drift_{steps}"),
+                        call_id,
                         tool_args,
                         str(result.output),
                     )
@@ -313,7 +310,7 @@ class DriftTurnPipeline:
                     ctx,
                     "drift",
                     tool_name,
-                    str(tool_call.get("id") or f"drift_{steps}"),
+                    call_id,
                     tool_args,
                     str(result.output),
                 )
@@ -330,7 +327,7 @@ class DriftTurnPipeline:
                 messages,
                 tool_name=tool_name,
                 tool_args=tool_args,
-                tool_call_id=str(tool_call.get("id") or f"drift_{steps}"),
+                tool_call_id=call_id,
                 result=str(result.output),
             )
 

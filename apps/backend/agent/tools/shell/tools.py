@@ -28,6 +28,7 @@ from .constants import (
     _FG_THRESHOLD,
     _IS_WINDOWS,
     _MAX_TIMEOUT,
+    SHELL_TOOL_NAME,
     _STREAM_DRAIN_GRACE_S,
 )
 from .environment import _shell_env
@@ -64,7 +65,7 @@ async def _start_logged_process(
 class ShellTool(Tool):
     """在 Windows PowerShell 7 或 POSIX /bin/sh 中执行命令。"""
 
-    name = "shell"
+    name = SHELL_TOOL_NAME
 
     def __init__(
         self,

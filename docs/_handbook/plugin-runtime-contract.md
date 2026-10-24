@@ -206,6 +206,69 @@ consolidates these additions and the subsequent #847 breaking migration.
   handler's error under the event's `on_error`). No existing hook, phase,
   capability or event is removed or changes behavior.
 
+- **Tool calls run through `ToolCalling` / `ToolCalled` (PR #926, issue #902,
+  refactor P3-3, D11).** Every tool call of a passive turn, a proactive tick, a
+  drift tick and a subagent now goes through the generation's kernel: the
+  `ToolCalling` chain (plugin order: dependency depth, then id) may return a
+  replaced event to rewrite `arguments`, or a `Veto` to reject the call with its
+  reason as the result; `ToolVeto(reason, finalize=True)` also skips the rest of
+  the batch and closes the turn with a summary (it replaces
+  `HookOutcome(decision="deny", finalize=True)`). `ToolCalling` fails closed: a
+  handler error rejects the call (`denied`, reason `插件 <id> 处理 ToolCalling 失败: …`).
+  After the chain the core runs fixed checks on the final arguments, which no
+  handler can rewrite past and which hold with every plugin disabled: an
+  external-context turn's tool limits (unchanged, #522) and a minimal shell guard
+  that refuses only removing the filesystem root, a drive root, the home
+  directory or the workspace root (or everything directly in one) whole, by a
+  delete or as the source of a move (`rm -rf /`, `Remove-Item -Recurse C:\`,
+  `mv ~ …` — so shell_restore rewriting `rm -rf ~` into a move is still refused),
+  writing a block device (`dd of=/dev/sda`, `> /dev/nvme0n1`, `mkfs`
+  on a device) and formatting a drive (`Format-Volume`, `Clear-Disk`,
+  `format D:`), also inside `sh -c`, `pwsh -Command` and `cmd /c` (two levels
+  deep). Interactive-command refusal and the rm→mv rewrite stay in the
+  shell_safety / shell_restore plugins. `ToolCalled` follows every call that ran or
+  was rejected (`status` `success` / `denied` / `error`, the final `arguments`);
+  its `result` is the output as text (a `ToolResult`'s `text`). Only a changed
+  `result` reaches the model, as plain text: rewriting the result of a tool that
+  returned a structured or media `ToolResult` replaces it whole and drops its media;
+  left unchanged, the tool's own result passes as it is. `ToolCalled` cannot be
+  vetoed. Both events freeze `arguments` (and each `tool_batch` entry) into
+  read-only mappings on construction, so a handler may write
+  `replace(event, arguments={**event.arguments, ...})`. `ToolCalling.request_text`,
+  which the host never filled, is dropped (never published). The bundled
+  shell_restore, shell_safety, tool_loop_guard and novelai guards, and the
+  default_memory and novelai result trackers, now join these events with
+  `ctx.on`; the trackers keep reading passive-turn results only (`source ==
+  "passive"`), as before. **Behavior visible to plugins:** a failing guard used to
+  end the call as `error` and now ends it as `denied`; a rejected call records the
+  model's own arguments as `final_arguments` (a veto carries no event, so an earlier
+  plugin's rewrite is not recorded); during an in-generation reload the kernel waits
+  for `ToolCalling` handlers in flight, and between disposing the old instance and
+  setting up the new one the plugin's handler is simply absent (the call runs with
+  the other plugins and the core checks) instead of being denied.
+- **breaking: capability `tool_hooks` and `shiori_sdk.tool_hooks` removed (PR
+  #926, issue #902, refactor P3-3).** Gone with it: `PreToolCtx`, `HookOutcome`
+  (including `extra_message`, which the host never consumed), `PreToolHandler`,
+  `ToolHooksCapability`, `ctx.tool_hooks` (also on `HookPluginContext` /
+  `ServicePluginContext`) and `shiori_sdk.testing.hooks.FakeToolHooks`. The name
+  leaves `KNOWN_CAPABILITIES` and the `capabilities` enum of `manifest.schema.json`;
+  a manifest still declaring it is rejected at discovery and package validation as
+  an unknown capability. Migrate a pre-tool handler to
+  `ctx.on(ToolCalling, handler)`: return the event to pass, a replaced event to
+  rewrite the arguments, `ToolVeto(reason)` to reject (`finalize=True` to close);
+  check `event.tool_name` yourself where `tool_name_filter` was used. Plugin
+  tests emit through the fake context: `await ctx.emit(ToolCalling(...))`.
+- **breaking: `shiori_sdk.lifecycle.AfterToolResultCtx` removed (PR #926, issue
+  #902, refactor P3-3).** Subscribe `ToolCalled` with `ctx.on` and return the event
+  unchanged. Unlike `AfterToolResultCtx`, which only passive turns fanned out on the
+  event bus, `ToolCalled` also reports proactive, drift and subagent calls; filter on
+  `event.source` to keep the old scope.
+- **breaking: tool-chain call records lose `pre_hook_trace` / `post_hook_trace` (PR
+  #926, issue #902, refactor P3-3).** The host persisted them into each turn's
+  `tool_chain` and nothing ever read them. New records omit the two keys; records
+  already stored keep them and stay readable, since every reader picks the keys it
+  needs.
+
 - **Natural proactive replies and background reports (PR #894, issue #868).** The current
   role's built-in natural-chat capability also applies to proactive draft
   `message_push` output, Drift dialogue and captured background-result reports.
@@ -451,19 +514,15 @@ consolidates these additions and the subsequent #847 breaking migration.
   runtime generation instead of publishing a new one; other plugins are not set up
   again and keep their effects (managed services, channel connections), and the
   `generation` stays the same. Plugin-observable semantics:
-  - Each phase-module `run` and tool-hook `run` contributed through `ctx.lifecycle` /
-    `ctx.tool_hooks` counts as an in-flight call of its plugin: a reload waits for the
-    run in progress (not for the whole turn). While the plugin is sealed or after it
-    was disposed, its phase module passes the frame through unchanged and its
-    `post_tool_use` / `post_tool_error` hooks leave the result unchanged, while its
-    `pre_tool_use` hooks fail closed: the tool call is denied with "插件 X 正在重载，本次
-    工具调用未执行，请稍后重试" instead of running unguarded. This also applies to tools
-    that a closure plugin's own in-flight call runs through the executor (for example a
-    subagent): those inner calls are denied, so that outer call fails instead of
-    finishing. A turn that started before the reload never reaches the old instance.
-    **breaking** (narrow): the host gates `run` in place on the contributed
-    object, as it already does for tools, so phase modules and tool hook objects must
-    accept attribute assignment (no `__slots__`); otherwise `setup` fails.
+  - Each phase-module `run` contributed through `ctx.lifecycle` counts as an
+    in-flight call of its plugin: a reload waits for the run in progress (not for the
+    whole turn). While the plugin is sealed or after it was disposed, its phase module
+    passes the frame through unchanged. A turn that started before the reload never
+    reaches the old instance. **breaking** (narrow): the host gates `run` in place on
+    the contributed object, as it already does for tools, so phase modules must accept
+    attribute assignment (no `__slots__`); otherwise `setup` fails. (Tool hooks were
+    gated the same way, failing closed while sealed, until the P3-3 tool events entry
+    replaced them with `ToolCalling` handlers, which the kernel drains instead.)
   - The reload waits up to 60 s for the closure's in-flight calls. If they do not
     finish, nothing changes and the save fails with `plugin_reload_busy`
     (`details.plugin_ids` = still busy). If the new config fails `setup`, the old

@@ -16,8 +16,8 @@ from shiori_sdk.channel_events import TurnCancelled
 from shiori_sdk.channels.message_source import MessageSource
 from conversation.service import desktop_thread_id
 from tests.support.host_external_turns import ROOM, ExternalTurnHost, room_message
-from tests.support.tool_hooks import (
-    FinalizeOnCallHook,
+from tests.support.tool_calls import (
+    FinalizeOnCall,
     DummyTool,
     FakeProvider,
     StrictProvider,
@@ -135,7 +135,7 @@ async def test_finalize_denial_stops_repeated_calls_and_returns_closed_summary(
         ]
     )
     loop = make_agent_loop_with_tools(
-        tmp_path, provider, [tool], hooks=[FinalizeOnCallHook("c3")]
+        tmp_path, provider, [tool], handlers=(FinalizeOnCall("c3"),)
     )
 
     final, tools_used, _, _vn, _ = await loop._run_agent_loop(
@@ -154,7 +154,7 @@ async def test_finalize_denial_truncates_the_rest_of_a_multi_tool_batch(tmp_path
     """The finalize call's siblings are skipped yet still answered in the chain."""
     tool_a = DummyTool("a")
     tool_b = DummyTool("b")
-    hook = FinalizeOnCallHook("a2")
+    hook = FinalizeOnCall("a2")
     provider = StrictProvider(
         [
             LLMResponse(
@@ -175,7 +175,7 @@ async def test_finalize_denial_truncates_the_rest_of_a_multi_tool_batch(tmp_path
         ]
     )
     loop = make_agent_loop_with_tools(
-        tmp_path, provider, [tool_a, tool_b], hooks=[hook]
+        tmp_path, provider, [tool_a, tool_b], handlers=(hook,)
     )
 
     final, tools_used, _, _vn, _ = await loop._run_agent_loop(
@@ -208,7 +208,7 @@ async def test_finalize_denial_of_a_locked_tool_request_keeps_chain_closed(tmp_p
         tmp_path,
         provider,
         [tool],
-        hooks=[FinalizeOnCallHook("h2")],
+        handlers=(FinalizeOnCall("h2"),),
         tool_search_enabled=True,
     )
 

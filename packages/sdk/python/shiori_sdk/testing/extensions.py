@@ -8,7 +8,6 @@ from shiori_sdk.memory.engine import MemoryEngine
 from shiori_sdk.extensions import Dependencies
 from shiori_sdk.runtime import HostServiceUnavailable
 from .context import FakePluginContext
-from .hooks import FakeToolHooks
 from .diagnostics import FakeDiagnostics
 from .memory import FakeMemoryStorage
 
@@ -107,7 +106,6 @@ class FakeExtensionContext(FakePluginContext):
         super().__init__(plugin_id)
         self._workspace = workspace
         self.config = FakeConfig(config)
-        self.tool_hooks = FakeToolHooks()
         self.bot_commands = FakeBotCommands()
         self.dependencies = dependencies or FakeDependencies()
         self._session_manager = session_manager
@@ -139,5 +137,4 @@ class FakeExtensionContext(FakePluginContext):
         try:
             await super().aclose()
         finally:
-            self.tool_hooks.handlers.clear()
             self.bot_commands.commands.clear()

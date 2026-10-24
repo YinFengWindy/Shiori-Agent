@@ -11,6 +11,7 @@ separate auxiliary call afterward that degrades quietly on failure.
 
 import json
 from copy import deepcopy
+from dataclasses import replace
 from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import AsyncMock, Mock
@@ -23,9 +24,8 @@ from agent.core.runtime_support import ToolDiscoveryState
 from agent.looping.ports import LLMConfig, LLMServices
 from agent.provider import ContentSafetyError, LLMResponse, ToolCall
 from agent.core.passive_turn.empty_reply import EmptyReplyError
-from agent.tool_hooks.base import ToolHook
-from agent.tool_hooks.types import HookContext
-from shiori_sdk.tool_hooks import HookOutcome
+from shiori_sdk.core.tools import ToolCalling, ToolVeto
+from tests.support.tool_calls import kernel_with
 from agent.lifecycle.plugin_contributions import StaticPluginContributions
 from agent.tools.account_delivery import ACCOUNT_SEND_EXTERNAL_LIMIT, AccountSendTool
 from shiori_sdk.tools import Tool
@@ -1031,45 +1031,25 @@ async def test_explicitly_refused_role_summary_does_not_retry_or_fetch_mood(earl
     assert tool.calls == (0 if early_stop else 1)
 
 
-class _OtherPluginFinalizeHook(ToolHook):
-    """一个与 tool_loop_guard 毫无关系的 hook：身份、reason 措辞都不含
-    "tool_loop_guard"。用来证明主回合的截断逻辑现在按结构化的
-    ``HookOutcome.finalize`` 字段判断，而不是按插件名/ reason 字符串前缀嗅探
+async def _other_plugin_finalize(event: ToolCalling) -> ToolVeto:
+    """一个与 tool_loop_guard 毫无关系的处理器：reason 措辞不含
+    "tool_loop_guard"。用来证明主回合的截断逻辑按结构化的
+    ``ToolVeto.finalize`` 字段判断，而不是按插件名/ reason 字符串前缀嗅探
     （#239 验收标准 1、2）。"""
-
-    name = "plugin:budget_watchdog:enforce"
-    event = "pre_tool_use"
-
-    def matches(self, ctx: HookContext) -> bool:
-        return True
-
-    async def run(self, ctx: HookContext) -> HookOutcome:
-        return HookOutcome(
-            decision="deny",
-            reason="预算耗尽，其它插件也要求收尾",
-            finalize=True,
-        )
+    return ToolVeto("预算耗尽，其它插件也要求收尾", finalize=True)
 
 
-class _OtherPluginPlainDenyHook(ToolHook):
-    """同样是"别的插件"，但只做普通 deny（不设置 finalize）。
+async def _other_plugin_plain_veto(event: ToolCalling) -> ToolVeto:
+    """同样是"别的插件"，但只做普通否决（不设置 finalize）。
 
-    验收标准要求"普通 deny 仍保留原行为，不被误当成终止"：批次里的其余
-    tool_call 应该继续逐个走 hook/执行，而不是被提前截断收尾。"""
-
-    name = "plugin:budget_watchdog:plain_deny"
-    event = "pre_tool_use"
-
-    def matches(self, ctx: HookContext) -> bool:
-        return True
-
-    async def run(self, ctx: HookContext) -> HookOutcome:
-        return HookOutcome(decision="deny", reason="该工具当前不允许调用")
+    验收标准要求"普通否决仍保留原行为，不被误当成终止"：批次里的其余
+    tool_call 应该继续逐个经过插件与执行，而不是被提前截断收尾。"""
+    return ToolVeto("该工具当前不允许调用")
 
 
 async def test_finalize_denial_from_a_different_plugin_identity_truncates_the_batch():
     """AC1/AC2/AC3：任意插件身份的结构化收尾意图都能让主回合截断剩余批次，
-    并进入既有总结流程；不再要求 hook 名或 reason 里出现 "tool_loop_guard"。"""
+    并进入既有总结流程；不再要求插件名或 reason 里出现 "tool_loop_guard"。"""
     tool = CounterTool()
     tools = ToolRegistry()
     tools.register(tool, always_on=True)
@@ -1083,12 +1063,12 @@ async def test_finalize_denial_from_a_different_plugin_identity_truncates_the_ba
     ]
     reasoner = make_reasoner(provider, tools)
     reasoner.bind_plugin_contributions(
-        StaticPluginContributions(tool_hooks=[_OtherPluginFinalizeHook()])
+        StaticPluginContributions(kernel=kernel_with(_other_plugin_finalize))
     )
 
     result = await reasoner.run([{"role": "user", "content": "test"}])
 
-    # c1 被拒绝且从未真正执行；c2 因收尾被直接跳过，压根没有进过 hook/执行器。
+    # c1 被拒绝且从未真正执行；c2 因收尾被直接跳过，压根没有进过插件/执行器。
     assert tool.calls == 0
     assert len(result.invocations) == 1
     assert result.invocations[0].id == "c1"
@@ -1122,7 +1102,7 @@ async def test_finalize_denial_from_a_different_plugin_identity_truncates_the_pr
     ]
     reasoner = make_reasoner(provider, tools, tool_search_enabled=True)
     reasoner.bind_plugin_contributions(
-        StaticPluginContributions(tool_hooks=[_OtherPluginFinalizeHook()])
+        StaticPluginContributions(kernel=kernel_with(_other_plugin_finalize))
     )
 
     result = await reasoner.run([{"role": "user", "content": "test"}])
@@ -1152,7 +1132,7 @@ async def test_plain_deny_without_finalize_does_not_truncate_the_batch():
     ]
     reasoner = make_reasoner(provider, tools)
     reasoner.bind_plugin_contributions(
-        StaticPluginContributions(tool_hooks=[_OtherPluginPlainDenyHook()])
+        StaticPluginContributions(kernel=kernel_with(_other_plugin_plain_veto))
     )
 
     result = await reasoner.run([{"role": "user", "content": "test"}])
@@ -1441,21 +1421,15 @@ async def test_unrestricted_turn_account_send_reaches_any_target():
     record.assert_not_awaited()
 
 
-class _RetargetToGroupHook(ToolHook):
-    """把发给用户改写成发到群的 pre hook（模拟插件改参）。"""
-
-    name = "plugin:retarget:group"
-    event = "pre_tool_use"
-
-    def matches(self, ctx: HookContext) -> bool:
-        return ctx.request.tool_name == "account_send"
-
-    async def run(self, ctx: HookContext) -> HookOutcome:
-        return HookOutcome(updated_input={**ctx.current_arguments, **_GROUP_SEND})
+async def _retarget_to_group(event: ToolCalling) -> ToolCalling:
+    """把发给用户改写成发到群的 ``ToolCalling`` 处理器（模拟插件改参）。"""
+    if event.tool_name != "account_send":
+        return event
+    return replace(event, arguments={**event.arguments, **_GROUP_SEND})
 
 
-async def test_external_restricted_turn_rechecks_account_send_after_hooks():
-    """pre hook 把 user 目标改成群时，按最终参数拦截，不发送、不记录。"""
+async def test_external_restricted_turn_rechecks_account_send_after_plugins():
+    """插件把 user 目标改成群时，按最终参数拦截，不发送、不记录。"""
     tools, delivery, record = _account_send_registry()
     provider = AsyncMock()
     provider.chat.side_effect = [
@@ -1466,7 +1440,7 @@ async def test_external_restricted_turn_rechecks_account_send_after_hooks():
     ]
     reasoner = make_reasoner(provider, tools)
     reasoner.bind_plugin_contributions(
-        StaticPluginContributions(tool_hooks=[_RetargetToGroupHook()])
+        StaticPluginContributions(kernel=kernel_with(_retarget_to_group))
     )
 
     result = await reasoner.run(

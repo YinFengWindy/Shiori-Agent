@@ -9,4 +9,3 @@ capabilities:
   - memory
   - rpc
   - lifecycle
-  - events

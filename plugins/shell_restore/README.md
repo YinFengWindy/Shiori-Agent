@@ -8,7 +8,7 @@
 
 | 接入方式 | 阶段 |
 |---|---|
-| `@on_tool_pre(tool_name="shell")` | shell 工具执行前——改写命令参数 |
+| `ctx.on(ToolCalling, ...)`（只处理 `shell` 工具） | shell 工具执行前——改写命令参数 |
 
 ---
 
@@ -16,7 +16,7 @@
 
 ### 1. 拦截 shell 工具
 
-每次 LLM 调用 `shell` 工具时，钩子接收 `PreToolCtx`，取出 `arguments["command"]` 字符串。
+每次 LLM 调用 `shell` 工具时，处理器收到 `ToolCalling` 事件，取出 `arguments["command"]` 字符串；其他工具的调用原样透传。
 
 ### 2. 解析命令（_rewrite_command）
 
@@ -41,4 +41,4 @@
 
 显式环境变量 `AKASIC_RESTORE_DIR` 继续优先，按原值使用；空值报错。历史 `~/restore` 不自动迁移、分配给某个工作区或删除，用户应单独备份和管理其内容。完整恢复备份须包含当前恢复目录，若设置了自定义路径则另行备份该路径。
 
-改写后的命令字典替换原 `arguments` 并继续执行，LLM 感知不到任何变化。
+改写后的参数经 `replace(event, arguments=...)` 替换原 `arguments` 并继续执行，LLM 感知不到任何变化。核心在 `ToolCalling` 链后还会对最终命令做最小破坏性命令拦截（D11）；改写成的 `mv` 不在拦截范围内。

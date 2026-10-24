@@ -3,7 +3,7 @@
 import pytest
 from pydantic import ValidationError
 from plugins.tool_loop_guard.backend.plugin import setup
-from shiori_sdk.tool_hooks import PreToolCtx
+from shiori_sdk.core.tools import ToolCalling, ToolVeto
 from shiori_sdk.testing.extensions import FakeExtensionContext
 
 
@@ -22,16 +22,21 @@ def _event(
     batch=(),
     index=0,
 ):
-    return PreToolCtx(
-        session,
-        "cli",
-        "1",
-        name,
-        arguments or {"x": 1},
+    return ToolCalling(
+        session_key=session,
+        channel="cli",
+        chat_id="1",
         source=source,
+        call_id="c1",
+        tool_name=name,
+        arguments=arguments or {"x": 1},
         tool_batch=batch,
         tool_batch_index=index,
     )
+
+
+async def _vetoed(ctx, event) -> bool:
+    return isinstance(await ctx.emit(event), ToolVeto)
 
 
 @pytest.mark.asyncio
@@ -46,11 +51,10 @@ def _event(
 )
 async def test_configured_threshold_applies_and_requests_finalize(config, limit):
     ctx = await _context(config)
-    assert ctx.tool_hooks.handlers[0].handler_name == "detect_repeated_tool_call"
     for _ in range(limit - 1):
-        assert (await ctx.tool_hooks.dispatch(_event())).decision == "pass"
-    outcome = await ctx.tool_hooks.dispatch(_event())
-    assert outcome.decision == "deny" and outcome.finalize
+        assert not await _vetoed(ctx, _event())
+    outcome = await ctx.emit(_event())
+    assert isinstance(outcome, ToolVeto) and outcome.finalize
     assert f"{limit} 次" in outcome.reason
     await ctx.aclose()
 
@@ -60,21 +64,17 @@ async def test_configured_threshold_applies_and_requests_finalize(config, limit)
 async def test_task_polling_is_excluded(name):
     ctx = await _context()
     for _ in range(8):
-        assert (await ctx.tool_hooks.dispatch(_event(name))).decision == "pass"
+        assert not await _vetoed(ctx, _event(name))
 
 
 @pytest.mark.asyncio
 async def test_changed_arguments_order_session_and_source_do_not_share_repeat_counts():
     ctx = await _context()
     for n in range(5):
-        assert (
-            await ctx.tool_hooks.dispatch(_event(arguments={"x": n}))
-        ).decision == "pass"
+        assert not await _vetoed(ctx, _event(arguments={"x": n}))
     for session, source in [("a", "passive"), ("b", "passive"), ("a", "subagent")]:
         for _ in range(2):
-            assert (
-                await ctx.tool_hooks.dispatch(_event(session=session, source=source))
-            ).decision == "pass"
+            assert not await _vetoed(ctx, _event(session=session, source=source))
 
 
 @pytest.mark.asyncio
@@ -87,14 +87,12 @@ async def test_batch_counts_once_and_ignores_polling_but_preserves_order():
     )
     for turn in range(3):
         for index, call in enumerate(batch):
-            outcome = await ctx.tool_hooks.dispatch(
-                _event(call["name"], call["arguments"], batch=batch, index=index)
+            vetoed = await _vetoed(
+                ctx, _event(call["name"], call["arguments"], batch=batch, index=index)
             )
-            assert (outcome.decision == "deny") == (turn == 2 and index == 1)
+            assert vetoed == (turn == 2 and index == 1)
     changed = (batch[0], batch[2], batch[1])
-    assert (
-        await ctx.tool_hooks.dispatch(_event("write", batch=changed, index=1))
-    ).decision == "pass"
+    assert not await _vetoed(ctx, _event("write", batch=changed, index=1))
 
 
 @pytest.mark.asyncio
@@ -103,4 +101,5 @@ async def test_invalid_config_is_not_coerced_to_a_default(value):
     ctx = FakeExtensionContext("tool_loop_guard", config={"repeat_limit": value})
     with pytest.raises(ValidationError, match="repeat_limit"):
         await setup(ctx)
-    assert ctx.tool_hooks.handlers == []
+    for _ in range(3):
+        assert not await _vetoed(ctx, _event())

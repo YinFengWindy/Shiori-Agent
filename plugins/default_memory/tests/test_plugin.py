@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from shiori_sdk.lifecycle import AfterToolResultCtx
+from shiori_sdk.core.tools import ToolCalled, ToolSource
 from shiori_sdk.rpc import Concurrency
 from shiori_sdk.testing.memory_context import FakeMemoryPluginContext
 
@@ -33,6 +33,26 @@ def _before_turn_ctx(**overrides: object):
     )
     defaults.update(overrides)
     return SimpleNamespace(**defaults)
+
+
+def _called(
+    tool_name: str = "recall_memory",
+    *,
+    arguments: dict[str, object] | None = None,
+    result: str = "{}",
+    source: ToolSource = "passive",
+) -> ToolCalled:
+    return ToolCalled(
+        session_key="cli:1",
+        channel="cli",
+        chat_id="1",
+        source=source,
+        call_id="c1",
+        tool_name=tool_name,
+        arguments=arguments or {},
+        status="success",
+        result=result,
+    )
 
 
 def _read_jsonl(path: Path) -> list[dict[str, Any]]:
@@ -91,30 +111,15 @@ async def test_recall_memory_recorded_only_for_matching_tool_when_active(
     data_path = tmp_path / "trace.jsonl"
     recorder = _DefaultMemoryRecorder(active=True, data_path=data_path)
 
-    await recorder.record_recall_memory(
-        AfterToolResultCtx(
-            session_key="cli:1",
-            channel="cli",
-            chat_id="1",
-            tool_name="other_tool",
-            arguments={},
-            result="{}",
-            status="ok",
-        )
-    )
+    await recorder.record_recall_memory(_called("other_tool"))
+    # Only a passive turn's recall is recorded, as before the event existed.
+    await recorder.record_recall_memory(_called(source="proactive"))
     assert _read_jsonl(data_path) == []
 
-    await recorder.record_recall_memory(
-        AfterToolResultCtx(
-            session_key="cli:1",
-            channel="cli",
-            chat_id="1",
-            tool_name="recall_memory",
-            arguments={"query": "q"},
-            result=json.dumps({"items": [{"id": "m1"}]}),
-            status="ok",
-        )
+    called = _called(
+        arguments={"query": "q"}, result=json.dumps({"items": [{"id": "m1"}]})
     )
+    assert await recorder.record_recall_memory(called) is called
     rows = _read_jsonl(data_path)
     assert len(rows) == 1
     assert rows[0]["kind"] == "recall_memory"
@@ -134,14 +139,9 @@ async def test_setup_registers_scoped_documents_semantics_and_observation(tmp_pa
     }
     assert set(ctx.rpc.concurrency.values()) == {Concurrency.READ_ONLY}
     assert len(ctx.lifecycle.modules["before_turn"]) == 1
-    await ctx.events.emit(
-        AfterToolResultCtx("cli:1", "cli", "1", "recall_memory", {}, "{}", "ok")
-    )
+    await ctx.emit(_called())
     path = tmp_path / "plugin-data/default_memory/recall_inspector.jsonl"
     assert len(_read_jsonl(path)) == 1
-    events = ctx.events
     await ctx.aclose()
-    await events.emit(
-        AfterToolResultCtx("cli:1", "cli", "1", "recall_memory", {}, "{}", "ok")
-    )
+    await ctx.emit(_called())
     assert len(_read_jsonl(path)) == 1

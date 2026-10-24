@@ -8,13 +8,12 @@ from collections.abc import Awaitable, Callable, Sequence
 from typing import Any
 
 from shiori_sdk.rpc import PluginRpcError
-from shiori_sdk.tool_hooks import HookOutcome
 from shiori_sdk.tools import Tool
 
 # Gates that registered one tool object, kept on the object itself. A tool kept
 # in a process resource can be registered by several instances or generations.
 _TOOL_GATES = "__plugin_call_gates__"
-# Same bookkeeping for the ``run`` of a contributed phase module or tool hook.
+# Same bookkeeping for the ``run`` of a contributed phase module.
 _RUN_GATES = "__plugin_run_gates__"
 
 
@@ -112,22 +111,6 @@ class PluginCallGate:
         """
         self._guard_method(module, "run", _RUN_GATES, skipped=_pass_frame)
 
-    def guard_tool_hook(self, hook: object) -> None:
-        """Gates a contributed tool hook's ``run`` like a tool call.
-
-        While no registering instance admits, a ``pre_tool_use`` hook fails
-        closed: it may guard admission (deny or rewrite the call), so the tool
-        call is denied rather than run unguarded during a reload. Post hooks
-        cannot affect admission and let the call result pass unchanged.
-        """
-        pre_tool = getattr(hook, "event", "pre_tool_use") == "pre_tool_use"
-        self._guard_method(
-            hook,
-            "run",
-            _RUN_GATES,
-            skipped=_deny_tool_call(self._plugin_id) if pre_tool else _pass_hook,
-        )
-
     def _guard_method(
         self,
         target: object,
@@ -204,20 +187,3 @@ def _prune(gates: list[PluginCallGate]) -> None:
 def _pass_frame(frame: Any) -> Any:
     """Result of a skipped phase module run: the frame, unchanged."""
     return frame
-
-
-def _pass_hook(*_args: Any) -> HookOutcome:
-    """Result of a skipped post hook run: leave the call result unchanged."""
-    return HookOutcome()
-
-
-def _deny_tool_call(plugin_id: str) -> Callable[..., HookOutcome]:
-    """Result of a skipped pre-tool hook run: deny the call, never run it unguarded."""
-
-    def deny(*_args: Any) -> HookOutcome:
-        return HookOutcome(
-            decision="deny",
-            reason=f"插件 {plugin_id} 正在重载，本次工具调用未执行，请稍后重试",
-        )
-
-    return deny

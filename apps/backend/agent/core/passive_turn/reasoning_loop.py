@@ -11,15 +11,12 @@ from agent.core.types import ReasonerResult
 from agent.core.reply_completion import fetch_role_mood
 from agent.core.reply_output import RoleReplyOutput
 from core.roles.reply_state import RoleReply
-from agent.lifecycle.types import BeforeStepInput, BeforeToolCallCtx
-from shiori_sdk.lifecycle import AfterStepCtx, AfterToolResultCtx
-from agent.tool_hooks import (
-    ToolExecutionRequest,
-    append_finalize_skipped_tool_results,
-    is_finalize_denial,
-)
+from agent.lifecycle.types import BeforeStepInput
+from shiori_sdk.lifecycle import AfterStepCtx
+from agent.tools.execution import ToolExecutionRequest
 from agent.tool_runtime import (
     append_assistant_tool_calls,
+    append_finalize_skipped_tool_results,
     append_tool_result,
     tool_call_batch_snapshot,
 )
@@ -213,7 +210,8 @@ class _PassiveReasoningLoopMixin:
                 or []
             )
 
-        # 外部上下文受限回合在 pre hooks 改参后按最终参数再判一次（#522）。
+        # 外部上下文受限回合在插件改参后按最终参数再判一次（#522）：
+        # 作为本次调用的准入，进入 ToolCalling 链后的核心校验。
         admit_external = self._tools.external_denial if external_restricted else None
 
         if self._tool_search_enabled:
@@ -530,7 +528,7 @@ class _PassiveReasoningLoopMixin:
                             tool_name=tool_call.name,
                             arguments=tool_call.arguments,
                         )
-                        if is_finalize_denial(exec_result):
+                        if exec_result.finalize:
                             result = str(exec_result.output)
                             append_tool_result(
                                 messages,
@@ -557,10 +555,6 @@ class _PassiveReasoningLoopMixin:
                                     "status": exec_result.status,
                                     "arguments": tool_call.arguments,
                                     "final_arguments": exec_result.final_arguments,
-                                    "pre_hook_trace": [
-                                        item.to_dict()
-                                        for item in exec_result.pre_hook_trace
-                                    ],
                                     "result": result,
                                 }
                             )
@@ -632,7 +626,7 @@ class _PassiveReasoningLoopMixin:
                         )
                         continue
 
-                    # 6.2 通过统一执行器跑 pre/post hooks + 真实工具。
+                    # 6.2 通过统一执行器发 ToolCalling、跑真实工具、发 ToolCalled。
                     # tool_search 的已可见名单与受限标志随本次调用的执行上下文
                     # 传入，不挂在跨会话共享的工具实例上。
                     call_context = execution_context
@@ -661,19 +655,10 @@ class _PassiveReasoningLoopMixin:
                         tool_name=tool_call.name,
                         arguments=tool_call.arguments,
                     )
-                    # 工具调用统一先过 ToolExecutor：
-                    # pre_hook 可改参/拒绝，真实执行后再补 post_hook trace。
-                    await self._bus.fanout(
-                        BeforeToolCallCtx(
-                            session_key=tool_event_session_key,
-                            channel=tool_event_channel,
-                            chat_id=tool_event_chat_id,
-                            tool_name=tool_call.name,
-                            arguments=dict(tool_call.arguments),
-                        )
-                    )
                     if reply_was_invalidated():
                         return interrupted_result(iter_calls, response.thinking)
+                    # 插件可在 ToolCalling 上改参或拒绝，核心校验最终参数，
+                    # 工具执行后插件可在 ToolCalled 上改写结果。
                     exec_result = await self._tool_executor.execute(
                         ToolExecutionRequest(
                             call_id=tool_call.id,
@@ -687,28 +672,17 @@ class _PassiveReasoningLoopMixin:
                             tool_batch_index=tool_batch_index,
                         ),
                         # 真实工具执行入口仍是 ToolRegistry.execute；
-                        # hook 只负责拦截与记录，不替代 registry。
+                        # 插件只负责改参、拦截与改写结果，不替代 registry。
                         lambda name, args: self._tools.execute(
                             name,
                             args,
                             context=call_context,
                         ),
-                        admit=admit_external,
+                        admission=admit_external,
                     )
                     if exec_result.status == "success":
                         tools_used.append(tool_call.name)
                     result = exec_result.output
-                    await self._bus.fanout(
-                        AfterToolResultCtx(
-                            session_key=tool_event_session_key,
-                            channel=tool_event_channel,
-                            chat_id=tool_event_chat_id,
-                            tool_name=tool_call.name,
-                            arguments=dict(exec_result.final_arguments),
-                            result=str(result),
-                            status=exec_result.status,
-                        )
-                    )
                     normalized = normalize_tool_result(result)
                     _result_preview = support.log_preview(normalized.preview())
                     _result_len = len(normalized.preview() or "")
@@ -769,19 +743,13 @@ class _PassiveReasoningLoopMixin:
                         else:
                             logger.info("[工具解锁] tool_search 未解锁新工具")
                     # tool_chain 持久化的是“执行后的事实”：
-                    # 最终参数、hook trace、结果预览，供后续回放与 session 复原。
+                    # 最终参数、结果预览，供后续回放与 session 复原。
                     call_record: dict[str, Any] = {
                         "call_id": tool_call.id,
                         "name": tool_call.name,
                         "status": exec_result.status,
                         "arguments": tool_call.arguments,
                         "final_arguments": exec_result.final_arguments,
-                        "pre_hook_trace": [
-                            item.to_dict() for item in exec_result.pre_hook_trace
-                        ],
-                        "post_hook_trace": [
-                            item.to_dict() for item in exec_result.post_hook_trace
-                        ],
                         "result": normalized.preview(),
                     }
                     # 解锁名单单独落盘：后续轮次据此从历史恢复可见工具，
@@ -791,9 +759,9 @@ class _PassiveReasoningLoopMixin:
                     iter_calls.append(call_record)
                     if reply_was_invalidated():
                         return interrupted_result(iter_calls, response.thinking)
-                    if is_finalize_denial(exec_result):
+                    if exec_result.finalize:
                         logger.warning(
-                            "[插件收尾] hook 截断重复工具调用，进入收尾 (iteration=%d, tool=%s)",
+                            "[插件收尾] 插件截断重复工具调用，进入收尾 (iteration=%d, tool=%s)",
                             iteration + 1,
                             tool_call.name,
                         )

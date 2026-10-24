@@ -6,7 +6,7 @@ from typing import Sequence
 
 from agent.provider import LLMProvider
 from agent.subagent import SubAgent
-from agent.tool_hooks import ToolHookSource
+from agent.tools.execution import KernelSource
 from agent.tool_bundles import build_readonly_research_tools
 from shiori_sdk.tools import Tool
 from agent.tools.filesystem import (
@@ -37,10 +37,8 @@ class SubagentSpec:
     max_iterations: int = 30
     mandatory_exit_tools: Sequence[str] = field(default_factory=tuple)
 
-    def build(
-        self, runtime: SubagentRuntime, *, tool_hooks: ToolHookSource
-    ) -> SubAgent:
-        """按运行时模型与实时 tool hook 来源构造子 Agent。"""
+    def build(self, runtime: SubagentRuntime, *, kernel: KernelSource) -> SubAgent:
+        """按运行时模型与实时插件内核来源构造子 Agent。"""
         return SubAgent(
             provider=runtime.provider,
             model=runtime.model,
@@ -49,7 +47,7 @@ class SubagentSpec:
             max_iterations=self.max_iterations,
             max_tokens=runtime.max_tokens,
             mandatory_exit_tools=self.mandatory_exit_tools,
-            tool_hooks=tool_hooks,
+            kernel=kernel,
         )
 
 

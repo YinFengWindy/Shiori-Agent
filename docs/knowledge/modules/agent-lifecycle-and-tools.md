@@ -8,7 +8,6 @@ source_paths:
   - apps/backend/agent/turns/
   - apps/backend/agent/lifecycle/
   - apps/backend/agent/tools/
-  - apps/backend/agent/tool_hooks/
   - apps/backend/agent/plugin_host/
   - apps/backend/agent/mcp/
   - apps/backend/core/compaction.py
@@ -31,7 +30,7 @@ related:
 
 ## 工具体系
 
-`ToolRegistry`（`agent/tools/registry.py`）保存工具和索引视图，`search_backend.py` 的关键词后端配合 `tool_search` 工具支持按需发现工具。`agent/tool_hooks/` 的 `ToolExecutor` 执行调用，`ToolHook` 在执行前后接入插件逻辑。文件、Shell、消息推送与历史查询、记忆、调度、网页抓取与搜索、subagent（`spawn`）、群环境与群旁听、成员查询、账号投递（`account_*`）、MCP 管理等能力都是 `agent/tools/` 下的具体工具实现；图片生成等能力由插件注册（如 `plugins/novelai/`）。
+`ToolRegistry`（`agent/tools/registry.py`）保存工具和索引视图，`search_backend.py` 的关键词后端配合 `tool_search` 工具支持按需发现工具。`agent/tools/execution.py` 的 `ToolExecutor` 执行调用：经本代插件内核发 `ToolCalling`（插件可改参或否决，fail_closed），再跑核心链后校验（外部上下文受限回合的准入与 `agent/tools/shell/guard.py` 的最小破坏性命令拦截，D11），执行工具后发 `ToolCalled`（插件可改写结果）。文件、Shell、消息推送与历史查询、记忆、调度、网页抓取与搜索、subagent（`spawn`）、群环境与群旁听、成员查询、账号投递（`account_*`）、MCP 管理等能力都是 `agent/tools/` 下的具体工具实现；图片生成等能力由插件注册（如 `plugins/novelai/`）。
 
 工具搜索的目的是控制可见工具规模；初始可见集合由 always-on 工具加会话历史中已发现的工具组成（`passive_turn/tool_visibility.py`），搜索结果进入当前回合，不应永久污染全局 registry。外部上下文（群聊、陌生私聊）中非已绑定用户触发的受限回合只能使用注册时声明 `external_allowed` 的工具，可附带参数取值限制，规则在 `agent/tools/external_access.py` 与 `ToolRegistry.external_denial`。后台 Shell 任务由 `agent/tools/shell/background.py` 管理注册、轮询和停止。
 
@@ -39,7 +38,7 @@ related:
 
 ## 插件与 MCP
 
-插件包位于顶层 `plugins/<id>/`（`manifest.yaml` + `backend/`、`ui/` 等子目录），对外 API 由 `packages/sdk/python/shiori_sdk/` 提供。宿主侧 `apps/backend/agent/plugin_host/` 的 `PluginKernel` 负责插件发现与准入、manifest 解析、依赖加载、setup 装配、失败回滚和卸载；能力（工具、渠道、账号、后台任务、bot 命令等）经 capabilities 与作用域服务暴露给插件。插件的 pre-tool handler 由 `agent/tool_hooks/plugin_capability.py` 的 `PluginToolHook` 适配到统一 ToolExecutor 接口；插件工具经 `agent/tools/plugin_capability.py` 注册进 ToolRegistry，插件渠道、头像缓存与账号登记分别由 `core/channels/plugin_capability.py`、`core/accounts/plugin_capability.py` 实现，插件会话操作由 `session/plugin_capability.py` 实现，角色与模型、场景观测需求分别由 `core/roles/plugin_capability.py`、`core/scene/plugin_capability.py` 实现，本机进程由 `infra/process/plugin_capability.py` 实现，记忆插件接口由 `bootstrap/memory_capabilities.py`、宿主资源由 `bootstrap/plugin_capability.py` 实现，外部回合、后台结果与 bot 命令分别由 `conversation/external_turns.py`、`conversation/background_results.py`、`conversation/plugin_capability.py` 实现，插件后台任务由 `core/common/plugin_capability.py` 实现，主动 gate 由 `agent/core/proactive_turn/plugin_capability.py` 实现（P3 删除），插件事件订阅（`ScopedEventBus`）由 `bus/plugin_capability.py`、插件 RPC 登记由 `desktop_bridge/plugin_capability.py` 实现，RPC 注册表由 bootstrap 每代创建一份并经 `host.bridge` 交给内核；这些都由核心模块经 `plugin_host/core_keys.py` 的 Key 提供给装配层。`apps/backend/agent/mcp/registry.py`（`McpServerRegistry`，持久化到 `mcp_servers.json`）与 `client.py` 管理 MCP server 配置和 stdio 连接，并把远端工具同步到 ToolRegistry；`manage_tools.py` 提供 `mcp_add` / `mcp_remove` / `mcp_list` 工具。
+插件包位于顶层 `plugins/<id>/`（`manifest.yaml` + `backend/`、`ui/` 等子目录），对外 API 由 `packages/sdk/python/shiori_sdk/` 提供。宿主侧 `apps/backend/agent/plugin_host/` 的 `PluginKernel` 负责插件发现与准入、manifest 解析、依赖加载、setup 装配、失败回滚和卸载；能力（工具、渠道、账号、后台任务、bot 命令等）经 capabilities 与作用域服务暴露给插件。插件的工具前后处理用 `ctx.on(ToolCalling / ToolCalled, …)` 直接挂在内核事件上；插件工具经 `agent/tools/plugin_capability.py` 注册进 ToolRegistry，插件渠道、头像缓存与账号登记分别由 `core/channels/plugin_capability.py`、`core/accounts/plugin_capability.py` 实现，插件会话操作由 `session/plugin_capability.py` 实现，角色与模型、场景观测需求分别由 `core/roles/plugin_capability.py`、`core/scene/plugin_capability.py` 实现，本机进程由 `infra/process/plugin_capability.py` 实现，记忆插件接口由 `bootstrap/memory_capabilities.py`、宿主资源由 `bootstrap/plugin_capability.py` 实现，外部回合、后台结果与 bot 命令分别由 `conversation/external_turns.py`、`conversation/background_results.py`、`conversation/plugin_capability.py` 实现，插件后台任务由 `core/common/plugin_capability.py` 实现，主动 gate 由 `agent/core/proactive_turn/plugin_capability.py` 实现（P3 删除），插件事件订阅（`ScopedEventBus`）由 `bus/plugin_capability.py`、插件 RPC 登记由 `desktop_bridge/plugin_capability.py` 实现，RPC 注册表由 bootstrap 每代创建一份并经 `host.bridge` 交给内核；这些都由核心模块经 `plugin_host/core_keys.py` 的 Key 提供给装配层。`apps/backend/agent/mcp/registry.py`（`McpServerRegistry`，持久化到 `mcp_servers.json`）与 `client.py` 管理 MCP server 配置和 stdio 连接，并把远端工具同步到 ToolRegistry；`manage_tools.py` 提供 `mcp_add` / `mcp_remove` / `mcp_list` 工具。
 
 `plugins/herdr/` 的 `herdr_start_task` 把完整需求写入 UTF-8 文件，连接明确的本机 Herdr session（CLI 和服务端均要求 >=0.9.4），在独立 worktree 以 Full Access 启动 Codex 或 Claude Code。`TaskService` 保留本进程任务记录；`delivery.py` 校验本回合结果、实际验证命令、干净提交和开放 Draft PR 的 head SHA。CLI 超时不会重发任务，Herdr 的 idle/done 不等于业务完成；工作中的终端只读取可见屏幕，日志读取失败不终止任务追踪。
 

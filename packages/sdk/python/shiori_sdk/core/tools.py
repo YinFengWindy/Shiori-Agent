@@ -3,17 +3,21 @@
 ``ToolCalling`` runs before a tool executes: ``on`` handlers may rewrite the
 arguments or reject the call with ``Veto`` (``ToolVeto`` to also close the
 tool loop). It fails closed: a handler error rejects the call. After the
-chain the core runs its fixed checks on the final arguments, so no handler
-can rewrite a call past them. ``ToolCalled`` follows every call, including a
-rejected one, and may rewrite the result. Both are frozen projections of the
-host's call; container fields are tuples or read-only mappings.
+chain the core runs its fixed checks on the final arguments (its minimal
+shell guard, and the tool limits of an external-context turn), so no handler
+can rewrite a call past them. ``ToolCalled`` follows every call that ran or
+was rejected and may rewrite the result. Both are frozen projections of the
+host's call: ``arguments`` (and each ``tool_batch`` entry) is frozen into a
+read-only mapping on construction, so a handler may build its replacement
+with a plain dict, e.g. ``replace(event, arguments={**event.arguments, ...})``.
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import ClassVar, Literal
+from types import MappingProxyType
+from typing import ClassVar, Literal, cast
 
 from shiori_sdk.kernel import FailurePolicy, Veto
 
@@ -24,14 +28,28 @@ type ToolStatus = Literal["success", "denied", "error"]
 """How a call ended: the tool ran, the call was rejected, or the tool raised."""
 
 
+def _frozen(mapping: Mapping[str, object]) -> Mapping[str, object]:
+    return MappingProxyType(dict(mapping))
+
+
+def _frozen_call(call: Mapping[str, object]) -> Mapping[str, object]:
+    arguments = call.get("arguments")
+    if not isinstance(arguments, Mapping):
+        arguments = {}
+    return _frozen(
+        {**call, "arguments": _frozen(cast(Mapping[str, object], arguments))}
+    )
+
+
 @dataclass(frozen=True)
 class ToolCalling:
     """A tool is about to run with ``arguments``.
 
-    ``request_text`` is the user message the call serves, when the host knows
-    it. ``tool_batch`` holds every call of the same model response as
+    ``tool_batch`` holds every call of the same model response as
     ``{"name", "arguments"}`` mappings and ``tool_batch_index`` this call's
-    position in it.
+    position in it. A passive turn also emits it for a call to a tool not
+    loaded yet (still behind ``tool_search``): the tool never runs, only a
+    finalizing ``ToolVeto`` takes effect there, and no ``ToolCalled`` follows.
 
     Writable: ``arguments``.
     """
@@ -45,9 +63,13 @@ class ToolCalling:
     call_id: str
     tool_name: str
     arguments: Mapping[str, object]
-    request_text: str = ""
     tool_batch: tuple[Mapping[str, object], ...] = ()
     tool_batch_index: int = 0
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "arguments", _frozen(self.arguments))
+        batch = tuple(_frozen_call(call) for call in self.tool_batch)
+        object.__setattr__(self, "tool_batch", batch)
 
 
 @dataclass(frozen=True)
@@ -65,9 +87,14 @@ class ToolVeto(Veto):
 class ToolCalled:
     """A tool call ended with ``status``; ``arguments`` are the final ones.
 
-    ``result`` is the tool's output as text, or the rejection or error text.
+    ``result`` is the tool's output as text (the text part of a structured
+    ``ToolResult``), or the rejection or error text. It cannot be vetoed: a
+    veto fails the loop that made the call.
 
-    Writable: ``result``.
+    Writable: ``result``. Only a changed ``result`` reaches the model, and then
+    as plain text: rewriting the result of a tool that returned a structured
+    or media ``ToolResult`` replaces it whole, dropping its media and
+    structured content. Left unchanged, the tool's own result passes as it is.
     """
 
     session_key: str
@@ -79,3 +106,6 @@ class ToolCalled:
     arguments: Mapping[str, object]
     status: ToolStatus
     result: str
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "arguments", _frozen(self.arguments))

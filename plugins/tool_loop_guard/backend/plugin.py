@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, cast
 
-from shiori_sdk.tool_hooks import PreToolCtx
-from shiori_sdk.tool_hooks import HookOutcome
+from shiori_sdk.core.tools import ToolCalling, ToolVeto
 
 from .config import ToolLoopGuardConfig
 
@@ -28,10 +28,12 @@ class _ToolLoopGuard:
         self._states: dict[str, _LoopState] = {}
         self._repeat_limit = repeat_limit
 
-    async def detect_repeated_tool_call(self, event: PreToolCtx) -> HookOutcome | None:
+    async def detect_repeated_tool_call(
+        self, event: ToolCalling
+    ) -> ToolCalling | ToolVeto:
         signature, active_index = self._event_signature(event)
         if not signature or event.tool_batch_index != active_index:
-            return None
+            return event
         state_key = self._state_key(event)
         state = self._states.setdefault(state_key, _LoopState())
         if signature == state.signature:
@@ -40,26 +42,25 @@ class _ToolLoopGuard:
             state.signature = signature
             state.repeat_count = 1
         if state.repeat_count < self._repeat_limit:
-            return None
-        return HookOutcome(
-            decision="deny",
-            reason=(f"连续重复调用工具 {state.repeat_count} 次，已截断并进入收尾。"),
-            # 结构化收尾意图（见 shiori_sdk.tool_hooks.HookOutcome.finalize）：宿主
+            return event
+        return ToolVeto(
+            f"连续重复调用工具 {state.repeat_count} 次，已截断并进入收尾。",
+            # 结构化收尾意图（见 shiori_sdk.core.tools.ToolVeto.finalize）：宿主
             # 靠这个字段截断剩余批次并进入既有总结流程，不再靠 reason 前缀
             # 猜插件身份——任何插件都能用同一个字段表达"该收尾了"。
             finalize=True,
         )
 
-    def _state_key(self, event: PreToolCtx) -> str:
+    def _state_key(self, event: ToolCalling) -> str:
         if event.session_key:
             return f"{event.source}:{event.session_key}"
         return f"{event.source}:{event.channel}:{event.chat_id}"
 
-    def _signature(self, tool_name: str, arguments: dict[str, Any]) -> str:
-        args = json.dumps(arguments, ensure_ascii=False, sort_keys=True)
+    def _signature(self, tool_name: str, arguments: Mapping[str, object]) -> str:
+        args = json.dumps(dict(arguments), ensure_ascii=False, sort_keys=True)
         return f"{tool_name}:{args}"
 
-    def _event_signature(self, event: PreToolCtx) -> tuple[str, int]:
+    def _event_signature(self, event: ToolCalling) -> tuple[str, int]:
         if not event.tool_batch:
             if event.tool_name in _EXCLUDED_TOOLS:
                 return "", 0
@@ -71,22 +72,18 @@ class _ToolLoopGuard:
             tool_name = str(tool_call.get("name", ""))
             if tool_name in _EXCLUDED_TOOLS:
                 continue
-            arguments = tool_call.get("arguments")
-            if not isinstance(arguments, dict):
-                arguments = {}
+            # ToolCalling freezes every batch entry's arguments into a mapping.
+            arguments = cast(Mapping[str, object], tool_call["arguments"])
             if active_index < 0:
                 active_index = index
-            parts.append(self._signature(tool_name, cast("dict[str, Any]", arguments)))
+            parts.append(self._signature(tool_name, arguments))
         if active_index < 0:
             return "", 0
         return "|".join(parts), active_index
 
 
 async def setup(ctx: "PluginRuntimeContext") -> None:
-    """装配 tool_loop_guard：读取 repeat_limit 配置，注册 pre-tool hook。
-
-    hook 名由 ToolHooksCapability 统一生成（plugin:{plugin_id}:{handler.__name__}），
-    插件不再直接引用宿主的 PluginToolHook 或自行拼接 hook 名（#182 评审）。
+    """装配 tool_loop_guard：读取 repeat_limit 配置，在 ``ToolCalling`` 上检测重复调用。
 
     行为变化说明：旧 Plugin ABC 版本没有 ConfigModel / _conf_schema.json，
     因此旧 self.context.config 恒为 None，repeat_limit 实际上永远是这里的硬编码默认值 3，
@@ -103,4 +100,4 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
     """
     config = ToolLoopGuardConfig.model_validate(ctx.config.as_dict())
     guard = _ToolLoopGuard(config.repeat_limit)
-    ctx.tool_hooks.add_handler(guard.detect_repeated_tool_call)
+    ctx.on(ToolCalling, guard.detect_repeated_tool_call)

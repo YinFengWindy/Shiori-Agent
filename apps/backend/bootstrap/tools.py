@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass, field
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
 from uuid import uuid4
@@ -152,7 +153,7 @@ class CoreRuntime:
             self.loop.bind_plugin_contributions(kernel)
             spawn = self.tools.get_tool("spawn")
             if isinstance(spawn, SpawnTool):
-                spawn.manager.bind_tool_hooks(lambda: kernel.tool_hooks)
+                spawn.manager.bind_kernel(lambda: kernel.kernel)
 
     async def inspect_modules(self) -> str:
         """Renders this generation\'s lifecycle module configuration."""
@@ -716,7 +717,7 @@ def build_core_runtime(
         ),
         namespace=uuid4().hex,
         strict=shared is not None,
-        core_checks=install_core_checks,
+        core_checks=partial(install_core_checks, workspace=workspace),
         core=plugin_core_modules(
             PluginCoreInputs(
                 plugin_dirs=tuple(plugin_dirs),

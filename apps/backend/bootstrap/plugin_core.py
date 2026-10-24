@@ -44,7 +44,6 @@ from agent.plugin_host.core_keys import (
     HOST_SCENE_OBSERVATIONS,
     HOST_SESSION_MANAGER,
     HOST_SESSIONS,
-    HOST_TOOL_HOOKS,
     HOST_TOOL_TURN,
     HOST_TOOLS,
     HOST_WORKSPACE,
@@ -52,7 +51,6 @@ from agent.plugin_host.core_keys import (
     CoreProvide,
     Nullable,
 )
-from agent.tool_hooks.plugin_capability import PluginToolHooks
 from agent.tools.plugin_capability import PluginTools
 from agent.tools.registry import ToolRegistry
 from agent.tools.turn_scope import current_tool_turn
@@ -160,10 +158,9 @@ def plugin_core_modules(inputs: PluginCoreInputs) -> tuple[CoreModule, ...]:
         provide(HOST_CONFIG_REFERENCES, resolve_config_reference)
 
     def provide_tools(provide: CoreProvide) -> None:
-        """Plugin tools, tool hooks and the current tool turn (``agent.tools``)."""
+        """Plugin tools and the current tool turn (``agent.tools``)."""
         if inputs.tools is not None:
             provide(HOST_TOOLS, PluginTools(inputs.tools))
-        provide(HOST_TOOL_HOOKS, PluginToolHooks())
         provide(HOST_TOOL_TURN, current_tool_turn)
 
     def provide_channels(provide: CoreProvide) -> None:

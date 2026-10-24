@@ -12,22 +12,26 @@ checks, so it passes them too.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+from pathlib import Path
 from types import MappingProxyType
 from typing import cast
 
+from agent.tools.execution import install_tool_checks
 from bus.event_bus import EventBus
 from shiori_sdk.kernel import Kernel, Veto
 
 
-def install_core_checks(kernel: Kernel) -> None:
+def install_core_checks(kernel: Kernel, *, workspace: Path | None = None) -> None:
     """Adds the core's fixed post-chain checks to ``kernel`` (D11, §8.1).
 
     Every kernel the core emits through gets them: each plugin generation's
-    (``PluginKernel``) and the bare one of a turn without plugins
-    (``core_kernel``). P3-3 adds the minimal shell check on ``ToolCalling``,
-    P3-4 the citation cleanup on ``ReasoningFinished``.
+    (``PluginKernel``, with the generation's ``workspace`` guarded as a root)
+    and the bare one of a loop without plugins (``core_kernel``). On
+    ``ToolCalling`` they are the calling loop's admission and the minimal shell
+    guard (``agent.tools.execution.check_tool_call``); P3-4 adds the citation
+    cleanup on ``ReasoningFinished``.
     """
-    _ = kernel
+    install_tool_checks(kernel, workspace=workspace)
 
 
 def core_kernel() -> Kernel:

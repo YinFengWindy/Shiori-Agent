@@ -130,19 +130,6 @@ class AfterTurnCtx:
     extra_metadata: dict[str, object] = field(default_factory=dict)
 
 
-@dataclass(frozen=True)
-class AfterToolResultCtx:
-    """Final tool result observed by plugin lifecycle subscribers."""
-
-    session_key: str
-    channel: str
-    chat_id: str
-    tool_name: str
-    arguments: dict[str, object]
-    result: str
-    status: str
-
-
 @runtime_checkable
 class BeforeTurnObservation(Protocol):
     """Read-only retrieval fields needed by memory inspection modules."""

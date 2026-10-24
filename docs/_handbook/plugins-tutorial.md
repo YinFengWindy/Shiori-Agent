@@ -87,7 +87,7 @@ async def setup(ctx):
 | --- | --- |
 | `events` | `ctx.events.on(EventType, handler)`；卸载先停用并退订，再清理其它 effect，与登记先后无关 |
 | `lifecycle` | `ctx.lifecycle.contribute(phase, modules)`；登记阶段模块 |
-| `tools` / `tool_hooks` | 注册工具或工具执行前处理器 |
+| `tools` | 注册工具（工具执行前后的处理改用 `ctx.on(ToolCalling, …)` / `ctx.on(ToolCalled, …)`，无需声明 capability） |
 | `channels` / `bot_commands` | 贡献 manifest 已声明的渠道（见[渠道声明](#渠道声明)）及机器人命令 |
 | `accounts` | `ctx.accounts.register/register_saved/report/...`：向宿主登记通信账号及其归属，随插件作用域释放（见[渠道插件](channel-plugins.md)） |
 | `services` | `ctx.services.register(service_id, contract=, label=, methods=)`：发布可被 renderer 按契约发现、调用的 JSON 服务方法（Runtime API 3.1.1，如语音 `shiori.asr.v1` / `shiori.tts.v1`，见[运行时契约](plugin-runtime-contract.md#runtime-api-311-plugin-services-native-resources-and-background-chat)） |

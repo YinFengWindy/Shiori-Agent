@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from agent.core.turn_events import core_kernel
 from proactive_v2.agent_tick_factory import AgentTickDeps, AgentTickFactory
 from proactive_v2.context import AgentTickContext
 from proactive_v2.mcp_sources import McpClientPool
@@ -51,6 +52,7 @@ def _build_deps(*, with_pool: bool):
         rng=SimpleNamespace(),
         workspace_context_fn=lambda: "",
         role_prompt_fn=lambda: "测试角色提示词",
+        kernel=core_kernel,
         pool=McpClientPool() if with_pool else None,
     )
     return deps

@@ -1,4 +1,4 @@
-"""插件贡献的实时视图：阶段模块与工具 hook 每次使用时从插件内核读取。
+"""插件贡献的实时视图：阶段模块与事件内核每次使用时从插件内核读取。
 
 插件内核（``PluginKernel``）的同名属性每次访问都只汇总当前 ACTIVE 插件的贡献，
 所以消费方持有内核本身而不是启动时复制的列表（派生对象的按需重建见
@@ -10,17 +10,14 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Protocol
+from typing import Protocol
 
 from agent.core.turn_events import core_kernel
 from shiori_sdk.kernel import Kernel
 
-if TYPE_CHECKING:
-    from agent.tool_hooks.base import ToolHook
-
 
 class PluginContributionSource(Protocol):
-    """当前 ACTIVE 插件的阶段模块与工具 hook；每次读取都反映最新启停状态。"""
+    """当前 ACTIVE 插件的阶段模块与事件内核；每次读取都反映最新启停状态。"""
 
     @property
     def before_turn_modules(self) -> Sequence[object]: ...
@@ -44,11 +41,8 @@ class PluginContributionSource(Protocol):
     def after_turn_modules(self) -> Sequence[object]: ...
 
     @property
-    def tool_hooks(self) -> Sequence["ToolHook"]: ...
-
-    @property
     def kernel(self) -> Kernel:
-        """The kernel turn events go through (the generation's, with core checks)."""
+        """The kernel turn and tool events go through (the generation's, with core checks)."""
         ...
 
 
@@ -56,7 +50,7 @@ class PluginContributionSource(Protocol):
 class StaticPluginContributions:
     """内容固定的插件贡献来源；默认实例即未接插件内核时的空来源。
 
-    回合事件经裸内核发出：没有插件，只有核心校验（``core_kernel``）。
+    回合与工具事件经裸内核发出：没有插件，只有核心校验（``core_kernel``）。
     """
 
     before_turn_modules: Sequence[object] = ()
@@ -66,7 +60,6 @@ class StaticPluginContributions:
     after_step_modules: Sequence[object] = ()
     after_reasoning_modules: Sequence[object] = ()
     after_turn_modules: Sequence[object] = ()
-    tool_hooks: Sequence["ToolHook"] = ()
     kernel: Kernel = field(default_factory=core_kernel)
 
 

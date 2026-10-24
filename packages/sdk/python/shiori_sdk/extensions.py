@@ -5,7 +5,6 @@ from collections.abc import Coroutine
 from pathlib import Path
 from typing import Protocol
 from .runtime import PluginRuntimeContext
-from .tool_hooks import ToolHooksCapability
 from .sessions import SessionUndo
 from .memory.engine import MemoryEngine
 from .diagnostics import Diagnostics
@@ -61,12 +60,10 @@ class PrivateStorage(Protocol):
 
 
 class HookPluginContext(PluginRuntimeContext, Protocol):
-    """Granted inputs consumed by tool policy plugins."""
+    """Granted inputs consumed by tool policy plugins (they join ``ToolCalling``)."""
 
     @property
     def workspace(self) -> Path: ...
-    @property
-    def tool_hooks(self) -> ToolHooksCapability: ...
     @property
     def config(self) -> ConfigValues: ...
 

@@ -162,7 +162,7 @@ class _ProcessingMixin:
         logger.info("AgentLoop 停止")
 
     def bind_plugin_contributions(self, plugins: "PluginContributionSource") -> None:
-        """让被动回合的阶段模块与 tool hooks 每次使用时从 ``plugins`` 读取。
+        """让被动回合的阶段模块与工具事件内核每次使用时从 ``plugins`` 读取。
 
         ``plugins`` 通常是本代的插件内核：其中插件被卸载或新加载后，下一次
         回合/工具调用即按当前 ACTIVE 插件执行。

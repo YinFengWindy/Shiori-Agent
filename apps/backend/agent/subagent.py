@@ -10,6 +10,7 @@ SubAgent — 通用子 Agent
         model="deepseek-chat",
         tools=[WebSearchTool(), WebFetchTool()],
         system_prompt="你是中性的后台研究处理器，不扮演角色，也不生成用户可见回复。",
+        kernel=lambda: plugin_kernel.kernel,
     )
     result = await agent.run("调研最新的 agent 相关论文，总结后发给我")
 """
@@ -22,21 +23,19 @@ from typing import Any, Sequence
 from agent.provider import LLMProvider
 from agent.prompting.usage_anchor import independent_usage_context
 from agent.prompting.usage_accounting import current_usage
-from agent.tool_hooks import (
+from agent.tools.execution import (
+    KernelSource,
     ToolExecutionRequest,
+    ToolExecutionResult,
     ToolExecutor,
-    ToolHookSource,
-    append_finalize_skipped_tool_results,
-    is_finalize_denial,
-    no_tool_hooks,
 )
 from agent.tool_runtime import (
     append_assistant_tool_calls,
+    append_finalize_skipped_tool_results,
     append_tool_result,
     prepare_toolset,
     tool_call_batch_snapshot,
 )
-from agent.tool_hooks.types import ToolExecutionResult
 from shiori_sdk.tools import Tool, normalize_tool_result
 
 logger = logging.getLogger(__name__)
@@ -128,9 +127,9 @@ class SubAgent:
         max_iterations: int = 30,
         max_tokens: int = 8192,
         mandatory_exit_tools: Sequence[str] = (),
-        tool_hooks: ToolHookSource = no_tool_hooks,
+        kernel: KernelSource,
     ) -> None:
-        """``tool_hooks`` 在每次工具调用时读取，插件变化对运行中的子任务即时生效。"""
+        """``kernel`` 在每次工具调用时读取，插件变化对运行中的子任务即时生效。"""
         self._provider = provider
         self._model = model
         self._system_prompt = system_prompt
@@ -146,7 +145,7 @@ class SubAgent:
         prepared = prepare_toolset(tools)
         self._tool_map: dict[str, Tool] = prepared.tool_map
         self._tool_schemas: list[dict[str, Any]] = prepared.schemas
-        self._tool_executor = ToolExecutor(tool_hooks)
+        self._tool_executor = ToolExecutor(kernel)
 
     async def run(self, task: str) -> str:
         """执行任务并返回文本结果。
@@ -241,9 +240,9 @@ class SubAgent:
                     content=normalized,
                     tool_name=tc.name,
                 )
-                if is_finalize_denial(exec_result):
+                if exec_result.finalize:
                     logger.warning(
-                        "[subagent] hook 截断重复工具调用 tool=%s，提前收尾",
+                        "[subagent] 插件否决并要求收尾 tool=%s，提前收尾",
                         tc.name,
                     )
                     self.last_exit_reason = "tool_loop"

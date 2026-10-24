@@ -21,7 +21,7 @@ from agent.background.subagent_profiles import (
     SubagentRuntime,
     build_spawn_spec,
 )
-from agent.tool_hooks import ToolHookSource, no_tool_hooks
+from agent.tools.execution import KernelSource
 from bus.internal_events import (
     SpawnCompletionEvent,
 )
@@ -88,11 +88,12 @@ class SubagentManager:
         self._running_jobs: dict[str, RunningSubagentJob] = {}
         self._origins: dict[str, InboundMessage] = {}
         self._cancel_announced: set[str] = set()
-        self._tool_hooks: ToolHookSource = no_tool_hooks
+        # Bound by the runtime once the generation's plugin kernel is loaded.
+        self._kernel: KernelSource | None = None
 
-    def bind_tool_hooks(self, tool_hooks: ToolHookSource) -> None:
-        """子 Agent 的每次工具调用都从 ``tool_hooks`` 读取当前插件 hook。"""
-        self._tool_hooks = tool_hooks
+    def bind_kernel(self, kernel: KernelSource) -> None:
+        """子 Agent 的每次工具调用都经 ``kernel`` 返回的当前插件内核发出事件。"""
+        self._kernel = kernel
 
     def _spawn_jobs_dir(self) -> Path:
         root = self._workspace / "subagent-runs"
@@ -437,7 +438,9 @@ class SubagentManager:
             profile=profile,
             multimodal=self._multimodal,
         )
-        return spec.build(runtime or self._runtime, tool_hooks=self._tool_hooks)
+        if self._kernel is None:
+            raise RuntimeError("子 Agent 需要本代插件内核，但尚未绑定（bind_kernel）")
+        return spec.build(runtime or self._runtime, kernel=self._kernel)
 
     @property
     def role_runtime_enabled(self) -> bool:

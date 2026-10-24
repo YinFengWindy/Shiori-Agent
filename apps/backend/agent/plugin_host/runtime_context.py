@@ -25,7 +25,6 @@ from shiori_sdk.extensions import (
     BackgroundTasks,
     PrivateStorage,
 )
-from shiori_sdk.tool_hooks import ToolHooksCapability
 from shiori_sdk.memory.engine import MemoryEngine
 from shiori_sdk.diagnostics import Diagnostics
 from shiori_sdk.runtime import (
@@ -79,7 +78,6 @@ class PluginSetupContext:
         rpc: RpcCapability | None = None,
         workspace: Path | None = None,
         config: ConfigValues | None = None,
-        tool_hooks: ToolHooksCapability | None = None,
         bot_commands: BotCommands | None = None,
         dependencies: Dependencies | None = None,
         background: BackgroundTasks | None = None,
@@ -120,7 +118,6 @@ class PluginSetupContext:
         self._rpc = rpc
         self._workspace = workspace
         self._config = config
-        self._tool_hooks = tool_hooks
         self._bot_commands = bot_commands
         self._dependencies = dependencies
         self._background = background
@@ -258,11 +255,6 @@ class PluginSetupContext:
         if "config" not in self.granted or self._config is None:
             raise CapabilityNotGranted("Plugin did not request config")
         return self._config
-
-    @property
-    def tool_hooks(self) -> ToolHooksCapability:
-        """Return the explicitly granted tool_hooks capability."""
-        return self._core_capability("tool_hooks", self._tool_hooks)
 
     @property
     def bot_commands(self) -> BotCommands:

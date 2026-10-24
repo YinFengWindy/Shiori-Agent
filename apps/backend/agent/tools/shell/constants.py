@@ -16,6 +16,8 @@ _BLOCK_MAX_MS = (
 _BG_TTL_S = 4 * 3600  # 后台任务最长存活时间：4 小时
 _BG_EVICT_DELAY_S = 300  # 任务完成后延迟 5 分钟清理注册表和日志
 _IS_WINDOWS = os.name == "nt"
+# 工具名：ShellTool 与核心链后校验（agent.tools.execution）共用。
+SHELL_TOOL_NAME = "shell"
 
 # 禁止命令（对应 OpenCode bannedCommands）
 _BANNED = frozenset(

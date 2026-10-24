@@ -85,7 +85,7 @@ from agent.lifecycle.types import (
 from shiori_sdk.lifecycle import AfterStepCtx
 from agent.prompting import DEFAULT_CONTEXT_TRIM_PLANS
 from agent.provider import ContentSafetyError, ContextLengthError
-from agent.tool_hooks import ToolExecutor
+from agent.tools.execution import ToolExecutor
 from agent.tools.external_access import external_tools_restricted
 from bus.event_bus import EventBus
 
@@ -158,7 +158,7 @@ class Reasoner(ABC):
         """
 
     def bind_plugin_contributions(self, plugins: PluginContributionSource) -> None:
-        """子类可重写以实时读取插件的 tool hooks 与步骤阶段模块。默认 no-op。"""
+        """子类可重写以实时读取插件内核与步骤阶段模块。默认 no-op。"""
 
     async def render_prompt(
         self,
@@ -224,8 +224,8 @@ class DefaultReasoner(
             if session_manager is not None and self._compaction is not None
             else None
         )
-        # 插件 hook 与阶段模块每次使用时从当前插件来源读取（#855）。
-        self._tool_executor = ToolExecutor(lambda: self._plugins.tool_hooks)
+        # 工具事件与阶段模块每次使用时从当前插件来源读取（#855、#902）。
+        self._tool_executor = ToolExecutor(lambda: self._plugins.kernel)
         self._stream_sink_factory: (
             Callable[[object], Callable[[dict[str, str] | str], Awaitable[None]] | None]
             | None
@@ -252,7 +252,7 @@ class DefaultReasoner(
         )
 
     def bind_plugin_contributions(self, plugins: PluginContributionSource) -> None:
-        """改为从 ``plugins`` 实时读取 tool hooks 与步骤阶段模块。"""
+        """改为从 ``plugins`` 实时读取插件内核与步骤阶段模块。"""
         self._plugins = plugins
         # 绑定时立即按当前贡献构造一次，模块 slot 冲突等装配错误在启动时暴露。
         self._before_step.current()

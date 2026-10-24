@@ -34,7 +34,6 @@ DEFAULT_DIRECTORIES: tuple[str, ...] = (
     "tests/backend/agent/looping",
     "tests/backend/agent/turns",
     "tests/backend/agent/mcp",
-    "tests/backend/agent/tool_hooks",
     "tests/backend/agent/policies",
     "tests/backend/agent/background",
     "tests/backend/agent/account_delivery",
@@ -88,6 +87,8 @@ DEFAULT_FILES: frozenset[str] = frozenset(
         "tests/backend/agent/core/proactive_turn/test_delivery.py",
         "tests/backend/agent/core/proactive_turn/test_strategies.py",
         "tests/backend/agent/tools/test_registry.py",
+        # 工具执行器（ToolCalling / 核心链后校验 / ToolCalled）的宿主契约，#902。
+        "tests/backend/agent/tools/test_execution.py",
         "tests/backend/agent/tools/test_turn_scope.py",
         "tests/backend/agent/tools/test_message_push.py",
         "tests/backend/scripts/test_check_sdk_imports.py",

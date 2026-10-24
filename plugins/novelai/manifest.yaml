@@ -9,7 +9,6 @@ capabilities:
   - background
   - http
   - tools
-  - tool_hooks
   - events
   - scene_observations
   - light_provider

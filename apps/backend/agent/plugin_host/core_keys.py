@@ -42,7 +42,6 @@ from shiori_sdk.processes import Processes, Resources, ToolTurn
 from shiori_sdk.roles import Roles, SceneObservations
 from shiori_sdk.rpc import RpcCapability
 from shiori_sdk.sessions import PluginSessions, SessionUndo
-from shiori_sdk.tool_hooks import ToolHooksCapability
 from shiori_sdk.tools import ToolsCapability
 from shiori_sdk.kernel import Key, Scope
 from shiori_sdk.runtime import EventsCapability, HostServiceUnavailable
@@ -118,13 +117,6 @@ HOST_DIAGNOSTICS: Key[Diagnostics] = Key("host.diagnostics")
 HOST_TOOLS: Key[PluginCapabilityBinder[ToolsCapability]] = Key("host.tools")
 """The ``tools`` capability over the host ``ToolRegistry`` (``agent.tools``)."""
 
-
-# The hook type (``agent.tool_hooks.ToolHook``) is a host module this layer may
-# not import, so the key leaves it open; ``PluginToolHooks`` types it exactly.
-HOST_TOOL_HOOKS: Key[PluginContributionService[ToolHooksCapability, Any]] = Key(
-    "host.tool_hooks"
-)
-"""The ``tool_hooks`` capability (``agent.tool_hooks``)."""
 
 HOST_TOOL_TURN: Key[Callable[[], ToolTurn]] = Key("host.tool_turn")
 """The ``tool_turn`` capability: the tool turn running in the current task."""
@@ -281,7 +273,6 @@ class CoreCapability:
 CORE_CAPABILITIES: Mapping[str, CoreCapability] = {
     "diagnostics": CoreCapability(HOST_DIAGNOSTICS),
     "tools": CoreCapability(HOST_TOOLS, per_plugin=True),
-    "tool_hooks": CoreCapability(HOST_TOOL_HOOKS, per_plugin=True),
     "tool_turn": CoreCapability(HOST_TOOL_TURN),
     "channels": CoreCapability(HOST_CHANNELS, per_plugin=True),
     "accounts": CoreCapability(HOST_ACCOUNTS, per_plugin=True),

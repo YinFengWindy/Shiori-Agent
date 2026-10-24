@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from typing import Any, cast
 
 from shiori_sdk.tools import Tool, ToolResult, normalize_tool_result
@@ -134,4 +134,29 @@ def append_tool_result(
                 "role": "user",
                 "content": [{"type": "text", "text": prefix}, *result.content_blocks],
             }
+        )
+
+
+# LLM 可见、非用户可见的通用收尾提示：任意插件触发结构化收尾意图时，
+# 同一批次里被跳过的后续 tool_call 都用这条统一文案回填 tool result。
+FINALIZE_SKIPPED_TOOL_CALL_MESSAGE = "工具调用已跳过：本轮工具调用已提前收尾。"
+
+
+def append_finalize_skipped_tool_results(
+    messages: list[dict[str, Any]],
+    skipped_tool_calls: Iterable[Any],
+) -> None:
+    """Backfills a tool result for every batch member a finalize skipped.
+
+    Every ``tool_call`` in an assistant message must get a matching ``tool``
+    result message, or a strict provider / session replay chokes on an
+    unresolved ``tool_call_id``. The passive reasoning loop (both branches)
+    and ``SubAgent`` close a truncated batch this way.
+    """
+    for skipped in skipped_tool_calls:
+        append_tool_result(
+            messages,
+            tool_call_id=skipped.id,
+            content=FINALIZE_SKIPPED_TOOL_CALL_MESSAGE,
+            tool_name=skipped.name,
         )

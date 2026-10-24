@@ -311,18 +311,20 @@ order if one callback fails. A direct build caller supplies and owns that scope.
 Setup plugins declaring `memory` and `rpc` use `MemoryPluginContext`: shared
 Markdown reads, role existence/permissions, storage and current engine are injected,
 while RPC registration remains plugin-owned. `BeforeTurnObservation` exposes only
-inspection fields; `AfterToolResultCtx` is the shared result event. Standalone tests
+inspection fields; tool results arrive as `shiori_sdk.core.tools.ToolCalled`. Standalone tests
 can use `FakeMemoryPluginContext`, `FakeMemoryRoles`, `FakeMemoryStorage` and
 `FakeBuildResources`; real migration and runtime assembly remain host integration tests.
 
 
 ## Tool policies, commands and observation
 
-`shiori_sdk.tools` owns `Tool`, `ToolResult` and result normalization; `tool_hooks`
-owns `PreToolCtx`, `HookOutcome` and registration. Policies remain in plugins.
-`HookOutcome(finalize=True, decision="deny")` requests host summarization while
-ordinary denial leaves the existing execution flow intact. `HookPluginContext`
-provides granted config, workspace and hook registration.
+`shiori_sdk.tools` owns `Tool`, `ToolResult` and result normalization;
+`shiori_sdk.core.tools` owns the tool call events `ToolCalling`, `ToolCalled` and
+`ToolVeto`, which policy plugins join with `ctx.on`. Policies remain in plugins;
+the host's own minimal shell guard runs after every `ToolCalling` chain.
+`ToolVeto(reason, finalize=True)` requests host summarization while ordinary
+denial leaves the existing execution flow intact. `HookPluginContext` provides
+granted config and workspace.
 
 Before-turn command modules accept a `CommandFrame`, read its immutable
 `CommandInput`, and call `frame.abort_command(reply)`. The host constructs the
@@ -346,7 +348,8 @@ Status commands declare `observe` as an optional manifest dependency and resolve
 its public `recent_cache_turns` export for each command. Unload yields an unavailable
 reply; reload uses the new export. Consumers do not inspect Observe's database.
 
-`testing.extensions.FakeExtensionContext`, `testing.hooks.FakeToolHooks`,
+`testing.extensions.FakeExtensionContext` (its `emit` runs the plugin's tool event
+handlers on a bare kernel, without the host's checks),
 `testing.commands.FakeCommandFrame` / `FakeSessionUndo` and
 `testing.diagnostics.FakeDiagnostics` provide independent contract doubles.
 Diagnostics fakes record callbacks without modifying process-wide handlers. Global
