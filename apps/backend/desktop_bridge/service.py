@@ -28,6 +28,7 @@ from bus.events_context import ContextWindowChanged
 from bus.events_lifecycle import ProactiveMessageCommitted, ReplyMessageCommitted
 from shiori_sdk.role_events import RoleDeleted
 from shiori_sdk.memory.committed import TurnCommitted
+from shiori_sdk.memory.engine import MemoryEngine
 from conversation.listening import GroupListeningControl
 from conversation.listening_store import ListeningMessage
 from conversation.service import ConversationService
@@ -91,7 +92,7 @@ class DesktopBridgeService:
         subagent_manager: Any | None = None,
         memory_optimizer: Any | None = None,
         role_runtime_registry: RoleRuntimeRegistry | None = None,
-        memory_engine: Any | None = None,
+        current_memory_engine: Callable[[], MemoryEngine | None] = lambda: None,
         card_import_service: Any | None = None,
         activate_transport: bool = True,
         model_resolver: RoleModelRuntime | None = None,
@@ -138,7 +139,8 @@ class DesktopBridgeService:
             if isinstance(registrations, list)
             else None
         )
-        self.memory_engine = memory_engine
+        # 引擎只留 getter，删角色时现取（D25）。
+        self._current_memory_engine = current_memory_engine
         self._event_listeners: set[
             Callable[[dict[str, Any]], Awaitable[None] | None]
         ] = set()
@@ -446,8 +448,9 @@ class DesktopBridgeService:
         clean_role_id = str(role_id or "").strip()
         if not clean_role_id:
             raise ValueError("role_id required for role deletion lifecycle")
-        if self.memory_engine is not None:
-            invalidate = getattr(self.memory_engine, "invalidate_role_memories", None)
+        engine = self._current_memory_engine()
+        if engine is not None:
+            invalidate = getattr(engine, "invalidate_role_memories", None)
             if not callable(invalidate):
                 raise RuntimeError("memory engine lacks role invalidation capability")
             invalidate(clean_role_id)

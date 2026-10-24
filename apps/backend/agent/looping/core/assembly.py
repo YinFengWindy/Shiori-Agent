@@ -37,7 +37,6 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from agent.lifecycle.phases.before_turn import MemoryConsolidator
-    from shiori_sdk.memory.engine import MemoryEngine
     from core.memory.markdown import MemoryProfileApi
 
 
@@ -64,16 +63,16 @@ class _AssemblyMixin:
         self._active_turn_states: dict[str, TurnInterruptState] = {}
         self._interrupt_states: dict[str, TurnInterruptState] = {}
 
-        # 2. 再解析 memory runtime 入口。
-        memory_engine = self._resolve_memory_runtime(deps)
+        # 2. 再解析 memory 入口：引擎只拿 getter，每次检索现取（D25）。
+        memory_services = self._resolve_memory_services(deps)
         markdown_memory = self._resolve_markdown_runtime(deps)
         self._tool_search_enabled = bool(config.llm.tool_search_enabled)
-        self._memory_engine = memory_engine
         self._markdown_memory = markdown_memory
+        # 没有 markdown 运行时只出现在宿主测试里：测试替身同时充当 markdown profile。
         memory_profile = (
             markdown_memory.store
             if markdown_memory is not None
-            else cast("MemoryProfileApi", self._memory_engine)
+            else cast("MemoryProfileApi", memory_services.current_engine())
         )
         self._context = deps.context or ContextBuilder(
             deps.workspace,
@@ -109,6 +108,7 @@ class _AssemblyMixin:
         self._assemble_passive_runtime(
             deps=deps,
             config=config,
+            memory_services=memory_services,
         )
         self._configure_stream_events()
 
@@ -118,15 +118,15 @@ class _AssemblyMixin:
         self._active_turn_states = previous._active_turn_states
         self._interrupt_states = previous._interrupt_states
 
-    def _resolve_memory_runtime(
+    def _resolve_memory_services(
         self,
         deps: AgentLoopDeps,
-    ) -> "MemoryEngine":
+    ) -> MemoryServices:
+        if deps.memory_services is not None:
+            return deps.memory_services
         if deps.memory_runtime is not None:
-            return deps.memory_runtime.engine
-        if deps.memory_services is not None and deps.memory_services.engine is not None:
-            return deps.memory_services.engine
-        raise ValueError("AgentLoop requires memory_runtime.engine")
+            return MemoryServices(current_engine=deps.memory_runtime.current_engine)
+        raise ValueError("AgentLoop requires memory_runtime or memory_services")
 
     def _resolve_markdown_runtime(
         self,
@@ -141,12 +141,10 @@ class _AssemblyMixin:
         *,
         deps: AgentLoopDeps,
         config: AgentLoopConfig,
+        memory_services: MemoryServices,
     ) -> None:
         # 1. 先组基础 service ports。
         llm_svc = self._llm_services
-        memory_svc = deps.memory_services or MemoryServices(
-            engine=getattr(deps.memory_runtime, "engine", None),
-        )
         session_svc = self._session_services
         # 2. 组执行层。
         self._tool_discovery = deps.tool_discovery or ToolDiscoveryState()
@@ -166,7 +164,7 @@ class _AssemblyMixin:
 
         # 3. 最后串 passive prepare / execute / commit 主链。
         retrieval_pipeline = deps.retrieval_pipeline or DefaultMemoryRetrievalPipeline(
-            memory=memory_svc,
+            memory=memory_services,
         )
         self._retrieval_pipeline = retrieval_pipeline
         passive_context_store = DefaultContextStore(

@@ -80,8 +80,9 @@ async def test_preview_failure_prevents_session_deletion():
         def undo_by_message_sources(self, message_ids, *, dry_run=False):
             raise RuntimeError("preview failed")
 
+    memory = BrokenMemory()
     with pytest.raises(RuntimeError, match="preview failed"):
-        await PluginUndo(manager, BrokenMemory()).undo("cli:1")
+        await PluginUndo(manager, lambda: memory).undo("cli:1")
     assert not manager.deleted
 
 
@@ -89,7 +90,7 @@ async def test_preview_failure_prevents_session_deletion():
 async def test_no_passive_turn_does_not_touch_memory():
     memory = _MemoryEngine()
     assert (
-        await PluginUndo(FakeSessionUndo(), memory).undo("cli:1")
+        await PluginUndo(FakeSessionUndo(), lambda: memory).undo("cli:1")
         == "没有可撤销的上一轮对话。"
     )
     assert memory.calls == []
@@ -98,7 +99,7 @@ async def test_no_passive_turn_does_not_touch_memory():
 @pytest.mark.asyncio
 async def test_missing_memory_still_undoes_session():
     manager = FakeSessionUndo(UndoSessionResult(["u", "a"], "u", "a", 0, 0, 0))
-    assert "失效记忆：0 条" in await PluginUndo(manager, None).undo("cli:1")
+    assert "失效记忆：0 条" in await PluginUndo(manager, lambda: None).undo("cli:1")
 
 
 @pytest.mark.asyncio

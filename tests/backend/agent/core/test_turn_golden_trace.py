@@ -314,6 +314,7 @@ async def golden_host(
     bus = EventBus()
     provider = ScriptedProvider()
     retrieval = RecordingRetrieval()
+    memory_engine = cast(Any, _MemoryEngine())
     loop = AgentLoop(
         AgentLoopDeps(
             bus=MagicMock(),
@@ -323,7 +324,7 @@ async def golden_host(
             session_manager=manager,
             workspace=workspace,
             event_bus=bus,
-            memory_services=MemoryServices(engine=cast(Any, _MemoryEngine())),
+            memory_services=MemoryServices(current_engine=lambda: memory_engine),
             retrieval_pipeline=retrieval,
             role_runtime_registry=RoleRuntimeRegistry(
                 RoleRepository(roles), model_resolver=cast(Any, _ModelRuntime())

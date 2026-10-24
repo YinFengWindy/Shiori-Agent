@@ -213,6 +213,7 @@ class ExternalTurnHost:
         tools.register(NamedTool("user_only"), always_on=True)
         tools.register(NamedTool("public"), always_on=True, external_allowed=True)
         directory = ChannelDirectory()
+        memory_engine = cast(Any, _MemoryEngine())
         self.loop = AgentLoop(
             AgentLoopDeps(
                 bus=MagicMock(),
@@ -221,7 +222,7 @@ class ExternalTurnHost:
                 tools=tools,
                 session_manager=self.manager,
                 workspace=workspace,
-                memory_services=MemoryServices(engine=cast(Any, _MemoryEngine())),
+                memory_services=MemoryServices(current_engine=lambda: memory_engine),
                 role_runtime_registry=RoleRuntimeRegistry(
                     RoleRepository(self.roles), model_resolver=_ModelRuntime()
                 ),

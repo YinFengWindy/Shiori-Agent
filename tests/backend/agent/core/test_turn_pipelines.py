@@ -315,6 +315,7 @@ def _make_loop(
 ) -> AgentLoop:
     tools = ToolRegistry()
     tools.register(_NoopTool())
+    memory_engine = cast(Any, _FakeMemoryEngine())
     return AgentLoop(
         AgentLoopDeps(
             bus=MagicMock(),
@@ -325,7 +326,7 @@ def _make_loop(
                 session_manager if session_manager is not None else MagicMock()
             ),
             workspace=tmp_path,
-            memory_services=MemoryServices(engine=cast(Any, _FakeMemoryEngine())),
+            memory_services=MemoryServices(current_engine=lambda: memory_engine),
             retrieval_pipeline=retrieval_pipeline,
         ),
         AgentLoopConfig(),

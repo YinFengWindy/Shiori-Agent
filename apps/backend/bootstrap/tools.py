@@ -296,7 +296,6 @@ def build_registered_tools(
                 provider=provider,
                 light_provider=light_provider,
                 bus=bus,
-                memory_engine=memory_runtime.engine,
                 scheduler=scheduler,
                 event_publisher=event_publisher,
                 role_runtime_registry=role_runtime_registry,
@@ -354,10 +353,9 @@ def _build_loop_deps(
         context.set_group_environment(group_environment)
         if channel_directory is not None:
             context.set_channel_directory(channel_directory)
-    memory_engine = memory_runtime.engine
     light = light_provider or provider
     llm_services = LLMServices(provider=provider, light_provider=light)
-    memory_services = MemoryServices(engine=memory_engine)
+    memory_services = MemoryServices(current_engine=memory_runtime.current_engine)
     session_services = SessionServices(
         session_manager=session_manager,
         presence=presence,
@@ -726,7 +724,9 @@ def build_core_runtime(
                 role_runtime_registry=role_runtime_registry,
                 light_provider=plugin_light_provider,
                 light_model=plugin_light_model,
-                memory_engine=memory_runtime.engine,
+                # Provided once into this generation's kernel; plugins read it
+                # through their context (P3-7b replaces it with MEMORY_ENGINE).
+                memory_engine=memory_runtime.current_engine(),
                 external_turns=external_turns,
                 background_results=background_results,
                 http=http_resources.external_default,

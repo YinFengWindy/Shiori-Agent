@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+from collections.abc import Callable
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
@@ -10,8 +11,6 @@ from shiori_sdk.memory.build import BuildResource
 if TYPE_CHECKING:
     from shiori_sdk.memory.engine import (
         MemoryEngine,
-        MemoryMutation,
-        MemoryMutationResult,
         MemoryQuery,
         MemoryQueryResult,
     )
@@ -20,10 +19,16 @@ if TYPE_CHECKING:
 
 @dataclass
 class MemoryRuntime:
-    """Markdown memory, the selected engine, and the engine's transferred resources."""
+    """Markdown memory, the selected engine's getter, and its transferred resources.
+
+    ``current_engine`` is the one source every engine consumer reads: callers
+    take the getter and call it on each use, never keeping the engine itself
+    (D25). It answers the engine bootstrap built for this generation,
+    ``DisabledMemoryEngine`` when memory is off.
+    """
 
     markdown: "MarkdownMemoryRuntime"
-    engine: "MemoryEngine"
+    current_engine: Callable[[], "MemoryEngine"]
     resources: list[BuildResource] = field(default_factory=list)
     _session_metadata_var: ContextVar[dict[str, Any] | None] = field(
         default_factory=lambda: ContextVar(
@@ -74,13 +79,7 @@ class MemoryRuntime:
         self,
         request: "MemoryQuery",
     ) -> "MemoryQueryResult":
-        return await self.engine.query(request)
-
-    async def mutate(
-        self,
-        request: "MemoryMutation",
-    ) -> "MemoryMutationResult":
-        return await self.engine.mutate(request)
+        return await self.current_engine().query(request)
 
     async def aclose(self) -> None:
         """Runs transferred cleanups in reverse order and re-raises the first error."""

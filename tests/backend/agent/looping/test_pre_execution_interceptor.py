@@ -59,6 +59,7 @@ def _make_loop(
 ) -> AgentLoop:
     tools = ToolRegistry()
     tools.register(tool)
+    memory_engine = FakeMemoryEngine(tmp_path)
     return AgentLoop(
         AgentLoopDeps(
             bus=MagicMock(),
@@ -66,7 +67,7 @@ def _make_loop(
             tools=tools,
             session_manager=MagicMock(),
             workspace=tmp_path,
-            memory_services=MemoryServices(engine=FakeMemoryEngine(tmp_path)),
+            memory_services=MemoryServices(current_engine=lambda: memory_engine),
         ),
         AgentLoopConfig(llm=LLMConfig(max_iterations=5)),
     )

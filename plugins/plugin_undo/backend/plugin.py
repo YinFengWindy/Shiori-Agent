@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from shiori_sdk.commands import CommandInput
@@ -14,17 +15,25 @@ logger = logging.getLogger("plugin.undo")
 
 
 class PluginUndo:
-    """Coordinate public session undo and memory source cleanup."""
+    """Coordinate public session undo and memory source cleanup.
+
+    ``current_memory`` answers the memory engine to clean up, or None without
+    one; each undo reads it afresh instead of keeping the engine (D25).
+    """
 
     def __init__(
-        self, session_manager: SessionUndo, memory_engine: MemoryUndo | None
+        self,
+        session_manager: SessionUndo,
+        current_memory: Callable[[], MemoryUndo | None],
     ) -> None:
         self._session_manager = session_manager
-        self._memory_engine = memory_engine
+        self._current_memory = current_memory
 
     async def undo(self, session_key: str) -> str:
         """Undo the latest committed passive turn and report memory cleanup results."""
         session_manager = self._session_manager
+        # One engine for the whole undo: the dry run and the cleanup must agree.
+        memory_engine = self._current_memory()
         memory_result: dict[str, object] = {
             "affected_ids": [],
             "restored_ids": [],
@@ -36,7 +45,7 @@ class PluginUndo:
             nonlocal memory_result, message_ids_for_memory
             message_ids_for_memory = list(message_ids)
             memory_result = _undo_memory_sources(
-                self._memory_engine,
+                memory_engine,
                 message_ids,
                 dry_run=True,
             )
@@ -50,7 +59,7 @@ class PluginUndo:
             return "没有可撤销的上一轮对话。"
         try:
             memory_result = _undo_memory_sources(
-                self._memory_engine,
+                memory_engine,
                 message_ids_for_memory or result.deleted_ids,
                 dry_run=False,
             )
@@ -102,10 +111,12 @@ def _string_list(value: object) -> list[str]:
 
 async def setup(ctx: "PluginRuntimeContext") -> None:
     """Register the scoped ``/undo`` command."""
-    engine = ctx.memory_engine
-    plugin = PluginUndo(
-        ctx.session_manager, engine if isinstance(engine, MemoryUndo) else None
-    )
+
+    def current_memory() -> MemoryUndo | None:
+        engine = ctx.memory_engine
+        return engine if isinstance(engine, MemoryUndo) else None
+
+    plugin = PluginUndo(ctx.session_manager, current_memory)
 
     async def undo(command: CommandInput) -> str:
         return await plugin.undo(command.session_key)

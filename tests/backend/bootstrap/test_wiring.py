@@ -547,7 +547,7 @@ def test_build_registered_tools_respects_toolset_order_and_subset(
     class _MemoryProvider:
         def register(self, registry, deps):
             calls.append("memory")
-            runtime = SimpleNamespace(engine=object())
+            runtime = SimpleNamespace()
             return SimpleNamespace(extras={"memory_runtime": runtime})
 
     class _ToolsetProvider:
@@ -657,7 +657,7 @@ def test_build_loop_deps_uses_context_factory(monkeypatch, tmp_path: Path):
         memory_runtime=cast(
             Any,
             SimpleNamespace(
-                engine=object(),
+                current_engine=object,
                 markdown=SimpleNamespace(
                     store=markdown_store,
                     maintenance=markdown_maintenance,
@@ -861,7 +861,7 @@ def test_build_registered_tools_without_mcp_toolset_still_returns_empty_registry
         "bootstrap.tools.resolve_memory_toolset_provider",
         lambda name: SimpleNamespace(
             register=lambda registry, deps: SimpleNamespace(
-                extras={"memory_runtime": SimpleNamespace(engine=object())}
+                extras={"memory_runtime": SimpleNamespace()}
             )
         ),
     )
