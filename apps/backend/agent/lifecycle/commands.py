@@ -1,4 +1,4 @@
-"""Shared command parsing and before-turn replies for command contributions."""
+"""The turn result of a bot command answered before retrieval (see ``before_turn``)."""
 
 from agent.lifecycle.types import BeforeTurnCtx, TurnState
 

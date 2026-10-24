@@ -6,6 +6,7 @@ from pathlib import Path
 from shiori_sdk.sessions import SessionUndo
 from shiori_sdk.memory.engine import MemoryEngine
 from shiori_sdk.extensions import Dependencies
+from shiori_sdk.kernel import Kernel
 from shiori_sdk.runtime import HostServiceUnavailable
 from .context import FakePluginContext
 from .diagnostics import FakeDiagnostics
@@ -26,17 +27,6 @@ class FakeConfig:
     def resolve_reference(self, value: str) -> str:
         """Return a test-provided runtime resolution, keeping unknown references unchanged."""
         return self.references.get(value, value)
-
-
-class FakeBotCommands:
-    """Record command-menu registration."""
-
-    def __init__(self):
-        self.commands: list[tuple[str, str]] = []
-
-    def add(self, command: str, description: str) -> None:
-        """Record one contribution."""
-        self.commands.append((command, description))
 
 
 class FakeDependencies:
@@ -91,6 +81,8 @@ class FakeExtensionContext(FakePluginContext):
     ``workspace`` and ``session_manager`` left as ``None`` model a host that lacks
     the service: reading them raises ``HostServiceUnavailable`` like the host does.
     ``memory_engine`` stays optional because the host has none when memory is off.
+    ``kernel`` and ``inject`` are those of ``FakePluginContext``: provide a
+    ``CommandRegistry`` as ``COMMANDS`` on ``kernel`` for a command plugin.
     """
 
     def __init__(
@@ -102,11 +94,12 @@ class FakeExtensionContext(FakePluginContext):
         dependencies: Dependencies | None = None,
         session_manager: SessionUndo | None = None,
         memory_engine: MemoryEngine | None = None,
+        kernel: Kernel | None = None,
+        inject: tuple[str, ...] = (),
     ):
-        super().__init__(plugin_id)
+        super().__init__(plugin_id, kernel=kernel, inject=inject)
         self._workspace = workspace
         self.config = FakeConfig(config)
-        self.bot_commands = FakeBotCommands()
         self.dependencies = dependencies or FakeDependencies()
         self._session_manager = session_manager
         self.memory_engine = memory_engine
@@ -131,10 +124,3 @@ class FakeExtensionContext(FakePluginContext):
                 self.plugin_id, "session_manager", ("session_manager",)
             )
         return self._session_manager
-
-    async def aclose(self) -> None:
-        """Remove subscriptions and reverse cleanups, then clear contributions."""
-        try:
-            await super().aclose()
-        finally:
-            self.bot_commands.commands.clear()

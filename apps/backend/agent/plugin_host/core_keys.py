@@ -31,7 +31,7 @@ from shiori_sdk.channels import Channel
 from shiori_sdk.channels.avatars import AvatarsCapability
 from shiori_sdk.channels.context import ChannelsCapability
 from shiori_sdk.diagnostics import Diagnostics
-from shiori_sdk.extensions import BackgroundTasks, BotCommands
+from shiori_sdk.extensions import BackgroundTasks
 from shiori_sdk.external_turns import ExternalTurns
 from shiori_sdk.http import HttpClient
 from shiori_sdk.memory.context import MemoryCapability
@@ -218,11 +218,6 @@ HOST_EXTERNAL_TURNS: Key[ExternalTurns] = Key("host.external_turns")
 HOST_BACKGROUND_RESULTS: Key[BackgroundResults] = Key("host.background_results")
 """The ``background_results`` capability (``conversation``)."""
 
-HOST_BOT_COMMANDS: Key[PluginContributionService[BotCommands, tuple[str, str]]] = Key(
-    "host.bot_commands"
-)
-"""The ``bot_commands`` capability: command-menu entries (``conversation``)."""
-
 HOST_BACKGROUND: Key[PluginCapabilityBinder[BackgroundTasks]] = Key("host.background")
 """The ``background`` capability: plugin-scoped tasks (``core.common``)."""
 
@@ -289,7 +284,6 @@ CORE_CAPABILITIES: Mapping[str, CoreCapability] = {
     "resources": CoreCapability(HOST_RESOURCES),
     "external_turns": CoreCapability(HOST_EXTERNAL_TURNS),
     "background_results": CoreCapability(HOST_BACKGROUND_RESULTS),
-    "bot_commands": CoreCapability(HOST_BOT_COMMANDS, per_plugin=True),
     "background": CoreCapability(HOST_BACKGROUND, per_plugin=True),
     "events": CoreCapability(HOST_EVENTS, per_plugin=True),
     "rpc": CoreCapability(HOST_RPC, per_plugin=True),

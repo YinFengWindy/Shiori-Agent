@@ -2,52 +2,19 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
-from shiori_sdk.commands import CommandFrame, normalize_command
-from shiori_sdk.lifecycle import LifecycleFrame
+from shiori_sdk.commands import CommandInput
 from shiori_sdk.prompting import is_context_frame
 
 from .formatting import content_to_text, preview_text
 
-logger = logging.getLogger("plugin.status_commands")
-_SESSION_SLOT = "session:session"
-_CTX_SLOT = "session:ctx"
 
-
-class MemoryStatusCommandModule:
-    """Reply with the current session consolidation status before retrieval."""
-
-    slot = "status_commands.memory_status"
-    requires = ("before_turn.acquire_session", _SESSION_SLOT)
-    produces = (_CTX_SLOT,)
-
-    async def run[FrameT: LifecycleFrame](self, frame: FrameT) -> FrameT:
-        """Handle memory-status commands, preserving an earlier command abort."""
-        if _CTX_SLOT in frame.slots or not isinstance(frame, CommandFrame):
-            return frame
-        state = frame.command
-        command = normalize_command(state.content)
-        if command not in {
-            "/memorystatus",
-            "/memory_status",
-            "/compact_status",
-        }:
-            return frame
-        if not state.has_session:
-            return frame
-        messages = [dict(message) for message in state.messages]
-        last = max(0, state.last_consolidated)
-        last = min(last, len(messages))
-        logger.info(
-            "[%s:%s] 命中命令: %s",
-            "status_commands",
-            self.__class__.__name__,
-            command,
-        )
-        frame.abort_command(_format_memory_status_reply(messages, last))
-        return frame
+async def memory_status(command: CommandInput) -> str:
+    """Reply with the session's consolidation status, leaving the session unchanged."""
+    messages = [dict(message) for message in command.messages]
+    last = min(max(0, command.last_consolidated), len(messages))
+    return _format_memory_status_reply(messages, last)
 
 
 def _format_memory_status_reply(

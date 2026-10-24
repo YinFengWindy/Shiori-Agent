@@ -38,7 +38,7 @@ flowchart TD
   N --> O[Session commit + bridge events]
 ```
 
-`/compact` 命令在进入回合前被拦截（桌面端在 `desktop_bridge/chat_requests.py`，渠道在 `agent/looping/core/context_window.py`），走手动压缩而不是普通回合。
+`/compact` 命令在进入回合前被拦截（桌面端在 `desktop_bridge/chat_requests.py`，渠道在 `agent/looping/core/context_window.py`），走手动压缩而不是普通回合。插件注册在核心 `COMMANDS` 上的命令（如 `/undo`、`/memorystatus`）在 BeforeTurn 里应答：`acquire_session` 之后、记忆积压检查与检索之前，命中即以 handler 的返回文本作为 abort 回复，不调用模型。
 
 ## 对外事件契约
 

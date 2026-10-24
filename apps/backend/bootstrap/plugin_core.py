@@ -23,7 +23,6 @@ from agent.plugin_host.core_keys import (
     HOST_AVATARS,
     HOST_BACKGROUND,
     HOST_BACKGROUND_RESULTS,
-    HOST_BOT_COMMANDS,
     HOST_BRIDGE,
     HOST_CHANNELS,
     HOST_CONFIG_REFERENCES,
@@ -58,7 +57,6 @@ from bootstrap.memory_capabilities import HostMemoryCapability
 from bootstrap.plugin_capability import HostResources
 from bus.event_bus import EventBus
 from bus.plugin_capability import PluginEvents
-from conversation.plugin_capability import PluginBotCommands
 from core.accounts.plugin_capability import PluginAccounts
 from core.channels.plugin_capability import PluginAvatars, PluginChannels
 from core.common.diagnostics import HostDiagnostics
@@ -76,6 +74,8 @@ from infra.process.plugin_capability import HostProcesses
 from session.manager import SessionManager
 from session.plugin_capability import HostSessions
 from shiori_sdk.background_results import BackgroundResults
+from shiori_sdk.commands import CommandRegistry
+from shiori_sdk.core.conversation import COMMANDS
 from shiori_sdk.core.crash_reporting import CRASH_REPORTING
 from shiori_sdk.external_turns import ExternalTurns
 from shiori_sdk.http import HttpClient
@@ -233,12 +233,12 @@ def plugin_core_modules(inputs: PluginCoreInputs) -> tuple[CoreModule, ...]:
         provide(HOST_RESOURCES, resources)
 
     def provide_conversation(provide: CoreProvide) -> None:
-        """External turns, background results and bot commands (``conversation``)."""
+        """External turns, background results and ``COMMANDS`` (``conversation``)."""
         if inputs.external_turns is not None:
             provide(HOST_EXTERNAL_TURNS, inputs.external_turns)
         if inputs.background_results is not None:
             provide(HOST_BACKGROUND_RESULTS, inputs.background_results)
-        provide(HOST_BOT_COMMANDS, PluginBotCommands())
+        provide(COMMANDS, CommandRegistry())
 
     def provide_background(provide: CoreProvide) -> None:
         """Plugin-scoped background tasks (``core.common``)."""

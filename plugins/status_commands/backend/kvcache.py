@@ -9,8 +9,6 @@ from typing import Protocol, runtime_checkable
 from collections.abc import Sequence
 from zoneinfo import ZoneInfo
 
-from shiori_sdk.commands import CommandFrame, normalize_command
-from shiori_sdk.lifecycle import LifecycleFrame
 from shiori_sdk.extensions import Dependencies
 from shiori_sdk.commands import CommandInput
 from shiori_sdk.prompting import is_context_frame
@@ -41,35 +39,18 @@ class CacheReader(Protocol):
 
 
 logger = logging.getLogger("plugin.status_commands")
-_SESSION_SLOT = "session:session"
-_CTX_SLOT = "session:ctx"
 _TS_PATTERN = re.compile(r"(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})")
 _BEIJING_TZ = ZoneInfo("Asia/Shanghai")
 
 
-class KVCacheCommandModule:
+class KVCacheCommand:
     """Read telemetry on demand without requiring observe to be installed."""
-
-    slot = "status_commands.kvcache"
-    requires = ("before_turn.acquire_session", _SESSION_SLOT)
-    produces = (_CTX_SLOT,)
 
     def __init__(self, dependencies: Dependencies) -> None:
         self._dependencies = dependencies
 
-    async def run[FrameT: LifecycleFrame](self, frame: FrameT) -> FrameT:
-        """Handle cache commands before retrieval, keeping prior aborts intact."""
-        if _CTX_SLOT in frame.slots or not isinstance(frame, CommandFrame):
-            return frame
-        state = frame.command
-        command = normalize_command(state.content)
-        if command not in {"/kvcache", "/cache_status"}:
-            return frame
-        logger.info("[status_commands:%s] 命中命令: %s", type(self).__name__, command)
-        frame.abort_command(self._build_reply(state))
-        return frame
-
-    def _build_reply(self, state: CommandInput) -> str:
+    async def __call__(self, state: CommandInput) -> str:
+        """Report the session's recent cache turns (``/kvcache [limit]``)."""
         # Re-resolve each command so provider unload/reload cannot retain a stale API.
         reader = self._dependencies.get_optional("observe")
         if reader is None:

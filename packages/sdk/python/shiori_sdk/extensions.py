@@ -19,12 +19,6 @@ class ConfigValues(Protocol):
         ...
 
 
-class BotCommands(Protocol):
-    """Contribute command-menu entries for this generation."""
-
-    def add(self, command: str, description: str) -> None: ...
-
-
 class Dependencies(Protocol):
     """Resolve the current export only for explicitly declared dependencies."""
 
@@ -69,10 +63,8 @@ class HookPluginContext(PluginRuntimeContext, Protocol):
 
 
 class CommandPluginContext(PluginRuntimeContext, Protocol):
-    """Command registration and bounded undo/dependency services."""
+    """Undo and dependency services for command plugins (they inject ``COMMANDS``)."""
 
-    @property
-    def bot_commands(self) -> BotCommands: ...
     @property
     def dependencies(self) -> Dependencies: ...
     @property

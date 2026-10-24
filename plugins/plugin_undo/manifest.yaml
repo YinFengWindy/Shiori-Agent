@@ -5,7 +5,7 @@ display_name: 撤销回合
 version: '0.1.1'
 desc: 撤销最近被动回合并清理关联记忆来源
 capabilities:
-  - lifecycle
-  - bot_commands
   - session_manager
   - memory_engine
+inject:
+  - commands

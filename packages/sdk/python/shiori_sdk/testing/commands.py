@@ -1,29 +1,11 @@
-"""Command-phase inputs and explicit session-undo outcomes for independent tests."""
+"""Explicit session-undo outcomes for independent command tests.
+
+Command registrations need no fake: provide ``shiori_sdk.commands.CommandRegistry``
+as ``COMMANDS`` on the fake context's kernel.
+"""
 
 from collections.abc import Callable
-from dataclasses import dataclass, field
-from shiori_sdk.commands import CommandInput
 from shiori_sdk.sessions import UndoSessionResult
-
-
-@dataclass
-class FakeCommandReply:
-    """The abort requested by a command contributor."""
-
-    abort_reply: str
-    abort: bool = True
-
-
-@dataclass
-class FakeCommandFrame:
-    """A phase view with no retrieval, session storage or model execution."""
-
-    command: CommandInput
-    slots: dict[str, object] = field(default_factory=dict)
-
-    def abort_command(self, reply: str) -> None:
-        """Record the command's request using the normal abort slot."""
-        self.slots["session:ctx"] = FakeCommandReply(reply)
 
 
 class FakeSessionUndo:
