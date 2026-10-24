@@ -280,7 +280,7 @@ Optimizer 定时任务
 | `apps/backend/proactive_v2/tools.py` | `query(intent="interest")` | proactive tick 中评估内容候选时调用，查询用户对某条内容是否可能感兴趣 |
 | `apps/backend/agent/tools/memorize.py` | `mutate(kind="remember")` | `memorize` 工具。用户要求"记住..."时调用 |
 | `apps/backend/agent/tools/forget_memory.py` | `mutate(kind="forget")` | `forget_memory` 工具。用户纠正错误记忆时调用 |
-| `apps/backend/core/memory/runtime.py` | `query()` / `mutate()` | `MemoryRuntime` 薄封装层，统一入口 |
+| `apps/backend/core/memory/runtime.py` | `query()` | `MemoryRuntime` 薄封装层：每次调用都经 `current_engine()` 现取引擎，主动链路经它检索 |
 | `apps/backend/core/memory/plugin.py` | 全部方法 | `DisabledMemoryEngine` — 记忆关闭时的空实现，所有方法都返回空/报错 |
 
 ### 引擎如何注入
@@ -289,10 +289,11 @@ Optimizer 定时任务
 bootstrap/memory.py → engine = plugin_runtime.engine（记忆关闭时 DisabledMemoryEngine）
     ├── register_memory_meta_tools(tools, engine) → 按 engine.tool_profile() 注册 memorize / forget_memory / recall_memory
     ↓
-  MemoryRuntime(markdown=..., engine=...)
-    ↓
-    ├── 被动 reply: DefaultMemoryRetrievalPipeline → engine.query(intent="context")
-    └── 插件宿主服务 memory_engine → 声明 memory_engine capability 的插件通过 ctx.memory_engine 访问
+  MemoryRuntime(markdown=..., current_engine=lambda: engine)
+    ↓  消费方只拿 getter `current_engine`，每次使用时调用，不长期持有引擎（D25）
+    ├── 被动 reply: MemoryServices(current_engine) → DefaultMemoryRetrievalPipeline → current_engine().query(intent="context")
+    ├── 桌面端删角色: DesktopBridgeService 现取引擎调用 invalidate_role_memories
+    └── 插件宿主服务 memory_engine → 本代内核构造时取一次 provide；声明 memory_engine capability 的插件通过 ctx.memory_engine 访问（plugin_undo 每次 /undo 现读）
     ↓
   proactive_v2/tools.py → ToolDeps.memory → query(intent="interest")
 ```

@@ -19,7 +19,7 @@ related:
 
 ## 分层
 
-- `packages/sdk/python/shiori_sdk/memory/` 定义 `MemoryEngine`、`MemoryQuery`、变更、ingest 和构造（build）契约；`apps/backend/core/memory/plugin.py` 只保留宿主的 `DisabledMemoryEngine` 并转引这些契约，`core/memory/runtime.py` 的 `MemoryRuntime` 把 Markdown 记忆、选中的引擎和其构造资源装在一起。
+- `packages/sdk/python/shiori_sdk/memory/` 定义 `MemoryEngine`、`MemoryQuery`、变更、ingest 和构造（build）契约；`apps/backend/core/memory/plugin.py` 只保留宿主的 `DisabledMemoryEngine` 并转引这些契约，`core/memory/runtime.py` 的 `MemoryRuntime` 把 Markdown 记忆、选中引擎的 getter（`current_engine`）和其构造资源装在一起；引擎消费方（被动检索、桌面端删角色、主动检索）只拿这个 getter、每次使用时调用，不长期持有引擎（D25）。
 - `apps/backend/core/memory/markdown/` 是宿主拥有的 Markdown 记忆层：后台维护队列与整理提交（`maintenance.py`、`consolidation.py`）、近期上下文（`recent_context.py`）、用户层整理（`user_layer.py`，#496）和外部段整理（`external_segment.py`，#497）。
 - 记忆分层（#475）中由宿主直接写入、不经过记忆引擎的两层：群环境层 `core/memory/group_environment.py`（每个外部会话的最近动态写在 `thread_state.summary`，群笔记在角色记忆目录 `memory/groups/`）与成员层 `core/memory/member_profiles.py`（按「渠道 + 发送者 ID」一份 `memory/members/` 档案，用户本人不建档）。二者的写入互斥与整理提交时的乐观校验在 `core/memory/external_writes.py`。
 - `plugins/default_memory/` 是默认记忆引擎插件：`backend/engine/` 实现 SDK 的 `MemoryEngine`（查询、显式召回的 HyDE 假设生成、变更、管理、提示词），`backend/semantic/` 拥有原 memory2 的 SQLite 存储（`MemoryStore2`，默认 `plugin-data/default_memory/memory2.db`）、向量编码与召回、去重、procedure 查询构造与标签、记忆写入和响应后 worker。原 `apps/backend/memory2/` 已不存在。

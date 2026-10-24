@@ -26,11 +26,6 @@ class LLMServices:
 
 
 @dataclass
-class MemoryServices:
-    engine: object
-
-
-@dataclass
 class ToolDiscoveryState:
     """解析 tool_search 结果中的解锁名单。
 

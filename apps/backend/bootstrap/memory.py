@@ -129,7 +129,7 @@ def build_memory_runtime(
 
     return MemoryRuntime(
         markdown=markdown,
-        engine=engine,
+        current_engine=lambda: engine,
         resources=resources,
     )
 

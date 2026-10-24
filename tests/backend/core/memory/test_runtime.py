@@ -31,7 +31,7 @@ class _MarkdownStub:
 def test_memory_runtime_bind_session_metadata_is_task_local() -> None:
     runtime = MemoryRuntime(
         markdown=_MarkdownStub(),  # type: ignore[arg-type]
-        engine=SimpleNamespace(),
+        current_engine=SimpleNamespace,
     )
     first_ready = asyncio.Event()
     second_ready = asyncio.Event()
@@ -59,7 +59,7 @@ def test_memory_runtime_bind_session_metadata_is_task_local() -> None:
 def test_memory_runtime_bind_session_metadata_none_clears_current_task_state() -> None:
     runtime = MemoryRuntime(
         markdown=_MarkdownStub(),  # type: ignore[arg-type]
-        engine=SimpleNamespace(),
+        current_engine=SimpleNamespace,
     )
 
     runtime.bind_session_metadata({"role_id": "mira"})

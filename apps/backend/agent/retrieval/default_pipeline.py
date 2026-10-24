@@ -24,12 +24,13 @@ class DefaultMemoryRetrievalPipeline(MemoryRetrievalPipeline):
 
     # 被动预检索入口：只转换请求形状，检索语义统一交给 MemoryEngine。
     async def retrieve(self, request: RetrievalRequest) -> RetrievalResult:
-        # 1. 没有启用记忆引擎时，主链继续无记忆回复。
-        if self._memory.engine is None:
+        # 1. 每次检索都现取当前引擎；没有启用记忆引擎时，主链继续无记忆回复。
+        engine = self._memory.current_engine()
+        if engine is None:
             return RetrievalResult(block="", trace=None)
 
         # 2. 把 agent loop 的上下文转成 engine 的稳定请求协议。
-        result = await self._memory.engine.query(
+        result = await engine.query(
             MemoryQuery(
                 text=request.message,
                 intent="context",

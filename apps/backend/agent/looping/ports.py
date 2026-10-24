@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -64,7 +65,12 @@ class LLMServices:
 
 @dataclass
 class MemoryServices:
-    engine: MemoryEngine | None = None
+    """The memory engine getter; call it on each use, never keep the engine (D25).
+
+    The getter answers None when no engine is installed.
+    """
+
+    current_engine: Callable[[], MemoryEngine | None]
 
 
 @dataclass

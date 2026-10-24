@@ -29,7 +29,7 @@ def build_desktop_service(
         subagent_manager=getattr(spawn, "manager", None),
         memory_optimizer=runtime.memory_optimizer,
         role_runtime_registry=registry,
-        memory_engine=runtime.memory_runtime.engine,
+        current_memory_engine=runtime.memory_runtime.current_engine,
         plugin_rpc_registry=runtime.plugin_rpc,
         group_environment=runtime.group_environment,
         group_listening=runtime.group_listening,

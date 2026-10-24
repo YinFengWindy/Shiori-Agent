@@ -27,7 +27,6 @@ class ToolsetDeps:
     push_tool: "MessagePushTool | None" = None
     bus: "MessageBus | None" = None
     scheduler: "SchedulerService | None" = None
-    memory_engine: object | None = None
     event_publisher: "EventBus | None" = None
 
 
