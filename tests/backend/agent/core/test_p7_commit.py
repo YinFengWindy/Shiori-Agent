@@ -305,8 +305,7 @@ async def test_new_chain_after_reasoning_persists_meme_and_fires_turn_committed(
         dispatch=AsyncMock(side_effect=lambda *a, **kw: order.append("dispatch")),
     )
     plugin_root = tmp_path / "plugins"
-    for plugin_id in ("citation", "meme"):
-        stage_plugin_package(plugin_directory(plugin_id), plugin_root / plugin_id)
+    stage_plugin_package(plugin_directory("meme"), plugin_root / "meme")
     kernel = host_kernel(
         [plugin_root],
         settings=PluginGenerationSettings(workspace=tmp_path),
@@ -315,7 +314,7 @@ async def test_new_chain_after_reasoning_persists_meme_and_fires_turn_committed(
         event_bus=event_bus,
     )
     await kernel.load_all()
-    assert kernel.loaded_count == 2
+    assert kernel.loaded_count == 1
     context_store = SimpleNamespace(
         prepare=AsyncMock(
             return_value=ContextBundle(

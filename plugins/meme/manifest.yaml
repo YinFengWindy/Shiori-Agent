@@ -11,5 +11,3 @@ capabilities:
   - events
   - workspace
   - sessions
-dependencies:
-  - citation

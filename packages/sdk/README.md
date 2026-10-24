@@ -395,7 +395,7 @@ storage and runtime leases remain host-owned.
 `testing.service_context.FakeServiceContext` composes independent role, session,
 tool, HTTP, resource, process, RPC and task fixtures. Native calls fail until a
 test explicitly supplies their result. Plugin policy tests execute with only the
-SDK and declared sibling dependencies (Story → NovelAI; Meme → Citation).
+SDK and declared sibling dependencies (Story → NovelAI).
 Individual fixtures live in their owning `testing.tools`, `testing.storage`,
 `testing.sessions`, `testing.resources`, `testing.models`, `testing.http`,
 `testing.runtime` and `testing.scene_observations` modules; the context only

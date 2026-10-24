@@ -82,7 +82,7 @@ async def test_agent_core_process_runs_prepare_prompt_run_commit_in_order():
         run_turn=AsyncMock(
             side_effect=lambda *args, **kwargs: order.append("run")
             or TurnRunResult(
-                reply="final <meme:shy>\n§cited:[mem_1]§",
+                reply="final",
                 tools_used=["shell"],
                 tool_chain=[{"text": "done", "calls": []}],
                 thinking="think",
@@ -119,7 +119,7 @@ async def test_agent_core_process_runs_prepare_prompt_run_commit_in_order():
 
     out = await agent_core.process(msg, "telegram:123")
 
-    assert out.content == "final <meme:shy>\n§cited:[mem_1]§"
+    assert out.content == "final"
     assert order == ["prepare", "tool_context", "render", "run"]
     assert context_store.prepare.await_args.kwargs["session_key"] == "telegram:123"
     render_request = context.render.call_args.args[0]
@@ -151,7 +151,7 @@ async def test_agent_core_process_runs_prepare_prompt_run_commit_in_order():
     assert len(session.messages) == 2
     assert session.messages[0]["role"] == "user"
     assert session.messages[1]["role"] == "assistant"
-    assert session.messages[1]["content"] == "final <meme:shy>\n§cited:[mem_1]§"
+    assert session.messages[1]["content"] == "final"
 
 
 @pytest.mark.asyncio

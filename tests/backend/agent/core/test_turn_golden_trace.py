@@ -9,7 +9,10 @@ phase, slot or hook, so the event implementation must pass them unchanged.
 
 Allowed edits during P3: the assembly in ``golden_host`` and ``observe_steps``
 (the wiring itself changes), and the attachment order of
-``scenario_meme_and_novelai_attachments``, which P3-4 flips on purpose.
+``scenario_meme_and_novelai_attachments``, which P3-4 flipped on purpose.
+
+``test_core_only_turn`` runs the same host with no plugin at all (§5.3): the
+core alone replies and leaves no citation or protocol marker behind.
 """
 
 from __future__ import annotations
@@ -59,9 +62,9 @@ from shiori_sdk.tools import Tool
 from tests.support.plugin_kernel import host_kernel
 
 # Every system plugin with a phase module or tool hook today, plus novelai
-# (default off) for its pre-tool guard and reply attachments.
+# (default off) for its pre-tool guard and reply attachments. Citation is
+# core since P3-4 (D9).
 PLUGINS = (
-    "citation",
     "context_pressure",
     "meme",
     "novelai",
@@ -290,9 +293,12 @@ def _seed_workspace(workspace: Path, *, natural_chat: bool) -> None:
 
 @asynccontextmanager
 async def golden_host(
-    workspace: Path, plugin_root: Path, *, natural_chat: bool = False
+    workspace: Path, plugin_root: Path | None, *, natural_chat: bool = False
 ) -> AsyncGenerator[GoldenHost]:
-    """A real ``AgentLoop`` with every ``PLUGINS`` entry loaded by the kernel."""
+    """A real ``AgentLoop`` with every ``PLUGINS`` entry loaded by the kernel.
+
+    Without ``plugin_root`` no plugin generation is bound: the core runs alone.
+    """
     _seed_workspace(workspace, natural_chat=natural_chat)
     roles = RoleStore(workspace)
     manager = SessionManager(workspace)
@@ -326,6 +332,12 @@ async def golden_host(
     )
     host = GoldenHost(workspace, provider, shell, lookup, retrieval, manager, loop)
     observe_steps(bus, host.steps)
+    if plugin_root is None:
+        try:
+            yield host
+        finally:
+            await bus.aclose()
+        return
     kernel: PluginKernel = host_kernel(
         [plugin_root],
         settings=PluginGenerationSettings(
@@ -381,8 +393,9 @@ async def scenario_citation_marker_and_emoji(host: GoldenHost) -> None:
 async def scenario_meme_and_novelai_attachments(host: GoldenHost) -> None:
     """A generated picture and a meme picture attach to the same reply.
 
-    Today novelai's picture comes first (meme sets up after citation, novelai
-    before it); P3-4 makes meme independent of citation and flips this order.
+    Until P3-4 novelai's picture came first (meme set up after citation,
+    novelai before it). With citation in the core both have depth 0 and set up
+    by id, so meme's picture now comes first (#902, accepted).
     """
     host.provider.script = [
         _calls(("g1", "generate_image", {"prompt": "rain"})),
@@ -392,8 +405,8 @@ async def scenario_meme_and_novelai_attachments(host: GoldenHost) -> None:
     assert await host.turn("画一张") == "看图"
     media = host.assistant()["media"]
     assert len(media) == 2
-    assert media[0] == CG_IMAGE
-    meme_copy = Path(media[1])
+    assert media[1] == CG_IMAGE
+    meme_copy = Path(media[0])
     assert meme_copy.suffix == ".png"
     assert meme_copy.is_relative_to(host.workspace / "sessions/media")
 
@@ -516,8 +529,8 @@ async def scenario_finish_reply_cleans_each_message(host: GoldenHost) -> None:
     The citation IDs found in any message are recorded on every stored row.
     ``[§mem-2]`` is only removed, never recorded: the trailing
     ``§cited:[...]§`` marker (or recall_memory results) is the one citation
-    format citation reads (plugins/citation/README.md), and no prompt asks the
-    model for inline ``[§id]``; citation strips those as leftover markers.
+    format the core reads (``agent.core.citation``), and no prompt asks the
+    model for inline ``[§id]``; the core strips those as leftover markers.
     """
     host.provider.script = [
         _calls(
@@ -590,3 +603,47 @@ async def test_turn_golden_trace(
     monkeypatch.delenv("AKASIC_RESTORE_DIR", raising=False)
     async with golden_host(tmp_path, plugin_root, natural_chat=natural_chat) as host:
         await scenario(host)
+
+
+_FINISH_REPLY = ["早呀[§mem-2]", "一起加油 §cited:[mem-3]§ <emoji:smile> <x:y>"]
+
+
+@pytest.mark.parametrize(
+    ("natural_chat", "answer", "reply", "stored"),
+    [
+        (
+            False,
+            _reply("好呀 §cited:[mem-1]§ <emoji:smile>"),
+            "好呀",
+            [("好呀", ["mem-1"])],
+        ),
+        (
+            True,
+            _calls(("r", FINISH_REPLY_TOOL_NAME, {"messages": _FINISH_REPLY})),
+            "早呀\n\n一起加油",
+            [("早呀", ["mem-3"]), ("一起加油", ["mem-3"])],
+        ),
+    ],
+    ids=["reply", "finish_reply"],
+)
+async def test_core_only_turn(
+    tmp_path: Path,
+    natural_chat: bool,
+    answer: LLMResponse,
+    reply: str,
+    stored: list[tuple[str, list[str]]],
+) -> None:
+    """With every plugin off the core replies and strips every marker (§5.3, D9).
+
+    The citation IDs are still recorded; the emoji and protocol tags no plugin
+    consumed are removed, from each finish_reply message.
+    """
+    async with golden_host(tmp_path, None, natural_chat=natural_chat) as host:
+        host.provider.script = [answer]
+
+        assert await host.turn("你好", turn_id="t1") == reply
+        assert [
+            (message["content"], message.get("cited_memory_ids"))
+            for message in host.stored()
+            if message["role"] == "assistant"
+        ] == stored

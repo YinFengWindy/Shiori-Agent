@@ -191,7 +191,7 @@ async def setup(ctx):
     ctx.lifecycle.contribute("prompt_render", [ExamplePrompt()])
 ```
 
-模块依赖其它插件提供的槽位时，还应在 manifest 声明插件依赖。例如 meme 的 `dependencies: [citation]` 保证 citation 先活动；提供方缺失、停用或失败时 meme 为 `BLOCKED`，不会显示活动但缺少提示词。卸载提供方会级联其强依赖消费者。
+模块依赖其它插件提供的槽位时，还应在 manifest 声明插件依赖。例如 story 的 `dependencies: [novelai]` 保证 novelai 先活动；提供方缺失、停用或失败时 story 为 `BLOCKED`，不会显示活动但缺少依赖。卸载提供方会级联其强依赖消费者。
 
 需要调用另一个插件的 API 时，提供方用 `ctx.expose(api)`，消费者声明 `dependencies` 和同名 capability，再调用 `ctx.dependencies.require("provider")`。只需要加载顺序时不必调用 `require`。可选提供方用 `optional_dependencies` 和 `get_optional`：它不会强制启动提供方，提供方不可用时返回 `None`，也不会触发消费者级联卸载。
 
@@ -270,7 +270,7 @@ PLUGIN_DIR = Path(__file__).resolve().parents[1]
 
 SDK 的 `sdk_context` fixture 从测试文件向上（不越过 pytest rootdir）找到本包 `manifest.yaml`，只授予其 `capabilities` 声明的能力（未知能力名与宿主一样报错）；访问未声明的能力抛 `CapabilityNotGranted`，与宿主一致。manifest 只用于读取，`plugin_dir` 是隔离的临时目录；包内文件按包资源读取，不要写入 `plugin_dir`。测试不在包内时，在 `conftest.py` 覆盖 `sdk_plugin_dir` fixture。
 
-兄弟插件通过 `plugin_directory("citation")` 定位，并在 `pyproject.toml` 明确声明安装依赖；不得推导原仓库路径，也不得导入宿主测试树。异步测试由 pytest-asyncio 执行，公共支持来自 SDK 的 pytest entry point；独立插件测试不安装宿主。真实 AppRuntime 集成 fixture 由宿主开发包 `shiori-host-testing` 提供，仅在显式安装该包时通过其 pytest entry point 注册。
+兄弟插件通过 `plugin_directory("novelai")` 定位，并在 `pyproject.toml` 明确声明安装依赖；不得推导原仓库路径，也不得导入宿主测试树。异步测试由 pytest-asyncio 执行，公共支持来自 SDK 的 pytest entry point；独立插件测试不安装宿主。真实 AppRuntime 集成 fixture 由宿主开发包 `shiori-host-testing` 提供，仅在显式安装该包时通过其 pytest entry point 注册。
 
 仓库开发使用 `uv sync --dev`，再 `uv run pytest plugins/example/tests`。仓库外验收运行 `uv run python -m scripts.verify_plugin_tests --plugins example --output <仓库外新目录>`：从副本构建非 editable wheel，在独立环境运行真实插件测试，检查模块来源，并确认 await 后故意失败的异步断言真正执行。完整步骤见 [插件测试](../agents/plugin-testing.md) 与各包 `TESTING.md`。
 

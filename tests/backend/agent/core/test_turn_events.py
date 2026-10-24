@@ -3,7 +3,8 @@
 A plugin veto stops the stage and reaches no core listener. The core checks on
 ``ToolCalling`` hold whatever the plugins did: a plugin rewriting a call into
 a catastrophic command, a plugin handler failing, and a generation without
-shell_safety all leave the tool unrun.
+shell_safety all leave the tool unrun. The check on ``ReasoningFinished``
+removes the protocol tags and memory references a plugin writes back.
 """
 
 from __future__ import annotations
@@ -15,14 +16,14 @@ from typing import Any
 
 import pytest
 
-from agent.core.turn_events import TurnEvents
+from agent.core.turn_events import TurnEvents, core_kernel
 from agent.plugin_host import PluginGenerationSettings
 from agent.tools.execution import ToolExecutionRequest, ToolExecutor
 from agent.tools.shell.guard import destructive_command_reason
 from bus.event_bus import EventBus
-from shiori_sdk.core.conversation import ReasoningStarting
+from shiori_sdk.core.conversation import ReasoningFinished, ReasoningStarting
 from shiori_sdk.core.tools import ToolCalling
-from shiori_sdk.kernel import Context, Kernel, PluginSpec, Veto
+from shiori_sdk.kernel import Context, Kernel, PluginSpec, Scope, Veto
 from shiori_sdk.testing.packages import plugin_directory, stage_plugin_package
 from tests.support.plugin_kernel import host_kernel
 from tests.support.tool_calls import kernel_with
@@ -169,3 +170,39 @@ async def test_shell_restore_turning_a_home_wipe_into_a_move_is_still_refused(
     assert tidy.status == "success"
     assert [command.split()[0] for command in shell.commands] == ["mv"]
     await kernel.terminate_all()
+
+
+async def test_tags_a_plugin_writes_back_into_a_reply_are_removed() -> None:
+    async def tag(event: ReasoningFinished) -> ReasoningFinished:
+        messages = tuple(f"{text} [§mem-9] <meme:shy>" for text in event.reply_messages)
+        return replace(event, reply_messages=messages, reply="|".join(messages))
+
+    kernel = core_kernel()
+
+    async def no_setup(_: Context) -> None:
+        return None
+
+    Context(kernel, PluginSpec("tagger", no_setup), Scope("tagger")).on(
+        ReasoningFinished, tag
+    )
+    bus = EventBus()
+    heard: list[ReasoningFinished] = []
+    bus.on(ReasoningFinished, heard.append)
+    applied: list[ReasoningFinished] = []
+    finished = ReasoningFinished(
+        session_key="role:mira",
+        channel="desktop",
+        chat_id="mira",
+        tools_used=(),
+        tool_chain=(),
+        thinking=None,
+        streamed=False,
+        reply="早呀\n\n加油",
+        reply_messages=("早呀", "加油"),
+    )
+
+    await TurnEvents(bus, lambda: kernel).emit(finished, applied.append)
+
+    assert [(e.reply_messages, e.reply) for e in applied + heard] == [
+        (("早呀", "加油"), "早呀\n\n加油")
+    ] * 2

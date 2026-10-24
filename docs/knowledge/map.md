@@ -48,7 +48,7 @@ related:
 | 官网 | `apps/site/`（Astro 静态站，`https://www.windchant.online`；设计 token、Tailwind 主题、场景背景直接引用 `apps/desktop/renderer/`） | Vercel 部署（`vercel.json`，忽略构建脚本 `apps/site/scripts/vercel-ignore-build.sh`）、GitHub Pages 工作流（`.github/workflows/site-pages.yml`）；更新日志 `/changelog/` 构建期经 GitHub API 读取 Release（`GITHUB_TOKEN`），Release 发布后由 `.github/workflows/site-redeploy-on-release.yml` 调 Vercel Deploy Hook 重部署 |
 | 单角色剧情 | `plugins/story/backend/`、`plugins/story/ui/`（依赖 NovelAI 插件） | 剧情事实、角色/玩家快照、提交事件、固定故事日期与“清晨/上午/下午/夜晚/深夜”五段时段时钟、桌面剧情界面 |
 | 桌宠语音 | `plugins/desktop_pet/background/voice/`、`plugins/desktop_pet/backend/voice_rpc.py`、`plugins/desktop_pet/backend/voice_preferences.py`、`apps/desktop/src/native/`、`apps/desktop/renderer/src/voice/`；ASR/TTS provider 为 `plugins/sensevoice_asr/`、`plugins/gpt_sovits_tts/` | 录音、ASR、角色 Loop、按句 TTS、播放与中断 |
-| 其他内置插件 | `plugins/<id>/`（`browser_use`、`computer_use`、`citation`、`context_pressure`、`herdr`、`meme`、`observe`、`plugin_undo`、`screen_perception`、`shell_restore`、`shell_safety`、`status_commands`、`tool_loop_guard`）。Herdr 与屏幕识别的宿主衔接见 [Agent 生命周期与工具](modules/agent-lifecycle-and-tools.md) | 各插件自己的 `backend/`、`ui/`、`surface/`、`background/` |
+| 其他内置插件 | `plugins/<id>/`（`browser_use`、`computer_use`、`context_pressure`、`herdr`、`meme`、`observe`、`plugin_undo`、`screen_perception`、`shell_restore`、`shell_safety`、`status_commands`、`tool_loop_guard`）。Herdr 与屏幕识别的宿主衔接见 [Agent 生命周期与工具](modules/agent-lifecycle-and-tools.md) | 各插件自己的 `backend/`、`ui/`、`surface/`、`background/` |
 
 ```mermaid
 flowchart LR

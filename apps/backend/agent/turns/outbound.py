@@ -1,21 +1,18 @@
 from __future__ import annotations
 
 import inspect
-import re
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from shiori_sdk.messages import OutboundMessage
+from agent.core.citation import strip_citation_markers
 from agent.tools.message_push import PENDING_TURN_DELIVERY
-
-# Final § is optional because models also emit citations without it.
-_INTERNAL_CITATION_RE = re.compile(r"\s*§cited:\[[^\]]*\]§?\s*")
 
 
 def sanitize_user_visible_content(content: str) -> str:
     """Consumes internal memory citation markers before transport delivery."""
 
-    return _INTERNAL_CITATION_RE.sub(" ", str(content or "")).strip()
+    return strip_citation_markers(str(content or ""))
 
 
 @dataclass
