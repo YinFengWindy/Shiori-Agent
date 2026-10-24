@@ -9,8 +9,9 @@ a reply is read and cleaned the same with any engine or none. Two steps:
   come first: a plugin resolving an emoji tag after the marker would leave it
   unmatched at the end of the reply.
 - ``clean_reply`` is the fixed check after the chain (D11, §8.1): it removes
-  any marker left anywhere, trailing protocol tags no plugin consumed and
-  inline ``[§id]`` references, including any a plugin wrote back.
+  trailing protocol tags no plugin consumed and inline ``[§id]`` references,
+  including any a plugin wrote back. Markers elsewhere stay in the stored reply
+  and are removed on delivery by ``strip_citation_markers``.
 """
 
 from __future__ import annotations
@@ -150,8 +151,6 @@ def take_citations(
 
 
 def _clean(text: str) -> str:
-    if _ANY_CITED_RE.search(text):
-        text = strip_citation_markers(text)
     return strip_inline_memory_refs(strip_trailing_protocol_tags(text))
 
 
