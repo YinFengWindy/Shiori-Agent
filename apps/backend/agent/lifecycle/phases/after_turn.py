@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import copy
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 import logging
 from typing import TYPE_CHECKING, Any, TypeAlias, cast
 
@@ -13,16 +13,10 @@ from agent.core.passive_support import (
 )
 from agent.core.types import to_tool_call_groups
 from conversation.context_scope import history_filter
-from agent.lifecycle.phase import (
-    PhaseFrame,
-    PhaseModule,
-    collect_prefixed_slots,
-    topo_sort_modules,
-)
+from agent.lifecycle.phase import PhaseFrame, PhaseModule, topo_sort_modules
 from agent.lifecycle.types import TurnSnapshot, TurnState
-from agent.core.turn_events import TurnEvents, read_only
+from agent.core.turn_events import TurnEvents
 from shiori_sdk.core.conversation import TurnFinished
-from shiori_sdk.lifecycle import AfterTurnCtx
 from agent.turns.outbound import OutboundDispatch, OutboundPort
 from bus.event_bus import EventBus
 from shiori_sdk.messages import OutboundMessage
@@ -50,11 +44,8 @@ _REACT_STATS_SLOT = "turn:react_stats"
 _TOOL_CHAIN_SLOT = "turn:tool_chain"
 _OMIT_USER_TURN_SLOT = "turn:omit_user_turn"
 _EXTRA_SLOT = "turn:extra"
-_EXTRA_COLLECTED_SLOT = "turn:extra_collected"
 _TURN_COMMITTED_SLOT = "turn:committed"
 _CTX_SLOT = "turn:ctx"
-_EXTRA_PREFIX = "turn:extra:"
-_TELEMETRY_PREFIX = "turn:telemetry:"
 
 
 def will_dispatch_outbound(snapshot: TurnSnapshot) -> bool:
@@ -162,14 +153,12 @@ class _ApplyTurnAffectionModule:
 
 class _BuildTurnCommittedModule:
     requires = (
-        "after_turn.collect_extras",
         "after_turn.affection",
         _BUDGET_SLOT,
         _REACT_STATS_SLOT,
         _TOOL_CHAIN_SLOT,
         _OMIT_USER_TURN_SLOT,
         _EXTRA_SLOT,
-        _EXTRA_COLLECTED_SLOT,
     )
     slot = "after_turn.build_committed"
     produces = (_TURN_COMMITTED_SLOT,)
@@ -236,19 +225,6 @@ class _BuildTurnCommittedModule:
         return frame
 
 
-class _CollectAfterTurnExtraSlotsModule:
-    slot = "after_turn.collect_extras"
-    requires = ("after_turn.build_work", _EXTRA_SLOT)
-    produces = (_EXTRA_SLOT, _EXTRA_COLLECTED_SLOT)
-
-    async def run(self, frame: AfterTurnFrame) -> AfterTurnFrame:
-        extra = dict(cast(dict[str, object], frame.slots[_EXTRA_SLOT]))
-        extra.update(collect_prefixed_slots(frame.slots, _EXTRA_PREFIX))
-        frame.slots[_EXTRA_SLOT] = extra
-        frame.slots[_EXTRA_COLLECTED_SLOT] = True
-        return frame
-
-
 class _FanoutTurnCommittedModule:
     slot = "after_turn.fanout_committed"
     requires = ("after_turn.build_committed", _TURN_COMMITTED_SLOT)
@@ -278,16 +254,15 @@ class _LogBudgetModule:
         return frame
 
 
-class _BuildAfterTurnCtxModule:
+class _BuildTurnFinishedModule:
     slot = "after_turn.build_ctx"
     requires = ("after_turn.fanout_committed",)
     produces = (_CTX_SLOT,)
 
     async def run(self, frame: AfterTurnFrame) -> AfterTurnFrame:
         snap = frame.input
-        state = snap.state
-        frame.slots[_CTX_SLOT] = AfterTurnCtx(
-            session_key=state.session_key,
+        frame.slots[_CTX_SLOT] = TurnFinished(
+            session_key=snap.state.session_key,
             channel=snap.outbound.channel,
             chat_id=snap.outbound.chat_id,
             reply=snap.outbound.content,
@@ -298,52 +273,23 @@ class _BuildAfterTurnCtxModule:
         return frame
 
 
-class _FanoutAfterTurnCtxModule:
-    slot = "after_turn.fanout_ctx"
-    requires = ("after_turn.collect_telemetry", _CTX_SLOT)
+class _EmitTurnFinishedModule:
+    slot = "after_turn.emit"
+    requires = ("after_turn.build_ctx", _CTX_SLOT)
 
-    def __init__(self, bus: EventBus, events: TurnEvents) -> None:
-        self._bus = bus
+    def __init__(self, events: TurnEvents) -> None:
         self._events = events
 
     async def run(self, frame: AfterTurnFrame) -> AfterTurnFrame:
-        ctx = cast(AfterTurnCtx, frame.slots[_CTX_SLOT])
-        await self._bus.fanout(ctx)
+        event = cast(TurnFinished, frame.slots[_CTX_SLOT])
         # Nothing is writable: the turn is stored, only listeners remain.
-        await self._events.emit(_turn_finished(ctx), lambda _: None)
-        return frame
-
-
-def _turn_finished(ctx: AfterTurnCtx) -> TurnFinished:
-    """The ``TurnFinished`` projection of the turn's context."""
-    return TurnFinished(
-        session_key=ctx.session_key,
-        channel=ctx.channel,
-        chat_id=ctx.chat_id,
-        reply=ctx.reply,
-        tools_used=ctx.tools_used,
-        thinking=ctx.thinking,
-        will_dispatch=ctx.will_dispatch,
-        extra_metadata=read_only(ctx.extra_metadata),
-    )
-
-
-class _CollectAfterTurnTelemetrySlotsModule:
-    slot = "after_turn.collect_telemetry"
-    requires = ("after_turn.build_ctx", _CTX_SLOT)
-    produces = (_CTX_SLOT,)
-
-    async def run(self, frame: AfterTurnFrame) -> AfterTurnFrame:
-        ctx = cast(AfterTurnCtx, frame.slots[_CTX_SLOT])
-        extra_metadata = dict(ctx.extra_metadata)
-        extra_metadata.update(collect_prefixed_slots(frame.slots, _TELEMETRY_PREFIX))
-        frame.slots[_CTX_SLOT] = replace(ctx, extra_metadata=extra_metadata)
+        await self._events.emit(event, lambda _: None)
         return frame
 
 
 class _DispatchOutboundModule:
     slot = "after_turn.dispatch"
-    requires = ("after_turn.fanout_ctx", _CTX_SLOT)
+    requires = ("after_turn.emit", _CTX_SLOT)
 
     def __init__(self, outbound: OutboundPort) -> None:
         self._outbound = outbound
@@ -381,23 +327,17 @@ def default_after_turn_modules(
     outbound: OutboundPort,
     context: ContextBuilder,
     history_window: int = 500,
-    plugin_modules: AfterTurnModules | None = None,
     relationship_runtime: RoleRelationshipRuntimeService | None = None,
 ) -> AfterTurnModules:
     builtins: AfterTurnModules = [
         _BuildTurnWorkModule(context, history_window),
         _ApplyTurnAffectionModule(relationship_runtime),
-        _CollectAfterTurnExtraSlotsModule(),
         _BuildTurnCommittedModule(),
         _FanoutTurnCommittedModule(bus),
         _LogBudgetModule(),
-        _BuildAfterTurnCtxModule(),
-        _CollectAfterTurnTelemetrySlotsModule(),
-        _FanoutAfterTurnCtxModule(bus, events),
+        _BuildTurnFinishedModule(),
+        _EmitTurnFinishedModule(events),
         _DispatchOutboundModule(outbound),
         _ReturnOutboundMessageModule(),
     ]
-    return cast(
-        AfterTurnModules,
-        topo_sort_modules(builtins + list(plugin_modules or [])),
-    )
+    return cast(AfterTurnModules, topo_sort_modules(builtins))

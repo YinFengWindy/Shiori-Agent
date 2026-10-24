@@ -359,7 +359,7 @@ async def golden_host(
     )
     await kernel.load_all()
     assert sorted(kernel.active_plugin_ids) == sorted(PLUGINS)
-    loop.bind_plugin_contributions(kernel)
+    loop.bind_kernel(lambda: kernel.kernel)
     generate = tools.get_tool("generate_image")
     assert generate is not None
 

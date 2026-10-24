@@ -324,6 +324,54 @@ consolidates these additions and the subsequent #847 breaking migration.
   `shiori_sdk.testing.extensions.FakeBotCommands`. Migrate a command module and its
   `bot_commands.add` to one `COMMANDS.register` per name (aliases without a
   description).
+- **Bundled phase plugins move to turn events (PR #929, issue #902, refactor
+  P3-6a).** context_pressure requests the closing summary from a `StepFinished`
+  handler (`early_stop` / `early_stop_reason="context_pressure"`, telemetry
+  `context_pressure_tokens` / `context_pressure_threshold` in `extra_metadata`);
+  meme adds its prompt section on `PromptRendering` and resolves its tags on
+  `ReasoningFinished`; novelai attaches generated pictures on `ReasoningFinished`;
+  default_memory records each turn's retrieval on `TurnStarting` (an `on` handler
+  that returns the event, so the recall record of the same turn keeps its turn id).
+  All four no longer declare `lifecycle`, and meme no longer declares `events`.
+  Ordering and stored data are unchanged: the meme section still renders before the
+  natural-chat prompt, a meme picture still comes before a generated one, and
+  `recall_inspector.jsonl` keeps its record shape (a top-level dict trace, frozen by
+  the event, is stored as the same JSON object). **Behavior visible to plugins:**
+  a failing handler of these events is logged and skipped (`fail_open`) where a
+  failing phase module or `AfterReasoningCtx` listener used to fail the turn; and
+  during an in-generation reload the old instance's handlers keep running until it
+  is disposed (the kernel drains them), where a sealed phase module used to pass
+  the frame through. context_pressure now writes `early_stop` inside the
+  `StepFinished` chain, so a `StepFinished` handler ranked before it no longer sees
+  the stop (it used to be set before the event was emitted); no bundled plugin has
+  another `StepFinished` handler. If meme's handler fails and is skipped, a
+  `<meme:x>` tag that is not at the end of a message stays in the reply, since the
+  core check removes only trailing protocol tags.
+- **breaking: capability `lifecycle`, `shiori_sdk.lifecycle` and the phase slot
+  exports removed (PR #929, issue #902, refactor P3-6a).** Plugins no longer
+  contribute modules to the host phases; they join the turn events with `ctx.on` /
+  `ctx.watch` (see the P3-2 entry). Gone: the `lifecycle` capability
+  (`KNOWN_CAPABILITIES`, the `capabilities` enum of `manifest.schema.json`; a
+  manifest still declaring it is rejected at discovery and package validation as
+  an unknown capability), `ctx.lifecycle` (also on `PluginRuntimeContext`), the
+  whole `shiori_sdk.lifecycle` module — `PHASE_SLOTS`, `require_phase_slot`,
+  `LifecycleFrame`, `LifecycleModule`, `LifecycleCapability`,
+  `BeforeTurnObservation`, and the host frame values `AfterStepCtx`,
+  `AfterReasoningCtx`, `AfterTurnCtx`, `PromptRenderCtx` and `ResponseMetadata`,
+  which now live in the host and are no longer emitted on the event bus (a
+  `ctx.events.on(AfterReasoningCtx, …)` listener has nothing to receive; use
+  `ReasoningFinished` and the other turn events) — and the test doubles
+  `shiori_sdk.testing.FakeLifecycle` / `FakeFrame` (`FakePluginContext` now grants
+  `("events",)` by default). The phase slot exports a module could write
+  (`session:extra_hint:*` / `session:abort_reply`, `reasoning:extra_hint:*` /
+  `reasoning:abort_reply`, `prompt:section_top:*` / `prompt:section_bottom:*` /
+  `prompt:extra_hint:*`, `step:extra_hint:*` / `step:abort_reply`,
+  `step:telemetry:*` / `step:early_stop_reason`, `persist:user:*` /
+  `persist:assistant:*`, `outbound:metadata:*` / `outbound:media:*`,
+  `turn:extra:*` / `turn:telemetry:*`) go with them: write the event's writable
+  fields instead. There is no replacement for extra persisted message fields or
+  `TurnCommitted.extra` entries. `TurnFinished.extra_metadata`, filled only from
+  `turn:telemetry:*`, is dropped (never published).
 
 - **Natural proactive replies and background reports (PR #894, issue #868).** The current
   role's built-in natural-chat capability also applies to proactive draft
@@ -403,7 +451,7 @@ consolidates these additions and the subsequent #847 breaking migration.
   chain instead of failing or inheriting the old budget. The host no longer
   reserves outbound identity before enqueue: `PreparesOutbound`,
   `MessageBus.prepare_outbound` and `TurnCommitted.will_dispatch` are removed.
-  `AfterTurnCtx.will_dispatch` remains the observer-facing dispatch gate.
+  `TurnFinished.will_dispatch` remains the observer-facing dispatch gate.
   `ReplyInterruption` is the only cancellation owner; `ChannelSequenceOwner`
   registers the current generation's plans and invalidates them on replacement.
   One `NaturalReplyRequest` carries the optional finish_reply protocol through
@@ -578,7 +626,9 @@ consolidates these additions and the subsequent #847 breaking migration.
     the contributed object, as it already does for tools, so phase modules must accept
     attribute assignment (no `__slots__`); otherwise `setup` fails. (Tool hooks were
     gated the same way, failing closed while sealed, until the P3-3 tool events entry
-    replaced them with `ToolCalling` handlers, which the kernel drains instead.)
+    replaced them with `ToolCalling` handlers, which the kernel drains instead. Phase
+    modules went away with the `lifecycle` capability in P3-6a; turn event handlers
+    are drained by the kernel the same way.)
   - The reload waits up to 60 s for the closure's in-flight calls. If they do not
     finish, nothing changes and the save fails with `plugin_reload_busy`
     (`details.plugin_ids` = still busy). If the new config fails `setup`, the old

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
-from types import SimpleNamespace
+from types import MappingProxyType, SimpleNamespace
 from typing import Any, cast
 from unittest.mock import AsyncMock, Mock
 
@@ -10,36 +11,35 @@ import pytest
 
 from agent.core.turn_events import TurnEvents, core_kernel
 from shiori_sdk.commands import CommandInput, CommandRegistry
-from shiori_sdk.core.conversation import COMMANDS
-from shiori_sdk.kernel import Kernel
+from shiori_sdk.core.conversation import (
+    COMMANDS,
+    PromptRendering,
+    ReasoningFinished,
+    ReasoningStarting,
+    StepFinished,
+    StepStarting,
+    TurnStarting,
+)
+from shiori_sdk.kernel import Kernel, Veto
+from tests.support.tool_calls import kernel_with
 from agent.context import ContextBuilder
 from agent.core.passive_support import build_context_hint_message
 from agent.core.passive_turn import ContextStore
-from shiori_sdk.lifecycle import ResponseMetadata
 from agent.core.runtime_support import TurnRunResult
 from agent.core.types import ContextBundle, HistoryMessage
 from agent.lifecycle.phase import Phase
 from agent.tools.registry import ToolRegistry
 from bus.event_bus import EventBus
-from shiori_sdk.messages import InboundMessage, OutboundMessage
-from shiori_sdk.memory.committed import TurnCommitted
+from shiori_sdk.messages import InboundMessage
 from core.roles import RoleStore
 from agent.lifecycle.types import (
     AfterReasoningInput,
-    BeforeReasoningCtx,
+    AfterStepCtx,
     BeforeReasoningInput,
-    BeforeStepCtx,
     BeforeStepInput,
     BeforeTurnCtx,
     PromptRenderInput,
-    TurnSnapshot,
     TurnState,
-)
-from shiori_sdk.lifecycle import (
-    AfterReasoningCtx,
-    AfterStepCtx,
-    AfterTurnCtx,
-    PromptRenderCtx,
 )
 from agent.lifecycle.phases.after_reasoning import (
     AfterReasoningFrame,
@@ -48,10 +48,6 @@ from agent.lifecycle.phases.after_reasoning import (
 from agent.lifecycle.phases.after_step import (
     AfterStepFrame,
     default_after_step_modules,
-)
-from agent.lifecycle.phases.after_turn import (
-    AfterTurnFrame,
-    default_after_turn_modules,
 )
 from agent.lifecycle.phases.before_reasoning import (
     BeforeReasoningFrame,
@@ -71,16 +67,10 @@ from agent.lifecycle.phases.prompt_render import (
     default_prompt_render_modules,
 )
 from shiori_sdk.prompting import PromptSectionRender
-from agent.turns.outbound import DeliveryReceipt, OutboundDispatch
 from conversation.store import ConversationStore
 from session.manager import SessionManager
 
 _now = datetime.now()
-
-
-class _DummyOutbound:
-    async def dispatch(self, outbound: OutboundDispatch) -> DeliveryReceipt:
-        return DeliveryReceipt.queued()
 
 
 def _inbound() -> InboundMessage:
@@ -143,7 +133,6 @@ async def test_before_turn_setup_fills_turn_state():
 
     phase = Phase(
         default_before_turn_modules(
-            bus,
             TurnEvents(bus, core_kernel),
             cast(SessionManager, session_mgr),
             cast(ContextStore, ctx_store),
@@ -178,7 +167,6 @@ async def test_before_turn_ctx_carries_context_scope_of_turn_thread(tmp_path):
     ctx_store = SimpleNamespace(prepare=AsyncMock(return_value=ContextBundle()))
     phase = Phase(
         default_before_turn_modules(
-            EventBus(),
             TurnEvents(EventBus(), core_kernel),
             cast(SessionManager, session_mgr),
             cast(ContextStore, ctx_store),
@@ -213,7 +201,6 @@ async def test_before_turn_binds_message_role_id_to_session_before_context_prepa
     ctx_store = SimpleNamespace(prepare=AsyncMock(return_value=ContextBundle()))
     phase = Phase(
         default_before_turn_modules(
-            bus,
             TurnEvents(bus, core_kernel),
             cast(SessionManager, session_mgr),
             cast(ContextStore, ctx_store),
@@ -244,7 +231,6 @@ async def test_before_turn_uses_cli_session_override_context():
     ctx_store = SimpleNamespace(prepare=AsyncMock(return_value=ContextBundle()))
     phase = Phase(
         default_before_turn_modules(
-            bus,
             TurnEvents(bus, core_kernel),
             cast(SessionManager, session_mgr),
             cast(ContextStore, ctx_store),
@@ -282,20 +268,15 @@ async def test_before_turn_chain_can_abort():
     bundle = ContextBundle()
     ctx_store = SimpleNamespace(prepare=AsyncMock(return_value=bundle))
 
-    async def abort_handler(ctx):
-        ctx.abort = True
-        ctx.abort_reply = "rate limited"
-        return ctx
+    async def abort_handler(event: TurnStarting) -> Veto:
+        return Veto("rate limited")
 
-    bus.on(BeforeTurnCtx, abort_handler)
-
+    kernel = kernel_with(on=((TurnStarting, abort_handler),))
     phase = Phase(
         default_before_turn_modules(
-            bus,
-            TurnEvents(bus, core_kernel),
+            TurnEvents(bus, lambda: kernel),
             cast(SessionManager, session_mgr),
             cast(ContextStore, ctx_store),
-            plugin_modules=[],
         ),
         frame_factory=BeforeTurnFrame,
     )
@@ -318,7 +299,6 @@ async def test_before_turn_memory_context_guard_blocks_unconsolidated_tail():
 
     phase = Phase(
         default_before_turn_modules(
-            bus,
             TurnEvents(bus, core_kernel),
             cast(SessionManager, session_mgr),
             cast(ContextStore, ctx_store),
@@ -367,7 +347,6 @@ async def test_before_turn_memory_context_guard_counts_only_the_turn_context(tmp
     ctx_store = SimpleNamespace(prepare=AsyncMock(return_value=ContextBundle()))
     phase = Phase(
         default_before_turn_modules(
-            EventBus(),
             TurnEvents(EventBus(), core_kernel),
             cast(SessionManager, session_mgr),
             cast(ContextStore, ctx_store),
@@ -419,7 +398,6 @@ async def test_before_turn_memory_context_guard_schedules_consolidation_without_
 
     phase = Phase(
         default_before_turn_modules(
-            bus,
             TurnEvents(bus, core_kernel),
             cast(SessionManager, session_mgr),
             cast(ContextStore, ctx_store),
@@ -473,7 +451,6 @@ async def test_before_turn_defers_token_pressure_until_complete_request_is_rende
     consolidator = _Consolidator()
     phase = Phase(
         default_before_turn_modules(
-            bus,
             TurnEvents(bus, core_kernel),
             cast(SessionManager, session_mgr),
             cast(ContextStore, ctx_store),
@@ -510,7 +487,6 @@ async def test_before_turn_memory_context_guard_blocks_after_consolidation_failu
 
     phase = Phase(
         default_before_turn_modules(
-            bus,
             TurnEvents(bus, core_kernel),
             cast(SessionManager, session_mgr),
             cast(ContextStore, ctx_store),
@@ -551,7 +527,6 @@ async def test_before_turn_memory_context_guard_reports_failure_for_nsfw_role():
 
     phase = Phase(
         default_before_turn_modules(
-            bus,
             TurnEvents(bus, core_kernel),
             cast(SessionManager, session_mgr),
             cast(ContextStore, ctx_store),
@@ -569,123 +544,6 @@ async def test_before_turn_memory_context_guard_reports_failure_for_nsfw_role():
 
 
 @pytest.mark.asyncio
-async def test_before_turn_accepts_custom_command_module():
-    bus = EventBus()
-    session = _DummySession("telegram:123")
-    session_mgr = SimpleNamespace(get_or_create=lambda key: session)
-    ctx_store = SimpleNamespace(prepare=AsyncMock())
-
-    class CustomCommandModule:
-        slot = "test.custom_command"
-        requires = ("before_turn.acquire_session", "session:session")
-        produces = ("session:ctx",)
-
-        async def run(self, frame: BeforeTurnFrame) -> BeforeTurnFrame:
-            state = frame.input
-            if state.msg.content != "/debug":
-                return frame
-            frame.slots["session:ctx"] = BeforeTurnCtx(
-                session_key=state.session_key,
-                channel=state.msg.channel,
-                chat_id=state.msg.chat_id,
-                content=state.msg.content,
-                timestamp=state.msg.timestamp,
-                skill_names=[],
-                retrieved_memory_block="",
-                retrieval_trace_raw=None,
-                history_messages=(),
-                context_scope=None,
-                abort=True,
-                abort_reply="debug ok",
-            )
-            return frame
-
-    phase = Phase(
-        default_before_turn_modules(
-            bus,
-            TurnEvents(bus, core_kernel),
-            cast(SessionManager, session_mgr),
-            cast(ContextStore, ctx_store),
-            plugin_modules=[CustomCommandModule()],
-        ),
-        frame_factory=BeforeTurnFrame,
-    )
-    msg = InboundMessage(
-        channel="telegram",
-        sender="user",
-        chat_id="123",
-        content="/debug",
-        timestamp=_now,
-    )
-    state = TurnState(msg=msg, session_key="telegram:123", dispatch_outbound=True)
-
-    ctx = await phase.run(state)
-
-    assert ctx.abort is True
-    assert ctx.abort_reply == "debug ok"
-    ctx_store.prepare.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_before_turn_accepts_plugin_modules():
-    bus = EventBus()
-    session = _DummySession("telegram:123")
-    session_mgr = SimpleNamespace(get_or_create=lambda key: session)
-    bundle = ContextBundle(
-        skill_mentions=["memo"],
-        retrieved_memory_block="retrieved block",
-        retrieval_trace_raw={"trace": 1},
-        history_messages=[HistoryMessage(role="user", content="prev")],
-    )
-    ctx_store = SimpleNamespace(prepare=AsyncMock(return_value=bundle))
-    seen: list[str] = []
-
-    class EarlyPluginModule:
-        slot = "test.before_turn.early"
-        requires = ("before_turn.acquire_session", "session:session")
-
-        async def run(self, frame: BeforeTurnFrame) -> BeforeTurnFrame:
-            seen.append("early")
-            frame.input.msg.metadata["early_seen"] = True
-            return frame
-
-    class LatePluginModule:
-        slot = "test.before_turn.late"
-        requires = ("before_turn.emit", "session:ctx")
-        produces = ("session:ctx",)
-
-        async def run(self, frame: BeforeTurnFrame) -> BeforeTurnFrame:
-            seen.append("late")
-            ctx = cast(BeforeTurnCtx, frame.slots["session:ctx"])
-            ctx.extra_metadata["late_seen"] = ctx.retrieved_memory_block
-            frame.slots["session:ctx"] = ctx
-            frame.slots["session:extra_hint:late"] = "hint from before turn"
-            return frame
-
-    phase = Phase(
-        default_before_turn_modules(
-            bus,
-            TurnEvents(bus, core_kernel),
-            cast(SessionManager, session_mgr),
-            cast(ContextStore, ctx_store),
-            plugin_modules=[EarlyPluginModule(), LatePluginModule()],
-        ),
-        frame_factory=BeforeTurnFrame,
-    )
-    msg = _inbound()
-    msg.metadata["seed"] = "x"
-    state = TurnState(msg=msg, session_key="telegram:123", dispatch_outbound=True)
-
-    ctx = await phase.run(state)
-
-    assert seen == ["early", "late"]
-    assert state.msg.metadata["early_seen"] is True
-    assert ctx.extra_metadata["late_seen"] == "retrieved block"
-    assert ctx.extra_hints == ["hint from before turn"]
-    ctx_store.prepare.assert_called_once()
-
-
-@pytest.mark.asyncio
 async def test_before_turn_chain_can_modify_skill_names():
     bus = EventBus()
     session = _DummySession("telegram:123")
@@ -694,16 +552,18 @@ async def test_before_turn_chain_can_modify_skill_names():
     bundle = ContextBundle(skill_mentions=["search"])
     ctx_store = SimpleNamespace(prepare=AsyncMock(return_value=bundle))
 
-    async def add_skill(ctx):
-        ctx.skill_names.append("added_skill")
-        return ctx
+    async def add_skill(event: TurnStarting) -> TurnStarting:
+        return replace(
+            event,
+            skill_names=(*event.skill_names, "added_skill"),
+            extra_hints=("plugin hint",),
+            extra_metadata=MappingProxyType({"plugin_flag": True}),
+        )
 
-    bus.on(BeforeTurnCtx, add_skill)
-
+    kernel = kernel_with(on=((TurnStarting, add_skill),))
     phase = Phase(
         default_before_turn_modules(
-            bus,
-            TurnEvents(bus, core_kernel),
+            TurnEvents(bus, lambda: kernel),
             cast(SessionManager, session_mgr),
             cast(ContextStore, ctx_store),
         ),
@@ -714,6 +574,8 @@ async def test_before_turn_chain_can_modify_skill_names():
 
     ctx = await phase.run(state)
     assert ctx.skill_names == ["search", "added_skill"]
+    assert ctx.extra_hints == ["plugin hint"]
+    assert ctx.extra_metadata == {"plugin_flag": True}
 
 
 # ── BeforeReasoning ──
@@ -734,7 +596,6 @@ async def test_before_reasoning_setup_calls_tools_set_context():
 
     phase = Phase(
         default_before_reasoning_modules(
-            bus,
             TurnEvents(bus, core_kernel),
             cast(ToolRegistry, tools),
             cast(SessionManager, session_mgr),
@@ -783,7 +644,6 @@ async def test_before_reasoning_requires_session():
 
     phase = Phase(
         default_before_reasoning_modules(
-            bus,
             TurnEvents(bus, core_kernel),
             cast(ToolRegistry, tools),
             cast(SessionManager, session_mgr),
@@ -830,7 +690,6 @@ async def test_before_reasoning_finalize_calls_render():
 
     phase = Phase(
         default_before_reasoning_modules(
-            bus,
             TurnEvents(bus, core_kernel),
             cast(ToolRegistry, tools),
             cast(SessionManager, session_mgr),
@@ -878,16 +737,13 @@ async def test_before_reasoning_chain_can_add_extra_hints():
     context_builder = Mock()
     context_builder.render = Mock(return_value=None)
 
-    async def hint_handler(ctx):
-        ctx.extra_hints.append("hint from plugin")
-        return ctx
+    async def hint_handler(event: ReasoningStarting) -> ReasoningStarting:
+        return replace(event, extra_hints=(*event.extra_hints, "hint from plugin"))
 
-    bus.on(BeforeReasoningCtx, hint_handler)
-
+    kernel = kernel_with(on=((ReasoningStarting, hint_handler),))
     phase = Phase(
         default_before_reasoning_modules(
-            bus,
-            TurnEvents(bus, core_kernel),
+            TurnEvents(bus, lambda: kernel),
             cast(ToolRegistry, tools),
             cast(SessionManager, session_mgr),
             cast(ContextBuilder, context_builder),
@@ -917,59 +773,6 @@ async def test_before_reasoning_chain_can_add_extra_hints():
 
 
 @pytest.mark.asyncio
-async def test_before_reasoning_collects_export_slots():
-    bus = EventBus()
-    tools = Mock()
-    tools.set_context = Mock()
-    session = _DummySession("telegram:123")
-    session_mgr = SimpleNamespace(get_or_create=lambda key: session)
-    context_builder = Mock()
-    context_builder.render = Mock(return_value=None)
-
-    class SlotModule:
-        slot = "test.before_reasoning.slot"
-        requires = ("before_reasoning.emit", "reasoning:ctx")
-
-        async def run(self, frame: BeforeReasoningFrame) -> BeforeReasoningFrame:
-            frame.slots["reasoning:extra_hint:test"] = "slot hint"
-            frame.slots["reasoning:abort_reply"] = "slot abort"
-            return frame
-
-    phase = Phase(
-        default_before_reasoning_modules(
-            bus,
-            TurnEvents(bus, core_kernel),
-            cast(ToolRegistry, tools),
-            cast(SessionManager, session_mgr),
-            cast(ContextBuilder, context_builder),
-            plugin_modules=[SlotModule()],
-        ),
-        frame_factory=BeforeReasoningFrame,
-    )
-    msg = _inbound()
-    before_turn = BeforeTurnCtx(
-        session_key="telegram:123",
-        channel=msg.channel,
-        chat_id=msg.chat_id,
-        content=msg.content,
-        timestamp=msg.timestamp,
-        retrieved_memory_block="",
-        retrieval_trace_raw=None,
-        history_messages=(),
-        context_scope=None,
-    )
-    state = TurnState(msg=msg, session_key="telegram:123", dispatch_outbound=True)
-    state.session = session
-
-    ctx = await phase.run(BeforeReasoningInput(state=state, before_turn=before_turn))
-
-    assert ctx.extra_hints == ["slot hint"]
-    assert ctx.abort is True
-    assert ctx.abort_reply == "slot abort"
-    context_builder.render.assert_not_called()
-
-
-@pytest.mark.asyncio
 async def test_before_reasoning_chain_modify_skill_names_used_in_finalize_render():
     bus = EventBus()
     tools = Mock()
@@ -981,17 +784,17 @@ async def test_before_reasoning_chain_modify_skill_names_used_in_finalize_render
     context_builder = Mock()
     context_builder.render = Mock(return_value=None)
 
-    async def modify_chain(ctx: BeforeReasoningCtx) -> BeforeReasoningCtx:
-        ctx.skill_names.append("chain_added_skill")
-        ctx.retrieved_memory_block = "chain_modified_block"
-        return ctx
+    async def modify_chain(event: ReasoningStarting) -> ReasoningStarting:
+        return replace(
+            event,
+            skill_names=(*event.skill_names, "chain_added_skill"),
+            retrieved_memory_block="chain_modified_block",
+        )
 
-    bus.on(BeforeReasoningCtx, modify_chain)
-
+    kernel = kernel_with(on=((ReasoningStarting, modify_chain),))
     phase = Phase(
         default_before_reasoning_modules(
-            bus,
-            TurnEvents(bus, core_kernel),
+            TurnEvents(bus, lambda: kernel),
             cast(ToolRegistry, tools),
             cast(SessionManager, session_mgr),
             cast(ContextBuilder, context_builder),
@@ -1028,7 +831,7 @@ async def test_before_reasoning_chain_modify_skill_names_used_in_finalize_render
 async def test_before_step_setup_records_token_estimate():
     bus = EventBus()
     phase = Phase(
-        default_before_step_modules(bus, TurnEvents(bus, core_kernel)),
+        default_before_step_modules(TurnEvents(bus, core_kernel)),
         frame_factory=BeforeStepFrame,
     )
     messages = [{"role": "user", "content": "hello"}]
@@ -1048,75 +851,16 @@ async def test_before_step_setup_records_token_estimate():
 
 
 @pytest.mark.asyncio
-async def test_prompt_render_chain_appends_bottom_section(tmp_path):
-    RoleStore(tmp_path).create_role(role_id="mira", name="Mira", system_prompt="test")
-    bus = EventBus()
-
-    async def append_section(ctx: PromptRenderCtx) -> PromptRenderCtx:
-        ctx.system_sections_bottom.append(
-            PromptSectionRender(
-                name="plugin_protocol",
-                content="# Plugin Protocol\n\n稳定协议",
-                is_static=False,
-            )
-        )
-        return ctx
-
-    bus.on(PromptRenderCtx, append_section)
-    memory = SimpleNamespace(
-        read_self=lambda: "",
-        read_profile=lambda: "",
-        read_recent_context=lambda: "",
-        get_memory_context=lambda: "",
-    )
-    context = ContextBuilder(
-        tmp_path, memory=cast(Any, memory), runtime_roles=RoleStore(tmp_path)
-    )
-    phase = Phase(
-        default_prompt_render_modules(bus, TurnEvents(bus, core_kernel), context),
-        frame_factory=PromptRenderFrame,
-    )
-
-    result = await phase.run(
-        PromptRenderInput(
-            session_key="k",
-            channel="cli",
-            chat_id="ch",
-            content="hello",
-            media=None,
-            timestamp=_now,
-            history=[],
-            skill_names=None,
-            retrieved_memory_block="",
-            disabled_sections=set(),
-            turn_injection_prompt="",
-            session_metadata={"role_id": "mira"},
-        )
-    )
-
-    assert "Plugin Protocol" in str(result.messages[0]["content"])
-
-
-@pytest.mark.asyncio
 async def test_prompt_render_chain_respects_disabled_sections(tmp_path):
     RoleStore(tmp_path).create_role(role_id="mira", name="Mira", system_prompt="test")
 
-    class BottomModule:
-        slot = "test.prompt.bottom"
-        requires = ("prompt_render.emit", "prompt:ctx")
-        produces = ("prompt:ctx",)
+    async def add_bottom(event: PromptRendering) -> PromptRendering:
+        section = PromptSectionRender(
+            name="memes", content="# Memes\n\n<meme:happy>", is_static=False
+        )
+        return replace(event, system_sections_bottom=(section,))
 
-        async def run(self, frame: PromptRenderFrame) -> PromptRenderFrame:
-            ctx = cast(PromptRenderCtx, frame.slots["prompt:ctx"])
-            ctx.system_sections_bottom.append(
-                PromptSectionRender(
-                    name="memes",
-                    content="# Memes\n\n<meme:happy>",
-                    is_static=False,
-                )
-            )
-            return frame
-
+    kernel = kernel_with(on=((PromptRendering, add_bottom),))
     memory = SimpleNamespace(
         read_self=lambda: "",
         read_profile=lambda: "",
@@ -1127,12 +871,7 @@ async def test_prompt_render_chain_respects_disabled_sections(tmp_path):
         tmp_path, memory=cast(Any, memory), runtime_roles=RoleStore(tmp_path)
     )
     phase = Phase(
-        default_prompt_render_modules(
-            EventBus(),
-            TurnEvents(EventBus(), core_kernel),
-            context,
-            plugin_modules=[BottomModule()],
-        ),
+        default_prompt_render_modules(TurnEvents(EventBus(), lambda: kernel), context),
         frame_factory=PromptRenderFrame,
     )
 
@@ -1157,76 +896,15 @@ async def test_prompt_render_chain_respects_disabled_sections(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_prompt_render_collects_export_slots(tmp_path):
-    RoleStore(tmp_path).create_role(role_id="mira", name="Mira", system_prompt="test")
-
-    class SlotModule:
-        slot = "test.prompt.slot"
-        requires = ("prompt_render.emit", "prompt:ctx")
-
-        async def run(self, frame: PromptRenderFrame) -> PromptRenderFrame:
-            frame.slots["prompt:section_top:top_slot"] = "top content"
-            frame.slots["prompt:section_bottom:bottom_slot"] = PromptSectionRender(
-                name="bottom_slot",
-                content="bottom content",
-                is_static=False,
-            )
-            frame.slots["prompt:extra_hint:test"] = "hint content"
-            return frame
-
-    memory = SimpleNamespace(
-        read_self=lambda: "",
-        read_profile=lambda: "",
-        read_recent_context=lambda: "",
-        get_memory_context=lambda: "",
-    )
-    context = ContextBuilder(
-        tmp_path, memory=cast(Any, memory), runtime_roles=RoleStore(tmp_path)
-    )
-    phase = Phase(
-        default_prompt_render_modules(
-            EventBus(),
-            TurnEvents(EventBus(), core_kernel),
-            context,
-            plugin_modules=[SlotModule()],
-        ),
-        frame_factory=PromptRenderFrame,
-    )
-
-    result = await phase.run(
-        PromptRenderInput(
-            session_key="k",
-            channel="cli",
-            chat_id="ch",
-            content="hello",
-            media=None,
-            timestamp=_now,
-            history=[],
-            skill_names=None,
-            retrieved_memory_block="",
-            disabled_sections=set(),
-            turn_injection_prompt="",
-            session_metadata={"role_id": "mira"},
-        )
-    )
-    rendered = str(result.messages)
-
-    assert "top content" in rendered
-    assert "bottom content" in rendered
-    assert "hint content" in rendered
-
-
-@pytest.mark.asyncio
 async def test_before_step_finalize_injects_extra_hints():
     bus = EventBus()
 
-    async def append_hint(ctx: BeforeStepCtx) -> BeforeStepCtx:
-        ctx.extra_hints.append("hints from plugin")
-        return ctx
+    async def append_hint(event: StepStarting) -> StepStarting:
+        return replace(event, extra_hints=(*event.extra_hints, "hints from plugin"))
 
-    bus.on(BeforeStepCtx, append_hint)
+    kernel = kernel_with(on=((StepStarting, append_hint),))
     phase = Phase(
-        default_before_step_modules(bus, TurnEvents(bus, core_kernel)),
+        default_before_step_modules(TurnEvents(bus, lambda: kernel)),
         frame_factory=BeforeStepFrame,
     )
     messages = [{"role": "user", "content": "hello"}]
@@ -1247,54 +925,15 @@ async def test_before_step_finalize_injects_extra_hints():
 
 
 @pytest.mark.asyncio
-async def test_before_step_collects_export_slots():
-    class SlotModule:
-        slot = "test.before_step.slot"
-        requires = ("before_step.emit", "step:ctx")
-
-        async def run(self, frame: BeforeStepFrame) -> BeforeStepFrame:
-            frame.slots["step:extra_hint:test"] = "slot step hint"
-            frame.slots["step:abort_reply"] = "slot stop"
-            return frame
-
-    phase = Phase(
-        default_before_step_modules(
-            EventBus(),
-            TurnEvents(EventBus(), core_kernel),
-            plugin_modules=[SlotModule()],
-        ),
-        frame_factory=BeforeStepFrame,
-    )
-    messages = [{"role": "user", "content": "hello"}]
-
-    ctx = await phase.run(
-        BeforeStepInput(
-            session_key="k",
-            channel="c",
-            chat_id="ch",
-            iteration=1,
-            messages=messages,
-            visible_names=None,
-        )
-    )
-
-    assert ctx.extra_hints == ["slot step hint"]
-    assert ctx.early_stop is True
-    assert ctx.early_stop_reply == "slot stop"
-
-
-@pytest.mark.asyncio
 async def test_before_step_finalize_early_stop():
     bus = EventBus()
 
-    async def stop_early(ctx: BeforeStepCtx) -> BeforeStepCtx:
-        ctx.early_stop = True
-        ctx.early_stop_reply = "预算不足"
-        return ctx
+    async def stop_early(event: StepStarting) -> Veto:
+        return Veto("预算不足")
 
-    bus.on(BeforeStepCtx, stop_early)
+    kernel = kernel_with(on=((StepStarting, stop_early),))
     phase = Phase(
-        default_before_step_modules(bus, TurnEvents(bus, core_kernel)),
+        default_before_step_modules(TurnEvents(bus, lambda: kernel)),
         frame_factory=BeforeStepFrame,
     )
     messages = [{"role": "user", "content": "hello"}]
@@ -1319,12 +958,12 @@ async def test_after_step_phase_runs_observers():
     bus = EventBus()
     side_effect: list[str] = []
 
-    async def handler(ctx: AfterStepCtx) -> None:
-        side_effect.append(ctx.partial_reply)
+    async def handler(event: StepFinished) -> None:
+        side_effect.append(event.partial_reply)
 
-    bus.on(AfterStepCtx, handler)
+    bus.on(StepFinished, handler)
     phase = Phase(
-        default_after_step_modules(bus, TurnEvents(bus, core_kernel)),
+        default_after_step_modules(TurnEvents(bus, core_kernel)),
         frame_factory=AfterStepFrame,
     )
     await phase.run(
@@ -1347,72 +986,17 @@ async def test_after_step_phase_runs_observers():
 
 
 @pytest.mark.asyncio
-async def test_after_step_collects_telemetry_slots_before_fanout():
-    bus = EventBus()
-    seen: list[dict[str, Any]] = []
-
-    class SlotModule:
-        slot = "test.after_step.pre"
-        requires = ("after_step.copy_input", "step:ctx")
-
-        async def run(self, frame: AfterStepFrame) -> AfterStepFrame:
-            frame.slots["step:telemetry:test"] = {"ok": True}
-            return frame
-
-    class AfterFanoutSlotModule:
-        slot = "test.after_step.post"
-        requires = ("after_step.fanout", "step:ctx")
-
-        async def run(self, frame: AfterStepFrame) -> AfterStepFrame:
-            frame.slots["step:telemetry:after"] = "done"
-            frame.slots["step:telemetry:test"] = "overwritten"
-            return frame
-
-    async def handler(ctx: AfterStepCtx) -> None:
-        seen.append(dict(ctx.extra_metadata))
-
-    bus.on(AfterStepCtx, handler)
-    phase = Phase(
-        default_after_step_modules(
-            bus,
-            TurnEvents(bus, core_kernel),
-            plugin_modules=[SlotModule(), AfterFanoutSlotModule()],
-        ),
-        frame_factory=AfterStepFrame,
-    )
-    ctx = await phase.run(
-        AfterStepCtx(
-            session_key="k",
-            channel="c",
-            chat_id="ch",
-            iteration=0,
-            context_tokens_estimate=0,
-            tools_called=(),
-            partial_reply="ok",
-            tools_used_so_far=(),
-            tool_chain_partial=(),
-            partial_thinking=None,
-            has_more=True,
+async def test_after_reasoning_applies_reasoning_finished_to_store_and_outbound():
+    async def attach(event: ReasoningFinished) -> ReasoningFinished:
+        return replace(
+            event,
+            media=("/tmp/a.png",),
+            outbound_metadata=MappingProxyType(
+                {**event.outbound_metadata, "plugin_flag": "m"}
+            ),
         )
-    )
 
-    assert seen == [{"test": {"ok": True}}]
-    assert ctx.extra_metadata == {"test": {"ok": True}, "after": "done"}
-
-
-@pytest.mark.asyncio
-async def test_after_reasoning_collects_persist_and_outbound_slots():
-    class SlotModule:
-        slot = "test.after_reasoning.slot"
-        requires = ("after_reasoning.emit", "reasoning:ctx")
-
-        async def run(self, frame: AfterReasoningFrame) -> AfterReasoningFrame:
-            frame.slots["persist:user:user_flag"] = "u"
-            frame.slots["persist:assistant:assistant_flag"] = "a"
-            frame.slots["outbound:metadata:plugin_flag"] = "m"
-            frame.slots["outbound:media:image"] = ["/tmp/a.png", None, 1]
-            return frame
-
+    kernel = kernel_with(on=((ReasoningFinished, attach),))
     session = _DummySession("telegram:123")
     msg = _inbound()
     state = TurnState(msg=msg, session_key=session.key, dispatch_outbound=True)
@@ -1433,17 +1017,15 @@ async def test_after_reasoning_collects_persist_and_outbound_slots():
     phase = Phase(
         default_after_reasoning_modules(
             EventBus(),
-            TurnEvents(EventBus(), core_kernel),
+            TurnEvents(EventBus(), lambda: kernel),
             cast(Any, services),
-            plugin_modules=[SlotModule()],
         ),
         frame_factory=AfterReasoningFrame,
     )
 
     result = await phase.run(AfterReasoningInput(state=state, turn_result=turn_result))
 
-    assert session.messages[0]["user_flag"] == "u"
-    assert session.messages[1]["assistant_flag"] == "a"
+    assert session.messages[1]["media"] == ["/tmp/a.png"]
     assert result.outbound.metadata["before_turn_flag"] == "bt"
     assert result.outbound.metadata["plugin_flag"] == "m"
     assert result.outbound.media == ["/tmp/a.png"]
@@ -1638,80 +1220,6 @@ async def test_after_reasoning_enriches_session_metadata_with_relationship_runti
     assert relationship_snapshot["role_self_view"] == "我在想你。"
 
 
-@pytest.mark.asyncio
-async def test_after_turn_collects_extra_and_telemetry_slots():
-    committed_extra: list[dict[str, object]] = []
-    after_turn_metadata: list[dict[str, object]] = []
-    bus = EventBus()
-
-    class ExtraModule:
-        slot = "test.after_turn.extra"
-        requires = ("after_turn.build_work", "turn:extra")
-
-        async def run(self, frame: AfterTurnFrame) -> AfterTurnFrame:
-            frame.slots["turn:extra:plugin_flag"] = "extra"
-            return frame
-
-    class TelemetryModule:
-        slot = "test.after_turn.telemetry"
-        requires = ("after_turn.build_ctx", "turn:ctx")
-
-        async def run(self, frame: AfterTurnFrame) -> AfterTurnFrame:
-            frame.slots["turn:telemetry:plugin_flag"] = "telemetry"
-            return frame
-
-    async def committed_handler(event: TurnCommitted) -> None:
-        committed_extra.append(dict(event.extra))
-
-    async def after_turn_handler(ctx: AfterTurnCtx) -> None:
-        after_turn_metadata.append(dict(ctx.extra_metadata))
-
-    bus.on(AfterTurnCtx, after_turn_handler)
-    bus.on(TurnCommitted, committed_handler)
-    session = _DummySession("telegram:123")
-    msg = _inbound()
-    state = TurnState(msg=msg, session_key=session.key, dispatch_outbound=False)
-    state.session = session
-    ctx = AfterReasoningCtx(
-        session_key=session.key,
-        channel=msg.channel,
-        chat_id=msg.chat_id,
-        tools_used=(),
-        thinking=None,
-        response_metadata=ResponseMetadata(raw_text="reply"),
-        streamed=False,
-        tool_chain=(),
-        context_retry={},
-        reply="reply",
-    )
-    context = Mock()
-    context.render = Mock(return_value=SimpleNamespace(messages=[]))
-    context.last_debug_breakdown = []
-    phase = Phase(
-        default_after_turn_modules(
-            bus,
-            TurnEvents(bus, core_kernel),
-            _DummyOutbound(),
-            cast(ContextBuilder, context),
-            plugin_modules=[ExtraModule(), TelemetryModule()],
-        ),
-        frame_factory=AfterTurnFrame,
-    )
-
-    await phase.run(
-        TurnSnapshot(
-            state=state,
-            outbound=OutboundMessage(
-                channel=msg.channel, chat_id=msg.chat_id, content="reply"
-            ),
-            ctx=ctx,
-        )
-    )
-
-    assert committed_extra[0]["plugin_flag"] == "extra"
-    assert after_turn_metadata == [{"plugin_flag": "telemetry"}]
-
-
 class _RecordingConsolidator:
     """Records which consolidation the context guard asked for."""
 
@@ -1731,7 +1239,6 @@ async def _guard_group_turn(
 ) -> None:
     phase = Phase(
         default_before_turn_modules(
-            EventBus(),
             TurnEvents(EventBus(), core_kernel),
             manager,
             cast(
@@ -1815,7 +1322,6 @@ async def test_registered_command_answers_before_retrieval_and_keeps_session():
     context = SimpleNamespace(prepare=AsyncMock())
     phase = Phase(
         default_before_turn_modules(
-            EventBus(),
             TurnEvents(EventBus(), lambda: kernel),
             cast(SessionManager, SimpleNamespace(get_or_create=lambda key: session)),
             cast(ContextStore, context),

@@ -6,14 +6,7 @@ from typing import TYPE_CHECKING, TypeAlias, cast
 from agent.core.passive_support import predict_current_user_source_ref
 from agent.core.types import ContextRequest
 from agent.tools.turn_origin import set_tool_origin
-from agent.lifecycle.phase import (
-    PhaseFrame,
-    PhaseModule,
-    append_string_exports,
-    collect_prefixed_slots,
-    topo_sort_modules,
-)
-from bus.event_bus import EventBus
+from agent.lifecycle.phase import PhaseFrame, PhaseModule, topo_sort_modules
 from agent.core.turn_events import TurnEvents
 from agent.lifecycle.types import BeforeReasoningCtx, BeforeReasoningInput
 from shiori_sdk.channels.message_source import MessageSource
@@ -35,8 +28,6 @@ BeforeReasoningModules: TypeAlias = list[PhaseModule[BeforeReasoningFrame]]
 
 
 _CTX_SLOT = "reasoning:ctx"
-_EXTRA_HINT_PREFIX = "reasoning:extra_hint:"
-_ABORT_REPLY_SLOT = "reasoning:abort_reply"
 
 
 class _SyncToolContextModule:
@@ -123,14 +114,11 @@ class _EmitBeforeReasoningCtxModule:
     requires = ("before_reasoning.build_ctx", _CTX_SLOT)
     produces = (_CTX_SLOT,)
 
-    def __init__(self, bus: EventBus, events: TurnEvents) -> None:
-        self._bus = bus
+    def __init__(self, events: TurnEvents) -> None:
         self._events = events
 
     async def run(self, frame: BeforeReasoningFrame) -> BeforeReasoningFrame:
         ctx = cast(BeforeReasoningCtx, frame.slots[_CTX_SLOT])
-        ctx = await self._bus.emit(ctx)
-        frame.slots[_CTX_SLOT] = ctx
 
         def apply(event: ReasoningStarting) -> None:
             ctx.skill_names[:] = event.skill_names
@@ -160,7 +148,7 @@ def _reasoning_starting(ctx: BeforeReasoningCtx) -> ReasoningStarting:
 
 class _PromptWarmupModule:
     slot = "before_reasoning.warmup"
-    requires = ("before_reasoning.collect_exports", _CTX_SLOT)
+    requires = ("before_reasoning.emit", _CTX_SLOT)
 
     def __init__(self, context: ContextBuilder) -> None:
         self._context = context
@@ -192,25 +180,6 @@ class _PromptWarmupModule:
         return frame
 
 
-class _CollectBeforeReasoningExportSlotsModule:
-    slot = "before_reasoning.collect_exports"
-    requires = ("before_reasoning.emit", _CTX_SLOT)
-    produces = (_CTX_SLOT,)
-
-    async def run(self, frame: BeforeReasoningFrame) -> BeforeReasoningFrame:
-        ctx = cast(BeforeReasoningCtx, frame.slots[_CTX_SLOT])
-        append_string_exports(
-            ctx.extra_hints,
-            collect_prefixed_slots(frame.slots, _EXTRA_HINT_PREFIX),
-        )
-        # 插件也可以在 before_emit 阶段直接改 ctx.abort；after_emit 阶段用 slot export。
-        abort_reply = frame.slots.get(_ABORT_REPLY_SLOT)
-        if isinstance(abort_reply, str) and abort_reply:
-            ctx.abort = True
-            ctx.abort_reply = abort_reply
-        return frame
-
-
 class _ReturnBeforeReasoningCtxModule:
     slot = "before_reasoning.return"
     requires = ("before_reasoning.warmup", _CTX_SLOT)
@@ -221,22 +190,16 @@ class _ReturnBeforeReasoningCtxModule:
 
 
 def default_before_reasoning_modules(
-    bus: EventBus,
     events: TurnEvents,
     tools: ToolRegistry,
     session_manager: SessionManager,
     context: ContextBuilder,
-    plugin_modules: BeforeReasoningModules | None = None,
 ) -> BeforeReasoningModules:
     builtins: BeforeReasoningModules = [
         _SyncToolContextModule(tools, session_manager),
         _BuildBeforeReasoningCtxModule(),
-        _EmitBeforeReasoningCtxModule(bus, events),
-        _CollectBeforeReasoningExportSlotsModule(),
+        _EmitBeforeReasoningCtxModule(events),
         _PromptWarmupModule(context),
         _ReturnBeforeReasoningCtxModule(),
     ]
-    return cast(
-        BeforeReasoningModules,
-        topo_sort_modules(builtins + list(plugin_modules or [])),
-    )
+    return cast(BeforeReasoningModules, topo_sort_modules(builtins))

@@ -61,7 +61,7 @@ flowchart TD
 - `RuntimeDispatcher` 是 bus 的唯一消费者，为每条渠道消息获取租约后交给当代 `AgentLoop.process_inbound()`；定时任务与子回合沿用父操作的那一代。
 - `RuntimeBackground` 为每一代准备主动循环与记忆优化任务。换代或关闭时 `stop()` 取消上一代在途的后台工作（记忆整理回滚 PENDING 快照，主动 tick 放弃未发出的部分，已进出站队列的回复照常发出），新一代等它退出后按自身间隔重新调度；切换不等待卡在模型重试里的后台任务。
 - `ChannelHost`（`bootstrap/channel_host.py`）是跨代长驻的渠道宿主，负责渠道启动、交接与失败快照。
-- 例外：`plugin.config.set` 只改一张插件表时不换代（#857）。`RuntimeSettingsApplication._reload_plugin` 调 `PluginKernel.reload` 在当前代内重载目标及其强依赖消费者（排空它们自己的在途调用，含阶段模块与工具钩子的当次执行，最长 60 秒），落盘在内核不可取消的替换步骤里完成，桥接发 `plugins.reloaded`。闭包含渠道或不支持热卸载的插件、目标非 ACTIVE 时仍走整代切换；已停用插件只落盘。
+- 例外：`plugin.config.set` 只改一张插件表时不换代（#857）。`RuntimeSettingsApplication._reload_plugin` 调 `PluginKernel.reload` 在当前代内重载目标及其强依赖消费者（排空它们自己的在途调用，含正在执行的 `on` / `watch` 事件处理器，最长 60 秒），落盘在内核不可取消的替换步骤里完成，桥接发 `plugins.reloaded`。闭包含渠道或不支持热卸载的插件、目标非 ACTIVE 时仍走整代切换；已停用插件只落盘。
 - 例外：`plugins.setEnabled` 同样不换代（#858）。`_reload_plugin` 改调 `PluginKernel.set_enabled`：停用直接处置目标及其活动的强依赖消费者（不排空，在途工作随之取消，进程资源关闭），留下 DISABLED / BLOCKED 句柄；启用加载 DISABLED 的目标和因它而 BLOCKED 的消费者，setup 失败照整代切换的做法保留为 FAILED。落盘失败恢复原状态，桥接同样发 `plugins.reloaded`。闭包含渠道或不支持热卸载的插件、启用目标的依赖处于 FAILED 等只能整代重试的状态时仍走整代切换。
 
 ## Bridge 与消息入口
@@ -111,8 +111,8 @@ LLM 调用由 `apps/backend/agent/provider.py` 封装，使用官方 `openai` SD
 
 - `ToolRegistry` 保存工具、schema、风险、always-on、搜索索引和 source metadata；MCP 工具也同步到该 registry。内置 toolset 由 `apps/backend/bootstrap/toolsets/` 注册。
 - 记忆契约 `MemoryEngine`、`MemoryQuery`、`MemoryQueryResult`、`MemoryMutation` 定义在 SDK 的 `packages/sdk/python/shiori_sdk/memory/`；`apps/backend/core/memory/` 的 `MemoryRuntime` 组合宿主 Markdown 记忆与所选 engine，默认 engine 位于 `plugins/default_memory/backend/`，由 `bootstrap/wiring.py` 的 `resolve_memory_plugin()` 加载。
-- `PluginKernel` 同时负责 discover/import/config/context 注入、EventBus handler、tool、phase module、channel、bot command、RPC、服务注册、initialize rollback、drain 和 terminate。
-- 插件的 phase module 与工具事件处理不在启动时复制：`CoreRuntime.start()` 把本代 `PluginKernel` 绑定给 `AgentLoop.bind_plugin_contributions()` 与 spawn 的 `SubagentManager.bind_kernel()`，主动循环（`RuntimeBackground`）同样传入读取本代内核的来源。被动回合各阶段（经 `core/common/live_contributions.py` 的 `LiveContributions`）与 `ToolExecutor` 每次使用时读取当前 ACTIVE 插件的贡献与内核，插件在代内卸载或新加载后下一次回合/工具调用/主动 tick 即生效；阶段只在贡献集合变化时重建并重新校验（启动时的集合在接线处即校验）。
+- `PluginKernel` 同时负责 discover/import/config/context 注入、EventBus handler、tool、channel、RPC、服务注册、initialize rollback、drain 和 terminate；插件的回合与工具事件处理器挂在本代内核（`shiori_sdk.kernel`）上。
+- 回合与工具事件经本代内核发出：`CoreRuntime.start()` 把读取本代内核的来源绑定给 `AgentLoop.bind_kernel()` 与 spawn 的 `SubagentManager.bind_kernel()`，主动循环（`RuntimeBackground`）同样传入该来源。被动回合各阶段（`agent/core/turn_events.py` 的 `TurnEvents`）与 `ToolExecutor` 每次发出事件时读取内核，内核只运行当前 ACTIVE 插件的处理器，插件在代内卸载或新加载后下一次回合/工具调用/主动 tick 即生效。阶段本身只由核心模块组成，构造一次。
 - `ScopedEventBus` 将每个事件订阅注册到所属 `EffectScope`，插件卸载和初始化回滚会撤销贡献；已经开始的 handler 由插件 disposer 等待或取消。
 
 ## 持久化边界

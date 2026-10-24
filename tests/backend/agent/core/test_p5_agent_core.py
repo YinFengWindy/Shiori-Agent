@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime
 from types import SimpleNamespace
 from typing import cast
@@ -18,7 +19,9 @@ from agent.tools.registry import ToolRegistry
 from agent.turns.outbound import OutboundPort
 from bus.event_bus import EventBus
 from shiori_sdk.messages import InboundMessage
-from agent.lifecycle.types import BeforeReasoningCtx, BeforeTurnCtx
+from shiori_sdk.core.conversation import ReasoningStarting, TurnStarting
+from shiori_sdk.kernel import Veto
+from tests.support.tool_calls import kernel_with
 from agent.lifecycle.phases.before_turn import MemoryConsolidationFailedError
 from session.manager import SessionManager
 
@@ -222,18 +225,10 @@ async def test_agent_core_before_reasoning_can_patch_context():
     )
     event_bus = EventBus()
 
-    event_bus.on(
-        BeforeReasoningCtx,
-        lambda ctx: BeforeReasoningCtx(
-            session_key=ctx.session_key,
-            channel=ctx.channel,
-            chat_id=ctx.chat_id,
-            content=ctx.content,
-            timestamp=ctx.timestamp,
-            skill_names=["new"],
-            retrieved_memory_block="new memory",
-        ),
-    )
+    async def patch(event: ReasoningStarting) -> ReasoningStarting:
+        return replace(event, skill_names=("new",), retrieved_memory_block="new memory")
+
+    kernel = kernel_with(on=((ReasoningStarting, patch),))
     agent_core = AgentCore(
         AgentCoreDeps(
             session=cast(
@@ -254,6 +249,7 @@ async def test_agent_core_before_reasoning_can_patch_context():
             event_bus=event_bus,
         )
     )
+    agent_core.bind_kernel(lambda: kernel)
     msg = InboundMessage(channel="telegram", sender="hua", chat_id="123", content="hi")
 
     await agent_core.process(msg, "telegram:123")
@@ -291,12 +287,10 @@ async def test_before_turn_abort_skips_reasoner_and_commit_and_dispatches():
     event_bus = EventBus()
     dispatch_port = AsyncMock(return_value=True)
 
-    async def abort_handler(ctx):
-        ctx.abort = True
-        ctx.abort_reply = "blocked by policy"
-        return ctx
+    async def abort_handler(event: TurnStarting) -> Veto:
+        return Veto("blocked by policy")
 
-    event_bus.on(BeforeTurnCtx, abort_handler)
+    kernel = kernel_with(on=((TurnStarting, abort_handler),))
 
     agent_core = AgentCore(
         AgentCoreDeps(
@@ -316,6 +310,7 @@ async def test_before_turn_abort_skips_reasoner_and_commit_and_dispatches():
             outbound_port=cast(OutboundPort, dispatch_port),
         )
     )
+    agent_core.bind_kernel(lambda: kernel)
     msg = InboundMessage(channel="telegram", sender="hua", chat_id="123", content="hi")
 
     out = await agent_core.process(msg, "telegram:123", dispatch_outbound=True)
@@ -343,12 +338,10 @@ async def test_before_reasoning_abort_skips_reasoner_and_commit_and_dispatches()
     event_bus = EventBus()
     dispatch_port = AsyncMock(return_value=True)
 
-    async def abort_handler(ctx):
-        ctx.abort = True
-        ctx.abort_reply = "rate limited"
-        return ctx
+    async def abort_handler(event: ReasoningStarting) -> Veto:
+        return Veto("rate limited")
 
-    event_bus.on(BeforeReasoningCtx, abort_handler)
+    kernel = kernel_with(on=((ReasoningStarting, abort_handler),))
 
     agent_core = AgentCore(
         AgentCoreDeps(
@@ -368,6 +361,7 @@ async def test_before_reasoning_abort_skips_reasoner_and_commit_and_dispatches()
             outbound_port=cast(OutboundPort, dispatch_port),
         )
     )
+    agent_core.bind_kernel(lambda: kernel)
     msg = InboundMessage(channel="telegram", sender="hua", chat_id="123", content="hi")
 
     out = await agent_core.process(msg, "telegram:123", dispatch_outbound=True)
@@ -393,12 +387,10 @@ async def test_abort_does_not_dispatch_when_dispatch_outbound_false():
     event_bus = EventBus()
     dispatch_port = AsyncMock(return_value=True)
 
-    async def abort_handler(ctx):
-        ctx.abort = True
-        ctx.abort_reply = "quiet abort"
-        return ctx
+    async def abort_handler(event: TurnStarting) -> Veto:
+        return Veto("quiet abort")
 
-    event_bus.on(BeforeTurnCtx, abort_handler)
+    kernel = kernel_with(on=((TurnStarting, abort_handler),))
 
     agent_core = AgentCore(
         AgentCoreDeps(
@@ -418,6 +410,7 @@ async def test_abort_does_not_dispatch_when_dispatch_outbound_false():
             outbound_port=cast(OutboundPort, dispatch_port),
         )
     )
+    agent_core.bind_kernel(lambda: kernel)
     msg = InboundMessage(channel="telegram", sender="hua", chat_id="123", content="hi")
 
     out = await agent_core.process(msg, "telegram:123", dispatch_outbound=False)

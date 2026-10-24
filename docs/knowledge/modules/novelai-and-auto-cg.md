@@ -57,7 +57,7 @@ NovelAI 与故事的业务回归分别随 `plugins/novelai/tests/`、`plugins/st
 4. NovelAI 插件通过 `scene_observations` capability 登记角色消费需求，订阅场景事件。`AutoCgController` 独立检查自动 CG 开关、视觉去重、冷却与手动生成抑制；通过后才由 `scene_prompt.py` 使用既有 light 模型把冻结的中立场景事实转换为 NovelAI tags 和画幅，并校验供应商参数。角色能力中的自动场景 CG 卡片通过齿轮弹层编辑中文或多行「补充要求」，独立自动保存至 `plugin_data.novelai.<role_id>.auto_scene_cg_prompt_instructions`；开关仍跟随角色页保存，两种保存只修改各自字段。控制器在调度时读取要求快照，提示词模型将其作为绘图要求理解，空白时不注入；后续编辑影响下一次自动 CG，不改变手动生图、Story 或历史图片的请求重放。删除角色时随该角色的 NovelAI 偏好一同清理。
 5. 图片生成成功后立即记录冷却和视觉去重，再执行非主动补发。桌面通过 `message_push`，外部渠道通过 `account_send` 的宿主补发参数，由账号投递服务匹配原始 transport/channel 与 chat ID 对应的当前绑定用户私聊，并同步回权威角色会话；绑定消失或地址变化时明确拒绝，不改发其他用户或会话。
 
-`AfterTurnCtx.will_dispatch` 只表示核心消息总线是否还需下发回复，不表示回合是否完成。桌面桥接直接取得回复时该值为 `false`，场景观察仍必须处理这个有效回合。
+`TurnFinished.will_dispatch` 只表示核心消息总线是否还需下发回复，不表示回合是否完成。桌面桥接直接取得回复时该值为 `false`，场景观察仍必须处理这个有效回合。
 
 ## 防重复与失败处理
 

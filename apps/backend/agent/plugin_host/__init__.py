@@ -1,6 +1,5 @@
 """插件内核公共入口：内核、manifest、运行时上下文与 capability 契约。"""
 
-from agent.plugin_host.capabilities import PluginContributions
 from agent.plugin_host.config_schema import (
     ConfigModelError,
     PluginConfigSchemaRegistry,
@@ -31,7 +30,6 @@ __all__ = [
     "DEFAULT_ENTRY",
     "ManifestError",
     "PluginConfigSchemaRegistry",
-    "PluginContributions",
     "PluginGenerationSettings",
     "PluginHandle",
     "PluginKernel",

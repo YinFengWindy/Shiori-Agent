@@ -4,46 +4,28 @@ import hashlib
 import json
 import re
 import threading
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
+from shiori_sdk.core.conversation import TurnStarting
 from shiori_sdk.core.tools import ToolCalled
-from shiori_sdk.lifecycle import LifecycleFrame
-from shiori_sdk.lifecycle import (
-    BeforeTurnObservation as BeforeTurnCtx,
-)
 from shiori_sdk.storage import plugin_data_dir
 
 if TYPE_CHECKING:
     from shiori_sdk.memory.context import MemoryPluginContext as PluginRuntimeContext
 
-_CTX_SLOT = "session:ctx"
 _ITEM_LINE_RE = re.compile(r"^-\s+\[([^\]]+)\]\s*(.*)$")
 _META_RE = re.compile(r"（(?P<meta>[^（）]*(?:证据|src|有印象|不确定)[^（）]*)）$")
-
-
-class ContextPrepareRecordModule:
-    slot = "default_memory.inspector"
-    requires = ("before_turn.emit", _CTX_SLOT)
-    produces = ()
-
-    def __init__(self, recorder: "_DefaultMemoryRecorder") -> None:
-        self._recorder = recorder
-
-    async def run[FrameT: LifecycleFrame](self, frame: FrameT) -> FrameT:
-        ctx = frame.slots.get(_CTX_SLOT)
-        if isinstance(ctx, BeforeTurnCtx):
-            self._recorder.record_context_prepare(ctx)
-        return frame
 
 
 class _DefaultMemoryRecorder:
     """记录 default 记忆引擎的检索/召回轨迹到 workspace 下的 jsonl 文件。
 
     是否激活只在装配时判定一次（与旧 initialize() 里的一次性判定等价，见
-    setup() 文档）；两个记录入口（before_turn 模块、AFTER_TOOL_RESULT 事件）
-    共享同一份状态，因此收进一个小类而不是两处散落的闭包。
+    setup() 文档）；两个记录入口（TurnStarting、ToolCalled 事件）共享同一份
+    状态，因此收进一个小类而不是两处散落的闭包。
     """
 
     def __init__(self, *, active: bool, data_path: Path) -> None:
@@ -53,16 +35,24 @@ class _DefaultMemoryRecorder:
         self._data_path = data_path
         self._data_path.parent.mkdir(parents=True, exist_ok=True)
 
-    def record_context_prepare(self, event: BeforeTurnCtx) -> None:
-        if not self._active:
-            return
+    async def record_context_prepare(self, event: TurnStarting) -> TurnStarting:
+        """Records a turn's retrieved memory; the event passes unchanged.
+
+        It joins the ``on`` chain rather than watching: the turn id it keeps is
+        read by the ``recall_memory`` record of the same turn.
+        """
+        if self._active:
+            self._record_context_prepare(event)
+        return event
+
+    def _record_context_prepare(self, event: TurnStarting) -> None:
         turn_id = _turn_id(
             event.session_key, event.timestamp.isoformat(), event.content
         )
         self._active_turns[event.session_key] = turn_id
         block = event.retrieved_memory_block or ""
         injected_items = _items_from_block(block)
-        all_hits = _hits_from_trace(event.retrieval_trace_raw)
+        all_hits = _hits_from_trace(event.retrieval_trace)
         self._append(
             {
                 "kind": "context_prepare",
@@ -79,7 +69,7 @@ class _DefaultMemoryRecorder:
                     "items": all_hits or injected_items,
                     "injected_items": injected_items,
                     "raw_block": block,
-                    "retrieval_trace_raw": _jsonable(event.retrieval_trace_raw),
+                    "retrieval_trace_raw": _jsonable(event.retrieval_trace),
                 },
             }
         )
@@ -137,7 +127,7 @@ class _DefaultMemoryRecorder:
 
 
 async def setup(ctx: "PluginRuntimeContext") -> None:
-    """装配 default_memory 插件壳：贡献 before_turn 检索记录模块与 recall_memory 工具结果记录。
+    """装配 default_memory 插件壳：记录每回合的检索结果与 recall_memory 工具结果。
 
     记忆引擎本体（``DefaultMemoryEngine`` / ``MemoryPlugin``）不在此文件，由
     ``shiori_sdk.memory.build`` 的独立契约装配（见同目录 ``memory_plugin.py``），
@@ -162,7 +152,7 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
         data_path=plugin_data_dir(ctx.memory.workspace, "default_memory")
         / "recall_inspector.jsonl",
     )
-    ctx.lifecycle.contribute("before_turn", [ContextPrepareRecordModule(recorder)])
+    ctx.on(TurnStarting, recorder.record_context_prepare)
     ctx.on(ToolCalled, recorder.record_recall_memory)
 
 
@@ -277,6 +267,9 @@ def _split_summary_meta(summary: str) -> tuple[str, list[str]]:
 
 
 def _jsonable(value: Any) -> Any:
+    # The event freezes a top-level dict into a read-only mapping.
+    if isinstance(value, Mapping):
+        value = dict(cast(Mapping[object, object], value))
     try:
         _ = json.dumps(value, ensure_ascii=False)
         return value

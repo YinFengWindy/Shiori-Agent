@@ -2,7 +2,7 @@
 
 v2 插件（issue #180）：不再继承旧 ``Plugin`` ABC，改为 ``setup(ctx)`` 一次性
 装配。生图前的自动 CG 守卫与生图结果的收集挂在工具事件 ``ToolCalling`` /
-``ToolCalled`` 上（#902），附图仍在 ``AfterReasoningCtx`` 上。
+``ToolCalled`` 上，附图挂在 ``ReasoningFinished`` 上（#902）。
 """
 
 from __future__ import annotations
@@ -12,8 +12,8 @@ import logging
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any, cast
 
+from shiori_sdk.core.conversation import ReasoningFinished
 from shiori_sdk.core.tools import ToolCalled, ToolCalling, ToolVeto
-from shiori_sdk.lifecycle import AfterReasoningCtx
 from shiori_sdk.role_events import RoleDeleted, SceneObservationCommitted
 from shiori_sdk.rpc import Concurrency
 
@@ -95,11 +95,13 @@ class _MediaTracker:
         else:
             _ = self._pending_media.pop(event.session_key, None)
 
-    async def attach_generated_media(self, ctx: AfterReasoningCtx) -> AfterReasoningCtx:
-        media = self._pending_media.pop(ctx.session_key, [])
-        if media:
-            ctx.media.extend(media)
-        return ctx
+    async def attach_generated_media(
+        self, event: ReasoningFinished
+    ) -> ReasoningFinished:
+        media = self._pending_media.pop(event.session_key, [])
+        if not media:
+            return event
+        return replace(event, media=(*event.media, *media))
 
 
 async def setup(ctx: "PluginRuntimeContext") -> None:
@@ -184,7 +186,7 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
 
     tracker = _MediaTracker(auto_cg)
     ctx.on(ToolCalled, tracker.track)
-    ctx.events.on(AfterReasoningCtx, tracker.attach_generated_media)
+    ctx.on(ReasoningFinished, tracker.attach_generated_media)
 
     _register_rpc(
         ctx,

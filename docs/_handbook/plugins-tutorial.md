@@ -1,6 +1,6 @@
 # 插件开发
 
-Shiori 只有一套显式 v2 插件运行时。插件提供 `manifest.yaml` 和异步 `setup(ctx)`，宿主按声明授予能力，并用作用域回收事件、阶段贡献、工具和后台任务。
+Shiori 只有一套显式 v2 插件运行时。插件提供 `manifest.yaml` 和异步 `setup(ctx)`，宿主按声明授予能力，并用作用域回收事件订阅、工具和后台任务。
 
 ## 包布局与发现
 
@@ -32,8 +32,6 @@ version: '0.1.0'
 desc: 示例插件
 capabilities:
   - config
-  - events
-  - lifecycle
   - rpc
 config_model: config:ExampleConfig
 supports_hot_unload: true
@@ -58,20 +56,20 @@ class ExampleConfig(BaseModel):
 
 ```python
 # backend/plugin.py
-from shiori_sdk.lifecycle import AfterTurnCtx
+from shiori_sdk.core.conversation import TurnFinished
 from .config import ExampleConfig
 
 async def setup(ctx):
     """Registers this activation's contributions and cleanup."""
     config = ExampleConfig.model_validate(ctx.config.as_dict())
 
-    async def after_turn(event: AfterTurnCtx):
+    async def after_turn(event: TurnFinished):
         await ctx.rpc.emit("updated", {"label": config.label})
 
     async def read_label(payload):
         return {"label": config.label}
 
-    ctx.events.on(AfterTurnCtx, after_turn)
+    ctx.watch(TurnFinished, after_turn)
     ctx.rpc.register("label.get", read_label)
 ```
 
@@ -86,7 +84,6 @@ async def setup(ctx):
 | 能力 | 用途 |
 | --- | --- |
 | `events` | `ctx.events.on(EventType, handler)`；卸载先停用并退订，再清理其它 effect，与登记先后无关 |
-| `lifecycle` | `ctx.lifecycle.contribute(phase, modules)`；登记阶段模块 |
 | `tools` | 注册工具（工具执行前后的处理改用 `ctx.on(ToolCalling, …)` / `ctx.on(ToolCalled, …)`，无需声明 capability） |
 | `channels` | 贡献 manifest 已声明的渠道（见[渠道声明](#渠道声明)）。机器人命令不是 capability：manifest 写 `inject: [commands]`，`ctx.effect("command:<名>", ctx.require(COMMANDS).register(名, handler, description=...))`；带说明的命令进入渠道命令菜单 |
 | `accounts` | `ctx.accounts.register/register_saved/report/...`：向宿主登记通信账号及其归属，随插件作用域释放（见[渠道插件](channel-plugins.md)） |
@@ -164,34 +161,34 @@ class QQBotChannel:
 - 开了流式事件就要订阅 `StreamDeltaReady` 并自己节流，最终回复仍经出站消息送达。
 - 用到这些钩子的包要声明 `runtime_api: ">=3.0.0 <4.0.0"`；旧宿主会忽略钩子。
 
-## 阶段与依赖
+## 回合事件与依赖
 
-阶段槽位为 `before_turn`、`before_reasoning`、`prompt_render`、`before_step`、`after_step`、`after_reasoning`、`after_turn`（SDK 的 `shiori_sdk.lifecycle.PHASE_SLOTS`；向其它名称 `contribute` 会抛 `ValueError`）。模块按 `shiori_sdk.lifecycle.LifecycleModule` 协议声明唯一 `slot`、所需 `requires` 和导出的 `produces`（无依赖或无导出时写空元组）；宿主核心拥有具体执行顺序与帧语义。用到 `AfterTurnCtx`、`PHASE_SLOTS`、`require_phase_slot` 或按该协议声明 `requires` / `produces` 的外部包声明 `runtime_api: ">=3.1.0 <4.0.0"`。
+插件不再向宿主阶段贡献模块（`lifecycle` capability 已删除），而是用 `ctx.on` / `ctx.watch` 订阅核心 conversation 模块的回合事件（`shiori_sdk.core.conversation`），不需要声明 capability：`TurnStarting`（会话、历史和检索已就绪）、`ReasoningStarting`、`PromptRendering`（每次模型请求渲染提示词前）、`StepStarting` / `StepFinished`（工具循环每一步前后）、`ReasoningFinished`（回复定稿、尚未存储和投递）、`TurnFinished`（回合已存储）。工具调用前后另有 `shiori_sdk.core.tools` 的 `ToolCalling` / `ToolCalled`。
+
+- 事件是冻结的投影，容器字段是 tuple 或只读 mapping。`on` 处理器返回原事件（放行）、`dataclasses.replace` 出的新事件（只有各事件文档列出的可写字段会回写到回合），或 `Veto(reason)`（只有 `TurnStarting`、`ReasoningStarting` 以原因结束回合，`StepStarting` 以原因结束工具循环；其余事件否决会让回合失败）。替换事件里不能放 list / dict / set，要写成 tuple 或 `MappingProxyType`。
+- `on` 链按插件依赖深度、再按插件 id 排序，与加载先后无关；核心的固定校验在链后执行（如 `ReasoningFinished` 之后清除残留的协议标签）。`watch` 只读、不阻塞回合，按插件串行投递。
+- 处理器出错时按事件的 `on_error`：除 `ToolCalling`（失败即拒绝该调用）外都记录日志后放行原事件，回合照常继续。
+- 需要在同一回合里跨事件保持状态（例如检索记录要给随后的 `recall_memory` 记录同一个回合 ID）时用 `on` 并原样返回事件，不要用 `watch`。
 
 ```python
-from shiori_sdk.lifecycle import PromptRenderCtx
+from dataclasses import replace
+
+from shiori_sdk.core.conversation import PromptRendering
 from shiori_sdk.prompting import PromptSectionRender
 
-class ExamplePrompt:
-    """Adds a prompt section after the host creates its prompt context."""
-    slot = "example.prompt"
-    requires = ("prompt_render.emit", "prompt:ctx")
-    produces = ("prompt:ctx",)
-
-    async def run(self, frame):
-        ctx = frame.slots.get("prompt:ctx")
-        if isinstance(ctx, PromptRenderCtx):
-            ctx.system_sections_bottom.append(
-                PromptSectionRender(name="example", content="Example context", is_static=True)
-            )
-        return frame
-
 async def setup(ctx):
-    """Contributes one scoped prompt module."""
-    ctx.lifecycle.contribute("prompt_render", [ExamplePrompt()])
+    """Adds one prompt section to every model request."""
+
+    async def add_section(event: PromptRendering) -> PromptRendering:
+        section = PromptSectionRender(name="example", content="Example context", is_static=True)
+        return replace(event, system_sections_bottom=(*event.system_sections_bottom, section))
+
+    ctx.on(PromptRendering, add_section)
 ```
 
-模块依赖其它插件提供的槽位时，还应在 manifest 声明插件依赖。例如 story 的 `dependencies: [novelai]` 保证 novelai 先活动；提供方缺失、停用或失败时 story 为 `BLOCKED`，不会显示活动但缺少依赖。卸载提供方会级联其强依赖消费者。
+插件测试用 `sdk_context`（或 `FakePluginContext`）装配后 `await ctx.emit(PromptRendering(...))`，在真实内核上运行插件的处理器；宿主的链后校验不在其中。
+
+依赖其它插件时在 manifest 声明插件依赖。例如 story 的 `dependencies: [novelai]` 保证 novelai 先活动；提供方缺失、停用或失败时 story 为 `BLOCKED`，不会显示活动但缺少依赖。卸载提供方会级联其强依赖消费者。依赖也决定 `on` 链里的先后：被依赖的插件排在前面。
 
 需要调用另一个插件的 API 时，提供方用 `ctx.expose(api)`，消费者声明 `dependencies` 和同名 capability，再调用 `ctx.dependencies.require("provider")`。只需要加载顺序时不必调用 `require`。可选提供方用 `optional_dependencies` 和 `get_optional`：它不会强制启动提供方，提供方不可用时返回 `None`，也不会触发消费者级联卸载。
 

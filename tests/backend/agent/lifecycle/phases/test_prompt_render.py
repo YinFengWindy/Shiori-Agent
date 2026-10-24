@@ -43,7 +43,6 @@ async def _render(
     bus = EventBus()
     phase = Phase(
         default_prompt_render_modules(
-            bus,
             TurnEvents(bus, kernel),
             ContextBuilder(tmp_path, memory=cast(Any, memory), runtime_roles=roles),
         ),

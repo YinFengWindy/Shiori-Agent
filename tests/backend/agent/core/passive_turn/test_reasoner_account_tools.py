@@ -11,7 +11,6 @@ import pytest
 
 from dataclasses import replace
 
-from agent.lifecycle.plugin_contributions import StaticPluginContributions
 from agent.provider import LLMResponse, ToolCall
 from agent.tools.external_access import ExternalArgumentLimit
 from agent.tools.tool_search import ToolSearchTool
@@ -113,9 +112,8 @@ async def test_account_rule_controls_search_dynamic_mcp_and_rewritten_call_execu
             "mode", frozenset({"public"}), "limited", "public only"
         ),
     )
-    host.loop.bind_plugin_contributions(
-        StaticPluginContributions(kernel=kernel_with(retarget))
-    )
+    kernel = kernel_with(retarget)
+    host.loop.bind_kernel(lambda: kernel)
     original_chat = host.provider.chat
     responses = [
         LLMResponse(

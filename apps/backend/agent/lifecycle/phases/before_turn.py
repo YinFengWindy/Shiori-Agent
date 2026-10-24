@@ -7,18 +7,11 @@ from typing import TYPE_CHECKING, Protocol, TypeAlias, cast
 from shiori_sdk.commands import CommandInput
 from agent.lifecycle.commands import abort_command
 from conversation.commands import generation_commands
-from bus.event_bus import EventBus
 from agent.core.turn_events import TurnEvents, freeze_top_level, read_only
 from session.manager.models import consolidation_cursor
 from agent.core.runtime_support import SessionLike
 from agent.core.types import ContextBundle
-from agent.lifecycle.phase import (
-    PhaseFrame,
-    PhaseModule,
-    append_string_exports,
-    collect_prefixed_slots,
-    topo_sort_modules,
-)
+from agent.lifecycle.phase import PhaseFrame, PhaseModule, topo_sort_modules
 from agent.lifecycle.types import BeforeTurnCtx, TurnState
 from conversation.context_scope import (
     session_context_view,
@@ -57,8 +50,6 @@ class MemoryConsolidationFailedError(RuntimeError):
 _SESSION_SLOT = "session:session"
 _CONTEXT_BUNDLE_SLOT = "session:context_bundle"
 _CTX_SLOT = "session:ctx"
-_EXTRA_HINT_PREFIX = "session:extra_hint:"
-_ABORT_REPLY_SLOT = "session:abort_reply"
 
 
 class _AcquireSessionModule:
@@ -119,11 +110,6 @@ class _AnswerCommandModule:
         self._events = events
 
     async def run(self, frame: BeforeTurnFrame) -> BeforeTurnFrame:
-        # A plugin before_turn module that requires only ``acquire_session`` sorts
-        # ahead of this one (plugin slots go first among ready modules) and may
-        # already have ended the turn; its result stands and no command runs.
-        if _CTX_SLOT in frame.slots:
-            return frame
         state = frame.input
         commands = generation_commands(self._events.kernel)
         handler = None if commands is None else commands.handler(state.msg.content)
@@ -288,13 +274,11 @@ class _EmitBeforeTurnCtxModule:
     requires = ("before_turn.build_ctx", _CTX_SLOT)
     produces = (_CTX_SLOT,)
 
-    def __init__(self, bus: EventBus, events: TurnEvents) -> None:
-        self._bus = bus
+    def __init__(self, events: TurnEvents) -> None:
         self._events = events
 
     async def run(self, frame: BeforeTurnFrame) -> BeforeTurnFrame:
-        ctx = await self._bus.emit(cast(BeforeTurnCtx, frame.slots[_CTX_SLOT]))
-        frame.slots[_CTX_SLOT] = ctx
+        ctx = cast(BeforeTurnCtx, frame.slots[_CTX_SLOT])
 
         def apply(event: TurnStarting) -> None:
             ctx.skill_names[:] = event.skill_names
@@ -335,40 +319,20 @@ def _turn_starting(ctx: BeforeTurnCtx) -> TurnStarting:
 
 class _ReturnBeforeTurnCtxModule:
     slot = "before_turn.return"
-    requires = ("before_turn.collect_exports", _CTX_SLOT)
+    requires = ("before_turn.emit", _CTX_SLOT)
 
     async def run(self, frame: BeforeTurnFrame) -> BeforeTurnFrame:
         frame.output = cast(BeforeTurnCtx, frame.slots[_CTX_SLOT])
         return frame
 
 
-class _CollectBeforeTurnExportSlotsModule:
-    slot = "before_turn.collect_exports"
-    requires = ("before_turn.emit", _CTX_SLOT)
-    produces = (_CTX_SLOT,)
-
-    async def run(self, frame: BeforeTurnFrame) -> BeforeTurnFrame:
-        ctx = cast(BeforeTurnCtx, frame.slots[_CTX_SLOT])
-        append_string_exports(
-            ctx.extra_hints,
-            collect_prefixed_slots(frame.slots, _EXTRA_HINT_PREFIX),
-        )
-        abort_reply = frame.slots.get(_ABORT_REPLY_SLOT)
-        if isinstance(abort_reply, str) and abort_reply:
-            ctx.abort = True
-            ctx.abort_reply = abort_reply
-        return frame
-
-
 def default_before_turn_modules(
-    bus: EventBus,
     events: TurnEvents,
     session_manager: SessionManager,
     context_store: ContextStore,
     *,
     keep_count: int = 20,
     consolidator: MemoryConsolidator | None = None,
-    plugin_modules: BeforeTurnModules | None = None,
 ) -> BeforeTurnModules:
     builtins: BeforeTurnModules = [
         _AcquireSessionModule(session_manager),
@@ -380,14 +344,10 @@ def default_before_turn_modules(
         ),
         _PrepareContextModule(context_store),
         _BuildBeforeTurnCtxModule(),
-        _EmitBeforeTurnCtxModule(bus, events),
-        _CollectBeforeTurnExportSlotsModule(),
+        _EmitBeforeTurnCtxModule(events),
         _ReturnBeforeTurnCtxModule(),
     ]
-    return cast(
-        BeforeTurnModules,
-        topo_sort_modules(builtins + list(plugin_modules or [])),
-    )
+    return cast(BeforeTurnModules, topo_sort_modules(builtins))
 
 
 def _clamp_context_cursor(cursor: int, total_messages: int) -> int:

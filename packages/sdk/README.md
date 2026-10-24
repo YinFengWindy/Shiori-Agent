@@ -154,10 +154,10 @@ directories such as `files/`, independently of installed or bundled plugins.
 verifies dynamic imports without repository paths in its environment.
 
 The wheel contains contracts and pure values, without a dependency on the host.
-The core lifecycle surface includes `PluginRuntimeContext`,
-`LifecycleFrame`, `LifecycleModule`, `LifecycleCapability`, `EventsCapability`,
-`Dispose`, `EventHandler`, `AfterStepCtx`, `AfterReasoningCtx` and `ResponseMetadata`.
-The host owns phase execution, storage, capability authorization and cleanup.
+The core plugin surface includes `PluginRuntimeContext`, `EventsCapability`,
+`Dispose` and `EventHandler`; turn and tool events live in
+`shiori_sdk.core.conversation` and `shiori_sdk.core.tools`.
+The host owns turn execution, storage, capability authorization and cleanup.
 `setup(ctx)` receives its declared capabilities; undeclared access raises
 `CapabilityNotGranted`. A declared capability whose backing host service is
 missing fails before `setup` with `HostServiceUnavailable`, naming the service,
@@ -170,34 +170,37 @@ independent testing fixtures are documented below; host service implementations
 remain in the host.
 
 ```python
+from dataclasses import replace
+from types import MappingProxyType
+
 from shiori_sdk import PluginRuntimeContext
-from shiori_sdk.lifecycle import LifecycleFrame
+from shiori_sdk.core.conversation import StepFinished
 
-class TraceStep:
-    slot = "example.trace"
-    requires = ("after_step.copy_input", "step:ctx")
-    produces = ("step:telemetry:example",)
 
-    async def run[FrameT: LifecycleFrame](self, frame: FrameT) -> FrameT:
-        frame.slots["step:telemetry:example"] = True
-        return frame
+async def trace_step(event: StepFinished) -> StepFinished:
+    metadata = MappingProxyType({**event.extra_metadata, "example": True})
+    return replace(event, extra_metadata=metadata)
+
 
 async def setup(ctx: PluginRuntimeContext) -> None:
-    ctx.lifecycle.contribute("after_step", [TraceStep()])
+    ctx.on(StepFinished, trace_step)
 ```
 
 Install `shiori-sdk[testing]` for pytest/pytest-asyncio, `sdk_context`,
-`FakePluginContext`, `FakeLifecycle`, `FakeEvents`, `FakeFrame`, package staging,
+`FakePluginContext`, `FakeEvents`, package staging,
 bridge request helpers and shared test TLS contexts. Fakes store only test values
 in memory; they never open host persistence. `sdk_context` reads the nearest
 `manifest.yaml` above the test file (within the pytest rootdir; override the
 `sdk_plugin_dir` fixture otherwise) and grants only its declared `capabilities`,
 validated against the host's `KNOWN_CAPABILITIES`, so undeclared access raises
 `CapabilityNotGranted` as in the host. The manifest is only read: `plugin_dir`
-is an isolated temporary directory, and bundled files are package assets. `FakeLifecycle`
-records modules for explicit execution and rejects slots outside
-`shiori_sdk.lifecycle.PHASE_SLOTS` like the host; it does not simulate the host
-phase dependency sorter.
+is an isolated temporary directory, and bundled files are package assets. A
+plugin test emits a turn event through the fake context
+(`await sdk_context.emit(StepFinished(...))`), which runs the plugin's `on`
+handlers on a real kernel without the host's core checks. A replacement event
+holds no list, dict or set field: wrap mappings in `MappingProxyType` and use
+tuples, or the kernel rejects the replacement and, under `fail_open`, skips the
+handler.
 HTTP response contracts and tolerant JSON helpers declare httpx/json-repair as
 runtime dependencies. pytest-asyncio and test fixtures remain optional.
 The base wheel can coexist with pytest without the testing extra: unrelated tests
@@ -310,8 +313,9 @@ order if one callback fails. A direct build caller supplies and owns that scope.
 
 Setup plugins declaring `memory` and `rpc` use `MemoryPluginContext`: shared
 Markdown reads, role existence/permissions, storage and current engine are injected,
-while RPC registration remains plugin-owned. `BeforeTurnObservation` exposes only
-inspection fields; tool results arrive as `shiori_sdk.core.tools.ToolCalled`. Standalone tests
+while RPC registration remains plugin-owned. A turn's retrieval arrives as
+`shiori_sdk.core.conversation.TurnStarting` and tool results as
+`shiori_sdk.core.tools.ToolCalled`. Standalone tests
 can use `FakeMemoryPluginContext`, `FakeMemoryRoles`, `FakeMemoryStorage` and
 `FakeBuildResources`; real migration and runtime assembly remain host integration tests.
 

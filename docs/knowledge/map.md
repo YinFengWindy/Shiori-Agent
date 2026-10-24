@@ -40,7 +40,7 @@ related:
 | 账号与身份 | `apps/backend/core/accounts/`、`apps/backend/agent/account_delivery/`、`apps/backend/core/identity/` | 渠道账号投递、用户身份配对 |
 | Agent 回合 | `apps/backend/agent/core/`、`apps/backend/agent/looping/`、`apps/backend/agent/turns/`、`apps/backend/agent/lifecycle/` | 上下文、推理、工具、输出、生命周期事件 |
 | 工具、MCP | `apps/backend/agent/tools/`、`apps/backend/agent/mcp/`、`apps/backend/bootstrap/toolsets/` | ToolRegistry、ToolExecutor、远端工具连接 |
-| 插件宿主与 SDK | `apps/backend/agent/plugin_host/`（`PluginKernel`）、`packages/sdk/`（`shiori_sdk`，版本源 `packages/sdk/python/shiori_sdk/_version.py`）、`packages/shiori-host-testing/` | 插件发现/加载/卸载、phase module、事件、渠道、RPC、服务注册 |
+| 插件宿主与 SDK | `apps/backend/agent/plugin_host/`（`PluginKernel`）、`packages/sdk/`（`shiori_sdk`，版本源 `packages/sdk/python/shiori_sdk/_version.py`）、`packages/shiori-host-testing/` | 插件发现/加载/卸载、回合与工具事件、渠道、RPC、服务注册 |
 | 插件包管理 | `apps/backend/desktop_bridge/runtime/plugin_*.py`、`scripts/build-plugin.mjs`、`scripts/plugin-distribution.mjs` | 外部插件安装/卸载事务、信任、`workspace/plugins/` 与 `workspace/plugin-data/` |
 | 调度任务 | `apps/backend/agent/scheduler.py`、`apps/backend/agent/tools/schedule.py`、`apps/backend/desktop_bridge/schedule_role_task_service.py`、`apps/backend/desktop_bridge/role_task_service.py` | 主动触发、角色任务、桌面展示 |
 | 桌面桥接 | `apps/backend/desktop_bridge/` | Electron 主进程、React renderer、后端服务 |

@@ -58,14 +58,9 @@ from .reasoning_loop import _PassiveReasoningLoopMixin
 from .reasoning_result import _PassiveReasoningResultMixin
 from .natural_reply import NaturalReply
 from agent.core.runtime_support import ToolDiscoveryState
-from agent.core.turn_events import TurnEvents
+from agent.core.turn_events import TurnEvents, core_kernel
 from agent.core.types import ReasonerResult
 from agent.lifecycle.phase import Phase
-from agent.lifecycle.plugin_contributions import (
-    NO_PLUGIN_CONTRIBUTIONS,
-    PluginContributionSource,
-)
-from core.common.live_contributions import LiveContributions
 from agent.lifecycle.phases.after_step import AfterStepFrame, default_after_step_modules
 from agent.lifecycle.phases.before_step import (
     BeforeStepFrame,
@@ -77,17 +72,18 @@ from agent.lifecycle.phases.prompt_render import (
 )
 from agent.lifecycle.types import (
     inbound_thread_id,
+    AfterStepCtx,
     BeforeStepCtx,
     BeforeStepInput,
     PromptRenderInput,
     PromptRenderResult,
 )
-from shiori_sdk.lifecycle import AfterStepCtx
 from agent.prompting import DEFAULT_CONTEXT_TRIM_PLANS
 from agent.provider import ContentSafetyError, ContextLengthError
 from agent.tools.execution import ToolExecutor
 from agent.tools.external_access import external_tools_restricted
 from bus.event_bus import EventBus
+from shiori_sdk.kernel import Kernel
 
 if TYPE_CHECKING:
     from agent.context import ContextBuilder
@@ -157,8 +153,8 @@ class Reasoner(ABC):
         ``context_view`` 限定从会话读取的历史只含回合所在上下文的消息。
         """
 
-    def bind_plugin_contributions(self, plugins: PluginContributionSource) -> None:
-        """子类可重写以实时读取插件内核与步骤阶段模块。默认 no-op。"""
+    def bind_kernel(self, kernel: Callable[[], Kernel]) -> None:
+        """子类可重写以让步骤与工具事件经 ``kernel()`` 发出。默认 no-op。"""
 
     async def render_prompt(
         self,
@@ -211,7 +207,10 @@ class DefaultReasoner(
             if session_manager is not None and compaction_memory is not None
             else None
         )
-        self._plugins = NO_PLUGIN_CONTRIBUTIONS
+        # 步骤、提示词与工具事件经当前插件代的内核发出（#902）；未接插件时
+        # 是只带核心校验的裸内核。
+        bare_kernel = core_kernel()
+        self._kernel: Callable[[], Kernel] = lambda: bare_kernel
         self.context_window = (
             ContextWindow(
                 session_manager,
@@ -224,78 +223,38 @@ class DefaultReasoner(
             if session_manager is not None and self._compaction is not None
             else None
         )
-        # 工具事件与阶段模块每次使用时从当前插件来源读取（#855、#902）。
-        self._tool_executor = ToolExecutor(lambda: self._plugins.kernel)
+        self._tool_executor = ToolExecutor(lambda: self._kernel())
         self._stream_sink_factory: (
             Callable[[object], Callable[[dict[str, str] | str], Awaitable[None]] | None]
             | None
         ) = None
         bus = event_bus or EventBus()
         self._bus = bus
-        # 步骤与提示词事件经当前插件来源的内核发出（#902）。
-        self._events = TurnEvents(bus, lambda: self._plugins.kernel)
-        self._before_step = LiveContributions(
-            lambda: self._plugins.before_step_modules,
-            self._build_before_step_phase,
+        self._events = TurnEvents(bus, lambda: self._kernel())
+        self._before_step: Phase[BeforeStepInput, BeforeStepCtx, BeforeStepFrame] = (
+            Phase(
+                default_before_step_modules(self._events),
+                frame_factory=BeforeStepFrame,
+            )
         )
-        self._after_step = LiveContributions(
-            lambda: self._plugins.after_step_modules,
-            self._build_after_step_phase,
+        self._after_step: Phase[AfterStepCtx, AfterStepCtx, AfterStepFrame] = Phase(
+            default_after_step_modules(self._events),
+            frame_factory=AfterStepFrame,
         )
-        self._prompt_render = (
-            LiveContributions(
-                lambda: self._plugins.prompt_render_modules,
-                lambda modules: self._build_prompt_render_phase(context, modules),
+        self._prompt_render: (
+            Phase[PromptRenderInput, PromptRenderResult, PromptRenderFrame] | None
+        ) = (
+            Phase(
+                default_prompt_render_modules(self._events, context),
+                frame_factory=PromptRenderFrame,
             )
             if context is not None
             else None
         )
 
-    def bind_plugin_contributions(self, plugins: PluginContributionSource) -> None:
-        """改为从 ``plugins`` 实时读取插件内核与步骤阶段模块。"""
-        self._plugins = plugins
-        # 绑定时立即按当前贡献构造一次，模块 slot 冲突等装配错误在启动时暴露。
-        self._before_step.current()
-        self._after_step.current()
-        if self._prompt_render is not None:
-            self._prompt_render.current()
-
-    def _build_before_step_phase(
-        self,
-        plugin_modules: list[Any],
-    ) -> Phase[BeforeStepInput, BeforeStepCtx, BeforeStepFrame]:
-        return Phase(
-            default_before_step_modules(
-                self._bus, self._events, plugin_modules=plugin_modules
-            ),
-            frame_factory=BeforeStepFrame,
-        )
-
-    def _build_after_step_phase(
-        self,
-        plugin_modules: list[Any],
-    ) -> Phase[AfterStepCtx, AfterStepCtx, AfterStepFrame]:
-        return Phase(
-            default_after_step_modules(
-                self._bus, self._events, plugin_modules=plugin_modules
-            ),
-            frame_factory=AfterStepFrame,
-        )
-
-    def _build_prompt_render_phase(
-        self,
-        context: "ContextBuilder",
-        plugin_modules: list[Any],
-    ) -> Phase[PromptRenderInput, PromptRenderResult, PromptRenderFrame]:
-        return Phase(
-            default_prompt_render_modules(
-                self._bus,
-                self._events,
-                context,
-                plugin_modules=plugin_modules,
-            ),
-            frame_factory=PromptRenderFrame,
-        )
+    def bind_kernel(self, kernel: Callable[[], Kernel]) -> None:
+        """步骤、提示词与工具事件改经 ``kernel()`` 返回的内核发出。"""
+        self._kernel = kernel
 
     async def render_prompt(
         self,
@@ -303,7 +262,7 @@ class DefaultReasoner(
     ) -> PromptRenderResult:
         if self._prompt_render is None:
             raise RuntimeError("DefaultReasoner.render_prompt requires context")
-        return await self._prompt_render.current().run(input)
+        return await self._prompt_render.run(input)
 
     def set_stream_sink_factory(
         self,

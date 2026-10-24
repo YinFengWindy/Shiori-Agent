@@ -6,9 +6,7 @@ from shiori_sdk.prompting import PromptSectionRender
 from shiori_sdk.messages import InboundMessage, OutboundMessage
 from conversation.context_scope import source_belongs_to_user
 from shiori_sdk.channels.message_source import MessageSource
-from shiori_sdk.lifecycle import (
-    AfterReasoningCtx,
-)
+from agent.core.response_parser import ResponseMetadata
 
 if TYPE_CHECKING:
     from agent.core.runtime_support import SessionLike, TurnRunResult
@@ -203,6 +201,79 @@ class BeforeStepCtx:
     extra_hints: list[str] = field(default_factory=_empty_str_list)
     early_stop: bool = False
     early_stop_reply: str = ""
+
+
+@dataclass(frozen=True)
+class AfterStepCtx:
+    """One finished tool-loop step; ``StepFinished`` is its event projection.
+
+    ``context_tokens_estimate`` measures the step's next request with the host's
+    unified input budget. ``input_limit_tokens`` is that budget's hard input
+    limit for the current model (window minus output reservation and safety
+    margin); ``None`` when the host has no budget for the model.
+    """
+
+    session_key: str
+    channel: str
+    chat_id: str
+    iteration: int
+    context_tokens_estimate: int
+    tools_called: tuple[str, ...]
+    partial_reply: str
+    tools_used_so_far: tuple[str, ...]
+    tool_chain_partial: tuple[dict[str, object], ...]
+    partial_thinking: str | None
+    has_more: bool
+    early_stop: bool = False
+    early_stop_reason: str = ""
+    extra_metadata: dict[str, object] = field(default_factory=_empty_metadata)
+    input_limit_tokens: int | None = None
+
+
+@dataclass
+class AfterReasoningCtx:
+    """The final reply with its media and outbound metadata, before it is stored."""
+
+    session_key: str
+    channel: str
+    chat_id: str
+    tools_used: tuple[str, ...]
+    thinking: str | None
+    response_metadata: ResponseMetadata
+    streamed: bool
+    tool_chain: tuple[dict[str, object], ...]
+    context_retry: dict[str, object]
+    reply: str
+    media: list[str] = field(default_factory=_empty_str_list)
+    meme_tag: str | None = None
+    outbound_metadata: dict[str, object] = field(default_factory=_empty_metadata)
+    # Validated natural-chat bubbles; ``reply`` stays their plain join.
+    reply_messages: tuple[str, ...] = ()
+
+
+@dataclass
+class PromptRenderCtx:
+    """One request's prompt context; ``PromptRendering`` is its event projection."""
+
+    session_key: str
+    channel: str
+    chat_id: str
+    content: str
+    media: list[str] | None
+    timestamp: datetime
+    history: list[dict[str, object]]
+    skill_names: list[str] | None
+    retrieved_memory_block: str
+    disabled_sections: set[str]
+    turn_injection_prompt: str
+    session_metadata: dict[str, object] = field(default_factory=_empty_metadata)
+    extra_hints: list[str] = field(default_factory=_empty_str_list)
+    system_sections_top: list[PromptSectionRender] = field(
+        default_factory=_empty_prompt_sections
+    )
+    system_sections_bottom: list[PromptSectionRender] = field(
+        default_factory=_empty_prompt_sections
+    )
 
 
 @dataclass(frozen=True)

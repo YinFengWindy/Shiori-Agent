@@ -11,7 +11,6 @@ from shiori_sdk.runtime import (
     require_known_capabilities,
 )
 from .events import FakeEvents
-from .lifecycle import FakeLifecycle
 
 
 class FakePluginContext:
@@ -19,8 +18,8 @@ class FakePluginContext:
 
     ``capabilities`` are the grants, normally a manifest's declaration (see the
     ``sdk_context`` fixture); names unknown to the host are rejected like the host
-    does. Only ``lifecycle`` and ``events`` have fakes here; other declared names
-    are recorded in ``granted`` for specialized fakes.
+    does. Only ``events`` has a fake here; other declared names are recorded in
+    ``granted`` for specialized fakes.
 
     The kernel members (``provide`` / ``require`` / ``get``, ``on`` / ``watch``
     / ``emit``) run on a real ``Kernel``: ``kernel`` (a fresh one by default)
@@ -33,7 +32,7 @@ class FakePluginContext:
         plugin_id: str = "test_plugin",
         plugin_dir: Path = Path("."),
         *,
-        capabilities: tuple[str, ...] = ("lifecycle", "events"),
+        capabilities: tuple[str, ...] = ("events",),
         kernel: Kernel | None = None,
         inject: tuple[str, ...] = (),
         optional_inject: tuple[str, ...] = (),
@@ -44,7 +43,6 @@ class FakePluginContext:
         self.plugin_dir = plugin_dir
         self.granted = tuple(sorted(set(capabilities)))
         self.exported: object | None = None
-        self._lifecycle = FakeLifecycle()
         self._events = FakeEvents()
         self._effects: list[tuple[str, Dispose]] = []
         self._closed = False
@@ -66,12 +64,6 @@ class FakePluginContext:
             raise CapabilityNotGranted(
                 f"插件 {self.plugin_id} 未声明 capability '{name}'"
             )
-
-    @property
-    def lifecycle(self) -> FakeLifecycle:
-        """Returns the granted lifecycle fake."""
-        self._check("lifecycle")
-        return self._lifecycle
 
     @property
     def events(self) -> FakeEvents:
@@ -119,7 +111,6 @@ class FakePluginContext:
         """Stops subscriptions, then runs all cleanup in reverse registration order."""
         self._closed = True
         self._events.close()
-        self._lifecycle.close()
         errors: list[Exception] = await self._scope.close()
         while self._effects:
             _, dispose = self._effects.pop()
