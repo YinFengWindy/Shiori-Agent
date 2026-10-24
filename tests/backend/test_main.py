@@ -214,39 +214,6 @@ def test_main_accepts_desktop_as_bridge_alias(
 
 
 @pytest.mark.asyncio
-async def test_inspect_modules_prints_result(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-):
-    class _Runtime:
-        memory_runtime = SimpleNamespace(aclose=AsyncMock())
-
-        async def inspect_modules(self):
-            return {"memory": "ready"}
-
-        async def stop(self):
-            return None
-
-    class _HttpResources:
-        async def aclose(self):
-            return None
-
-    loader = Mock(return_value=object())
-    monkeypatch.setattr(app_main.Config, "load", loader)
-    monkeypatch.setattr(app_main, "SharedHttpResources", _HttpResources)
-    monkeypatch.setattr(
-        "bootstrap.tools.build_core_runtime",
-        lambda config, workspace, http_resources: _Runtime(),
-    )
-
-    await app_main.inspect_modules(workspace=tmp_path)
-
-    loader.assert_called_once_with("config.toml")
-    assert "{'memory': 'ready'}" in capsys.readouterr().out
-
-
-@pytest.mark.asyncio
 async def test_bridge_passes_the_explicit_workspace(
     tmp_path, monkeypatch, capsys: pytest.CaptureFixture[str]
 ):
@@ -267,23 +234,6 @@ async def test_bridge_passes_the_explicit_workspace(
     await app_main.serve_bridge(str(path), workspace)
     assert builder.call_args.kwargs["workspace"] == workspace
     runtime.shutdown.assert_awaited_once()
-
-
-@pytest.mark.asyncio
-async def test_module_inspection_closes_http_when_construction_fails(
-    monkeypatch, tmp_path
-):
-    http = SimpleNamespace(aclose=AsyncMock())
-    monkeypatch.setattr(app_main.Config, "load", lambda _, **kwargs: object())
-    monkeypatch.setattr(app_main, "SharedHttpResources", lambda: http)
-
-    def fail(*args):
-        raise ValueError("invalid wiring")
-
-    monkeypatch.setattr("bootstrap.tools.build_core_runtime", fail)
-    with pytest.raises(ValueError, match="invalid wiring"):
-        await app_main.inspect_modules(workspace=tmp_path)
-    http.aclose.assert_awaited_once()
 
 
 def test_dev_launch_makes_top_level_plugins_importable(tmp_path: Path):

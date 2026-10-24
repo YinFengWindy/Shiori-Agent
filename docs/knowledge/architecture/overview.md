@@ -22,7 +22,7 @@ related:
 
 ## 启动与装配
 
-`apps/backend/main.py` 是进程入口（默认命令 `bridge`，另有 `init` 和 `--inspect-modules`）。`apps/backend/bootstrap/app.py` 的 `AppRuntime` 管理应用生命周期；`apps/backend/bootstrap/tools.py` 的 `build_core_runtime()` 把配置、持久化、角色运行时、Session、Agent、工具、记忆、MCP 和插件内核拼装成一代 `CoreRuntime`；`apps/backend/bootstrap/wiring.py` 只维护 memory engine、context builder 和 toolset provider 的名字到工厂映射。`apps/backend/bootstrap/runtime/` 负责运行时换代：设置保存时准备新一代 `CoreRuntime` 并发布，旧代在已接收工作完成后退役。具体领域服务应由 owning module 提供，bootstrap 只承担依赖拼接。
+`apps/backend/main.py` 是进程入口（默认命令 `bridge`，另有 `init`）。`apps/backend/bootstrap/app.py` 的 `AppRuntime` 管理应用生命周期；`apps/backend/bootstrap/tools.py` 的 `build_core_runtime()` 把配置、持久化、角色运行时、Session、Agent、工具、记忆、MCP 和插件内核拼装成一代 `CoreRuntime`；`apps/backend/bootstrap/wiring.py` 只维护 memory engine、context builder 和 toolset provider 的名字到工厂映射。`apps/backend/bootstrap/runtime/` 负责运行时换代：设置保存时准备新一代 `CoreRuntime` 并发布，旧代在已接收工作完成后退役。具体领域服务应由 owning module 提供，bootstrap 只承担依赖拼接。
 
 ## 被动消息主链路
 

@@ -11,11 +11,7 @@ import pytest
 from agent.core.turn_events import TurnEvents, core_kernel
 from agent.context import ContextBuilder
 from agent.core.types import ContextBundle
-from agent.lifecycle.phase import Phase
-from agent.lifecycle.phases.before_reasoning import (
-    BeforeReasoningFrame,
-    default_before_reasoning_modules,
-)
+from agent.lifecycle.phases.before_reasoning import BeforeReasoningPhase
 from agent.lifecycle.types import BeforeReasoningInput, BeforeTurnCtx, TurnState
 from agent.tools.registry import ToolRegistry
 from bus.event_bus import EventBus
@@ -38,14 +34,11 @@ async def test_before_reasoning_syncs_session_key_and_role_id_into_tool_context(
     )
     context_builder = Mock(spec=ContextBuilder)
     context_builder.render = Mock(return_value=ContextBundle())
-    phase = Phase(
-        default_before_reasoning_modules(
-            TurnEvents(bus, core_kernel),
-            cast(ToolRegistry, tools),
-            cast(Any, session_manager),
-            cast(ContextBuilder, context_builder),
-        ),
-        frame_factory=BeforeReasoningFrame,
+    phase = BeforeReasoningPhase(
+        TurnEvents(bus, core_kernel),
+        cast(ToolRegistry, tools),
+        cast(Any, session_manager),
+        cast(ContextBuilder, context_builder),
     )
     session = Session("role:mira")
     session.metadata["role_id"] = "mira"
@@ -125,17 +118,14 @@ async def test_prompt_warmup_renders_external_turn_with_its_group_note(
 
     monkeypatch.setattr(builder, "render", spy_render)
     tools = Mock(spec=ToolRegistry)
-    phase = Phase(
-        default_before_reasoning_modules(
-            TurnEvents(EventBus(), core_kernel),
-            cast(ToolRegistry, tools),
-            cast(
-                Any,
-                SimpleNamespace(peek_next_message_id=lambda key: f"{key}:1"),
-            ),
-            builder,
+    phase = BeforeReasoningPhase(
+        TurnEvents(EventBus(), core_kernel),
+        cast(ToolRegistry, tools),
+        cast(
+            Any,
+            SimpleNamespace(peek_next_message_id=lambda key: f"{key}:1"),
         ),
-        frame_factory=BeforeReasoningFrame,
+        builder,
     )
     session = Session("role:mira")
     session.metadata["role_id"] = "mira"

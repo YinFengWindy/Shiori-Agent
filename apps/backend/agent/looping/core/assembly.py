@@ -181,8 +181,6 @@ class _AssemblyMixin:
                 context=self._context,
                 tools=deps.tools,
                 reasoner=self._reasoner,
-                llm=llm_svc,
-                llm_config=config.llm,
                 event_bus=self._event_bus,
                 outbound_port=BusOutboundPort(self.bus),
                 history_window=config.memory.keep_count,

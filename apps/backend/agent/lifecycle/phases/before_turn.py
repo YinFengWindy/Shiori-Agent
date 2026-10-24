@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import logging
-from typing import TYPE_CHECKING, Protocol, TypeAlias, cast
+from typing import TYPE_CHECKING, Protocol, cast
 
 from shiori_sdk.commands import CommandInput
 from agent.lifecycle.commands import abort_command
@@ -11,7 +10,6 @@ from agent.core.turn_events import TurnEvents, freeze_top_level, read_only
 from session.manager.models import consolidation_cursor
 from agent.core.runtime_support import SessionLike
 from agent.core.types import ContextBundle
-from agent.lifecycle.phase import PhaseFrame, PhaseModule, topo_sort_modules
 from agent.lifecycle.types import BeforeTurnCtx, TurnState
 from conversation.context_scope import (
     session_context_view,
@@ -27,14 +25,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-@dataclass
-class BeforeTurnFrame(PhaseFrame[TurnState, BeforeTurnCtx]):
-    """The before-turn phase's frame."""
-
-
-BeforeTurnModules: TypeAlias = list[PhaseModule[BeforeTurnFrame]]
-
-
 class MemoryConsolidator(Protocol):
     """Schedule semantic memory independently of model-window compaction."""
 
@@ -47,21 +37,49 @@ class MemoryConsolidationFailedError(RuntimeError):
     """Raised when background memory consolidation has definitively failed."""
 
 
-_SESSION_SLOT = "session:session"
-_CONTEXT_BUNDLE_SLOT = "session:context_bundle"
-_CTX_SLOT = "session:ctx"
+class BeforeTurnPhase:
+    """Prepares a turn: session, command answer, backlog guard, context, ``TurnStarting``.
 
+    The steps run in this fixed order. A registered command or the memory
+    backlog guard ends the turn with an aborting context before retrieval; that
+    context still goes out as ``TurnStarting``.
+    """
 
-class _AcquireSessionModule:
-    slot = "before_turn.acquire_session"
-    requires: tuple[str, ...] = ()
-    produces = (_SESSION_SLOT,)
-
-    def __init__(self, session_manager: SessionManager) -> None:
+    def __init__(
+        self,
+        events: TurnEvents,
+        session_manager: SessionManager,
+        context_store: ContextStore,
+        *,
+        keep_count: int = 20,
+        consolidator: MemoryConsolidator | None = None,
+    ) -> None:
+        self._events = events
         self._session_manager = session_manager
+        self._context_store = context_store
+        self._keep_count = max(1, int(keep_count))
+        self._min_new = max(5, self._keep_count // 2)
+        self._threshold = self._keep_count + self._min_new
+        self._consolidator = consolidator
 
-    async def run(self, frame: BeforeTurnFrame) -> BeforeTurnFrame:
-        state = frame.input
+    async def run(self, state: TurnState) -> BeforeTurnCtx:
+        """Prepares the turn and returns its context, aborting or not."""
+        session = self._acquire_session(state)
+        ctx = await self._answer_command(state, session)
+        if ctx is None:
+            ctx = self._guard_memory_backlog(state, session)
+        if ctx is None:
+            bundle = await self._context_store.prepare(
+                msg=state.msg,
+                session_key=state.session_key,
+                session=session,
+                context_view=state.context_view,
+            )
+            ctx = _before_turn_ctx(state, bundle)
+        await self._emit(ctx)
+        return ctx
+
+    def _acquire_session(self, state: TurnState) -> SessionLike:
         session = self._session_manager.get_or_create(state.session_key)
         message_role_id = str((state.msg.metadata or {}).get("role_id") or "").strip()
         session_metadata = getattr(session, "metadata", None)
@@ -89,33 +107,22 @@ class _AcquireSessionModule:
                 role_id=message_role_id or session_role_id,
                 thread_id=state.thread_id,
             )
-        frame.slots[_SESSION_SLOT] = session
-        return frame
+        return cast(SessionLike, session)
 
+    async def _answer_command(
+        self, state: TurnState, session: SessionLike
+    ) -> BeforeTurnCtx | None:
+        """Answers a registered bot command right after the session is acquired.
 
-class _AnswerCommandModule:
-    """Answers a registered bot command right after the session is acquired.
-
-    It runs before the memory backlog guard and retrieval, so a command still
-    answers when the backlog refuses ordinary turns. The registry is read from
-    the current kernel on every turn: a plugin unloaded since then no longer
-    answers.
-    """
-
-    slot = "before_turn.answer_command"
-    requires = ("before_turn.acquire_session", _SESSION_SLOT)
-    produces = (_CTX_SLOT,)
-
-    def __init__(self, events: TurnEvents) -> None:
-        self._events = events
-
-    async def run(self, frame: BeforeTurnFrame) -> BeforeTurnFrame:
-        state = frame.input
+        It runs before the memory backlog guard and retrieval, so a command still
+        answers when the backlog refuses ordinary turns. The registry is read from
+        the current kernel on every turn: a plugin unloaded since then no longer
+        answers.
+        """
         commands = generation_commands(self._events.kernel)
         handler = None if commands is None else commands.handler(state.msg.content)
         if handler is None:
-            return frame
-        session = cast(SessionLike, frame.slots[_SESSION_SLOT])
+            return None
         reply = await handler(
             CommandInput(
                 content=state.msg.content,
@@ -125,57 +132,18 @@ class _AnswerCommandModule:
             )
         )
         logger.info("command answered: session=%s", state.session_key)
-        frame.slots[_CTX_SLOT] = abort_command(state, reply)
-        return frame
+        return abort_command(state, reply)
 
+    def _guard_memory_backlog(
+        self, state: TurnState, session: SessionLike
+    ) -> BeforeTurnCtx | None:
+        """An aborting context when the unconsolidated backlog is over the threshold.
 
-class _PrepareContextModule:
-    slot = "before_turn.prepare_context"
-    requires = ("before_turn.acquire_session", _SESSION_SLOT)
-    produces = (_CONTEXT_BUNDLE_SLOT,)
-
-    def __init__(self, context_store: ContextStore) -> None:
-        self._context_store = context_store
-
-    async def run(self, frame: BeforeTurnFrame) -> BeforeTurnFrame:
-        if _CTX_SLOT in frame.slots:
-            return frame
-        state = frame.input
-        session = cast(SessionLike, frame.slots[_SESSION_SLOT])
-        bundle = await self._context_store.prepare(
-            msg=state.msg,
-            session_key=state.session_key,
-            session=session,
-            context_view=state.context_view,
-        )
-        frame.slots[_CONTEXT_BUNDLE_SLOT] = bundle
-        return frame
-
-
-class _MemoryContextGuardModule:
-    slot = "before_turn.memory_context_guard"
-    requires = ("before_turn.acquire_session", _SESSION_SLOT)
-    produces = (_CTX_SLOT,)
-
-    def __init__(
-        self,
-        session_manager: SessionManager,
-        keep_count: int,
-        consolidator: MemoryConsolidator | None = None,
-    ) -> None:
-        self._session_manager = session_manager
-        self._keep_count = max(1, int(keep_count))
-        self._min_new = max(5, self._keep_count // 2)
-        self._threshold = self._keep_count + self._min_new
-        self._consolidator = consolidator
-
-    async def run(self, frame: BeforeTurnFrame) -> BeforeTurnFrame:
-        if _CTX_SLOT in frame.slots:
-            return frame
-        state = frame.input
+        With a consolidator the turn continues on the hot window while
+        consolidation runs, unless consolidation has already failed.
+        """
         if bool((state.msg.metadata or {}).get("skip_memory_context_guard")):
-            return frame
-        session = cast(SessionLike, frame.slots[_SESSION_SLOT])
+            return None
         messages = list(getattr(session, "messages", []))
         # 记忆积压按本回合所属类别的记忆游标计算，与模型窗口水位独立。
         last = _clamp_context_cursor(
@@ -186,7 +154,7 @@ class _MemoryContextGuardModule:
         )
         pending = _pending_messages(messages, last, state.context_view)
         if pending < self._threshold:
-            return frame
+            return None
 
         if self._consolidator is not None:
             failure = self._consolidator.get_memory_consolidation_failure(
@@ -203,7 +171,7 @@ class _MemoryContextGuardModule:
                 pending,
                 self._threshold,
             )
-            return frame
+            return None
 
         logger.error(
             "memory context guard blocked turn: session=%s pending=%d threshold=%d last_consolidated=%d total=%d",
@@ -213,7 +181,7 @@ class _MemoryContextGuardModule:
             last,
             len(messages),
         )
-        frame.slots[_CTX_SLOT] = BeforeTurnCtx(
+        return BeforeTurnCtx(
             session_key=state.session_key,
             channel=state.msg.context_channel,
             chat_id=state.msg.context_chat_id,
@@ -241,44 +209,9 @@ class _MemoryContextGuardModule:
                 }
             },
         )
-        return frame
 
-
-class _BuildBeforeTurnCtxModule:
-    slot = "before_turn.build_ctx"
-    requires = ("before_turn.prepare_context", _CONTEXT_BUNDLE_SLOT)
-    produces = (_CTX_SLOT,)
-
-    async def run(self, frame: BeforeTurnFrame) -> BeforeTurnFrame:
-        if _CTX_SLOT in frame.slots:
-            return frame
-        state = frame.input
-        bundle = cast(ContextBundle, frame.slots[_CONTEXT_BUNDLE_SLOT])
-        frame.slots[_CTX_SLOT] = BeforeTurnCtx(
-            session_key=state.session_key,
-            channel=state.msg.context_channel,
-            chat_id=state.msg.context_chat_id,
-            content=state.msg.content,
-            timestamp=state.msg.timestamp,
-            skill_names=list(bundle.skill_mentions),
-            retrieved_memory_block=bundle.retrieved_memory_block,
-            retrieval_trace_raw=bundle.retrieval_trace_raw,
-            history_messages=tuple(bundle.history_messages),
-            context_scope=state.context_scope,
-        )
-        return frame
-
-
-class _EmitBeforeTurnCtxModule:
-    slot = "before_turn.emit"
-    requires = ("before_turn.build_ctx", _CTX_SLOT)
-    produces = (_CTX_SLOT,)
-
-    def __init__(self, events: TurnEvents) -> None:
-        self._events = events
-
-    async def run(self, frame: BeforeTurnFrame) -> BeforeTurnFrame:
-        ctx = cast(BeforeTurnCtx, frame.slots[_CTX_SLOT])
+    async def _emit(self, ctx: BeforeTurnCtx) -> None:
+        """Emits ``TurnStarting`` and writes the final event back to ``ctx``."""
 
         def apply(event: TurnStarting) -> None:
             ctx.skill_names[:] = event.skill_names
@@ -289,7 +222,22 @@ class _EmitBeforeTurnCtxModule:
             ctx.abort, ctx.abort_reply = True, veto.reason
 
         await self._events.emit(_turn_starting(ctx), apply, vetoed)
-        return frame
+
+
+def _before_turn_ctx(state: TurnState, bundle: ContextBundle) -> BeforeTurnCtx:
+    """The context of a turn that goes on to reasoning."""
+    return BeforeTurnCtx(
+        session_key=state.session_key,
+        channel=state.msg.context_channel,
+        chat_id=state.msg.context_chat_id,
+        content=state.msg.content,
+        timestamp=state.msg.timestamp,
+        skill_names=list(bundle.skill_mentions),
+        retrieved_memory_block=bundle.retrieved_memory_block,
+        retrieval_trace_raw=bundle.retrieval_trace_raw,
+        history_messages=tuple(bundle.history_messages),
+        context_scope=state.context_scope,
+    )
 
 
 def _turn_starting(ctx: BeforeTurnCtx) -> TurnStarting:
@@ -315,39 +263,6 @@ def _turn_starting(ctx: BeforeTurnCtx) -> TurnStarting:
         extra_hints=tuple(ctx.extra_hints),
         extra_metadata=read_only(ctx.extra_metadata),
     )
-
-
-class _ReturnBeforeTurnCtxModule:
-    slot = "before_turn.return"
-    requires = ("before_turn.emit", _CTX_SLOT)
-
-    async def run(self, frame: BeforeTurnFrame) -> BeforeTurnFrame:
-        frame.output = cast(BeforeTurnCtx, frame.slots[_CTX_SLOT])
-        return frame
-
-
-def default_before_turn_modules(
-    events: TurnEvents,
-    session_manager: SessionManager,
-    context_store: ContextStore,
-    *,
-    keep_count: int = 20,
-    consolidator: MemoryConsolidator | None = None,
-) -> BeforeTurnModules:
-    builtins: BeforeTurnModules = [
-        _AcquireSessionModule(session_manager),
-        _AnswerCommandModule(events),
-        _MemoryContextGuardModule(
-            session_manager,
-            keep_count,
-            consolidator,
-        ),
-        _PrepareContextModule(context_store),
-        _BuildBeforeTurnCtxModule(),
-        _EmitBeforeTurnCtxModule(events),
-        _ReturnBeforeTurnCtxModule(),
-    ]
-    return cast(BeforeTurnModules, topo_sort_modules(builtins))
 
 
 def _clamp_context_cursor(cursor: int, total_messages: int) -> int:

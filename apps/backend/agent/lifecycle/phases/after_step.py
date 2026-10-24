@@ -1,58 +1,37 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
-from typing import TypeAlias, cast
+from dataclasses import replace
 
 from agent.core.turn_events import TurnEvents, read_only
-from agent.lifecycle.phase import PhaseFrame, PhaseModule, topo_sort_modules
 from agent.lifecycle.types import AfterStepCtx
 from shiori_sdk.core.conversation import StepFinished
 
 
-@dataclass
-class AfterStepFrame(PhaseFrame[AfterStepCtx, AfterStepCtx]):
-    pass
-
-
-AfterStepModules: TypeAlias = list[PhaseModule[AfterStepFrame]]
-
-
-_CTX_SLOT = "step:ctx"
-
-
-class _CopyInputToCtxModule:
-    slot = "after_step.copy_input"
-    requires: tuple[str, ...] = ()
-    produces = (_CTX_SLOT,)
-
-    async def run(self, frame: AfterStepFrame) -> AfterStepFrame:
-        frame.slots[_CTX_SLOT] = frame.input
-        return frame
-
-
-class _EmitStepFinishedModule:
-    slot = "after_step.emit"
-    requires = ("after_step.copy_input", _CTX_SLOT)
-    produces = (_CTX_SLOT,)
+class AfterStepPhase:
+    """Closes one reasoning step through ``StepFinished``."""
 
     def __init__(self, events: TurnEvents) -> None:
         self._events = events
 
-    async def run(self, frame: AfterStepFrame) -> AfterStepFrame:
-        ctx = cast(AfterStepCtx, frame.slots[_CTX_SLOT])
+    async def run(self, ctx: AfterStepCtx) -> AfterStepCtx:
+        """Emits ``StepFinished`` and returns ``ctx`` with its writable fields.
+
+        Handlers may request the stop (context_pressure); core listeners then
+        see the final event (progress reporting).
+        """
+        result = ctx
 
         def apply(event: StepFinished) -> None:
-            frame.slots[_CTX_SLOT] = replace(
+            nonlocal result
+            result = replace(
                 ctx,
                 early_stop=event.early_stop,
                 early_stop_reason=event.early_stop_reason,
                 extra_metadata=dict(event.extra_metadata),
             )
 
-        # Handlers may request the stop (context_pressure); core listeners then
-        # see the final event (progress reporting).
         await self._events.emit(_step_finished(ctx), apply)
-        return frame
+        return result
 
 
 def _step_finished(ctx: AfterStepCtx) -> StepFinished:
@@ -74,21 +53,3 @@ def _step_finished(ctx: AfterStepCtx) -> StepFinished:
         early_stop_reason=ctx.early_stop_reason,
         extra_metadata=read_only(ctx.extra_metadata),
     )
-
-
-class _ReturnAfterStepCtxModule:
-    slot = "after_step.return"
-    requires = ("after_step.emit", _CTX_SLOT)
-
-    async def run(self, frame: AfterStepFrame) -> AfterStepFrame:
-        frame.output = cast(AfterStepCtx, frame.slots[_CTX_SLOT])
-        return frame
-
-
-def default_after_step_modules(events: TurnEvents) -> AfterStepModules:
-    builtins: AfterStepModules = [
-        _CopyInputToCtxModule(),
-        _EmitStepFinishedModule(events),
-        _ReturnAfterStepCtxModule(),
-    ]
-    return cast(AfterStepModules, topo_sort_modules(builtins))

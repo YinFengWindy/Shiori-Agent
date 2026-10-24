@@ -11,11 +11,7 @@ import pytest
 
 from agent.core.turn_events import TurnEvents, core_kernel
 from agent.core.runtime_support import TurnRunResult
-from agent.lifecycle.phase import Phase
-from agent.lifecycle.phases.after_reasoning import (
-    AfterReasoningFrame,
-    default_after_reasoning_modules,
-)
+from agent.lifecycle.phases.after_reasoning import AfterReasoningPhase
 from agent.lifecycle.types import AfterReasoningInput, TurnState
 from agent.scheduler import ScheduledJob, SchedulerService
 from bus.event_bus import EventBus
@@ -107,13 +103,10 @@ async def test_external_sequence_sends_each_committed_row_once_with_first_only_e
 
 
 def phase(manager):
-    return Phase(
-        default_after_reasoning_modules(
-            EventBus(),
-            TurnEvents(EventBus(), core_kernel),
-            SimpleNamespace(session_manager=manager, presence=None),
-        ),
-        frame_factory=AfterReasoningFrame,
+    return AfterReasoningPhase(
+        EventBus(),
+        TurnEvents(EventBus(), core_kernel),
+        SimpleNamespace(session_manager=manager, presence=None),
     )
 
 
@@ -653,11 +646,8 @@ async def test_only_the_users_own_group_message_updates_relationship_state(
         session_manager=manager, presence=presence, relationship_runtime=relationship
     )
 
-    await Phase(
-        default_after_reasoning_modules(
-            EventBus(), TurnEvents(EventBus(), core_kernel), services
-        ),
-        frame_factory=AfterReasoningFrame,
+    await AfterReasoningPhase(
+        EventBus(), TurnEvents(EventBus(), core_kernel), services
     ).run(request)
 
     runtime = relationship.read_loneliness_runtime("yin")

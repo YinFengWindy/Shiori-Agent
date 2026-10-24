@@ -10,11 +10,7 @@ import pytest
 
 from agent.core.turn_events import TurnEvents, core_kernel
 from agent.context import ContextBuilder
-from agent.lifecycle.phase import Phase
-from agent.lifecycle.phases.prompt_render import (
-    PromptRenderFrame,
-    default_prompt_render_modules,
-)
+from agent.lifecycle.phases.prompt_render import PromptRenderPhase
 from agent.lifecycle.types import PromptRenderInput, PromptRenderResult
 from bus.event_bus import EventBus
 from core.roles import RoleStore
@@ -41,12 +37,9 @@ async def _render(
         get_memory_context=lambda: "",
     )
     bus = EventBus()
-    phase = Phase(
-        default_prompt_render_modules(
-            TurnEvents(bus, kernel),
-            ContextBuilder(tmp_path, memory=cast(Any, memory), runtime_roles=roles),
-        ),
-        frame_factory=PromptRenderFrame,
+    phase = PromptRenderPhase(
+        TurnEvents(bus, kernel),
+        ContextBuilder(tmp_path, memory=cast(Any, memory), runtime_roles=roles),
     )
     return await phase.run(
         PromptRenderInput(

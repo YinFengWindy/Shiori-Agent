@@ -24,7 +24,7 @@ related:
 
 ## 回合生命周期
 
-被动回合由 `apps/backend/agent/core/passive_turn/` 组织（`pipeline.py` 串起各 phase，`reasoning_loop.py` / `reasoner.py` 执行推理与工具循环），主动回合在 `agent/core/proactive_turn/`。`apps/backend/agent/turns/` 的 `orchestrator.py` 负责回合协调、权威会话写入与出站分发（`outbound.py`）。生命周期模块（`agent/lifecycle/phases/`）提供 `BeforeTurn`、`BeforeReasoning`、prompt render、`BeforeStep`、`AfterStep`、`AfterReasoning`、`AfterTurn` 等 phase，使记忆、插件、自动 CG 和观测逻辑在明确边界接入；各 phase 在对应位置经 `TurnEvents` 发出 `shiori_sdk.core.conversation` 的回合事件，插件用 `ctx.on` / `ctx.watch` 订阅，不再向 phase 贡献模块。
+被动回合由 `apps/backend/agent/core/passive_turn/` 组织（`pipeline.py` 串起各 phase，`reasoning_loop.py` / `reasoner.py` 执行推理与工具循环），主动回合在 `agent/core/proactive_turn/`。`apps/backend/agent/turns/` 的 `orchestrator.py` 负责回合协调、权威会话写入与出站分发（`outbound.py`）。生命周期模块（`agent/lifecycle/phases/`）提供 `BeforeTurnPhase`、`BeforeReasoningPhase`、`PromptRenderPhase`、`BeforeStepPhase`、`AfterStepPhase`、`AfterReasoningPhase`、`AfterTurnPhase`，每个 phase 是按固定顺序执行的一串核心步骤（步骤之间用局部变量传值，没有模块注册、依赖排序或 slot），使记忆、插件、自动 CG 和观测逻辑在明确边界接入；各 phase 在对应位置经 `TurnEvents` 发出 `shiori_sdk.core.conversation` 的回合事件，插件用 `ctx.on` / `ctx.watch` 订阅，不再向 phase 贡献模块。
 
 上下文压缩（#64）也在被动回合内完成：`passive_turn/compaction.py` 在请求超出预算时调用 `core/compaction.py` 的 `CompactionController` 生成工作摘要，当前输入和进行中的工具交换保持完整；`passive_turn/context_window.py` 提供不执行回合的预算查看与手动压缩。预算依据模型注册里的 `model_context_window`（可选 `model_auto_compact_token_limit` 作为单模型自动压缩阈值，须小于窗口），窗口缺失的注册视为未完成、需要用户补全。
 
@@ -58,6 +58,6 @@ Herdr 的 `backend/progress.py` 读取当前 task/run 的有界 JSONL 阶段报�
 
 ## 不变量
 
-- phase 的 `requires`/`produces` 契约在构造 phase 时校验：依赖的模块 slot 不存在时该模块被禁用并告警，循环依赖或 slot 重复直接报错。
+- phase 内的步骤顺序写死在各 phase 的 `run` 里，调整顺序就是改回合语义，须由 `tests/backend/agent/core/test_turn_golden_trace.py` 守住。
 - 工具调用异常应进入回合错误路径，不能由业务层静默吞掉。
 - 插件卸载或 MCP 断开后，相关工具不能残留在 registry。

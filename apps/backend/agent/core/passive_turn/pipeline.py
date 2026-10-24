@@ -11,31 +11,17 @@ from .context import ContextStore
 from .empty_reply import EmptyReplyError
 from .reasoner import Reasoner
 from agent.core.turn_events import TurnEvents, core_kernel
-from agent.lifecycle.phase import Phase
-from agent.lifecycle.phases.after_reasoning import (
-    AfterReasoningFrame,
-    default_after_reasoning_modules,
-)
-from agent.lifecycle.phases.after_turn import (
-    AfterTurnFrame,
-    default_after_turn_modules,
-)
-from agent.lifecycle.phases.before_reasoning import (
-    BeforeReasoningFrame,
-    default_before_reasoning_modules,
-)
+from agent.lifecycle.phases.after_reasoning import AfterReasoningPhase
+from agent.lifecycle.phases.after_turn import AfterTurnPhase
+from agent.lifecycle.phases.before_reasoning import BeforeReasoningPhase
 from agent.lifecycle.phases.before_turn import (
-    BeforeTurnFrame,
+    BeforeTurnPhase,
     MemoryConsolidationFailedError,
     MemoryConsolidator,
-    default_before_turn_modules,
 )
 from agent.lifecycle.types import (
     AfterReasoningInput,
-    AfterReasoningResult,
-    BeforeReasoningCtx,
     BeforeReasoningInput,
-    BeforeTurnCtx,
     TurnSnapshot,
     TurnState,
 )
@@ -56,7 +42,7 @@ from core.compaction import CompactionFailedError
 if TYPE_CHECKING:
     from agent.context import ContextBuilder
     from agent.core.runtime_support import TurnRunResult
-    from agent.looping.ports import LLMConfig, LLMServices, SessionServices
+    from agent.looping.ports import SessionServices
     from agent.tools.registry import ToolRegistry
 
 logger = logging.getLogger("agent.core.passive_turn")
@@ -81,8 +67,6 @@ class AgentCoreDeps:
     context: "ContextBuilder"
     tools: "ToolRegistry"
     reasoner: "Reasoner"
-    llm: "LLMServices | None" = None
-    llm_config: "LLMConfig | None" = None
     event_bus: "EventBus | None" = None
     outbound_port: "OutboundPort | None" = None
     history_window: int = 500
@@ -144,8 +128,6 @@ class PassiveTurnPipeline:
         self._context = deps.context
         self._tools = deps.tools
         self._reasoner = deps.reasoner
-        self._llm = getattr(deps, "llm", None)
-        self._llm_config = getattr(deps, "llm_config", None)
         self._outbound_port = deps.outbound_port or _NoopOutboundPort()
         self._history_window = deps.history_window
         self._memory_consolidator = deps.memory_consolidator
@@ -156,51 +138,31 @@ class PassiveTurnPipeline:
         bare_kernel = core_kernel()
         self._kernel: Callable[[], Kernel] = lambda: bare_kernel
         self._events = TurnEvents(bus, lambda: self._kernel())
-        self._before_turn: Phase[TurnState, BeforeTurnCtx, BeforeTurnFrame] = Phase(
-            default_before_turn_modules(
-                self._events,
-                self._session.session_manager,
-                self._context_store,
-                keep_count=self._history_window,
-                consolidator=self._memory_consolidator,
-            ),
-            frame_factory=BeforeTurnFrame,
+        self._before_turn = BeforeTurnPhase(
+            self._events,
+            self._session.session_manager,
+            self._context_store,
+            keep_count=self._history_window,
+            consolidator=self._memory_consolidator,
         )
-        self._before_reasoning: Phase[
-            BeforeReasoningInput, BeforeReasoningCtx, BeforeReasoningFrame
-        ] = Phase(
-            default_before_reasoning_modules(
-                self._events,
-                self._tools,
-                self._session.session_manager,
-                self._context,
-            ),
-            frame_factory=BeforeReasoningFrame,
+        self._before_reasoning = BeforeReasoningPhase(
+            self._events,
+            self._tools,
+            self._session.session_manager,
+            self._context,
         )
-        self._after_reasoning: Phase[
-            AfterReasoningInput, AfterReasoningResult, AfterReasoningFrame
-        ] = Phase(
-            default_after_reasoning_modules(
-                self._bus,
-                self._events,
-                self._session,
-                self._llm,
-                self._llm_config,
-            ),
-            frame_factory=AfterReasoningFrame,
+        # after_reasoning / after_turn also publish core domain events
+        # (ReplyMessageCommitted, TurnCommitted) on the same bus as ``_events``.
+        self._after_reasoning = AfterReasoningPhase(
+            self._bus, self._events, self._session
         )
-        self._after_turn: Phase[TurnSnapshot, OutboundMessage, AfterTurnFrame] = Phase(
-            default_after_turn_modules(
-                self._bus,
-                self._events,
-                self._outbound_port,
-                self._context,
-                self._history_window,
-                relationship_runtime=getattr(
-                    self._session, "relationship_runtime", None
-                ),
-            ),
-            frame_factory=AfterTurnFrame,
+        self._after_turn = AfterTurnPhase(
+            self._bus,
+            self._events,
+            self._outbound_port,
+            self._context,
+            self._history_window,
+            relationship_runtime=getattr(self._session, "relationship_runtime", None),
         )
 
     def bind_kernel(self, kernel: Callable[[], Kernel]) -> None:
@@ -250,9 +212,9 @@ class PassiveTurnPipeline:
                     action="run",
                 )
             )
-            # try/except 只包前置模块链和 reasoning：在派发前兜底并返回错误提示。
+            # try/except 只包前置阶段和 reasoning：在派发前兜底并返回错误提示。
             try:
-                # Phase 1: BeforeTurn 模块链（会话、上下文、BeforeTurn 事件）。
+                # Phase 1: BeforeTurn（会话、命令、积压守卫、上下文、TurnStarting）。
                 with diagnostic_context(phase="before_turn"):
                     before_turn = await self._before_turn.run(state)
                 # TurnState 存内部默认 metadata；BeforeTurnCtx 存 TurnStarting 处理器写入的，同名 key 以后者覆盖。
@@ -292,7 +254,7 @@ class PassiveTurnPipeline:
                     )
                 )
 
-                # Phase 2: BeforeReasoning 模块链（工具上下文、BeforeReasoning 事件、prompt warmup）。
+                # Phase 2: BeforeReasoning（工具上下文、ReasoningStarting、prompt warmup）。
                 with diagnostic_context(phase="before_reasoning"):
                     before_reasoning = await self._before_reasoning.run(
                         BeforeReasoningInput(state=state, before_turn=before_turn)
@@ -333,7 +295,7 @@ class PassiveTurnPipeline:
                     )
                 )
 
-                # Phase 3-4: Reasoning（BeforeStep/AfterStep 模块链在 Reasoner 内部执行）。
+                # Phase 3-4: Reasoning（BeforeStep/AfterStep 在 Reasoner 内部执行）。
                 session = state.session
                 if session is None:
                     raise RuntimeError("Passive turn requires TurnState.session")
@@ -417,7 +379,7 @@ class PassiveTurnPipeline:
         key = state.session_key
         turn_id = _turn_log_id(key, state.msg)
         try:
-            # Phase 5: AfterReasoning 模块链（parse、AfterReasoning 事件、持久化、出站消息）。
+            # Phase 5: AfterReasoning（parse、ReasoningFinished、持久化、出站消息）。
             with diagnostic_context(phase="after_reasoning"):
                 after_reasoning = await self._after_reasoning.run(
                     AfterReasoningInput(state=state, turn_result=turn_result)
@@ -456,7 +418,7 @@ class PassiveTurnPipeline:
             state=state, outbound=after_reasoning.outbound, ctx=after_reasoning.ctx
         )
         try:
-            # Phase 6: AfterTurn 模块链（TurnCommitted fanout、AfterTurn fanout、dispatch）。
+            # Phase 6: AfterTurn（TurnCommitted fanout、TurnFinished、dispatch）。
             with diagnostic_context(phase="after_turn"):
                 outbound = await self._after_turn.run(snapshot)
         except Exception as exc:
