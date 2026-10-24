@@ -288,7 +288,7 @@ consolidates these additions and the subsequent #847 breaking migration.
   ignored. meme no longer depends on citation, so with both at depth 0 it sets up
   before novelai: a reply carrying a meme picture and a generated picture now
   lists the meme picture first.
-- **Bot commands register on `COMMANDS` (PR TBD, issue #902, refactor P3-5).** The
+- **Bot commands register on `COMMANDS` (PR #928, issue #902, refactor P3-5).** The
   core conversation module provides `COMMANDS` (`shiori_sdk.core.conversation`) to
   every plugin generation as a `shiori_sdk.commands.CommandRegistry`. A plugin
   declares `inject: [commands]` and calls
@@ -308,9 +308,11 @@ consolidates these additions and the subsequent #847 breaking migration.
   `CommandRegistry` as `COMMANDS` on that kernel. **Behavior visible to plugins:**
   a command handler is a core-socket callback, not a gated phase module, so an
   in-generation reload no longer waits for one in flight (D25: the drain waits for
-  `on` / `watch` handlers only).
+  `on` / `watch` handlers only), and the command keeps answering while the plugin
+  drains (a sealed phase module used to pass `/undo` on to the model as an ordinary
+  turn); it is gone once the old instance is disposed.
 - **breaking: capability `bot_commands` and the before-turn command frame removed
-  (PR TBD, issue #902, refactor P3-5).** Gone: the `bot_commands` capability
+  (PR #928, issue #902, refactor P3-5).** Gone: the `bot_commands` capability
   (`KNOWN_CAPABILITIES`, the `capabilities` enum of `manifest.schema.json`; a
   manifest still declaring it is rejected at discovery and package validation as an
   unknown capability), `ctx.bot_commands`, `shiori_sdk.extensions.BotCommands` and

@@ -8,17 +8,20 @@ generation list its menu.
 
 from __future__ import annotations
 
+from typing import cast
+
 from shiori_sdk.commands import CommandRegistry
 from shiori_sdk.core.conversation import COMMANDS
 from shiori_sdk.kernel import Kernel
 
 
 def generation_commands(kernel: Kernel) -> CommandRegistry | None:
-    """``kernel``'s command registry; None on a kernel without plugins."""
-    commands = kernel.get(COMMANDS)
-    if commands is None or isinstance(commands, CommandRegistry):
-        return commands
-    raise TypeError(f"COMMANDS 的提供方不是核心注册表: {type(commands).__name__}")
+    """``kernel``'s command registry; None on a kernel without plugins.
+
+    Only ``bootstrap.plugin_core`` provides ``COMMANDS`` (a plugin cannot
+    provide a core key), so the provider is always a ``CommandRegistry``.
+    """
+    return cast(CommandRegistry | None, kernel.get(COMMANDS))
 
 
 def command_menu(kernel: Kernel) -> list[tuple[str, str]]:

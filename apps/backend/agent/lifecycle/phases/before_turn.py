@@ -119,6 +119,9 @@ class _AnswerCommandModule:
         self._events = events
 
     async def run(self, frame: BeforeTurnFrame) -> BeforeTurnFrame:
+        # A plugin before_turn module that requires only ``acquire_session`` sorts
+        # ahead of this one (plugin slots go first among ready modules) and may
+        # already have ended the turn; its result stands and no command runs.
         if _CTX_SLOT in frame.slots:
             return frame
         state = frame.input

@@ -706,17 +706,27 @@ async def setup(ctx):
     ctx.effect("command:chatid", remove)
 """.strip()
 
-_V2_COMMANDS_MANIFEST = "api: 2\nid: v2cmds\ncapabilities: []\ninject:\n  - commands\n"
+_V2_COMMANDS_MANIFEST = "api: 2\nid: {id}\ncapabilities: []\ninject:\n  - commands\n"
 
 
 @pytest.mark.asyncio
 async def test_injected_commands_reach_the_menu_until_unload(tmp_path: Path):
-    package = tmp_path / "v2cmds"
-    (package / "backend").mkdir(parents=True)
-    (package / "backend/plugin.py").write_text(_V2_COMMANDS_PLUGIN, encoding="utf-8")
-    (package / "manifest.yaml").write_text(_V2_COMMANDS_MANIFEST, encoding="utf-8")
+    # Both register /chatid: v2cmds sets up first (id order), the duplicate fails.
+    for plugin_id in ("v2cmds", "v2cmds_dup"):
+        package = tmp_path / plugin_id
+        (package / "backend").mkdir(parents=True)
+        (package / "backend/plugin.py").write_text(
+            _V2_COMMANDS_PLUGIN, encoding="utf-8"
+        )
+        (package / "manifest.yaml").write_text(
+            _V2_COMMANDS_MANIFEST.format(id=plugin_id), encoding="utf-8"
+        )
     kernel = make_kernel([tmp_path], event_bus=EventBus())
     await kernel.load_all()
+    states = {row["id"]: row for row in kernel.states()}
+    assert states["v2cmds"]["state"] == "ACTIVE"
+    assert states["v2cmds_dup"]["state"] == "FAILED"
+    assert "/chatid" in states["v2cmds_dup"]["error"]
     assert command_menu(kernel.kernel) == [("chatid", "查看我的 chat_id")]
     await kernel.unload("v2cmds")
     assert command_menu(kernel.kernel) == []

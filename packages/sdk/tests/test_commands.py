@@ -2,7 +2,7 @@
 
 import pytest
 
-from shiori_sdk.commands import CommandInput, CommandRegistry
+from shiori_sdk.commands import CommandInput, CommandRegistry, normalize_command
 
 
 async def _reply(_: CommandInput) -> str:
@@ -10,6 +10,10 @@ async def _reply(_: CommandInput) -> str:
 
 
 def test_a_command_head_finds_its_registration_but_plain_text_does_not():
+    # The head is lowercased and loses its @bot suffix and arguments; blank text has none.
+    assert normalize_command(" /UNDO@ShioriBot  next ") == "/undo"
+    assert normalize_command(" \n\t") == ""
+    assert normalize_command("ordinary message") == "ordinary"
     registry = CommandRegistry()
     _ = registry.register("undo", _reply)
     assert registry.handler(" /UNDO@ShioriBot 3 ") is _reply
