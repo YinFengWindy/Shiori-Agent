@@ -27,7 +27,6 @@ from agent.core.passive_support import build_context_hint_message
 from agent.core.passive_turn import ContextStore
 from agent.core.runtime_support import TurnRunResult
 from agent.core.types import ContextBundle, HistoryMessage
-from agent.lifecycle.phase import Phase
 from agent.tools.registry import ToolRegistry
 from bus.event_bus import EventBus
 from shiori_sdk.messages import InboundMessage
@@ -41,31 +40,15 @@ from agent.lifecycle.types import (
     PromptRenderInput,
     TurnState,
 )
-from agent.lifecycle.phases.after_reasoning import (
-    AfterReasoningFrame,
-    default_after_reasoning_modules,
-)
-from agent.lifecycle.phases.after_step import (
-    AfterStepFrame,
-    default_after_step_modules,
-)
-from agent.lifecycle.phases.before_reasoning import (
-    BeforeReasoningFrame,
-    default_before_reasoning_modules,
-)
-from agent.lifecycle.phases.before_step import (
-    BeforeStepFrame,
-    default_before_step_modules,
-)
+from agent.lifecycle.phases.after_reasoning import AfterReasoningPhase
+from agent.lifecycle.phases.after_step import AfterStepPhase
+from agent.lifecycle.phases.before_reasoning import BeforeReasoningPhase
+from agent.lifecycle.phases.before_step import BeforeStepPhase
 from agent.lifecycle.phases.before_turn import (
-    BeforeTurnFrame,
+    BeforeTurnPhase,
     MemoryConsolidationFailedError,
-    default_before_turn_modules,
 )
-from agent.lifecycle.phases.prompt_render import (
-    PromptRenderFrame,
-    default_prompt_render_modules,
-)
+from agent.lifecycle.phases.prompt_render import PromptRenderPhase
 from shiori_sdk.prompting import PromptSectionRender
 from conversation.store import ConversationStore
 from session.manager import SessionManager
@@ -131,13 +114,10 @@ async def test_before_turn_setup_fills_turn_state():
         prepare=AsyncMock(return_value=bundle),
     )
 
-    phase = Phase(
-        default_before_turn_modules(
-            TurnEvents(bus, core_kernel),
-            cast(SessionManager, session_mgr),
-            cast(ContextStore, ctx_store),
-        ),
-        frame_factory=BeforeTurnFrame,
+    phase = BeforeTurnPhase(
+        TurnEvents(bus, core_kernel),
+        cast(SessionManager, session_mgr),
+        cast(ContextStore, ctx_store),
     )
     msg = _inbound()
     state = TurnState(msg=msg, session_key="telegram:123", dispatch_outbound=True)
@@ -165,13 +145,10 @@ async def test_before_turn_ctx_carries_context_scope_of_turn_thread(tmp_path):
         conversation_store=ConversationStore(tmp_path / "sessions.db"),
     )
     ctx_store = SimpleNamespace(prepare=AsyncMock(return_value=ContextBundle()))
-    phase = Phase(
-        default_before_turn_modules(
-            TurnEvents(EventBus(), core_kernel),
-            cast(SessionManager, session_mgr),
-            cast(ContextStore, ctx_store),
-        ),
-        frame_factory=BeforeTurnFrame,
+    phase = BeforeTurnPhase(
+        TurnEvents(EventBus(), core_kernel),
+        cast(SessionManager, session_mgr),
+        cast(ContextStore, ctx_store),
     )
     msg = InboundMessage(
         channel="qq",
@@ -199,13 +176,10 @@ async def test_before_turn_binds_message_role_id_to_session_before_context_prepa
         workspace=Path("unused"),
     )
     ctx_store = SimpleNamespace(prepare=AsyncMock(return_value=ContextBundle()))
-    phase = Phase(
-        default_before_turn_modules(
-            TurnEvents(bus, core_kernel),
-            cast(SessionManager, session_mgr),
-            cast(ContextStore, ctx_store),
-        ),
-        frame_factory=BeforeTurnFrame,
+    phase = BeforeTurnPhase(
+        TurnEvents(bus, core_kernel),
+        cast(SessionManager, session_mgr),
+        cast(ContextStore, ctx_store),
     )
     msg = InboundMessage(
         channel="benchmark",
@@ -229,13 +203,10 @@ async def test_before_turn_uses_cli_session_override_context():
     session = _DummySession("telegram:7674283004")
     session_mgr = SimpleNamespace(get_or_create=lambda key: session)
     ctx_store = SimpleNamespace(prepare=AsyncMock(return_value=ContextBundle()))
-    phase = Phase(
-        default_before_turn_modules(
-            TurnEvents(bus, core_kernel),
-            cast(SessionManager, session_mgr),
-            cast(ContextStore, ctx_store),
-        ),
-        frame_factory=BeforeTurnFrame,
+    phase = BeforeTurnPhase(
+        TurnEvents(bus, core_kernel),
+        cast(SessionManager, session_mgr),
+        cast(ContextStore, ctx_store),
     )
     msg = InboundMessage(
         channel="cli",
@@ -272,13 +243,10 @@ async def test_before_turn_chain_can_abort():
         return Veto("rate limited")
 
     kernel = kernel_with(on=((TurnStarting, abort_handler),))
-    phase = Phase(
-        default_before_turn_modules(
-            TurnEvents(bus, lambda: kernel),
-            cast(SessionManager, session_mgr),
-            cast(ContextStore, ctx_store),
-        ),
-        frame_factory=BeforeTurnFrame,
+    phase = BeforeTurnPhase(
+        TurnEvents(bus, lambda: kernel),
+        cast(SessionManager, session_mgr),
+        cast(ContextStore, ctx_store),
     )
     msg = _inbound()
     state = TurnState(msg=msg, session_key="telegram:123", dispatch_outbound=True)
@@ -297,14 +265,11 @@ async def test_before_turn_memory_context_guard_blocks_unconsolidated_tail():
     session_mgr = SimpleNamespace(get_or_create=lambda key: session)
     ctx_store = SimpleNamespace(prepare=AsyncMock())
 
-    phase = Phase(
-        default_before_turn_modules(
-            TurnEvents(bus, core_kernel),
-            cast(SessionManager, session_mgr),
-            cast(ContextStore, ctx_store),
-            keep_count=20,
-        ),
-        frame_factory=BeforeTurnFrame,
+    phase = BeforeTurnPhase(
+        TurnEvents(bus, core_kernel),
+        cast(SessionManager, session_mgr),
+        cast(ContextStore, ctx_store),
+        keep_count=20,
     )
     msg = _inbound()
     state = TurnState(msg=msg, session_key="telegram:123", dispatch_outbound=True)
@@ -345,14 +310,11 @@ async def test_before_turn_memory_context_guard_counts_only_the_turn_context(tmp
     )
     session_mgr = SimpleNamespace(get_or_create=lambda key: session, workspace=tmp_path)
     ctx_store = SimpleNamespace(prepare=AsyncMock(return_value=ContextBundle()))
-    phase = Phase(
-        default_before_turn_modules(
-            TurnEvents(EventBus(), core_kernel),
-            cast(SessionManager, session_mgr),
-            cast(ContextStore, ctx_store),
-            keep_count=20,
-        ),
-        frame_factory=BeforeTurnFrame,
+    phase = BeforeTurnPhase(
+        TurnEvents(EventBus(), core_kernel),
+        cast(SessionManager, session_mgr),
+        cast(ContextStore, ctx_store),
+        keep_count=20,
     )
     msg = InboundMessage(
         channel="desktop",
@@ -396,15 +358,12 @@ async def test_before_turn_memory_context_guard_schedules_consolidation_without_
 
     consolidator = _Consolidator()
 
-    phase = Phase(
-        default_before_turn_modules(
-            TurnEvents(bus, core_kernel),
-            cast(SessionManager, session_mgr),
-            cast(ContextStore, ctx_store),
-            keep_count=20,
-            consolidator=consolidator,
-        ),
-        frame_factory=BeforeTurnFrame,
+    phase = BeforeTurnPhase(
+        TurnEvents(bus, core_kernel),
+        cast(SessionManager, session_mgr),
+        cast(ContextStore, ctx_store),
+        keep_count=20,
+        consolidator=consolidator,
     )
     msg = _inbound()
     state = TurnState(msg=msg, session_key="telegram:123", dispatch_outbound=True)
@@ -449,15 +408,12 @@ async def test_before_turn_defers_token_pressure_until_complete_request_is_rende
             raise AssertionError("token pressure must use awaited consolidation")
 
     consolidator = _Consolidator()
-    phase = Phase(
-        default_before_turn_modules(
-            TurnEvents(bus, core_kernel),
-            cast(SessionManager, session_mgr),
-            cast(ContextStore, ctx_store),
-            keep_count=20,
-            consolidator=cast(Any, consolidator),
-        ),
-        frame_factory=BeforeTurnFrame,
+    phase = BeforeTurnPhase(
+        TurnEvents(bus, core_kernel),
+        cast(SessionManager, session_mgr),
+        cast(ContextStore, ctx_store),
+        keep_count=20,
+        consolidator=cast(Any, consolidator),
     )
 
     ctx = await phase.run(
@@ -485,15 +441,12 @@ async def test_before_turn_memory_context_guard_blocks_after_consolidation_failu
         def get_memory_consolidation_failure(self, session_key: str) -> str | None:
             return "provider timeout"
 
-    phase = Phase(
-        default_before_turn_modules(
-            TurnEvents(bus, core_kernel),
-            cast(SessionManager, session_mgr),
-            cast(ContextStore, ctx_store),
-            keep_count=20,
-            consolidator=_Consolidator(),
-        ),
-        frame_factory=BeforeTurnFrame,
+    phase = BeforeTurnPhase(
+        TurnEvents(bus, core_kernel),
+        cast(SessionManager, session_mgr),
+        cast(ContextStore, ctx_store),
+        keep_count=20,
+        consolidator=_Consolidator(),
     )
     msg = _inbound()
     state = TurnState(msg=msg, session_key="telegram:123", dispatch_outbound=True)
@@ -525,15 +478,12 @@ async def test_before_turn_memory_context_guard_reports_failure_for_nsfw_role():
         def get_memory_consolidation_failure(self, session_key: str) -> str | None:
             return "invalid response"
 
-    phase = Phase(
-        default_before_turn_modules(
-            TurnEvents(bus, core_kernel),
-            cast(SessionManager, session_mgr),
-            cast(ContextStore, ctx_store),
-            keep_count=20,
-            consolidator=_Consolidator(),
-        ),
-        frame_factory=BeforeTurnFrame,
+    phase = BeforeTurnPhase(
+        TurnEvents(bus, core_kernel),
+        cast(SessionManager, session_mgr),
+        cast(ContextStore, ctx_store),
+        keep_count=20,
+        consolidator=_Consolidator(),
     )
     msg = _inbound()
     state = TurnState(msg=msg, session_key="telegram:123", dispatch_outbound=True)
@@ -561,13 +511,10 @@ async def test_before_turn_chain_can_modify_skill_names():
         )
 
     kernel = kernel_with(on=((TurnStarting, add_skill),))
-    phase = Phase(
-        default_before_turn_modules(
-            TurnEvents(bus, lambda: kernel),
-            cast(SessionManager, session_mgr),
-            cast(ContextStore, ctx_store),
-        ),
-        frame_factory=BeforeTurnFrame,
+    phase = BeforeTurnPhase(
+        TurnEvents(bus, lambda: kernel),
+        cast(SessionManager, session_mgr),
+        cast(ContextStore, ctx_store),
     )
     msg = _inbound()
     state = TurnState(msg=msg, session_key="telegram:123", dispatch_outbound=True)
@@ -594,14 +541,11 @@ async def test_before_reasoning_setup_calls_tools_set_context():
     context_builder = Mock()
     context_builder.render = Mock(return_value=None)
 
-    phase = Phase(
-        default_before_reasoning_modules(
-            TurnEvents(bus, core_kernel),
-            cast(ToolRegistry, tools),
-            cast(SessionManager, session_mgr),
-            cast(ContextBuilder, context_builder),
-        ),
-        frame_factory=BeforeReasoningFrame,
+    phase = BeforeReasoningPhase(
+        TurnEvents(bus, core_kernel),
+        cast(ToolRegistry, tools),
+        cast(SessionManager, session_mgr),
+        cast(ContextBuilder, context_builder),
     )
     msg = _inbound()
 
@@ -642,14 +586,11 @@ async def test_before_reasoning_requires_session():
     session_mgr = Mock()
     context_builder = Mock()
 
-    phase = Phase(
-        default_before_reasoning_modules(
-            TurnEvents(bus, core_kernel),
-            cast(ToolRegistry, tools),
-            cast(SessionManager, session_mgr),
-            cast(ContextBuilder, context_builder),
-        ),
-        frame_factory=BeforeReasoningFrame,
+    phase = BeforeReasoningPhase(
+        TurnEvents(bus, core_kernel),
+        cast(ToolRegistry, tools),
+        cast(SessionManager, session_mgr),
+        cast(ContextBuilder, context_builder),
     )
     msg = _inbound()
 
@@ -688,14 +629,11 @@ async def test_before_reasoning_finalize_calls_render():
     context_builder = Mock()
     context_builder.render = Mock(return_value=None)
 
-    phase = Phase(
-        default_before_reasoning_modules(
-            TurnEvents(bus, core_kernel),
-            cast(ToolRegistry, tools),
-            cast(SessionManager, session_mgr),
-            cast(ContextBuilder, context_builder),
-        ),
-        frame_factory=BeforeReasoningFrame,
+    phase = BeforeReasoningPhase(
+        TurnEvents(bus, core_kernel),
+        cast(ToolRegistry, tools),
+        cast(SessionManager, session_mgr),
+        cast(ContextBuilder, context_builder),
     )
     msg = _inbound()
 
@@ -741,14 +679,11 @@ async def test_before_reasoning_chain_can_add_extra_hints():
         return replace(event, extra_hints=(*event.extra_hints, "hint from plugin"))
 
     kernel = kernel_with(on=((ReasoningStarting, hint_handler),))
-    phase = Phase(
-        default_before_reasoning_modules(
-            TurnEvents(bus, lambda: kernel),
-            cast(ToolRegistry, tools),
-            cast(SessionManager, session_mgr),
-            cast(ContextBuilder, context_builder),
-        ),
-        frame_factory=BeforeReasoningFrame,
+    phase = BeforeReasoningPhase(
+        TurnEvents(bus, lambda: kernel),
+        cast(ToolRegistry, tools),
+        cast(SessionManager, session_mgr),
+        cast(ContextBuilder, context_builder),
     )
     msg = _inbound()
 
@@ -792,14 +727,11 @@ async def test_before_reasoning_chain_modify_skill_names_used_in_finalize_render
         )
 
     kernel = kernel_with(on=((ReasoningStarting, modify_chain),))
-    phase = Phase(
-        default_before_reasoning_modules(
-            TurnEvents(bus, lambda: kernel),
-            cast(ToolRegistry, tools),
-            cast(SessionManager, session_mgr),
-            cast(ContextBuilder, context_builder),
-        ),
-        frame_factory=BeforeReasoningFrame,
+    phase = BeforeReasoningPhase(
+        TurnEvents(bus, lambda: kernel),
+        cast(ToolRegistry, tools),
+        cast(SessionManager, session_mgr),
+        cast(ContextBuilder, context_builder),
     )
     msg = _inbound()
 
@@ -830,10 +762,7 @@ async def test_before_reasoning_chain_modify_skill_names_used_in_finalize_render
 @pytest.mark.asyncio
 async def test_before_step_setup_records_token_estimate():
     bus = EventBus()
-    phase = Phase(
-        default_before_step_modules(TurnEvents(bus, core_kernel)),
-        frame_factory=BeforeStepFrame,
-    )
+    phase = BeforeStepPhase(TurnEvents(bus, core_kernel))
     messages = [{"role": "user", "content": "hello"}]
 
     ctx = await phase.run(
@@ -870,10 +799,7 @@ async def test_prompt_render_chain_respects_disabled_sections(tmp_path):
     context = ContextBuilder(
         tmp_path, memory=cast(Any, memory), runtime_roles=RoleStore(tmp_path)
     )
-    phase = Phase(
-        default_prompt_render_modules(TurnEvents(EventBus(), lambda: kernel), context),
-        frame_factory=PromptRenderFrame,
-    )
+    phase = PromptRenderPhase(TurnEvents(EventBus(), lambda: kernel), context)
 
     result = await phase.run(
         PromptRenderInput(
@@ -903,10 +829,7 @@ async def test_before_step_finalize_injects_extra_hints():
         return replace(event, extra_hints=(*event.extra_hints, "hints from plugin"))
 
     kernel = kernel_with(on=((StepStarting, append_hint),))
-    phase = Phase(
-        default_before_step_modules(TurnEvents(bus, lambda: kernel)),
-        frame_factory=BeforeStepFrame,
-    )
+    phase = BeforeStepPhase(TurnEvents(bus, lambda: kernel))
     messages = [{"role": "user", "content": "hello"}]
 
     await phase.run(
@@ -932,10 +855,7 @@ async def test_before_step_finalize_early_stop():
         return Veto("预算不足")
 
     kernel = kernel_with(on=((StepStarting, stop_early),))
-    phase = Phase(
-        default_before_step_modules(TurnEvents(bus, lambda: kernel)),
-        frame_factory=BeforeStepFrame,
-    )
+    phase = BeforeStepPhase(TurnEvents(bus, lambda: kernel))
     messages = [{"role": "user", "content": "hello"}]
 
     ctx = await phase.run(
@@ -962,10 +882,7 @@ async def test_after_step_phase_runs_observers():
         side_effect.append(event.partial_reply)
 
     bus.on(StepFinished, handler)
-    phase = Phase(
-        default_after_step_modules(TurnEvents(bus, core_kernel)),
-        frame_factory=AfterStepFrame,
-    )
+    phase = AfterStepPhase(TurnEvents(bus, core_kernel))
     await phase.run(
         AfterStepCtx(
             session_key="k",
@@ -1014,13 +931,10 @@ async def test_after_reasoning_applies_reasoning_finished_to_store_and_outbound(
         streamed=False,
         context_retry={},
     )
-    phase = Phase(
-        default_after_reasoning_modules(
-            EventBus(),
-            TurnEvents(EventBus(), lambda: kernel),
-            cast(Any, services),
-        ),
-        frame_factory=AfterReasoningFrame,
+    phase = AfterReasoningPhase(
+        EventBus(),
+        TurnEvents(EventBus(), lambda: kernel),
+        cast(Any, services),
     )
 
     result = await phase.run(AfterReasoningInput(state=state, turn_result=turn_result))
@@ -1066,11 +980,8 @@ async def test_after_reasoning_carries_the_persisted_assistant_message_id_into_o
         streamed=False,
         context_retry={},
     )
-    phase = Phase(
-        default_after_reasoning_modules(
-            EventBus(), TurnEvents(EventBus(), core_kernel), cast(Any, services)
-        ),
-        frame_factory=AfterReasoningFrame,
+    phase = AfterReasoningPhase(
+        EventBus(), TurnEvents(EventBus(), core_kernel), cast(Any, services)
     )
 
     result = await phase.run(AfterReasoningInput(state=state, turn_result=turn_result))
@@ -1111,11 +1022,8 @@ async def test_after_reasoning_persists_user_display_content_without_internal_me
         streamed=False,
         context_retry={},
     )
-    phase = Phase(
-        default_after_reasoning_modules(
-            EventBus(), TurnEvents(EventBus(), core_kernel), cast(Any, services)
-        ),
-        frame_factory=AfterReasoningFrame,
+    phase = AfterReasoningPhase(
+        EventBus(), TurnEvents(EventBus(), core_kernel), cast(Any, services)
     )
 
     await phase.run(AfterReasoningInput(state=state, turn_result=turn_result))
@@ -1158,11 +1066,8 @@ async def test_after_reasoning_copies_thread_id_into_persisted_messages():
         streamed=False,
         context_retry={},
     )
-    phase = Phase(
-        default_after_reasoning_modules(
-            EventBus(), TurnEvents(EventBus(), core_kernel), cast(Any, services)
-        ),
-        frame_factory=AfterReasoningFrame,
+    phase = AfterReasoningPhase(
+        EventBus(), TurnEvents(EventBus(), core_kernel), cast(Any, services)
     )
 
     await phase.run(AfterReasoningInput(state=state, turn_result=turn_result))
@@ -1203,11 +1108,8 @@ async def test_after_reasoning_enriches_session_metadata_with_relationship_runti
         streamed=False,
         context_retry={},
     )
-    phase = Phase(
-        default_after_reasoning_modules(
-            EventBus(), TurnEvents(EventBus(), core_kernel), cast(Any, services)
-        ),
-        frame_factory=AfterReasoningFrame,
+    phase = AfterReasoningPhase(
+        EventBus(), TurnEvents(EventBus(), core_kernel), cast(Any, services)
     )
 
     await phase.run(AfterReasoningInput(state=state, turn_result=turn_result))
@@ -1237,18 +1139,15 @@ class _RecordingConsolidator:
 async def _guard_group_turn(
     manager: SessionManager, consolidator: _RecordingConsolidator, **guard: Any
 ) -> None:
-    phase = Phase(
-        default_before_turn_modules(
-            TurnEvents(EventBus(), core_kernel),
-            manager,
-            cast(
-                ContextStore,
-                SimpleNamespace(prepare=AsyncMock(return_value=ContextBundle())),
-            ),
-            consolidator=cast(Any, consolidator),
-            **guard,
+    phase = BeforeTurnPhase(
+        TurnEvents(EventBus(), core_kernel),
+        manager,
+        cast(
+            ContextStore,
+            SimpleNamespace(prepare=AsyncMock(return_value=ContextBundle())),
         ),
-        frame_factory=BeforeTurnFrame,
+        consolidator=cast(Any, consolidator),
+        **guard,
     )
     msg = InboundMessage(
         channel="qq",
@@ -1320,13 +1219,10 @@ async def test_registered_command_answers_before_retrieval_and_keeps_session():
     session.messages = [{"role": "user", "content": "kept"}]
     session.last_consolidated = 1
     context = SimpleNamespace(prepare=AsyncMock())
-    phase = Phase(
-        default_before_turn_modules(
-            TurnEvents(EventBus(), lambda: kernel),
-            cast(SessionManager, SimpleNamespace(get_or_create=lambda key: session)),
-            cast(ContextStore, context),
-        ),
-        frame_factory=BeforeTurnFrame,
+    phase = BeforeTurnPhase(
+        TurnEvents(EventBus(), lambda: kernel),
+        cast(SessionManager, SimpleNamespace(get_or_create=lambda key: session)),
+        cast(ContextStore, context),
     )
     message = _inbound()
     message.content = "/Example@bot now"

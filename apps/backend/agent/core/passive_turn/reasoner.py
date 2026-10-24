@@ -60,21 +60,11 @@ from .natural_reply import NaturalReply
 from agent.core.runtime_support import ToolDiscoveryState
 from agent.core.turn_events import TurnEvents, core_kernel
 from agent.core.types import ReasonerResult
-from agent.lifecycle.phase import Phase
-from agent.lifecycle.phases.after_step import AfterStepFrame, default_after_step_modules
-from agent.lifecycle.phases.before_step import (
-    BeforeStepFrame,
-    default_before_step_modules,
-)
-from agent.lifecycle.phases.prompt_render import (
-    PromptRenderFrame,
-    default_prompt_render_modules,
-)
+from agent.lifecycle.phases.after_step import AfterStepPhase
+from agent.lifecycle.phases.before_step import BeforeStepPhase
+from agent.lifecycle.phases.prompt_render import PromptRenderPhase
 from agent.lifecycle.types import (
     inbound_thread_id,
-    AfterStepCtx,
-    BeforeStepCtx,
-    BeforeStepInput,
     PromptRenderInput,
     PromptRenderResult,
 )
@@ -231,25 +221,10 @@ class DefaultReasoner(
         bus = event_bus or EventBus()
         self._bus = bus
         self._events = TurnEvents(bus, lambda: self._kernel())
-        self._before_step: Phase[BeforeStepInput, BeforeStepCtx, BeforeStepFrame] = (
-            Phase(
-                default_before_step_modules(self._events),
-                frame_factory=BeforeStepFrame,
-            )
-        )
-        self._after_step: Phase[AfterStepCtx, AfterStepCtx, AfterStepFrame] = Phase(
-            default_after_step_modules(self._events),
-            frame_factory=AfterStepFrame,
-        )
-        self._prompt_render: (
-            Phase[PromptRenderInput, PromptRenderResult, PromptRenderFrame] | None
-        ) = (
-            Phase(
-                default_prompt_render_modules(self._events, context),
-                frame_factory=PromptRenderFrame,
-            )
-            if context is not None
-            else None
+        self._before_step = BeforeStepPhase(self._events)
+        self._after_step = AfterStepPhase(self._events)
+        self._prompt_render = (
+            PromptRenderPhase(self._events, context) if context is not None else None
         )
 
     def bind_kernel(self, kernel: Callable[[], Kernel]) -> None:

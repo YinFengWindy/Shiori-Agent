@@ -155,12 +155,6 @@ class CoreRuntime:
             if isinstance(spawn, SpawnTool):
                 spawn.manager.bind_kernel(lambda: kernel.kernel)
 
-    async def inspect_modules(self) -> str:
-        """Renders this generation\'s lifecycle module configuration."""
-        from bootstrap.runtime.inspection import inspect_core_modules
-
-        return await inspect_core_modules(self)
-
     def assert_hot_unloadable(self) -> None:
         """Refuses live replacement before scene, event, or provider teardown starts."""
         if self.plugin_manager is not None:

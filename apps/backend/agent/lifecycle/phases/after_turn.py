@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 import copy
-from dataclasses import dataclass
 import logging
-from typing import TYPE_CHECKING, Any, TypeAlias, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from agent.core.passive_support import (
     build_post_reply_context_budget,
@@ -13,7 +12,6 @@ from agent.core.passive_support import (
 )
 from agent.core.types import to_tool_call_groups
 from conversation.context_scope import history_filter
-from agent.lifecycle.phase import PhaseFrame, PhaseModule, topo_sort_modules
 from agent.lifecycle.types import TurnSnapshot, TurnState
 from agent.core.turn_events import TurnEvents
 from shiori_sdk.core.conversation import TurnFinished
@@ -31,23 +29,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-@dataclass
-class AfterTurnFrame(PhaseFrame[TurnSnapshot, OutboundMessage]):
-    pass
-
-
-AfterTurnModules: TypeAlias = list[PhaseModule[AfterTurnFrame]]
-
-
-_BUDGET_SLOT = "turn:budget"
-_REACT_STATS_SLOT = "turn:react_stats"
-_TOOL_CHAIN_SLOT = "turn:tool_chain"
-_OMIT_USER_TURN_SLOT = "turn:omit_user_turn"
-_EXTRA_SLOT = "turn:extra"
-_TURN_COMMITTED_SLOT = "turn:committed"
-_CTX_SLOT = "turn:ctx"
-
-
 def will_dispatch_outbound(snapshot: TurnSnapshot) -> bool:
     """Share the actual normal-reply decision with pre-dispatch observers."""
     return snapshot.state.dispatch_outbound and not snapshot.outbound.metadata.get(
@@ -55,36 +36,41 @@ def will_dispatch_outbound(snapshot: TurnSnapshot) -> bool:
     )
 
 
-class _BuildTurnWorkModule:
-    slot = "after_turn.build_work"
-    requires: tuple[str, ...] = ()
+class AfterTurnPhase:
+    """Closes a committed turn and dispatches its reply.
+
+    The steps run in this fixed order: measure the post-reply context, apply
+    the reply's affection change, fan ``TurnCommitted`` out, log the budgets,
+    emit ``TurnFinished``, then dispatch.
+    """
 
     def __init__(
         self,
+        bus: EventBus,
+        events: TurnEvents,
+        outbound: OutboundPort,
         context: ContextBuilder,
         history_window: int = 500,
+        relationship_runtime: RoleRelationshipRuntimeService | None = None,
     ) -> None:
+        # ``TurnCommitted`` is a core domain event, not a turn event: it fans
+        # out on the core bus alone, without the plugin kernel.
+        self._bus = bus
+        self._events = events
+        self._outbound = outbound
         self._context = context
         self._history_window = max(1, int(history_window))
+        self._relationship_runtime = relationship_runtime
 
-    produces = (
-        _BUDGET_SLOT,
-        _REACT_STATS_SLOT,
-        _TOOL_CHAIN_SLOT,
-        _OMIT_USER_TURN_SLOT,
-        _EXTRA_SLOT,
-    )
-
-    async def run(self, frame: AfterTurnFrame) -> AfterTurnFrame:
-        snap = frame.input
+    async def run(self, snap: TurnSnapshot) -> OutboundMessage:
+        """Closes the turn and returns its outbound message."""
         state = snap.state
-        msg = state.msg
         raw_session = state.session
         if raw_session is None:
             raise RuntimeError("AfterTurn requires TurnState.session")
         session = cast("Session", raw_session)
         hw = self._history_window
-        frame.slots[_BUDGET_SLOT] = build_post_reply_context_budget(
+        budget = build_post_reply_context_budget(
             context=self._context,
             history=session.get_history(
                 max_messages=hw,
@@ -92,13 +78,17 @@ class _BuildTurnWorkModule:
             ),
             history_window=hw,
         )
-        frame.slots[_REACT_STATS_SLOT] = extract_react_stats(snap.ctx.context_retry)
-        frame.slots[_EXTRA_SLOT] = _memory_extra(state)
-        frame.slots[_TOOL_CHAIN_SLOT] = list(snap.ctx.tool_chain)
-        frame.slots[_OMIT_USER_TURN_SLOT] = bool(
-            (msg.metadata or {}).get("omit_user_turn")
+        react_stats = extract_react_stats(snap.ctx.context_retry)
+        await _apply_turn_affection(self._relationship_runtime, state)
+        await self._bus.fanout(
+            _turn_committed(snap, budget=budget, react_stats=react_stats)
         )
-        return frame
+        log_post_reply_context_budget(session_key=state.session_key, budget=budget)
+        log_react_context_budget(session_key=state.session_key, react_stats=react_stats)
+        # Nothing is writable: the turn is stored, only listeners remain.
+        await self._events.emit(_turn_finished(snap), lambda _: None)
+        await _dispatch(self._outbound, snap)
+        return snap.outbound
 
 
 def _memory_extra(state: TurnState) -> dict[str, object]:
@@ -114,230 +104,121 @@ def _memory_extra(state: TurnState) -> dict[str, object]:
     return {}
 
 
-class _ApplyTurnAffectionModule:
+async def _apply_turn_affection(
+    relationship_runtime: RoleRelationshipRuntimeService | None, state: TurnState
+) -> None:
     """Applies the committed reply's affection change before the turn is announced.
 
     Running ahead of ``TurnCommitted`` lets every session refresh triggered by
     it carry the new summary.
     """
-
-    slot = "after_turn.affection"
-    requires = ("after_turn.build_work",)
-
-    def __init__(
-        self, relationship_runtime: RoleRelationshipRuntimeService | None
-    ) -> None:
-        self._relationship_runtime = relationship_runtime
-
-    async def run(self, frame: AfterTurnFrame) -> AfterTurnFrame:
-        state = frame.input.state
-        change = state.affection_change
-        if change is None or self._relationship_runtime is None:
-            return frame
-        session = cast("Session", state.session)
-        try:
-            await self._relationship_runtime.apply_turn_affection(session, change)
-        except Exception:
-            # Boundary: the reply is already committed and goes out regardless;
-            # affection is a side record of it. Raising here would report a
-            # stored reply as failed (desktop shows a retry error), so the
-            # failure is logged with its traceback instead.
-            logger.exception(
-                "好感记账失败，本轮回复照常完成: session=%s role=%s change=%+d",
-                session.key,
-                session.metadata.get("role_id"),
-                change.delta,
-            )
-        return frame
+    change = state.affection_change
+    if change is None or relationship_runtime is None:
+        return
+    session = cast("Session", state.session)
+    try:
+        await relationship_runtime.apply_turn_affection(session, change)
+    except Exception:
+        # Boundary: the reply is already committed and goes out regardless;
+        # affection is a side record of it. Raising here would report a
+        # stored reply as failed (desktop shows a retry error), so the
+        # failure is logged with its traceback instead.
+        logger.exception(
+            "好感记账失败，本轮回复照常完成: session=%s role=%s change=%+d",
+            session.key,
+            session.metadata.get("role_id"),
+            change.delta,
+        )
 
 
-class _BuildTurnCommittedModule:
-    requires = (
-        "after_turn.affection",
-        _BUDGET_SLOT,
-        _REACT_STATS_SLOT,
-        _TOOL_CHAIN_SLOT,
-        _OMIT_USER_TURN_SLOT,
-        _EXTRA_SLOT,
+def _turn_committed(
+    snap: TurnSnapshot,
+    *,
+    budget: dict[str, int],
+    react_stats: dict[str, int],
+) -> TurnCommitted:
+    """The ``TurnCommitted`` record of the committed turn."""
+    state = snap.state
+    msg = state.msg
+    session = cast("Session", state.session)
+    role_id = str(session.metadata.get("role_id") or "").strip()
+    tool_chain_list = cast(list[dict[str, Any]], list(snap.ctx.tool_chain))
+    omit_user_turn = bool((msg.metadata or {}).get("omit_user_turn"))
+    source = str((msg.metadata or {}).get("source") or "").strip()
+    raw_turn_metrics = snap.ctx.outbound_metadata.get("turn_metrics")
+    turn_metrics = raw_turn_metrics if isinstance(raw_turn_metrics, dict) else {}
+    return TurnCommitted(
+        session_key=state.session_key,
+        channel=msg.channel,
+        chat_id=msg.chat_id,
+        input_message=msg.content,
+        persisted_user_message=None if omit_user_turn else msg.content,
+        assistant_response=snap.ctx.reply,
+        tools_used=list(snap.ctx.tools_used),
+        thinking=snap.ctx.thinking,
+        raw_reply=snap.ctx.response_metadata.raw_text,
+        meme_tag=snap.ctx.meme_tag,
+        meme_media_count=len(snap.ctx.media),
+        tool_chain_raw=copy.deepcopy(tool_chain_list),
+        tool_call_groups=to_tool_call_groups(tool_chain_list),
+        timestamp=msg.timestamp,
+        post_reply_budget=dict(budget),
+        react_stats=dict(react_stats),
+        extra={
+            **_memory_extra(state),
+            **({"source": source} if source else {}),
+            **(
+                {"committed_message_ids": list(state.committed_message_ids)}
+                if state.committed_message_ids
+                else {}
+            ),
+        },
+        role_id=role_id,
+        request_id=str((msg.metadata or {}).get("request_id") or "").strip(),
+        thread_id=str((msg.metadata or {}).get("thread_id") or "").strip(),
+        external_message_id=str(
+            (msg.metadata or {}).get("external_message_id") or ""
+        ).strip(),
+        total_tokens=(
+            value
+            if isinstance((value := turn_metrics.get("total_tokens")), int)
+            and value >= 0
+            else None
+        ),
+        thinking_duration_ms=(
+            value
+            if isinstance((value := turn_metrics.get("thinking_duration_ms")), int)
+            and value >= 0
+            else None
+        ),
     )
-    slot = "after_turn.build_committed"
-    produces = (_TURN_COMMITTED_SLOT,)
-
-    async def run(self, frame: AfterTurnFrame) -> AfterTurnFrame:
-        snap = frame.input
-        state = snap.state
-        msg = state.msg
-        raw_session = state.session
-        if raw_session is None:
-            raise RuntimeError("AfterTurn requires TurnState.session")
-        session = cast("Session", raw_session)
-        role_id = str(session.metadata.get("role_id") or "").strip()
-        tool_chain_list = cast(list[dict[str, Any]], frame.slots[_TOOL_CHAIN_SLOT])
-        omit_user_turn = bool(frame.slots[_OMIT_USER_TURN_SLOT])
-        source = str((msg.metadata or {}).get("source") or "").strip()
-        raw_turn_metrics = snap.ctx.outbound_metadata.get("turn_metrics")
-        turn_metrics = raw_turn_metrics if isinstance(raw_turn_metrics, dict) else {}
-        frame.slots[_TURN_COMMITTED_SLOT] = TurnCommitted(
-            session_key=state.session_key,
-            channel=msg.channel,
-            chat_id=msg.chat_id,
-            input_message=msg.content,
-            persisted_user_message=None if omit_user_turn else msg.content,
-            assistant_response=snap.ctx.reply,
-            tools_used=list(snap.ctx.tools_used),
-            thinking=snap.ctx.thinking,
-            raw_reply=snap.ctx.response_metadata.raw_text,
-            meme_tag=snap.ctx.meme_tag,
-            meme_media_count=len(snap.ctx.media),
-            tool_chain_raw=copy.deepcopy(tool_chain_list),
-            tool_call_groups=to_tool_call_groups(tool_chain_list),
-            timestamp=msg.timestamp,
-            post_reply_budget=dict(cast(dict[str, int], frame.slots[_BUDGET_SLOT])),
-            react_stats=dict(cast(dict[str, int], frame.slots[_REACT_STATS_SLOT])),
-            extra={
-                **dict(cast(dict[str, object], frame.slots[_EXTRA_SLOT])),
-                **({"source": source} if source else {}),
-                **(
-                    {"committed_message_ids": list(state.committed_message_ids)}
-                    if state.committed_message_ids
-                    else {}
-                ),
-            },
-            role_id=role_id,
-            request_id=str((msg.metadata or {}).get("request_id") or "").strip(),
-            thread_id=str((msg.metadata or {}).get("thread_id") or "").strip(),
-            external_message_id=str(
-                (msg.metadata or {}).get("external_message_id") or ""
-            ).strip(),
-            total_tokens=(
-                value
-                if isinstance((value := turn_metrics.get("total_tokens")), int)
-                and value >= 0
-                else None
-            ),
-            thinking_duration_ms=(
-                value
-                if isinstance((value := turn_metrics.get("thinking_duration_ms")), int)
-                and value >= 0
-                else None
-            ),
-        )
-        return frame
 
 
-class _FanoutTurnCommittedModule:
-    slot = "after_turn.fanout_committed"
-    requires = ("after_turn.build_committed", _TURN_COMMITTED_SLOT)
-
-    def __init__(self, bus: EventBus) -> None:
-        self._bus = bus
-
-    async def run(self, frame: AfterTurnFrame) -> AfterTurnFrame:
-        await self._bus.fanout(cast(TurnCommitted, frame.slots[_TURN_COMMITTED_SLOT]))
-        return frame
-
-
-class _LogBudgetModule:
-    slot = "after_turn.log_budget"
-    requires = ("after_turn.build_work", _BUDGET_SLOT, _REACT_STATS_SLOT)
-
-    async def run(self, frame: AfterTurnFrame) -> AfterTurnFrame:
-        state = frame.input.state
-        log_post_reply_context_budget(
-            session_key=state.session_key,
-            budget=cast(dict[str, int], frame.slots[_BUDGET_SLOT]),
-        )
-        log_react_context_budget(
-            session_key=state.session_key,
-            react_stats=cast(dict[str, int], frame.slots[_REACT_STATS_SLOT]),
-        )
-        return frame
+def _turn_finished(snap: TurnSnapshot) -> TurnFinished:
+    """The ``TurnFinished`` event of the closed turn."""
+    return TurnFinished(
+        session_key=snap.state.session_key,
+        channel=snap.outbound.channel,
+        chat_id=snap.outbound.chat_id,
+        reply=snap.outbound.content,
+        tools_used=snap.ctx.tools_used,
+        thinking=snap.ctx.thinking,
+        will_dispatch=will_dispatch_outbound(snap),
+    )
 
 
-class _BuildTurnFinishedModule:
-    slot = "after_turn.build_ctx"
-    requires = ("after_turn.fanout_committed",)
-    produces = (_CTX_SLOT,)
-
-    async def run(self, frame: AfterTurnFrame) -> AfterTurnFrame:
-        snap = frame.input
-        frame.slots[_CTX_SLOT] = TurnFinished(
-            session_key=snap.state.session_key,
-            channel=snap.outbound.channel,
-            chat_id=snap.outbound.chat_id,
-            reply=snap.outbound.content,
-            tools_used=snap.ctx.tools_used,
-            thinking=snap.ctx.thinking,
-            will_dispatch=will_dispatch_outbound(snap),
-        )
-        return frame
-
-
-class _EmitTurnFinishedModule:
-    slot = "after_turn.emit"
-    requires = ("after_turn.build_ctx", _CTX_SLOT)
-
-    def __init__(self, events: TurnEvents) -> None:
-        self._events = events
-
-    async def run(self, frame: AfterTurnFrame) -> AfterTurnFrame:
-        event = cast(TurnFinished, frame.slots[_CTX_SLOT])
-        # Nothing is writable: the turn is stored, only listeners remain.
-        await self._events.emit(event, lambda _: None)
-        return frame
-
-
-class _DispatchOutboundModule:
-    slot = "after_turn.dispatch"
-    requires = ("after_turn.emit", _CTX_SLOT)
-
-    def __init__(self, outbound: OutboundPort) -> None:
-        self._outbound = outbound
-
-    async def run(self, frame: AfterTurnFrame) -> AfterTurnFrame:
-        snap = frame.input
-        outbound = snap.outbound
-        if will_dispatch_outbound(snap):
-            _ = await self._outbound.dispatch(
-                OutboundDispatch(
-                    channel=outbound.channel,
-                    chat_id=outbound.chat_id,
-                    content=outbound.content,
-                    thinking=outbound.thinking,
-                    metadata=outbound.metadata,
-                    media=outbound.media,
-                    committed_message_id=outbound.committed_message_id,
-                )
+async def _dispatch(outbound_port: OutboundPort, snap: TurnSnapshot) -> None:
+    """Hands the reply to the outbound port unless it is not to be dispatched."""
+    outbound = snap.outbound
+    if will_dispatch_outbound(snap):
+        _ = await outbound_port.dispatch(
+            OutboundDispatch(
+                channel=outbound.channel,
+                chat_id=outbound.chat_id,
+                content=outbound.content,
+                thinking=outbound.thinking,
+                metadata=outbound.metadata,
+                media=outbound.media,
+                committed_message_id=outbound.committed_message_id,
             )
-        return frame
-
-
-class _ReturnOutboundMessageModule:
-    slot = "after_turn.return"
-    requires = ("after_turn.dispatch",)
-
-    async def run(self, frame: AfterTurnFrame) -> AfterTurnFrame:
-        frame.output = frame.input.outbound
-        return frame
-
-
-def default_after_turn_modules(
-    bus: EventBus,
-    events: TurnEvents,
-    outbound: OutboundPort,
-    context: ContextBuilder,
-    history_window: int = 500,
-    relationship_runtime: RoleRelationshipRuntimeService | None = None,
-) -> AfterTurnModules:
-    builtins: AfterTurnModules = [
-        _BuildTurnWorkModule(context, history_window),
-        _ApplyTurnAffectionModule(relationship_runtime),
-        _BuildTurnCommittedModule(),
-        _FanoutTurnCommittedModule(bus),
-        _LogBudgetModule(),
-        _BuildTurnFinishedModule(),
-        _EmitTurnFinishedModule(events),
-        _DispatchOutboundModule(outbound),
-        _ReturnOutboundMessageModule(),
-    ]
-    return cast(AfterTurnModules, topo_sort_modules(builtins))
+        )

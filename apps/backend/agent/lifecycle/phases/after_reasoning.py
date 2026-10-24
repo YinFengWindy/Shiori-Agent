@@ -3,9 +3,8 @@ from __future__ import annotations
 from agent.turns.channel_sequence import channel_sequence_context
 from agent.turns.channel_sequence_commit import commit_channel_reply_sequence
 
-from dataclasses import dataclass
 import logging
-from typing import TYPE_CHECKING, Any, TypeAlias, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from shiori_sdk.channels.message_source import (
     PERSISTED_USER_CONTENT_KEY,
@@ -25,12 +24,12 @@ from agent.core.citation import join_messages, take_citations
 from agent.core.response_parser import ParsedResponse, ResponseMetadata, parse_response
 from core.roles.reply_state import InvalidRoleReply, RoleReply, reply_state_metadata
 from shiori_sdk.channels.chat_types import REPLY_MENTION_IDS_KEY, is_group_chat_type
-from agent.lifecycle.phase import PhaseFrame, PhaseModule, topo_sort_modules
 from agent.core.turn_events import TurnEvents, read_only
 from agent.lifecycle.types import (
     AfterReasoningCtx,
     AfterReasoningInput,
     AfterReasoningResult,
+    TurnState,
 )
 from shiori_sdk.core.conversation import ReasoningFinished
 from shiori_sdk.messages import OutboundMessage
@@ -43,24 +42,12 @@ from agent.turns.reply_sequence_commit import (
 
 if TYPE_CHECKING:
     from bus.event_bus import EventBus
-    from agent.looping.ports import LLMConfig, LLMServices
     from agent.looping.ports import SessionServices
     from session.manager import Session
 
 logger = logging.getLogger(__name__)
 
 
-@dataclass
-class AfterReasoningFrame(PhaseFrame[AfterReasoningInput, AfterReasoningResult]):
-    pass
-
-
-AfterReasoningModules: TypeAlias = list[PhaseModule[AfterReasoningFrame]]
-
-
-_CTX_SLOT = "reasoning:ctx"
-_OUTBOUND_SLOT = "reasoning:outbound"
-_CITED_SLOT = "reasoning:cited_memory_ids"
 _INTERNAL_USER_METADATA_KEYS = frozenset({PERSISTED_USER_CONTENT_KEY})
 _CONVERSATION_MESSAGE_FIELDS = (
     "thread_id",
@@ -106,113 +93,84 @@ def _copy_conversation_message_fields(
     return copied
 
 
-class _BuildAfterReasoningCtxModule:
-    slot = "after_reasoning.build_ctx"
-    requires: tuple[str, ...] = ()
-    produces = (_CTX_SLOT,)
+class AfterReasoningPhase:
+    """Turns the reasoning's result into the committed reply and its outbound message.
 
-    async def run(self, frame: AfterReasoningFrame) -> AfterReasoningFrame:
-        input = frame.input
-        msg = input.state.msg
-        turn_result = input.turn_result
-        raw_reply = turn_result.reply
-        if raw_reply is None:
-            raw_reply = "I've completed processing but have no response to give."
-        tool_chain = cast(list[dict[str, object]], turn_result.tool_chain)
-        session = input.state.session
-        mention_ids: tuple[str, ...] = ()
-        if reply_was_invalidated():
-            parsed = ParsedResponse(
-                clean_text="", metadata=ResponseMetadata(raw_text="")
-            )
-        elif session is not None and turn_result.context_retry.get("formal_role_reply"):
-            # The reasoner already produced content plus a validated (or
-            # degraded, previous-turn) RoleReply; no JSON parsing here. Kept
-            # off `context_retry`, which gets snapshotted verbatim into
-            # persisted JSON metadata further down.
-            if not isinstance(turn_result.role_reply, RoleReply):
-                raise InvalidRoleReply("角色回复缺少已生成的心情/想法状态")
-            reply = turn_result.role_reply
-            # Mentions belong to group replies only; no other reply carries them.
-            if is_group_chat_type((msg.metadata or {}).get("chat_type")):
-                mention_ids = reply.mention_ids
-            parsed = ParsedResponse(
-                clean_text=reply.content,
-                metadata=ResponseMetadata(
-                    raw_text=raw_reply, mood=reply.mood, thought=reply.thought
-                ),
-            )
-            frame.slots["reply:state"] = reply
-        else:
-            parsed = parse_response(raw_reply, tool_chain=tool_chain)
-        if turn_result.raw_reply is not None and not reply_was_invalidated():
-            parsed.metadata.raw_text = turn_result.raw_reply
-        if session is not None:
-            frame.slots["reply:previous_metadata"] = dict(session.metadata)
-            frame.slots["reply:messages"] = []
-            frame.slots["reply:private"] = (
-                "reply:state" in frame.slots
-                or turn_result.reply_sequence is not None
-                or reply_was_invalidated()
-                or bool(input.state.turn_pushes and input.state.turn_pushes.messages)
-            )
-        raw_turn_metrics = turn_result.context_retry.get("turn_metrics")
-        turn_metrics = (
-            {
-                key: value
-                for key in ("total_tokens", "thinking_duration_ms")
-                if isinstance((value := raw_turn_metrics.get(key)), int) and value >= 0
-            }
-            if isinstance(raw_turn_metrics, dict)
-            else {}
-        )
-        ctx = AfterReasoningCtx(
-            session_key=input.state.session_key,
-            channel=msg.channel,
-            chat_id=msg.chat_id,
-            reply=parsed.clean_text,
-            response_metadata=parsed.metadata,
-            tools_used=tuple(turn_result.tools_used),
-            tool_chain=tuple(tool_chain),
-            thinking=turn_result.thinking,
-            streamed=turn_result.streamed,
-            context_retry=dict(turn_result.context_retry),
-            outbound_metadata={
-                **(msg.metadata or {}),
-                **input.state.extra_metadata,
-                "tools_used": list(turn_result.tools_used),
-                "tool_chain": list(tool_chain),
-                "context_retry": dict(turn_result.context_retry),
-                "streamed_reply": turn_result.streamed,
-                **(
-                    {"account_delivery_sent": True}
-                    if turn_result.context_retry.get("account_delivery_sent")
-                    else {}
-                ),
-                **({"turn_metrics": turn_metrics} if turn_metrics else {}),
-                # Extra group members the role chose to mention in this reply.
-                **({REPLY_MENTION_IDS_KEY: list(mention_ids)} if mention_ids else {}),
-            },
-        )
-        sequence = turn_result.reply_sequence
-        if isinstance(sequence, ReplySequence) and not reply_was_invalidated():
-            ctx.reply_messages = sequence.messages
-            ctx.reply = sequence.content
-        frame.slots[_CTX_SLOT] = ctx
-        return frame
+    The steps run in this fixed order: build the reply context, take the
+    citations and emit ``ReasoningFinished``, stage the user and assistant
+    messages, update the session metadata, commit, then build the outbound
+    message. A reply with a mood state, a reply sequence, an invalidated reply
+    or turn pushes commits privately: its messages are drafts until the
+    commit publishes them.
+    """
 
-
-class _EmitAfterReasoningCtxModule:
-    slot = "after_reasoning.emit"
-    requires = ("after_reasoning.build_ctx", _CTX_SLOT)
-    produces = (_CTX_SLOT,)
-
-    def __init__(self, events: TurnEvents) -> None:
+    def __init__(
+        self,
+        bus: EventBus,
+        events: TurnEvents,
+        session_services: SessionServices,
+    ) -> None:
+        # The reply sequence commits announce ``ReplyMessageCommitted`` with
+        # ``bus.emit``, a core domain event that does not go through the kernel.
+        self._bus = bus
         self._events = events
+        self._session_services = session_services
+        self._relationship_runtime = getattr(
+            session_services, "relationship_runtime", None
+        )
 
-    async def run(self, frame: AfterReasoningFrame) -> AfterReasoningFrame:
-        ctx = cast(AfterReasoningCtx, frame.slots[_CTX_SLOT])
-        _take_citations(ctx, frame.slots)
+    async def run(self, input: AfterReasoningInput) -> AfterReasoningResult:
+        """Commits the reply and returns its context and outbound message."""
+        state = input.state
+        ctx, role_reply = _after_reasoning_ctx(input)
+        previous_metadata = (
+            dict(state.session.metadata) if state.session is not None else {}
+        )
+        private = (
+            role_reply is not None
+            or input.turn_result.reply_sequence is not None
+            or reply_was_invalidated()
+            or bool(state.turn_pushes and state.turn_pushes.messages)
+        )
+        cited = await self._emit(ctx)
+        raw_session = state.session
+        if raw_session is None:
+            raise RuntimeError("AfterReasoning requires TurnState.session")
+        session = cast("Session", raw_session)
+        messages: list[dict[str, Any]] = []
+        self._stage_user_message(ctx, state, session, messages, private=private)
+        sequence = _stage_assistant_messages(
+            ctx, input, session, messages, private=private, cited=cited
+        )
+        if private:
+            metadata_updates = build_session_runtime_metadata(
+                tools_used=list(ctx.tools_used),
+                tool_chain=list(ctx.tool_chain),
+            )
+            attempted_metadata: dict[str, Any] = {}
+        else:
+            metadata_updates = {}
+            attempted_metadata = self._update_session_metadata(ctx, session)
+        await self._commit_messages(
+            input,
+            ctx,
+            session,
+            messages,
+            private=private,
+            role_reply=role_reply,
+            sequence=sequence,
+            metadata_updates=metadata_updates,
+            previous_metadata=previous_metadata,
+            attempted_metadata=attempted_metadata,
+        )
+        return AfterReasoningResult(ctx=ctx, outbound=_outbound_message(ctx, messages))
+
+    async def _emit(self, ctx: AfterReasoningCtx) -> list[str]:
+        """Takes the citations, emits ``ReasoningFinished`` and applies it to ``ctx``.
+
+        Returns the cited memory IDs, stored with the assistant message.
+        """
+        cited = _take_citations(ctx)
 
         def apply(event: ReasoningFinished) -> None:
             ctx.reply = event.reply
@@ -222,61 +180,21 @@ class _EmitAfterReasoningCtxModule:
             ctx.outbound_metadata = dict(event.outbound_metadata)
 
         await self._events.emit(_reasoning_finished(ctx), apply)
-        return frame
+        return cited
 
-
-def _take_citations(ctx: AfterReasoningCtx, slots: dict[str, object]) -> None:
-    """Removes the citation markers before the plugins see the reply (D9).
-
-    The cited memory IDs are stored with the assistant message. The leftover
-    tags are removed by the core check after ``ReasoningFinished``.
-    """
-    messages, cited = take_citations(ctx.reply_messages or (ctx.reply,), ctx.tool_chain)
-    if cited:
-        slots[_CITED_SLOT] = cited
-    if ctx.reply_messages:
-        ctx.reply_messages = messages
-        ctx.reply = join_messages(messages)
-    else:
-        ctx.reply = messages[0]
-
-
-def _reasoning_finished(ctx: AfterReasoningCtx) -> ReasoningFinished:
-    """The ``ReasoningFinished`` projection of the reply's context."""
-    return ReasoningFinished(
-        session_key=ctx.session_key,
-        channel=ctx.channel,
-        chat_id=ctx.chat_id,
-        tools_used=ctx.tools_used,
-        tool_chain=tuple(read_only(group) for group in ctx.tool_chain),
-        thinking=ctx.thinking,
-        streamed=ctx.streamed,
-        reply=ctx.reply,
-        reply_messages=ctx.reply_messages,
-        media=tuple(ctx.media),
-        meme_tag=ctx.meme_tag,
-        outbound_metadata=read_only(ctx.outbound_metadata),
-    )
-
-
-class _PersistUserMessageModule:
-    slot = "after_reasoning.persist_user"
-    requires = ("after_reasoning.emit", _CTX_SLOT)
-
-    def __init__(self, session_services: SessionServices) -> None:
-        self._session_services = session_services
-
-    async def run(self, frame: AfterReasoningFrame) -> AfterReasoningFrame:
-        ctx = cast(AfterReasoningCtx, frame.slots[_CTX_SLOT])
-        state = frame.input.state
+    def _stage_user_message(
+        self,
+        ctx: AfterReasoningCtx,
+        state: TurnState,
+        session: Session,
+        messages: list[dict[str, Any]],
+        *,
+        private: bool,
+    ) -> None:
         msg = state.msg
-        raw_session = state.session
-        if raw_session is None:
-            raise RuntimeError("AfterReasoning requires TurnState.session")
-        session = cast("Session", raw_session)
         omit_user_turn = bool((msg.metadata or {}).get("omit_user_turn"))
         if omit_user_turn:
-            return frame
+            return
         user_kwargs: dict[str, object] = {}
         user_metadata = _build_synced_message_metadata(
             channel=msg.channel,
@@ -315,8 +233,8 @@ class _PersistUserMessageModule:
         user_media = list(msg.media)[
             len(quoted_media) if isinstance(quoted_media, list) else 0 :
         ]
-        if frame.slots["reply:private"]:
-            frame.slots["reply:messages"].append(
+        if private:
+            messages.append(
                 build_session_message(
                     "user",
                     user_content,
@@ -331,8 +249,7 @@ class _PersistUserMessageModule:
                 media=user_media or None,
                 **user_kwargs,
             )
-            frame.slots["reply:messages"].append(session.messages[-1])
-        return frame
+            messages.append(session.messages[-1])
 
     def _record_user_activity(self, session_key: str) -> None:
         """用户本人发来消息：刷新在场，并让关系状态（孤独值、等待回复）响应。"""
@@ -344,129 +261,13 @@ class _PersistUserMessageModule:
         if relationship_runtime is not None:
             relationship_runtime.handle_user_message(session_key)
 
+    def _update_session_metadata(
+        self, ctx: AfterReasoningCtx, session: Session
+    ) -> dict[str, Any]:
+        """Updates a publicly committed turn's session metadata in place.
 
-class _PersistAssistantMessageModule:
-    slot = "after_reasoning.persist_asst"
-    requires = ("after_reasoning.persist_user", _CTX_SLOT)
-
-    async def run(self, frame: AfterReasoningFrame) -> AfterReasoningFrame:
-        ctx = cast(AfterReasoningCtx, frame.slots[_CTX_SLOT])
-        raw_session = frame.input.state.session
-        if raw_session is None:
-            raise RuntimeError("AfterReasoning requires TurnState.session")
-        session = cast("Session", raw_session)
-        drafts = frame.input.state.turn_pushes
-        if drafts is not None:
-            frame.slots["reply:messages"].extend(drafts.messages)
-        carried = frame.input.turn_result.reply_sequence
-        if isinstance(carried, ReplySequence) or reply_was_invalidated():
-            if not ctx.outbound_metadata.get("turn_id") and not (
-                channel_sequence_context() is not None
-                and ctx.outbound_metadata.get("request_id")
-            ):
-                raise ValueError("消息序列需要可投递的交互回合标识")
-            if reply_was_invalidated():
-                sequence = ReplySequence(("",))
-            else:
-                decorated = ctx.reply_messages or carried.messages
-                sequence = ReplySequence(tuple(decorated))
-            frame.slots["reply:sequence"] = sequence
-            ctx.reply = sequence.content
-            ctx.reply_messages = sequence.messages
-        assistant_kwargs: dict[str, Any] = {
-            "tools_used": list(ctx.tools_used) if ctx.tools_used else None,
-            "tool_chain": list(ctx.tool_chain) if ctx.tool_chain else None,
-            "metadata": _build_synced_message_metadata(
-                channel=ctx.channel,
-                chat_id=ctx.chat_id,
-                metadata=ctx.outbound_metadata,
-            ),
-        }
-        if ctx.response_metadata.mood:
-            assistant_kwargs["metadata"]["mood"] = ctx.response_metadata.mood
-        if ctx.response_metadata.thought:
-            assistant_kwargs["metadata"]["thought"] = ctx.response_metadata.thought
-        if ctx.thinking is not None:
-            assistant_kwargs["reasoning_content"] = ctx.thinking
-        if ctx.media:
-            assistant_kwargs["media"] = list(dict.fromkeys(ctx.media))
-        if cited := frame.slots.get(_CITED_SLOT):
-            assistant_kwargs["cited_memory_ids"] = cited
-        # Outbound transport metadata still identifies the triggering turn for
-        # live-stream correlation. Persist that identity separately: the reply's
-        # own platform ID is only known after the channel acknowledges delivery.
-        assistant_metadata = assistant_kwargs["metadata"]
-        trigger_id = assistant_metadata.pop("external_message_id", None)
-        if trigger_id:
-            assistant_metadata["trigger_external_message_id"] = trigger_id
-        assistant_metadata.pop("delivery_status", None)
-        assistant_kwargs.update(
-            _copy_conversation_message_fields(
-                metadata=assistant_metadata,
-                session=session,
-            )
-        )
-        if isinstance(carried, ReplySequence) or reply_was_invalidated():
-            for index, content in enumerate(sequence.messages):
-                metadata = {
-                    **assistant_metadata,
-                    "reply_sequence_id": assistant_metadata.get("turn_id")
-                    or assistant_metadata["request_id"],
-                    "reply_sequence_index": index,
-                }
-                kwargs = dict(assistant_kwargs)
-                if index:
-                    for key in (
-                        "tools_used",
-                        "tool_chain",
-                        "reasoning_content",
-                        "media",
-                    ):
-                        kwargs.pop(key, None)
-                    for key in (
-                        "turn_metrics",
-                        "tools_used",
-                        "tool_chain",
-                        "context_retry",
-                        REPLY_MENTION_IDS_KEY,
-                    ):
-                        metadata.pop(key, None)
-                if index < len(sequence.messages) - 1:
-                    metadata.pop("mood", None)
-                    metadata.pop("thought", None)
-                kwargs["metadata"] = metadata
-                frame.slots["reply:messages"].append(
-                    build_session_message("assistant", content, **kwargs)
-                )
-        elif frame.slots["reply:private"]:
-            frame.slots["reply:messages"].append(
-                build_session_message("assistant", ctx.reply, **assistant_kwargs)
-            )
-        else:
-            session.add_message("assistant", ctx.reply, **assistant_kwargs)
-            frame.slots["reply:messages"].append(session.messages[-1])
-        return frame
-
-
-class _UpdateSessionMetadataModule:
-    slot = "after_reasoning.update_meta"
-    requires = ("after_reasoning.persist_asst", _CTX_SLOT)
-
-    def __init__(self, relationship_runtime: Any | None = None) -> None:
-        self._relationship_runtime = relationship_runtime
-
-    async def run(self, frame: AfterReasoningFrame) -> AfterReasoningFrame:
-        ctx = cast(AfterReasoningCtx, frame.slots[_CTX_SLOT])
-        raw_session = frame.input.state.session
-        if raw_session is None:
-            raise RuntimeError("AfterReasoning requires TurnState.session")
-        session = cast("Session", raw_session)
-        if frame.slots["reply:private"]:
-            frame.slots["reply:metadata_updates"] = build_session_runtime_metadata(
-                tools_used=list(ctx.tools_used),
-                tool_chain=list(ctx.tool_chain),
-            )
-            return frame
+        Returns the attempted metadata, which a failed commit restores from.
+        """
         # A normally committed assistant reply closes any older interrupted snapshot.
         _ = session.metadata.pop(INTERRUPTED_TURN_METADATA_KEY, None)
         update_session_runtime_metadata(
@@ -479,39 +280,36 @@ class _UpdateSessionMetadataModule:
             session.metadata = self._relationship_runtime.enrich_session_metadata(
                 cast(dict[str, Any], session.metadata),
             )
-        frame.slots["reply:attempted_metadata"] = dict(session.metadata)
-        return frame
+        return dict(session.metadata)
 
-
-class _AppendMessagesModule:
-    slot = "after_reasoning.append_messages"
-    requires = ("after_reasoning.update_meta",)
-
-    def __init__(self, session_services: SessionServices, bus: EventBus) -> None:
-        self._session_services = session_services
-        self._bus = bus
-
-    async def run(self, frame: AfterReasoningFrame) -> AfterReasoningFrame:
-        state = frame.input.state
-        raw_session = state.session
-        if raw_session is None:
-            raise RuntimeError("AfterReasoning requires TurnState.session")
-        session = cast("Session", raw_session)
-        owned_messages = frame.slots["reply:messages"]
+    async def _commit_messages(
+        self,
+        input: AfterReasoningInput,
+        ctx: AfterReasoningCtx,
+        session: Session,
+        owned_messages: list[dict[str, Any]],
+        *,
+        private: bool,
+        role_reply: RoleReply | None,
+        sequence: ReplySequence | None,
+        metadata_updates: dict[str, Any],
+        previous_metadata: dict[str, Any],
+        attempted_metadata: dict[str, Any],
+    ) -> None:
+        state = input.state
         # Replies and embedded tool results stay in their triggering turn even
         # if an identity is bound while the model is running. Plugins cannot
-        # override this host-owned timestamp through outgoing metadata or slots.
+        # override this host-owned timestamp through outgoing metadata.
         for message in owned_messages:
             message.setdefault("metadata", {})[
                 CONTEXT_TURN_STARTED_AT
             ] = state.msg.timestamp.isoformat()
-        reply = frame.slots.get("reply:state")
         relationship_runtime = getattr(
             self._session_services, "relationship_runtime", None
         )
         state_kwargs = (
             {
-                "metadata_updates": frame.slots["reply:metadata_updates"],
+                "metadata_updates": metadata_updates,
                 "pending_messages": True,
                 "removed_metadata_keys": (INTERRUPTED_TURN_METADATA_KEY,),
                 "metadata_enricher": (
@@ -520,21 +318,21 @@ class _AppendMessagesModule:
                     else None
                 ),
             }
-            if frame.slots["reply:private"]
+            if private
             else {}
         )
-        if reply is not None:
-            pending_metadata = frame.slots["reply:metadata_updates"]
+        if role_reply is not None:
             # Only a freshly fetched mood/thought bumps session mood state; a
             # degraded reply (mood call failed) leaves last turn's mood and
             # thought untouched instead of overwriting them with copies.
-            mood_fresh = bool(frame.input.turn_result.role_reply_mood_fresh)
+            mood_fresh = bool(input.turn_result.role_reply_mood_fresh)
             state_kwargs = {
                 "metadata_updates": {
-                    **pending_metadata,
+                    **metadata_updates,
                     **(
                         reply_state_metadata(
-                            reply, updated_at=str(pending_metadata["last_turn_ts"])
+                            role_reply,
+                            updated_at=str(metadata_updates["last_turn_ts"]),
                         )
                         if mood_fresh
                         else {}
@@ -548,16 +346,13 @@ class _AppendMessagesModule:
                     else None
                 ),
                 "expected_mood_updated_at": str(
-                    frame.input.turn_result.context_retry.get(
+                    input.turn_result.context_retry.get(
                         "role_reply_previous_updated_at",
-                        frame.slots["reply:previous_metadata"].get(
-                            "current_mood_updated_at", ""
-                        ),
+                        previous_metadata.get("current_mood_updated_at", ""),
                     )
                 ),
             }
         try:
-            sequence = frame.slots.get("reply:sequence")
             if sequence is not None and reply_was_invalidated():
                 await commit_invalidated_reply(
                     manager=self._session_services.session_manager,
@@ -573,7 +368,6 @@ class _AppendMessagesModule:
                     ),
                 )
             if sequence is not None and state.msg.channel != "desktop":
-                ctx = cast(AfterReasoningCtx, frame.slots[_CTX_SLOT])
                 await commit_channel_reply_sequence(
                     manager=self._session_services.session_manager,
                     session=session,
@@ -610,12 +404,12 @@ class _AppendMessagesModule:
                     owned_messages,
                     **state_kwargs,
                 )
-            if frame.slots["reply:private"]:
+            if private:
                 state.session = self._session_services.session_manager.get_or_create(
                     session.key
                 )
         except BaseException:
-            if frame.slots["reply:private"]:
+            if private:
                 # Drafts were private; cancellation before lock acquisition publishes nothing.
                 raise
             # Only remove this turn's objects; unrelated concurrent messages remain.
@@ -624,89 +418,267 @@ class _AppendMessagesModule:
                 for message in session.messages
                 if not any(message is owned for owned in owned_messages)
             ]
-            previous = frame.slots["reply:previous_metadata"]
-            attempted = frame.slots["reply:attempted_metadata"]
-            if session.metadata.get("last_turn_ts") == attempted.get("last_turn_ts"):
+            if session.metadata.get("last_turn_ts") == attempted_metadata.get(
+                "last_turn_ts"
+            ):
                 for key in (
                     "last_turn_tool_calls_count",
                     "last_turn_ts",
                     INTERRUPTED_TURN_METADATA_KEY,
                 ):
-                    if key in previous:
-                        session.metadata[key] = previous[key]
+                    if key in previous_metadata:
+                        session.metadata[key] = previous_metadata[key]
                     else:
                         session.metadata.pop(key, None)
             raise
         state.committed_message_ids = tuple(
             str(message["id"]) for message in owned_messages if message.get("id")
         )
-        if reply is not None and reply.affection is not None and state.is_user_turn():
+        if (
+            role_reply is not None
+            and role_reply.affection is not None
+            and state.is_user_turn()
+        ):
             # Only the user's own message counts (group members and scheduled
             # jobs do not; proactive replies never pass here), and only once
             # the reply is committed: a stale or failed commit raised above.
             # AfterTurn applies it, so bookkeeping cannot block delivery.
-            state.affection_change = reply.affection
+            state.affection_change = role_reply.affection
         if state.turn_pushes is not None:
             await state.turn_pushes.committed()
-        return frame
 
 
-class _BuildOutboundMessageModule:
-    slot = "after_reasoning.build_outbound"
-    requires = ("after_reasoning.append_messages", _CTX_SLOT)
-    produces = (_OUTBOUND_SLOT,)
-
-    async def run(self, frame: AfterReasoningFrame) -> AfterReasoningFrame:
-        ctx = cast(AfterReasoningCtx, frame.slots[_CTX_SLOT])
-        metadata = dict(ctx.outbound_metadata)
-        media = list(ctx.media)
-        # after_reasoning.append_messages already committed the assistant reply;
-        # its dict was mutated in place with the store-assigned id. Carrying that
-        # id lets delivery bookkeeping target this exact row later on.
-        owned_messages = frame.slots.get("reply:messages") or []
-        committed_message_id = (
-            str(owned_messages[-1].get("id") or "").strip() if owned_messages else ""
+def _after_reasoning_ctx(
+    input: AfterReasoningInput,
+) -> tuple[AfterReasoningCtx, RoleReply | None]:
+    """The reply's context and, for a formal role reply, its mood state."""
+    msg = input.state.msg
+    turn_result = input.turn_result
+    raw_reply = turn_result.reply
+    if raw_reply is None:
+        raw_reply = "I've completed processing but have no response to give."
+    tool_chain = cast(list[dict[str, object]], turn_result.tool_chain)
+    session = input.state.session
+    mention_ids: tuple[str, ...] = ()
+    role_reply: RoleReply | None = None
+    if reply_was_invalidated():
+        parsed = ParsedResponse(clean_text="", metadata=ResponseMetadata(raw_text=""))
+    elif session is not None and turn_result.context_retry.get("formal_role_reply"):
+        # The reasoner already produced content plus a validated (or
+        # degraded, previous-turn) RoleReply; no JSON parsing here. Kept
+        # off `context_retry`, which gets snapshotted verbatim into
+        # persisted JSON metadata further down.
+        if not isinstance(turn_result.role_reply, RoleReply):
+            raise InvalidRoleReply("角色回复缺少已生成的心情/想法状态")
+        role_reply = turn_result.role_reply
+        # Mentions belong to group replies only; no other reply carries them.
+        if is_group_chat_type((msg.metadata or {}).get("chat_type")):
+            mention_ids = role_reply.mention_ids
+        parsed = ParsedResponse(
+            clean_text=role_reply.content,
+            metadata=ResponseMetadata(
+                raw_text=raw_reply, mood=role_reply.mood, thought=role_reply.thought
+            ),
         )
-        frame.slots[_OUTBOUND_SLOT] = OutboundMessage(
+    else:
+        parsed = parse_response(raw_reply, tool_chain=tool_chain)
+    if turn_result.raw_reply is not None and not reply_was_invalidated():
+        parsed.metadata.raw_text = turn_result.raw_reply
+    raw_turn_metrics = turn_result.context_retry.get("turn_metrics")
+    turn_metrics = (
+        {
+            key: value
+            for key in ("total_tokens", "thinking_duration_ms")
+            if isinstance((value := raw_turn_metrics.get(key)), int) and value >= 0
+        }
+        if isinstance(raw_turn_metrics, dict)
+        else {}
+    )
+    ctx = AfterReasoningCtx(
+        session_key=input.state.session_key,
+        channel=msg.channel,
+        chat_id=msg.chat_id,
+        reply=parsed.clean_text,
+        response_metadata=parsed.metadata,
+        tools_used=tuple(turn_result.tools_used),
+        tool_chain=tuple(tool_chain),
+        thinking=turn_result.thinking,
+        streamed=turn_result.streamed,
+        context_retry=dict(turn_result.context_retry),
+        outbound_metadata={
+            **(msg.metadata or {}),
+            **input.state.extra_metadata,
+            "tools_used": list(turn_result.tools_used),
+            "tool_chain": list(tool_chain),
+            "context_retry": dict(turn_result.context_retry),
+            "streamed_reply": turn_result.streamed,
+            **(
+                {"account_delivery_sent": True}
+                if turn_result.context_retry.get("account_delivery_sent")
+                else {}
+            ),
+            **({"turn_metrics": turn_metrics} if turn_metrics else {}),
+            # Extra group members the role chose to mention in this reply.
+            **({REPLY_MENTION_IDS_KEY: list(mention_ids)} if mention_ids else {}),
+        },
+    )
+    sequence = turn_result.reply_sequence
+    if isinstance(sequence, ReplySequence) and not reply_was_invalidated():
+        ctx.reply_messages = sequence.messages
+        ctx.reply = sequence.content
+    return ctx, role_reply
+
+
+def _take_citations(ctx: AfterReasoningCtx) -> list[str]:
+    """Removes the citation markers before the plugins see the reply (D9).
+
+    Returns the cited memory IDs, stored with the assistant message. The
+    leftover tags are removed by the core check after ``ReasoningFinished``.
+    """
+    messages, cited = take_citations(ctx.reply_messages or (ctx.reply,), ctx.tool_chain)
+    if ctx.reply_messages:
+        ctx.reply_messages = messages
+        ctx.reply = join_messages(messages)
+    else:
+        ctx.reply = messages[0]
+    return cited
+
+
+def _reasoning_finished(ctx: AfterReasoningCtx) -> ReasoningFinished:
+    """The ``ReasoningFinished`` projection of the reply's context."""
+    return ReasoningFinished(
+        session_key=ctx.session_key,
+        channel=ctx.channel,
+        chat_id=ctx.chat_id,
+        tools_used=ctx.tools_used,
+        tool_chain=tuple(read_only(group) for group in ctx.tool_chain),
+        thinking=ctx.thinking,
+        streamed=ctx.streamed,
+        reply=ctx.reply,
+        reply_messages=ctx.reply_messages,
+        media=tuple(ctx.media),
+        meme_tag=ctx.meme_tag,
+        outbound_metadata=read_only(ctx.outbound_metadata),
+    )
+
+
+def _stage_assistant_messages(
+    ctx: AfterReasoningCtx,
+    input: AfterReasoningInput,
+    session: Session,
+    messages: list[dict[str, Any]],
+    *,
+    private: bool,
+    cited: list[str],
+) -> ReplySequence | None:
+    """Stages the assistant reply; returns the reply sequence it commits as, if any."""
+    drafts = input.state.turn_pushes
+    if drafts is not None:
+        messages.extend(drafts.messages)
+    carried = input.turn_result.reply_sequence
+    sequence: ReplySequence | None = None
+    if isinstance(carried, ReplySequence) or reply_was_invalidated():
+        if not ctx.outbound_metadata.get("turn_id") and not (
+            channel_sequence_context() is not None
+            and ctx.outbound_metadata.get("request_id")
+        ):
+            raise ValueError("消息序列需要可投递的交互回合标识")
+        if reply_was_invalidated():
+            sequence = ReplySequence(("",))
+        else:
+            decorated = ctx.reply_messages or cast(ReplySequence, carried).messages
+            sequence = ReplySequence(tuple(decorated))
+        ctx.reply = sequence.content
+        ctx.reply_messages = sequence.messages
+    assistant_kwargs: dict[str, Any] = {
+        "tools_used": list(ctx.tools_used) if ctx.tools_used else None,
+        "tool_chain": list(ctx.tool_chain) if ctx.tool_chain else None,
+        "metadata": _build_synced_message_metadata(
             channel=ctx.channel,
             chat_id=ctx.chat_id,
-            content=ctx.reply,
-            thinking=ctx.thinking,
-            media=media,
-            metadata=metadata,
-            committed_message_id=committed_message_id or None,
+            metadata=ctx.outbound_metadata,
+        ),
+    }
+    if ctx.response_metadata.mood:
+        assistant_kwargs["metadata"]["mood"] = ctx.response_metadata.mood
+    if ctx.response_metadata.thought:
+        assistant_kwargs["metadata"]["thought"] = ctx.response_metadata.thought
+    if ctx.thinking is not None:
+        assistant_kwargs["reasoning_content"] = ctx.thinking
+    if ctx.media:
+        assistant_kwargs["media"] = list(dict.fromkeys(ctx.media))
+    if cited:
+        assistant_kwargs["cited_memory_ids"] = cited
+    # Outbound transport metadata still identifies the triggering turn for
+    # live-stream correlation. Persist that identity separately: the reply's
+    # own platform ID is only known after the channel acknowledges delivery.
+    assistant_metadata = assistant_kwargs["metadata"]
+    trigger_id = assistant_metadata.pop("external_message_id", None)
+    if trigger_id:
+        assistant_metadata["trigger_external_message_id"] = trigger_id
+    assistant_metadata.pop("delivery_status", None)
+    assistant_kwargs.update(
+        _copy_conversation_message_fields(
+            metadata=assistant_metadata,
+            session=session,
         )
-        return frame
-
-
-class _ReturnAfterReasoningResultModule:
-    slot = "after_reasoning.return"
-    requires = ("after_reasoning.build_outbound", _CTX_SLOT, _OUTBOUND_SLOT)
-
-    async def run(self, frame: AfterReasoningFrame) -> AfterReasoningFrame:
-        frame.output = AfterReasoningResult(
-            ctx=cast(AfterReasoningCtx, frame.slots[_CTX_SLOT]),
-            outbound=cast(OutboundMessage, frame.slots[_OUTBOUND_SLOT]),
+    )
+    if sequence is not None:
+        for index, content in enumerate(sequence.messages):
+            metadata = {
+                **assistant_metadata,
+                "reply_sequence_id": assistant_metadata.get("turn_id")
+                or assistant_metadata["request_id"],
+                "reply_sequence_index": index,
+            }
+            kwargs = dict(assistant_kwargs)
+            if index:
+                for key in (
+                    "tools_used",
+                    "tool_chain",
+                    "reasoning_content",
+                    "media",
+                ):
+                    kwargs.pop(key, None)
+                for key in (
+                    "turn_metrics",
+                    "tools_used",
+                    "tool_chain",
+                    "context_retry",
+                    REPLY_MENTION_IDS_KEY,
+                ):
+                    metadata.pop(key, None)
+            if index < len(sequence.messages) - 1:
+                metadata.pop("mood", None)
+                metadata.pop("thought", None)
+            kwargs["metadata"] = metadata
+            messages.append(build_session_message("assistant", content, **kwargs))
+    elif private:
+        messages.append(
+            build_session_message("assistant", ctx.reply, **assistant_kwargs)
         )
-        return frame
+    else:
+        session.add_message("assistant", ctx.reply, **assistant_kwargs)
+        messages.append(session.messages[-1])
+    return sequence
 
 
-def default_after_reasoning_modules(
-    bus: EventBus,
-    events: TurnEvents,
-    session_services: SessionServices,
-    llm: "LLMServices | None" = None,
-    llm_config: "LLMConfig | None" = None,
-) -> AfterReasoningModules:
-    relationship_runtime = getattr(session_services, "relationship_runtime", None)
-    builtins: AfterReasoningModules = [
-        _BuildAfterReasoningCtxModule(),
-        _EmitAfterReasoningCtxModule(events),
-        _PersistUserMessageModule(session_services),
-        _PersistAssistantMessageModule(),
-        _UpdateSessionMetadataModule(relationship_runtime),
-        _AppendMessagesModule(session_services, bus),
-        _BuildOutboundMessageModule(),
-        _ReturnAfterReasoningResultModule(),
-    ]
-    return cast(AfterReasoningModules, topo_sort_modules(builtins))
+def _outbound_message(
+    ctx: AfterReasoningCtx, owned_messages: list[dict[str, Any]]
+) -> OutboundMessage:
+    """The reply's outbound message, pointing at its committed row."""
+    # The commit mutated the assistant reply's dict in place with the
+    # store-assigned id. Carrying that id lets delivery bookkeeping target this
+    # exact row later on.
+    committed_message_id = (
+        str(owned_messages[-1].get("id") or "").strip() if owned_messages else ""
+    )
+    return OutboundMessage(
+        channel=ctx.channel,
+        chat_id=ctx.chat_id,
+        content=ctx.reply,
+        thinking=ctx.thinking,
+        media=list(ctx.media),
+        metadata=dict(ctx.outbound_metadata),
+        committed_message_id=committed_message_id or None,
+    )

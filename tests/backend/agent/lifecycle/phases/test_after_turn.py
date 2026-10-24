@@ -4,18 +4,17 @@ from __future__ import annotations
 
 
 from types import SimpleNamespace
+from typing import Any, cast
 from unittest.mock import AsyncMock
 
 import pytest
 
 from agent.lifecycle.phases.after_turn import (
-    AfterTurnFrame,
-    _ApplyTurnAffectionModule,
-    _DispatchOutboundModule,
+    _apply_turn_affection,
+    _dispatch,
     _memory_extra,
-    _BuildTurnCommittedModule,
-    _BuildTurnFinishedModule,
-    _FanoutTurnCommittedModule,
+    _turn_committed,
+    _turn_finished,
 )
 from agent.lifecycle.types import TurnState
 from agent.account_delivery import AccountDelivery
@@ -56,32 +55,20 @@ async def test_silent_committed_turn_keeps_its_original_inbound_message_id(tmp_p
         dispatch_outbound=False,
         session=session,
     )
-    frame = AfterTurnFrame(
-        input=SimpleNamespace(
-            state=state,
-            ctx=SimpleNamespace(
-                reply="",
-                tools_used=[],
-                thinking=None,
-                response_metadata=SimpleNamespace(raw_text=""),
-                meme_tag=None,
-                media=[],
-                outbound_metadata={},
-            ),
-        )
+    snap = SimpleNamespace(
+        state=state,
+        ctx=SimpleNamespace(
+            reply="",
+            tools_used=[],
+            tool_chain=[],
+            thinking=None,
+            response_metadata=SimpleNamespace(raw_text=""),
+            meme_tag=None,
+            media=[],
+            outbound_metadata={},
+        ),
     )
-    frame.slots.update(
-        {
-            "turn:tool_chain": [],
-            "turn:omit_user_turn": False,
-            "turn:budget": {},
-            "turn:react_stats": {},
-            "turn:extra": {},
-        }
-    )
-    await _BuildTurnCommittedModule().run(frame)
-    committed = frame.slots["turn:committed"]
-    assert isinstance(committed, TurnCommitted)
+    committed = _turn_committed(cast(Any, snap), budget={}, react_stats={})
     assert committed.external_message_id == "bot-input"
     assert committed.assistant_response == ""
 
@@ -89,19 +76,16 @@ async def test_silent_committed_turn_keeps_its_original_inbound_message_id(tmp_p
 @pytest.mark.asyncio
 async def test_account_send_suppresses_default_dispatch() -> None:
     port = SimpleNamespace(dispatch=AsyncMock())
-    module = _DispatchOutboundModule(port)
     outbound = OutboundMessage(
         channel="qq",
         chat_id="42",
         content="reply",
         metadata={"account_delivery_sent": True},
     )
-    frame = AfterTurnFrame(
-        input=SimpleNamespace(
-            state=SimpleNamespace(dispatch_outbound=True), outbound=outbound
-        )
+    snap = SimpleNamespace(
+        state=SimpleNamespace(dispatch_outbound=True), outbound=outbound
     )
-    await module.run(frame)
+    await _dispatch(cast(Any, port), cast(Any, snap))
     port.dispatch.assert_not_awaited()
 
 
@@ -136,29 +120,22 @@ async def test_commit_observers_receive_actual_dispatch_intent_before_enqueue(
             "account_delivery_sent": account_sent,
         },
     )
-    frame = AfterTurnFrame(
-        input=SimpleNamespace(
+    snap = cast(
+        Any,
+        SimpleNamespace(
             state=state,
             outbound=outbound,
             ctx=SimpleNamespace(
                 reply=outbound.content,
                 tools_used=[],
+                tool_chain=[],
                 thinking=None,
                 response_metadata=SimpleNamespace(raw_text=outbound.content),
                 meme_tag=None,
                 media=[],
                 outbound_metadata={},
             ),
-        )
-    )
-    frame.slots.update(
-        {
-            "turn:tool_chain": [],
-            "turn:omit_user_turn": False,
-            "turn:budget": {},
-            "turn:react_stats": {},
-            "turn:extra": {},
-        }
+        ),
     )
     bus, events = MessageBus(), EventBus()
     observed = []
@@ -172,12 +149,10 @@ async def test_commit_observers_receive_actual_dispatch_intent_before_enqueue(
         )
 
     events.on(TurnCommitted, observe)
-    await _BuildTurnCommittedModule().run(frame)
-    await _FanoutTurnCommittedModule(events).run(frame)
+    await events.fanout(_turn_committed(snap, budget={}, react_stats={}))
     assert observed == [(False, 0)]
-    await _BuildTurnFinishedModule().run(frame)
-    assert frame.slots["turn:ctx"].will_dispatch is expected
-    await _DispatchOutboundModule(BusOutboundPort(bus)).run(frame)
+    assert _turn_finished(snap).will_dispatch is expected
+    await _dispatch(BusOutboundPort(bus), snap)
     assert (
         bus.has_pending_outbound(message.channel, message.chat_id, "bot-input")
         is expected
@@ -217,12 +192,10 @@ async def test_uncertain_account_send_does_not_auto_dispatch_original(tmp_path) 
         content="hi",
         metadata={"account_delivery_sent": state.get("sent", False)},
     )
-    frame = AfterTurnFrame(
-        input=SimpleNamespace(
-            state=SimpleNamespace(dispatch_outbound=True), outbound=outbound
-        )
+    snap = SimpleNamespace(
+        state=SimpleNamespace(dispatch_outbound=True), outbound=outbound
     )
-    await _DispatchOutboundModule(port).run(frame)
+    await _dispatch(cast(Any, port), cast(Any, snap))
 
     [attempt] = AccountDeliveryLedger(tmp_path).list_for_role("mira")
     assert attempt.status == "pending"
@@ -270,16 +243,12 @@ async def test_committed_affection_change_is_recorded_and_saved_with_the_session
         presence=PresenceStore(manager._store),
     )
     relationship.affection.initialize("yin", value=50, reason="初识")
-    frame = AfterTurnFrame(
-        input=SimpleNamespace(
-            state=SimpleNamespace(
-                session=session,
-                affection_change=AffectionChange(3, "他一直记得我说过的话。"),
-            )
-        )
+    state = SimpleNamespace(
+        session=session,
+        affection_change=AffectionChange(3, "他一直记得我说过的话。"),
     )
 
-    await _ApplyTurnAffectionModule(relationship).run(frame)
+    await _apply_turn_affection(relationship, cast(Any, state))
 
     history = relationship.affection.read_history("yin")
     assert [(e.delta, e.reason, e.source) for e in history[1:]] == [
