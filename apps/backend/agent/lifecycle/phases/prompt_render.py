@@ -34,9 +34,10 @@ class PromptRenderPhase:
     async def _emit(self, ctx: PromptRenderCtx, input: PromptRenderInput) -> ReplyMode:
         """Emits ``PromptRendering``, writes it back to ``ctx``, returns the reply mode.
 
-        The event cannot be vetoed, so the final event always comes back.
+        The event cannot be vetoed (a veto fails the turn), so ``apply`` always
+        runs before the emit returns.
         """
-        reply_mode: ReplyMode = "single"
+        reply_mode: ReplyMode | None = None
 
         def apply(event: PromptRendering) -> None:
             nonlocal reply_mode
@@ -46,6 +47,8 @@ class PromptRenderPhase:
             reply_mode = _rendered_reply_mode(event, input)
 
         await self._events.emit(_prompt_rendering(ctx, input), apply)
+        if reply_mode is None:
+            raise RuntimeError("PromptRendering 发出后未写回最终事件")
         return reply_mode
 
     def _render(

@@ -80,7 +80,6 @@ def _build_synced_message_metadata(
 def _copy_conversation_message_fields(
     *,
     metadata: dict[str, Any] | None,
-    session: "Session",
 ) -> dict[str, Any]:
     source = dict(metadata or {})
     copied: dict[str, Any] = {}
@@ -214,7 +213,6 @@ class AfterReasoningPhase:
         user_kwargs.update(
             _copy_conversation_message_fields(
                 metadata=cast(dict[str, Any] | None, msg.metadata),
-                session=session,
             )
         )
         if state.is_user_authored():
@@ -255,11 +253,8 @@ class AfterReasoningPhase:
         """用户本人发来消息：刷新在场，并让关系状态（孤独值、等待回复）响应。"""
         if self._session_services.presence:
             self._session_services.presence.record_user_message(session_key)
-        relationship_runtime = getattr(
-            self._session_services, "relationship_runtime", None
-        )
-        if relationship_runtime is not None:
-            relationship_runtime.handle_user_message(session_key)
+        if self._relationship_runtime is not None:
+            self._relationship_runtime.handle_user_message(session_key)
 
     def _update_session_metadata(
         self, ctx: AfterReasoningCtx, session: Session
@@ -304,9 +299,7 @@ class AfterReasoningPhase:
             message.setdefault("metadata", {})[
                 CONTEXT_TURN_STARTED_AT
             ] = state.msg.timestamp.isoformat()
-        relationship_runtime = getattr(
-            self._session_services, "relationship_runtime", None
-        )
+        relationship_runtime = self._relationship_runtime
         state_kwargs = (
             {
                 "metadata_updates": metadata_updates,
@@ -620,7 +613,6 @@ def _stage_assistant_messages(
     assistant_kwargs.update(
         _copy_conversation_message_fields(
             metadata=assistant_metadata,
-            session=session,
         )
     )
     if sequence is not None:
