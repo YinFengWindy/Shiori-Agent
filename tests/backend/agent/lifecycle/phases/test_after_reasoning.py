@@ -774,11 +774,12 @@ async def test_desktop_sequence_preserves_raw_reply_while_committing_clean_bubbl
     result = await phase(manager).run(request)
 
     assert result.ctx.response_metadata.raw_text == "raw tool arguments"
-    assert result.ctx.reply == "  one\n\ntwo  "
+    # The core's citation step trims each bubble's trailing whitespace (D9).
+    assert result.ctx.reply == "  one\n\ntwo"
     stored = SessionManager(tmp_path).get_or_create(session.key)
     assert [
         row["content"] for row in stored.messages if row["role"] == "assistant"
     ] == [
         "  one",
-        "two  ",
+        "two",
     ]

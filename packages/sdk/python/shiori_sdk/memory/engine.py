@@ -11,6 +11,20 @@ MemoryQueryIntent = Literal["context", "answer", "timeline", "interest", "proced
 MemoryQueryEffect = Literal["stateful", "read_only"]
 MemoryDomain = Literal["role_self", "relationship", "shared"]
 
+# Citation format of the memory socket (D1/D9), the same for every engine. A
+# reply that used memories ends with ``§cited:[id,...]§`` (the final § may be
+# missing); the core records the IDs (group ``ids``) and removes the marker.
+CITED_MARKER_PATTERN = r"§cited:\[(?P<ids>[A-Za-z0-9_:,\-\s]*)\]§?"
+# Any marker-shaped text, whatever its IDs, with the whitespace around it: what
+# is removed before a reply is stored or sent. Only ``CITED_MARKER_PATTERN``
+# yields IDs.
+CITED_MARKER_STRIP_PATTERN = r"\s*§cited:\[[^\]]*\]§?\s*"
+# An inline ``[§id]`` reference is removed from replies but never recorded.
+INLINE_MEMORY_REF_PATTERN = r"\[§[A-Za-z0-9:_-]{1,128}\]"
+# The key of a recall result's JSON listing the recalled memory IDs; the core
+# records them when the reply carries no citation marker.
+CITED_ITEM_IDS_KEY = "cited_item_ids"
+
 
 class EngineProfile(str, Enum):
     """Identifies the interaction model offered by an engine."""

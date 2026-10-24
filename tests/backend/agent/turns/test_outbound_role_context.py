@@ -72,13 +72,14 @@ async def test_bus_outbound_port_removes_internal_citation_markers(marker: str) 
         OutboundDispatch(
             channel="qqbot",
             chat_id="c2c:user-1",
-            content=f"我记得这件事 {marker}",
+            # A marker with IDs no extraction reads (``a.b``) is still removed.
+            content=f"我记得 §cited:[a.b]§ 这件事 {marker}",
         )
     )
 
     assert receipt == DeliveryReceipt.queued()
     assert len(published) == 1
-    assert published[0].content == "我记得这件事"
+    assert published[0].content == "我记得 这件事"
 
 
 @pytest.mark.asyncio

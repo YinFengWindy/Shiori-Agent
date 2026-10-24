@@ -21,6 +21,7 @@ from session.manager.models import (
     INTERRUPTED_TURN_METADATA_KEY,
     build_session_message,
 )
+from agent.core.citation import join_messages, take_citations
 from agent.core.response_parser import parse_response, ParsedResponse
 from shiori_sdk.lifecycle import ResponseMetadata
 from core.roles.reply_state import InvalidRoleReply, RoleReply, reply_state_metadata
@@ -65,6 +66,7 @@ _CTX_SLOT = "reasoning:ctx"
 _OUTBOUND_SLOT = "reasoning:outbound"
 _PERSIST_USER_PREFIX = "persist:user:"
 _PERSIST_ASSISTANT_PREFIX = "persist:assistant:"
+_PERSIST_CITED_SLOT = f"{_PERSIST_ASSISTANT_PREFIX}cited_memory_ids"
 _OUTBOUND_METADATA_PREFIX = "outbound:metadata:"
 _OUTBOUND_MEDIA_PREFIX = "outbound:media:"
 _ASSISTANT_FIXED_FIELDS = {"tools_used", "tool_chain", "reasoning_content"}
@@ -221,6 +223,7 @@ class _EmitAfterReasoningCtxModule:
 
     async def run(self, frame: AfterReasoningFrame) -> AfterReasoningFrame:
         ctx = cast(AfterReasoningCtx, frame.slots[_CTX_SLOT])
+        _take_citations(ctx, frame.slots)
         ctx = await self._bus.emit(ctx)
         frame.slots[_CTX_SLOT] = ctx
 
@@ -233,6 +236,22 @@ class _EmitAfterReasoningCtxModule:
 
         await self._events.emit(_reasoning_finished(ctx), apply)
         return frame
+
+
+def _take_citations(ctx: AfterReasoningCtx, slots: dict[str, object]) -> None:
+    """Removes the citation markers before the plugins see the reply (D9).
+
+    The cited memory IDs are stored with the assistant message. The leftover
+    tags are removed by the core check after ``ReasoningFinished``.
+    """
+    messages, cited = take_citations(ctx.reply_messages or (ctx.reply,), ctx.tool_chain)
+    if cited:
+        slots[_PERSIST_CITED_SLOT] = cited
+    if ctx.reply_messages:
+        ctx.reply_messages = messages
+        ctx.reply = join_messages(messages)
+    else:
+        ctx.reply = messages[0]
 
 
 def _reasoning_finished(ctx: AfterReasoningCtx) -> ReasoningFinished:

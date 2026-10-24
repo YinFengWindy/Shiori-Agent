@@ -74,7 +74,7 @@ class _MemeReactions:
         )
 
     async def decorate_meme(self, ctx: AfterReasoningCtx) -> AfterReasoningCtx:
-        """Resolve image and emoji protocols on each bubble before citation."""
+        """Resolve image and emoji protocols on each bubble before the core cleanup."""
         role_id = self._role_id_for_session(ctx.session_key)
         resolve = self._role_decorator.resolve_emoji if role_id else lambda _name: ""
         texts = ctx.reply_messages or (ctx.reply,)
@@ -124,8 +124,8 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
         plugin_data_dir(ctx.workspace, "meme") / "library",
     )
     ctx.lifecycle.contribute("prompt_render", [MemePromptModule(reactions)])
-    # The scoped event runs inside after_reasoning.emit, before citation's
-    # protocol_cleanup stage can consume valid meme/emoji tags.
+    # The scoped event runs inside after_reasoning.emit, before the core's
+    # cleanup after ReasoningFinished removes unconsumed protocol tags.
     ctx.events.on(AfterReasoningCtx, reactions.decorate_meme)
 
 

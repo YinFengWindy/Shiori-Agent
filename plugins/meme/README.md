@@ -11,7 +11,7 @@
 | `prompt_render_modules()` | `prompt_render.emit` 之后——注入表情包目录说明 |
 | `@on_after_reasoning()` | AfterReasoning GATE——解析 meme 标签，附加媒体 |
 
-依赖 `citation` 插件在表情解析完成后清理残留协议标签；表情提示词只依赖宿主 prompt 阶段。
+表情解析前，核心已取走记忆引用标记；解析完成后，核心清理残留的协议标签。表情提示词只依赖宿主 prompt 阶段。
 
 ---
 

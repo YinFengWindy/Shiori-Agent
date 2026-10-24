@@ -297,7 +297,6 @@ async def test_force_cleanup_recovers_effects_after_rollback_is_cancelled(tmp_pa
 _EXPECTED_TOP_LEVEL_PLUGINS = {
     "browser_use",
     "computer_use",
-    "citation",
     "context_pressure",
     "default_memory",
     "desktop_pet",
@@ -1935,47 +1934,6 @@ async def test_plugins_declaring_one_channel_both_stay_inactive(tmp_path: Path):
         }
     finally:
         await kernel.terminate_all(force=True)
-
-
-@pytest.mark.asyncio
-async def test_citation_setup_contributes_expected_phase_modules_via_kernel(
-    tmp_path: Path,
-) -> None:
-    """setup(ctx) 只贡献回复后处理模块，不再向 prompt 注入引用要求。
-
-    用真实 PluginKernel 装配真实插件目录来验证，而不是自造 fake capability——
-    fake 与真实 capability 契约脱钩，capability 改坏也不会让测试变红（#182 评审）。
-    """
-    from shiori_sdk.testing.packages import stage_plugin_package
-
-    root = tmp_path / "plugins"
-    root.mkdir()
-    source = tmp_path / "source-citation"
-    stage_plugin_package(
-        Path(__file__).resolve().parents[4] / "plugins/citation", source
-    )
-    environment = source / ".venv/Lib/site-packages"
-    environment.mkdir(parents=True)
-    (environment / "review-marker.txt").write_text("environment", encoding="utf-8")
-    stage_plugin_package(source, root / "citation")
-    assert (root / "citation/backend/plugin.py").is_file()
-    assert (root / "citation/manifest.yaml").is_file()
-    assert not (root / "citation/.venv").exists()
-    kernel = host_kernel(
-        [root],
-    )
-    await kernel.load_all()
-
-    assert kernel.prompt_render_modules == []
-    assert [type(m).__name__ for m in kernel.after_reasoning_modules] == [
-        "CitationAfterReasoningModule",
-        "ProtocolTagCleanupModule",
-    ]
-
-    # 卸载后贡献必须整体撤回，证明生命周期与 phase 槽位真正挂在插件作用域上
-    _ = await kernel.unload("citation")
-    assert kernel.prompt_render_modules == []
-    assert kernel.after_reasoning_modules == []
 
 
 @pytest.mark.asyncio

@@ -16,6 +16,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import cast
 
+from agent.core.citation import install_citation_checks
 from agent.tools.execution import install_tool_checks
 from bus.event_bus import EventBus
 from shiori_sdk.kernel import Kernel, Veto
@@ -28,10 +29,11 @@ def install_core_checks(kernel: Kernel, *, workspace: Path | None = None) -> Non
     (``PluginKernel``, with the generation's ``workspace`` guarded as a root)
     and the bare one of a loop without plugins (``core_kernel``). On
     ``ToolCalling`` they are the calling loop's admission and the minimal shell
-    guard (``agent.tools.execution.check_tool_call``); P3-4 adds the citation
-    cleanup on ``ReasoningFinished``.
+    guard (``agent.tools.execution.check_tool_call``); on ``ReasoningFinished``
+    the removal of leftover reply markers (``agent.core.citation.clean_reply``).
     """
     install_tool_checks(kernel, workspace=workspace)
+    install_citation_checks(kernel)
 
 
 def core_kernel() -> Kernel:

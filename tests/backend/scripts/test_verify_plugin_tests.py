@@ -69,15 +69,15 @@ def test_sibling_runtime_chain_does_not_inherit_target_test_extra(
     _plugin(
         repository,
         "observe",
-        dependencies=("shiori-plugin-citation",),
+        dependencies=("shiori-plugin-anchor",),
         optional={"test": ("shiori-plugin-unrequested",)},
     )
-    _plugin(repository, "citation", dependencies=("shiori-plugin-target",))
+    _plugin(repository, "anchor", dependencies=("shiori-plugin-target",))
 
     assert runner.plugin_dependencies({"target"}, extras=frozenset({"test"})) == {
         "target",
         "observe",
-        "citation",
+        "anchor",
     }
 
 
@@ -127,13 +127,13 @@ def test_markers_use_the_active_extra_and_preserve_base_runtime_dependencies(
             'shiori-plugin-runtime; extra != "test"',
             'shiori-plugin-observe; extra == "test" and python_version >= "3"',
         ),
-        optional={"test": ("Shiori_Sdk", "shiori-plugin-citation[render_tools]")},
+        optional={"test": ("Shiori_Sdk", "shiori-plugin-anchor[render_tools]")},
     )
     _plugin(repository, "runtime")
     _plugin(repository, "observe")
     _plugin(
         repository,
-        "citation",
+        "anchor",
         optional={"render-tools": ('shiori-plugin-audit; extra == "render_tools"',)},
     )
     _plugin(repository, "audit")
@@ -142,7 +142,7 @@ def test_markers_use_the_active_extra_and_preserve_base_runtime_dependencies(
         "target",
         "runtime",
         "observe",
-        "citation",
+        "anchor",
         "audit",
     }
 
@@ -416,12 +416,12 @@ def test_jobs_defaults_to_cpu_count_for_builds_and_verification(
 def test_sdk_selection_does_not_add_default_memory_or_host(repository: Path) -> None:
     _plugin(
         repository,
-        "citation",
+        "anchor",
         dependencies=("shiori-sdk==3.0.0",),
         optional={"test": ("shiori-sdk[testing]==3.0.0",)},
     )
-    assert runner.plugin_dependencies({"citation"}, extras=frozenset({"test"})) == {
-        "citation"
+    assert runner.plugin_dependencies({"anchor"}, extras=frozenset({"test"})) == {
+        "anchor"
     }
 
 
@@ -480,12 +480,11 @@ def test_each_plugin_and_async_probe_own_separate_pytest_temp_directories(
 def test_target_provenance_covers_installed_siblings_and_every_staged_source(
     repository: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _plugin(repository, "meme", dependencies=("shiori-plugin-citation",))
-    _plugin(repository, "citation")
+    _plugin(repository, "meme", dependencies=("shiori-plugin-anchor",))
+    _plugin(repository, "anchor")
     output = tmp_path / "artifacts"
     sources = {
-        name: output / "sources" / name
-        for name in ("meme", "citation", "another_target")
+        name: output / "sources" / name for name in ("meme", "anchor", "another_target")
     }
     received = {}
 
@@ -508,10 +507,10 @@ def test_target_provenance_covers_installed_siblings_and_every_staged_source(
         sources=sources,
         wheel=output / "wheels/shiori_plugin_meme-0.1.0-py3-none-any.whl",
     )
-    assert received["allowed"] == ["shiori-plugin-citation", "shiori-plugin-meme"]
+    assert received["allowed"] == ["shiori-plugin-anchor", "shiori-plugin-meme"]
     assert set(received["modules"]) == {
         "plugins.meme.backend.plugin",
-        "plugins.citation.backend.plugin",
+        "plugins.anchor.backend.plugin",
     }
     # Installed-module provenance is the dependency closure, while execution
     # rejection covers even other targets sharing this artifact's staged tree.

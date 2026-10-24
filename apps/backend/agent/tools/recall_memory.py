@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 
 from shiori_sdk.tools import Tool
 from shiori_sdk.memory.engine import (
+    CITED_ITEM_IDS_KEY,
     EvidenceRef,
     MemoryQuery,
     MemoryQueryFilters,
@@ -124,7 +125,7 @@ def _render_records(records: list[MemoryRecord], *, trace: dict[str, object]) ->
             "count": len(items),
             "items": items,
             "trace": trace,
-            "cited_item_ids": cited_item_ids,
+            CITED_ITEM_IDS_KEY: cited_item_ids,
         },
         ensure_ascii=False,
     )

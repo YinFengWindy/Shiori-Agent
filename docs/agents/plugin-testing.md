@@ -34,7 +34,7 @@ uv run pytest plugins/example/tests
 - `shiori-sdk[testing]` 提供契约 fake、包定位、bridge helper 与 pytest 支持，不安装或实例化宿主。
 - `shiori-agent` 是真实生产模块组成的私有 runtime wheel，明确依赖默认记忆；不包含宿主测试、其他插件或用户状态。
 - `shiori-host-testing` 提供真实宿主集成能力，只安装在宿主开发环境。
-- 插件 wheel 只包含本包后端、明确打包的 testing helper 与资源。Story→NovelAI、Meme→citation 为公开运行时依赖；status_commands 的 test extra→Observe 是显式测试依赖。没有声明的兄弟插件不会被注入。
+- 插件 wheel 只包含本包后端、明确打包的 testing helper 与资源。Story→NovelAI 为公开运行时依赖；status_commands 的 test extra→Observe 是显式测试依赖。没有声明的兄弟插件不会被注入。
 
 公开 SDK 的 npm 包为 `@yinfengwindy/shiori-sdk`，PyPI 包为 `shiori-sdk`；SDK 与 Runtime API 当前版本均为 3.1.2（npm 与 PyPI 均已发布），注册表安装与 testing extra 用法见 [SDK README](../../packages/sdk/README.md)。`shiori-agent`、`shiori-host-testing` 和插件 wheel 仍只构建为本地/CI 产物，不随 SDK 发布到 npm 或 PyPI。
 
@@ -48,7 +48,7 @@ uv pip install --python .venv --find-links /absolute/path/to/wheelhouse --refres
 uv run --no-project --python .venv python -m pytest -c pyproject.toml tests
 ```
 
-uv 会缓存 `--find-links` 中同名同版本的 wheel，重新构建后不加 `--refresh-package` 会装回缓存里的旧构建；wheelhouse 提供的兄弟插件 wheel（如 meme 依赖的 citation）也各加一个 `--refresh-package <分发名>`，各插件 `TESTING.md` 已列全。
+uv 会缓存 `--find-links` 中同名同版本的 wheel，重新构建后不加 `--refresh-package` 会装回缓存里的旧构建；wheelhouse 提供的兄弟插件 wheel（如 story 依赖的 novelai）也各加一个 `--refresh-package <分发名>`，各插件 `TESTING.md` 已列全。
 
 不要使用 editable 安装、设置指向原仓库的 `PYTHONPATH` 或复制宿主 conftest。私有 wheel 缺失时补齐产物，不改为从原仓库导入。
 
