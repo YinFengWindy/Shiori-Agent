@@ -9,8 +9,8 @@ a reply is read and cleaned the same with any engine or none. Two steps:
   come first: a plugin resolving an emoji tag after the marker would leave it
   unmatched at the end of the reply.
 - ``clean_reply`` is the fixed check after the chain (D11, §8.1): it removes
-  trailing protocol tags no plugin consumed and inline ``[§id]`` references,
-  including any a plugin wrote back.
+  any marker left anywhere, trailing protocol tags no plugin consumed and
+  inline ``[§id]`` references, including any a plugin wrote back.
 """
 
 from __future__ import annotations
@@ -21,22 +21,24 @@ from collections.abc import Iterable, Mapping
 from dataclasses import replace
 from typing import cast
 
+from agent.tools.recall_memory import RecallMemoryTool
 from shiori_sdk.core.conversation import ReasoningFinished
 from shiori_sdk.kernel import Kernel
 from shiori_sdk.memory.engine import (
     CITED_ITEM_IDS_KEY,
     CITED_MARKER_PATTERN,
+    CITED_MARKER_STRIP_PATTERN,
     INLINE_MEMORY_REF_PATTERN,
 )
 
 # The tool whose results stand in for a missing citation marker.
-RECALL_TOOL_NAME = "recall_memory"
+RECALL_TOOL_NAME = RecallMemoryTool.name
 _PROTOCOL_TAG = r"<[a-zA-Z][a-zA-Z0-9_-]*:[^<>\s]+>"
 _TRAILING_CITED_RE = re.compile(
     rf"(?:\n|\r\n)?{CITED_MARKER_PATTERN}(?P<trailing>(?:\s*{_PROTOCOL_TAG}\s*)*)$",
     re.IGNORECASE,
 )
-_ANY_CITED_RE = re.compile(rf"\s*{CITED_MARKER_PATTERN}\s*", re.IGNORECASE)
+_ANY_CITED_RE = re.compile(CITED_MARKER_STRIP_PATTERN)
 _TRAILING_PROTOCOL_TAGS_RE = re.compile(rf"(?:\s*{_PROTOCOL_TAG}\s*)+$", re.IGNORECASE)
 _INLINE_MEMORY_REF_RE = re.compile(
     rf"[ \t]*(?:{INLINE_MEMORY_REF_PATTERN})+", re.IGNORECASE
@@ -60,8 +62,17 @@ def extract_cited_ids(response: str) -> tuple[str, list[str]]:
 
 
 def strip_citation_markers(content: str) -> str:
-    """``content`` without any citation marker, wherever it stands."""
+    """``content`` without any citation marker, wherever it stands.
+
+    It removes more than ``extract_cited_ids`` reads: a marker with malformed
+    IDs must not reach the user either.
+    """
     return _ANY_CITED_RE.sub(" ", content).strip()
+
+
+def join_messages(messages: tuple[str, ...]) -> str:
+    """The plain ``reply`` of a sequence reply: its messages, blank-line separated."""
+    return "\n\n".join(messages)
 
 
 def strip_inline_memory_refs(response: str) -> str:
@@ -139,6 +150,8 @@ def take_citations(
 
 
 def _clean(text: str) -> str:
+    if _ANY_CITED_RE.search(text):
+        text = strip_citation_markers(text)
     return strip_inline_memory_refs(strip_trailing_protocol_tags(text))
 
 
@@ -152,7 +165,7 @@ def clean_reply(event: ReasoningFinished) -> ReasoningFinished:
         messages = tuple(_clean(message) for message in event.reply_messages)
         if messages == event.reply_messages:
             return event
-        return replace(event, reply_messages=messages, reply="\n\n".join(messages))
+        return replace(event, reply_messages=messages, reply=join_messages(messages))
     reply = _clean(event.reply)
     return event if reply == event.reply else replace(event, reply=reply)
 

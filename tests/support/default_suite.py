@@ -78,7 +78,7 @@ DEFAULT_FILES: frozenset[str] = frozenset(
         "tests/backend/agent/core/passive_turn/test_reply_recovery.py",
         "tests/backend/agent/core/passive_turn/test_compaction.py",
         "tests/backend/agent/core/test_turn_pipelines.py",
-        # P3 golden trace，维护者 2026-10-23 确认，#902。
+        # P3 golden trace（维护者 2026-10-23 确认）与 core-only 冒烟（§5.3），#902。
         "tests/backend/agent/core/test_turn_golden_trace.py",
         "tests/backend/agent/core/test_response_parser.py",
         "tests/backend/agent/core/test_safety_retry.py",
@@ -104,7 +104,9 @@ DEFAULT_FILES: frozenset[str] = frozenset(
 
 # Parametrized cases. The guard test fails outside this band.
 DEFAULT_CASE_MIN = 950
-# P3 golden trace，维护者 2026-10-23 确认，#902：上限从 1050 上调到正好容纳它的 8 条用例。
+# P3 golden trace，维护者 2026-10-23 确认，#902：上限从 1050 上调到 1058，当时为它的 8 条
+# 场景用例留位。同一文件里的 core-only 冒烟（§5.3，P3-4 加入，2 条）也是每次 CI 都必须
+# 守住的宿主契约；加入它之后计数仍在上限内，上限不变。
 DEFAULT_CASE_MAX = 1058
 
 REPO_ROOT = Path(__file__).resolve().parents[2]

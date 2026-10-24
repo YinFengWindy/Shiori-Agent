@@ -21,7 +21,7 @@ from session.manager.models import (
     INTERRUPTED_TURN_METADATA_KEY,
     build_session_message,
 )
-from agent.core.citation import take_citations
+from agent.core.citation import join_messages, take_citations
 from agent.core.response_parser import parse_response, ParsedResponse
 from shiori_sdk.lifecycle import ResponseMetadata
 from core.roles.reply_state import InvalidRoleReply, RoleReply, reply_state_metadata
@@ -249,7 +249,7 @@ def _take_citations(ctx: AfterReasoningCtx, slots: dict[str, object]) -> None:
         slots[_PERSIST_CITED_SLOT] = cited
     if ctx.reply_messages:
         ctx.reply_messages = messages
-        ctx.reply = "\n\n".join(messages)
+        ctx.reply = join_messages(messages)
     else:
         ctx.reply = messages[0]
 

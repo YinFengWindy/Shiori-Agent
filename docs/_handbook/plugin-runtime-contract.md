@@ -269,16 +269,19 @@ consolidates these additions and the subsequent #847 breaking migration.
   already stored keep them and stay readable, since every reader picks the keys it
   needs.
 - **breaking: bundled plugin `citation` removed, its work moved into the core (PR
-  #<待定>, issue #902, refactor P3-4, D9).** The core now reads and cleans memory
+  #927, issue #902, refactor P3-4, D9).** The core now reads and cleans memory
   citations on every passive reply, with any memory engine or none, and with every
   plugin disabled. Before the `AfterReasoningCtx` listeners and the
   `ReasoningFinished` chain it removes each message's trailing `§cited:[...]§`
   marker and inline `[§id]` references, and records the marker IDs (else the IDs
   `recall_memory` returned) as the assistant message's `cited_memory_ids`, stored
-  as before. After the chain a fixed core check removes the protocol tags left at
-  the end of each message (`<name:value>`) and inline `[§id]` references, also
-  those a plugin writes back. The marker formats join the memory socket contract
-  in `shiori_sdk.memory.engine`: `CITED_MARKER_PATTERN` (group `ids`),
+  as before. After the chain a fixed core check removes any citation marker left
+  anywhere, the protocol tags left at the end of each message (`<name:value>`) and
+  inline `[§id]` references, also those a plugin writes back. The marker formats
+  join the memory socket contract in `shiori_sdk.memory.engine`:
+  `CITED_MARKER_PATTERN` (group `ids`; the strict form IDs are read from),
+  `CITED_MARKER_STRIP_PATTERN` (any marker-shaped text, removed by the core check
+  and before delivery as the outbound sanitizer always did),
   `INLINE_MEMORY_REF_PATTERN` and `CITED_ITEM_IDS_KEY`. A third-party manifest
   listing `citation` in `dependencies` stays `BLOCKED` because the provider no
   longer exists; drop the dependency. A stored `[plugins.citation]` table is

@@ -7,12 +7,17 @@ their final arguments and results, the order of prompt sections and
 attachments, command replies and recorded citation IDs. They never name a
 phase, slot or hook, so the event implementation must pass them unchanged.
 
-Allowed edits during P3: the assembly in ``golden_host`` and ``observe_steps``
-(the wiring itself changes), and the attachment order of
-``scenario_meme_and_novelai_attachments``, which P3-4 flipped on purpose.
+The file also carries the core-only smoke test of §5.3: ``test_core_only_turn``
+runs the same host with no plugin generation bound, and the core alone must
+reply (including a multi-message finish_reply) and leave no citation or
+protocol marker behind. Like the scenarios, it is a host contract every CI run
+keeps.
 
-``test_core_only_turn`` runs the same host with no plugin at all (§5.3): the
-core alone replies and leaves no citation or protocol marker behind.
+Allowed edits during P3: the assembly in ``golden_host`` (P3-4 added the
+core-only mode, ``plugin_root=None``) and ``observe_steps`` (the wiring itself
+changes), and the attachment order of ``scenario_meme_and_novelai_attachments``,
+which P3-4 flipped on purpose. Scenario assertions and the core-only
+assertions stay as they are.
 """
 
 from __future__ import annotations

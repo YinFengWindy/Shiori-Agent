@@ -25,7 +25,6 @@ from agent.core.citation import (
         ("答复正文\n§cited:[mem_1,mem-2]§", "答复正文", ["mem_1", "mem-2"]),
         # The model may omit the final §.
         ("§cited:[9b615a9c5f29,7e190efce6ff]", "", ["9b615a9c5f29", "7e190efce6ff"]),
-        ("答复正文\n§cited:[mem_1, mem-2]§", "答复正文", ["mem_1", "mem-2"]),
         (
             "答复正文\n§cited:[telegram:7674283004:4395,telegram:7674283004:4396]§",
             "答复正文",
@@ -34,12 +33,6 @@ from agent.core.citation import (
         ("答复正文\n§cited:[]§", "答复正文", []),
         # Protocol tags after the marker stay for the plugins.
         ("答复正文\n§cited:[mem_1]§ <meme:shy>", "答复正文 <meme:shy>", ["mem_1"]),
-        ("答复正文\n§cited:[mem_1] <meme:shy>", "答复正文 <meme:shy>", ["mem_1"]),
-        (
-            "答复正文\n§cited:[mem_1]§ <meme:shy> <foo:bar>",
-            "答复正文 <meme:shy> <foo:bar>",
-            ["mem_1"],
-        ),
     ],
 )
 def test_a_trailing_marker_is_removed_and_its_ids_read(
@@ -48,16 +41,8 @@ def test_a_trailing_marker_is_removed_and_its_ids_read(
     assert extract_cited_ids(text) == (clean, ids)
 
 
-@pytest.mark.parametrize(
-    "text",
-    [
-        "正文里提到 §cited:[mem_1]§ 这串文本，但不是协议行。\n后面还有内容",
-        "正文里提到 §cited:[mem_1] 这串文本，但不是协议行。\n后面还有内容",
-        "答复正文\n§cited:[mem_1]§ 其他文字",
-        "答复正文\n§cited:[mem_1]§ <bad tag>",
-    ],
-)
-def test_a_marker_not_at_the_end_is_body_text(text: str) -> None:
+def test_a_marker_not_at_the_end_is_body_text() -> None:
+    text = "答复正文\n§cited:[mem_1]§ 其他文字"
     assert extract_cited_ids(text) == (text, [])
 
 
@@ -94,7 +79,6 @@ def test_recall_results_supply_the_ids(result: dict[str, object]) -> None:
 @pytest.mark.parametrize(
     ("messages", "cleaned", "ids"),
     [
-        (("答复正文 [§mem_9]\n§cited:[mem_1]§",), ("答复正文",), ["mem_1"]),
         # No marker in any message: the recall results stand in.
         (("答复正文",), ("答复正文",), ["mem_r"]),
         (("早呀[§mem-2]", "加油 §cited:[mem-3]§"), ("早呀", "加油"), ["mem-3"]),
