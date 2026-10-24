@@ -1,6 +1,6 @@
 """插件内核：发现、装配、生命周期与失败回滚。
 
-内核只拥有"插件如何被装配、启动、停止和清理"；phase 顺序、事件语义、
+内核只拥有"插件如何被装配、启动、停止和清理"；回合事件语义、
 工具错误路径等产品语义仍由 Shiori 核心模块定义。
 """
 
@@ -24,9 +24,6 @@ from agent.plugin_host.process_resources import ProcessResourceOwner
 from agent.plugin_host.config import PluginConfig
 from agent.plugin_host.kv import PluginKVStore
 from agent.plugin_host.storage import PluginStorage
-from agent.plugin_host.capabilities import (
-    LifecycleCapability,
-)
 from agent.plugin_host.core_keys import (
     HOST_ACCOUNTS,
     HOST_BRIDGE,
@@ -684,7 +681,6 @@ class PluginKernel:
                 namespace=self._namespace,
                 manifest=handle.record.manifest,
                 scope=handle.effects,
-                contributions=handle.contributions,
                 calls=handle.calls,
             ),
         )
@@ -693,11 +689,6 @@ class PluginKernel:
             plugin_dir=handle.record.plugin_dir,
             manifest=handle.record.manifest,
             effects=handle.effects,
-            lifecycle=(
-                LifecycleCapability(handle.contributions, handle.effects, handle.calls)
-                if "lifecycle" in handle.record.manifest.capabilities
-                else None
-            ),
             config=PluginConfig(
                 self._settings.plugin_configs.get(handle.plugin_id, {}),
                 resolve_reference=self._resolve_reference,
@@ -768,7 +759,6 @@ class PluginKernel:
     ) -> None:
         """Host bookkeeping once the kernel released a failed instance's scope."""
         _purge_modules(handle.record.import_path)
-        handle.contributions = type(handle.contributions)()
         handle.instance = None
         handle.pending_renderer_kinds = frozenset()
         handle.activation_token = ""
@@ -1160,7 +1150,6 @@ class PluginKernel:
         # 不是 setup 回滚 effect 的一部分：见 _register_config_schema 的文档。
         self.config_schemas.unregister(handle.plugin_id)
         _purge_modules(handle.record.import_path)
-        handle.contributions = type(handle.contributions)()
         handle.instance = None
         handle.state = PluginState.DISPOSED
         self._handles.pop(handle.record.candidate_id, None)
@@ -1231,40 +1220,6 @@ class PluginKernel:
         return [
             self._handles[name] for name in self._active_order if name in self._handles
         ]
-
-    def _collect_phase(self, slot: str) -> list[object]:
-        modules: list[object] = []
-        for handle in self._active_handles():
-            modules.extend(handle.contributions.phase_modules[slot])
-        return modules
-
-    @property
-    def before_turn_modules(self) -> list[object]:
-        return self._collect_phase("before_turn")
-
-    @property
-    def before_reasoning_modules(self) -> list[object]:
-        return self._collect_phase("before_reasoning")
-
-    @property
-    def prompt_render_modules(self) -> list[object]:
-        return self._collect_phase("prompt_render")
-
-    @property
-    def before_step_modules(self) -> list[object]:
-        return self._collect_phase("before_step")
-
-    @property
-    def after_step_modules(self) -> list[object]:
-        return self._collect_phase("after_step")
-
-    @property
-    def after_reasoning_modules(self) -> list[object]:
-        return self._collect_phase("after_reasoning")
-
-    @property
-    def after_turn_modules(self) -> list[object]:
-        return self._collect_phase("after_turn")
 
     @property
     def kernel(self) -> Kernel:

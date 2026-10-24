@@ -10,8 +10,8 @@ uv run --no-project --python .venv python -m pytest -c pyproject.toml tests
 ```
 
 不要注入 `PYTHONPATH`，也不要复制宿主测试树或 conftest。测试通过
-`shiori_sdk.testing` 的 `FakeFrame`、`FakePluginContext` 和 `sdk_context`
-执行真实插件模块。Fake 仅记录贡献，不模拟宿主阶段调度。
+`shiori_sdk.testing` 的 `sdk_context` 装配插件，再用 `sdk_context.emit`
+把 `StepFinished` 发给插件的 `on` 处理器；不模拟宿主的回合调度。
 真实 Kernel 加载与卸载回归保留在宿主 `test_kernel.py`，由宿主 CI 执行。
 
 仓库维护者可运行 `uv run python -m scripts.verify_plugin_tests`

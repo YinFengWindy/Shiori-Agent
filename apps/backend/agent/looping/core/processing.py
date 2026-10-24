@@ -42,7 +42,7 @@ from bus.processing import ProcessingState
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from agent.lifecycle.plugin_contributions import PluginContributionSource
+    from shiori_sdk.kernel import Kernel
 
 from .helpers import (
     _item_content,
@@ -161,14 +161,14 @@ class _ProcessingMixin:
         self._running = False
         logger.info("AgentLoop 停止")
 
-    def bind_plugin_contributions(self, plugins: "PluginContributionSource") -> None:
-        """让被动回合的阶段模块与工具事件内核每次使用时从 ``plugins`` 读取。
+    def bind_kernel(self, kernel: Callable[[], "Kernel"]) -> None:
+        """让被动回合的回合、步骤与工具事件每次发出时经 ``kernel()`` 返回的内核。
 
-        ``plugins`` 通常是本代的插件内核：其中插件被卸载或新加载后，下一次
+        ``kernel`` 通常读本代插件内核：其中插件被卸载或新加载后，下一次
         回合/工具调用即按当前 ACTIVE 插件执行。
         """
-        self._reasoner.bind_plugin_contributions(plugins)
-        self._agent_core.bind_plugin_contributions(plugins)
+        self._reasoner.bind_kernel(kernel)
+        self._agent_core.bind_kernel(kernel)
 
     # ── 中断控制面 ────────────────────────────────────────────────
 

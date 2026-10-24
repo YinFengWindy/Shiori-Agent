@@ -3,19 +3,15 @@ from __future__ import annotations
 import hashlib
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from .context import ContextStore
 from .empty_reply import EmptyReplyError
 from .reasoner import Reasoner
-from agent.core.turn_events import TurnEvents
+from agent.core.turn_events import TurnEvents, core_kernel
 from agent.lifecycle.phase import Phase
-from agent.lifecycle.plugin_contributions import (
-    NO_PLUGIN_CONTRIBUTIONS,
-    PluginContributionSource,
-)
-from core.common.live_contributions import LiveContributions
 from agent.lifecycle.phases.after_reasoning import (
     AfterReasoningFrame,
     default_after_reasoning_modules,
@@ -54,6 +50,7 @@ from shiori_sdk.messages import InboundMessage, OutboundMessage
 from bus.events_lifecycle import TurnFailed
 from core.common.diagnostic_log import diagnostic_context, diagnostic_line
 from shiori_sdk.errors import summarize_exception_for_user
+from shiori_sdk.kernel import Kernel
 from core.compaction import CompactionFailedError
 
 if TYPE_CHECKING:
@@ -109,9 +106,9 @@ class AgentCore:
     def pipeline(self) -> "PassiveTurnPipeline":
         return self._passive_pipeline
 
-    def bind_plugin_contributions(self, plugins: PluginContributionSource) -> None:
-        """改为从 ``plugins`` 实时读取回合级阶段的插件模块。"""
-        self._passive_pipeline.bind_plugin_contributions(plugins)
+    def bind_kernel(self, kernel: Callable[[], Kernel]) -> None:
+        """回合事件改经 ``kernel()`` 返回的内核发出（每次发出时读取）。"""
+        self._passive_pipeline.bind_kernel(kernel)
 
     async def process(
         self,
@@ -155,103 +152,60 @@ class PassiveTurnPipeline:
         bus = deps.event_bus or EventBus()
         self._bus = bus
 
-        # 插件模块每回合从当前插件来源读取，贡献变化时才重建阶段（#855）。
-        self._plugins = NO_PLUGIN_CONTRIBUTIONS
-        # 回合事件经当前来源的内核发出（未接插件时是只带核心校验的裸内核）。
-        self._events = TurnEvents(bus, lambda: self._plugins.kernel)
-        self._before_turn = LiveContributions(
-            lambda: self._plugins.before_turn_modules,
-            self._build_before_turn_phase,
-        )
-        self._before_reasoning = LiveContributions(
-            lambda: self._plugins.before_reasoning_modules,
-            self._build_before_reasoning_phase,
-        )
-        self._after_reasoning = LiveContributions(
-            lambda: self._plugins.after_reasoning_modules,
-            self._build_after_reasoning_phase,
-        )
-        self._after_turn = LiveContributions(
-            lambda: self._plugins.after_turn_modules,
-            self._build_after_turn_phase,
-        )
-
-    def bind_plugin_contributions(self, plugins: PluginContributionSource) -> None:
-        """改为从 ``plugins`` 实时读取回合级阶段的插件模块。"""
-        self._plugins = plugins
-        # 绑定时立即按当前贡献构造一次，模块 slot 冲突等装配错误在启动时暴露。
-        self._before_turn.current()
-        self._before_reasoning.current()
-        self._after_reasoning.current()
-        self._after_turn.current()
-
-    def _build_before_turn_phase(
-        self,
-        plugin_modules: list[Any],
-    ) -> Phase[TurnState, BeforeTurnCtx, BeforeTurnFrame]:
-        return Phase(
+        # 回合事件经当前插件代的内核发出；未接插件时是只带核心校验的裸内核。
+        bare_kernel = core_kernel()
+        self._kernel: Callable[[], Kernel] = lambda: bare_kernel
+        self._events = TurnEvents(bus, lambda: self._kernel())
+        self._before_turn: Phase[TurnState, BeforeTurnCtx, BeforeTurnFrame] = Phase(
             default_before_turn_modules(
-                self._bus,
                 self._events,
                 self._session.session_manager,
                 self._context_store,
                 keep_count=self._history_window,
                 consolidator=self._memory_consolidator,
-                plugin_modules=plugin_modules,
             ),
             frame_factory=BeforeTurnFrame,
         )
-
-    def _build_before_reasoning_phase(
-        self,
-        plugin_modules: list[Any],
-    ) -> Phase[BeforeReasoningInput, BeforeReasoningCtx, BeforeReasoningFrame]:
-        return Phase(
+        self._before_reasoning: Phase[
+            BeforeReasoningInput, BeforeReasoningCtx, BeforeReasoningFrame
+        ] = Phase(
             default_before_reasoning_modules(
-                self._bus,
                 self._events,
                 self._tools,
                 self._session.session_manager,
                 self._context,
-                plugin_modules=plugin_modules,
             ),
             frame_factory=BeforeReasoningFrame,
         )
-
-    def _build_after_reasoning_phase(
-        self,
-        plugin_modules: list[Any],
-    ) -> Phase[AfterReasoningInput, AfterReasoningResult, AfterReasoningFrame]:
-        return Phase(
+        self._after_reasoning: Phase[
+            AfterReasoningInput, AfterReasoningResult, AfterReasoningFrame
+        ] = Phase(
             default_after_reasoning_modules(
                 self._bus,
                 self._events,
                 self._session,
                 self._llm,
                 self._llm_config,
-                plugin_modules=plugin_modules,
             ),
             frame_factory=AfterReasoningFrame,
         )
-
-    def _build_after_turn_phase(
-        self,
-        plugin_modules: list[Any],
-    ) -> Phase[TurnSnapshot, OutboundMessage, AfterTurnFrame]:
-        return Phase(
+        self._after_turn: Phase[TurnSnapshot, OutboundMessage, AfterTurnFrame] = Phase(
             default_after_turn_modules(
                 self._bus,
                 self._events,
                 self._outbound_port,
                 self._context,
                 self._history_window,
-                plugin_modules=plugin_modules,
                 relationship_runtime=getattr(
                     self._session, "relationship_runtime", None
                 ),
             ),
             frame_factory=AfterTurnFrame,
         )
+
+    def bind_kernel(self, kernel: Callable[[], Kernel]) -> None:
+        """回合事件改经 ``kernel()`` 返回的内核发出（每次发出时读取）。"""
+        self._kernel = kernel
 
     # 核心方法：处理一条普通被动消息，并提交最终出站结果。
     async def run(
@@ -300,8 +254,8 @@ class PassiveTurnPipeline:
             try:
                 # Phase 1: BeforeTurn 模块链（会话、上下文、BeforeTurn 事件）。
                 with diagnostic_context(phase="before_turn"):
-                    before_turn = await self._before_turn.current().run(state)
-                # TurnState 存内部默认 metadata；BeforeTurnCtx 存插件导出，同名 key 以后者覆盖。
+                    before_turn = await self._before_turn.run(state)
+                # TurnState 存内部默认 metadata；BeforeTurnCtx 存 TurnStarting 处理器写入的，同名 key 以后者覆盖。
                 state.extra_metadata.update(before_turn.extra_metadata)
                 if before_turn.abort:
                     logger.info(
@@ -340,7 +294,7 @@ class PassiveTurnPipeline:
 
                 # Phase 2: BeforeReasoning 模块链（工具上下文、BeforeReasoning 事件、prompt warmup）。
                 with diagnostic_context(phase="before_reasoning"):
-                    before_reasoning = await self._before_reasoning.current().run(
+                    before_reasoning = await self._before_reasoning.run(
                         BeforeReasoningInput(state=state, before_turn=before_turn)
                     )
                 if before_reasoning.abort:
@@ -465,7 +419,7 @@ class PassiveTurnPipeline:
         try:
             # Phase 5: AfterReasoning 模块链（parse、AfterReasoning 事件、持久化、出站消息）。
             with diagnostic_context(phase="after_reasoning"):
-                after_reasoning = await self._after_reasoning.current().run(
+                after_reasoning = await self._after_reasoning.run(
                     AfterReasoningInput(state=state, turn_result=turn_result)
                 )
         except Exception as exc:
@@ -504,7 +458,7 @@ class PassiveTurnPipeline:
         try:
             # Phase 6: AfterTurn 模块链（TurnCommitted fanout、AfterTurn fanout、dispatch）。
             with diagnostic_context(phase="after_turn"):
-                outbound = await self._after_turn.current().run(snapshot)
+                outbound = await self._after_turn.run(snapshot)
         except Exception as exc:
             logger.exception(
                 diagnostic_line(

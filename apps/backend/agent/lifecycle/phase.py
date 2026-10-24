@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Collection, Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, cast
 from typing import Generic, Protocol, TypeVar
@@ -15,47 +15,6 @@ FrameT = TypeVar("FrameT", bound="PhaseFrame[Any, Any]")
 
 def _empty_slots() -> dict[str, Any]:
     return {}
-
-
-def collect_prefixed_slots(
-    slots: Mapping[str, object],
-    prefix: str,
-    *,
-    reserved: Collection[str] = (),
-) -> dict[str, object]:
-    values: dict[str, object] = {}
-    reserved_fields = set(reserved)
-    for key, value in slots.items():
-        if not key.startswith(prefix):
-            continue
-        field_name = key.removeprefix(prefix)
-        if not field_name or field_name in reserved_fields:
-            continue
-        values[field_name] = value
-    return values
-
-
-def append_string_exports(target: list[str], exports: Mapping[str, object]) -> None:
-    for key, value in exports.items():
-        if isinstance(value, str) and value.strip():
-            target.append(value)
-        elif isinstance(value, list):
-            items = cast(list[object], value)
-            for item in items:
-                if isinstance(item, str) and item.strip():
-                    target.append(item)
-                elif item is not None:
-                    logger.warning(
-                        "忽略非字符串 slot export: key=%s type=%s",
-                        key,
-                        type(item).__name__,
-                    )
-        elif value is not None:
-            logger.warning(
-                "忽略非字符串 slot export: key=%s type=%s",
-                key,
-                type(value).__name__,
-            )
 
 
 @dataclass
@@ -86,10 +45,6 @@ def topo_sort_modules(modules: Sequence[object]) -> list[object]:
             raise RuntimeError(f"模块 slot 重复: {slot}")
         slot_map[slot] = cast(SlotModule, module)
         slot_order[slot] = index
-    active_slots = _active_module_slots(slot_map)
-    slot_map = {
-        slot: module for slot, module in slot_map.items() if slot in active_slots
-    }
 
     in_degree = {slot: 0 for slot in slot_map}
     dependents: dict[str, list[str]] = {slot: [] for slot in slot_map}
@@ -101,7 +56,7 @@ def topo_sort_modules(modules: Sequence[object]) -> list[object]:
     queue = [slot for slot, degree in in_degree.items() if degree == 0]
     sorted_modules: list[object] = []
     while queue:
-        queue.sort(key=lambda item: (_is_builtin_slot(item), slot_order[item]))
+        queue.sort(key=lambda item: slot_order[item])
         slot = queue.pop(0)
         sorted_modules.append(slot_map[slot])
         for dependent in dependents[slot]:
@@ -159,94 +114,8 @@ def _module_requires(
     return tuple(slot for slot in requires if slot in known_slots)
 
 
-def _active_module_slots(slot_map: Mapping[str, object]) -> set[str]:
-    active = set(slot_map)
-    while True:
-        disabled = set[str]()
-        for slot, module in slot_map.items():
-            if slot not in active or _is_builtin_slot(slot):
-                continue
-            missing = _missing_module_requires(module, active)
-            if missing:
-                logger.warning(
-                    "Phase 模块依赖不存在，已禁用模块: module=%s requires=%s",
-                    slot,
-                    ", ".join(missing),
-                )
-                disabled.add(slot)
-        if not disabled:
-            return active
-        active -= disabled
-
-
-def _disable_modules_with_missing_module_dependencies(
-    modules: Sequence[PhaseModule[FrameT]],
-) -> list[PhaseModule[FrameT]]:
-    module_slots = {
-        str(slot)
-        for slot in (getattr(module, "slot", None) for module in modules)
-        if isinstance(slot, str) and slot
-    }
-    active = set(module_slots)
-    disabled = set[str]()
-    while True:
-        current = set[str]()
-        for module in modules:
-            slot = getattr(module, "slot", None)
-            if not isinstance(slot, str) or not slot:
-                continue
-            if slot not in active or _is_builtin_slot(slot):
-                continue
-            missing = _missing_module_requires(module, active)
-            if missing:
-                logger.warning(
-                    "Phase 模块依赖不存在，已禁用模块: module=%s requires=%s",
-                    slot,
-                    ", ".join(missing),
-                )
-                current.add(slot)
-        if not current:
-            break
-        disabled |= current
-        active -= current
-    return [
-        module for module in modules if getattr(module, "slot", None) not in disabled
-    ]
-
-
-def _missing_module_requires(
-    module: object,
-    active_slots: set[str],
-) -> tuple[str, ...]:
-    return tuple(
-        req
-        for req in (str(slot) for slot in getattr(module, "requires", ()))
-        if _is_module_slot(req) and req not in active_slots
-    )
-
-
 def _is_module_slot(slot: str) -> bool:
     return "." in slot and ":" not in slot
-
-
-def _module_label(module: SlotModule) -> str:
-    slot = module.slot
-    tag = "[B]" if _is_builtin_slot(slot) else "[P]"
-    return f"{tag} {slot}"
-
-
-def _is_builtin_slot(slot: str) -> bool:
-    return slot.startswith(
-        (
-            "before_turn.",
-            "before_reasoning.",
-            "prompt_render.",
-            "before_step.",
-            "after_step.",
-            "after_reasoning.",
-            "after_turn.",
-        )
-    )
 
 
 def _render_tree_node(
@@ -264,7 +133,7 @@ def _render_tree_node(
     visited.add(slot)
     connector = "└── " if is_last else "├── "
     module = slot_map[slot]
-    lines.append(f"{prefix}{connector}{_module_label(module)}")
+    lines.append(f"{prefix}{connector}{module.slot}")
     _append_tree_details(lines, module, prefix=prefix, is_last=is_last)
     child_prefix = prefix + ("    " if is_last else "│   ")
     child_slots = children.get(slot, [])
@@ -303,7 +172,7 @@ class Phase(Generic[InputT, OutputT, FrameT]):
         *,
         frame_factory: Callable[[InputT], FrameT],
     ) -> None:
-        self._modules = _disable_modules_with_missing_module_dependencies(modules)
+        self._modules = list(modules)
         self._frame_factory = frame_factory
         self._validate()
 

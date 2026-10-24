@@ -12,7 +12,7 @@ from agent.core.reply_completion import fetch_role_mood
 from agent.core.reply_output import RoleReplyOutput
 from core.roles.reply_state import RoleReply
 from agent.lifecycle.types import BeforeStepInput
-from shiori_sdk.lifecycle import AfterStepCtx
+from agent.lifecycle.types import AfterStepCtx
 from agent.tools.execution import ToolExecutionRequest
 from agent.tool_runtime import (
     append_assistant_tool_calls,
@@ -256,7 +256,7 @@ class _PassiveReasoningLoopMixin:
             ):
                 break
             # 3. BeforeStep 模块链：token 估算、BeforeStep 事件、提示注入。
-            step_ctx = await self._before_step.current().run(
+            step_ctx = await self._before_step.run(
                 BeforeStepInput(
                     session_key=tool_event_session_key,
                     channel=tool_event_channel,
@@ -811,7 +811,7 @@ class _PassiveReasoningLoopMixin:
                     else support.estimate_messages_tokens(messages)
                 )
                 # 7a. AfterStep 模块链（工具分支）：通知观察者本轮工具执行完毕。
-                after_step = await self._after_step.current().run(
+                after_step = await self._after_step.run(
                     AfterStepCtx(
                         session_key=tool_event_session_key,
                         channel=tool_event_channel,
@@ -901,7 +901,7 @@ class _PassiveReasoningLoopMixin:
             )
             messages.append({"role": "assistant", "content": response.content})
             # 8c. AfterStep 模块链（最终回复分支）：通知观察者本轮推理结束。
-            _ = await self._after_step.current().run(
+            _ = await self._after_step.run(
                 AfterStepCtx(
                     session_key=tool_event_session_key,
                     channel=tool_event_channel,

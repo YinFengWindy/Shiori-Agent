@@ -14,7 +14,7 @@ from agent.lifecycle.phases.after_turn import (
     _DispatchOutboundModule,
     _memory_extra,
     _BuildTurnCommittedModule,
-    _BuildAfterTurnCtxModule,
+    _BuildTurnFinishedModule,
     _FanoutTurnCommittedModule,
 )
 from agent.lifecycle.types import TurnState
@@ -175,7 +175,7 @@ async def test_commit_observers_receive_actual_dispatch_intent_before_enqueue(
     await _BuildTurnCommittedModule().run(frame)
     await _FanoutTurnCommittedModule(events).run(frame)
     assert observed == [(False, 0)]
-    await _BuildAfterTurnCtxModule().run(frame)
+    await _BuildTurnFinishedModule().run(frame)
     assert frame.slots["turn:ctx"].will_dispatch is expected
     await _DispatchOutboundModule(BusOutboundPort(bus)).run(frame)
     assert (

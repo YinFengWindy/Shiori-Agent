@@ -53,17 +53,17 @@ def test_sdk_context_rejects_a_capability_the_manifest_does_not_declare(
     tmp_path: Path,
 ) -> None:
     (tmp_path / "manifest.yaml").write_text(
-        "id: probe\ncapabilities:\n  - events\n", encoding="utf-8"
+        "id: probe\ncapabilities:\n  - rpc\n", encoding="utf-8"
     )
     result = _run_plugin_suite(
         tmp_path,
         "async def test_setup(sdk_context):\n"
-        "    assert sdk_context.granted == ('events',)\n"
-        "    sdk_context.lifecycle.contribute('after_turn', [])\n",
+        "    assert sdk_context.granted == ('rpc',)\n"
+        "    sdk_context.events.on(str, print)\n",
     )
     assert result.returncode == 1, result.stdout + result.stderr
     assert "CapabilityNotGranted" in result.stdout
-    assert "插件 probe 未声明 capability 'lifecycle'" in result.stdout
+    assert "插件 probe 未声明 capability 'events'" in result.stdout
 
 
 def test_find_plugin_dir_stops_at_the_test_root(tmp_path: Path) -> None:
@@ -81,8 +81,8 @@ def test_find_plugin_dir_stops_at_the_test_root(tmp_path: Path) -> None:
     ("capabilities", "message"),
     [
         ("", "v2 manifest 缺少 capabilities 声明"),
-        ("capabilities: lifecycle\n", "capabilities 必须是列表"),
-        ("capabilities: [lifecycle, host_storage]\n", "未知 capability"),
+        ("capabilities: events\n", "capabilities 必须是列表"),
+        ("capabilities: [events, host_storage]\n", "未知 capability"),
     ],
 )
 def test_manifest_capabilities_are_validated_like_the_host(

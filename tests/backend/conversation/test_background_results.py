@@ -335,8 +335,8 @@ async def capture_bot(host):
 async def test_natural_background_completion_keeps_shared_correction_raw_thinking_and_usage(
     host, monkeypatch
 ):
-    from agent.lifecycle.facade import TurnLifecycle
     from agent.provider import LLMResponse, ToolCall
+    from shiori_sdk.memory.committed import TurnCommitted
     from agent.turns.channel_sequence import ChannelSequenceOwner
     from bus.queue import MessageBus
     from session.manager.models import whole_session
@@ -381,7 +381,7 @@ async def test_natural_background_completion_keeps_shared_correction_raw_thinkin
 
     monkeypatch.setattr(host.provider, "chat", chat)
     monkeypatch.setattr("agent.turns.reply_sequence.wait_between_messages", AsyncMock())
-    TurnLifecycle(host.loop._event_bus).on_after_reasoning(observed.append)
+    host.loop._event_bus.on(TurnCommitted, observed.append)
     with ChannelSequenceOwner().bind(MessageBus()):
         assert await target.report(
             "background:shared-protocol", "后台工作只执行一次的原始产物"
@@ -392,10 +392,10 @@ async def test_natural_background_completion_keeps_shared_correction_raw_thinkin
     assert any(
         "已经完成的检查事实" in str(message) for message in requests[2]["messages"]
     )
-    [ctx] = observed
-    assert ctx.response_metadata.raw_text == raw
-    assert ctx.thinking == "完成报告的正常思考"
-    assert ctx.outbound_metadata["turn_metrics"]["total_tokens"] == 15
+    [committed] = observed
+    assert committed.raw_reply == raw
+    assert committed.thinking == "完成报告的正常思考"
+    assert committed.total_tokens == 15
     history = host.manager.get_or_create("role:mira").get_history(include=whole_session)
     assert sum(m.get("content") == "后台工作只执行一次的原始产物" for m in history) == 1
     assert any(m.get("content") == "已经完成的检查事实" for m in history)

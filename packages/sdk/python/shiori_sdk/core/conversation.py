@@ -204,7 +204,7 @@ class ReasoningFinished:
 class TurnFinished:
     """The turn is stored; ``will_dispatch`` tells whether its reply is sent next.
 
-    ``extra_metadata`` is the turn's telemetry. Nothing is writable.
+    Nothing is writable.
     """
 
     session_key: str
@@ -214,7 +214,6 @@ class TurnFinished:
     tools_used: tuple[str, ...]
     thinking: str | None
     will_dispatch: bool
-    extra_metadata: Mapping[str, object] = field(default_factory=_no_metadata)
 
 
 type CommandHandler = Callable[[CommandInput], Awaitable[str]]

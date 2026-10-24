@@ -5,19 +5,15 @@ from typing import TYPE_CHECKING, TypeAlias, cast
 
 from agent.core.passive_support import build_context_hint_message
 from agent.core.types import ContextRequest
-from agent.lifecycle.phase import (
-    PhaseFrame,
-    PhaseModule,
-    append_string_exports,
-    collect_prefixed_slots,
-    topo_sort_modules,
-)
-from bus.event_bus import EventBus
+from agent.lifecycle.phase import PhaseFrame, PhaseModule, topo_sort_modules
 from agent.core.turn_events import TurnEvents, read_only
-from agent.lifecycle.types import PromptRenderInput, PromptRenderResult
+from agent.lifecycle.types import (
+    PromptRenderCtx,
+    PromptRenderInput,
+    PromptRenderResult,
+)
 from prompts.natural_chat import NATURAL_CHAT_PROMPT
 from shiori_sdk.core.conversation import PromptRendering, ReplyMode
-from shiori_sdk.lifecycle import PromptRenderCtx
 from shiori_sdk.prompting import PromptSectionRender
 
 if TYPE_CHECKING:
@@ -34,9 +30,6 @@ PromptRenderModules: TypeAlias = list[PhaseModule[PromptRenderFrame]]
 
 _CTX_SLOT = "prompt:ctx"
 _RESULT_SLOT = "prompt:result"
-_SECTION_TOP_PREFIX = "prompt:section_top:"
-_SECTION_BOTTOM_PREFIX = "prompt:section_bottom:"
-_EXTRA_HINT_PREFIX = "prompt:extra_hint:"
 _REPLY_MODE_SLOT = "prompt:reply_mode"
 
 
@@ -70,13 +63,11 @@ class _EmitPromptRenderCtxModule:
     requires = ("prompt_render.build_ctx", _CTX_SLOT)
     produces = (_CTX_SLOT,)
 
-    def __init__(self, bus: EventBus, events: TurnEvents) -> None:
-        self._bus = bus
+    def __init__(self, events: TurnEvents) -> None:
         self._events = events
 
     async def run(self, frame: PromptRenderFrame) -> PromptRenderFrame:
-        ctx = await self._bus.emit(cast(PromptRenderCtx, frame.slots[_CTX_SLOT]))
-        frame.slots[_CTX_SLOT] = ctx
+        ctx = cast(PromptRenderCtx, frame.slots[_CTX_SLOT])
 
         def apply(event: PromptRendering) -> None:
             ctx.system_sections_top[:] = event.system_sections_top
@@ -130,7 +121,7 @@ def _rendered_reply_mode(event: PromptRendering, input: PromptRenderInput) -> Re
 
 class _RenderPromptModule:
     slot = "prompt_render.render"
-    requires = ("prompt_render.collect_exports", _CTX_SLOT)
+    requires = ("prompt_render.emit", _CTX_SLOT)
     produces = (_RESULT_SLOT,)
 
     def __init__(self, context: ContextBuilder) -> None:
@@ -191,28 +182,6 @@ class _RenderPromptModule:
         return frame
 
 
-class _CollectPromptExportSlotsModule:
-    slot = "prompt_render.collect_exports"
-    requires = ("prompt_render.emit", _CTX_SLOT)
-    produces = (_CTX_SLOT,)
-
-    async def run(self, frame: PromptRenderFrame) -> PromptRenderFrame:
-        ctx = cast(PromptRenderCtx, frame.slots[_CTX_SLOT])
-        _append_sections(
-            ctx.system_sections_top,
-            collect_prefixed_slots(frame.slots, _SECTION_TOP_PREFIX),
-        )
-        _append_sections(
-            ctx.system_sections_bottom,
-            collect_prefixed_slots(frame.slots, _SECTION_BOTTOM_PREFIX),
-        )
-        append_string_exports(
-            ctx.extra_hints,
-            collect_prefixed_slots(frame.slots, _EXTRA_HINT_PREFIX),
-        )
-        return frame
-
-
 class _ReturnPromptRenderResultModule:
     slot = "prompt_render.return"
     requires = ("prompt_render.render", _RESULT_SLOT)
@@ -223,36 +192,12 @@ class _ReturnPromptRenderResultModule:
 
 
 def default_prompt_render_modules(
-    bus: EventBus,
-    events: TurnEvents,
-    context: ContextBuilder,
-    plugin_modules: PromptRenderModules | None = None,
+    events: TurnEvents, context: ContextBuilder
 ) -> PromptRenderModules:
     builtins: PromptRenderModules = [
         _BuildPromptRenderCtxModule(),
-        _EmitPromptRenderCtxModule(bus, events),
-        _CollectPromptExportSlotsModule(),
+        _EmitPromptRenderCtxModule(events),
         _RenderPromptModule(context),
         _ReturnPromptRenderResultModule(),
     ]
-    return cast(
-        PromptRenderModules,
-        topo_sort_modules(builtins + list(plugin_modules or [])),
-    )
-
-
-def _append_sections(
-    target: list[PromptSectionRender],
-    exports: dict[str, object],
-) -> None:
-    for name, value in exports.items():
-        if isinstance(value, PromptSectionRender):
-            target.append(value)
-        elif isinstance(value, str) and value.strip():
-            target.append(
-                PromptSectionRender(
-                    name=name,
-                    content=value,
-                    is_static=False,
-                )
-            )
+    return cast(PromptRenderModules, topo_sort_modules(builtins))

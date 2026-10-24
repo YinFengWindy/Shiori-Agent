@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
-from shiori_sdk.lifecycle import AfterReasoningCtx, PromptRenderCtx
+from shiori_sdk.core.conversation import PromptRendering, ReasoningFinished
 from shiori_sdk.prompting import PromptSectionRender
 from shiori_sdk.storage import plugin_data_dir
 from .runtime import (
@@ -21,39 +22,9 @@ if TYPE_CHECKING:
     from shiori_sdk.roles import Roles
     from shiori_sdk.processes import Resources
 
-_CTX_SLOT = "prompt:ctx"
 _MEME_RE = re.compile(r"<meme:([a-zA-Z0-9_-]+)>", re.IGNORECASE)
 _MEME_PROTOCOL_RE = re.compile(r"<meme:[^>]*>", re.IGNORECASE)
 _EMOJI_PROTOCOL_RE = re.compile(r"<emoji:([a-zA-Z0-9_-]+)>", re.IGNORECASE)
-
-
-class MemePromptModule:
-    """Append available role reactions after prompt context emission."""
-
-    slot = "meme.prompt"
-    requires = ("prompt_render.emit", _CTX_SLOT)
-    produces = (_CTX_SLOT,)
-
-    def __init__(self, plugin: "_MemeReactions") -> None:
-        self._plugin = plugin
-
-    async def run(self, frame: Any) -> Any:
-        """Contribute the current role's available reactions to the prompt."""
-        ctx = frame.slots.get(_CTX_SLOT)
-        if not isinstance(ctx, PromptRenderCtx):
-            return frame
-        role_id = str(ctx.session_metadata.get("role_id") or "").strip()
-        block = self._plugin.build_prompt_block(role_id)
-        if not block:
-            return frame
-        ctx.system_sections_bottom.append(
-            PromptSectionRender(
-                name="memes",
-                content=f"# Memes\n\n{block}",
-                is_static=False,
-            )
-        )
-        return frame
 
 
 class _MemeReactions:
@@ -73,12 +44,27 @@ class _MemeReactions:
             load_common_emojis(self._emoji_paths),
         )
 
-    async def decorate_meme(self, ctx: AfterReasoningCtx) -> AfterReasoningCtx:
+    async def append_prompt(self, event: PromptRendering) -> PromptRendering:
+        """Lists the current role's available reactions at the prompt's bottom."""
+        role_id = str(event.session_metadata.get("role_id") or "").strip()
+        block = self.build_prompt_block(role_id)
+        if not block:
+            return event
+        section = PromptSectionRender(
+            name="memes", content=f"# Memes\n\n{block}", is_static=False
+        )
+        return replace(
+            event, system_sections_bottom=(*event.system_sections_bottom, section)
+        )
+
+    async def decorate_meme(self, event: ReasoningFinished) -> ReasoningFinished:
         """Resolve image and emoji protocols on each bubble before the core cleanup."""
-        role_id = self._role_id_for_session(ctx.session_key)
+        role_id = self._role_id_for_session(event.session_key)
         resolve = self._role_decorator.resolve_emoji if role_id else lambda _name: ""
-        texts = ctx.reply_messages or (ctx.reply,)
+        texts = event.reply_messages or (event.reply,)
         rewritten: list[str] = []
+        media = list(event.media)
+        meme_tag: str | None = None
         attached = False
         for text in texts:
             cleaned, tag = _extract_meme_tag(text)
@@ -89,17 +75,18 @@ class _MemeReactions:
             )
             if use_tag:
                 attached = True
-                ctx.media.extend(decorated.media)
-                ctx.meme_tag = decorated.tag
+                media.extend(decorated.media)
+                meme_tag = decorated.tag
             rewritten.append(decorated.content)
-        if not attached:
-            ctx.meme_tag = None
-        if ctx.reply_messages:
-            ctx.reply_messages = tuple(rewritten)
-            ctx.reply = "\n\n".join(rewritten)
-        else:
-            ctx.reply = rewritten[0]
-        return ctx
+        if event.reply_messages:
+            return replace(
+                event,
+                reply_messages=tuple(rewritten),
+                reply="\n\n".join(rewritten),
+                media=tuple(media),
+                meme_tag=meme_tag,
+            )
+        return replace(event, reply=rewritten[0], media=tuple(media), meme_tag=meme_tag)
 
     def build_prompt_block(self, role_id: str) -> str | None:
         """Render the available role images and shared emoji catalog."""
@@ -123,10 +110,10 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
         ctx.resources,
         plugin_data_dir(ctx.workspace, "meme") / "library",
     )
-    ctx.lifecycle.contribute("prompt_render", [MemePromptModule(reactions)])
-    # The scoped event runs inside after_reasoning.emit, before the core's
-    # cleanup after ReasoningFinished removes unconsumed protocol tags.
-    ctx.events.on(AfterReasoningCtx, reactions.decorate_meme)
+    ctx.on(PromptRendering, reactions.append_prompt)
+    # Runs on ReasoningFinished, before the core's post-chain check removes
+    # unconsumed protocol tags.
+    ctx.on(ReasoningFinished, reactions.decorate_meme)
 
 
 def _extract_meme_tag(response: str) -> tuple[str, str | None]:

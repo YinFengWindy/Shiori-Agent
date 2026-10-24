@@ -7,4 +7,3 @@ and are not importable from an installed plugin.
 
 from .context import FakePluginContext
 from .events import FakeEvents
-from .lifecycle import FakeFrame, FakeLifecycle

@@ -15,7 +15,6 @@ from shiori_sdk.kernel import (
 )
 
 from agent.plugin_host.call_gate import PluginCallGate
-from agent.plugin_host.capabilities import PluginContributions
 from agent.plugin_host.manifest import PluginManifest
 from agent.plugin_host.diagnostics import ChannelDeclarationError
 from agent.plugin_host.dependencies import PluginDependencyError
@@ -76,7 +75,6 @@ class PluginHandle:
     effects: Scope = field(default_factory=lambda: Scope("unbound"))
     # Admission for host-routed calls into this instance (tools, services, RPC).
     calls: PluginCallGate = field(default_factory=lambda: PluginCallGate("unbound"))
-    contributions: PluginContributions = field(default_factory=PluginContributions)
     instance: Any = None
     # Whether this setup reactivates an instance an in-generation reload replaced.
     reactivated: bool = False

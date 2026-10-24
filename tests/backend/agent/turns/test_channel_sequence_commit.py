@@ -101,7 +101,6 @@ async def batch(
             metadata=metadata,
             channel="qqbot",
             chat_id=f"c2c:app:{chat}",
-            extra_media=[],
         )
 
 

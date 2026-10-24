@@ -1,5 +1,6 @@
 import asyncio
 import json
+from dataclasses import replace
 from datetime import datetime
 from types import SimpleNamespace
 from typing import Any, cast
@@ -19,19 +20,13 @@ from agent.tools.tool_search import ToolSearchTool
 from bus.event_bus import EventBus
 from shiori_sdk.messages import InboundMessage
 from shiori_sdk.channel_events import ToolCallCompleted, ToolCallStarted
-from shiori_sdk.lifecycle import LifecycleFrame
+from shiori_sdk.core.conversation import StepFinished
 from session.manager import SessionManager
-from agent.lifecycle.plugin_contributions import StaticPluginContributions
+from tests.support.tool_calls import kernel_with
 
 
-class _RequestSummary:
-    slot = "test.request_summary"
-    requires = ("after_step.copy_input", "step:ctx")
-    produces = ("step:early_stop_reason",)
-
-    async def run[FrameT: LifecycleFrame](self, frame: FrameT) -> FrameT:
-        frame.slots["step:early_stop_reason"] = "test_policy"
-        return frame
+async def _request_summary(event: StepFinished) -> StepFinished:
+    return replace(event, early_stop=True, early_stop_reason="test_policy")
 
 
 class _DummyTool(Tool):
@@ -489,9 +484,8 @@ def test_default_reasoner_honors_after_step_stop_after_tool_batch():
         discovery=ToolDiscoveryState(),
         tool_search_enabled=False,
     )
-    reasoner.bind_plugin_contributions(
-        StaticPluginContributions(after_step_modules=[_RequestSummary()])
-    )
+    kernel = kernel_with(on=((StepFinished, _request_summary),))
+    reasoner.bind_kernel(lambda: kernel)
 
     result = asyncio.run(reasoner.run([{"role": "user", "content": "hi"}]))
 

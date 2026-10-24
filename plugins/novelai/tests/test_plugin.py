@@ -2,8 +2,8 @@
 
 import json
 import pytest
+from shiori_sdk.core.conversation import ReasoningFinished
 from shiori_sdk.core.tools import ToolCalled
-from shiori_sdk.lifecycle import ResponseMetadata, AfterReasoningCtx
 from shiori_sdk.testing.service_context import FakeServiceContext
 from plugins.novelai.backend.plugin import setup
 
@@ -46,19 +46,19 @@ async def test_setup_tracks_generated_media_and_releases_contributions(
                 result="图片已发送",
             )
         )
-    event = AfterReasoningCtx(
-        session_key="role:mira",
-        channel="desktop",
-        chat_id="desktop",
-        tools_used=(),
-        thinking=None,
-        response_metadata=ResponseMetadata(raw_text="test"),
-        streamed=False,
-        tool_chain=(),
-        context_retry={},
-        reply="已生成",
+    event = await context.emit(
+        ReasoningFinished(
+            session_key="role:mira",
+            channel="desktop",
+            chat_id="desktop",
+            tools_used=(),
+            tool_chain=(),
+            thinking=None,
+            streamed=False,
+            reply="已生成",
+        )
     )
-    await context.events.emit(event)
-    assert event.media == ([] if pushed else [image])
+    assert isinstance(event, ReasoningFinished)
+    assert event.media == (() if pushed else (image,))
     await context.aclose()
     assert not context.tools.tools and not context.rpc.handlers

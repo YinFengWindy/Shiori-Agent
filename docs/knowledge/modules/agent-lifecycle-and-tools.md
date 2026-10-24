@@ -24,7 +24,7 @@ related:
 
 ## 回合生命周期
 
-被动回合由 `apps/backend/agent/core/passive_turn/` 组织（`pipeline.py` 串起各 phase，`reasoning_loop.py` / `reasoner.py` 执行推理与工具循环），主动回合在 `agent/core/proactive_turn/`。`apps/backend/agent/turns/` 的 `orchestrator.py` 负责回合协调、权威会话写入与出站分发（`outbound.py`）。生命周期模块（`agent/lifecycle/phases/`）提供 `BeforeTurn`、`BeforeReasoning`、prompt render、`BeforeStep`、`AfterStep`、`AfterReasoning`、`AfterTurn` 等 phase，使记忆、插件、自动 CG 和观测逻辑在明确边界接入；插件贡献的 phase 模块由插件内核按 slot 收集后并入默认模块链。
+被动回合由 `apps/backend/agent/core/passive_turn/` 组织（`pipeline.py` 串起各 phase，`reasoning_loop.py` / `reasoner.py` 执行推理与工具循环），主动回合在 `agent/core/proactive_turn/`。`apps/backend/agent/turns/` 的 `orchestrator.py` 负责回合协调、权威会话写入与出站分发（`outbound.py`）。生命周期模块（`agent/lifecycle/phases/`）提供 `BeforeTurn`、`BeforeReasoning`、prompt render、`BeforeStep`、`AfterStep`、`AfterReasoning`、`AfterTurn` 等 phase，使记忆、插件、自动 CG 和观测逻辑在明确边界接入；各 phase 在对应位置经 `TurnEvents` 发出 `shiori_sdk.core.conversation` 的回合事件，插件用 `ctx.on` / `ctx.watch` 订阅，不再向 phase 贡献模块。
 
 上下文压缩（#64）也在被动回合内完成：`passive_turn/compaction.py` 在请求超出预算时调用 `core/compaction.py` 的 `CompactionController` 生成工作摘要，当前输入和进行中的工具交换保持完整；`passive_turn/context_window.py` 提供不执行回合的预算查看与手动压缩。预算依据模型注册里的 `model_context_window`（可选 `model_auto_compact_token_limit` 作为单模型自动压缩阈值，须小于窗口），窗口缺失的注册视为未完成、需要用户补全。
 
@@ -50,7 +50,7 @@ Herdr 的 `backend/progress.py` 读取当前 task/run 的有界 JSONL 阶段报�
 
 ## 修改影响
 
-- 修改 phase 上下文：检查所有插件 handler、记忆生命周期、自动 CG 和观测插件。
+- 修改 phase 上下文或回合事件：检查所有插件的 `on` / `watch` 处理器、记忆生命周期、自动 CG 和观测插件。
 - 修改 Tool/ToolMeta：检查 registry、搜索索引、MCP 同步、提示词渲染和调用结果事件。
 - 修改执行器：检查 hook 顺序、错误冒泡、后台任务和工具事件日志。
 - 修改 MCP 生命周期：检查连接重建、工具卸载、名称冲突和配置持久化。

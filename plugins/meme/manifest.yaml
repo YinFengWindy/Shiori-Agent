@@ -7,7 +7,5 @@ desc: 角色表情与 emoji 协议，注入可用表情并关联回复媒体
 capabilities:
   - resources
   - roles
-  - lifecycle
-  - events
   - workspace
   - sessions

@@ -25,27 +25,32 @@ from shiori_sdk.core.tools import ToolCalled, ToolCalling, ToolVeto
 from shiori_sdk.kernel import Context, Kernel, PluginSpec, Scope, Veto
 from shiori_sdk.tools import Tool
 from agent.tools.registry import ToolRegistry
-from agent.lifecycle.plugin_contributions import StaticPluginContributions
 
 type ToolCallingHandler = Callable[[ToolCalling], Awaitable[ToolCalling | Veto]]
 type ToolCalledHandler = Callable[[ToolCalled], Awaitable[ToolCalled]]
 
 
 def kernel_with(
-    *calling: ToolCallingHandler, called: tuple[ToolCalledHandler, ...] = ()
+    *calling: ToolCallingHandler,
+    called: tuple[ToolCalledHandler, ...] = (),
+    on: tuple[tuple[type[Any], Callable[[Any], Awaitable[Any]]], ...] = (),
 ) -> Kernel:
-    """A core kernel (core checks installed) running the given tool event handlers.
+    """A core kernel (core checks installed) running the given event handlers.
 
     Each handler joins under its own stand-in plugin, in the given order:
-    ``calling`` on ``ToolCalling``, ``called`` on ``ToolCalled``.
+    ``calling`` on ``ToolCalling``, ``called`` on ``ToolCalled``, then each
+    ``(event type, handler)`` pair of ``on``.
     """
     kernel = core_kernel()
 
     async def no_setup(_: Context) -> None:
         return None
 
-    subscriptions = [(ToolCalling, handler) for handler in calling]
+    subscriptions: list[tuple[type[Any], Callable[[Any], Awaitable[Any]]]] = [
+        (ToolCalling, handler) for handler in calling
+    ]
     subscriptions += [(ToolCalled, handler) for handler in called]
+    subscriptions += on
     for index, (event_type, handler) in enumerate(subscriptions):
         plugin_id = f"test_{index}"
         context = Context(kernel, PluginSpec(plugin_id, no_setup), Scope(plugin_id))
@@ -198,7 +203,6 @@ def make_agent_loop_with_tools(
             )
         ),
     )
-    loop.bind_plugin_contributions(
-        StaticPluginContributions(kernel=kernel_with(*handlers))
-    )
+    kernel = kernel_with(*handlers)
+    loop.bind_kernel(lambda: kernel)
     return loop

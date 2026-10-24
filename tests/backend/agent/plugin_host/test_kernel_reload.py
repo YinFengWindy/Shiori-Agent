@@ -9,6 +9,7 @@ from types import ModuleType
 from typing import Any
 
 import pytest
+from shiori_sdk.core.conversation import StepStarting
 from shiori_sdk.rpc import PluginRpcError
 
 from agent.plugin_host import (
@@ -663,30 +664,27 @@ async def test_terminate_waits_for_a_reload_and_later_reloads_are_refused(
 
 _HOOKED = """
 import sys
+from dataclasses import replace
+
+from shiori_sdk.core.conversation import StepStarting
 
 probe = sys.modules["reload_probe"]
 
 
-class Stamp:
-    slot = "hooked.stamp"
-
-    def __init__(self, label):
-        self.label = label
-
-    async def run(self, frame):
-        probe.events.append(("module-start", self.label))
-        await probe.release.wait()
-        return [*frame, self.label]
-
-
 async def setup(ctx):
     label = ctx.config.get("label")
-    ctx.lifecycle.contribute("before_turn", [Stamp(label)])
+
+    async def stamp(event):
+        probe.events.append(("handler-start", label))
+        await probe.release.wait()
+        return replace(event, extra_hints=(*event.extra_hints, label))
+
+    ctx.on(StepStarting, stamp)
 """
 
 
 async def _hooked_kernel(tmp_path: Path) -> PluginKernel:
-    _write(tmp_path, "hooked", "capabilities: [lifecycle, config]\n", _HOOKED)
+    _write(tmp_path, "hooked", "capabilities: [config]\n", _HOOKED)
     configs = {"hooked": {"label": "v1"}}
     kernel = host_kernel(
         [tmp_path],
@@ -707,35 +705,41 @@ def _reload_hooked(kernel: PluginKernel):
     )
 
 
+def _step() -> StepStarting:
+    return StepStarting(
+        session_key="s",
+        channel="c",
+        chat_id="1",
+        iteration=1,
+        input_tokens_estimate=0,
+        visible_tool_names=None,
+    )
+
+
+async def _hints(kernel: PluginKernel) -> tuple[str, ...]:
+    event = await kernel.kernel.emit(_step())
+    assert isinstance(event, StepStarting)
+    return event.extra_hints
+
+
 @pytest.mark.asyncio
-async def test_reload_waits_for_a_running_phase_module_and_skips_stale_runs(
+async def test_reload_waits_for_a_running_turn_handler_and_then_runs_the_new_one(
     probe, tmp_path
 ):
     kernel = await _hooked_kernel(tmp_path)
-    old = kernel.before_turn_modules[0]
-    # A turn holds a phase built before the reload and is inside the module.
-    running = asyncio.create_task(old.run(["frame"]))
-    await _until(probe, ("module-start", "v1"))
+    # A turn is inside the old instance's handler when the reload starts.
+    running = asyncio.create_task(_hints(kernel))
+    await _until(probe, ("handler-start", "v1"))
 
     reload = asyncio.create_task(_reload_hooked(kernel))
     for _ in range(20):
         await asyncio.sleep(0)
     assert not reload.done()
-    # While draining, another run of the old module passes the frame through.
-    assert await old.run(["next"]) == ["next"]
 
     probe.release.set()
-    assert await running == ["frame", "v1"]
+    assert await running == ("v1",)
     await asyncio.wait_for(reload, 1)
-    (new,) = kernel.before_turn_modules
-    assert new is not old
-    # A phase still holding the disposed module never runs the old instance.
-    assert await old.run(["stale"]) == ["stale"]
-    assert await new.run(["fresh"]) == ["fresh", "v2"]
-    assert [event for event in probe.events if event[0] == "module-start"] == [
-        ("module-start", "v1"),
-        ("module-start", "v2"),
-    ]
+    assert await _hints(kernel) == ("v2",)
     await kernel.terminate_all(force=True)
 
 

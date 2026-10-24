@@ -47,7 +47,6 @@ from shiori_sdk.kernel import Key, Scope
 from shiori_sdk.runtime import EventsCapability, HostServiceUnavailable
 
 from agent.plugin_host.call_gate import PluginCallGate
-from agent.plugin_host.capabilities import PluginContributions
 from agent.plugin_host.manifest import PluginManifest
 from agent.plugin_host.rpc import PluginRpcRegistry
 
@@ -57,7 +56,6 @@ class PluginBinding:
     """One plugin activation, for the binders that scope a capability to it.
 
     ``scope`` releases what the capability registered when the plugin stops,
-    ``contributions`` collects the objects the host aggregates across plugins,
     and ``calls`` admits or refuses calls into the plugin. ``namespace`` is the
     kernel generation's import namespace; ``manifest`` is the plugin's parsed
     manifest, for the static declarations a capability checks against.
@@ -71,7 +69,6 @@ class PluginBinding:
     namespace: str
     manifest: PluginManifest
     scope: Scope
-    contributions: PluginContributions
     calls: PluginCallGate
 
 
@@ -263,8 +260,8 @@ class CoreCapability:
 
 # v2 capability name (which is also the plugin context argument it fills) ->
 # the core key behind it. The capabilities missing here are kernel-native: the
-# assembly layer builds them itself (lifecycle, config, dependencies, runtime,
-# kv, storage, services).
+# assembly layer builds them itself (config, dependencies, runtime, kv, storage,
+# services).
 CORE_CAPABILITIES: Mapping[str, CoreCapability] = {
     "diagnostics": CoreCapability(HOST_DIAGNOSTICS),
     "tools": CoreCapability(HOST_TOOLS, per_plugin=True),

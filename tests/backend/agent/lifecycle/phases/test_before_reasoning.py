@@ -40,7 +40,6 @@ async def test_before_reasoning_syncs_session_key_and_role_id_into_tool_context(
     context_builder.render = Mock(return_value=ContextBundle())
     phase = Phase(
         default_before_reasoning_modules(
-            bus,
             TurnEvents(bus, core_kernel),
             cast(ToolRegistry, tools),
             cast(Any, session_manager),
@@ -128,7 +127,6 @@ async def test_prompt_warmup_renders_external_turn_with_its_group_note(
     tools = Mock(spec=ToolRegistry)
     phase = Phase(
         default_before_reasoning_modules(
-            EventBus(),
             TurnEvents(EventBus(), core_kernel),
             cast(ToolRegistry, tools),
             cast(

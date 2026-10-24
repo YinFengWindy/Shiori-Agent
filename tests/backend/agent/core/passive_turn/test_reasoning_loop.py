@@ -24,9 +24,10 @@ from agent.core.runtime_support import ToolDiscoveryState
 from agent.looping.ports import LLMConfig, LLMServices
 from agent.provider import ContentSafetyError, LLMResponse, ToolCall
 from agent.core.passive_turn.empty_reply import EmptyReplyError
+from shiori_sdk.core.conversation import StepFinished, StepStarting
 from shiori_sdk.core.tools import ToolCalling, ToolVeto
+from shiori_sdk.kernel import Kernel, Veto
 from tests.support.tool_calls import kernel_with
-from agent.lifecycle.plugin_contributions import StaticPluginContributions
 from agent.tools.account_delivery import ACCOUNT_SEND_EXTERNAL_LIMIT, AccountSendTool
 from shiori_sdk.tools import Tool
 from agent.tools.registry import ToolRegistry
@@ -913,28 +914,13 @@ async def test_iteration_summary_fetches_mood_without_json_content_contract():
     assert result.metadata["role_reply_mood_fresh"] is True
 
 
-class _AbortStepModule:
-    """Plugin before_step module that asks the step to stop early."""
-
-    slot = "test.abort_step"
-    produces = ("step:abort_reply",)
-
-    async def run(self, frame):
-        frame.slots["step:abort_reply"] = "提前收尾"
-        return frame
+async def _stop_step(event: StepStarting) -> Veto:
+    """A plugin asking the step to stop early."""
+    return Veto("提前收尾")
 
 
-class _AfterStepRecorder:
-    """Plugin after_step module that records each step's AfterStepCtx."""
-
-    slot = "test.record_after_step"
-
-    def __init__(self) -> None:
-        self.seen: list = []
-
-    async def run(self, frame):
-        self.seen.append(frame.input)
-        return frame
+def _bind(reasoner: DefaultReasoner, kernel: Kernel) -> None:
+    reasoner.bind_kernel(lambda: kernel)
 
 
 @pytest.mark.parametrize("early_stop", [False, True])
@@ -969,9 +955,7 @@ async def test_role_summary_empty_content_uses_shared_recovery_without_replaying
     provider.chat.side_effect = responses
     reasoner = make_reasoner(provider, tools, max_iterations=1)
     if early_stop:
-        reasoner.bind_plugin_contributions(
-            StaticPluginContributions(before_step_modules=[_AbortStepModule()])
-        )
+        _bind(reasoner, kernel_with(on=((StepStarting, _stop_step),)))
     operation = reasoner.run(
         [{"role": "user", "content": "检查"}],
         reply_moods=("平静",),
@@ -1020,9 +1004,7 @@ async def test_explicitly_refused_role_summary_does_not_retry_or_fetch_mood(earl
     provider.chat.side_effect = responses
     reasoner = make_reasoner(provider, tools, max_iterations=1)
     if early_stop:
-        reasoner.bind_plugin_contributions(
-            StaticPluginContributions(before_step_modules=[_AbortStepModule()])
-        )
+        _bind(reasoner, kernel_with(on=((StepStarting, _stop_step),)))
     with pytest.raises(EmptyReplyError) as caught:
         await reasoner.run([{"role": "user", "content": "检查"}], reply_moods=("平静",))
     assert caught.value.diagnostics["outcome"] == "refused"
@@ -1062,9 +1044,7 @@ async def test_finalize_denial_from_a_different_plugin_identity_truncates_the_ba
         LLMResponse(content="收尾总结"),
     ]
     reasoner = make_reasoner(provider, tools)
-    reasoner.bind_plugin_contributions(
-        StaticPluginContributions(kernel=kernel_with(_other_plugin_finalize))
-    )
+    _bind(reasoner, kernel_with(_other_plugin_finalize))
 
     result = await reasoner.run([{"role": "user", "content": "test"}])
 
@@ -1101,9 +1081,7 @@ async def test_finalize_denial_from_a_different_plugin_identity_truncates_the_pr
         LLMResponse(content="收尾总结"),
     ]
     reasoner = make_reasoner(provider, tools, tool_search_enabled=True)
-    reasoner.bind_plugin_contributions(
-        StaticPluginContributions(kernel=kernel_with(_other_plugin_finalize))
-    )
+    _bind(reasoner, kernel_with(_other_plugin_finalize))
 
     result = await reasoner.run([{"role": "user", "content": "test"}])
 
@@ -1131,9 +1109,7 @@ async def test_plain_deny_without_finalize_does_not_truncate_the_batch():
         LLMResponse(content="最终回复"),
     ]
     reasoner = make_reasoner(provider, tools)
-    reasoner.bind_plugin_contributions(
-        StaticPluginContributions(kernel=kernel_with(_other_plugin_plain_veto))
-    )
+    _bind(reasoner, kernel_with(_other_plugin_plain_veto))
 
     result = await reasoner.run([{"role": "user", "content": "test"}])
 
@@ -1439,9 +1415,7 @@ async def test_external_restricted_turn_rechecks_account_send_after_plugins():
         LLMResponse(content="好的"),
     ]
     reasoner = make_reasoner(provider, tools)
-    reasoner.bind_plugin_contributions(
-        StaticPluginContributions(kernel=kernel_with(_retarget_to_group))
-    )
+    _bind(reasoner, kernel_with(_retarget_to_group))
 
     result = await reasoner.run(
         [{"role": "user", "content": "帮我告诉你主人"}],
@@ -1495,14 +1469,17 @@ async def test_after_step_receives_the_request_budget_hard_limit():
     tools.register(CounterTool(), always_on=True)
     reasoner = make_reasoner(provider, tools)
     reasoner._llm_config.max_tokens = 100
-    recorder = _AfterStepRecorder()
-    reasoner.bind_plugin_contributions(
-        StaticPluginContributions(after_step_modules=[recorder])
-    )
+    seen: list[StepFinished] = []
+
+    async def record(event: StepFinished) -> StepFinished:
+        seen.append(event)
+        return event
+
+    _bind(reasoner, kernel_with(on=((StepFinished, record),)))
     try:
         result = await reasoner.run([{"role": "user", "content": "数一下"}])
         assert result.reply == "完成"
-        step = next(ctx for ctx in recorder.seen if ctx.has_more)
+        step = next(event for event in seen if event.has_more)
         assert step.input_limit_tokens == 8000 - 100 - 20
     finally:
         await provider.aclose()

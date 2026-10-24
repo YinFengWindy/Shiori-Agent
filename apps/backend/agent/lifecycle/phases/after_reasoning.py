@@ -22,21 +22,17 @@ from session.manager.models import (
     build_session_message,
 )
 from agent.core.citation import join_messages, take_citations
-from agent.core.response_parser import parse_response, ParsedResponse
-from shiori_sdk.lifecycle import ResponseMetadata
+from agent.core.response_parser import ParsedResponse, ResponseMetadata, parse_response
 from core.roles.reply_state import InvalidRoleReply, RoleReply, reply_state_metadata
 from shiori_sdk.channels.chat_types import REPLY_MENTION_IDS_KEY, is_group_chat_type
-from agent.lifecycle.phase import (
-    PhaseFrame,
-    PhaseModule,
-    append_string_exports,
-    collect_prefixed_slots,
-    topo_sort_modules,
-)
+from agent.lifecycle.phase import PhaseFrame, PhaseModule, topo_sort_modules
 from agent.core.turn_events import TurnEvents, read_only
-from agent.lifecycle.types import AfterReasoningInput, AfterReasoningResult
+from agent.lifecycle.types import (
+    AfterReasoningCtx,
+    AfterReasoningInput,
+    AfterReasoningResult,
+)
 from shiori_sdk.core.conversation import ReasoningFinished
-from shiori_sdk.lifecycle import AfterReasoningCtx
 from shiori_sdk.messages import OutboundMessage
 from agent.turns.reply_sequence import ReplySequence
 from agent.turns.reply_interruption import reply_was_invalidated
@@ -64,13 +60,7 @@ AfterReasoningModules: TypeAlias = list[PhaseModule[AfterReasoningFrame]]
 
 _CTX_SLOT = "reasoning:ctx"
 _OUTBOUND_SLOT = "reasoning:outbound"
-_PERSIST_USER_PREFIX = "persist:user:"
-_PERSIST_ASSISTANT_PREFIX = "persist:assistant:"
-_PERSIST_CITED_SLOT = f"{_PERSIST_ASSISTANT_PREFIX}cited_memory_ids"
-_OUTBOUND_METADATA_PREFIX = "outbound:metadata:"
-_OUTBOUND_MEDIA_PREFIX = "outbound:media:"
-_ASSISTANT_FIXED_FIELDS = {"tools_used", "tool_chain", "reasoning_content"}
-_USER_FIXED_FIELDS = {"media"}
+_CITED_SLOT = "reasoning:cited_memory_ids"
 _INTERNAL_USER_METADATA_KEYS = frozenset({PERSISTED_USER_CONTENT_KEY})
 _CONVERSATION_MESSAGE_FIELDS = (
     "thread_id",
@@ -217,15 +207,12 @@ class _EmitAfterReasoningCtxModule:
     requires = ("after_reasoning.build_ctx", _CTX_SLOT)
     produces = (_CTX_SLOT,)
 
-    def __init__(self, bus: EventBus, events: TurnEvents) -> None:
-        self._bus = bus
+    def __init__(self, events: TurnEvents) -> None:
         self._events = events
 
     async def run(self, frame: AfterReasoningFrame) -> AfterReasoningFrame:
         ctx = cast(AfterReasoningCtx, frame.slots[_CTX_SLOT])
         _take_citations(ctx, frame.slots)
-        ctx = await self._bus.emit(ctx)
-        frame.slots[_CTX_SLOT] = ctx
 
         def apply(event: ReasoningFinished) -> None:
             ctx.reply = event.reply
@@ -246,7 +233,7 @@ def _take_citations(ctx: AfterReasoningCtx, slots: dict[str, object]) -> None:
     """
     messages, cited = take_citations(ctx.reply_messages or (ctx.reply,), ctx.tool_chain)
     if cited:
-        slots[_PERSIST_CITED_SLOT] = cited
+        slots[_CITED_SLOT] = cited
     if ctx.reply_messages:
         ctx.reply_messages = messages
         ctx.reply = join_messages(messages)
@@ -304,7 +291,6 @@ class _PersistUserMessageModule:
         llm_context_frame = ctx.context_retry.get("llm_context_frame")
         if isinstance(llm_context_frame, str) and llm_context_frame.strip():
             user_kwargs["llm_context_frame"] = llm_context_frame
-        user_kwargs.update(_collect_persist_user_slots(frame.slots))
         # Message time records receipt, not the eventual successful commit time.
         user_kwargs["timestamp"] = msg.timestamp.astimezone().isoformat()
         user_kwargs.update(
@@ -404,7 +390,8 @@ class _PersistAssistantMessageModule:
             assistant_kwargs["reasoning_content"] = ctx.thinking
         if ctx.media:
             assistant_kwargs["media"] = list(dict.fromkeys(ctx.media))
-        assistant_kwargs.update(_collect_persist_assistant_slots(frame.slots))
+        if cited := frame.slots.get(_CITED_SLOT):
+            assistant_kwargs["cited_memory_ids"] = cited
         # Outbound transport metadata still identifies the triggering turn for
         # live-stream correlation. Persist that identity separately: the reply's
         # own platform ID is only known after the channel acknowledges delivery.
@@ -587,26 +574,15 @@ class _AppendMessagesModule:
                 )
             if sequence is not None and state.msg.channel != "desktop":
                 ctx = cast(AfterReasoningCtx, frame.slots[_CTX_SLOT])
-                extra_media: list[str] = []
-                _append_media(
-                    extra_media,
-                    collect_prefixed_slots(frame.slots, _OUTBOUND_MEDIA_PREFIX),
-                )
                 await commit_channel_reply_sequence(
                     manager=self._session_services.session_manager,
                     session=session,
                     messages=owned_messages,
                     sequence=sequence,
                     state_kwargs=state_kwargs,
-                    metadata={
-                        **ctx.outbound_metadata,
-                        **collect_prefixed_slots(
-                            frame.slots, _OUTBOUND_METADATA_PREFIX
-                        ),
-                    },
+                    metadata=dict(ctx.outbound_metadata),
                     channel=ctx.channel,
                     chat_id=ctx.chat_id,
-                    extra_media=extra_media,
                     on_first_commit=(
                         state.turn_pushes.committed
                         if state.turn_pushes is not None
@@ -683,11 +659,7 @@ class _BuildOutboundMessageModule:
     async def run(self, frame: AfterReasoningFrame) -> AfterReasoningFrame:
         ctx = cast(AfterReasoningCtx, frame.slots[_CTX_SLOT])
         metadata = dict(ctx.outbound_metadata)
-        metadata.update(collect_prefixed_slots(frame.slots, _OUTBOUND_METADATA_PREFIX))
         media = list(ctx.media)
-        _append_media(
-            media, collect_prefixed_slots(frame.slots, _OUTBOUND_MEDIA_PREFIX)
-        )
         # after_reasoning.append_messages already committed the assistant reply;
         # its dict was mutated in place with the store-assigned id. Carrying that
         # id lets delivery bookkeeping target this exact row later on.
@@ -725,12 +697,11 @@ def default_after_reasoning_modules(
     session_services: SessionServices,
     llm: "LLMServices | None" = None,
     llm_config: "LLMConfig | None" = None,
-    plugin_modules: AfterReasoningModules | None = None,
 ) -> AfterReasoningModules:
     relationship_runtime = getattr(session_services, "relationship_runtime", None)
     builtins: AfterReasoningModules = [
         _BuildAfterReasoningCtxModule(),
-        _EmitAfterReasoningCtxModule(bus, events),
+        _EmitAfterReasoningCtxModule(events),
         _PersistUserMessageModule(session_services),
         _PersistAssistantMessageModule(),
         _UpdateSessionMetadataModule(relationship_runtime),
@@ -738,27 +709,4 @@ def default_after_reasoning_modules(
         _BuildOutboundMessageModule(),
         _ReturnAfterReasoningResultModule(),
     ]
-    return cast(
-        AfterReasoningModules,
-        topo_sort_modules(builtins + list(plugin_modules or [])),
-    )
-
-
-def _collect_persist_assistant_slots(slots: dict[str, object]) -> dict[str, object]:
-    return collect_prefixed_slots(
-        slots,
-        _PERSIST_ASSISTANT_PREFIX,
-        reserved=_ASSISTANT_FIXED_FIELDS,
-    )
-
-
-def _collect_persist_user_slots(slots: dict[str, object]) -> dict[str, object]:
-    return collect_prefixed_slots(
-        slots,
-        _PERSIST_USER_PREFIX,
-        reserved=_USER_FIXED_FIELDS,
-    )
-
-
-def _append_media(target: list[str], exports: dict[str, object]) -> None:
-    append_string_exports(target, exports)
+    return cast(AfterReasoningModules, topo_sort_modules(builtins))

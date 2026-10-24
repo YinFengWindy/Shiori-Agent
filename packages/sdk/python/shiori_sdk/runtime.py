@@ -6,7 +6,6 @@ from typing import Protocol, cast
 
 from .kernel import Key, Veto
 from .kernel.events import OnHandler, WatchHandler
-from .lifecycle import LifecycleCapability
 
 type Dispose = Callable[[], Awaitable[None] | None]
 type EventHandler[EventT] = Callable[[EventT], Awaitable[EventT | None] | EventT | None]
@@ -41,7 +40,6 @@ KNOWN_CAPABILITIES = frozenset(
     {
         "services",
         "tools",
-        "lifecycle",
         "channels",
         "accounts",
         # 渠道发送者与群的头像缓存（#514）
@@ -132,9 +130,6 @@ class PluginRuntimeContext(Protocol):
 
     @property
     def granted(self) -> tuple[str, ...]: ...
-
-    @property
-    def lifecycle(self) -> LifecycleCapability: ...
 
     @property
     def events(self) -> EventsCapability: ...

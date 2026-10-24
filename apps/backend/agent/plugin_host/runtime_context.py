@@ -6,7 +6,6 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from agent.plugin_host.capabilities import LifecycleCapability
 from shiori_sdk.rpc import RpcCapability
 from shiori_sdk.kernel import Context, Key, Scope, Veto
 from shiori_sdk.kernel.events import OnHandler, WatchHandler
@@ -71,7 +70,6 @@ class PluginSetupContext:
         effects: Scope,
         kernel_context: Context,
         publish_api: Callable[[object], None] | None = None,
-        lifecycle: LifecycleCapability | None = None,
         events: EventsCapability | None = None,
         memory: MemoryCapability | None = None,
         rpc: RpcCapability | None = None,
@@ -110,7 +108,6 @@ class PluginSetupContext:
         self._effects = effects
         self._kernel_context = kernel_context
         self._publish_api = publish_api
-        self._lifecycle = lifecycle
         self._events = events
         self._memory = memory
         self._rpc = rpc
@@ -216,15 +213,6 @@ class PluginSetupContext:
         先后不影响退订优先规则；开始清理后拒绝新登记。
         """
         _ = self._effects.effect(dispose, f"custom:{label}")
-
-    @property
-    def lifecycle(self) -> LifecycleCapability:
-        """Returns the explicitly typed lifecycle capability granted by the kernel."""
-        if self._lifecycle is None:
-            raise CapabilityNotGranted(
-                f"插件 {self.plugin_id} 未声明 capability 'lifecycle'"
-            )
-        return self._lifecycle
 
     @property
     def events(self) -> EventsCapability:

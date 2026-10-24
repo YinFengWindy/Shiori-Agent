@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from shiori_sdk.core.conversation import TurnStarting
 from shiori_sdk.core.tools import ToolCalled
 from agent.plugin_host import PluginGenerationSettings, PluginKernel, PluginRpcRegistry
 from tests.support.plugin_kernel import host_kernel
@@ -72,12 +74,40 @@ async def test_markdown_rpc_is_read_only_and_unloads_with_plugin(
     assert rpc.resolve(method) is None
 
 
+def _turn_starting() -> TurnStarting:
+    return TurnStarting(
+        session_key="cli:1",
+        channel="cli",
+        chat_id="1",
+        content="hello",
+        timestamp=datetime.now(timezone.utc),
+        context_scope=None,
+        history=(),
+        retrieved_memory_block="",
+        retrieval_trace=None,
+    )
+
+
+def _recall(arguments: dict[str, object], result: str) -> ToolCalled:
+    return ToolCalled(
+        session_key="cli:1",
+        channel="cli",
+        chat_id="1",
+        source="passive",
+        call_id="c1",
+        tool_name="recall_memory",
+        arguments=arguments,
+        status="success",
+        result=result,
+    )
+
+
 @pytest.mark.asyncio
-async def test_setup_wires_before_turn_module_and_tool_result_event(
+async def test_setup_records_turn_retrieval_and_tool_results_until_unload(
     tmp_path: Path,
 ) -> None:
-    """setup(ctx) 必须与旧 DefaultMemoryInspector 等价：贡献 before_turn 模块，
-    并把 recall_memory 工具结果记录接到本代内核的 ``ToolCalled`` 事件上。"""
+    """setup(ctx) 与旧 DefaultMemoryInspector 等价：本代内核的 ``TurnStarting``
+    记录检索，``ToolCalled`` 记录 recall_memory 结果，卸载后都不再记录。"""
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     kernel, _, _ = _load_default_memory_kernel(
@@ -87,52 +117,22 @@ async def test_setup_wires_before_turn_module_and_tool_result_event(
     )
     await kernel.load_all()
 
-    assert [type(m).__name__ for m in kernel.before_turn_modules] == [
-        "ContextPrepareRecordModule"
-    ]
-
     data_path = workspace / "plugin-data" / "default_memory" / "recall_inspector.jsonl"
-    _ = await kernel.kernel.emit(
-        ToolCalled(
-            session_key="cli:1",
-            channel="cli",
-            chat_id="1",
-            source="passive",
-            call_id="c1",
-            tool_name="recall_memory",
-            arguments={"query": "q"},
-            status="success",
-            result=json.dumps({"items": []}),
-        )
-    )
+    _ = await kernel.kernel.emit(_turn_starting())
+    _ = await kernel.kernel.emit(_recall({"query": "q"}, json.dumps({"items": []})))
     rows = _read_jsonl(data_path)
-    assert len(rows) == 1
-    assert rows[0]["kind"] == "recall_memory"
+    assert [row["kind"] for row in rows] == ["context_prepare", "recall_memory"]
 
-    # 卸载后贡献必须整体撤回，证明 phase 槽位与事件订阅都挂在插件作用域上
+    # 卸载后订阅整体撤回，证明它们都挂在插件作用域上
     _ = await kernel.unload("default_memory")
-    assert kernel.before_turn_modules == []
-    _ = await kernel.kernel.emit(
-        ToolCalled(
-            session_key="cli:1",
-            channel="cli",
-            chat_id="1",
-            source="passive",
-            call_id="c1",
-            tool_name="recall_memory",
-            arguments={},
-            status="success",
-            result="{}",
-        )
-    )
-    assert len(_read_jsonl(data_path)) == 1
+    _ = await kernel.kernel.emit(_turn_starting())
+    _ = await kernel.kernel.emit(_recall({}, "{}"))
+    assert len(_read_jsonl(data_path)) == 2
 
 
 @pytest.mark.asyncio
-async def test_setup_still_wires_module_but_recorder_is_inactive_for_other_engine(
-    tmp_path: Path,
-) -> None:
-    """引擎不是 default 时模块仍会贡献（对齐旧行为），但记录内部被抑制。"""
+async def test_recorder_is_inactive_for_another_engine(tmp_path: Path) -> None:
+    """引擎不是 default 时插件照常装配，但不记录任何轨迹。"""
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     kernel, _, _ = _load_default_memory_kernel(
@@ -144,23 +144,8 @@ async def test_setup_still_wires_module_but_recorder_is_inactive_for_other_engin
     )
     await kernel.load_all()
 
-    assert [type(m).__name__ for m in kernel.before_turn_modules] == [
-        "ContextPrepareRecordModule"
-    ]
-
-    _ = await kernel.kernel.emit(
-        ToolCalled(
-            session_key="cli:1",
-            channel="cli",
-            chat_id="1",
-            source="passive",
-            call_id="c1",
-            tool_name="recall_memory",
-            arguments={},
-            status="success",
-            result="{}",
-        )
-    )
+    _ = await kernel.kernel.emit(_turn_starting())
+    _ = await kernel.kernel.emit(_recall({}, "{}"))
     assert not (
         workspace / "plugin-data" / "default_memory" / "recall_inspector.jsonl"
     ).exists()

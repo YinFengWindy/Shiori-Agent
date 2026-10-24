@@ -179,15 +179,12 @@ async def test_setup_cancellation_rolls_back_before_force_cleanup(tmp_path, stri
         package = tmp_path / name
         (package / "backend").mkdir(parents=True)
         (package / "manifest.yaml").write_text(
-            f"api: 2\nid: {name}\ncapabilities: [events, lifecycle]\n"
+            f"api: 2\nid: {name}\ncapabilities: [events]\n"
             "supports_hot_unload: false\n",
             encoding="utf-8",
         )
         (package / "backend/plugin.py").write_text(
             "import asyncio\n"
-            "class Module:\n"
-            "    async def run(self, frame):\n"
-            "        return frame\n"
             "async def setup(ctx):\n"
             "    state = ['started']\n"
             "    ctx.expose(state)\n"
@@ -196,7 +193,6 @@ async def test_setup_cancellation_rolls_back_before_force_cleanup(tmp_path, stri
             f"        event.append('{name}')\n"
             "        return event\n"
             "    ctx.events.on(list, on_event)\n"
-            "    ctx.lifecycle.contribute('before_turn', [Module()])\n"
             + ("    await asyncio.Event().wait()\n" if name == "waiting" else ""),
             encoding="utf-8",
         )
@@ -210,14 +206,12 @@ async def test_setup_cancellation_rolls_back_before_force_cleanup(tmp_path, stri
     assert waiting.state is PluginState.LOADING
     assert state == ["started"]
     assert waiting.effects.labels
-    assert len(waiting.contributions.phase_modules["before_turn"]) == 1
     loading.cancel()
     with pytest.raises(asyncio.CancelledError):
         await loading
     try:
         assert state == ["started", "closed"]
         assert waiting.effects.labels == []
-        assert waiting.contributions.phase_modules["before_turn"] == []
         assert waiting.state is PluginState.FAILED
         assert isinstance(waiting.error, asyncio.CancelledError)
         assert await bus.emit([]) == ["active"]
@@ -350,14 +344,8 @@ from agent.lifecycle.types import BeforeTurnCtx
 seen: list[str] = []
 
 
-class StampModule:
-    async def run(self, frame):
-        return frame
-
-
 async def setup(ctx):
     ctx.events.on(BeforeTurnCtx, _on_turn)
-    ctx.lifecycle.contribute("before_turn", [StampModule()])
     ctx.kv.set("booted", True)
 
 
@@ -367,8 +355,7 @@ async def _on_turn(event):
 """.strip()
 
 _V2_MANIFEST = (
-    "api: 2\nid: v2demo\nversion: '0.1'\n"
-    "capabilities:\n  - events\n  - lifecycle\n  - kv\n"
+    "api: 2\nid: v2demo\nversion: '0.1'\n" "capabilities:\n  - events\n  - kv\n"
 )
 
 
@@ -483,7 +470,6 @@ async def test_v2_plugin_setup_and_unload(
     await kernel.load_all()
 
     assert kernel.loaded_count == 1
-    assert [m.__class__.__name__ for m in kernel.before_turn_modules] == ["StampModule"]
     # kv 落在 workspace 而不是插件目录（issue #209）
     assert (plugin_data_dir(workspace, "v2demo") / "kv.json").exists()
     assert not (plugin_dir / ".kv.json").exists()
@@ -499,7 +485,6 @@ async def test_v2_plugin_setup_and_unload(
     assert module.seen == ["test:v2"]
 
     _ = await kernel.unload("v2demo")
-    assert kernel.before_turn_modules == []
     _ = await bus.emit(before_turn_ctx(session_key="test:gone"))
     assert module.seen == ["test:v2"]
 
@@ -1952,32 +1937,3 @@ async def test_plugins_declaring_one_channel_both_stay_inactive(tmp_path: Path):
         }
     finally:
         await kernel.terminate_all(force=True)
-
-
-@pytest.mark.asyncio
-async def test_setup_contributes_after_step_module_via_kernel(tmp_path: Path) -> None:
-    """setup(ctx) 必须与旧 ContextPressurePlugin.after_step_modules() 等价。
-
-    用真实 PluginKernel 装配真实插件目录来验证，而不是自造 fake capability——
-    fake 与真实 capability 契约脱钩，capability 改坏也不会让测试变红（#182 评审）。
-    """
-    from shiori_sdk.testing.packages import stage_plugin_package
-
-    root = tmp_path / "plugins"
-    root.mkdir()
-    stage_plugin_package(
-        Path(__file__).resolve().parents[4] / "plugins/context_pressure",
-        root / "context_pressure",
-    )
-    kernel = host_kernel(
-        [root],
-    )
-    await kernel.load_all()
-
-    assert [type(m).__name__ for m in kernel.after_step_modules] == [
-        "ContextPressureStopModule"
-    ]
-
-    # 卸载后贡献必须整体撤回，证明 phase 槽位真正挂在插件作用域上
-    _ = await kernel.unload("context_pressure")
-    assert kernel.after_step_modules == []

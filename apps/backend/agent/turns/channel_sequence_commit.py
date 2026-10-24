@@ -35,7 +35,6 @@ async def commit_channel_reply_sequence(
     metadata: dict[str, Any],
     channel: str,
     chat_id: str,
-    extra_media: list[str],
     on_first_commit: Callable[[], Awaitable[None]] | None = None,
 ) -> None:
     """Persist one pending row, await the channel receipt, then advance.
@@ -103,11 +102,7 @@ async def commit_channel_reply_sequence(
             chat_id=chat_id,
             content=sanitize_user_visible_content(reply["content"]),
             thinking=reply.get("reasoning_content"),
-            media=list(
-                dict.fromkeys(
-                    [*(reply.get("media") or []), *(extra_media if index == 0 else [])]
-                )
-            ),
+            media=list(dict.fromkeys(reply.get("media") or [])),
             metadata=outgoing,
             committed_message_id=str(reply["id"]),
         )

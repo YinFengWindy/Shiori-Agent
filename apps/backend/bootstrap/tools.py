@@ -147,10 +147,10 @@ class CoreRuntime:
         if self.plugin_manager is not None:
             await self.plugin_manager.load_all()
             logger.info("插件加载完成: %d 个", self.plugin_manager.loaded_count)
-            # 接入内核本身而不是复制贡献列表：代内卸载/加载的插件下一次
+            # 回合与工具事件经本代内核发出：代内卸载/加载的插件下一次
             # 回合或工具调用即按当前 ACTIVE 插件执行（#855）。
             kernel = self.plugin_manager
-            self.loop.bind_plugin_contributions(kernel)
+            self.loop.bind_kernel(lambda: kernel.kernel)
             spawn = self.tools.get_tool("spawn")
             if isinstance(spawn, SpawnTool):
                 spawn.manager.bind_kernel(lambda: kernel.kernel)

@@ -70,7 +70,6 @@
           "external_turns",
           "http",
           "kv",
-          "lifecycle",
           "light_model",
           "light_provider",
           "memory",
