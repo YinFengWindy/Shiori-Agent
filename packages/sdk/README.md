@@ -171,13 +171,15 @@ remain in the host.
 
 ```python
 from dataclasses import replace
+from types import MappingProxyType
 
 from shiori_sdk import PluginRuntimeContext
 from shiori_sdk.core.conversation import StepFinished
 
 
 async def trace_step(event: StepFinished) -> StepFinished:
-    return replace(event, extra_metadata={**event.extra_metadata, "example": True})
+    metadata = MappingProxyType({**event.extra_metadata, "example": True})
+    return replace(event, extra_metadata=metadata)
 
 
 async def setup(ctx: PluginRuntimeContext) -> None:
@@ -195,7 +197,10 @@ validated against the host's `KNOWN_CAPABILITIES`, so undeclared access raises
 is an isolated temporary directory, and bundled files are package assets. A
 plugin test emits a turn event through the fake context
 (`await sdk_context.emit(StepFinished(...))`), which runs the plugin's `on`
-handlers on a real kernel without the host's core checks.
+handlers on a real kernel without the host's core checks. A replacement event
+holds no list, dict or set field: wrap mappings in `MappingProxyType` and use
+tuples, or the kernel rejects the replacement and, under `fail_open`, skips the
+handler.
 HTTP response contracts and tolerant JSON helpers declare httpx/json-repair as
 runtime dependencies. pytest-asyncio and test fixtures remain optional.
 The base wheel can coexist with pytest without the testing extra: unrelated tests

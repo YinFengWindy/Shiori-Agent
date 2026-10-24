@@ -324,7 +324,7 @@ consolidates these additions and the subsequent #847 breaking migration.
   `shiori_sdk.testing.extensions.FakeBotCommands`. Migrate a command module and its
   `bot_commands.add` to one `COMMANDS.register` per name (aliases without a
   description).
-- **Bundled phase plugins move to turn events (PR TBD, issue #902, refactor
+- **Bundled phase plugins move to turn events (PR #929, issue #902, refactor
   P3-6a).** context_pressure requests the closing summary from a `StepFinished`
   handler (`early_stop` / `early_stop_reason="context_pressure"`, telemetry
   `context_pressure_tokens` / `context_pressure_threshold` in `extra_metadata`);
@@ -341,9 +341,14 @@ consolidates these additions and the subsequent #847 breaking migration.
   failing phase module or `AfterReasoningCtx` listener used to fail the turn; and
   during an in-generation reload the old instance's handlers keep running until it
   is disposed (the kernel drains them), where a sealed phase module used to pass
-  the frame through.
+  the frame through. context_pressure now writes `early_stop` inside the
+  `StepFinished` chain, so a `StepFinished` handler ranked before it no longer sees
+  the stop (it used to be set before the event was emitted); no bundled plugin has
+  another `StepFinished` handler. If meme's handler fails and is skipped, a
+  `<meme:x>` tag that is not at the end of a message stays in the reply, since the
+  core check removes only trailing protocol tags.
 - **breaking: capability `lifecycle`, `shiori_sdk.lifecycle` and the phase slot
-  exports removed (PR TBD, issue #902, refactor P3-6a).** Plugins no longer
+  exports removed (PR #929, issue #902, refactor P3-6a).** Plugins no longer
   contribute modules to the host phases; they join the turn events with `ctx.on` /
   `ctx.watch` (see the P3-2 entry). Gone: the `lifecycle` capability
   (`KNOWN_CAPABILITIES`, the `capabilities` enum of `manifest.schema.json`; a
@@ -446,7 +451,7 @@ consolidates these additions and the subsequent #847 breaking migration.
   chain instead of failing or inheriting the old budget. The host no longer
   reserves outbound identity before enqueue: `PreparesOutbound`,
   `MessageBus.prepare_outbound` and `TurnCommitted.will_dispatch` are removed.
-  `AfterTurnCtx.will_dispatch` remains the observer-facing dispatch gate.
+  `TurnFinished.will_dispatch` remains the observer-facing dispatch gate.
   `ReplyInterruption` is the only cancellation owner; `ChannelSequenceOwner`
   registers the current generation's plans and invalidates them on replacement.
   One `NaturalReplyRequest` carries the optional finish_reply protocol through
