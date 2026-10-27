@@ -32,7 +32,8 @@ from .engine.lifecycle import DefaultMemoryEngine
 from .fingerprint import ensure_embedding_fingerprint
 from .semantic.store import VEC_DIM
 
-# What the host resolver hands back unchanged when ``${NAME}`` has no value.
+# What the host resolver leaves in place when ``${NAME}`` has no value; same
+# pattern as the host's ``_CONFIG_REFERENCE``.
 _UNRESOLVED_REFERENCE = re.compile(r"\$\{\w+\}")
 
 _CREDENTIALS_MISSING = (
@@ -97,7 +98,8 @@ def _embedding_settings(ctx: _EngineSetup) -> tuple[str, str, str, int | None]:
 
     def resolve(value: str) -> str:
         resolved = ctx.config.resolve_reference(value).strip()
-        return "" if _UNRESOLVED_REFERENCE.fullmatch(resolved) else resolved
+        # Any reference left over, even inside ``${BASE}/v1``, means missing.
+        return "" if _UNRESOLVED_REFERENCE.search(resolved) else resolved
 
     return (
         resolve(settings.embedding_model),

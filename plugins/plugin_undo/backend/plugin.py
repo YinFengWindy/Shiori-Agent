@@ -19,7 +19,12 @@ class PluginUndo:
     """Coordinate public session undo and memory source cleanup.
 
     ``current_memory`` answers the memory engine to clean up, or None without
-    one; each undo reads it afresh instead of keeping the engine (D25).
+    one. It is read when the session is ready to preview, not before waiting
+    for the session lock, and again for the cleanup after that wait: a reload
+    or disable of the provider in between closes the engine read earlier, and
+    its calls do not count as in flight (D25). The host's ``undo_last_turn``
+    does not yield between the preview and its return, so both reads answer
+    the same engine there.
     """
 
     def __init__(
@@ -33,8 +38,6 @@ class PluginUndo:
     async def undo(self, session_key: str) -> str:
         """Undo the latest committed passive turn and report memory cleanup results."""
         session_manager = self._session_manager
-        # One engine for the whole undo: the dry run and the cleanup must agree.
-        memory_engine = self._current_memory()
         memory_result: dict[str, object] = {
             "affected_ids": [],
             "restored_ids": [],
@@ -46,7 +49,7 @@ class PluginUndo:
             nonlocal memory_result, message_ids_for_memory
             message_ids_for_memory = list(message_ids)
             memory_result = _undo_memory_sources(
-                memory_engine,
+                self._current_memory(),
                 message_ids,
                 dry_run=True,
             )
@@ -60,7 +63,7 @@ class PluginUndo:
             return "没有可撤销的上一轮对话。"
         try:
             memory_result = _undo_memory_sources(
-                memory_engine,
+                self._current_memory(),
                 message_ids_for_memory or result.deleted_ids,
                 dry_run=False,
             )

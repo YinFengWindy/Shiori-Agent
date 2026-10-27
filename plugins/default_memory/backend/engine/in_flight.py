@@ -10,10 +10,13 @@ from contextlib import asynccontextmanager
 class InFlightCalls:
     """The engine's async entry points that are running right now (D25).
 
-    Host callers (passive retrieval, ``plugin_undo``) and event-bus handlers
-    reach the engine outside the kernel's own drain. ``wait_idle`` lets the
-    plugin's ``on_drain`` and the cleanup that closes the database wait for
-    them instead of closing the store under a running call.
+    Host callers (passive retrieval, memory tools) and event-bus handlers
+    reach the engine's async entry points outside the kernel's own drain.
+    ``wait_idle`` lets the plugin's ``on_drain`` and the cleanup that closes the
+    database wait for them instead of closing the store under a running call.
+    Synchronous methods are not counted: they cannot interleave with the close
+    on the event loop, so a caller only has to ``get`` the engine again after
+    any ``await`` (``plugin_undo`` does).
     """
 
     def __init__(self) -> None:

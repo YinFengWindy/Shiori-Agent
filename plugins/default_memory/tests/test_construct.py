@@ -71,6 +71,11 @@ def _seed(path: Path, sql: str) -> None:
             },
             None,
         ),
+        # A reference left inside a longer value is just as missing.
+        (
+            {"embedding_api_key": "k", "embedding_base_url": "${BASE}/v1"},
+            None,
+        ),
     ],
 )
 def test_missing_credentials_do_not_create_the_database(tmp_path, values, references):

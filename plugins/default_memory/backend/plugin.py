@@ -150,8 +150,10 @@ async def setup(ctx: _DefaultMemorySetup) -> None:
     向量凭据只读插件配置。缺凭据或向量空间不一致时这里抛出，内核把插件标为
     FAILED，插座保持为空，对话仍可继续。成功则本插件就是这代的引擎，检索记录开启。
 
-    宿主检索、plugin_undo 与总线订阅直接调用引擎，不在内核默认排空之内：重载
-    排空（``on_drain``）和关库前的清理都先等这些在途调用结束（D25）。
+    宿主检索、记忆工具与总线订阅调用引擎的异步入口，不在内核默认排空之内：重载
+    排空（``on_drain``）和关库前的清理都先等这些在途调用结束（D25）。同步方法
+    （如 plugin_undo 的 ``undo_by_message_sources``）不计数，它们在事件循环上不会
+    与关库交错；调用方在任何 ``await`` 之后都要重新 ``get`` 引擎。
     """
     from shiori_sdk.core.memory import MEMORY_ENGINE
     from shiori_sdk.rpc import Concurrency

@@ -177,3 +177,59 @@ async def test_undo_reads_the_engine_again_after_reload():
         2,
     ]
     await ctx.aclose()
+
+
+@pytest.mark.asyncio
+async def test_undo_reads_the_engine_after_waiting_for_the_session():
+    """A reload while undo waits for the session lock closes the engine read earlier.
+
+    Its synchronous cleanup is not counted as in flight, so undo must not reuse
+    an engine it read before that wait.
+    """
+    kernel = Kernel()
+    commands = CommandRegistry()
+    kernel.provide(COMMANDS, commands)
+
+    class _ClosableEngine(_MemoryEngine):
+        closed = False
+
+        def undo_by_message_sources(self, message_ids, *, dry_run=False):
+            assert not self.closed, "undo used a closed engine"
+            return super().undo_by_message_sources(message_ids, dry_run=dry_run)
+
+    engines: list[_ClosableEngine] = []
+
+    async def provide_engine(ctx) -> None:
+        engine = _ClosableEngine()
+        engines.append(engine)
+        ctx.provide(MEMORY_ENGINE, cast(Any, engine))
+        ctx.effect(lambda: setattr(engine, "closed", True))
+
+    await kernel.start(
+        [PluginSpec("memory", provide_engine, provides=("memory_engine",))]
+    )
+
+    class _ReloadWhileLocked(FakeSessionUndo):
+        async def undo_last_turn(self, session_key, *, rollback_source_resolver=None):
+            await kernel.reload("memory")
+            return await super().undo_last_turn(
+                session_key, rollback_source_resolver=rollback_source_resolver
+            )
+
+    manager = _ReloadWhileLocked(
+        UndoSessionResult(["cli:1:0"], "cli:1:0", "cli:1:1", 0, 0, 0)
+    )
+    ctx = FakeExtensionContext(
+        "plugin_undo",
+        session_manager=manager,
+        kernel=kernel,
+        inject=("commands",),
+        optional_inject=("memory_engine",),
+    )
+    await setup(ctx)
+    handler = commands.handler("/undo")
+    assert handler is not None
+    reply = await handler(CommandInput("/undo", "cli:1"))
+    assert "失效记忆：1 条" in reply
+    assert [len(engine.calls) for engine in engines] == [0, 2]
+    await ctx.aclose()
