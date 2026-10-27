@@ -21,7 +21,7 @@ P3 里原先的七处读取都改走这个入口：
 
 `TurnOrchestrator.natural_chat_enabled` 仍是主动回合的调用点，内部只转发给上面的入口。没有 `role_lookup` 时视为关：没有角色记录就没有开关。生产装配始终传入运行时的 `RoleStore`。
 
-`PromptRendering.reply_mode` 的初值仍是这个开关，再被 `supports_reply_sequence` 与 `minimal_request` 收窄。不新增字段。
+`PromptRendering.reply_mode` 的初值仍是这个开关，再被 `supports_reply_sequence` 与 `minimal_request` 收窄。不新增字段。提示词上下文没有角色库时（只提供 `render` 的测试替身）视为关，不回退到会话副本。生产的 `ContextBuilder` 始终带着运行时的 `RoleStore`。
 
 选用与否不改变核心里的多消息协议：`finish_reply` 校验和 `deliver_sequence` 投递一直在，不论开关状态。
 
