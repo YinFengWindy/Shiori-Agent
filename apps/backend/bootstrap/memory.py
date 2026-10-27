@@ -6,8 +6,6 @@ from typing import TYPE_CHECKING
 from agent.config_models import Config
 from agent.provider import LLMProvider
 from agent.skills import SkillsLoader
-from agent.tools.meta import register_memory_meta_tools
-from agent.tools.registry import ToolRegistry
 from core.memory.markdown import build_markdown_memory_runtime
 from core.memory.plugin import DisabledMemoryEngine
 from shiori_sdk.memory.build import MemoryPluginBuildDeps, MemoryPluginRuntime
@@ -86,7 +84,6 @@ def ensure_memory_plugin_storage(
 def build_memory_runtime(
     config: Config,
     workspace: Path,
-    tools: ToolRegistry,
     provider: LLMProvider,
     light_provider: LLMProvider | None,
     http_resources: SharedHttpResources,
@@ -118,10 +115,6 @@ def build_memory_runtime(
         )
         engine = plugin_runtime.engine
         resources = plugin_runtime.resources
-        register_memory_meta_tools(
-            tools,
-            engine,
-        )
     else:
         engine = DisabledMemoryEngine()
 

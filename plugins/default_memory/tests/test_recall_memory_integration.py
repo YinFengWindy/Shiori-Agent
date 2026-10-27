@@ -3,9 +3,9 @@ from datetime import datetime
 from typing import Any, cast
 from zoneinfo import ZoneInfo
 
-import agent.tools.recall_memory as recall_memory_module
+import plugins.default_memory.backend.tools.recall_memory as recall_memory_module
 import pytest
-from agent.tools.recall_memory import RecallMemoryTool
+from plugins.default_memory.backend.tools.recall_memory import RecallMemoryTool
 from shiori_sdk.memory.engine import (
     EvidenceRef,
     MemoryQueryResult,

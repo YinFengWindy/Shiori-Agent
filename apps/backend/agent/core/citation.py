@@ -22,7 +22,6 @@ from collections.abc import Iterable, Mapping
 from dataclasses import replace
 from typing import cast
 
-from agent.tools.recall_memory import RecallMemoryTool
 from shiori_sdk.core.conversation import ReasoningFinished
 from shiori_sdk.kernel import Kernel
 from shiori_sdk.memory.engine import (
@@ -32,8 +31,9 @@ from shiori_sdk.memory.engine import (
     INLINE_MEMORY_REF_PATTERN,
 )
 
-# The tool whose results stand in for a missing citation marker.
-RECALL_TOOL_NAME = RecallMemoryTool.name
+# recall_memory stands in for a missing citation marker. The tool itself lives
+# in default_memory; citation only needs the registered name.
+RECALL_TOOL_NAME = "recall_memory"
 _PROTOCOL_TAG = r"<[a-zA-Z][a-zA-Z0-9_-]*:[^<>\s]+>"
 _TRAILING_CITED_RE = re.compile(
     rf"(?:\n|\r\n)?{CITED_MARKER_PATTERN}(?P<trailing>(?:\s*{_PROTOCOL_TAG}\s*)*)$",

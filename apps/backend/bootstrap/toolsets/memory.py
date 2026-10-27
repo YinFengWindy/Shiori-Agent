@@ -23,7 +23,6 @@ class MemoryToolsetProvider(ToolsetProvider):
         memory_runtime = build_memory_runtime(
             config,
             deps.workspace,
-            registry,
             deps.provider,
             deps.light_provider,
             http_resources,

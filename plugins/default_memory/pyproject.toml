@@ -13,7 +13,7 @@ test = ["shiori-sdk[testing]>=3.1.0,<4"]
 
 [tool.setuptools]
 include-package-data = false
-packages = ["plugins.default_memory", "plugins.default_memory.backend", "plugins.default_memory.backend.engine", "plugins.default_memory.backend.semantic", "plugins.default_memory.backend.semantic.store"]
+packages = ["plugins.default_memory", "plugins.default_memory.backend", "plugins.default_memory.backend.engine", "plugins.default_memory.backend.semantic", "plugins.default_memory.backend.semantic.store", "plugins.default_memory.backend.tools"]
 package-dir = {"plugins.default_memory" = "."}
 
 [tool.setuptools.package-data]

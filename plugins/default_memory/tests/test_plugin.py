@@ -11,6 +11,7 @@ from shiori_sdk.core.conversation import TurnStarting
 from shiori_sdk.core.tools import ToolCalled, ToolSource
 from shiori_sdk.rpc import Concurrency
 from shiori_sdk.testing.memory_context import FakeMemoryPluginContext
+from shiori_sdk.testing.tools import FakeTools
 
 from plugins.default_memory.backend.plugin import _DefaultMemoryRecorder
 
@@ -123,7 +124,9 @@ async def test_setup_registers_scoped_documents_semantics_and_observation(tmp_pa
     from plugins.default_memory.backend.plugin import setup
 
     ctx = FakeMemoryPluginContext(tmp_path)
+    ctx.tools = FakeTools()
     await setup(ctx)
+    assert ctx.tools.tools == {}
     assert set(ctx.rpc.handlers) == {
         "roles.memory.documents",
         "roles.memory.semantic.list",
@@ -140,3 +143,40 @@ async def test_setup_registers_scoped_documents_semantics_and_observation(tmp_pa
     await ctx.aclose()
     await ctx.emit(_called())
     assert len(_read_jsonl(path)) == 2
+
+
+@pytest.mark.asyncio
+async def test_setup_registers_the_engine_profile_on_tools(tmp_path: Path) -> None:
+    from types import SimpleNamespace
+
+    from plugins.default_memory.backend.engine.prompts import (
+        _default_memory_tool_profile,
+    )
+    from plugins.default_memory.backend.plugin import setup
+
+    profile = _default_memory_tool_profile()
+    ctx = FakeMemoryPluginContext(
+        tmp_path,
+        engine=SimpleNamespace(
+            describe=lambda: SimpleNamespace(name="default"),
+            tool_profile=_default_memory_tool_profile,
+        ),
+    )
+    ctx.tools = FakeTools()
+    await setup(ctx)
+
+    specs = {
+        "memorize": profile.memorize,
+        "forget_memory": profile.forget,
+        "recall_memory": profile.recall,
+    }
+    assert set(ctx.tools.tools) == set(specs)
+    for name, spec in specs.items():
+        assert spec is not None
+        options = ctx.tools.options[name]
+        assert options["always_on"] is True
+        assert options["risk"] == spec.risk
+        assert options["search_hint"] == (spec.search_hint or None)
+        assert options["external_allowed"] is False
+        assert ctx.tools.tools[name].description == spec.description
+    await ctx.aclose()
