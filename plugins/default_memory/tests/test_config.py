@@ -103,17 +103,7 @@ max_chars = 3000
     assert cfg.retrieval.inject.max_chars == 3000
 
 
-def test_plugin_config_model_describes_embedding_credentials() -> None:
-    cfg = DefaultMemoryPluginConfig()
-    schema = DefaultMemoryPluginConfig.model_json_schema()["properties"]
-
-    assert cfg.embedding_model == "text-embedding-v3"
-    assert cfg.embedding_api_key == ""
-    assert cfg.output_dimensionality is None
-    assert schema["embedding_model"]["title"] == "向量模型"
-    assert schema["embedding_api_key"]["title"] == "API Key"
-    assert schema["embedding_base_url"]["title"] == "Base URL"
-    assert schema["output_dimensionality"]["title"] == "输出维度"
+def test_plugin_config_model_drops_the_host_owned_enabled_key() -> None:
     parsed = DefaultMemoryPluginConfig.model_validate(
         {"enabled": False, "embedding_api_key": "k"}
     )

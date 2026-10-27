@@ -1,16 +1,21 @@
 """One-shot migration of legacy ``[memory]`` into ``[plugins.default_memory]``.
 
-The presence of a top-level ``memory`` key is the work marker. After a
-successful migration that key is deleted; a later load sees no ``memory``
-table and leaves the file alone. A workspace created from the current
-template has no ``[memory]`` table, so it is not migrated and the plugin
-stays at its manifest default (enabled).
+Work is pending while the file still has a top-level ``memory`` key, or while
+``[plugins.default_memory]`` has no explicit ``enabled``. Every migration
+deletes ``memory`` and writes an explicit ``enabled``, so a later load finds
+nothing to do. The current template writes ``enabled = true`` itself, which
+is how a freshly initialized workspace keeps memory on: only workspaces
+created from the template count as new installs.
 
-An existing ``[memory]`` table uses the old loader's actual semantics: a
-missing ``enabled`` key means disabled. That value overwrites an explicit
-``[plugins.default_memory].enabled``. Embedding credentials are the values
-the engine would have used, including fallbacks from ``[llm.fast]`` and the
-primary model registration, with ``${NAME}`` references materialized.
+An existing config uses the old loader's actual semantics: a missing
+``[memory]`` table or a missing ``memory.enabled`` means disabled. A legacy
+``memory.enabled`` overwrites an explicit ``[plugins.default_memory].enabled``.
+Embedding credentials are the values the engine would have used, including
+fallbacks from ``[llm.fast]``, top-level ``light_*`` and the primary model
+registration. The fallback order is decided on resolved values, but the raw
+string is written, so a ``${NAME}`` reference stays a reference; the plugin
+table is resolved on load. Without a ``[memory]`` table, values already in
+the plugin table win over those fallbacks.
 A ``memory.engine`` value other than empty or ``default`` is logged and
 ignored. That selection is not migrated: enablement and embedding still land
 on ``default_memory``, and later engines are inserted only as plugins.
@@ -38,10 +43,14 @@ DEFAULT_EMBEDDING_MODEL = "text-embedding-v3"
 _ENABLED_KEY = "enabled"
 _LEGACY_DIMENSIONALITY = "memory.embedding.output_dimensionality"
 _EDITOR_MODULE = "_shiori_memory_migration_plugin_config_text"
+_UNLOCATABLE_MESSAGE = (
+    "config.toml 里的 memory 或 plugins.default_memory 写成了内联表或点分键，"
+    "无法自动迁移；请先改成独立的 [memory] 与 [plugins.default_memory] 表"
+)
 
 
 def migrate_legacy_memory_config(path: Path) -> None:
-    """Rewrites ``path`` once when it still contains a ``[memory]`` table."""
+    """Migrates ``path`` once; the module docstring says when work is pending."""
     if not path.is_file():
         return
     text = path.read_text(encoding="utf-8")
@@ -49,9 +58,18 @@ def migrate_legacy_memory_config(path: Path) -> None:
         data = tomllib.loads(text)
     except tomllib.TOMLDecodeError:
         return
-    if "memory" not in data:
+    has_legacy_table = "memory" in data
+    existing = _existing_plugin_values(data)
+    if not has_legacy_table and _ENABLED_KEY in existing:
         return
-    values = _plugin_values(data)
+    migrated = _plugin_values(data)
+    if has_legacy_table:
+        values = {**existing, **migrated}
+        if OUTPUT_DIMENSIONALITY_KEY not in migrated:
+            values.pop(OUTPUT_DIMENSIONALITY_KEY, None)
+    else:
+        values = {**migrated, **existing}
+    values[_ENABLED_KEY] = migrated[_ENABLED_KEY]
     updated = _apply(text, values)
     if updated != text:
         _atomic_write(path, updated)
@@ -70,7 +88,13 @@ def require_output_dimensionality(value: object, *, field: str) -> int | None:
     return parsed
 
 
+def _existing_plugin_values(data: dict[str, Any]) -> dict[str, Any]:
+    existing = _as_dict(data.get("plugins")).get(DEFAULT_MEMORY_PLUGIN_ID)
+    return dict(existing) if isinstance(existing, dict) else {}
+
+
 def _plugin_values(data: dict[str, Any]) -> dict[str, Any]:
+    """Values the old loader would have produced; no ``[memory]`` means disabled."""
     memory = data.get("memory")
     memory = memory if isinstance(memory, dict) else {}
     enabled = bool(memory["enabled"]) if "enabled" in memory else False
@@ -86,18 +110,14 @@ def _plugin_values(data: dict[str, Any]) -> dict[str, Any]:
         embedding.get("output_dimensionality"),
         field=_LEGACY_DIMENSIONALITY,
     )
-    plugins = data.get("plugins")
-    plugins = plugins if isinstance(plugins, dict) else {}
-    existing = plugins.get(DEFAULT_MEMORY_PLUGIN_ID)
-    values = dict(existing) if isinstance(existing, dict) else {}
-    values[EMBEDDING_MODEL_KEY] = _embedding_model(embedding)
-    values[EMBEDDING_API_KEY_KEY] = _embedding_api_key(data, embedding)
-    values[EMBEDDING_BASE_URL_KEY] = _embedding_base_url(data, embedding)
-    if dimensionality is None:
-        values.pop(OUTPUT_DIMENSIONALITY_KEY, None)
-    else:
+    values: dict[str, Any] = {
+        _ENABLED_KEY: enabled,
+        EMBEDDING_MODEL_KEY: _embedding_model(embedding),
+        EMBEDDING_API_KEY_KEY: _embedding_api_key(data, embedding),
+        EMBEDDING_BASE_URL_KEY: _embedding_base_url(data, embedding),
+    }
+    if dimensionality is not None:
         values[OUTPUT_DIMENSIONALITY_KEY] = dimensionality
-    values[_ENABLED_KEY] = enabled
     return values
 
 
@@ -108,20 +128,23 @@ def _embedding_model(embedding: dict[str, Any]) -> str:
 
 
 def _embedding_api_key(data: dict[str, Any], embedding: dict[str, Any]) -> str:
+    """Returns the raw value of the first source that resolves to a key.
+
+    Resolution only decides the fallback, as the old loader did; the stored
+    value stays unresolved so a ``${NAME}`` secret never lands in config.toml
+    as plaintext.
+    """
     from agent.config import resolve_config_reference
 
-    explicit = resolve_config_reference(str(embedding.get("api_key", "")))
-    if explicit:
+    explicit = str(embedding.get("api_key", ""))
+    if resolve_config_reference(explicit):
         return explicit
     llm = _as_dict(data.get("llm"))
     fast = _as_dict(llm.get("fast"))
-    light = resolve_config_reference(
-        str(fast.get("api_key") or data.get("light_api_key") or "")
-    )
-    if light:
+    light = str(fast.get("api_key") or data.get("light_api_key") or "")
+    if resolve_config_reference(light):
         return light
-    primary = _primary_registration(llm)
-    return resolve_config_reference(str(primary.get("api_key") or ""))
+    return str(_primary_registration(llm).get("api_key") or "")
 
 
 def _embedding_base_url(data: dict[str, Any], embedding: dict[str, Any]) -> str:
@@ -148,35 +171,21 @@ def _primary_registration(llm: dict[str, Any]) -> dict[str, Any]:
 
 
 def _apply(text: str, values: dict[str, Any]) -> str:
+    """Rewrites only the plugin table and drops ``[memory]``, or raises.
+
+    Inline tables and dotted keys have no header line the table editor can
+    replace. Rewriting the whole document instead would drop every comment in
+    the user's file, so such a config stops startup with a fix-it message.
+    """
     editor = _toml_editor()
     try:
         merged = editor.merge_plugin_table(text, DEFAULT_MEMORY_PLUGIN_ID, values)
-    except editor.PluginTableConflict:
-        return _dump_without_memory(text, values)
-    removed = editor.remove_table(merged, ["memory"])
-    if _still_has_memory(removed):
-        return _dump_without_memory(text, values)
-    return removed
-
-
-def _still_has_memory(text: str) -> bool:
-    try:
-        parsed = tomllib.loads(text)
-    except tomllib.TOMLDecodeError:
-        return True
-    return "memory" in parsed
-
-
-def _dump_without_memory(text: str, values: dict[str, Any]) -> str:
-    import toml
-
-    parsed = tomllib.loads(text)
-    parsed.pop("memory", None)
-    plugins = parsed.get("plugins")
-    plugins = dict(plugins) if isinstance(plugins, dict) else {}
-    plugins[DEFAULT_MEMORY_PLUGIN_ID] = values
-    parsed["plugins"] = plugins
-    return toml.dumps(parsed)
+    except editor.PluginTableConflict as exc:
+        raise ValueError(_UNLOCATABLE_MESSAGE) from exc
+    updated = editor.remove_table(merged, ["memory"])
+    if "memory" in tomllib.loads(updated):
+        raise ValueError(_UNLOCATABLE_MESSAGE)
+    return updated
 
 
 def _atomic_write(path: Path, text: str) -> None:

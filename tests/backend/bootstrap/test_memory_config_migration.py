@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 from agent.config import load_config_text
+from bootstrap.init_workspace import CONFIG_TEMPLATE_PATH
 from bootstrap.memory_config_migration import (
     EMBEDDING_API_KEY_KEY,
     EMBEDDING_BASE_URL_KEY,
@@ -138,7 +139,7 @@ base_url = " https://primary.example/v1 "
     assert plugin[EMBEDDING_BASE_URL_KEY] == "https://primary.example/v1"
 
 
-def test_embedding_api_key_reference_is_materialized(
+def test_embedding_api_key_reference_is_written_unresolved(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("SHIORI_TEST_EMBED_KEY", "from-env")
@@ -160,9 +161,36 @@ api_key = "fast-key"
 
     migrate_legacy_memory_config(path)
 
-    text = path.read_text(encoding="utf-8")
-    assert _plugin(path)[EMBEDDING_API_KEY_KEY] == "from-env"
-    assert "${SHIORI_TEST_EMBED_KEY}" not in text
+    assert _plugin(path)[EMBEDDING_API_KEY_KEY] == "${SHIORI_TEST_EMBED_KEY}"
+    assert "from-env" not in path.read_text(encoding="utf-8")
+
+
+def test_fallback_api_key_reference_is_written_unresolved(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("SHIORI_TEST_FAST_EMPTY", "")
+    monkeypatch.setenv("SHIORI_TEST_MAIN_KEY", "main-secret")
+    monkeypatch.setattr("agent.config.resolve_default_workspace", lambda: tmp_path)
+    path = tmp_path / "config.toml"
+    _write(
+        path,
+        """
+[memory]
+enabled = true
+
+[llm.fast]
+api_key = "${SHIORI_TEST_FAST_EMPTY}"
+
+[[llm.registrations]]
+id = "00000000-0000-4000-a000-000000000001"
+api_key = "${SHIORI_TEST_MAIN_KEY}"
+""",
+    )
+
+    migrate_legacy_memory_config(path)
+
+    assert _plugin(path)[EMBEDDING_API_KEY_KEY] == "${SHIORI_TEST_MAIN_KEY}"
+    assert "main-secret" not in path.read_text(encoding="utf-8")
 
 
 def test_unresolved_embedding_reference_does_not_fall_through(
@@ -277,9 +305,33 @@ def test_second_migration_does_not_revert_a_later_plugin_edit(tmp_path: Path) ->
     assert _plugin(path)["enabled"] is True
 
 
-def test_file_without_memory_table_is_left_unchanged(tmp_path: Path) -> None:
+def test_existing_config_without_memory_table_disables_the_plugin(
+    tmp_path: Path,
+) -> None:
     path = tmp_path / "config.toml"
-    text = "# keep\n[agent]\nmax_tokens = 8\n"
+    _write(path, "# keep\n[agent]\nmax_tokens = 8\n")
+
+    migrate_legacy_memory_config(path)
+
+    text = path.read_text(encoding="utf-8")
+    assert text.startswith("# keep\n[agent]\nmax_tokens = 8\n")
+    assert _plugin(path)["enabled"] is False
+
+
+def test_workspace_created_from_the_template_stays_enabled(tmp_path: Path) -> None:
+    path = tmp_path / "config.toml"
+    template = CONFIG_TEMPLATE_PATH.read_text(encoding="utf-8")
+    _write(path, template)
+
+    migrate_legacy_memory_config(path)
+
+    assert path.read_text(encoding="utf-8") == template
+    assert _plugin(path)["enabled"] is True
+
+
+def test_already_migrated_config_is_left_unchanged(tmp_path: Path) -> None:
+    path = tmp_path / "config.toml"
+    text = '[plugins.default_memory]\nenabled = true\nembedding_api_key = ""\n'
     _write(path, text)
 
     migrate_legacy_memory_config(path)
@@ -314,41 +366,23 @@ api_key = "k"
     assert parsed["plugins"]["default_memory"][EMBEDDING_API_KEY_KEY] == "k"
 
 
-def test_inline_memory_table_is_removed(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "text",
+    [
+        "# keep\nmemory = { enabled = true }\n",
+        "# keep\n[plugins]\ndefault_memory = { note = 1 }\n\n[memory]\nenabled = true\n",
+    ],
+)
+def test_inline_tables_raise_without_rewriting_the_file(
+    tmp_path: Path, text: str
+) -> None:
     path = tmp_path / "config.toml"
-    _write(
-        path,
-        'memory = { enabled = true, embedding = { model = "m", api_key = "k" } }\n',
-    )
+    _write(path, text)
 
-    migrate_legacy_memory_config(path)
+    with pytest.raises(ValueError, match="内联表或点分键"):
+        migrate_legacy_memory_config(path)
 
-    parsed = tomllib.loads(path.read_text(encoding="utf-8"))
-    assert "memory" not in parsed
-    assert parsed["plugins"]["default_memory"][EMBEDDING_API_KEY_KEY] == "k"
-    assert parsed["plugins"]["default_memory"]["enabled"] is True
-
-
-def test_inline_plugin_table_conflict_still_migrates(tmp_path: Path) -> None:
-    path = tmp_path / "config.toml"
-    _write(
-        path,
-        """
-[plugins]
-default_memory = { enabled = true, note = "stay" }
-
-[memory]
-enabled = false
-""",
-    )
-
-    migrate_legacy_memory_config(path)
-
-    parsed = tomllib.loads(path.read_text(encoding="utf-8"))
-    plugin = parsed["plugins"]["default_memory"]
-    assert "memory" not in parsed
-    assert plugin["enabled"] is False
-    assert plugin["note"] == "stay"
+    assert path.read_text(encoding="utf-8") == text
 
 
 def test_load_config_text_does_not_apply_the_legacy_memory_table() -> None:
