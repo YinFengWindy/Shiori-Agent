@@ -11,7 +11,9 @@ missing ``enabled`` key means disabled. That value overwrites an explicit
 ``[plugins.default_memory].enabled``. Embedding credentials are the values
 the engine would have used, including fallbacks from ``[llm.fast]`` and the
 primary model registration, with ``${NAME}`` references materialized.
-``memory.engine`` other than empty or ``default`` is logged and ignored.
+A ``memory.engine`` value other than empty or ``default`` is logged and
+ignored. That selection is not migrated: enablement and embedding still land
+on ``default_memory``, and later engines are inserted only as plugins.
 """
 
 from __future__ import annotations

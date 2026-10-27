@@ -26,7 +26,7 @@ related:
 - `plugins/default_memory/` 是默认记忆引擎插件：`backend/engine/` 实现 SDK 的 `MemoryEngine`（查询、显式召回的 HyDE 假设生成、变更、管理、提示词），`backend/semantic/` 拥有原 memory2 的 SQLite 存储（`MemoryStore2`，默认 `plugin-data/default_memory/memory2.db`）、向量编码与召回、去重、procedure 查询构造与标签、记忆写入和响应后 worker。原 `apps/backend/memory2/` 已不存在。
 - `apps/backend/agent/retrieval/`（`DefaultMemoryRetrievalPipeline`）将具体记忆召回适配到 Agent 上下文准备阶段。
 
-语义记忆的开关是 `default_memory` 插件：`[plugins.default_memory].enabled` 显式优先，缺省沿用 manifest 的 `default_enabled`（开启）。向量模型凭据在同一张表（`embedding_model` / `embedding_api_key` / `embedding_base_url` / `output_dimensionality`）。启动时若 `config.toml` 仍有 `[memory]`，会按旧加载语义一次性写入这张表并删掉 `[memory]`；其中 `memory.engine` 不是空或 `default` 时只记日志并忽略。插件启用时 `bootstrap/memory.py` 仍经 `bootstrap/memory_plugins.py` 加载 `default_memory`（`default` 对应这个包）。Akasha 已从内置插件中移除，旧配置里的 `memory.engine = "akasha"` 不会再被选中。卸载不迁移或删除工作区中原有的 Akasha 数据。
+语义记忆的开关是 `default_memory` 插件：`[plugins.default_memory].enabled` 显式优先，缺省沿用 manifest 的 `default_enabled`（开启）。向量模型凭据在同一张表（`embedding_model` / `embedding_api_key` / `embedding_base_url` / `output_dimensionality`）。启动时若 `config.toml` 仍有 `[memory]`，会按旧加载语义一次性写入这张表并删掉 `[memory]`。`memory.engine` 不是空或 `default` 时记一条警告并忽略，不迁移该引擎选择；后续引擎只以插件接入。插件启用时 `bootstrap/memory.py` 仍经 `bootstrap/memory_plugins.py` 加载 `default_memory`（`default` 对应这个包）。Akasha 已从内置插件中移除，旧配置里的 `memory.engine = "akasha"` 不会再被选中。卸载不迁移或删除工作区中原有的 Akasha 数据。
 
 ## 典型数据流
 
