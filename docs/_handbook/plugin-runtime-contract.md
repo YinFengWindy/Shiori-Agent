@@ -374,7 +374,7 @@ consolidates these additions and the subsequent #847 breaking migration.
   `turn:telemetry:*`, is dropped (never published).
 
 - **breaking: `MEMORY_ENGINE` is a plugin-provided socket; the host no longer
-  builds a memory engine (issue #902, refactor P3-7b-3).** `shiori_sdk.core.memory`
+  builds a memory engine (PR #935, issue #902, refactor P3-7b-3).** `shiori_sdk.core.memory`
   exports `MEMORY_ENGINE` (`Key` name `memory_engine`). A plugin lists it in
   `provides`, constructs the engine in `setup` and `ctx.provide`s it. Consumers
   list it in `optional_inject` and `get` it on every use; `None` means no

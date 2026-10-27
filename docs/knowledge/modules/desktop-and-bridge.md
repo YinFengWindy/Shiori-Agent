@@ -2,7 +2,7 @@
 title: 桌面端与桥接
 kind: 领域说明
 status: 当前有效
-last_verified_commit: bdfdae59
+last_verified_commit: a0dc6d73
 source_paths:
   - apps/desktop/src/
   - apps/desktop/scripts/
@@ -68,7 +68,7 @@ bridge 连接、会话存储和角色执行锁在进程内保持稳定。聊天�
 
 各渠道插件（Telegram、QQ、QQBot、飞书）经 `ChannelIntake` 在暂停期间使用有界入站缓冲，复用连接在提交后继续处理。旧账号连接即将关闭或缓冲已满时，通过该原始连接明确提示消息尚未处理、需要重试；不把旧账号消息投给新账号。候选恢复接收与提交之间没有异步让出，提交失败会先重新暂停候选，再回滚连接。
 
-已有向量库的 embedding 模型或维度变更需要显式数据迁移，热更新返回 `memory_storage_incompatible`，不会自动重建或清除向量。凭据、连接地址及兼容的记忆配置可通过新的 runtime 实例生效。
+向量库的模型或维度记在该库的 `embedding_fingerprint`（并核对 `vec_items` 声明维度）。与当前 `default_memory` 插件配置不一致时，插件启动失败，插座为空，不会自动重建或清除向量；对话仍继续。缺向量凭据同样不启动引擎。凭据、连接地址及兼容的记忆配置随新的 runtime 实例由插件 setup 读取。
 
 ## 修改影响
 

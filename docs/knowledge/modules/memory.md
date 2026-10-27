@@ -2,7 +2,7 @@
 title: 记忆系统
 kind: 领域说明
 status: 当前有效
-last_verified_commit: bdfdae59
+last_verified_commit: a0dc6d73
 source_paths:
   - packages/sdk/python/shiori_sdk/memory/
   - apps/backend/core/memory/

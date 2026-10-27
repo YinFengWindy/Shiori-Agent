@@ -2,7 +2,7 @@
 title: 当前后端架构
 kind: 架构说明
 status: 当前有效
-last_verified_commit: bdfdae59
+last_verified_commit: a0dc6d73
 source_paths:
   - apps/backend/main.py
   - apps/backend/bootstrap/app.py
