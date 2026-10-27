@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Awaitable, Callable, Coroutine, Iterable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Coroutine, Iterable, Sequence
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 from . import graph
@@ -44,9 +43,7 @@ class Context:
     """Everything a plugin's ``setup`` receives from the kernel."""
 
     def __init__(self, kernel: Kernel, spec: PluginSpec, scope: Scope) -> None:
-        self.plugin_id = spec.id
-        self.data_dir: Path | None = spec.data_dir
-        self.config: Mapping[str, object] = spec.config
+        self.plugin_id, self.data_dir, self.config = spec.id, spec.data_dir, spec.config
         self.log = plugin_logger(spec.id)
         self._kernel, self._spec, self._scope = kernel, spec, scope
 
@@ -128,8 +125,7 @@ class Kernel:
 
     def get[T](self, key: Key[T]) -> T | None:
         """The current provider of ``key``; consumers look it up on every use."""
-        found = self._providers.get(key.name)
-        return None if found is None else found[1]
+        return None if (found := self._providers.get(key.name)) is None else found[1]
 
     def check[E](self, event_type: type[E], check: Check[E]) -> None:
         """Adds a fixed core check run on the final event of each ``on`` chain."""
@@ -160,20 +156,22 @@ class Kernel:
         self._providers[key.name] = (owner, impl)
 
     async def start(self, specs: Iterable[PluginSpec]) -> None:
-        """Plans ``specs`` and sets up every planned plugin that is not running.
+        """Plans ``specs`` and sets up every runnable plugin that is not running.
 
-        A plugin whose required key is unavailable becomes BLOCKED, one whose
-        setup raises FAILED, and its ``require`` dependents BLOCKED in turn.
+        Register-only specs are ordered but not activated, so a later ``start``
+        cannot run an untrusted or disabled plugin by accident. A plugin whose
+        required key is unavailable becomes BLOCKED, one whose setup raises
+        FAILED, and its ``require`` dependents BLOCKED in turn.
         """
         for plugin_id in await self.plan(specs):
-            if plugin_id not in self._scopes:
+            if self._specs[plugin_id].runnable and plugin_id not in self._scopes:
                 _ = await self.activate(plugin_id)
 
     async def plan(self, specs: Iterable[PluginSpec]) -> tuple[str, ...]:
         """Adds ``specs``, re-plans all known specs and returns the setup order.
 
         Excluded plugins (see ``graph.plan``) get their status here and never
-        run. Raises ``KernelError`` when a plugin declares a core key.
+        run. Raises ``KernelError`` when a runnable plugin declares a core key.
         """
         self._specs.update((spec.id, spec) for spec in specs)
         core = {name for name, (owner, _) in self._providers.items() if owner == CORE}
@@ -183,8 +181,7 @@ class Kernel:
         for plugin_id, excluded in plan.excluded.items():
             known = getattr(self._status.get(plugin_id), "diagnostic", None)
             if plugin_id not in self._scopes and known != excluded:
-                state = KernelState(excluded.state)
-                _ = await self._settle(plugin_id, state, excluded)
+                _ = await self._settle(plugin_id, KernelState(excluded.state), excluded)
         return plan.order
 
     def scope(self, plugin_id: str) -> Scope:
@@ -194,9 +191,13 @@ class Kernel:
     async def activate(self, plugin_id: str) -> PluginStatus:
         """Runs one planned plugin's setup; on failure releases what it registered.
 
-        Cancellation also releases the scope, then propagates.
+        A register-only spec is refused and left unchanged. Cancellation also
+        releases the scope, then propagates.
         """
         spec = self._specs[plugin_id]
+        if not spec.runnable:
+            reason = f"插件 {plugin_id} 只登记，不能启动"
+            raise KernelError("not_runnable", "setup", "runnable", reason, [plugin_id])
         if missing := [name for name in spec.requires if name not in self._providers]:
             # ``field`` names the first missing ``requires`` entry by index; a
             # key no spec declares is missing, a declared one is unavailable.
@@ -227,9 +228,7 @@ class Kernel:
         if plugin_id not in self._scopes:
             return []
         errors = await self._release(plugin_id)
-        _ = await self._settle(
-            plugin_id, KernelState.STOPPED, None, None, tuple(errors)
-        )
+        _ = await self._settle(plugin_id, KernelState.STOPPED, cleanup=tuple(errors))
         return errors
 
     async def _release(self, plugin_id: str) -> list[Exception]:

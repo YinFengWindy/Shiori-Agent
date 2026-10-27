@@ -89,6 +89,59 @@ def test_plugin_providing_a_core_key_refuses_the_whole_plan() -> None:
     assert refused.value.plugin_ids == ("rogue",)
 
 
+def test_register_only_spec_does_not_exclude_enabled_plugins() -> None:
+    planned = plan(
+        [
+            spec("kept", provides=("memory_engine",)),
+            spec(
+                "parked",
+                provides=("memory_engine", "parked_only"),
+                replaces=("kept",),
+                conflicts=("other",),
+                runnable=False,
+            ),
+            spec("other"),
+            spec("reader", requires=("memory_engine",)),
+            spec("side", requires=("parked_only",)),
+        ],
+        core=(),
+    )
+
+    assert planned.excluded == {}
+    assert planned.owners["memory_engine"] == "kept"
+    assert planned.owners["parked_only"] == "parked"
+    assert planned.order == ("kept", "other", "parked", "reader", "side")
+
+
+def test_register_only_partner_is_not_a_dependency_cycle() -> None:
+    planned = plan(
+        [
+            spec("enabled", requires=("b_key",), provides=("a_key",)),
+            spec(
+                "disabled",
+                requires=("a_key",),
+                provides=("b_key",),
+                runnable=False,
+            ),
+        ],
+        core=(),
+    )
+
+    assert planned.excluded == {}
+    assert planned.owners == {"a_key": "enabled", "b_key": "disabled"}
+
+
+def test_register_only_spec_declaring_a_core_key_does_not_refuse_the_plan() -> None:
+    planned = plan(
+        [spec("parked", provides=("tools",), runnable=False), spec("free")],
+        core=("tools",),
+    )
+
+    assert planned.excluded == {}
+    assert "tools" not in planned.owners
+    assert planned.order == ("free", "parked")
+
+
 def test_requires_cycle_is_refused_before_setup_listing_its_members() -> None:
     planned = plan(
         [

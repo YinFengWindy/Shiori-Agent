@@ -83,8 +83,13 @@ class PluginSpec:
 
     ``requires`` / ``optional`` / ``provides`` hold ``Key`` names (manifest
     ``inject`` / ``optional_inject`` / ``provides``); dependency order is derived
-    from them. ``channels`` marks a plugin declaring ``contributes.channels``,
-    which, like ``hot_reload=False``, can only change on restart (D14).
+    from them. ``runnable`` is false for a register-only spec (disabled, or
+    admitted by the host only for bookkeeping — untrusted, invalid contract,
+    missing host deps). ``plan`` may still order it and record its keys;
+    ``start`` / ``activate`` will not run it, and it does not take part in
+    ``conflicts`` / ``replaces`` / duplicate ``provides`` or cycle refusal.
+    ``channels`` marks a plugin declaring ``contributes.channels``, which, like
+    ``hot_reload=False``, can only change on restart (D14).
     """
 
     id: str
@@ -94,6 +99,7 @@ class PluginSpec:
     provides: tuple[str, ...] = ()
     replaces: tuple[str, ...] = ()
     conflicts: tuple[str, ...] = ()
+    runnable: bool = True
     hot_reload: bool = True
     channels: bool = False
     config: Mapping[str, object] = field(default_factory=dict[str, object])

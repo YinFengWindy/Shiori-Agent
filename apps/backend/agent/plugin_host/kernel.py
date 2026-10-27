@@ -408,10 +408,11 @@ class PluginKernel:
             if self._runnable(record)
         }
         # Disabled and admission-failed (untrusted, invalid contract) plugins
-        # are planned too but never activated: enabling one later keeps the
-        # order, the kernel computes its enable closure and restart refusal,
-        # and a dependent learns it exists ("未启用或加载失败", not "不存在").
-        # Only conflicting candidates stay out: their id is ambiguous.
+        # are planned as register-only: the kernel orders them and records
+        # their keys, but ``start`` / ``activate`` refuse to run them. Enabling
+        # one later keeps the order, and a dependent learns the key exists
+        # ("未启用或加载失败", not "不存在"). Only conflicting candidates stay
+        # out: their id is ambiguous.
         order = await self._kernel.plan(
             self._spec(record)
             for record in selected.values()
@@ -459,7 +460,12 @@ class PluginKernel:
         return error
 
     def _spec(self, record: PluginRecord) -> PluginSpec:
-        """Adapts one runnable record to a kernel spec whose setup is the v2 setup."""
+        """Adapts one record to a kernel spec whose setup is the v2 setup.
+
+        Admission-failed and disabled records are register-only (``runnable``
+        false). The host still does not activate them; the flag is what stops
+        ``Kernel.start`` from doing so later.
+        """
         manifest = record.manifest
 
         async def setup(ctx: Context) -> None:
@@ -496,6 +502,7 @@ class PluginKernel:
                 *manifest.optional_inject,
             ),
             provides=(plugin_key(manifest.id).name, *manifest.provides),
+            runnable=self._runnable(record),
             hot_reload=manifest.supports_hot_unload,
             channels=_declares_channels(record),
         )

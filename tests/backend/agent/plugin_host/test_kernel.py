@@ -395,6 +395,41 @@ async def test_declared_dependency_loads_first_and_its_api_is_scoped(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_enabled_plugin_cycled_with_a_disabled_one_is_not_a_dependency_cycle(
+    tmp_path: Path,
+):
+    for name, dependencies in (("enabled", "[disabled]"), ("disabled", "[enabled]")):
+        package = tmp_path / name
+        (package / "backend").mkdir(parents=True)
+        (package / "manifest.yaml").write_text(
+            f"api: 2\nid: {name}\ncapabilities: []\ndependencies: {dependencies}\n",
+            encoding="utf-8",
+        )
+        (package / "backend/plugin.py").write_text(
+            "async def setup(ctx):\n    raise AssertionError('must not run')\n",
+            encoding="utf-8",
+        )
+    kernel = make_kernel(
+        [tmp_path],
+        event_bus=EventBus(),
+        plugin_configs={"disabled": {"enabled": False}},
+    )
+    await kernel.load_all()
+
+    states = {item["id"]: item for item in kernel.states()}
+    assert states["disabled"]["state"] == "DISABLED"
+    assert states["enabled"]["state"] == "BLOCKED"
+    assert (
+        states["enabled"]["error"]
+        == "插件 enabled 依赖的 plugin:disabled 未启用或加载失败"
+    )
+    assert kernel.kernel.status("disabled") is None
+    enabled = kernel.kernel.status("enabled")
+    assert enabled is not None and enabled.diagnostic is not None
+    assert enabled.diagnostic.code == "dependency_unavailable"
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("dependencies", ["[missing]", "[blocked]"])
 async def test_missing_or_cyclic_dependency_blocks_setup(tmp_path, dependencies):
     package = tmp_path / "blocked"
