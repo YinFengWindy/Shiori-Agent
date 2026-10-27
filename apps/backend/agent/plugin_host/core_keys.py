@@ -40,7 +40,7 @@ from shiori_sdk.process_resources import PluginProcessResources
 from shiori_sdk.processes import Processes, Resources, ToolTurn
 from shiori_sdk.roles import Roles, SceneObservations
 from shiori_sdk.rpc import RpcCapability
-from shiori_sdk.sessions import PluginSessions, SessionUndo
+from shiori_sdk.sessions import PluginSessions
 from shiori_sdk.tools import ToolsCapability
 from shiori_sdk.kernel import Key, Scope
 from shiori_sdk.runtime import EventsCapability, HostServiceUnavailable
@@ -152,9 +152,6 @@ HOST_AVATARS: Key[PluginCapabilityBinder[AvatarsCapability]] = Key("host.avatars
 HOST_SESSIONS: Key[PluginSessions] = Key("host.sessions")
 """The ``sessions`` capability over the host ``SessionManager`` (``session``)."""
 
-HOST_SESSION_MANAGER: Key[SessionUndo] = Key("host.session_manager")
-"""The ``session_manager`` capability: the host ``SessionManager`` itself."""
-
 HOST_ROLES: Key[Roles] = Key("host.roles")
 """The ``roles`` capability over the canonical ``RoleStore`` (``core.roles``)."""
 
@@ -250,7 +247,6 @@ CORE_CAPABILITIES: Mapping[str, CoreCapability] = {
     "accounts": CoreCapability(HOST_ACCOUNTS, per_plugin=True),
     "avatars": CoreCapability(HOST_AVATARS, per_plugin=True),
     "sessions": CoreCapability(HOST_SESSIONS),
-    "session_manager": CoreCapability(HOST_SESSION_MANAGER),
     "roles": CoreCapability(HOST_ROLES),
     "models": CoreCapability(HOST_MODELS),
     "light_provider": CoreCapability(HOST_LIGHT_PROVIDER),

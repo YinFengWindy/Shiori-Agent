@@ -16,7 +16,8 @@ class InFlightCalls:
     database wait for them instead of closing the store under a running call.
     Synchronous methods are not counted: they cannot interleave with the close
     on the event loop, so a caller only has to ``get`` the engine again after
-    any ``await`` (``plugin_undo`` does).
+    any ``await`` (``plugin_undo`` re-reads ``MEMORY_ENGINE`` before
+    ``rollback_turn``, and does not use that engine after the session await).
     """
 
     def __init__(self) -> None:

@@ -8,6 +8,7 @@ from typing import Any, cast
 import pytest
 
 from session.manager import SessionManager
+from shiori_sdk.core.sessions import PassiveTurn, RollbackResult, TurnChanged
 
 _FRAME = '<system-reminder data-system-context-frame="true">内部</system-reminder>'
 
@@ -47,8 +48,8 @@ async def test_undo_complete_reply_sequence_preserves_interleaved_background_mes
         },
     )
     manager.save(session)
-    result = await manager.undo_last_turn(session.key)
-    assert result is not None and len(result.deleted_ids) == 3
+    result = await manager.rollback_last_turn(session.key)
+    assert isinstance(result, RollbackResult) and len(result.deleted_ids) == 3
     reloaded = SessionManager(tmp_path).get_or_create(session.key)
     assert [row["content"] for row in reloaded.messages] == ["background"]
 
@@ -85,7 +86,7 @@ async def test_unresolvable_latest_sequence_never_undoes_an_earlier_turn(
     )
     manager.save(session)
     before_ids = [row["id"] for row in session.messages]
-    assert await manager.undo_last_turn(session.key) is None
+    assert await manager.rollback_last_turn(session.key) is None
     assert [
         row["id"]
         for row in SessionManager(tmp_path).get_or_create(session.key).messages
@@ -124,13 +125,66 @@ def test_undo_deletes_context_user_assistant_three_rows(tmp_path: Path):
     session.last_consolidated = 6
     manager.save(session)
 
-    result = _run(manager.undo_last_turn("cli:1"))
+    result = _run(manager.rollback_last_turn("cli:1"))
 
-    assert result is not None
-    assert result.deleted_ids == ["cli:1:3", "cli:1:4", "cli:1:5"]
+    assert isinstance(result, RollbackResult)
+    assert result.deleted_ids == ("cli:1:3", "cli:1:4", "cli:1:5")
     session = manager.get_or_create("cli:1")
     assert [m["content"] for m in session.messages] == [_FRAME, "u0", "a0"]
     assert session.last_consolidated == 3
+
+
+async def test_last_passive_turn_reads_the_anchor_and_every_message_id(
+    tmp_path: Path,
+):
+    manager = _saved_manager(tmp_path, turns=2)
+    turn = manager.last_passive_turn("cli:1")
+    assert turn is not None
+    assert turn == PassiveTurn("cli:1:4", ("cli:1:3", "cli:1:4", "cli:1:5"))
+
+    result = await manager.rollback_last_turn("cli:1", expected_turn=turn)
+
+    assert isinstance(result, RollbackResult)
+    assert (result.turn_id, result.deleted_ids) == (turn.turn_id, turn.message_ids)
+
+
+async def test_rollback_refuses_a_turn_other_than_the_expected_one(tmp_path: Path):
+    """A turn committed after the read is not deleted in place of the read one."""
+    manager = _saved_manager(tmp_path, turns=1)
+    turn = manager.last_passive_turn("cli:1")
+    assert turn is not None
+    session = manager.get_or_create("cli:1")
+    _add_turn(session, 1)
+    manager.save(session)
+
+    result = await manager.rollback_last_turn("cli:1", expected_turn=turn)
+
+    assert result == TurnChanged("cli:1:4")
+    manager.invalidate("cli:1")
+    assert len(manager.get_or_create("cli:1").messages) == 6
+
+
+async def test_rollback_refuses_the_same_anchor_with_different_messages(tmp_path):
+    """A reply sequence that grew after the read keeps its anchor but not its ids."""
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("role:a")
+    thread_id = "thread:a:desktop"
+    session.add_message("user", "hello", thread_id=thread_id)
+    manager.save(session)
+    user_id = session.messages[-1]["id"]
+    sequence = {"reply_sequence_id": "turn-1", "trigger_user_message_id": user_id}
+    session.add_message("assistant", "one", thread_id=thread_id, metadata=sequence)
+    manager.save(session)
+    turn = manager.last_passive_turn(session.key)
+    assert turn is not None
+    session.add_message("assistant", "two", thread_id=thread_id, metadata=sequence)
+    manager.save(session)
+
+    result = await manager.rollback_last_turn(session.key, expected_turn=turn)
+
+    assert result == TurnChanged(user_id)
+    manager.invalidate(session.key)
+    assert len(manager.get_or_create(session.key).messages) == 3
 
 
 def test_undo_uses_rollback_source_ids_for_consolidated_window_start(tmp_path: Path):
@@ -142,9 +196,9 @@ def test_undo_uses_rollback_source_ids_for_consolidated_window_start(tmp_path: P
     manager.save(session)
 
     result = _run(
-        manager.undo_last_turn(
+        manager.rollback_last_turn(
             "cli:1",
-            rollback_source_resolver=lambda _: [
+            rollback_source_ids=[
                 "cli:1:0",
                 "cli:1:1",
                 "cli:1:2",
@@ -155,7 +209,7 @@ def test_undo_uses_rollback_source_ids_for_consolidated_window_start(tmp_path: P
         )
     )
 
-    assert result is not None
+    assert isinstance(result, RollbackResult)
     assert result.last_consolidated_before == 6
     assert result.last_consolidated_after == 0
 
@@ -168,29 +222,29 @@ def test_undo_keeps_cursor_when_target_is_after_consolidated_prefix(tmp_path: Pa
     session.last_consolidated = 6
     manager.save(session)
 
-    result = _run(manager.undo_last_turn("cli:1"))
+    result = _run(manager.rollback_last_turn("cli:1"))
 
-    assert result is not None
-    assert result.deleted_ids == ["cli:1:6", "cli:1:7", "cli:1:8"]
+    assert isinstance(result, RollbackResult)
+    assert result.deleted_ids == ("cli:1:6", "cli:1:7", "cli:1:8")
     assert manager.get_or_create("cli:1").last_consolidated == 6
 
 
 def test_undo_deletes_user_assistant_when_frame_is_extra(tmp_path: Path):
     manager = _saved_manager(tmp_path, turns=1, standalone_frame=False)
 
-    result = _run(manager.undo_last_turn("cli:1"))
+    result = _run(manager.rollback_last_turn("cli:1"))
 
-    assert result is not None
-    assert result.deleted_ids == ["cli:1:0", "cli:1:1"]
+    assert isinstance(result, RollbackResult)
+    assert result.deleted_ids == ("cli:1:0", "cli:1:1")
     assert manager.get_or_create("cli:1").messages == []
 
 
 def test_undo_does_not_reuse_deleted_tail_message_ids(tmp_path: Path):
     manager = _saved_manager(tmp_path, turns=1)
 
-    result = _run(manager.undo_last_turn("cli:1"))
-    assert result is not None
-    assert result.deleted_ids == ["cli:1:0", "cli:1:1", "cli:1:2"]
+    result = _run(manager.rollback_last_turn("cli:1"))
+    assert isinstance(result, RollbackResult)
+    assert result.deleted_ids == ("cli:1:0", "cli:1:1", "cli:1:2")
 
     session = manager.get_or_create("cli:1")
     _add_turn(session, 2, standalone_frame=False)
@@ -207,15 +261,15 @@ async def test_undo_preserves_proactive_messages_and_incomplete_user(tmp_path: P
     session.add_message("user", "incomplete")
     manager.save(session)
 
-    result = await manager.undo_last_turn(session.key)
+    result = await manager.rollback_last_turn(session.key)
 
-    assert result is not None
-    assert result.deleted_ids == ["cli:1:0", "cli:1:1", "cli:1:2"]
+    assert isinstance(result, RollbackResult)
+    assert result.deleted_ids == ("cli:1:0", "cli:1:1", "cli:1:2")
     assert [message["content"] for message in session.messages] == [
         "proactive",
         "incomplete",
     ]
-    assert await manager.undo_last_turn(session.key) is None
+    assert await manager.rollback_last_turn(session.key) is None
 
 
 @pytest.mark.asyncio
@@ -231,9 +285,9 @@ async def test_undo_deletes_context_frames_on_both_sides_of_user(tmp_path: Path)
         session.add_message(role, content)
     manager.save(session)
 
-    result = await manager.undo_last_turn(session.key)
+    result = await manager.rollback_last_turn(session.key)
 
-    assert result is not None
+    assert isinstance(result, RollbackResult)
     assert len(result.deleted_ids) == 4
     assert session.messages == []
     manager.invalidate(session.key)
@@ -258,7 +312,7 @@ async def test_concurrent_append_and_undo_use_committed_turn_and_keep_shared_cac
     async with manager._lock(session.key):
         operations = [
             lambda: manager.append_messages(session, pending),
-            lambda: manager.undo_last_turn(session.key),
+            lambda: manager.rollback_last_turn(session.key),
         ]
         if not append_first:
             operations.reverse()
@@ -269,11 +323,11 @@ async def test_concurrent_append_and_undo_use_committed_turn_and_keep_shared_cac
             assert not tasks[-1].done()
     results = await asyncio.gather(*tasks)
     undo_result = results[1 if append_first else 0]
-    assert undo_result is not None
+    assert isinstance(undo_result, RollbackResult)
     expected_deleted = [
         f"cli:1:{index}" for index in (range(3, 6) if append_first else range(3))
     ]
-    assert undo_result.deleted_ids == expected_deleted
+    assert undo_result.deleted_ids == tuple(expected_deleted)
     remaining_turn = 0 if append_first else 1
     assert manager.get_or_create(session.key) is session
     assert [message["content"] for message in session.messages] == [
@@ -293,31 +347,6 @@ async def test_concurrent_append_and_undo_use_committed_turn_and_keep_shared_cac
 
 
 @pytest.mark.asyncio
-async def test_undo_resolver_failure_preserves_cache_cursor_and_disk(tmp_path: Path):
-    manager = _saved_manager(tmp_path, turns=1)
-    session = manager.get_or_create("cli:1")
-    manager._store.update_last_consolidated(session.key, 3)
-
-    session.last_consolidated = 3
-    manager.save(session)
-    before = list(session.messages)
-
-    def fail_resolver(message_ids: list[str]) -> list[str]:
-        assert message_ids == ["cli:1:0", "cli:1:1", "cli:1:2"]
-        raise RuntimeError("memory preview unavailable")
-
-    with pytest.raises(RuntimeError, match="memory preview unavailable"):
-        await manager.undo_last_turn(
-            session.key, rollback_source_resolver=fail_resolver
-        )
-
-    assert session.messages == before
-    assert session.last_consolidated == 3
-    manager.invalidate(session.key)
-    assert manager.get_or_create(session.key).messages == before
-
-
-@pytest.mark.asyncio
 async def test_undo_refreshes_thread_projection_after_last_turn_deleted(tmp_path: Path):
     from conversation.service import ConversationService, LegacySessionDescriptor
 
@@ -334,7 +363,7 @@ async def test_undo_refreshes_thread_projection_after_last_turn_deleted(tmp_path
     before = manager.conversation_store.get_thread_state(thread.id)
     assert before is not None and before.metadata["message_count"] == 2
 
-    await manager.undo_last_turn(session.key)
+    await manager.rollback_last_turn(session.key)
 
     after = manager.conversation_store.get_thread_state(thread.id)
     assert after is not None
@@ -377,7 +406,7 @@ async def test_undo_projection_failure_rolls_back_messages_cursor_all_states_and
     manager._store._conn.commit()
 
     with pytest.raises(sqlite3.IntegrityError, match="projection failed"):
-        await manager.undo_last_turn(session.key)
+        await manager.rollback_last_turn(session.key)
 
     assert manager.get_or_create(session.key) is session
     assert session.messages == before_messages
@@ -424,10 +453,10 @@ async def test_undo_rolls_back_each_context_cursor(
     )
     manager.invalidate(session.key)
 
-    result = await manager.undo_last_turn(session.key)
+    result = await manager.rollback_last_turn(session.key)
 
-    assert result is not None
-    assert result.deleted_ids == ["role:mira:6", "role:mira:7"]
+    assert isinstance(result, RollbackResult)
+    assert result.deleted_ids == ("role:mira:6", "role:mira:7")
     manager.invalidate(session.key)
     reloaded = manager.get_or_create(session.key)
     assert reloaded.context_cursors == expected
@@ -454,12 +483,12 @@ async def test_undo_ignores_memory_sources_from_the_other_context(tmp_path: Path
     )
     manager.invalidate(session.key)
 
-    result = await manager.undo_last_turn(
+    result = await manager.rollback_last_turn(
         session.key,
-        rollback_source_resolver=lambda _ids: ["role:mira:0", "role:mira:6"],
+        rollback_source_ids=["role:mira:0", "role:mira:6"],
     )
 
-    assert result is not None
+    assert isinstance(result, RollbackResult)
     reloaded = manager.get_or_create(session.key)
     assert reloaded.context_cursors == {"user": 6, "external": 6}
 
@@ -489,7 +518,7 @@ async def test_undo_before_a_legacy_cut_invalidates_like_an_explicit_window(
     )
     manager.invalidate(session.key)
 
-    assert await manager.undo_last_turn(session.key) is not None
+    assert await manager.rollback_last_turn(session.key) is not None
 
     session = manager.get_or_create(session.key)
     # The undone desktop turn sat before the frozen user cut: that window restarts.

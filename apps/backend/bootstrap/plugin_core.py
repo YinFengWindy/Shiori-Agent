@@ -40,7 +40,6 @@ from agent.plugin_host.core_keys import (
     HOST_RPC,
     HOST_ROLES,
     HOST_SCENE_OBSERVATIONS,
-    HOST_SESSION_MANAGER,
     HOST_SESSIONS,
     HOST_TOOL_TURN,
     HOST_TOOLS,
@@ -76,6 +75,7 @@ from shiori_sdk.commands import CommandRegistry
 from shiori_sdk.core.conversation import COMMANDS
 from shiori_sdk.core.crash_reporting import CRASH_REPORTING
 from shiori_sdk.core.models import MAIN_MODEL, MAIN_PROVIDER
+from shiori_sdk.core.sessions import SESSIONS, Sessions
 from shiori_sdk.external_turns import ExternalTurns
 from shiori_sdk.http import HttpClient
 from shiori_sdk.models import RoleModels
@@ -102,9 +102,10 @@ class PluginCoreInputs:
     - ``role_store``: the canonical role store, behind ``roles``, ``accounts``
       and ``avatars`` (its account index and avatar cache) and, with the
       ``workspace``, ``memory``.
-    - ``session_manager``: ``session_manager`` and, with the ``workspace``
-      holding session media, ``sessions``, whose payloads the desktop
-      presenter projects with ``relationship_runtime``.
+    - ``session_manager``: the ``sessions`` socket (``SESSIONS``) and, with
+      the ``workspace`` holding session media, the ``sessions`` capability
+      (``host.sessions``), whose payloads the desktop presenter projects with
+      ``relationship_runtime``.
     - ``role_runtime_registry``: ``models``.
     - ``provider`` / ``model``: the main chat pair, provided as
       ``MAIN_PROVIDER`` and ``MAIN_MODEL``. None means this generation has no
@@ -171,10 +172,12 @@ def plugin_core_modules(inputs: PluginCoreInputs) -> tuple[CoreModule, ...]:
             provide(HOST_AVATARS, PluginAvatars(inputs.role_store.avatars))
 
     def provide_sessions(provide: CoreProvide) -> None:
-        """The session manager and the session operations over it (``session``)."""
+        """The sessions socket and session media (``session``)."""
         if inputs.session_manager is None:
             return
-        provide(HOST_SESSION_MANAGER, inputs.session_manager)
+        # Typed as the plugin contract, so pyright checks the host implementation.
+        sessions_api: Sessions = inputs.session_manager
+        provide(SESSIONS, sessions_api)
         if inputs.workspace is not None:
             presenter = DesktopSessionPresenter(None, inputs.relationship_runtime)
             # Typed as the plugin contract, so pyright checks the host implementation.

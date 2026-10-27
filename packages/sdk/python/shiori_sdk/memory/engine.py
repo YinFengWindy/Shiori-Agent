@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -252,6 +252,21 @@ class MemoryWriteApi(Protocol):
     def reinforce_items_batch(self, ids: list[str]) -> None: ...
 
 
+@dataclass(frozen=True)
+class TurnRollback:
+    """Memories superseded and restored when one turn is rolled back.
+
+    ``affected_ids`` were superseded. ``restored_ids`` were brought back
+    because this turn had replaced them. ``rollback_source_ids`` are the
+    message ids those memories were sourced from, including every id in a
+    consolidation window that contained the turn.
+    """
+
+    affected_ids: tuple[str, ...] = ()
+    restored_ids: tuple[str, ...] = ()
+    rollback_source_ids: tuple[str, ...] = ()
+
+
 @runtime_checkable
 class MemoryAdminApi(Protocol):
     """Administrative reads, mutations and structured facets of an engine."""
@@ -326,6 +341,19 @@ class MemoryAdminApi(Protocol):
         score_threshold: float = 0.0,
         include_superseded: bool = False,
     ) -> list[dict[str, object]]: ...
+
+    def rollback_turn(self, turn_id: str, message_ids: Sequence[str]) -> TurnRollback:
+        """Supersede memories sourced from this turn and restore what they replaced.
+
+        ``turn_id`` is the passive turn's anchor user message id;
+        ``message_ids`` are every message of the turn (``PassiveTurn`` of
+        ``shiori_sdk.core.sessions``), so a consolidation window holding only
+        the turn's tool or assistant messages is rolled back too. A memory is
+        superseded when its ``source_ref`` is one of those ids or a window
+        listing one. Synchronous: callers re-``get`` the engine after any
+        ``await``, and this call is not counted as in flight.
+        """
+        ...
 
 
 @runtime_checkable

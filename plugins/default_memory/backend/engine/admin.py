@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from datetime import datetime
 from typing import cast
+
+from shiori_sdk.memory.engine import TurnRollback
 
 from ..semantic.store import MemoryStore2
 
@@ -31,14 +34,16 @@ def _source_ref_message_ids(source_ref: str) -> list[str]:
 
 
 def _undo_store_by_message_sources(
-    store: MemoryStore2,
-    message_ids: list[str],
-    *,
-    dry_run: bool = False,
-) -> dict[str, object]:
+    store: MemoryStore2, message_ids: Sequence[str]
+) -> TurnRollback:
+    """作废来源命中这些消息 id 的记忆，并恢复被它们替换掉的旧记忆。
+
+    来源是单条消息 id，或列出了其中任一条的整理窗口；窗口里的全部消息 id
+    都记进 ``rollback_source_ids``，供会话把整理游标退回窗口起点。
+    """
     clean_ids = [str(item).strip() for item in message_ids if str(item).strip()]
     if not clean_ids:
-        return {"affected_ids": [], "restored_ids": [], "rollback_source_ids": []}
+        return TurnRollback()
     target_ids = set(clean_ids)
     with store._lock:
         rows = store._db.execute("""
@@ -59,31 +64,23 @@ def _undo_store_by_message_sources(
                 affected_ids.add(str(item_id))
                 rollback_source_ids.update(base_ids)
 
-        if affected_ids and not dry_run:
+        if affected_ids:
             now = datetime.now().astimezone().isoformat()
             store._db.executemany(
                 "UPDATE memory_items SET status='superseded', updated_at=? WHERE id=?",
                 [(now, item_id) for item_id in sorted(affected_ids)],
             )
-        restored_ids = _restore_replacements_for_undo(
-            store,
-            affected_ids,
-            dry_run=dry_run,
-        )
-        if not dry_run:
-            store._db.commit()
-    return {
-        "affected_ids": sorted(affected_ids),
-        "restored_ids": sorted(restored_ids),
-        "rollback_source_ids": sorted(rollback_source_ids),
-    }
+        restored_ids = _restore_replacements_for_undo(store, affected_ids)
+        store._db.commit()
+    return TurnRollback(
+        affected_ids=tuple(sorted(affected_ids)),
+        restored_ids=tuple(sorted(restored_ids)),
+        rollback_source_ids=tuple(sorted(rollback_source_ids)),
+    )
 
 
 def _restore_replacements_for_undo(
-    store: MemoryStore2,
-    affected_ids: set[str],
-    *,
-    dry_run: bool = False,
+    store: MemoryStore2, affected_ids: set[str]
 ) -> set[str]:
     if not affected_ids:
         return set()
@@ -114,14 +111,6 @@ def _restore_replacements_for_undo(
             tuple([old_id, *sorted_affected]),
         ).fetchone()
         if active_replacement is not None:
-            continue
-        if dry_run:
-            old_row = store._db.execute(
-                "SELECT 1 FROM memory_items WHERE id=? AND status='superseded'",
-                (old_id,),
-            ).fetchone()
-            if old_row is not None:
-                restored.add(old_id)
             continue
         cur = store._db.execute(
             "UPDATE memory_items SET status='active', updated_at=? WHERE id=? AND status='superseded'",
@@ -239,16 +228,14 @@ class _AdminMixin:
 
         return self._require_v2_store().invalidate_role_memories(role_id)
 
-    def undo_by_message_sources(
-        self,
-        message_ids: list[str],
-        *,
-        dry_run: bool = False,
-    ) -> dict[str, object]:
+    def rollback_turn(self, turn_id: str, message_ids: Sequence[str]) -> TurnRollback:
+        """按整轮消息 id 回滚这一轮记下来的记忆。
+
+        整理窗口按消息条数切分，一轮可能跨两个窗口；只含这轮助手或工具消息的
+        窗口也要回滚，所以按整轮 id 匹配，而不是只按锚点用户消息 ``turn_id``。
+        """
         return _undo_store_by_message_sources(
-            self._require_v2_store(),
-            message_ids,
-            dry_run=dry_run,
+            self._require_v2_store(), [turn_id, *message_ids]
         )
 
     def find_similar_items_for_admin(

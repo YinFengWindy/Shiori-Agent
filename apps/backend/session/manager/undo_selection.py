@@ -2,6 +2,7 @@
 
 from typing import Any
 
+from shiori_sdk.core.sessions import PassiveTurn
 from shiori_sdk.prompting import is_context_frame
 from .models import message_thread_id
 
@@ -29,7 +30,8 @@ def _is_passive_assistant_message(message: dict[str, Any]) -> bool:
 
 def _find_last_passive_turn(
     messages: list[dict[str, Any]],
-) -> tuple[list[int], int, int] | None:
+) -> tuple[list[int], int] | None:
+    """The latest passive turn: the indices it would delete and its user index."""
     for assistant_index in range(len(messages) - 1, -1, -1):
         if not _is_passive_assistant_message(messages[assistant_index]):
             continue
@@ -51,13 +53,13 @@ def _find_last_passive_turn(
         while context_index >= 0 and _is_context_frame_message(messages[context_index]):
             delete_indices.insert(0, context_index)
             context_index -= 1
-        return delete_indices, user_index, assistant_index
+        return delete_indices, user_index
     return None
 
 
 def _find_reply_sequence_turn(
     messages: list[dict[str, Any]], assistant_index: int, sequence_id: str
-) -> tuple[list[int], int, int] | None:
+) -> tuple[list[int], int] | None:
     assistant = messages[assistant_index]
     user_id = assistant.get("metadata", {}).get("trigger_user_message_id")
     thread_id = message_thread_id(assistant)
@@ -90,8 +92,22 @@ def _find_reply_sequence_turn(
         ):
             delete_indices.insert(0, context_index)
             context_index -= 1
-        return delete_indices, user_index, assistant_index
+        return delete_indices, user_index
     return None
+
+
+def passive_turn(
+    messages: list[dict[str, Any]], indices: list[int], user_index: int
+) -> PassiveTurn:
+    """The selected passive turn: its anchor user message id and every message id.
+
+    Memory ``source_ref`` values are message ids, so the anchor id — not the
+    desktop ``metadata.turn_id`` — is the ``turn_id`` a memory rollback uses.
+    """
+    return PassiveTurn(
+        turn_id=str(messages[user_index]["id"]),
+        message_ids=tuple(str(messages[index]["id"]) for index in indices),
+    )
 
 
 def _compute_rollback_index(

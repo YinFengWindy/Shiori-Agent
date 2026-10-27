@@ -757,14 +757,13 @@ captured: dict = {}
 
 async def setup(ctx):
     captured["workspace"] = ctx.workspace
-    captured["session_manager"] = ctx.session_manager
     captured["light_provider"] = ctx.light_provider
     captured["light_model"] = ctx.light_model
 """.strip()
 
 _HOST_SERVICES_MANIFEST = (
     "api: 2\nid: hostrefs\ncapabilities:\n"
-    "  - workspace\n  - session_manager\n"
+    "  - workspace\n"
     "  - light_provider\n  - light_model\n"
 )
 
@@ -780,13 +779,11 @@ async def test_v2_plugin_reads_host_service_references(tmp_path: Path):
     (plugin_dir / "manifest.yaml").write_text(_HOST_SERVICES_MANIFEST, encoding="utf-8")
     workspace = tmp_path / "workspace-for-hostrefs"
     workspace.mkdir()
-    session_manager = object()
     light_provider = object()
     kernel = make_kernel(
         [tmp_path],
         event_bus=EventBus(),
         workspace=workspace,
-        session_manager=session_manager,
         light_provider=light_provider,
         light_model="light-model-x",
     )
@@ -801,7 +798,6 @@ async def test_v2_plugin_reads_host_service_references(tmp_path: Path):
     )
     assert module.captured == {
         "workspace": workspace,
-        "session_manager": session_manager,
         "light_provider": light_provider,
         "light_model": "light-model-x",
     }
@@ -836,7 +832,7 @@ captured: dict = {}
 
 async def setup(ctx):
     try:
-        _ = ctx.session_manager
+        _ = ctx.light_provider
     except AttributeError as e:
         captured["denied"] = (type(e).__name__, str(e))
 """.strip(),
@@ -858,7 +854,7 @@ async def setup(ctx):
     )
     kind, message = module.captured["denied"]
     assert kind == "CapabilityNotGranted"
-    assert "未声明 capability 'session_manager'" in message
+    assert "未声明 capability 'light_provider'" in message
 
 
 @pytest.mark.asyncio

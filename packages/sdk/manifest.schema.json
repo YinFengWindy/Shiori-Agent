@@ -82,7 +82,6 @@
           "runtime",
           "scene_observations",
           "services",
-          "session_manager",
           "sessions",
           "storage",
           "tool_turn",

@@ -1361,7 +1361,7 @@ async def test_interrupted_proactive_facts_reach_next_model_without_replay(
             if m.get("metadata", {}).get("proactive_tool_facts")
         }
         assert facts
-        assert await env.host.manager.undo_last_turn("role:mira") is not None
+        assert await env.host.manager.rollback_last_turn("role:mira") is not None
         reloaded = SessionManager(tmp_path).get_or_create("role:mira")
         assert facts <= {m["id"] for m in reloaded.messages}
         assert "get_recent_chat" in reloaded.get_history_tool_names(

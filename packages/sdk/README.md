@@ -161,7 +161,7 @@ The host owns turn execution, storage, capability authorization and cleanup.
 `setup(ctx)` receives its declared capabilities; undeclared access raises
 `CapabilityNotGranted`. A declared capability whose backing host service is
 missing fails before `setup` with `HostServiceUnavailable`, naming the service,
-so declared services such as `workspace` or `session_manager` are never `None`.
+so declared services such as `workspace` or `sessions` are never `None`.
 Runtime injection is checked through a static
 `PluginSetupContext` without the legacy context's dynamic attribute fallback.
 Typed setup contexts also cover memory, hooks, commands, diagnostics, role/model
@@ -285,7 +285,9 @@ host-resource checks. Existing renderer and Windows process lifecycle jobs remai
 ## Memory engines
 
 `shiori_sdk.memory.engine` owns memory requests, results, scopes, tool profiles and
-`MemoryEngine`. `shiori_sdk.core.memory` owns the `MEMORY_ENGINE` socket plugins
+`MemoryEngine`. `MemoryAdminApi.rollback_turn(turn_id, message_ids)` supersedes
+memories for one passive turn — `turn_id` is its anchor user message id,
+`message_ids` every message of the turn — and returns `TurnRollback`. `shiori_sdk.core.memory` owns the `MEMORY_ENGINE` socket plugins
 provide and consumers `get` (`None` means no retrieval; chat still runs).
 `memory.access` holds `MemoryRoles`, `MemoryStorage` and `MemoryEvents`.
 `memory.events` and `memory.committed` own shared ingestion, consolidation and
@@ -332,11 +334,17 @@ the host builds the ordinary turn result around it, retaining channel, timestamp
 and context scope and skipping retrieval/model calls. Described registrations form
 the command menu channels receive as `ChannelContext.bot_commands`; aliases pass no
 description. `last_consolidated` is memory progress, not model compaction.
-`SessionUndo` supplies an atomic undo result and invokes a memory source resolver
-before deleting messages. The optional `MemoryUndo` extension supports dry-run and
-real cleanup. A command resolves it from the current memory engine; engines lacking
-that extension keep working without memory undo. `CommandPluginContext` also
-provides current declared dependency exports.
+`shiori_sdk.core.sessions` owns the `SESSIONS` socket (an `inject` key, unrelated
+to the `sessions` capability). `last_passive_turn` reads the latest passive turn
+as `PassiveTurn` (`turn_id` is the anchor user message id; `message_ids` are every
+message of the turn) without deleting it. `rollback_last_turn` deletes it under
+the session lock and returns `RollbackResult`; with `expected_turn` it deletes
+only that exact turn (same anchor and message ids), otherwise it returns
+`TurnChanged`, and
+`rollback_source_ids` rewinds the consolidation cursor to a memory window.
+`plugin_undo` calls `MemoryAdminApi.rollback_turn(turn_id, message_ids)` first,
+then the session; an empty `MEMORY_ENGINE` rolls back the session only.
+`CommandPluginContext` also provides current declared dependency exports.
 
 Observe uses `ObservePluginContext` with `background`, `storage` and `diagnostics`.
 The migration port is shared with memory construction. The host owns receipt/lease
@@ -353,7 +361,7 @@ reply; reload uses the new export. Consumers do not inspect Observe's database.
 `testing.extensions.FakeExtensionContext` (its `emit` runs the plugin's tool event
 handlers on a bare kernel, without the host's checks),
 `commands.CommandRegistry` (the host's own `COMMANDS` registry; provide it on the
-fake context's `kernel`), `testing.commands.FakeSessionUndo` and
+fake context's `kernel`), `testing.commands.FakeSessions` and
 `testing.diagnostics.FakeDiagnostics` provide independent contract doubles.
 Diagnostics fakes record callbacks without modifying process-wide handlers. Global
 hook restoration and real lifecycle ordering stay in host integration tests.

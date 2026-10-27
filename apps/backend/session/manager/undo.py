@@ -1,6 +1,6 @@
 """Atomic passive-turn undo owned by the session manager."""
 
-from collections.abc import Callable
+from collections.abc import Sequence
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
@@ -9,38 +9,59 @@ from session.maintenance_progress import MaintenanceProgress, message_window_key
 
 from .manager import _ManagerCoreMixin
 from .models import effective_context_cursors
-from shiori_sdk.sessions import UndoSessionResult
-from .undo_selection import _compute_rollback_index, _find_last_passive_turn
+from shiori_sdk.core.sessions import PassiveTurn, RollbackResult, TurnChanged
+from .undo_selection import (
+    _compute_rollback_index,
+    _find_last_passive_turn,
+    passive_turn,
+)
 
 if TYPE_CHECKING:
     from conversation.context_scope import UserContextThreads
 
 
 class _UndoMixin(_ManagerCoreMixin):
-    async def undo_last_turn(
+    def last_passive_turn(self, session_key: str) -> PassiveTurn | None:
+        """The latest committed passive turn, read without the session write lock.
+
+        ``rollback_last_turn`` selects again under the lock; pass this turn
+        as ``expected_turn`` so a turn that changed in between is not deleted
+        in its place.
+        """
+        messages = self._store.fetch_session_messages(session_key)
+        target = _find_last_passive_turn(messages)
+        if target is None:
+            return None
+        indices, user_index = target
+        return passive_turn(messages, indices, user_index)
+
+    async def rollback_last_turn(
         self,
         session_key: str,
         *,
-        rollback_source_resolver: Callable[[list[str]], list[str]] | None = None,
-    ) -> UndoSessionResult | None:
+        expected_turn: PassiveTurn | None = None,
+        rollback_source_ids: Sequence[str] = (),
+    ) -> RollbackResult | TurnChanged | None:
         """Delete the latest committed passive turn under the session write lock.
 
-        The synchronous resolver previews memory rollback sources while the selected
-        message IDs are stable. Its failure leaves the session untouched. Pending
-        message objects stay attached to the cached session for queued appends.
+        With ``expected_turn``, the turn is deleted only when its anchor and
+        every message id still match (memory rolled back exactly that set);
+        otherwise nothing is deleted and ``TurnChanged`` is returned. ``rollback_source_ids`` are memory sources
+        already rolled back for this turn: they rewind the consolidation cursor
+        to the start of their window. Pending message objects stay attached to
+        the cached session for queued appends.
         """
         async with self._lock(session_key):
             messages = self._store.fetch_session_messages(session_key)
             target = _find_last_passive_turn(messages)
             if target is None:
                 return None
-            indices, user_index, assistant_index = target
-            deleted_ids = [str(messages[index]["id"]) for index in indices]
-            sources = (
-                rollback_source_resolver(list(deleted_ids))
-                if rollback_source_resolver is not None
-                else []
-            )
+            indices, user_index = target
+            turn = passive_turn(messages, indices, user_index)
+            if expected_turn is not None and turn != expected_turn:
+                return TurnChanged(turn.turn_id)
+            deleted_ids = list(turn.message_ids)
+            sources = list(rollback_source_ids)
             meta = self._store.get_session_meta(session_key)
             old_last = max(0, int(meta["last_consolidated"])) if meta else 0
             context_cursors: dict[ContextScope, int] | None = None
@@ -51,7 +72,7 @@ class _UndoMixin(_ManagerCoreMixin):
             if user_threads is not None:
                 # 角色会话按上下文各自回退：删掉的消息只让它所属那类上下文的游标
                 # 退回重新整理，另一类游标只随删除平移（#523）。
-                rollback_index, context_cursors = _rolled_back_context_cursors(
+                context_cursors = _rolled_back_context_cursors(
                     user_threads,
                     messages,
                     indices=indices,
@@ -62,7 +83,7 @@ class _UndoMixin(_ManagerCoreMixin):
                 )
                 new_last = min(context_cursors.values())
             else:
-                rollback_index, new_last = _rolled_back_cursor(
+                new_last = _rolled_back_cursor(
                     messages,
                     indices=indices,
                     scoped_indices=indices,
@@ -110,11 +131,9 @@ class _UndoMixin(_ManagerCoreMixin):
                 ]
                 session.set_consolidation_cursors(new_last, context_cursors)
                 session.maintenance_progress = progress
-            return UndoSessionResult(
-                deleted_ids=deleted_ids,
-                target_user_id=str(messages[user_index]["id"]),
-                target_assistant_id=str(messages[assistant_index]["id"]),
-                rollback_index=rollback_index,
+            return RollbackResult(
+                turn_id=turn.turn_id,
+                deleted_ids=turn.message_ids,
                 last_consolidated_before=old_last,
                 last_consolidated_after=new_last,
             )
@@ -171,8 +190,8 @@ def _rolled_back_context_cursors(
     indices: list[int],
     old_cursors: dict[ContextScope, int],
     rollback_source_ids: list[str],
-) -> tuple[int, dict[ContextScope, int]]:
-    """角色会话撤销后各上下文的游标，以及最靠前的回退位置。
+) -> dict[ContextScope, int]:
+    """角色会话撤销后各上下文的游标。
 
     删除的消息与记忆来源都按此刻的身份绑定归入上下文，与整理时的划分一致；
     计算某类游标时只看这类上下文的删除与来源，另一类的来源不会把它多拉回。
@@ -180,10 +199,9 @@ def _rolled_back_context_cursors(
     from conversation.context_scope import role_context_views
 
     by_id = {str(message.get("id") or ""): message for message in messages}
-    rollback_indices: list[int] = []
     cursors: dict[ContextScope, int] = {}
     for view in role_context_views(user_threads):
-        rollback_index, cursors[view.scope] = _rolled_back_cursor(
+        cursors[view.scope] = _rolled_back_cursor(
             messages,
             indices=indices,
             scoped_indices=[
@@ -196,8 +214,7 @@ def _rolled_back_context_cursors(
                 if source_id in by_id and view.includes(by_id[source_id])
             ],
         )
-        rollback_indices.append(rollback_index)
-    return min(rollback_indices), cursors
+    return cursors
 
 
 def _rolled_back_cursor(
@@ -207,8 +224,8 @@ def _rolled_back_cursor(
     scoped_indices: list[int],
     old_cursor: int,
     rollback_source_ids: list[str],
-) -> tuple[int, int]:
-    """一个整理游标在删除 ``indices`` 后的回退位置与新值。
+) -> int:
+    """一个整理游标在删除 ``indices`` 后的新值。
 
     只有 ``scoped_indices``（删除的消息里属于这个游标那类上下文的）落在游标之前时，
     游标才退回重新整理；其余删除只让游标随之平移。
@@ -219,6 +236,4 @@ def _rolled_back_cursor(
         old_last_consolidated=old_cursor,
         rollback_source_ids=rollback_source_ids,
     )
-    return rollback_index, max(
-        0, min(_shifted(rollback_index, indices), len(messages) - len(indices))
-    )
+    return max(0, min(_shifted(rollback_index, indices), len(messages) - len(indices)))

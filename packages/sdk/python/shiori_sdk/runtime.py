@@ -69,7 +69,6 @@ KNOWN_CAPABILITIES = frozenset(
         # 装配/回滚语义，宿主直接透传同名服务，不各建 Capability 类。
         "workspace",
         "memory",
-        "session_manager",
         "light_provider",
         "light_model",
     }
