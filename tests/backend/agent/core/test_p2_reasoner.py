@@ -21,6 +21,7 @@ from bus.event_bus import EventBus
 from shiori_sdk.messages import InboundMessage
 from shiori_sdk.channel_events import ToolCallCompleted, ToolCallStarted
 from shiori_sdk.core.conversation import StepFinished
+from core.roles.store import RoleStore
 from session.manager import SessionManager
 from tests.support.tool_calls import kernel_with
 
@@ -575,6 +576,7 @@ def test_default_reasoner_observes_tool_lifecycle_events(tmp_path):
         context=cast(
             Any,
             SimpleNamespace(
+                runtime_roles=RoleStore(manager.workspace),
                 render=lambda request, **_: SimpleNamespace(
                     messages=[{"role": "user", "content": request.current_message}],
                 ),
@@ -854,6 +856,7 @@ def test_default_reasoner_run_turn_uses_context_render(tmp_path):
         context=cast(
             Any,
             SimpleNamespace(
+                runtime_roles=RoleStore(manager.workspace),
                 render=lambda request, **_: SimpleNamespace(
                     messages=[{"role": "user", "content": request.current_message}],
                 ),
@@ -905,6 +908,7 @@ def test_default_reasoner_run_turn_reports_llm_timeout(tmp_path):
         context=cast(
             Any,
             SimpleNamespace(
+                runtime_roles=RoleStore(manager.workspace),
                 render=lambda request, **_: SimpleNamespace(
                     messages=[{"role": "user", "content": request.current_message}],
                 ),

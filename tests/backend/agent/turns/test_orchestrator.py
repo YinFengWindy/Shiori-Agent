@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 
 from core.roles.reply_state import RoleReply, RoleReplyContext
+from core.roles.store import RoleStore
 
 from typing import Any, cast
 from types import SimpleNamespace
@@ -36,6 +38,18 @@ from bus.queue import MessageBus
 from bus.events_lifecycle import ReplyMessageCommitted
 from shiori_sdk.messages import InboundMessage
 from session.manager.models import whole_session
+
+
+def _natural_chat_lookup(tmp_path: Path, enabled: bool):
+    """The role record for mira. Session copies in these tests disagree on purpose."""
+    store = RoleStore(tmp_path)
+    store.create_role(
+        role_id="mira",
+        name="Mira",
+        system_prompt="test",
+        runtime_config={"natural_chat_enabled": enabled},
+    )
+    return store.get_role
 
 
 class _DummySession:
@@ -577,7 +591,7 @@ async def test_natural_proactive_keeps_sent_prefix_and_finishes_one_logical_turn
     manager = SessionManager(tmp_path)
     session = manager.get_or_create("role:mira")
     session.metadata.update(
-        role_id="mira", role_runtime_config={"natural_chat_enabled": True}
+        role_id="mira", role_runtime_config={"natural_chat_enabled": False}
     )
     events, sent = [], []
     entered, release = asyncio.Event(), asyncio.Event()
@@ -612,6 +626,7 @@ async def test_natural_proactive_keeps_sent_prefix_and_finishes_one_logical_turn
             ),
             outbound=SimpleNamespace(dispatch=dispatch),
             event_bus=event_bus,
+            role_lookup=_natural_chat_lookup(tmp_path, True),
         )
     )
     success, failure = AsyncMock(), AsyncMock()
@@ -666,7 +681,7 @@ async def test_natural_proactive_reads_role_flag_and_records_state_once(
     manager = SessionManager(tmp_path)
     session = manager.get_or_create("role:mira")
     session.metadata.update(
-        role_id="mira", role_runtime_config={"natural_chat_enabled": enabled}
+        role_id="mira", role_runtime_config={"natural_chat_enabled": not enabled}
     )
     dispatch = AsyncMock(return_value=DeliveryReceipt.sent())
     event_bus = EventBus()
@@ -678,6 +693,7 @@ async def test_natural_proactive_reads_role_flag_and_records_state_once(
             session=SessionServices(manager),
             outbound=SimpleNamespace(dispatch=dispatch),
             event_bus=event_bus,
+            role_lookup=_natural_chat_lookup(tmp_path, enabled),
         )
     )
     success = AsyncMock()
@@ -723,7 +739,7 @@ async def test_bound_private_natural_batch_uses_known_address_without_resolver_r
 
     manager = SessionManager(tmp_path)
     manager.get_or_create("role:mira").metadata.update(
-        role_id="mira", role_runtime_config={"natural_chat_enabled": True}
+        role_id="mira", role_runtime_config={"natural_chat_enabled": False}
     )
     owner = TurnOrchestrator(
         TurnOrchestratorDeps(
@@ -739,6 +755,7 @@ async def test_bound_private_natural_batch_uses_known_address_without_resolver_r
                 "chat",
                 AccountTarget("private", "user42"),
             ),
+            role_lookup=_natural_chat_lookup(tmp_path, True),
         )
     )
     pause = asyncio.Event()

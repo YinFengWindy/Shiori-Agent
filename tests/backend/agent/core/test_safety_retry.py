@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from core.compaction import CompactionFailedError
+from core.roles.store import RoleStore
 from session.manager import SessionManager
 from shiori_sdk.tools import Tool
 from agent.tools.registry import ToolRegistry
@@ -129,6 +130,7 @@ def _make_reasoner(
         context=cast(
             Any,
             SimpleNamespace(
+                runtime_roles=RoleStore(manager.workspace),
                 render=_render,
             ),
         ),
@@ -219,6 +221,7 @@ def test_reasoner_run_turn_content_safety_trims_dynamic_sections_before_history(
         context=cast(
             Any,
             SimpleNamespace(
+                runtime_roles=RoleStore(manager.workspace),
                 render=_render,
             ),
         ),

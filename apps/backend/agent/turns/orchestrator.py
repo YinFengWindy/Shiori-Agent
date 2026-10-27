@@ -19,6 +19,7 @@ from shiori_sdk.accounts.targets import AccountTarget
 from shiori_sdk.accounts.routing import AccountRoute
 from shiori_sdk.channels.chat_types import CHAT_TYPE_PRIVATE
 from core.common.channel_directory import DESKTOP_CHANNEL
+from core.roles.natural_chat import natural_chat_enabled as read_natural_chat_enabled
 from core.roles.services import RoleSessionService
 from core.roles.reply_state import (
     RoleReplyContext,
@@ -81,17 +82,15 @@ class TurnOrchestrator:
         self._role_lookup = deps.role_lookup
 
     def natural_chat_enabled(self, session_key: str) -> bool:
-        """Read the current role capability at the start of each proactive tick."""
-        if self._role_lookup is not None:
-            role = self._role_lookup(session_key.removeprefix("role:"))
-            return (
-                role is not None
-                and role.runtime_config.get("natural_chat_enabled") is True
-            )
-        session = self._session.session_manager.get_or_create(session_key)
-        return (
-            session.metadata.get("role_runtime_config", {}).get("natural_chat_enabled")
-            is True
+        """Read the role record at the start of each proactive tick.
+
+        The session copy of ``role_runtime_config`` is not a switch. No lookup
+        means there is no role record, so the switch is off.
+        """
+        if self._role_lookup is None:
+            return False
+        return read_natural_chat_enabled(
+            self._role_lookup(session_key.removeprefix("role:"))
         )
 
     async def _reply_origin(
