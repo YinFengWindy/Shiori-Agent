@@ -10,6 +10,7 @@ import pytest
 from conversation.background_results import HostBackgroundResults
 from agent.tools.turn_scope import tool_turn
 from agent.tools.turn_origin import set_tool_origin
+from shiori_sdk.core.sessions import RollbackResult
 from shiori_sdk.messages import InboundMessage
 from conversation.listening import GroupListeningControl
 from conversation.service import (
@@ -234,10 +235,10 @@ async def test_natural_report_batch_reloads_and_does_not_change_eligible_undo_tu
         m["metadata"]["reply_sequence_id"] for m in report_rows if m["content"]
     ] == ["report:stable", "report:stable"]
     before_ids = {str(m["id"]) for m in report_rows}
-    result = await host.manager.undo_last_turn("role:mira")
+    result = await host.manager.rollback_last_turn("role:mira")
     if ordinary_turns:
-        assert result is not None
-        assert result.deleted_ids == old_last_turn
+        assert isinstance(result, RollbackResult)
+        assert result.deleted_ids == tuple(old_last_turn)
     else:
         assert result is None
     after = SessionManager(tmp_path).get_or_create("role:mira")

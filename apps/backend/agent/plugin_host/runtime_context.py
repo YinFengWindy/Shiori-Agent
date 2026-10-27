@@ -35,7 +35,7 @@ from shiori_sdk.runtime import (
 from shiori_sdk.plugin_services import ServicePluginContext, RuntimeLifecycle
 from shiori_sdk.roles import Roles, SceneObservations
 from shiori_sdk.models import ChatProvider, RoleModels
-from shiori_sdk.sessions import PluginSessions, SessionUndo
+from shiori_sdk.sessions import PluginSessions
 from shiori_sdk.external_turns import ExternalTurns
 from shiori_sdk.background_results import BackgroundResults
 from shiori_sdk.process_resources import PluginProcessResources
@@ -78,7 +78,6 @@ class PluginSetupContext:
         background: BackgroundTasks | None = None,
         storage: PrivateStorage | None = None,
         diagnostics: Diagnostics | None = None,
-        session_manager: SessionUndo | None = None,
         roles: Roles | None = None,
         models: RoleModels | None = None,
         sessions: PluginSessions | None = None,
@@ -115,7 +114,6 @@ class PluginSetupContext:
         self._background = background
         self._storage = storage
         self._diagnostics = diagnostics
-        self._session_manager = session_manager
         self._roles = roles
         self._models = models
         self._sessions = sessions
@@ -261,11 +259,6 @@ class PluginSetupContext:
     def diagnostics(self) -> Diagnostics:
         """Return the explicitly granted diagnostics capability."""
         return self._core_capability("diagnostics", self._diagnostics)
-
-    @property
-    def session_manager(self) -> SessionUndo:
-        """Return the explicitly granted session_manager capability."""
-        return self._core_capability("session_manager", self._session_manager)
 
     def as_hook_context(self) -> HookPluginContext:
         """Check the hook setup boundary without dynamic attributes."""

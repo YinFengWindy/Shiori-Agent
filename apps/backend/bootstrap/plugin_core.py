@@ -40,7 +40,6 @@ from agent.plugin_host.core_keys import (
     HOST_RPC,
     HOST_ROLES,
     HOST_SCENE_OBSERVATIONS,
-    HOST_SESSION_MANAGER,
     HOST_SESSIONS,
     HOST_TOOL_TURN,
     HOST_TOOLS,
@@ -103,10 +102,10 @@ class PluginCoreInputs:
     - ``role_store``: the canonical role store, behind ``roles``, ``accounts``
       and ``avatars`` (its account index and avatar cache) and, with the
       ``workspace``, ``memory``.
-    - ``session_manager``: the ``session_manager`` capability and the
-      ``sessions`` socket (``SESSIONS``), and, with the ``workspace`` holding
-      session media, the ``sessions`` capability (``host.sessions``), whose
-      payloads the desktop presenter projects with ``relationship_runtime``.
+    - ``session_manager``: the ``sessions`` socket (``SESSIONS``) and, with
+      the ``workspace`` holding session media, the ``sessions`` capability
+      (``host.sessions``), whose payloads the desktop presenter projects with
+      ``relationship_runtime``.
     - ``role_runtime_registry``: ``models``.
     - ``provider`` / ``model``: the main chat pair, provided as
       ``MAIN_PROVIDER`` and ``MAIN_MODEL``. None means this generation has no
@@ -173,10 +172,9 @@ def plugin_core_modules(inputs: PluginCoreInputs) -> tuple[CoreModule, ...]:
             provide(HOST_AVATARS, PluginAvatars(inputs.role_store.avatars))
 
     def provide_sessions(provide: CoreProvide) -> None:
-        """The session manager, the sessions socket, and session media (``session``)."""
+        """The sessions socket and session media (``session``)."""
         if inputs.session_manager is None:
             return
-        provide(HOST_SESSION_MANAGER, inputs.session_manager)
         # Typed as the plugin contract, so pyright checks the host implementation.
         sessions_api: Sessions = inputs.session_manager
         provide(SESSIONS, sessions_api)

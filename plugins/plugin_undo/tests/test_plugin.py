@@ -10,20 +10,12 @@ from shiori_sdk.core.memory import MEMORY_ENGINE
 from shiori_sdk.core.sessions import SESSIONS, RollbackResult
 from shiori_sdk.kernel import Kernel, PluginSpec
 from shiori_sdk.memory.engine import TurnRollback
-from shiori_sdk.testing.commands import FakeSessionUndo
+from shiori_sdk.testing.commands import FakeSessions
 from shiori_sdk.testing.extensions import FakeExtensionContext
 
 
-def _rolled_back() -> RollbackResult:
-    return RollbackResult(
-        "cli:1:0",
-        ("cli:1:0", "cli:1:1"),
-        "cli:1:0",
-        "cli:1:1",
-        0,
-        2,
-        0,
-    )
+def _rolled_back(turn_id: str = "cli:1:0") -> RollbackResult:
+    return RollbackResult(turn_id, (turn_id, "cli:1:1"), 2, 0)
 
 
 def _context(manager, memory=None) -> tuple[FakeExtensionContext, CommandRegistry]:
@@ -43,12 +35,12 @@ def _context(manager, memory=None) -> tuple[FakeExtensionContext, CommandRegistr
 
 class _MemoryEngine:
     def __init__(self, *, fail: bool = False) -> None:
-        self.calls: list[str] = []
+        self.calls: list[tuple[str, tuple[str, ...]]] = []
         self.fail = fail
         self.superseded = False
 
-    def rollback_turn(self, turn_id: str) -> TurnRollback:
-        self.calls.append(turn_id)
+    def rollback_turn(self, turn_id: str, message_ids) -> TurnRollback:
+        self.calls.append((turn_id, tuple(message_ids)))
         if self.fail:
             raise RuntimeError("memory rollback failed")
         self.superseded = True
@@ -62,19 +54,19 @@ class _MemoryEngine:
 @pytest.mark.asyncio
 async def test_undo_rolls_memory_back_before_the_session():
     order: list[str] = []
-    manager = FakeSessionUndo(_rolled_back())
+    manager = FakeSessions(_rolled_back())
     memory = _MemoryEngine()
 
     real_rollback = memory.rollback_turn
     real_session = manager.rollback_last_turn
 
-    def rollback_turn(turn_id: str) -> TurnRollback:
+    def rollback_turn(turn_id: str, message_ids) -> TurnRollback:
         order.append("memory")
-        return real_rollback(turn_id)
+        return real_rollback(turn_id, message_ids)
 
-    async def rollback_last_turn(session_key, *, rollback_source_ids=None):
+    async def rollback_last_turn(session_key, **kwargs):
         order.append("session")
-        return await real_session(session_key, rollback_source_ids=rollback_source_ids)
+        return await real_session(session_key, **kwargs)
 
     memory.rollback_turn = rollback_turn
     manager.rollback_last_turn = rollback_last_turn
@@ -82,9 +74,10 @@ async def test_undo_rolls_memory_back_before_the_session():
     reply = await PluginUndo(manager, lambda: cast(Any, memory)).undo("cli:1")
 
     assert order == ["memory", "session"]
-    assert memory.calls == ["cli:1:0"]
+    # The whole turn, so a window holding only its reply is rolled back too.
+    assert memory.calls == [("cli:1:0", ("cli:1:0", "cli:1:1"))]
     assert manager.deleted
-    assert manager.source_ids == ["cli:1:0", "cli:1:1", "cli:1:2"]
+    assert manager.source_ids == ("cli:1:0", "cli:1:1", "cli:1:2")
     assert reply == (
         "已撤销上一轮对话。\n删除消息：2 条\n失效记忆：1 条\n恢复旧记忆：1 条"
     )
@@ -92,12 +85,11 @@ async def test_undo_rolls_memory_back_before_the_session():
 
 @pytest.mark.asyncio
 async def test_session_failure_after_memory_rollback_keeps_the_memory_change(caplog):
-    manager = FakeSessionUndo(_rolled_back())
+    manager = FakeSessions(_rolled_back())
     memory = _MemoryEngine()
 
-    async def rollback_last_turn(session_key, *, rollback_source_ids=None):
+    async def rollback_last_turn(session_key, **_kwargs):
         manager.calls.append(session_key)
-        manager.source_ids = list(rollback_source_ids or [])
         raise RuntimeError("session rollback failed")
 
     manager.rollback_last_turn = rollback_last_turn
@@ -115,11 +107,11 @@ async def test_session_failure_after_memory_rollback_keeps_the_memory_change(cap
 
 @pytest.mark.asyncio
 async def test_memory_failure_leaves_the_session(caplog):
-    manager = FakeSessionUndo(_rolled_back())
+    manager = FakeSessions(_rolled_back())
     memory = _MemoryEngine(fail=True)
     reply = await PluginUndo(manager, lambda: cast(Any, memory)).undo("cli:1")
     assert reply == "记忆回滚失败，上一轮对话还在。可以重试。"
-    assert memory.calls == ["cli:1:0"]
+    assert [turn_id for turn_id, _ids in memory.calls] == ["cli:1:0"]
     assert manager.calls == []
     assert not manager.deleted
     assert not memory.superseded
@@ -128,8 +120,8 @@ async def test_memory_failure_leaves_the_session(caplog):
 
 @pytest.mark.asyncio
 async def test_no_passive_turn_does_not_roll_memory_back():
-    class _DeletesOnCall(FakeSessionUndo):
-        async def rollback_last_turn(self, session_key, *, rollback_source_ids=None):
+    class _DeletesOnCall(FakeSessions):
+        async def rollback_last_turn(self, session_key, **_kwargs):
             self.deleted = True
             return None
 
@@ -145,17 +137,16 @@ async def test_no_passive_turn_does_not_roll_memory_back():
 
 @pytest.mark.asyncio
 async def test_missing_memory_still_undoes_session():
-    """An empty memory socket rolls the session back even if no turn id is readable."""
+    """An empty memory socket rolls the session back even if no turn is readable."""
 
-    class _NoTurnId(FakeSessionUndo):
-        def last_passive_turn_id(self, session_key: str) -> str | None:
-            self.turn_lookups.append(session_key)
+    class _NoTurnRead(FakeSessions):
+        def last_passive_turn(self, session_key: str):
             return None
 
-    manager = _NoTurnId(_rolled_back())
+    manager = _NoTurnRead(_rolled_back())
     reply = await PluginUndo(manager, lambda: None).undo("cli:1")
     assert manager.deleted
-    assert manager.source_ids is None
+    assert manager.source_ids == ()
     assert reply == (
         "已撤销上一轮对话。\n删除消息：2 条\n失效记忆：0 条\n恢复旧记忆：0 条"
     )
@@ -163,9 +154,9 @@ async def test_missing_memory_still_undoes_session():
 
 @pytest.mark.asyncio
 async def test_session_error_without_memory_propagates():
-    manager = FakeSessionUndo(_rolled_back())
+    manager = FakeSessions(_rolled_back())
 
-    async def rollback_last_turn(session_key, *, rollback_source_ids=None):
+    async def rollback_last_turn(session_key, **_kwargs):
         raise RuntimeError("session down")
 
     manager.rollback_last_turn = rollback_last_turn
@@ -175,10 +166,10 @@ async def test_session_error_without_memory_propagates():
 
 @pytest.mark.asyncio
 async def test_session_without_a_turn_after_memory_rollback_does_not_claim_undo():
-    manager = FakeSessionUndo(_rolled_back())
+    manager = FakeSessions(_rolled_back())
     memory = _MemoryEngine()
 
-    async def rollback_last_turn(session_key, *, rollback_source_ids=None):
+    async def rollback_last_turn(session_key, **_kwargs):
         manager.calls.append(session_key)
         return None
 
@@ -192,8 +183,30 @@ async def test_session_without_a_turn_after_memory_rollback_does_not_claim_undo(
 
 
 @pytest.mark.asyncio
+async def test_turn_committed_after_memory_rollback_is_not_deleted(caplog):
+    """Memory rolled back turn A; the session now ends in B, which stays."""
+    manager = FakeSessions(_rolled_back("cli:1:0"))
+    memory = _MemoryEngine()
+    real_rollback = memory.rollback_turn
+
+    def rollback_turn(turn_id: str, message_ids) -> TurnRollback:
+        result = real_rollback(turn_id, message_ids)
+        manager.result = _rolled_back("cli:1:2")
+        return result
+
+    memory.rollback_turn = rollback_turn
+    reply = await PluginUndo(manager, lambda: cast(Any, memory)).undo("cli:1")
+
+    assert memory.superseded
+    assert manager.calls == ["cli:1"]
+    assert not manager.deleted
+    assert reply == "已回滚上一轮的记忆，但会话里有新消息，上一轮对话未撤销。"
+    assert "latest=cli:1:2" in caplog.text
+
+
+@pytest.mark.asyncio
 async def test_setup_and_unload_register_one_command():
-    ctx, commands = _context(FakeSessionUndo())
+    ctx, commands = _context(FakeSessions())
     await setup(ctx)
     assert commands.menu() == [("undo", "撤销上一轮对话")]
     await ctx.aclose()
@@ -213,7 +226,7 @@ async def test_undo_reads_the_engine_again_after_reload():
             self.generation_id = generation_id
             self.calls: list[str] = []
 
-        def rollback_turn(self, turn_id: str) -> TurnRollback:
+        def rollback_turn(self, turn_id: str, message_ids) -> TurnRollback:
             self.calls.append(turn_id)
             return TurnRollback(
                 affected_ids=tuple(
@@ -232,7 +245,7 @@ async def test_undo_reads_the_engine_again_after_reload():
     await kernel.start(
         [PluginSpec("memory", provide_engine, provides=("memory_engine",))]
     )
-    manager = FakeSessionUndo(_rolled_back())
+    manager = FakeSessions(_rolled_back())
     kernel.provide(SESSIONS, manager)
     ctx = FakeExtensionContext(
         "plugin_undo",

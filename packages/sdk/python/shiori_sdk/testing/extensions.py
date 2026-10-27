@@ -3,7 +3,6 @@
 import asyncio
 from collections.abc import Coroutine
 from pathlib import Path
-from shiori_sdk.sessions import SessionUndo
 from shiori_sdk.extensions import Dependencies
 from shiori_sdk.kernel import Kernel
 from shiori_sdk.runtime import HostServiceUnavailable
@@ -77,11 +76,11 @@ class FakeBackground:
 class FakeExtensionContext(FakePluginContext):
     """Inject only SDK fakes; no host install, config, database or session services.
 
-    ``workspace`` and ``session_manager`` left as ``None`` model a host that lacks
-    the service: reading them raises ``HostServiceUnavailable`` like the host does.
+    ``workspace`` left as ``None`` models a host that lacks the service:
+    reading it raises ``HostServiceUnavailable`` like the host does.
     ``kernel``, ``inject`` and ``optional_inject`` are those of
     ``FakePluginContext``: provide a ``CommandRegistry`` as ``COMMANDS`` on
-    ``kernel`` for a command plugin, a ``FakeSessionUndo`` as ``SESSIONS`` when
+    ``kernel`` for a command plugin, a ``FakeSessions`` as ``SESSIONS`` when
     the command rolls a turn back, and ``MEMORY_ENGINE`` when the test has one.
     """
 
@@ -92,7 +91,6 @@ class FakeExtensionContext(FakePluginContext):
         workspace: Path | None = None,
         config: dict[str, object] | None = None,
         dependencies: Dependencies | None = None,
-        session_manager: SessionUndo | None = None,
         kernel: Kernel | None = None,
         inject: tuple[str, ...] = (),
         optional_inject: tuple[str, ...] = (),
@@ -103,7 +101,6 @@ class FakeExtensionContext(FakePluginContext):
         self._workspace = workspace
         self.config = FakeConfig(config)
         self.dependencies = dependencies or FakeDependencies()
-        self._session_manager = session_manager
         self.background = FakeBackground(self)
         self.diagnostics = FakeDiagnostics()
         self.storage = FakeMemoryStorage()
@@ -116,12 +113,3 @@ class FakeExtensionContext(FakePluginContext):
                 self.plugin_id, "workspace", ("workspace",)
             )
         return self._workspace
-
-    @property
-    def session_manager(self) -> SessionUndo:
-        """Returns the supplied session undo service, failing like a host without one."""
-        if self._session_manager is None:
-            raise HostServiceUnavailable.for_capability(
-                self.plugin_id, "session_manager", ("session_manager",)
-            )
-        return self._session_manager

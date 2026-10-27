@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from shiori_sdk.commands import CommandInput
 from shiori_sdk.core.conversation import COMMANDS
 from shiori_sdk.core.memory import MEMORY_ENGINE
-from shiori_sdk.core.sessions import SESSIONS, Sessions
+from shiori_sdk.core.sessions import SESSIONS, RollbackResult, Sessions, TurnChanged
 from shiori_sdk.memory.engine import MemoryEngine, TurnRollback
 
 if TYPE_CHECKING:
@@ -23,9 +23,11 @@ class PluginUndo:
 
     ``current_memory`` is read immediately before the synchronous memory
     rollback and is not used after the session await (D25). An empty socket
-    rolls back the session only. Memory failure leaves the session in place
+    rolls back the session only. Memory rolls back over every message id of
+    the turn read before the session lock; the session then deletes that turn
+    only if it is still the latest. Memory failure leaves the session in place
     so the command can be retried. The two calls are not one transaction: a
-    session failure after memory has already rolled back is reported, not
+    session that fails or moved on after memory rolled back is reported, not
     undone inside this command (D10).
     """
 
@@ -41,69 +43,76 @@ class PluginUndo:
         """Undo the latest committed passive turn and report what memory did."""
         sessions = self._sessions
         engine = self._current_memory()
-        memory = TurnRollback()
-        memory_rolled_back = False
-        if engine is not None:
-            turn_id = sessions.last_passive_turn_id(session_key) or ""
-            if not turn_id:
+        if engine is None:
+            result = await sessions.rollback_last_turn(session_key)
+            if not isinstance(result, RollbackResult):
                 return _NO_TURN
-            try:
-                memory = engine.rollback_turn(turn_id)
-            except Exception:
-                logger.exception(
-                    "undo memory rollback failed; session left in place: session=%s turn_id=%s",
-                    session_key,
-                    turn_id,
-                )
-                return "记忆回滚失败，上一轮对话还在。可以重试。"
-            memory_rolled_back = True
+            return _undone_reply(session_key, result, TurnRollback())
+        turn = sessions.last_passive_turn(session_key)
+        if turn is None:
+            return _NO_TURN
+        try:
+            memory = engine.rollback_turn(turn.turn_id, turn.message_ids)
+        except Exception:
+            logger.exception(
+                "undo memory rollback failed; session left in place: session=%s turn_id=%s",
+                session_key,
+                turn.turn_id,
+            )
+            return "记忆回滚失败，上一轮对话还在。可以重试。"
         try:
             result = await sessions.rollback_last_turn(
                 session_key,
-                rollback_source_ids=list(memory.rollback_source_ids) or None,
+                expected_turn=turn,
+                rollback_source_ids=memory.rollback_source_ids,
             )
         except Exception:
-            if not memory_rolled_back:
-                raise
             logger.exception(
                 "undo session rollback failed after memory rollback: session=%s affected=%s restored=%s",
                 session_key,
                 memory.affected_ids,
                 memory.restored_ids,
             )
-            return _session_failure_reply(memory)
+            return f"记忆已回滚，但会话撤销失败。{_memory_counts(memory)}\n请查看日志后重试。"
         if result is None:
-            if memory_rolled_back:
-                return (
-                    "会话里已经没有可撤销的上一轮，但记忆已回滚。"
-                    f"\n失效记忆：{len(memory.affected_ids)} 条"
-                    f"\n恢复旧记忆：{len(memory.restored_ids)} 条"
-                )
-            return _NO_TURN
-        logger.info(
-            "undo session=%s deleted=%d memory_superseded=%d memory_restored=%d last=%d->%d turn_id=%s",
-            session_key,
-            len(result.deleted_ids),
-            len(memory.affected_ids),
-            len(memory.restored_ids),
-            result.last_consolidated_before,
-            result.last_consolidated_after,
-            result.turn_id,
-        )
-        return (
-            "已撤销上一轮对话。"
-            f"\n删除消息：{len(result.deleted_ids)} 条"
-            f"\n失效记忆：{len(memory.affected_ids)} 条"
-            f"\n恢复旧记忆：{len(memory.restored_ids)} 条"
-        )
+            return (
+                f"会话里已经没有可撤销的上一轮，但记忆已回滚。{_memory_counts(memory)}"
+            )
+        if isinstance(result, TurnChanged):
+            logger.warning(
+                "undo session moved on after memory rollback: session=%s rolled_back=%s latest=%s affected=%s",
+                session_key,
+                turn.turn_id,
+                result.turn_id,
+                memory.affected_ids,
+            )
+            return "已回滚上一轮的记忆，但会话里有新消息，上一轮对话未撤销。"
+        return _undone_reply(session_key, result, memory)
 
 
-def _session_failure_reply(memory: TurnRollback) -> str:
+def _memory_counts(memory: TurnRollback) -> str:
     return (
-        "记忆已回滚，但会话撤销失败。"
         f"\n失效记忆：{len(memory.affected_ids)} 条"
         f"\n恢复旧记忆：{len(memory.restored_ids)} 条"
-        "\n请查看日志后重试。"
+    )
+
+
+def _undone_reply(
+    session_key: str, result: RollbackResult, memory: TurnRollback
+) -> str:
+    logger.info(
+        "undo session=%s deleted=%d memory_superseded=%d memory_restored=%d last=%d->%d turn_id=%s",
+        session_key,
+        len(result.deleted_ids),
+        len(memory.affected_ids),
+        len(memory.restored_ids),
+        result.last_consolidated_before,
+        result.last_consolidated_after,
+        result.turn_id,
+    )
+    return (
+        f"已撤销上一轮对话。\n删除消息：{len(result.deleted_ids)} 条"
+        f"{_memory_counts(memory)}"
     )
 
 

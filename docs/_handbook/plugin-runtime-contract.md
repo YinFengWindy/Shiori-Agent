@@ -123,25 +123,49 @@ consolidates these additions and the subsequent #847 breaking migration.
 
 <!-- Record the next contract batch here, with PR references and breaking markers. -->
 
-- **Session rollback and memory `rollback_turn` (PR #938, issue #902, refactor P3-7c, D10).**
-  `shiori_sdk.core.sessions` defines `SESSIONS` (`Key` name `sessions`) and
-  `Sessions`. `last_passive_turn_id(session_key)` reads the anchor user message
-  id of the latest passive turn without deleting it.
-  `rollback_last_turn(session_key, *, rollback_source_ids=None)` returns
-  `RollbackResult | None`; `RollbackResult.turn_id` is that same anchor
-  id (not a desktop `metadata.turn_id`). Optional `rollback_source_ids` rewinds
-  the consolidation cursor across the memory window those message ids cover.
-  `MemoryAdminApi.rollback_turn(turn_id) -> TurnRollback` is part of
-  `MEMORY_ENGINE`: it supersedes memories whose `source_ref` is that anchor id
-  or a consolidation window listing it, and restores memories that turn had
-  replaced. A memory sourced only from the turn's assistant message is left in
-  place. `plugin_undo` injects `sessions` and `commands` and optionally
-  `memory_engine`. It rolls memory back first (a failure leaves the session in
-  place and can be retried), then the session. An empty memory socket rolls
-  back the session only. The two calls are not one transaction: if the session
-  step fails after memory has rolled back, the command reports that partial
-  result. These methods are on the existing sockets; there is no parallel key.
-  No SDK version bump.
+- **breaking: session rollback socket, memory `rollback_turn`, and capability
+  `session_manager` removed (PR #938, issue #902, refactor P3-7c, D10).**
+  `shiori_sdk.core.sessions` defines the `SESSIONS` socket (`Key` name
+  `sessions`, declared in `inject`) with `Sessions`, `PassiveTurn`,
+  `RollbackResult` and `TurnChanged`. It is unrelated to the manifest
+  capability `sessions` (`host.sessions`, session metadata and media, declared
+  in `capabilities`): the two share a name, not a contract.
+  `last_passive_turn(session_key) -> PassiveTurn | None` reads the latest
+  passive turn without deleting it: `turn_id` is its anchor user message id
+  (not a desktop `metadata.turn_id`), `message_ids` every message of the turn
+  (context frames, user, tool and the whole assistant reply sequence).
+  `rollback_last_turn(session_key, *, expected_turn=None,
+  rollback_source_ids=())` deletes the latest passive turn under the session
+  lock and returns `RollbackResult` (`turn_id`, `deleted_ids`,
+  `last_consolidated_before/after`), `None` when there is none, or
+  `TurnChanged(turn_id)` without deleting when the latest turn is not exactly
+  `expected_turn` (its anchor and every message id must match, because memory
+  rolled back that set). `rollback_source_ids` rewinds the consolidation cursor to
+  the start of the memory window those message ids cover.
+  **Breaking for memory engines:** `MemoryAdminApi` (part of `MemoryEngine`
+  behind `MEMORY_ENGINE`) gains the required method
+  `rollback_turn(turn_id, message_ids) -> TurnRollback`; a third-party engine
+  that lacks it no longer satisfies the protocol. It supersedes memories whose
+  `source_ref` is one of those ids or a consolidation window listing one, and
+  restores memories the turn had replaced (decision confirmed by the
+  maintainer on 2026-10-27: the whole turn, so a window holding only the
+  turn's tool or reply messages is rolled back too).
+  **Breaking for command plugins:** capability `session_manager` is removed. No
+  plugin declares it any more; it leaves `shiori_sdk.runtime.KNOWN_CAPABILITIES`
+  and the `capabilities` enum of `manifest.schema.json`, the host no longer
+  exposes `ctx.session_manager`, and `CommandPluginContext.session_manager`,
+  `FakeExtensionContext(session_manager=)`, `shiori_sdk.sessions.SessionUndo`,
+  `UndoSessionResult` and `MemoryUndo` are gone. A third-party manifest that
+  still declares it is rejected as an unknown capability; inject `sessions`
+  instead. `testing.commands.FakeSessionUndo` is renamed `FakeSessions` and
+  now implements `Sessions`.
+  `plugin_undo` injects `sessions` and `commands` and optionally
+  `memory_engine`: it rolls memory back first (a failure leaves the session in
+  place and can be retried), then the session with `expected_turn`. An empty
+  memory socket rolls back the session only. The two calls are not one
+  transaction: a session step that fails or finds a changed turn after memory
+  rolled back is reported to the user as is, not undone, and the reply gives
+  no retry advice (retrying would undo the newer turn).
 
 - **Optional process-tree ownership (issue #934, PR #936).** `Processes.spawn()` accepts
   `own_process_tree: bool = True`. Existing callers retain the owned-process

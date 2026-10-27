@@ -5,7 +5,6 @@ from collections.abc import Coroutine
 from pathlib import Path
 from typing import Protocol
 from .runtime import PluginRuntimeContext
-from .sessions import SessionUndo
 from .diagnostics import Diagnostics
 
 
@@ -64,16 +63,14 @@ class HookPluginContext(PluginRuntimeContext, Protocol):
 class CommandPluginContext(PluginRuntimeContext, Protocol):
     """Dependency services for command plugins (they inject ``COMMANDS``).
 
-    Session rollback is the ``sessions`` socket (``shiori_sdk.core.sessions``),
-    not a capability of this context. The memory engine is not a capability
-    here either. A command plugin that also declares
-    ``optional_inject: [memory_engine]`` reads it with ``get``.
+    Session rollback (``SESSIONS``) and the memory engine (``MEMORY_ENGINE``)
+    are sockets, not capabilities of this context: a command plugin declares
+    them in ``inject`` / ``optional_inject`` and reads them with ``require`` /
+    ``get``.
     """
 
     @property
     def dependencies(self) -> Dependencies: ...
-    @property
-    def session_manager(self) -> SessionUndo: ...
 
 
 class ObservePluginContext(PluginRuntimeContext, Protocol):

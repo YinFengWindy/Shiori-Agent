@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -342,14 +342,16 @@ class MemoryAdminApi(Protocol):
         include_superseded: bool = False,
     ) -> list[dict[str, object]]: ...
 
-    def rollback_turn(self, turn_id: str) -> TurnRollback:
+    def rollback_turn(self, turn_id: str, message_ids: Sequence[str]) -> TurnRollback:
         """Supersede memories sourced from this turn and restore what they replaced.
 
-        ``turn_id`` is the passive turn's anchor user message id. A memory
-        whose ``source_ref`` is that id, or a consolidation window that lists
-        it, is superseded. A memory sourced only from the turn's assistant
-        message is left in place. Synchronous: callers re-``get`` the engine
-        after any ``await``, and this call is not counted as in flight.
+        ``turn_id`` is the passive turn's anchor user message id;
+        ``message_ids`` are every message of the turn (``PassiveTurn`` of
+        ``shiori_sdk.core.sessions``), so a consolidation window holding only
+        the turn's tool or assistant messages is rolled back too. A memory is
+        superseded when its ``source_ref`` is one of those ids or a window
+        listing one. Synchronous: callers re-``get`` the engine after any
+        ``await``, and this call is not counted as in flight.
         """
         ...
 
