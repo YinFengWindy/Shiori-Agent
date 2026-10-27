@@ -123,7 +123,7 @@ consolidates these additions and the subsequent #847 breaking migration.
 
 <!-- Record the next contract batch here, with PR references and breaking markers. -->
 
-- **Session rollback and memory `rollback_turn` (issue #902, refactor P3-7c, D10).**
+- **Session rollback and memory `rollback_turn` (PR #938, issue #902, refactor P3-7c, D10).**
   `shiori_sdk.core.sessions` defines `SESSIONS` (`Key` name `sessions`) and
   `Sessions`. `last_passive_turn_id(session_key)` reads the anchor user message
   id of the latest passive turn without deleting it.
