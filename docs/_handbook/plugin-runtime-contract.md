@@ -124,7 +124,7 @@ consolidates these additions and the subsequent #847 breaking migration.
 <!-- Record the next contract batch here, with PR references and breaking markers. -->
 
 - **breaking: capability `diagnostics` removed; observe injects `crash_reporting`
-  (issue #902, refactor P3-8, D13).** `CrashReporting` gains `session_key() ->
+  (PR #940, issue #902, refactor P3-8, D13).** `CrashReporting` gains `session_key() ->
   str | None` and `top_frame(tb) -> str` (maintainer, 2026-10-27: on this
   protocol, not a new key). The host object provided as `CRASH_REPORTING`
   arbitrates `sys.excepthook`, `threading.excepthook` and the loop exception
