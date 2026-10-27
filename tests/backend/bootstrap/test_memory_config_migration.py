@@ -379,8 +379,10 @@ def test_inline_tables_raise_without_rewriting_the_file(
     path = tmp_path / "config.toml"
     _write(path, text)
 
-    with pytest.raises(ValueError, match="内联表或点分键"):
+    with pytest.raises(ValueError, match="内联表或点分键") as raised:
         migrate_legacy_memory_config(path)
+
+    assert str(path) in str(raised.value)
 
     assert path.read_text(encoding="utf-8") == text
 

@@ -30,6 +30,8 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
+from shiori_sdk.files.text import atomic_save_text
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_MEMORY_PLUGIN_ID = "default_memory"
@@ -44,7 +46,7 @@ _ENABLED_KEY = "enabled"
 _LEGACY_DIMENSIONALITY = "memory.embedding.output_dimensionality"
 _EDITOR_MODULE = "_shiori_memory_migration_plugin_config_text"
 _UNLOCATABLE_MESSAGE = (
-    "config.toml 里的 memory 或 plugins.default_memory 写成了内联表或点分键，"
+    "{path} 里的 memory 或 plugins.default_memory 写成了内联表或点分键，"
     "无法自动迁移；请先改成独立的 [memory] 与 [plugins.default_memory] 表"
 )
 
@@ -70,9 +72,9 @@ def migrate_legacy_memory_config(path: Path) -> None:
     else:
         values = {**migrated, **existing}
     values[_ENABLED_KEY] = migrated[_ENABLED_KEY]
-    updated = _apply(text, values)
+    updated = _apply(path, text, values)
     if updated != text:
-        _atomic_write(path, updated)
+        atomic_save_text(path, updated)
 
 
 def require_output_dimensionality(value: object, *, field: str) -> int | None:
@@ -170,7 +172,7 @@ def _primary_registration(llm: dict[str, Any]) -> dict[str, Any]:
     return {}
 
 
-def _apply(text: str, values: dict[str, Any]) -> str:
+def _apply(path: Path, text: str, values: dict[str, Any]) -> str:
     """Rewrites only the plugin table and drops ``[memory]``, or raises.
 
     Inline tables and dotted keys have no header line the table editor can
@@ -181,17 +183,11 @@ def _apply(text: str, values: dict[str, Any]) -> str:
     try:
         merged = editor.merge_plugin_table(text, DEFAULT_MEMORY_PLUGIN_ID, values)
     except editor.PluginTableConflict as exc:
-        raise ValueError(_UNLOCATABLE_MESSAGE) from exc
+        raise ValueError(_UNLOCATABLE_MESSAGE.format(path=path)) from exc
     updated = editor.remove_table(merged, ["memory"])
     if "memory" in tomllib.loads(updated):
-        raise ValueError(_UNLOCATABLE_MESSAGE)
+        raise ValueError(_UNLOCATABLE_MESSAGE.format(path=path))
     return updated
-
-
-def _atomic_write(path: Path, text: str) -> None:
-    temporary = path.with_name(f".{path.name}.migrating")
-    temporary.write_text(text, encoding="utf-8")
-    temporary.replace(path)
 
 
 def _toml_editor() -> Any:
