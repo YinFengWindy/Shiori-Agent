@@ -3,6 +3,9 @@
 from shiori_sdk.testing.processes import FakeProcesses
 
 import asyncio
+import json
+from plugins.browser_use.backend.ego_command import EgoActionError, EgoCommand
+from plugins.browser_use.backend.ego_runtime import EgoRuntime
 from unittest.mock import AsyncMock
 
 import pytest
@@ -353,4 +356,154 @@ async def test_closing_one_role_does_not_serialize_other_roles(tmp_path, monkeyp
     with pytest.raises(asyncio.CancelledError):
         await first
     assert "second" in manager._sessions and "first" not in manager._sessions
+    await manager.close()
+
+
+@pytest.fixture
+def remote(tmp_path, monkeypatch):
+    class Remote:
+        started = asyncio.Event()
+        act = asyncio.Event()
+        release = asyncio.Event()
+        startup_release = asyncio.Event()
+        delay_start = False
+        fail_close = False
+        action_failure = None
+        effects = []
+        spaces = set()
+
+        async def run(self, command, request):
+            operation = request["operation"]
+            if operation == "start":
+                self.spaces.add(command.root)
+                (command.root / "space.json").write_text(
+                    json.dumps({"id": len(self.spaces)}), encoding="utf8"
+                )
+                self.started.set()
+                if self.delay_start:
+                    await self.startup_release.wait()
+                return {"ok": True, "result": "started"}
+            if operation == "close":
+                if self.fail_close:
+                    raise RuntimeError("close not acknowledged")
+                self.spaces.remove(command.root)
+                return {"ok": True, "result": {"closedSpace": True}}
+            if operation == "actions":
+                self.act.set()
+                await self.release.wait()
+                if self.action_failure is not None:
+                    raise self.action_failure
+            if (command.root / "stopped").exists():
+                raise EgoActionError("stopped")
+            self.effects.append((command.root, operation))
+            return {"ok": True, "result": "done"}
+
+    remote = Remote()
+
+    async def run(command, request):
+        return await remote.run(command, request)
+
+    monkeypatch.setattr(EgoCommand, "run", run)
+    manager = BrowserSessions(
+        tmp_path,
+        BrowserUseConfig(backend="ego(lite)"),
+        processes=FakeProcesses(),
+        resources=tmp_path,
+        ego_runtime=EgoRuntime(tmp_path / "ego.exe"),
+    )
+    return remote, manager
+
+
+async def test_cancel_stops_queued_actions_and_releases_only_its_role(remote):
+    server, manager = remote
+    await manager.call("other", "ego_browser_open", {})
+    active = asyncio.create_task(manager.call("role", "ego_browser_actions", {}))
+    await server.act.wait()
+    queued = asyncio.create_task(manager.call("role", "ego_browser_open", {}))
+    await asyncio.sleep(0)
+    active.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await active
+    with pytest.raises((asyncio.CancelledError, RuntimeError)):
+        await queued
+    assert len(server.spaces) == 1
+    assert len(server.effects) == 1
+    assert await manager.call("other", "ego_browser_snapshot", {}) == "done"
+    assert await manager.call("role", "ego_browser_open", {}) == "done"
+    await manager.close()
+    assert not server.spaces
+
+
+async def test_startup_cancellation_waits_for_late_space_acknowledgment(remote):
+    server, manager = remote
+    server.delay_start = True
+    active = asyncio.create_task(manager.call("role", "ego_browser_open", {}))
+    await server.started.wait()
+    active.cancel()
+    await asyncio.sleep(0)
+    assert not active.done()
+    server.startup_release.set()
+    with pytest.raises(asyncio.CancelledError):
+        await active
+    assert not server.spaces
+    assert not server.effects
+    await manager.close()
+
+
+async def test_cleanup_failure_blocks_reuse_until_remote_close_succeeds(remote):
+    server, manager = remote
+    active = asyncio.create_task(manager.call("role", "ego_browser_actions", {}))
+    await server.act.wait()
+    server.fail_close = True
+    active.cancel()
+    with pytest.raises(RuntimeError, match="not acknowledged"):
+        await active
+    assert len(server.spaces) == 1
+    with pytest.raises(RuntimeError):
+        await manager.call("role", "ego_browser_open", {})
+    server.fail_close = False
+    await manager.close()
+    assert not server.spaces
+
+
+async def test_lost_start_receipt_can_still_close_the_published_space(
+    remote, monkeypatch
+):
+    server, manager = remote
+    original = EgoCommand.run
+
+    async def lose_receipt(command, request):
+        result = await original(command, request)
+        if request["operation"] == "start":
+            raise RuntimeError("client disconnected after creation")
+        return result
+
+    monkeypatch.setattr(EgoCommand, "run", lose_receipt)
+    with pytest.raises(RuntimeError, match="disconnected"):
+        await manager.call("role", "ego_browser_open", {})
+    assert not server.spaces
+    assert not server.effects
+    monkeypatch.setattr(EgoCommand, "run", original)
+    assert await manager.call("role", "ego_browser_open", {}) == "done"
+    await manager.close()
+
+
+async def test_early_helper_timeout_stops_the_generation_and_queued_actions(remote):
+    server, manager = remote
+    server.action_failure = EgoActionError(
+        "provider diagnostic wording may change",
+        details={"name": "ElementResolutionError", "kind": "transient"},
+    )
+    active = asyncio.create_task(manager.call("role", "ego_browser_actions", {}))
+    await server.act.wait()
+    queued = asyncio.create_task(manager.call("role", "ego_browser_open", {}))
+    await asyncio.sleep(0)
+    server.release.set()
+    with pytest.raises(EgoActionError):
+        await asyncio.wait_for(active, 1)  # Far before the configured 45s deadline.
+    with pytest.raises((asyncio.CancelledError, RuntimeError)):
+        await queued
+    assert not server.spaces
+    assert not server.effects
+    assert await manager.call("role", "ego_browser_open", {}) == "done"
     await manager.close()

@@ -6,17 +6,23 @@ from shiori_sdk.plugin_services import ServicePluginContext as PluginRuntimeCont
 from .browser import BrowserSessions
 from .config import BrowserUseConfig
 from .tool import browser_tools
+from .ego_tool import ego_tools
 
 
 async def setup(ctx: PluginRuntimeContext) -> None:
     """Contributes discoverable tools; no native process runs until the first action."""
+    config = BrowserUseConfig.model_validate(ctx.config.as_dict())
     sessions = BrowserSessions(
         plugin_data_dir(ctx.workspace, ctx.plugin_id),
-        BrowserUseConfig.model_validate(ctx.config.as_dict()),
+        config,
         processes=ctx.processes,
         resources=ctx.resources.root,
     )
-    for tool in browser_tools(sessions):
+    for tool in (
+        ego_tools(sessions)
+        if config.backend == "ego(lite)"
+        else browser_tools(sessions)
+    ):
         ctx.tools.register(
             tool,
             risk="external-side-effect",

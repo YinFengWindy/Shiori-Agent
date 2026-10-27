@@ -77,6 +77,7 @@ class FakeProcesses:
         stdin: int,
         stdout: int | BinaryIO,
         stderr: int | BinaryIO,
+        own_process_tree: bool = True,
     ) -> tuple[asyncio.subprocess.Process, ProcessOwner | None]:
         """Reject accidental native process starts in independent plugin tests."""
         raise AssertionError(f"Native spawn requires an explicit fixture: {command}")

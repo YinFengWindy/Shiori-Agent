@@ -268,6 +268,7 @@ def test_config_load_ignores_legacy_memory_v2_enabled(tmp_path: Path):
             "memory_v2": {
                 "enabled": True,
             },
+            "plugins": {"default_memory": {"enabled": False}},
         },
     )
 
@@ -277,7 +278,7 @@ def test_config_load_ignores_legacy_memory_v2_enabled(tmp_path: Path):
 
     assert not hasattr(cfg, "memory_v2")
     assert not hasattr(cfg, "memory")
-    assert "default_memory" not in cfg.plugins
+    assert cfg.plugins == {"default_memory": {"enabled": False}}
     assert cfg_path.read_text(encoding="utf-8") == original
 
 
