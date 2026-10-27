@@ -381,6 +381,31 @@ consolidates these additions and the subsequent #847 breaking migration.
   `TurnCommitted.extra` entries. `TurnFinished.extra_metadata`, filled only from
   `turn:telemetry:*`, is dropped (never published).
 
+- **breaking: `MEMORY_ENGINE` is a plugin-provided socket; the host no longer
+  builds a memory engine (PR #935, issue #902, refactor P3-7b-3).** `shiori_sdk.core.memory`
+  exports `MEMORY_ENGINE` (`Key` name `memory_engine`). A plugin lists it in
+  `provides`, constructs the engine in `setup` and `ctx.provide`s it. Consumers
+  list it in `optional_inject` and `get` it on every use; `None` means no
+  retrieval and chat still runs. `shiori_sdk.core.models` exports `MAIN_PROVIDER`
+  and `MAIN_MODEL` for the generation's main chat pair (`inject` / `require`).
+  Removed: the `memory_engine` capability (`KNOWN_CAPABILITIES`, the
+  `capabilities` enum; a manifest still declaring it is an unknown capability),
+  `ctx.memory_engine`, `HOST_MEMORY_ENGINE`, the `Nullable` box,
+  `MemoryCapability.engine`, and `shiori_sdk.memory.build` (`MemoryPlugin`,
+  `MemoryPluginBuildDeps`, `MemoryPluginRuntime`, `MemoryBuildConfig`,
+  `EmbeddingConfig`, `BuildResource`, `BuildResources`,
+  `MemoryStorageIncompatibleError`, `FakeBuildResources`). `MemoryRoles`,
+  `MemoryStorage` and `MemoryEvents` now live in `shiori_sdk.memory.access`.
+  `MemoryCapability.skill_names()` replaces the skill-name callback that build
+  used to inject. The host no longer loads an engine before plugins, no longer
+  pre-creates `memory2.db`, and no longer checks the vector space before saving
+  settings. `default_memory` reads embedding credentials only from its plugin
+  config (no chat-credential fallback); a missing credential or an
+  `embedding_fingerprint` / `vec_items` dimension mismatch fails setup
+  (`FAILED`, socket empty, chat still runs) and registers engine cleanup with
+  `ctx.effect`. `plugin_undo` uses `optional_inject: [memory_engine]` and
+  `get`; an empty socket undoes only the session.
+
 - **Natural proactive replies and background reports (PR #894, issue #868).** The current
   role's built-in natural-chat capability also applies to proactive draft
   `message_push` output, Drift dialogue and captured background-result reports.

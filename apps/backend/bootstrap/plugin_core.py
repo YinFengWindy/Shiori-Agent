@@ -33,7 +33,6 @@ from agent.plugin_host.core_keys import (
     HOST_LIGHT_MODEL,
     HOST_LIGHT_PROVIDER,
     HOST_MEMORY,
-    HOST_MEMORY_ENGINE,
     HOST_MODELS,
     HOST_PROCESS_RESOURCES,
     HOST_PROCESSES,
@@ -48,7 +47,6 @@ from agent.plugin_host.core_keys import (
     HOST_WORKSPACE,
     CoreModule,
     CoreProvide,
-    Nullable,
 )
 from agent.tools.plugin_capability import PluginTools
 from agent.tools.registry import ToolRegistry
@@ -77,9 +75,9 @@ from shiori_sdk.background_results import BackgroundResults
 from shiori_sdk.commands import CommandRegistry
 from shiori_sdk.core.conversation import COMMANDS
 from shiori_sdk.core.crash_reporting import CRASH_REPORTING
+from shiori_sdk.core.models import MAIN_MODEL, MAIN_PROVIDER
 from shiori_sdk.external_turns import ExternalTurns
 from shiori_sdk.http import HttpClient
-from shiori_sdk.memory.engine import MemoryEngine
 from shiori_sdk.models import RoleModels
 from shiori_sdk.processes import Processes, Resources
 from shiori_sdk.roles import Roles
@@ -108,9 +106,10 @@ class PluginCoreInputs:
       holding session media, ``sessions``, whose payloads the desktop
       presenter projects with ``relationship_runtime``.
     - ``role_runtime_registry``: ``models``.
+    - ``provider`` / ``model``: the main chat pair, provided as
+      ``MAIN_PROVIDER`` and ``MAIN_MODEL``. None means this generation has no
+      chat model; a plugin that injects either is blocked.
     - ``light_provider`` / ``light_model``: the plugins' light model.
-    - ``memory_engine``: ``memory_engine`` and part of ``memory``; None is the
-      valid state of a host with memory disabled, not a missing service.
     - ``external_turns`` / ``background_results``: the conversation services,
       built over the generation's agent loop.
     - ``workspace`` and ``http``: passed through as they are.
@@ -131,9 +130,10 @@ class PluginCoreInputs:
     session_manager: SessionManager | None
     relationship_runtime: object
     role_runtime_registry: RoleRuntimeRegistry | None
+    provider: LLMProvider | None
+    model: str | None
     light_provider: LLMProvider | None
     light_model: str | None
-    memory_engine: MemoryEngine | None
     external_turns: ExternalTurns | None
     background_results: BackgroundResults | None
     http: HttpClient | None
@@ -184,7 +184,7 @@ def plugin_core_modules(inputs: PluginCoreInputs) -> tuple[CoreModule, ...]:
             provide(HOST_SESSIONS, sessions)
 
     def provide_roles(provide: CoreProvide) -> None:
-        """Roles, their models and the light model plugins use (``core.roles``)."""
+        """Roles, their models, and the main and light chat pairs (``core.roles``)."""
         # Typed as the plugin contracts, so pyright checks the host implementations.
         if inputs.role_store is not None:
             roles: Roles = HostRoles(inputs.role_store)
@@ -192,6 +192,10 @@ def plugin_core_modules(inputs: PluginCoreInputs) -> tuple[CoreModule, ...]:
         if inputs.role_runtime_registry is not None:
             models: RoleModels = HostRoleModels(inputs.role_runtime_registry)
             provide(HOST_MODELS, models)
+        if inputs.provider is not None:
+            provide(MAIN_PROVIDER, inputs.provider)
+        if inputs.model is not None:
+            provide(MAIN_MODEL, inputs.model)
         if inputs.light_provider is not None:
             provide(HOST_LIGHT_PROVIDER, inputs.light_provider)
         if inputs.light_model is not None:
@@ -205,18 +209,14 @@ def plugin_core_modules(inputs: PluginCoreInputs) -> tuple[CoreModule, ...]:
         )
 
     def provide_memory(provide: CoreProvide) -> None:
-        """The memory engine and the memory plugin's surface.
+        """The memory plugin's surface (``bootstrap.memory_capabilities``).
 
-        The surface is ``bootstrap.memory_capabilities``; the engine is None
-        when memory is disabled.
+        The engine itself is provided by a plugin as ``MEMORY_ENGINE``.
         """
-        provide(HOST_MEMORY_ENGINE, Nullable(inputs.memory_engine))
         if inputs.workspace is not None and inputs.role_store is not None:
             provide(
                 HOST_MEMORY,
-                HostMemoryCapability(
-                    inputs.workspace, inputs.role_store, inputs.memory_engine
-                ),
+                HostMemoryCapability(inputs.workspace, inputs.role_store),
             )
 
     def provide_processes(provide: CoreProvide) -> None:

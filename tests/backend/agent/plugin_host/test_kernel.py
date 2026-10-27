@@ -10,7 +10,7 @@ import pytest
 
 from agent.plugin_host import PluginState
 from agent.plugin_host import PluginGenerationSettings, PluginRpcRegistry
-from agent.plugin_host.core_keys import HOST_MEMORY_ENGINE
+from agent.plugin_host.core_keys import HOST_LIGHT_PROVIDER
 from agent.plugin_host.manifest import group_listening_channels
 from agent.plugin_host.package_fingerprint import inspect_package_content
 from agent.plugin_host.trust_store import PluginTrustStore
@@ -757,7 +757,6 @@ captured: dict = {}
 
 async def setup(ctx):
     captured["workspace"] = ctx.workspace
-    captured["memory_engine"] = ctx.memory_engine
     captured["session_manager"] = ctx.session_manager
     captured["light_provider"] = ctx.light_provider
     captured["light_model"] = ctx.light_model
@@ -765,7 +764,7 @@ async def setup(ctx):
 
 _HOST_SERVICES_MANIFEST = (
     "api: 2\nid: hostrefs\ncapabilities:\n"
-    "  - workspace\n  - memory_engine\n  - session_manager\n"
+    "  - workspace\n  - session_manager\n"
     "  - light_provider\n  - light_model\n"
 )
 
@@ -781,14 +780,12 @@ async def test_v2_plugin_reads_host_service_references(tmp_path: Path):
     (plugin_dir / "manifest.yaml").write_text(_HOST_SERVICES_MANIFEST, encoding="utf-8")
     workspace = tmp_path / "workspace-for-hostrefs"
     workspace.mkdir()
-    memory_engine = object()
     session_manager = object()
     light_provider = object()
     kernel = make_kernel(
         [tmp_path],
         event_bus=EventBus(),
         workspace=workspace,
-        memory_engine=memory_engine,
         session_manager=session_manager,
         light_provider=light_provider,
         light_model="light-model-x",
@@ -804,28 +801,27 @@ async def test_v2_plugin_reads_host_service_references(tmp_path: Path):
     )
     assert module.captured == {
         "workspace": workspace,
-        "memory_engine": memory_engine,
         "session_manager": session_manager,
         "light_provider": light_provider,
         "light_model": "light-model-x",
     }
-    # memory_engine 可以合法地为 None，但核心根本没 provide 它时仍在 setup 前失败。
+    # 核心根本没 provide 声明过的 capability 时，仍在 setup 前失败。
     withheld_root = tmp_path / "withheld"
-    engine_plugin = withheld_root / "needs_engine"
-    (engine_plugin / "backend").mkdir(parents=True)
-    (engine_plugin / "backend" / "plugin.py").write_text(
+    light_plugin = withheld_root / "needs_light"
+    (light_plugin / "backend").mkdir(parents=True)
+    (light_plugin / "backend" / "plugin.py").write_text(
         "async def setup(ctx):\n    raise AssertionError('setup must not run')\n",
         encoding="utf-8",
     )
-    (engine_plugin / "manifest.yaml").write_text(
-        "api: 2\nid: needs_engine\ncapabilities:\n  - memory_engine\n",
+    (light_plugin / "manifest.yaml").write_text(
+        "api: 2\nid: needs_light\ncapabilities:\n  - light_provider\n",
         encoding="utf-8",
     )
-    withheld = host_kernel([withheld_root], withheld=frozenset({HOST_MEMORY_ENGINE}))
+    withheld = host_kernel([withheld_root], withheld=frozenset({HOST_LIGHT_PROVIDER}))
     await withheld.load_all()
     [state] = withheld.states()
     assert state["state"] == "FAILED"
-    assert "宿主未提供服务 host.memory_engine" in state["error"]
+    assert "宿主未提供服务 host.light_provider" in state["error"]
 
 
 @pytest.mark.asyncio
@@ -840,9 +836,9 @@ captured: dict = {}
 
 async def setup(ctx):
     try:
-        _ = ctx.memory_engine
+        _ = ctx.session_manager
     except AttributeError as e:
-        captured["denied"] = str(e)
+        captured["denied"] = (type(e).__name__, str(e))
 """.strip(),
         encoding="utf-8",
     )
@@ -860,7 +856,9 @@ async def setup(ctx):
         for k, m in sys.modules.items()
         if k.startswith("akasic_plugin_") and k.endswith("_hostrefs_gated")
     )
-    assert "未声明 capability" in module.captured["denied"]
+    kind, message = module.captured["denied"]
+    assert kind == "CapabilityNotGranted"
+    assert "未声明 capability 'session_manager'" in message
 
 
 @pytest.mark.asyncio

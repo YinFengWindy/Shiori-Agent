@@ -106,6 +106,12 @@ METHOD_POLICIES: dict[str, MethodPolicy] = {
         admission_exempt=True,
         handler=Handler.PLUGIN_MANAGEMENT,
     ),
+    "memory.provider": MethodPolicy(
+        # Who currently provides MEMORY_ENGINE; readable during a reload.
+        concurrency=Concurrency.READ_ONLY,
+        admission_exempt=True,
+        handler=Handler.PLUGIN_MANAGEMENT,
+    ),
     "plugins.trust": MethodPolicy(
         concurrency=Concurrency.MUTATION,
         admission_exempt=True,

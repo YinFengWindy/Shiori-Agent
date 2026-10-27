@@ -35,7 +35,6 @@ from shiori_sdk.extensions import BackgroundTasks
 from shiori_sdk.external_turns import ExternalTurns
 from shiori_sdk.http import HttpClient
 from shiori_sdk.memory.context import MemoryCapability
-from shiori_sdk.memory.engine import MemoryEngine
 from shiori_sdk.models import ChatProvider, RoleModels
 from shiori_sdk.process_resources import PluginProcessResources
 from shiori_sdk.processes import Processes, Resources, ToolTurn
@@ -168,22 +167,6 @@ HOST_WORKSPACE: Key[Path] = Key("host.workspace")
 HOST_HTTP: Key[HttpClient] = Key("host.http")
 """The ``http`` capability: the host's shared external HTTP requester."""
 
-
-@dataclass(frozen=True)
-class Nullable[T]:
-    """A provided value that may legitimately be None (``CoreCapability.nullable``).
-
-    The kernel's ``get`` answers None both for a key nobody provided and for a
-    provided None; boxing the value keeps "provided" observable, so a missing
-    provide still fails instead of reaching the plugin as None.
-    """
-
-    value: T | None
-
-
-HOST_MEMORY_ENGINE: Key[Nullable[MemoryEngine]] = Key("host.memory_engine")
-"""The ``memory_engine`` capability: the generation's engine, None when memory is off."""
-
 HOST_PROCESS_RESOURCES: Key[PluginCapabilityBinder[PluginProcessResources]] = Key(
     "host.process_resources"
 )
@@ -248,14 +231,11 @@ class CoreCapability:
 
     ``per_plugin`` marks a key whose provider is a ``PluginCapabilityBinder``;
     the plugin then gets ``for_plugin(binding)``. Otherwise the provided
-    instance itself is the capability, shared by every plugin. ``nullable``
-    marks a capability for which None is a valid host state: its key provides
-    a ``Nullable`` box and the plugin gets the boxed value, None included.
+    instance itself is the capability, shared by every plugin.
     """
 
     key: Key[Any]
     per_plugin: bool = False
-    nullable: bool = False
 
 
 # v2 capability name (which is also the plugin context argument it fills) ->
@@ -286,7 +266,6 @@ CORE_CAPABILITIES: Mapping[str, CoreCapability] = {
     "rpc": CoreCapability(HOST_RPC, per_plugin=True),
     "workspace": CoreCapability(HOST_WORKSPACE),
     "http": CoreCapability(HOST_HTTP),
-    "memory_engine": CoreCapability(HOST_MEMORY_ENGINE, nullable=True),
     "process_resources": CoreCapability(HOST_PROCESS_RESOURCES, per_plugin=True),
 }
 
@@ -300,8 +279,7 @@ def bind_core_capabilities(
 
     ``provided`` looks a key up in the kernel (``Kernel.get``). A declared
     capability whose key nobody provides fails before setup, like a missing
-    host service; that includes a ``nullable`` row, whose provided box may
-    hold None.
+    host service.
     """
     arguments: dict[str, Any] = {}
     for capability in capabilities:
@@ -312,9 +290,7 @@ def bind_core_capabilities(
             raise HostServiceUnavailable.for_capability(
                 binding.plugin_id, capability, [row.key.name]
             )
-        if row.nullable:
-            arguments[capability] = value.value
-        elif row.per_plugin:
+        if row.per_plugin:
             arguments[capability] = value.for_plugin(binding)
         else:
             arguments[capability] = value

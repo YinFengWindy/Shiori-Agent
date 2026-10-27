@@ -23,7 +23,6 @@ from shiori_sdk.extensions import (
     BackgroundTasks,
     PrivateStorage,
 )
-from shiori_sdk.memory.engine import MemoryEngine
 from shiori_sdk.diagnostics import Diagnostics
 from shiori_sdk.runtime import (
     CapabilityNotGranted,
@@ -80,7 +79,6 @@ class PluginSetupContext:
         storage: PrivateStorage | None = None,
         diagnostics: Diagnostics | None = None,
         session_manager: SessionUndo | None = None,
-        memory_engine: MemoryEngine | None = None,
         roles: Roles | None = None,
         models: RoleModels | None = None,
         sessions: PluginSessions | None = None,
@@ -118,7 +116,6 @@ class PluginSetupContext:
         self._storage = storage
         self._diagnostics = diagnostics
         self._session_manager = session_manager
-        self._memory_engine = memory_engine
         self._roles = roles
         self._models = models
         self._sessions = sessions
@@ -269,17 +266,6 @@ class PluginSetupContext:
     def session_manager(self) -> SessionUndo:
         """Return the explicitly granted session_manager capability."""
         return self._core_capability("session_manager", self._session_manager)
-
-    @property
-    def memory_engine(self) -> MemoryEngine | None:
-        """Return the explicitly granted memory_engine capability.
-
-        ``None`` is a valid host state (memory disabled in config), not a missing
-        service, so it is returned rather than raised.
-        """
-        if "memory_engine" not in self.granted:
-            raise CapabilityNotGranted("Plugin did not request memory_engine")
-        return self._memory_engine
 
     def as_hook_context(self) -> HookPluginContext:
         """Check the hook setup boundary without dynamic attributes."""

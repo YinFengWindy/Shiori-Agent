@@ -191,9 +191,7 @@ async def test_implicit_long_term_extraction_uses_auxiliary_budget(monkeypatch):
     )
     engine = DefaultMemoryEngine.__new__(DefaultMemoryEngine)
     monkeypatch.setattr(engine, "_provider", provider, raising=False)
-    monkeypatch.setattr(
-        engine, "_config", SimpleNamespace(model="memory-model"), raising=False
-    )
+    monkeypatch.setattr(engine, "_model", "memory-model", raising=False)
 
     result = await engine._extract_implicit_long_term(conversation="USER: 我喜欢拿铁")
 

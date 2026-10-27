@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Protocol
 from .runtime import PluginRuntimeContext
 from .sessions import SessionUndo
-from .memory.engine import MemoryEngine
 from .diagnostics import Diagnostics
 
 
@@ -63,14 +62,16 @@ class HookPluginContext(PluginRuntimeContext, Protocol):
 
 
 class CommandPluginContext(PluginRuntimeContext, Protocol):
-    """Undo and dependency services for command plugins (they inject ``COMMANDS``)."""
+    """Undo and dependency services for command plugins (they inject ``COMMANDS``).
+
+    The memory engine is not a capability here. A command plugin that also
+    declares ``optional_inject: [memory_engine]`` reads it with ``get``.
+    """
 
     @property
     def dependencies(self) -> Dependencies: ...
     @property
     def session_manager(self) -> SessionUndo: ...
-    @property
-    def memory_engine(self) -> MemoryEngine | None: ...
 
 
 class ObservePluginContext(PluginRuntimeContext, Protocol):

@@ -1,80 +1,70 @@
 from __future__ import annotations
 
+import asyncio
 import json
+import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
-from types import SimpleNamespace
 from typing import Any
 
 import pytest
 from shiori_sdk.core.conversation import TurnStarting
+from shiori_sdk.core.memory import MEMORY_ENGINE
 from shiori_sdk.core.tools import ToolCalled
+from shiori_sdk.memory.engine import MemoryQuery, MemoryQueryResult
 from agent.plugin_host import PluginGenerationSettings, PluginKernel, PluginRpcRegistry
 from agent.tools.registry import ToolRegistry
 from tests.support.plugin_kernel import host_kernel
 from bus.event_bus import EventBus
 from core.roles import RoleStore
-from shiori_sdk.memory.engine import MemoryToolProfile
 from shiori_sdk.rpc import Concurrency
 from shiori_sdk.testing.packages import stage_plugin_package
 
 PLUGIN_DIR = Path(__file__).resolve().parents[4] / "plugins/default_memory"
+_CREDENTIALS = {
+    "embedding_api_key": "test-key",
+    "embedding_base_url": "http://embed.test",
+}
 
 
-# ── setup(ctx) 通过真实内核装配的端到端验证 ────────────────────────────────
-
-
-def _load_default_memory_kernel(
-    *, tmp_path: Path, memory_engine: object, workspace: Path
-) -> tuple[PluginKernel, EventBus, PluginRpcRegistry[Any]]:
+def _kernel(
+    tmp_path: Path,
+    workspace: Path,
+    *,
+    plugin_config: dict[str, object] | None = None,
+    provider: object | None = object(),
+    model: str | None = "chat",
+    tools: ToolRegistry | None = None,
+) -> tuple[PluginKernel, ToolRegistry, PluginRpcRegistry[Any]]:
     root = tmp_path / "plugins"
     root.mkdir()
     stage_plugin_package(PLUGIN_DIR, root / "default_memory")
     bus = EventBus()
     rpc = PluginRpcRegistry(bus)
+    registry = tools if tools is not None else ToolRegistry()
     kernel = host_kernel(
         [root],
-        settings=PluginGenerationSettings(workspace=workspace),
+        settings=PluginGenerationSettings(
+            workspace=workspace,
+            plugin_configs=(
+                {"default_memory": plugin_config} if plugin_config is not None else {}
+            ),
+        ),
         role_store=RoleStore(workspace),
-        tools=ToolRegistry(),
-        memory_engine=memory_engine,
+        tools=registry,
+        provider=provider,
+        model=model,
+        http=object(),
+        light_provider=object(),
+        light_model="light",
         event_bus=bus,
         rpc=rpc,
     )
-    return kernel, bus, rpc
+    return kernel, registry, rpc
 
 
-@pytest.mark.asyncio
-async def test_markdown_rpc_is_read_only_and_unloads_with_plugin(
-    tmp_path: Path,
-) -> None:
-    workspace = tmp_path / "workspace"
-    workspace.mkdir()
-    store = RoleStore(workspace)
-    store.create_role(role_id="mira", name="Mira", system_prompt="test")
-    root = workspace / "roles" / "mira" / "memory"
-    root.mkdir(parents=True)
-    (root / "SELF.md").write_text("# Mira", encoding="utf-8")
-    kernel, _, rpc = _load_default_memory_kernel(
-        tmp_path=tmp_path, memory_engine=None, workspace=workspace
-    )
-    await kernel.load_all()
-    method = "plugin.default_memory.roles.memory.documents"
-    assert rpc.policy_for(method).concurrency is Concurrency.READ_ONLY
-    resolved = rpc.resolve(method)
-    assert resolved is not None
-    assert resolved[0] == "default_memory"
-    result = await resolved[1]({"role_id": "mira"})
-    assert (
-        next(item for item in result["documents"] if item["name"] == "SELF.md")[
-            "content"
-        ]
-        == "# Mira"
-    )
-    with pytest.raises(ValueError, match="role not found"):
-        await resolved[1]({"role_id": "missing"})
-    await kernel.unload("default_memory")
-    assert rpc.resolve(method) is None
+def _state(kernel: PluginKernel) -> dict[str, Any]:
+    return next(row for row in kernel.states() if row["id"] == "default_memory")
 
 
 def _turn_starting() -> TurnStarting:
@@ -105,59 +95,6 @@ def _recall(arguments: dict[str, object], result: str) -> ToolCalled:
     )
 
 
-@pytest.mark.asyncio
-async def test_setup_records_turn_retrieval_and_tool_results_until_unload(
-    tmp_path: Path,
-) -> None:
-    """setup(ctx) 与旧 DefaultMemoryInspector 等价：本代内核的 ``TurnStarting``
-    记录检索，``ToolCalled`` 记录 recall_memory 结果，卸载后都不再记录。"""
-    workspace = tmp_path / "workspace"
-    workspace.mkdir()
-    kernel, _, _ = _load_default_memory_kernel(
-        tmp_path=tmp_path,
-        memory_engine=SimpleNamespace(
-            describe=lambda: SimpleNamespace(name="default"),
-            tool_profile=MemoryToolProfile,
-        ),
-        workspace=workspace,
-    )
-    await kernel.load_all()
-
-    data_path = workspace / "plugin-data" / "default_memory" / "recall_inspector.jsonl"
-    _ = await kernel.kernel.emit(_turn_starting())
-    _ = await kernel.kernel.emit(_recall({"query": "q"}, json.dumps({"items": []})))
-    rows = _read_jsonl(data_path)
-    assert [row["kind"] for row in rows] == ["context_prepare", "recall_memory"]
-
-    # 卸载后订阅整体撤回，证明它们都挂在插件作用域上
-    _ = await kernel.unload("default_memory")
-    _ = await kernel.kernel.emit(_turn_starting())
-    _ = await kernel.kernel.emit(_recall({}, "{}"))
-    assert len(_read_jsonl(data_path)) == 2
-
-
-@pytest.mark.asyncio
-async def test_recorder_is_inactive_for_another_engine(tmp_path: Path) -> None:
-    """引擎不是 default 时插件照常装配，但不记录任何轨迹。"""
-    workspace = tmp_path / "workspace"
-    workspace.mkdir()
-    kernel, _, _ = _load_default_memory_kernel(
-        tmp_path=tmp_path,
-        memory_engine=SimpleNamespace(
-            describe=lambda: SimpleNamespace(name="disabled"),
-            tool_profile=MemoryToolProfile,
-        ),
-        workspace=workspace,
-    )
-    await kernel.load_all()
-
-    _ = await kernel.kernel.emit(_turn_starting())
-    _ = await kernel.kernel.emit(_recall({}, "{}"))
-    assert not (
-        workspace / "plugin-data" / "default_memory" / "recall_inspector.jsonl"
-    ).exists()
-
-
 def _read_jsonl(path: Path) -> list[dict[str, Any]]:
     if not path.exists():
         return []
@@ -166,3 +103,172 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
         for line in path.read_text(encoding="utf-8").splitlines()
         if line
     ]
+
+
+@pytest.mark.asyncio
+async def test_setup_provides_the_engine_tools_and_documents(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    store = RoleStore(workspace)
+    store.create_role(role_id="mira", name="Mira", system_prompt="test")
+    root = workspace / "roles" / "mira" / "memory"
+    root.mkdir(parents=True)
+    (root / "SELF.md").write_text("# Mira", encoding="utf-8")
+    kernel, tools, rpc = _kernel(tmp_path, workspace, plugin_config=_CREDENTIALS)
+    await kernel.load_all()
+
+    assert _state(kernel)["state"] == "ACTIVE"
+    engine = kernel.kernel.get(MEMORY_ENGINE)
+    assert engine is not None
+    assert engine.describe().name == "default"
+    assert tools.get_tool("memorize") is not None
+    assert tools.get_tool("forget_memory") is not None
+    assert tools.get_tool("recall_memory") is not None
+
+    method = "plugin.default_memory.roles.memory.documents"
+    assert rpc.policy_for(method).concurrency is Concurrency.READ_ONLY
+    resolved = rpc.resolve(method)
+    assert resolved is not None
+    assert resolved[0] == "default_memory"
+    result = await resolved[1]({"role_id": "mira"})
+    assert (
+        next(item for item in result["documents"] if item["name"] == "SELF.md")[
+            "content"
+        ]
+        == "# Mira"
+    )
+    with pytest.raises(ValueError, match="role not found"):
+        await resolved[1]({"role_id": "missing"})
+
+    data_path = workspace / "plugin-data" / "default_memory" / "recall_inspector.jsonl"
+    _ = await kernel.kernel.emit(_turn_starting())
+    _ = await kernel.kernel.emit(_recall({"query": "q"}, json.dumps({"items": []})))
+    assert [row["kind"] for row in _read_jsonl(data_path)] == [
+        "context_prepare",
+        "recall_memory",
+    ]
+
+    await kernel.unload("default_memory")
+    assert rpc.resolve(method) is None
+    assert kernel.kernel.get(MEMORY_ENGINE) is None
+    _ = await kernel.kernel.emit(_turn_starting())
+    _ = await kernel.kernel.emit(_recall({}, "{}"))
+    assert len(_read_jsonl(data_path)) == 2
+
+
+@pytest.mark.asyncio
+async def test_missing_embedding_credentials_fail_setup_and_leave_the_socket_empty(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    kernel, _, _ = _kernel(tmp_path, workspace, plugin_config={})
+    await kernel.load_all()
+    state = _state(kernel)
+    assert state["state"] == "FAILED"
+    assert "凭据" in state["error"]
+    assert kernel.kernel.get(MEMORY_ENGINE) is None
+    assert not (workspace / "plugin-data" / "default_memory" / "memory2.db").exists()
+
+
+@pytest.mark.asyncio
+async def test_missing_main_provider_blocks_before_setup(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    kernel, _, _ = _kernel(
+        tmp_path, workspace, plugin_config=_CREDENTIALS, provider=None
+    )
+    await kernel.load_all()
+    state = _state(kernel)
+    assert state["state"] == "BLOCKED"
+    assert "main_provider" in state["error"]
+    assert kernel.kernel.get(MEMORY_ENGINE) is None
+
+
+@pytest.mark.asyncio
+async def test_fingerprint_mismatch_fails_setup_without_rewriting_the_row(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    db_path = workspace / "plugin-data" / "default_memory" / "memory2.db"
+    db_path.parent.mkdir(parents=True)
+    connection = sqlite3.connect(db_path)
+    connection.execute("CREATE TABLE sentinel (note TEXT)")
+    connection.execute("INSERT INTO sentinel (note) VALUES ('keep')")
+    connection.execute("""
+        CREATE TABLE embedding_fingerprint (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            model TEXT NOT NULL,
+            dim INTEGER NOT NULL
+        )
+        """)
+    connection.execute(
+        "INSERT INTO embedding_fingerprint (id, model, dim) VALUES (1, 'other', 32)"
+    )
+    connection.commit()
+    connection.close()
+
+    kernel, _, _ = _kernel(tmp_path, workspace, plugin_config=_CREDENTIALS)
+    await kernel.load_all()
+    state = _state(kernel)
+    assert state["state"] == "FAILED"
+    assert "向量空间" in state["error"]
+    assert kernel.kernel.get(MEMORY_ENGINE) is None
+
+    connection = sqlite3.connect(db_path)
+    try:
+        assert connection.execute("SELECT note FROM sentinel").fetchone() == ("keep",)
+        assert connection.execute(
+            "SELECT model, dim FROM embedding_fingerprint WHERE id = 1"
+        ).fetchone() == ("other", 32)
+    finally:
+        connection.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("enabled", [True, False], ids=["reload", "disable"])
+async def test_an_in_flight_query_finishes_before_the_engine_closes(
+    tmp_path: Path, enabled: bool
+) -> None:
+    """Host retrieval is outside the kernel drain; releasing waits for it (D25).
+
+    A reload drains through ``on_drain``; disabling does not drain, so the
+    cleanup that closes the database waits instead.
+    """
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    kernel, _, _ = _kernel(tmp_path, workspace, plugin_config=_CREDENTIALS)
+    await kernel.load_all()
+    engine: Any = kernel.kernel.get(MEMORY_ENGINE)
+    store = engine._require_v2_store()
+    entered, release = asyncio.Event(), asyncio.Event()
+
+    async def blocked_context(request: MemoryQuery) -> MemoryQueryResult:
+        entered.set()
+        await release.wait()
+        _, total = store.list_items_for_admin()
+        return MemoryQueryResult(raw={"total": total})
+
+    engine._query_context = blocked_context
+    query = asyncio.create_task(engine.query(MemoryQuery(text="hi", intent="context")))
+    await entered.wait()
+    values = {**_CREDENTIALS, "enabled": enabled}
+    change = kernel.reload if enabled else kernel.set_enabled
+    transition = asyncio.create_task(
+        change(
+            "default_memory", values=values, raw_values=dict(values), drain_timeout=5
+        )
+    )
+    for _ in range(20):
+        await asyncio.sleep(0)
+    assert not transition.done()
+
+    release.set()
+    assert (await query).raw == {"total": 0}
+    _ = await transition
+    with pytest.raises(sqlite3.ProgrammingError):
+        store.list_items_for_admin()
+    replacement = kernel.kernel.get(MEMORY_ENGINE)
+    assert (replacement is not None) is enabled
+    assert replacement is not engine

@@ -2,7 +2,7 @@
 title: 总体架构
 kind: 架构说明
 status: 当前有效
-last_verified_commit: bdfdae59
+last_verified_commit: a0dc6d73
 source_paths:
   - apps/backend/main.py
   - apps/backend/bootstrap/app.py
@@ -41,7 +41,7 @@ related:
 - 角色定义、绑定和素材：`apps/backend/core/roles/`。
 - 活跃运行会话：`apps/backend/session/`。
 - 可持久化对话线程与投影：`apps/backend/conversation/`。
-- 记忆：契约在 SDK 的 `shiori_sdk.memory`，宿主侧 `apps/backend/core/memory/` 组合 Markdown 记忆与所选 engine（默认 `plugins/default_memory/`）。
+- 记忆：契约在 SDK 的 `shiori_sdk.memory`，插座是 `MEMORY_ENGINE`。宿主 `apps/backend/core/memory/` 持有 Markdown 记忆；语义引擎由提供该插座的插件接入（默认 `plugins/default_memory/`）。
 - 渠道仅负责适配，不应成为角色或会话业务的权威来源；外部渠道全部以插件形式提供。
 - 桌面 renderer 是视图和交互层，业务写入应经过 `apps/backend/desktop_bridge/` 对应服务。
 

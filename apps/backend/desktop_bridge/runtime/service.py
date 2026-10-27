@@ -173,6 +173,8 @@ class ReloadableDesktopService:
             async def compute_plugin_management_result():
                 if method == "plugins.list":
                     return self.plugin_management.list(payload)
+                if method == "memory.provider":
+                    return self.plugin_management.memory_provider(payload)
                 if method == "channels.list":
                     return self.plugin_management.channels.list(payload)
                 if method == "plugins.trust":

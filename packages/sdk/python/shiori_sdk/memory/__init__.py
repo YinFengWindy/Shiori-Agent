@@ -1,1 +1,1 @@
-"""Memory engine values, build contracts and host capabilities."""
+"""Memory engine values, access ports and host capabilities."""

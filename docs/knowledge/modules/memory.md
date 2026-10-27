@@ -2,11 +2,11 @@
 title: 记忆系统
 kind: 领域说明
 status: 当前有效
-last_verified_commit: bdfdae59
+last_verified_commit: a0dc6d73
 source_paths:
   - packages/sdk/python/shiori_sdk/memory/
   - apps/backend/core/memory/
-  - apps/backend/bootstrap/memory_plugins.py
+  - apps/backend/bootstrap/memory.py
   - apps/backend/bootstrap/memory_config_migration.py
   - plugins/default_memory/
   - apps/backend/agent/retrieval/
@@ -20,13 +20,13 @@ related:
 
 ## 分层
 
-- `packages/sdk/python/shiori_sdk/memory/` 定义 `MemoryEngine`、`MemoryQuery`、变更、ingest 和构造（build）契约；`apps/backend/core/memory/plugin.py` 只保留宿主的 `DisabledMemoryEngine` 并转引这些契约，`core/memory/runtime.py` 的 `MemoryRuntime` 把 Markdown 记忆、选中引擎的 getter（`current_engine`）和其构造资源装在一起；引擎消费方（被动检索、桌面端删角色、主动检索）只拿这个 getter、每次使用时调用，不长期持有引擎（D25）。
+- `packages/sdk/python/shiori_sdk/memory/` 定义 `MemoryEngine`、`MemoryQuery`、变更和 ingest 契约；`shiori_sdk.core.memory` 的 `MEMORY_ENGINE` 是插座，宿主不构造引擎，也没有 `DisabledMemoryEngine`。`core/memory/runtime.py` 的 `MemoryRuntime` 把 Markdown 记忆和 `EngineGetter` 装在一起：getter 在内核建好后绑定到这一代的 `kernel.get(MEMORY_ENGINE)`，可以是 None。消费方（被动检索、桌面端删角色、主动检索、plugin_undo）每次使用时调用 getter，不长期持有引擎（D25）。
 - `apps/backend/core/memory/markdown/` 是宿主拥有的 Markdown 记忆层：后台维护队列与整理提交（`maintenance.py`、`consolidation.py`）、近期上下文（`recent_context.py`）、用户层整理（`user_layer.py`，#496）和外部段整理（`external_segment.py`，#497）。
 - 记忆分层（#475）中由宿主直接写入、不经过记忆引擎的两层：群环境层 `core/memory/group_environment.py`（每个外部会话的最近动态写在 `thread_state.summary`，群笔记在角色记忆目录 `memory/groups/`）与成员层 `core/memory/member_profiles.py`（按「渠道 + 发送者 ID」一份 `memory/members/` 档案，用户本人不建档）。二者的写入互斥与整理提交时的乐观校验在 `core/memory/external_writes.py`。
 - `plugins/default_memory/` 是默认记忆引擎插件：`backend/engine/` 实现 SDK 的 `MemoryEngine`（查询、显式召回的 HyDE 假设生成、变更、管理、提示词），`backend/semantic/` 拥有原 memory2 的 SQLite 存储（`MemoryStore2`，默认 `plugin-data/default_memory/memory2.db`）、向量编码与召回、去重、procedure 查询构造与标签、记忆写入和响应后 worker。原 `apps/backend/memory2/` 已不存在。
 - `apps/backend/agent/retrieval/`（`DefaultMemoryRetrievalPipeline`）将具体记忆召回适配到 Agent 上下文准备阶段。
 
-语义记忆的开关是 `default_memory` 插件：`[plugins.default_memory].enabled` 显式优先，缺省沿用 manifest 的 `default_enabled`（开启）。向量模型凭据在同一张表（`embedding_model` / `embedding_api_key` / `embedding_base_url` / `output_dimensionality`）。启动时若 `config.toml` 仍有 `[memory]`，或者这张表还没有显式的 `enabled`，会按旧加载语义一次性写入这张表并删掉 `[memory]`：旧版没有 `[memory]` 或没写 `memory.enabled` 都算关闭，旧开关优先于插件表里已有的 `enabled`；向量凭据写入旧逻辑实际生效的来源（含 `[llm.fast]`、顶层 `light_*` 与首个模型注册的回退），`${NAME}` 引用按原样写回、不展开成明文。模板 `config.example.toml` 显式写 `enabled = true`，所以只有从模板新建的工作区默认开启；迁移后的显式 `enabled` 即已迁移标记。内联表或点分键写法无法定位替换，迁移直接报错并保留原文件。`memory.engine` 不是空或 `default` 时记一条警告并忽略，不迁移该引擎选择；后续引擎只以插件接入。插件启用时 `bootstrap/memory.py` 仍经 `bootstrap/memory_plugins.py` 加载 `default_memory`（`default` 对应这个包）。Akasha 已从内置插件中移除，旧配置里的 `memory.engine = "akasha"` 不会再被选中。卸载不迁移或删除工作区中原有的 Akasha 数据。
+语义记忆的开关是谁在这一代里提供了 `MEMORY_ENGINE`。`default_memory` 在 `setup` 里按插件配置构造引擎并 `provide`；`[plugins.default_memory].enabled` 显式优先，缺省沿用 manifest 的 `default_enabled`（开启）。向量凭据只读这张表（`embedding_model` / `embedding_api_key` / `embedding_base_url` / `output_dimensionality`），不回退到对话模型凭据；解析后仍残留 `${...}` 的值视为缺失。缺凭据，或 `memory2.db` 里 `embedding_fingerprint`（单行 model + dim）/`vec_items` 声明维度与当前配置不一致，插件 FAILED、插座为空，对话仍继续；没有指纹表的旧库在第一次成功 setup 时写入。自定义 `db_path` 指向被检查的那一个库。启动时若 `config.toml` 仍有 `[memory]`，或者这张表还没有显式的 `enabled`，会按旧加载语义一次性写入这张表并删掉 `[memory]`：旧版没有 `[memory]` 或没写 `memory.enabled` 都算关闭，旧开关优先于插件表里已有的 `enabled`；向量凭据写入旧逻辑实际生效的来源（含 `[llm.fast]`、顶层 `light_*` 与首个模型注册的回退），`${NAME}` 引用按原样写回、不展开成明文。模板 `config.example.toml` 显式写 `enabled = true`，所以只有从模板新建的工作区默认开启；迁移后的显式 `enabled` 即已迁移标记。内联表或点分键写法无法定位替换，迁移直接报错并保留原文件。`memory.engine` 不是空或 `default` 时记一条警告并忽略；引擎只经插件接入。Akasha 已从内置插件中移除，旧配置里的 `memory.engine = "akasha"` 不会再被选中。卸载不迁移或删除工作区中原有的 Akasha 数据。角色记忆面板按当前 ACTIVE 且真正提供了 `MEMORY_ENGINE` 的插件显示；没有提供者时显示「记忆已关闭」。
 
 ## 典型数据流
 

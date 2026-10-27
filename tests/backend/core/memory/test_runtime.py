@@ -2,8 +2,12 @@ from __future__ import annotations
 
 import asyncio
 from types import SimpleNamespace
+from typing import Any, cast
 
 from core.memory.runtime import MemoryRuntime
+from shiori_sdk.core.memory import MEMORY_ENGINE
+from shiori_sdk.kernel import Kernel, PluginSpec
+from shiori_sdk.memory.engine import MemoryQuery
 
 
 class _MarkdownStub:
@@ -31,7 +35,6 @@ class _MarkdownStub:
 def test_memory_runtime_bind_session_metadata_is_task_local() -> None:
     runtime = MemoryRuntime(
         markdown=_MarkdownStub(),  # type: ignore[arg-type]
-        current_engine=SimpleNamespace,
     )
     first_ready = asyncio.Event()
     second_ready = asyncio.Event()
@@ -59,7 +62,6 @@ def test_memory_runtime_bind_session_metadata_is_task_local() -> None:
 def test_memory_runtime_bind_session_metadata_none_clears_current_task_state() -> None:
     runtime = MemoryRuntime(
         markdown=_MarkdownStub(),  # type: ignore[arg-type]
-        current_engine=SimpleNamespace,
     )
 
     runtime.bind_session_metadata({"role_id": "mira"})
@@ -67,3 +69,39 @@ def test_memory_runtime_bind_session_metadata_none_clears_current_task_state() -
 
     runtime.bind_session_metadata(None)
     assert runtime.read_long_term() == "long:"
+
+
+def test_memory_runtime_query_without_engine_is_disabled() -> None:
+    runtime = MemoryRuntime(
+        markdown=_MarkdownStub(),  # type: ignore[arg-type]
+    )
+    runtime.current_engine.bind(lambda: None)
+    result = asyncio.run(runtime.query(MemoryQuery(text="")))
+    assert result.trace == {"mode": "disabled"}
+    assert result.text_block == ""
+
+
+def test_memory_runtime_reads_the_engine_from_the_reloaded_generation() -> None:
+    """The getter is bound once; the next call after reload sees the new engine."""
+
+    async def _run() -> None:
+        kernel = Kernel()
+        generation = {"n": 1}
+
+        async def setup(ctx) -> None:
+            ctx.provide(
+                MEMORY_ENGINE,
+                cast(Any, SimpleNamespace(generation=generation["n"])),
+            )
+
+        await kernel.start([PluginSpec("memory", setup, provides=("memory_engine",))])
+        runtime = MemoryRuntime(
+            markdown=_MarkdownStub(),  # type: ignore[arg-type]
+        )
+        runtime.current_engine.bind(lambda: kernel.get(MEMORY_ENGINE))
+        assert cast(Any, runtime.current_engine()).generation == 1
+        generation["n"] = 2
+        await kernel.reload("memory")
+        assert cast(Any, runtime.current_engine()).generation == 2
+
+    asyncio.run(_run())

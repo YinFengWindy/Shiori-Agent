@@ -9,8 +9,9 @@ are someone's private history. Everything the still shows besides the card
 is demo data written here, dated relative to now so nothing on screen looks
 stale and no decay or catch-up rewrites it at launch.
 
-The model registration points at a closed loopback port: the app has a model
-to show, but no request ever leaves the machine.
+The model registration and the memory plugin's embedding endpoint point at a
+closed loopback port: the app has a model to show and its memory plugin starts,
+but no request ever leaves the machine.
 
 Usage::
 
@@ -62,6 +63,12 @@ streaming_enabled = true
 
 [agent.maintenance]
 memory_optimizer_enabled = false
+
+# Offline credentials so default_memory starts and the memory scene shows its
+# timeline instead of "记忆已关闭"; nothing is embedded while capturing.
+[plugins.default_memory]
+embedding_api_key = "showcase-offline"
+embedding_base_url = "http://127.0.0.1:9/v1"
 
 [plugins.browser_use]
 enabled = false

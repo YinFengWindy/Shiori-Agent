@@ -625,6 +625,7 @@ def build_core_runtime(
     from conversation.service import ConversationService
     from core.channels.role_routing import RoleTurnRouter
     from shiori_sdk.background_results import BackgroundResults
+    from shiori_sdk.core.memory import MEMORY_ENGINE
     from shiori_sdk.external_turns import ExternalTurns
 
     plugin_light_provider, plugin_light_model = _resolve_plugin_llm_dependencies(
@@ -722,11 +723,10 @@ def build_core_runtime(
                 session_manager=session_manager,
                 relationship_runtime=relationship_runtime,
                 role_runtime_registry=role_runtime_registry,
+                provider=loop_provider,
+                model=loop_model,
                 light_provider=plugin_light_provider,
                 light_model=plugin_light_model,
-                # Provided once into this generation's kernel; plugins read it
-                # through their context (P3-7b replaces it with MEMORY_ENGINE).
-                memory_engine=memory_runtime.current_engine(),
                 external_turns=external_turns,
                 background_results=background_results,
                 http=http_resources.external_default,
@@ -734,6 +734,9 @@ def build_core_runtime(
             )
         ),
     )
+    # The loop already holds this getter. Bind it before plugins start so the
+    # first turn reads whoever provides MEMORY_ENGINE (D25).
+    memory_runtime.current_engine.bind(lambda: plugin_manager.kernel.get(MEMORY_ENGINE))
     account_delivery = AccountDelivery(
         role_store.accounts,
         plugin_rpc,

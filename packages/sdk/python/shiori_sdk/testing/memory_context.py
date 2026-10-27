@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from shiori_sdk.memory.engine import MemoryEngine
+from shiori_sdk.kernel import Kernel
 from shiori_sdk.rpc import Concurrency, RpcHandler
 
 from .context import FakePluginContext
@@ -43,14 +43,18 @@ class FakeMemoryCapability:
         self,
         workspace: Path,
         *,
-        engine: MemoryEngine | None = None,
         roles: FakeMemoryRoles | None = None,
+        skills: tuple[str, ...] = (),
     ):
         self.workspace = workspace
-        self.engine = engine
         self.roles = roles or FakeMemoryRoles()
         self.storage = FakeMemoryStorage()
         self.documents: dict[str, list[dict[str, object]]] = {}
+        self._skills = list(skills)
+
+    def skill_names(self) -> list[str]:
+        """Names the test listed; the host implementation reads the skill dirs."""
+        return list(self._skills)
 
     async def read_documents(self, payload: dict[str, object]) -> dict[str, object]:
         role_id = str(payload.get("role_id") or "")
@@ -66,12 +70,23 @@ class FakeMemoryPluginContext(FakePluginContext):
         self,
         workspace: Path,
         *,
-        engine: MemoryEngine | None = None,
         roles: FakeMemoryRoles | None = None,
+        skills: tuple[str, ...] = (),
         plugin_dir: Path = Path("."),
+        kernel: Kernel | None = None,
+        inject: tuple[str, ...] = (),
+        optional_inject: tuple[str, ...] = (),
+        provides: tuple[str, ...] = (),
     ):
-        super().__init__("default_memory", plugin_dir)
-        self.memory = FakeMemoryCapability(workspace, engine=engine, roles=roles)
+        super().__init__(
+            "default_memory",
+            plugin_dir,
+            kernel=kernel,
+            inject=inject,
+            optional_inject=optional_inject,
+            provides=provides,
+        )
+        self.memory = FakeMemoryCapability(workspace, roles=roles, skills=skills)
         self.rpc = FakeRpc()
 
     async def aclose(self):

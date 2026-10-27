@@ -2,7 +2,7 @@
 title: 当前后端架构
 kind: 架构说明
 status: 当前有效
-last_verified_commit: bdfdae59
+last_verified_commit: a0dc6d73
 source_paths:
   - apps/backend/main.py
   - apps/backend/bootstrap/app.py
@@ -110,7 +110,7 @@ LLM 调用由 `apps/backend/agent/provider.py` 封装，使用官方 `openai` SD
 ## 工具、Memory 与插件
 
 - `ToolRegistry` 保存工具、schema、风险、always-on、搜索索引和 source metadata；MCP 工具也同步到该 registry。内置 toolset 由 `apps/backend/bootstrap/toolsets/` 注册。
-- 记忆契约 `MemoryEngine`、`MemoryQuery`、`MemoryQueryResult`、`MemoryMutation` 定义在 SDK 的 `packages/sdk/python/shiori_sdk/memory/`；`apps/backend/core/memory/` 的 `MemoryRuntime` 组合宿主 Markdown 记忆与所选 engine，默认 engine 位于 `plugins/default_memory/backend/`，由 `bootstrap/wiring.py` 的 `resolve_memory_plugin()` 加载。
+- 记忆契约 `MemoryEngine`、`MemoryQuery`、`MemoryQueryResult`、`MemoryMutation` 定义在 SDK 的 `packages/sdk/python/shiori_sdk/memory/`；插座是 `MEMORY_ENGINE`。`default_memory` 在 setup 里构造并 `provide`。`MemoryRuntime` 的 getter 读这一代的插座，可以是 None：没有语义检索时对话仍继续，Markdown 记忆照常。
 - `PluginKernel` 同时负责 discover/import/config/context 注入、EventBus handler、tool、channel、RPC、服务注册、initialize rollback、drain 和 terminate；插件的回合与工具事件处理器挂在本代内核（`shiori_sdk.kernel`）上。
 - 回合与工具事件经本代内核发出：`CoreRuntime.start()` 把读取本代内核的来源绑定给 `AgentLoop.bind_kernel()` 与 spawn 的 `SubagentManager.bind_kernel()`，主动循环（`RuntimeBackground`）同样传入该来源。被动回合各阶段（`agent/core/turn_events.py` 的 `TurnEvents`）与 `ToolExecutor` 每次发出事件时读取内核，内核只运行当前 ACTIVE 插件的处理器，插件在代内卸载或新加载后下一次回合/工具调用/主动 tick 即生效。阶段本身只由核心模块组成，构造一次。
 - `ScopedEventBus` 将每个事件订阅注册到所属 `EffectScope`，插件卸载和初始化回滚会撤销贡献；已经开始的 handler 由插件 disposer 等待或取消。

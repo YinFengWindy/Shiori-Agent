@@ -68,7 +68,6 @@ KNOWN_CAPABILITIES = frozenset(
         # 直传宿主服务引用，供渠道/事件/记忆壳插件读取（#183）；这些字段没有
         # 装配/回滚语义，宿主直接透传同名服务，不各建 Capability 类。
         "workspace",
-        "memory_engine",
         "memory",
         "session_manager",
         "light_provider",

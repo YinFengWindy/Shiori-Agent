@@ -1,17 +1,17 @@
 """Shared construction fixture for testing individual default-engine mixins."""
 
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 from shiori_sdk.testing.memory import FakeMemoryRoles
 
 from plugins.default_memory.backend.engine import DefaultMemoryEngine
+from plugins.default_memory.backend.engine.in_flight import InFlightCalls
 
 
 def _make_default_engine(
     *,
-    config=None,
+    model="lm",
     provider=None,
     retriever=None,
     memorizer=None,
@@ -21,11 +21,12 @@ def _make_default_engine(
     v2_store=None,
 ):
     engine = DefaultMemoryEngine.__new__(DefaultMemoryEngine)
-    engine._config = config or SimpleNamespace(model="lm")
+    engine._model = model
     engine._workspace = Path(".")
     engine._roles = FakeMemoryRoles()
     engine._provider = provider
     engine._light_provider = None
+    engine._calls = InFlightCalls()
     engine._light_model = ""
     engine._v2_store = v2_store
     engine._embedder = None

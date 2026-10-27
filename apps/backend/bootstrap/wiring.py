@@ -6,13 +6,11 @@ from typing import TYPE_CHECKING, Any, Callable, Mapping
 from agent.context import ContextBuilder
 from agent.lifecycle.facade import TurnLifecycle
 from shiori_sdk.tools import Tool
-from bootstrap.memory_plugins import load_memory_plugin_module, normalize_memory_engine
 from bootstrap.toolsets.mcp import McpToolsetProvider
 from bootstrap.toolsets.memory import MemoryToolsetProvider
 from bootstrap.toolsets.meta import CommonMetaToolsetProvider, SpawnToolsetProvider
 from bootstrap.toolsets.protocol import ToolsetProvider
 from bootstrap.toolsets.schedule import SchedulerToolsetProvider
-from shiori_sdk.memory.build import MemoryPlugin
 from core.roles import RoleStore
 
 if TYPE_CHECKING:
@@ -22,19 +20,9 @@ if TYPE_CHECKING:
 # (workspace, memory store, the runtime's shared role store) -> context builder.
 ContextFactory = Callable[[Path, Any, RoleStore], Any]
 ToolsetProviderFactory = Callable[[], ToolsetProvider]
-MemoryPluginFactory = Callable[[], MemoryPlugin]
 
 _MEMORY_WIRING: dict[str, ToolsetProviderFactory] = {
     "default": MemoryToolsetProvider,
-}
-
-
-def _build_default_memory_plugin() -> MemoryPlugin:
-    return _load_memory_plugin_from_dir("default")
-
-
-_MEMORY_PLUGIN_WIRING: dict[str, MemoryPluginFactory] = {
-    "default": _build_default_memory_plugin,
 }
 _CONTEXT_WIRING: dict[str, ContextFactory] = {
     "default": lambda workspace, memory, roles: ContextBuilder(
@@ -78,40 +66,6 @@ def resolve_memory_toolset_provider(name: str) -> ToolsetProvider:
         choices = ", ".join(sorted(_MEMORY_WIRING))
         raise ValueError(f"未知 memory wiring: {name}；可选值: {choices}")
     return _MEMORY_WIRING[name]()
-
-
-def resolve_memory_plugin(name: str) -> MemoryPlugin:
-    """Resolve only the selected engine; import/build errors never select another."""
-    normalized = normalize_memory_engine(name)
-    if normalized in _MEMORY_PLUGIN_WIRING:
-        return _MEMORY_PLUGIN_WIRING[normalized]()
-    return _load_memory_plugin_from_dir(normalized)
-
-
-def register_memory_plugin(
-    name: str,
-    factory: MemoryPluginFactory,
-) -> None:
-    """Register an explicit memory engine factory without activating it."""
-    normalized = name.strip()
-    if not normalized:
-        raise ValueError("memory engine 名称不能为空")
-    normalized = normalize_memory_engine(normalized)
-    _MEMORY_PLUGIN_WIRING[normalized] = factory
-
-
-def _load_memory_plugin_from_dir(name: str) -> MemoryPlugin:
-    module = load_memory_plugin_module(name, "memory_plugin")
-    plugin_path = module.__file__
-    if hasattr(module, "create_memory_plugin"):
-        plugin = module.create_memory_plugin()
-    elif hasattr(module, "MemoryPlugin"):
-        plugin = module.MemoryPlugin()
-    else:
-        raise ValueError(f"{plugin_path} 缺少 create_memory_plugin 或 MemoryPlugin")
-    if not isinstance(plugin, MemoryPlugin):
-        raise TypeError(f"{plugin_path} 未返回 MemoryPlugin")
-    return plugin
 
 
 def resolve_context_factory(name: str) -> ContextFactory:

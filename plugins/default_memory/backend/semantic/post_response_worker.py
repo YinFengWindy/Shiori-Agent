@@ -15,7 +15,7 @@ from ..semantic.memorizer import Memorizer
 from ..semantic.retriever import Retriever
 
 if TYPE_CHECKING:
-    from shiori_sdk.memory.build import MemoryEvents as EventPublisher
+    from shiori_sdk.memory.access import MemoryEvents as EventPublisher
 
 logger = logging.getLogger(__name__)
 

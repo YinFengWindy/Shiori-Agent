@@ -6,8 +6,6 @@ from pathlib import Path
 
 from agent.config import Config
 from agent.memory import MemoryStore
-from bootstrap.memory import ensure_memory_plugin_storage
-from bootstrap.memory_capabilities import default_memory_enabled
 from bootstrap.paths import resource_root
 from shiori_sdk.files.json import save_json
 from session.store import SessionStore
@@ -141,20 +139,9 @@ def _ensure_workspace_db_assets(
     else:
         summary.skipped.append(consolidation_db)
 
-    if default_memory_enabled(config):
-        storage_results = ensure_memory_plugin_storage(config, workspace)
-        if storage_results:
-            for path, existed in storage_results:
-                if existed:
-                    summary.skipped.append(path)
-                else:
-                    summary.created.append(path)
-        else:
-            summary.notes.append(
-                "当前 memory engine 未声明 init 预创建逻辑，跳过语义记忆库。"
-            )
-    else:
-        summary.notes.append("default_memory 未启用，未预创建语义记忆库。")
+    summary.notes.append(
+        "语义记忆库不在初始化时创建；default_memory 启动时按插件配置创建。"
+    )
 
 
 def init_workspace(

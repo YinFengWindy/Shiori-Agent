@@ -61,7 +61,6 @@ DEFAULT_FILES: frozenset[str] = frozenset(
         "tests/backend/session/test_manager.py",
         "tests/backend/session/test_turns.py",
         "tests/backend/core/memory/test_runtime.py",
-        "tests/backend/core/memory/test_plugin.py",
         "tests/backend/core/memory/test_external_writes.py",
         "tests/backend/core/memory/markdown/test_consolidation.py",
         "tests/backend/core/roles/test_store.py",
