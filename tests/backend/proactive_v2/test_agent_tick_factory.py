@@ -74,15 +74,25 @@ async def test_natural_drift_uses_shared_messages_and_preserves_thinking(
     from proactive_v2.tools import ToolDeps
     from session.manager import SessionManager
 
+    from core.roles.store import RoleStore
+
     manager = SessionManager(tmp_path)
     manager.get_or_create("role:mira").metadata.update(
-        role_id="mira", role_runtime_config={"natural_chat_enabled": True}
+        role_id="mira", role_runtime_config={"natural_chat_enabled": False}
+    )
+    roles = RoleStore(tmp_path)
+    roles.create_role(
+        role_id="mira",
+        name="Mira",
+        system_prompt="test",
+        runtime_config={"natural_chat_enabled": True},
     )
     dispatch = AsyncMock(return_value=DeliveryReceipt.sent())
     owner = TurnOrchestrator(
         TurnOrchestratorDeps(
             session=SessionServices(manager),
             outbound=SimpleNamespace(dispatch=dispatch),
+            role_lookup=roles.get_role,
         )
     )
     deps = _build_deps(with_pool=True)

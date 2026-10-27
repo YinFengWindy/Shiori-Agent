@@ -40,6 +40,8 @@ from desktop_bridge.tool_call_preview import truncate_desktop_tool_result
 from session.manager import Session, SessionManager
 from session.manager.models import INTERRUPTED_TURN_METADATA_KEY
 from shiori_sdk.errors import public_validation_message, summarize_exception_for_user
+from core.roles.models import RoleRecord
+from core.roles.natural_chat import natural_chat_enabled
 from core.roles.self_initializer import SelfInitializationError
 from core.roles.model_errors import ModelConfigurationError
 from core.common.runtime_tasks import create_runtime_task
@@ -92,6 +94,7 @@ class DesktopChatService:
         agent_loop: AgentLoop,
         event_bus: EventBus,
         session_manager: SessionManager,
+        role_lookup: Callable[[str], RoleRecord | None],
         role_id_from_session_key: Callable[[str], str],
         sync_desktop_session_thread: SyncDesktopSessionThread,
         emit_payload: Callable[
@@ -104,6 +107,7 @@ class DesktopChatService:
         self._agent_loop = agent_loop
         self._event_bus = event_bus
         self._session_manager = session_manager
+        self._role_lookup = role_lookup
         self._role_id_from_session_key = role_id_from_session_key
         self._sync_desktop_session_thread = sync_desktop_session_thread
         self._emit_payload = emit_payload
@@ -677,10 +681,9 @@ class DesktopChatService:
             emit_event=emit_event,
             previous=previous,
             reply_interruption=ReplyInterruption(
-                natural_chat=self._session_manager.get_or_create(session_key)
-                .metadata.get("role_runtime_config", {})
-                .get("natural_chat_enabled")
-                is True
+                natural_chat=natural_chat_enabled(
+                    self._role_lookup(self._role_id_from_session_key(session_key))
+                )
             ),
         )
 

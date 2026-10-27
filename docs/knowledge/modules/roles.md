@@ -38,7 +38,7 @@ related:
 
 素材页只管理已有素材与手动心情绑定；一键生成差分及其 RPC 已移除。自动场景 CG 偏好由 NovelAI 插件的角色设置扩展管理，停用时隐藏控件并保留配置。
 
-自然聊天是「能力」页中的内置角色开关，保存为 `runtime_config.natural_chat_enabled`，缺省关闭。v10 将旧 `plugin_data.natural_chat` 中的角色选择原子迁入该字段并移除旧命名空间；已有内置字段（含 `false`）优先。宿主 `prompt_render` 为支持分条的回合加入即时聊天场景提示，模型通过 `finish_reply` 的 `messages` 列表提交独立消息，`agent/core/passive_turn/natural_reply.py` 负责校验与一次格式纠正。`agent/turns/reply_sequence.py` 继续负责通用消息序列与发送，能力不依赖插件注册或启用状态。
+自然聊天是「能力」页中的内置角色开关，保存为 `runtime_config.natural_chat_enabled`，缺省关闭。读取只经过 `core.roles.natural_chat.natural_chat_enabled`，只认角色记录上的布尔值 `True`；会话 metadata 里的 `role_runtime_config` 副本不参与。v10 将旧 `plugin_data.natural_chat` 中的角色选择原子迁入该字段并移除旧命名空间；已有内置字段（含 `false`）优先。宿主 `prompt_render` 为支持分条的回合加入即时聊天场景提示，模型通过 `finish_reply` 的 `messages` 列表提交独立消息，`agent/core/passive_turn/natural_reply.py` 负责校验与一次格式纠正。`agent/turns/reply_sequence.py` 继续负责通用消息序列与发送，能力不依赖插件注册或启用状态。
 
 完成回复工具不直接发送消息，也不计作业务工具调用。业务工具先完成，再提交消息列表；列表格式不合规时，只开放完成回复工具做一次辅助纠正，不重跑业务操作。正常生成保留角色 thinking 设置；纠正请求使用辅助模式以兼容 DeepSeek 对强制工具选择的限制。仍然无效时进入错误边界，不把普通正文默认为合法单条。宿主内部用不与消息正文冲突的边界保持整轮装饰与媒体处理，诊断记录保留原始工具参数；内部边界不进入模型历史或可见正文。
 

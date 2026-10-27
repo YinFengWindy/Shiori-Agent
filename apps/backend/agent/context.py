@@ -278,10 +278,12 @@ class ContextBuilder:
     ):
         """``runtime_roles`` is the runtime's shared role store: every turn's
         prompt lists the user's identities on the role's channels from its
-        account index and identity bindings (``UserIdentitiesPromptBlock``)."""
+        account index and identity bindings (``UserIdentitiesPromptBlock``),
+        and prompt rendering reads the natural-chat switch from the same store."""
         self.workspace = workspace
         self.skills = SkillsLoader(workspace)
         self.memory = memory
+        self.runtime_roles = runtime_roles
         self._system_prompt_builder = SystemPromptBuilder(
             [
                 IdentityPromptBlock(render_fn=build_agent_static_identity_prompt),
