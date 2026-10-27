@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from bootstrap.runtime.generations import RuntimeLease
 
 from core.common.runtime_scope import bind_runtime, current_runtime_lease
+from core.roles.natural_chat import natural_chat_enabled
 from agent.turns.channel_sequence import channel_reply_scope
 from agent.turns.reply_interruption import ReplyInterruption, reply_interruption_scope
 from bus.events import SpawnCompletionItem
@@ -97,7 +98,7 @@ class RuntimeDispatcher:
                             if dedupe is not None:
                                 accepted.discard(dedupe)
                             continue
-                        if role.runtime_config.get("natural_chat_enabled") is True:
+                        if natural_chat_enabled(role):
                             background = lease.reply_sequences.background_tasks(origin)
                             interruption = (
                                 lease.reply_sequences.admit(item)

@@ -202,6 +202,7 @@ class DesktopBridgeService:
             agent_loop=agent_loop,
             event_bus=event_bus,
             session_manager=session_manager,
+            role_lookup=role_store.get_role,
             role_id_from_session_key=self._role_id_from_desktop_session_key,
             sync_desktop_session_thread=self._sync_desktop_session_thread,
             emit_payload=self._emit_event,

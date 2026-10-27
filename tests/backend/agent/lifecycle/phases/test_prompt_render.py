@@ -1,4 +1,4 @@
-"""Natural chat follows the role snapshot, or the PromptRendering reply mode."""
+"""Natural chat follows the role record, not the session copy."""
 
 from collections.abc import Callable
 from dataclasses import replace
@@ -29,7 +29,14 @@ async def _render(
     minimal: bool = False,
 ) -> PromptRenderResult:
     roles = RoleStore(tmp_path)
-    roles.create_role(role_id="mira", name="Mira", system_prompt="保持原有性格")
+    roles.create_role(
+        role_id="mira",
+        name="Mira",
+        system_prompt="保持原有性格",
+        runtime_config=(
+            {"natural_chat_enabled": enabled} if enabled is not None else None
+        ),
+    )
     memory = SimpleNamespace(
         read_self=lambda: "",
         read_profile=lambda: "",
@@ -56,7 +63,8 @@ async def _render(
             turn_injection_prompt="",
             session_metadata={
                 "role_id": "mira",
-                "role_runtime_config": {"natural_chat_enabled": enabled},
+                # The copy disagrees with the role record. The record wins.
+                "role_runtime_config": {"natural_chat_enabled": enabled is not True},
             },
             supports_reply_sequence=supported,
             minimal_request=minimal,

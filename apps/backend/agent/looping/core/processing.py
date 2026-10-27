@@ -32,6 +32,7 @@ from functools import partial
 from shiori_sdk.accounts.models import AccountNotFoundError
 from dataclasses import replace
 
+from core.roles.natural_chat import natural_chat_enabled
 from core.roles.role_runtime import RoleBusyError, RoleExecutionContext
 from core.roles.services import RoleSessionService
 from shiori_sdk.external_turns import ExternalTurnResult
@@ -458,8 +459,7 @@ class _ProcessingMixin:
             ReplyInterruption(
                 role_lookup=lambda: registry.repository.store.get_role(context.role_id)
             )
-            if transport is not None
-            and role.runtime_config.get("natural_chat_enabled") is True
+            if transport is not None and natural_chat_enabled(role)
             else None
         )
         predecessors = (

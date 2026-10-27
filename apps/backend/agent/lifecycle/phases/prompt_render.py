@@ -10,6 +10,8 @@ from agent.lifecycle.types import (
     PromptRenderInput,
     PromptRenderResult,
 )
+from core.roles.natural_chat import natural_chat_enabled
+from core.roles.store import RoleStore
 from prompts.natural_chat import NATURAL_CHAT_PROMPT
 from shiori_sdk.core.conversation import PromptRendering, ReplyMode
 from shiori_sdk.prompting import PromptSectionRender
@@ -46,7 +48,9 @@ class PromptRenderPhase:
             ctx.extra_hints[:] = event.extra_hints
             reply_mode = _rendered_reply_mode(event, input)
 
-        await self._events.emit(_prompt_rendering(ctx, input), apply)
+        await self._events.emit(
+            _prompt_rendering(ctx, input, self._context.runtime_roles), apply
+        )
         if reply_mode is None:
             raise RuntimeError("PromptRendering 发出后未写回最终事件")
         return reply_mode
@@ -125,7 +129,7 @@ def _prompt_render_ctx(input: PromptRenderInput) -> PromptRenderCtx:
 
 
 def _prompt_rendering(
-    ctx: PromptRenderCtx, input: PromptRenderInput
+    ctx: PromptRenderCtx, input: PromptRenderInput, roles: RoleStore
 ) -> PromptRendering:
     """The ``PromptRendering`` projection of the request's prompt context."""
     return PromptRendering(
@@ -147,15 +151,18 @@ def _prompt_rendering(
         system_sections_top=tuple(ctx.system_sections_top),
         system_sections_bottom=tuple(ctx.system_sections_bottom),
         extra_hints=tuple(ctx.extra_hints),
-        reply_mode=_role_reply_mode(input),
+        reply_mode=_role_reply_mode(roles, input),
     )
 
 
-def _role_reply_mode(input: PromptRenderInput) -> ReplyMode:
-    """The role's natural-chat switch, the initial ``PromptRendering.reply_mode``."""
-    runtime_config = input.session_metadata.get("role_runtime_config") or {}
-    enabled = runtime_config.get("natural_chat_enabled") is True
-    return "sequence" if enabled else "single"
+def _role_reply_mode(roles: RoleStore, input: PromptRenderInput) -> ReplyMode:
+    """The role record's switch, the initial ``PromptRendering.reply_mode``.
+
+    ``session_metadata["role_runtime_config"]`` is a copy and is not read.
+    """
+    role_id = str(input.session_metadata.get("role_id") or "").strip()
+    role = roles.get_role(role_id) if role_id else None
+    return "sequence" if natural_chat_enabled(role) else "single"
 
 
 def _rendered_reply_mode(event: PromptRendering, input: PromptRenderInput) -> ReplyMode:
