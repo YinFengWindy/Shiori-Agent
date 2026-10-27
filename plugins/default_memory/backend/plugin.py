@@ -7,14 +7,21 @@ import threading
 from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import Any, Protocol, cast
 
 from shiori_sdk.core.conversation import TurnStarting
 from shiori_sdk.core.tools import ToolCalled
+from shiori_sdk.memory.context import MemoryPluginContext
 from shiori_sdk.storage import plugin_data_dir
+from shiori_sdk.tools import ToolsCapability
 
-if TYPE_CHECKING:
-    from shiori_sdk.memory.context import MemoryPluginContext as PluginRuntimeContext
+
+class _DefaultMemorySetup(MemoryPluginContext, Protocol):
+    """记忆插件 setup 上下文，外加本插件声明的 tools。"""
+
+    @property
+    def tools(self) -> ToolsCapability: ...
+
 
 _ITEM_LINE_RE = re.compile(r"^-\s+\[([^\]]+)\]\s*(.*)$")
 _META_RE = re.compile(r"（(?P<meta>[^（）]*(?:证据|src|有印象|不确定)[^（）]*)）$")
@@ -126,19 +133,21 @@ class _DefaultMemoryRecorder:
                 _ = fh.write(line + "\n")
 
 
-async def setup(ctx: "PluginRuntimeContext") -> None:
-    """装配 default_memory 插件壳：记录每回合的检索结果与 recall_memory 工具结果。
+async def setup(ctx: _DefaultMemorySetup) -> None:
+    """装配 default_memory：按引擎 tool_profile 注册记忆工具，并记录检索与召回。
 
-    记忆引擎本体（``DefaultMemoryEngine`` / ``MemoryPlugin``）不在此文件，由
-    ``shiori_sdk.memory.build`` 的独立契约装配（见同目录 ``memory_plugin.py``），
-    构造依赖通过 SDK 注入；此入口负责插件作用域的观察与 RPC 注册。
-
-    是否激活只在装配时判定一次：``ctx.memory.engine`` 在同一次 kernel
-    generation 内固定不变，与旧 ``initialize()`` 里的一次性判定效果等价。
+    记忆引擎本体不在此文件，由 ``shiori_sdk.memory.build`` 装配（见
+    ``memory_plugin.py``）。工具经 ``ctx.tools`` 注册；引擎为空则不注册。
+    记录是否激活只在装配时判定一次。
     """
     from shiori_sdk.rpc import Concurrency
 
     from .role_memory import register_role_semantic_memory
+    from .tools import register_memory_meta_tools
+
+    engine = ctx.memory.engine
+    if engine is not None:
+        register_memory_meta_tools(ctx.tools, engine)
 
     ctx.rpc.register(
         "roles.memory.documents",

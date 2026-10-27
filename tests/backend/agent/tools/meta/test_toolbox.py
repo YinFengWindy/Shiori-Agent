@@ -1,68 +1,17 @@
 from pathlib import Path
 from typing import Any, cast
-import pytest
+
 from agent.tools.filesystem import ListDirTool, ReadFileTool
 from agent.tools.meta import (
     META_TOOLBOX_NAMES,
     build_meta_toolbox_prompt,
     register_common_meta_tools,
-    register_memory_meta_tools,
 )
 from agent.tools.message_push import MessagePushTool
 from agent.tools.registry import ToolRegistry
 from agent.tools.web_fetch import WebFetchTool
 from agent.tools.web_search import WebSearchTool
 from tests.support.push import allow_every_role_target
-from shiori_sdk.memory.engine import MemoryToolProfile, MemoryToolSpec
-
-
-class _MemoryEngineStub:
-    def tool_profile(self) -> MemoryToolProfile:
-        return MemoryToolProfile(
-            recall=MemoryToolSpec(
-                description="test",
-                parameters={
-                    "type": "object",
-                    "properties": {"query": {"type": "string"}},
-                    "required": ["query"],
-                },
-            ),
-            forget=MemoryToolSpec(
-                description="test",
-                parameters={
-                    "type": "object",
-                    "properties": {
-                        "ids": {"type": "array", "items": {"type": "string"}}
-                    },
-                    "required": ["ids"],
-                },
-                risk="write",
-            ),
-            tools=(
-                MemoryToolSpec(
-                    name="reinforce_memory",
-                    description="test",
-                    parameters={
-                        "type": "object",
-                        "properties": {"note": {"type": "string"}},
-                        "required": [],
-                    },
-                    risk="write",
-                ),
-            ),
-        )
-
-    async def query(self, request):
-        raise NotImplementedError
-
-    async def mutate(self, request):
-        raise NotImplementedError
-
-    def reinforce_items_batch(self, ids: list[str]) -> None:
-        return None
-
-    async def execute(self, **kwargs):
-        return ""
 
 
 def test_meta_toolbox_prompt_contains_grouped_overview():
@@ -92,15 +41,14 @@ def test_register_meta_tool_helpers_mark_expected_tools_always_on():
         workspace=Path("."),
         push_tool=push_tool,
     )
-    register_memory_meta_tools(
-        tools,
-        cast(Any, _MemoryEngineStub()),
-    )
 
     always_on = tools.get_always_on_names()
     assert tools.get_tool("message_push") is push_tool
-    assert set(META_TOOLBOX_NAMES) - {"memorize"} <= always_on
-    assert "reinforce_memory" in always_on
+    # memorize / recall_memory / forget_memory 由 default_memory 注册，不在这里。
+    assert (
+        set(META_TOOLBOX_NAMES) - {"memorize", "recall_memory", "forget_memory"}
+        <= always_on
+    )
     # 外部上下文受限回合只放行这些内置工具；记忆读写、命令、文件、推送一律不放行。
     external_allowed = {
         name for name in tools.get_registered_names() if tools.is_external_allowed(name)
@@ -112,31 +60,3 @@ def test_register_meta_tool_helpers_mark_expected_tools_always_on():
         "fetch_messages",
         "search_messages",
     }
-
-
-def test_register_memory_meta_tools_rejects_duplicate_names():
-    tools = ToolRegistry()
-
-    register_memory_meta_tools(tools, cast(Any, _MemoryEngineStub()))
-
-    with pytest.raises(ValueError, match="重复注册"):
-        register_memory_meta_tools(tools, cast(Any, _MemoryEngineStub()))
-
-
-def test_register_memory_meta_tools_rejects_invalid_custom_name():
-    class _BadMemoryEngineStub(_MemoryEngineStub):
-        def tool_profile(self) -> MemoryToolProfile:
-            return MemoryToolProfile(
-                tools=(
-                    MemoryToolSpec(
-                        name="bad-name",
-                        description="test",
-                        parameters={"type": "object", "properties": {}, "required": []},
-                    ),
-                )
-            )
-
-    tools = ToolRegistry()
-
-    with pytest.raises(ValueError, match="非法"):
-        register_memory_meta_tools(tools, cast(Any, _BadMemoryEngineStub()))

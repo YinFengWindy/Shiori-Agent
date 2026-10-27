@@ -2,7 +2,7 @@
 
 import json
 
-from agent.tools.memorize import MemorizeTool
+from plugins.default_memory.backend.tools.memorize import MemorizeTool
 from shiori_sdk.memory.engine import MemoryMutationResult, MemoryToolSpec
 
 

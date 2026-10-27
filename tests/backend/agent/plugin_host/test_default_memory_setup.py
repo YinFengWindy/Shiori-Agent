@@ -10,9 +10,11 @@ import pytest
 from shiori_sdk.core.conversation import TurnStarting
 from shiori_sdk.core.tools import ToolCalled
 from agent.plugin_host import PluginGenerationSettings, PluginKernel, PluginRpcRegistry
+from agent.tools.registry import ToolRegistry
 from tests.support.plugin_kernel import host_kernel
 from bus.event_bus import EventBus
 from core.roles import RoleStore
+from shiori_sdk.memory.engine import MemoryToolProfile
 from shiori_sdk.rpc import Concurrency
 from shiori_sdk.testing.packages import stage_plugin_package
 
@@ -34,6 +36,7 @@ def _load_default_memory_kernel(
         [root],
         settings=PluginGenerationSettings(workspace=workspace),
         role_store=RoleStore(workspace),
+        tools=ToolRegistry(),
         memory_engine=memory_engine,
         event_bus=bus,
         rpc=rpc,
@@ -112,7 +115,10 @@ async def test_setup_records_turn_retrieval_and_tool_results_until_unload(
     workspace.mkdir()
     kernel, _, _ = _load_default_memory_kernel(
         tmp_path=tmp_path,
-        memory_engine=SimpleNamespace(describe=lambda: SimpleNamespace(name="default")),
+        memory_engine=SimpleNamespace(
+            describe=lambda: SimpleNamespace(name="default"),
+            tool_profile=MemoryToolProfile,
+        ),
         workspace=workspace,
     )
     await kernel.load_all()
@@ -138,7 +144,8 @@ async def test_recorder_is_inactive_for_another_engine(tmp_path: Path) -> None:
     kernel, _, _ = _load_default_memory_kernel(
         tmp_path=tmp_path,
         memory_engine=SimpleNamespace(
-            describe=lambda: SimpleNamespace(name="disabled")
+            describe=lambda: SimpleNamespace(name="disabled"),
+            tool_profile=MemoryToolProfile,
         ),
         workspace=workspace,
     )

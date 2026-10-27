@@ -264,7 +264,7 @@ Optimizer 定时任务
 | `list_role_filter_values(role_id)` / `list_items_for_admin(...)` / `get_item_for_admin(id)` | default_memory 自己的角色记忆面板 RPC（`plugins/default_memory/backend/role_memory.py`） |
 | `update_item_for_admin(id, ...)` / `delete_item(id)` / `delete_items_batch(ids)` / `find_similar_items_for_admin(id)` | 管理用途，宿主没有调用点 |
 | `invalidate_role_memories(role_id)` | 删除角色时由宿主调用（`desktop_bridge/service.py`） |
-| `tool_profile()` | 宿主注册记忆工具时读取：由引擎声明 `memorize` / `forget_memory` / `recall_memory` 的描述、参数和风险（`agent/tools/meta/register.py`） |
+| `tool_profile()` | default_memory 在 setup 里读取：由引擎声明 `memorize` / `forget_memory` / `recall_memory` 的描述、参数和风险（`plugins/default_memory/backend/tools/register.py`） |
 | `describe()` | 引擎描述 |
 | `keyword_match_procedures(tokens)` | 关键词匹配过程（仅 default_memory 内部） |
 | `list_events_by_time_range(start, end)` | 时间范围事件列表（仅 default_memory 内部） |
@@ -276,10 +276,10 @@ Optimizer 定时任务
 | 位置 | 方法 | 说明 |
 |------|------|------|
 | `apps/backend/agent/retrieval/default_pipeline.py` | `query(intent="context")` | 被动 turn 每轮的语义检索入口。`DefaultMemoryRetrievalPipeline.retrieve()` 把回合上下文转成 `MemoryQuery` 交给 `engine.query()` |
-| `apps/backend/agent/tools/recall_memory.py` | `query()` | `recall_memory` 工具。LLM 传入 query / intent / memory_kind / 时间范围 / limit，工具组装成 `MemoryQuery` |
+| `plugins/default_memory/backend/tools/recall_memory.py` | `query()` | `recall_memory` 工具。LLM 传入 query / intent / memory_kind / 时间范围 / limit，工具组装成 `MemoryQuery` |
 | `apps/backend/proactive_v2/tools.py` | `query(intent="interest")` | proactive tick 中评估内容候选时调用，查询用户对某条内容是否可能感兴趣 |
-| `apps/backend/agent/tools/memorize.py` | `mutate(kind="remember")` | `memorize` 工具。用户要求"记住..."时调用 |
-| `apps/backend/agent/tools/forget_memory.py` | `mutate(kind="forget")` | `forget_memory` 工具。用户纠正错误记忆时调用 |
+| `plugins/default_memory/backend/tools/memorize.py` | `mutate(kind="remember")` | `memorize` 工具。用户要求"记住..."时调用 |
+| `plugins/default_memory/backend/tools/forget_memory.py` | `mutate(kind="forget")` | `forget_memory` 工具。用户纠正错误记忆时调用 |
 | `apps/backend/core/memory/runtime.py` | `query()` | `MemoryRuntime` 薄封装层：每次调用都经 `current_engine()` 现取引擎，主动链路经它检索 |
 | `apps/backend/core/memory/plugin.py` | 全部方法 | `DisabledMemoryEngine` — 记忆关闭时的空实现，所有方法都返回空/报错 |
 
@@ -287,7 +287,8 @@ Optimizer 定时任务
 
 ```
 bootstrap/memory.py → engine = plugin_runtime.engine（记忆关闭时 DisabledMemoryEngine）
-    ├── register_memory_meta_tools(tools, engine) → 按 engine.tool_profile() 注册 memorize / forget_memory / recall_memory
+    ↓
+default_memory setup → ctx.memory.engine.tool_profile() → ctx.tools 注册 memorize / forget_memory / recall_memory
     ↓
   MemoryRuntime(markdown=..., current_engine=lambda: engine)
     ↓  消费方只拿 getter `current_engine`，每次使用时调用，不长期持有引擎（D25）

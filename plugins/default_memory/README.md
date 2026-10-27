@@ -13,6 +13,6 @@
 旧配置迁移、迁移凭证和仍在使用的数据库拒绝迁移规则保持原状。数据迁移和 SQLite
 lease 使用注入的宿主 storage 能力，共享原来的锁。修改已有向量空间仍必须显式迁移。
 
-`setup(ctx)` 声明 memory 和 rpc，用 `ctx.on` 订阅 `TurnStarting` / `ToolCalled` 记录检索与召回轨迹。文档读取由注入能力实现，
+`setup(ctx)` 声明 memory、rpc 和 tools。引擎存在时按 `tool_profile()` 经 `ctx.tools` 注册 memorize / forget_memory / recall_memory；用 `ctx.on` 订阅 `TurnStarting` / `ToolCalled` 记录检索与召回轨迹。文档读取由注入能力实现，
 插件继续拥有 roles.memory.documents 与 roles.memory.semantic.* RPC 注册及卸载。
 独立安装与测试见 [TESTING.md](TESTING.md)。

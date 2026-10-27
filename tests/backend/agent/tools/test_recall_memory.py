@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from agent.tools.recall_memory import RecallMemoryTool
+from plugins.default_memory.backend.tools.recall_memory import RecallMemoryTool
 from agent.tools.registry import ToolRegistry
 from shiori_sdk.memory.engine import MemoryQueryResult, MemoryToolSpec
 
