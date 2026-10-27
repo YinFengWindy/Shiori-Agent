@@ -26,9 +26,9 @@ describe("useSettingsSubsectionMemory", () => {
   it("remember() is reflected by a later resolve() for the same section", async () => {
     const { view, memory } = await mountHarness();
     try {
-      await act(async () => memory().remember("memory", "embedding"));
-      assert.equal(memory().activeSubsections.memory, "embedding");
-      assert.equal(memory().resolve("memory"), "embedding");
+      await act(async () => memory().remember("advanced", "general"));
+      assert.equal(memory().activeSubsections.advanced, "general");
+      assert.equal(memory().resolve("advanced"), "general");
     } finally { await view.cleanup(); }
   });
 
