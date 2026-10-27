@@ -49,9 +49,7 @@ class PromptRenderPhase:
             reply_mode = _rendered_reply_mode(event, input)
 
         await self._events.emit(
-            _prompt_rendering(
-                ctx, input, getattr(self._context, "runtime_roles", None)
-            ),
+            _prompt_rendering(ctx, input, self._context.runtime_roles),
             apply,
         )
         if reply_mode is None:
@@ -132,7 +130,7 @@ def _prompt_render_ctx(input: PromptRenderInput) -> PromptRenderCtx:
 
 
 def _prompt_rendering(
-    ctx: PromptRenderCtx, input: PromptRenderInput, roles: RoleStore | None
+    ctx: PromptRenderCtx, input: PromptRenderInput, roles: RoleStore
 ) -> PromptRendering:
     """The ``PromptRendering`` projection of the request's prompt context."""
     return PromptRendering(
@@ -158,14 +156,11 @@ def _prompt_rendering(
     )
 
 
-def _role_reply_mode(roles: RoleStore | None, input: PromptRenderInput) -> ReplyMode:
+def _role_reply_mode(roles: RoleStore, input: PromptRenderInput) -> ReplyMode:
     """The role record's switch, the initial ``PromptRendering.reply_mode``.
 
     ``session_metadata["role_runtime_config"]`` is a copy and is not read.
-    A context with no role store has no record, so the switch is off.
     """
-    if roles is None:
-        return "single"
     role_id = str(input.session_metadata.get("role_id") or "").strip()
     role = roles.get_role(role_id) if role_id else None
     return "sequence" if natural_chat_enabled(role) else "single"

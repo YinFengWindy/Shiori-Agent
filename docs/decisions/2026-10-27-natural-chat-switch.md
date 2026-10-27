@@ -15,13 +15,14 @@ P3 里原先的七处读取都改走这个入口：
 | `bootstrap/runtime/dispatcher.py` | 角色记录 |
 | `agent/turns/reply_interruption.py` 的 `refresh` | 角色记录 |
 | `agent/turns/orchestrator.py` | 有 `role_lookup` 时读角色记录，否则读会话副本 |
+| `agent/core/proactive_turn/__init__.py` 的主动 tick 准入 | 经 `TurnOrchestrator.natural_chat_enabled`，同上一行 |
 | `agent/looping/core/processing.py` | 角色记录 |
 | `desktop_bridge/chat_service.py` | 会话副本 |
 | `agent/lifecycle/phases/prompt_render.py` | 会话副本 |
 
 `TurnOrchestrator.natural_chat_enabled` 仍是主动回合的调用点，内部只转发给上面的入口。没有 `role_lookup` 时视为关：没有角色记录就没有开关。生产装配始终传入运行时的 `RoleStore`。
 
-`PromptRendering.reply_mode` 的初值仍是这个开关，再被 `supports_reply_sequence` 与 `minimal_request` 收窄。不新增字段。提示词上下文没有角色库时（只提供 `render` 的测试替身）视为关，不回退到会话副本。生产的 `ContextBuilder` 始终带着运行时的 `RoleStore`。
+`PromptRendering.reply_mode` 的初值仍是这个开关，再被 `supports_reply_sequence` 与 `minimal_request` 收窄。不新增字段。提示词阶段直接读 `ContextBuilder.runtime_roles`，不回退到会话副本；上下文缺角色库时直接报错，不悄悄视为关。
 
 选用与否不改变核心里的多消息协议：`finish_reply` 校验和 `deliver_sequence` 投递一直在，不论开关状态。
 
