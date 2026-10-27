@@ -8,3 +8,5 @@ desc: default 记忆引擎的插件壳（检索/召回轨迹记录）；引擎�
 capabilities:
   - memory
   - rpc
+  - config
+config_model: "config:DefaultMemoryPluginConfig"

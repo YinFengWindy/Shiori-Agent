@@ -8,22 +8,6 @@ import uuid
 from agent.prompting.input_budget import BudgetPolicy
 from proactive_v2.config import ProactiveConfig, ProactiveStrategiesConfig
 
-
-@dataclass
-class MemoryEmbeddingConfig:
-    model: str = "text-embedding-v3"
-    api_key: str = ""
-    base_url: str = ""
-    output_dimensionality: int | None = None
-
-
-@dataclass
-class MemoryConfig:
-    enabled: bool = False
-    engine: str = ""
-    embedding: MemoryEmbeddingConfig = field(default_factory=MemoryEmbeddingConfig)
-
-
 # Supported reasoning effort values persisted by model registrations.
 Effort = Literal["none", "low", "high", "max"]
 
@@ -97,7 +81,6 @@ class Config:
     agent_model: str = ""
     agent_api_key: str = ""
     agent_base_url: str = ""
-    memory: MemoryConfig = field(default_factory=MemoryConfig)
     multimodal: bool = True
     tool_search_enabled: bool = False
     spawn_enabled: bool = True
@@ -135,7 +118,7 @@ class Config:
 
     @classmethod
     def load(cls, path: str | Path = "config.toml") -> Config:
-        """Loads persisted settings without rewriting the file."""
+        """Loads persisted settings, migrating a legacy ``[memory]`` table once."""
         from importlib import import_module
 
         return import_module("agent.config").load_config(path)
@@ -143,8 +126,6 @@ class Config:
 
 __all__ = [
     "Config",
-    "MemoryConfig",
-    "MemoryEmbeddingConfig",
     "Effort",
     "ModelRegistration",
     "WiringConfig",

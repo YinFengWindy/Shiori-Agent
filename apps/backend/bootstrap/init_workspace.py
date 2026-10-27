@@ -7,6 +7,7 @@ from pathlib import Path
 from agent.config import Config
 from agent.memory import MemoryStore
 from bootstrap.memory import ensure_memory_plugin_storage
+from bootstrap.memory_capabilities import default_memory_enabled
 from bootstrap.paths import resource_root
 from shiori_sdk.files.json import save_json
 from session.store import SessionStore
@@ -140,7 +141,7 @@ def _ensure_workspace_db_assets(
     else:
         summary.skipped.append(consolidation_db)
 
-    if config.memory.enabled:
+    if default_memory_enabled(config):
         storage_results = ensure_memory_plugin_storage(config, workspace)
         if storage_results:
             for path, existed in storage_results:
@@ -153,7 +154,7 @@ def _ensure_workspace_db_assets(
                 "当前 memory engine 未声明 init 预创建逻辑，跳过语义记忆库。"
             )
     else:
-        summary.notes.append("memory.enabled = false，未预创建语义记忆库。")
+        summary.notes.append("default_memory 未启用，未预创建语义记忆库。")
 
 
 def init_workspace(
@@ -179,9 +180,9 @@ def init_workspace(
 
     summary.notes.append(f"工作区已初始化: {workspace}")
     summary.next_steps = [
-        f"1. 编辑 {config_path}，配置模型和所需的记忆服务：",
+        f"1. 编辑 {config_path}，配置模型和记忆插件：",
         '     [[llm.registrations]]  api_key = "sk-..."',
-        '     [memory.embedding]  api_key = "sk-..."',
+        '     [plugins.default_memory]  embedding_api_key = "sk-..."',
         "2. 运行 uv run python apps/backend/main.py 启动。",
         "3. 在角色页创建角色并添加 Telegram、QQ、QQBot 或飞书账号，在账号中填写凭据和响应规则。",
         "4. 向账号发一条消息确认对话正常；需要主动消息时再配置 proactive。",

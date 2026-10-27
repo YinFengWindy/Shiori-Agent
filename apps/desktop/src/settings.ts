@@ -94,8 +94,6 @@ export function loadSettingsData(contentOverride?: string): SettingsSnapshot {
   const content = contentOverride ?? (existsSync(configuredPath) ? readFileSync(configuredPath, "utf-8") : "");
   const parsed = parseToml(content, { integersAsBigInt: "asNeeded" });
   const llm = asRecord(parsed.llm);
-  const memory = asRecord(parsed.memory);
-  const embedding = asRecord(memory.embedding);
   const agent = asRecord(parsed.agent);
   const agentContext = asRecord(agent.context);
   const agentTools = asRecord(agent.tools);
@@ -107,17 +105,6 @@ export function loadSettingsData(contentOverride?: string): SettingsSnapshot {
       proactiveStrategies: loadProactiveStrategies(proactiveStrategies),
       models: {
         registrations: loadModelRegistrations(llm),
-      },
-      memory: {
-        enabled: Boolean(memory.enabled),
-        engine: String(memory.engine ?? ""),
-        embeddingModel: String(embedding.model ?? ""),
-        embeddingApiKey: String(embedding.api_key ?? ""),
-        embeddingBaseUrl: String(embedding.base_url ?? ""),
-        outputDimensionality:
-          embedding.output_dimensionality == null
-            ? ""
-            : String(embedding.output_dimensionality),
       },
       advanced: {
         maxTokens: Number(agent.max_tokens ?? 8192),
@@ -147,8 +134,6 @@ export function loadSettingsData(contentOverride?: string): SettingsSnapshot {
 }
 
 function renderSettingsToml(formData: SettingsFormData): string {
-  const outputDimensionality = formData.memory.outputDimensionality.trim();
-
   return [
     "[llm]",
     ...(formData.models.registrations.length === 0 ? ["registrations = []"] : []),
@@ -202,18 +187,6 @@ function renderSettingsToml(formData: SettingsFormData): string {
     'memory = "default"',
     "toolsets = []",
     "",
-    "[memory]",
-    `enabled = ${formData.memory.enabled ? "true" : "false"}`,
-    `engine = ${quote(formData.memory.engine)}`,
-    "",
-    "[memory.embedding]",
-    `model = ${quote(formData.memory.embeddingModel)}`,
-    `api_key = ${quote(formData.memory.embeddingApiKey)}`,
-    `base_url = ${quote(formData.memory.embeddingBaseUrl)}`,
-    outputDimensionality
-      ? `output_dimensionality = ${Number(outputDimensionality)}`
-      : "",
-    "",
   ]
     .filter((line, index, array) => {
       if (line !== "") return true;
@@ -254,12 +227,6 @@ function validateSettings(formData: SettingsFormData): void {
   }
   if (formData.advanced.maxIterations < 0) {
     throw new Error("max_iterations 不能小于 0");
-  }
-  if (formData.memory.outputDimensionality.trim()) {
-    const value = Number(formData.memory.outputDimensionality);
-    if (!Number.isInteger(value) || value <= 0) {
-      throw new Error("embedding output_dimensionality 必须是正整数");
-    }
   }
 }
 

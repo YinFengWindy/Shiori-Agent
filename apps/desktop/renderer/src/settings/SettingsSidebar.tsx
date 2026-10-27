@@ -1,5 +1,5 @@
 import type React from "react";
-import { Brain, BookBookmark, IdentificationCardIcon, Info, Palette, PuzzlePiece, SlidersHorizontal, type Icon } from "@phosphor-icons/react";
+import { Brain, IdentificationCardIcon, Info, Palette, PuzzlePiece, SlidersHorizontal, type Icon } from "@phosphor-icons/react";
 import { pluginUiRegistry } from "../plugins/pluginUiRegistry";
 import { SidebarResizeHandle } from "@yinfengwindy/shiori-sdk";
 import {
@@ -12,12 +12,11 @@ import { registerBuiltinSettingsSections } from "./registerBuiltinSettingsSectio
 registerBuiltinSettingsSections();
 
 /**
- * The eight settings.section ids registered by `registerBuiltinSettingsSections`.
- * 「频道」随 Telegram / QQ 迁为渠道插件而移除（#363），渠道配置在 设置 › 插件。
+ * The six settings.section ids registered by `registerBuiltinSettingsSections`.
+ * 「记忆」随 default_memory 迁到插件设置（#902）。「频道」随 Telegram / QQ 迁为渠道插件而移除（#363）。
  */
 export type BuiltinSettingsSectionId =
   | "models"
-  | "memory"
   | "appearance"
   | "advanced"
   | "identities"
@@ -26,7 +25,7 @@ export type BuiltinSettingsSectionId =
 
 /**
  * Identifies a settings.section registry entry — today always one of the
- * eight built-ins (issue #230: a plugin's own settings no longer registers
+ * built-ins (issue #230: a plugin's own settings no longer registers
  * a top-level section, it nests as a subtab under "plugins" instead, see
  * `pluginUiRegistry`'s `SettingsSubsectionEntry`). This still accepts any
  * string rather than narrowing to `BuiltinSettingsSectionId` because
@@ -54,7 +53,6 @@ export function listSettingsSidebarSections(
 /** Icons for the built-in sections; a section without one renders its label alone. */
 const sectionIcons: Partial<Record<SettingsSectionId, Icon>> = {
   models: Brain,
-  memory: BookBookmark,
   appearance: Palette,
   advanced: SlidersHorizontal,
   identities: IdentificationCardIcon,

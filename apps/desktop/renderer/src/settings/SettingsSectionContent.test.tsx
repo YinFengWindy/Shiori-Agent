@@ -12,14 +12,6 @@ function createSettingsFormData(): SettingsFormData {
     models: {
       registrations: [{ id: "00000000-0000-4000-a000-000000000001", provider: "openai", model: "gpt-agent", apiKey: "agent-key", baseUrl: "https://agent.example", effort: "high" }],
     },
-    memory: {
-      enabled: true,
-      engine: "default_memory",
-      embeddingModel: "embed-model",
-      embeddingApiKey: "embed-key",
-      embeddingBaseUrl: "https://embed.example",
-      outputDimensionality: "1536",
-    },
     advanced: {
       maxTokens: 4000,
       maxIterations: 10,
@@ -42,7 +34,6 @@ describe("SettingsSectionContent", () => {
   it("routes every settings domain to its editor", () => {
     const cases = [
       { sectionId: "models", subsectionId: "catalog", expected: "gpt-agent" },
-      { sectionId: "memory", subsectionId: "embedding", expected: "embed-model" },
       { sectionId: "advanced", subsectionId: "general", expected: "max_tokens" },
     ] as const;
 

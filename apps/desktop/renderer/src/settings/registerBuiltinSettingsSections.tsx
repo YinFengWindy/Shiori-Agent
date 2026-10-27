@@ -4,7 +4,6 @@ import { PluginManagementSection } from "../plugins/PluginManagementSection";
 import { AboutSettingsPage } from "./AboutSettingsPage";
 import { AdvancedSettingsSection } from "./AdvancedSettingsSection";
 import { AppearanceSettingsSection } from "./AppearanceSettingsSection";
-import { MemorySettingsSection } from "./MemorySettingsSection";
 import { ModelsSettingsSection } from "./ModelsSettingsSection";
 
 /** Wraps the standalone About page so it fits the registry's uniform component shape. */
@@ -15,7 +14,7 @@ function AboutSection() {
 let registered = false;
 
 /**
- * Registers the eight built-in settings domains as ordinary registry
+ * Registers the built-in settings domains as ordinary registry
  * entries instead of a hand-written switch. This both dynamizes the
  * settings page (a plugin's own settings.section slots into the same list)
  * and gives the slot mechanism a real, always-present consumer. Idempotent
@@ -29,15 +28,6 @@ export function registerBuiltinSettingsSections(): void {
     kind: "editor", slot: "settings.section", id: "models", label: "模型",
     subsections: [{ id: "catalog", label: "模型注册" }],
     Component: ModelsSettingsSection,
-  }, "builtin");
-
-  pluginUiRegistry.registerSettingsSection({
-    kind: "editor", slot: "settings.section", id: "memory", label: "记忆",
-    subsections: [
-      { id: "general", label: "基础" },
-      { id: "embedding", label: "向量模型" },
-    ],
-    Component: MemorySettingsSection,
   }, "builtin");
 
   pluginUiRegistry.registerSettingsSection({

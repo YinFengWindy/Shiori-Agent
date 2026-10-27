@@ -6,8 +6,10 @@ plugin declaring ``memory``.
 """
 
 from pathlib import Path
+from typing import Any
 
 from agent.config_models import Config
+from agent.plugin_host.manifest import PluginManifest
 from agent.plugin_host.storage import PluginStorage
 from agent.plugin_host.local_config import resolve_local_config
 from core.roles import RoleStore
@@ -17,6 +19,19 @@ from core.roles.policy import is_shared_memory_enabled
 from infra.persistence.sqlite_lifecycle import open_owned_database
 from shiori_sdk.memory.build import EmbeddingConfig, MemoryBuildConfig
 from shiori_sdk.memory.engine import MemoryEngine
+
+from bootstrap.memory_config_migration import (
+    DEFAULT_EMBEDDING_MODEL,
+    DEFAULT_MEMORY_PLUGIN_ID,
+    EMBEDDING_API_KEY_KEY,
+    EMBEDDING_BASE_URL_KEY,
+    EMBEDDING_MODEL_KEY,
+    OUTPUT_DIMENSIONALITY_KEY,
+    require_output_dimensionality,
+)
+
+_DEFAULT_MEMORY_MANIFEST: PluginManifest | None = None
+_PLUGIN_DIMENSIONALITY = "plugins.default_memory.output_dimensionality"
 
 
 class HostMemoryStorage(PluginStorage):
@@ -71,19 +86,57 @@ class HostMemoryCapability:
         return await self._documents.read(payload)
 
 
+def default_memory_enabled(config: Config) -> bool:
+    """Whether the bundled default_memory plugin is enabled for this config."""
+    from agent.plugin_host.kernel import plugin_enabled
+
+    return plugin_enabled(_default_memory_manifest(), _plugin_table(config))
+
+
 def memory_build_config(config: Config) -> MemoryBuildConfig:
-    """Resolves credential fallback before passing bounded values to the plugin."""
-    embedding = config.memory.embedding
+    """Builds engine inputs from the default_memory plugin table.
+
+    Embedding credentials are only those stored on the plugin. Chat model
+    credentials are not a fallback.
+    """
+    stored = _plugin_table(config)
+    if EMBEDDING_MODEL_KEY in stored and stored[EMBEDDING_MODEL_KEY] is not None:
+        model = str(stored[EMBEDDING_MODEL_KEY])
+    else:
+        model = DEFAULT_EMBEDDING_MODEL
     return MemoryBuildConfig(
         model=config.model,
         light_model=config.light_model or config.model,
         embedding=EmbeddingConfig(
-            base_url=embedding.base_url
-            or config.light_base_url
-            or config.base_url
-            or "",
-            api_key=embedding.api_key or config.light_api_key or config.api_key,
-            model=embedding.model,
-            output_dimensionality=embedding.output_dimensionality,
+            base_url=str(stored.get(EMBEDDING_BASE_URL_KEY) or ""),
+            api_key=str(stored.get(EMBEDDING_API_KEY_KEY) or ""),
+            model=model,
+            output_dimensionality=require_output_dimensionality(
+                stored.get(OUTPUT_DIMENSIONALITY_KEY),
+                field=_PLUGIN_DIMENSIONALITY,
+            ),
         ),
     )
+
+
+def _plugin_table(config: Config) -> dict[str, Any]:
+    stored = config.plugins.get(DEFAULT_MEMORY_PLUGIN_ID, {})
+    return stored if isinstance(stored, dict) else {}
+
+
+def _default_memory_manifest() -> PluginManifest:
+    global _DEFAULT_MEMORY_MANIFEST
+    if _DEFAULT_MEMORY_MANIFEST is not None:
+        return _DEFAULT_MEMORY_MANIFEST
+    from agent.plugin_host.manifest import load_manifest
+    from bootstrap.paths import plugin_roots
+
+    for root in plugin_roots():
+        plugin_dir = root / DEFAULT_MEMORY_PLUGIN_ID
+        if not (plugin_dir / "manifest.yaml").is_file():
+            continue
+        manifest = load_manifest(plugin_dir)
+        if manifest is not None and manifest.id == DEFAULT_MEMORY_PLUGIN_ID:
+            _DEFAULT_MEMORY_MANIFEST = manifest
+            return manifest
+    raise RuntimeError("找不到内置 default_memory 插件清单")

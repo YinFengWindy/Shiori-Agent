@@ -4,19 +4,22 @@ from pathlib import Path
 
 from agent.config_models import Config
 
-from bootstrap.memory_capabilities import HostMemoryStorage, memory_build_config
-from bootstrap.memory_plugins import normalize_memory_engine
+from bootstrap.memory_capabilities import (
+    HostMemoryStorage,
+    default_memory_enabled,
+    memory_build_config,
+)
 
 
 def validate_memory_transition(
     previous: Config, candidate: Config, workspace: Path
 ) -> None:
     """Runs engine-owned compatibility rules before preparing a new generation."""
-    if not candidate.memory.enabled:
+    if not default_memory_enabled(candidate):
         return
     from bootstrap.wiring import resolve_memory_plugin
 
-    plugin = resolve_memory_plugin(normalize_memory_engine(candidate.memory.engine))
+    plugin = resolve_memory_plugin("default")
     plugin.validate_transition(
         memory_build_config(previous),
         memory_build_config(candidate),

@@ -107,14 +107,6 @@ export type SettingsFormData = {
   models: {
     registrations: ModelRegistrationFormData[];
   };
-  memory: {
-    enabled: boolean;
-    engine: string;
-    embeddingModel: string;
-    embeddingApiKey: string;
-    embeddingBaseUrl: string;
-    outputDimensionality: string;
-  };
   advanced: {
     maxTokens: number;
     maxIterations: number;

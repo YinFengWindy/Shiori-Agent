@@ -19,9 +19,9 @@ from shiori_sdk.memory.build import BuildResource
 from bootstrap.memory_capabilities import (
     HostMemoryRoles,
     HostMemoryStorage,
+    default_memory_enabled,
     memory_build_config,
 )
-from bootstrap.memory_plugins import normalize_memory_engine
 from bootstrap.runtime.construction import MemoryBuildResources
 
 if TYPE_CHECKING:
@@ -41,8 +41,7 @@ def _build_memory_plugin_runtime(
 ) -> MemoryPluginRuntime:
     from bootstrap.wiring import resolve_memory_plugin
 
-    engine_name = normalize_memory_engine(config.memory.engine)
-    plugin = resolve_memory_plugin(engine_name)
+    plugin = resolve_memory_plugin("default")
     return plugin.build(
         MemoryPluginBuildDeps(
             config=memory_build_config(config),
@@ -65,7 +64,7 @@ def _build_memory_plugin_runtime(
 
 
 def _memory_plugin_enabled(config: Config) -> bool:
-    return bool(config.memory.enabled)
+    return default_memory_enabled(config)
 
 
 def ensure_memory_plugin_storage(
@@ -74,10 +73,9 @@ def ensure_memory_plugin_storage(
 ) -> list[tuple[Path, bool]]:
     if not _memory_plugin_enabled(config):
         return []
-    engine_name = normalize_memory_engine(config.memory.engine)
     from bootstrap.wiring import resolve_memory_plugin
 
-    plugin = resolve_memory_plugin(engine_name)
+    plugin = resolve_memory_plugin("default")
     return plugin.ensure_workspace_storage(
         config=memory_build_config(config),
         workspace=workspace,
