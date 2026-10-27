@@ -26,7 +26,6 @@ from agent.plugin_host.core_keys import (
     HOST_BRIDGE,
     HOST_CHANNELS,
     HOST_CONFIG_REFERENCES,
-    HOST_DIAGNOSTICS,
     HOST_HTTP,
     HOST_EVENTS,
     HOST_EXTERNAL_TURNS,
@@ -56,7 +55,7 @@ from bus.event_bus import EventBus
 from bus.plugin_capability import PluginEvents
 from core.accounts.plugin_capability import PluginAccounts
 from core.channels.plugin_capability import PluginAvatars, PluginChannels
-from core.common.diagnostics import HostDiagnostics
+from core.common.diagnostics import HostCrashReporting
 from core.common.global_hook_stack import ProcessCrashReporting
 from core.common.plugin_capability import PluginBackground
 from core.roles.plugin_capability import HostRoleModels, HostRoles
@@ -89,8 +88,8 @@ class PluginCoreInputs:
     """What one runtime generation's core modules provide to its plugin kernel.
 
     ``plugin_dirs`` are the generation's plugin discovery roots: every plugin
-    is a directory directly under one, which is how diagnostics attributes a
-    traceback frame to ``plugins/<directory>/...``. ``event_bus`` is the
+    is a directory directly under one, which is how crash reporting attributes
+    a traceback frame to ``plugins/<directory>/...``. ``event_bus`` is the
     generation's event bus and ``rpc`` its plugin RPC registry, created over
     that bus. ``scene_observations`` is the demand registry the scene
     controller reads.
@@ -148,11 +147,9 @@ def plugin_core_modules(inputs: PluginCoreInputs) -> tuple[CoreModule, ...]:
     """The core provide list, in provide order, for one runtime generation."""
     roots = [("plugins", directory.resolve()) for directory in inputs.plugin_dirs]
 
-    def provide_diagnostics(provide: CoreProvide) -> None:
-        """``CRASH_REPORTING`` and the ``diagnostics`` capability over it (D13b)."""
-        crash_reporting = ProcessCrashReporting()
-        provide(CRASH_REPORTING, crash_reporting)
-        provide(HOST_DIAGNOSTICS, HostDiagnostics(crash_reporting, roots))
+    def provide_crash_reporting(provide: CoreProvide) -> None:
+        """``CRASH_REPORTING``: process hooks plus session and frame attribution."""
+        provide(CRASH_REPORTING, HostCrashReporting(ProcessCrashReporting(), roots))
 
     def provide_config_references(provide: CoreProvide) -> None:
         """The host's ``${NAME}`` expansion behind ``config.resolve_reference``."""
@@ -266,7 +263,7 @@ def plugin_core_modules(inputs: PluginCoreInputs) -> tuple[CoreModule, ...]:
     return (
         provide_bridge,
         provide_events,
-        provide_diagnostics,
+        provide_crash_reporting,
         provide_config_references,
         provide_tools,
         provide_channels,

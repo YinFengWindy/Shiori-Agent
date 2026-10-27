@@ -9,7 +9,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import cast
 import pytest
-from shiori_sdk.testing.diagnostics import FakeDiagnostics
+from shiori_sdk.testing.diagnostics import FakeCrashReporting
 
 _observe_db = importlib.import_module("plugins.observe.backend.db")
 _observe_events = importlib.import_module("plugins.observe.backend.events")
@@ -324,7 +324,7 @@ async def test_global_error_collector_captures_error_log_with_context(tmp_path):
     db_path = tmp_path / "observe.db"
     writer = TraceWriter(db_path)
     task = asyncio.create_task(writer.run())
-    diagnostics = FakeDiagnostics()
+    diagnostics = FakeCrashReporting()
     collector = GlobalErrorCollector(writer, diagnostics)
     test_logger = logging.getLogger("tests.observe.collector")
     row = None

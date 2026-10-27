@@ -11,7 +11,8 @@ from __future__ import annotations
 
 import re
 import sqlite3
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
+from dataclasses import replace
 from pathlib import Path
 from typing import Protocol, cast
 
@@ -19,8 +20,9 @@ from shiori_sdk.core.models import MAIN_MODEL, MAIN_PROVIDER
 from shiori_sdk.extensions import ConfigValues
 from shiori_sdk.http import HttpClient
 from shiori_sdk.memory.access import MemoryEvents
+from shiori_sdk.memory.events import MemoryWritten
 from shiori_sdk.models import ChatProvider
-from shiori_sdk.runtime import Dispose, PluginRuntimeContext
+from shiori_sdk.runtime import Dispose, EventHandler, PluginRuntimeContext
 
 from .config import (
     DefaultMemoryPluginConfig,
@@ -89,8 +91,56 @@ def construct_default_engine(ctx: _EngineSetup) -> DefaultMemoryEngine:
         roles=ctx.memory.roles,
         skills=ctx.memory.skill_names,
         register=register,
-        event_publisher=cast(MemoryEvents, ctx.events),
+        event_publisher=_WatchingMemoryEvents(cast(MemoryEvents, ctx.events), ctx.emit),
     )
+
+
+class _WatchingMemoryEvents:
+    """Bus publisher that also emits a watch-safe ``MemoryWritten`` on the kernel.
+
+    The bus copy keeps ``superseded_ids`` as a list. The kernel copy is a tuple,
+    because ``kernel.emit`` rejects a list field. Other events stay on the bus:
+    ``TurnCommitted`` is bus-only in P3, and ``TurnIngested`` is not watched.
+    """
+
+    def __init__(
+        self,
+        events: MemoryEvents,
+        emit: Callable[[object], Awaitable[object]],
+    ) -> None:
+        self._events = events
+        self._emit = emit
+
+    def on[EventT](
+        self, event_type: type[EventT], handler: EventHandler[EventT]
+    ) -> None:
+        self._events.on(event_type, handler)
+
+    def off[EventT](
+        self, event_type: type[EventT], handler: EventHandler[EventT]
+    ) -> None:
+        self._events.off(event_type, handler)
+
+    async def emit[EventT](self, event: EventT) -> EventT:
+        return await self._events.emit(event)
+
+    def enqueue(self, event: object) -> None:
+        self._events.enqueue(event)
+
+    async def fanout(self, event: object) -> None:
+        await fanout_memory_observation(self._events, self._emit, event)
+
+
+async def fanout_memory_observation(
+    events: MemoryEvents,
+    emit: Callable[[object], Awaitable[object]],
+    event: object,
+) -> None:
+    """Emit a frozen ``MemoryWritten`` for watchers, then fan the original out."""
+    if isinstance(event, MemoryWritten):
+        frozen = replace(event, superseded_ids=tuple(event.superseded_ids))
+        await emit(frozen)
+    await events.fanout(event)
 
 
 def _embedding_settings(ctx: _EngineSetup) -> tuple[str, str, str, int | None]:

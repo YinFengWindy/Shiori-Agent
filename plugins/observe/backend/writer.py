@@ -154,7 +154,7 @@ class TraceWriter:
                         ts,
                         event.session_key,
                         event.context_key,
-                        json.dumps(event.status, ensure_ascii=False),
+                        json.dumps(dict(event.status), ensure_ascii=False),
                         event.status.get("failure_stage") or None,
                     ),
                 )

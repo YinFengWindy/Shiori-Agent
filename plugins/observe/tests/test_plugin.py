@@ -7,25 +7,39 @@ import logging
 import sqlite3
 from contextlib import closing, asynccontextmanager
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any
 import pytest
 from plugins.observe.backend.plugin import setup
 from shiori_sdk import HostServiceUnavailable
+from shiori_sdk.core.crash_reporting import CRASH_REPORTING
+from shiori_sdk.kernel import Kernel
 from shiori_sdk.memory.committed import TurnCommitted
-from shiori_sdk.memory.events import (
-    MemoryWritten,
-    RetrievalCompleted,
-    RetrievalHitSummary,
-)
+from shiori_sdk.memory.events import MemoryWritten
+from shiori_sdk.testing.diagnostics import FakeCrashReporting
 from shiori_sdk.testing.extensions import FakeExtensionContext
+from shiori_sdk.testing.kernel import KernelHarness
+
+
+def _context(workspace: Path | None = None):
+    kernel = Kernel()
+    reporting = FakeCrashReporting()
+    kernel.provide(CRASH_REPORTING, reporting)
+    ctx = FakeExtensionContext(
+        "observe",
+        workspace=workspace,
+        kernel=kernel,
+        inject=("crash_reporting",),
+    )
+    return ctx, reporting
 
 
 @asynccontextmanager
 async def _loaded(workspace):
-    ctx = FakeExtensionContext("observe", workspace=workspace)
+    ctx, reporting = _context(workspace)
     try:
         await setup(ctx)
-        yield ctx, ctx.events
+        yield ctx, ctx.events, reporting
     finally:
         await ctx.aclose()
 
@@ -65,32 +79,6 @@ def _turn_committed(**overrides: object) -> TurnCommitted:
     return TurnCommitted(**defaults)
 
 
-def _retrieval_completed(**overrides: object) -> RetrievalCompleted:
-    defaults: dict[str, object] = dict(
-        session_key="cli:1",
-        channel="cli",
-        chat_id="1",
-        query="改写问题",
-        orig_query="原始问题",
-        hits=[
-            RetrievalHitSummary(
-                item_id="mem_1",
-                memory_type="event",
-                # summary 故意超过 120 字符，证明 _to_rag_query_log 的截断逻辑真的跑了，
-                # 而不只是原样透传。
-                score=0.9,
-                summary="命中的记忆" * 30,
-                injected=True,
-            )
-        ],
-        injected_count=1,
-        route_decision="RETRIEVE",
-        aux_queries=["假想问题"],
-    )
-    defaults.update(overrides)
-    return RetrievalCompleted(**defaults)
-
-
 def _memory_written(**overrides: object) -> MemoryWritten:
     defaults: dict[str, object] = dict(
         session_key="cli:1",
@@ -98,7 +86,7 @@ def _memory_written(**overrides: object) -> MemoryWritten:
         chat_id="1",
         action="supersede",
         source_ref="cli:1@post_response",
-        superseded_ids=["mem_1"],
+        superseded_ids=("mem_1",),
     )
     defaults.update(overrides)
     return MemoryWritten(**defaults)
@@ -133,7 +121,7 @@ async def test_turn_committed_event_reaches_writer_and_is_persisted(
     真正写入 observe.db（而不仅仅是"没抛异常"）。"""
     workspace = tmp_path / "workspace"
     workspace.mkdir()
-    async with _loaded(workspace) as (ctx, bus):
+    async with _loaded(workspace) as (ctx, bus, _reporting):
 
         _ = await bus.emit(_turn_committed())
 
@@ -143,70 +131,16 @@ async def test_turn_committed_event_reaches_writer_and_is_persisted(
 
 
 @pytest.mark.asyncio
-async def test_retrieval_completed_event_translated_and_persisted(
-    tmp_path: Path,
-) -> None:
-    """RetrievalCompleted 订阅必须真正落库，且经 _to_rag_query_log 翻译
-    （截断 summary 到 120 字符、映射 hits_json）——不是只订阅了事件却没接对
-    翻译函数。"""
-    workspace = tmp_path / "workspace"
-    workspace.mkdir()
-    async with _loaded(workspace) as (ctx, bus):
-
-        db_path = workspace / "plugin-data" / "observe" / "observe.db"
-        _ = await bus.emit(_retrieval_completed())
-        row_count = await _wait_for_table_count(db_path, "rag_queries")
-        assert row_count == 1
-
-        with closing(sqlite3.connect(str(db_path))) as conn:
-            row = conn.execute(
-                """SELECT caller, session_key, query, orig_query, aux_queries,
-                          hits_json, injected_count, route_decision, error
-                   FROM rag_queries"""
-            ).fetchone()
-
-        (
-            caller,
-            session_key,
-            query,
-            orig_query,
-            aux_queries_json,
-            hits_json,
-            injected_count,
-            route_decision,
-            error,
-        ) = row
-        assert caller == "passive"
-        assert session_key == "cli:1"
-        assert query == "改写问题"
-        assert orig_query == "原始问题"
-        assert json.loads(aux_queries_json) == ["假想问题"]
-        assert injected_count == 1
-        assert route_decision == "RETRIEVE"
-        assert error is None
-
-        hits = json.loads(hits_json)
-        assert len(hits) == 1
-        # 翻译函数把 summary 截到 120 字符（RagHitLog 构造时做的），源 summary 是
-        # "命中的记忆" * 30 = 150 字符；证明截断逻辑真的跑了，而不是原样透传。
-        assert hits[0]["id"] == "mem_1"
-        assert hits[0]["type"] == "event"
-        assert hits[0]["score"] == 0.9
-        assert hits[0]["injected"] is True
-        assert len(hits[0]["summary"]) == 120
-        assert hits[0]["summary"] == ("命中的记忆" * 30)[:120]
-
-
-@pytest.mark.asyncio
 async def test_memory_written_event_translated_and_persisted(tmp_path: Path) -> None:
-    """MemoryWritten 订阅必须真正落库，且经 _to_memory_write_trace 翻译
+    """MemoryWritten 的内核 watch 必须真正落库，且经 _to_memory_write_trace 翻译
     （action/source_ref/superseded_ids 映射到对应列）。"""
     workspace = tmp_path / "workspace"
     workspace.mkdir()
-    async with _loaded(workspace) as (ctx, bus):
+    async with _loaded(workspace) as (ctx, _bus, _reporting):
 
         db_path = workspace / "plugin-data" / "observe" / "observe.db"
-        _ = await bus.emit(_memory_written())
+        _ = await ctx.emit(_memory_written())
+        await KernelHarness(kernel=ctx.kernel).idle()
         row_count = await _wait_for_table_count(db_path, "memory_writes")
         assert row_count == 1
 
@@ -240,11 +174,11 @@ async def test_memory_written_event_translated_and_persisted(tmp_path: Path) -> 
 @pytest.mark.asyncio
 async def test_setup_fails_instead_of_skipping_without_workspace():
     """A host without workspace must stop setup, not load observe half-disabled."""
-    ctx = FakeExtensionContext("observe")
+    ctx, reporting = _context()
     with pytest.raises(HostServiceUnavailable, match="workspace"):
         await setup(ctx)
     assert ctx.exported is None
-    assert not ctx.diagnostics.owners
+    assert not reporting.owners
     await ctx.aclose()
 
 
@@ -253,8 +187,8 @@ async def test_setup_fails_instead_of_skipping_without_workspace():
 async def test_partial_collector_install_is_rolled_back(
     tmp_path, monkeypatch, cancel, opened_connections
 ):
-    ctx = FakeExtensionContext("observe", workspace=tmp_path)
-    install = ctx.diagnostics.install_global_hooks
+    ctx, reporting = _context(tmp_path)
+    install = reporting.install
 
     def fail_install(*args, **kwargs):
         install(*args, **kwargs)
@@ -262,13 +196,13 @@ async def test_partial_collector_install_is_rolled_back(
             raise asyncio.CancelledError("collector install cancelled")
         raise RuntimeError("collector install failed")
 
-    monkeypatch.setattr(ctx.diagnostics, "install_global_hooks", fail_install)
+    monkeypatch.setattr(reporting, "install", fail_install)
     with pytest.raises(asyncio.CancelledError if cancel else RuntimeError):
         try:
             await setup(ctx)
         finally:
             await ctx.aclose()
-    assert not ctx.diagnostics.owners
+    assert not reporting.owners
     assert not ctx._events._subscriptions
     _assert_connections_closed(opened_connections)
 
@@ -277,7 +211,7 @@ async def test_partial_collector_install_is_rolled_back(
 async def test_cancel_setup_during_readiness_closes_started_writer(
     tmp_path, monkeypatch, opened_connections
 ):
-    ctx = FakeExtensionContext("observe", workspace=tmp_path)
+    ctx, reporting = _context(tmp_path)
     spawn = ctx.background.spawn
 
     def cancel_after_spawn(coro, *, name):
@@ -298,7 +232,7 @@ async def test_cancel_setup_during_readiness_closes_started_writer(
 
     with pytest.raises(asyncio.CancelledError):
         await asyncio.create_task(load())
-    assert not ctx.diagnostics.owners
+    assert not reporting.owners
     assert not ctx._events._subscriptions
     _assert_connections_closed(opened_connections)
 
@@ -324,7 +258,7 @@ async def test_initialization_failure_rolls_back_and_can_reload(
         db_path.parent.unlink()
     else:
         db_path.unlink()
-    async with _loaded(tmp_path) as (ctx, bus):
+    async with _loaded(tmp_path) as (ctx, bus, _reporting):
         await bus.emit(_turn_committed())
         assert await _wait_for_turn_row(db_path) == 1
     _assert_connections_closed(opened_connections)
@@ -338,13 +272,13 @@ async def test_setup_failure_after_registration_cleans_all_resources(
         raise RuntimeError("expose failed after subscriptions")
 
     monkeypatch.setattr(FakeExtensionContext, "expose", fail_expose)
-    ctx = FakeExtensionContext("observe", workspace=tmp_path)
+    ctx, reporting = _context(tmp_path)
     with pytest.raises(RuntimeError, match="expose failed"):
         try:
             await setup(ctx)
         finally:
             await ctx.aclose()
-    assert not ctx.diagnostics.owners
+    assert not reporting.owners
     assert not ctx._events._subscriptions
     _assert_connections_closed(opened_connections)
 
@@ -354,12 +288,12 @@ async def test_unload_flushes_final_errors_and_stops_observations(
     tmp_path, opened_connections
 ):
     db_path = tmp_path / "plugin-data/observe/observe.db"
-    async with _loaded(tmp_path) as (ctx, bus):
+    async with _loaded(tmp_path) as (ctx, bus, reporting):
         assert db_path.exists()
         await bus.emit(_turn_committed())
         assert await _wait_for_turn_row(db_path) == 1
-        assert ctx.diagnostics.handler is not None
-        ctx.diagnostics.handler.emit(
+        assert reporting.handler is not None
+        reporting.handler.emit(
             logging.LogRecord(
                 "test.final_flush",
                 logging.ERROR,
@@ -376,27 +310,31 @@ async def test_unload_flushes_final_errors_and_stops_observations(
         assert conn.execute(
             "SELECT message FROM global_errors WHERE logger_name='test.final_flush'"
         ).fetchone() == ("last collected error",)
-    assert not ctx.diagnostics.owners
+    assert not reporting.owners
     _assert_connections_closed(opened_connections)
 
 
+@pytest.mark.asyncio
 async def test_context_budget_sdk_event_is_observed_without_a_committed_turn(tmp_path):
     from shiori_sdk.context import ContextBudgetObserved
 
-    ctx = FakeExtensionContext("observe", workspace=tmp_path)
+    ctx, _reporting = _context(tmp_path)
     try:
         await setup(ctx)
-        await ctx.events.emit(
+        await ctx.emit(
             ContextBudgetObserved(
                 "role:mira",
                 "user",
-                {
-                    "reason": "manual",
-                    "failure_stage": "summary",
-                    "memory_committed": True,
-                },
+                MappingProxyType(
+                    {
+                        "reason": "manual",
+                        "failure_stage": "summary",
+                        "memory_committed": True,
+                    }
+                ),
             )
         )
+        await KernelHarness(kernel=ctx.kernel).idle()
         async with asyncio.timeout(5):
             while not (
                 records := ctx.exported.recent_context_budgets("role:mira", "user")

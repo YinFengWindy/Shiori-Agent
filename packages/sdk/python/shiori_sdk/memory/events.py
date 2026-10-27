@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Literal
 
@@ -55,7 +56,7 @@ class MemoryWritten:
     memory_type: str | None = None
     item_id: str | None = None
     summary: str | None = None
-    superseded_ids: list[str] = field(default_factory=_empty_str_list)
+    superseded_ids: Sequence[str] = field(default_factory=_empty_str_list)
     error: str | None = None
     role_id: str = ""
 

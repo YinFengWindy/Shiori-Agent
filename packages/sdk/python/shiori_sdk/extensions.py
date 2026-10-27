@@ -5,7 +5,6 @@ from collections.abc import Coroutine
 from pathlib import Path
 from typing import Protocol
 from .runtime import PluginRuntimeContext
-from .diagnostics import Diagnostics
 
 
 class ConfigValues(Protocol):
@@ -74,12 +73,14 @@ class CommandPluginContext(PluginRuntimeContext, Protocol):
 
 
 class ObservePluginContext(PluginRuntimeContext, Protocol):
-    """Explicit storage, diagnostics and task services for event observers."""
+    """Storage and task services for event observers.
+
+    Crash collection is ``inject: [crash_reporting]`` (``CRASH_REPORTING``),
+    not a capability. Telemetry of kernel events uses ``ctx.watch``.
+    """
 
     @property
     def workspace(self) -> Path: ...
-    @property
-    def diagnostics(self) -> Diagnostics: ...
     @property
     def storage(self) -> PrivateStorage: ...
     @property

@@ -4,16 +4,28 @@
 handler are process globals. Collectors register through this one service
 instead of rewriting them directly, so overlapping plugin generations hand the
 hooks over in order and the last one out restores the originals.
+
+``session_key`` and ``top_frame`` are part of the same protocol (maintainer,
+2026-10-27). The collector attributes a crash after it injects this key;
+they are not a second key, and the ``diagnostics`` capability is gone.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
+import threading
+from collections.abc import Callable
+from types import TracebackType
 from typing import Protocol
 
-from shiori_sdk.diagnostics import LoopExceptHandler, SysExceptHook, ThreadExceptHook
 from shiori_sdk.kernel import Key
+
+SysExceptHook = Callable[
+    [type[BaseException], BaseException, TracebackType | None], object
+]
+ThreadExceptHook = Callable[[threading.ExceptHookArgs], object]
+LoopExceptHandler = Callable[[asyncio.AbstractEventLoop, dict[str, object]], object]
 
 
 class CrashReporting(Protocol):
@@ -39,6 +51,14 @@ class CrashReporting(Protocol):
         """Retires ``owner``; the previous collector or the originals take over."""
         ...
 
+    def session_key(self) -> str | None:
+        """The host's current passive-turn attribution, if a turn is in progress."""
+        ...
+
+    def top_frame(self, tb: TracebackType | None) -> str:
+        """The first frame the host or a plugin owns, else the innermost filename."""
+        ...
+
 
 CRASH_REPORTING: Key[CrashReporting] = Key("crash_reporting")
-"""Provided by the host's core diagnostics module; observe injects it (P3)."""
+"""Host core service. Observe injects it and registers its collector through it."""

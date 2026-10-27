@@ -22,61 +22,72 @@ from agent.plugin_host import (
 from agent.core.turn_events import install_core_checks
 from bootstrap.plugin_core import PluginCoreInputs, plugin_core_modules
 from bus.event_bus import EventBus
+from core.error_context import current_session_key
 from core.roles.models import RoleRecord
 from core.roles.store import RoleStore
 from core.scene.demand import SceneObservationDemand
 from tests.support.plugin_kernel import host_kernel, make_kernel
 
+_CRASH_PROBE = """\
+import asyncio
+import logging
+from shiori_sdk.core.crash_reporting import CRASH_REPORTING
+
+def hook(*args):
+    pass
+
+async def setup(ctx):
+    reporting = ctx.require(CRASH_REPORTING)
+    owner = object()
+    reporting.install(
+        owner, logging.NullHandler(), hook, hook,
+        asyncio.get_running_loop(), hook,
+    )
+    ctx.effect("hooks", lambda: reporting.uninstall(owner))
+    seen = reporting.session_key()
+    try:
+        raise RuntimeError("probe")
+    except RuntimeError as error:
+        frame = reporting.top_frame(error.__traceback__)
+    ctx.expose((hook, frame, seen))
+"""
+
 
 @pytest.mark.asyncio
-async def test_diagnostics_capability_hooks_go_through_crash_reporting(
-    tmp_path: Path,
-) -> None:
-    """diagnostics 由 CRASH_REPORTING 构建：三种进程钩子都被插件接管，卸载后还原；
-
-    栈帧按发现根归因到 plugins/<目录>/...。
-    """
+async def test_crash_reporting_hooks_session_and_frame(tmp_path: Path) -> None:
+    """CRASH_REPORTING 接管三种进程钩子，并给出会话与插件栈帧；卸载后钩子还原。"""
     package = tmp_path / "plugins" / "crash_probe"
     (package / "backend").mkdir(parents=True)
     (package / "manifest.yaml").write_text(
-        "api: 2\nid: crash_probe\ncapabilities: [diagnostics]\n", encoding="utf-8"
-    )
-    (package / "backend/plugin.py").write_text(
-        "import asyncio\n"
-        "import logging\n"
-        "def hook(*args):\n"
-        "    pass\n"
-        "async def setup(ctx):\n"
-        "    owner = object()\n"
-        "    ctx.diagnostics.install_global_hooks(\n"
-        "        owner, logging.NullHandler(), hook, hook,\n"
-        "        asyncio.get_running_loop(), hook,\n"
-        "    )\n"
-        "    ctx.effect('hooks', lambda: ctx.diagnostics.uninstall_global_hooks(owner))\n"
-        "    try:\n"
-        "        raise RuntimeError('probe')\n"
-        "    except RuntimeError as error:\n"
-        "        frame = ctx.diagnostics.top_frame(error.__traceback__)\n"
-        "    ctx.expose((hook, frame))\n",
+        "api: 2\nid: crash_probe\ncapabilities: []\ninject:\n  - crash_reporting\n",
         encoding="utf-8",
+    )
+    (package / "backend/plugin.py").write_text(_CRASH_PROBE, encoding="utf-8")
+    raise_line = next(
+        index
+        for index, line in enumerate(_CRASH_PROBE.splitlines(), 1)
+        if line.strip() == 'raise RuntimeError("probe")'
     )
     loop = asyncio.get_running_loop()
     originals = (sys.excepthook, threading.excepthook, loop.get_exception_handler())
+    token = current_session_key.set("role:mira")
     kernel = make_kernel([tmp_path / "plugins"], event_bus=EventBus())
-    await kernel.load_all()
     try:
+        await kernel.load_all()
         handle = kernel._handles[str(package.absolute())]
         assert handle.state is PluginState.ACTIVE, handle.error
-        hook, frame = handle.instance
+        hook, frame, seen = handle.instance
         installed = (
             sys.excepthook,
             threading.excepthook,
             loop.get_exception_handler(),
         )
         assert installed == (hook, hook, hook)
-        assert frame == "plugins/crash_probe/backend/plugin.py:13"
+        assert frame == f"plugins/crash_probe/backend/plugin.py:{raise_line}"
+        assert seen == "role:mira"
     finally:
         await kernel.terminate_all(force=True)
+        current_session_key.reset(token)
     restored = (sys.excepthook, threading.excepthook, loop.get_exception_handler())
     assert restored == originals
 

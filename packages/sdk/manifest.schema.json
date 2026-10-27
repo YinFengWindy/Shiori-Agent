@@ -65,7 +65,6 @@
           "channels",
           "config",
           "dependencies",
-          "diagnostics",
           "events",
           "external_turns",
           "http",

@@ -53,7 +53,6 @@ KNOWN_CAPABILITIES = frozenset(
         "kv",
         "config",
         "background",
-        "diagnostics",
         "storage",
         "roles",
         "models",

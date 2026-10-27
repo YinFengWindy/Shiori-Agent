@@ -1,24 +1,28 @@
-"""Runtime diagnostic attribution with explicit installed-code roots."""
+"""Crash-report attribution with explicit installed-code roots."""
 
 import asyncio
 import logging
 import traceback
 from collections.abc import Sequence
+from importlib.util import find_spec
 from pathlib import Path
 from types import TracebackType
 
-from importlib.util import find_spec
+from core.common.global_hook_stack import ProcessCrashReporting
 from core.error_context import current_session_key
-from shiori_sdk.core.crash_reporting import CrashReporting
-from shiori_sdk.diagnostics import LoopExceptHandler, SysExceptHook, ThreadExceptHook
+from shiori_sdk.core.crash_reporting import (
+    LoopExceptHandler,
+    SysExceptHook,
+    ThreadExceptHook,
+)
 
 
-class HostDiagnostics:
-    """Route global hooks through ``CRASH_REPORTING`` and attribute traceback frames."""
+class HostCrashReporting:
+    """``CRASH_REPORTING``: the process hook stack plus session and frame attribution."""
 
     def __init__(
         self,
-        crash_reporting: CrashReporting,
+        crash_reporting: ProcessCrashReporting,
         plugin_roots: Sequence[tuple[str, Path]] = (),
     ) -> None:
         self._crash_reporting = crash_reporting
@@ -63,7 +67,7 @@ class HostDiagnostics:
             else "?"
         )
 
-    def install_global_hooks(
+    def install(
         self,
         owner: object,
         handler: logging.Handler,
@@ -72,11 +76,11 @@ class HostDiagnostics:
         loop: asyncio.AbstractEventLoop | None,
         loop_handler: LoopExceptHandler,
     ) -> tuple[SysExceptHook | None, ThreadExceptHook | None, LoopExceptHandler | None]:
-        """Installs the collector through the crash-reporting core service."""
+        """Installs the collector on the process-wide hook stack."""
         return self._crash_reporting.install(
             owner, handler, system, thread, loop, loop_handler
         )
 
-    def uninstall_global_hooks(self, owner: object) -> None:
-        """Retires the collector through the crash-reporting core service."""
+    def uninstall(self, owner: object) -> None:
+        """Retires the collector on the process-wide hook stack."""
         self._crash_reporting.uninstall(owner)

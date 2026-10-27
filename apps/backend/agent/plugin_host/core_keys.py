@@ -30,7 +30,6 @@ from shiori_sdk.background_results import BackgroundResults
 from shiori_sdk.channels import Channel
 from shiori_sdk.channels.avatars import AvatarsCapability
 from shiori_sdk.channels.context import ChannelsCapability
-from shiori_sdk.diagnostics import Diagnostics
 from shiori_sdk.extensions import BackgroundTasks
 from shiori_sdk.external_turns import ExternalTurns
 from shiori_sdk.http import HttpClient
@@ -106,9 +105,6 @@ class CoreProvide(Protocol):
 
 CoreModule = Callable[[CoreProvide], None]
 """Provides one core module's keys; raising aborts startup (§8.5)."""
-
-HOST_DIAGNOSTICS: Key[Diagnostics] = Key("host.diagnostics")
-"""The ``diagnostics`` capability, built over ``CRASH_REPORTING``."""
 
 HOST_TOOLS: Key[PluginCapabilityBinder[ToolsCapability]] = Key("host.tools")
 """The ``tools`` capability over the host ``ToolRegistry`` (``agent.tools``)."""
@@ -240,7 +236,6 @@ class CoreCapability:
 # assembly layer builds them itself (config, dependencies, runtime, kv, storage,
 # services).
 CORE_CAPABILITIES: Mapping[str, CoreCapability] = {
-    "diagnostics": CoreCapability(HOST_DIAGNOSTICS),
     "tools": CoreCapability(HOST_TOOLS, per_plugin=True),
     "tool_turn": CoreCapability(HOST_TOOL_TURN),
     "channels": CoreCapability(HOST_CHANNELS, per_plugin=True),

@@ -5,9 +5,10 @@ import logging
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, cast
 
-from shiori_sdk.memory.committed import TurnCommitted
-from shiori_sdk.memory.events import MemoryWritten, RetrievalCompleted
 from shiori_sdk.context import ContextBudgetObserved
+from shiori_sdk.core.crash_reporting import CRASH_REPORTING
+from shiori_sdk.memory.committed import TurnCommitted
+from shiori_sdk.memory.events import MemoryWritten
 
 from .collector import GlobalErrorCollector
 from .retention import run_retention_if_needed
@@ -23,9 +24,9 @@ logger = logging.getLogger("plugin.observe")
 async def setup(ctx: "PluginRuntimeContext") -> None:
     """等待 writer 数据库就绪后，再装配 retention、错误采集和遥测订阅。
 
-    宿主首先停用并退订事件，与订阅的登记位置无关。其它资源仍刻意保持
-    [writer 后台任务, retention 后台任务, 全局错误采集器] 的登记顺序，
-    按 LIFO 逆序处置，因此实际清理顺序是
+    宿主首先停用并退订事件（领域总线订阅与内核 watch），与登记位置无关。
+    其它资源仍刻意保持 [writer 后台任务, retention 后台任务, 全局错误采集器]
+    的登记顺序，按 LIFO 逆序处置，因此实际清理顺序是
     事件订阅 -> 采集器 uninstall（把内存中缓冲的错误 flush 进队列）->
     retention 任务取消 -> writer 任务最后取消，writer 任务的取消时机晚于
     采集器 flush，保证 flush 出的最后一批错误仍有机会被 writer 写盘——
@@ -40,28 +41,28 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
     await writer.wait_ready(writer_task)
     _ = ctx.background.spawn(run_retention_if_needed(db_path), name="retention")
 
-    collector = GlobalErrorCollector(writer, ctx.diagnostics)
+    collector = GlobalErrorCollector(writer, ctx.require(CRASH_REPORTING))
     # 安装过程本身可能部分成功，先登记清理以覆盖 setup 的失败回滚。
     ctx.effect("collector", collector.uninstall)
     collector.install()
 
+    # TurnCommitted 的载荷含 list/dict，P3 仍只走领域总线。预算与记忆写入由
+    # 发布方 emit 只读副本，这里 watch，避免和总线监听各写一次。
     ctx.events.on(TurnCommitted, lambda event: _observe_turn_committed(writer, event))
-    ctx.events.on(ContextBudgetObserved, writer.emit)
-    ctx.events.on(RetrievalCompleted, lambda event: _observe_retrieval(writer, event))
-    ctx.events.on(MemoryWritten, lambda event: _observe_memory_written(writer, event))
+
+    async def watch_budget(event: ContextBudgetObserved) -> None:
+        writer.emit(event)
+
+    async def watch_memory(event: MemoryWritten) -> None:
+        writer.emit(_to_memory_write_trace(event))
+
+    ctx.watch(ContextBudgetObserved, watch_budget)
+    ctx.watch(MemoryWritten, watch_memory)
     ctx.expose(ObserveTelemetry(db_path))
 
 
 def _observe_turn_committed(writer: TraceWriter, event: TurnCommitted) -> None:
     _emit_turn_trace(writer, event)
-
-
-def _observe_retrieval(writer: TraceWriter, event: RetrievalCompleted) -> None:
-    writer.emit(_to_rag_query_log(event))
-
-
-def _observe_memory_written(writer: TraceWriter, event: MemoryWritten) -> None:
-    writer.emit(_to_memory_write_trace(event))
 
 
 def _emit_turn_trace(writer: TraceWriter, event: TurnCommitted) -> None:
@@ -107,34 +108,6 @@ def _emit_turn_trace(writer: TraceWriter, event: TurnCommitted) -> None:
         "[observe] turn_trace 已入队 session=%s tool_calls=%d",
         event.session_key,
         len(tool_calls),
-    )
-
-
-def _to_rag_query_log(event: RetrievalCompleted):
-    from .events import RagHitLog, RagQueryLog
-
-    return RagQueryLog(
-        caller="passive",
-        session_key=event.session_key,
-        role_id=event.role_id,
-        query=event.query,
-        orig_query=event.orig_query,
-        aux_queries=list(event.aux_queries),
-        hits=[
-            RagHitLog(
-                item_id=hit.item_id,
-                memory_type=hit.memory_type,
-                score=hit.score,
-                summary=hit.summary[:120],
-                injected=hit.injected,
-                confidence_label=hit.confidence_label,
-                forced=hit.forced,
-            )
-            for hit in event.hits
-        ],
-        injected_count=event.injected_count,
-        route_decision=event.route_decision,
-        error=event.error,
     )
 
 

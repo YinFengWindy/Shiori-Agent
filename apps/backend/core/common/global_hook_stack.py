@@ -7,7 +7,11 @@ import sys
 import threading
 from dataclasses import dataclass
 import asyncio
-from shiori_sdk.diagnostics import SysExceptHook, ThreadExceptHook, LoopExceptHandler
+from shiori_sdk.core.crash_reporting import (
+    LoopExceptHandler,
+    SysExceptHook,
+    ThreadExceptHook,
+)
 
 
 @dataclass
@@ -86,10 +90,11 @@ def _uninstall_global_hooks(owner: object) -> None:
 
 
 class ProcessCrashReporting:
-    """The ``CRASH_REPORTING`` core service (D13b) over the process-wide hook stack.
+    """Process-wide hook stack used by ``HostCrashReporting`` (D13b).
 
     Every instance shares the module-level stack above, because the hooks it
-    arbitrates are process globals.
+    arbitrates are process globals. Session and frame attribution live on the
+    host object the kernel provides as ``CRASH_REPORTING``, not on this stack.
     """
 
     install = staticmethod(_install_global_hooks)

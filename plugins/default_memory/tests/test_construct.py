@@ -235,3 +235,57 @@ async def test_partial_allocation_closes_the_store_when_embedder_fails(
         construct_default_engine(cast(Any, ctx))
     await ctx.aclose()
     store.close.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_memory_written_fanout_is_watched_as_a_tuple(tmp_path: Path) -> None:
+    """The engine publisher emits a tuple copy for watchers and the list on the bus."""
+    from dataclasses import dataclass
+
+    from shiori_sdk.kernel import PluginSpec
+    from shiori_sdk.memory.events import MemoryWritten
+    from shiori_sdk.testing.kernel import KernelHarness
+
+    ctx = _context(
+        tmp_path,
+        {"embedding_api_key": "k", "embedding_base_url": "http://embed"},
+    )
+    watched: list[MemoryWritten] = []
+
+    async def setup(kernel_ctx) -> None:
+        async def watch(event: MemoryWritten) -> None:
+            watched.append(event)
+
+        kernel_ctx.watch(MemoryWritten, watch)
+
+    await ctx.kernel.start([PluginSpec("observe", setup)])
+    bus_events: list[object] = []
+    ctx.events.on(MemoryWritten, lambda event: bus_events.append(event))
+
+    @dataclass(frozen=True)
+    class _Listed:
+        items: list[str]
+
+    engine = construct_default_engine(cast(Any, ctx))
+    publisher = engine._event_bus
+    assert publisher is not None
+    written = MemoryWritten(
+        session_key="cli:1",
+        channel="cli",
+        chat_id="1",
+        action="supersede",
+        source_ref="cli:1@post_response",
+        superseded_ids=["mem_1"],
+    )
+    listed = _Listed(["keep-on-the-bus"])
+    try:
+        await publisher.fanout(written)
+        await publisher.fanout(listed)
+        await KernelHarness(kernel=ctx.kernel).idle()
+    finally:
+        if engine._v2_store is not None:
+            engine._v2_store.close()
+    assert tuple(watched[0].superseded_ids) == ("mem_1",)
+    assert bus_events[0] is written
+    assert list(written.superseded_ids) == ["mem_1"]
+    assert len(watched) == 1

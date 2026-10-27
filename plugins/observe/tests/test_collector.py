@@ -3,14 +3,14 @@
 import logging
 import pytest
 from types import SimpleNamespace
-from shiori_sdk.testing.diagnostics import FakeDiagnostics
+from shiori_sdk.testing.diagnostics import FakeCrashReporting
 from plugins.observe.backend.collector import GlobalErrorCollector
 
 
 @pytest.mark.asyncio
 async def test_injected_context_attribution_flush_and_idempotent_uninstall():
     events = []
-    diagnostics = FakeDiagnostics()
+    diagnostics = FakeCrashReporting()
     diagnostics.current_session.set("external:1")
     collector = GlobalErrorCollector(SimpleNamespace(emit=events.append), diagnostics)
     collector.install()
@@ -43,7 +43,7 @@ def _error(message: str) -> logging.LogRecord:
 
 @pytest.mark.asyncio
 async def test_retiring_the_old_collector_keeps_the_new_one_recording_once():
-    diagnostics = FakeDiagnostics()
+    diagnostics = FakeCrashReporting()
     old_events, new_events = [], []
     old = GlobalErrorCollector(SimpleNamespace(emit=old_events.append), diagnostics)
     new = GlobalErrorCollector(SimpleNamespace(emit=new_events.append), diagnostics)
