@@ -1,6 +1,8 @@
 import fs from "node:fs/promises";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 
+/* global taskSpace: readonly, takeOverTaskSpace: readonly -- Injected by ego's embedded Node runtime. */
+
 // The host supplies this fixed runner. Model input is data, never Node code,
 // a Space id, a profile id, or a filesystem path.
 export async function run(request) {
