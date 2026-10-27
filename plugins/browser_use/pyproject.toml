@@ -17,7 +17,7 @@ packages = ["plugins.browser_use", "plugins.browser_use.backend"]
 package-dir = {"plugins.browser_use" = "."}
 
 [tool.setuptools.package-data]
-"plugins.browser_use" = ["manifest.yaml", "TESTING.md", "README.md", "native-runtime.json", "LICENSE.agent-browser", "backend/**/*.json", "backend/**/*.yaml", "backend/**/*.md"]
+"plugins.browser_use" = ["manifest.yaml", "TESTING.md", "README.md", "native-runtime.json", "LICENSE.agent-browser", "backend/**/*.json", "backend/**/*.yaml", "backend/**/*.md", "backend/**/*.mjs"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -3,6 +3,7 @@
 import asyncio
 import os
 import subprocess
+import sys
 from collections.abc import Mapping
 from typing import IO, Any
 
@@ -24,7 +25,13 @@ async def spawn_owned(
     before the error propagates.
     """
     process = await asyncio.create_subprocess_exec(
-        *command, creationflags=OWNED_TREE_FLAGS if owned else 0, **kwargs
+        *command,
+        creationflags=(
+            OWNED_TREE_FLAGS
+            if owned
+            else CREATE_NO_WINDOW if sys.platform == "win32" else 0
+        ),
+        **kwargs,
     )
     if not owned:
         return process, None
