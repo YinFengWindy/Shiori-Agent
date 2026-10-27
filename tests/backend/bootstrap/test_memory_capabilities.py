@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 from agent.config_models import Config
-from bootstrap.memory_capabilities import default_memory_enabled, memory_build_config
+from bootstrap.memory_capabilities import memory_build_config
 
 
 def _config(**plugins: dict) -> Config:
@@ -56,9 +56,3 @@ def test_memory_build_config_keeps_an_explicit_empty_model() -> None:
 def test_memory_build_config_rejects_non_positive_dimensionality() -> None:
     with pytest.raises(ValueError, match="output_dimensionality"):
         memory_build_config(_config(default_memory={"output_dimensionality": 0}))
-
-
-def test_default_memory_enabled_uses_the_manifest_default_or_explicit_flag() -> None:
-    assert default_memory_enabled(_config()) is True
-    assert default_memory_enabled(_config(default_memory={"enabled": False})) is False
-    assert default_memory_enabled(_config(default_memory={"enabled": True})) is True

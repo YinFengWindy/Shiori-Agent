@@ -62,6 +62,10 @@ search_enabled = true
 # =============================================================================
 # 语义记忆
 # 开关和向量模型凭据在 [plugins.default_memory]（设置 › 插件 › 默认记忆引擎）。
-# 未写 enabled 时默认启用。检索阈值在
-# workspace/plugin-data/default_memory/config.local.toml。
+# 检索阈值在 workspace/plugin-data/default_memory/config.local.toml。
+# 新工作区显式写 enabled = true；已有配置里没有这个键时，启动迁移按旧版默认
+# 视为关闭并写入 enabled = false。
 # =============================================================================
+
+[plugins.default_memory]
+enabled = true

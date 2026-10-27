@@ -71,6 +71,8 @@ enabled = false
 enabled = false
 [plugins.desktop_pet]
 enabled = false
+[plugins.default_memory]
+enabled = true
 """
 
 # The card fields worth a still; runtime wiring is rewritten for this workspace.
