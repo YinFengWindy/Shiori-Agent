@@ -164,7 +164,7 @@ missing fails before `setup` with `HostServiceUnavailable`, naming the service,
 so declared services such as `workspace` or `sessions` are never `None`.
 Runtime injection is checked through a static
 `PluginSetupContext` without the legacy context's dynamic attribute fallback.
-Typed setup contexts also cover memory, hooks, commands, diagnostics, role/model
+Typed setup contexts also cover memory, hooks, commands, observation, role/model
 and process services, channels and accounts. Their capability protocols and
 independent testing fixtures are documented below; host service implementations
 remain in the host.
@@ -346,13 +346,18 @@ only that exact turn (same anchor and message ids), otherwise it returns
 then the session; an empty `MEMORY_ENGINE` rolls back the session only.
 `CommandPluginContext` also provides current declared dependency exports.
 
-Observe uses `ObservePluginContext` with `background`, `storage` and `diagnostics`.
-The migration port is shared with memory construction. The host owns receipt/lease
-handling, the active error session, installed package and external plugin code roots,
-and the process-global hook stack. The plugin owns fingerprinting, deduplication,
-flush and SQLite. Register collector cleanup before installing global hooks; stop
-subscriptions before final flush, then cancel retention and writer in reverse order.
-Source checkout depth is never a plugin contract.
+Observe uses `ObservePluginContext` with `background` and `workspace`, and
+injects `crash_reporting`. The migration port (`storage`) is shared with memory
+construction when declared. The host owns receipt/lease handling, the active
+error session, installed package and external plugin code roots, and the
+process-global hook stack behind `CRASH_REPORTING` (`install` / `uninstall`,
+`session_key`, `top_frame`). The plugin owns fingerprinting, deduplication,
+flush and SQLite. Register collector cleanup before installing hooks; stop
+subscriptions and watches before final flush, then cancel retention and writer
+in reverse order. Source checkout depth is never a plugin contract.
+`ContextBudgetObserved` and `MemoryWritten` are watched (`ctx.watch`);
+`TurnCommitted` stays on the domain bus. A budget watcher sees a read-only
+status mapping; a memory watcher sees `superseded_ids` as a tuple.
 
 Status commands declare `observe` as an optional manifest dependency and resolve
 its public `recent_cache_turns` export for each command. Unload yields an unavailable
@@ -362,9 +367,9 @@ reply; reload uses the new export. Consumers do not inspect Observe's database.
 handlers on a bare kernel, without the host's checks),
 `commands.CommandRegistry` (the host's own `COMMANDS` registry; provide it on the
 fake context's `kernel`), `testing.commands.FakeSessions` and
-`testing.diagnostics.FakeDiagnostics` provide independent contract doubles.
-Diagnostics fakes record callbacks without modifying process-wide handlers. Global
-hook restoration and real lifecycle ordering stay in host integration tests.
+`testing.crash_reporting.FakeCrashReporting` provide independent contract doubles.
+The crash-reporting fake records callbacks without modifying process-wide handlers.
+Global hook restoration and real lifecycle ordering stay in host integration tests.
 
 
 `shiori_sdk.storage.plugin_data_dir` and `PLUGIN_DATA_DIRNAME` own the pure canonical

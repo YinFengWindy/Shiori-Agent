@@ -1,11 +1,16 @@
-"""Recording diagnostic ports; never installs process-wide exception hooks."""
+"""Recording crash-reporting port; never installs process-wide exception hooks."""
 
 import asyncio
 import logging
 from contextvars import ContextVar
 from dataclasses import dataclass
 from types import TracebackType
-from shiori_sdk.diagnostics import SysExceptHook, ThreadExceptHook, LoopExceptHandler
+
+from shiori_sdk.core.crash_reporting import (
+    LoopExceptHandler,
+    SysExceptHook,
+    ThreadExceptHook,
+)
 
 
 @dataclass(frozen=True)
@@ -18,7 +23,7 @@ class _Generation:
     loop_handler: LoopExceptHandler
 
 
-class FakeDiagnostics:
+class FakeCrashReporting:
     """Expose callbacks so tests can drive error sources without touching host globals."""
 
     def __init__(self):
@@ -41,7 +46,7 @@ class FakeDiagnostics:
         """Return the controlled attribution chosen by the test."""
         return self.frame
 
-    def install_global_hooks(
+    def install(
         self,
         owner: object,
         handler: logging.Handler,
@@ -66,7 +71,7 @@ class FakeDiagnostics:
         )
         return None, None, None
 
-    def uninstall_global_hooks(self, owner: object) -> None:
+    def uninstall(self, owner: object) -> None:
         """Remove one registration of ``owner``, mirroring the host hook stack.
 
         Only the oldest matching registration is removed. Retiring the newest

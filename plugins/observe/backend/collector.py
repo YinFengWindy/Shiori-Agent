@@ -18,8 +18,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Protocol
 
-from shiori_sdk.diagnostics import (
-    Diagnostics,
+from shiori_sdk.core.crash_reporting import (
+    CrashReporting,
     SysExceptHook as _SysExceptHook,
     ThreadExceptHook as _ThreadExceptHook,
     LoopExceptHandler as _LoopExceptHandler,
@@ -66,9 +66,9 @@ class _BucketAgg:
 
 
 class GlobalErrorCollector:
-    def __init__(self, writer: _Emitter, diagnostics: Diagnostics) -> None:
+    def __init__(self, writer: _Emitter, reporting: CrashReporting) -> None:
         self._writer = writer
-        self._diagnostics = diagnostics
+        self._reporting = reporting
         self._lock = threading.Lock()
         self._buckets: dict[tuple[str, str], _BucketAgg] = {}
         self._flush_task: asyncio.Task[None] | None = None
@@ -100,7 +100,7 @@ class GlobalErrorCollector:
                 self._flush_loop(), name="observe_error_flush"
             )
         self._prev_excepthook, self._prev_threadhook, self._prev_loop_handler = (
-            self._diagnostics.install_global_hooks(
+            self._reporting.install(
                 self,
                 handler,
                 self._on_sys_except,
@@ -116,7 +116,7 @@ class GlobalErrorCollector:
             return
         self._installed = False
         # 1. 还原钩子
-        self._diagnostics.uninstall_global_hooks(self)
+        self._reporting.uninstall(self)
         self._log_handler = None
         # 2. 停 flush task 并最终 flush
         if self._flush_task is not None:
@@ -242,8 +242,8 @@ class GlobalErrorCollector:
             message=message,
             traceback_text=tb_text,
             level=level,
-            top_frame=self._diagnostics.top_frame(tb),
-            session_key=self._diagnostics.session_key(),
+            top_frame=self._reporting.top_frame(tb),
+            session_key=self._reporting.session_key(),
         )
 
     # ── flush ────────────────────────────────────
@@ -295,7 +295,7 @@ class _CollectorLogHandler(logging.Handler):
                 error_type = exc_type.__name__
                 message = str(exc_value) if exc_value else record.getMessage()
                 tb_text = "".join(traceback.format_exception(exc_type, exc_value, tb))
-                top_frame = self._collector._diagnostics.top_frame(tb)
+                top_frame = self._collector._reporting.top_frame(tb)
             else:
                 error_type = "LogError"
                 message = record.getMessage()
@@ -309,7 +309,7 @@ class _CollectorLogHandler(logging.Handler):
                 traceback_text=tb_text,
                 level=record.levelname,
                 top_frame=top_frame,
-                session_key=self._collector._diagnostics.session_key(),
+                session_key=self._collector._reporting.session_key(),
             )
         except Exception:
             pass

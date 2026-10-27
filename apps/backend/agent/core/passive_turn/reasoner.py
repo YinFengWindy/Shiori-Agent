@@ -26,6 +26,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from copy import deepcopy
 from dataclasses import replace
+from functools import partial
 
 from core.compaction import (
     CompactionController,
@@ -58,7 +59,7 @@ from .reasoning_loop import _PassiveReasoningLoopMixin
 from .reasoning_result import _PassiveReasoningResultMixin
 from .natural_reply import NaturalReply
 from agent.core.runtime_support import ToolDiscoveryState
-from agent.core.turn_events import TurnEvents, core_kernel
+from agent.core.turn_events import TurnEvents, core_kernel, read_only
 from agent.core.types import ReasonerResult
 from agent.lifecycle.phases.after_step import AfterStepPhase
 from agent.lifecycle.phases.before_step import BeforeStepPhase
@@ -73,6 +74,7 @@ from agent.provider import ContentSafetyError, ContextLengthError
 from agent.tools.execution import ToolExecutor
 from agent.tools.external_access import external_tools_restricted
 from bus.event_bus import EventBus
+from shiori_sdk.context import ContextBudgetObserved
 from shiori_sdk.kernel import Kernel
 
 if TYPE_CHECKING:
@@ -87,6 +89,24 @@ if TYPE_CHECKING:
 logger = logging.getLogger("agent.core.passive_turn")
 
 _SAFETY_RETRY_RATIOS = (1.0, 0.5, 0.0)
+
+
+async def publish_context_budget(
+    kernel: Callable[[], Kernel],
+    bus: EventBus,
+    event: ContextBudgetObserved,
+) -> None:
+    """Bus listeners keep the original dict; kernel watchers get a read-only copy.
+
+    ``kernel.emit`` rejects a dict field, and compaction still publishes the
+    dict it built so bus listeners can serialize it. The copy is taken before
+    either delivery, so bus listeners cannot change what watchers see. The bus
+    goes first: its observer failures are only logged, while ``kernel.emit``
+    can raise, so a failing emit never drops the bus delivery.
+    """
+    watched = replace(event, status=read_only(event.status))
+    await bus.observe(event)
+    await kernel().emit(watched)
 
 
 def _disabled_tools_from_msg(msg: object) -> set[str]:
@@ -181,6 +201,10 @@ class DefaultReasoner(
         self._context = context
         self._session_manager = session_manager
         self._event_bus = event_bus
+        # 步骤、提示词与工具事件经当前插件代的内核发出（#902）；未接插件时
+        # 是只带核心校验的裸内核。上下文预算也走这条内核，供 observe watch。
+        bare_kernel = core_kernel()
+        self._kernel: Callable[[], Kernel] = lambda: bare_kernel
         self._compaction = (
             CompactionController(
                 session_manager,
@@ -192,15 +216,15 @@ class DefaultReasoner(
                     llm_config.max_tokens,
                     llm_config.summary_token_limit,
                 ),
-                observe=event_bus.observe if event_bus is not None else None,
+                observe=(
+                    partial(publish_context_budget, lambda: self._kernel(), event_bus)
+                    if event_bus is not None
+                    else None
+                ),
             )
             if session_manager is not None and compaction_memory is not None
             else None
         )
-        # 步骤、提示词与工具事件经当前插件代的内核发出（#902）；未接插件时
-        # 是只带核心校验的裸内核。
-        bare_kernel = core_kernel()
-        self._kernel: Callable[[], Kernel] = lambda: bare_kernel
         self.context_window = (
             ContextWindow(
                 session_manager,

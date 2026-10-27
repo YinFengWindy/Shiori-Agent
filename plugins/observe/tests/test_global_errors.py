@@ -8,7 +8,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import cast
 import pytest
-from shiori_sdk.testing.diagnostics import FakeDiagnostics
+from shiori_sdk.testing.crash_reporting import FakeCrashReporting
 
 _db = importlib.import_module("plugins.observe.backend.db")
 _events = importlib.import_module("plugins.observe.backend.events")
@@ -115,7 +115,7 @@ def test_write_global_error_separate_bucket_is_new_row(tmp_path):
 
 def test_collector_dedups_and_counts():
     emitter = _RecordingEmitter()
-    diagnostics = FakeDiagnostics()
+    diagnostics = FakeCrashReporting()
     col = GlobalErrorCollector(emitter, diagnostics)
     for _ in range(5):
         col.capture(
@@ -137,7 +137,7 @@ def test_collector_dedups_and_counts():
 
 def test_collector_flush_clears_so_next_flush_emits_delta():
     emitter = _RecordingEmitter()
-    diagnostics = FakeDiagnostics()
+    diagnostics = FakeCrashReporting()
     col = GlobalErrorCollector(emitter, diagnostics)
     col.capture(
         source="log",
@@ -160,7 +160,7 @@ def test_collector_flush_clears_so_next_flush_emits_delta():
 @pytest.mark.asyncio
 async def test_install_captures_logger_error_and_skips_observe():
     emitter = _RecordingEmitter()
-    diagnostics = FakeDiagnostics()
+    diagnostics = FakeCrashReporting()
     col = GlobalErrorCollector(emitter, diagnostics)
     prev_excepthook = sys.excepthook
     prev_threadhook = threading.excepthook
@@ -191,7 +191,7 @@ async def test_install_captures_logger_error_and_skips_observe():
 @pytest.mark.asyncio
 async def test_install_captures_exception_with_traceback():
     emitter = _RecordingEmitter()
-    diagnostics = FakeDiagnostics()
+    diagnostics = FakeCrashReporting()
     col = GlobalErrorCollector(emitter, diagnostics)
     col.install()
     try:

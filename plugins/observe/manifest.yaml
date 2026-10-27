@@ -9,4 +9,5 @@ capabilities:
   - workspace
   - events
   - background
-  - diagnostics
+inject:
+  - crash_reporting

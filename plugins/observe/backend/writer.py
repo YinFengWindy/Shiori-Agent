@@ -1,4 +1,4 @@
-"""异步 TraceWriter：把 TurnTrace / RagQueryLog 写入 SQLite。
+"""异步 TraceWriter：把 观测事件写入 SQLite。
 
 非阻塞：调用方用 emit() put_nowait，后台 task 消费队列写 DB。
 Queue 满时 drop + 计数，不崩溃主循环。
@@ -15,7 +15,7 @@ from pathlib import Path
 from shiori_sdk.context import ContextBudgetObserved
 
 from .db import open_db
-from .events import GlobalErrorTrace, MemoryWriteTrace, RagQueryLog, TurnTrace
+from .events import GlobalErrorTrace, MemoryWriteTrace, TurnTrace
 
 logger = logging.getLogger("observe.writer")
 
@@ -46,11 +46,7 @@ class TraceWriter:
     def __init__(self, db_path: Path) -> None:
         self._db_path = db_path
         self._queue: asyncio.Queue[
-            TurnTrace
-            | RagQueryLog
-            | MemoryWriteTrace
-            | GlobalErrorTrace
-            | ContextBudgetObserved
+            TurnTrace | MemoryWriteTrace | GlobalErrorTrace | ContextBudgetObserved
         ] = asyncio.Queue(maxsize=_QUEUE_MAX)
         self._dropped = 0
         self._ready = asyncio.Event()
@@ -59,13 +55,7 @@ class TraceWriter:
 
     def emit(
         self,
-        event: (
-            TurnTrace
-            | RagQueryLog
-            | MemoryWriteTrace
-            | GlobalErrorTrace
-            | ContextBudgetObserved
-        ),
+        event: TurnTrace | MemoryWriteTrace | GlobalErrorTrace | ContextBudgetObserved,
     ) -> None:
         """非阻塞 emit。Queue 满时 drop 并记录计数。"""
         try:
@@ -129,19 +119,11 @@ class TraceWriter:
     def _write_one(
         self,
         conn,
-        event: (
-            TurnTrace
-            | RagQueryLog
-            | MemoryWriteTrace
-            | GlobalErrorTrace
-            | ContextBudgetObserved
-        ),
+        event: TurnTrace | MemoryWriteTrace | GlobalErrorTrace | ContextBudgetObserved,
     ) -> None:
         ts = _now_iso()
         if isinstance(event, TurnTrace):
             _write_turn(conn, event, ts)
-        elif isinstance(event, RagQueryLog):
-            _write_rag(conn, event, ts)
         elif isinstance(event, MemoryWriteTrace):
             _write_memory_write(conn, event, ts)
         elif isinstance(event, GlobalErrorTrace):
@@ -154,7 +136,7 @@ class TraceWriter:
                         ts,
                         event.session_key,
                         event.context_key,
-                        json.dumps(event.status, ensure_ascii=False),
+                        json.dumps(dict(event.status), ensure_ascii=False),
                         event.status.get("failure_stage") or None,
                     ),
                 )
@@ -203,51 +185,6 @@ def _write_turn(conn, e: TurnTrace, ts: str) -> None:
                 e.react_final_input_tokens,
                 e.react_cache_prompt_tokens,
                 e.react_cache_hit_tokens,
-                e.error,
-            ),
-        )
-
-
-def _write_rag(conn, e: RagQueryLog, ts: str) -> None:
-    hits_json = (
-        json.dumps(
-            [
-                {
-                    "id": h.item_id,
-                    "type": h.memory_type,
-                    "score": round(h.score, 4),
-                    "summary": h.summary,
-                    "injected": h.injected,
-                }
-                for h in e.hits
-            ],
-            ensure_ascii=False,
-        )
-        if e.hits
-        else None
-    )
-    with conn:
-        conn.execute(
-            """
-            INSERT INTO rag_queries (
-                ts, caller, session_key, query, orig_query,
-                aux_queries, hits_json, injected_count, route_decision, error
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                ts,
-                e.caller,
-                e.session_key,
-                e.query,
-                e.orig_query,
-                (
-                    json.dumps(e.aux_queries, ensure_ascii=False)
-                    if e.aux_queries
-                    else None
-                ),
-                hits_json,
-                e.injected_count,
-                e.route_decision,
                 e.error,
             ),
         )

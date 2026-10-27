@@ -1,46 +1,12 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Literal
 
 
-def _empty_hit_metadata() -> dict[str, object]:
-    return {}
-
-
 def _empty_str_list() -> list[str]:
     return []
-
-
-@dataclass(frozen=True)
-class RetrievalHitSummary:
-    """Compact retrieval evidence carried by lifecycle observations."""
-
-    item_id: str
-    memory_type: str
-    score: float
-    summary: str
-    injected: bool
-    confidence_label: str = ""
-    forced: bool = False
-    metadata: dict[str, object] = field(default_factory=_empty_hit_metadata)
-
-
-@dataclass(frozen=True)
-class RetrievalCompleted:
-    """Observation emitted after a scoped retrieval finishes."""
-
-    session_key: str
-    channel: str
-    chat_id: str
-    query: str
-    orig_query: str | None
-    hits: list[RetrievalHitSummary]
-    injected_count: int
-    route_decision: str | None
-    aux_queries: list[str] = field(default_factory=_empty_str_list)
-    error: str | None = None
-    role_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -55,7 +21,7 @@ class MemoryWritten:
     memory_type: str | None = None
     item_id: str | None = None
     summary: str | None = None
-    superseded_ids: list[str] = field(default_factory=_empty_str_list)
+    superseded_ids: Sequence[str] = field(default_factory=_empty_str_list)
     error: str | None = None
     role_id: str = ""
 

@@ -123,6 +123,40 @@ consolidates these additions and the subsequent #847 breaking migration.
 
 <!-- Record the next contract batch here, with PR references and breaking markers. -->
 
+- **breaking: capability `diagnostics` removed; observe injects `crash_reporting`
+  (PR #940, issue #902, refactor P3-8, D13).** `CrashReporting` gains `session_key() ->
+  str | None` and `top_frame(tb) -> str` (maintainer, 2026-10-27: on this
+  protocol, not a new key). The host object provided as `CRASH_REPORTING`
+  arbitrates `sys.excepthook`, `threading.excepthook` and the loop exception
+  handler and attributes the active session and the first owned frame. The
+  hook type aliases `SysExceptHook`, `ThreadExceptHook` and `LoopExceptHandler`
+  live in `shiori_sdk.core.crash_reporting`.
+  **Breaking:** `diagnostics` leaves `shiori_sdk.runtime.KNOWN_CAPABILITIES`
+  and the `capabilities` enum of `manifest.schema.json`. A manifest that still
+  declares it is rejected. `ctx.diagnostics`, `ObservePluginContext.diagnostics`,
+  `shiori_sdk.diagnostics` (`Diagnostics`, `install_global_hooks`) and
+  `testing.diagnostics.FakeDiagnostics` are gone. **Breaking:** the test module
+  `shiori_sdk.testing.diagnostics` is renamed `shiori_sdk.testing.crash_reporting`;
+  its double is `FakeCrashReporting` (`install` / `uninstall` / `session_key` /
+  `top_frame`), and it still does not touch process globals.
+  `PluginDiagnostic`, `PackageContractError` and `RendererActivationError`
+  stay in `shiori_sdk.kernel`.
+  Observe's manifest is `capabilities: [workspace, events, background]` and
+  `inject: [crash_reporting]`. It watches `ContextBudgetObserved` and
+  `MemoryWritten`. `TurnCommitted` stays a domain-bus event in P3 (its payload
+  has lists and dicts, which `kernel.emit` rejects). Publishers that want a
+  watcher deliver the original on the bus first, then emit a read-only copy
+  taken before the bus delivery. **Breaking (types):**
+  `ContextBudgetObserved.status` changes from `dict` to `Mapping[str, Any]`
+  (watchers receive a `MappingProxyType` copy; bus listeners keep the dict),
+  and `MemoryWritten.superseded_ids` from `list[str]` to `Sequence[str]`
+  (watchers receive a tuple; the bus event keeps the list).
+  **Breaking:** `shiori_sdk.memory.events.RetrievalCompleted` and
+  `RetrievalHitSummary` are removed (nothing ever emitted the event), and
+  observe drops its `rag_queries` table: opening an existing observe database
+  runs `DROP TABLE IF EXISTS rag_queries` (maintainer, 2026-10-27).
+  No SDK or plugin version bump (D26).
+
 - **breaking: session rollback socket, memory `rollback_turn`, and capability
   `session_manager` removed (PR #938, issue #902, refactor P3-7c, D10).**
   `shiori_sdk.core.sessions` defines the `SESSIONS` socket (`Key` name
@@ -206,9 +240,9 @@ consolidates these additions and the subsequent #847 breaking migration.
   (`install(owner, handler, system, thread, loop, loop_handler)` returning the
   original hooks, `uninstall(owner)`) and `CRASH_REPORTING = Key("crash_reporting")`.
   The host provides it as a core service that arbitrates `sys.excepthook`,
-  `threading.excepthook` and the loop exception handler; the v2 `diagnostics`
-  capability now installs through it, with unchanged behavior. Plugins cannot
-  inject it yet: observe switches to `inject: [crash_reporting]` in P3.
+  `threading.excepthook` and the loop exception handler. P3-8 (the bullet
+  above) adds `session_key` / `top_frame` to this protocol, deletes the v2
+  `diagnostics` capability, and switches observe to `inject: [crash_reporting]`.
 
 - **breaking: capabilities `role_store`, `role_runtime_registry` and
   `relationship_runtime` removed (PR #921, issue #901, refactor P2).** None of the three
@@ -1969,11 +2003,13 @@ plugin. The guide also covers installation, testing and artifact checks.
 
 The hook/command/observation setup surfaces are `HookPluginContext`,
 `CommandPluginContext` and `ObservePluginContext` in `shiori_sdk.extensions`.
-Observe declares `diagnostics` and `storage` alongside events/background/workspace.
-Diagnostics connects to the owning host's global handler stack and active session;
-code roots are resolved from installed host packages and discovered plugin roots.
-The plugin never guesses a repository root. `storage.migrate_data` uses the existing
-host migration receipts and leases. These ports are part of Runtime API 3.0.
+Observe declares `workspace`, `events` and `background`, and injects
+`crash_reporting` (Unreleased, P3-8). Capability `diagnostics` is removed.
+`storage.migrate_data` remains the migration port when a plugin declares
+`storage`. Crash hooks, the active session and owned frames come from
+`CRASH_REPORTING`. The plugin never guesses a repository root. These ports
+were introduced in Runtime API 3.0; the diagnostics capability split is
+unreleased.
 
 Command plugins register on the core `COMMANDS` socket
 (`inject: [commands]`, `shiori_sdk.core.conversation`); the handler reads a

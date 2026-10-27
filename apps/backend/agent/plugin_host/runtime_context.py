@@ -23,7 +23,6 @@ from shiori_sdk.extensions import (
     BackgroundTasks,
     PrivateStorage,
 )
-from shiori_sdk.diagnostics import Diagnostics
 from shiori_sdk.runtime import (
     CapabilityNotGranted,
 )
@@ -77,7 +76,6 @@ class PluginSetupContext:
         dependencies: Dependencies | None = None,
         background: BackgroundTasks | None = None,
         storage: PrivateStorage | None = None,
-        diagnostics: Diagnostics | None = None,
         roles: Roles | None = None,
         models: RoleModels | None = None,
         sessions: PluginSessions | None = None,
@@ -113,7 +111,6 @@ class PluginSetupContext:
         self._dependencies = dependencies
         self._background = background
         self._storage = storage
-        self._diagnostics = diagnostics
         self._roles = roles
         self._models = models
         self._sessions = sessions
@@ -254,11 +251,6 @@ class PluginSetupContext:
         if "storage" not in self.granted or self._storage is None:
             raise CapabilityNotGranted("Plugin did not request storage")
         return self._storage
-
-    @property
-    def diagnostics(self) -> Diagnostics:
-        """Return the explicitly granted diagnostics capability."""
-        return self._core_capability("diagnostics", self._diagnostics)
 
     def as_hook_context(self) -> HookPluginContext:
         """Check the hook setup boundary without dynamic attributes."""

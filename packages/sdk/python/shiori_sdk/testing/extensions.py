@@ -7,7 +7,6 @@ from shiori_sdk.extensions import Dependencies
 from shiori_sdk.kernel import Kernel
 from shiori_sdk.runtime import HostServiceUnavailable
 from .context import FakePluginContext
-from .diagnostics import FakeDiagnostics
 from .memory import FakeMemoryStorage
 
 
@@ -102,7 +101,6 @@ class FakeExtensionContext(FakePluginContext):
         self.config = FakeConfig(config)
         self.dependencies = dependencies or FakeDependencies()
         self.background = FakeBackground(self)
-        self.diagnostics = FakeDiagnostics()
         self.storage = FakeMemoryStorage()
 
     @property
