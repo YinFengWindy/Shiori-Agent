@@ -123,7 +123,7 @@ consolidates these additions and the subsequent #847 breaking migration.
 
 <!-- Record the next contract batch here, with PR references and breaking markers. -->
 
-- **Optional process-tree ownership (issue #934).** `Processes.spawn()` accepts
+- **Optional process-tree ownership (issue #934, PR #936).** `Processes.spawn()` accepts
   `own_process_tree: bool = True`. Existing callers retain the owned-process
   behavior. Clients of user-owned applications can pass `False`: the caller
   still reaps its client process and must separately stop remote work; the
