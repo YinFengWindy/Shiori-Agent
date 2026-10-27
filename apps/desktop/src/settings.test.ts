@@ -48,6 +48,7 @@ describe("desktop settings config path", () => {
       const result = await saveSettings(formData, async (request) => {
         applyCalls += 1;
         assert.match(request.config_toml, /model = "test-model"/);
+        assert.doesNotMatch(request.config_toml, /\[memory(\]|\.)/);
         assert.equal(request.expected_generation, 3);
         assert.equal(request.preserve_plugins, true);
         assert.equal(request.operation_id, "retry-operation");

@@ -229,7 +229,7 @@ Optimizer 定时任务
 
 ## 向量记忆 API——谁在调它
 
-`packages/sdk/python/shiori_sdk/memory/engine.py` 定义了一套抽象协议（`MemoryEngine`），由四个子协议组成。引擎本身是一个 **plugin**——`[memory].engine` 配置项指定用哪个实现，留空或 `default` = `default_memory` 插件；`[memory].enabled = false` 时宿主换成 `DisabledMemoryEngine`。协议与实现解耦。
+`packages/sdk/python/shiori_sdk/memory/engine.py` 定义了一套抽象协议（`MemoryEngine`），由四个子协议组成。引擎本身是一个 **plugin**。当前宿主在 `default_memory` 插件启用时构造这个默认实现，关闭时换成 `DisabledMemoryEngine`。向量模型凭据在 `[plugins.default_memory]`。协议与实现解耦。
 
 检索和写入各只有一个入口：检索统一走 `query(MemoryQuery)`，用 `intent` 区分场景（`context` / `answer` / `timeline` / `interest` / `procedure`，`effect` 区分 `stateful` / `read_only`）；写入统一走 `mutate(MemoryMutation)`，用 `kind` 区分 `remember` / `forget`。
 
@@ -298,4 +298,4 @@ bootstrap/memory.py → engine = plugin_runtime.engine（记忆关闭时 Disable
   proactive_v2/tools.py → ToolDeps.memory → query(intent="interest")
 ```
 
-调用方拿到的都是协议类型（`MemoryRetrievalApi` / `MemoryWriteApi` / `MemoryAdminApi`），不是 `DefaultMemoryEngine`。换引擎实现只需要改 `config.toml` 的 `[memory].engine`。
+调用方拿到的都是协议类型（`MemoryRetrievalApi` / `MemoryWriteApi` / `MemoryAdminApi`），不是 `DefaultMemoryEngine`。当前启用的实现由 `default_memory` 插件开关决定。

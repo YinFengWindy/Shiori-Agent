@@ -169,7 +169,7 @@ def test_config_load_defaults_empty_toolsets_to_full_wiring(tmp_path: Path):
     assert cfg.wiring.toolsets == ["meta_common", "spawn", "schedule", "mcp"]
 
 
-def test_config_load_reads_memory_engine_selector(tmp_path: Path):
+def test_config_load_migrates_legacy_memory_table(tmp_path: Path, caplog):
     cfg_path = tmp_path / "config.toml"
     _write_toml(
         cfg_path,
@@ -189,14 +189,31 @@ def test_config_load_reads_memory_engine_selector(tmp_path: Path):
             "memory": {
                 "enabled": True,
                 "engine": "memu",
+                "embedding": {
+                    "model": "legacy-embedding",
+                    "api_key": "legacy-key",
+                    "output_dimensionality": 1536,
+                },
+                "retrieval": {"score_threshold": 0.99},
             },
         },
     )
 
-    cfg = Config.load(cfg_path)
+    with caplog.at_level("WARNING"):
+        cfg = Config.load(cfg_path)
 
-    assert cfg.memory.enabled is True
-    assert cfg.memory.engine == "memu"
+    assert not hasattr(cfg, "memory")
+    plugin = cfg.plugins["default_memory"]
+    assert plugin["enabled"] is True
+    assert plugin["embedding_model"] == "legacy-embedding"
+    assert plugin["embedding_api_key"] == "legacy-key"
+    assert plugin["embedding_base_url"] == ""
+    assert plugin["output_dimensionality"] == 1536
+    assert "score_threshold" not in plugin
+    import tomllib
+
+    assert "memory" not in tomllib.loads(cfg_path.read_text(encoding="utf-8"))
+    assert any("memu" in record.message for record in caplog.records)
 
 
 def test_config_load_ignores_wiring_memory_engine(tmp_path: Path):
@@ -229,8 +246,8 @@ def test_config_load_ignores_wiring_memory_engine(tmp_path: Path):
 
     cfg = Config.load(cfg_path)
 
-    assert cfg.memory.enabled is True
-    assert cfg.memory.engine == ""
+    assert cfg.wiring.memory == "default"
+    assert not hasattr(cfg, "memory")
 
 
 def test_config_load_ignores_legacy_memory_v2_enabled(tmp_path: Path):
@@ -256,56 +273,14 @@ def test_config_load_ignores_legacy_memory_v2_enabled(tmp_path: Path):
         },
     )
 
+    original = cfg_path.read_text(encoding="utf-8")
+
     cfg = Config.load(cfg_path)
 
     assert not hasattr(cfg, "memory_v2")
-    assert cfg.memory.enabled is False
-    assert cfg.memory.engine == ""
-
-
-def test_config_load_reads_embedding_and_ignores_private_memory_sections(
-    tmp_path: Path,
-):
-    cfg_path = tmp_path / "config.toml"
-    _write_toml(
-        cfg_path,
-        {
-            "llm": {
-                "registrations": [
-                    {
-                        "id": "00000000-0000-4000-a000-000000000001",
-                        "provider": "openai",
-                        "model": "m",
-                        "api_key": "k",
-                        "effort": "none",
-                    }
-                ],
-            },
-            "agent": {"system_prompt": "s"},
-            "memory": {
-                "enabled": True,
-                "engine": "",
-                "embedding": {
-                    "model": "legacy-embedding",
-                    "api_key": "legacy-key",
-                    "output_dimensionality": 1536,
-                },
-                "retrieval": {
-                    "score_threshold": 0.99,
-                    "thresholds": {"event": 0.99},
-                },
-                "hyde": {"enabled": True},
-            },
-        },
-    )
-
-    cfg = Config.load(cfg_path)
-
-    assert cfg.memory.enabled is True
-    assert cfg.memory.engine == ""
-    assert cfg.memory.embedding.model == "legacy-embedding"
-    assert cfg.memory.embedding.api_key == "legacy-key"
-    assert cfg.memory.embedding.output_dimensionality == 1536
+    assert not hasattr(cfg, "memory")
+    assert "default_memory" not in cfg.plugins
+    assert cfg_path.read_text(encoding="utf-8") == original
 
 
 def test_config_load_rejects_legacy_socket_configuration(tmp_path: Path):

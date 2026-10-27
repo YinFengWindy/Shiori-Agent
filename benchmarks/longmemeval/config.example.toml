@@ -64,38 +64,12 @@ toolsets = ["meta_common"]
 # Called once per memory write during consolidation, and once
 # per recall_memory call during QA. Use a cheap text-embedding API.
 # Suggestions: text-embedding-v3 (Qwen/Dashscope), text-embedding-3-small (OpenAI)
-[memory]
+# Retrieval thresholds live in workspace/plugin-data/default_memory/config.local.toml.
+[plugins.default_memory]
 enabled = true
-
-[memory.embedding]
-model    = "text-embedding-v3"
-api_key  = "${BENCH_EMBED_API_KEY}"
-base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-
-[memory.retrieval]
-top_k_history   = 8
-score_threshold = 0.40    # slightly lower than production; benchmark conversations
-relative_delta  = 0.2     # are English, embedding space may be noisier
-route_intention = false   # skip intent-routing gate to save LLM calls
-
-[memory.retrieval.thresholds]
-procedure = 0.60
-preference = 0.45
-event      = 0.45
-profile    = 0.45
-
-[memory.retrieval.inject]
-max_chars      = 4000
-line_max       = 400
-event_profile  = 6     # allow more auto-injected facts for QA
-
-[memory.gate]
-llm_timeout_ms = 2000
-max_tokens     = 150
-
-[memory.hyde]
-enabled    = true
-timeout_ms = 3000
+embedding_model = "text-embedding-v3"
+embedding_api_key = "${BENCH_EMBED_API_KEY}"
+embedding_base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 
 # ── Proactive: disabled ───────────────────────────────────────
 [proactive]

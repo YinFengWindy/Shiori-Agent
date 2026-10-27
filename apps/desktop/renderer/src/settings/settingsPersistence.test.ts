@@ -17,14 +17,6 @@ function createSettingsFormData(
     models: {
       registrations: overrides.registrations ?? [{ id: "00000000-0000-4000-a000-000000000001", provider: "openai", model: "gpt-main", apiKey: "", baseUrl: "", effort: "none" }],
     },
-    memory: {
-      enabled: true,
-      engine: "default",
-      embeddingModel: "",
-      embeddingApiKey: "",
-      embeddingBaseUrl: "",
-      outputDimensionality: "",
-    },
     advanced: {
       maxTokens: 4000,
       maxIterations: 10,
@@ -91,7 +83,7 @@ describe("saveSettingsPageData", () => {
 
     assert.deepEqual(calls, ["saveSettings", "readSettings"]);
     assert.equal(result.snapshot?.formData.models.registrations[0]?.model, "saved-model");
-    assert.equal(result.nextDraft.memory.engine, "default");
+    assert.equal(result.nextDraft.models.registrations[0]?.model, "saved-model");
   });
 
   it("commits deferred role reference changes in the same settings request", async () => {
@@ -116,7 +108,7 @@ describe("saveSettingsPageData", () => {
   it("keeps the entire draft and bindings when apply fails without reading stale settings", async () => {
     const draft = createSettingsFormData();
     draft.pendingRoleModelUpdates = [{ roleId: "role-1", runtimeConfig: { dialogue_model_registration_id: "registration-2" } }];
-    draft.memory.engine = "unsaved-engine";
+    draft.models.registrations[0]!.model = "unsaved-model";
     const result = await saveSettingsPageData({
       saveSettings: async () => ({
         ok: false,

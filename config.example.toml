@@ -61,15 +61,7 @@ search_enabled = true
 
 # =============================================================================
 # 语义记忆
-# default memory 的检索阈值在 workspace/plugin-data/default_memory/config.local.toml。
+# 开关和向量模型凭据在 [plugins.default_memory]（设置 › 插件 › 默认记忆引擎）。
+# 未写 enabled 时默认启用。检索阈值在
+# workspace/plugin-data/default_memory/config.local.toml。
 # =============================================================================
-
-[memory]
-enabled = true
-# 语义记忆 engine 选择。留空等同 default。
-engine = ""
-
-[memory.embedding]
-model = "text-embedding-v3"
-api_key = "sk-..."
-base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"

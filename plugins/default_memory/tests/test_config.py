@@ -2,10 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+from pydantic import ValidationError
 from shiori_sdk.testing.memory import FakeMemoryStorage
 
 from plugins.default_memory.backend import config as config_module
 from plugins.default_memory.backend.config import (
+    DefaultMemoryPluginConfig,
     ensure_default_memory_config_file,
     load_default_memory_config,
     render_default_memory_config,
@@ -98,6 +101,29 @@ max_chars = 3000
     assert cfg.retrieval.score_threshold == 0.7
     assert cfg.retrieval.thresholds.event == 0.8
     assert cfg.retrieval.inject.max_chars == 3000
+
+
+def test_plugin_config_model_describes_embedding_credentials() -> None:
+    cfg = DefaultMemoryPluginConfig()
+    schema = DefaultMemoryPluginConfig.model_json_schema()["properties"]
+
+    assert cfg.embedding_model == "text-embedding-v3"
+    assert cfg.embedding_api_key == ""
+    assert cfg.output_dimensionality is None
+    assert schema["embedding_model"]["title"] == "向量模型"
+    assert schema["embedding_api_key"]["title"] == "API Key"
+    assert schema["embedding_base_url"]["title"] == "Base URL"
+    assert schema["output_dimensionality"]["title"] == "输出维度"
+    parsed = DefaultMemoryPluginConfig.model_validate(
+        {"enabled": False, "embedding_api_key": "k"}
+    )
+    assert parsed.embedding_api_key == "k"
+    assert "enabled" not in parsed.model_dump()
+
+
+def test_plugin_config_model_rejects_non_positive_dimensionality() -> None:
+    with pytest.raises(ValidationError):
+        DefaultMemoryPluginConfig(output_dimensionality=0)
 
 
 def test_default_memory_db_path_resolves_under_workspace(tmp_path: Path) -> None:

@@ -5,8 +5,29 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from pydantic import BaseModel, Field, field_validator
 from shiori_sdk.memory.build import MemoryStorage
 from shiori_sdk.storage import plugin_data_dir
+
+
+class DefaultMemoryPluginConfig(BaseModel):
+    """``[plugins.default_memory]`` embedding credentials.
+
+    Retrieval thresholds stay in the plugin-data ``config.local.toml``.
+    ``enabled`` is host-owned and is not a field of this model.
+    """
+
+    embedding_model: str = Field(default="text-embedding-v3", title="向量模型")
+    embedding_api_key: str = Field(default="", title="API Key")
+    embedding_base_url: str = Field(default="", title="Base URL")
+    output_dimensionality: int | None = Field(default=None, title="输出维度")
+
+    @field_validator("output_dimensionality")
+    @classmethod
+    def _positive_dimensionality(cls, value: int | None) -> int | None:
+        if value is not None and value <= 0:
+            raise ValueError("必须大于 0")
+        return value
 
 
 @dataclass(frozen=True)

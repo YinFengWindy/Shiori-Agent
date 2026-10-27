@@ -63,9 +63,6 @@ streaming_enabled = true
 [agent.maintenance]
 memory_optimizer_enabled = false
 
-[memory]
-enabled = true
-
 [plugins.browser_use]
 enabled = false
 [plugins.computer_use]

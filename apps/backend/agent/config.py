@@ -16,8 +16,6 @@ from typing import Any, cast
 
 from agent.config_models import (
     Config,
-    MemoryConfig,
-    MemoryEmbeddingConfig,
     ModelRegistration,
     WiringConfig,
 )
@@ -28,8 +26,16 @@ from proactive_v2.config_loader import ProactiveConfigError, load_proactive_conf
 
 
 def load_config(path: str | Path = "config.toml") -> Config:
-    """Loads and validates the persisted TOML configuration without rewriting it."""
-    return load_config_data(_load_config_data(path))
+    """Loads persisted TOML, migrating a legacy ``[memory]`` table once first.
+
+    ``load_config_text`` and ``load_config_data`` stay pure: only this path
+    rewrites the file, and only when a ``[memory]`` table is still present.
+    """
+    config_path = Path(path)
+    from bootstrap.memory_config_migration import migrate_legacy_memory_config
+
+    migrate_legacy_memory_config(config_path)
+    return load_config_data(_load_config_data(config_path))
 
 
 def load_config_data(data: dict[str, Any]) -> Config:
@@ -50,7 +56,6 @@ def load_config_data(data: dict[str, Any]) -> Config:
     from agent.proactive_preferences import load_proactive_preferences
 
     proactive_strategies = load_proactive_preferences(data)
-    memory = _load_memory_config(data)
     wiring = _load_wiring_config(data)
     plugins = _load_plugins_config(data)
     model_registrations = _load_model_registrations(data)
@@ -106,7 +111,6 @@ def load_config_data(data: dict[str, Any]) -> Config:
             str(llm_agent.get("api_key") or data.get("agent_api_key", ""))
         ),
         agent_base_url=str(llm_agent.get("base_url") or data.get("agent_base_url", "")),
-        memory=memory,
         tool_search_enabled=bool(
             agent_tools.get("search_enabled", data.get("tool_search_enabled", False))
         ),
@@ -207,29 +211,6 @@ def _load_proactive_config(data: dict) -> ProactiveConfig:
         except ProactiveConfigError as e:
             raise ValueError(f"Proactive 配置错误: {e}") from e
     return proactive
-
-
-def _load_memory_config(data: dict) -> MemoryConfig:
-    memory = _as_dict(data.get("memory"))
-    embedding = _as_dict(memory.get("embedding"))
-    raw_output_dimensionality = embedding.get("output_dimensionality")
-    output_dimensionality = (
-        int(raw_output_dimensionality)
-        if raw_output_dimensionality not in (None, "")
-        else None
-    )
-    if output_dimensionality is not None and output_dimensionality <= 0:
-        raise ValueError("memory.embedding.output_dimensionality 必须大于 0")
-    return MemoryConfig(
-        enabled=bool(memory.get("enabled", False)),
-        engine=str(memory.get("engine", "") or ""),
-        embedding=MemoryEmbeddingConfig(
-            model=str(embedding.get("model", "text-embedding-v3")),
-            api_key=resolve_config_reference(str(embedding.get("api_key", ""))),
-            base_url=str(embedding.get("base_url", "")),
-            output_dimensionality=output_dimensionality,
-        ),
-    )
 
 
 def _load_wiring_config(data: dict) -> WiringConfig:
@@ -351,8 +332,6 @@ def _load_config_data(path: str | Path) -> dict:
 
 __all__ = [
     "Config",
-    "MemoryConfig",
-    "MemoryEmbeddingConfig",
     "has_config_reference",
     "load_config",
     "load_config_data",

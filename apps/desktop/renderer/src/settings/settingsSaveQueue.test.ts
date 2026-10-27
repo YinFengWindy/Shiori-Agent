@@ -7,8 +7,19 @@ import { createSettingsDraft } from "./testFixtures.js";
 
 function editedDraft(marker: string) {
   const draft = createSettingsDraft();
-  draft.memory.engine = marker;
+  draft.models.registrations = [{
+    id: "00000000-0000-4000-a000-000000000001",
+    provider: "openai",
+    model: marker,
+    apiKey: "",
+    baseUrl: "",
+    effort: "none",
+  }];
   return draft;
+}
+
+function draftMarker(draft: SettingsFormData): string {
+  return draft.models.registrations[0]?.model ?? "";
 }
 
 describe("SettingsSaveQueue", () => {
@@ -39,7 +50,7 @@ describe("SettingsSaveQueue", () => {
     await setImmediate();
     assert.equal(calls.length, 3);
     assert.deepEqual(calls[1], calls[0]);
-    assert.equal(calls[2]?.draft.memory.engine, "second");
+    assert.equal(draftMarker(calls[2]!.draft), "second");
     assert.equal(calls[2]?.options?.expectedGeneration, 5);
     assert.notEqual(calls[2]?.options?.operationId, calls[0]?.options?.operationId);
   });
@@ -71,7 +82,7 @@ describe("SettingsSaveQueue", () => {
     const queue = new SettingsSaveQueue({
       api: {
         saveSettings: async (draft) => {
-          calls.push(draft.memory.engine);
+          calls.push(draftMarker(draft));
           return calls.length === 1
             ? { ok: false, error: { code: "runtime_config_invalid", message: "invalid" } }
             : { ok: true, generation: 2 };
@@ -95,7 +106,7 @@ describe("SettingsSaveQueue", () => {
     const queue = new SettingsSaveQueue({
       api: {
         saveSettings: async (draft) => {
-          calls.push(draft.memory.engine);
+          calls.push(draftMarker(draft));
           return new Promise<SaveSettingsResult>((resolve) => { release = resolve; });
         },
         readSettings: async () => ({ configPath: "config.toml", formData: editedDraft("first"), generation: 2 }),
@@ -119,7 +130,7 @@ describe("SettingsSaveQueue", () => {
     const queue = new SettingsSaveQueue({
       api: {
         saveSettings: async (draft) => {
-          calls.push(draft.memory.engine);
+          calls.push(draftMarker(draft));
           persisted = draft;
           if (calls.length === 1) return new Promise<SaveSettingsResult>((resolve) => { release = resolve; });
           return { ok: true, generation: 3 };
@@ -148,7 +159,7 @@ it("retries only the read after an acknowledged save and preserves newer queued 
   let persisted = editedDraft("original");
   let unreadable = true;
   const queue = new SettingsSaveQueue({ api: {
-    saveSettings: async (draft) => { writes.push(draft.memory.engine); persisted = draft; return { ok: true, generation: ++generation }; },
+    saveSettings: async (draft) => { writes.push(draftMarker(draft)); persisted = draft; return { ok: true, generation: ++generation }; },
     readSettings: async () => { if (unreadable) throw new Error("read failed"); return { configPath: "config.toml", generation, formData: persisted }; },
   }, onApplied: () => undefined, onStatus: (phase) => phases.push(phase) });
   queue.reset(4);

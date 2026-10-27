@@ -9,8 +9,10 @@ from desktop_bridge.runtime.apply import DerivedWrite, RuntimeApplyError
 from infra.persistence.toml_store import render_toml
 
 # Match the top-level tables emitted by desktop renderSettingsToml. Everything
-# else is opaque to this form, including removed-feature data and plugin values.
-_FORM_OWNED_TABLES = frozenset({"llm", "agent", "desktop", "memory"})
+# else is opaque to this form, including plugin values and a leftover [memory]
+# table. The next config load migrates that table; owning it here would delete
+# it on save before the credentials were copied.
+_FORM_OWNED_TABLES = frozenset({"llm", "agent", "desktop"})
 
 
 def settings_form_write(payload: dict[str, Any]) -> DerivedWrite | None:
