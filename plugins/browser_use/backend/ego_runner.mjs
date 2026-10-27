@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 
-/* global taskSpace: readonly, takeOverTaskSpace: readonly -- Injected by ego's embedded Node runtime. */
+/* global taskSpace: readonly, takeOverTaskSpace: readonly, listTaskSpaces: readonly -- Injected by ego's embedded Node runtime. */
 
 // The host supplies this fixed runner. Model input is data, never Node code,
 // a Space id, a profile id, or a filesystem path.
@@ -38,8 +38,32 @@ export async function run(request) {
         // gated and cannot reclaim the task without an explicit resume action.
         result = { preservedForUser: true, spaceId: state.id };
       } else {
-        const task = await taskSpace(state.id);
-        result = await task.finish({ keep: [] });
+        try {
+          const task = await taskSpace(state.id);
+          result = await task.finish({ keep: [] });
+        } catch (error) {
+          // Native UI takeover does not update our handoff flag. The binding's
+          // explicit ownership signal is authoritative; never reclaim control
+          // merely to clean up.
+          if (error?.error_code === "EGO_TASK_SPACE_USER_IN_CONTROL") {
+            result = { preservedForUser: true, spaceId: state.id };
+          } else {
+            // This helper version reports missing ids as an unclassified Error.
+            // Confirm absence through the official read-only enumeration, never
+            // diagnostic text. An uncertain listing preserves the original error.
+            let spaces;
+            try {
+              spaces = await listTaskSpaces();
+            } catch {
+              throw error;
+            }
+            if (!Number.isSafeInteger(state.id)
+              || !Array.isArray(spaces)
+              || !spaces.every(space => Number.isSafeInteger(space?.id))
+              || spaces.some(space => space.id === state.id)) throw error;
+            result = { alreadyClosed: true, spaceId: state.id };
+          }
+        }
         writeFileSync(`${request.root}/disposed.json`, JSON.stringify(result), "utf8");
       }
     } else {

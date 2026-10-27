@@ -29,6 +29,27 @@ pytestmark = pytest.mark.skipif(
 )
 
 
+async def _run_fixture_script(path: Path, source: str) -> None:
+    """Operate only fixture-created Spaces through the independent official CLI."""
+    path.write_text(source, encoding="utf8")
+    process = await asyncio.create_subprocess_exec(
+        os.environ["SHIORI_EGO_BROWSER"],
+        "nodejs",
+        "-e",
+        f"await import('{path.as_uri()}')",
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        creationflags=subprocess.CREATE_NO_WINDOW,
+    )
+    try:
+        _, errors = await asyncio.wait_for(process.communicate(), 10)
+        assert process.returncode == 0, errors
+    finally:
+        if process.returncode is None:
+            process.kill()
+        await process.wait()
+
+
 @pytest.fixture
 def site():
     records = []
@@ -225,23 +246,13 @@ async def test_real_ego_role_isolation_images_and_cancelled_generations(
         await call("second", "close")
         receipt = evidence / "preserved-page.txt"
         script = evidence / "inspect-preserved-test-space.mjs"
-        script.write_text(
+        await _run_fixture_script(
+            script,
             f"const task = await takeOverTaskSpace({state['id']});\n"
             f"const fs = await import('node:fs/promises');\n"
             f"await fs.writeFile({json.dumps(receipt.as_posix())}, await task.page('p1').snapshot(), 'utf8');\n"
             "await task.finish({keep: []});\n",
-            encoding="utf8",
         )
-        inspection = await asyncio.create_subprocess_exec(
-            os.environ["SHIORI_EGO_BROWSER"],
-            "nodejs",
-            "-e",
-            f"await import('{script.as_uri()}')",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        _, errors = await asyncio.wait_for(inspection.communicate(), 10)
-        assert inspection.returncode == 0, errors
         assert "Empty" in receipt.read_text(encoding="utf8")
         milestones.append(
             "handed-off user task survives plugin close and can be reclaimed"
@@ -261,6 +272,77 @@ async def test_real_ego_role_isolation_images_and_cancelled_generations(
             encoding="utf8",
         )
     assert not manager._sessions
+
+
+@pytest.mark.parametrize("unload", [False, True], ids=["close-tool", "plugin-unload"])
+async def test_external_handoff_preserves_user_task_and_retires_local_generation(
+    tmp_path, site, unload
+):
+    url, _ = site
+
+    def new_manager():
+        return BrowserSessions(
+            tmp_path,
+            BrowserUseConfig(backend="ego(lite)"),
+            processes=HostProcesses(),
+            resources=tmp_path,
+            ego_runtime=EgoRuntime(Path(os.environ["SHIORI_EGO_BROWSER"])),
+        )
+
+    manager = new_manager()
+    current = manager
+    preserved_id = None
+    try:
+        await manager.call("role", "ego_browser_open", {"url": url})
+        session = manager._sessions["role"]
+        assert isinstance(session, EgoSession)
+        state_path = session.root / "space.json"
+        state = json.loads(state_path.read_text(encoding="utf8"))
+        preserved_id = state["id"]
+        await _run_fixture_script(
+            tmp_path / "external-handoff.mjs",
+            f"const task = await taskSpace({preserved_id});\n"
+            "await task.handOff();\n",
+        )
+        # This is a browser-side transition; the plugin never wrote its flag.
+        assert json.loads(state_path.read_text(encoding="utf8"))["handedOff"] is False
+        if unload:
+            await manager.close()
+            current = new_manager()
+        else:
+            await manager.call("role", "ego_browser_close", {})
+        assert "role" not in manager._sessions
+        assert session.closed
+        receipt = json.loads(
+            (session.root / "disposed.json").read_text(encoding="utf8")
+        )
+        assert receipt == {"preservedForUser": True, "spaceId": preserved_id}
+        result = await current.call("role", "ego_browser_open", {"url": url})
+        assert isinstance(result, str) and "Empty" in result
+        replacement = current._sessions["role"]
+        assert isinstance(replacement, EgoSession)
+        assert (
+            json.loads((replacement.root / "space.json").read_text(encoding="utf8"))[
+                "id"
+            ]
+            != preserved_id
+        )
+    finally:
+        try:
+            await current.close()
+        finally:
+            if preserved_id is not None:
+                # Explicitly reclaim only the deliberately handed-off fixture,
+                # prove its page survived, and finish it to leave no test Space.
+                snapshot = tmp_path / "preserved-native-page.txt"
+                await _run_fixture_script(
+                    tmp_path / "reclaim-preserved-fixture.mjs",
+                    f"const task = await takeOverTaskSpace({preserved_id});\n"
+                    "const fs = await import('node:fs/promises');\n"
+                    f"await fs.writeFile({json.dumps(snapshot.as_posix())}, await task.page('p1').snapshot(), 'utf8');\n"
+                    "await task.finish({keep: []});\n",
+                )
+                assert "Empty" in snapshot.read_text(encoding="utf8")
 
 
 async def test_real_early_helper_timeout_retires_space_but_stale_refs_recover(
@@ -333,5 +415,55 @@ async def test_real_early_helper_timeout_retires_space_but_stale_refs_recover(
         assert "role" not in manager._sessions
         result = await manager.call("role", "ego_browser_open", {"url": url})
         assert isinstance(result, str) and "Empty" in result
+    finally:
+        await manager.close()
+
+
+async def test_external_space_loss_retires_generation_and_allows_same_role(
+    tmp_path, site
+):
+    url, _ = site
+    manager = BrowserSessions(
+        tmp_path,
+        BrowserUseConfig(backend="ego(lite)"),
+        processes=HostProcesses(),
+        resources=tmp_path,
+        ego_runtime=EgoRuntime(Path(os.environ["SHIORI_EGO_BROWSER"])),
+    )
+    try:
+        await manager.call("role", "ego_browser_open", {"url": url})
+        session = manager._sessions["role"]
+        assert isinstance(session, EgoSession)
+        state = json.loads((session.root / "space.json").read_text(encoding="utf8"))
+        receipt = tmp_path / "external-close.json"
+        await _run_fixture_script(
+            tmp_path / "external-close.mjs",
+            f"const task = await taskSpace({state['id']});\n"
+            "const result = await task.finish({keep: []});\n"
+            "const fs = await import('node:fs/promises');\n"
+            f"await fs.writeFile({json.dumps(receipt.as_posix())}, JSON.stringify(result), 'utf8');\n",
+        )
+        assert json.loads(receipt.read_text(encoding="utf8"))["closedSpace"] is True
+        # A successful authoritative listing proves the exact Space is gone;
+        # cleanup is idempotent and distinct from preserving a user-owned task.
+        await manager.call("role", "ego_browser_close", {})
+        assert "role" not in manager._sessions
+        assert session.closed
+        assert json.loads(
+            (session.root / "disposed.json").read_text(encoding="utf8")
+        ) == {
+            "alreadyClosed": True,
+            "spaceId": state["id"],
+        }
+        result = await manager.call("role", "ego_browser_open", {"url": url})
+        assert isinstance(result, str) and "Empty" in result
+        replacement = manager._sessions["role"]
+        assert isinstance(replacement, EgoSession)
+        assert (
+            json.loads((replacement.root / "space.json").read_text(encoding="utf8"))[
+                "id"
+            ]
+            != state["id"]
+        )
     finally:
         await manager.close()
