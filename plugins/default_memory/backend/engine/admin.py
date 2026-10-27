@@ -6,7 +6,15 @@ import json
 from datetime import datetime
 from typing import cast
 
+from shiori_sdk.memory.engine import TurnRollback
+
 from ..semantic.store import MemoryStore2
+
+
+def _id_tuple(value: object) -> tuple[str, ...]:
+    if not isinstance(value, list):
+        return ()
+    return tuple(str(item) for item in value if str(item).strip())
 
 
 def _source_ref_message_ids(source_ref: str) -> list[str]:
@@ -249,6 +257,15 @@ class _AdminMixin:
             self._require_v2_store(),
             message_ids,
             dry_run=dry_run,
+        )
+
+    def rollback_turn(self, turn_id: str) -> TurnRollback:
+        """按锚点用户消息 id 回滚这一轮记下来的记忆来源。"""
+        raw = self.undo_by_message_sources([turn_id])
+        return TurnRollback(
+            affected_ids=_id_tuple(raw.get("affected_ids")),
+            restored_ids=_id_tuple(raw.get("restored_ids")),
+            rollback_source_ids=_id_tuple(raw.get("rollback_source_ids")),
         )
 
     def find_similar_items_for_admin(

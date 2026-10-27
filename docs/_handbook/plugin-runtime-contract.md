@@ -123,6 +123,26 @@ consolidates these additions and the subsequent #847 breaking migration.
 
 <!-- Record the next contract batch here, with PR references and breaking markers. -->
 
+- **Session rollback and memory `rollback_turn` (issue #902, refactor P3-7c, D10).**
+  `shiori_sdk.core.sessions` defines `SESSIONS` (`Key` name `sessions`) and
+  `Sessions`. `last_passive_turn_id(session_key)` reads the anchor user message
+  id of the latest passive turn without deleting it.
+  `rollback_last_turn(session_key, *, rollback_source_ids=None)` returns
+  `RollbackResult | None`; `RollbackResult.turn_id` is that same anchor
+  id (not a desktop `metadata.turn_id`). Optional `rollback_source_ids` rewinds
+  the consolidation cursor across the memory window those message ids cover.
+  `MemoryAdminApi.rollback_turn(turn_id) -> TurnRollback` is part of
+  `MEMORY_ENGINE`: it supersedes memories whose `source_ref` is that anchor id
+  or a consolidation window listing it, and restores memories that turn had
+  replaced. A memory sourced only from the turn's assistant message is left in
+  place. `plugin_undo` injects `sessions` and `commands` and optionally
+  `memory_engine`. It rolls memory back first (a failure leaves the session in
+  place and can be retried), then the session. An empty memory socket rolls
+  back the session only. The two calls are not one transaction: if the session
+  step fails after memory has rolled back, the command reports that partial
+  result. These methods are on the existing sockets; there is no parallel key.
+  No SDK version bump.
+
 - **Optional process-tree ownership (issue #934, PR #936).** `Processes.spawn()` accepts
   `own_process_tree: bool = True`. Existing callers retain the owned-process
   behavior. Clients of user-owned applications can pass `False`: the caller

@@ -81,7 +81,8 @@ class FakeExtensionContext(FakePluginContext):
     the service: reading them raises ``HostServiceUnavailable`` like the host does.
     ``kernel``, ``inject`` and ``optional_inject`` are those of
     ``FakePluginContext``: provide a ``CommandRegistry`` as ``COMMANDS`` on
-    ``kernel`` for a command plugin, and ``MEMORY_ENGINE`` when the test has one.
+    ``kernel`` for a command plugin, a ``FakeSessionUndo`` as ``SESSIONS`` when
+    the command rolls a turn back, and ``MEMORY_ENGINE`` when the test has one.
     """
 
     def __init__(

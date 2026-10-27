@@ -9,14 +9,66 @@ from session.maintenance_progress import MaintenanceProgress, message_window_key
 
 from .manager import _ManagerCoreMixin
 from .models import effective_context_cursors
+from shiori_sdk.core.sessions import RollbackResult
 from shiori_sdk.sessions import UndoSessionResult
-from .undo_selection import _compute_rollback_index, _find_last_passive_turn
+from .undo_selection import (
+    _compute_rollback_index,
+    _find_last_passive_turn,
+    passive_turn_anchor_id,
+)
 
 if TYPE_CHECKING:
     from conversation.context_scope import UserContextThreads
 
 
 class _UndoMixin(_ManagerCoreMixin):
+    def last_passive_turn_id(self, session_key: str) -> str | None:
+        """Anchor user message id of the latest committed passive turn.
+
+        A point-in-time read outside the session write lock.
+        ``rollback_last_turn`` selects again under the lock; a turn that
+        arrives between the two calls can be a different one.
+        """
+        messages = self._store.fetch_session_messages(session_key)
+        target = _find_last_passive_turn(messages)
+        if target is None:
+            return None
+        _indices, user_index, _assistant_index = target
+        return passive_turn_anchor_id(messages, user_index)
+
+    async def rollback_last_turn(
+        self,
+        session_key: str,
+        *,
+        rollback_source_ids: list[str] | None = None,
+    ) -> RollbackResult | None:
+        """Delete the latest passive turn and report its anchor id.
+
+        ``rollback_source_ids`` are memory sources already rolled back for
+        this turn. They rewind the consolidation cursor the same way the
+        in-lock preview used to. Omitting them only rewinds for the deleted
+        messages.
+        """
+        sources = list(rollback_source_ids) if rollback_source_ids else []
+
+        def resolve(_message_ids: list[str]) -> list[str]:
+            return list(sources)
+
+        result = await self.undo_last_turn(
+            session_key, rollback_source_resolver=resolve
+        )
+        if result is None:
+            return None
+        return RollbackResult(
+            turn_id=result.target_user_id,
+            deleted_ids=tuple(result.deleted_ids),
+            target_user_id=result.target_user_id,
+            target_assistant_id=result.target_assistant_id,
+            rollback_index=result.rollback_index,
+            last_consolidated_before=result.last_consolidated_before,
+            last_consolidated_after=result.last_consolidated_after,
+        )
+
     async def undo_last_turn(
         self,
         session_key: str,
@@ -112,7 +164,7 @@ class _UndoMixin(_ManagerCoreMixin):
                 session.maintenance_progress = progress
             return UndoSessionResult(
                 deleted_ids=deleted_ids,
-                target_user_id=str(messages[user_index]["id"]),
+                target_user_id=passive_turn_anchor_id(messages, user_index),
                 target_assistant_id=str(messages[assistant_index]["id"]),
                 rollback_index=rollback_index,
                 last_consolidated_before=old_last,

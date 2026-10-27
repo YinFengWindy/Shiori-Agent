@@ -10,7 +10,7 @@ setup 解析，解析不到值的引用也算缺失）；缺任一项则启动�
 模型经 `main_provider` / `main_model` 注入。数据库与 embedder 在构造时用 `ctx.effect`
 登记清理。宿主检索、记忆工具与总线订阅调用引擎的异步入口，不在内核默认排空之内：
 引擎对外的 query / ingest / mutate 与总线 handler 记为在途，`runtime.on_drain` 与关库
-前的清理都先等它们结束。同步方法（如 plugin_undo 的 `undo_by_message_sources`）不计数，
+前的清理都先等它们结束。同步方法（如 plugin_undo 的 `rollback_turn`）不计数，
 调用方在任何 `await` 之后都要重新取引擎。
 
 默认路径仍为 `workspace/plugin-data/default_memory/memory2.db`；显式 `db_path`

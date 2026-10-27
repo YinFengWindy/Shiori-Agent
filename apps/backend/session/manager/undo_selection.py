@@ -94,6 +94,15 @@ def _find_reply_sequence_turn(
     return None
 
 
+def passive_turn_anchor_id(messages: list[dict[str, Any]], user_index: int) -> str:
+    """Anchor user message id of a selected passive turn.
+
+    Memory ``source_ref`` values are message ids, so this id — not the
+    desktop ``metadata.turn_id`` — is what a memory rollback matches.
+    """
+    return str(messages[user_index]["id"])
+
+
 def _compute_rollback_index(
     messages: list[dict[str, Any]],
     *,

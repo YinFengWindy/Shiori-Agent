@@ -285,7 +285,9 @@ host-resource checks. Existing renderer and Windows process lifecycle jobs remai
 ## Memory engines
 
 `shiori_sdk.memory.engine` owns memory requests, results, scopes, tool profiles and
-`MemoryEngine`. `shiori_sdk.core.memory` owns the `MEMORY_ENGINE` socket plugins
+`MemoryEngine`. `MemoryAdminApi.rollback_turn(turn_id)` supersedes memories for
+one passive turn — `turn_id` is its anchor user message id — and returns
+`TurnRollback`. `shiori_sdk.core.memory` owns the `MEMORY_ENGINE` socket plugins
 provide and consumers `get` (`None` means no retrieval; chat still runs).
 `memory.access` holds `MemoryRoles`, `MemoryStorage` and `MemoryEvents`.
 `memory.events` and `memory.committed` own shared ingestion, consolidation and
@@ -332,11 +334,15 @@ the host builds the ordinary turn result around it, retaining channel, timestamp
 and context scope and skipping retrieval/model calls. Described registrations form
 the command menu channels receive as `ChannelContext.bot_commands`; aliases pass no
 description. `last_consolidated` is memory progress, not model compaction.
-`SessionUndo` supplies an atomic undo result and invokes a memory source resolver
-before deleting messages. The optional `MemoryUndo` extension supports dry-run and
-real cleanup. A command resolves it from the current memory engine; engines lacking
-that extension keep working without memory undo. `CommandPluginContext` also
-provides current declared dependency exports.
+`shiori_sdk.core.sessions` owns the `SESSIONS` socket. `rollback_last_turn`
+returns `RollbackResult` (`turn_id` is the anchor user message id) and accepts
+optional `rollback_source_ids` so the consolidation cursor can rewind to a memory
+window. `last_passive_turn_id` reads that id before the session is changed.
+`plugin_undo` rolls `MemoryAdminApi.rollback_turn` back first, then the session;
+an empty `MEMORY_ENGINE` rolls back the session only. `SessionUndo.undo_last_turn`
+remains the locked deletion and still runs a synchronous source resolver inside
+that lock. `CommandPluginContext` also provides current declared dependency
+exports.
 
 Observe uses `ObservePluginContext` with `background`, `storage` and `diagnostics`.
 The migration port is shared with memory construction. The host owns receipt/lease

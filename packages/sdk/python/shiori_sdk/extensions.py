@@ -62,10 +62,12 @@ class HookPluginContext(PluginRuntimeContext, Protocol):
 
 
 class CommandPluginContext(PluginRuntimeContext, Protocol):
-    """Undo and dependency services for command plugins (they inject ``COMMANDS``).
+    """Dependency services for command plugins (they inject ``COMMANDS``).
 
-    The memory engine is not a capability here. A command plugin that also
-    declares ``optional_inject: [memory_engine]`` reads it with ``get``.
+    Session rollback is the ``sessions`` socket (``shiori_sdk.core.sessions``),
+    not a capability of this context. The memory engine is not a capability
+    here either. A command plugin that also declares
+    ``optional_inject: [memory_engine]`` reads it with ``get``.
     """
 
     @property

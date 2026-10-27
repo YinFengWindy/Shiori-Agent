@@ -268,6 +268,7 @@ Optimizer 定时任务
 | `describe()` | 引擎描述 |
 | `keyword_match_procedures(tokens)` | 关键词匹配过程（仅 default_memory 内部） |
 | `list_events_by_time_range(start, end)` | 时间范围事件列表（仅 default_memory 内部） |
+| `rollback_turn(turn_id)` | `plugin_undo`：`turn_id` 是被动回合的锚点用户消息 id。先按它失效来源记忆（含整理窗口），再交给会话回滚；同步，不计入在途 |
 
 ### 调用点汇总
 
@@ -292,8 +293,9 @@ MemoryRuntime.current_engine 绑定 kernel.get(MEMORY_ENGINE)（可为空）
     ├── 被动 reply: MemoryServices(current_engine) → DefaultMemoryRetrievalPipeline
     │     插座为空则跳过语义检索，Markdown 记忆仍在
     ├── 桌面端删角色: DesktopBridgeService 现取引擎调用 invalidate_role_memories
-    └── plugin_undo: optional_inject memory_engine，每次 /undo get 一次；
-          插座为空只撤销会话
+    └── plugin_undo: optional_inject memory_engine，每次 /undo 在回滚前 get 一次；
+          先 rollback_turn（锚点用户消息 id），再 SESSIONS.rollback_last_turn；
+          插座为空只回滚会话。记忆失败则会话不动，可以重试
     ↓
   proactive_v2/tools.py → ToolDeps.memory → query(intent="interest")
 ```

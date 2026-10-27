@@ -152,7 +152,7 @@ async def setup(ctx: _DefaultMemorySetup) -> None:
 
     宿主检索、记忆工具与总线订阅调用引擎的异步入口，不在内核默认排空之内：重载
     排空（``on_drain``）和关库前的清理都先等这些在途调用结束（D25）。同步方法
-    （如 plugin_undo 的 ``undo_by_message_sources``）不计数，它们在事件循环上不会
+    （如 plugin_undo 的 ``rollback_turn``）不计数，它们在事件循环上不会
     与关库交错；调用方在任何 ``await`` 之后都要重新 ``get`` 引擎。
     """
     from shiori_sdk.core.memory import MEMORY_ENGINE

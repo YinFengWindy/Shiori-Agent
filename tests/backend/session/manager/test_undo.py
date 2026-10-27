@@ -133,6 +133,51 @@ def test_undo_deletes_context_user_assistant_three_rows(tmp_path: Path):
     assert session.last_consolidated == 3
 
 
+async def test_rollback_last_turn_reports_the_anchor_user_message_id(tmp_path: Path):
+    manager = _saved_manager(tmp_path, turns=2)
+    assert manager.last_passive_turn_id("cli:1") == "cli:1:4"
+
+    result = await manager.rollback_last_turn("cli:1")
+
+    assert result is not None
+    assert result.turn_id == "cli:1:4"
+    assert result.target_user_id == "cli:1:4"
+    assert result.deleted_ids == ("cli:1:3", "cli:1:4", "cli:1:5")
+    assert [m["content"] for m in manager.get_or_create("cli:1").messages] == [
+        _FRAME,
+        "u0",
+        "a0",
+    ]
+    assert manager.last_passive_turn_id("cli:1") == "cli:1:1"
+
+
+async def test_rollback_last_turn_rewinds_cursor_from_memory_source_ids(
+    tmp_path: Path,
+):
+    manager = _saved_manager(tmp_path, turns=2)
+    session = manager.get_or_create("cli:1")
+    manager._store.update_last_consolidated(session.key, 6)
+    session.last_consolidated = 6
+    manager.save(session)
+
+    result = await manager.rollback_last_turn(
+        "cli:1",
+        rollback_source_ids=[
+            "cli:1:0",
+            "cli:1:1",
+            "cli:1:2",
+            "cli:1:3",
+            "cli:1:4",
+            "cli:1:5",
+        ],
+    )
+
+    assert result is not None
+    assert result.turn_id == "cli:1:4"
+    assert result.last_consolidated_before == 6
+    assert result.last_consolidated_after == 0
+
+
 def test_undo_uses_rollback_source_ids_for_consolidated_window_start(tmp_path: Path):
     manager = _saved_manager(tmp_path, turns=2)
     session = manager.get_or_create("cli:1")

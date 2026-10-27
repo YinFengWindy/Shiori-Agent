@@ -105,6 +105,38 @@ def test_undo_marks_consolidation_window_memory_superseded(tmp_path: Path, make_
         store.close()
 
 
+def test_rollback_turn_supersedes_the_consolidation_window(tmp_path: Path, make_store):
+    store = make_store(tmp_path / "memory2.db")
+    try:
+        engine = _engine_admin_undo(store)
+        base = json.dumps(["cli:1:0", "cli:1:1", "cli:1:2"], ensure_ascii=False)
+        history_id = _item_id_admin_undo(
+            store.upsert_item(
+                memory_type="event",
+                summary="用户完成了压缩前的一轮任务",
+                embedding=[0.1, 0.2],
+                source_ref=f"{base}#h:abc",
+            )
+        )
+        profile_id = _item_id_admin_undo(
+            store.upsert_item(
+                memory_type="profile",
+                summary="用户在测试 undo",
+                embedding=[0.2, 0.3],
+                source_ref=f"{base}#profile",
+            )
+        )
+
+        result = engine.rollback_turn("cli:1:1")
+
+        assert set(result.affected_ids) == {history_id, profile_id}
+        assert result.rollback_source_ids == ("cli:1:0", "cli:1:1", "cli:1:2")
+        rows = store.get_items_by_ids([history_id, profile_id])
+        assert [row["status"] for row in rows] == ["superseded", "superseded"]
+    finally:
+        store.close()
+
+
 def test_undo_restores_old_memory_replaced_by_affected_new_memory(
     tmp_path: Path, make_store
 ):
