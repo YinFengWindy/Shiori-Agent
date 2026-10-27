@@ -31,7 +31,7 @@ test("collectPluginBackendModules discovers namespace backends and nested packag
       "qq/backend/onebot.py",
       "default_memory/backend/engine/__init__.py",
       "default_memory/backend/engine/lifecycle.py",
-      "default_memory/backend/memory_plugin.py",
+      "default_memory/backend/fingerprint.py",
       "default_memory/backend/semantic/store/__init__.py",
       "default_memory/backend/semantic/store/vector.py",
       "default_memory/backend/config.local.toml",
@@ -48,7 +48,7 @@ test("collectPluginBackendModules discovers namespace backends and nested packag
     assert.deepEqual(await collectPluginBackendModules(directory), [
       "plugins.default_memory.backend.engine",
       "plugins.default_memory.backend.engine.lifecycle",
-      "plugins.default_memory.backend.memory_plugin",
+      "plugins.default_memory.backend.fingerprint",
       "plugins.default_memory.backend.semantic.store",
       "plugins.default_memory.backend.semantic.store.vector",
       "plugins.qq.backend.channel",

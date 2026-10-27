@@ -16,13 +16,17 @@ class EngineGetter:
 
     The agent loop captures the getter before plugins start. ``bind`` replaces
     what it reads without replacing the callable, so the next use sees the
-    engine this generation actually provides (D25). Unbound, it answers None.
+    engine this generation actually provides (D25). Called before ``bind`` it
+    raises: an empty socket is ``None`` from the bound kernel, not a getter
+    nobody wired.
     """
 
     def __init__(self) -> None:
-        self._get: Callable[[], MemoryEngine | None] = lambda: None
+        self._get: Callable[[], MemoryEngine | None] | None = None
 
     def __call__(self) -> MemoryEngine | None:
+        if self._get is None:
+            raise RuntimeError("记忆引擎 getter 尚未绑定到插件内核")
         return self._get()
 
     def bind(self, get: Callable[[], MemoryEngine | None]) -> None:

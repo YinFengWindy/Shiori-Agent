@@ -6,15 +6,18 @@
 
 `setup(ctx)` 构造默认引擎并 `provide(MEMORY_ENGINE)`。向量凭据只读插件配置
 （`embedding_api_key`、`embedding_base_url`、`embedding_model`，`${NAME}` 在
-setup 解析）；缺任一项则启动失败，不创建数据库。主对话模型经 `main_provider` /
-`main_model` 注入。数据库与 embedder 在构造时用 `ctx.effect` 登记清理。
+setup 解析，解析不到值的引用也算缺失）；缺任一项则启动失败，不创建数据库。主对话
+模型经 `main_provider` / `main_model` 注入。数据库与 embedder 在构造时用 `ctx.effect`
+登记清理。宿主检索、plugin_undo 与总线订阅直接调用引擎，不在内核默认排空之内：
+引擎对外的 query / ingest / mutate 与总线 handler 记为在途，`runtime.on_drain` 与关库
+前的清理都先等它们结束。
 
 默认路径仍为 `workspace/plugin-data/default_memory/memory2.db`；显式 `db_path`
 照旧。旧配置迁移与 SQLite lease 仍走注入的 storage。库内单行表
 `embedding_fingerprint` 记录模型与维度，并核对已有 `vec_items` 的声明维度。
 旧库没有指纹表时，首次启动写入；模型或维度不一致则启动失败，不改已有行。
 
-`setup` 声明 memory、rpc、tools、http、events、light_provider、light_model，
+`setup` 声明 memory、rpc、tools、http、events、light_provider、light_model、runtime，
 并注入 `main_provider` 与 `main_model`。成功启动后按 `tool_profile()` 经
 `ctx.tools` 注册 memorize / forget_memory / recall_memory；用 `ctx.on` 订阅
 `TurnStarting` / `ToolCalled` 记录检索与召回轨迹。文档读取由注入能力实现，

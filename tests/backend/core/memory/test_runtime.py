@@ -75,6 +75,7 @@ def test_memory_runtime_query_without_engine_is_disabled() -> None:
     runtime = MemoryRuntime(
         markdown=_MarkdownStub(),  # type: ignore[arg-type]
     )
+    runtime.current_engine.bind(lambda: None)
     result = asyncio.run(runtime.query(MemoryQuery(text="")))
     assert result.trace == {"mode": "disabled"}
     assert result.text_block == ""

@@ -3,7 +3,7 @@ runtime_api: ">=3.1.0 <4.0.0"
 id: default_memory
 display_name: 默认记忆引擎
 category: system
-version: 0.1.2
+version: 0.1.1
 desc: 在 setup 中构造默认记忆引擎并提供 memory_engine；注册 memorize / recall_memory / forget_memory，并记录检索与召回轨迹
 capabilities:
   - memory
@@ -14,6 +14,7 @@ capabilities:
   - events
   - light_provider
   - light_model
+  - runtime
 inject:
   - main_provider
   - main_model

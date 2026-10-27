@@ -370,7 +370,7 @@ consolidates these additions and the subsequent #847 breaking migration.
   `persist:assistant:*`, `outbound:metadata:*` / `outbound:media:*`,
   `turn:extra:*` / `turn:telemetry:*`) go with them: write the event's writable
   fields instead. There is no replacement for extra persisted message fields or
-  `TurnCommitted.extra` entries.   `TurnFinished.extra_metadata`, filled only from
+  `TurnCommitted.extra` entries. `TurnFinished.extra_metadata`, filled only from
   `turn:telemetry:*`, is dropped (never published).
 
 - **breaking: `MEMORY_ENGINE` is a plugin-provided socket; the host no longer

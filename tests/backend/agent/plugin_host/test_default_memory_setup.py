@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import sqlite3
 from datetime import datetime, timezone
@@ -10,6 +11,7 @@ import pytest
 from shiori_sdk.core.conversation import TurnStarting
 from shiori_sdk.core.memory import MEMORY_ENGINE
 from shiori_sdk.core.tools import ToolCalled
+from shiori_sdk.memory.engine import MemoryQuery, MemoryQueryResult
 from agent.plugin_host import PluginGenerationSettings, PluginKernel, PluginRpcRegistry
 from agent.tools.registry import ToolRegistry
 from tests.support.plugin_kernel import host_kernel
@@ -222,3 +224,51 @@ async def test_fingerprint_mismatch_fails_setup_without_rewriting_the_row(
         ).fetchone() == ("other", 32)
     finally:
         connection.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("enabled", [True, False], ids=["reload", "disable"])
+async def test_an_in_flight_query_finishes_before_the_engine_closes(
+    tmp_path: Path, enabled: bool
+) -> None:
+    """Host retrieval is outside the kernel drain; releasing waits for it (D25).
+
+    A reload drains through ``on_drain``; disabling does not drain, so the
+    cleanup that closes the database waits instead.
+    """
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    kernel, _, _ = _kernel(tmp_path, workspace, plugin_config=_CREDENTIALS)
+    await kernel.load_all()
+    engine: Any = kernel.kernel.get(MEMORY_ENGINE)
+    store = engine._require_v2_store()
+    entered, release = asyncio.Event(), asyncio.Event()
+
+    async def blocked_context(request: MemoryQuery) -> MemoryQueryResult:
+        entered.set()
+        await release.wait()
+        _, total = store.list_items_for_admin()
+        return MemoryQueryResult(raw={"total": total})
+
+    engine._query_context = blocked_context
+    query = asyncio.create_task(engine.query(MemoryQuery(text="hi", intent="context")))
+    await entered.wait()
+    values = {**_CREDENTIALS, "enabled": enabled}
+    change = kernel.reload if enabled else kernel.set_enabled
+    transition = asyncio.create_task(
+        change(
+            "default_memory", values=values, raw_values=dict(values), drain_timeout=5
+        )
+    )
+    for _ in range(20):
+        await asyncio.sleep(0)
+    assert not transition.done()
+
+    release.set()
+    assert (await query).raw == {"total": 0}
+    _ = await transition
+    with pytest.raises(sqlite3.ProgrammingError):
+        store.list_items_for_admin()
+    replacement = kernel.kernel.get(MEMORY_ENGINE)
+    assert (replacement is not None) is enabled
+    assert replacement is not engine

@@ -6,8 +6,7 @@ import asyncio
 import hashlib
 import logging
 import time
-from collections.abc import Callable
-from dataclasses import dataclass
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
@@ -19,6 +18,12 @@ from shiori_sdk.memory.engine import (
     EngineProfile,
     MemoryCapability,
     MemoryEngineDescriptor,
+    MemoryIngestRequest,
+    MemoryIngestResult,
+    MemoryMutation,
+    MemoryMutationResult,
+    MemoryQuery,
+    MemoryQueryResult,
     MemoryToolProfile,
 )
 from shiori_sdk.memory.events import ConsolidationCommitted, TurnIngested
@@ -36,6 +41,7 @@ from ..semantic.procedure_tagger import ProcedureTagger
 from ..semantic.retriever import Retriever
 from ..semantic.store import VEC_DIM, MemoryStore2
 from .admin import _AdminMixin
+from .in_flight import InFlightCalls
 from .mutation import _MutationMixin
 from .policy import _PolicyMixin
 from .prompts import _build_long_term_prompt, _default_memory_tool_profile
@@ -43,13 +49,6 @@ from .query import _QueryMixin
 
 if TYPE_CHECKING:
     from shiori_sdk.memory.access import MemoryEvents as EventBus
-
-
-@dataclass(frozen=True)
-class _EngineChat:
-    """The chat model implicit extraction calls."""
-
-    model: str
 
 
 logger = logging.getLogger(__name__)
@@ -99,7 +98,7 @@ class DefaultMemoryEngine(
         default_config: DefaultMemoryConfig,
         workspace: Path,
         provider: LLMProvider,
-        light_provider: LLMProvider | None = None,
+        light_provider: LLMProvider,
         requester: HttpRequester,
         storage: MemoryStorage,
         roles: MemoryRoles,
@@ -107,13 +106,14 @@ class DefaultMemoryEngine(
         register: Callable[[object, Dispose], None],
         event_publisher: "EventBus | None" = None,
     ) -> None:
-        self._config = _EngineChat(model)
+        self._model = model
         self._default_config = default_config
         self._workspace = workspace
         self._roles = roles
         self._provider = provider
-        self._light_provider = light_provider or provider
-        self._light_model = light_model or model
+        self._light_provider = light_provider
+        self._light_model = light_model
+        self._calls = InFlightCalls()
         self._v2_store: MemoryStore2 | None = None
         self._embedder: Embedder | None = None
         self._memorizer: Memorizer | None = None
@@ -141,6 +141,8 @@ class DefaultMemoryEngine(
             requester=requester,
         )
         register(self._embedder, self._embedder.aclose)
+        # Registered after the store and embedder, so it runs before they close.
+        register(self._calls, self._calls.wait_idle)
         self._memorizer = Memorizer(self._v2_store, self._embedder)
         self._retriever = Retriever(
             self._v2_store,
@@ -182,9 +184,40 @@ class DefaultMemoryEngine(
             return
         if self._post_response_worker is not None:
             self._event_bus.on(TurnCommitted, self._on_turn_committed)
-            self._event_bus.on(TurnIngested, self._post_response_worker.handle)
+            handle_ingested = self._tracked(self._post_response_worker.handle)
+            self._event_bus.on(TurnIngested, handle_ingested)
         if self._memorizer is not None:
-            self._event_bus.on(ConsolidationCommitted, self._on_consolidation_committed)
+            handle_consolidation = self._tracked(self._on_consolidation_committed)
+            self._event_bus.on(ConsolidationCommitted, handle_consolidation)
+
+    def _tracked[E](
+        self, handler: Callable[[E], Awaitable[None]]
+    ) -> Callable[[E], Awaitable[None]]:
+        """An event handler that counts as in flight while it runs."""
+
+        async def run(event: E) -> None:
+            async with self._calls.track():
+                await handler(event)
+
+        return run
+
+    # The async entry points below count as in flight, so releasing the engine
+    # waits for them before the database closes (D25).
+    async def query(self, request: MemoryQuery) -> MemoryQueryResult:
+        async with self._calls.track():
+            return await super().query(request)
+
+    async def ingest(self, request: MemoryIngestRequest) -> MemoryIngestResult:
+        async with self._calls.track():
+            return await super().ingest(request)
+
+    async def mutate(self, request: MemoryMutation) -> MemoryMutationResult:
+        async with self._calls.track():
+            return await super().mutate(request)
+
+    async def wait_idle(self) -> None:
+        """Returns once no query, write or event handler of this engine is running."""
+        await self._calls.wait_idle()
 
     # 对话提交后只入队，不在主回复链路里等待 memory2 后处理。
     def _on_turn_committed(self, event: TurnCommitted) -> None:
@@ -312,7 +345,7 @@ class DefaultMemoryEngine(
                     {"role": "user", "content": prompt},
                 ],
                 tools=[],
-                model=self._config.model,
+                model=self._model,
                 max_tokens=600,
                 call_purpose="auxiliary",
             )

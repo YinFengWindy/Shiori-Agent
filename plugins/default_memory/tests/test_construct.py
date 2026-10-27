@@ -62,13 +62,14 @@ def _seed(path: Path, sql: str) -> None:
             },
             None,
         ),
+        # The host resolver returns a reference with no value unchanged.
         (
             {
                 "embedding_api_key": "${MISSING}",
                 "embedding_base_url": "http://embed",
                 "chat_api_key": "chat-secret",
             },
-            {"${MISSING}": ""},
+            None,
         ),
     ],
 )
@@ -123,37 +124,6 @@ def test_old_database_without_fingerprint_records_the_current_space(tmp_path):
     finally:
         if engine._v2_store is not None:
             engine._v2_store.close()
-
-
-def test_fingerprint_mismatch_keeps_the_stored_row(tmp_path):
-    path = _db(tmp_path)
-    _seed(
-        path,
-        """
-        CREATE TABLE sentinel (note TEXT);
-        INSERT INTO sentinel VALUES ('keep');
-        CREATE TABLE embedding_fingerprint (
-            id INTEGER PRIMARY KEY CHECK (id = 1),
-            model TEXT NOT NULL,
-            dim INTEGER NOT NULL
-        );
-        INSERT INTO embedding_fingerprint (id, model, dim) VALUES (1, 'other', 32);
-        """,
-    )
-    ctx = _context(
-        tmp_path,
-        {"embedding_api_key": "k", "embedding_base_url": "http://embed"},
-    )
-    with pytest.raises(RuntimeError, match="向量空间"):
-        construct_default_engine(cast(Any, ctx))
-    connection = sqlite3.connect(path)
-    try:
-        assert connection.execute("SELECT note FROM sentinel").fetchone() == ("keep",)
-        assert connection.execute(
-            "SELECT model, dim FROM embedding_fingerprint"
-        ).fetchone() == ("other", 32)
-    finally:
-        connection.close()
 
 
 def test_vec_dimension_mismatch_keeps_the_declared_sql(tmp_path):

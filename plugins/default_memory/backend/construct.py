@@ -1,13 +1,15 @@
 """Build the default engine from this plugin's own config and injected ports.
 
 Embedding credentials are only the plugin config (``${NAME}`` resolved at
-setup). Chat model credentials are not a fallback. A missing credential or a
-vector-space mismatch raises, so the kernel marks the plugin FAILED and
-leaves ``MEMORY_ENGINE`` empty.
+setup; a reference that resolves to nothing counts as missing). Chat model
+credentials are not a fallback. A missing credential, a missing main model or
+a vector-space mismatch raises before the database is touched or changed, so
+the kernel marks the plugin FAILED and leaves ``MEMORY_ENGINE`` empty.
 """
 
 from __future__ import annotations
 
+import re
 import sqlite3
 from collections.abc import Callable
 from pathlib import Path
@@ -17,7 +19,7 @@ from shiori_sdk.core.models import MAIN_MODEL, MAIN_PROVIDER
 from shiori_sdk.extensions import ConfigValues
 from shiori_sdk.http import HttpClient
 from shiori_sdk.memory.access import MemoryEvents
-from shiori_sdk.models import ChatProvider, ModelProvider
+from shiori_sdk.models import ChatProvider
 from shiori_sdk.runtime import Dispose, PluginRuntimeContext
 
 from .config import (
@@ -29,6 +31,9 @@ from .config import (
 from .engine.lifecycle import DefaultMemoryEngine
 from .fingerprint import ensure_embedding_fingerprint
 from .semantic.store import VEC_DIM
+
+# What the host resolver hands back unchanged when ``${NAME}`` has no value.
+_UNRESOLVED_REFERENCE = re.compile(r"\$\{\w+\}")
 
 _CREDENTIALS_MISSING = (
     "default_memory 未配置向量模型凭据"
@@ -54,6 +59,8 @@ def construct_default_engine(ctx: _EngineSetup) -> DefaultMemoryEngine:
     embedding_model, api_key, base_url, dimensionality = _embedding_settings(ctx)
     if not embedding_model or not api_key or not base_url:
         raise RuntimeError(_CREDENTIALS_MISSING)
+    provider = ctx.require(MAIN_PROVIDER)
+    model = ctx.require(MAIN_MODEL)
     workspace = ctx.memory.workspace
     storage = ctx.memory.storage
     ensure_default_memory_config_file(workspace=workspace, storage=storage)
@@ -61,15 +68,13 @@ def construct_default_engine(ctx: _EngineSetup) -> DefaultMemoryEngine:
     db_path = resolve_memory_db_path(workspace=workspace, default_config=default_config)
     dim = dimensionality if dimensionality is not None else VEC_DIM
     _prepare_database(storage.open_database, db_path, model=embedding_model, dim=dim)
-    provider = cast(ModelProvider, ctx.require(MAIN_PROVIDER))
-    model = ctx.require(MAIN_MODEL)
 
     def register(resource: object, cleanup: Dispose) -> None:
         ctx.effect(type(resource).__name__, cleanup)
 
     return DefaultMemoryEngine(
         model=model,
-        light_model=ctx.light_model or model,
+        light_model=ctx.light_model,
         embedding_base_url=base_url,
         embedding_api_key=api_key,
         embedding_model=embedding_model,
@@ -89,11 +94,15 @@ def construct_default_engine(ctx: _EngineSetup) -> DefaultMemoryEngine:
 
 def _embedding_settings(ctx: _EngineSetup) -> tuple[str, str, str, int | None]:
     settings = DefaultMemoryPluginConfig.model_validate(ctx.config.as_dict())
-    resolve = ctx.config.resolve_reference
+
+    def resolve(value: str) -> str:
+        resolved = ctx.config.resolve_reference(value).strip()
+        return "" if _UNRESOLVED_REFERENCE.fullmatch(resolved) else resolved
+
     return (
-        resolve(settings.embedding_model).strip(),
-        resolve(settings.embedding_api_key).strip(),
-        resolve(settings.embedding_base_url).strip(),
+        resolve(settings.embedding_model),
+        resolve(settings.embedding_api_key),
+        resolve(settings.embedding_base_url),
         settings.output_dimensionality,
     )
 

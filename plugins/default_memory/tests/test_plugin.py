@@ -66,18 +66,9 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
 
 
 @pytest.mark.asyncio
-async def test_recorder_skips_when_inactive(tmp_path: Path) -> None:
-    recorder = _DefaultMemoryRecorder(active=False, data_path=tmp_path / "trace.jsonl")
-
-    await recorder.record_context_prepare(_turn_starting())
-
-    assert not (tmp_path / "trace.jsonl").exists()
-
-
-@pytest.mark.asyncio
-async def test_recorder_records_context_prepare_when_active(tmp_path: Path) -> None:
+async def test_recorder_records_context_prepare(tmp_path: Path) -> None:
     data_path = tmp_path / "trace.jsonl"
-    recorder = _DefaultMemoryRecorder(active=True, data_path=data_path)
+    recorder = _DefaultMemoryRecorder(data_path=data_path)
     # TurnStarting freezes a dict trace into a read-only mapping.
     event = _turn_starting(
         retrieved_memory_block="## profile\n- [id1] 摘要文本",
@@ -96,11 +87,11 @@ async def test_recorder_records_context_prepare_when_active(tmp_path: Path) -> N
 
 
 @pytest.mark.asyncio
-async def test_recall_memory_recorded_only_for_matching_tool_when_active(
+async def test_recall_memory_recorded_only_for_matching_tool(
     tmp_path: Path,
 ) -> None:
     data_path = tmp_path / "trace.jsonl"
-    recorder = _DefaultMemoryRecorder(active=True, data_path=data_path)
+    recorder = _DefaultMemoryRecorder(data_path=data_path)
 
     await recorder.record_recall_memory(_called("other_tool"))
     # Only a passive turn's recall is recorded, as before the event existed.
@@ -127,6 +118,7 @@ async def test_setup_provides_the_engine_and_records_until_close(
     from shiori_sdk.core.models import MAIN_MODEL, MAIN_PROVIDER
     from shiori_sdk.kernel import Kernel
     from shiori_sdk.testing.extensions import FakeConfig
+    from shiori_sdk.testing.runtime import FakeRuntimeLifecycle
 
     from plugins.default_memory.backend.engine.prompts import (
         _default_memory_tool_profile,
@@ -149,6 +141,7 @@ async def test_setup_provides_the_engine_and_records_until_close(
     ctx.light_provider = object()
     ctx.light_model = "light"
     ctx.tools = FakeTools()
+    ctx.runtime = FakeRuntimeLifecycle()
     await setup(cast(Any, ctx))
 
     engine = ctx.kernel.get(MEMORY_ENGINE)

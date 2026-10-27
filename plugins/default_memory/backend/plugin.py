@@ -15,12 +15,13 @@ from shiori_sdk.extensions import ConfigValues
 from shiori_sdk.http import HttpClient
 from shiori_sdk.memory.context import MemoryPluginContext
 from shiori_sdk.models import ChatProvider
+from shiori_sdk.plugin_services import RuntimeLifecycle
 from shiori_sdk.storage import plugin_data_dir
 from shiori_sdk.tools import ToolsCapability
 
 
 class _DefaultMemorySetup(MemoryPluginContext, Protocol):
-    """记忆插件 setup 上下文：工具、配置、主模型与轻量模型。"""
+    """记忆插件 setup 上下文：工具、配置、主模型、轻量模型与重载排空。"""
 
     @property
     def tools(self) -> ToolsCapability: ...
@@ -32,6 +33,8 @@ class _DefaultMemorySetup(MemoryPluginContext, Protocol):
     def light_provider(self) -> ChatProvider: ...
     @property
     def light_model(self) -> str: ...
+    @property
+    def runtime(self) -> RuntimeLifecycle: ...
 
 
 _ITEM_LINE_RE = re.compile(r"^-\s+\[([^\]]+)\]\s*(.*)$")
@@ -41,13 +44,11 @@ _META_RE = re.compile(r"（(?P<meta>[^（）]*(?:证据|src|有印象|不确定)
 class _DefaultMemoryRecorder:
     """记录 default 记忆引擎的检索/召回轨迹到 workspace 下的 jsonl 文件。
 
-    是否激活只在装配时判定一次（与旧 initialize() 里的一次性判定等价，见
-    setup() 文档）；两个记录入口（TurnStarting、ToolCalled 事件）共享同一份
-    状态，因此收进一个小类而不是两处散落的闭包。
+    两个记录入口（TurnStarting、ToolCalled 事件）共享同一份状态，因此收进
+    一个小类而不是两处散落的闭包。
     """
 
-    def __init__(self, *, active: bool, data_path: Path) -> None:
-        self._active = active
+    def __init__(self, *, data_path: Path) -> None:
         self._lock = threading.RLock()
         self._active_turns: dict[str, str] = {}
         self._data_path = data_path
@@ -59,8 +60,7 @@ class _DefaultMemoryRecorder:
         It joins the ``on`` chain rather than watching: the turn id it keeps is
         read by the ``recall_memory`` record of the same turn.
         """
-        if self._active:
-            self._record_context_prepare(event)
+        self._record_context_prepare(event)
         return event
 
     def _record_context_prepare(self, event: TurnStarting) -> None:
@@ -99,7 +99,7 @@ class _DefaultMemoryRecorder:
         return event
 
     def _record_recall_memory(self, event: ToolCalled) -> None:
-        if not self._active or event.tool_name != "recall_memory":
+        if event.tool_name != "recall_memory":
             return
         turn_id = self._active_turns.get(event.session_key)
         if not turn_id:
@@ -149,6 +149,9 @@ async def setup(ctx: _DefaultMemorySetup) -> None:
 
     向量凭据只读插件配置。缺凭据或向量空间不一致时这里抛出，内核把插件标为
     FAILED，插座保持为空，对话仍可继续。成功则本插件就是这代的引擎，检索记录开启。
+
+    宿主检索、plugin_undo 与总线订阅直接调用引擎，不在内核默认排空之内：重载
+    排空（``on_drain``）和关库前的清理都先等这些在途调用结束（D25）。
     """
     from shiori_sdk.core.memory import MEMORY_ENGINE
     from shiori_sdk.rpc import Concurrency
@@ -158,6 +161,7 @@ async def setup(ctx: _DefaultMemorySetup) -> None:
     from .tools import register_memory_meta_tools
 
     engine = construct_default_engine(ctx)
+    ctx.runtime.on_drain(engine.wait_idle)
     ctx.provide(MEMORY_ENGINE, engine)
     register_memory_meta_tools(ctx.tools, engine)
     ctx.rpc.register(
@@ -168,7 +172,6 @@ async def setup(ctx: _DefaultMemorySetup) -> None:
     register_role_semantic_memory(ctx, engine)
 
     recorder = _DefaultMemoryRecorder(
-        active=True,
         data_path=plugin_data_dir(ctx.memory.workspace, "default_memory")
         / "recall_inspector.jsonl",
     )

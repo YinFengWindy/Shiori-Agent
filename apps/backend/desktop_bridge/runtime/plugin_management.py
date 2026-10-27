@@ -54,6 +54,9 @@ def memory_engine_provider(kernel: PluginKernel | None) -> str | None:
     """
     if kernel is None or kernel.kernel.get(MEMORY_ENGINE) is None:
         return None
+    # The SDK kernel keeps a key's owner private and has no LOC budget left for
+    # an owner lookup, so the owner is read off the manifests. Planning refuses
+    # two live plugins declaring the same key, so at most one ACTIVE one does.
     active = set(kernel.active_plugin_ids)
     for record in kernel.discover():
         if record.manifest.id in active and "memory_engine" in record.manifest.provides:

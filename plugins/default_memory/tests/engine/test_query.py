@@ -18,6 +18,7 @@ from shiori_sdk.models import ModelProvider as LLMProvider
 from shiori_sdk.testing.models import FakeModelResponse as LLMResponse
 
 import plugins.default_memory.backend.semantic.retriever as retriever_module
+from plugins.default_memory.backend.engine.in_flight import InFlightCalls
 from plugins.default_memory.backend.engine.lifecycle import DefaultMemoryEngine
 from plugins.default_memory.backend.semantic.embedder import Embedder
 from plugins.default_memory.backend.semantic.retriever import Retriever
@@ -484,7 +485,8 @@ def _recall_engine_query_integration(
 ) -> DefaultMemoryEngine:
     retriever = Retriever(cast(MemoryStore2, store), cast(Embedder, embedder))
     facade = DefaultMemoryEngine.__new__(DefaultMemoryEngine)
-    facade._config = None
+    facade._model = "test-model"
+    facade._calls = InFlightCalls()
     facade._workspace = Path(".")
     facade._provider = cast(LLMProvider, provider)
     facade._light_provider = cast(LLMProvider, provider)

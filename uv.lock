@@ -1845,7 +1845,7 @@ requires-dist = [
 
 [[package]]
 name = "shiori-plugin-default-memory"
-version = "0.1.2"
+version = "0.1.1"
 source = { editable = "plugins/default_memory" }
 dependencies = [
     { name = "httpx" },

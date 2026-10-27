@@ -836,9 +836,9 @@ captured: dict = {}
 
 async def setup(ctx):
     try:
-        _ = ctx.memory_engine
+        _ = ctx.session_manager
     except AttributeError as e:
-        captured["denied"] = str(e)
+        captured["denied"] = (type(e).__name__, str(e))
 """.strip(),
         encoding="utf-8",
     )
@@ -856,7 +856,9 @@ async def setup(ctx):
         for k, m in sys.modules.items()
         if k.startswith("akasic_plugin_") and k.endswith("_hostrefs_gated")
     )
-    assert "未声明 capability" in module.captured["denied"]
+    kind, message = module.captured["denied"]
+    assert kind == "CapabilityNotGranted"
+    assert "未声明 capability 'session_manager'" in message
 
 
 @pytest.mark.asyncio
