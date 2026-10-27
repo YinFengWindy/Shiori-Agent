@@ -3,7 +3,7 @@
 import logging
 import pytest
 from types import SimpleNamespace
-from shiori_sdk.testing.diagnostics import FakeCrashReporting
+from shiori_sdk.testing.crash_reporting import FakeCrashReporting
 from plugins.observe.backend.collector import GlobalErrorCollector
 
 

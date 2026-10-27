@@ -5,35 +5,6 @@ from typing import Literal
 
 
 @dataclass
-class RagHitLog:
-    """一次检索中命中的单条记忆条目。"""
-
-    item_id: str
-    memory_type: str
-    score: float
-    summary: str  # 截断 120 字符
-    injected: bool  # 是否最终注入到 context
-    confidence_label: str = ""  # "有印象，不确定" 等，空串表示正常置信度
-    forced: bool = False  # True = 因 tool_requirement 强制注入，非 score 过阈值
-
-
-@dataclass
-class RagQueryLog:
-    """一次 memory 检索事件：query → hits → injected。"""
-
-    caller: str  # "passive" | "proactive" | "explicit"
-    session_key: str
-    query: str  # 实际检索用的 query（rewrite 之后）
-    orig_query: str | None  # 改写前原文，None = 未改写
-    aux_queries: list[str]  # HyDE 生成的假想条目列表
-    hits: list[RagHitLog]
-    injected_count: int
-    route_decision: str | None = None  # "RETRIEVE" | "NO_RETRIEVE"；None = 无 gate
-    error: str | None = None
-    role_id: str = ""
-
-
-@dataclass
 class TurnTrace:
     """一轮 agent 对话的完整记录。"""
 

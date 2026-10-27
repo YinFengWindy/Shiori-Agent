@@ -16,7 +16,7 @@ from shiori_sdk.core.crash_reporting import CRASH_REPORTING
 from shiori_sdk.kernel import Kernel
 from shiori_sdk.memory.committed import TurnCommitted
 from shiori_sdk.memory.events import MemoryWritten
-from shiori_sdk.testing.diagnostics import FakeCrashReporting
+from shiori_sdk.testing.crash_reporting import FakeCrashReporting
 from shiori_sdk.testing.extensions import FakeExtensionContext
 from shiori_sdk.testing.kernel import KernelHarness
 

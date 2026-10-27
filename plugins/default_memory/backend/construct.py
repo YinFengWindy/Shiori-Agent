@@ -136,11 +136,20 @@ async def fanout_memory_observation(
     emit: Callable[[object], Awaitable[object]],
     event: object,
 ) -> None:
-    """Emit a frozen ``MemoryWritten`` for watchers, then fan the original out."""
-    if isinstance(event, MemoryWritten):
-        frozen = replace(event, superseded_ids=tuple(event.superseded_ids))
-        await emit(frozen)
+    """Fan the original out on the bus, then emit a frozen ``MemoryWritten``.
+
+    The frozen copy is taken first, so bus listeners cannot change what
+    watchers see. The bus goes first: its observer failures are only logged,
+    while ``emit`` can raise, so a failing emit never drops the bus delivery.
+    """
+    frozen = (
+        replace(event, superseded_ids=tuple(event.superseded_ids))
+        if isinstance(event, MemoryWritten)
+        else None
+    )
     await events.fanout(event)
+    if frozen is not None:
+        await emit(frozen)
 
 
 def _embedding_settings(ctx: _EngineSetup) -> tuple[str, str, str, int | None]:

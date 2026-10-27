@@ -128,26 +128,33 @@ consolidates these additions and the subsequent #847 breaking migration.
   str | None` and `top_frame(tb) -> str` (maintainer, 2026-10-27: on this
   protocol, not a new key). The host object provided as `CRASH_REPORTING`
   arbitrates `sys.excepthook`, `threading.excepthook` and the loop exception
-  handler and attributes the active session and the first owned frame.
+  handler and attributes the active session and the first owned frame. The
+  hook type aliases `SysExceptHook`, `ThreadExceptHook` and `LoopExceptHandler`
+  live in `shiori_sdk.core.crash_reporting`.
   **Breaking:** `diagnostics` leaves `shiori_sdk.runtime.KNOWN_CAPABILITIES`
   and the `capabilities` enum of `manifest.schema.json`. A manifest that still
   declares it is rejected. `ctx.diagnostics`, `ObservePluginContext.diagnostics`,
   `shiori_sdk.diagnostics` (`Diagnostics`, `install_global_hooks`) and
-  `testing.diagnostics.FakeDiagnostics` are gone. The test double is
-  `testing.diagnostics.FakeCrashReporting` (`install` / `uninstall` /
-  `session_key` / `top_frame`), and it still does not touch process globals.
+  `testing.diagnostics.FakeDiagnostics` are gone. **Breaking:** the test module
+  `shiori_sdk.testing.diagnostics` is renamed `shiori_sdk.testing.crash_reporting`;
+  its double is `FakeCrashReporting` (`install` / `uninstall` / `session_key` /
+  `top_frame`), and it still does not touch process globals.
   `PluginDiagnostic`, `PackageContractError` and `RendererActivationError`
   stay in `shiori_sdk.kernel`.
   Observe's manifest is `capabilities: [workspace, events, background]` and
   `inject: [crash_reporting]`. It watches `ContextBudgetObserved` and
   `MemoryWritten`. `TurnCommitted` stays a domain-bus event in P3 (its payload
   has lists and dicts, which `kernel.emit` rejects). Publishers that want a
-  watcher emit a read-only copy and still deliver the original on the bus:
-  budget `status` is a `Mapping` (watchers receive a `MappingProxyType` copy;
-  bus listeners keep the dict), and `MemoryWritten.superseded_ids` is a
-  `Sequence[str]` (watchers receive a tuple; the bus event keeps the list).
-  Observe no longer subscribes to `RetrievalCompleted`. The event type and the
-  `rag_queries` writer remain; nothing in the host emits that event.
+  watcher deliver the original on the bus first, then emit a read-only copy
+  taken before the bus delivery. **Breaking (types):**
+  `ContextBudgetObserved.status` changes from `dict` to `Mapping[str, Any]`
+  (watchers receive a `MappingProxyType` copy; bus listeners keep the dict),
+  and `MemoryWritten.superseded_ids` from `list[str]` to `Sequence[str]`
+  (watchers receive a tuple; the bus event keeps the list).
+  **Breaking:** `shiori_sdk.memory.events.RetrievalCompleted` and
+  `RetrievalHitSummary` are removed (nothing ever emitted the event), and
+  observe drops its `rag_queries` table: opening an existing observe database
+  runs `DROP TABLE IF EXISTS rag_queries` (maintainer, 2026-10-27).
   No SDK or plugin version bump (D26).
 
 - **breaking: session rollback socket, memory `rollback_turn`, and capability

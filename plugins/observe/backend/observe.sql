@@ -49,25 +49,8 @@ CREATE TABLE IF NOT EXISTS context_budgets (
 CREATE INDEX IF NOT EXISTS ix_context_budgets_owner
     ON context_budgets (session_key, context_key, id);
 
--- ─────────────────────────────────────────────
--- 2. rag_queries  当前 memory 检索记录
--- ─────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS rag_queries (
-    id             INTEGER PRIMARY KEY AUTOINCREMENT,
-    ts             TEXT    NOT NULL,
-    caller         TEXT    NOT NULL,    -- passive | proactive | explicit
-    session_key    TEXT    NOT NULL,
-    query          TEXT    NOT NULL,    -- rewrite 后的检索 query
-    orig_query     TEXT,               -- 改写前原文，NULL = 未改写
-    aux_queries    TEXT,               -- JSON: ["hypothesis1", ...]  HyDE 假想条目
-    hits_json      TEXT,               -- JSON: [{id, type, score, summary, injected}]
-    injected_count INTEGER NOT NULL DEFAULT 0,
-    route_decision TEXT,               -- "RETRIEVE" | "NO_RETRIEVE" | NULL
-    error          TEXT
-);
-
-CREATE INDEX IF NOT EXISTS ix_rq_sk_ts  ON rag_queries (session_key, ts);
-CREATE INDEX IF NOT EXISTS ix_rq_caller ON rag_queries (caller, ts);
+-- rag_queries 已删除：旧库在 open_db 时 DROP TABLE IF EXISTS。
+DROP TABLE IF EXISTS rag_queries;
 
 -- ─────────────────────────────────────────────
 -- 3. memory_writes  post-response 记忆写入记录
@@ -116,6 +99,5 @@ CREATE INDEX IF NOT EXISTS ix_gerr_type ON global_errors (error_type, last_ts);
 
 -- 淘汰策略（由 retention.py 执行，不在 schema 里 enforce）
 -- turns:               180 天
--- rag_queries:          90 天
 -- 例外：error IS NOT NULL 的行永久保留
 -- ─────────────────────────────────────────────

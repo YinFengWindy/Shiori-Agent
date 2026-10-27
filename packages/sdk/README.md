@@ -367,7 +367,7 @@ reply; reload uses the new export. Consumers do not inspect Observe's database.
 handlers on a bare kernel, without the host's checks),
 `commands.CommandRegistry` (the host's own `COMMANDS` registry; provide it on the
 fake context's `kernel`), `testing.commands.FakeSessions` and
-`testing.diagnostics.FakeCrashReporting` provide independent contract doubles.
+`testing.crash_reporting.FakeCrashReporting` provide independent contract doubles.
 The crash-reporting fake records callbacks without modifying process-wide handlers.
 Global hook restoration and real lifecycle ordering stay in host integration tests.
 

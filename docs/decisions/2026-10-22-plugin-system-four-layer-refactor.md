@@ -48,7 +48,7 @@
 | D26 | **重构期不发桌面版；停用自动发版（R4）** | P1–P8 期间不发桌面版。仓库的自动桌面发版已停用：`.github/workflows/windows-release.yml` 的 `schedule` cron 随 PR #897 注释掉，**必须在任何 P1 代码 PR 之前合入 main**（GitHub 定时任务只认默认分支）。`apps/desktop/scripts/daily-release.mjs` 留在仓库，恢复日程后发布流程仍走它。`v*` tag 和 `workflow_dispatch` 保留，但重构期不用。**不设 `release/0.5.x` 热修分支**：维护者确认目前没有需要热修的 bug，接受重构期 0.5.x 不出修复版的风险 | 「不发没事」 |
 | D27 | **配置外迁：只迁缺失的键，迁完从 `config.toml` 删掉（R7 / T2，2026-10-22 维护者确认）** | 从宿主 `config.toml` 搬进插件的配置，在启动时迁入插件配置存储。规则：**只有插件配置里还没有这个键时才迁入**；迁入成功后，**从 `config.toml` 删掉已迁移的键**，插件此后只读插件配置，避免 toml 旧值覆盖用户在设置页的修改，也避免用户改了旧键却静默不生效。迁移失败时不删 toml 键，并产出诊断；重复执行是安全的（插件配置里已有的键不覆盖、toml 里已经没有的键不处理）。**不**给内置插件开读取 toml 命名段的特权。迁移清单（以 976f920 源码为准）：proactive 配置段、`memory_optimizer_enabled`、`scene_observation_enabled`。`natural_chat_enabled` 存在角色 JSON 的 `runtime_config` 里，不在本条范围。与 D4′ 的关系：只改配置键的存放位置；`plugin_data/`、kv、启用状态等 0.5.x 路径和格式不变。memory_optimizer 要「插件启用」和 `memory_optimizer_enabled` 同时为真才运行（真值表见 §8.6） | P6 各外迁 PR 填写「现位置 → 新位置」表 |
 
-**2026-10-27（P3-8，维护者确认）**：`session_key()` 与 `top_frame()` 放在 `CRASH_REPORTING` 协议上，不另开 Key。二者原来在 `HostDiagnostics` / `shiori_sdk.diagnostics`，observe 的 collector 在 `inject: [crash_reporting]` 之后仍要用它们给崩溃标注会话和栈帧。该协议尚未进入 4.0 基线，按 D22「新方法必须在进 4.0 前并入基线」并入现有协议。capability `diagnostics` 删除（**breaking**）；`PluginDiagnostic` / `PackageContractError` / `RendererActivationError` 仍留在 `shiori_sdk.kernel`。`TurnCommitted` 在 P3 继续只走领域总线。`ContextBudgetObserved` 与 `MemoryWritten` 由发布方先向内核 `emit` 一份只读副本，再在总线上发出原事件；observe 对这两类用 `ctx.watch`。
+**2026-10-27（P3-8，维护者确认）**：`session_key()` 与 `top_frame()` 放在 `CRASH_REPORTING` 协议上，不另开 Key。二者原来在 `HostDiagnostics` / `shiori_sdk.diagnostics`，observe 的 collector 在 `inject: [crash_reporting]` 之后仍要用它们给崩溃标注会话和栈帧。该协议尚未进入 4.0 基线，按 D22「新方法必须在进 4.0 前并入基线」并入现有协议。capability `diagnostics` 删除（**breaking**）；`PluginDiagnostic` / `PackageContractError` / `RendererActivationError` 仍留在 `shiori_sdk.kernel`。`TurnCommitted` 在 P3 继续只走领域总线。`ContextBudgetObserved` 与 `MemoryWritten` 由发布方先取一份只读副本，先在总线上发出原事件，再向内核 `emit` 副本（内核 emit 抛错时总线那份不丢）；observe 对这两类用 `ctx.watch`。`rag_queries` 死链（`RetrievalCompleted` 从未被发出）代码与表一起删：删除 `RetrievalCompleted`（**breaking**），observe 打开数据库时 `DROP TABLE IF EXISTS rag_queries`，retention 不再清理该表。
 
 ## 1. 目标架构
 
@@ -376,7 +376,7 @@ D2 已定 proactive 是可禁用的系统插件、核心不依赖它。本节是
 | `bootstrap/runtime/background.py` | `build_proactive_runtime`、`build_memory_optimizer_task` | proactive 在 `setup` 里 `ctx.spawn` 自己的循环；memory_optimizer 拆成独立系统插件（D20 修订），不再由本 bootstrap 启动 |
 | `desktop_bridge/runtime/service.py`、`desktop_bridge/method_policy.py` | `proactive_target` 方法 | 改成插件 rpc `proactive.previewTarget`（`BRIDGE.expose`） |
 | `core/roles/models.py` | 角色记录里的 proactive 字段（agent / overrides / drift） | ⚑ `ROLES.plugin_settings(role_id, "proactive")`：读写角色 JSON 里的同一个字段，核心不解释内容 |
-| `core/common/diagnostics.py` | logger 名单里有 `proactive_v2` | 删掉这一项 |
+| `core/common/crash_reporting.py` | logger 名单里有 `proactive_v2` | 删掉这一项 |
 | renderer 角色编辑页 | `RoleProactiveSettingsPanel` 等 | ⚑ renderer 新增具名插槽 `roleSettings`（和 `accountDetail` 同一机制），面板搬进 proactive 前端 |
 
 ### 7.4 插件形态

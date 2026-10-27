@@ -1,12 +1,23 @@
-"""Process-wide ownership of exception hooks across overlapping plugin versions."""
+"""Process-wide crash hooks and crash-report attribution (``CRASH_REPORTING``, D13b).
+
+Exception hooks are owned across overlapping plugin generations by one stack;
+attribution uses explicit installed-code roots.
+"""
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import sys
 import threading
+import traceback
+from collections.abc import Sequence
 from dataclasses import dataclass
-import asyncio
+from importlib.util import find_spec
+from pathlib import Path
+from types import TracebackType
+
+from core.error_context import current_session_key
 from shiori_sdk.core.crash_reporting import (
     LoopExceptHandler,
     SysExceptHook,
@@ -89,13 +100,55 @@ def _uninstall_global_hooks(owner: object) -> None:
         _original_loop_handlers.clear()
 
 
-class ProcessCrashReporting:
-    """Process-wide hook stack used by ``HostCrashReporting`` (D13b).
+class HostCrashReporting:
+    """``CRASH_REPORTING``: the process hook stack plus session and frame attribution.
 
-    Every instance shares the module-level stack above, because the hooks it
-    arbitrates are process globals. Session and frame attribution live on the
-    host object the kernel provides as ``CRASH_REPORTING``, not on this stack.
+    Every instance shares the module-level hook stack above, because the hooks
+    it arbitrates are process globals; only the attribution roots are per
+    instance.
     """
+
+    def __init__(self, plugin_roots: Sequence[tuple[str, Path]] = ()) -> None:
+        self._roots = list(plugin_roots)
+        # Package locations remain valid in a source tree, wheel or frozen layout.
+        for name in (
+            "agent",
+            "bootstrap",
+            "bus",
+            "conversation",
+            "core",
+            "desktop_bridge",
+            "infra",
+            "proactive_v2",
+            "prompts",
+            "session",
+            "utils",
+            "shiori_runtime_resources",
+        ):
+            spec = find_spec(name)
+            if spec is not None and spec.submodule_search_locations is not None:
+                self._roots.extend(
+                    (name, Path(path).resolve())
+                    for path in spec.submodule_search_locations
+                )
+
+    def session_key(self) -> str | None:
+        """Read the host's current passive-turn error attribution."""
+        return current_session_key.get()
+
+    def top_frame(self, tb: TracebackType | None) -> str:
+        """Prefer the first owned frame; otherwise report the innermost filename."""
+        frames = traceback.extract_tb(tb) if tb else []
+        for frame in frames:
+            for label, root in self._roots:
+                path = Path(frame.filename).resolve()
+                if path.is_relative_to(root):
+                    return f"{label}/{path.relative_to(root).as_posix()}:{frame.lineno or 0}"
+        return (
+            f"{Path(frames[-1].filename).name}:{frames[-1].lineno or 0}"
+            if frames
+            else "?"
+        )
 
     install = staticmethod(_install_global_hooks)
     uninstall = staticmethod(_uninstall_global_hooks)

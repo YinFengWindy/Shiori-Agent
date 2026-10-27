@@ -8,7 +8,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import cast
 import pytest
-from shiori_sdk.testing.diagnostics import FakeCrashReporting
+from shiori_sdk.testing.crash_reporting import FakeCrashReporting
 
 _db = importlib.import_module("plugins.observe.backend.db")
 _events = importlib.import_module("plugins.observe.backend.events")

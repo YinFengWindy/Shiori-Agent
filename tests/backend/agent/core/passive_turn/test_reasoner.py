@@ -1859,3 +1859,51 @@ async def test_safety_retry_reads_committed_compaction_with_frozen_input_and_his
         assert reloaded.messages[2]["content"] == "future message must stay out"
     finally:
         await provider.aclose()
+
+
+async def test_context_budget_reaches_watchers_read_only_and_the_bus_as_a_dict():
+    from types import MappingProxyType
+
+    from bus.event_bus import EventBus
+    from shiori_sdk.context import ContextBudgetObserved
+    from shiori_sdk.kernel import Kernel, PluginSpec
+    from shiori_sdk.testing.kernel import KernelHarness
+
+    bus = EventBus()
+    seen_bus: list[ContextBudgetObserved] = []
+    bus.on(ContextBudgetObserved, lambda event: seen_bus.append(event))
+    reasoner = DefaultReasoner(
+        LLMServices(provider=AsyncMock(), light_provider=AsyncMock()),
+        LLMConfig(model="m", max_tokens=32, summary_token_limit=2000),
+        ToolRegistry(),
+        ToolDiscoveryState(),
+        tool_search_enabled=False,
+        session_manager=SimpleNamespace(),
+        event_bus=bus,
+        compaction_memory=SimpleNamespace(),
+    )
+    watched: list[ContextBudgetObserved] = []
+
+    async def setup(ctx) -> None:
+        async def watch(event: ContextBudgetObserved) -> None:
+            watched.append(event)
+
+        ctx.watch(ContextBudgetObserved, watch)
+
+    # The generation's kernel is bound after construction, like the host does.
+    kernel = Kernel()
+    await kernel.start([PluginSpec("observe", setup)])
+    reasoner.bind_kernel(lambda: kernel)
+    status = {"failure_stage": "summary", "final_budget": {"schema_tokens": 0}}
+    assert reasoner._compaction is not None
+    assert reasoner._compaction._observe is not None
+    await reasoner._compaction._observe(
+        ContextBudgetObserved("role:mira", "user", status)
+    )
+    await KernelHarness(kernel=kernel).idle()
+
+    assert isinstance(watched[0].status, MappingProxyType)
+    assert watched[0].status["failure_stage"] == "summary"
+    assert watched[0].status["final_budget"]["schema_tokens"] == 0
+    assert seen_bus[0].status is status
+    assert "summary" in json.dumps(seen_bus[0].status)

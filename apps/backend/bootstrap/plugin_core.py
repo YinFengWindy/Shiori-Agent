@@ -55,8 +55,7 @@ from bus.event_bus import EventBus
 from bus.plugin_capability import PluginEvents
 from core.accounts.plugin_capability import PluginAccounts
 from core.channels.plugin_capability import PluginAvatars, PluginChannels
-from core.common.diagnostics import HostCrashReporting
-from core.common.global_hook_stack import ProcessCrashReporting
+from core.common.crash_reporting import HostCrashReporting
 from core.common.plugin_capability import PluginBackground
 from core.roles.plugin_capability import HostRoleModels, HostRoles
 from core.roles.role_runtime import RoleRuntimeRegistry
@@ -149,7 +148,7 @@ def plugin_core_modules(inputs: PluginCoreInputs) -> tuple[CoreModule, ...]:
 
     def provide_crash_reporting(provide: CoreProvide) -> None:
         """``CRASH_REPORTING``: process hooks plus session and frame attribution."""
-        provide(CRASH_REPORTING, HostCrashReporting(ProcessCrashReporting(), roots))
+        provide(CRASH_REPORTING, HostCrashReporting(roots))
 
     def provide_config_references(provide: CoreProvide) -> None:
         """The host's ``${NAME}`` expansion behind ``config.resolve_reference``."""

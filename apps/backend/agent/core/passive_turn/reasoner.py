@@ -26,6 +26,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from copy import deepcopy
 from dataclasses import replace
+from functools import partial
 
 from core.compaction import (
     CompactionController,
@@ -95,19 +96,17 @@ async def publish_context_budget(
     bus: EventBus,
     event: ContextBudgetObserved,
 ) -> None:
-    """Watchers see a read-only status copy; bus listeners keep the original dict.
+    """Bus listeners keep the original dict; kernel watchers get a read-only copy.
 
-    ``kernel.emit`` rejects a dict field. Compaction still publishes the dict
-    it built, so bus listeners can serialize it.
+    ``kernel.emit`` rejects a dict field, and compaction still publishes the
+    dict it built so bus listeners can serialize it. The copy is taken before
+    either delivery, so bus listeners cannot change what watchers see. The bus
+    goes first: its observer failures are only logged, while ``kernel.emit``
+    can raise, so a failing emit never drops the bus delivery.
     """
-    status = event.status
-    watched = event
-    if isinstance(status, dict):
-        watched = ContextBudgetObserved(
-            event.session_key, event.context_key, read_only(status)
-        )
-    await kernel().emit(watched)
+    watched = replace(event, status=read_only(event.status))
     await bus.observe(event)
+    await kernel().emit(watched)
 
 
 def _disabled_tools_from_msg(msg: object) -> set[str]:
@@ -218,7 +217,9 @@ class DefaultReasoner(
                     llm_config.summary_token_limit,
                 ),
                 observe=(
-                    self._publish_context_budget if event_bus is not None else None
+                    partial(publish_context_budget, lambda: self._kernel(), event_bus)
+                    if event_bus is not None
+                    else None
                 ),
             )
             if session_manager is not None and compaction_memory is not None
@@ -253,13 +254,6 @@ class DefaultReasoner(
     def bind_kernel(self, kernel: Callable[[], Kernel]) -> None:
         """步骤、提示词与工具事件改经 ``kernel()`` 返回的内核发出。"""
         self._kernel = kernel
-
-    async def _publish_context_budget(self, event: ContextBudgetObserved) -> None:
-        """Kernel watchers get a read-only status; the bus keeps the dict."""
-        bus = self._event_bus
-        if bus is None:
-            raise RuntimeError("上下文预算发布需要事件总线")
-        await publish_context_budget(self._kernel, bus, event)
 
     async def render_prompt(
         self,

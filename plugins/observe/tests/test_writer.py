@@ -9,7 +9,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import cast
 import pytest
-from shiori_sdk.testing.diagnostics import FakeCrashReporting
+from shiori_sdk.testing.crash_reporting import FakeCrashReporting
 
 _observe_db = importlib.import_module("plugins.observe.backend.db")
 _observe_events = importlib.import_module("plugins.observe.backend.events")
@@ -18,8 +18,6 @@ _observe_writer = importlib.import_module("plugins.observe.backend.writer")
 _observe_collector = importlib.import_module("plugins.observe.backend.collector")
 
 open_db = cast(Callable[[Path], sqlite3.Connection], getattr(_observe_db, "open_db"))
-RagHitLog = getattr(_observe_events, "RagHitLog")
-RagQueryLog = getattr(_observe_events, "RagQueryLog")
 TurnTrace = getattr(_observe_events, "TurnTrace")
 GlobalErrorTrace = getattr(_observe_events, "GlobalErrorTrace")
 GlobalErrorCollector = getattr(_observe_collector, "GlobalErrorCollector")
@@ -268,58 +266,6 @@ def test_write_global_error_upserts_count_and_sessions(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_trace_writer_drain_waits_for_rag_query(tmp_path):
-    db_path = tmp_path / "observe.db"
-    writer = TraceWriter(db_path)
-    task = asyncio.create_task(writer.run())
-    row = None
-    try:
-        writer.emit(
-            RagQueryLog(
-                caller="passive",
-                session_key="telegram:1",
-                query="改写问题",
-                orig_query="原问题",
-                aux_queries=[],
-                hits=[
-                    RagHitLog(
-                        item_id="m1",
-                        memory_type="event",
-                        score=0.9,
-                        summary="记忆",
-                        injected=True,
-                    )
-                ],
-                injected_count=1,
-                route_decision="RETRIEVE",
-            )
-        )
-        await writer.drain()
-        conn = sqlite3.connect(str(db_path))
-        try:
-            row = conn.execute("""
-                select caller, session_key, query, orig_query, injected_count,
-                       route_decision, hits_json
-                from rag_queries
-                """).fetchone()
-        finally:
-            conn.close()
-    finally:
-        task.cancel()
-        with suppress(asyncio.CancelledError):
-            await task
-
-    assert row is not None
-    assert row[0] == "passive"
-    assert row[1] == "telegram:1"
-    assert row[2] == "改写问题"
-    assert row[3] == "原问题"
-    assert row[4] == 1
-    assert row[5] == "RETRIEVE"
-    assert '"id": "m1"' in row[6]
-
-
-@pytest.mark.asyncio
 async def test_global_error_collector_captures_error_log_with_context(tmp_path):
     db_path = tmp_path / "observe.db"
     writer = TraceWriter(db_path)
@@ -374,24 +320,6 @@ async def test_global_error_collector_captures_error_log_with_context(tmp_path):
     assert json.loads(row[3]) == ["telegram:1"]
 
 
-def test_open_db_does_not_create_legacy_rag_tables(tmp_path):
-    db_path = tmp_path / "observe.db"
-    conn = open_db(db_path)
-    try:
-        tables = {
-            row[0]
-            for row in conn.execute(
-                "select name from sqlite_master where type = 'table'"
-            ).fetchall()
-        }
-    finally:
-        conn.close()
-
-    assert "rag_queries" in tables
-    assert "rag_events" not in tables
-    assert "rag_items" not in tables
-
-
 def test_open_db_preserves_existing_observe_records(tmp_path):
     db_path = tmp_path / "observe.db"
     conn = sqlite3.connect(str(db_path))
@@ -420,54 +348,36 @@ def test_open_db_preserves_existing_observe_records(tmp_path):
                 values('2026-04-01T00:01:00+00:00', 'proactive', 'cli:1', '', 'push');
                 insert into proactive_decisions(tick_id, ts, session_key, stage)
                 values('tick-1', '2026-04-01T00:01:00+00:00', 'cli:1', 'gate');
+                create table rag_queries (
+                    id integer primary key autoincrement,
+                    ts text not null,
+                    caller text not null,
+                    session_key text not null,
+                    query text not null,
+                    error text
+                );
+                create index ix_rq_sk_ts on rag_queries (session_key, ts);
+                insert into rag_queries(ts, caller, session_key, query)
+                values('2026-04-01T00:00:00+00:00', 'passive', 'cli:1', 'q');
                 """)
     finally:
         conn.close()
 
+    # 旧库升级与再次打开都要成功：删表迁移必须幂等。
+    open_db(db_path).close()
     conn = open_db(db_path)
     try:
-        tables = {
+        schema_names = {
             row[0]
             for row in conn.execute(
-                "select name from sqlite_master where type = 'table'"
+                "select name from sqlite_master where type in ('table', 'index')"
             ).fetchall()
         }
         rows = conn.execute("select source, llm_output from turns").fetchall()
     finally:
         conn.close()
 
-    assert "proactive_decisions" in tables
+    assert "proactive_decisions" in schema_names
+    assert "rag_queries" not in schema_names
+    assert "ix_rq_sk_ts" not in schema_names
     assert rows == [("agent", "ok"), ("proactive", "push")]
-
-
-def test_retention_cleans_rag_queries(tmp_path):
-    db_path = tmp_path / "observe.db"
-    conn = open_db(db_path)
-    try:
-        with conn:
-            conn.execute("""
-                insert into rag_queries (
-                    ts, caller, session_key, query
-                ) values (
-                    datetime('now', '-91 days'), 'passive', 'cli:1', '旧问题'
-                )
-                """)
-            conn.execute("""
-                insert into rag_queries (
-                    ts, caller, session_key, query, error
-                ) values (
-                    datetime('now', '-91 days'), 'passive', 'cli:1', '错误问题', 'failed'
-                )
-                """)
-    finally:
-        conn.close()
-
-    _run_cleanup(db_path)
-
-    conn = sqlite3.connect(str(db_path))
-    try:
-        rows = conn.execute("select query from rag_queries order by query").fetchall()
-    finally:
-        conn.close()
-
-    assert rows == [("错误问题",)]

@@ -50,21 +50,9 @@ CREATE TABLE IF NOT EXISTS context_budgets (
 CREATE INDEX IF NOT EXISTS ix_context_budgets_owner
     ON context_budgets (session_key, context_key, id);
 
-CREATE TABLE IF NOT EXISTS rag_queries (
-    id             INTEGER PRIMARY KEY AUTOINCREMENT,
-    ts             TEXT    NOT NULL,
-    caller         TEXT    NOT NULL,    -- passive | proactive | explicit
-    session_key    TEXT    NOT NULL,
-    query          TEXT    NOT NULL,    -- rewrite 后的检索 query
-    orig_query     TEXT,               -- 改写前原文，NULL = 未改写
-    aux_queries    TEXT,               -- JSON: ["hypothesis1", ...]  HyDE 假想条目
-    hits_json      TEXT,               -- JSON: [{id, type, score, summary, injected}]
-    injected_count INTEGER NOT NULL DEFAULT 0,
-    route_decision TEXT,               -- "RETRIEVE" | "NO_RETRIEVE" | NULL
-    error          TEXT
-);
-CREATE INDEX IF NOT EXISTS ix_rq_sk_ts  ON rag_queries (session_key, ts);
-CREATE INDEX IF NOT EXISTS ix_rq_caller ON rag_queries (caller, ts);
+-- rag_queries 从未被写入（RetrievalCompleted 没有发布方），已删除；
+-- 每次打开都执行，旧库删表、新库无操作。索引随表一起删除。
+DROP TABLE IF EXISTS rag_queries;
 
 -- ─────────────────────────────────────────────
 -- 3. memory_writes  post-response 记忆写入记录
