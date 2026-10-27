@@ -10,6 +10,8 @@ from shiori_sdk.tools import ToolResult
 from .config import BrowserUseConfig
 from .runtime import BrowserRuntime
 from .session import BrowserSession
+from .ego_runtime import EgoRuntime
+from .ego_session import EgoSession
 
 
 class BrowserSessions:
@@ -23,11 +25,15 @@ class BrowserSessions:
         processes: Processes,
         resources: Path,
         runtime: BrowserRuntime | None = None,
+        ego_runtime: EgoRuntime | None = None,
     ) -> None:
         self._processes, self._resources = processes, resources
         self._root, self._config, self._runtime = root, config, runtime
-        self._sessions: dict[str, BrowserSession] = {}
-        self._active: dict[asyncio.Task[str | ToolResult], BrowserSession] = {}
+        self._ego_runtime = ego_runtime
+        self._sessions: dict[str, BrowserSession | EgoSession] = {}
+        self._active: dict[
+            asyncio.Task[str | ToolResult], BrowserSession | EgoSession
+        ] = {}
         self._closing: dict[str, asyncio.Task[str]] = {}
         self._closed = False
 
@@ -39,7 +45,7 @@ class BrowserSessions:
             raise RuntimeError("Browser Use 插件已停用")
         if not role_id.strip():
             raise ValueError("当前会话缺少角色身份，无法操作浏览器")
-        if name == "agent_browser_close":
+        if name in {"agent_browser_close", "ego_browser_close"}:
             session = self._sessions.get(role_id)
             if session is None:
                 return "浏览器会话已关闭，站点状态已保留。"
@@ -47,12 +53,23 @@ class BrowserSessions:
         if role_id in self._closing:
             raise RuntimeError("Browser Use 会话正在关闭，请稍后重试")
         if role_id not in self._sessions:
-            self._sessions[role_id] = BrowserSession(
-                self._root,
-                role_id,
-                self._config,
-                self._runtime or BrowserRuntime.resolve(self._resources),
-                self._processes,
+            self._sessions[role_id] = (
+                EgoSession(
+                    self._root,
+                    role_id,
+                    self._config,
+                    self._ego_runtime
+                    or EgoRuntime.resolve(self._config.ego_browser_path),
+                    self._processes,
+                )
+                if self._config.backend == "ego(lite)"
+                else BrowserSession(
+                    self._root,
+                    role_id,
+                    self._config,
+                    self._runtime or BrowserRuntime.resolve(self._resources),
+                    self._processes,
+                )
             )
         session = self._sessions[role_id]
         task = asyncio.create_task(session.call(name, arguments))
@@ -66,7 +83,9 @@ class BrowserSessions:
         finally:
             self._active.pop(task, None)
 
-    def _begin_close(self, role_id: str, session: BrowserSession) -> asyncio.Task[str]:
+    def _begin_close(
+        self, role_id: str, session: BrowserSession | EgoSession
+    ) -> asyncio.Task[str]:
         if role_id not in self._closing:
             # Keep the generation in _sessions until cleanup completes. A new
             # caller must not acquire its profile while startup is unwinding.
@@ -76,7 +95,9 @@ class BrowserSessions:
             )
         return self._closing[role_id]
 
-    async def _close_session(self, role_id: str, session: BrowserSession) -> str:
+    async def _close_session(
+        self, role_id: str, session: BrowserSession | EgoSession
+    ) -> str:
         pending = tuple(
             task for task, owner in self._active.items() if owner is session
         )
@@ -88,7 +109,11 @@ class BrowserSessions:
         if self._sessions.get(role_id) is session:
             self._sessions.pop(role_id)
         self._closing.pop(role_id, None)
-        return "浏览器会话已关闭，站点状态已保留。"
+        return (
+            "ego 浏览任务已结束，用户浏览器和其他任务已保留。"
+            if self._config.backend == "ego(lite)"
+            else "浏览器会话已关闭，站点状态已保留。"
+        )
 
     async def _wait_close(self, role_id: str, task: asyncio.Task[str]) -> str:
         try:

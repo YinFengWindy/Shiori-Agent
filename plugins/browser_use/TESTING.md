@@ -57,3 +57,27 @@ Chrome for Testing 153.0.8010.52. They verify three browser generations, profile
 reuse, cancellation of in-flight and queued work, and final tab closure without
 diagnostic builds or manual pipe draining. The daemon fingerprint and cached core
 tool schemas remain compatible; timeout, retry and browser launch flags are unchanged.
+
+## User-installed ego acceptance
+
+After the user installs ego and completes onboarding, point the opt-in Windows
+test at its client (the app and guide versions are recorded in the evidence):
+
+```powershell
+$env:SHIORI_EGO_BROWSER = "$env:USERPROFILE/.local/share/ego/active_version_dir/ego-browser.exe"
+$env:SHIORI_EGO_EVIDENCE = Join-Path (Get-Location) '.scratch/ego-acceptance'
+.venv\Scripts\pytest.exe tests/backend/agent/plugin_host/test_processes_ego.py -q
+```
+
+No test installs ego or imports/clears browser data. All pages and Spaces belong
+to a controlled local fixture. The test checks Chinese fill/click, PNG ToolResult
+content, scrolling/tabs, role isolation, handoff/resume, a handed-off task
+surviving plugin closure, and cancellation before a delayed startup receipt.
+Cancellation is armed by an observable HTTP request before waiting on a disabled
+button; neither its late click nor the page timer may reach the server after
+cleanup. Another role's Space remains usable.
+
+The application is user-owned: native CLI exit is not proof that remote work has
+stopped. Ordinary plugin tests cover cleanup acknowledgment failure, stopped
+generations and invalid action batches. The host process test also proves an
+unowned client's application child survives the client's exit.

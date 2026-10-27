@@ -123,6 +123,14 @@ consolidates these additions and the subsequent #847 breaking migration.
 
 <!-- Record the next contract batch here, with PR references and breaking markers. -->
 
+- **Optional process-tree ownership (issue #934).** `Processes.spawn()` accepts
+  `own_process_tree: bool = True`. Existing callers retain the owned-process
+  behavior. Clients of user-owned applications can pass `False`: the caller
+  still reaps its client process and must separately stop remote work; the
+  external application is not placed in a kill-on-close Windows Job. Windows
+  client processes remain hidden. `HostProcesses` and the SDK test fake expose
+  the same option. No new capability is introduced.
+
 - **Plugin kernel `shiori_sdk.kernel` (issue #900, refactor P1).** New SDK
   package holding the kernel the host now runs on: `Key[T]`, `PluginSpec`,
   `Kernel` (`start` / `reload` / `stop`, host steps `plan` / `activate` /

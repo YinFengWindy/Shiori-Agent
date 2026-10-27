@@ -45,10 +45,17 @@ class HostProcesses:
         stdin: int,
         stdout: int | BinaryIO,
         stderr: int | BinaryIO,
+        own_process_tree: bool = True,
     ):
         """Assign child ownership before allowing executable code to run."""
         return await spawn_owned(
-            *command, env=env, cwd=cwd, stdin=stdin, stdout=stdout, stderr=stderr
+            *command,
+            owned=own_process_tree,
+            env=env,
+            cwd=cwd,
+            stdin=stdin,
+            stdout=stdout,
+            stderr=stderr,
         )
 
     def popen(
