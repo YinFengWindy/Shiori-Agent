@@ -23,9 +23,7 @@ from bootstrap.tools import (
     build_registered_tools,
 )
 from bootstrap.wiring import (
-    register_memory_plugin,
     resolve_context_factory,
-    resolve_memory_plugin,
     resolve_memory_toolset_provider,
     resolve_toolset_provider,
     wire_turn_lifecycle,
@@ -667,97 +665,12 @@ def test_wiring_error_messages_list_available_choices():
         raise AssertionError("resolve_memory_toolset_provider should fail for bad name")
 
     try:
-        resolve_memory_plugin("bad")
-    except ValueError as exc:
-        assert "可选值" in str(exc)
-        assert "default" in str(exc)
-    else:
-        raise AssertionError("resolve_memory_plugin should fail for bad name")
-
-    try:
         resolve_toolset_provider("bad")
     except ValueError as exc:
         assert "可选值" in str(exc)
         assert "meta_common" in str(exc)
     else:
         raise AssertionError("resolve_toolset_provider should fail for bad name")
-
-
-def test_memory_plugin_registry_accepts_custom_engine(monkeypatch):
-    import bootstrap.wiring as wiring
-
-    monkeypatch.setattr(wiring, "_MEMORY_PLUGIN_WIRING", {})
-
-    class _Plugin:
-        plugin_id = "custom"
-
-        def build(self, deps):
-            raise AssertionError("not used")
-
-    register_memory_plugin("custom", lambda: _Plugin())
-
-    assert resolve_memory_plugin("custom").plugin_id == "custom"
-
-
-def test_memory_plugin_resolver_loads_plugin_directory(monkeypatch, tmp_path: Path):
-    plugin_dir = tmp_path / "plugins" / "demo_memory" / "backend"
-    plugin_dir.mkdir(parents=True)
-    (plugin_dir / "memory_plugin.py").write_text(
-        "\n".join(
-            [
-                "from shiori_sdk.memory.build import MemoryPluginRuntime",
-                "",
-                "class MemoryPlugin:",
-                "    plugin_id = 'demo_memory'",
-                "    def build(self, deps):",
-                "        raise AssertionError('not used')",
-                "    def validate_transition(self, previous, candidate, workspace, storage): pass",
-                "    def ensure_workspace_storage(self, *, config, workspace, storage): return []",
-            ]
-        ),
-        encoding="utf-8",
-    )
-    monkeypatch.setattr(
-        "bootstrap.memory_plugins.plugin_roots", lambda: [tmp_path / "plugins"]
-    )
-
-    assert resolve_memory_plugin("demo_memory").plugin_id == "demo_memory"
-
-
-def test_memory_plugin_resolver_loads_default_package():
-    from shiori_sdk.memory.build import MemoryPlugin
-
-    plugin = resolve_memory_plugin("default")
-
-    assert isinstance(plugin, MemoryPlugin)
-    assert plugin.plugin_id == "default"
-    assert type(resolve_memory_plugin("default")) is type(plugin)
-
-
-@pytest.mark.parametrize("name", ["../custom", "a/b", "a\\b", "a.b", "C:custom"])
-def test_memory_plugin_resolver_rejects_invalid_names(name):
-    with pytest.raises(ValueError, match="名称非法"):
-        resolve_memory_plugin(name)
-
-
-@pytest.mark.parametrize(
-    ("source", "error", "message"),
-    [
-        ("raise RuntimeError('broken engine')", RuntimeError, "broken engine"),
-        ("value = 1", ValueError, "缺少"),
-        ("def create_memory_plugin(): return object()", TypeError, "未返回"),
-    ],
-)
-def test_memory_plugin_resolver_propagates_invalid_entry_errors(
-    tmp_path, monkeypatch, source, error, message
-):
-    backend = tmp_path / "broken" / "backend"
-    backend.mkdir(parents=True)
-    (backend / "memory_plugin.py").write_text(source, encoding="utf-8")
-    monkeypatch.setattr("bootstrap.memory_plugins.plugin_roots", lambda: [tmp_path])
-
-    with pytest.raises(error, match=message):
-        resolve_memory_plugin("broken")
 
 
 @pytest.mark.asyncio

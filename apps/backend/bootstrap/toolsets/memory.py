@@ -17,21 +17,14 @@ class MemoryToolsetProvider(ToolsetProvider):
     ):
         before = set(registry._tools.keys())
         config = deps.config
-        http_resources = deps.http_resources
-        if config is None or http_resources is None:
+        if config is None:
             raise ValueError("memory toolset 缺少必要依赖")
         memory_runtime = build_memory_runtime(
             config,
             deps.workspace,
             deps.provider,
             deps.light_provider,
-            http_resources,
             event_publisher=deps.event_publisher,
-            runtime_roles=(
-                deps.role_runtime_registry.repository.store
-                if deps.role_runtime_registry is not None
-                else None
-            ),
         )
         return build_registration_result(
             registry=registry,

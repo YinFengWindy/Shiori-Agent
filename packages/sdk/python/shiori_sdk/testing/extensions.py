@@ -4,7 +4,6 @@ import asyncio
 from collections.abc import Coroutine
 from pathlib import Path
 from shiori_sdk.sessions import SessionUndo
-from shiori_sdk.memory.engine import MemoryEngine
 from shiori_sdk.extensions import Dependencies
 from shiori_sdk.kernel import Kernel
 from shiori_sdk.runtime import HostServiceUnavailable
@@ -80,9 +79,9 @@ class FakeExtensionContext(FakePluginContext):
 
     ``workspace`` and ``session_manager`` left as ``None`` model a host that lacks
     the service: reading them raises ``HostServiceUnavailable`` like the host does.
-    ``memory_engine`` stays optional because the host has none when memory is off.
-    ``kernel`` and ``inject`` are those of ``FakePluginContext``: provide a
-    ``CommandRegistry`` as ``COMMANDS`` on ``kernel`` for a command plugin.
+    ``kernel``, ``inject`` and ``optional_inject`` are those of
+    ``FakePluginContext``: provide a ``CommandRegistry`` as ``COMMANDS`` on
+    ``kernel`` for a command plugin, and ``MEMORY_ENGINE`` when the test has one.
     """
 
     def __init__(
@@ -93,16 +92,17 @@ class FakeExtensionContext(FakePluginContext):
         config: dict[str, object] | None = None,
         dependencies: Dependencies | None = None,
         session_manager: SessionUndo | None = None,
-        memory_engine: MemoryEngine | None = None,
         kernel: Kernel | None = None,
         inject: tuple[str, ...] = (),
+        optional_inject: tuple[str, ...] = (),
     ):
-        super().__init__(plugin_id, kernel=kernel, inject=inject)
+        super().__init__(
+            plugin_id, kernel=kernel, inject=inject, optional_inject=optional_inject
+        )
         self._workspace = workspace
         self.config = FakeConfig(config)
         self.dependencies = dependencies or FakeDependencies()
         self._session_manager = session_manager
-        self.memory_engine = memory_engine
         self.background = FakeBackground(self)
         self.diagnostics = FakeDiagnostics()
         self.storage = FakeMemoryStorage()

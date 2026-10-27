@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
-from shiori_sdk.memory.build import MemoryStorage
+from shiori_sdk.memory.access import MemoryStorage
 from shiori_sdk.storage import plugin_data_dir
 
 

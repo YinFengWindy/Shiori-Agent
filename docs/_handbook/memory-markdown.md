@@ -229,7 +229,7 @@ Optimizer 定时任务
 
 ## 向量记忆 API——谁在调它
 
-`packages/sdk/python/shiori_sdk/memory/engine.py` 定义了一套抽象协议（`MemoryEngine`），由四个子协议组成。引擎本身是一个 **plugin**。当前宿主在 `default_memory` 插件启用时构造这个默认实现，关闭时换成 `DisabledMemoryEngine`。向量模型凭据在 `[plugins.default_memory]`。协议与实现解耦。
+`packages/sdk/python/shiori_sdk/memory/engine.py` 定义了一套抽象协议（`MemoryEngine`），由四个子协议组成。引擎本身是一个 **plugin**。`default_memory` 在 setup 里按插件配置构造默认实现并 `provide(MEMORY_ENGINE)`。没有提供者时插座是空的，语义检索跳过，对话仍继续。向量模型凭据在 `[plugins.default_memory]`。协议与实现解耦。
 
 检索和写入各只有一个入口：检索统一走 `query(MemoryQuery)`，用 `intent` 区分场景（`context` / `answer` / `timeline` / `interest` / `procedure`，`effect` 区分 `stateful` / `read_only`）；写入统一走 `mutate(MemoryMutation)`，用 `kind` 区分 `remember` / `forget`。
 
@@ -280,23 +280,22 @@ Optimizer 定时任务
 | `apps/backend/proactive_v2/tools.py` | `query(intent="interest")` | proactive tick 中评估内容候选时调用，查询用户对某条内容是否可能感兴趣 |
 | `plugins/default_memory/backend/tools/memorize.py` | `mutate(kind="remember")` | `memorize` 工具。用户要求"记住..."时调用 |
 | `plugins/default_memory/backend/tools/forget_memory.py` | `mutate(kind="forget")` | `forget_memory` 工具。用户纠正错误记忆时调用 |
-| `apps/backend/core/memory/runtime.py` | `query()` | `MemoryRuntime` 薄封装层：每次调用都经 `current_engine()` 现取引擎，主动链路经它检索 |
-| `apps/backend/core/memory/plugin.py` | 全部方法 | `DisabledMemoryEngine` — 记忆关闭时的空实现，所有方法都返回空/报错 |
+| `apps/backend/core/memory/runtime.py` | `query()` | `MemoryRuntime` 薄封装层：每次调用都经 `current_engine()` 现取引擎；插座为空时返回 disabled，主动链路经它检索 |
 
 ### 引擎如何注入
 
 ```
-bootstrap/memory.py → engine = plugin_runtime.engine（记忆关闭时 DisabledMemoryEngine）
+default_memory setup → 构造引擎 → provide(MEMORY_ENGINE)
     ↓
-default_memory setup → ctx.memory.engine.tool_profile() → ctx.tools 注册 memorize / forget_memory / recall_memory
-    ↓
-  MemoryRuntime(markdown=..., current_engine=lambda: engine)
-    ↓  消费方只拿 getter `current_engine`，每次使用时调用，不长期持有引擎（D25）
-    ├── 被动 reply: MemoryServices(current_engine) → DefaultMemoryRetrievalPipeline → current_engine().query(intent="context")
+MemoryRuntime.current_engine 绑定 kernel.get(MEMORY_ENGINE)（可为空）
+    ↓  消费方只拿 getter，每次使用时调用，不长期持有引擎（D25）
+    ├── 被动 reply: MemoryServices(current_engine) → DefaultMemoryRetrievalPipeline
+    │     插座为空则跳过语义检索，Markdown 记忆仍在
     ├── 桌面端删角色: DesktopBridgeService 现取引擎调用 invalidate_role_memories
-    └── 插件宿主服务 memory_engine → 本代内核构造时取一次 provide；声明 memory_engine capability 的插件通过 ctx.memory_engine 访问（plugin_undo 每次 /undo 现读）
+    └── plugin_undo: optional_inject memory_engine，每次 /undo get 一次；
+          插座为空只撤销会话
     ↓
   proactive_v2/tools.py → ToolDeps.memory → query(intent="interest")
 ```
 
-调用方拿到的都是协议类型（`MemoryRetrievalApi` / `MemoryWriteApi` / `MemoryAdminApi`），不是 `DefaultMemoryEngine`。当前启用的实现由 `default_memory` 插件开关决定。
+调用方拿到的都是协议类型（`MemoryRetrievalApi` / `MemoryWriteApi` / `MemoryAdminApi`），不是 `DefaultMemoryEngine`。当前启用的实现是这一代里提供了 `MEMORY_ENGINE` 的插件。

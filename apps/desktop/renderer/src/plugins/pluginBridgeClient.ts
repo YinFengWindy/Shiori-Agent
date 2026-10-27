@@ -215,6 +215,8 @@ export interface PluginBridgeClient {
     options: { operationId: string },
   ): Promise<PluginConfigSaveResult>;
   listPlugins(): Promise<PluginSummary[]>;
+  /** The ACTIVE plugin that currently provides `MEMORY_ENGINE`, or null when the socket is empty. */
+  memoryProvider(): Promise<string | null>;
   /** Lists `desktop`, builtin and plugin-declared channels with their runtime state (`channels.list`). */
   listChannels(): Promise<ChannelSummary[]>;
   setEnabled(
@@ -315,6 +317,10 @@ export function createPluginBridgeClient(invoke?: DesktopInvoke): PluginBridgeCl
         supportsHotUnload: item.supports_hot_unload,
         pendingRendererKinds: item.pending_renderer_kinds ?? [],
       }));
+    },
+    async memoryProvider() {
+      const payload = await invokePluginPayload<{ plugin_id: string | null }>(resolveInvoke(), "memory.provider", {});
+      return payload.plugin_id;
     },
     async listChannels() {
       const payload = await invokePluginPayload<{ channels: Array<PluginChannelDeclarationPayload & {

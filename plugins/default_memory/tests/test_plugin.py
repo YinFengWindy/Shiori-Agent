@@ -15,8 +15,6 @@ from shiori_sdk.testing.tools import FakeTools
 
 from plugins.default_memory.backend.plugin import _DefaultMemoryRecorder
 
-PLUGIN_DIR = Path(__file__).resolve().parents[1]
-
 
 def _turn_starting(
     *, retrieved_memory_block: str = "", retrieval_trace: object | None = None
@@ -120,51 +118,43 @@ async def test_recall_memory_recorded_only_for_matching_tool_when_active(
 
 
 @pytest.mark.asyncio
-async def test_setup_registers_scoped_documents_semantics_and_observation(tmp_path):
-    from plugins.default_memory.backend.plugin import setup
+async def test_setup_provides_the_engine_and_records_until_close(
+    tmp_path: Path,
+) -> None:
+    from typing import Any, cast
 
-    ctx = FakeMemoryPluginContext(tmp_path)
-    ctx.tools = FakeTools()
-    await setup(ctx)
-    assert ctx.tools.tools == {}
-    assert set(ctx.rpc.handlers) == {
-        "roles.memory.documents",
-        "roles.memory.semantic.list",
-        "roles.memory.semantic.detail",
-    }
-    assert set(ctx.rpc.concurrency.values()) == {Concurrency.READ_ONLY}
-    await ctx.emit(_turn_starting())
-    await ctx.emit(_called())
-    path = tmp_path / "plugin-data/default_memory/recall_inspector.jsonl"
-    rows = _read_jsonl(path)
-    assert [row["kind"] for row in rows] == ["context_prepare", "recall_memory"]
-    # The recall joins the turn the retrieval record opened.
-    assert rows[0]["turn_id"] == rows[1]["turn_id"]
-    await ctx.aclose()
-    await ctx.emit(_called())
-    assert len(_read_jsonl(path)) == 2
-
-
-@pytest.mark.asyncio
-async def test_setup_registers_the_engine_profile_on_tools(tmp_path: Path) -> None:
-    from types import SimpleNamespace
+    from shiori_sdk.core.memory import MEMORY_ENGINE
+    from shiori_sdk.core.models import MAIN_MODEL, MAIN_PROVIDER
+    from shiori_sdk.kernel import Kernel
+    from shiori_sdk.testing.extensions import FakeConfig
 
     from plugins.default_memory.backend.engine.prompts import (
         _default_memory_tool_profile,
     )
     from plugins.default_memory.backend.plugin import setup
 
-    profile = _default_memory_tool_profile()
+    kernel = Kernel()
+    kernel.provide(MAIN_PROVIDER, cast(Any, object()))
+    kernel.provide(MAIN_MODEL, "chat")
     ctx = FakeMemoryPluginContext(
         tmp_path,
-        engine=SimpleNamespace(
-            describe=lambda: SimpleNamespace(name="default"),
-            tool_profile=_default_memory_tool_profile,
-        ),
+        kernel=kernel,
+        inject=("main_provider", "main_model"),
+        provides=("memory_engine",),
     )
+    ctx.config = FakeConfig(
+        {"embedding_api_key": "k", "embedding_base_url": "http://embed"}
+    )
+    ctx.http = object()
+    ctx.light_provider = object()
+    ctx.light_model = "light"
     ctx.tools = FakeTools()
-    await setup(ctx)
+    await setup(cast(Any, ctx))
 
+    engine = ctx.kernel.get(MEMORY_ENGINE)
+    assert engine is not None
+    assert engine.describe().name == "default"
+    profile = _default_memory_tool_profile()
     specs = {
         "memorize": profile.memorize,
         "forget_memory": profile.forget,
@@ -179,4 +169,19 @@ async def test_setup_registers_the_engine_profile_on_tools(tmp_path: Path) -> No
         assert options["search_hint"] == (spec.search_hint or None)
         assert options["external_allowed"] is False
         assert ctx.tools.tools[name].description == spec.description
+    assert set(ctx.rpc.handlers) == {
+        "roles.memory.documents",
+        "roles.memory.semantic.list",
+        "roles.memory.semantic.detail",
+    }
+    assert set(ctx.rpc.concurrency.values()) == {Concurrency.READ_ONLY}
+
+    await ctx.emit(_turn_starting())
+    await ctx.emit(_called())
+    path = tmp_path / "plugin-data/default_memory/recall_inspector.jsonl"
+    rows = _read_jsonl(path)
+    assert [row["kind"] for row in rows] == ["context_prepare", "recall_memory"]
+    assert rows[0]["turn_id"] == rows[1]["turn_id"]
     await ctx.aclose()
+    await ctx.emit(_called())
+    assert len(_read_jsonl(path)) == 2

@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 from shiori_sdk.commands import CommandInput
 from shiori_sdk.core.conversation import COMMANDS
+from shiori_sdk.core.memory import MEMORY_ENGINE
 from shiori_sdk.sessions import SessionUndo, MemoryUndo
 
 if TYPE_CHECKING:
@@ -113,7 +114,7 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
     """Register the scoped ``/undo`` command."""
 
     def current_memory() -> MemoryUndo | None:
-        engine = ctx.memory_engine
+        engine = ctx.get(MEMORY_ENGINE)
         return engine if isinstance(engine, MemoryUndo) else None
 
     plugin = PluginUndo(ctx.session_manager, current_memory)

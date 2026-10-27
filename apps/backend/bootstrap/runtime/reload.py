@@ -15,7 +15,6 @@ from bootstrap.tools import build_core_runtime
 from bootstrap.channels import start_channels
 from conversation.commands import command_menu
 from core.channels.plugin_capability import active_plugin_channels
-from bootstrap.runtime.memory import validate_memory_transition
 from bootstrap.runtime.construction import prepare_core_runtime
 from bootstrap.runtime.channel_barrier import channel_handover_barrier
 
@@ -63,7 +62,6 @@ class RuntimeReloadMixin:
         if config == self.config and plugin_discovery_snapshot is None:
             return current
         current.core.assert_hot_unloadable()
-        validate_memory_transition(self.config, config, self.workspace)
         snapshot = deepcopy(config)
         core = await prepare_core_runtime(
             snapshot,
@@ -191,7 +189,6 @@ class RuntimeReloadMixin:
     ) -> None:
         """Runs durable commit and pointer publication in one synchronous step."""
         self._generation_manager.require_running().core.assert_hot_unloadable()
-        validate_memory_transition(self.config, candidate.config, self.workspace)
         if commit is not None:
             commit()
         if candidate.core.plugin_manager is not None:

@@ -6,21 +6,23 @@ from typing import Protocol
 from shiori_sdk.rpc import RpcCapability
 from shiori_sdk.runtime import PluginRuntimeContext
 
-from .build import MemoryRoles, MemoryStorage
-from .engine import MemoryEngine
+from .access import MemoryRoles, MemoryStorage
 
 
 class MemoryCapability(Protocol):
-    """Host state needed by memory plugins, without private role/config services."""
+    """Host state needed by memory plugins, without private role/config services.
+
+    The engine is not here. The plugin that provides ``MEMORY_ENGINE`` keeps
+    the instance it built; other plugins ``get`` the socket.
+    """
 
     @property
     def workspace(self) -> Path: ...
     @property
-    def engine(self) -> MemoryEngine | None: ...
-    @property
     def roles(self) -> MemoryRoles: ...
     @property
     def storage(self) -> MemoryStorage: ...
+    def skill_names(self) -> list[str]: ...
     async def read_documents(self, payload: dict[str, object]) -> dict[str, object]: ...
 
 

@@ -7,17 +7,13 @@ import hashlib
 import logging
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
 from shiori_sdk.http import HttpRequester
 from shiori_sdk.json import load_json_object_loose
-from shiori_sdk.memory.build import (
-    BuildResources,
-    MemoryBuildConfig,
-    MemoryRoles,
-    MemoryStorage,
-)
+from shiori_sdk.memory.access import MemoryRoles, MemoryStorage
 from shiori_sdk.memory.committed import TurnCommitted
 from shiori_sdk.memory.engine import (
     EngineProfile,
@@ -27,6 +23,7 @@ from shiori_sdk.memory.engine import (
 )
 from shiori_sdk.memory.events import ConsolidationCommitted, TurnIngested
 from shiori_sdk.models import ModelProvider as LLMProvider
+from shiori_sdk.runtime import Dispose
 
 from ..config import (
     DefaultMemoryConfig,
@@ -45,7 +42,15 @@ from .prompts import _build_long_term_prompt, _default_memory_tool_profile
 from .query import _QueryMixin
 
 if TYPE_CHECKING:
-    from shiori_sdk.memory.build import MemoryEvents as EventBus
+    from shiori_sdk.memory.access import MemoryEvents as EventBus
+
+
+@dataclass(frozen=True)
+class _EngineChat:
+    """The chat model implicit extraction calls."""
+
+    model: str
+
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +90,12 @@ class DefaultMemoryEngine(
     def __init__(
         self,
         *,
-        config: MemoryBuildConfig,
+        model: str,
+        light_model: str,
+        embedding_base_url: str,
+        embedding_api_key: str,
+        embedding_model: str,
+        output_dimensionality: int | None,
         default_config: DefaultMemoryConfig,
         workspace: Path,
         provider: LLMProvider,
@@ -94,16 +104,16 @@ class DefaultMemoryEngine(
         storage: MemoryStorage,
         roles: MemoryRoles,
         skills: Callable[[], list[str]],
-        resources: BuildResources,
+        register: Callable[[object, Dispose], None],
         event_publisher: "EventBus | None" = None,
     ) -> None:
-        self._config = config
+        self._config = _EngineChat(model)
         self._default_config = default_config
         self._workspace = workspace
         self._roles = roles
         self._provider = provider
         self._light_provider = light_provider or provider
-        self._light_model = config.light_model or config.model
+        self._light_model = light_model or model
         self._v2_store: MemoryStore2 | None = None
         self._embedder: Embedder | None = None
         self._memorizer: Memorizer | None = None
@@ -116,22 +126,21 @@ class DefaultMemoryEngine(
             workspace=workspace,
             default_config=default_config,
         )
-        embedding = config.embedding
         retrieval = default_config.retrieval
         self._v2_store = MemoryStore2(
             db_path,
-            vec_dim=embedding.output_dimensionality or VEC_DIM,
+            vec_dim=output_dimensionality or VEC_DIM,
             open_database=storage.open_database,
         )
-        resources.register(self._v2_store, self._v2_store.close)
+        register(self._v2_store, self._v2_store.close)
         self._embedder = Embedder(
-            base_url=embedding.base_url,
-            api_key=embedding.api_key,
-            model=embedding.model,
-            output_dimensionality=embedding.output_dimensionality,
+            base_url=embedding_base_url,
+            api_key=embedding_api_key,
+            model=embedding_model,
+            output_dimensionality=output_dimensionality,
             requester=requester,
         )
-        resources.register(self._embedder, self._embedder.aclose)
+        register(self._embedder, self._embedder.aclose)
         self._memorizer = Memorizer(self._v2_store, self._embedder)
         self._retriever = Retriever(
             self._v2_store,
@@ -167,21 +176,6 @@ class DefaultMemoryEngine(
             implicit_memory_handler=self._extract_and_save_post_response,
         )
         self._wire_memory2_events()
-
-    @classmethod
-    def ensure_workspace_storage(
-        cls,
-        *,
-        default_config: DefaultMemoryConfig,
-        workspace: Path,
-        storage: MemoryStorage,
-    ) -> None:
-        db_path = resolve_memory_db_path(
-            workspace=workspace,
-            default_config=default_config,
-        )
-        store = MemoryStore2(db_path, open_database=storage.open_database)
-        store.close()
 
     def _wire_memory2_events(self) -> None:
         if self._event_bus is None:

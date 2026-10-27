@@ -8,10 +8,10 @@ attachments, command replies and recorded citation IDs. They never name a
 phase, slot or hook, so the event implementation must pass them unchanged.
 
 The file also carries the core-only smoke test of §5.3: ``test_core_only_turn``
-runs the same host with no plugin generation bound, and the core alone must
-reply (including a multi-message finish_reply) and leave no citation or
-protocol marker behind. Like the scenarios, it is a host contract every CI run
-keeps.
+runs the same host with no plugin generation bound, so there is no
+``MEMORY_ENGINE``. The core alone must still reply (including a multi-message
+finish_reply) and leave no citation or protocol marker behind. Like the
+scenarios, it is a host contract every CI run keeps.
 
 Allowed edits during P3: the assembly in ``golden_host`` (P3-4 added the
 core-only mode, ``plugin_root=None``) and ``observe_steps`` (the wiring itself
@@ -34,6 +34,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from agent.context import ContextBuilder
 from agent.lifecycle.facade import TurnLifecycle
 from agent.looping.core import AgentLoop
 from agent.looping.ports import (
@@ -45,6 +46,7 @@ from agent.looping.ports import (
 from agent.plugin_host import PluginGenerationSettings, PluginKernel
 from agent.prompting.input_budget import InputBudget
 from agent.provider import LLMProvider, LLMResponse, ToolCall
+from agent.retrieval.default_pipeline import DefaultMemoryRetrievalPipeline
 from agent.retrieval.protocol import (
     MemoryRetrievalPipeline,
     RetrievalRequest,
@@ -315,6 +317,21 @@ async def golden_host(
     provider = ScriptedProvider()
     retrieval = RecordingRetrieval()
     memory_engine = cast(Any, _MemoryEngine())
+    # No plugin generation means no MEMORY_ENGINE. Retrieval sees None; the
+    # context profile is only a stand-in so assembly can build the prompt.
+    if plugin_root is None:
+        memory_services = MemoryServices(current_engine=lambda: None)
+        retrieval_pipeline = DefaultMemoryRetrievalPipeline(memory_services)
+        context = ContextBuilder(
+            workspace,
+            memory_engine,
+            runtime_roles=roles,
+            channel_directory=ChannelDirectory(),
+        )
+    else:
+        memory_services = MemoryServices(current_engine=lambda: memory_engine)
+        retrieval_pipeline = retrieval
+        context = None
     loop = AgentLoop(
         AgentLoopDeps(
             bus=MagicMock(),
@@ -324,8 +341,9 @@ async def golden_host(
             session_manager=manager,
             workspace=workspace,
             event_bus=bus,
-            memory_services=MemoryServices(current_engine=lambda: memory_engine),
-            retrieval_pipeline=retrieval,
+            context=context,
+            memory_services=memory_services,
+            retrieval_pipeline=retrieval_pipeline,
             role_runtime_registry=RoleRuntimeRegistry(
                 RoleRepository(roles), model_resolver=cast(Any, _ModelRuntime())
             ),
@@ -639,10 +657,11 @@ async def test_core_only_turn(
     reply: str,
     stored: list[tuple[str, list[str]]],
 ) -> None:
-    """With every plugin off the core replies and strips every marker (§5.3, D9).
+    """With every plugin off, chat still runs and strips every marker (§5.3, D9).
 
-    The citation IDs are still recorded; the emoji and protocol tags no plugin
-    consumed are removed, from each finish_reply message.
+    There is no ``MEMORY_ENGINE``. The citation IDs are still recorded; the
+    emoji and protocol tags no plugin consumed are removed, from each
+    finish_reply message.
     """
     async with golden_host(tmp_path, None, natural_chat=natural_chat) as host:
         host.provider.script = [answer]

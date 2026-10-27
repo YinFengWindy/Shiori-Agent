@@ -285,39 +285,32 @@ host-resource checks. Existing renderer and Windows process lifecycle jobs remai
 ## Memory engines
 
 `shiori_sdk.memory.engine` owns memory requests, results, scopes, tool profiles and
-`MemoryEngine`. `memory.events` and `memory.committed` own shared ingestion,
-consolidation and committed-turn values; implementations and SQLite stay outside SDK.
+`MemoryEngine`. `shiori_sdk.core.memory` owns the `MEMORY_ENGINE` socket plugins
+provide and consumers `get` (`None` means no retrieval; chat still runs).
+`memory.access` holds `MemoryRoles`, `MemoryStorage` and `MemoryEvents`.
+`memory.events` and `memory.committed` own shared ingestion, consolidation and
+committed-turn values; implementations and SQLite stay outside SDK.
 Pure semantic pagination/filter declarations live in `memory.requests`; each engine
 owns its status vocabulary and removes private vector/hash fields from responses.
+`shiori_sdk.core.models` owns `MAIN_PROVIDER` and `MAIN_MODEL`, the generation's
+main chat pair. A providing plugin `require`s them.
 
-A memory package exposes `MemoryPlugin.build(MemoryPluginBuildDeps)`,
-`ensure_workspace_storage(...)` and `validate_transition(...)` from its
-`backend/memory_plugin.py`. Build inputs contain resolved `MemoryBuildConfig`
-(model selection and embedding credentials), a `ModelProvider`, bounded HTTP
-requester, typed queued events, a skill-name callback and narrow role/storage ports.
-No full host Config, RoleStore, provider implementation or Markdown service crosses
-this boundary. The storage port retains host migration receipts, atomic publication
-and live-database leases. Compatibility failures use
-`MemoryStorageIncompatibleError.to_details()` for the settings recovery hint.
-
-Construction must register every allocation with `deps.resources.register(value,
-cleanup)` before allocating the next resource. Call `transfer()` only after the
-engine is complete and return its records in `MemoryPluginRuntime.resources`;
-this is the only ownership handoff, and the runtime has no separate list of
-closeable objects. Memory databases are opened only through
-`deps.storage.open_database(path)` so the host's live-database lease applies.
-The caller retains an outer construction cleanup scope until all host assembly
-succeeds, then consumes those exact callbacks at shutdown (including opaque values
-with no close method). Returned callbacks run once; cleanup continues in reverse
-order if one callback fails. A direct build caller supplies and owns that scope.
+A providing plugin constructs the engine in `setup` from its own config and
+`ctx.provide(MEMORY_ENGINE, engine)`. Embedding credentials come from that plugin
+config. Register each database and embedder with `ctx.effect` before the next
+allocation; the plugin scope closes them. Databases are opened only through
+`ctx.memory.storage.open_database(path)` so the host's live-database lease applies.
+`MemoryCapability.skill_names()` supplies procedure-tagger names.
+`MemoryPluginContext` no longer injects an engine.
 
 Setup plugins declaring `memory` and `rpc` use `MemoryPluginContext`: shared
-Markdown reads, role existence/permissions, storage and current engine are injected,
-while RPC registration remains plugin-owned. A turn's retrieval arrives as
+Markdown reads, role existence/permissions and storage are injected, while RPC
+registration remains plugin-owned. A turn's retrieval arrives as
 `shiori_sdk.core.conversation.TurnStarting` and tool results as
 `shiori_sdk.core.tools.ToolCalled`. Standalone tests
-can use `FakeMemoryPluginContext`, `FakeMemoryRoles`, `FakeMemoryStorage` and
-`FakeBuildResources`; real migration and runtime assembly remain host integration tests.
+can use `FakeMemoryPluginContext`, `FakeMemoryRoles` and `FakeMemoryStorage`;
+provide `MEMORY_ENGINE` on the test kernel when the test has an engine.
+Real runtime assembly remains a host integration test.
 
 
 ## Tool policies, commands and observation

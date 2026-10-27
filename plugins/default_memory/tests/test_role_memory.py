@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
-from typing import cast
+from typing import Any, cast
 
 import pytest
 from shiori_sdk.rpc import Concurrency
@@ -47,8 +47,8 @@ async def test_semantic_rpc_filters_role_status_and_page_and_rejects_cross_role_
             list_role_filter_values=store.list_role_filter_values,
             get_item_for_admin=store.get_item_for_admin,
         )
-        ctx = FakeMemoryPluginContext(workspace, roles=roles, engine=engine)
-        register_role_semantic_memory(ctx)
+        ctx = FakeMemoryPluginContext(workspace, roles=roles)
+        register_role_semantic_memory(ctx, cast(Any, engine))
         list_method = "roles.memory.semantic.list"
         detail_method = "roles.memory.semantic.detail"
         assert ctx.rpc.concurrency[list_method] is Concurrency.READ_ONLY

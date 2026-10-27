@@ -1,10 +1,13 @@
 """Undo command business outcomes through SDK session and memory ports."""
 
+from typing import Any, cast
+
 import pytest
 from plugins.plugin_undo.backend.plugin import PluginUndo, setup
 from shiori_sdk.commands import CommandInput, CommandRegistry
 from shiori_sdk.core.conversation import COMMANDS
-from shiori_sdk.kernel import Kernel
+from shiori_sdk.core.memory import MEMORY_ENGINE
+from shiori_sdk.kernel import Kernel, PluginSpec
 from shiori_sdk.sessions import UndoSessionResult
 from shiori_sdk.testing.commands import FakeSessionUndo
 from shiori_sdk.testing.extensions import FakeExtensionContext
@@ -13,12 +16,14 @@ from shiori_sdk.testing.extensions import FakeExtensionContext
 def _context(manager, memory=None) -> tuple[FakeExtensionContext, CommandRegistry]:
     kernel, commands = Kernel(), CommandRegistry()
     kernel.provide(COMMANDS, commands)
+    if memory is not None:
+        kernel.provide(MEMORY_ENGINE, cast(Any, memory))
     ctx = FakeExtensionContext(
         "plugin_undo",
         session_manager=manager,
-        memory_engine=memory,
         kernel=kernel,
         inject=("commands",),
+        optional_inject=("memory_engine",),
     )
     return ctx, commands
 
@@ -109,3 +114,66 @@ async def test_setup_and_unload_register_one_command():
     assert commands.menu() == [("undo", "撤销上一轮对话")]
     await ctx.aclose()
     assert commands.menu() == [] and commands.handler("/undo") is None
+
+
+@pytest.mark.asyncio
+async def test_undo_reads_the_engine_again_after_reload():
+    """Each undo calls get once; reload replaces the engine the next undo sees."""
+    kernel = Kernel()
+    commands = CommandRegistry()
+    kernel.provide(COMMANDS, commands)
+    generation = {"n": 1}
+
+    class _GenerationEngine(_MemoryEngine):
+        def __init__(self, generation_id: int) -> None:
+            super().__init__()
+            self.generation_id = generation_id
+
+        def undo_by_message_sources(self, message_ids, *, dry_run=False):
+            self.calls.append(
+                {
+                    "generation": self.generation_id,
+                    "dry_run": dry_run,
+                    "message_ids": list(message_ids),
+                }
+            )
+            return {
+                "affected_ids": ["mem1"],
+                "restored_ids": [],
+                "rollback_source_ids": ["cli:1:0"],
+            }
+
+    engines: list[_GenerationEngine] = []
+
+    async def provide_engine(ctx) -> None:
+        engine = _GenerationEngine(generation["n"])
+        engines.append(engine)
+        ctx.provide(MEMORY_ENGINE, cast(Any, engine))
+
+    await kernel.start(
+        [PluginSpec("memory", provide_engine, provides=("memory_engine",))]
+    )
+    manager = FakeSessionUndo(
+        UndoSessionResult(["cli:1:0"], "cli:1:0", "cli:1:1", 0, 0, 0)
+    )
+    ctx = FakeExtensionContext(
+        "plugin_undo",
+        session_manager=manager,
+        kernel=kernel,
+        inject=("commands",),
+        optional_inject=("memory_engine",),
+    )
+    await setup(ctx)
+    handler = commands.handler("/undo")
+    assert handler is not None
+    await handler(CommandInput("/undo", "cli:1"))
+    generation["n"] = 2
+    await kernel.reload("memory")
+    await handler(CommandInput("/undo", "cli:1"))
+    assert [call["generation"] for engine in engines for call in engine.calls] == [
+        1,
+        1,
+        2,
+        2,
+    ]
+    await ctx.aclose()

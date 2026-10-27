@@ -1,11 +1,8 @@
 """Small memory capability fakes; none imports or constructs a host service."""
 
-import inspect
 import sqlite3
-from collections.abc import Callable
 from pathlib import Path
 
-from shiori_sdk.memory.build import BuildResource
 from shiori_sdk.storage import plugin_data_dir
 
 
@@ -49,29 +46,3 @@ class FakeMemoryStorage:
 
     def open_database(self, path: Path) -> sqlite3.Connection:
         return sqlite3.connect(path, check_same_thread=False)
-
-
-class FakeBuildResources:
-    """Records explicit registration/transfer and permits deterministic cleanup."""
-
-    def __init__(self):
-        self.resources: list[BuildResource] = []
-        self.transferred = False
-
-    def register(self, resource: object, cleanup: Callable[[], object]) -> None:
-        if self.transferred:
-            raise RuntimeError("resources already transferred")
-        self.resources.append(BuildResource(resource, cleanup))
-
-    def transfer(self) -> list[BuildResource]:
-        if self.transferred:
-            raise RuntimeError("resources already transferred")
-        self.transferred = True
-        return list(self.resources)
-
-    async def aclose(self):
-        for resource in reversed(self.resources):
-            result = resource.cleanup()
-            if inspect.isawaitable(result):
-                await result
-        self.resources.clear()

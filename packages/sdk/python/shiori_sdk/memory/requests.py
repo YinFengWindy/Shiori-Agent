@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from shiori_sdk.memory.build import MemoryRoles
+from shiori_sdk.memory.access import MemoryRoles
 
 
 def require_memory_role(role_store: MemoryRoles, payload: dict[str, Any]) -> str:

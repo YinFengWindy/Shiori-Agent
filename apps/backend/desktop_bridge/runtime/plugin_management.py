@@ -26,6 +26,7 @@ from agent.plugin_host.kernel import (
     PluginKernel,
     plugin_enabled,
 )
+from shiori_sdk.core.memory import MEMORY_ENGINE
 from agent.plugin_host.manifest import PluginManifest
 from bootstrap.app import AppRuntime
 from desktop_bridge.runtime.channel_listing import RuntimeChannelListing
@@ -45,6 +46,21 @@ from desktop_bridge.runtime.apply import (
 )
 
 
+def memory_engine_provider(kernel: PluginKernel | None) -> str | None:
+    """The ACTIVE plugin that currently provides ``MEMORY_ENGINE``, if any.
+
+    A declared ``provides`` entry is not enough: setup failure releases the
+    socket, and ``get`` is then None.
+    """
+    if kernel is None or kernel.kernel.get(MEMORY_ENGINE) is None:
+        return None
+    active = set(kernel.active_plugin_ids)
+    for record in kernel.discover():
+        if record.manifest.id in active and "memory_engine" in record.manifest.provides:
+            return record.manifest.id
+    return None
+
+
 class RuntimePluginManagement:
     """Lists discovered plugins and toggles their enablement via config state."""
 
@@ -54,6 +70,10 @@ class RuntimePluginManagement:
         self.trust = RuntimePluginTrust(app, settings)
         self.packages = RuntimePluginPackages(self, app.workspace)
         self.channels = RuntimeChannelListing(app, self._enabled)
+
+    def memory_provider(self, _payload: dict[str, Any]) -> dict[str, Any]:
+        """``memory.provider``: the plugin id filling ``MEMORY_ENGINE``, or null."""
+        return {"plugin_id": memory_engine_provider(self._plugin_kernel())}
 
     def list(self, _payload: dict[str, Any]) -> dict[str, Any]:
         """Returns every discovered plugin with its enabled flag and runtime state."""

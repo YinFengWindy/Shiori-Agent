@@ -5,80 +5,11 @@ from typing import TYPE_CHECKING
 
 from agent.config_models import Config
 from agent.provider import LLMProvider
-from agent.skills import SkillsLoader
 from core.memory.markdown import build_markdown_memory_runtime
-from core.memory.plugin import DisabledMemoryEngine
-from shiori_sdk.memory.build import MemoryPluginBuildDeps, MemoryPluginRuntime
 from core.memory.runtime import MemoryRuntime
-from core.net.http import SharedHttpResources
-from core.roles import RoleStore
-from shiori_sdk.memory.build import BuildResource
-
-from bootstrap.memory_capabilities import (
-    HostMemoryRoles,
-    HostMemoryStorage,
-    default_memory_enabled,
-    memory_build_config,
-)
-from bootstrap.runtime.construction import MemoryBuildResources
 
 if TYPE_CHECKING:
     from bus.event_bus import EventBus
-
-
-# 统一插件构造入口，运行时与管理工具复用同一套路由。
-def _build_memory_plugin_runtime(
-    *,
-    config: Config,
-    workspace: Path,
-    provider: LLMProvider,
-    light_provider: LLMProvider | None,
-    http_resources: SharedHttpResources,
-    roles: RoleStore,
-    event_publisher: "EventBus | None" = None,
-) -> MemoryPluginRuntime:
-    from bootstrap.wiring import resolve_memory_plugin
-
-    plugin = resolve_memory_plugin("default")
-    return plugin.build(
-        MemoryPluginBuildDeps(
-            config=memory_build_config(config),
-            workspace=workspace,
-            provider=provider,
-            light_provider=light_provider,
-            requester=http_resources.external_default,
-            event_publisher=event_publisher,
-            storage=HostMemoryStorage(),
-            roles=HostMemoryRoles(roles),
-            skills=lambda: [
-                skill["name"]
-                for skill in SkillsLoader(workspace).list_skills(
-                    filter_unavailable=False
-                )
-            ],
-            resources=MemoryBuildResources(),
-        )
-    )
-
-
-def _memory_plugin_enabled(config: Config) -> bool:
-    return default_memory_enabled(config)
-
-
-def ensure_memory_plugin_storage(
-    config: Config,
-    workspace: Path,
-) -> list[tuple[Path, bool]]:
-    if not _memory_plugin_enabled(config):
-        return []
-    from bootstrap.wiring import resolve_memory_plugin
-
-    plugin = resolve_memory_plugin("default")
-    return plugin.ensure_workspace_storage(
-        config=memory_build_config(config),
-        workspace=workspace,
-        storage=HostMemoryStorage(),
-    )
 
 
 def build_memory_runtime(
@@ -86,11 +17,13 @@ def build_memory_runtime(
     workspace: Path,
     provider: LLMProvider,
     light_provider: LLMProvider | None,
-    http_resources: SharedHttpResources,
     event_publisher: "EventBus | None" = None,
-    runtime_roles: RoleStore | None = None,
 ) -> MemoryRuntime:
-    # 1. markdown 是默认记忆层，任何 engine 都共用。
+    """Markdown memory plus a getter later bound to this generation's socket.
+
+    The semantic engine is not built here. ``default_memory`` (or another
+    provider) constructs it during plugin setup and provides ``MEMORY_ENGINE``.
+    """
     markdown = build_markdown_memory_runtime(
         workspace=workspace,
         provider=provider,
@@ -100,29 +33,7 @@ def build_memory_runtime(
         recent_context_provider=light_provider or provider,
         recent_context_model=config.light_model or config.model,
     )
-
-    # 插件登记的资源是唯一移交渠道；回滚由 MemoryBuildResources 在外层装配作用域登记。
-    resources: list[BuildResource] = []
-    if _memory_plugin_enabled(config):
-        plugin_runtime = _build_memory_plugin_runtime(
-            config=config,
-            workspace=workspace,
-            provider=provider,
-            light_provider=light_provider,
-            http_resources=http_resources,
-            roles=runtime_roles if runtime_roles is not None else RoleStore(workspace),
-            event_publisher=event_publisher,
-        )
-        engine = plugin_runtime.engine
-        resources = plugin_runtime.resources
-    else:
-        engine = DisabledMemoryEngine()
-
-    return MemoryRuntime(
-        markdown=markdown,
-        current_engine=lambda: engine,
-        resources=resources,
-    )
+    return MemoryRuntime(markdown=markdown)
 
 
 def _memory_keep_count(window: int) -> int:

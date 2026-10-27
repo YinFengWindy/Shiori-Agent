@@ -1,35 +1,48 @@
 from __future__ import annotations
 
-import inspect
 from collections.abc import Callable
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from shiori_sdk.memory.build import BuildResource
+from shiori_sdk.memory.engine import MemoryEngine, MemoryQuery, MemoryQueryResult
 
 if TYPE_CHECKING:
-    from shiori_sdk.memory.engine import (
-        MemoryEngine,
-        MemoryQuery,
-        MemoryQueryResult,
-    )
     from core.memory.markdown import MarkdownMemoryRuntime
+
+
+class EngineGetter:
+    """Callable bound to this generation's ``MEMORY_ENGINE`` after the kernel exists.
+
+    The agent loop captures the getter before plugins start. ``bind`` replaces
+    what it reads without replacing the callable, so the next use sees the
+    engine this generation actually provides (D25). Unbound, it answers None.
+    """
+
+    def __init__(self) -> None:
+        self._get: Callable[[], MemoryEngine | None] = lambda: None
+
+    def __call__(self) -> MemoryEngine | None:
+        return self._get()
+
+    def bind(self, get: Callable[[], MemoryEngine | None]) -> None:
+        """Read ``get`` on every later call."""
+        self._get = get
 
 
 @dataclass
 class MemoryRuntime:
-    """Markdown memory, the selected engine's getter, and its transferred resources.
+    """Markdown memory and this generation's engine getter.
 
-    ``current_engine`` is the one source every engine consumer reads: callers
+    ``current_engine`` is the one source every engine consumer reads. Callers
     take the getter and call it on each use, never keeping the engine itself
-    (D25). It answers the engine bootstrap built for this generation,
-    ``DisabledMemoryEngine`` when memory is off.
+    (D25). It answers ``kernel.get(MEMORY_ENGINE)`` once bound, and None when
+    this generation has no provider. Engine databases and embedders close with
+    the providing plugin, before this runtime is closed.
     """
 
     markdown: "MarkdownMemoryRuntime"
-    current_engine: Callable[[], "MemoryEngine"]
-    resources: list[BuildResource] = field(default_factory=list)
+    current_engine: EngineGetter = field(default_factory=EngineGetter)
     _session_metadata_var: ContextVar[dict[str, Any] | None] = field(
         default_factory=lambda: ContextVar(
             "memory_runtime_session_metadata",
@@ -75,23 +88,11 @@ class MemoryRuntime:
             dict(session_metadata) if isinstance(session_metadata, dict) else None
         )
 
-    async def query(
-        self,
-        request: "MemoryQuery",
-    ) -> "MemoryQueryResult":
-        return await self.current_engine().query(request)
+    async def query(self, request: MemoryQuery) -> MemoryQueryResult:
+        engine = self.current_engine()
+        if engine is None:
+            return MemoryQueryResult(trace={"mode": "disabled"})
+        return await engine.query(request)
 
     async def aclose(self) -> None:
-        """Runs transferred cleanups in reverse order and re-raises the first error."""
-        first_error: Exception | None = None
-        resources, self.resources = self.resources, []
-        for resource in reversed(resources):
-            try:
-                result = resource.cleanup()
-                if inspect.isawaitable(result):
-                    await result
-            except Exception as exc:
-                if first_error is None:
-                    first_error = exc
-        if first_error is not None:
-            raise first_error
+        """No engine resources live here; the providing plugin already closed them."""

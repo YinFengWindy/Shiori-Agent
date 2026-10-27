@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from shiori_sdk.memory.build import MemoryRoles
+from shiori_sdk.memory.access import MemoryRoles
 from shiori_sdk.memory.engine import MemoryAdminApi
 from shiori_sdk.memory.requests import (
     page_options,
@@ -76,11 +76,10 @@ class DefaultRoleMemoryReader:
         return {"role_id": role_id, "status": "ready", "item": readable_item(item)}
 
 
-def register_role_semantic_memory(ctx: PluginRuntimeContext) -> None:
-    """Register default-engine reads in this plugin's RPC namespace."""
-    engine = ctx.memory.engine
-    if engine is not None and engine.describe().name != "default":
-        engine = None
+def register_role_semantic_memory(
+    ctx: PluginRuntimeContext, engine: MemoryAdminApi
+) -> None:
+    """Register reads of the engine this plugin just constructed."""
     reader = DefaultRoleMemoryReader(ctx.memory.roles, engine)
     ctx.rpc.register(
         "roles.memory.semantic.list", reader.list, concurrency=Concurrency.READ_ONLY

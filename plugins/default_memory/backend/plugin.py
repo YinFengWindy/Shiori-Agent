@@ -11,16 +11,27 @@ from typing import Any, Protocol, cast
 
 from shiori_sdk.core.conversation import TurnStarting
 from shiori_sdk.core.tools import ToolCalled
+from shiori_sdk.extensions import ConfigValues
+from shiori_sdk.http import HttpClient
 from shiori_sdk.memory.context import MemoryPluginContext
+from shiori_sdk.models import ChatProvider
 from shiori_sdk.storage import plugin_data_dir
 from shiori_sdk.tools import ToolsCapability
 
 
 class _DefaultMemorySetup(MemoryPluginContext, Protocol):
-    """记忆插件 setup 上下文，外加本插件声明的 tools。"""
+    """记忆插件 setup 上下文：工具、配置、主模型与轻量模型。"""
 
     @property
     def tools(self) -> ToolsCapability: ...
+    @property
+    def config(self) -> ConfigValues: ...
+    @property
+    def http(self) -> HttpClient: ...
+    @property
+    def light_provider(self) -> ChatProvider: ...
+    @property
+    def light_model(self) -> str: ...
 
 
 _ITEM_LINE_RE = re.compile(r"^-\s+\[([^\]]+)\]\s*(.*)$")
@@ -134,30 +145,30 @@ class _DefaultMemoryRecorder:
 
 
 async def setup(ctx: _DefaultMemorySetup) -> None:
-    """装配 default_memory：按引擎 tool_profile 注册记忆工具，并记录检索与召回。
+    """构造默认记忆引擎并提供 ``MEMORY_ENGINE``，再注册工具与检索记录。
 
-    记忆引擎本体不在此文件，由 ``shiori_sdk.memory.build`` 装配（见
-    ``memory_plugin.py``）。工具经 ``ctx.tools`` 注册；引擎为空则不注册。
-    记录是否激活只在装配时判定一次。
+    向量凭据只读插件配置。缺凭据或向量空间不一致时这里抛出，内核把插件标为
+    FAILED，插座保持为空，对话仍可继续。成功则本插件就是这代的引擎，检索记录开启。
     """
+    from shiori_sdk.core.memory import MEMORY_ENGINE
     from shiori_sdk.rpc import Concurrency
 
+    from .construct import construct_default_engine
     from .role_memory import register_role_semantic_memory
     from .tools import register_memory_meta_tools
 
-    engine = ctx.memory.engine
-    if engine is not None:
-        register_memory_meta_tools(ctx.tools, engine)
-
+    engine = construct_default_engine(ctx)
+    ctx.provide(MEMORY_ENGINE, engine)
+    register_memory_meta_tools(ctx.tools, engine)
     ctx.rpc.register(
         "roles.memory.documents",
         ctx.memory.read_documents,
         concurrency=Concurrency.READ_ONLY,
     )
-    register_role_semantic_memory(ctx)
+    register_role_semantic_memory(ctx, engine)
 
     recorder = _DefaultMemoryRecorder(
-        active=_is_memory_engine(ctx.memory.engine, "default"),
+        active=True,
         data_path=plugin_data_dir(ctx.memory.workspace, "default_memory")
         / "recall_inspector.jsonl",
     )
@@ -168,15 +179,6 @@ async def setup(ctx: _DefaultMemorySetup) -> None:
 def _turn_id(session_key: str, timestamp: str, content: str) -> str:
     raw = f"{session_key}\n{timestamp}\n{content}"
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
-
-
-def _is_memory_engine(engine: object, name: str) -> bool:
-    if engine is None:
-        return True
-    describe = getattr(engine, "describe", None)
-    if not callable(describe):
-        return False
-    return str(describe().name) == name
 
 
 def _now_iso() -> str:
