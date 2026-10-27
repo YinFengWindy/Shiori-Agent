@@ -164,8 +164,10 @@ consolidates these additions and the subsequent #847 breaking migration.
   place and can be retried), then the session with `expected_turn`. An empty
   memory socket rolls back the session only. The two calls are not one
   transaction: a session step that fails or finds a changed turn after memory
-  rolled back is reported to the user as is, not undone, and the reply gives
-  no retry advice (retrying would undo the newer turn).
+  rolled back is reported to the user as is, not undone. A failed session
+  step may be retried (the session is unchanged and replaying the memory
+  rollback is idempotent); a changed turn gives no retry advice, since
+  retrying would undo the newer turn.
 
 - **Optional process-tree ownership (issue #934, PR #936).** `Processes.spawn()` accepts
   `own_process_tree: bool = True`. Existing callers retain the owned-process
