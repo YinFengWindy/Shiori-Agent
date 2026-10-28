@@ -6,7 +6,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
 
-from shiori_sdk.kernel import Context, KernelError, Key, Scope, Veto
+from shiori_sdk.kernel import Context, Key, Scope, Veto
 from shiori_sdk.kernel.events import OnHandler, WatchHandler
 from shiori_sdk.runtime import Dispose, HostServiceUnavailable
 from agent.plugin_host.manifest import PluginManifest
@@ -75,20 +75,7 @@ class PluginRuntimeContext:
         self._publish_api(api)
 
     def provide[T](self, key: Key[T], impl: T) -> None:
-        """Publishes ``impl`` under a key declared in manifest ``provides``.
-
-        ``host.`` names belong to the host. The check is here, before the
-        kernel, so a plugin cannot register one even when the name was
-        declared. A non-``api: 4`` package never reaches ``setup``.
-        """
-        if key.name.startswith("host."):
-            raise KernelError(
-                "reserved_key",
-                "setup",
-                "provides",
-                f"插件 {self.plugin_id} 不能提供宿主保留的服务 {key.name}",
-                [self.plugin_id],
-            )
+        """Publishes ``impl`` under a key declared in manifest ``provides``."""
         self._kernel_context.provide(key, impl)
 
     def require[T](self, key: Key[T]) -> T:

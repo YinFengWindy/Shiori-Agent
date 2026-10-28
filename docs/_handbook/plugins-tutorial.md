@@ -39,9 +39,9 @@ supports_hot_unload: true
 
 `inject` 列出要用的服务名，`setup` 里用 `ctx.require(KEY)` 取得；可有可无的服务写进 `optional_inject`，用 `ctx.get(KEY)` 取得，宿主没有提供时返回 `None`。Key 定义在 `shiori_sdk.core.services`（见下文[服务与副作用](#服务与副作用)）。`require` 未声明的 Key 抛内核的 `undeclared_key`；`inject` 里的服务宿主没有提供方时，计划阶段即为 BLOCKED，不会进入 `setup`；`kv` 在没有 workspace 时，构造上下文会抛 `HostServiceUnavailable`。
 
-`api: 2` 的外部包仍必须写 `capabilities` 列表，但其中的名字不授予任何服务，`ctx` 上也没有同名属性；服务同样写进 `inject`。新包写 `capabilities: []` 即可；`capabilities` 非空而 `inject`、`optional_inject` 都为空的 `api: 2` 包会被标为 BLOCKED（诊断码 `capabilities_retired`），`setup` 不会运行。`config_model` 可以是入口中的类名，也可以是相对入口包的 `模块:类名`。模型必须继承 Pydantic `BaseModel`。
+`config_model` 可以是入口中的类名，也可以是相对入口包的 `模块:类名`。模型必须继承 Pydantic `BaseModel`。
 
-`display_name` 是设置 › 插件里显示的名称（省略时显示 ID）。可选的 `category` 决定插件在列表中的分组：`feature`（功能）、`channel`（渠道）、`system`（系统组件，默认折叠，用于宿主内部护栏、诊断命令这类用户不需要日常操作的插件）。省略时，声明了渠道（`api: 4` 的 `contributes.channels`，或 `api: 2` 的 `capabilities` 含 `channels`）的插件归入渠道，其余归入功能；`system` 只能显式声明。取值不在这三者之内时 manifest 被拒绝。Package Contract v1 的外部包自 Runtime API 3.1.1（#678）起也接受 `display_name` 与 `category`（含 `system`），校验规则相同；更早的宿主把它们当未知字段拒绝。
+`display_name` 是设置 › 插件里显示的名称（省略时显示 ID）。可选的 `category` 决定插件在列表中的分组：`feature`（功能）、`channel`（渠道）、`system`（系统组件，默认折叠，用于宿主内部护栏、诊断命令这类用户不需要日常操作的插件）。省略时，声明了渠道（`contributes.channels` 非空）的插件归入渠道，其余归入功能；`system` 只能显式声明。取值不在这三者之内时 manifest 被拒绝。Package Contract v1 的外部包自 Runtime API 3.1.1（#678）起也接受 `display_name` 与 `category`（含 `system`），校验规则相同；更早的宿主把它们当未知字段拒绝。
 
 可选的 `default_enabled`（严格布尔值，省略为 `true`）决定 `[plugins.<id>]` 没有显式 `enabled` 时插件是否启用；显式的 `enabled` 始终优先，设置 › 插件的开关写的就是显式值。目前 `browser_use`、`computer_use`、`novelai`、`gpt_sovits_tts`、`grok_bot`、`herdr`、`sensevoice_asr` 声明为 `false`，没有显式开关时默认停用。宿主加载配置时不改写这份开关。Package Contract v1 的外部包自 Runtime API 3.1.1 起也接受 `default_enabled`。
 
@@ -141,7 +141,7 @@ contributes:
           prefix: 'c2c:'               # 可选，拼在号码前组成存储的 chat_id
 ```
 
-`api: 2` 的外部包把同样的条目写在顶层 `channels`，并且 `capabilities` 必须含 `channels`（解析器仍按这条校验）；服务照样写进 `inject`。
+外部包同样写在 `contributes.channels`。
 
 - 渠道名是会话线程和消息引用的数据键，发布后不要改名。账号 ID 采用 `<插件 id>:<平台账号>`；渠道名必须是小写标识（`[a-z][a-z0-9_-]{0,63}`），`desktop` 由宿主保留。
 - 声明是静态的：插件停用、未信任或还没有账号时，桌面端也能经 `channels.list` 列出这个渠道。账号插件应始终贡献渠道，并从插件自己的存储恢复账号；凭据缺失只影响对应账号的连接状态。
@@ -176,7 +176,6 @@ class QQBotChannel:
 
 - 钩子按渠道名查询当前已发布的连接；换代中正在排空的旧连接仍按它自己的钩子回答。
 - 开了流式事件就要订阅 `StreamDeltaReady` 并自己节流，最终回复仍经出站消息送达。
-- 用到这些钩子的包要声明 `runtime_api: ">=3.0.0 <4.0.0"`；旧宿主会忽略钩子。
 
 ## 回合事件与依赖
 
@@ -243,7 +242,7 @@ Runtime API **2.4.0** 起，绑定的组件（`navPage` 及其侧栏、自定义
 
 `app.background` 在隐藏的 plugin-host renderer 运行，入口是 `background/index.ts` 的 `{ pluginId, setup(ctx) }`。桌宠已通过它拥有控制器、surface、托盘项与订阅。它的 `BackgroundCtx` 不是 Python 上下文：通过自己的 `effect`、`events`、`hostEvents`、`rpc`、`surfaces`、`tray`、`store`、`assets` 管理资源，用 `reportFailure` 把已处理但需要人看到的失败写进桌面诊断日志（2.11）；3.1.1 起还有作用域内的原生资源 `native`（录音、播放、全局快捷键）与 `chat`（为角色发起、取消回合）。使用 `surface/` 入口渲染独立桌面窗口。
 
-Runtime API **2.1.0** 为 UI、surface 和后台注入同一套通信接口。新包使用这些接口时声明 `runtime_api: ">=3.0.0 <4.0.0"`。它们沿用 manifest 的 `dependencies` / `optional_dependencies`；不会建立另一套依赖注册表，也不会隐式启用提供方。
+Runtime API **2.1.0** 为 UI、surface 和后台注入同一套通信接口。它们沿用 manifest 的 `dependencies` / `optional_dependencies`；不会建立另一套依赖注册表，也不会隐式启用提供方。
 
 ```ts
 // UI / surface：自身后端、事件、后台都只传局部名称。
@@ -309,8 +308,7 @@ Story 播放偏好保留为设备 renderer 的 `localStorage["shiori.story-prefe
 
 ## 统一 SDK 3.0
 
-新插件前端使用 `@yinfengwindy/shiori-sdk`，后端契约使用 `shiori_sdk`，并声明
-`runtime_api: ">=3.0.0 <4.0.0"`。SDK 主文档位于
+新插件前端使用 `@yinfengwindy/shiori-sdk`，后端契约使用 `shiori_sdk`。SDK 主文档位于
 [packages/sdk/README.md](../../packages/sdk/README.md)，包括 wheel/tarball 构建、
 公开协议和 `shiori-sdk[testing]` 的无宿主测试入口。
 全部 22 个内置插件，包括四个外部渠道、桌宠和两个语音 provider，均使用 SDK 契约及 `shiori-sdk[testing]` 独立测试支持。

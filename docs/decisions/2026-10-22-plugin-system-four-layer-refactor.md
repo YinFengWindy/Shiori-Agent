@@ -124,6 +124,8 @@ contributes:                                 # 可选，只放静态元数据（
 
 删除的字段：`capabilities`、`runtime_api`、`package_contract`、`renderer` 三种 kind、`supports_hot_unload`（**保留字段**，默认 true；声明了 `contributes.channels` 的插件由内核判定为不可代内重载，TTS/ASR 默认可热重载，D14）、`host_dependencies`/`peer_dependencies`（依赖交给 pyproject/package.json）。
 
+renderer 字段在 api:4 中临时保留，激活门与 build-plugin.mjs 仍读取，P7 统一 frontend 入口时删除（P4-5 按 P7 范围处理）；`peer_dependencies` 只用于校验 renderer 的 React 版本，随 renderer 一起保留到 P7。其余字段在 P4-5 已从解析器和 schema 删除。
+
 ## 2. 盘点
 
 ### 2.1 内置插件（24 个目录）

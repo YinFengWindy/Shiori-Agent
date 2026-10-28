@@ -1,21 +1,16 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/YinFengWindy/Shiori-Agent/blob/main/packages/sdk/manifest.schema.json",
-  "title": "Shiori plugin manifest (api: 2 or 4)",
-  "description": "plugins/<id>/manifest.yaml 的现行格式。字段与取值以 apps/backend/agent/plugin_host/manifest.py 和 package_contract.py 为准。安装与启动只接受 api: 4；api: 2 仍能被解析，以便已安装的旧包显示为 BLOCKED。schema 只描述字段形状；跨字段规则（渠道名与会话类型不重复、前缀互不包含、dependencies 与 optional_dependencies、inject 与 optional_inject 不重叠、入口文件存在且可解析、contributes.channels 要求 inject 含 channels）仍由解析代码判定。",
+  "title": "Shiori plugin manifest (api: 4)",
+  "description": "plugins/<id>/manifest.yaml 的现行格式。字段与取值以 apps/backend/agent/plugin_host/manifest.py 和 package_contract.py 为准。只接受 api: 4：其他值安装时被拒绝，已安装的在启动时 BLOCKED（unsupported_api）。renderer 与 peer_dependencies 在 api: 4 中临时保留，P7 统一 frontend 入口时删除。schema 只描述字段形状；跨字段规则（渠道名与会话类型不重复、前缀互不包含、dependencies 与 optional_dependencies、inject 与 optional_inject 不重叠、入口文件存在且可解析、contributes.channels 要求 inject 含 channels）仍由解析代码判定。",
   "type": "object",
   "additionalProperties": false,
   "required": ["api"],
   "properties": {
     "api": {
-      "description": "插件 API 版本。安装与启动只接受 4（inject / contributes / frontend）。2 仍能解析，已安装的旧包启动时 BLOCKED。",
+      "description": "插件 API 版本，只接受整数 4。",
       "type": "integer",
-      "enum": [2, 4]
-    },
-    "package_contract": {
-      "description": "旧外部包字段。api: 4 不接受；安装器不再按它放行。",
-      "type": "integer",
-      "const": 1
+      "const": 4
     },
     "id": {
       "description": "插件 ID，与插件目录名一致。",
@@ -40,10 +35,6 @@
     },
     "default_enabled": { "type": "boolean", "default": true },
     "supports_hot_unload": { "type": "boolean", "default": true },
-    "runtime_api": {
-      "description": "兼容的 Runtime API 版本范围，例如 \">=3.1.0 <4.0.0\"。",
-      "$ref": "#/$defs/nonEmptyString"
-    },
     "entry": {
       "description": "后端入口，相对插件目录。",
       "type": "string",
@@ -52,16 +43,6 @@
     "config_model": {
       "description": "配置模型，形如 \"模块:类名\"，模块相对 backend/。",
       "type": "string"
-    },
-    "capabilities": {
-      "description": "api: 2 遗留字段。不再授予服务。非 api: 4 的包在安装时被拒绝，已安装的在启动时 BLOCKED。",
-      "type": "array",
-      "items": { "type": "string" }
-    },
-    "channels": {
-      "description": "静态渠道声明；非空时 capabilities 必须含 channels。",
-      "type": "array",
-      "items": { "$ref": "#/$defs/channel" }
     },
     "dependencies": { "$ref": "#/$defs/pluginIds" },
     "optional_dependencies": { "$ref": "#/$defs/pluginIds" },
@@ -78,7 +59,7 @@
       "$ref": "#/$defs/keyNames"
     },
     "contributes": {
-      "description": "静态贡献。api: 4 的渠道声明写在 contributes.channels，并且 inject 含 channels。",
+      "description": "静态贡献。渠道声明写在 contributes.channels，并且 inject 含 channels。",
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -98,7 +79,7 @@
       }
     },
     "renderer": {
-      "description": "外部包的已编译前端入口（renderer_contract.py）。",
+      "description": "外部包的已编译前端入口（renderer_contract.py）。api: 4 中临时保留，激活门与 build-plugin.mjs 仍读取，P7 统一 frontend 入口时删除。",
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -112,17 +93,6 @@
       "type": "array",
       "items": { "$ref": "#/$defs/nonEmptyString" }
     },
-    "host_dependencies": {
-      "description": "外部包要求宿主提供的 Python 发行包。",
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "python": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/nonEmptyString" }
-        }
-      }
-    },
     "peer_dependencies": {
       "description": "声明 renderer 的外部包必须同时给出 react 与 react-dom 的版本范围。",
       "type": "object",
@@ -134,43 +104,6 @@
     }
   },
   "allOf": [
-    {
-      "if": {
-        "required": ["channels"],
-        "properties": { "channels": { "minItems": 1 } }
-      },
-      "then": {
-        "properties": { "capabilities": { "contains": { "const": "channels" } } }
-      }
-    },
-    {
-      "if": { "required": ["package_contract"] },
-      "then": { "required": ["id", "version", "runtime_api", "entry"] }
-    },
-    {
-      "if": {
-        "properties": { "api": { "const": 2 } },
-        "required": ["api"]
-      },
-      "then": {
-        "required": ["capabilities"],
-        "properties": { "contributes": false }
-      }
-    },
-    {
-      "if": {
-        "properties": { "api": { "const": 4 } },
-        "required": ["api"]
-      },
-      "then": {
-        "properties": {
-          "capabilities": false,
-          "runtime_api": false,
-          "package_contract": false,
-          "channels": false
-        }
-      }
-    },
     {
       "if": {
         "required": ["contributes"],

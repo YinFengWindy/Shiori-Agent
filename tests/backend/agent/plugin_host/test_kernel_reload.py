@@ -198,23 +198,22 @@ def probe(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
     return module
 
 
+_CONSUMER_INJECT = "dependencies, runtime, tools"
+_RELAY_CHANNEL = (
+    "contributes:\n  channels:\n    - {name: relay, label: Relay, chat_types:"
+    " [{type: private, label: Private, chat_id_label: ID}]}\n"
+)
+
+
 async def _kernel(
     tmp_path: Path,
     *,
-    consumer_capabilities: str = "",
+    consumer_inject: str = _CONSUMER_INJECT,
     consumer_manifest: str = "",
     configs: dict[str, dict] | None = None,
 ) -> tuple[
     PluginKernel, PluginGenerationSettings, ToolRegistry, PluginRpcRegistry[Any]
 ]:
-    extra = consumer_manifest
-    inject = "inject: [dependencies, runtime, tools]\n"
-    if consumer_capabilities == "channels" or extra.startswith("channels:"):
-        inject = "inject: [dependencies, runtime, tools, channels]\n"
-        if extra.startswith("channels:"):
-            extra = "contributes:\n" + "".join(
-                f"  {line}\n" for line in extra.splitlines()
-            )
     _write(
         tmp_path,
         "provider",
@@ -224,7 +223,7 @@ async def _kernel(
     _write(
         tmp_path,
         "consumer",
-        inject + f"dependencies: [provider]\n{extra}",
+        f"inject: [{consumer_inject}]\ndependencies: [provider]\n{consumer_manifest}",
         _CONSUMER,
     )
     _write(
@@ -618,11 +617,7 @@ async def test_failed_reload_restores_the_old_config_instance(probe, tmp_path):
 @pytest.mark.parametrize(
     ("consumer_manifest", "reason"),
     [
-        (
-            "channels:\n  - {name: relay, label: Relay, chat_types:"
-            " [{type: private, label: Private, chat_id_label: ID}]}\n",
-            "channels",
-        ),
+        (_RELAY_CHANNEL, "channels"),
         ("supports_hot_unload: false\n", "hot_unload"),
     ],
 )
@@ -631,7 +626,11 @@ async def test_reload_refuses_generation_only_closures_before_any_change(
 ):
     kernel, settings, _, _ = await _kernel(
         tmp_path,
-        consumer_capabilities="channels" if reason == "channels" else "",
+        consumer_inject=(
+            f"{_CONSUMER_INJECT}, channels"
+            if reason == "channels"
+            else _CONSUMER_INJECT
+        ),
         consumer_manifest=consumer_manifest,
     )
     probe.events.clear()
@@ -920,11 +919,8 @@ async def test_toggle_refuses_closures_only_a_generation_swap_can_change(
 ):
     kernel, settings, _, _ = await _kernel(
         tmp_path,
-        consumer_capabilities="channels",
-        consumer_manifest=(
-            "channels:\n  - {name: relay, label: Relay, chat_types:"
-            " [{type: private, label: Private, chat_id_label: ID}]}\n"
-        ),
+        consumer_inject=f"{_CONSUMER_INJECT}, channels",
+        consumer_manifest=_RELAY_CHANNEL,
     )
     probe.events.clear()
 

@@ -8,7 +8,7 @@ it("preserves candidate identity and structured admission diagnostics from the b
     id: "1", type: "response", method, error: null, payload: { plugins: [{
       id: "demo", candidate_id: "workspace/demo", source: "workspace", directory: "C:/workspace/plugins/demo",
       name: "demo", version: "1.0.0", description: "", enabled: true, can_toggle: false,
-      state: "CONFLICT", error: "conflict", diagnostic, has_config_schema: false, supports_hot_unload: true, capabilities: [], channels: [],
+      state: "CONFLICT", error: "conflict", diagnostic, has_config_schema: false, supports_hot_unload: true, channels: [],
     }] },
   }));
   const [plugin] = await client.listPlugins();
@@ -28,7 +28,7 @@ it("surfaces pendingRendererKinds verbatim when the backend reports them (#262 A
     id: "1", type: "response", method, error: null, payload: { plugins: [{
       id: "demo", candidate_id: "workspace/demo", source: "workspace", directory: "C:/workspace/plugins/demo",
       name: "demo", version: "1.0.0", description: "", enabled: true, can_toggle: true,
-      state: "ACTIVE", error: "", diagnostic: null, has_config_schema: false, supports_hot_unload: true, capabilities: [], channels: [],
+      state: "ACTIVE", error: "", diagnostic: null, has_config_schema: false, supports_hot_unload: true, channels: [],
       pending_renderer_kinds: ["background", "ui"],
     }] },
   }));
@@ -36,19 +36,17 @@ it("surfaces pendingRendererKinds verbatim when the backend reports them (#262 A
   assert.deepEqual(plugin.pendingRendererKinds, ["background", "ui"]);
 });
 
-it("maps declared capabilities and channel declarations for plugin grouping (#363)", async () => {
+it("maps injected services and channel declarations for plugin grouping (#363)", async () => {
   const client = createPluginBridgeClient(async ({ method }) => ({
     id: "1", type: "response", method, error: null, payload: { plugins: [{
       id: "qqbot", candidate_id: "builtin/qqbot", source: "builtin", directory: "plugins/qqbot",
       name: "QQBot", version: "1.0.0", description: "", enabled: true, can_toggle: true,
       state: "ACTIVE", error: "", diagnostic: null, has_config_schema: true, supports_hot_unload: true,
-      capabilities: ["channels", "config"],
       inject: ["channels", "accounts", "config"],
       channels: [{ name: "qqbot", label: "QQBot", contact_label: "QQBot 用户 OpenID", chat_types: [{ type: "private", label: "私聊", chat_id_label: "用户 OpenID", chat_id_hint: null, prefix: "c2c:" }] }],
     }] },
   }));
   const [plugin] = await client.listPlugins();
-  assert.deepEqual(plugin.capabilities, ["channels", "config"]);
   assert.deepEqual(plugin.inject, ["channels", "accounts", "config"]);
   assert.deepEqual(plugin.channels, [{
     name: "qqbot", label: "QQBot", contactLabel: "QQBot 用户 OpenID",

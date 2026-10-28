@@ -8,7 +8,6 @@ import pytest
 import pytest_asyncio
 import yaml
 
-from shiori_sdk.runtime import parse_capabilities
 from .context import FakePluginContext
 from .ssl_context import share_httpx_ssl_contexts
 
@@ -39,11 +38,7 @@ def find_plugin_dir(test_path: Path, root: Path) -> Path:
 
 
 def read_plugin_id(plugin_dir: Path) -> str:
-    """The manifest's plugin id, rejecting what the host's manifest parser rejects.
-
-    A non-``api: 4`` manifest must still carry a ``capabilities`` list, as
-    the host requires; the names grant nothing.
-    """
+    """The manifest's plugin id; a manifest that is not a mapping or has no id fails."""
     manifest = plugin_dir / "manifest.yaml"
     raw = yaml.safe_load(manifest.read_text(encoding="utf-8"))
     if not isinstance(raw, dict):
@@ -52,8 +47,6 @@ def read_plugin_id(plugin_dir: Path) -> str:
     plugin_id = values.get("id")
     if not isinstance(plugin_id, str) or not plugin_id:
         raise ValueError(f"manifest 缺少 id: {manifest}")
-    if values.get("api") != 4 or "capabilities" in values:
-        parse_capabilities(values.get("capabilities"), manifest)
     return plugin_id
 
 

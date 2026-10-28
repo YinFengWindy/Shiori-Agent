@@ -83,7 +83,7 @@ async def setup(ctx: PluginRuntimeContext) -> None:
     channels.add(DemoChatChannel(...))
 ```
 
-工作区外部包（Package Contract v1）仍是 `api: 2`：渠道条目写在顶层 `channels`，`capabilities` 必须含 `channels`，服务同样写进 `inject`、用 `ctx.require` 取得；`capabilities` 本身不授予任何服务。
+工作区外部包同样是 `api: 4`，渠道条目写在 `contributes.channels`。不是 `api: 4` 的包无法安装，已安装的在启动时 BLOCKED（`unsupported_api`）。
 
 - 插件 id 建议与渠道名相同。渠道名写进会话线程，账号 ID 为 `<插件 id>:<平台账号>`；**发布后不能改名**，否则历史账号和线程无法定位。
 - 声明是静态的：插件停用、未授信或还没有账号时，桌面端也能通过 `channels.list` 列出这个渠道并标注状态。插件加载后再从自己的存储恢复账号。
@@ -215,7 +215,7 @@ async def stop(self):
 - `uses_bot_commands = True`：只有在 `start` 里读取 `ctx.bot_commands`（如注册 Telegram 命令菜单）的渠道才声明；宿主会把命令列表并入复用键，其它插件增减命令时它才会重连。
 - `status()`：返回 `{"connected": bool, "account": str, "detail": str}`（后两项可省略），`channels.list` 原样带给桌面端。适合放机器人名称、断线原因或账号连接状态。`status()` 抛错时渠道显示为 `failed`。
 
-这些钩子和 `description` 参数属于 Runtime API 2.3；外部包要声明 `runtime_api: ">=3.0.0 <4.0.0"`。
+这些钩子和 `description` 参数属于 Runtime API 2.3。
 
 ## 7. 流式回复
 
@@ -271,8 +271,7 @@ uv run python -m scripts.verify_plugin_tests --plugins <id>
 
 ## 统一 SDK 3.0
 
-新插件前端使用 `@yinfengwindy/shiori-sdk`，后端契约使用 `shiori_sdk`，并声明
-`runtime_api: ">=3.0.0 <4.0.0"`。SDK 主文档位于
+新插件前端使用 `@yinfengwindy/shiori-sdk`，后端契约使用 `shiori_sdk`。SDK 主文档位于
 [packages/sdk/README.md](../../packages/sdk/README.md)，包括 wheel/tarball 构建、
 公开协议和 `shiori-sdk[testing]` 的无宿主测试入口。
 QQBot、QQ、Telegram 与飞书均已完成后端和单测迁移。公共值由 SDK 单一定义，入站、头像、HTTP 和进程的宿主实现通过上下文注入。QQ 的 `QQ_GROUP_PREFIX` 只归插件自己的 formatting；通用 sender helper 仍可由宿主调用。

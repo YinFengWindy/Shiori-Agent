@@ -1477,7 +1477,7 @@ def _restart_only(error: KernelError) -> PluginReloadUnsupported:
 
 def _declares_channels(record: PluginRecord) -> bool:
     """Whether a plugin declares channels, which only a restart may change (D14)."""
-    return "channels" in record.manifest.capabilities or bool(record.manifest.channels)
+    return bool(record.manifest.channels)
 
 
 def _required_renderer_kinds(record: PluginRecord) -> frozenset[str]:

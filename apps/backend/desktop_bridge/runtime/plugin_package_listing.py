@@ -35,7 +35,6 @@ def external_source_row(source: ExternalSourceDiagnostic) -> dict[str, Any]:
         "can_toggle": False,
         "supports_hot_unload": manifest.supports_hot_unload,
         "dependencies": list(manifest.dependencies),
-        "capabilities": list(manifest.capabilities),
         "inject": list(manifest.inject),
         "channels": [],
         "category": manifest.category,
@@ -73,7 +72,6 @@ def with_package_operations(
                 "dependencies": [],
                 # A queued first install has no admitted manifest yet; the row
                 # still carries the list-shaped fields every other row has.
-                "capabilities": [],
                 "channels": [],
                 "category": "feature",
                 "state": (

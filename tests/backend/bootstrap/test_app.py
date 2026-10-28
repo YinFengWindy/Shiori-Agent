@@ -155,7 +155,7 @@ async def test_initial_setup_cancellation_releases_plugin_and_runtime(
     package = tmp_path / "host_plugins/waiting"
     (package / "backend").mkdir(parents=True)
     (package / "manifest.yaml").write_text(
-        "api: 4\nid: waiting\ninject: [events]\n" "supports_hot_unload: false\n",
+        "api: 4\nid: waiting\ninject: [events]\nsupports_hot_unload: false\n",
         encoding="utf-8",
     )
     (package / "backend/plugin.py").write_text(

@@ -7,7 +7,7 @@ function plugin(overrides: Partial<PluginSummary>): PluginSummary {
   return {
     id: "demo", candidateId: "builtin/demo", source: "builtin", directory: "plugins/demo", name: "demo", version: "0.1.0",
     description: "", enabled: true, canToggle: true, state: "ACTIVE", error: "", diagnostic: null, hasConfigSchema: false,
-    capabilities: [], inject: [], channels: [], category: "feature", supportsHotUnload: true, pendingRendererKinds: [],
+    inject: [], channels: [], category: "feature", supportsHotUnload: true, pendingRendererKinds: [],
     ...overrides,
   };
 }

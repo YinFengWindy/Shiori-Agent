@@ -8,10 +8,9 @@ Install and startup accept only `api: 4`. A package whose `api` is not the
 integer `4` (including `api: 2`) is rejected at install with code
 `unsupported_api` before the trust prompt, and an already-installed copy is
 `BLOCKED` at startup with the same reason. Files, plugin config and
-`plugin-data/` are left in place. `runtime_api` ranges, `package_contract` and
-`host_dependencies` are not consulted. `renderer` is still validated when an
-`api: 4` package declares it. The field table below is the previous v1 shape;
-where it disagrees with this paragraph, this paragraph is the current contract.
+`plugin-data/` are left in place. The `renderer` field is kept in `api: 4`
+for now: the activation gate and `scripts/build-plugin.mjs` still read it, and
+it is deleted when P7 unifies the frontend entry.
 Source classification/manual trust
 (#211/#216), external renderer loading (#213), and cross-host activation rollback
 (#262) were delivered separately and are described in the later sections.
@@ -34,28 +33,25 @@ assets/label.txt
 UTF-8 YAML is required. The executable schema is `validate_package()` in
 `apps/backend/agent/plugin_host/package_contract.py`, with shared strict field
 readers and renderer validation in the adjacent owning modules. Unknown top-level
-and renderer declaration keys are rejected. This table defines the v1 fields:
+and renderer declaration keys are rejected. This table defines the fields:
 
 | Field | Required | Value |
 | --- | --- | --- |
-| `package_contract` | yes | integer `1` |
-| `api` | yes | integer `2` |
+| `api` | yes | integer `4`; anything else is `unsupported_api` |
 | `id` | yes | `[a-z][a-z0-9_-]{0,63}` |
 | `version` | yes | full SemVer 2.0 string, including optional prerelease/build |
-| `runtime_api` | yes | compatibility range; host currently advertises `3.1.2` |
 | `entry` | yes | explicit package-relative `.py` backend entry |
-| `capabilities` | yes | v2 name list, including `[]`; names grant nothing (services come from `inject`). A non-empty list with empty `inject` and `optional_inject` is `BLOCKED` (`capabilities_retired`) |
 | `inject`, `optional_inject`, `provides` | no | service key names: the backend takes `inject` keys with `ctx.require(KEY)` and `optional_inject` keys with `ctx.get(KEY)` (keys in `shiori_sdk.core.services`), and publishes `provides` keys with `ctx.provide`; `host.` names are rejected |
-| `channels` | no | static channel declarations (Runtime API 2.2); `capabilities` must contain `channels`, and the backend injects `channels` to contribute them |
-| `renderer` | no | object with optional `ui`, `background`, `surface` keys |
+| `contributes.channels` | no | static channel declarations; `inject` must contain `channels` |
+| `frontend.entry` | no | package-relative frontend entry file |
+| `renderer` | no | object with optional `ui`, `background`, `surface` keys; kept until P7 |
 | `renderer.<kind>.entry` | per declared kind | package-relative precompiled `.mjs` |
 | `renderer.<kind>.css` | per declared kind | list of `.css` files; `[]` explicitly means no styles |
 | `assets` | no | list of required package-relative regular files; default `[]` |
-| `host_dependencies.python` | no | required host Python distribution names; default `[]` |
-| `peer_dependencies` | for any renderer | `react` and `react-dom` compatibility ranges |
+| `peer_dependencies` | for any renderer | `react` and `react-dom` compatibility ranges; kept with `renderer` until P7 |
 | `dependencies`, `optional_dependencies` | no | existing strong/optional plugin ID lists |
 | `supports_hot_unload` | no | existing boolean, default `true` |
-| `desc`, `author`, `config_model` | no | existing v2 descriptive/configuration metadata |
+| `desc`, `author`, `config_model` | no | descriptive/configuration metadata |
 | `display_name`, `category`, `default_enabled` | no | same meaning and validation as for bundled plugins (see the plugin tutorial): title, `feature` / `channel` / `system` group, strict boolean default enablement; accepted since Runtime API 3.1.1 (#678), older hosts reject the unknown keys |
 | `distribution` | no | `builtin` (default) or `external`; see [External source packages in the repository](#external-source-packages-in-the-repository-675) |
 
@@ -69,7 +65,7 @@ taken with `ctx.require(KEY)`. The external fixture uses that context without
 importing host internals; public backend import
 portability is completed by #212.
 
-Ranges use whitespace-separated comparators with AND semantics: `=`, `>`, `>=`,
+`peer_dependencies` ranges use whitespace-separated comparators with AND semantics: `=`, `>`, `>=`,
 `<`, `<=`; a bare SemVer means equality. Example: `>=3.0.0 <4.0.0`. Caret, tilde,
 wildcard, comma, OR and hyphen ranges are deliberately unsupported and rejected.
 Build metadata does not affect precedence. Prerelease hosts require a comparator
@@ -128,23 +124,39 @@ consolidates these additions and the subsequent #847 breaking migration.
 
 <!-- Record the next contract batch here, with PR references and breaking markers. -->
 
-- **Non-`api: 4` packages are rejected (issue #903, refactor P4-5).**
-  Install (`validate_package` / zip extract, before the trust prompt) rejects
-  any package whose `api` is not the integer `4`, including current `api: 2`,
-  with code `unsupported_api` and the reason 「该插件为旧版插件 API（3.x），本版本不再支持，请安装插件作者发布的新版本」.
-  An already-installed copy is discovered as `BLOCKED` with that same
-  diagnostic. Its directory, config table and `plugin-data/` are not deleted,
-  and its setup does not run, so it cannot `provide` a core key or a `host.`
-  name. A manifest that fails to parse but still says `api` is an integer
-  other than `4` (for example it names `host.bridge`) gets the same
-  `BLOCKED` row instead of aborting startup. `ctx.provide` refuses a `host.`
-  name even for a running `api: 4` plugin.
-  **breaking:** `runtime_api` range checks, `package_contract: 1` and
-  `host_dependencies` are no longer part of admission. `capabilities_retired`
-  no longer occurs: every non-`api: 4` package is `unsupported_api`.
-  `renderer` and its React peer ranges stay, because the activation gate and
-  `scripts/build-plugin.mjs` still read them. The zip builder requires
-  `api: 4` and `distribution: external`. No SDK or plugin version bump (D26).
+- **Non-`api: 4` packages are rejected (PR #946, issue #903, refactor P4-5).**
+  The manifest parser accepts only the integer `api: 4`; `api: 2`, `"4"`,
+  `4.0`, `5` and a missing `api` all fail the same way, before any other
+  field is checked. Install (`validate_package` / zip extract) and discovery
+  both report code `unsupported_api` (field `api`) with the reason
+  「插件 API 版本不受支持，请安装插件作者发布的新版本」.
+  The `BLOCKED` row of an installed old package still shows its `id` and
+  `version`, read from the raw manifest; strict startup does not abort on it.
+  The `renderer` field is kept in `api: 4` for now: the activation gate and
+  `scripts/build-plugin.mjs` still read it, and it is deleted when P7 unifies
+  the frontend entry. `peer_dependencies` stays with it. The zip builder
+  requires `api: 4` and `distribution: external`. No SDK or plugin version
+  bump (D26).
+  **breaking** (each item):
+  - An `api: 2` package can neither be installed nor run. Install refuses
+    it before the trust prompt; an installed copy is `BLOCKED` at startup,
+    its setup never runs, and its directory, config table and
+    `plugin-data/` stay. Being unrunnable, it can no longer provide a core
+    key and fail the whole generation.
+  - `runtime_api`, `package_contract`, `capabilities`, top-level `channels`
+    and `host_dependencies` are gone from the manifest. On an `api: 4`
+    package the first four are rejected by name and `host_dependencies` is
+    an unknown field. `manifest.schema.json` accepts only `api: 4` and
+    drops these fields and their conditional rules.
+  - Diagnostic codes `incompatible_runtime` for `runtime_api`,
+    `unsupported_contract` and `capabilities_retired` no longer occur.
+    `incompatible_runtime` remains only for a `peer_dependencies` range the
+    host's React does not satisfy.
+  - `shiori_sdk.runtime.parse_capabilities` is removed.
+    `shiori-sdk[testing]`'s `sdk_context` no longer validates a
+    `capabilities` list in the manifest.
+  - `plugins.list` rows drop the `capabilities` field; the desktop reads
+    `inject` and `channels`.
 
 - **Capability properties and `host.*` dual-write are gone (PR #945, issue #903, refactor P4-4).**
   `KNOWN_CAPABILITIES`, `CapabilityNotGranted`, `require_known_capabilities`,
@@ -183,7 +195,7 @@ consolidates these additions and the subsequent #847 breaking migration.
     the package before setup, so an old manifest that names `host.` never runs.
   - `shiori_sdk.runtime.parse_capabilities` no longer checks names against a
     whitelist; it still requires a list and now rejects a non-string item
-    (before, it converted items with `str`).
+    (before, it converted items with `str`). P4-5 (above) removes it.
   - `HostServiceUnavailable.for_capability` is removed; the host raises
     `HostServiceUnavailable` with its own message.
   - Testing (`shiori-sdk[testing]`):

@@ -1,7 +1,6 @@
 """Static external package validation. No plugin modules are imported.
 
-Install accepts only ``api: 4``. ``runtime_api`` ranges and ``package_contract``
-are not consulted.
+Install accepts only ``api: 4``.
 """
 
 from __future__ import annotations
@@ -13,9 +12,9 @@ from pathlib import Path
 from shiori_sdk.kernel import PackageContractError
 from agent.plugin_host.host_contract import HostRuntimeContract
 from agent.plugin_host.manifest import (
-    UNSUPPORTED_API_REASON,
     ManifestError,
     PluginManifest,
+    UnsupportedApiError,
     load_manifest,
 )
 from agent.plugin_host.package_paths import contained_file, package_path
@@ -28,8 +27,8 @@ from agent.plugin_host.package_schema import (
 )
 from agent.plugin_host.renderer_contract import RendererEntry, validate_renderer
 
-# api: 4 external packages. ``renderer`` stays until the frontend migration;
-# ``runtime_api``, ``package_contract``, ``capabilities`` and ``host_dependencies`` do not.
+# api: 4 external package fields. ``renderer`` and its ``peer_dependencies``
+# stay until P7 unifies the frontend entry.
 _PACKAGE_FIELDS = {
     "api",
     "id",
@@ -61,16 +60,8 @@ class ValidatedPackage:
     """Static package descriptor; validation neither grants trust nor activates code."""
 
     manifest: PluginManifest
-    runtime_api: str
     renderer: tuple[RendererEntry, ...]
     assets: tuple[str, ...]
-
-
-def _unsupported_api(exc: Exception | None = None) -> PackageContractError:
-    error = PackageContractError("unsupported_api", "api", UNSUPPORTED_API_REASON)
-    if exc is not None:
-        raise error from exc
-    return error
 
 
 def validate_package(
@@ -80,24 +71,19 @@ def validate_package(
 
     Directory and zip callers share this validator. Anything that is not
     integer ``api: 4`` is rejected here, before the trust prompt. Bundled
-    plugins use ``load_manifest`` directly and are blocked at discovery.
+    plugins use ``load_manifest`` directly.
     """
     _ = contained_file(root, "manifest.yaml", "manifest")
     try:
         manifest = load_manifest(root)
+    except UnsupportedApiError as exc:
+        raise PackageContractError("unsupported_api", "api", str(exc)) from exc
     except ManifestError as exc:
-        api = (exc.metadata or {}).get("api")
-        if type(api) is int and api == 4:
-            raise PackageContractError(
-                "invalid_manifest", "manifest", str(exc)
-            ) from exc
-        raise _unsupported_api(exc)
+        raise PackageContractError("invalid_manifest", "manifest", str(exc)) from exc
     if manifest is None:
         raise PackageContractError(
             "invalid_manifest", "manifest", "Missing manifest.yaml"
         )
-    if manifest.api != 4:
-        raise _unsupported_api()
     raw = manifest.metadata
     _ = object_field(raw, "manifest", _PACKAGE_FIELDS)
     plugin_id = string_field(raw.get("id"), "id")
@@ -113,10 +99,8 @@ def validate_package(
         raise PackageContractError("invalid_version", "version", str(exc)) from exc
     runtime = host or HostRuntimeContract()
     _ = validate_artifact(root, raw.get("entry"), "entry", ".py")
-    renderer: tuple[RendererEntry, ...] = ()
-    if "renderer" in raw:
-        renderer = validate_renderer(root, raw, runtime)
+    renderer = validate_renderer(root, raw, runtime)
     assets = string_list(raw.get("assets", []), "assets")
     for index, path in enumerate(assets):
         _ = contained_file(root, path, f"assets[{index}]")
-    return ValidatedPackage(manifest, "", renderer, assets)
+    return ValidatedPackage(manifest, renderer, assets)

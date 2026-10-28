@@ -10,7 +10,7 @@ it when ``plugins/`` or the plugin host changes. The api 4 host contract
 
 Hot-reload order equality, dispose-zero for every plugin, runtime channel
 registration and named frontend exports need the P5 harness and the P7
-loader. A non-api-4 package still parses, and discovery marks it BLOCKED.
+loader.
 """
 
 from __future__ import annotations
@@ -145,11 +145,8 @@ def test_builtin_plugin_manifest_matches_require(plugin_dir: Path) -> None:
     """api 4, inject lines up with require/get/provide, and the entry file exists."""
     manifest = load_manifest(plugin_dir)
     assert manifest is not None
-    assert manifest.api == 4
-    assert manifest.capabilities == ()
-    for removed in ("capabilities", "runtime_api", "package_contract", "renderer"):
-        assert removed not in manifest.metadata, removed
-    assert "channels" not in manifest.metadata or not manifest.metadata["channels"]
+    # The parser rejects the other removed fields; renderer is kept until P7.
+    assert "renderer" not in manifest.metadata
     assert not ({"sessions", "session_store"} <= set(manifest.inject))
     for name in (*manifest.inject, *manifest.optional_inject, *manifest.provides):
         assert name in _KNOWN_KEYS, name
@@ -169,17 +166,3 @@ def test_builtin_plugin_manifest_matches_require(plugin_dir: Path) -> None:
     assert optional <= set(manifest.optional_inject)
     assert provided <= set(manifest.provides)
     assert set(manifest.provides) <= provided
-
-
-def test_api_2_manifest_still_parses_so_a_blocked_row_can_name_it(tmp_path) -> None:
-    """Discovery blocks the package. Parsing still has to succeed to name it."""
-    package = tmp_path / "legacy"
-    package.mkdir()
-    (package / "manifest.yaml").write_text(
-        "api: 2\nid: legacy\ncapabilities: [tools]\ninject: [tools]\n",
-        encoding="utf-8",
-    )
-    manifest = load_manifest(package)
-    assert manifest is not None
-    assert manifest.api == 2
-    assert manifest.id == "legacy"

@@ -11,9 +11,9 @@ from shiori_sdk.kernel import PackageContractError, PluginDiagnostic
 from agent.plugin_host.handle import PluginRecord
 from agent.plugin_host.host_contract import HostRuntimeContract
 from agent.plugin_host.manifest import (
-    UNSUPPORTED_API_REASON,
     ManifestError,
     PluginManifest,
+    UnsupportedApiError,
     load_manifest,
 )
 from agent.plugin_host.package_contract import validate_package
@@ -311,38 +311,32 @@ def _read_candidate(
     except PackageContractError as exc:
         manifest = PluginManifest(id=child.name)
         diagnostic = exc.diagnostic
+    except UnsupportedApiError as exc:
+        # Before trust and package validation, and in strict mode too: the old
+        # package stays on the roster as BLOCKED, never set up, files and
+        # config untouched.
+        manifest = _roster_manifest(child, exc)
+        diagnostic = PluginDiagnostic(
+            "unsupported_api",
+            "validation",
+            "api",
+            str(exc),
+            str(child / "manifest.yaml"),
+        )
     except ManifestError as exc:
         logger.warning("插件 manifest 无效: %s (%s)", child.name, exc)
-        metadata = exc.metadata or {}
-        api = metadata.get("api")
-        # An old package that no longer parses (for example it names a
-        # ``host.`` key) stays on the roster as BLOCKED. Strict mode still
-        # aborts on a broken api: 4 manifest.
-        if type(api) is int and api != 4:
-            manifest = PluginManifest(
-                id=str(metadata.get("id") or child.name),
-                version=str(metadata.get("version") or ""),
-                api=api,
-                metadata=metadata,
-            )
-            diagnostic = _unsupported_api(child)
-        else:
-            if source == "builtin" and strict:
+        if source == "builtin":
+            if strict:
                 raise
-            if source == "builtin" and "package_contract" not in metadata:
-                return None
-            manifest = PluginManifest(
-                id=str(metadata.get("id") or child.name),
-                version=str(metadata.get("version") or ""),
-                metadata=metadata,
-            )
-            diagnostic = PluginDiagnostic(
-                "invalid_manifest",
-                "validation",
-                "manifest",
-                str(exc),
-                str(child / "manifest.yaml"),
-            )
+            return None
+        manifest = _roster_manifest(child, exc)
+        diagnostic = PluginDiagnostic(
+            "invalid_manifest",
+            "validation",
+            "manifest",
+            str(exc),
+            str(child / "manifest.yaml"),
+        )
     if manifest is None:
         # Old workspace/plugins/<id>/kv.json directories are data, not packages.
         return None
@@ -355,10 +349,6 @@ def _read_candidate(
         # installed workspace copy enters package validation and trust admission.
         # The plugin list reports it via find_uninstalled_external_sources.
         return None
-    if diagnostic is None and manifest.api != 4:
-        # Before trust and before package validation, so files and config stay
-        # and the plugin is not runnable (no setup, no core-key collision).
-        diagnostic = _unsupported_api(child)
     if diagnostic is None and source == "workspace":
         try:
             _ = validate_package(child, host=host)
@@ -413,12 +403,11 @@ def _read_candidate(
     )
 
 
-def _unsupported_api(plugin_dir: Path) -> PluginDiagnostic:
-    """The one admission result for a package that is not ``api: 4``."""
-    return PluginDiagnostic(
-        "unsupported_api",
-        "validation",
-        "api",
-        UNSUPPORTED_API_REASON,
-        str(plugin_dir / "manifest.yaml"),
+def _roster_manifest(child: Path, exc: ManifestError) -> PluginManifest:
+    """Names a rejected package from its raw fields so its BLOCKED row reads."""
+    metadata = exc.metadata or {}
+    return PluginManifest(
+        id=str(metadata.get("id") or child.name),
+        version=str(metadata.get("version") or ""),
+        metadata=metadata,
     )

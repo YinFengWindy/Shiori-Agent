@@ -10,7 +10,7 @@ export async function invalidArchives(app: PackagedApp, fixture: string) {
   await app.settings();
   for (const variant of ["incompatible", "missing-entry"]) {
     await app.choose(resolve(fixture, `external_demo-1.0.0-${variant}.zip`));
-    const expected = variant === "incompatible" ? /旧版插件 API/ : /backend.+plugin\.py/;
+    const expected = variant === "incompatible" ? /插件 API 版本不受支持/ : /backend.+plugin\.py/;
     const alert = app.page!.getByRole("alert").filter({ hasText: expected });
     await alert.waitFor();
     const diagnostic = await alert.innerText();

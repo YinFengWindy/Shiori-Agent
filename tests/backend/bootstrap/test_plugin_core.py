@@ -136,7 +136,7 @@ async def test_scene_observation_requests_reach_the_generation_demand(
     package = tmp_path / "plugins" / "scene_probe"
     (package / "backend").mkdir(parents=True)
     (package / "manifest.yaml").write_text(
-        "api: 4\nid: scene_probe\n" "inject: [scene_observations]\n",
+        "api: 4\nid: scene_probe\ninject: [scene_observations]\n",
         encoding="utf-8",
     )
     (package / "backend/plugin.py").write_text(

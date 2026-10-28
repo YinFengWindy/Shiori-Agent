@@ -8,8 +8,6 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from shiori_sdk.runtime import parse_capabilities
-
 from shiori_sdk.channels.chat_types import (
     ChatTypeDeclaration,
     ChatTypeDeclarations,
@@ -44,22 +42,25 @@ _CHAT_TYPE_REQUIRED_FIELDS = ("type", "label", "chat_id_label")
 _CHAT_TYPE_OPTIONAL_FIELDS = ("chat_id_hint", "prefix")
 
 # 插件管理页的分组：feature 面向用户的功能，channel 外部渠道，system 宿主内部的
-# 护栏与诊断组件（默认折叠）。省略时：声明了渠道（api: 2 的 capabilities 含
-# channels，或 api: 4 的 contributes.channels 非空）即渠道，否则为功能；
-# system 只能显式声明。
+# 护栏与诊断组件（默认折叠）。省略时：contributes.channels 非空即渠道，否则为
+# 功能；system 只能显式声明。
 PLUGIN_CATEGORIES = ("feature", "channel", "system")
 
-# 安装与启动对非 api: 4 共用这一句（D4）。解析仍接受 api: 2，这样已安装的旧包
-# 还能在列表里显示名称，而不是变成读不出来的目录。
-UNSUPPORTED_API_REASON = (
-    "该插件为旧版插件 API（3.x），本版本不再支持，请安装插件作者发布的新版本"
-)
+# 安装与启动对非 api: 4 共用这一句（D4）。
+UNSUPPORTED_API_REASON = "插件 API 版本不受支持，请安装插件作者发布的新版本"
 
 
 class ManifestError(Exception):
     """manifest 无法读取、解析，或声明不符合插件契约。"""
 
     metadata: dict[str, object] | None = None
+
+
+class UnsupportedApiError(ManifestError):
+    """``api`` 不是整数 4。``metadata`` 仍带原始字段，供 BLOCKED 行显示名称。"""
+
+    def __init__(self) -> None:
+        super().__init__(UNSUPPORTED_API_REASON)
 
 
 @dataclass(frozen=True)
@@ -104,7 +105,7 @@ class ChannelDeclaration:
 
 @dataclass
 class PluginManifest:
-    """插件包声明：身份、入口与所需 capability。"""
+    """插件包声明：身份、入口与所需服务。"""
 
     id: str
     # User-facing title; the stable ID still owns lookup, configuration and imports.
@@ -115,8 +116,7 @@ class PluginManifest:
     # 插件包统一为 plugins/<id>/{backend,ui,tests}/ 布局（#178），入口默认落在
     # backend/ 下；manifest 显式写 entry 时以它为准。
     entry: str = DEFAULT_ENTRY
-    capabilities: tuple[str, ...] = ()
-    # Runtime API 2.2：静态渠道声明，需同时声明 channels capability
+    # contributes.channels 的静态渠道声明，需同时 inject channels
     channels: tuple[ChannelDeclaration, ...] = ()
     config_model: str | None = None
     dependencies: tuple[str, ...] = ()
@@ -127,12 +127,11 @@ class PluginManifest:
     inject: tuple[str, ...] = ()
     optional_inject: tuple[str, ...] = ()
     provides: tuple[str, ...] = ()
-    api: int = 2
     # External source packages are excluded from host-owned roots; this never grants trust.
     distribution: str = "builtin"
     # False forbids replacing a live instance without restarting the process.
     supports_hot_unload: bool = True
-    # 插件管理页分组（PLUGIN_CATEGORIES 之一），解析时已按 capabilities 补全默认值
+    # 插件管理页分组（PLUGIN_CATEGORIES 之一），解析时已按渠道声明补全默认值
     category: str = "feature"
     # ``[plugins.<id>]`` 没有显式 ``enabled`` 时是否启用；显式值始终优先。
     default_enabled: bool = True
@@ -162,8 +161,8 @@ class PluginManifest:
 def load_manifest(plugin_dir: Path) -> PluginManifest | None:
     """读取 manifest.yaml；不存在返回 None，格式非法抛 ManifestError。
 
-    接受显式 ``api: 2`` 或 ``api: 4``，好让已安装的旧包仍能显示。
-    没有 manifest 的目录不属于插件。发现与安装不运行非 ``api: 4`` 的包。
+    只接受整数 ``api: 4``，其余抛 ``UnsupportedApiError``。没有 manifest 的
+    目录不属于插件。
     """
     manifest_path = plugin_dir / "manifest.yaml"
     import yaml
@@ -190,17 +189,13 @@ def load_manifest(plugin_dir: Path) -> PluginManifest | None:
 def _parse_manifest(
     raw: dict[str, object], manifest_path: Path, directory_name: str
 ) -> PluginManifest:
+    api = raw.get("api")
+    # Checked first so an old package is reported as one, whatever else it
+    # declares. ``4.0``, ``"4"`` and ``True`` are not integer 4.
+    if type(api) is not int or api != 4:
+        raise UnsupportedApiError()
     if any(not isinstance(key, str) for key in raw):
         raise ManifestError("manifest keys must be strings")
-    api_value = raw.get("api")
-    # ``2.0 == 2``, so a float slips past this comparison. Leave that for the
-    # external package contract, which reports the field as ``api``. A
-    # non-integer 4 is not a version this loader accepts.
-    if isinstance(api_value, bool) or api_value not in (2, 4):
-        raise ManifestError(f"插件必须显式声明 api: 2 或 api: 4: {manifest_path}")
-    if api_value == 4 and type(api_value) is not int:
-        raise ManifestError(f"插件必须显式声明 api: 2 或 api: 4: {manifest_path}")
-    api = 4 if api_value == 4 else 2
     plugin_id = str(raw.get("id") or raw.get("name") or directory_name)
     distribution = raw.get("distribution", "builtin")
     if not isinstance(distribution, str) or distribution not in ("builtin", "external"):
@@ -223,15 +218,8 @@ def _parse_manifest(
     if set(inject) & set(optional_inject):
         raise ManifestError("服务 Key 不能同时声明为 inject 和 optional_inject")
     _reject_host_keys(inject=inject, optional_inject=optional_inject, provides=provides)
-    if api == 4:
-        _reject_removed_v4_fields(raw)
-        capabilities: tuple[str, ...] = ()
-        channels = _parse_contributed_channels(raw, inject)
-    else:
-        if "contributes" in raw:
-            raise ManifestError("api: 2 不接受 contributes；渠道声明写在 channels")
-        capabilities = _parse_capabilities(raw, manifest_path)
-        channels = _parse_channels(raw, capabilities)
+    _reject_removed_fields(raw)
+    channels = _parse_contributed_channels(raw, inject)
     frontend_entry = _parse_frontend(raw, manifest_path.parent)
     return PluginManifest(
         id=plugin_id,
@@ -240,7 +228,6 @@ def _parse_manifest(
         desc=_optional_str(raw.get("desc")),
         author=_optional_str(raw.get("author")),
         entry=str(raw.get("entry") or DEFAULT_ENTRY),
-        capabilities=capabilities,
         channels=channels,
         config_model=_optional_str(raw.get("config_model")),
         dependencies=dependencies,
@@ -248,18 +235,18 @@ def _parse_manifest(
         inject=inject,
         optional_inject=optional_inject,
         provides=provides,
-        api=api,
         distribution=distribution,
         supports_hot_unload=supports_hot_unload,
-        category=_parse_category(raw, capabilities, channels),
+        category=_parse_category(raw, channels),
         default_enabled=default_enabled,
         frontend_entry=frontend_entry,
         metadata={k: v for k, v in raw.items() if isinstance(k, str)},
     )
 
 
-# ``renderer`` 仍留给激活门和外部 zip 构建器，直到前端入口迁移。
-_API4_REMOVED = (
+# renderer 字段在 api: 4 中临时保留：激活门与 build-plugin.mjs 仍读取，P7 统一
+# frontend 入口时删除。
+_REMOVED_FIELDS = (
     "capabilities",
     "runtime_api",
     "package_contract",
@@ -267,9 +254,9 @@ _API4_REMOVED = (
 )
 
 
-def _reject_removed_v4_fields(raw: dict[str, object]) -> None:
-    """api: 4 drops the v2 capability manifest. Discovery rejects api: 2."""
-    present = [name for name in _API4_REMOVED if name in raw]
+def _reject_removed_fields(raw: dict[str, object]) -> None:
+    """api: 4 drops the v2 capability manifest fields."""
+    present = [name for name in _REMOVED_FIELDS if name in raw]
     if present:
         raise ManifestError(
             "api: 4 不再接受 "
@@ -279,7 +266,7 @@ def _reject_removed_v4_fields(raw: dict[str, object]) -> None:
 
 
 def _reject_host_keys(**fields: tuple[str, ...]) -> None:
-    """No manifest, of any api version, names a ``host.`` key.
+    """No manifest names a ``host.`` key.
 
     ``host.bridge`` (the shared RPC registry) and ``host.config_references``
     are read by the host itself; a plugin holding the registry could register
@@ -294,7 +281,7 @@ def _reject_host_keys(**fields: tuple[str, ...]) -> None:
 def _parse_contributed_channels(
     raw: dict[str, object], inject: tuple[str, ...]
 ) -> tuple[ChannelDeclaration, ...]:
-    """``contributes.channels`` on an api: 4 manifest, same rows as ``channels``."""
+    """``contributes.channels``: the plugin's static channel declarations."""
     contributes = raw.get("contributes")
     if contributes is None:
         return ()
@@ -339,32 +326,6 @@ def _parse_frontend(raw: dict[str, object], plugin_dir: Path) -> str | None:
     if not (plugin_dir / path).is_file():
         raise ManifestError(f"frontend.entry 不存在: {entry}")
     return entry
-
-
-def _parse_capabilities(raw: dict[str, object], manifest_path: Path) -> tuple[str, ...]:
-    # api: 2 仍要有一份列表。名字不再是授权；P4-5 才拒绝非 api: 4。
-    try:
-        return parse_capabilities(raw.get("capabilities"), manifest_path)
-    except ValueError as exc:
-        raise ManifestError(str(exc)) from exc
-
-
-def _parse_channels(
-    raw: dict[str, object], capabilities: tuple[str, ...]
-) -> tuple[ChannelDeclaration, ...]:
-    value = raw.get("channels", [])
-    if not isinstance(value, list):
-        raise ManifestError("channels 必须是渠道声明列表")
-    items: list[object] = value
-    if items and "channels" not in capabilities:
-        raise ManifestError("声明 channels 的插件必须在 capabilities 中声明 channels")
-    declarations: list[ChannelDeclaration] = []
-    for index, item in enumerate(items):
-        declarations.append(_parse_channel(item, f"channels[{index}]"))
-    names = [declaration.name for declaration in declarations]
-    if duplicates := sorted({name for name in names if names.count(name) > 1}):
-        raise ManifestError(f"channels 重复声明渠道名 {duplicates}")
-    return tuple(declarations)
 
 
 def _parse_channel(item: object, field_name: str) -> ChannelDeclaration:
@@ -539,13 +500,11 @@ class _DeclaredChatTypes(dict[str, tuple[ChatTypeDeclaration, ...]]):
 
 
 def _parse_category(
-    raw: dict[str, object],
-    capabilities: tuple[str, ...],
-    channels: tuple[ChannelDeclaration, ...],
+    raw: dict[str, object], channels: tuple[ChannelDeclaration, ...]
 ) -> str:
     value = raw.get("category")
     if value is None:
-        return "channel" if "channels" in capabilities or channels else "feature"
+        return "channel" if channels else "feature"
     if not isinstance(value, str) or value not in PLUGIN_CATEGORIES:
         raise ManifestError(f"category 必须是 {' / '.join(PLUGIN_CATEGORIES)} 之一")
     return value
