@@ -5,9 +5,10 @@ from unittest.mock import Mock
 
 import pytest
 from shiori_sdk.core.models import MAIN_MODEL, MAIN_PROVIDER
+from shiori_sdk.core.services import CONFIG, HTTP, LIGHT_MODEL, LIGHT_PROVIDER
 from shiori_sdk.kernel import Kernel
 from shiori_sdk.testing.extensions import FakeConfig
-from shiori_sdk.testing.memory_context import FakeMemoryPluginContext
+from shiori_sdk.testing.memory_context import FakeMemorySetupContext
 
 from plugins.default_memory.backend.construct import construct_default_engine
 from plugins.default_memory.backend.engine import lifecycle
@@ -20,11 +21,11 @@ def _context(
     tmp_path: Path,
     values: dict[str, object] | None = None,
     references: dict[str, str] | None = None,
-) -> FakeMemoryPluginContext:
+) -> FakeMemorySetupContext:
     kernel = Kernel()
     kernel.provide(MAIN_PROVIDER, cast(Any, object()))
     kernel.provide(MAIN_MODEL, "chat")
-    ctx = FakeMemoryPluginContext(
+    ctx = FakeMemorySetupContext(
         tmp_path,
         kernel=kernel,
         package_dir=PACKAGE_DIR,
@@ -32,10 +33,10 @@ def _context(
     config = FakeConfig(values)
     if references:
         config.references.update(references)
-    ctx.config = config
-    ctx.http = object()
-    ctx.light_provider = object()
-    ctx.light_model = "light"
+    ctx.serve(CONFIG, config)
+    ctx.serve(HTTP, cast(Any, object()))
+    ctx.serve(LIGHT_PROVIDER, cast(Any, object()))
+    ctx.serve(LIGHT_MODEL, "light")
     return ctx
 
 
@@ -261,7 +262,7 @@ async def test_memory_written_fanout_is_watched_as_a_tuple(tmp_path: Path) -> No
 
     await ctx.kernel.start([PluginSpec("observe", setup)])
     bus_events: list[object] = []
-    ctx.events.on(MemoryWritten, lambda event: bus_events.append(event))
+    ctx.fake_events.on(MemoryWritten, lambda event: bus_events.append(event))
 
     @dataclass(frozen=True)
     class _Listed:

@@ -290,6 +290,18 @@ def test_api_4_manifest_rejects_capabilities_and_host_keys(
         load_manifest(tmp_path)
 
 
+def test_api_2_manifest_rejects_host_keys(tmp_path: Path):
+    """api: 2 cannot take the shared RPC registry either."""
+    from agent.plugin_host.manifest import ManifestError, load_manifest
+
+    (tmp_path / "manifest.yaml").write_text(
+        "api: 2\nid: demo\ncapabilities: []\ninject:\n  - host.bridge\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ManifestError, match="inject 不能声明宿主内部 Key"):
+        load_manifest(tmp_path)
+
+
 @pytest.mark.asyncio
 async def test_api_4_require_tools_registers_and_dispose_clears(tmp_path: Path):
     """ctx.require(TOOLS) reaches the host registry, and dispose unregisters it."""
@@ -624,7 +636,7 @@ async def setup(ctx):
         encoding="utf-8",
     )
     (plugin_dir / "manifest.yaml").write_text(
-        "api: 2\nid: gated\ncapabilities:\n  - events\n",
+        "api: 2\nid: gated\ncapabilities:\n  - events\ninject:\n  - events\n",
         encoding="utf-8",
     )
     kernel = make_kernel([tmp_path], event_bus=EventBus())
@@ -944,42 +956,26 @@ async def test_v2_plugin_reads_host_service_references(tmp_path: Path):
 
 
 @pytest.mark.asyncio
-async def test_v2_plugin_host_service_capabilities_are_gated(tmp_path: Path):
-    """未在 inject 声明的服务，require 拒绝，setup 仍能跑完。"""
-    plugin_dir = tmp_path / "hostrefs_gated"
+async def test_v2_package_relying_only_on_capabilities_is_blocked(tmp_path: Path):
+    """Capabilities grant nothing: such a package is BLOCKED and never set up."""
+    plugin_dir = tmp_path / "legacy"
     (plugin_dir / "backend").mkdir(parents=True)
     (plugin_dir / "backend" / "plugin.py").write_text(
-        """
-from shiori_sdk.core.services import LIGHT_PROVIDER
-
-captured: dict = {}
-
-
-async def setup(ctx):
-    try:
-        ctx.require(LIGHT_PROVIDER)
-    except Exception as e:
-        captured["denied"] = (type(e).__name__, str(e))
-""".strip(),
+        "async def setup(ctx):\n    raise AssertionError('setup must not run')\n",
         encoding="utf-8",
     )
     (plugin_dir / "manifest.yaml").write_text(
-        "api: 2\nid: hostrefs_gated\ncapabilities:\n  - workspace\n",
-        encoding="utf-8",
+        "api: 2\nid: legacy\ncapabilities:\n  - rpc\n", encoding="utf-8"
     )
     kernel = make_kernel([tmp_path], event_bus=EventBus())
-    await kernel.load_all()
-
-    import sys
-
-    module = next(
-        m
-        for k, m in sys.modules.items()
-        if k.startswith("akasic_plugin_") and k.endswith("_hostrefs_gated")
-    )
-    kind, message = module.captured["denied"]
-    assert kind == "KernelError"
-    assert "未在 manifest inject 中声明 light_provider" in message
+    try:
+        await kernel.load_all()
+        [state] = kernel.states()
+        assert state["state"] == "BLOCKED"
+        assert state["diagnostic"]["code"] == "capabilities_retired"
+        assert "inject + ctx.require" in state["diagnostic"]["reason"]
+    finally:
+        await kernel.terminate_all(force=True)
 
 
 @pytest.mark.asyncio
@@ -1043,14 +1039,6 @@ inject: {declared}
     ("name", "state", "fragment", "with_workspace"),
     [
         ("roles", "BLOCKED", "不存在", True),
-        ("models", "BLOCKED", "不存在", True),
-        ("sessions", "BLOCKED", "不存在", True),
-        ("external_turns", "BLOCKED", "不存在", True),
-        ("background_results", "BLOCKED", "不存在", True),
-        ("memory", "BLOCKED", "不存在", True),
-        ("http", "BLOCKED", "不存在", True),
-        ("light_model", "BLOCKED", "不存在", True),
-        ("tools", "BLOCKED", "不存在", True),
         ("kv", "FAILED", "宿主未提供服务 workspace", False),
     ],
 )

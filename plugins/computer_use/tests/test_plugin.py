@@ -10,8 +10,8 @@ PACKAGE_DIR = Path(__file__).resolve().parents[1]
 
 async def test_setup_is_lazy_and_unload_retires_retained_tools(tmp_path):
     context = FakeServiceContext("computer_use", tmp_path, package_dir=PACKAGE_DIR)
-    await setup(context.as_capability())
-    tool = context.tools.get_tool("computer_get_window_state")
+    await setup(context)
+    tool = context.fake_tools.get_tool("computer_get_window_state")
     assert tool is not None
     await context.aclose()
     with pytest.raises(RuntimeError, match="已停用"):

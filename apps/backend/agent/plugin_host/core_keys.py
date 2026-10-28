@@ -4,8 +4,7 @@ Core modules provide public keys (``shiori_sdk.core``) before any plugin
 starts. A binder is stored as itself; ``PluginRuntimeContext.require`` calls
 ``for_plugin`` so the plugin sees its own view. ``host.bridge`` and
 ``host.config_references`` are host-internal and are not service keys plugins
-inject. api: 4 manifests cannot name a ``host.`` key. api: 2 may still list
-one until P4-5 rejects non-``api: 4`` packages.
+inject: no manifest, whatever its api version, may name a ``host.`` key.
 """
 
 from __future__ import annotations
@@ -45,7 +44,7 @@ class PluginBinding:
     calls: PluginCallGate
 
 
-class PluginCapabilityBinder[T](Protocol):
+class PluginViewBinder[T](Protocol):
     """A core service that hands each plugin its own view."""
 
     def for_plugin(self, binding: PluginBinding) -> T:
@@ -62,7 +61,7 @@ class ActiveContributions[T](Protocol):
 
 
 class PluginContributionService[C, T](
-    PluginCapabilityBinder[C], ActiveContributions[T], Protocol
+    PluginViewBinder[C], ActiveContributions[T], Protocol
 ):
     """A per-plugin view ``C`` whose contributions ``T`` the host aggregates.
 
@@ -84,7 +83,7 @@ CoreModule = Callable[[CoreProvide], None]
 
 # Deliberately accounts-only, not a generic "generation lifecycle" protocol:
 # accounts is the only core service with per-generation publish/drop.
-class GenerationAccounts(PluginCapabilityBinder[AccountsCapability], Protocol):
+class GenerationAccounts(PluginViewBinder[AccountsCapability], Protocol):
     """One kernel generation's account index, stored under ``ACCOUNTS``.
 
     Plugins register into the generation's own index; ``publish`` makes it the
@@ -127,6 +126,10 @@ class HostBuilt:
     plugin's context. The kernel still needs a provider so planning does
     not block a plugin that injects one. ``PluginRuntimeContext.require``
     replaces this marker with the plugin's object. It is not a service.
+
+    Remove it once kernel planning can tell a host-built per-plugin key from
+    a missing provider; until then a plugin injecting one would be BLOCKED.
+    No phase owns that change yet.
     """
 
 

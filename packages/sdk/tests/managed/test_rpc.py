@@ -35,7 +35,7 @@ def _register(tmp_path: Path) -> tuple[FakeServiceContext, ManagedRuntime]:
     runtime = ManagedRuntime(
         Installation(root, "v1", [asset]),
         OwnedService(root, FakeProcesses(), lambda path, port, token: ([], path, {})),
-        ctx.background,
+        ctx.fake_background,
         build,
         lambda: "external",
         import_asset=asset.name,
@@ -56,7 +56,7 @@ async def rpc(tmp_path, monkeypatch):
     monkeypatch.setattr(module.platform, "system", lambda: "Windows")
     monkeypatch.setattr(module.platform, "machine", lambda: "AMD64")
     ctx, runtime = _register(tmp_path)
-    yield ctx.rpc.handlers, runtime
+    yield ctx.fake_rpc.handlers, runtime
     await ctx.aclose()
 
 
@@ -73,7 +73,7 @@ async def test_register_runtime_rpc_requires_the_rpc_inject(tmp_path):
         )
     assert caught.value.diagnostic.code == "undeclared_key"
     ctx, _runtime = _register(tmp_path)
-    assert sorted(ctx.rpc.handlers) == [
+    assert sorted(ctx.fake_rpc.handlers) == [
         "runtime." + name
         for name in (
             "cancel",
@@ -90,11 +90,11 @@ async def test_register_runtime_rpc_requires_the_rpc_inject(tmp_path):
 
 async def test_draining_only_waits_and_disposal_stops_the_runtime(tmp_path):
     ctx, runtime = _register(tmp_path)
-    for drain in ctx.runtime.drainers:
+    for drain in ctx.fake_runtime.drainers:
         await drain()
     # An abandoned in-generation reload keeps this instance serving.
     assert not runtime.closed
-    assert (await ctx.rpc.handlers["runtime.status"]({}))["phase"] == "stopped"
+    assert (await ctx.fake_rpc.handlers["runtime.status"]({}))["phase"] == "stopped"
     await ctx.aclose()
     assert runtime.closed
 

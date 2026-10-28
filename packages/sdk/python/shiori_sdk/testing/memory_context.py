@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+from shiori_sdk.core.services import MEMORY, RPC
 from shiori_sdk.kernel import Kernel
 from shiori_sdk.rpc import Concurrency, RpcHandler
 
@@ -63,8 +64,12 @@ class FakeMemoryCapability:
         return {"role_id": role_id, "documents": self.documents.get(role_id, [])}
 
 
-class FakeMemoryPluginContext(FakePluginContext):
-    """Setup context with fake memory and RPC capabilities."""
+class FakeMemorySetupContext(FakePluginContext):
+    """A setup context stocked for the memory plugin: ``fake_memory``, ``fake_rpc``.
+
+    Both are served under ``MEMORY`` / ``RPC``; the declaration still decides
+    which of them ``require`` resolves.
+    """
 
     def __init__(
         self,
@@ -88,11 +93,13 @@ class FakeMemoryPluginContext(FakePluginContext):
             provides=provides,
             package_dir=package_dir,
         )
-        self.memory = FakeMemoryCapability(workspace, roles=roles, skills=skills)
-        self.rpc = FakeRpc()
+        self.fake_memory = FakeMemoryCapability(workspace, roles=roles, skills=skills)
+        self.fake_rpc = FakeRpc()
+        self.serve(MEMORY, self.fake_memory)
+        self.serve(RPC, self.fake_rpc)
 
     async def aclose(self):
         await super().aclose()
-        self.rpc.handlers.clear()
-        self.rpc.concurrency.clear()
-        self.rpc.admission_exempt.clear()
+        self.fake_rpc.handlers.clear()
+        self.fake_rpc.concurrency.clear()
+        self.fake_rpc.admission_exempt.clear()

@@ -28,17 +28,17 @@ async def test_list_filters_by_host_role_and_fake_arguments_do_not_change_it(tmp
             "branch",
             "run",
         )
-    context.tools.context = {"role_id": "role-a"}
+    context.fake_tools.context = {"role_id": "role-a"}
     tool = TaskManagementTool(
         service,
-        context.tools,
-        context.process_resources,
+        context.fake_tools,
+        context.fake_process_resources,
         "list",
-        context.background_results,
+        context.fake_background_results,
     )
     listed = json.loads(await tool.execute(role_id="role-b"))["tasks"]
     assert [task["role_id"] for task in listed] == ["role-a"]
-    context.process_resources.active = False
+    context.fake_process_resources.active = False
     with pytest.raises(RuntimeError, match="配置已替换"):
         await tool.execute()
     await context.aclose()
@@ -46,14 +46,14 @@ async def test_list_filters_by_host_role_and_fake_arguments_do_not_change_it(tmp
 
 async def test_mutation_requires_authenticated_user_even_with_current_role(tmp_path):
     context = FakeServiceContext("herdr", tmp_path, package_dir=PACKAGE_DIR)
-    context.tools.context = {"role_id": "role-a"}
+    context.fake_tools.context = {"role_id": "role-a"}
     service = TaskService(tmp_path)
     tool = TaskManagementTool(
         service,
-        context.tools,
-        context.process_resources,
+        context.fake_tools,
+        context.fake_process_resources,
         "continue",
-        context.background_results,
+        context.fake_background_results,
     )
     with pytest.raises(PermissionError):
         await tool.execute(task_id="unknown", requirement="new")
@@ -67,11 +67,11 @@ async def test_current_tools_manage_retained_service_across_import_namespaces(
     retired, current = generations
     assert retired["cli"].CommandError is not current["cli"].CommandError
     context = FakeServiceContext("herdr", tmp_path, package_dir=PACKAGE_DIR)
-    context.tools.context = {"role_id": "role-a"}
+    context.fake_tools.context = {"role_id": "role-a"}
     target = FakeBackgroundResultTarget("role-a", "thread-a")
-    context.background_results.target = target
+    context.fake_background_results.target = target
     service = retired["service"].TaskService(tmp_path)
-    service.attach(context.process_resources, context.processes, tmp_path)
+    service.attach(context.fake_process_resources, context.fake_processes, tmp_path)
     task = retired["models"].CodingTask(
         "task-a",
         "original",
@@ -123,10 +123,10 @@ async def test_current_tools_manage_retained_service_across_import_namespaces(
     monkeypatch.setattr(service, "_execute", execute)
     tool = current["management_tools"].TaskManagementTool(
         service,
-        context.tools,
-        context.process_resources,
+        context.fake_tools,
+        context.fake_process_resources,
         action,
-        context.background_results,
+        context.fake_background_results,
     )
     try:
         if action == "continue":

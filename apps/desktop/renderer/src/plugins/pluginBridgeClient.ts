@@ -141,7 +141,7 @@ export type PluginSummary = {
   /** Manifest capabilities; `channels` marks a plugin that may contribute channels. */
   capabilities: string[];
   /** Services the plugin takes with `ctx.require`. Account plugins list `accounts`. */
-  inject?: string[];
+  inject: string[];
   /** Static channel declarations, present even while the plugin is inactive. */
   channels: PluginChannelDeclaration[];
   /** Manifest grouping for 设置 › 插件 (`feature` / `channel` / `system`). */

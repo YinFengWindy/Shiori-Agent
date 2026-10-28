@@ -113,12 +113,12 @@ def make_task(tmp_path, task_id, *, pane_id, session="default", created_at="t1")
 def fixture(tmp_path):
     ctx = FakeServiceContext("herdr", tmp_path, package_dir=PACKAGE_DIR)
     service = TaskService(tmp_path)
-    cli = HerdrCli(HerdrConfig(session="default"), ctx.processes, tmp_path)
+    cli = HerdrCli(HerdrConfig(session="default"), ctx.fake_processes, tmp_path)
     herdr = ScriptedHerdr()
     cli.command = herdr.command  # type: ignore[method-assign]
-    gate = SessionGate(cli, ctx.process_resources)
+    gate = SessionGate(cli, ctx.fake_process_resources)
     control = AgentControl(gate, AgentCommandLog(), service, AgentWatcher())
-    SessionAgents(service, ctx.as_capability(), control).register()
+    SessionAgents(service, ctx, control).register()
     return ctx, service, herdr
 
 
@@ -127,7 +127,7 @@ async def test_agents_are_grouped_by_workspace_and_linked_to_their_task(
 ):
     ctx, service, herdr = fixture
     for name in ("agents.list", "agents.get"):
-        assert ctx.rpc.concurrency[name] is Concurrency.READ_ONLY
+        assert ctx.fake_rpc.concurrency[name] is Concurrency.READ_ONLY
     # Same pane: the older task and a task of another session are not linked.
     # The pane alone links: a codex task on a pane Herdr now reports as claude.
     for task in (
@@ -138,7 +138,7 @@ async def test_agents_are_grouped_by_workspace_and_linked_to_their_task(
     ):
         service.tasks[task.id] = task
 
-    listed = await ctx.rpc.handlers["agents.list"]({})
+    listed = await ctx.fake_rpc.handlers["agents.list"]({})
 
     assert listed["session"] == "default"
     assert [
@@ -167,18 +167,18 @@ async def test_get_reads_the_agent_and_its_task_and_reports_a_gone_agent(
     ctx, service, herdr = fixture
     service.tasks["new"] = make_task(tmp_path, "new", pane_id="w9:p1")
 
-    detail = await ctx.rpc.handlers["agents.get"]({"pane_id": "w9:p1"})
+    detail = await ctx.fake_rpc.handlers["agents.get"]({"pane_id": "w9:p1"})
     assert detail["agent"]["status"] == "idle"
     assert detail["output"] == "output of w9:p1 via recent-unwrapped"
     assert detail["task"]["id"] == "new"
     assert detail["task"]["can_cancel"] is True
 
-    working = await ctx.rpc.handlers["agents.get"]({"pane_id": "wR:p2"})
+    working = await ctx.fake_rpc.handlers["agents.get"]({"pane_id": "wR:p2"})
     assert working["output"] == "output of wR:p2 via visible"
     assert working["task"] is None
 
     herdr.agents = []
-    gone = await ctx.rpc.handlers["agents.get"]({"pane_id": "w9:p1"})
+    gone = await ctx.fake_rpc.handlers["agents.get"]({"pane_id": "w9:p1"})
     assert gone == {
         "session": "default",
         "agent": None,
@@ -195,7 +195,7 @@ async def test_session_is_checked_once_and_a_failed_read_reports_the_reason(
     fixture,
 ):
     ctx, _service, herdr = fixture
-    list_agents = ctx.rpc.handlers["agents.list"]
+    list_agents = ctx.fake_rpc.handlers["agents.list"]
     await list_agents({})
     await list_agents({})
     assert sum(argv[1:] == ["--version"] for argv in herdr.argv) == 1
@@ -210,9 +210,9 @@ async def test_session_is_checked_once_and_a_failed_read_reports_the_reason(
     # A healthy session keeps the read's own error.
     herdr.read_error = CommandError("alternate screen", code="read_failed")
     with pytest.raises(CommandError, match="alternate screen"):
-        await ctx.rpc.handlers["agents.get"]({"pane_id": "wR:p2"})
+        await ctx.fake_rpc.handlers["agents.get"]({"pane_id": "wR:p2"})
 
-    ctx.process_resources.active = False
+    ctx.fake_process_resources.active = False
     with pytest.raises(RuntimeError, match="配置已替换"):
         await list_agents({})
     await ctx.aclose()
@@ -223,17 +223,17 @@ async def test_the_users_prompt_and_keys_are_recorded_and_returned_by_get(
 ):
     ctx, service, herdr = fixture
     for name in ("agents.prompt", "agents.keys"):
-        assert ctx.rpc.concurrency[name] is Concurrency.INTEGRATION
+        assert ctx.fake_rpc.concurrency[name] is Concurrency.INTEGRATION
 
-    await ctx.rpc.handlers["agents.prompt"]({"pane_id": "wR:p2", "text": "继续"})
-    await ctx.rpc.handlers["agents.keys"]({"pane_id": "wR:p2", "keys": ["ctrl+c"]})
+    await ctx.fake_rpc.handlers["agents.prompt"]({"pane_id": "wR:p2", "text": "继续"})
+    await ctx.fake_rpc.handlers["agents.keys"]({"pane_id": "wR:p2", "keys": ["ctrl+c"]})
 
     assert herdr.argv[-2][3:6] == ["agent", "prompt", "wR:p2"]
     assert herdr.argv[-1] == [
         "herdr",
         *("--session", "default", "agent", "send-keys", "wR:p2", "ctrl+c"),
     ]
-    detail = await ctx.rpc.handlers["agents.get"]({"pane_id": "wR:p2"})
+    detail = await ctx.fake_rpc.handlers["agents.get"]({"pane_id": "wR:p2"})
     assert detail["can_prompt"] is True
     assert [
         (item["kind"], item["content"], item["source"], item["status"])
@@ -247,12 +247,14 @@ async def test_the_users_prompt_and_keys_are_recorded_and_returned_by_get(
     task = make_task(tmp_path, "busy", pane_id="wR:p2")
     service.tasks[task.id] = task
     task.worker = asyncio.get_running_loop().create_future()  # type: ignore[assignment]
-    assert (await ctx.rpc.handlers["agents.get"]({"pane_id": "wR:p2"}))[
+    assert (await ctx.fake_rpc.handlers["agents.get"]({"pane_id": "wR:p2"}))[
         "can_prompt"
     ] is False
     sent = len(herdr.argv)
     with pytest.raises(ValueError, match="插件任务"):
-        await ctx.rpc.handlers["agents.prompt"]({"pane_id": "wR:p2", "text": "插话"})
+        await ctx.fake_rpc.handlers["agents.prompt"](
+            {"pane_id": "wR:p2", "text": "插话"}
+        )
     assert len(herdr.argv) == sent
     task.worker.cancel()
     await ctx.aclose()

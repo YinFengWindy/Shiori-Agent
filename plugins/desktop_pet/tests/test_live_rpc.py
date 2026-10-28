@@ -12,11 +12,11 @@ PACKAGE_DIR = Path(__file__).resolve().parents[1]
 
 async def test_config_rpcs_merge_fields_and_explain_errors(tmp_path):
     ctx = FakeServiceContext("desktop_pet", tmp_path, package_dir=PACKAGE_DIR)
-    ctx.roles.create_role(role_id="mira", name="Mira", system_prompt="")
-    await setup(ctx.as_capability())
-    handlers = ctx.rpc.handlers
-    assert ctx.rpc.concurrency["live.start"] is Concurrency.INTEGRATION
-    assert ctx.rpc.concurrency["live.config.get"] is Concurrency.READ_ONLY
+    ctx.fake_roles.create_role(role_id="mira", name="Mira", system_prompt="")
+    await setup(ctx)
+    handlers = ctx.fake_rpc.handlers
+    assert ctx.fake_rpc.concurrency["live.start"] is Concurrency.INTEGRATION
+    assert ctx.fake_rpc.concurrency["live.config.get"] is Concurrency.READ_ONLY
 
     with pytest.raises(ValueError, match="role_id"):
         await handlers["live.config.get"]({})

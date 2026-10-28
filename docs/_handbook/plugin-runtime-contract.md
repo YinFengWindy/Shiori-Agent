@@ -41,8 +41,9 @@ and renderer declaration keys are rejected. This table defines the v1 fields:
 | `version` | yes | full SemVer 2.0 string, including optional prerelease/build |
 | `runtime_api` | yes | compatibility range; host currently advertises `3.1.2` |
 | `entry` | yes | explicit package-relative `.py` backend entry |
-| `capabilities` | yes | existing v2 capability-name list, including `[]` |
-| `channels` | no | static channel declarations (Runtime API 2.2); requires the `channels` capability |
+| `capabilities` | yes | v2 name list, including `[]`; names grant nothing (services come from `inject`). A non-empty list with empty `inject` and `optional_inject` is `BLOCKED` (`capabilities_retired`) |
+| `inject`, `optional_inject`, `provides` | no | service key names: the backend takes `inject` keys with `ctx.require(KEY)` and `optional_inject` keys with `ctx.get(KEY)` (keys in `shiori_sdk.core.services`), and publishes `provides` keys with `ctx.provide`; `host.` names are rejected |
+| `channels` | no | static channel declarations (Runtime API 2.2); `capabilities` must contain `channels`, and the backend injects `channels` to contribute them |
 | `renderer` | no | object with optional `ui`, `background`, `surface` keys |
 | `renderer.<kind>.entry` | per declared kind | package-relative precompiled `.mjs` |
 | `renderer.<kind>.css` | per declared kind | list of `.css` files; `[]` explicitly means no styles |
@@ -60,8 +61,9 @@ declaration is required; there is no `optional` entry flag. A missing stylesheet
 background module or surface entry blocks the whole package before backend import.
 A backend entry must be parseable Python with a top-level `async def setup` that
 accepts one positional context and has no additional required arguments. The
-existing injected context/capability protocol is unchanged. The external fixture
-uses that context without importing host internals; public backend import
+context is `shiori_sdk.PluginRuntimeContext`; services listed in `inject` are
+taken with `ctx.require(KEY)`. The external fixture uses that context without
+importing host internals; public backend import
 portability is completed by #212.
 
 Ranges use whitespace-separated comparators with AND semantics: `=`, `>`, `>=`,
@@ -123,7 +125,7 @@ consolidates these additions and the subsequent #847 breaking migration.
 
 <!-- Record the next contract batch here, with PR references and breaking markers. -->
 
-- **Capability properties and `host.*` dual-write are gone (issue #903, refactor P4-4).**
+- **Capability properties and `host.*` dual-write are gone (PR #945, issue #903, refactor P4-4).**
   `KNOWN_CAPABILITIES`, `CapabilityNotGranted`, `require_known_capabilities`,
   the capability attributes on the host context, and the
   `*PluginContext` protocols (`ChannelPluginContext`, `ServicePluginContext`,
@@ -137,15 +139,70 @@ consolidates these additions and the subsequent #847 breaking migration.
   for every plugin, and `kv` / `services` when those names are injected;
   the kernel sees a marker so planning does not block them. `PluginBinding`
   still scopes tools, channels, accounts and the other per-plugin views.
-  `host.bridge` and `host.config_references` stay host-internal (the kernel
-  reads them at construction). The other `host.*` keys and their dual
-  `provide` are gone; readers use the public keys (`ACCOUNTS`, `CHANNELS`,
-  …). An `api: 2` manifest may still list a `capabilities` array, including
-  unknown names and `host.` names; that list no longer grants anything.
-  Rejecting non-`api: 4` packages, blocking old installs, and the reserved
-  public-key collision are P4-5.
-  **breaking** for any plugin that still reads `ctx.tools` / `ctx.rpc` / the
-  deleted protocols: declare the key in `inject` and call `ctx.require`.
+  `host.bridge` and `host.config_references` are read by the host itself
+  (the kernel requires them at construction). The other `host.*` keys and
+  their dual `provide` are gone; readers use the public keys (`ACCOUNTS`,
+  `CHANNELS`, …). Rejecting every non-`api: 4` package, blocking old
+  installs, and the reserved public-key collision are P4-5.
+  **breaking** (each item):
+  - `PluginRuntimeContext.granted` and `PluginRuntimeContext.events` are
+    removed from the SDK protocol. The domain bus is the key `EVENTS`
+    (`ctx.require(EVENTS)`), not a context attribute.
+  - A plugin that reads `ctx.tools` / `ctx.rpc` / `ctx.config` or any other
+    former capability attribute now fails: declare the key in `inject` and
+    call `ctx.require`.
+  - An `api: 2` package whose `capabilities` list is non-empty while
+    `inject` and `optional_inject` are both empty is `BLOCKED` at discovery
+    with diagnostic code `capabilities_retired` ("capabilities 已不再授权，请改用
+    inject + ctx.require"); its setup never runs. Such a package used to load
+    and could only fail inside setup, `config` included. An `api: 2` package
+    that also declares `inject` still loads; its `capabilities` list grants
+    nothing.
+  - No manifest, whatever its `api`, may name a `host.` key in `inject`,
+    `optional_inject` or `provides` (before, `api: 2` could inject
+    `host.bridge`, the shared RPC registry, or `host.config_references`).
+    `manifest.schema.json` applies the rule to every manifest.
+  - `shiori_sdk.runtime.parse_capabilities` no longer checks names against a
+    whitelist; it still requires a list and now rejects a non-string item
+    (before, it converted items with `str`).
+  - `HostServiceUnavailable.for_capability` is removed; the host raises
+    `HostServiceUnavailable` with its own message.
+  - Testing (`shiori-sdk[testing]`):
+    - `FakePluginContext` drops the `capabilities=` argument and the
+      `granted` attribute, so it no longer rejects an unknown capability
+      name, and drops its `events` property (`fake_events` is the fake
+      served as `EVENTS`).
+    - `FakePluginContext` refuses to set or read any former capability
+      attribute (`ctx.kv = ...`, `ctx.rpc`, …), on itself or a subclass,
+      because the host context has none. `FakePluginContext.serve(KEY, fake)`
+      supplies a fake for a declared, unprovided key instead.
+    - The stocked contexts keep their fakes on `fake_<key name>` and serve
+      them: `FakeExtensionContext` (`fake_config`, `fake_dependencies`,
+      `fake_background`, `fake_storage`; `workspace=` is served as
+      `WORKSPACE`), `FakeServiceContext` (`fake_roles`, `fake_models`,
+      `fake_sessions` as `SESSION_STORE`, `fake_external_turns`,
+      `fake_background_results`, `fake_process_resources`, `fake_tools`,
+      `fake_kv`, `fake_rpc`, `fake_http`, `fake_resources`,
+      `fake_processes`, `fake_runtime`, `fake_scene_observations`,
+      `fake_light_provider`; `TOOL_TURN` and `LIGHT_MODEL` are served too).
+      Without `workspace`, `require(WORKSPACE)` raises the kernel's
+      `provider_unavailable` instead of `HostServiceUnavailable`.
+    - `FakeChannelPluginContext` is renamed `FakeChannelSetupContext`
+      (`fake_channels`, `fake_accounts`, `fake_kv`, `fake_config`,
+      `fake_rpc`, `fake_processes`, `fake_http`, `fake_avatars`,
+      `fake_tools`) and gains `kv=` (an earlier context's `fake_kv`, for a
+      restart) and `workspace=` (default `plugin_dir`).
+    - `FakeMemoryPluginContext` is renamed `FakeMemorySetupContext`
+      (`fake_memory`, `fake_rpc`).
+    - `FakeServiceProviderContext` is removed: use `FakePluginContext` and
+      `ctx.serve(SERVICES, FakePluginServices(ctx))`.
+    - The identity adapters `as_capability()` on `FakeChannelPluginContext`,
+      `FakeServiceContext`, `FakeServiceProviderContext` and `FakeAccounts`
+      are removed; pass the context (or the fake) directly.
+    - `pytest_fixtures.load_manifest_grants` is replaced by
+      `read_plugin_id(plugin_dir)`, which returns only the id and still
+      rejects a non-`api: 4` manifest without a valid `capabilities` list.
+  No SDK or plugin version bump (D26).
 
 - **Built-in plugins use manifest `api: 4` (issue #903, refactor P4-3).**
   Each built-in manifest drops `capabilities`, `runtime_api`, `package_contract`
@@ -1201,8 +1258,9 @@ API 2.1 adds injected renderer `client.events.on(localName, handler)`,
 alongside the existing `client.call`. Dependency IDs use the manifest's existing
 strong/optional lists. Missing or inactive optional peers return `null`; retained
 peers and calls from retired contexts fail with `plugin_unavailable`. The same
-local names are used for self and declared peers. Background setup registers
-awaitable methods with `ctx.rpc.handle`; `ctx.events` is plugin-local and
+local names are used for self and declared peers. The renderer background
+(TypeScript `BackgroundCtx`, not the Python setup context) registers awaitable
+methods with `ctx.rpc.handle`; its `ctx.events` is plugin-local and
 `ctx.hostEvents` explicitly subscribes to host events.
 
 Components must renew subscription effects when their injected `client` changes.
@@ -1232,10 +1290,13 @@ existing trust model, not a sandbox; the CSP and resource grants are unchanged.
 ## Runtime API 2.2 channel declarations
 
 API 2.2 adds the optional top-level `channels` list. Each entry declares one
-external chat channel the plugin may contribute through `ctx.channels.add`:
+external chat channel the plugin may contribute through the injected
+`CHANNELS` service (`ctx.require(CHANNELS).add(channel)`). An `api: 4` package
+writes the same entries under `contributes.channels`:
 
 ```yaml
-capabilities: [config, channels]
+capabilities: [channels]
+inject: [config, channels]
 channels:
   - name: qq                         # required, [a-z][a-z0-9_-]{0,63}
     label: QQ（NapCat）               # required, display name
@@ -1255,7 +1316,7 @@ channels:
 
 Values must be nonempty strings (`group_listening` is a boolean); unknown keys,
 duplicate names, the host-owned `desktop` name and declarations without the
-`channels` capability are rejected.
+`channels` in `capabilities` are rejected.
 
 Since API 2.13 an entry may declare `group_listening: true`: the plugin passes
 every group message to `route_account_inbound`, not only those that @ or reply
@@ -1289,7 +1350,7 @@ then use generated transport names `<instance_prefix><suffix>`, which share the
 entry's `chat_types` and `group_listening`. `channels.list` adds one row per such
 contributed instance of an enabled, `ACTIVE` plugin.
 
-At runtime `ctx.channels.add(channel)` only accepts a `channel.name` declared by
+At runtime `ctx.require(CHANNELS).add(channel)` only accepts a `channel.name` declared by
 the same manifest, a name under a declared `instance_prefix`, or an account
 instance named `<declared name>:<suffix>` whose channel carries a nonempty
 `account_id`. Any other name raises during setup, so the plugin rolls back
@@ -1302,7 +1363,7 @@ none of them activates; candidates that already conflict by plugin ID keep
 Packages using `channels` must require `runtime_api: ">=3.0.0 <4.0.0"`; older
 hosts reject the unknown top-level key.
 
-`plugins.list` rows carry the manifest's `capabilities` and `channels`. The
+`plugins.list` rows carry the manifest's `capabilities`, `inject` and `channels`. The
 read-only bridge method `channels.list` returns `{channels: [...]}`: the
 host-owned `desktop` first, then every declared plugin channel (every external
 channel is a plugin). Each row has the declaration fields plus `plugin_id` (`null`
@@ -1412,7 +1473,7 @@ prompt-library delete confirmation is `host.ui.ConfirmDialog` with
 
 A turn in an external context (group chats, private chats with someone who is
 not a bound user) whose sender is not the bound user may only use tools that
-were registered as allowed there. `ctx.tools.register(tool, ...,
+were registered as allowed there. `ctx.require(TOOLS).register(tool, ...,
 external_allowed=True)` is that declaration; the default is `False`, so a plugin
 tool that does not declare it is unavailable in such turns. Messages from the
 bound user themselves are never restricted, even in a group.
@@ -1441,8 +1502,8 @@ else, and their tools become available in those turns once they declare
 ## Runtime API 3.1.1 external turns
 
 A plugin that receives messages from a source that is not a channel account
-(the desktop pet's live-stream chat, #292) declares `external_turns` and submits
-each message it wants answered through `ctx.external_turns.submit(...)`. The host
+(the desktop pet's live-stream chat, #292) injects `external_turns` and submits
+each message it wants answered through `ctx.require(EXTERNAL_TURNS).submit(...)`. The host
 routes it through the same thread creation, projection and role execution context
 as channel account intake (`core/channels/role_routing.py`), with group-chat
 semantics: the conversation is the role's external thread
@@ -1584,9 +1645,9 @@ These are the additions of the 3.1.1 row; packages using any of them declare
 `runtime_api: ">=3.1.1 <4.0.0"`. The SDK README ("Discoverable services and
 speech contracts") holds the details.
 
-- **Services.** A backend that declares the `services` capability publishes
-  `ctx.services.register(service_id, contract=, label=, methods={...},
-  metadata=)` (`shiori_sdk.services.ServiceProviderContext`): explicit async JSON
+- **Services.** A backend that injects `services` publishes
+  `ctx.require(SERVICES).register(service_id, contract=, label=, methods={...},
+  metadata=)` (`shiori_sdk.services.PluginServices`): explicit async JSON
   methods for exactly that plugin instance's lifetime. Renderer code discovers
   them through the injected `client.services.list(contract)` (descriptors
   `{plugin_id, service_id, contract, label, metadata}`) and calls one with
@@ -1720,10 +1781,10 @@ settling its DOM detection before the first mount; the desktop unit test loader
 
 ## Runtime API 2.12 channel avatars
 
-API 2.12 adds the `avatars` capability, the host's cache of the platform
-avatars of a channel's message senders and chats (#514). A plugin declares
-`avatars` in its manifest `capabilities` and, if it is an external package,
-`runtime_api: ">=3.0.0 <4.0.0"`.
+API 2.12 adds the `avatars` service, the host's cache of the platform
+avatars of a channel's message senders and chats (#514). A plugin lists
+`avatars` in its manifest `inject`, takes `ctx.require(AVATARS)` and, if it is
+an external package, declares `runtime_api: ">=3.0.0 <4.0.0"`.
 
 An avatar is keyed by `kind` and the message's transport `channel`
 (`InboundMessage.channel`):
@@ -1735,7 +1796,7 @@ An avatar is keyed by `kind` and the message's transport `channel`
   the other person's for a private chat.
 
 The plugin holds the platform credentials and downloads the picture; the host
-decides when it is due, validates, shrinks and stores it. The capability has
+decides when it is due, validates, shrinks and stores it. The service has
 one member, `refresh(kind, channel, id, fetch)`:
 
 - It is due when there is no cached avatar or the last attempt is older than
@@ -1759,7 +1820,7 @@ the phone (`sender_avatar_abs` on messages, `avatar_abs` on conversation rows)
 and identity (`avatar_abs`) bridge responses. After the plugin scope is
 released `refresh` raises `RuntimeError` and its pending tasks are
 cancelled. A bundled channel's own account avatar still goes through
-`ctx.accounts.register(..., avatar_url=)`.
+`ctx.require(ACCOUNTS).register(..., avatar_url=)`.
 
 ## Renderer artifacts and dependencies
 
@@ -2166,17 +2227,16 @@ uses `shiori-sdk[testing]`, and executes the tests without the host. The SDK nev
 imports host or concrete plugin implementations or creates host storage. Real
 AppRuntime, channel, window and process integration remains in separate host CI;
 `shiori-host-testing` provides Python runtime fixtures. Memory construction,
-resource handoff and typed setup capabilities are documented in
+resource handoff and the injected service keys are documented in
 [the shared SDK guide](../../packages/sdk/README.md);
 the default memory implementation and vector compatibility rules belong to its
 plugin. The guide also covers installation, testing and artifact checks.
 
 
-The hook/command/observation setup surfaces are `HookPluginContext`,
-`CommandPluginContext` and `ObservePluginContext` in `shiori_sdk.extensions`.
-Observe declares `workspace`, `events` and `background`, and injects
-`crash_reporting` (Unreleased, P3-8). Capability `diagnostics` is removed.
-`storage.migrate_data` remains the migration port when a plugin declares
+Hook, command and observation plugins take their services with `ctx.require`
+like every other plugin. Observe injects `workspace`, `events`, `background`
+and `crash_reporting` (Unreleased, P3-8); `diagnostics` is removed.
+`STORAGE.migrate_data` remains the migration port when a plugin injects
 `storage`. Crash hooks, the active session and owned frames come from
 `CRASH_REPORTING`. The plugin never guesses a repository root. These ports
 were introduced in Runtime API 3.0; the diagnostics capability split is
@@ -2186,15 +2246,16 @@ Command plugins register on the core `COMMANDS` socket
 (`inject: [commands]`, `shiori_sdk.core.conversation`); the handler reads a
 `CommandInput` and returns the reply, and the host builds the turn result around
 it, so abort construction/context preservation remain host-owned.
-The optional Observe reader is queried through `dependencies.get_optional("observe")`
+The optional Observe reader is queried through `ctx.require(DEPENDENCIES).get_optional("observe")`
 each time; availability is scoped to the active provider generation.
 
 
 ### SDK 3.0 role and process capabilities (#588)
 
-Role, generation and native-tool plugins use the manifest-granted SDK
-`ServicePluginContext`: `roles`, `models`, `sessions`, `http`, `resources`,
-`processes`, `tool_turn`, `background` and `runtime`. The role model activation
+Role, generation and native-tool plugins inject the service keys they use
+(`shiori_sdk.core.services`): `roles`, `models`, `session_store`, `http`,
+`resources`, `processes`, `tool_turn`, `background` and `runtime`, each taken
+with `ctx.require`. The role model activation
 context is held across awaits; runtime background tasks retain the current
 generation. MCP and owned process cleanup remain implemented by the host,
 including Windows Job ownership before execution. See the SDK README for the
@@ -2204,9 +2265,9 @@ explicit dependencies; desktop-pet integration is tested on the host side.
 
 ### SDK 3.0 channel services (#589)
 
-QQBot, QQ, Telegram and Feishu consume the public `ChannelPluginContext`/`ChannelContext` and SDK-only testing support. Channel values (accounts, targets, message events, declarations, session keys and message source/quotes) have one SDK definition. `ctx.intake_factory` creates host-owned admission coordination; `avatars` schedules host-owned caching, and `http` provides bounded requests. `processes.popen` exposes the synchronous counterpart to owned async spawn, preserving WindowsJob adoption before execution without moving any OS implementation into the SDK. Platform credentials, clients, reconnect/streaming, NapCat installation and QR/profile policy remain plugin-owned. Actual host construction checks these protocols with pyright.
+QQBot, QQ, Telegram and Feishu take their setup services with `ctx.require` (`channels`, `accounts`, `kv`, `config`, `rpc` and the like), receive `ChannelContext` at transport start, and use SDK-only testing support. Channel values (accounts, targets, message events, declarations, session keys and message source/quotes) have one SDK definition. `ctx.intake_factory` creates host-owned admission coordination; `avatars` schedules host-owned caching, and `http` provides bounded requests. `processes.popen` exposes the synchronous counterpart to owned async spawn, preserving WindowsJob adoption before execution without moving any OS implementation into the SDK. Platform credentials, clients, reconnect/streaming, NapCat installation and QR/profile policy remain plugin-owned. Actual host construction checks these protocols with pyright.
 
-Channel groups and identity indexes are obtained from granted services (`channels.group`, `session_manager.identity_index`); their runtime and persistence implementations remain host-owned. The SDK only declares these protocols and supplies independent fakes. Channel credential references resolve through granted `config.resolve_reference` at use time while stored credentials retain their original reference. `KeyValueStore.delete` is idempotent.
+Channel groups and identity indexes are obtained from injected services (`CHANNELS.group`, and `ChannelContext.session_manager.identity_index` at start); their runtime and persistence implementations remain host-owned. The SDK only declares these protocols and supplies independent fakes. Channel credential references resolve through the injected `CONFIG.resolve_reference` at use time while stored credentials retain their original reference. `KeyValueStore.delete` is idempotent.
 
 
 ### Schema configuration autosave

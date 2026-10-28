@@ -4,7 +4,7 @@ import asyncio
 
 from shiori_sdk.channels import ChannelContext
 from shiori_sdk.testing.channel_context import (
-    FakeChannelPluginContext,
+    FakeChannelSetupContext,
     fake_channel_context,
 )
 from shiori_sdk.testing.channel_hub import FakeChannelHub
@@ -16,7 +16,7 @@ async def test_close_cancels_pending_platform_avatar_fetch(tmp_path):
     (tmp_path / "manifest.yaml").write_text(
         "id: example\nchannels: []\n", encoding="utf-8"
     )
-    context = FakeChannelPluginContext("example", tmp_path)
+    context = FakeChannelSetupContext("example", tmp_path)
     started = asyncio.Event()
 
     async def fetch() -> bytes:
@@ -24,22 +24,22 @@ async def test_close_cancels_pending_platform_avatar_fetch(tmp_path):
         await asyncio.Event().wait()
         return b"unreachable"
 
-    task = context.as_capability().avatars.refresh("sender", "example", "1", fetch)
+    task = context.fake_avatars.refresh("sender", "example", "1", fetch)
     await started.wait()
     await context.aclose()
     assert task is not None and task.cancelled()
-    assert context.avatars.tasks == set()
+    assert context.fake_avatars.tasks == set()
 
 
 def test_channel_plugin_context_maps_platform_account_ids(tmp_path):
     (tmp_path / "manifest.yaml").write_text(
         "id: example\nchannels: []\n", encoding="utf-8"
     )
-    context = FakeChannelPluginContext(
+    context = FakeChannelSetupContext(
         "example", tmp_path, account_ids=lambda value: f"account-{value}"
     )
 
-    snapshot = context.accounts.register(
+    snapshot = context.fake_accounts.register(
         platform="example", platform_account_id="7", config_ref="r", role_id="mira"
     )
 

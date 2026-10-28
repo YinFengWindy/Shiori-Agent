@@ -11,7 +11,7 @@ from types import MappingProxyType
 from typing import Any
 import pytest
 from plugins.observe.backend.plugin import setup
-from shiori_sdk import HostServiceUnavailable
+from shiori_sdk.kernel import KernelError
 from shiori_sdk.core.crash_reporting import CRASH_REPORTING
 from shiori_sdk.kernel import Kernel
 from shiori_sdk.memory.committed import TurnCommitted
@@ -41,7 +41,7 @@ async def _loaded(workspace):
     ctx, reporting = _context(workspace)
     try:
         await setup(ctx)
-        yield ctx, ctx.events, reporting
+        yield ctx, ctx.fake_events, reporting
     finally:
         await ctx.aclose()
 
@@ -177,7 +177,7 @@ async def test_memory_written_event_translated_and_persisted(tmp_path: Path) -> 
 async def test_setup_fails_instead_of_skipping_without_workspace():
     """A host without workspace must stop setup, not load observe half-disabled."""
     ctx, reporting = _context()
-    with pytest.raises(HostServiceUnavailable, match="workspace"):
+    with pytest.raises(KernelError, match="workspace"):
         await setup(ctx)
     assert ctx.exported is None
     assert not reporting.owners
@@ -205,7 +205,7 @@ async def test_partial_collector_install_is_rolled_back(
         finally:
             await ctx.aclose()
     assert not reporting.owners
-    assert not ctx._events._subscriptions
+    assert not ctx.fake_events._subscriptions
     _assert_connections_closed(opened_connections)
 
 
@@ -214,7 +214,7 @@ async def test_cancel_setup_during_readiness_closes_started_writer(
     tmp_path, monkeypatch, opened_connections
 ):
     ctx, reporting = _context(tmp_path)
-    spawn = ctx.background.spawn
+    spawn = ctx.fake_background.spawn
 
     def cancel_after_spawn(coro, *, name):
         task = spawn(coro, name=name)
@@ -224,7 +224,7 @@ async def test_cancel_setup_during_readiness_closes_started_writer(
             asyncio.get_running_loop().call_soon(current.cancel)
         return task
 
-    monkeypatch.setattr(ctx.background, "spawn", cancel_after_spawn)
+    monkeypatch.setattr(ctx.fake_background, "spawn", cancel_after_spawn)
 
     async def load():
         try:
@@ -235,7 +235,7 @@ async def test_cancel_setup_during_readiness_closes_started_writer(
     with pytest.raises(asyncio.CancelledError):
         await asyncio.create_task(load())
     assert not reporting.owners
-    assert not ctx._events._subscriptions
+    assert not ctx.fake_events._subscriptions
     _assert_connections_closed(opened_connections)
 
 
@@ -281,7 +281,7 @@ async def test_setup_failure_after_registration_cleans_all_resources(
         finally:
             await ctx.aclose()
     assert not reporting.owners
-    assert not ctx._events._subscriptions
+    assert not ctx.fake_events._subscriptions
     _assert_connections_closed(opened_connections)
 
 

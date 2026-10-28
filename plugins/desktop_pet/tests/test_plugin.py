@@ -12,9 +12,9 @@ PACKAGE_DIR = Path(__file__).resolve().parents[1]
 @pytest.mark.asyncio
 async def test_setup_registers_scoped_tools_rpc_and_role_participant(tmp_path):
     ctx = FakeServiceContext("desktop_pet", tmp_path, package_dir=PACKAGE_DIR)
-    await setup(ctx.as_capability())
-    assert "pet_action" in ctx.tools.tools
-    assert set(ctx.rpc.handlers) == {
+    await setup(ctx)
+    assert "pet_action" in ctx.fake_tools.tools
+    assert set(ctx.fake_rpc.handlers) == {
         "binding.get",
         "pets.list",
         "pets.import",
@@ -37,15 +37,15 @@ async def test_setup_registers_scoped_tools_rpc_and_role_participant(tmp_path):
         "live.stop",
         "live.status",
     }
-    assert ctx.rpc.concurrency["binding.get"] is Concurrency.READ_ONLY
-    assert ctx.rpc.concurrency["pets.import"] is Concurrency.MUTATION
-    assert ctx.rpc.admission_exempt["bubble.dismiss"]
-    assert ctx.rpc.admission_exempt["live.reply.outcome"]
-    assert ctx.rpc.concurrency["live.start"] is Concurrency.INTEGRATION
-    assert ctx.rpc.concurrency["live.status"] is Concurrency.READ_ONLY
-    assert await ctx.rpc.handlers["binding.get"]({}) == {"binding": None}
-    assert "desktop_pet" in ctx.roles.extensions.participants
+    assert ctx.fake_rpc.concurrency["binding.get"] is Concurrency.READ_ONLY
+    assert ctx.fake_rpc.concurrency["pets.import"] is Concurrency.MUTATION
+    assert ctx.fake_rpc.admission_exempt["bubble.dismiss"]
+    assert ctx.fake_rpc.admission_exempt["live.reply.outcome"]
+    assert ctx.fake_rpc.concurrency["live.start"] is Concurrency.INTEGRATION
+    assert ctx.fake_rpc.concurrency["live.status"] is Concurrency.READ_ONLY
+    assert await ctx.fake_rpc.handlers["binding.get"]({}) == {"binding": None}
+    assert "desktop_pet" in ctx.fake_roles.extensions.participants
     await ctx.aclose()
-    assert not ctx.roles.extensions.participants
-    assert not ctx.tools.tools
-    assert not ctx.rpc.handlers
+    assert not ctx.fake_roles.extensions.participants
+    assert not ctx.fake_tools.tools
+    assert not ctx.fake_rpc.handlers

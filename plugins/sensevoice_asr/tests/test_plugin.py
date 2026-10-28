@@ -13,20 +13,20 @@ async def test_service_and_independent_file_test(context, tmp_path, audio, monke
     )
     monkeypatch.setattr(plugin, "SenseVoiceClient", lambda: client)
     await plugin.setup(context)
-    service = context.services.methods["asr", "transcribe"]
+    service = context.fake_services.methods["asr", "transcribe"]
     assert await service(
         {"audio_base64": base64.b64encode(audio).decode(), "format": "wav"}
     ) == {"text": "独立识别"}
     source = tmp_path / "private_runtime/imports/sensevoice_asr-audio/clip.wav"
     source.parent.mkdir(parents=True)
     source.write_bytes(audio)
-    assert await context.rpc.handlers["transcribe_file"]({"source": str(source)}) == {
-        "text": "独立识别"
-    }
+    assert await context.fake_rpc.handlers["transcribe_file"](
+        {"source": str(source)}
+    ) == {"text": "独立识别"}
     assert not source.exists()
-    assert context.config.as_dict() == {}
+    assert context.fake_config.as_dict() == {}
     await context.aclose()
-    assert not context.services.entries
+    assert not context.fake_services.entries
     assert client.http.is_closed
 
 
@@ -41,7 +41,7 @@ async def test_malformed_audio_never_enters_http(context, monkeypatch):
     monkeypatch.setattr(plugin, "SenseVoiceClient", lambda: client)
     await plugin.setup(context)
     with pytest.raises(ValueError):
-        await context.services.methods["asr", "transcribe"](
+        await context.fake_services.methods["asr", "transcribe"](
             {"audio_base64": "not base64", "format": "wav"}
         )
     assert calls == []

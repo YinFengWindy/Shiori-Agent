@@ -5,7 +5,13 @@ from collections.abc import Coroutine
 from pathlib import Path
 from shiori_sdk.extensions import Dependencies
 from shiori_sdk.kernel import Kernel
-from shiori_sdk.runtime import HostServiceUnavailable
+from shiori_sdk.core.services import (
+    BACKGROUND,
+    CONFIG,
+    DEPENDENCIES,
+    STORAGE,
+    WORKSPACE,
+)
 from .context import FakePluginContext
 from .memory import FakeMemoryStorage
 
@@ -73,14 +79,17 @@ class FakeBackground:
 
 
 class FakeExtensionContext(FakePluginContext):
-    """Inject only SDK fakes; no host install, config, database or session services.
+    """Serve only SDK fakes; no host install, config, database or session services.
 
-    ``workspace`` left as ``None`` models a host that lacks the service:
-    reading it raises ``HostServiceUnavailable`` like the host does.
-    ``kernel``, ``inject``, ``optional_inject`` and ``package_dir`` are those
-    of ``FakePluginContext``: provide a ``CommandRegistry`` as ``COMMANDS`` on
-    ``kernel`` for a command plugin, a ``FakeSessions`` as ``SESSIONS`` when
-    the command rolls a turn back, and ``MEMORY_ENGINE`` when the test has one.
+    ``fake_config``, ``fake_dependencies``, ``fake_background`` and
+    ``fake_storage`` are served under ``CONFIG`` / ``DEPENDENCIES`` /
+    ``BACKGROUND`` / ``STORAGE``. ``workspace`` is served as ``WORKSPACE``;
+    left as ``None`` it models a host without one, and ``require(WORKSPACE)``
+    fails like the kernel's missing provider. ``kernel``, ``inject``,
+    ``optional_inject`` and ``package_dir`` are those of ``FakePluginContext``:
+    provide a ``CommandRegistry`` as ``COMMANDS`` on ``kernel`` for a command
+    plugin, a ``FakeSessions`` as ``SESSIONS`` when the command rolls a turn
+    back, and ``MEMORY_ENGINE`` when the test has one.
     """
 
     def __init__(
@@ -102,17 +111,13 @@ class FakeExtensionContext(FakePluginContext):
             optional_inject=optional_inject,
             package_dir=package_dir,
         )
-        self._workspace = workspace
-        self.config = FakeConfig(config)
-        self.dependencies = dependencies or FakeDependencies()
-        self.background = FakeBackground(self)
-        self.storage = FakeMemoryStorage()
-
-    @property
-    def workspace(self) -> Path:
-        """Returns the supplied workspace, failing like a host that has none."""
-        if self._workspace is None:
-            raise HostServiceUnavailable.for_capability(
-                self.plugin_id, "workspace", ("workspace",)
-            )
-        return self._workspace
+        self.fake_config = FakeConfig(config)
+        self.fake_dependencies = dependencies or FakeDependencies()
+        self.fake_background = FakeBackground(self)
+        self.fake_storage = FakeMemoryStorage()
+        self.serve(CONFIG, self.fake_config)
+        self.serve(DEPENDENCIES, self.fake_dependencies)
+        self.serve(BACKGROUND, self.fake_background)
+        self.serve(STORAGE, self.fake_storage)
+        if workspace is not None:
+            self.serve(WORKSPACE, workspace)

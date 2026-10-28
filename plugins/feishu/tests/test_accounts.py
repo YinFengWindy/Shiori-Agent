@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 from shiori_sdk.accounts import AccountResponseRules
-from shiori_sdk.testing.channel_context import FakeChannelPluginContext
+from shiori_sdk.testing.channel_context import FakeChannelSetupContext
 from shiori_sdk.testing.storage import FakeKV
 
 from plugins.feishu.backend import accounts as feishu_accounts
@@ -27,18 +27,17 @@ def _app(app_id: str, role_id: str = "mira", **extra: Any) -> dict[str, Any]:
     }
 
 
-async def _load(kv: FakeKV, roles: set[str] | None = None) -> FakeChannelPluginContext:
+async def _load(kv: FakeKV, roles: set[str] | None = None) -> FakeChannelSetupContext:
     """Runs setup over saved plugin data, as one application start does."""
-    ctx = FakeChannelPluginContext("feishu", PLUGIN_DIR)
-    ctx.kv = kv
-    ctx.accounts.available_roles = roles
-    await setup(ctx.as_capability())
+    ctx = FakeChannelSetupContext("feishu", PLUGIN_DIR, kv=kv)
+    ctx.fake_accounts.available_roles = roles
+    await setup(ctx)
     return ctx
 
 
-async def _unload(ctx: FakeChannelPluginContext) -> None:
+async def _unload(ctx: FakeChannelSetupContext) -> None:
     try:
-        for group in ctx.channels.channels:
+        for group in ctx.fake_channels.channels:
             await group.stop()
     finally:
         await ctx.aclose()
@@ -59,14 +58,14 @@ async def test_saved_applications_register_separate_accounts_and_channels() -> N
     try:
         assert {
             account_id: snapshot.connection
-            for account_id, snapshot in ctx.accounts.records.items()
+            for account_id, snapshot in ctx.fake_accounts.records.items()
         } == {
             "feishu:feishu:cli_a": "connecting",
             "feishu:lark:cli_b": "login_required",
             "feishu:feishu:cli_c": "offline",
         }
         # Only the application that can connect runs as a member channel.
-        [group] = ctx.channels.channels
+        [group] = ctx.fake_channels.channels
         assert group.member("feishu:cli_a") is not None
         assert group.member("lark:cli_b") is None
         assert group.member("feishu:cli_c") is None
@@ -85,20 +84,20 @@ async def test_rules_survive_restart_and_apps_of_deleted_roles_are_purged() -> N
     first = await _load(kv, {"mira"})
     try:
         # The application whose role is gone is deleted with its data.
-        assert list(first.accounts.records) == ["feishu:feishu:cli_a"]
+        assert list(first.fake_accounts.records) == ["feishu:feishu:cli_a"]
         applications = kv.get("applications")
         assert isinstance(applications, list)
         assert [row["app_id"] for row in applications] == ["cli_a"]
         assert kv.get("profile:feishu:cli_gone") is None
         assert kv.get("targets:feishu:cli_gone") is None
-        assert first.accounts.rules_handler is not None
-        first.accounts.rules_handler("feishu:cli_a", rules)
+        assert first.fake_accounts.rules_handler is not None
+        first.fake_accounts.rules_handler("feishu:cli_a", rules)
     finally:
         await _unload(first)
 
     restarted = await _load(kv, {"mira"})
     try:
-        [snapshot] = restarted.accounts.records.values()
+        [snapshot] = restarted.fake_accounts.records.values()
         assert snapshot.record.response_rules == rules
     finally:
         await _unload(restarted)
@@ -113,7 +112,7 @@ async def test_saved_application_keeps_its_secret_for_its_role_only(
     kv = FakeKV()
     ctx = await _load(kv, {"mira", "other"})
     try:
-        saved = await ctx.rpc.handlers["accounts.save"](
+        saved = await ctx.fake_rpc.handlers["accounts.save"](
             {
                 "role_id": "mira",
                 "domain": "lark",
@@ -128,7 +127,7 @@ async def test_saved_application_keeps_its_secret_for_its_role_only(
         [stored] = applications
         assert (stored["app_secret"], stored["role_id"]) == ("new-secret", "mira")
         with pytest.raises(ValueError, match="另一个角色"):
-            await ctx.rpc.handlers["accounts.save"](
+            await ctx.fake_rpc.handlers["accounts.save"](
                 {"role_id": "other", "domain": "lark", "app_id": "cli_new"}
             )
     finally:

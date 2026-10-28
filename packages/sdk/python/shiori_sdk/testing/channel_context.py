@@ -15,8 +15,19 @@ from shiori_sdk.channels.services import (
 )
 from shiori_sdk.http import HttpResources
 from shiori_sdk.runtime import EventsCapability
+from shiori_sdk.core.services import (
+    ACCOUNTS,
+    AVATARS,
+    CHANNELS,
+    CONFIG,
+    HTTP,
+    KV,
+    PROCESSES,
+    RPC,
+    TOOLS,
+    WORKSPACE,
+)
 from shiori_sdk.channels.chat_types import ChatTypeDeclaration, parse_chat_type
-from shiori_sdk.runtime import PluginRuntimeContext
 from .accounts import FakeAccounts
 from .extensions import FakeConfig
 from .context import FakePluginContext
@@ -82,8 +93,13 @@ class FakeChannels:
         return FakeAccountChannelGroup(name)
 
 
-class FakeChannelPluginContext(FakePluginContext):
-    """Channel setup services using no host storage, runtime or manifest loader."""
+class FakeChannelSetupContext(FakePluginContext):
+    """A setup context stocked for a channel plugin; no host storage or runtime.
+
+    Each fake sits on ``fake_<key name>`` and is served under that key, so a
+    plugin's ``ctx.require(RPC)`` returns ``fake_rpc``. Only keys the package
+    manifest declares in ``inject`` / ``optional_inject`` resolve.
+    """
 
     def __init__(
         self,
@@ -91,32 +107,43 @@ class FakeChannelPluginContext(FakePluginContext):
         plugin_dir: Path,
         *,
         account_ids: Callable[[str], str] | None = None,
+        kv: FakeKV | None = None,
+        workspace: Path | None = None,
     ):
-        """``account_ids`` maps a platform account ID to the host account ID."""
+        """``account_ids`` maps a platform account ID to the host account ID.
+
+        Pass an earlier context's ``fake_kv`` as ``kv`` to model a restart over
+        saved plugin data. ``workspace`` defaults to ``plugin_dir``.
+        """
         super().__init__(plugin_id, plugin_dir, package_dir=plugin_dir)
         self.manifest = FakeChannelDeclarations(plugin_dir)
-        self.channels = FakeChannels()
-        self.accounts = FakeAccounts(plugin_id, id_factory=account_ids)
-        self.kv = FakeKV()
-        self.config = FakeConfig()
-        self.rpc = FakeRpc()
-        self.workspace = plugin_dir
-        self.processes = FakeProcesses()
-        self.http = FakeHttp()
-        self.avatars = FakeAvatars()
-        self.tools = FakeTools()
-
-    def as_capability(self) -> PluginRuntimeContext:
-        """The same setup boundary the host passes to ``setup``."""
-        return self
+        self.fake_channels = FakeChannels()
+        self.fake_accounts = FakeAccounts(plugin_id, id_factory=account_ids)
+        self.fake_kv = kv if kv is not None else FakeKV()
+        self.fake_config = FakeConfig()
+        self.fake_rpc = FakeRpc()
+        self.fake_processes = FakeProcesses()
+        self.fake_http = FakeHttp()
+        self.fake_avatars = FakeAvatars()
+        self.fake_tools = FakeTools()
+        self.serve(CHANNELS, self.fake_channels)
+        self.serve(ACCOUNTS, self.fake_accounts)
+        self.serve(KV, self.fake_kv)
+        self.serve(CONFIG, self.fake_config)
+        self.serve(RPC, self.fake_rpc)
+        self.serve(WORKSPACE, workspace if workspace is not None else plugin_dir)
+        self.serve(PROCESSES, self.fake_processes)
+        self.serve(HTTP, self.fake_http)
+        self.serve(AVATARS, self.fake_avatars)
+        self.serve(TOOLS, self.fake_tools)
 
     async def aclose(self) -> None:
         """Dispose setup registrations and cancel pending avatar downloads."""
         try:
             await super().aclose()
         finally:
-            self.tools.tools.clear()
-            await self.avatars.aclose()
+            self.fake_tools.tools.clear()
+            await self.fake_avatars.aclose()
 
 
 def fake_channel_context(

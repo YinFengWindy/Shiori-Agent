@@ -21,7 +21,11 @@ async def test_restart_recovers_owned_crash_but_refuses_foreign_inference(
     context, configured, owned
 ):
     engine = SynthesisEngine(
-        configured.store, configured, SovitsClient(), context.background, context.roles
+        configured.store,
+        configured,
+        SovitsClient(),
+        context.fake_background,
+        context.fake_roles,
     )
     identity = str(configured.store.root / "runtime")
     with engine.instance.lease():
@@ -40,7 +44,7 @@ async def test_restart_recovers_owned_crash_but_refuses_foreign_inference(
 
 
 async def test_old_engine_completion_keeps_same_audio_reimported_by_new_editor(
-    context, configured, wav_bytes
+    context, configured, wav_bytes, tmp_path
 ):
     entered, finish = asyncio.Event(), asyncio.Event()
     old_references = References(configured.store)
@@ -59,8 +63,8 @@ async def test_old_engine_completion_keeps_same_audio_reimported_by_new_editor(
         configured.store,
         old_references,
         SovitsClient(httpx.MockTransport(respond)),
-        context.background,
-        context.roles,
+        context.fake_background,
+        context.fake_roles,
     )
     accepted = asyncio.create_task(old.synthesize(request()))
     await entered.wait()
@@ -70,23 +74,21 @@ async def test_old_engine_completion_keeps_same_audio_reimported_by_new_editor(
         configured.store,
         new_references,
         SovitsClient(httpx.MockTransport(respond)),
-        context.background,
-        context.roles,
+        context.fake_background,
+        context.fake_roles,
     )
     register_rpc(context, new, create_runtime(context, configured.store))
 
     async def import_audio(content):
-        source = (
-            context.workspace / "private_runtime/imports/gpt_sovits_tts-audio/a.wav"
-        )
+        source = tmp_path / "private_runtime/imports/gpt_sovits_tts-audio/a.wav"
         source.parent.mkdir(parents=True, exist_ok=True)
         source.write_bytes(content)
-        return await context.rpc.handlers["reference.import"](
+        return await context.fake_rpc.handlers["reference.import"](
             {"role_id": "role", "source": str(source)}
         )
 
     async def save(asset):
-        return await context.rpc.handlers["role.set"](
+        return await context.fake_rpc.handlers["role.set"](
             {"role_id": "role", "voice": {"default": {"asset": asset}}}
         )
 
@@ -128,7 +130,11 @@ async def test_cancel_does_not_release_instance_or_reference(
 
     client = SovitsClient(httpx.MockTransport(respond))
     engine = SynthesisEngine(
-        configured.store, configured, client, context.background, context.roles
+        configured.store,
+        configured,
+        client,
+        context.fake_background,
+        context.fake_roles,
     )
     first = asyncio.create_task(engine.synthesize(request()))
     await entered.wait()
@@ -176,7 +182,11 @@ async def test_moods_select_different_private_references(
 
     client = SovitsClient(httpx.MockTransport(respond))
     engine = SynthesisEngine(
-        configured.store, configured, client, context.background, context.roles
+        configured.store,
+        configured,
+        client,
+        context.fake_background,
+        context.fake_roles,
     )
     await engine.synthesize(request())
     await engine.synthesize(request(mood="Happy"))
@@ -208,12 +218,20 @@ async def test_disconnect_quarantines_across_restart_until_explicit_recovery(
 
     client = SovitsClient(httpx.MockTransport(respond))
     engine = SynthesisEngine(
-        configured.store, configured, client, context.background, context.roles
+        configured.store,
+        configured,
+        client,
+        context.fake_background,
+        context.fake_roles,
     )
     with pytest.raises(RuntimeError, match="完成状态未知"):
         await engine.synthesize(request())
     replacement = SynthesisEngine(
-        configured.store, configured, client, context.background, context.roles
+        configured.store,
+        configured,
+        client,
+        context.fake_background,
+        context.fake_roles,
     )
     assert replacement.instance.status()["recovery_required"] is True
     with pytest.raises(RuntimeError, match="状态未知"):
@@ -238,7 +256,11 @@ async def test_close_waits_for_actual_completion(context, configured, wav_bytes)
 
     client = SovitsClient(httpx.MockTransport(respond))
     engine = SynthesisEngine(
-        configured.store, configured, client, context.background, context.roles
+        configured.store,
+        configured,
+        client,
+        context.fake_background,
+        context.fake_roles,
     )
     accepted = asyncio.create_task(engine.synthesize(request()))
     await entered.wait()
@@ -292,15 +314,15 @@ async def test_distinct_engines_wait_for_live_owner_and_preserve_new_marker(
         configured.store,
         configured,
         SovitsClient(httpx.MockTransport(old_response)),
-        context.background,
-        context.roles,
+        context.fake_background,
+        context.fake_roles,
     )
     new = SynthesisEngine(
         configured.store,
         References(configured.store),
         SovitsClient(httpx.MockTransport(new_response)),
-        context.background,
-        context.roles,
+        context.fake_background,
+        context.fake_roles,
     )
     first = asyncio.create_task(old.synthesize(request()))
     await old_entered.wait()

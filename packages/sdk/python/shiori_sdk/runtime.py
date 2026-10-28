@@ -1,6 +1,6 @@
-"""Granted runtime interfaces; the SDK never creates host services or storage."""
+"""The plugin setup context protocol; the SDK never creates host services."""
 
-from collections.abc import Awaitable, Callable, Iterable
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Protocol, cast
 
@@ -19,29 +19,23 @@ class HostServiceUnavailable(RuntimeError):
     defaults can never swallow it.
     """
 
-    @classmethod
-    def for_capability(
-        cls, plugin_id: str, capability: str, services: Iterable[str]
-    ) -> "HostServiceUnavailable":
-        """Builds the shared message naming the declared service and what is missing."""
-        return cls(
-            f"插件 {plugin_id} 声明了 capability {capability!r}，"
-            f"但宿主未提供服务 {'、'.join(services)}"
-        )
-
 
 def parse_capabilities(value: object, source: object) -> tuple[str, ...]:
     """Validates an api: 2 manifest ``capabilities`` list.
 
     ``source`` names the manifest in messages. Raises ``ValueError`` when the
-    list is missing or not a list. Names are not a grant: plugins take services
-    with ``ctx.require``. P4-5 is what rejects a non-``api: 4`` package.
+    list is missing, not a list, or has a non-string item. Names are not a
+    grant: plugins take services with ``ctx.require``. P4-5 is what rejects a
+    non-``api: 4`` package.
     """
     if value is None:
         raise ValueError(f"v2 manifest 缺少 capabilities 声明: {source}")
     if not isinstance(value, list):
         raise ValueError(f"capabilities 必须是列表: {source}")
-    return tuple(str(item) for item in cast(list[object], value))
+    items = cast(list[object], value)
+    if not all(isinstance(item, str) for item in items):
+        raise ValueError(f"capabilities 必须是字符串列表: {source}")
+    return tuple(cast(list[str], items))
 
 
 class EventsCapability(Protocol):

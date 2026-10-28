@@ -71,17 +71,19 @@ def _write_library(workspace: Path) -> Path:
 
 async def _setup_role(tmp_path: Path, *, sendable: bool = True):
     context = FakeServiceContext("meme", tmp_path, package_dir=PACKAGE_DIR)
-    role = context.roles.create_role(role_id="mira", name="Mira", system_prompt="test")
+    role = context.fake_roles.create_role(
+        role_id="mira", name="Mira", system_prompt="test"
+    )
     source = tmp_path / "reaction.png"
     source.write_bytes(b"image")
-    asset = context.roles.add_illustration("mira", source)
+    asset = context.fake_roles.add_illustration("mira", source)
     role.asset_categories = [FakeCategory("happy", "开心", sendable)]
     role.asset_category_bindings[asset] = "happy"
-    context.sessions.get_or_create("role:mira").metadata["role_id"] = "mira"
+    context.fake_sessions.get_or_create("role:mira").metadata["role_id"] = "mira"
     (tmp_path / "common_emojis.json").write_text(
         '[{"name":"heart","value":"♥"}]', encoding="utf-8"
     )
-    await setup(context.as_capability())
+    await setup(context)
     return context, asset
 
 
@@ -92,7 +94,9 @@ async def test_setup_resolves_injected_role_assets_and_emoji(tmp_path, sendable)
         context, _reply("好 <meme:happy> <emoji:heart> <emoji:unknown>")
     )
     assert event.reply == "好  ♥"
-    assert event.media == ((str(context.roles.asset_path(asset)),) if sendable else ())
+    assert event.media == (
+        (str(context.fake_roles.asset_path(asset)),) if sendable else ()
+    )
     await context.aclose()
 
 
@@ -112,7 +116,7 @@ async def test_role_prompt_lists_sendable_categories_and_shared_emoji(tmp_path):
 async def test_library_prompt_and_reply_without_a_role(tmp_path):
     image = _write_library(tmp_path)
     context = FakeServiceContext("meme", tmp_path, package_dir=PACKAGE_DIR)
-    await setup(context.as_capability())
+    await setup(context)
 
     prompt = await _emit(context, _prompt())
     event = await _emit(
@@ -134,7 +138,7 @@ async def test_empty_or_unknown_meme_tag_is_stripped_without_media(
 ):
     _write_library(tmp_path)
     context = FakeServiceContext("meme", tmp_path, package_dir=PACKAGE_DIR)
-    await setup(context.as_capability())
+    await setup(context)
     event = await _emit(context, _reply(reply, session_key="telegram:1"))
 
     assert event.reply == "好的"

@@ -22,7 +22,7 @@ async def context(tmp_path):
         config={"executable": "custom-herdr", "session": "mine"},
         package_dir=PACKAGE_DIR,
     )
-    await setup(context.as_capability())
+    await setup(context)
     yield context
     await context.aclose()
 
@@ -37,8 +37,8 @@ async def test_lists_every_session_with_its_running_state(context, monkeypatch):
     command = AsyncMock(return_value=json.dumps(output))
     monkeypatch.setattr(HerdrCli, "command", command)
 
-    assert context.rpc.concurrency["sessions.list"] is Concurrency.READ_ONLY
-    listed = await context.rpc.handlers["sessions.list"]({})
+    assert context.fake_rpc.concurrency["sessions.list"] is Concurrency.READ_ONLY
+    listed = await context.fake_rpc.handlers["sessions.list"]({})
 
     assert listed == {
         "sessions": [
@@ -63,4 +63,4 @@ async def test_unavailable_herdr_or_unreadable_output_fails_the_request(
 ):
     monkeypatch.setattr(HerdrCli, "command", command)
     with pytest.raises((FileNotFoundError, CommandError), match=message):
-        await context.rpc.handlers["sessions.list"]({})
+        await context.fake_rpc.handlers["sessions.list"]({})

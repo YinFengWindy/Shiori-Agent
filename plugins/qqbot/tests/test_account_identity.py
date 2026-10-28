@@ -12,7 +12,7 @@ def test_gateway_status_and_bot_identity_are_account_scoped(tmp_path, setup_cont
             {"app_id": app_id, "client_secret": f"secret-{app_id}", "role_id": app_id}
         )
     context = setup_context(lambda value: f"account-{value}")
-    accounts = context.accounts
+    accounts = context.fake_accounts
     identity = QQBotAccountIdentity(context, store)
 
     identity.report("100", "online", "", "Bot One", "bot-one")

@@ -937,7 +937,9 @@ class PluginKernel:
         """
         workspace = self._settings.workspace
         if workspace is None:
-            raise HostServiceUnavailable.for_capability(plugin_id, "kv", ["workspace"])
+            raise HostServiceUnavailable(
+                f"插件 {plugin_id} 注入了 kv，但宿主未提供服务 workspace"
+            )
         return open_plugin_kv(workspace=workspace, plugin_id=plugin_id)
 
     async def _rollback_failed_load(

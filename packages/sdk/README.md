@@ -9,7 +9,7 @@ use this published version and its testing support.
 
 Start with the [plugin tutorial](https://github.com/YinFengWindy/Shiori-Agent/blob/main/docs/_handbook/plugins-tutorial.md)
 and [runtime contract](https://github.com/YinFengWindy/Shiori-Agent/blob/main/docs/_handbook/plugin-runtime-contract.md)
-for plugin layout, capability declarations and packaging.
+for plugin layout, `inject` service declarations and packaging.
 
 ## Compatibility
 
@@ -22,7 +22,7 @@ published 3.1.1:
   and the `push_tool=` argument to `fake_channel_context` are gone. Role sends
   to channels use `account_send` (`account.send`); role `message_push`
   only targets the role's own desktop session.
-- A `message_push` tool obtained with `ctx.tools.get_tool` raises on an unknown
+- A `message_push` tool obtained from the tool registry (`get_tool`) raises on an unknown
   channel, unsupported payload or sender failure. Handle exceptions at the
   caller's boundary; do not inspect returned error text. A normal return means
   the message was sent or queued in the current turn.
@@ -186,12 +186,19 @@ Install `shiori-sdk[testing]` for pytest/pytest-asyncio, `sdk_context`,
 bridge request helpers and shared test TLS contexts. Fakes store only test values
 in memory; they never open host persistence. `sdk_context` reads the nearest
 `manifest.yaml` above the test file (within the pytest rootdir; override the
-`sdk_plugin_dir` fixture otherwise) and records its `capabilities` list
-(`api: 2` must have a list; names are not a whitelist). It also declares the manifest's
+`sdk_plugin_dir` fixture otherwise) and declares the manifest's
 `inject` / `optional_inject` / `provides`: `ctx.require` / `ctx.get` of a key
 not listed there raises the kernel's `undeclared_key`, as in the host. Other
 fake contexts take `package_dir=` to read the same lists from a package's
-manifest. The manifest is only read: `plugin_dir`
+manifest. Hand a fake to a declared host-provided key with
+`ctx.serve(KV, FakeKV())`; the plugin's `ctx.require(KV)` then returns it.
+The preset contexts (`FakeExtensionContext`, `FakeServiceContext`,
+`FakeChannelSetupContext`, `FakeMemorySetupContext`) already serve their fakes
+and keep them on `fake_<name>` attributes for assertions (`ctx.fake_rpc`,
+`ctx.fake_kv`, `ctx.fake_accounts`); pass the context straight to `setup`.
+Reading or setting a removed capability attribute name (`ctx.kv = ...`,
+`ctx.rpc`) raises, as the host context has no such attributes. The manifest is
+only read: `plugin_dir`
 is an isolated temporary directory, and bundled files are package assets. A
 plugin test emits a turn event through the fake context
 (`await sdk_context.emit(StepFinished(...))`), which runs the plugin's `on`
@@ -299,16 +306,17 @@ A providing plugin constructs the engine in `setup` from its own config and
 `ctx.provide(MEMORY_ENGINE, engine)`. Embedding credentials come from that plugin
 config. Register each database and embedder with `ctx.effect` before the next
 allocation; the plugin scope closes them. Databases are opened only through
-`ctx.memory.storage.open_database(path)` so the host's live-database lease applies.
-`MemoryCapability.skill_names()` supplies procedure-tagger names.
-`MemoryPluginContext` no longer injects an engine.
+`ctx.require(MEMORY).storage.open_database(path)` so the host's live-database
+lease applies. `MemoryCapability.skill_names()` supplies procedure-tagger names.
+The `MEMORY` service never carries an engine.
 
-Setup plugins declaring `memory` and `rpc` use `MemoryPluginContext`: shared
-Markdown reads, role existence/permissions and storage are injected, while RPC
-registration remains plugin-owned. A turn's retrieval arrives as
+A memory plugin lists `memory` and `rpc` in `inject` and takes
+`ctx.require(MEMORY)` (`shiori_sdk.core.services`): shared Markdown reads, role
+existence/permissions and storage come from the host, while RPC registration
+through `ctx.require(RPC)` remains plugin-owned. A turn's retrieval arrives as
 `shiori_sdk.core.conversation.TurnStarting` and tool results as
 `shiori_sdk.core.tools.ToolCalled`. Standalone tests
-can use `FakeMemoryPluginContext`, `FakeMemoryRoles` and `FakeMemoryStorage`;
+can use `FakeMemorySetupContext`, `FakeMemoryRoles` and `FakeMemoryStorage`;
 provide `MEMORY_ENGINE` on the test kernel when the test has an engine.
 Real runtime assembly remains a host integration test.
 
@@ -320,8 +328,9 @@ Real runtime assembly remains a host integration test.
 `ToolVeto`, which policy plugins join with `ctx.on`. Policies remain in plugins;
 the host's own minimal shell guard runs after every `ToolCalling` chain.
 `ToolVeto(reason, finalize=True)` requests host summarization while ordinary
-denial leaves the existing execution flow intact. `HookPluginContext` provides
-granted config and workspace.
+denial leaves the existing execution flow intact. A policy plugin that needs
+its config or the workspace injects `config` / `workspace` and takes
+`ctx.require(CONFIG)` / `ctx.require(WORKSPACE)`.
 
 Command plugins declare `inject: [commands]` and register with
 `ctx.require(COMMANDS).register(name, handler, description=...)`
@@ -332,8 +341,9 @@ the host builds the ordinary turn result around it, retaining channel, timestamp
 and context scope and skipping retrieval/model calls. Described registrations form
 the command menu channels receive as `ChannelContext.bot_commands`; aliases pass no
 description. `last_consolidated` is memory progress, not model compaction.
-`shiori_sdk.core.sessions` owns the `SESSIONS` socket (an `inject` key, unrelated
-to the `sessions` capability). `last_passive_turn` reads the latest passive turn
+`shiori_sdk.core.sessions` owns the `SESSIONS` socket (`inject: [sessions]`;
+session metadata and media are the separate `SESSION_STORE`, `inject:
+[session_store]`). `last_passive_turn` reads the latest passive turn
 as `PassiveTurn` (`turn_id` is the anchor user message id; `message_ids` are every
 message of the turn) without deleting it. `rollback_last_turn` deletes it under
 the session lock and returns `RollbackResult`; with `expected_turn` it deletes
@@ -342,11 +352,12 @@ only that exact turn (same anchor and message ids), otherwise it returns
 `rollback_source_ids` rewinds the consolidation cursor to a memory window.
 `plugin_undo` calls `MemoryAdminApi.rollback_turn(turn_id, message_ids)` first,
 then the session; an empty `MEMORY_ENGINE` rolls back the session only.
-`CommandPluginContext` also provides current declared dependency exports.
+A command plugin that calls another plugin's export injects `dependencies` and
+reads `ctx.require(DEPENDENCIES)` on each call.
 
-Observe uses `ObservePluginContext` with `background` and `workspace`, and
-injects `crash_reporting`. The migration port (`storage`) is shared with memory
-construction when declared. The host owns receipt/lease handling, the active
+Observe injects `background`, `workspace` and `crash_reporting`. The migration
+port (`STORAGE`, `inject: [storage]`) is shared with memory construction when
+declared. The host owns receipt/lease handling, the active
 error session, installed package and external plugin code roots, and the
 process-global hook stack behind `CRASH_REPORTING` (`install` / `uninstall`,
 `session_key`, `top_frame`). The plugin owns fingerprinting, deduplication,
@@ -378,22 +389,23 @@ so an injected storage root remains consistent and reads never create storage.
 
 ## Role, generation and native services
 
-`plugin_services.ServicePluginContext` describes statically checked setup inputs.
-Properties require the corresponding manifest grant; the context does not grant
-access merely because the interface declares a property.
+Each service below is a key in `shiori_sdk.core.services`: list the `inject`
+name in the manifest and take it with `ctx.require(KEY)` in `setup`. A key the
+manifest does not declare raises `undeclared_key`; a declared key without a host
+provider blocks the plugin before `setup`.
 
-| Capability | Contract and ownership |
+| `inject` name / key | Contract and ownership |
 | --- | --- |
-| `roles` | Detached role snapshots, explicit asset resolution/adoption and opaque role-extension transactions. The host keeps its canonical RoleStore and write lock. |
-| `models` | `async with ctx.models.activate(role_id, "chat" or "vision")` holds the host-selected provider/model snapshot across awaited work. No runtime registry or full Config is exported. |
-| `sessions` | Session metadata, original media provenance, atomic image replacement and its host-owned desktop projection. |
-| `external_turns` | (3.1.1) `await ctx.external_turns.submit(ExternalTurnMessage(...))` runs one message from a non-channel source (platform, conversation id/title, sender id/name, message id, text) as an external-context group turn of a role and returns `ExternalTurnResult` (`replied` with the reply text, `busy`, `duplicate`). It never waits for the role, never dispatches to a channel, and cancelling the call cancels the turn. `testing.external_turns.FakeExternalTurns` answers with queued results. |
-| `http` | `HttpClient` uses the injected external transport and its default retry/budget policy. Memory's bounded `HttpRequester` remains separate. |
-| `background` | `spawn` owns scoped tasks; `spawn_runtime` additionally retains the calling runtime generation until task completion. Both cancel and join outstanding work on unload. |
-| `processes` | Creates explicit MCP sessions and owned child processes through the host's existing McpClient/owned_spawn/WindowsJob implementations. The SDK contains no process implementation. |
-| `resources` | Supplies source/frozen resource roots and shared emoji paths; plugins do not guess checkout depth. |
-| `tool_turn` | Returns the current host turn identity and awaited ownership finalizers. Model arguments cannot forge it. |
-| `runtime` | `was_active` and `on_drain` preserve accepted work during generation replacement. |
+| `roles` / `ROLES` | Detached role snapshots, explicit asset resolution/adoption and opaque role-extension transactions. The host keeps its canonical RoleStore and write lock. |
+| `models` / `MODELS` | `async with ctx.require(MODELS).activate(role_id, "chat" or "vision")` holds the host-selected provider/model snapshot across awaited work. No runtime registry or full Config is exported. |
+| `session_store` / `SESSION_STORE` | Session metadata, original media provenance, atomic image replacement and its host-owned desktop projection. |
+| `external_turns` / `EXTERNAL_TURNS` | (3.1.1) `await ctx.require(EXTERNAL_TURNS).submit(ExternalTurnMessage(...))` runs one message from a non-channel source (platform, conversation id/title, sender id/name, message id, text) as an external-context group turn of a role and returns `ExternalTurnResult` (`replied` with the reply text, `busy`, `duplicate`). It never waits for the role, never dispatches to a channel, and cancelling the call cancels the turn. `testing.external_turns.FakeExternalTurns` answers with queued results. |
+| `http` / `HTTP` | `HttpClient` uses the injected external transport and its default retry/budget policy. Memory's bounded `HttpRequester` remains separate. |
+| `background` / `BACKGROUND` | `spawn` owns scoped tasks; `spawn_runtime` additionally retains the calling runtime generation until task completion. Both cancel and join outstanding work on unload. |
+| `processes` / `PROCESSES` | Creates explicit MCP sessions and owned child processes through the host's existing McpClient/owned_spawn/WindowsJob implementations. The SDK contains no process implementation. |
+| `resources` / `RESOURCES` | Supplies source/frozen resource roots and shared emoji paths; plugins do not guess checkout depth. |
+| `tool_turn` / `TOOL_TURN` | Returns the current host turn identity and awaited ownership finalizers. Model arguments cannot forge it. |
+| `runtime` / `RUNTIME` | `was_active` and `on_drain` preserve accepted work during generation replacement. |
 
 `Roles.read_scope()` keeps a plugin's multi-read namespace reconciliation atomic
 against canonical role edits. Plugins retain their schemas and policies; only
@@ -419,20 +431,20 @@ Actual kernel ordering, role saves, session media adoption, runtime lease
 retention, screen/desktop-pet integration and Windows Job cleanup remain in host
 tests. PR CI includes a dedicated Windows process-lifecycle job.
 
-Desktop pet also consumes `roles`, `storage`, `tools`, `rpc` and typed
-`role_events.RoleDeleted` through this context. Sprite packages, role selection,
+Desktop pet also injects `roles`, `storage`, `tools`, `rpc` and `events`
+(typed `role_events.RoleDeleted`). Sprite packages, role selection,
 exclusive visibility and asset reconciliation remain plugin policies. Host
 integration tests exercise canonical role locks, atomic saves, migration receipts
-and kernel replacement with those public capabilities. `rpc.register` supports
+and kernel replacement with those public keys. `RPC`'s `register` supports
 `admission_exempt=True` for bounded controls that must remain reachable while
 ordinary admission pauses; desktop-pet bubble dismissal uses this flag.
 Pure timestamp/path helpers are defined once in `shiori_sdk.values`.
 
 ## Channel and account contracts
 
-Channel plugins use `shiori_sdk.channels.context.ChannelPluginContext`; transport startup receives `shiori_sdk.channels.ChannelContext`. Account values/rules/targets live in `shiori_sdk.accounts`, message values in `shiori_sdk.messages`, stream events in `shiori_sdk.channel_events`, and provenance/quote helpers in `shiori_sdk.channels.message_source` and `reply_context`. The host injects intake, routing, attachment storage, HTTP and avatar services; it retains lifecycle and cache policy.
+Channel plugins inject `channels` (`CHANNELS`, a `ChannelsCapability` in `shiori_sdk.channels.context`), `accounts` (`ACCOUNTS`) and whatever else they use, and take them with `ctx.require` in `setup`; transport startup receives `shiori_sdk.channels.ChannelContext`. Account values/rules/targets live in `shiori_sdk.accounts`, message values in `shiori_sdk.messages`, stream events in `shiori_sdk.channel_events`, and provenance/quote helpers in `shiori_sdk.channels.message_source` and `reply_context`. The host injects intake, routing, attachment storage, HTTP and avatar services; it retains lifecycle and cache policy.
 
-Declare `processes` for native children. `Processes.popen` is the synchronous counterpart of `spawn`, returning a process and an optional `ProcessOwner`; only the host implements OS ownership. QQ keeps NapCat installation, private profiles, QR codes and OneBot policy. Independent testing uses shared `FakeAccounts`, `FakeChannelPluginContext`, `FakeChannelIntake`, `FakeHttp`, `FakeAvatars` and `FakeProcesses`, never host services.
+Inject `processes` (`PROCESSES`) for native children. `Processes.popen` is the synchronous counterpart of `spawn`, returning a process and an optional `ProcessOwner`; only the host implements OS ownership. QQ keeps NapCat installation, private profiles, QR codes and OneBot policy. Independent testing uses shared `FakeAccounts`, `FakeChannelSetupContext`, `FakeChannelIntake`, `FakeHttp`, `FakeAvatars` and `FakeProcesses`, never host services.
 
 `ChannelsCapability.group(name)` constructs the host account-group coordinator; `ChannelSessions.identity_index(...)` constructs the host metadata-backed identity view. Platform dedupe, credential/authentication, stream formatting and reconnect policy stay in plugins. Use `FakeAccountChannelGroup` and `FakeChannelSessions` for independent tests. Scoped KV supports idempotent `delete`; `read_mapping` validates object-valued records before consumers access them. Telegram tool-call preview events and `EventBinding` are shared SDK values.
 
@@ -453,8 +465,8 @@ their plugin activation or actual renderer window is gone.
 
 ## Discoverable services and speech contracts (Runtime API 3.1.1)
 
-Provider backends declare `services` and use `ServiceProviderContext` from
-`shiori_sdk.services`. `ctx.services.register(service_id, contract=..., label=...,
+Provider backends inject `services` and take `ctx.require(SERVICES)`
+(`shiori_sdk.services.PluginServices`). Its `register(service_id, contract=..., label=...,
 methods={...}, metadata={...})` publishes explicit JSON methods for exactly the
 plugin instance's lifetime. Metadata is JSON data, not implementation objects.
 Consumers use `client.services.list(contract)` and `client.services.call(reference,
@@ -468,8 +480,9 @@ silently replaced with another provider.
 `synthesize({text, role_id, mood}) -> {audio_base64, format}`. The provider owns its
 role configuration and audio generation, including serialization until actual
 inference completes. The SDK has no voice controller, vendor client, voice asset
-lifecycle or default selection. `testing.services.FakeServiceProviderContext`
-provides independent setup tests.
+lifecycle or default selection. Independent setup tests serve
+`testing.services.FakePluginServices` on a `FakePluginContext`
+(`ctx.serve(SERVICES, FakePluginServices(ctx))`).
 
 Desktop pet requires SDK 3.1.1 or later. It owns input gestures, hotkey preferences, microphone
 selection, selected services, chat/reply matching, synthesis queues and manual
@@ -510,7 +523,9 @@ the existing Windows Job ownership contract; no PID is adopted or killed by ID.
 start/stop. `register_runtime_rpc` wires opt-in `runtime.status`, `prepare`, `start`,
 `stop`, `cancel`, `remove` and `relocate` endpoints plus plugin drain cleanup. Providers own imported
 file extensions/namespaces, models, private settings and recovery policy. They
-must declare `workspace`, `rpc`, `background`, `processes` and `runtime` capabilities.
+`register_runtime_rpc` takes `ctx.require(RPC)`, so the provider must list `rpc`
+in `inject`; a managed provider typically also injects `workspace`, `background`
+and `processes`.
 
 The renderer exports `ManagedRuntimePanel` and `useManagedRuntime`; the panel
 receives provider-selected import extensions and never stores

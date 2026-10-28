@@ -8,7 +8,7 @@ import httpx
 import pytest
 
 from shiori_sdk.accounts.targets import UncertainDeliveryError
-from shiori_sdk.testing.channel_context import FakeChannelPluginContext
+from shiori_sdk.testing.channel_context import FakeChannelSetupContext
 from plugins.feishu.backend.account_delivery import FeishuAccountDelivery
 
 
@@ -19,11 +19,11 @@ def _png(tmp_path) -> str:
     return str(path)
 
 
-def _setup_context() -> FakeChannelPluginContext:
+def _setup_context() -> FakeChannelSetupContext:
     """The plugin's setup context with one application's stored profile and targets."""
-    context = FakeChannelPluginContext("feishu", Path(__file__).resolve().parents[1])
-    context.kv.set("profile:feishu:app", {"open_id": "ou_bot"})
-    context.kv.set("targets:feishu:app", {"oc_b": "ou_b", "oc_a": "ou_a"})
+    context = FakeChannelSetupContext("feishu", Path(__file__).resolve().parents[1])
+    context.fake_kv.set("profile:feishu:app", {"open_id": "ou_bot"})
+    context.fake_kv.set("targets:feishu:app", {"oc_b": "ou_b", "oc_a": "ou_a"})
     return context
 
 

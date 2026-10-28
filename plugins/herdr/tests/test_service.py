@@ -22,7 +22,7 @@ class ScriptedCli(HerdrCli):
     """One explicit named-session script; no terminal or native agent starts."""
 
     def __init__(self, context, repository):
-        super().__init__(HerdrConfig(), context.processes, repository)
+        super().__init__(HerdrConfig(), context.fake_processes, repository)
         self.repository = repository
         self.calls = []
         self.prompt_error = None
@@ -91,7 +91,7 @@ def fixture(tmp_path, monkeypatch):
     target = FakeBackgroundResultTarget("mira", "original-thread")
     cli = ScriptedCli(context, tmp_path)
     service = TaskService(tmp_path / "plugin-data")
-    service.attach(context.process_resources, context.processes, tmp_path)
+    service.attach(context.fake_process_resources, context.fake_processes, tmp_path)
     monkeypatch.setattr(service, "create_cli", lambda config: cli)
     context.effect("service", service.close)
     return context, target, cli, service
@@ -292,7 +292,7 @@ async def test_close_before_monitor_first_runs_marks_stopped_without_native_call
 async def test_start_fails_while_no_generation_is_published(fixture):
     context, target, cli, service = fixture
     # The generation retires before its successor is published.
-    context.process_resources.active = False
+    context.fake_process_resources.active = False
     with pytest.raises(RuntimeError, match="切换配置"):
         service.start(str(cli.repository), "fix", "codex", target, cli.config)
     assert service.tasks == {} and cli.calls == [] and target.reports == {}

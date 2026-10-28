@@ -10,7 +10,7 @@ from plugins.qq.backend.napcat_account_files import NapCatAccountFiles
 from shiori_sdk.accounts import AccountResponseRules
 from plugins.qq.backend.plugin import setup
 from shiori_sdk.testing.channel_context import (
-    FakeChannelPluginContext,
+    FakeChannelSetupContext,
     FakeChannelDeclarations,
 )
 from plugins.qq.backend.plugin import _cancel, _send_account
@@ -183,15 +183,14 @@ async def test_temporary_login_cancel_forwards_role_to_runtime() -> None:
 
 @pytest.mark.asyncio
 async def test_plugin_contributes_one_account_channel(tmp_path):
-    ctx = FakeChannelPluginContext("qq", PLUGIN_DIR)
-    ctx.workspace = tmp_path
+    ctx = FakeChannelSetupContext("qq", PLUGIN_DIR, workspace=tmp_path)
     try:
-        await setup(ctx.as_capability())
-        [channel] = ctx.channels.channels
+        await setup(ctx)
+        [channel] = ctx.fake_channels.channels
         assert channel.name == "qq"
         assert channel.configuration_key[0] == "qq-accounts"
-        assert ctx.tools.options["read_attachment"]["external_allowed"] is True
-        assert ctx.tools.tools["read_attachment"].name == "read_attachment"
+        assert ctx.fake_tools.options["read_attachment"]["external_allowed"] is True
+        assert ctx.fake_tools.tools["read_attachment"].name == "read_attachment"
         await channel.stop()
     finally:
         await ctx.aclose()
@@ -209,18 +208,17 @@ def _verified(ref: str, uin: str, role_id: str) -> QQConnectionConfig:
     )
 
 
-async def _load(workspace: Path, roles: set[str]) -> FakeChannelPluginContext:
+async def _load(workspace: Path, roles: set[str]) -> FakeChannelSetupContext:
     """Runs setup on an existing workspace, as an application start does."""
-    ctx = FakeChannelPluginContext("qq", PLUGIN_DIR)
-    ctx.workspace = workspace
-    ctx.accounts.available_roles = roles
-    await setup(ctx.as_capability())
+    ctx = FakeChannelSetupContext("qq", PLUGIN_DIR, workspace=workspace)
+    ctx.fake_accounts.available_roles = roles
+    await setup(ctx)
     return ctx
 
 
-async def _unload(ctx: FakeChannelPluginContext) -> None:
+async def _unload(ctx: FakeChannelSetupContext) -> None:
     try:
-        for channel in ctx.channels.channels:
+        for channel in ctx.fake_channels.channels:
             await channel.stop()
     finally:
         await ctx.aclose()
@@ -246,7 +244,7 @@ async def test_load_registers_saved_owners_and_deletes_orphaned_data(tmp_path):
     try:
         assert {
             snapshot.record.id: snapshot.record.role_id
-            for snapshot in ctx.accounts.records.values()
+            for snapshot in ctx.fake_accounts.records.values()
         } == {"qq:303": "mira"}
         assert list(store.load()) == ["cc", "dd"]
         assert "secret-aa" not in store.path.read_text(encoding="utf-8")
@@ -262,14 +260,14 @@ async def test_rules_saved_through_the_host_hook_survive_a_restart(tmp_path):
     rules = AccountResponseRules(private_enabled=False, blocked_sender_ids=("9",))
     first = await _load(tmp_path, {"mira"})
     try:
-        assert first.accounts.rules_handler is not None
-        first.accounts.rules_handler("aa", rules)
+        assert first.fake_accounts.rules_handler is not None
+        first.fake_accounts.rules_handler("aa", rules)
     finally:
         await _unload(first)
 
     restarted = await _load(tmp_path, {"mira"})
     try:
-        [snapshot] = restarted.accounts.records.values()
+        [snapshot] = restarted.fake_accounts.records.values()
         assert (snapshot.record.id, snapshot.record.response_rules) == (
             "qq:101",
             rules,

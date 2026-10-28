@@ -8,7 +8,7 @@ function plugin(id: string, overrides: Partial<PluginSummary> = {}): PluginSumma
     id, candidateId: `workspace/${id}`, source: "workspace", directory: `workspace/${id}`,
     name: id, version: "1", description: "", enabled: true, canToggle: false,
     state: "UNTRUSTED", error: "", diagnostic: null, hasConfigSchema: false,
-    capabilities: [], channels: [], category: "feature", supportsHotUnload: true,
+    capabilities: [], inject: [], channels: [], category: "feature", supportsHotUnload: true,
     pendingRendererKinds: [], canTrust: true, trustFingerprint: "first", contentFingerprint: "first",
     ...overrides,
   };

@@ -216,11 +216,9 @@ def _parse_manifest(
     provides = _parse_keys(raw, "provides")
     if set(inject) & set(optional_inject):
         raise ManifestError("服务 Key 不能同时声明为 inject 和 optional_inject")
+    _reject_host_keys(inject=inject, optional_inject=optional_inject, provides=provides)
     if api == 4:
         _reject_removed_v4_fields(raw)
-        _reject_host_keys(
-            inject=inject, optional_inject=optional_inject, provides=provides
-        )
         capabilities: tuple[str, ...] = ()
         channels = _parse_contributed_channels(raw, inject)
     else:
@@ -275,15 +273,16 @@ def _reject_removed_v4_fields(raw: dict[str, object]) -> None:
 
 
 def _reject_host_keys(**fields: tuple[str, ...]) -> None:
-    """api: 4 never names a ``host.`` key.
+    """No manifest, of any api version, names a ``host.`` key.
 
-    ``host.bridge`` and ``host.config_references`` are host-internal. api: 2
-    may still list a ``host.`` name until P4-5 rejects non-``api: 4`` packages.
+    ``host.bridge`` (the shared RPC registry) and ``host.config_references``
+    are read by the host itself; a plugin holding the registry could register
+    methods as another plugin.
     """
     for name_field, names in fields.items():
         host = [name for name in names if name.startswith("host.")]
         if host:
-            raise ManifestError(f"api: 4 的 {name_field} 不能声明宿主内部 Key：{host}")
+            raise ManifestError(f"{name_field} 不能声明宿主内部 Key：{host}")
 
 
 def _parse_contributed_channels(

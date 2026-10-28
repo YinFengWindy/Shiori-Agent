@@ -14,7 +14,7 @@ from agent.plugin_host.core_keys import (
     HostBuilt,
     PER_PLUGIN_PUBLIC_KEYS,
     PluginBinding,
-    PluginCapabilityBinder,
+    PluginViewBinder,
 )
 from agent.plugin_host.kv import PluginKVStore
 from shiori_sdk.extensions import ConfigValues, Dependencies, PrivateStorage
@@ -101,7 +101,7 @@ class PluginRuntimeContext:
         if name in PER_PLUGIN_PUBLIC_KEYS:
             cached = self._views.get(name)
             if cached is None:
-                binder = cast(PluginCapabilityBinder[Any], value)
+                binder = cast(PluginViewBinder[Any], value)
                 cached = binder.for_plugin(self._binding)
                 self._views[name] = cached
             return cast(T, cached)

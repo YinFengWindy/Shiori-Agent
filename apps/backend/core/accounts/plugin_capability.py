@@ -22,7 +22,7 @@ from shiori_sdk.accounts.routing import AccountRoute
 from shiori_sdk.core.services import ACCOUNTS
 from shiori_sdk.kernel import Kernel
 
-from agent.plugin_host.core_keys import PluginBinding
+from agent.plugin_host.core_keys import PluginBinding, required_core_key
 from core.accounts.registry import AccountRegistry
 
 logger = logging.getLogger(__name__)
@@ -34,16 +34,24 @@ def publish_plugin_accounts(kernel: Kernel) -> None:
     Loading a generation only registers accounts. The app publishes when it
     starts, and a settings reload publishes when its pointer switches.
     """
-    accounts = kernel.get(ACCOUNTS)
-    if isinstance(accounts, PluginAccounts):
-        accounts.publish()
+    _plugin_accounts(kernel).publish()
 
 
 def drop_plugin_accounts(kernel: Kernel) -> None:
     """Discards ``kernel``'s account index after its plugins have stopped."""
-    accounts = kernel.get(ACCOUNTS)
-    if isinstance(accounts, PluginAccounts):
-        accounts.drop()
+    _plugin_accounts(kernel).drop()
+
+
+def _plugin_accounts(kernel: Kernel) -> PluginAccounts:
+    """The generation's ``ACCOUNTS`` provider, which the host always assembles.
+
+    The key is typed as the SDK protocol; the host stores ``PluginAccounts``
+    under it, so anything else is an assembly error, not a skip.
+    """
+    accounts = required_core_key(kernel.get, ACCOUNTS)
+    if not isinstance(accounts, PluginAccounts):
+        raise TypeError(f"ACCOUNTS 应由 PluginAccounts 提供，实际是 {type(accounts)!r}")
+    return accounts
 
 
 class PluginAccounts:
