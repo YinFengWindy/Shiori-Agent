@@ -5,7 +5,7 @@ from typing import Any
 from uuid import uuid4
 
 from shiori_sdk.rpc import PluginRpcError
-from shiori_sdk.plugin_services import ServicePluginContext as PluginRuntimeContext
+from shiori_sdk.runtime import PluginRuntimeContext
 from shiori_sdk.core.services import (
     BACKGROUND,
     DEPENDENCIES,

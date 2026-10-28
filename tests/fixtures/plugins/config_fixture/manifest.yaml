@@ -2,4 +2,5 @@ api: 2
 id: config_fixture
 version: "0.1.0"
 capabilities: [config]
+inject: [config]
 config_model: ConfigFixtureModel

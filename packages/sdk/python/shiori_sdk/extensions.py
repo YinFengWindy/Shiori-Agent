@@ -4,7 +4,6 @@ import asyncio
 from collections.abc import Coroutine
 from pathlib import Path
 from typing import Protocol
-from .runtime import PluginRuntimeContext
 
 
 class ConfigValues(Protocol):
@@ -48,40 +47,3 @@ class PrivateStorage(Protocol):
     def migrate_data(
         self, workspace: Path, plugin_id: str, name: str, source: Path
     ) -> Path: ...
-
-
-class HookPluginContext(PluginRuntimeContext, Protocol):
-    """Granted inputs consumed by tool policy plugins (they join ``ToolCalling``)."""
-
-    @property
-    def workspace(self) -> Path: ...
-    @property
-    def config(self) -> ConfigValues: ...
-
-
-class CommandPluginContext(PluginRuntimeContext, Protocol):
-    """Dependency services for command plugins (they inject ``COMMANDS``).
-
-    Session rollback (``SESSIONS``) and the memory engine (``MEMORY_ENGINE``)
-    are sockets, not capabilities of this context: a command plugin declares
-    them in ``inject`` / ``optional_inject`` and reads them with ``require`` /
-    ``get``.
-    """
-
-    @property
-    def dependencies(self) -> Dependencies: ...
-
-
-class ObservePluginContext(PluginRuntimeContext, Protocol):
-    """Storage and task services for event observers.
-
-    Crash collection is ``inject: [crash_reporting]`` (``CRASH_REPORTING``),
-    not a capability. Telemetry of kernel events uses ``ctx.watch``.
-    """
-
-    @property
-    def workspace(self) -> Path: ...
-    @property
-    def storage(self) -> PrivateStorage: ...
-    @property
-    def background(self) -> BackgroundTasks: ...

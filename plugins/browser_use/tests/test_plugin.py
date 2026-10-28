@@ -18,10 +18,10 @@ async def test_setup_is_lazy_and_unload_retires_retained_tools(
     context = FakeServiceContext(
         "browser_use", tmp_path, config=config, package_dir=PACKAGE_DIR
     )
-    await setup(context.as_capability())
-    tool = context.tools.get_tool(prefix + "snapshot")
-    assert tool is not None and len(context.tools.tools) == count
-    assert all(name.startswith(prefix) for name in context.tools.tools)
+    await setup(context)
+    tool = context.fake_tools.get_tool(prefix + "snapshot")
+    assert tool is not None and len(context.fake_tools.tools) == count
+    assert all(name.startswith(prefix) for name in context.fake_tools.tools)
     await context.aclose()
     with pytest.raises(RuntimeError, match="已停用"):
         await tool.execute(role_id="mira")

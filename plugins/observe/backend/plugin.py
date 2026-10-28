@@ -17,7 +17,7 @@ from .telemetry import ObserveTelemetry
 from .writer import TraceWriter
 
 if TYPE_CHECKING:
-    from shiori_sdk.extensions import ObservePluginContext as PluginRuntimeContext
+    from shiori_sdk.runtime import PluginRuntimeContext
 
 logger = logging.getLogger("plugin.observe")
 

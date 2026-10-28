@@ -20,13 +20,13 @@ from .formatting import CHANNEL
 from .identity import verify_app
 
 if TYPE_CHECKING:
-    from shiori_sdk.channels.context import ChannelPluginContext
+    from shiori_sdk.runtime import PluginRuntimeContext
 
 
 class FeishuAccounts:
     """Saved applications, their host accounts and their member channels."""
 
-    def __init__(self, ctx: ChannelPluginContext, group: AccountChannelGroup) -> None:
+    def __init__(self, ctx: PluginRuntimeContext, group: AccountChannelGroup) -> None:
         self._ctx = ctx
         self._group = group
         self._store = FeishuApplicationStore(ctx.require(KV))

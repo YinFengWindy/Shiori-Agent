@@ -14,7 +14,7 @@ from shiori_sdk.accounts import (
     response_rules_to_dict,
     stored_response_rules,
 )
-from shiori_sdk.channels.context import ChannelPluginContext
+from shiori_sdk.runtime import PluginRuntimeContext
 from shiori_sdk.accounts.routing import AccountRoute
 from shiori_sdk.channels.group import AccountChannelGroup
 from shiori_sdk.storage import plugin_data_dir
@@ -30,7 +30,7 @@ from .routine import routine_config
 class GrokAccounts:
     """Own one fixed Bot binding per role and expose account-scoped operations."""
 
-    def __init__(self, ctx: ChannelPluginContext, group: AccountChannelGroup) -> None:
+    def __init__(self, ctx: PluginRuntimeContext, group: AccountChannelGroup) -> None:
         self.ctx = ctx
         self.group = group
         self.store = ConnectionStore(ctx.require(KV))

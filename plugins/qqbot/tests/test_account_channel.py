@@ -163,7 +163,7 @@ async def test_connected_avatar_is_stored_reregistered_and_kept_on_failed_refres
     async def connect(fetched: str | None) -> FakeAccounts:
         avatar_fetch.return_value = fetched
         context = setup_context()
-        accounts = context.accounts
+        accounts = context.fake_accounts
         manager = QQBotAccountsChannel(context, store, ())
         await manager.start(fake_channel_context(tmp_path))
         await asyncio.gather(*manager._avatar_tasks.values())

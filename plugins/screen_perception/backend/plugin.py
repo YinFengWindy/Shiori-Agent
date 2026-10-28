@@ -1,6 +1,6 @@
 """Owns the on-demand screen tool and its in-flight analyses."""
 
-from shiori_sdk.plugin_services import ServicePluginContext as PluginRuntimeContext
+from shiori_sdk.runtime import PluginRuntimeContext
 from shiori_sdk.core.services import MODELS, ROLES, TOOLS
 
 from .capture import PrimaryScreenCapture

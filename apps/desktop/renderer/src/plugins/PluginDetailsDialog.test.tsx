@@ -18,7 +18,7 @@ const plugin: PluginSummary = {
   directory: "C:/workspace/plugins/external", description: "Line one\nLine two", source: "workspace",
   enabled: false, canToggle: false, state: "BLOCKED", error: "Activation failed",
   diagnostic: { code: "missing_dependency", stage: "setup", field: "dependencies", reason: "Dependency is unavailable", path: "C:/workspace/plugins/external/manifest.yaml", state: "BLOCKED" },
-  hasConfigSchema: false, capabilities: [], channels: [], category: "feature", supportsHotUnload: true, pendingRendererKinds: [],
+  hasConfigSchema: false, capabilities: [], inject: [], channels: [], category: "feature", supportsHotUnload: true, pendingRendererKinds: [],
 };
 
 test("details expose candidate metadata and full diagnostics within a scrollable body", async () => {

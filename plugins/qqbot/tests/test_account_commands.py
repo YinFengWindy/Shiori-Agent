@@ -15,7 +15,7 @@ def _manager(setup_context):
     store = QQBotAccountStore(FakeKV())
     context = setup_context()
     manager = QQBotAccountsChannel(context, store, ())
-    return manager, store, context.accounts
+    return manager, store, context.fake_accounts
 
 
 @pytest.mark.asyncio

@@ -1,6 +1,6 @@
 # 插件开发
 
-Shiori 只有一套显式 v2 插件运行时。插件提供 `manifest.yaml` 和异步 `setup(ctx)`，宿主按声明授予能力，并用作用域回收事件订阅、工具和后台任务。
+Shiori 只有一套显式 v2 插件运行时。插件提供 `manifest.yaml` 和异步 `setup(ctx)`，宿主按 manifest 的 `inject` 提供服务（`ctx.require(KEY)`），并用作用域回收事件订阅、工具和后台任务。
 
 ## 包布局与发现
 
@@ -19,27 +19,29 @@ plugins/example/
   README.md
 ```
 
-后端扫描 `bootstrap.paths.plugin_roots()` 返回的内置插件根目录，以及工作区的 `plugins/`。开发态和桌面 bundle 的内置包位于安装资源的顶层 `plugins/`；wheel 安装态使用已安装插件包。仓库内的内置包声明 `api: 4`，把要用的服务写进 `inject`，代码里用 `ctx.require` 取得（见运行时契约 Unreleased 的 P4-3）。默认入口仍为 `backend/plugin.py`，入口作为包导入，内部可使用相对 import。工作区里的外部包仍走下面的 `api: 2` 与 `capabilities`，直到 P4-5 拒绝非 `api: 4`。
+后端扫描 `bootstrap.paths.plugin_roots()` 返回的内置插件根目录，以及工作区的 `plugins/`。开发态和桌面 bundle 的内置包位于安装资源的顶层 `plugins/`；wheel 安装态使用已安装插件包。仓库内的内置包声明 `api: 4`，把要用的服务写进 `inject`，代码里用 `ctx.require(KEY)` 取得。默认入口仍为 `backend/plugin.py`，入口作为包导入，内部可使用相对 import。工作区里的外部包（Package Contract v1）仍声明 `api: 2`，取服务的方式相同（`inject` + `ctx.require`），直到 P4-5 拒绝非 `api: 4`。
 
 工作区 `plugins/<目录>/manifest.yaml` 声明的外部包必须通过 [Package Contract v1](plugin-runtime-contract.md) 静态检查；合法包显示为 `UNTRUSTED`，在用户于设置 › 插件中经「信任…」（或 ZIP 安装/更新时的「信任并安装」「信任并更新」）确认并重启应用之前，不导入它的后端或 renderer；内容一变授信即失效（流程见[运行时契约](plugin-runtime-contract.md#main-window-ui-loader-213)）。配置 `enabled = true` 不代表信任。无效 manifest、入口和依赖显示为 `BLOCKED`；只有旧 `kv.json`、没有 manifest 的目录被忽略，数据不会因此删除。
 
 按 manifest ID 检测全部候选：同 ID 的所有包均为 `CONFLICT`，不选择内置或工作区优先者；同目录名但不同 ID 的包分别显示。插件管理保留各候选的版本、来源、实际目录和结构化诊断，拒绝切换未通过准入的候选。目录级代码新增、替换、删除后重启应用；配置保存或启停插件产生的新运行代沿用本次应用启动的候选、manifest 和准入快照，应用重启后才重新扫描。各运行代的导入命名空间、句柄和 effect 仍独立。
 
 ```yaml
-api: 2
+api: 4
 id: example
 version: '0.1.0'
 desc: 示例插件
-capabilities:
+inject:
   - config
   - rpc
 config_model: config:ExampleConfig
 supports_hot_unload: true
 ```
 
-`capabilities` 必须显式列出，可以是空列表。只声明实际使用的能力；未授权属性访问会抛 `CapabilityNotGranted`。声明了能力而宿主缺少其背后的服务（如 workspace、roles、sessions、http）时，宿主在调用 `setup` 前抛 `HostServiceUnavailable` 并指明缺失的服务名，插件不需要也不应再对这些属性做 `is None` 判断。`config_model` 可以是入口中的类名，也可以是相对入口包的 `模块:类名`。模型必须继承 Pydantic `BaseModel`。
+`inject` 列出要用的服务名，`setup` 里用 `ctx.require(KEY)` 取得；可有可无的服务写进 `optional_inject`，用 `ctx.get(KEY)` 取得，宿主没有提供时返回 `None`。Key 定义在 `shiori_sdk.core.services`（见下文[服务与副作用](#服务与副作用)）。`require` 未声明的 Key 抛内核的 `undeclared_key`；`inject` 里的服务宿主没有提供方时，计划阶段即为 BLOCKED，不会进入 `setup`；`kv` 在没有 workspace 时，构造上下文会抛 `HostServiceUnavailable`。
 
-`display_name` 是设置 › 插件里显示的名称（省略时显示 ID）。可选的 `category` 决定插件在列表中的分组：`feature`（功能）、`channel`（渠道）、`system`（系统组件，默认折叠，用于宿主内部护栏、诊断命令这类用户不需要日常操作的插件）。省略时，声明了渠道（`capabilities` 含 `channels`，或 `api: 4` 的 `contributes.channels`）的插件归入渠道，其余归入功能；`system` 只能显式声明。取值不在这三者之内时 manifest 被拒绝。Package Contract v1 的外部包自 Runtime API 3.1.1（#678）起也接受 `display_name` 与 `category`（含 `system`），校验规则相同；更早的宿主把它们当未知字段拒绝。
+`api: 2` 的外部包仍必须写 `capabilities` 列表，但其中的名字不授予任何服务，`ctx` 上也没有同名属性；服务同样写进 `inject`。新包写 `capabilities: []` 即可；`capabilities` 非空而 `inject`、`optional_inject` 都为空的 `api: 2` 包会被标为 BLOCKED（诊断码 `capabilities_retired`），`setup` 不会运行。`config_model` 可以是入口中的类名，也可以是相对入口包的 `模块:类名`。模型必须继承 Pydantic `BaseModel`。
+
+`display_name` 是设置 › 插件里显示的名称（省略时显示 ID）。可选的 `category` 决定插件在列表中的分组：`feature`（功能）、`channel`（渠道）、`system`（系统组件，默认折叠，用于宿主内部护栏、诊断命令这类用户不需要日常操作的插件）。省略时，声明了渠道（`api: 4` 的 `contributes.channels`，或 `api: 2` 的 `capabilities` 含 `channels`）的插件归入渠道，其余归入功能；`system` 只能显式声明。取值不在这三者之内时 manifest 被拒绝。Package Contract v1 的外部包自 Runtime API 3.1.1（#678）起也接受 `display_name` 与 `category`（含 `system`），校验规则相同；更早的宿主把它们当未知字段拒绝。
 
 可选的 `default_enabled`（严格布尔值，省略为 `true`）决定 `[plugins.<id>]` 没有显式 `enabled` 时插件是否启用；显式的 `enabled` 始终优先，设置 › 插件的开关写的就是显式值。目前 `browser_use`、`computer_use`、`novelai`、`gpt_sovits_tts`、`grok_bot`、`herdr`、`sensevoice_asr` 声明为 `false`，没有显式开关时默认停用。宿主加载配置时不改写这份开关。Package Contract v1 的外部包自 Runtime API 3.1.1 起也接受 `default_enabled`。
 
@@ -56,21 +58,24 @@ class ExampleConfig(BaseModel):
 
 ```python
 # backend/plugin.py
+from shiori_sdk import PluginRuntimeContext
 from shiori_sdk.core.conversation import TurnFinished
+from shiori_sdk.core.services import CONFIG, RPC
 from .config import ExampleConfig
 
-async def setup(ctx):
+async def setup(ctx: PluginRuntimeContext) -> None:
     """Registers this activation's contributions and cleanup."""
-    config = ExampleConfig.model_validate(ctx.config.as_dict())
+    config = ExampleConfig.model_validate(ctx.require(CONFIG).as_dict())
+    rpc = ctx.require(RPC)
 
     async def after_turn(event: TurnFinished):
-        await ctx.rpc.emit("updated", {"label": config.label})
+        await rpc.emit("updated", {"label": config.label})
 
     async def read_label(payload):
         return {"label": config.label}
 
     ctx.watch(TurnFinished, after_turn)
-    ctx.rpc.register("label.get", read_label)
+    rpc.register("label.get", read_label)
 ```
 
 自动表单按 JSON Schema 渲染：字段标签取 Pydantic `Field(title=...)`，说明取 `description`（不写 `title` 时 Pydantic 会生成 "Timeout Seconds" 这类英文标题，请为每个字段写中文 `title`）；数字字段可用 `json_schema_extra={"unit": "秒"}` 声明单位，`ge`/`le` 会作为取值范围；`list[str]` 渲染为可增删的标签列表；`SecretStr` 或名称含 secret/token/password/api_key 的字符串按密钥遮挡；对象、对象列表等其余形状放进「高级」折叠区，以 JSON 编辑。
@@ -79,60 +84,72 @@ async def setup(ctx):
 
 桌面普通设置草稿不携带插件配置快照。保存时后端在同一配置事务锁内保留当前插件表，因此不会覆盖其它窗口刚完成的插件设置或启停更改。原始 `runtime.apply` 仍是整份配置替换；普通表单通过 `preserve_plugins: true` 明确选择保留语义。
 
-## 能力与副作用
+## 服务与副作用
 
-| 能力 | 用途 |
-| --- | --- |
-| `events` | `ctx.events.on(EventType, handler)`；卸载先停用并退订，再清理其它 effect，与登记先后无关 |
-| `tools` | 注册工具（工具执行前后的处理改用 `ctx.on(ToolCalling, …)` / `ctx.on(ToolCalled, …)`，无需声明 capability） |
-| `channels` | 贡献 manifest 已声明的渠道（见[渠道声明](#渠道声明)）。机器人命令不是 capability：manifest 写 `inject: [commands]`，`ctx.effect("command:<名>", ctx.require(COMMANDS).register(名, handler, description=...))`；带说明的命令进入渠道命令菜单 |
-| `accounts` | `ctx.accounts.register/register_saved/report/...`：向宿主登记通信账号及其归属，随插件作用域释放（见[渠道插件](channel-plugins.md)） |
-| `services` | `ctx.services.register(service_id, contract=, label=, methods=)`：发布可被 renderer 按契约发现、调用的 JSON 服务方法（Runtime API 3.1.1，如语音 `shiori.asr.v1` / `shiori.tts.v1`，见[运行时契约](plugin-runtime-contract.md#runtime-api-311-plugin-services-native-resources-and-background-chat)） |
-| `avatars` | `ctx.avatars.refresh(kind, channel, id, fetch)`：到期时在后台用插件的下载把发送者或群的平台头像交给宿主缓存，`fetch` 返回 None 即记为无头像；卸载取消在途获取（见[渠道插件](channel-plugins.md)） |
-| `rpc` | 注册 `plugin.<id>.<method>`，发送同命名空间事件 |
-| `background` | `spawn` 管理作用域任务；`spawn_runtime` 另保留当前 runtime lease，卸载取消并等待任务 |
-| `kv` | 工作区 `plugin-data/<id>/kv.json` 中的私有状态 |
-| `config` | 本代插件配置快照 |
-| `dependencies` | 读取已声明提供方的本代公开 API |
-| `runtime` | 本代是否重载、前代是否活动，以及收尾任务登记 |
-| `workspace` / `roles` / `sessions` | 工作区、角色快照/素材、会话元数据/素材替换；不导出完整存储聚合 |
-| `scene_observations` / `models` | 场景观察需求与按角色持有的 chat/vision 模型快照 |
-| `http` / `resources` / `processes` / `tool_turn` | 注入 HTTP、资源路径、MCP/进程所有权和当前工具回合 |
+下表的服务都是 `shiori_sdk.core.services` 里的 Key：manifest 的 `inject` 写左列的名字，代码里 `ctx.require(<Key>)`。每个插件拿到的是绑定到自身作用域的视图，随插件卸载释放。
 
-外部上下文（群聊、陌生私聊）里，发送者不是已绑定用户的回合只能使用声明过外部可用的工具：`ctx.tools.register(tool, ..., external_allowed=True)`。默认不声明，即这类回合看不到、也调不动该工具；已绑定用户本人的消息不受限。只给陌生人触发也安全的工具声明，例如 NovelAI 的 `generate_image`。MCP 工具不能声明。规则见[运行时契约](plugin-runtime-contract.md#tools-in-external-contexts-489)。
+| `inject` 名 | Key | 用途 |
+| --- | --- | --- |
+| `events` | `EVENTS` | 宿主领域事件总线：`ctx.require(EVENTS).on(EventType, handler)`；卸载先停用并退订，再清理其它 effect，与登记先后无关。回合与工具事件不走它，用 `ctx.on` / `ctx.watch` |
+| `tools` | `TOOLS` | 注册工具（工具执行前后的处理改用 `ctx.on(ToolCalling, …)` / `ctx.on(ToolCalled, …)`，不需要注入） |
+| `channels` | `CHANNELS` | 贡献 manifest 已声明的渠道（见[渠道声明](#渠道声明)） |
+| `accounts` | `ACCOUNTS` | `register` / `register_saved` / `report` 等：向宿主登记通信账号及其归属（见[渠道插件](channel-plugins.md)） |
+| `services` | `SERVICES` | `register(service_id, contract=, label=, methods=)`：发布可被 renderer 按契约发现、调用的 JSON 服务方法（Runtime API 3.1.1，如语音 `shiori.asr.v1` / `shiori.tts.v1`，见[运行时契约](plugin-runtime-contract.md#runtime-api-311-plugin-services-native-resources-and-background-chat)） |
+| `avatars` | `AVATARS` | `refresh(kind, channel, id, fetch)`：到期时在后台用插件的下载把发送者或群的平台头像交给宿主缓存，`fetch` 返回 None 即记为无头像；卸载取消在途获取（见[渠道插件](channel-plugins.md)） |
+| `rpc` | `RPC` | 注册 `plugin.<id>.<method>`，发送同命名空间事件 |
+| `background` | `BACKGROUND` | `spawn` 管理作用域任务；`spawn_runtime` 另保留当前 runtime lease，卸载取消并等待任务。不是内核的 `spawn` |
+| `kv` | `KV` | 工作区 `plugin-data/<id>/kv.json` 中的私有状态 |
+| `config` | `CONFIG` | 本代插件配置快照（`as_dict()`、`resolve_reference(value)`） |
+| `dependencies` | `DEPENDENCIES` | 读取已声明提供方的本代公开 API |
+| `runtime` | `RUNTIME` | 本代是否重载、前代是否活动，以及收尾任务登记 |
+| `storage` | `STORAGE` | 宿主负责的插件私有文件迁移（`migrate_data`） |
+| `workspace` / `roles` / `session_store` | `WORKSPACE` / `ROLES` / `SESSION_STORE` | 工作区目录、角色快照/素材、会话元数据/素材替换；不导出完整存储聚合。回滚最近一轮被动回合是另一个 Key：`inject: [sessions]` 对应 `shiori_sdk.core.sessions.SESSIONS` |
+| `scene_observations` / `models` | `SCENE_OBSERVATIONS` / `MODELS` | 场景观察需求与按角色持有的 chat/vision 模型快照 |
+| `light_provider` / `light_model` | `LIGHT_PROVIDER` / `LIGHT_MODEL` | 轻量模型及其模型名 |
+| `memory` | `MEMORY` | 记忆插件的宿主接口（引擎是 `MEMORY_ENGINE`，由插件提供） |
+| `external_turns` / `background_results` | `EXTERNAL_TURNS` / `BACKGROUND_RESULTS` | 提交非渠道来源的外部上下文回合；后台任务回报结果 |
+| `http` / `resources` / `processes` / `process_resources` / `tool_turn` | `HTTP` / `RESOURCES` / `PROCESSES` / `PROCESS_RESOURCES` / `TOOL_TURN` | 注入 HTTP、资源路径、MCP/进程所有权、跨代进程资源和当前工具回合 |
 
-能力名的完整权威清单是 SDK 的 `shiori_sdk.runtime.KNOWN_CAPABILITIES`（宿主 `agent/plugin_host/manifest.py` 与 SDK 测试替身共用 `parse_capabilities` 校验）。不要自己构造另一份 RoleStore 来写同一份角色文件，应获取宿主共享的 `roles` 窄接口。渠道使用 `ChannelPluginContext` 的账号、渠道和头像等协议；桌宠使用 `ServicePluginContext` 的角色、存储、工具和 RPC 协议，renderer 通过 SDK surface 能力声明交互。能力是架构边界，不是 Python 进程内安全沙箱。
+机器人命令走核心 Key：manifest 写 `inject: [commands]`，`ctx.effect("command:<名>", ctx.require(COMMANDS).register(名, handler, description=...))`（`COMMANDS` 在 `shiori_sdk.core.conversation`）；带说明的命令进入渠道命令菜单。
 
-其它外部资源用 `ctx.effect("label", disposer)` 登记清理；disposer 可同步或异步。Python 插件作用域分两段处置：先停止接收新事件并撤销所有 `ctx.events.on` 订阅，再按登记的逆序（LIFO）清理其余 effect，包括自定义 disposer、后台任务与贡献。订阅和资源的登记先后不影响退订优先规则；其它资源之间仍需按依赖顺序登记，例如先登记 writer，再登记需要向 writer 最终 flush 的采集器，使采集器先清理。
+外部上下文（群聊、陌生私聊）里，发送者不是已绑定用户的回合只能使用声明过外部可用的工具：`ctx.require(TOOLS).register(tool, ..., external_allowed=True)`。默认不声明，即这类回合看不到、也调不动该工具；已绑定用户本人的消息不受限。只给陌生人触发也安全的工具声明，例如 NovelAI 的 `generate_image`。MCP 工具不能声明。规则见[运行时契约](plugin-runtime-contract.md#tools-in-external-contexts-489)。
 
-开始处置后拒绝新订阅、后台任务和资源登记；即使总线已选中某个 handler，只要它尚未开始也不会再调用。已经执行中的 handler 不会被强制取消，插件应在 disposer 中取消或等待其持有的任务。`ctx.events.off` 使用原始 handler 的对象身份退订，移除同一 handler 的重复订阅，重复退订安全。一项清理失败不会跳过剩余 effect。初始化抛错使用相同规则撤销已登记贡献；再次启用使用新作用域，不能重复保留旧订阅。
+不要自己构造另一份 RoleStore 来写同一份角色文件，应 `ctx.require(ROLES)`。渠道、桌宠和其它插件的 `setup` 都用 `PluginRuntimeContext`，它上面没有按服务命名的属性。这些键是架构边界，不是 Python 进程内安全沙箱。
+
+其它外部资源用 `ctx.effect("label", disposer)` 登记清理；disposer 可同步或异步。Python 插件作用域分两段处置：先停止接收新事件并撤销所有 `EVENTS` 订阅，再按登记的逆序（LIFO）清理其余 effect，包括自定义 disposer、后台任务与贡献。订阅和资源的登记先后不影响退订优先规则；其它资源之间仍需按依赖顺序登记，例如先登记 writer，再登记需要向 writer 最终 flush 的采集器，使采集器先清理。
+
+开始处置后拒绝新订阅、后台任务和资源登记；即使总线已选中某个 handler，只要它尚未开始也不会再调用。已经执行中的 handler 不会被强制取消，插件应在 disposer 中取消或等待其持有的任务。`ctx.require(EVENTS).off` 使用原始 handler 的对象身份退订，移除同一 handler 的重复订阅，重复退订安全。一项清理失败不会跳过剩余 effect。初始化抛错使用相同规则撤销已登记贡献；再次启用使用新作用域，不能重复保留旧订阅。
 
 ## 渠道声明
 
 所有外部聊天渠道都是插件，宿主只拥有 `desktop`。从零写一个渠道插件（配置表单、渠道契约、入站路由、流式、测试）的完整步骤见 [写一个渠道插件](channel-plugins.md)；本节只列声明与钩子的规则。
 
-贡献外部聊天渠道的插件要在 manifest 里静态声明渠道，并同时声明 `channels` 能力（Runtime API 2.2）：
+贡献外部聊天渠道的插件要在 manifest 里静态声明渠道，并注入 `channels`（Runtime API 2.2）。`api: 4` 写在 `contributes.channels`：
 
 ```yaml
-capabilities: [channels, accounts, kv, rpc]
-channels:
-  - name: qqbot                      # 必填，渠道名
-    label: QQBot                     # 必填，显示名
-    chat_types:                      # 必填，渠道支持的会话类型
-      - type: private                # private / group
-        label: 私聊
-        chat_id_label: 用户 OpenID    # 会话标识的标签
-        chat_id_hint: 对方的用户 OpenID # 可选
-        prefix: 'c2c:'               # 可选，拼在号码前组成存储的 chat_id
+api: 4
+inject: [channels, accounts, kv, rpc]
+contributes:
+  channels:
+    - name: qqbot                      # 必填，渠道名
+      label: QQBot                     # 必填，显示名
+      chat_types:                      # 必填，渠道支持的会话类型
+        - type: private                # private / group
+          label: 私聊
+          chat_id_label: 用户 OpenID    # 会话标识的标签
+          chat_id_hint: 对方的用户 OpenID # 可选
+          prefix: 'c2c:'               # 可选，拼在号码前组成存储的 chat_id
 ```
+
+`api: 2` 的外部包把同样的条目写在顶层 `channels`，并且 `capabilities` 必须含 `channels`（解析器仍按这条校验）；服务照样写进 `inject`。
 
 - 渠道名是会话线程和消息引用的数据键，发布后不要改名。账号 ID 采用 `<插件 id>:<平台账号>`；渠道名必须是小写标识（`[a-z][a-z0-9_-]{0,63}`），`desktop` 由宿主保留。
 - 声明是静态的：插件停用、未信任或还没有账号时，桌面端也能经 `channels.list` 列出这个渠道。账号插件应始终贡献渠道，并从插件自己的存储恢复账号；凭据缺失只影响对应账号的连接状态。
 - `chat_types` 必填（Runtime API 2.5），声明渠道的会话类型（`private` / `group`，各带标签、号码标签与提示、可选内部前缀），缺失时宿主拒绝 manifest。渠道插件用它标注会话类型，并为 `/chatid` 等命令生成可识别的会话标识。
 - 渠道项还可选 `contact_label`（群聊黑名单里成员 ID 的说明）、`group_listening: true`（Runtime API 2.13，支持群聊旁听）和 `instance_prefix`（必须以 `<name>_` 开头，如 Telegram 的 `telegram_`）：按账号拆出的连接可用 `<instance_prefix><后缀>` 作渠道名，沿用该项的会话类型，`channels.list` 为启用且 `ACTIVE` 的插件每个实例列一行。
-- `ctx.channels.add(channel)` 只接受本 manifest 声明过的 `channel.name`、声明的 `instance_prefix` 下的名字，或带非空 `account_id` 的 `<声明名>:<后缀>` 账号实例，否则 setup 失败，插件回滚为 `FAILED`，诊断码 `undeclared_channel`。
+- `ctx.require(CHANNELS).add(channel)` 只接受本 manifest 声明过的 `channel.name`、声明的 `instance_prefix` 下的名字，或带非空 `account_id` 的 `<声明名>:<后缀>` 账号实例，否则 setup 失败，插件回滚为 `FAILED`，诊断码 `undeclared_channel`。
 - 两个插件声明同一个渠道名（或一方的 `instance_prefix` 与另一方的渠道名、前缀相互覆盖）时，两者都是 `CONFLICT`（诊断码 `duplicate_channel`），都不会激活。
-- 渠道的启停和换代由宿主的 ChannelHost 管理，不要用 `background` 自己起连接任务。跨代复用连接时，渠道提供 `configuration_key`，它变化就重建连接；声明了 `uses_bot_commands = True` 的渠道，宿主还会连同 bot 命令列表一起比较。
+- 渠道的启停和换代由宿主的 ChannelHost 管理，不要用 `BACKGROUND` 自己起连接任务。跨代复用连接时，渠道提供 `configuration_key`，它变化就重建连接；声明了 `uses_bot_commands = True` 的渠道，宿主还会连同 bot 命令列表一起比较。
 - 渠道可以实现可选的 `status()`，返回 `{"connected": bool, "account": str, "detail": str}`（`account`、`detail` 可省略），`channels.list` 会原样带给桌面端。
 
 ### 渠道钩子（Runtime API 2.3）
@@ -163,7 +180,7 @@ class QQBotChannel:
 
 ## 回合事件与依赖
 
-插件不再向宿主阶段贡献模块（`lifecycle` capability 已删除），而是用 `ctx.on` / `ctx.watch` 订阅核心 conversation 模块的回合事件（`shiori_sdk.core.conversation`），不需要声明 capability：`TurnStarting`（会话、历史和检索已就绪）、`ReasoningStarting`、`PromptRendering`（每次模型请求渲染提示词前）、`StepStarting` / `StepFinished`（工具循环每一步前后）、`ReasoningFinished`（回复定稿、尚未存储和投递）、`TurnFinished`（回合已存储）。工具调用前后另有 `shiori_sdk.core.tools` 的 `ToolCalling` / `ToolCalled`。
+插件不再向宿主阶段贡献模块（`lifecycle` capability 已删除），而是用 `ctx.on` / `ctx.watch` 订阅核心 conversation 模块的回合事件（`shiori_sdk.core.conversation`），不需要注入：`TurnStarting`（会话、历史和检索已就绪）、`ReasoningStarting`、`PromptRendering`（每次模型请求渲染提示词前）、`StepStarting` / `StepFinished`（工具循环每一步前后）、`ReasoningFinished`（回复定稿、尚未存储和投递）、`TurnFinished`（回合已存储）。工具调用前后另有 `shiori_sdk.core.tools` 的 `ToolCalling` / `ToolCalled`。
 
 - 事件是冻结的投影，容器字段是 tuple 或只读 mapping。`on` 处理器返回原事件（放行）、`dataclasses.replace` 出的新事件（只有各事件文档列出的可写字段会回写到回合），或 `Veto(reason)`（只有 `TurnStarting`、`ReasoningStarting` 以原因结束回合，`StepStarting` 以原因结束工具循环；其余事件否决会让回合失败）。替换事件里不能放 list / dict / set，要写成 tuple 或 `MappingProxyType`。
 - `on` 链按插件依赖深度、再按插件 id 排序，与加载先后无关；核心的固定校验在链后执行（如 `ReasoningFinished` 之后清除残留的协议标签）。`watch` 只读、不阻塞回合，按插件串行投递。
@@ -190,7 +207,7 @@ async def setup(ctx):
 
 依赖其它插件时在 manifest 声明插件依赖。例如 story 的 `dependencies: [novelai]` 保证 novelai 先活动；提供方缺失、停用或失败时 story 为 `BLOCKED`，不会显示活动但缺少依赖。卸载提供方会级联其强依赖消费者。依赖也决定 `on` 链里的先后：被依赖的插件排在前面。
 
-需要调用另一个插件的 API 时，提供方用 `ctx.expose(api)`，消费者声明 `dependencies` 和同名 capability，再调用 `ctx.dependencies.require("provider")`。只需要加载顺序时不必调用 `require`。可选提供方用 `optional_dependencies` 和 `get_optional`：它不会强制启动提供方，提供方不可用时返回 `None`，也不会触发消费者级联卸载。
+需要调用另一个插件的 API 时，提供方用 `ctx.expose(api)`，消费者在 manifest 写 `dependencies: [provider]` 和 `inject: [dependencies]`，再调用 `ctx.require(DEPENDENCIES).require("provider")`。只需要加载顺序时不必注入。可选提供方用 `optional_dependencies` 和 `ctx.require(DEPENDENCIES).get_optional("provider")`：它不会强制启动提供方，提供方不可用时返回 `None`，也不会触发消费者级联卸载。
 
 ## 热卸载与进程退出
 
@@ -206,7 +223,7 @@ async def setup(ctx):
 
 ## 桌面 RPC、事件与 UI
 
-`ctx.rpc.register("label.get", handler)` 注册 `plugin.example.label.get`。前端插件组件得到已绑定自身命名空间的 `client.call("label.get")`，不自行拼宿主 IPC。`await ctx.rpc.emit("updated", payload)` 通过 `PluginBridgeEvent` 与所属 generation 的服务下发 `plugin.example.updated`，旧代事件不会冒充新代。
+Python 后端 `ctx.require(RPC).register("label.get", handler)` 注册 `plugin.example.label.get`。前端插件组件得到已绑定自身命名空间的 `client.call("label.get")`，不自行拼宿主 IPC。`await ctx.require(RPC).emit("updated", payload)` 通过 `PluginBridgeEvent` 与所属 generation 的服务下发 `plugin.example.updated`，旧代事件不会冒充新代。
 
 主窗口在构建时发现 `plugins/*/ui/index.tsx`，默认导出 `PluginUiModule`：
 
@@ -242,13 +259,13 @@ if (pet) await pet.background.call("sync", { forceVisible: false });
 
 `dependency(id)` 对已声明但缺失、停用、失败的提供方返回 `null`；未声明时抛出 `plugin_dependency_undeclared`。拿到的 peer 同样提供 `call`、`events.on`、`background.call`，不会接受 `plugin.<id>.*` 全局名称。每次操作应重新取得当前注入 client 的 peer；旧代 peer 不会自动连接到新代。提供方在获取后停用时，调用以 `plugin_unavailable` 失败。只在用户操作或状态变化时重试，避免错误循环。
 
-后台通过 `await ctx.rpc.handle("sync", async payload => ...)` 注册自身方法，UI/surface 的 `background.call` 等待其完成，处理失败原样保留稳定错误码与消息。方法只由后台注册，同名重复注册立即报错。请求最多并发 128 个，15 秒未响应以 `plugin_timeout` 失败；等待 renderer 不占用后端 RPC 的调度容量，后台可在处理方法里继续 `await ctx.rpc.call(...)`。
+renderer 后台（TypeScript 的 `BackgroundCtx`）通过 `await ctx.rpc.handle("sync", async payload => ...)` 注册自身方法，UI/surface 的 `background.call` 等待其完成，处理失败原样保留稳定错误码与消息。方法只由后台注册，同名重复注册立即报错。请求最多并发 128 个，15 秒未响应以 `plugin_timeout` 失败；等待 renderer 不占用后端 RPC 的调度容量，后台可在处理方法里继续 `await ctx.rpc.call(...)`。
 
-后台 `await ctx.events.on("action", handler)` 只订阅自身插件事件；其它插件事件必须通过 `await ctx.rpc.dependency(id)` 取得 peer。宿主事件使用独立的 `ctx.hostEvents.on("chat.done", handler)`，该入口拒绝 `plugin.*` 名称。Python 后端继续通过 `ctx.dependencies.require/get_optional` 访问插件经 `ctx.expose` 导出的 API；声明、停用与卸载规则不变。
+renderer 后台 `await ctx.events.on("action", handler)` 只订阅自身插件事件；其它插件事件必须通过 `await ctx.rpc.dependency(id)` 取得 peer。宿主事件使用独立的 `ctx.hostEvents.on("chat.done", handler)`，该入口拒绝 `plugin.*` 名称。Python 后端继续通过 `ctx.require(DEPENDENCIES).require/get_optional` 访问插件经 `ctx.expose` 导出的 API；声明、停用与卸载规则不变。
 
 注入 client 由挂载的 UI/surface 或后台作用域持有。React 订阅 effect 把 `client` 放入依赖数组，并返回 `events.on` 给出的 disposer；异步订阅完成前若组件已经卸载，立即调用该 disposer。宿主会在卸载、挂载失败、后台 setup 失败、窗口退出、主文档刷新/导航以及运行代际替换时统一回收订阅、方法注册和待返回请求。同页导航与子 frame 导航不会回收主文档的通信。真实配置发布或 bridge 重连会替换注入 client，并重建后台作用域；`runtime.applied.changed` 只表示实际发布新代，同代幂等重试、无变化保存与仅改角色模型绑定的事件为 `changed: false`，不会打断现有请求；返回旧代结果的重试不再发布事件。RPC 响应仍保留原操作的结果。保存插件配置时，宿主只在当前代内重载该插件及其强依赖消费者，并发出 `plugins.reloaded`（`plugin_ids`）：只有这些插件的注入 client、后台作用域和原生会话被替换，它们的渲染入口按新的激活令牌重新上报；其他插件与角色列表不刷新。渲染入口就绪或失败通过 `plugins.changed` 刷新名单：仍处于 ACTIVE 的插件保留通信 client 和后台作用域，失败插件仍回收自己的 UI、后台和 surface。后台已有业务工作若跨卸载仍在执行，仍应由插件的 effect 取消或等待，旧 handler 不得回复到新代。
 
-`ctx.rpc.emit` 返回是否已经交给连接的桌面传输，不能解释成每个 renderer 都已消费。桌宠工具据此保留 `desktop_bridge_unavailable`，未投递的动作不占用冷却或本轮次数。桌宠动作、隐藏、包切换已走通用通道，宿主不再有桌宠动作事件或 `desktop:pet-sync`。回复气泡属于桌宠；屏幕感知插件独立。宿主自 Runtime API 3.1.1（#677）起不再有语音业务：识别与合成由 `sensevoice_asr`、`gpt_sovits_tts` 以 `services` 发布 `shiori.asr.v1` / `shiori.tts.v1`，桌宠拥有语音偏好、输入手势与播放编排，宿主只提供通用原生录音、播放与按键资源。
+Python 端 `RPC` 的 `emit` 返回是否已经交给连接的桌面传输，不能解释成每个 renderer 都已消费。桌宠工具据此保留 `desktop_bridge_unavailable`，未投递的动作不占用冷却或本轮次数。桌宠动作、隐藏、包切换已走通用通道，宿主不再有桌宠动作事件或 `desktop:pet-sync`。回复气泡属于桌宠；屏幕感知插件独立。宿主自 Runtime API 3.1.1（#677）起不再有语音业务：识别与合成由 `sensevoice_asr`、`gpt_sovits_tts` 以 `services` 发布 `shiori.asr.v1` / `shiori.tts.v1`，桌宠拥有语音偏好、输入手势与播放编排，宿主只提供通用原生录音、播放与按键资源。
 
 这些 API 是可表达、可观测的协作契约，不是安全隔离。同 realm 的受信插件仍有宿主权限；CSP 没有放宽。
 
@@ -265,7 +282,7 @@ PLUGIN_DIR = Path(__file__).resolve().parents[1]
 # staged = stage_plugin_package(PLUGIN_DIR, tmp_path / "plugins/example")
 ```
 
-SDK 的 `sdk_context` fixture 从测试文件向上（不越过 pytest rootdir）找到本包 `manifest.yaml`，只授予其 `capabilities` 声明的能力（未知能力名与宿主一样报错）；访问未声明的能力抛 `CapabilityNotGranted`，与宿主一致。它同时按 manifest 的 `inject` / `optional_inject` / `provides` 声明服务 Key：`ctx.require` / `ctx.get` 未声明的 Key 抛内核的 `undeclared_key`，与宿主一致；其他假上下文（如 `FakeServiceContext`）传 `package_dir=` 读取同一份声明。manifest 只用于读取，`plugin_dir` 是隔离的临时目录；包内文件按包资源读取，不要写入 `plugin_dir`。测试不在包内时，在 `conftest.py` 覆盖 `sdk_plugin_dir` fixture。
+SDK 的 `sdk_context` fixture 从测试文件向上（不越过 pytest rootdir）找到本包 `manifest.yaml`，按其中的 `inject` / `optional_inject` / `provides` 声明服务 Key：`ctx.require` / `ctx.get` 未声明的 Key 抛内核的 `undeclared_key`，与宿主一致；其他假上下文（如 `FakeServiceContext`）传 `package_dir=` 或 `inject=` 读取同一份声明。宿主提供的服务用 `ctx.serve(KV, FakeKV())` 交给假上下文，插件里 `ctx.require(KV)` 拿到的就是它；预置上下文（`FakeExtensionContext`、`FakeServiceContext`、`FakeChannelSetupContext`、`FakeMemorySetupContext`）已经把假对象 serve 好，并放在 `fake_<名字>` 属性上供断言（如 `ctx.fake_rpc`、`ctx.fake_kv`）。`ctx.kv = ...` 这类旧能力属性名的读写会直接报错。manifest 只用于读取，`plugin_dir` 是隔离的临时目录；包内文件按包资源读取，不要写入 `plugin_dir`。测试不在包内时，在 `conftest.py` 覆盖 `sdk_plugin_dir` fixture。
 
 兄弟插件通过 `plugin_directory("novelai")` 定位，并在 `pyproject.toml` 明确声明安装依赖；不得推导原仓库路径，也不得导入宿主测试树。异步测试由 pytest-asyncio 执行，公共支持来自 SDK 的 pytest entry point；独立插件测试不安装宿主。真实 AppRuntime 集成 fixture 由宿主开发包 `shiori-host-testing` 提供，仅在显式安装该包时通过其 pytest entry point 注册。
 

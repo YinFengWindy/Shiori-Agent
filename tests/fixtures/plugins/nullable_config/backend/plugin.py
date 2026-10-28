@@ -2,6 +2,8 @@ from enum import Enum
 
 from pydantic import BaseModel
 
+from shiori_sdk.core.services import CONFIG
+
 
 class Mode(Enum):
     """刻意不继承 str：这样 Enum 实例本身无法直接过 json.dumps。"""
@@ -19,4 +21,4 @@ class NullableConfigModel(BaseModel):
 
 async def setup(ctx):
     """Validates the fixture's explicitly declared configuration model."""
-    NullableConfigModel.model_validate(ctx.config.as_dict())
+    NullableConfigModel.model_validate(ctx.require(CONFIG).as_dict())

@@ -14,14 +14,11 @@ import sqlite3
 from collections.abc import Awaitable, Callable
 from dataclasses import replace
 from pathlib import Path
-from typing import Protocol, cast
+from typing import cast
 
 from shiori_sdk.core.models import MAIN_MODEL, MAIN_PROVIDER
-from shiori_sdk.extensions import ConfigValues
-from shiori_sdk.http import HttpClient
 from shiori_sdk.memory.access import MemoryEvents
 from shiori_sdk.memory.events import MemoryWritten
-from shiori_sdk.models import ChatProvider
 from shiori_sdk.runtime import Dispose, EventHandler, PluginRuntimeContext
 from shiori_sdk.core.services import (
     CONFIG,
@@ -52,20 +49,7 @@ _CREDENTIALS_MISSING = (
 )
 
 
-class _EngineSetup(PluginRuntimeContext, Protocol):
-    """Ports ``construct_default_engine`` reads off the plugin context."""
-
-    @property
-    def config(self) -> ConfigValues: ...
-    @property
-    def http(self) -> HttpClient: ...
-    @property
-    def light_provider(self) -> ChatProvider: ...
-    @property
-    def light_model(self) -> str: ...
-
-
-def construct_default_engine(ctx: _EngineSetup) -> DefaultMemoryEngine:
+def construct_default_engine(ctx: PluginRuntimeContext) -> DefaultMemoryEngine:
     """Construct the engine and register its database and embedder for cleanup."""
     embedding_model, api_key, base_url, dimensionality = _embedding_settings(ctx)
     if not embedding_model or not api_key or not base_url:
@@ -162,7 +146,7 @@ async def fanout_memory_observation(
         await emit(frozen)
 
 
-def _embedding_settings(ctx: _EngineSetup) -> tuple[str, str, str, int | None]:
+def _embedding_settings(ctx: PluginRuntimeContext) -> tuple[str, str, str, int | None]:
     settings = DefaultMemoryPluginConfig.model_validate(ctx.require(CONFIG).as_dict())
 
     def resolve(value: str) -> str:

@@ -72,13 +72,15 @@ async def plugin(tmp_path, monkeypatch):
     monkeypatch.setattr(
         HerdrCli, "command", lambda _cli, argv, **kwargs: herdr.command(argv, **kwargs)
     )
-    ctx.roles.create_role(role_id="role-a", name="Mira", system_prompt="")
-    ctx.tools.context = {"role_id": "role-a"}
-    ctx.background_results.target = FakeBackgroundResultTarget("role-a", "thread-a")
-    await setup(ctx.as_capability())
+    ctx.fake_roles.create_role(role_id="role-a", name="Mira", system_prompt="")
+    ctx.fake_tools.context = {"role_id": "role-a"}
+    ctx.fake_background_results.target = FakeBackgroundResultTarget(
+        "role-a", "thread-a"
+    )
+    await setup(ctx)
 
     async def call(name: str, **kwargs):
-        return json.loads(await ctx.tools.tools[name].execute(**kwargs))
+        return json.loads(await ctx.fake_tools.tools[name].execute(**kwargs))
 
     yield ctx, herdr, call
     await ctx.aclose()
@@ -161,7 +163,7 @@ async def test_failures_are_structured_and_never_resent(
     elif setup_failure == "timeout":
         herdr.answer = CommandError("slow", code="timeout")
     elif setup_failure == "no_target":
-        ctx.background_results.target = None
+        ctx.fake_background_results.target = None
     else:
         text = " "
 
@@ -180,7 +182,7 @@ async def test_the_handling_role_answers_a_report_without_a_new_capture(plugin):
     ctx, herdr, call = plugin
     await call("herdr_prompt_agent", pane_id="wR:p2", text="修滚动")
     # The turn reporting on the agent: the host refuses another capture.
-    ctx.background_results.target = None
+    ctx.fake_background_results.target = None
 
     answered = await call("herdr_send_keys", pane_id="wR:p2", keys=["enter"])
     assert answered["ok"] is True
@@ -188,7 +190,7 @@ async def test_the_handling_role_answers_a_report_without_a_new_capture(plugin):
     assert herdr.sent[-1] == ["agent", "send-keys", "wR:p2", "enter"]
 
     # Another role never borrows the handling role's destination.
-    ctx.tools.context = {"role_id": "role-b"}
+    ctx.fake_tools.context = {"role_id": "role-b"}
     refused = await call("herdr_send_keys", pane_id="wR:p2", keys=["enter"])
     assert refused["ok"] is False
     assert refused["error"]["code"] == "not_permitted"

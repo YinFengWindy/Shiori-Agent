@@ -102,14 +102,16 @@ async def test_avatars_capability_caches_into_the_host_role_store(
     package = tmp_path / "plugins" / "avatar_probe"
     (package / "backend").mkdir(parents=True)
     (package / "manifest.yaml").write_text(
-        "api: 2\nid: avatar_probe\ncapabilities: [avatars]\n", encoding="utf-8"
+        "api: 2\nid: avatar_probe\ncapabilities: [avatars]\ninject: [avatars]\n",
+        encoding="utf-8",
     )
     (package / "backend/plugin.py").write_text(
         f"IMAGE = {image.getvalue()!r}\n"
+        "from shiori_sdk.core.services import AVATARS\n"
         "async def fetch():\n"
         "    return IMAGE\n"
         "async def setup(ctx):\n"
-        "    await ctx.avatars.refresh('sender', 'qq', '42', fetch)\n",
+        "    await ctx.require(AVATARS).refresh('sender', 'qq', '42', fetch)\n",
         encoding="utf-8",
     )
     role_store = RoleStore(tmp_path / "workspace")
@@ -134,12 +136,14 @@ async def test_scene_observation_requests_reach_the_generation_demand(
     package = tmp_path / "plugins" / "scene_probe"
     (package / "backend").mkdir(parents=True)
     (package / "manifest.yaml").write_text(
-        "api: 2\nid: scene_probe\ncapabilities: [scene_observations]\n",
+        "api: 2\nid: scene_probe\ncapabilities: [scene_observations]\n"
+        "inject: [scene_observations]\n",
         encoding="utf-8",
     )
     (package / "backend/plugin.py").write_text(
+        "from shiori_sdk.core.services import SCENE_OBSERVATIONS\n"
         "async def setup(ctx):\n"
-        "    ctx.scene_observations.request(lambda role: role.id == 'mira')\n",
+        "    ctx.require(SCENE_OBSERVATIONS).request(lambda role: role.id == 'mira')\n",
         encoding="utf-8",
     )
     demand = SceneObservationDemand()

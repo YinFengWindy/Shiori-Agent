@@ -24,7 +24,7 @@ from .accounts import FeishuAccounts
 from .channel import resolve_receive_id
 
 if TYPE_CHECKING:
-    from shiori_sdk.channels.context import ChannelPluginContext
+    from shiori_sdk.runtime import PluginRuntimeContext
 
 
 # Image types Feishu's image upload accepts (it also takes TIFF and ICO, which
@@ -37,7 +37,7 @@ _IMAGE_MIME_TYPES = frozenset(
 class FeishuAccountDelivery:
     """Queries observed targets and sends through a connected application."""
 
-    def __init__(self, ctx: ChannelPluginContext, accounts: FeishuAccounts) -> None:
+    def __init__(self, ctx: PluginRuntimeContext, accounts: FeishuAccounts) -> None:
         self._ctx = ctx
         self._accounts = accounts
 

@@ -3,9 +3,11 @@
 import asyncio
 import json
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 
+from shiori_sdk.core.services import PROCESS_RESOURCES
 from shiori_sdk.testing.service_context import FakeServiceContext
 from plugins.herdr.backend import agent_watch
 from plugins.herdr.backend.cli import HerdrCli
@@ -18,10 +20,10 @@ PACKAGE_DIR = Path(__file__).resolve().parents[1]
 
 async def test_setup_uses_public_capabilities_without_starting_processes(tmp_path):
     context = FakeServiceContext("herdr", tmp_path, package_dir=PACKAGE_DIR)
-    await setup(context.as_capability())
+    await setup(context)
     assert isinstance(context.exported, TaskService)
     assert context.exported.tasks == {}
-    tool = context.tools.tools["herdr_start_task"]
+    tool = context.fake_tools.tools["herdr_start_task"]
     with pytest.raises(PermissionError):
         await tool.execute(
             repository=str(tmp_path), requirement="fix", role_id="forged"
@@ -34,9 +36,9 @@ async def test_agent_tools_run_without_confirmation_and_declare_their_effect(
     tmp_path,
 ):
     context = FakeServiceContext("herdr", tmp_path, package_dir=PACKAGE_DIR)
-    await setup(context.as_capability())
+    await setup(context)
     risks = {
-        name: context.tools.options[name]["risk"]
+        name: context.fake_tools.options[name]["risk"]
         for name in (
             "herdr_list_agents",
             "herdr_read_agent",
@@ -51,7 +53,7 @@ async def test_agent_tools_run_without_confirmation_and_declare_their_effect(
         "herdr_send_keys": "external-side-effect",
     }
     for name in risks:
-        description = context.tools.tools[name].description
+        description = context.fake_tools.tools[name].description
         assert "herdr_start_task" in description and "shell" in description
     await context.aclose()
 
@@ -98,23 +100,24 @@ async def test_a_watch_continues_on_the_generation_published_after_a_reload(
     shared: dict[str, object] = {}
     target = FakeBackgroundResultTarget("role-a", "thread-a")
     first = FakeServiceContext("herdr", tmp_path, package_dir=PACKAGE_DIR)
-    first.process_resources = Generation(shared)  # type: ignore[assignment]
-    first.tools.context = {"role_id": "role-a"}
-    first.background_results.target = target
-    await setup(first.as_capability())
+    first_generation = Generation(shared)
+    first.serve(PROCESS_RESOURCES, cast(Any, first_generation))
+    first.fake_tools.context = {"role_id": "role-a"}
+    first.fake_background_results.target = target
+    await setup(first)
     sent = json.loads(
-        await first.tools.tools["herdr_prompt_agent"].execute(
+        await first.fake_tools.tools["herdr_prompt_agent"].execute(
             pane_id="wR:p2", text="修滚动"
         )
     )
     assert sent["ok"] is True
 
     # The reload publishes a second generation and retires the first.
-    first.process_resources.active = False
-    revoked.append(first.processes)
+    first_generation.active = False
+    revoked.append(first.fake_processes)
     second = FakeServiceContext("herdr", tmp_path, package_dir=PACKAGE_DIR)
-    second.process_resources = Generation(shared)  # type: ignore[assignment]
-    await setup(second.as_capability())
+    second.serve(PROCESS_RESOURCES, cast(Any, Generation(shared)))
+    await setup(second)
     state["agent_status"] = "idle"
     try:
         async with asyncio.timeout(5):
@@ -204,14 +207,15 @@ async def test_a_task_is_monitored_and_verified_on_the_generation_published_afte
     shared: dict[str, object] = {}
     target = FakeBackgroundResultTarget("role-a", "thread-a")
     first = FakeServiceContext("herdr", tmp_path, package_dir=PACKAGE_DIR)
-    first.process_resources = Generation(shared)  # type: ignore[assignment]
-    first.tools.context = {"role_id": "role-a"}
-    first.background_results.target = target
-    await setup(first.as_capability())
+    first_generation = Generation(shared)
+    first.serve(PROCESS_RESOURCES, cast(Any, first_generation))
+    first.fake_tools.context = {"role_id": "role-a"}
+    first.fake_background_results.target = target
+    await setup(first)
     service = first.exported
     assert isinstance(service, TaskService)
     started = json.loads(
-        await first.tools.tools["herdr_start_task"].execute(
+        await first.fake_tools.tools["herdr_start_task"].execute(
             repository=str(repository), requirement="修滚动"
         )
     )
@@ -227,10 +231,10 @@ async def test_a_task_is_monitored_and_verified_on_the_generation_published_afte
         assert prompted.is_set(), task.error
 
         # The reload publishes a second generation and retires the first.
-        first.process_resources.active = False
-        revoked.append(first.processes)
-        second.process_resources = Generation(shared)  # type: ignore[assignment]
-        await setup(second.as_capability())
+        first_generation.active = False
+        revoked.append(first.fake_processes)
+        second.serve(PROCESS_RESOURCES, cast(Any, Generation(shared)))
+        await setup(second)
         assert second.exported is service
         state["agent_status"] = "idle"
         task.result_path.write_text(

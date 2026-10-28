@@ -21,7 +21,7 @@ from .credentials import (
 )
 
 if TYPE_CHECKING:
-    from shiori_sdk.channels.context import ChannelPluginContext
+    from shiori_sdk.runtime import PluginRuntimeContext
     from shiori_sdk.channels.group import AccountChannelGroup
 
     from .channel.lifecycle import TelegramChannel
@@ -34,7 +34,7 @@ class TelegramBots:
 
     def __init__(
         self,
-        ctx: ChannelPluginContext,
+        ctx: PluginRuntimeContext,
         store: TelegramBotStore,
         group: AccountChannelGroup,
     ) -> None:

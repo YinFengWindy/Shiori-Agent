@@ -7,7 +7,7 @@ from typing import Any, cast
 import pytest
 from shiori_sdk.rpc import Concurrency
 from shiori_sdk.testing.memory import FakeMemoryRoles
-from shiori_sdk.testing.memory_context import FakeMemoryPluginContext
+from shiori_sdk.testing.memory_context import FakeMemorySetupContext
 
 from plugins.default_memory.backend.role_memory import register_role_semantic_memory
 from plugins.default_memory.backend.semantic.store import MemoryStore2
@@ -49,14 +49,14 @@ async def test_semantic_rpc_filters_role_status_and_page_and_rejects_cross_role_
             list_role_filter_values=store.list_role_filter_values,
             get_item_for_admin=store.get_item_for_admin,
         )
-        ctx = FakeMemoryPluginContext(workspace, roles=roles, package_dir=PACKAGE_DIR)
+        ctx = FakeMemorySetupContext(workspace, roles=roles, package_dir=PACKAGE_DIR)
         register_role_semantic_memory(ctx, cast(Any, engine))
         list_method = "roles.memory.semantic.list"
         detail_method = "roles.memory.semantic.detail"
-        assert ctx.rpc.concurrency[list_method] is Concurrency.READ_ONLY
-        assert ctx.rpc.concurrency[detail_method] is Concurrency.READ_ONLY
-        list_rpc = ctx.rpc.handlers[list_method]
-        detail_rpc = ctx.rpc.handlers[detail_method]
+        assert ctx.fake_rpc.concurrency[list_method] is Concurrency.READ_ONLY
+        assert ctx.fake_rpc.concurrency[detail_method] is Concurrency.READ_ONLY
+        list_rpc = ctx.fake_rpc.handlers[list_method]
+        detail_rpc = ctx.fake_rpc.handlers[detail_method]
         active = await list_rpc({"role_id": "mira", "page_size": 1})
         assert active is not None
         assert active["total"] == 1
@@ -106,7 +106,7 @@ async def test_semantic_rpc_filters_role_status_and_page_and_rejects_cross_role_
         with pytest.raises(ValueError, match="role not found"):
             await list_rpc({"role_id": "missing"})
         await ctx.aclose()
-        assert list_method not in ctx.rpc.handlers
+        assert list_method not in ctx.fake_rpc.handlers
     finally:
         store.close()
 

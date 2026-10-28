@@ -16,11 +16,14 @@ async def test_setup_tracks_generated_media_and_releases_contributions(
     tmp_path, pushed
 ):
     context = FakeServiceContext("novelai", tmp_path, package_dir=PACKAGE_DIR)
-    await setup(context.as_capability())
-    assert context.exported is context.tools.get_tool("generate_image")
-    assert "regenerateMessageMedia" in context.rpc.handlers
-    assert {"role_settings.get", "role_settings.set"} <= context.rpc.handlers.keys()
-    assert len(context.scene_observations.predicates) == 1
+    await setup(context)
+    assert context.exported is context.fake_tools.get_tool("generate_image")
+    assert "regenerateMessageMedia" in context.fake_rpc.handlers
+    assert {
+        "role_settings.get",
+        "role_settings.set",
+    } <= context.fake_rpc.handlers.keys()
+    assert len(context.fake_scene_observations.predicates) == 1
     image = str(tmp_path / "output.png")
     await context.emit(
         ToolCalled(
@@ -64,4 +67,4 @@ async def test_setup_tracks_generated_media_and_releases_contributions(
     assert isinstance(event, ReasoningFinished)
     assert event.media == (() if pushed else (image,))
     await context.aclose()
-    assert not context.tools.tools and not context.rpc.handlers
+    assert not context.fake_tools.tools and not context.fake_rpc.handlers

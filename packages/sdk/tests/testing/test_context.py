@@ -1,13 +1,15 @@
-"""Contract fakes exercise setup, capability gates and cleanup without host storage."""
+"""Contract fakes exercise setup, declared keys and cleanup without host storage."""
 
 from pathlib import Path
 
 import pytest
 
-from shiori_sdk import CapabilityNotGranted, PluginRuntimeContext
-from shiori_sdk.core.services import HTTP, KV, RPC
+from shiori_sdk import PluginRuntimeContext
+from shiori_sdk.core.services import EVENTS, HTTP, KV, RPC
 from shiori_sdk.kernel import KernelError
 from shiori_sdk.testing import FakePluginContext
+from shiori_sdk.testing.memory_context import FakeRpc
+from shiori_sdk.testing.storage import FakeKV
 
 
 @pytest.fixture
@@ -15,7 +17,7 @@ def sdk_plugin_dir(tmp_path: Path) -> Path:
     package = tmp_path / "package"
     package.mkdir()
     (package / "manifest.yaml").write_text(
-        "id: probe\ncapabilities:\n  - rpc\n", encoding="utf-8"
+        "api: 4\nid: probe\ninject:\n  - rpc\n", encoding="utf-8"
     )
     return package
 
@@ -33,22 +35,20 @@ async def test_sdk_fixture_is_a_usable_setup_context(
     assert not (sdk_context.plugin_dir / "manifest.yaml").exists()
 
 
-async def test_sdk_fixture_grants_only_manifest_capabilities(
+async def test_sdk_fixture_gates_require_by_the_manifest(
     sdk_context: FakePluginContext,
 ) -> None:
     assert sdk_context.plugin_id == "probe"
-    assert sdk_context.granted == ("rpc",)
-    with pytest.raises(
-        CapabilityNotGranted, match="插件 probe 未声明 capability 'events'"
-    ):
-        _ = sdk_context.events
+    with pytest.raises(KernelError) as caught:
+        sdk_context.require(EVENTS)
+    assert caught.value.diagnostic.code == "undeclared_key"
 
 
 async def test_cleanup_is_lifo_stops_events_first_and_rejects_cached_registrations() -> (
     None
 ):
     context = FakePluginContext()
-    events = context.events
+    events = context.fake_events
     seen: list[str] = []
 
     def handler(event: str) -> None:
@@ -86,29 +86,24 @@ async def test_cleanup_continues_after_a_failure() -> None:
     assert seen == ["first"]
 
 
-def test_only_requested_capabilities_are_accessible() -> None:
-    context = FakePluginContext(capabilities=("rpc", "kv"))
-    assert context.granted == ("kv", "rpc")
-    with pytest.raises(CapabilityNotGranted, match="events"):
-        _ = context.events
-
-
-def test_unknown_capability_names_are_rejected_like_the_host() -> None:
-    with pytest.raises(
-        ValueError, match=r"manifest 声明了未知 capability \['host_storage'\]"
-    ):
-        FakePluginContext(capabilities=("events", "host_storage"))
-
-
 def test_require_and_get_reject_undeclared_keys_like_the_host() -> None:
     context = FakePluginContext(inject=("kv",), optional_inject=("http",))
-    kv, rpc = object(), object()
-    context.kv = kv  # type: ignore[attr-defined]
-    context.rpc = rpc  # type: ignore[attr-defined]
+    kv, rpc = FakeKV(), FakeRpc()
+    context.serve(KV, kv)
+    context.serve(RPC, rpc)
     assert context.require(KV) is kv
     assert context.get(HTTP) is None
-    # An attribute fake never stands in for a key the declaration lacks.
+    # A served fake never stands in for a key the declaration lacks.
     for lookup in (lambda: context.require(RPC), lambda: context.get(RPC)):
         with pytest.raises(KernelError) as caught:
             lookup()
         assert caught.value.diagnostic.code == "undeclared_key"
+
+
+def test_removed_capability_attributes_can_be_neither_set_nor_read() -> None:
+    """The host context has no ``ctx.kv``; a plugin reading it must fail here too."""
+    context = FakePluginContext(inject=("kv",))
+    with pytest.raises(AttributeError, match="ctx.require"):
+        context.kv = FakeKV()  # pyright: ignore[reportAttributeAccessIssue]
+    with pytest.raises(AttributeError, match="ctx.require"):
+        _ = context.rpc  # pyright: ignore[reportAttributeAccessIssue]

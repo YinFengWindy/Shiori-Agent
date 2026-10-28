@@ -11,7 +11,7 @@ from shiori_sdk.core.services import CONFIG
 from .config import ToolLoopGuardConfig
 
 if TYPE_CHECKING:
-    from shiori_sdk.extensions import HookPluginContext as PluginRuntimeContext
+    from shiori_sdk.runtime import PluginRuntimeContext
 
 _EXCLUDED_TOOLS = frozenset({"task_output", "task_stop"})
 

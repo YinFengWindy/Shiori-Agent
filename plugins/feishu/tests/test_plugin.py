@@ -9,10 +9,9 @@ import pytest
 
 from plugins.feishu.backend.plugin import setup
 from shiori_sdk.testing.channel_context import (
-    FakeChannelPluginContext,
+    FakeChannelSetupContext,
     FakeChannelDeclarations,
 )
-from shiori_sdk.testing.accounts import FakeAccounts
 from shiori_sdk.accounts.targets import UncertainDeliveryError
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
@@ -29,12 +28,15 @@ def _app(app_id: str, role_id: str = "mira", **extra: Any) -> dict[str, Any]:
 
 
 def _fake_ctx(kv: dict[str, Any], handlers: dict[str, Any], channels: list[Any]):
-    ctx = FakeChannelPluginContext("feishu", PLUGIN_DIR)
-    ctx.kv.values = kv
-    ctx.rpc.handlers = handlers
-    ctx.channels.channels = channels
-    ctx.accounts = FakeAccounts("feishu", id_factory=lambda _value: "account-a")
-    ctx.accounts.on_delete = lambda handler: handlers.__setitem__("delete", handler)
+    ctx = FakeChannelSetupContext(
+        "feishu", PLUGIN_DIR, account_ids=lambda _value: "account-a"
+    )
+    ctx.fake_kv.values = kv
+    ctx.fake_rpc.handlers = handlers
+    ctx.fake_channels.channels = channels
+    ctx.fake_accounts.on_delete = lambda handler: handlers.__setitem__(
+        "delete", handler
+    )
     return ctx
 
 
@@ -89,13 +91,13 @@ async def test_stored_bot_avatar_is_registered_on_load() -> None:
     }
     ctx = _fake_ctx(kv, {}, [])
     registered: list[dict[str, Any]] = []
-    register_saved = ctx.accounts.register_saved
+    register_saved = ctx.fake_accounts.register_saved
 
     def capture(**kwargs):
         registered.append(kwargs)
         return register_saved(**kwargs)
 
-    ctx.accounts.register_saved = capture
+    ctx.fake_accounts.register_saved = capture
 
     await setup(ctx)
 

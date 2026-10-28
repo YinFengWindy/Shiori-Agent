@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from shiori_sdk.core.tools import ToolCalling, ToolVeto
 
 if TYPE_CHECKING:
-    from shiori_sdk.extensions import HookPluginContext as PluginRuntimeContext
+    from shiori_sdk.runtime import PluginRuntimeContext
 
 INTERACTIVE_COMMANDS = {
     "vi",

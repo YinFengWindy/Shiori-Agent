@@ -9,7 +9,7 @@ import pytest
 from shiori_sdk.accounts import AccountResponseRules, account_id_for
 from shiori_sdk.accounts.routing import AccountRoute
 from shiori_sdk.testing.channel_context import (
-    FakeChannelPluginContext,
+    FakeChannelSetupContext,
     fake_channel_context,
 )
 from plugins.grok_bot.backend.accounts import GrokAccounts
@@ -22,9 +22,10 @@ from plugins.grok_bot.backend.protocol import BotMessage
 async def test_multiple_roles_isolate_credentials_pause_rules_reload_and_delete(
     tmp_path, config, monkeypatch
 ):
-    ctx = FakeChannelPluginContext("grok_bot", Path(__file__).resolve().parents[1])
-    ctx.workspace = tmp_path
-    group = ctx.channels.group("grok_bot")
+    ctx = FakeChannelSetupContext(
+        "grok_bot", Path(__file__).resolve().parents[1], workspace=tmp_path
+    )
+    group = ctx.fake_channels.group("grok_bot")
     accounts = GrokAccounts(ctx, group)
     one = config
     two = config.model_copy(
@@ -35,7 +36,7 @@ async def test_multiple_roles_isolate_credentials_pause_rules_reload_and_delete(
             "callback_token": "other-token-" + uuid4().hex,
         }
     )
-    store = ConnectionStore(ctx.kv)
+    store = ConnectionStore(ctx.fake_kv)
     store.save(one)
     store.save(two)
     await accounts.load()
@@ -54,7 +55,7 @@ async def test_multiple_roles_isolate_credentials_pause_rules_reload_and_delete(
         routine = detail["routine_config"]
         assert isinstance(routine, str)
         assert str(accounts.client_path) in routine
-        assert "fixed_peer" in ctx.accounts.records[first.account_id].capabilities
+        assert "fixed_peer" in ctx.fake_accounts.records[first.account_id].capabilities
         with pytest.raises(ValueError, match="另一个角色"):
             await accounts.disconnect(
                 {"account_id": first.account_id, "role_id": "other"}
@@ -72,10 +73,10 @@ async def test_multiple_roles_isolate_credentials_pause_rules_reload_and_delete(
         assert not (store.get(two.connection_id).response_rules or {}).get(
             "allow_full_tools", False
         )
-        assert "full_tools" in ctx.accounts.records[first.account_id].capabilities
-        restored = GrokAccounts(ctx, ctx.channels.group("grok_bot"))
+        assert "full_tools" in ctx.fake_accounts.records[first.account_id].capabilities
+        restored = GrokAccounts(ctx, ctx.fake_channels.group("grok_bot"))
         await restored.load()
-        assert ctx.accounts.records[
+        assert ctx.fake_accounts.records[
             first.account_id
         ].record.response_rules.allow_full_tools
         restored.save_rules(one.connection_id, AccountResponseRules())
@@ -95,10 +96,11 @@ async def test_multiple_roles_isolate_credentials_pause_rules_reload_and_delete(
 async def test_save_keeps_secret_reference_and_stable_identity_but_rotates_new_bot(
     tmp_path, config, monkeypatch
 ):
-    ctx = FakeChannelPluginContext("grok_bot", Path(__file__).resolve().parents[1])
-    ctx.workspace = tmp_path
-    ctx.config.references["${GROK_SECRET}"] = "resolved-secret"
-    group = ctx.channels.group("grok_bot")
+    ctx = FakeChannelSetupContext(
+        "grok_bot", Path(__file__).resolve().parents[1], workspace=tmp_path
+    )
+    ctx.fake_config.references["${GROK_SECRET}"] = "resolved-secret"
+    group = ctx.fake_channels.group("grok_bot")
     accounts = GrokAccounts(ctx, group)
     post = AsyncMock(side_effect=AssertionError("activation must not contact Grok"))
     monkeypatch.setattr(WebhookTransport, "post", post)
@@ -114,7 +116,7 @@ async def test_save_keeps_secret_reference_and_stable_identity_but_rotates_new_b
         [original] = accounts.configs.values()
         original_route = AccountRoute(original.channel_name, original.chat_id)
         assert (
-            ctx.accounts.records[result["account_id"]].tool_conversation
+            ctx.fake_accounts.records[result["account_id"]].tool_conversation
             == original_route
         )
         accounts.save_rules(
@@ -130,7 +132,7 @@ async def test_save_keeps_secret_reference_and_stable_identity_but_rotates_new_b
         assert resumed.webhook_key == "${GROK_SECRET}"
         assert resumed.response_rules["allow_full_tools"] is True
         assert (
-            ctx.accounts.records[result["account_id"]].tool_conversation
+            ctx.fake_accounts.records[result["account_id"]].tool_conversation
             == original_route
         )
         await accounts.save(
@@ -142,22 +144,22 @@ async def test_save_keeps_secret_reference_and_stable_identity_but_rotates_new_b
         assert changed.callback_token != original.callback_token
         post.assert_not_awaited()
         assert not changed.response_rules.get("allow_full_tools", False)
-        assert ctx.accounts.records[
+        assert ctx.fake_accounts.records[
             result["account_id"]
         ].tool_conversation == AccountRoute(changed.channel_name, changed.chat_id)
         assert (
-            ctx.accounts.records[result["account_id"]].tool_conversation
+            ctx.fake_accounts.records[result["account_id"]].tool_conversation
             != original_route
         )
         accounts.save_rules(
             changed.connection_id, AccountResponseRules(allow_full_tools=True)
         )
         accounts._register(accounts.configs[changed.connection_id])
-        assert ctx.accounts.records[
+        assert ctx.fake_accounts.records[
             result["account_id"]
         ].record.response_rules.allow_full_tools
         assert (
-            ctx.accounts.records[result["account_id"]].tool_conversation
+            ctx.fake_accounts.records[result["account_id"]].tool_conversation
             != original_route
         )
     finally:
@@ -168,21 +170,22 @@ async def test_save_keeps_secret_reference_and_stable_identity_but_rotates_new_b
 async def test_enabled_saved_account_reports_fixed_peer_and_error_when_secret_cannot_resolve(
     tmp_path, config
 ):
-    ctx = FakeChannelPluginContext("grok_bot", Path(__file__).resolve().parents[1])
-    ctx.workspace = tmp_path
-    accounts = GrokAccounts(ctx, ctx.channels.group("grok_bot"))
+    ctx = FakeChannelSetupContext(
+        "grok_bot", Path(__file__).resolve().parents[1], workspace=tmp_path
+    )
+    accounts = GrokAccounts(ctx, ctx.fake_channels.group("grok_bot"))
     accounts.store.save(
         config.model_copy(update={"webhook_key": "${MISSING_GROK_KEY}"})
     )
     try:
         await accounts.load()
-        snapshot = ctx.accounts.records[
+        snapshot = ctx.fake_accounts.records[
             account_id_for("grok_bot", config.connection_id)
         ]
         assert snapshot.capabilities == frozenset({"fixed_peer", "full_tools"})
         assert snapshot.connection == "error"
         assert snapshot.error == "Webhook 密钥未配置或环境变量未解析"
-        assert not ctx.accounts.rejections
+        assert not ctx.fake_accounts.rejections
         assert not accounts.connections
     finally:
         await ctx.aclose()
@@ -191,19 +194,23 @@ async def test_enabled_saved_account_reports_fixed_peer_and_error_when_secret_ca
 async def test_deleted_role_and_corrupt_record_do_not_restore_other_accounts(
     tmp_path, config
 ):
-    ctx = FakeChannelPluginContext("grok_bot", Path(__file__).resolve().parents[1])
-    ctx.workspace = tmp_path
-    ctx.accounts.available_roles = {"other"}
-    store = ConnectionStore(ctx.kv)
+    ctx = FakeChannelSetupContext(
+        "grok_bot", Path(__file__).resolve().parents[1], workspace=tmp_path
+    )
+    ctx.fake_accounts.available_roles = {"other"}
+    store = ConnectionStore(ctx.fake_kv)
     store.save(config)
-    ctx.kv.set("connections", {**store.rows(), "broken": {"webhook_key": "do-not-log"}})
-    accounts = GrokAccounts(ctx, ctx.channels.group("grok_bot"))
+    ctx.fake_kv.set(
+        "connections", {**store.rows(), "broken": {"webhook_key": "do-not-log"}}
+    )
+    accounts = GrokAccounts(ctx, ctx.fake_channels.group("grok_bot"))
     try:
         await accounts.load()
         assert config.connection_id not in store.rows()
         assert not accounts.connections
         assert (
-            account_id_for("grok_bot", config.connection_id) not in ctx.accounts.records
+            account_id_for("grok_bot", config.connection_id)
+            not in ctx.fake_accounts.records
         )
     finally:
         await ctx.aclose()
@@ -216,13 +223,14 @@ async def test_delete_plan_can_be_recreated_after_each_cleanup_failure(
     monkeypatch: pytest.MonkeyPatch,
     failed_step: str,
 ) -> None:
-    ctx = FakeChannelPluginContext("grok_bot", Path(__file__).resolve().parents[1])
-    ctx.workspace = tmp_path
-    accounts = GrokAccounts(ctx, ctx.channels.group("grok_bot"))
+    ctx = FakeChannelSetupContext(
+        "grok_bot", Path(__file__).resolve().parents[1], workspace=tmp_path
+    )
+    accounts = GrokAccounts(ctx, ctx.fake_channels.group("grok_bot"))
     accounts.store.save(config.model_copy(update={"enabled": False}))
     await accounts.load()
     journal_key = f"exchange:{config.connection_id}:{config.peer_id}"
-    ctx.kv.set(journal_key, {"pending": "stale transport state"})
+    ctx.fake_kv.set(journal_key, {"pending": "stale transport state"})
     client_file = accounts.data_dir / config.connection_id / "client.json"
     client_file.parent.mkdir(parents=True)
     client_file.write_text("{}", encoding="utf-8")
@@ -235,14 +243,14 @@ async def test_delete_plan_can_be_recreated_after_each_cleanup_failure(
             raise OSError("cleanup unavailable")
 
     if failed_step == "journal":
-        delete = ctx.kv.delete
+        delete = ctx.fake_kv.delete
 
         def delete_journal(key: str) -> None:
             if key == journal_key:
                 fail_once()
             delete(key)
 
-        monkeypatch.setattr(ctx.kv, "delete", delete_journal)
+        monkeypatch.setattr(ctx.fake_kv, "delete", delete_journal)
     elif failed_step == "client_file":
         unlink = Path.unlink
 
@@ -274,11 +282,11 @@ async def test_delete_plan_can_be_recreated_after_each_cleanup_failure(
         await retry.purge()
         assert config.connection_id not in accounts.store.rows()
         assert config.connection_id not in accounts.configs
-        assert ctx.kv.get(journal_key) is None
+        assert ctx.fake_kv.get(journal_key) is None
         assert not client_file.exists()
 
         # The host may request a new plan even after plugin data is already gone.
-        ctx.accounts.records.pop(account_id_for("grok_bot", config.connection_id))
+        ctx.fake_accounts.records.pop(account_id_for("grok_bot", config.connection_id))
         completed = accounts.delete_plan(config.connection_id)
         await completed.disconnect()
         await completed.purge()
@@ -289,9 +297,10 @@ async def test_delete_plan_can_be_recreated_after_each_cleanup_failure(
 async def test_reconnect_keeps_all_inflight_send_receipts_and_reply_correlation(
     tmp_path: Path, config: ConnectionConfig, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    ctx = FakeChannelPluginContext("grok_bot", Path(__file__).resolve().parents[1])
-    ctx.workspace = tmp_path
-    group = ctx.channels.group("grok_bot")
+    ctx = FakeChannelSetupContext(
+        "grok_bot", Path(__file__).resolve().parents[1], workspace=tmp_path
+    )
+    group = ctx.fake_channels.group("grok_bot")
     accounts = GrokAccounts(ctx, group)
     accounts.store.save(config)
     await accounts.load()
@@ -344,9 +353,10 @@ async def test_reconnect_keeps_all_inflight_send_receipts_and_reply_correlation(
 async def test_reconnect_validates_credentials_before_retiring_and_restores_on_failure(
     tmp_path: Path, config: ConnectionConfig, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    ctx = FakeChannelPluginContext("grok_bot", Path(__file__).resolve().parents[1])
-    ctx.workspace = tmp_path
-    group = ctx.channels.group("grok_bot")
+    ctx = FakeChannelSetupContext(
+        "grok_bot", Path(__file__).resolve().parents[1], workspace=tmp_path
+    )
+    group = ctx.fake_channels.group("grok_bot")
     accounts = GrokAccounts(ctx, group)
     accounts.store.save(config)
     await accounts.load()

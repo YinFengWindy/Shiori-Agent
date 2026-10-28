@@ -2,7 +2,7 @@
 
 import asyncio
 
-from shiori_sdk.plugin_services import ServicePluginContext
+from shiori_sdk.runtime import PluginRuntimeContext
 from shiori_sdk.rpc import Concurrency
 from shiori_sdk.core.services import BACKGROUND, PROCESS_RESOURCES, RPC
 
@@ -14,7 +14,7 @@ from .task_management import task_detail, task_summary
 class Dashboard:
     """Desktop sees all tasks; role tools keep their separate ownership checks."""
 
-    def __init__(self, service: TaskService, ctx: ServicePluginContext):
+    def __init__(self, service: TaskService, ctx: PluginRuntimeContext):
         self.service, self.ctx = service, ctx
         self._pending: dict[str, int] = {}
         self._emitting: asyncio.Task[None] | None = None

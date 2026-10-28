@@ -40,8 +40,8 @@ describe("synchronizePluginSettingsAutoRegistration (issue #230 AC 5/6)", () => 
   it("gives an account plugin no settings subtab, even with a config schema", () => {
     // Its accounts are managed on a role's 账号 tab, never in plugin settings.
     synchronizePluginSettingsAutoRegistration([
-      { id: "auto-b", name: "Account provider", hasConfigSchema: false, capabilities: ["accounts"] },
-      { id: "auto-c", name: "Account config", hasConfigSchema: true, capabilities: ["accounts"] },
+      { id: "auto-b", name: "Account provider", hasConfigSchema: false, inject: ["accounts"] },
+      { id: "auto-c", name: "Account config", hasConfigSchema: true, inject: ["accounts"] },
     ]);
     assert.equal(pluginUiRegistry.getSettingsSubsection("plugins", "auto-b"), undefined);
     assert.equal(pluginUiRegistry.getSettingsSubsection("plugins", "auto-c"), undefined);

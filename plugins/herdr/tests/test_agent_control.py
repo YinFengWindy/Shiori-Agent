@@ -86,7 +86,7 @@ async def fixture(tmp_path, monkeypatch):
     ctx = FakeServiceContext("herdr", tmp_path, package_dir=PACKAGE_DIR)
     # The smallest CLI timeout the config allows, shorter than Herdr's own wait.
     config = HerdrConfig(session="default", cli_timeout_seconds=5)
-    cli = HerdrCli(config, ctx.processes, tmp_path)
+    cli = HerdrCli(config, ctx.fake_processes, tmp_path)
     herdr = Herdr()
     # Watches build their own CLI; every CLI talks to the same fake Herdr.
     monkeypatch.setattr(
@@ -94,9 +94,9 @@ async def fixture(tmp_path, monkeypatch):
     )
     log = AgentCommandLog()
     watcher = AgentWatcher()
-    watcher.attach(ctx.process_resources, ctx.processes, tmp_path)
+    watcher.attach(ctx.fake_process_resources, ctx.fake_processes, tmp_path)
     control = AgentControl(
-        SessionGate(cli, ctx.process_resources),
+        SessionGate(cli, ctx.fake_process_resources),
         log,
         TaskService(tmp_path),
         watcher,

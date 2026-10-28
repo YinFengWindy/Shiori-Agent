@@ -22,7 +22,7 @@ PACKAGE_DIR = Path(__file__).resolve().parents[1]
 def fixture(tmp_path):
     ctx = FakeServiceContext("herdr", tmp_path, package_dir=PACKAGE_DIR)
     service = TaskService(tmp_path)
-    dashboard = Dashboard(service, ctx.as_capability())
+    dashboard = Dashboard(service, ctx)
     dashboard.register()
     for role in ("role-a", "role-b"):
         service.tasks[role] = CodingTask(
@@ -41,14 +41,18 @@ def fixture(tmp_path):
 async def test_list_is_global_but_role_tool_remains_scoped(fixture):
     ctx, service, _ = fixture
     for name in ("tasks.list", "tasks.get"):
-        assert ctx.rpc.concurrency[name] is Concurrency.READ_ONLY
-    assert "tasks.snapshot" not in ctx.rpc.handlers
-    listed = await ctx.rpc.handlers["tasks.list"]({})
+        assert ctx.fake_rpc.concurrency[name] is Concurrency.READ_ONLY
+    assert "tasks.snapshot" not in ctx.fake_rpc.handlers
+    listed = await ctx.fake_rpc.handlers["tasks.list"]({})
     assert listed["instance_id"] == service.instance_id
     assert {task["id"] for task in listed["tasks"]} == {"role-a", "role-b"}
-    ctx.tools.context = {"role_id": "role-a"}
+    ctx.fake_tools.context = {"role_id": "role-a"}
     tool = TaskManagementTool(
-        service, ctx.tools, ctx.process_resources, "get", ctx.background_results
+        service,
+        ctx.fake_tools,
+        ctx.fake_process_resources,
+        "get",
+        ctx.fake_background_results,
     )
     with pytest.raises(ValueError, match="当前角色"):
         await tool.execute(task_id="role-b")
@@ -74,7 +78,7 @@ async def test_list_summarizes_and_get_details_the_current_run(fixture, tmp_path
     ]
     task.stage = "implementation"
 
-    listed = await ctx.rpc.handlers["tasks.list"]({})
+    listed = await ctx.fake_rpc.handlers["tasks.list"]({})
     summary = listed["tasks"][0]
     assert summary == {
         "id": "role-a",
@@ -93,7 +97,7 @@ async def test_list_summarizes_and_get_details_the_current_run(fixture, tmp_path
         "revision": task.revision,
     }
 
-    result = await ctx.rpc.handlers["tasks.get"]({"task_id": "role-a"})
+    result = await ctx.fake_rpc.handlers["tasks.get"]({"task_id": "role-a"})
     assert result["instance_id"] == service.instance_id
     detail = result["task"]
     assert {key: detail[key] for key in summary} == summary
@@ -105,32 +109,34 @@ async def test_list_summarizes_and_get_details_the_current_run(fixture, tmp_path
 
     for status, finished in [("unknown", False), ("failed", True), ("cancelled", True)]:
         task.status = status
-        assert (await ctx.rpc.handlers["tasks.list"]({}))["tasks"][0][
+        assert (await ctx.fake_rpc.handlers["tasks.list"]({}))["tasks"][0][
             "finished"
         ] is finished
 
     with pytest.raises(ValueError, match="任务不存在"):
-        await ctx.rpc.handlers["tasks.get"]({"task_id": "missing"})
-    ctx.process_resources.active = False
+        await ctx.fake_rpc.handlers["tasks.get"]({"task_id": "missing"})
+    ctx.fake_process_resources.active = False
     with pytest.raises(RuntimeError, match="配置已替换"):
-        await ctx.rpc.handlers["tasks.list"]({})
+        await ctx.fake_rpc.handlers["tasks.list"]({})
     await ctx.aclose()
 
 
 async def test_candidate_does_not_emit_and_disposal_removes_subscription(fixture):
     ctx, service, _ = fixture
-    ctx.process_resources.active = False
+    ctx.fake_process_resources.active = False
     service.changed(service.tasks["role-a"])
     await asyncio.sleep(0)
-    assert ctx.rpc.events == []
-    ctx.process_resources.active = True
+    assert ctx.fake_rpc.events == []
+    ctx.fake_process_resources.active = True
     service.changed(service.tasks["role-a"])
     await asyncio.sleep(0)
-    assert ctx.rpc.events == [("tasks.changed", {"task_id": "role-a", "revision": 2})]
+    assert ctx.fake_rpc.events == [
+        ("tasks.changed", {"task_id": "role-a", "revision": 2})
+    ]
     await ctx.aclose()
     service.changed(service.tasks["role-a"])
     await asyncio.sleep(0)
-    assert len(ctx.rpc.events) == 1
+    assert len(ctx.fake_rpc.events) == 1
 
 
 @pytest.mark.parametrize("action", ["continue", "cancel"])
@@ -140,14 +146,14 @@ async def test_desktop_action_uses_task_owner_and_shared_operation(
     ctx, service, dashboard = fixture
     operation = AsyncMock(return_value=service.tasks["role-b"])
     monkeypatch.setattr(service, f"{action}_task", operation)
-    await ctx.rpc.handlers[f"tasks.{action}"](
+    await ctx.fake_rpc.handlers[f"tasks.{action}"](
         {"task_id": "role-b", "role_id": "forged", "requirement": "追加要求"}
     )
     if action == "continue":
         operation.assert_awaited_once_with("role-b", "追加要求", "role-b")
     else:
         operation.assert_awaited_once_with("role-b", "role-b")
-    ctx.process_resources.active = False
+    ctx.fake_process_resources.active = False
     with pytest.raises(RuntimeError, match="配置已替换"):
         await dashboard.cancel_task({"task_id": "role-a"})
     await ctx.aclose()
@@ -162,7 +168,7 @@ async def test_current_rpc_namespace_uses_retained_owners_operations(
     ctx = FakeServiceContext("herdr", tmp_path, package_dir=PACKAGE_DIR)
     target = FakeBackgroundResultTarget("role-a", "thread-a")
     service = retired["service"].TaskService(tmp_path)
-    service.attach(ctx.process_resources, ctx.processes, tmp_path)
+    service.attach(ctx.fake_process_resources, ctx.fake_processes, tmp_path)
     task = retired["models"].CodingTask(
         "task-a",
         "original",
@@ -202,10 +208,10 @@ async def test_current_rpc_namespace_uses_retained_owners_operations(
     monkeypatch.setattr(service, "_execute", execute)
     operation = AsyncMock(wraps=getattr(service, f"{action}_task"))
     monkeypatch.setattr(service, f"{action}_task", operation)
-    dashboard = current["dashboard"].Dashboard(service, ctx.as_capability())
+    dashboard = current["dashboard"].Dashboard(service, ctx)
     dashboard.register()
     try:
-        result = await ctx.rpc.handlers[f"tasks.{action}"](
+        result = await ctx.fake_rpc.handlers[f"tasks.{action}"](
             {
                 "task_id": task.id,
                 "requirement": "new requirement",

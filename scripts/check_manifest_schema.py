@@ -1,7 +1,6 @@
 """Validate every plugins/*/manifest.yaml against packages/sdk/manifest.schema.json.
 
-The schema describes the current manifest format; its capability list must equal
-``shiori_sdk.runtime.KNOWN_CAPABILITIES`` so that it cannot drift from the parser.
+The schema describes the current manifest format.
 """
 
 from __future__ import annotations
@@ -11,7 +10,6 @@ from pathlib import Path
 
 import yaml
 from jsonschema import Draft202012Validator
-from shiori_sdk.runtime import KNOWN_CAPABILITIES
 
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA = ROOT / "packages/sdk/manifest.schema.json"
@@ -32,17 +30,10 @@ def violations(root: Path, schema: dict[str, object]) -> tuple[list[str], int]:
 
 
 def main() -> None:
-    """Fail on a malformed schema, capability drift or a nonconforming manifest."""
+    """Fail on a malformed schema or a nonconforming manifest."""
     schema = json.loads(SCHEMA.read_text(encoding="utf-8"))
     Draft202012Validator.check_schema(schema)
     errors, count = violations(ROOT, schema)
-    listed = set(schema["properties"]["capabilities"]["items"]["enum"])
-    if listed != KNOWN_CAPABILITIES:
-        errors.append(
-            "manifest.schema.json capabilities differ from KNOWN_CAPABILITIES: "
-            f"missing {sorted(KNOWN_CAPABILITIES - listed)}, "
-            f"extra {sorted(listed - KNOWN_CAPABILITIES)}"
-        )
     if errors:
         raise SystemExit("\n".join(errors))
     print(f"{count} plugin manifests match packages/sdk/manifest.schema.json")

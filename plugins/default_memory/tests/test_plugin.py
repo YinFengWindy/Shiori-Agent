@@ -10,7 +10,7 @@ import pytest
 from shiori_sdk.core.conversation import TurnStarting
 from shiori_sdk.core.tools import ToolCalled, ToolSource
 from shiori_sdk.rpc import Concurrency
-from shiori_sdk.testing.memory_context import FakeMemoryPluginContext
+from shiori_sdk.testing.memory_context import FakeMemorySetupContext
 from shiori_sdk.testing.tools import FakeTools
 
 from plugins.default_memory.backend.plugin import _DefaultMemoryRecorder
@@ -118,6 +118,14 @@ async def test_setup_provides_the_engine_and_records_until_close(
 
     from shiori_sdk.core.memory import MEMORY_ENGINE
     from shiori_sdk.core.models import MAIN_MODEL, MAIN_PROVIDER
+    from shiori_sdk.core.services import (
+        CONFIG,
+        HTTP,
+        LIGHT_MODEL,
+        LIGHT_PROVIDER,
+        RUNTIME,
+        TOOLS,
+    )
     from shiori_sdk.kernel import Kernel
     from shiori_sdk.testing.extensions import FakeConfig
     from shiori_sdk.testing.runtime import FakeRuntimeLifecycle
@@ -130,19 +138,21 @@ async def test_setup_provides_the_engine_and_records_until_close(
     kernel = Kernel()
     kernel.provide(MAIN_PROVIDER, cast(Any, object()))
     kernel.provide(MAIN_MODEL, "chat")
-    ctx = FakeMemoryPluginContext(
+    ctx = FakeMemorySetupContext(
         tmp_path,
         kernel=kernel,
         package_dir=PACKAGE_DIR,
     )
-    ctx.config = FakeConfig(
-        {"embedding_api_key": "k", "embedding_base_url": "http://embed"}
+    ctx.serve(
+        CONFIG,
+        FakeConfig({"embedding_api_key": "k", "embedding_base_url": "http://embed"}),
     )
-    ctx.http = object()
-    ctx.light_provider = object()
-    ctx.light_model = "light"
-    ctx.tools = FakeTools()
-    ctx.runtime = FakeRuntimeLifecycle()
+    ctx.serve(HTTP, cast(Any, object()))
+    ctx.serve(LIGHT_PROVIDER, cast(Any, object()))
+    ctx.serve(LIGHT_MODEL, "light")
+    tools = FakeTools()
+    ctx.serve(TOOLS, tools)
+    ctx.serve(RUNTIME, FakeRuntimeLifecycle())
     await setup(cast(Any, ctx))
 
     engine = ctx.kernel.get(MEMORY_ENGINE)
@@ -154,21 +164,21 @@ async def test_setup_provides_the_engine_and_records_until_close(
         "forget_memory": profile.forget,
         "recall_memory": profile.recall,
     }
-    assert set(ctx.tools.tools) == set(specs)
+    assert set(tools.tools) == set(specs)
     for name, spec in specs.items():
         assert spec is not None
-        options = ctx.tools.options[name]
+        options = tools.options[name]
         assert options["always_on"] is True
         assert options["risk"] == spec.risk
         assert options["search_hint"] == (spec.search_hint or None)
         assert options["external_allowed"] is False
-        assert ctx.tools.tools[name].description == spec.description
-    assert set(ctx.rpc.handlers) == {
+        assert tools.tools[name].description == spec.description
+    assert set(ctx.fake_rpc.handlers) == {
         "roles.memory.documents",
         "roles.memory.semantic.list",
         "roles.memory.semantic.detail",
     }
-    assert set(ctx.rpc.concurrency.values()) == {Concurrency.READ_ONLY}
+    assert set(ctx.fake_rpc.concurrency.values()) == {Concurrency.READ_ONLY}
 
     await ctx.emit(_turn_starting())
     await ctx.emit(_called())

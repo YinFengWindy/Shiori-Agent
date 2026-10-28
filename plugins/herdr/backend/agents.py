@@ -3,7 +3,7 @@
 from collections.abc import Iterable
 from typing import Any
 
-from shiori_sdk.plugin_services import ServicePluginContext
+from shiori_sdk.runtime import PluginRuntimeContext
 from shiori_sdk.rpc import Concurrency
 from shiori_sdk.core.services import RPC
 
@@ -67,7 +67,7 @@ class SessionAgents:
     """
 
     def __init__(
-        self, service: TaskService, ctx: ServicePluginContext, control: AgentControl
+        self, service: TaskService, ctx: PluginRuntimeContext, control: AgentControl
     ) -> None:
         self.service, self.ctx, self.control = service, ctx, control
         self.gate, self.cli = control.gate, control.gate.cli

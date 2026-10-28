@@ -20,32 +20,10 @@ from infra.process.resources import (
 from agent.plugin_host.rpc import PluginRpcRegistry
 from agent.provider import LLMProvider
 from agent.plugin_host.core_keys import (
-    HOST_ACCOUNTS,
-    HOST_AVATARS,
-    HOST_BACKGROUND,
-    HOST_BACKGROUND_RESULTS,
     HOST_BRIDGE,
-    HOST_CHANNELS,
-    HOST_CONFIG_REFERENCES,
-    HOST_HTTP,
-    HOST_EVENTS,
-    HOST_EXTERNAL_TURNS,
-    HOST_LIGHT_MODEL,
-    HOST_LIGHT_PROVIDER,
-    HOST_MEMORY,
-    HOST_MODELS,
-    HOST_PROCESS_RESOURCES,
-    HOST_PROCESSES,
-    HOST_RESOURCES,
-    HOST_RPC,
-    HOST_ROLES,
-    HOST_SCENE_OBSERVATIONS,
-    HOST_SESSIONS,
-    HOST_TOOL_TURN,
-    HOST_TOOLS,
-    HOST_WORKSPACE,
-    CoreModule,
     HOST_BUILT_KEYS,
+    HOST_CONFIG_REFERENCES,
+    CoreModule,
     CoreProvide,
     HostBuilt,
 )
@@ -130,7 +108,7 @@ class PluginCoreInputs:
       ``workspace``, ``memory``.
     - ``session_manager``: the ``sessions`` socket (``SESSIONS``) and, with
       the ``workspace`` holding session media, session metadata
-      (``host.sessions`` and ``SESSION_STORE``), whose payloads the desktop
+      (``SESSION_STORE``), whose payloads the desktop
       presenter projects with ``relationship_runtime``.
     - ``role_runtime_registry``: ``models``.
     - ``provider`` / ``model``: the main chat pair, provided as
@@ -173,7 +151,7 @@ class PluginCoreInputs:
 def _publish(provide: CoreProvide, key: object, impl: object) -> None:
     """Publishes ``impl`` under a public key plugins inject.
 
-    A binder is stored as itself. ``PluginSetupContext.require`` calls
+    A binder is stored as itself. ``PluginRuntimeContext.require`` calls
     ``for_plugin`` before the plugin sees it, so the key's type is the view
     the plugin calls, not the binder. ``HostBuilt`` is the stand-in for a
     key built per plugin during setup. ``key`` is ``object`` because ``Key``
@@ -203,24 +181,15 @@ def plugin_core_modules(inputs: PluginCoreInputs) -> tuple[CoreModule, ...]:
     def provide_tools(provide: CoreProvide) -> None:
         """Plugin tools and the current tool turn (``agent.tools``)."""
         if inputs.tools is not None:
-            tools = PluginTools(inputs.tools)
-            provide(HOST_TOOLS, tools)
-            _publish(provide, TOOLS, tools)
-        provide(HOST_TOOL_TURN, current_tool_turn)
+            _publish(provide, TOOLS, PluginTools(inputs.tools))
         provide(TOOL_TURN, current_tool_turn)
 
     def provide_channels(provide: CoreProvide) -> None:
         """Plugin channels, and the accounts and avatars they serve (``core.channels``)."""
-        channels = PluginChannels()
-        provide(HOST_CHANNELS, channels)
-        _publish(provide, CHANNELS, channels)
+        _publish(provide, CHANNELS, PluginChannels())
         if inputs.role_store is not None:
-            accounts = PluginAccounts(inputs.role_store.accounts)
-            avatars = PluginAvatars(inputs.role_store.avatars)
-            provide(HOST_ACCOUNTS, accounts)
-            provide(HOST_AVATARS, avatars)
-            _publish(provide, ACCOUNTS, accounts)
-            _publish(provide, AVATARS, avatars)
+            _publish(provide, ACCOUNTS, PluginAccounts(inputs.role_store.accounts))
+            _publish(provide, AVATARS, PluginAvatars(inputs.role_store.avatars))
 
     def provide_sessions(provide: CoreProvide) -> None:
         """The sessions socket and session media (``session``)."""
@@ -235,7 +204,6 @@ def plugin_core_modules(inputs: PluginCoreInputs) -> tuple[CoreModule, ...]:
             sessions: PluginSessions = HostSessions(
                 inputs.session_manager, inputs.workspace, presenter
             )
-            provide(HOST_SESSIONS, sessions)
             provide(SESSION_STORE, sessions)
 
     def provide_roles(provide: CoreProvide) -> None:
@@ -243,28 +211,26 @@ def plugin_core_modules(inputs: PluginCoreInputs) -> tuple[CoreModule, ...]:
         # Typed as the plugin contracts, so pyright checks the host implementations.
         if inputs.role_store is not None:
             roles: Roles = HostRoles(inputs.role_store)
-            provide(HOST_ROLES, roles)
             provide(ROLES, roles)
         if inputs.role_runtime_registry is not None:
             models: RoleModels = HostRoleModels(inputs.role_runtime_registry)
-            provide(HOST_MODELS, models)
             provide(MODELS, models)
         if inputs.provider is not None:
             provide(MAIN_PROVIDER, inputs.provider)
         if inputs.model is not None:
             provide(MAIN_MODEL, inputs.model)
         if inputs.light_provider is not None:
-            provide(HOST_LIGHT_PROVIDER, inputs.light_provider)
             provide(LIGHT_PROVIDER, inputs.light_provider)
         if inputs.light_model is not None:
-            provide(HOST_LIGHT_MODEL, inputs.light_model)
             provide(LIGHT_MODEL, inputs.light_model)
 
     def provide_scene(provide: CoreProvide) -> None:
         """Plugin demand for scene observations (``core.scene``)."""
-        scene = PluginSceneObservations(inputs.scene_observations)
-        provide(HOST_SCENE_OBSERVATIONS, scene)
-        _publish(provide, SCENE_OBSERVATIONS, scene)
+        _publish(
+            provide,
+            SCENE_OBSERVATIONS,
+            PluginSceneObservations(inputs.scene_observations),
+        )
 
     def provide_memory(provide: CoreProvide) -> None:
         """The memory plugin's surface (``bootstrap.memory_capabilities``).
@@ -272,60 +238,48 @@ def plugin_core_modules(inputs: PluginCoreInputs) -> tuple[CoreModule, ...]:
         The engine itself is provided by a plugin as ``MEMORY_ENGINE``.
         """
         if inputs.workspace is not None and inputs.role_store is not None:
-            memory = HostMemoryCapability(inputs.workspace, inputs.role_store)
-            provide(HOST_MEMORY, memory)
-            provide(MEMORY, memory)
+            provide(MEMORY, HostMemoryCapability(inputs.workspace, inputs.role_store))
 
     def provide_processes(provide: CoreProvide) -> None:
         """Native processes, process-owned resources and distributed resources."""
         # Typed as the plugin contracts, so pyright checks the host implementations.
         processes: Processes = HostProcesses()
-        provide(HOST_PROCESSES, processes)
         provide(PROCESSES, processes)
         if inputs.process_resources is not None:
-            attachments = PluginProcessResourceAttachments(inputs.process_resources)
-            provide(HOST_PROCESS_RESOURCES, attachments)
-            _publish(provide, PROCESS_RESOURCES, attachments)
+            _publish(
+                provide,
+                PROCESS_RESOURCES,
+                PluginProcessResourceAttachments(inputs.process_resources),
+            )
         resources: Resources = HostResources()
-        provide(HOST_RESOURCES, resources)
         provide(RESOURCES, resources)
 
     def provide_conversation(provide: CoreProvide) -> None:
         """External turns, background results and ``COMMANDS`` (``conversation``)."""
         if inputs.external_turns is not None:
-            provide(HOST_EXTERNAL_TURNS, inputs.external_turns)
             provide(EXTERNAL_TURNS, inputs.external_turns)
         if inputs.background_results is not None:
-            provide(HOST_BACKGROUND_RESULTS, inputs.background_results)
             provide(BACKGROUND_RESULTS, inputs.background_results)
         provide(COMMANDS, CommandRegistry())
 
     def provide_background(provide: CoreProvide) -> None:
         """Plugin-scoped background tasks (``core.common``)."""
-        background = PluginBackground()
-        provide(HOST_BACKGROUND, background)
-        _publish(provide, BACKGROUND, background)
+        _publish(provide, BACKGROUND, PluginBackground())
 
     def provide_bridge(provide: CoreProvide) -> None:
         """The plugin RPC registry and the ``rpc`` capability over it (bridge)."""
         provide(HOST_BRIDGE, inputs.rpc)
-        rpc = PluginRpc(inputs.rpc, inputs.event_bus)
-        provide(HOST_RPC, rpc)
-        _publish(provide, RPC, rpc)
+        _publish(provide, RPC, PluginRpc(inputs.rpc, inputs.event_bus))
 
     def provide_events(provide: CoreProvide) -> None:
         """Plugin-scoped views of the event bus (``bus``)."""
-        events = PluginEvents(inputs.event_bus)
-        provide(HOST_EVENTS, events)
-        _publish(provide, EVENTS, events)
+        _publish(provide, EVENTS, PluginEvents(inputs.event_bus))
 
     def provide_host_passthrough(provide: CoreProvide) -> None:
         """The workspace directory and the shared external HTTP requester."""
         if inputs.workspace is not None:
-            provide(HOST_WORKSPACE, inputs.workspace)
             provide(WORKSPACE, inputs.workspace)
         if inputs.http is not None:
-            provide(HOST_HTTP, inputs.http)
             provide(HTTP, inputs.http)
 
     return (

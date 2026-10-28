@@ -1,8 +1,8 @@
-"""The ``accounts`` plugin capability: communication accounts in the ``AccountRegistry``.
+"""The ``accounts`` service: communication accounts in the ``AccountRegistry``.
 
-``PluginAccounts`` is the ``host.accounts`` core service (#901 P2) of one plugin
-kernel generation. Plugins register into that generation's own account index,
-which the host publishes when the generation becomes the running one.
+``PluginAccounts`` is the ``ACCOUNTS`` core service of one plugin kernel
+generation. Plugins register into that generation's own account index, which
+the host publishes when the generation becomes the running one.
 """
 
 from __future__ import annotations
@@ -19,9 +19,10 @@ from shiori_sdk.accounts.models import (
 )
 from shiori_sdk.accounts.routing import AccountRoute
 
+from shiori_sdk.core.services import ACCOUNTS
 from shiori_sdk.kernel import Kernel
 
-from agent.plugin_host.core_keys import HOST_ACCOUNTS, PluginBinding
+from agent.plugin_host.core_keys import PluginBinding, required_core_key
 from core.accounts.registry import AccountRegistry
 
 logger = logging.getLogger(__name__)
@@ -33,20 +34,28 @@ def publish_plugin_accounts(kernel: Kernel) -> None:
     Loading a generation only registers accounts. The app publishes when it
     starts, and a settings reload publishes when its pointer switches.
     """
-    accounts = kernel.get(HOST_ACCOUNTS)
-    if accounts is not None:
-        accounts.publish()
+    _plugin_accounts(kernel).publish()
 
 
 def drop_plugin_accounts(kernel: Kernel) -> None:
     """Discards ``kernel``'s account index after its plugins have stopped."""
-    accounts = kernel.get(HOST_ACCOUNTS)
-    if accounts is not None:
-        accounts.drop()
+    _plugin_accounts(kernel).drop()
+
+
+def _plugin_accounts(kernel: Kernel) -> PluginAccounts:
+    """The generation's ``ACCOUNTS`` provider, which the host always assembles.
+
+    The key is typed as the SDK protocol; the host stores ``PluginAccounts``
+    under it, so anything else is an assembly error, not a skip.
+    """
+    accounts = required_core_key(kernel.get, ACCOUNTS)
+    if not isinstance(accounts, PluginAccounts):
+        raise TypeError(f"ACCOUNTS 应由 PluginAccounts 提供，实际是 {type(accounts)!r}")
+    return accounts
 
 
 class PluginAccounts:
-    """The ``host.accounts`` core service: one generation's view of the registry."""
+    """The ``ACCOUNTS`` core service: one generation's view of the registry."""
 
     def __init__(self, registry: AccountRegistry) -> None:
         self._registry = registry

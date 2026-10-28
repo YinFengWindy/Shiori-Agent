@@ -216,11 +216,9 @@ def _parse_manifest(
     provides = _parse_keys(raw, "provides")
     if set(inject) & set(optional_inject):
         raise ManifestError("服务 Key 不能同时声明为 inject 和 optional_inject")
+    _reject_host_keys(inject=inject, optional_inject=optional_inject, provides=provides)
     if api == 4:
         _reject_removed_v4_fields(raw)
-        _reject_host_keys(
-            inject=inject, optional_inject=optional_inject, provides=provides
-        )
         capabilities: tuple[str, ...] = ()
         channels = _parse_contributed_channels(raw, inject)
     else:
@@ -275,11 +273,16 @@ def _reject_removed_v4_fields(raw: dict[str, object]) -> None:
 
 
 def _reject_host_keys(**fields: tuple[str, ...]) -> None:
-    """api: 4 never names a ``host.`` key: those hold raw binders (P4-4 removes them)."""
+    """No manifest, of any api version, names a ``host.`` key.
+
+    ``host.bridge`` (the shared RPC registry) and ``host.config_references``
+    are read by the host itself; a plugin holding the registry could register
+    methods as another plugin.
+    """
     for name_field, names in fields.items():
         host = [name for name in names if name.startswith("host.")]
         if host:
-            raise ManifestError(f"api: 4 的 {name_field} 不能声明宿主内部 Key：{host}")
+            raise ManifestError(f"{name_field} 不能声明宿主内部 Key：{host}")
 
 
 def _parse_contributed_channels(
@@ -333,7 +336,7 @@ def _parse_frontend(raw: dict[str, object], plugin_dir: Path) -> str | None:
 
 
 def _parse_capabilities(raw: dict[str, object], manifest_path: Path) -> tuple[str, ...]:
-    # 校验规则与已知能力集合归 SDK，宿主与 SDK 测试替身共用同一份。
+    # api: 2 仍要有一份列表。名字不再是授权；P4-5 才拒绝非 api: 4。
     try:
         return parse_capabilities(raw.get("capabilities"), manifest_path)
     except ValueError as exc:

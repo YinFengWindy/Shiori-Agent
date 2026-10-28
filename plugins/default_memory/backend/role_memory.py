@@ -17,7 +17,7 @@ from shiori_sdk.core.services import MEMORY, RPC
 from .semantic_requests import SEMANTIC_STATUS_FILTERS, readable_item
 
 if TYPE_CHECKING:
-    from shiori_sdk.memory.context import MemoryPluginContext as PluginRuntimeContext
+    from shiori_sdk.runtime import PluginRuntimeContext
 
 
 class DefaultRoleMemoryReader:

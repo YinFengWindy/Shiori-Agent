@@ -11,7 +11,7 @@ from shiori_sdk.core.sessions import SESSIONS, RollbackResult, Sessions, TurnCha
 from shiori_sdk.memory.engine import MemoryEngine, TurnRollback
 
 if TYPE_CHECKING:
-    from shiori_sdk.extensions import CommandPluginContext as PluginRuntimeContext
+    from shiori_sdk.runtime import PluginRuntimeContext
 
 logger = logging.getLogger("plugin.undo")
 

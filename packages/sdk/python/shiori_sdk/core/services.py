@@ -6,9 +6,8 @@ name, except ``session_store``: ``sessions`` is already the rollback socket
 takes the object with ``ctx.require``. The host provides these keys before
 any plugin starts.
 
-These are the same objects the capability properties return. Properties stay
-until P4-4 so an ``api: 2`` plugin, and any call the codemod missed, still
-works. ``EVENTS`` is the domain event bus, not kernel ``on`` / ``watch``.
+Plugins take them with ``ctx.require`` / ``ctx.get``. ``EVENTS`` is the
+domain event bus, not kernel ``on`` / ``watch``.
 ``BACKGROUND`` is named tasks, not kernel ``spawn``. ``WORKSPACE`` is the
 host workspace directory, not kernel ``data_dir``. ``MEMORY`` is the memory
 plugin surface, not ``MEMORY_ENGINE``.

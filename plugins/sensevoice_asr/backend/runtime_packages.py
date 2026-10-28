@@ -8,7 +8,7 @@ from pathlib import Path
 from shiori_sdk.managed.artifacts import Artifact
 from shiori_sdk.managed.child import run_owned
 from shiori_sdk.managed.paths import environment_path, native_path
-from shiori_sdk.plugin_services import ServicePluginContext
+from shiori_sdk.runtime import PluginRuntimeContext
 from shiori_sdk.core.services import PROCESSES
 
 from .runtime_environment import runtime_environment
@@ -17,7 +17,7 @@ from .runtime_manifest import PYTHON_RELATIVE, SOURCE_PACKAGES, UV_ARCHIVE
 
 async def install_packages(
     staging: Path,
-    ctx: ServicePluginContext,
+    ctx: PluginRuntimeContext,
     root: Path,
     install_root: Path,
     artifacts: tuple[Artifact, ...],

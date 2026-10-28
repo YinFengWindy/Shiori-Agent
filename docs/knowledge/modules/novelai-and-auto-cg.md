@@ -33,7 +33,7 @@ related:
 
 NovelAI 的业务代码、Logo、设置、聊天图片重生成和角色自动 CG 开关均由 `plugins/novelai/` 持有。宿主通过通用角色设置与聊天图片操作扩展位挂载 UI；插件不可用时撤下对应操作。自动 CG 偏好由插件以 `roles/roles.json` 的 `plugin_data.novelai.<role_id>.auto_scene_cg_enabled` 保存；角色表单只修改插件草稿，点击「保存」时和角色字段共同原子提交，取消编辑不落盘。角色清单当前版本是 9（`core/roles/migration.py`），加载时要求每条角色已有 `profile` 对象，不再改写 `runtime_config`。停用或清空插件文件不擦除仍存角色的偏好；插件启用及收到角色删除事件时清理已删角色的记录。长耗时 RPC 由插件显式传入 `timeoutMs`，宿主只验证通用截止时间，不识别供应商或生图方法名。
 
-故事模式归于 `plugins/story/`，manifest 显式声明 `dependencies: [novelai]`，通过 `ctx.dependencies.require("novelai")` 获取 NovelAI 以 `ctx.expose()` 导出的 `ImageGenerationAPI`（`plugins/novelai/backend/api.py` 中的 Protocol，由本代 `GenerateImageTool` 实现），类型不符时故事插件 setup 失败。故事的模型与提示词策略属于故事插件。宿主没有通用生图接口，也不装配故事业务；故事页面注册为全屏插件导航，RPC 与事件使用 `plugin.story.*` 命名空间。
+故事模式归于 `plugins/story/`，manifest 显式声明 `dependencies: [novelai]`，通过 `ctx.require(DEPENDENCIES).require("novelai")` 获取 NovelAI 以 `ctx.expose()` 导出的 `ImageGenerationAPI`（`plugins/novelai/backend/api.py` 中的 Protocol，由本代 `GenerateImageTool` 实现），类型不符时故事插件 setup 失败。故事的模型与提示词策略属于故事插件。宿主没有通用生图接口，也不装配故事业务；故事页面注册为全屏插件导航，RPC 与事件使用 `plugin.story.*` 命名空间。
 
 插件内核按依赖顺序加载、按反向依赖顺序卸载。缺失、禁用或失败的依赖使故事插件进入 `BLOCKED`，其页面和 RPC 不可用；恢复 NovelAI 后重新装配可恢复故事入口。运行时替换先等待旧插件接受的后台任务完成，桥接事件按所属注册表隔离，避免跨代重复转发。首次启用故事时恢复被中断的持久化任务；已有活跃前代时保留其执行权。
 

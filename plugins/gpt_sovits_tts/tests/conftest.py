@@ -5,6 +5,7 @@ import wave
 from pathlib import Path
 
 import pytest
+from shiori_sdk.core.services import SERVICES
 from shiori_sdk.testing.service_context import FakeServiceContext
 from shiori_sdk.testing.services import FakePluginServices
 
@@ -19,7 +20,8 @@ class ProviderContext(FakeServiceContext):
 
     def __init__(self, workspace):
         super().__init__("gpt_sovits_tts", workspace, package_dir=PACKAGE_DIR)
-        self.services = FakePluginServices(self)
+        self.fake_services = FakePluginServices(self)
+        self.serve(SERVICES, self.fake_services)
 
 
 @pytest.fixture
@@ -39,7 +41,7 @@ def wav_bytes():
 @pytest.fixture
 async def context(tmp_path):
     context = ProviderContext(tmp_path)
-    context.roles.create_role(role_id="role", name="Role", system_prompt="Role")
+    context.fake_roles.create_role(role_id="role", name="Role", system_prompt="Role")
     yield context
     await context.aclose()
 

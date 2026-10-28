@@ -5,6 +5,7 @@ import wave
 from pathlib import Path
 
 import pytest
+from shiori_sdk.core.services import SERVICES
 from shiori_sdk.testing.service_context import FakeServiceContext
 from shiori_sdk.testing.services import FakePluginServices
 
@@ -16,7 +17,8 @@ class ProviderContext(FakeServiceContext):
 
     def __init__(self, workspace):
         super().__init__("sensevoice_asr", workspace, package_dir=PACKAGE_DIR)
-        self.services = FakePluginServices(self)
+        self.fake_services = FakePluginServices(self)
+        self.serve(SERVICES, self.fake_services)
 
 
 @pytest.fixture

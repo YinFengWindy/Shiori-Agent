@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
-from shiori_sdk.testing.channel_context import FakeChannelPluginContext
+from shiori_sdk.testing.channel_context import FakeChannelSetupContext
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
 
@@ -21,12 +21,12 @@ def avatar_fetch(monkeypatch: pytest.MonkeyPatch) -> AsyncMock:
 
 
 @pytest.fixture
-def setup_context() -> Callable[..., FakeChannelPluginContext]:
+def setup_context() -> Callable[..., FakeChannelSetupContext]:
     """Build this plugin's SDK setup context with selected host account IDs."""
 
     def build(
         account_ids: Callable[[str], str] = lambda value: value,
-    ) -> FakeChannelPluginContext:
-        return FakeChannelPluginContext("qqbot", PLUGIN_DIR, account_ids=account_ids)
+    ) -> FakeChannelSetupContext:
+        return FakeChannelSetupContext("qqbot", PLUGIN_DIR, account_ids=account_ids)
 
     return build

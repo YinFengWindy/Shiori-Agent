@@ -1,8 +1,26 @@
-"""Compose explicit SDK capability fixtures for service plugin setup."""
+"""Compose explicit SDK service fakes for service plugin setup."""
 
 from pathlib import Path
+from shiori_sdk.core.services import (
+    BACKGROUND_RESULTS,
+    EXTERNAL_TURNS,
+    HTTP,
+    KV,
+    LIGHT_MODEL,
+    LIGHT_PROVIDER,
+    MODELS,
+    PROCESSES,
+    PROCESS_RESOURCES,
+    RESOURCES,
+    ROLES,
+    RPC,
+    RUNTIME,
+    SCENE_OBSERVATIONS,
+    SESSION_STORE,
+    TOOLS,
+    TOOL_TURN,
+)
 from shiori_sdk.models import ChatProvider
-from shiori_sdk.plugin_services import ServicePluginContext
 from .extensions import FakeExtensionContext
 from .memory_context import FakeRpc
 from .processes import FakeProcesses, current_tool_turn
@@ -30,41 +48,57 @@ class FakeServiceContext(FakeExtensionContext):
         *,
         config: dict[str, object] | None = None,
         package_dir: Path | None = None,
+        inject: tuple[str, ...] = (),
     ):
         """``package_dir`` declares inject from that package's manifest."""
         super().__init__(
-            plugin_id, workspace=workspace, config=config, package_dir=package_dir
+            plugin_id,
+            workspace=workspace,
+            config=config,
+            package_dir=package_dir,
+            inject=inject,
         )
-        self.roles = FakeRoles(workspace)
-        self.models = FakeModels()
-        self.sessions = FakeSessions()
-        self.external_turns = FakeExternalTurns()
-        self.background_results = FakeBackgroundResults()
-        self.process_resources = FakeProcessResources()
-        self.effect("process_resources", self.process_resources.close)
-        self.tools = FakeTools()
-        self.kv = FakeKV()
-        self.rpc = FakeRpc()
-        self.http = FakeHttp()
-        self.resources = FakeResources(workspace)
-        self.processes = FakeProcesses()
-        self.tool_turn = current_tool_turn
-        self.runtime = FakeRuntimeLifecycle()
-        self.scene_observations = FakeSceneObservations()
-        self.light_provider: ChatProvider = FakeChatProvider()
-        self.light_model = "fake-light-model"
-
-    def as_capability(self) -> ServicePluginContext:
-        """Check that fake and actual host implement the same setup surface."""
-        return self
+        self.fake_roles = FakeRoles(workspace)
+        self.fake_models = FakeModels()
+        self.fake_sessions = FakeSessions()
+        self.fake_external_turns = FakeExternalTurns()
+        self.fake_background_results = FakeBackgroundResults()
+        self.fake_process_resources = FakeProcessResources()
+        self.fake_tools = FakeTools()
+        self.fake_kv = FakeKV()
+        self.fake_rpc = FakeRpc()
+        self.fake_http = FakeHttp()
+        self.fake_resources = FakeResources(workspace)
+        self.fake_processes = FakeProcesses()
+        self.fake_runtime = FakeRuntimeLifecycle()
+        self.fake_scene_observations = FakeSceneObservations()
+        self.effect("process_resources", self.fake_process_resources.close)
+        self.fake_light_provider: ChatProvider = FakeChatProvider()
+        self.serve(ROLES, self.fake_roles)
+        self.serve(MODELS, self.fake_models)
+        self.serve(SESSION_STORE, self.fake_sessions)
+        self.serve(EXTERNAL_TURNS, self.fake_external_turns)
+        self.serve(BACKGROUND_RESULTS, self.fake_background_results)
+        self.serve(PROCESS_RESOURCES, self.fake_process_resources)
+        self.serve(TOOLS, self.fake_tools)
+        self.serve(KV, self.fake_kv)
+        self.serve(RPC, self.fake_rpc)
+        self.serve(HTTP, self.fake_http)
+        self.serve(RESOURCES, self.fake_resources)
+        self.serve(PROCESSES, self.fake_processes)
+        self.serve(RUNTIME, self.fake_runtime)
+        self.serve(SCENE_OBSERVATIONS, self.fake_scene_observations)
+        self.serve(TOOL_TURN, current_tool_turn)
+        self.serve(LIGHT_PROVIDER, self.fake_light_provider)
+        self.serve(LIGHT_MODEL, "fake-light-model")
 
     async def aclose(self) -> None:
         """Dispose plugin resources then clear the fixture's scoped registrations."""
         try:
             await super().aclose()
         finally:
-            self.tools.tools.clear()
-            self.rpc.handlers.clear()
-            self.rpc.concurrency.clear()
-            self.rpc.admission_exempt.clear()
-            self.scene_observations.predicates.clear()
+            self.fake_tools.tools.clear()
+            self.fake_rpc.handlers.clear()
+            self.fake_rpc.concurrency.clear()
+            self.fake_rpc.admission_exempt.clear()
+            self.fake_scene_observations.predicates.clear()

@@ -68,7 +68,9 @@ async def controller(tmp_path, monkeypatch):
     previous = await install.prepare(build, lambda *_: None, source=source)
     install.publish(previous)
     child = Service(install.root)
-    runtime = ManagedRuntime(install, child, ctx.background, build, lambda: "managed")
+    runtime = ManagedRuntime(
+        install, child, ctx.fake_background, build, lambda: "managed"
+    )
     yield SimpleNamespace(
         runtime=runtime, child=child, previous=previous, source=source
     )
@@ -360,7 +362,7 @@ async def test_custom_location_service_runs_with_state_in_plugin_data(
         return ManagedRuntime(
             Installation(state, "v1", [asset]),
             OwnedService(state, FakeProcesses(), launch),
-            ctx.background,
+            ctx.fake_background,
             build,
             lambda: "managed",
         )

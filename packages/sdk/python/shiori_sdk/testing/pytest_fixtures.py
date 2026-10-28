@@ -38,8 +38,12 @@ def find_plugin_dir(test_path: Path, root: Path) -> Path:
     )
 
 
-def load_manifest_grants(plugin_dir: Path) -> tuple[str, tuple[str, ...]]:
-    """Reads the plugin id and the declared capabilities the host grants from."""
+def read_plugin_id(plugin_dir: Path) -> str:
+    """The manifest's plugin id, rejecting what the host's manifest parser rejects.
+
+    A non-``api: 4`` manifest must still carry a ``capabilities`` list, as
+    the host requires; the names grant nothing.
+    """
     manifest = plugin_dir / "manifest.yaml"
     raw = yaml.safe_load(manifest.read_text(encoding="utf-8"))
     if not isinstance(raw, dict):
@@ -48,12 +52,9 @@ def load_manifest_grants(plugin_dir: Path) -> tuple[str, tuple[str, ...]]:
     plugin_id = values.get("id")
     if not isinstance(plugin_id, str) or not plugin_id:
         raise ValueError(f"manifest 缺少 id: {manifest}")
-    # api: 4 grants no capabilities; the plugin takes services with require.
-    # A manifest that still has the key is validated like the host, including
-    # one that omits it and is not api: 4.
-    if values.get("api") == 4 and "capabilities" not in values:
-        return plugin_id, ()
-    return plugin_id, parse_capabilities(values.get("capabilities"), manifest)
+    if values.get("api") != 4 or "capabilities" in values:
+        parse_capabilities(values.get("capabilities"), manifest)
+    return plugin_id
 
 
 @pytest.fixture
@@ -66,14 +67,15 @@ def sdk_plugin_dir(request: pytest.FixtureRequest) -> Path:
 async def sdk_context(
     sdk_plugin_dir: Path, tmp_path: Path
 ) -> AsyncIterator[FakePluginContext]:
-    """Grants only the manifest's capabilities and keys; always runs cleanup.
+    """Declares only the manifest's ``inject`` / ``optional_inject`` / ``provides``.
+
+    Always runs cleanup.
 
     The manifest is only read; ``plugin_dir`` is an isolated temporary directory so
     tests never write into the plugin package (bundled files are package assets).
     """
-    plugin_id, capabilities = load_manifest_grants(sdk_plugin_dir)
     context = FakePluginContext(
-        plugin_id, tmp_path, capabilities=capabilities, package_dir=sdk_plugin_dir
+        read_plugin_id(sdk_plugin_dir), tmp_path, package_dir=sdk_plugin_dir
     )
     try:
         yield context

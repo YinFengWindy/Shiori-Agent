@@ -337,6 +337,8 @@ def _read_candidate(
         # installed workspace copy enters package validation and trust admission.
         # The plugin list reports it via find_uninstalled_external_sources.
         return None
+    if diagnostic is None:
+        diagnostic = _capabilities_only(manifest, child)
     if diagnostic is None and (
         source == "workspace" or "package_contract" in manifest.metadata
     ):
@@ -390,4 +392,30 @@ def _read_candidate(
         fingerprint=fingerprint,
         trust_directory=trust_directory,
         content_hashes=content_hashes,
+    )
+
+
+# Diagnostic code for an api: 2 package that still relies on ``capabilities``.
+CAPABILITIES_RETIRED_CODE = "capabilities_retired"
+
+
+def _capabilities_only(
+    manifest: PluginManifest, plugin_dir: Path
+) -> PluginDiagnostic | None:
+    """Blocks an api: 2 package that lists capabilities but injects nothing.
+
+    Capabilities stopped granting services in P4-4, so its setup could only
+    fail on a missing context attribute. Rejecting every non-``api: 4``
+    package is P4-5.
+    """
+    if manifest.api != 2 or not manifest.capabilities:
+        return None
+    if manifest.inject or manifest.optional_inject:
+        return None
+    return PluginDiagnostic(
+        CAPABILITIES_RETIRED_CODE,
+        "validation",
+        "capabilities",
+        "capabilities 已不再授权，请改用 inject + ctx.require",
+        str(plugin_dir / "manifest.yaml"),
     )

@@ -3,7 +3,7 @@
 import json
 from collections.abc import Awaitable, Callable
 
-from shiori_sdk.plugin_services import ServicePluginContext
+from shiori_sdk.runtime import PluginRuntimeContext
 from shiori_sdk.process_resources import PluginProcessResources
 from shiori_sdk.rpc import Concurrency
 from shiori_sdk.core.services import RPC
@@ -33,7 +33,7 @@ async def list_sessions(cli: HerdrCli) -> list[dict[str, str]]:
         ) from error
 
 
-def register_session_rpc(ctx: ServicePluginContext, cli: HerdrCli) -> None:
+def register_session_rpc(ctx: PluginRuntimeContext, cli: HerdrCli) -> None:
     """`sessions.list` reads with the current generation's executable and timeout."""
 
     async def handle(_payload: dict[str, object]) -> dict[str, object]:

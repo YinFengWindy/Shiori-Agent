@@ -1,7 +1,7 @@
 """Registers independent tools and tears down the entire owned Driver generation."""
 
 from shiori_sdk.storage import plugin_data_dir
-from shiori_sdk.plugin_services import ServicePluginContext as PluginRuntimeContext
+from shiori_sdk.runtime import PluginRuntimeContext
 from shiori_sdk.core.services import (
     CONFIG,
     PROCESSES,

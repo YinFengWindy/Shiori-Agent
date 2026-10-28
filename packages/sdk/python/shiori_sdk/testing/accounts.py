@@ -12,7 +12,6 @@ from shiori_sdk.accounts import (
     AccountRulesHandler,
     account_id_for,
 )
-from shiori_sdk.accounts.capability import AccountsCapability
 from shiori_sdk.accounts.routing import AccountRoute
 
 
@@ -186,7 +185,3 @@ class FakeAccounts:
     def on_rules_change(self, handler: AccountRulesHandler) -> None:
         """Record the persistence callback for response rules."""
         self.rules_handler = handler
-
-    def as_capability(self) -> AccountsCapability:
-        """Check fixture and host against the same injected contract."""
-        return self

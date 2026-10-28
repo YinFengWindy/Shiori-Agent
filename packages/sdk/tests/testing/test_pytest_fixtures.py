@@ -6,7 +6,7 @@ import sys
 
 import pytest
 
-from shiori_sdk.testing.pytest_fixtures import find_plugin_dir, load_manifest_grants
+from shiori_sdk.testing.pytest_fixtures import find_plugin_dir, read_plugin_id
 
 
 def _run_plugin_suite(
@@ -49,21 +49,20 @@ def test_sdk_context_always_disposes_registered_effects(tmp_path: Path) -> None:
     assert (tmp_path / "disposed.txt").read_text(encoding="utf-8") == "closed"
 
 
-def test_sdk_context_rejects_a_capability_the_manifest_does_not_declare(
+def test_sdk_context_rejects_a_key_the_manifest_does_not_inject(
     tmp_path: Path,
 ) -> None:
     (tmp_path / "manifest.yaml").write_text(
-        "id: probe\ncapabilities:\n  - rpc\n", encoding="utf-8"
+        "api: 4\nid: probe\ninject:\n  - rpc\n", encoding="utf-8"
     )
     result = _run_plugin_suite(
         tmp_path,
+        "from shiori_sdk.core.services import EVENTS\n"
         "async def test_setup(sdk_context):\n"
-        "    assert sdk_context.granted == ('rpc',)\n"
-        "    sdk_context.events.on(str, print)\n",
+        "    sdk_context.require(EVENTS)\n",
     )
     assert result.returncode == 1, result.stdout + result.stderr
-    assert "CapabilityNotGranted" in result.stdout
-    assert "插件 probe 未声明 capability 'events'" in result.stdout
+    assert "未在 manifest inject 中声明 events" in result.stdout
 
 
 def test_find_plugin_dir_stops_at_the_test_root(tmp_path: Path) -> None:
@@ -82,7 +81,7 @@ def test_find_plugin_dir_stops_at_the_test_root(tmp_path: Path) -> None:
     [
         ("", "v2 manifest 缺少 capabilities 声明"),
         ("capabilities: events\n", "capabilities 必须是列表"),
-        ("capabilities: [events, host_storage]\n", "未知 capability"),
+        ("capabilities: [1]\n", "capabilities 必须是字符串列表"),
     ],
 )
 def test_manifest_capabilities_are_validated_like_the_host(
@@ -92,4 +91,4 @@ def test_manifest_capabilities_are_validated_like_the_host(
         f"id: probe\n{capabilities}", encoding="utf-8"
     )
     with pytest.raises(ValueError, match=message):
-        load_manifest_grants(tmp_path)
+        read_plugin_id(tmp_path)

@@ -29,6 +29,14 @@ from bus.event_bus import EventBus
 
 _PROVIDER = """
 import sys
+from shiori_sdk.core.services import (
+    CONFIG,
+    PROCESS_RESOURCES,
+    RPC,
+    RUNTIME,
+    SERVICES,
+    TOOLS,
+)
 from shiori_sdk.tools import Tool
 
 probe = sys.modules["reload_probe"]
@@ -50,31 +58,34 @@ class Slow(Tool):
 
 
 async def setup(ctx):
-    label = ctx.config.get("label")
+    runtime = ctx.require(RUNTIME)
+    label = ctx.require(CONFIG).get("label")
     if label == "broken":
         raise RuntimeError("broken config")
     if label == "slow-setup":
         probe.events.append(("setup-waiting",))
         await probe.setup_gate.wait()
     probe.events.append(
-        ("setup", "provider", label, ctx.runtime.was_active, ctx.runtime.is_reload)
+        ("setup", "provider", label, runtime.was_active, runtime.is_reload)
     )
-    probe.resources.append(ctx.process_resources.acquire("shared-v1", probe.Resource))
+    probe.resources.append(
+        ctx.require(PROCESS_RESOURCES).acquire("shared-v1", probe.Resource)
+    )
     tool = Slow(label)
-    ctx.tools.register(tool)
+    ctx.require(TOOLS).register(tool)
 
     async def echo(payload):
         return {"label": label}
 
-    ctx.rpc.register("echo", echo)
-    ctx.services.register(
+    ctx.require(RPC).register("echo", echo)
+    ctx.require(SERVICES).register(
         "labels", contract="labels-v1", label="Labels", methods={"echo": echo}
     )
 
     async def drain():
         probe.events.append(("drain", "provider", label))
 
-    ctx.runtime.on_drain(drain)
+    runtime.on_drain(drain)
     ctx.effect("dispose", lambda: probe.events.append(("dispose", "provider", label)))
     ctx.expose(tool)
 """
@@ -82,6 +93,7 @@ async def setup(ctx):
 _CONSUMER = """
 import asyncio
 import sys
+from shiori_sdk.core.services import DEPENDENCIES, RUNTIME, TOOLS
 from shiori_sdk.tools import Tool
 
 probe = sys.modules["reload_probe"]
@@ -102,33 +114,35 @@ class Relay(Tool):
 
 
 async def setup(ctx):
-    provider = ctx.dependencies.require("provider")
+    runtime = ctx.require(RUNTIME)
+    provider = ctx.require(DEPENDENCIES).require("provider")
     if provider.label == "consumer-fails":
         # A call into the new provider is under way when this setup fails.
         probe.pending.append(asyncio.ensure_future(provider.execute()))
         await asyncio.sleep(0)
         raise RuntimeError("consumer rejects the new provider")
-    ctx.tools.register(Relay(provider))
+    ctx.require(TOOLS).register(Relay(provider))
     probe.events.append(
         (
             "setup",
             "consumer",
             provider.label,
-            ctx.runtime.was_active,
-            ctx.runtime.is_reload,
+            runtime.was_active,
+            runtime.is_reload,
         )
     )
 
     async def drain():
         probe.events.append(("drain", "consumer"))
 
-    ctx.runtime.on_drain(drain)
+    runtime.on_drain(drain)
     ctx.effect("dispose", lambda: probe.events.append(("dispose", "consumer")))
     ctx.expose({"provider": provider})
 """
 
 _BYSTANDER = """
 import sys
+from shiori_sdk.core.services import TOOLS
 from shiori_sdk.tools import Tool
 
 probe = sys.modules["reload_probe"]
@@ -146,7 +160,7 @@ class Busy(Tool):
 
 async def setup(ctx):
     probe.events.append(("setup", "bystander"))
-    ctx.tools.register(Busy())
+    ctx.require(TOOLS).register(Busy())
     ctx.effect("dispose", lambda: probe.events.append(("dispose", "bystander")))
 """
 
@@ -196,17 +210,24 @@ async def _kernel(
     _write(
         tmp_path,
         "provider",
-        "capabilities: [tools, rpc, services, process_resources, config, runtime]\n",
+        "capabilities: [tools, rpc, services, process_resources, config, runtime]\n"
+        "inject: [tools, rpc, services, process_resources, config, runtime]\n",
         _PROVIDER,
     )
     _write(
         tmp_path,
         "consumer",
         f"capabilities: [dependencies, runtime, tools, {consumer_capabilities}]\n"
+        "inject: [dependencies, runtime, tools]\n"
         f"dependencies: [provider]\n{consumer_manifest}",
         _CONSUMER,
     )
-    _write(tmp_path, "bystander", "capabilities: [tools]\n", _BYSTANDER)
+    _write(
+        tmp_path,
+        "bystander",
+        "capabilities: [tools]\ninject: [tools]\n",
+        _BYSTANDER,
+    )
     tools = ToolRegistry()
     configs = configs or {"provider": {"label": "v1"}}
     settings = PluginGenerationSettings(
@@ -431,6 +452,7 @@ async def test_rollback_drain_timeout_is_reported_and_disposal_proceeds(
 
 _SHARER = """
 import sys
+from shiori_sdk.core.services import PROCESS_RESOURCES, TOOLS
 from shiori_sdk.tools import Tool
 
 probe = sys.modules["reload_probe"]
@@ -456,15 +478,21 @@ class Holder:
 
 
 async def setup(ctx):
-    holder = ctx.process_resources.acquire("holder-v1", Holder)
+    holder = ctx.require(PROCESS_RESOURCES).acquire("holder-v1", Holder)
     probe.shared.append(holder.tool)
-    ctx.tools.register(holder.tool)
+    ctx.require(TOOLS).register(holder.tool)
 """
 
 
 @pytest.mark.asyncio
 async def test_retired_generation_gate_never_admits_a_shared_tool_call(probe, tmp_path):
-    _write(tmp_path, "sharer", "capabilities: [tools, process_resources]\n", _SHARER)
+    _write(
+        tmp_path,
+        "sharer",
+        "capabilities: [tools, process_resources]\n"
+        "inject: [tools, process_resources]\n",
+        _SHARER,
+    )
     owner = ProcessResourceOwner()
 
     async def generation() -> tuple[PluginKernel, ToolRegistry]:
@@ -684,12 +712,13 @@ import sys
 from dataclasses import replace
 
 from shiori_sdk.core.conversation import StepStarting
+from shiori_sdk.core.services import CONFIG
 
 probe = sys.modules["reload_probe"]
 
 
 async def setup(ctx):
-    label = ctx.config.get("label")
+    label = ctx.require(CONFIG).get("label")
 
     async def stamp(event):
         probe.events.append(("handler-start", label))
@@ -701,7 +730,7 @@ async def setup(ctx):
 
 
 async def _hooked_kernel(tmp_path: Path) -> PluginKernel:
-    _write(tmp_path, "hooked", "capabilities: [config]\n", _HOOKED)
+    _write(tmp_path, "hooked", "capabilities: [config]\ninject: [config]\n", _HOOKED)
     configs = {"hooked": {"label": "v1"}}
     kernel = host_kernel(
         [tmp_path],

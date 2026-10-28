@@ -3,6 +3,8 @@
 import asyncio
 import threading
 
+from shiori_sdk.core.services import BACKGROUND, SERVICES
+
 
 async def setup(ctx):
     """Expose only test barriers; publish normal JSON service calls through the host."""
@@ -34,10 +36,10 @@ async def setup(ctx):
 
     async def run(_payload):
         state["accepted"] += 1
-        task = ctx.background.spawn_runtime(worker(), name="retained-worker")
+        task = ctx.require(BACKGROUND).spawn_runtime(worker(), name="retained-worker")
         return await asyncio.shield(task)
 
-    ctx.services.register(
+    ctx.require(SERVICES).register(
         "worker", contract="test.worker.v1", label="Worker", methods={"run": run}
     )
     ctx.expose(state)

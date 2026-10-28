@@ -30,7 +30,7 @@ related:
 
 ## 典型数据流
 
-回合前根据角色、会话和当前输入构建 `MemoryQuery`，召回结果经过过滤、重排或注入规划进入上下文。回合后由后台 worker 判断是否写入、合并或 supersede 旧记忆。post-response 与 consolidation 两条隐式长期记忆提取链路共用当前角色的 active `profile / preference / procedure` 作为去重上下文；每轮提取受 worker token 预算约束。显式的 `memorize`、`forget_memory`、`recall_memory` 工具在 `plugins/default_memory/backend/tools/`，由插件 `setup` 经 `ctx.tools` 按引擎 `tool_profile()` 注册；bootstrap 不再注册它们。它们复用同一记忆契约。
+回合前根据角色、会话和当前输入构建 `MemoryQuery`，召回结果经过过滤、重排或注入规划进入上下文。回合后由后台 worker 判断是否写入、合并或 supersede 旧记忆。post-response 与 consolidation 两条隐式长期记忆提取链路共用当前角色的 active `profile / preference / procedure` 作为去重上下文；每轮提取受 worker token 预算约束。显式的 `memorize`、`forget_memory`、`recall_memory` 工具在 `plugins/default_memory/backend/tools/`，由插件 `setup` 经 `ctx.require(TOOLS)` 按引擎 `tool_profile()` 注册；bootstrap 不再注册它们。它们复用同一记忆契约。
 
 记忆整理按 `conversation/context_scope.py` 的上下文划分分段：用户本人的发言走用户层，提炼成 HISTORY 事件条目与 PENDING 候选写入角色记忆目录，再交给记忆引擎；群友、陌生人的发言及角色在外部会话的回复走外部段，每个会话单独调用一次 LLM，产出该会话的最近动态、群笔记更新和成员档案（含一行速记），由宿主写入群环境层与成员层。整理不对准备阶段加锁，提交时比对快照，期间被小手机或 `update_group_context` 改过就整次放弃、游标不动，下次重来。
 

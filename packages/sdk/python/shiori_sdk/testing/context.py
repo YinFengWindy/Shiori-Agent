@@ -1,27 +1,63 @@
-"""A pure contract setup context with explicitly granted fake capabilities."""
+"""A pure contract setup context whose host services are explicit test fakes."""
 
 import inspect
-from functools import cache
 from pathlib import Path
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from shiori_sdk.kernel import Context, Kernel, Key, PluginSpec, Scope, Veto
 from shiori_sdk.kernel.events import OnHandler, WatchHandler
-from shiori_sdk.runtime import (
-    CapabilityNotGranted,
-    Dispose,
-    require_known_capabilities,
-)
+from shiori_sdk.runtime import Dispose
 from .events import FakeEvents
+
+_REMOVED_CAPABILITY_ATTRIBUTES = frozenset(
+    {
+        "accounts",
+        "avatars",
+        "background",
+        "background_results",
+        "channels",
+        "config",
+        "dependencies",
+        "events",
+        "external_turns",
+        "http",
+        "kv",
+        "light_model",
+        "light_provider",
+        "memory",
+        "models",
+        "process_resources",
+        "processes",
+        "resources",
+        "roles",
+        "rpc",
+        "runtime",
+        "scene_observations",
+        "services",
+        "sessions",
+        "storage",
+        "tool_turn",
+        "tools",
+        "workspace",
+    }
+)
+"""Context attributes the host removed in P4-4; plugins take these with ``require``.
+
+``FakePluginContext`` refuses to hold them so a plugin still reading
+``ctx.kv`` fails in its own tests exactly as it does in the host.
+"""
+
+
+def _removed_attribute(name: str) -> AttributeError:
+    """The error for a removed capability attribute, naming the replacement."""
+    return AttributeError(
+        f"上下文属性 {name!r} 已删除：插件在 manifest inject 中声明 {name!r} 并用 "
+        "ctx.require 取服务；测试用 ctx.serve(KEY, fake) 提供假对象"
+    )
 
 
 class FakePluginContext:
     """Records setup effects and exports without instantiating any host services.
-
-    ``capabilities`` are the grants, normally a manifest's declaration (see the
-    ``sdk_context`` fixture); names unknown to the host are rejected like the host
-    does. Only ``events`` has a fake here; other declared names are recorded in
-    ``granted`` for specialized fakes.
 
     The kernel members (``provide`` / ``require`` / ``get``, ``on`` / ``watch``
     / ``emit``) run on a real ``Kernel``: ``kernel`` (a fresh one by default)
@@ -31,26 +67,34 @@ class FakePluginContext:
     setup.
 
     ``require`` / ``get`` reject a key the declaration lacks with the kernel's
-    ``undeclared_key`` error, as the host does. A declared former-capability
-    key (``shiori_sdk.core.services``) that ``kernel`` has no provider for is
-    served by the fake the test set as the attribute of that name
-    (``ctx.kv = ...``; ``session_store`` is ``ctx.sessions``): the host
-    provides those keys itself.
+    ``undeclared_key`` error, as the host does. A declared key that ``kernel``
+    has no provider for is answered by the fake given to ``serve``: the host
+    builds those services per plugin (``kv``, ``rpc``, ``accounts`` ...).
+    ``fake_events`` is served as ``events`` and is closed before the effects
+    run, as the host closes a plugin's subscriptions first.
+
+    Attributes named in ``_REMOVED_CAPABILITY_ATTRIBUTES`` can be neither set
+    nor read, on this class or a subclass: the host context has none of them.
     """
+
+    def __init_subclass__(cls) -> None:
+        super().__init_subclass__()
+        if clashes := _REMOVED_CAPABILITY_ATTRIBUTES.intersection(vars(cls)):
+            raise TypeError(
+                f"{cls.__name__} 定义了已删除的上下文属性 {sorted(clashes)}"
+            )
 
     def __init__(
         self,
         plugin_id: str = "test_plugin",
         plugin_dir: Path = Path("."),
         *,
-        capabilities: tuple[str, ...] = ("events",),
         kernel: Kernel | None = None,
         inject: tuple[str, ...] = (),
         optional_inject: tuple[str, ...] = (),
         provides: tuple[str, ...] = (),
         package_dir: Path | None = None,
     ) -> None:
-        require_known_capabilities(capabilities, f"FakePluginContext({plugin_id})")
         if package_dir is not None:
             if inject or optional_inject or provides:
                 raise ValueError(
@@ -59,9 +103,9 @@ class FakePluginContext:
             inject, optional_inject, provides = read_manifest_keys(package_dir)
         self.plugin_id = plugin_id
         self.plugin_dir = plugin_dir
-        self.granted = tuple(sorted(set(capabilities)))
         self.exported: object | None = None
-        self._events = FakeEvents()
+        self.fake_events = FakeEvents()
+        self._served: dict[str, object] = {"events": self.fake_events}
         self._effects: list[tuple[str, Dispose]] = []
         self._closed = False
         self.kernel = kernel if kernel is not None else Kernel()
@@ -77,20 +121,24 @@ class FakePluginContext:
         )
         self._kernel_context = Context(self.kernel, spec, self._scope)
 
-    def _check(self, name: str) -> None:
-        if self._closed:
-            raise RuntimeError("Plugin scope is closed")
-        declared = name in self._inject or name in self._optional_inject
-        if name not in self.granted and not declared:
-            raise CapabilityNotGranted(
-                f"插件 {self.plugin_id} 未声明 capability '{name}'"
+    def __setattr__(self, name: str, value: object) -> None:
+        if name in _REMOVED_CAPABILITY_ATTRIBUTES:
+            raise _removed_attribute(name)
+        super().__setattr__(name, value)
+
+    if not TYPE_CHECKING:
+        # Hidden from type checkers so unknown attributes still fail there.
+
+        def __getattr__(self, name: str) -> object:
+            if name in _REMOVED_CAPABILITY_ATTRIBUTES:
+                raise _removed_attribute(name)
+            raise AttributeError(
+                f"{type(self).__name__!r} object has no attribute {name!r}"
             )
 
-    @property
-    def events(self) -> FakeEvents:
-        """Returns the granted event fake."""
-        self._check("events")
-        return self._events
+    def serve[T](self, key: Key[T], fake: T) -> None:
+        """Answers ``require`` / ``get`` of a declared, unprovided ``key`` with ``fake``."""
+        self._served[key.name] = fake
 
     def expose(self, api: object) -> None:
         """Records a plugin's public export."""
@@ -105,26 +153,16 @@ class FakePluginContext:
     def require[T](self, key: Key[T]) -> T:
         """The provider of a declared ``inject`` key; see the class docstring."""
         if key.name in self._inject and self.kernel.get(key) is None:
-            if (fake := self._service_fake(key)) is not None:
-                return fake
+            if key.name in self._served:
+                return cast(T, self._served[key.name])
         return self._kernel_context.require(key)
 
     def get[T](self, key: Key[T]) -> T | None:
         """The provider of a declared ``optional_inject`` key, or None."""
         if key.name in self._optional_inject and self.kernel.get(key) is None:
-            if (fake := self._service_fake(key)) is not None:
-                return fake
+            if key.name in self._served:
+                return cast(T, self._served[key.name])
         return self._kernel_context.get(key)
-
-    def _service_fake[T](self, key: Key[T]) -> T | None:
-        """The attribute fake standing in for a host-provided service key."""
-        attribute = _service_attributes().get(key.name)
-        if attribute is None:
-            return None
-        try:
-            return cast(T, getattr(self, attribute))
-        except (AttributeError, CapabilityNotGranted):
-            return None
 
     def on[E](self, event_type: type[E], handler: OnHandler[E]) -> None:
         """Joins ``kernel``'s ordered chain of ``event_type``."""
@@ -147,7 +185,7 @@ class FakePluginContext:
     async def aclose(self) -> None:
         """Stops subscriptions, then runs all cleanup in reverse registration order."""
         self._closed = True
-        self._events.close()
+        self.fake_events.close()
         errors: list[Exception] = await self._scope.close()
         while self._effects:
             _, dispose = self._effects.pop()
@@ -159,23 +197,6 @@ class FakePluginContext:
                 errors.append(error)
         if errors:
             raise ExceptionGroup("Plugin cleanup failed", errors)
-
-
-@cache
-def _service_attributes() -> dict[str, str]:
-    """Former capability key name -> the fake attribute tests set for it.
-
-    Imported on first use: ``shiori_sdk.core.services`` pulls in the service
-    protocols (``httpx`` among them), which the bare plugin-test runner that
-    imports ``shiori_sdk.testing`` does not install.
-    """
-    from shiori_sdk.core import services
-
-    return {
-        value.name: "sessions" if value is services.SESSION_STORE else value.name
-        for value in vars(services).values()
-        if isinstance(value, Key)
-    }
 
 
 def read_manifest_keys(

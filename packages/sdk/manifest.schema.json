@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/YinFengWindy/Shiori-Agent/blob/main/packages/sdk/manifest.schema.json",
   "title": "Shiori plugin manifest (api: 2 or 4)",
-  "description": "plugins/<id>/manifest.yaml 的现行格式。字段与取值以 apps/backend/agent/plugin_host/manifest.py（所有插件）和 package_contract.py / renderer_contract.py（声明 package_contract 的外部包）为准。api: 2 仍加载（拒绝非 api: 4 是 P4-5）。schema 只描述字段形状；跨字段规则（渠道名与会话类型不重复、前缀互不包含、dependencies 与 optional_dependencies、inject 与 optional_inject 不重叠、入口文件存在且可解析、版本范围与宿主兼容、contributes.channels 要求 inject 含 channels）仍由解析代码判定。",
+  "description": "plugins/<id>/manifest.yaml 的现行格式。字段与取值以 apps/backend/agent/plugin_host/manifest.py（所有插件）和 package_contract.py / renderer_contract.py（声明 package_contract 的外部包）为准。api: 2 仍加载，但 capabilities 非空而 inject、optional_inject 都为空的包标为 BLOCKED（拒绝所有非 api: 4 是 P4-5）。schema 只描述字段形状；跨字段规则（渠道名与会话类型不重复、前缀互不包含、dependencies 与 optional_dependencies、inject 与 optional_inject 不重叠、入口文件存在且可解析、版本范围与宿主兼容、contributes.channels 要求 inject 含 channels）仍由解析代码判定。",
   "type": "object",
   "additionalProperties": false,
   "required": ["api"],
@@ -54,40 +54,9 @@
       "type": "string"
     },
     "capabilities": {
-      "description": "插件 setup 可用的宿主 capability，取值与 shiori_sdk.runtime.KNOWN_CAPABILITIES 一致。",
+      "description": "api: 2 遗留字段。不再授予服务；插件用 inject 与 ctx.require。非空而 inject、optional_inject 都为空时插件 BLOCKED。P4-5 拒绝非 api: 4。",
       "type": "array",
-      "items": {
-        "enum": [
-          "accounts",
-          "avatars",
-          "background",
-          "background_results",
-          "channels",
-          "config",
-          "dependencies",
-          "events",
-          "external_turns",
-          "http",
-          "kv",
-          "light_model",
-          "light_provider",
-          "memory",
-          "models",
-          "process_resources",
-          "processes",
-          "resources",
-          "roles",
-          "rpc",
-          "runtime",
-          "scene_observations",
-          "services",
-          "sessions",
-          "storage",
-          "tool_turn",
-          "tools",
-          "workspace"
-        ]
-      }
+      "items": { "type": "string" }
     },
     "channels": {
       "description": "静态渠道声明；非空时 capabilities 必须含 channels。",
@@ -199,10 +168,7 @@
           "runtime_api": false,
           "package_contract": false,
           "renderer": false,
-          "channels": false,
-          "inject": { "$ref": "#/$defs/publicKeyNames" },
-          "optional_inject": { "$ref": "#/$defs/publicKeyNames" },
-          "provides": { "$ref": "#/$defs/publicKeyNames" }
+          "channels": false
         }
       }
     },
@@ -236,14 +202,13 @@
       "items": { "$ref": "#/$defs/nonEmptyString" }
     },
     "keyNames": {
-      "description": "服务 Key 名称列表（shiori_sdk.kernel.Key.name）：非空、无首尾空白。",
+      "description": "服务 Key 名称列表（shiori_sdk.kernel.Key.name）：非空、无首尾空白；不论 api 版本，都不能以 host. 开头（宿主保留前缀）。",
       "type": "array",
-      "items": { "type": "string", "pattern": "^\\S(.*\\S)?$" }
-    },
-    "publicKeyNames": {
-      "description": "api: 4 的服务 Key 名称不能以 host. 开头（宿主内部 Key）。",
-      "type": "array",
-      "items": { "not": { "type": "string", "pattern": "^host\\." } }
+      "items": {
+        "type": "string",
+        "pattern": "^\\S(.*\\S)?$",
+        "not": { "pattern": "^host\\." }
+      }
     },
     "channel": {
       "type": "object",

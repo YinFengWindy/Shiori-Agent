@@ -3,7 +3,7 @@
 from shiori_sdk.managed.controller import ManagedRuntime
 from shiori_sdk.managed.installation import Installation
 from shiori_sdk.managed.service import OwnedService
-from shiori_sdk.plugin_services import ServicePluginContext
+from shiori_sdk.runtime import PluginRuntimeContext
 from shiori_sdk.core.services import BACKGROUND, PROCESSES
 from .runtime_build import build_runtime
 from .runtime_launch import launch_runtime
@@ -17,7 +17,7 @@ from .runtime_manifest import (
 from .settings import Settings, VoiceStore
 
 
-def create_runtime(ctx: ServicePluginContext, store: VoiceStore) -> ManagedRuntime:
+def create_runtime(ctx: PluginRuntimeContext, store: VoiceStore) -> ManagedRuntime:
     """Wire provider-owned policy to generic installation and native process ownership.
 
     State (pointer, location, locks, logs, ``tts-config.json``) stays in plugin

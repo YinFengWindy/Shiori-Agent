@@ -69,7 +69,7 @@ class Agent:
 async def watcher(tmp_path, monkeypatch):
     ctx = FakeServiceContext("herdr", tmp_path, package_dir=PACKAGE_DIR)
     watcher = AgentWatcher()
-    watcher.attach(ctx.process_resources, ctx.processes, tmp_path)
+    watcher.attach(ctx.fake_process_resources, ctx.fake_processes, tmp_path)
     watcher.poll_seconds = 0
     watcher.start_grace_seconds = 30
     yield watcher, monkeypatch
