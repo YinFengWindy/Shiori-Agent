@@ -85,16 +85,16 @@ Build the plugin UI as ESM, externalizing `@yinfengwindy/shiori-sdk`, `react`,
 the host instances at runtime; do not bundle a separate SDK or React instance.
 The npm package requires React and React DOM `^19.2.5` for local development.
 The host renderer ABI guarantees `19.2.0`; declare compatible host peers separately
-in the plugin's `manifest.yaml`, alongside its Runtime API range:
+in the plugin's `manifest.yaml`:
 
 ```yaml
-runtime_api: ">=3.1.2 <4.0.0"
 peer_dependencies:
   react: ">=19.2.0 <20.0.0"
   react-dom: ">=19.2.0 <20.0.0"
 ```
 
-The SDK itself is versioned by `runtime_api` and needs no `peer_dependencies` entry.
+The SDK itself needs no `peer_dependencies` entry; an `api: 4` manifest no longer
+declares a `runtime_api` range (it is rejected).
 
 The main entry exports plugin contracts, components and helpers. `/contract`
 contains React/DOM-free types; `/host-internal` is reserved for host code; `/testing`
@@ -117,13 +117,12 @@ exposes `loadError` and `reload()` and never writes a default. `reload()` does n
 while a save is in flight and otherwise drops unsaved edits. Render its `savePhase` with
 `host.ui.SettingsSavedStatus` for the host's page-corner 「已保存」 mark, and lay the page
 out with the host's `SettingsGroup`, `SettingsSectionCard`, `SettingsField`,
-`SettingsToggleField`, `settingsInputClass` and `settingsGroupStackClass`. Packages
-using any of these require `runtime_api: ">=3.1.1 <4.0.0"`.
+`SettingsToggleField`, `settingsInputClass` and `settingsGroupStackClass`.
 
 Runtime API 3.1.1 adds the host event `chat.cancelled` (`{session_key, turn_id}`)
 and `chatTerminalEventMethods` / `isChatTerminalEvent`: while the bridge connection
 is open, every accepted chat turn ends with exactly one of `chat.done`, `chat.error`
-and `chat.cancelled`. Packages relying on it require `runtime_api: ">=3.1.1 <4.0.0"`.
+and `chat.cancelled`.
 
 A disposed scoped client rejects with `PluginBridgeError`, code
 `plugin_unavailable`, and `details.reason: "context_disposed"`. Cleanup may treat
