@@ -149,7 +149,11 @@ consolidates these additions and the subsequent #847 breaking migration.
   `optional_inject` (like `config`), so `ctx.get(KV)` is not None when the
   name is optional. An `api: 4` manifest may not list a `host.` name in
   `inject`, `optional_inject` or `provides`: those keys hold raw binders and
-  are deleted in P4-4. `manifest.schema.json` says the same.
+  are deleted in P4-4. `manifest.schema.json` says the same. An `api: 2`
+  manifest can still list `host.` names until P4-5 blocks non-`api: 4`
+  packages. An optional `kv` now needs the host's workspace like a required
+  one; without it the plugin fails instead of getting None (production hosts
+  always pass a workspace).
   **breaking:** the core now provides these 28 public keys itself, so a
   plugin that `provides` one of the names makes the whole generation fail to
   start (refactor plan §8, duplicate provide with the core), where an older
