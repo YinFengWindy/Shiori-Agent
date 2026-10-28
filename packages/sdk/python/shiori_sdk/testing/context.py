@@ -1,10 +1,10 @@
 """A pure contract setup context with explicitly granted fake capabilities."""
 
 import inspect
+from functools import cache
 from pathlib import Path
 from typing import cast
 
-from shiori_sdk.core import services
 from shiori_sdk.kernel import Context, Kernel, Key, PluginSpec, Scope, Veto
 from shiori_sdk.kernel.events import OnHandler, WatchHandler
 from shiori_sdk.runtime import (
@@ -118,7 +118,7 @@ class FakePluginContext:
 
     def _service_fake[T](self, key: Key[T]) -> T | None:
         """The attribute fake standing in for a host-provided service key."""
-        attribute = _SERVICE_ATTRIBUTES.get(key.name)
+        attribute = _service_attributes().get(key.name)
         if attribute is None:
             return None
         try:
@@ -161,12 +161,21 @@ class FakePluginContext:
             raise ExceptionGroup("Plugin cleanup failed", errors)
 
 
-# Former capability key name -> the fake attribute tests set for it.
-_SERVICE_ATTRIBUTES = {
-    value.name: "sessions" if value is services.SESSION_STORE else value.name
-    for value in vars(services).values()
-    if isinstance(value, Key)
-}
+@cache
+def _service_attributes() -> dict[str, str]:
+    """Former capability key name -> the fake attribute tests set for it.
+
+    Imported on first use: ``shiori_sdk.core.services`` pulls in the service
+    protocols (``httpx`` among them), which the bare plugin-test runner that
+    imports ``shiori_sdk.testing`` does not install.
+    """
+    from shiori_sdk.core import services
+
+    return {
+        value.name: "sessions" if value is services.SESSION_STORE else value.name
+        for value in vars(services).values()
+        if isinstance(value, Key)
+    }
 
 
 def read_manifest_keys(
