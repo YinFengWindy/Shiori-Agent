@@ -147,9 +147,14 @@ consolidates these additions and the subsequent #847 breaking migration.
   must keep `runnable` in step with each plugin's actual state within a
   generation: enabling or disabling a plugin re-plans its spec, and so does a
   load that fails admission after planning (package bytes changed since
-  discovery). After that re-plan, an enabled plugin that a lifted
-  `conflicts` / `replaces` / duplicate `provides` / cycle had `BLOCKED` is
-  loaded within the generation.
+  discovery). When enabling or disabling re-plans, an enabled plugin that a
+  lifted `conflicts` / `replaces` / duplicate `provides` / cycle had `BLOCKED`
+  is loaded within the generation. Not yet covered (P4-2): an exclusion lifted
+  by the mid-load admission re-plan (e.g. the `replaces` side fails admission)
+  leaves the replaced plugin `BLOCKED` until the next generation; and when a
+  disable's commit fails, a provider loaded in its place stays `ACTIVE` while
+  the restored one is `BLOCKED` (within a generation the running provider
+  wins, a generation swap blocks both).
 
 - **breaking: capability `diagnostics` removed; observe injects `crash_reporting`
   (PR #940, issue #902, refactor P3-8, D13).** `CrashReporting` gains `session_key() ->
