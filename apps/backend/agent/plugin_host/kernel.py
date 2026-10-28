@@ -593,16 +593,14 @@ class PluginKernel:
     ) -> PluginDependencyError:
         """Wraps the kernel's BLOCKED diagnostic as the handle's error.
 
-        Package-contract plugins surface it on the Plugins page. The kernel
-        names the first unavailable ``requires`` entry ``inject[i]``; the
-        adapter's ``requires`` are manifest ``dependencies`` followed by
+        The kernel names the first unavailable ``requires`` entry ``inject[i]``;
+        the adapter's ``requires`` are manifest ``dependencies`` followed by
         ``inject``, so the field is reported under the manifest's own name.
         """
         error = PluginDependencyError(blocked.reason)
-        if "package_contract" in record.manifest.metadata:
-            error.diagnostic = replace(
-                blocked, field=_manifest_requires_field(record.manifest, blocked.field)
-            )
+        error.diagnostic = replace(
+            blocked, field=_manifest_requires_field(record.manifest, blocked.field)
+        )
         return error
 
     def _spec(self, record: PluginRecord) -> PluginSpec:

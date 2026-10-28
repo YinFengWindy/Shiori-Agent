@@ -49,6 +49,12 @@ _CHAT_TYPE_OPTIONAL_FIELDS = ("chat_id_hint", "prefix")
 # system 只能显式声明。
 PLUGIN_CATEGORIES = ("feature", "channel", "system")
 
+# 安装与启动对非 api: 4 共用这一句（D4）。解析仍接受 api: 2，这样已安装的旧包
+# 还能在列表里显示名称，而不是变成读不出来的目录。
+UNSUPPORTED_API_REASON = (
+    "该插件为旧版插件 API（3.x），本版本不再支持，请安装插件作者发布的新版本"
+)
+
 
 class ManifestError(Exception):
     """manifest 无法读取、解析，或声明不符合插件契约。"""
@@ -156,8 +162,8 @@ class PluginManifest:
 def load_manifest(plugin_dir: Path) -> PluginManifest | None:
     """读取 manifest.yaml；不存在返回 None，格式非法抛 ManifestError。
 
-    接受显式 ``api: 2`` 或 ``api: 4``。没有 manifest 的目录不属于插件。
-    拒绝非 2/4 是 P4-5，这里两者都加载。
+    接受显式 ``api: 2`` 或 ``api: 4``，好让已安装的旧包仍能显示。
+    没有 manifest 的目录不属于插件。发现与安装不运行非 ``api: 4`` 的包。
     """
     manifest_path = plugin_dir / "manifest.yaml"
     import yaml
@@ -252,17 +258,17 @@ def _parse_manifest(
     )
 
 
+# ``renderer`` 仍留给激活门和外部 zip 构建器，直到前端入口迁移。
 _API4_REMOVED = (
     "capabilities",
     "runtime_api",
     "package_contract",
-    "renderer",
     "channels",
 )
 
 
 def _reject_removed_v4_fields(raw: dict[str, object]) -> None:
-    """api: 4 drops the v2 capability manifest. P4-5 is what rejects api: 2."""
+    """api: 4 drops the v2 capability manifest. Discovery rejects api: 2."""
     present = [name for name in _API4_REMOVED if name in raw]
     if present:
         raise ManifestError(

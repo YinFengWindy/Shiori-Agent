@@ -2,18 +2,18 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/YinFengWindy/Shiori-Agent/blob/main/packages/sdk/manifest.schema.json",
   "title": "Shiori plugin manifest (api: 2 or 4)",
-  "description": "plugins/<id>/manifest.yaml 的现行格式。字段与取值以 apps/backend/agent/plugin_host/manifest.py（所有插件）和 package_contract.py / renderer_contract.py（声明 package_contract 的外部包）为准。api: 2 仍加载，但 capabilities 非空而 inject、optional_inject 都为空的包标为 BLOCKED（拒绝所有非 api: 4 是 P4-5）。schema 只描述字段形状；跨字段规则（渠道名与会话类型不重复、前缀互不包含、dependencies 与 optional_dependencies、inject 与 optional_inject 不重叠、入口文件存在且可解析、版本范围与宿主兼容、contributes.channels 要求 inject 含 channels）仍由解析代码判定。",
+  "description": "plugins/<id>/manifest.yaml 的现行格式。字段与取值以 apps/backend/agent/plugin_host/manifest.py 和 package_contract.py 为准。安装与启动只接受 api: 4；api: 2 仍能被解析，以便已安装的旧包显示为 BLOCKED。schema 只描述字段形状；跨字段规则（渠道名与会话类型不重复、前缀互不包含、dependencies 与 optional_dependencies、inject 与 optional_inject 不重叠、入口文件存在且可解析、contributes.channels 要求 inject 含 channels）仍由解析代码判定。",
   "type": "object",
   "additionalProperties": false,
   "required": ["api"],
   "properties": {
     "api": {
-      "description": "插件 API 版本。2 使用 capabilities；4 使用 inject / contributes / frontend。",
+      "description": "插件 API 版本。安装与启动只接受 4（inject / contributes / frontend）。2 仍能解析，已安装的旧包启动时 BLOCKED。",
       "type": "integer",
       "enum": [2, 4]
     },
     "package_contract": {
-      "description": "外部包契约版本。声明后按外部包规则校验（package_contract.py）。",
+      "description": "旧外部包字段。api: 4 不接受；安装器不再按它放行。",
       "type": "integer",
       "const": 1
     },
@@ -54,7 +54,7 @@
       "type": "string"
     },
     "capabilities": {
-      "description": "api: 2 遗留字段。不再授予服务；插件用 inject 与 ctx.require。非空而 inject、optional_inject 都为空时插件 BLOCKED。P4-5 拒绝非 api: 4。",
+      "description": "api: 2 遗留字段。不再授予服务。非 api: 4 的包在安装时被拒绝，已安装的在启动时 BLOCKED。",
       "type": "array",
       "items": { "type": "string" }
     },
@@ -167,7 +167,6 @@
           "capabilities": false,
           "runtime_api": false,
           "package_contract": false,
-          "renderer": false,
           "channels": false
         }
       }

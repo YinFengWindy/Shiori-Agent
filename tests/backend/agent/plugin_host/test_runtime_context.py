@@ -34,7 +34,7 @@ async def _hint(event):
 """.strip()
 
 _MANIFEST = (
-    "api: 2\nid: keyed\nversion: '0.1'\ncapabilities: []\n"
+    "api: 4\nid: keyed\nversion: '0.1'\n"
     "inject:\n  - crash_reporting\nprovides:\n  - keyed.api\n"
 )
 

@@ -177,7 +177,7 @@ def _write(root: Path, plugin_id: str, manifest: str, source: str) -> None:
     package = root / plugin_id
     (package / "backend").mkdir(parents=True)
     (package / "manifest.yaml").write_text(
-        f"api: 2\nid: {plugin_id}\n{manifest}", encoding="utf-8"
+        f"api: 4\nid: {plugin_id}\n{manifest}", encoding="utf-8"
     )
     (package / "backend/plugin.py").write_text(source, encoding="utf-8")
 
@@ -207,25 +207,30 @@ async def _kernel(
 ) -> tuple[
     PluginKernel, PluginGenerationSettings, ToolRegistry, PluginRpcRegistry[Any]
 ]:
+    extra = consumer_manifest
+    inject = "inject: [dependencies, runtime, tools]\n"
+    if consumer_capabilities == "channels" or extra.startswith("channels:"):
+        inject = "inject: [dependencies, runtime, tools, channels]\n"
+        if extra.startswith("channels:"):
+            extra = "contributes:\n" + "".join(
+                f"  {line}\n" for line in extra.splitlines()
+            )
     _write(
         tmp_path,
         "provider",
-        "capabilities: [tools, rpc, services, process_resources, config, runtime]\n"
         "inject: [tools, rpc, services, process_resources, config, runtime]\n",
         _PROVIDER,
     )
     _write(
         tmp_path,
         "consumer",
-        f"capabilities: [dependencies, runtime, tools, {consumer_capabilities}]\n"
-        "inject: [dependencies, runtime, tools]\n"
-        f"dependencies: [provider]\n{consumer_manifest}",
+        inject + f"dependencies: [provider]\n{extra}",
         _CONSUMER,
     )
     _write(
         tmp_path,
         "bystander",
-        "capabilities: [tools]\ninject: [tools]\n",
+        "inject: [tools]\n",
         _BYSTANDER,
     )
     tools = ToolRegistry()
@@ -489,7 +494,6 @@ async def test_retired_generation_gate_never_admits_a_shared_tool_call(probe, tm
     _write(
         tmp_path,
         "sharer",
-        "capabilities: [tools, process_resources]\n"
         "inject: [tools, process_resources]\n",
         _SHARER,
     )
@@ -730,7 +734,7 @@ async def setup(ctx):
 
 
 async def _hooked_kernel(tmp_path: Path) -> PluginKernel:
-    _write(tmp_path, "hooked", "capabilities: [config]\ninject: [config]\n", _HOOKED)
+    _write(tmp_path, "hooked", "inject: [config]\n", _HOOKED)
     configs = {"hooked": {"label": "v1"}}
     kernel = host_kernel(
         [tmp_path],
@@ -978,7 +982,7 @@ async def test_failed_plugin_is_retried_only_when_a_load_selects_it(probe, tmp_p
     _write(
         tmp_path,
         "boom",
-        "capabilities: []\n",
+        "",
         "import sys\n\nasync def setup(ctx):\n"
         "    probe = sys.modules['reload_probe']\n"
         "    probe.events.append(('setup', 'boom'))\n"
@@ -988,7 +992,7 @@ async def test_failed_plugin_is_retried_only_when_a_load_selects_it(probe, tmp_p
     _write(
         tmp_path,
         "later",
-        "capabilities: []\n",
+        "",
         "import sys\n\nasync def setup(ctx):\n"
         "    sys.modules['reload_probe'].events.append(('setup', 'later'))\n",
     )
@@ -1030,7 +1034,7 @@ async def test_providers_of_one_key_take_over_from_each_other_within_the_generat
         _write(
             tmp_path,
             plugin_id,
-            "capabilities: []\nprovides: [shared.engine]\n",
+            "provides: [shared.engine]\n",
             "import sys\n\nasync def setup(ctx):\n"
             f"    sys.modules['reload_probe'].events.append(('setup', {plugin_id!r}))\n",
         )

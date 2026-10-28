@@ -17,8 +17,9 @@ def _change(package, **values):
 
 def test_valid_package_separates_identity_version_and_runtime(contract_package):
     result = validate_package(contract_package)
+    assert result.manifest.api == 4
     assert result.manifest.version == "1.2.3"
-    assert result.runtime_api == ">=3.1.1 <4.0.0"
+    assert result.runtime_api == ""
     assert [entry.kind for entry in result.renderer] == ["ui", "background", "surface"]
 
 
@@ -43,13 +44,10 @@ def test_package_accepts_host_supported_display_and_distribution_metadata(
 @pytest.mark.parametrize(
     "values, code, field",
     [
-        ({"runtime_api": ">=2.0.0 <3.0.0"}, "incompatible_runtime", "runtime_api"),
-        ({"runtime_api": ">=99.0.0 <100.0.0"}, "incompatible_runtime", "runtime_api"),
-        # Retracted unpublished 4.x range (#698): the host is back on 3.1.x.
-        ({"runtime_api": ">=4.3.0 <5.0.0"}, "incompatible_runtime", "runtime_api"),
+        ({"runtime_api": ">=3.1.1 <4.0.0"}, "invalid_manifest", "manifest"),
+        ({"package_contract": 1}, "invalid_manifest", "manifest"),
+        ({"capabilities": []}, "invalid_manifest", "manifest"),
         ({"version": "1.2"}, "invalid_version", "version"),
-        ({"package_contract": True}, "unsupported_contract", "package_contract"),
-        ({"package_contract": 2}, "unsupported_contract", "package_contract"),
         (
             {
                 "renderer": {
@@ -61,19 +59,9 @@ def test_package_accepts_host_supported_display_and_distribution_metadata(
         ),
         ({"peer_dependencies": {}}, "missing_dependency", "peer_dependencies"),
         (
-            {"host_dependencies": {"python": ["not-installed"]}},
-            "missing_dependency",
-            "host_dependencies.python[0]",
-        ),
-        (
-            {"host_dependencies": {"npm": ["lodash"]}},
+            {"host_dependencies": {"python": ["pydantic"]}},
             "invalid_manifest",
-            "host_dependencies",
-        ),
-        (
-            {"host_dependencies": {"python": ["ncatbot"]}},
-            "missing_dependency",
-            "host_dependencies.python[0]",
+            "manifest",
         ),
         ({"assets": ["../secret"]}, "invalid_path", "assets[0]"),
         ({"entry": "backend/missing.py"}, "missing_file", "entry"),
@@ -117,20 +105,27 @@ def test_css_is_required(contract_package):
     assert caught.value.diagnostic.field == "renderer.ui.css[0]"
 
 
-def test_declared_host_python_dependency_uses_host_inventory(contract_package):
-    _change(contract_package, host_dependencies={"python": ["pydantic"]})
-    host = HostRuntimeContract(python_dependencies=frozenset({"pydantic"}))
-    assert validate_package(contract_package, host=host).manifest.id == "external_demo"
+def test_install_rejects_api_2_before_trust(contract_package):
+    """A current api: 2 zip is refused with the upgrade reason, before trust."""
+    _change(contract_package, api=2, runtime_api=">=3.1.1 <4.0.0", package_contract=1)
+    with pytest.raises(PackageContractError) as caught:
+        validate_package(contract_package)
+    diagnostic = caught.value.diagnostic
+    assert diagnostic.code == "unsupported_api"
+    assert diagnostic.field == "api"
+    assert diagnostic.state == "BLOCKED"
+    assert "旧版插件 API" in diagnostic.reason
 
 
-def test_external_boundary_does_not_accept_legacy_manifest(contract_package):
+def test_external_boundary_rejects_a_missing_api(contract_package):
     path = contract_package / "manifest.yaml"
     raw = yaml.safe_load(path.read_text(encoding="utf-8"))
-    del raw["package_contract"]
+    del raw["api"]
     path.write_text(yaml.safe_dump(raw), encoding="utf-8")
     with pytest.raises(PackageContractError) as caught:
         validate_package(contract_package)
-    assert caught.value.diagnostic.field == "package_contract"
+    assert caught.value.diagnostic.code == "unsupported_api"
+    assert caught.value.diagnostic.field == "api"
 
 
 @pytest.mark.parametrize(
@@ -148,17 +143,18 @@ def test_external_schema_rejects_noninteger_api_and_device_id(
 def test_external_package_may_declare_channels(contract_package):
     _change(
         contract_package,
-        capabilities=["channels"],
-        runtime_api=">=3.1.1 <4.0.0",
-        channels=[
-            {
-                "name": "demo_chat",
-                "label": "Demo",
-                "chat_types": [
-                    {"type": "private", "label": "私聊", "chat_id_label": "用户 ID"}
-                ],
-            }
-        ],
+        inject=["channels"],
+        contributes={
+            "channels": [
+                {
+                    "name": "demo_chat",
+                    "label": "Demo",
+                    "chat_types": [
+                        {"type": "private", "label": "私聊", "chat_id_label": "用户 ID"}
+                    ],
+                }
+            ]
+        },
     )
     result = validate_package(contract_package)
     assert [item.name for item in result.manifest.channels] == ["demo_chat"]
@@ -167,8 +163,8 @@ def test_external_package_may_declare_channels(contract_package):
 def test_external_channel_declaration_errors_block_the_package(contract_package):
     _change(
         contract_package,
-        capabilities=["channels"],
-        channels=[{"name": "desktop", "label": "Desktop"}],
+        inject=["channels"],
+        contributes={"channels": [{"name": "desktop", "label": "Desktop"}]},
     )
     with pytest.raises(PackageContractError) as caught:
         validate_package(contract_package)
@@ -182,20 +178,12 @@ def test_host_advertises_runtime_api_with_shared_visual_components():
     assert HostRuntimeContract().runtime_api == RUNTIME_API_VERSION
 
 
-def test_lower_bound_one_patch_above_the_host_is_rejected(contract_package):
-    # A package requiring a future release must be gated, even one patch ahead.
-    major, minor, patch = HostRuntimeContract().runtime_api.split(".")
-    declared = f">={major}.{minor}.{int(patch) + 1} <{int(major) + 1}.0.0"
-    _change(contract_package, runtime_api=declared)
+def test_api_2_is_rejected_even_when_its_runtime_range_would_match(contract_package):
+    _change(contract_package, api=2, runtime_api=HostRuntimeContract().runtime_api)
     with pytest.raises(PackageContractError) as caught:
         validate_package(contract_package)
-    assert caught.value.diagnostic.code == "incompatible_runtime"
-    assert caught.value.diagnostic.field == "runtime_api"
-
-
-def test_explicit_cross_major_compatibility_is_accepted(contract_package):
-    _change(contract_package, runtime_api=">=2.16.0 <4.0.0")
-    assert validate_package(contract_package).runtime_api == ">=2.16.0 <4.0.0"
+    assert caught.value.diagnostic.code == "unsupported_api"
+    assert caught.value.diagnostic.field == "api"
 
 
 def test_repository_plugin_declarations_admit_the_installed_sdk_and_siblings():

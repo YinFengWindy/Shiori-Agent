@@ -1,6 +1,5 @@
-api: 2
+api: 4
 id: nullable_config
 version: "0.1.0"
-capabilities: [config]
 inject: [config]
 config_model: NullableConfigModel

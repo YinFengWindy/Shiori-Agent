@@ -25,7 +25,7 @@ def _plugin(root: Path, plugin_id: str, source: str, *, provides: bool) -> None:
     plugin = root / plugin_id
     (plugin / "backend").mkdir(parents=True)
     (plugin / "backend" / "plugin.py").write_text(source, encoding="utf-8")
-    manifest = f"api: 2\nid: {plugin_id}\ncapabilities: []\n"
+    manifest = f"api: 4\nid: {plugin_id}\n"
     if provides:
         manifest += "provides:\n  - memory_engine\n"
     (plugin / "manifest.yaml").write_text(manifest, encoding="utf-8")

@@ -25,8 +25,8 @@ def parse_capabilities(value: object, source: object) -> tuple[str, ...]:
 
     ``source`` names the manifest in messages. Raises ``ValueError`` when the
     list is missing, not a list, or has a non-string item. Names are not a
-    grant: plugins take services with ``ctx.require``. P4-5 is what rejects a
-    non-``api: 4`` package.
+    grant: plugins take services with ``ctx.require``. Install and startup
+    reject a package that is not ``api: 4``.
     """
     if value is None:
         raise ValueError(f"v2 manifest 缺少 capabilities 声明: {source}")

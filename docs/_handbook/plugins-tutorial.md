@@ -19,7 +19,7 @@ plugins/example/
   README.md
 ```
 
-后端扫描 `bootstrap.paths.plugin_roots()` 返回的内置插件根目录，以及工作区的 `plugins/`。开发态和桌面 bundle 的内置包位于安装资源的顶层 `plugins/`；wheel 安装态使用已安装插件包。仓库内的内置包声明 `api: 4`，把要用的服务写进 `inject`，代码里用 `ctx.require(KEY)` 取得。默认入口仍为 `backend/plugin.py`，入口作为包导入，内部可使用相对 import。工作区里的外部包（Package Contract v1）仍声明 `api: 2`，取服务的方式相同（`inject` + `ctx.require`），直到 P4-5 拒绝非 `api: 4`。
+后端扫描 `bootstrap.paths.plugin_roots()` 返回的内置插件根目录，以及工作区的 `plugins/`。开发态和桌面 bundle 的内置包位于安装资源的顶层 `plugins/`；wheel 安装态使用已安装插件包。插件声明 `api: 4`，把要用的服务写进 `inject`，代码里用 `ctx.require(KEY)` 取得。默认入口仍为 `backend/plugin.py`，入口作为包导入，内部可使用相对 import。不是 `api: 4` 的包无法安装；已经装上的在启动时标为 BLOCKED，文件和配置保留，提示向作者获取新版本。
 
 工作区 `plugins/<目录>/manifest.yaml` 声明的外部包必须通过 [Package Contract v1](plugin-runtime-contract.md) 静态检查；合法包显示为 `UNTRUSTED`，在用户于设置 › 插件中经「信任…」（或 ZIP 安装/更新时的「信任并安装」「信任并更新」）确认并重启应用之前，不导入它的后端或 renderer；内容一变授信即失效（流程见[运行时契约](plugin-runtime-contract.md#main-window-ui-loader-213)）。配置 `enabled = true` 不代表信任。无效 manifest、入口和依赖显示为 `BLOCKED`；只有旧 `kv.json`、没有 manifest 的目录被忽略，数据不会因此删除。
 

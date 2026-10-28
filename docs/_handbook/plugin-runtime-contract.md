@@ -4,12 +4,15 @@ This contract is the external package boundary for #210 / #261. A package is
 validated before its backend is imported. It is **not a sandbox or a trust grant**:
 trusted plugin code ultimately runs with the host's privileges.
 
-`package_contract: 1` opts into the package contract. `api: 2` remains the backend
-setup protocol. `version` identifies plugin releases; `runtime_api` independently
-constrains the host API. Bundled source plugins without `package_contract` retain
-the existing v2 build/loading path. An external installer or discovery provider
-must call this validator even when the discriminator is absent; omission is not
-a way to accept a legacy external package. Source classification/manual trust
+Install and startup accept only `api: 4`. A package whose `api` is not the
+integer `4` (including `api: 2`) is rejected at install with code
+`unsupported_api` before the trust prompt, and an already-installed copy is
+`BLOCKED` at startup with the same reason. Files, plugin config and
+`plugin-data/` are left in place. `runtime_api` ranges, `package_contract` and
+`host_dependencies` are not consulted. `renderer` is still validated when an
+`api: 4` package declares it. The field table below is the previous v1 shape;
+where it disagrees with this paragraph, this paragraph is the current contract.
+Source classification/manual trust
 (#211/#216), external renderer loading (#213), and cross-host activation rollback
 (#262) were delivered separately and are described in the later sections.
 
@@ -125,6 +128,24 @@ consolidates these additions and the subsequent #847 breaking migration.
 
 <!-- Record the next contract batch here, with PR references and breaking markers. -->
 
+- **Non-`api: 4` packages are rejected (issue #903, refactor P4-5).**
+  Install (`validate_package` / zip extract, before the trust prompt) rejects
+  any package whose `api` is not the integer `4`, including current `api: 2`,
+  with code `unsupported_api` and the reason 「该插件为旧版插件 API（3.x），本版本不再支持，请安装插件作者发布的新版本」.
+  An already-installed copy is discovered as `BLOCKED` with that same
+  diagnostic. Its directory, config table and `plugin-data/` are not deleted,
+  and its setup does not run, so it cannot `provide` a core key or a `host.`
+  name. A manifest that fails to parse but still says `api` is an integer
+  other than `4` (for example it names `host.bridge`) gets the same
+  `BLOCKED` row instead of aborting startup. `ctx.provide` refuses a `host.`
+  name even for a running `api: 4` plugin.
+  **breaking:** `runtime_api` range checks, `package_contract: 1` and
+  `host_dependencies` are no longer part of admission. `capabilities_retired`
+  no longer occurs: every non-`api: 4` package is `unsupported_api`.
+  `renderer` and its React peer ranges stay, because the activation gate and
+  `scripts/build-plugin.mjs` still read them. The zip builder requires
+  `api: 4` and `distribution: external`. No SDK or plugin version bump (D26).
+
 - **Capability properties and `host.*` dual-write are gone (PR #945, issue #903, refactor P4-4).**
   `KNOWN_CAPABILITIES`, `CapabilityNotGranted`, `require_known_capabilities`,
   the capability attributes on the host context, and the
@@ -142,8 +163,7 @@ consolidates these additions and the subsequent #847 breaking migration.
   `host.bridge` and `host.config_references` are read by the host itself
   (the kernel requires them at construction). The other `host.*` keys and
   their dual `provide` are gone; readers use the public keys (`ACCOUNTS`,
-  `CHANNELS`, …). Rejecting every non-`api: 4` package, blocking old
-  installs, and the reserved public-key collision are P4-5.
+  `CHANNELS`, …). Rejecting every non-`api: 4` package is the P4-5 note above.
   **breaking** (each item):
   - `PluginRuntimeContext.granted` and `PluginRuntimeContext.events` are
     removed from the SDK protocol. The domain bus is the key `EVENTS`
@@ -152,16 +172,15 @@ consolidates these additions and the subsequent #847 breaking migration.
     former capability attribute now fails: declare the key in `inject` and
     call `ctx.require`.
   - An `api: 2` package whose `capabilities` list is non-empty while
-    `inject` and `optional_inject` are both empty is `BLOCKED` at discovery
-    with diagnostic code `capabilities_retired` ("capabilities 已不再授权，请改用
-    inject + ctx.require"); its setup never runs. Such a package used to load
-    and could only fail inside setup, `config` included. An `api: 2` package
-    that also declares `inject` still loads; its `capabilities` list grants
-    nothing.
+    `inject` and `optional_inject` are both empty was `BLOCKED` at discovery
+    with diagnostic code `capabilities_retired`. P4-5 (above) supersedes that
+    narrower block: every non-`api: 4` package is `unsupported_api` and its
+    setup never runs.
   - No manifest, whatever its `api`, may name a `host.` key in `inject`,
     `optional_inject` or `provides` (before, `api: 2` could inject
     `host.bridge`, the shared RPC registry, or `host.config_references`).
-    `manifest.schema.json` applies the rule to every manifest.
+    `manifest.schema.json` applies the rule to every manifest. P4-5 blocks
+    the package before setup, so an old manifest that names `host.` never runs.
   - `shiori_sdk.runtime.parse_capabilities` no longer checks names against a
     whitelist; it still requires a list and now rejects a non-string item
     (before, it converted items with `str`).
@@ -228,8 +247,8 @@ consolidates these additions and the subsequent #847 breaking migration.
   name is optional. An `api: 4` manifest may not list a `host.` name in
   `inject`, `optional_inject` or `provides`: those keys hold raw binders and
   are deleted in P4-4. `manifest.schema.json` says the same. An `api: 2`
-  manifest can still list `host.` names until P4-5 blocks non-`api: 4`
-  packages. An optional `kv` now needs the host's workspace like a required
+  manifest that names `host.` does not run: the name is rejected at parse,
+  and P4-5 (above) blocks the package. An optional `kv` now needs the host's workspace like a required
   one; without it the plugin fails instead of getting None (production hosts
   always pass a workspace).
   **breaking:** the core now provides these 28 public keys itself, so a
@@ -242,8 +261,9 @@ consolidates these additions and the subsequent #847 breaking migration.
   `rpc`, `runtime`, `scene_observations`, `services`, `session_store`,
   `storage`, `tool_turn`, `tools`, `workspace`. (`commands`,
   `crash_reporting`, `main_model`, `main_provider` and `sessions` were
-  already core keys.) P4-5 marks every non-`api: 4` package `BLOCKED`, which
-  closes this window for old packages.
+  already core keys.) P4-5 (above) marks every non-`api: 4` package `BLOCKED`,
+  which closes this window for old packages. An `api: 4` plugin that provides
+  one of these names still fails the generation.
   Testing: `FakePluginContext.require` / `get` resolve only names declared in
   `inject` / `optional_inject` and otherwise raise the kernel's
   `undeclared_key`, as the host does. A declared former-capability key with no
@@ -254,9 +274,9 @@ consolidates these additions and the subsequent #847 breaking migration.
   lists from that package's `manifest.yaml`; `sdk_context` and
   `FakeChannelPluginContext` pass the package under test.
   **Not in this slice:** deleting `KNOWN_CAPABILITIES`, `CapabilityNotGranted`,
-  the context properties and `*PluginContext` adapters (P4-4); rejecting
-  non-`api: 4` at install and deleting `runtime_api` / `package_contract`
-  (P4-5). `api: 2` still loads. No SDK or plugin version bump (D26). Built-in
+  the context properties and `*PluginContext` adapters (done in P4-4).
+  Rejecting non-`api: 4` at install and dropping `runtime_api` /
+  `package_contract` from admission is the P4-5 note above. No SDK or plugin version bump (D26). Built-in
   `version` values are unchanged. User data paths (`plugin-data`, kv, config,
   enable flags) are unchanged. Citation is not a plugin (P3-4); the built-in
   set is the 23 packages under `plugins/`.
@@ -320,8 +340,8 @@ consolidates these additions and the subsequent #847 breaking migration.
   Still deferred: when a disable's commit fails, a provider loaded in its
   place can stay `ACTIVE` while the restored one is `BLOCKED` (within a
   generation the running provider wins; a generation swap blocks both).
-  P4-3 (above) migrates built-in manifests to `api: 4`. P4-4 still deletes
-  `KNOWN_CAPABILITIES` and the capability properties. P4-5 still rejects
+  P4-3 (above) migrates built-in manifests to `api: 4`. P4-4 deletes
+  `KNOWN_CAPABILITIES` and the capability properties. P4-5 (above) rejects
   non-`api: 4` packages.
 
 - **Plugin kernel register-only specs (PR #941, issue #903, refactor P4-1).** `PluginSpec`
@@ -1927,8 +1947,9 @@ From the repository root, build an external source package with:
 node scripts/build-plugin.mjs --plugin plugins/<id> --output artifacts/plugins
 ```
 
-The source manifest must declare `api: 2`, `package_contract: 1`, an explicit
-runtime range, version, backend entry and renderer artifacts. Source entries are
+The source manifest must declare `api: 4`, `distribution: external`, a semantic
+version and a backend entry. Renderer entries are still compiled from
+`renderer` when that block is present. Source entries are
 `ui/index.tsx`, `background/index.ts`, and `surface/index.tsx`; each declared kind
 is compiled to its `renderer.<kind>.entry` `.mjs` path. The SDK and React remain
 host peers. Imported CSS generates a sibling stylesheet (for example

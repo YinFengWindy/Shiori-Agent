@@ -10,7 +10,7 @@ it when ``plugins/`` or the plugin host changes. The api 4 host contract
 
 Hot-reload order equality, dispose-zero for every plugin, runtime channel
 registration and named frontend exports need the P5 harness and the P7
-loader. api 2 still loads; rejecting it is P4-5.
+loader. A non-api-4 package still parses, and discovery marks it BLOCKED.
 """
 
 from __future__ import annotations
@@ -171,9 +171,15 @@ def test_builtin_plugin_manifest_matches_require(plugin_dir: Path) -> None:
     assert set(manifest.provides) <= provided
 
 
-def test_api_2_manifest_still_loads() -> None:
-    """P4-5 is what rejects api 2. A current fixture still loads."""
-    manifest = load_manifest(REPOSITORY_ROOT / "tests/fixtures/plugins/hello")
+def test_api_2_manifest_still_parses_so_a_blocked_row_can_name_it(tmp_path) -> None:
+    """Discovery blocks the package. Parsing still has to succeed to name it."""
+    package = tmp_path / "legacy"
+    package.mkdir()
+    (package / "manifest.yaml").write_text(
+        "api: 2\nid: legacy\ncapabilities: [tools]\ninject: [tools]\n",
+        encoding="utf-8",
+    )
+    manifest = load_manifest(package)
     assert manifest is not None
     assert manifest.api == 2
-    assert manifest.capabilities
+    assert manifest.id == "legacy"

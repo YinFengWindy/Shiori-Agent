@@ -10,7 +10,12 @@ from pathlib import Path
 from shiori_sdk.kernel import PackageContractError, PluginDiagnostic
 from agent.plugin_host.handle import PluginRecord
 from agent.plugin_host.host_contract import HostRuntimeContract
-from agent.plugin_host.manifest import ManifestError, PluginManifest, load_manifest
+from agent.plugin_host.manifest import (
+    UNSUPPORTED_API_REASON,
+    ManifestError,
+    PluginManifest,
+    load_manifest,
+)
 from agent.plugin_host.package_contract import validate_package
 from agent.plugin_host.package_paths import contained_file
 from agent.plugin_host.package_fingerprint import inspect_package_content
@@ -308,23 +313,36 @@ def _read_candidate(
         diagnostic = exc.diagnostic
     except ManifestError as exc:
         logger.warning("插件 manifest 无效: %s (%s)", child.name, exc)
-        if source == "builtin" and strict:
-            raise
         metadata = exc.metadata or {}
-        if source == "builtin" and "package_contract" not in metadata:
-            return None
-        manifest = PluginManifest(
-            id=str(metadata.get("id") or child.name),
-            version=str(metadata.get("version") or ""),
-            metadata=metadata,
-        )
-        diagnostic = PluginDiagnostic(
-            "invalid_manifest",
-            "validation",
-            "manifest",
-            str(exc),
-            str(child / "manifest.yaml"),
-        )
+        api = metadata.get("api")
+        # An old package that no longer parses (for example it names a
+        # ``host.`` key) stays on the roster as BLOCKED. Strict mode still
+        # aborts on a broken api: 4 manifest.
+        if type(api) is int and api != 4:
+            manifest = PluginManifest(
+                id=str(metadata.get("id") or child.name),
+                version=str(metadata.get("version") or ""),
+                api=api,
+                metadata=metadata,
+            )
+            diagnostic = _unsupported_api(child)
+        else:
+            if source == "builtin" and strict:
+                raise
+            if source == "builtin" and "package_contract" not in metadata:
+                return None
+            manifest = PluginManifest(
+                id=str(metadata.get("id") or child.name),
+                version=str(metadata.get("version") or ""),
+                metadata=metadata,
+            )
+            diagnostic = PluginDiagnostic(
+                "invalid_manifest",
+                "validation",
+                "manifest",
+                str(exc),
+                str(child / "manifest.yaml"),
+            )
     if manifest is None:
         # Old workspace/plugins/<id>/kv.json directories are data, not packages.
         return None
@@ -337,13 +355,13 @@ def _read_candidate(
         # installed workspace copy enters package validation and trust admission.
         # The plugin list reports it via find_uninstalled_external_sources.
         return None
-    if diagnostic is None:
-        diagnostic = _capabilities_only(manifest, child)
-    if diagnostic is None and (
-        source == "workspace" or "package_contract" in manifest.metadata
-    ):
+    if diagnostic is None and manifest.api != 4:
+        # Before trust and before package validation, so files and config stay
+        # and the plugin is not runnable (no setup, no core-key collision).
+        diagnostic = _unsupported_api(child)
+    if diagnostic is None and source == "workspace":
         try:
-            validate_package(child, host=host)
+            _ = validate_package(child, host=host)
         except PackageContractError as exc:
             diagnostic = exc.diagnostic
     if diagnostic is None and source == "workspace":
@@ -395,27 +413,12 @@ def _read_candidate(
     )
 
 
-# Diagnostic code for an api: 2 package that still relies on ``capabilities``.
-CAPABILITIES_RETIRED_CODE = "capabilities_retired"
-
-
-def _capabilities_only(
-    manifest: PluginManifest, plugin_dir: Path
-) -> PluginDiagnostic | None:
-    """Blocks an api: 2 package that lists capabilities but injects nothing.
-
-    Capabilities stopped granting services in P4-4, so its setup could only
-    fail on a missing context attribute. Rejecting every non-``api: 4``
-    package is P4-5.
-    """
-    if manifest.api != 2 or not manifest.capabilities:
-        return None
-    if manifest.inject or manifest.optional_inject:
-        return None
+def _unsupported_api(plugin_dir: Path) -> PluginDiagnostic:
+    """The one admission result for a package that is not ``api: 4``."""
     return PluginDiagnostic(
-        CAPABILITIES_RETIRED_CODE,
+        "unsupported_api",
         "validation",
-        "capabilities",
-        "capabilities 已不再授权，请改用 inject + ctx.require",
+        "api",
+        UNSUPPORTED_API_REASON,
         str(plugin_dir / "manifest.yaml"),
     )
