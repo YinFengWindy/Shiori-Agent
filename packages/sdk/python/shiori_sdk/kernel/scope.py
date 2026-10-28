@@ -128,8 +128,7 @@ class Scope:
         self._closing = True
         async with self._lock:
             errors: list[Exception] = []
-            subscriptions = [e for e in reversed(self._entries) if e.subscription]
-            for entry in subscriptions:
+            for entry in [e for e in reversed(self._entries) if e.subscription]:
                 await self._release(entry, errors)
             if self._workers:
                 _ = await asyncio.wait(set(self._workers), timeout=WATCH_GRACE)

@@ -56,8 +56,7 @@ class EventHub:
     """
 
     def __init__(self, rank: Callable[[str], int], limit: int = WATCH_LIMIT) -> None:
-        self._rank = rank
-        self._limit = limit
+        self._rank, self._limit = rank, limit
         self._seq = itertools.count()
         self._on: dict[type, list[_Subscription]] = {}
         self._watch: dict[type, list[_Subscription]] = {}

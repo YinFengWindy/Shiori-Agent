@@ -15,6 +15,7 @@ from agent.plugin_host.manifest import group_listening_channels
 from agent.plugin_host.package_fingerprint import inspect_package_content
 from agent.plugin_host.trust_store import PluginTrustStore
 from agent.plugin_host.trusted_imports import TrustedPluginImports
+from shiori_sdk.kernel import KernelState
 from shiori_sdk.storage import plugin_data_dir
 from core.roles.store import RoleStore
 from agent.tools.registry import ToolRegistry
@@ -392,6 +393,41 @@ async def test_declared_dependency_loads_first_and_its_api_is_scoped(tmp_path):
     assert all(row["state"] == "ACTIVE" for row in kernel.states())
     await kernel.unload("z_provider")
     assert kernel.loaded_count == 0
+
+
+@pytest.mark.asyncio
+async def test_enabled_plugin_cycled_with_a_disabled_one_is_not_a_dependency_cycle(
+    tmp_path: Path,
+):
+    for name, dependencies in (("enabled", "[disabled]"), ("disabled", "[enabled]")):
+        package = tmp_path / name
+        (package / "backend").mkdir(parents=True)
+        (package / "manifest.yaml").write_text(
+            f"api: 2\nid: {name}\ncapabilities: []\ndependencies: {dependencies}\n",
+            encoding="utf-8",
+        )
+        (package / "backend/plugin.py").write_text(
+            "async def setup(ctx):\n    raise AssertionError('must not run')\n",
+            encoding="utf-8",
+        )
+    kernel = make_kernel(
+        [tmp_path],
+        event_bus=EventBus(),
+        plugin_configs={"disabled": {"enabled": False}},
+    )
+    await kernel.load_all()
+
+    states = {item["id"]: item for item in kernel.states()}
+    assert states["disabled"]["state"] == "DISABLED"
+    assert states["enabled"]["state"] == "BLOCKED"
+    assert (
+        states["enabled"]["error"]
+        == "插件 enabled 依赖的 plugin:disabled 未启用或加载失败"
+    )
+    assert kernel.kernel.status("disabled") is None
+    enabled = kernel.kernel.status("enabled")
+    assert enabled is not None and enabled.diagnostic is not None
+    assert enabled.diagnostic.code == "dependency_unavailable"
 
 
 @pytest.mark.asyncio
@@ -1449,6 +1485,40 @@ async def test_external_package_never_executes_even_with_config_enablement(
     assert first[0]["diagnostic"]["code"] == "trust_required"
     assert kernel.loaded_count == 0
     assert not marker.exists()
+    await kernel.terminate_all(force=True)
+
+
+@pytest.mark.asyncio
+async def test_package_changed_after_discovery_is_not_started_by_the_kernel(
+    contract_package, tmp_path
+):
+    approved = inspect_package_content(contract_package)
+    PluginTrustStore(tmp_path).approve(contract_package, approved.fingerprint)
+    kernel = host_kernel(
+        [tmp_path],
+        external_plugin_dirs=[tmp_path],
+        settings=PluginGenerationSettings(workspace=tmp_path),
+    )
+    _ = kernel.discover()
+    marker = tmp_path / "executed.txt"
+    (contract_package / "backend/plugin.py").write_text(
+        "from pathlib import Path\n"
+        f"Path({str(marker)!r}).write_text('imported', encoding='utf-8')\n"
+        "async def setup(ctx): pass\n",
+        encoding="utf-8",
+    )
+
+    # Planned as trusted, then refused at load when the bytes no longer match.
+    await kernel.load_all()
+    [state] = kernel.states()
+    assert state["state"] == "UNTRUSTED"
+    assert state["diagnostic"]["code"] == "trust_changed"
+
+    await kernel.kernel.start([])
+
+    assert not marker.exists()
+    status = kernel.kernel.status("external_demo")
+    assert status is None or status.state is not KernelState.ACTIVE
     await kernel.terminate_all(force=True)
 
 

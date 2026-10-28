@@ -335,6 +335,65 @@ async def test_next_get_after_reload_returns_the_new_provider_generation() -> No
     assert kernel.get(key) == Generation(2)
 
 
+async def test_start_does_not_activate_a_register_only_plugin() -> None:
+    started: list[str] = []
+
+    async def setup(ctx: Context) -> None:
+        started.append(ctx.plugin_id)
+
+    kernel = Kernel()
+    await kernel.start(
+        [
+            PluginSpec("untrusted", setup, runnable=False),
+            PluginSpec("trusted", setup),
+        ]
+    )
+
+    assert started == ["trusted"]
+    trusted = kernel.status("trusted")
+    assert trusted is not None and trusted.state is KernelState.ACTIVE
+    assert kernel.status("untrusted") is None
+    with pytest.raises(KernelError) as refused:
+        _ = await kernel.activate("untrusted")
+    assert refused.value.diagnostic.code == "not_runnable"
+    assert started == ["trusted"]
+    assert kernel.status("untrusted") is None
+
+
+async def test_register_only_cycle_partner_blocks_as_not_enabled() -> None:
+    failed: list[str] = []
+
+    async def observe(ctx: Context) -> None:
+        async def record(event: PluginFailed) -> None:
+            failed.append(event.plugin_id)
+
+        ctx.watch(PluginFailed, record)
+
+    harness = KernelHarness()
+    kernel = await harness.start(PluginSpec("observe", observe))
+    await kernel.start(
+        [
+            PluginSpec("enabled", _idle, requires=("b_key",), provides=("a_key",)),
+            PluginSpec(
+                "disabled",
+                _idle,
+                requires=("a_key",),
+                provides=("b_key",),
+                runnable=False,
+            ),
+        ]
+    )
+    await harness.idle()
+
+    enabled = kernel.status("enabled")
+    assert enabled is not None and enabled.state is KernelState.BLOCKED
+    assert enabled.diagnostic is not None
+    assert enabled.diagnostic.code == "dependency_unavailable"
+    assert enabled.diagnostic.reason == "插件 enabled 依赖的 b_key 未启用或加载失败"
+    assert kernel.status("disabled") is None
+    assert failed == ["enabled"]
+
+
 async def test_closure_takes_optional_consumers_only_for_a_reload() -> None:
     kernel = Kernel()
     await kernel.start(
