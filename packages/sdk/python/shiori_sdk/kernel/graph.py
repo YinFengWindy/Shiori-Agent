@@ -16,8 +16,8 @@ class Plan:
     ``order`` lists plugins by dependency depth, then plugin id (§8.1),
     including register-only specs so rank stays stable. ``excluded`` maps
     plugins that must not load to the reason. ``owners`` maps each key a
-    single runnable plugin declares to that plugin, or, when none does, to one
-    register-only plugin that declares it.
+    single runnable plugin declares to that plugin, or, when none does, to the
+    register-only plugin with the smallest id among those declaring it.
     """
 
     order: tuple[str, ...]
@@ -75,10 +75,9 @@ def plan(specs: Sequence[PluginSpec], core: Collection[str]) -> Plan:
     owners = {name: held[0] for name, held in providers.items() if len(held) == 1}
     # A register-only provider still owns a key no runnable spec claimed, so a
     # dependent reads "未启用或加载失败" rather than "不存在". Core keys stay the host's.
-    for spec in live:
-        for name in spec.provides if not spec.runnable else ():
-            if name not in core:
-                _ = owners.setdefault(name, spec.id)
+    for spec in [spec for spec in live if not spec.runnable]:
+        for name in set(spec.provides) - set(core):
+            _ = owners.setdefault(name, spec.id)
 
     def edges(spec: PluginSpec, names: Iterable[str]) -> list[str]:
         found = {owners[name] for name in names if name in owners}
@@ -130,8 +129,10 @@ def _cycles(deps: Mapping[str, Sequence[str]]) -> list[tuple[str, ...]]:
         _ = visiting.pop()
         done.add(node)
 
-    # ``visit`` marks everything it reaches done, so each node is entered once.
-    _ = [visit(node) for node in deps if node not in done]
+    # ``visit`` marks everything it reaches done; the filter reads ``done`` as it
+    # goes, so each node is entered once.
+    for node in (node for node in deps if node not in done):
+        visit(node)
     return found
 
 

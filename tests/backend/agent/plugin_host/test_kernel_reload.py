@@ -10,6 +10,7 @@ from typing import Any
 
 import pytest
 from shiori_sdk.core.conversation import StepStarting
+from shiori_sdk.kernel import KernelState
 from shiori_sdk.rpc import PluginRpcError
 
 from agent.plugin_host import (
@@ -907,4 +908,67 @@ async def test_enable_refuses_a_dependency_only_a_swap_can_retry(probe, tmp_path
     assert caught.value.reason == "failed"
     assert caught.value.plugin_ids == ("provider",)
     assert _states(kernel)["consumer"] == "DISABLED"
+    await kernel.terminate_all(force=True)
+
+
+@pytest.mark.asyncio
+async def test_disabled_plugin_is_not_started_again_by_the_kernel(probe, tmp_path):
+    kernel, _, _, _ = await _kernel(tmp_path)
+    await _toggle(kernel, False)
+    probe.events.clear()
+
+    # ``Kernel.start`` sets up every runnable plugin that is not running, so the
+    # disabled provider must be register-only in the kernel by now.
+    await kernel.kernel.start([])
+
+    assert probe.events == []
+    status = kernel.kernel.status("provider")
+    assert status is not None and status.state is not KernelState.ACTIVE
+    assert _states(kernel)["provider"] == "DISABLED"
+    await kernel.terminate_all(force=True)
+
+
+@pytest.mark.asyncio
+async def test_providers_of_one_key_take_over_from_each_other_within_the_generation(
+    probe, tmp_path
+):
+    for plugin_id in ("first", "second"):
+        _write(
+            tmp_path,
+            plugin_id,
+            "capabilities: []\nprovides: [shared.engine]\n",
+            "import sys\n\nasync def setup(ctx):\n"
+            f"    sys.modules['reload_probe'].events.append(('setup', {plugin_id!r}))\n",
+        )
+    configs = {"second": {"enabled": False}}
+    kernel = host_kernel(
+        [tmp_path],
+        settings=PluginGenerationSettings(
+            workspace=tmp_path / "workspace",
+            plugin_configs=configs,
+            raw_plugin_configs={key: dict(value) for key, value in configs.items()},
+        ),
+    )
+    await kernel.load_all()
+
+    async def toggle(plugin_id: str, enabled: bool) -> None:
+        table = {"enabled": enabled}
+        _ = await kernel.set_enabled(
+            plugin_id, values=table, raw_values=dict(table), drain_timeout=5
+        )
+
+    # A disabled provider no longer counts as a duplicate of the one enabled.
+    await toggle("first", False)
+    await toggle("second", True)
+    assert _states(kernel) == {"first": "DISABLED", "second": "ACTIVE"}
+    first = kernel.kernel.status("first")
+    assert first is not None and first.diagnostic is None
+
+    # Enabled while the other runs, it is refused; once the other is disabled
+    # it starts within the generation instead of staying BLOCKED.
+    await toggle("first", True)
+    assert _states(kernel)["first"] == "BLOCKED"
+    await toggle("second", False)
+    assert _states(kernel) == {"first": "ACTIVE", "second": "DISABLED"}
+    assert probe.events == [("setup", "first"), ("setup", "second"), ("setup", "first")]
     await kernel.terminate_all(force=True)

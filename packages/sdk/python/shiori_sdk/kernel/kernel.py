@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Awaitable, Callable, Coroutine, Iterable, Sequence
+from collections.abc import Awaitable, Callable, Coroutine, Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from . import graph
@@ -43,8 +44,9 @@ class Context:
     """Everything a plugin's ``setup`` receives from the kernel."""
 
     def __init__(self, kernel: Kernel, spec: PluginSpec, scope: Scope) -> None:
-        self.plugin_id, self.data_dir, self.config = spec.id, spec.data_dir, spec.config
-        self.log = plugin_logger(spec.id)
+        self.plugin_id, self.log = spec.id, plugin_logger(spec.id)
+        self.data_dir: Path | None = spec.data_dir
+        self.config: Mapping[str, object] = spec.config
         self._kernel, self._spec, self._scope = kernel, spec, scope
 
     def provide[T](self, key: Key[T], impl: T) -> None:

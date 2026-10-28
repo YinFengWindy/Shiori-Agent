@@ -123,7 +123,7 @@ consolidates these additions and the subsequent #847 breaking migration.
 
 <!-- Record the next contract batch here, with PR references and breaking markers. -->
 
-- **Plugin kernel register-only specs (issue #903, refactor P4-1).** `PluginSpec`
+- **Plugin kernel register-only specs (PR #941, issue #903, refactor P4-1).** `PluginSpec`
   gains `runnable: bool = True`. `False` means the spec is registered only
   (the host uses this for a disabled plugin and for one that failed admission:
   untrusted, invalid contract, or missing host dependency). `Kernel.start`
@@ -143,7 +143,13 @@ consolidates these additions and the subsequent #847 breaking migration.
   and is not reported as `dependency_cycle`. A register-only spec that
   declares a core key does not fail planning. Existing specs stay runnable.
   No SDK or plugin version bump (D26). Bootstrap still activates through the
-  host, which now sets `runnable` from admission and the enable flag.
+  host, which now sets `runnable` from admission and the enable flag. The host
+  must keep `runnable` in step with each plugin's actual state within a
+  generation: enabling or disabling a plugin re-plans its spec, and so does a
+  load that fails admission after planning (package bytes changed since
+  discovery). After that re-plan, an enabled plugin that a lifted
+  `conflicts` / `replaces` / duplicate `provides` / cycle had `BLOCKED` is
+  loaded within the generation.
 
 - **breaking: capability `diagnostics` removed; observe injects `crash_reporting`
   (PR #940, issue #902, refactor P3-8, D13).** `CrashReporting` gains `session_key() ->

@@ -114,6 +114,11 @@ def plugin_enabled(manifest: PluginManifest, stored: Mapping[str, Any]) -> bool:
 # 恰好同名时污染 sys.modules。
 _KERNEL_NAMESPACE_COUNTER = itertools.count(1)
 
+# Diagnostic codes ``Kernel.plan`` gives a plugin it excludes before any setup.
+_PLAN_EXCLUSIONS = frozenset(
+    {"replaced", "conflict", "duplicate_provider", "dependency_cycle"}
+)
+
 # Renderer contribution points whose readiness gates the *display* of a
 # plugin as fully "ACTIVE" (issue #262 AC1). ``surface`` is intentionally not
 # gated here: unlike ``ui`` (main window) and ``background`` (the always-on
@@ -386,7 +391,9 @@ class PluginKernel:
         disabled plugin never loads its dependencies as a side effect; a
         dependency cycle blocks its members before any setup (§8.5).
         ``reactivating`` names plugins brought back by an in-generation reload;
-        their setup sees ``was_active`` and ``is_reload`` as True.
+        their setup sees ``was_active`` and ``is_reload`` as True. Re-planning
+        also loads the runnable plugins a plan exclusion had blocked and the
+        new plan admits (see ``_lifted_exclusions``).
         """
         records = self._records_by_id()
         selected: dict[str, PluginRecord] = {}
@@ -423,6 +430,7 @@ class PluginKernel:
                 await self._load_one(record, reactivated=False)
             elif record.manifest.id not in order:
                 self._block_excluded(record)
+        runnable.update(self._lifted_exclusions(order))
         for plugin_id in order:
             if (record := runnable.get(plugin_id)) is not None:
                 await self._load_one(record, reactivated=plugin_id in reactivating)
@@ -430,8 +438,33 @@ class PluginKernel:
     def _runnable(self, record: PluginRecord) -> bool:
         return record.admission is None and self._config_enabled(record.manifest)
 
+    def _lifted_exclusions(self, order: Sequence[str]) -> dict[str, PluginRecord]:
+        """Runnable plugins a plan exclusion BLOCKED that the new plan admits.
+
+        The kernel only settles newly excluded plugins, so one whose conflict,
+        replacement, duplicate ``provides`` or cycle partner was disabled keeps
+        that status. Its stale handle is dropped for the caller to load it in
+        plan order, as a generation swap would.
+        """
+        planned = set(order)
+        lifted: dict[str, PluginRecord] = {}
+        for handle in list(self._handles.values()):
+            status = self._kernel.status(handle.plugin_id)
+            if (
+                handle.state is PluginState.BLOCKED
+                and handle.plugin_id in planned
+                and self._runnable(handle.record)
+                and status is not None
+                and status.diagnostic is not None
+                and status.diagnostic.code in _PLAN_EXCLUSIONS
+            ):
+                del self._handles[handle.record.candidate_id]
+                lifted[handle.plugin_id] = handle.record
+        return lifted
+
     def _block_excluded(self, record: PluginRecord) -> None:
-        """Records the kernel's refusal (a dependency cycle) as a BLOCKED handle."""
+        """Records the kernel's plan exclusion (conflict, replacement, duplicate
+        ``provides``, dependency cycle) as a BLOCKED handle."""
         if record.candidate_id in self._handles:
             return
         status = self._kernel.status(record.manifest.id)
@@ -585,6 +618,9 @@ class PluginKernel:
                 )
                 handle.state = PluginState[record.admission.state]
                 handle.error = exc
+                # It was planned runnable: register it again as register-only
+                # so ``Kernel.start`` cannot run the changed code later.
+                _ = await self._kernel.plan([self._spec(record)])
                 return
         handle.state = PluginState.LOADING
         self._contents[record.candidate_id] = content
