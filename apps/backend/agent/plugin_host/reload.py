@@ -14,16 +14,36 @@ import asyncio
 import logging
 from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol
 
 from agent.plugin_host.handle import PluginHandle, PluginRecord, PluginState
-from agent.plugin_host.process_resources import ResourceRetention
 from agent.plugin_host.unload import (
     PluginReloadFailed,
     PluginReloadTimeout,
 )
 
 logger = logging.getLogger(__name__)
+
+
+class ProcessResourceHold(Protocol):
+    """Resources one in-generation reload keeps alive until ``release``."""
+
+    async def release(self) -> list[BaseException]:
+        """Ends the hold and returns close failures of resources nobody re-acquired."""
+        ...
+
+
+class ProcessResourceSource(Protocol):
+    """The process-level owner a generation retains resources through.
+
+    The concrete owner lives with the PROCESSES provider
+    (``infra.process.resources.ProcessResourceOwner``). This protocol is the
+    seam the assembly layer can call without importing that module.
+    """
+
+    def retain(self, generation: str, plugins: Iterable[str]) -> ProcessResourceHold:
+        """Keeps ``plugins``' resources while their instances reload."""
+        ...
 
 
 @dataclass(frozen=True)
@@ -50,7 +70,7 @@ class ReloadSteps:
     # plugin ids; returns the handle it ended up with.
     activate: Callable[[PluginRecord, frozenset[str]], Awaitable[PluginHandle | None]]
     # Holds the plugins' process resources across the swap, when the host has any.
-    retain: Callable[[tuple[str, ...]], ResourceRetention | None]
+    retain: Callable[[tuple[str, ...]], ProcessResourceHold | None]
 
 
 @dataclass(frozen=True)

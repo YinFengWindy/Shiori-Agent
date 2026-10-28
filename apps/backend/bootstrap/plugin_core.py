@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from agent.config import resolve_config_reference
-from agent.plugin_host.process_resources import (
+from infra.process.resources import (
     PluginProcessResourceAttachments,
     ProcessResourceOwner,
 )

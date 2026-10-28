@@ -10,7 +10,7 @@ from typing import Any
 
 import pytest
 from shiori_sdk.core.conversation import StepStarting
-from shiori_sdk.kernel import KernelState
+from shiori_sdk.kernel import KernelState, PluginFailed
 from shiori_sdk.rpc import PluginRpcError
 
 from agent.plugin_host import (
@@ -23,7 +23,7 @@ from agent.plugin_host import (
     PluginState,
 )
 from tests.support.plugin_kernel import host_kernel
-from agent.plugin_host.process_resources import ProcessResourceOwner
+from infra.process.resources import ProcessResourceOwner
 from agent.tools.registry import ToolRegistry
 from bus.event_bus import EventBus
 
@@ -218,8 +218,21 @@ async def _kernel(
     rpc = PluginRpcRegistry(EventBus())
     kernel = host_kernel([tmp_path], settings=settings, tools=tools, rpc=rpc)
     await kernel.load_all()
-    kernel.publish_process_resources()
+    assert settings.process_resources is not None
+    settings.process_resources.publish(kernel.namespace)
     return kernel, settings, tools, rpc
+
+
+def _failures(kernel: PluginKernel) -> list[str]:
+    """Ids of the ``PluginFailed`` events the kernel emits from now on."""
+    failed: list[str] = []
+
+    async def record(event: PluginFailed) -> PluginFailed:
+        failed.append(event.plugin_id)
+        return event
+
+    kernel.kernel.check(PluginFailed, record)
+    return failed
 
 
 def _reload(kernel: PluginKernel, label: str, timeout: float = 5):
@@ -247,11 +260,14 @@ async def _echo(rpc: PluginRpcRegistry[Any]) -> dict[str, object] | None:
 async def test_reload_reruns_only_the_closure_with_new_config(probe, tmp_path):
     kernel, settings, _, _ = await _kernel(tmp_path)
     probe.events.clear()
+    failed = _failures(kernel)
 
     result = await _reload(kernel, "v2")
 
     assert result.plugin_ids == ("provider", "consumer")
     assert result.cleanup_errors == ()
+    # The disposed consumer is not started by the new provider's start.
+    assert failed == []
     # Dependents drain and retire first and come back after the new provider;
     # the reloaded instances see the reload, and the bystander is untouched.
     assert probe.events == [
@@ -461,7 +477,7 @@ async def test_retired_generation_gate_never_admits_a_shared_tool_call(probe, tm
             tools=tools,
         )
         await kernel.load_all()
-        kernel.publish_process_resources()
+        owner.publish(kernel.namespace)
         return kernel, tools
 
     first, _ = await generation()
@@ -925,6 +941,55 @@ async def test_disabled_plugin_is_not_started_again_by_the_kernel(probe, tmp_pat
     status = kernel.kernel.status("provider")
     assert status is not None and status.state is not KernelState.ACTIVE
     assert _states(kernel)["provider"] == "DISABLED"
+    await kernel.terminate_all(force=True)
+
+
+@pytest.mark.asyncio
+async def test_failed_plugin_is_retried_only_when_a_load_selects_it(probe, tmp_path):
+    _write(
+        tmp_path,
+        "boom",
+        "capabilities: []\n",
+        "import sys\n\nasync def setup(ctx):\n"
+        "    probe = sys.modules['reload_probe']\n"
+        "    probe.events.append(('setup', 'boom'))\n"
+        "    if not probe.setup_gate.is_set():\n"
+        "        raise RuntimeError('boom')\n",
+    )
+    _write(
+        tmp_path,
+        "later",
+        "capabilities: []\n",
+        "import sys\n\nasync def setup(ctx):\n"
+        "    sys.modules['reload_probe'].events.append(('setup', 'later'))\n",
+    )
+    configs = {"later": {"enabled": False}}
+    kernel = host_kernel(
+        [tmp_path],
+        settings=PluginGenerationSettings(
+            workspace=tmp_path / "workspace",
+            plugin_configs=configs,
+            raw_plugin_configs={key: dict(value) for key, value in configs.items()},
+        ),
+    )
+    failed = _failures(kernel)
+    await kernel.load_all()
+    table = {"enabled": True}
+
+    # Another plugin's start within the generation does not run the failed one.
+    _ = await kernel.set_enabled(
+        "later", values=table, raw_values=dict(table), drain_timeout=5
+    )
+
+    assert _states(kernel) == {"boom": "FAILED", "later": "ACTIVE"}
+    assert probe.events == [("setup", "boom"), ("setup", "later")]
+    assert failed == ["boom"]
+
+    # Selected by a load, it is tried again.
+    probe.setup_gate.set()
+    assert await kernel.load("boom")
+    assert probe.events[-1] == ("setup", "boom")
+    assert failed == ["boom"]
     await kernel.terminate_all(force=True)
 
 

@@ -17,7 +17,11 @@ from shiori_sdk.channels.avatars import AvatarFetch
 
 from agent.plugin_host import PluginKernel
 from agent.plugin_host.capabilities import ContributionsByPlugin, contribute_to_list
-from agent.plugin_host.core_keys import HOST_CHANNELS, PluginBinding
+from agent.plugin_host.core_keys import (
+    HOST_CHANNELS,
+    PluginBinding,
+    required_core_key,
+)
 from agent.plugin_host.diagnostics import ChannelDeclarationError
 from agent.plugin_host.manifest import matches_channel_instance
 from core.channel_avatars import AvatarKey, ChannelAvatarStore
@@ -34,8 +38,12 @@ class PluginChannels(ContributionsByPlugin[Channel]):
 
 
 def active_plugin_channels(kernel: PluginKernel) -> list[Channel]:
-    """The channels the generation's active plugins contributed, in kernel order."""
-    return kernel.active_contributions(HOST_CHANNELS)
+    """The channels the generation's active plugins contributed, in kernel order.
+
+    Read from the started kernel (``host.channels``), not a kernel forwarder.
+    """
+    channels = required_core_key(kernel.kernel.get, HOST_CHANNELS)
+    return list(channels.active(kernel.active_plugin_ids))
 
 
 class ChannelsCapability:

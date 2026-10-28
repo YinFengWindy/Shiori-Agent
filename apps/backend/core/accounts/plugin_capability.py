@@ -19,10 +19,30 @@ from shiori_sdk.accounts.models import (
 )
 from shiori_sdk.accounts.routing import AccountRoute
 
-from agent.plugin_host.core_keys import PluginBinding
+from shiori_sdk.kernel import Kernel
+
+from agent.plugin_host.core_keys import HOST_ACCOUNTS, PluginBinding
 from core.accounts.registry import AccountRegistry
 
 logger = logging.getLogger(__name__)
+
+
+def publish_plugin_accounts(kernel: Kernel) -> None:
+    """Makes ``kernel``'s account index the one routing, sending and the UI see.
+
+    Loading a generation only registers accounts. The app publishes when it
+    starts, and a settings reload publishes when its pointer switches.
+    """
+    accounts = kernel.get(HOST_ACCOUNTS)
+    if accounts is not None:
+        accounts.publish()
+
+
+def drop_plugin_accounts(kernel: Kernel) -> None:
+    """Discards ``kernel``'s account index after its plugins have stopped."""
+    accounts = kernel.get(HOST_ACCOUNTS)
+    if accounts is not None:
+        accounts.drop()
 
 
 class PluginAccounts:

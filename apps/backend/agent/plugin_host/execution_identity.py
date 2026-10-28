@@ -50,6 +50,15 @@ class PluginExecutionIdentity:
             if key == plugin_id or row["directory"] == identity["directory"]
         )
 
+    def verify(self, plugin_id: str, directory: Path, fingerprint: str) -> None:
+        """Raises ``executed_content_changed`` unless ``matches``; records nothing."""
+        if not self.matches(plugin_id, directory, fingerprint):
+            raise PackageContractError(
+                "executed_content_changed",
+                "content",
+                "此插件已在本次运行执行过其他内容，请重启 Shiori 后重新确认",
+            )
+
     def record(self, plugin_id: str, directory: Path, fingerprint: str) -> None:
         """Persist before import, including failed imports that may have had effects."""
         session = os.environ.get("SHIORI_DESKTOP_APPLICATION_SESSION_ID", "")
@@ -58,12 +67,7 @@ class PluginExecutionIdentity:
         packages = self._read()
         identity = {"directory": str(directory.absolute()), "fingerprint": fingerprint}
         previous = packages.get(plugin_id)
-        if not self.matches(plugin_id, directory, fingerprint):
-            raise PackageContractError(
-                "executed_content_changed",
-                "content",
-                "此插件已在本次运行执行过其他内容，请重启 Shiori 后重新确认",
-            )
+        self.verify(plugin_id, directory, fingerprint)
         if previous == identity:
             return
         packages[plugin_id] = identity

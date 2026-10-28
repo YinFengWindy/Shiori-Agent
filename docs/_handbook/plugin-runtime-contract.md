@@ -123,6 +123,61 @@ consolidates these additions and the subsequent #847 breaking migration.
 
 <!-- Record the next contract batch here, with PR references and breaking markers. -->
 
+- **Bootstrap activation goes through `Kernel.start` (issue #903, refactor P4-2).**
+  `PluginKernel.load` / `load_all` and in-generation reload or enable plan the
+  generation's specs and call `Kernel.start`. The host no longer calls
+  `Kernel.activate` itself. `start` still activates only runnable specs that
+  are not already running (P4-1).
+  The pre-execution gates run before the round is planned, not in the
+  kernel: the host rechecks a workspace package's fingerprint and its
+  execution identity for every plugin the round would start. A refusal sets
+  the host handle to `UNTRUSTED` or `RESTART_REQUIRED` and plans the spec as
+  register-only, so the package is never imported, the kernel records no
+  status for it and emits no `PluginFailed`, and it excludes no one: a
+  duplicate `provides` partner, for example, starts in the same round. A
+  plugin that a later plan exclusion lift releases is checked the same way
+  before it starts. The spec `setup` imports exactly the content that was
+  checked (the verified bytes are kept in memory, not read again) and records
+  the execution identity just before the import. As a backstop it refuses,
+  with the reason, a start the host did not prepare (no `LOADING` handle,
+  disabled, or unchecked content); that becomes a kernel `setup_failed`.
+  `runnable` now means the host intends to run the plugin in this round: a
+  runnable spec without a scope is either being started by the current
+  `start` or excluded by the plan, with one window: when `unload` lifts an
+  exclusion, the freed plugin stays unstarted until the next load round picks
+  it up (screened like any other). A plugin whose setup fails (`FAILED` /
+  `RESTART_REQUIRED`, including a renderer-entry rollback), one blocked on an
+  unavailable dependency, one the round selected but does not start, and one
+  disposed (reload neighbors, disabled closures, unload) are re-planned
+  register-only, so another plugin's `start` never runs them as a side
+  effect. A later round that selects one (`load`, a dependency pull, an
+  in-generation reload or enable, a generation swap) plans it runnable again
+  and retries it. Renderer pending (`pending_renderer_kinds` and
+  `activation_token`) is recorded at the end of a successful spec setup, and
+  the host handle is `ACTIVE` before `start` moves on to the next plugin. A
+  failed setup still rolls the host handle back to `FAILED` or
+  `RESTART_REQUIRED` after the kernel releases the scope. When `start` is
+  cancelled, plugins it had not reached get back the handle they had before
+  (or none) instead of staying `LOADING`.
+  **breaking:** `PluginKernel.publish_accounts`, `publish_process_resources`
+  and `active_contributions` are removed. Account publish
+  (`publish_plugin_accounts`) runs when the app starts a generation and when
+  a settings reload publishes its pointer; drop (`drop_plugin_accounts`) runs
+  from `CoreRuntime.stop` after plugins terminate, not from `terminate_all`.
+  Process-resource publish is `ProcessResourceOwner.publish` on the
+  process-level owner. That owner, its retention, and
+  `PluginProcessResourceAttachments` moved from
+  `agent.plugin_host.process_resources` to `infra.process.resources`
+  (PROCESSES, with `HostProcesses`). `active_plugin_channels` reads
+  `host.channels` from the kernel and fails when it is missing. These are
+  host assembly APIs: plugin packages are not affected and need no change.
+  No SDK or plugin version bump (D26).
+  Still deferred: when a disable's commit fails, a provider loaded in its
+  place can stay `ACTIVE` while the restored one is `BLOCKED` (within a
+  generation the running provider wins; a generation swap blocks both).
+  P4-3+ still owns manifest `api: 4`, deleting `KNOWN_CAPABILITIES`, and
+  rejecting non-`api: 4` packages.
+
 - **Plugin kernel register-only specs (PR #941, issue #903, refactor P4-1).** `PluginSpec`
   gains `runnable: bool = True`. `False` means the spec is registered only
   (the host uses this for a disabled plugin and for one that failed admission:
@@ -142,19 +197,13 @@ consolidates these additions and the subsequent #847 breaking migration.
   disabled one requires it back, stays `BLOCKED` for the missing dependency
   and is not reported as `dependency_cycle`. A register-only spec that
   declares a core key does not fail planning. Existing specs stay runnable.
-  No SDK or plugin version bump (D26). Bootstrap still activates through the
-  host, which now sets `runnable` from admission and the enable flag. The host
-  must keep `runnable` in step with each plugin's actual state within a
-  generation: enabling or disabling a plugin re-plans its spec, and so does a
-  load that fails admission after planning (package bytes changed since
-  discovery). When enabling or disabling re-plans, an enabled plugin that a
-  lifted `conflicts` / `replaces` / duplicate `provides` / cycle had `BLOCKED`
-  is loaded within the generation. Not yet covered (P4-2): an exclusion lifted
-  by the mid-load admission re-plan (e.g. the `replaces` side fails admission)
-  leaves the replaced plugin `BLOCKED` until the next generation; and when a
-  disable's commit fails, a provider loaded in its place stays `ACTIVE` while
-  the restored one is `BLOCKED` (within a generation the running provider
-  wins, a generation swap blocks both).
+  No SDK or plugin version bump (D26). The host sets `runnable` from admission
+  and the enable flag and keeps it in step with each plugin's actual state
+  within a generation: enabling or disabling a plugin re-plans its spec.
+  When enabling or disabling re-plans, an enabled plugin that a lifted
+  `conflicts` / `replaces` / duplicate `provides` / cycle had `BLOCKED` is
+  loaded within the generation. Activation itself is `Kernel.start`, and the
+  pre-execution gate and failed plugins are handled as P4-2 (above) describes.
 
 - **breaking: capability `diagnostics` removed; observe injects `crash_reporting`
   (PR #940, issue #902, refactor P3-8, D13).** `CrashReporting` gains `session_key() ->

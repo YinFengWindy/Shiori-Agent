@@ -15,11 +15,15 @@ from agent.plugin_host.manifest import group_listening_channels
 from agent.plugin_host.package_fingerprint import inspect_package_content
 from agent.plugin_host.trust_store import PluginTrustStore
 from agent.plugin_host.trusted_imports import TrustedPluginImports
-from shiori_sdk.kernel import KernelState
+from shiori_sdk.kernel import PluginFailed
 from shiori_sdk.storage import plugin_data_dir
 from core.roles.store import RoleStore
 from agent.tools.registry import ToolRegistry
 from conversation.commands import command_menu
+from core.accounts.plugin_capability import (
+    drop_plugin_accounts,
+    publish_plugin_accounts,
+)
 from core.channels.plugin_capability import active_plugin_channels
 from bus.event_bus import EventBus
 import sys
@@ -73,6 +77,7 @@ async def test_account_test_plugin_reports_and_withdraws_live_state(tmp_path):
         role_store=role_store,
     )
     await first_kernel.load_all()
+    publish_plugin_accounts(first_kernel.kernel)
     assert first_kernel.loaded_count == 1
     first, second = first_kernel._dependency_api("account_demo")
     assert role_store.accounts.get(first).connection == "online"
@@ -91,6 +96,7 @@ async def test_account_test_plugin_reports_and_withdraws_live_state(tmp_path):
     await discarded.load_all()
     assert role_store.accounts.get(first).connection == "online"
     await discarded.terminate_all(force=True)
+    drop_plugin_accounts(discarded.kernel)
     assert role_store.accounts.get(first).connection == "online"
 
     replacement = host_kernel(
@@ -102,11 +108,13 @@ async def test_account_test_plugin_reports_and_withdraws_live_state(tmp_path):
     assert replacement._dependency_api("account_demo") == (first, second)
     assert role_store.accounts.get(first).connection == "online"
     assert role_store.accounts.get(first).runtime_active
-    replacement.publish_accounts()
+    publish_plugin_accounts(replacement.kernel)
     await first_kernel.terminate_all(force=True)
+    drop_plugin_accounts(first_kernel.kernel)
     assert role_store.accounts.get(first).runtime_active
     # The unloaded plugin's accounts leave the index instead of lingering.
     await replacement.terminate_all(force=True)
+    drop_plugin_accounts(replacement.kernel)
     assert role_store.accounts.list() == []
 
     disabled = host_kernel(
@@ -176,7 +184,9 @@ async def test_external_source_import_boundary_is_reclaimed_with_plugin_effects(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("strict", [False, True])
 async def test_setup_cancellation_rolls_back_before_force_cleanup(tmp_path, strict):
-    for name in ("active", "waiting"):
+    # ``zlater`` is ordered after ``waiting``, so the cancelled start never
+    # reaches it.
+    for name in ("active", "waiting", "zlater"):
         package = tmp_path / name
         (package / "backend").mkdir(parents=True)
         (package / "manifest.yaml").write_text(
@@ -215,6 +225,10 @@ async def test_setup_cancellation_rolls_back_before_force_cleanup(tmp_path, stri
         assert waiting.effects.labels == []
         assert waiting.state is PluginState.FAILED
         assert isinstance(waiting.error, asyncio.CancelledError)
+        assert str((tmp_path / "zlater").absolute()) not in kernel._handles
+        # Neither the cancelled plugin nor the unreached one is left runnable.
+        await kernel.kernel.start([])
+        assert kernel.kernel.status("zlater") is None
         assert await bus.emit([]) == ["active"]
         assert active_state == ["started"]
     finally:
@@ -1507,18 +1521,65 @@ async def test_package_changed_after_discovery_is_not_started_by_the_kernel(
         "async def setup(ctx): pass\n",
         encoding="utf-8",
     )
+    failed: list[PluginFailed] = []
 
-    # Planned as trusted, then refused at load when the bytes no longer match.
+    async def record_failure(event: PluginFailed) -> PluginFailed:
+        failed.append(event)
+        return event
+
+    kernel.kernel.check(PluginFailed, record_failure)
+
+    # Admitted at discovery, then refused at load when the bytes no longer
+    # match: the refusal is the host's, never a kernel setup failure.
     await kernel.load_all()
     [state] = kernel.states()
     assert state["state"] == "UNTRUSTED"
     assert state["diagnostic"]["code"] == "trust_changed"
+    assert kernel.kernel.status("external_demo") is None
+    assert failed == []
 
     await kernel.kernel.start([])
 
     assert not marker.exists()
-    status = kernel.kernel.status("external_demo")
-    assert status is None or status.state is not KernelState.ACTIVE
+    assert kernel.kernel.status("external_demo") is None
+    assert failed == []
+    await kernel.terminate_all(force=True)
+
+
+@pytest.mark.asyncio
+async def test_refused_duplicate_provider_leaves_the_key_to_the_other(tmp_path):
+    workspace = tmp_path / "workspace"
+    trust = PluginTrustStore(tmp_path)
+    for plugin_id in ("alpha", "beta"):
+        package = workspace / plugin_id
+        (package / "backend").mkdir(parents=True)
+        (package / "manifest.yaml").write_text(
+            f"api: 2\nid: {plugin_id}\ncapabilities: []\npackage_contract: 1\n"
+            "version: 1.0.0\nruntime_api: '>=3.1.1 <4.0.0'\n"
+            "entry: backend/plugin.py\nprovides: [shared.engine]\n",
+            encoding="utf-8",
+        )
+        (package / "backend/plugin.py").write_text(
+            "async def setup(ctx): pass\n", encoding="utf-8"
+        )
+        trust.approve(package, inspect_package_content(package).fingerprint)
+    kernel = host_kernel(
+        [workspace],
+        external_plugin_dirs=[workspace],
+        settings=PluginGenerationSettings(workspace=tmp_path),
+    )
+    _ = kernel.discover()
+    (workspace / "beta/backend/plugin.py").write_text(
+        "async def setup(ctx): raise RuntimeError('changed')\n", encoding="utf-8"
+    )
+
+    await kernel.load_all()
+
+    # beta is refused before the plan, so it is no duplicate of alpha.
+    assert {row["id"]: row["state"] for row in kernel.states()} == {
+        "alpha": "ACTIVE",
+        "beta": "UNTRUSTED",
+    }
     await kernel.terminate_all(force=True)
 
 
