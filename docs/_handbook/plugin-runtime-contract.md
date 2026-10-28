@@ -140,7 +140,37 @@ consolidates these additions and the subsequent #847 breaking migration.
   `dependencies`, `runtime`, `services` and `storage` are built per plugin
   at setup; the kernel sees a marker so planning does not block them.
   Capability properties still return that object when the name is injected,
-  so `api: 2` plugins and the old property path keep working.
+  so `api: 2` plugins and the old property path keep working. SDK helpers
+  that plugins call keep using the capability property until P4-4 for the
+  same reason: `register_runtime_rpc` (`shiori_sdk.managed.rpc`) reads
+  `ctx.rpc`, which an `api: 2` plugin gets from `capabilities: [rpc]` and an
+  `api: 4` plugin from `inject: [rpc]`; `ctx.require(RPC)` would reject the
+  former. `kv` and `services` are built when listed in `inject` or
+  `optional_inject` (like `config`), so `ctx.get(KV)` is not None when the
+  name is optional. An `api: 4` manifest may not list a `host.` name in
+  `inject`, `optional_inject` or `provides`: those keys hold raw binders and
+  are deleted in P4-4. `manifest.schema.json` says the same.
+  **breaking:** the core now provides these 28 public keys itself, so a
+  plugin that `provides` one of the names makes the whole generation fail to
+  start (refactor plan §8, duplicate provide with the core), where an older
+  plugin providing the same name used to load: `accounts`, `avatars`,
+  `background`, `background_results`, `channels`, `config`, `dependencies`,
+  `events`, `external_turns`, `http`, `kv`, `light_model`, `light_provider`,
+  `memory`, `models`, `process_resources`, `processes`, `resources`, `roles`,
+  `rpc`, `runtime`, `scene_observations`, `services`, `session_store`,
+  `storage`, `tool_turn`, `tools`, `workspace`. (`commands`,
+  `crash_reporting`, `main_model`, `main_provider` and `sessions` were
+  already core keys.) P4-5 marks every non-`api: 4` package `BLOCKED`, which
+  closes this window for old packages.
+  Testing: `FakePluginContext.require` / `get` resolve only names declared in
+  `inject` / `optional_inject` and otherwise raise the kernel's
+  `undeclared_key`, as the host does. A declared former-capability key with no
+  provider on the fake's kernel is served by the fake set as the attribute of
+  that name (`session_store` is `ctx.sessions`). The new `package_dir`
+  argument (also on `FakeExtensionContext`, `FakeServiceContext`,
+  `FakeMemoryPluginContext` and `FakeServiceProviderContext`) reads the three
+  lists from that package's `manifest.yaml`; `sdk_context` and
+  `FakeChannelPluginContext` pass the package under test.
   **Not in this slice:** deleting `KNOWN_CAPABILITIES`, `CapabilityNotGranted`,
   the context properties and `*PluginContext` adapters (P4-4); rejecting
   non-`api: 4` at install and deleting `runtime_api` / `package_contract`
@@ -149,8 +179,10 @@ consolidates these additions and the subsequent #847 breaking migration.
   enable flags) are unchanged. Citation is not a plugin (P3-4); the built-in
   set is the 23 packages under `plugins/`.
   The contract test checks every built-in manifest and that backend
-  `require` / `get` / `provide` names match it, and that one `api: 4` plugin
-  registering through `ctx.require(TOOLS)` is gone after dispose. Hot-reload
+  `require` / `get` / `provide` names match it; it runs when `plugins/` or
+  the plugin host changes, not in the default suite. The default suite keeps
+  that one `api: 4` plugin registering through `ctx.require(TOOLS)` is gone
+  after dispose, and the `api: 4` manifest rejections. Hot-reload
   order equality, dispose-zero for every plugin, runtime channel registration
   and named frontend exports stay with the P5 harness and P7.
 

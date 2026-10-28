@@ -199,7 +199,10 @@
           "runtime_api": false,
           "package_contract": false,
           "renderer": false,
-          "channels": false
+          "channels": false,
+          "inject": { "$ref": "#/$defs/publicKeyNames" },
+          "optional_inject": { "$ref": "#/$defs/publicKeyNames" },
+          "provides": { "$ref": "#/$defs/publicKeyNames" }
         }
       }
     },
@@ -236,6 +239,11 @@
       "description": "服务 Key 名称列表（shiori_sdk.kernel.Key.name）：非空、无首尾空白。",
       "type": "array",
       "items": { "type": "string", "pattern": "^\\S(.*\\S)?$" }
+    },
+    "publicKeyNames": {
+      "description": "api: 4 的服务 Key 名称不能以 host. 开头（宿主内部 Key）。",
+      "type": "array",
+      "items": { "not": { "type": "string", "pattern": "^host\\." } }
     },
     "channel": {
       "type": "object",

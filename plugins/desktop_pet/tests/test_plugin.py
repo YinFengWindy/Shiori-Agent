@@ -1,14 +1,17 @@
 """Setup registers pet-owned capabilities using only SDK test support."""
 
+from pathlib import Path
 import pytest
 from shiori_sdk.testing.service_context import FakeServiceContext
 from shiori_sdk.rpc import Concurrency
 from plugins.desktop_pet.backend.plugin import setup
 
+PACKAGE_DIR = Path(__file__).resolve().parents[1]
+
 
 @pytest.mark.asyncio
 async def test_setup_registers_scoped_tools_rpc_and_role_participant(tmp_path):
-    ctx = FakeServiceContext("desktop_pet", tmp_path)
+    ctx = FakeServiceContext("desktop_pet", tmp_path, package_dir=PACKAGE_DIR)
     await setup(ctx.as_capability())
     assert "pet_action" in ctx.tools.tools
     assert set(ctx.rpc.handlers) == {

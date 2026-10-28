@@ -213,10 +213,14 @@ def _parse_manifest(
         )
     inject = _parse_keys(raw, "inject")
     optional_inject = _parse_keys(raw, "optional_inject")
+    provides = _parse_keys(raw, "provides")
     if set(inject) & set(optional_inject):
         raise ManifestError("服务 Key 不能同时声明为 inject 和 optional_inject")
     if api == 4:
         _reject_removed_v4_fields(raw)
+        _reject_host_keys(
+            inject=inject, optional_inject=optional_inject, provides=provides
+        )
         capabilities: tuple[str, ...] = ()
         channels = _parse_contributed_channels(raw, inject)
     else:
@@ -239,7 +243,7 @@ def _parse_manifest(
         optional_dependencies=optional_dependencies,
         inject=inject,
         optional_inject=optional_inject,
-        provides=_parse_keys(raw, "provides"),
+        provides=provides,
         api=api,
         distribution=distribution,
         supports_hot_unload=supports_hot_unload,
@@ -268,6 +272,14 @@ def _reject_removed_v4_fields(raw: dict[str, object]) -> None:
             + "、".join(present)
             + "（能力改 inject，渠道改 contributes.channels）"
         )
+
+
+def _reject_host_keys(**fields: tuple[str, ...]) -> None:
+    """api: 4 never names a ``host.`` key: those hold raw binders (P4-4 removes them)."""
+    for name_field, names in fields.items():
+        host = [name for name in names if name.startswith("host.")]
+        if host:
+            raise ManifestError(f"api: 4 的 {name_field} 不能声明宿主内部 Key：{host}")
 
 
 def _parse_contributed_channels(

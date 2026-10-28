@@ -5,6 +5,8 @@ from pathlib import Path
 import pytest
 
 from shiori_sdk import CapabilityNotGranted, PluginRuntimeContext
+from shiori_sdk.core.services import HTTP, KV, RPC
+from shiori_sdk.kernel import KernelError
 from shiori_sdk.testing import FakePluginContext
 
 
@@ -96,3 +98,17 @@ def test_unknown_capability_names_are_rejected_like_the_host() -> None:
         ValueError, match=r"manifest 声明了未知 capability \['host_storage'\]"
     ):
         FakePluginContext(capabilities=("events", "host_storage"))
+
+
+def test_require_and_get_reject_undeclared_keys_like_the_host() -> None:
+    context = FakePluginContext(inject=("kv",), optional_inject=("http",))
+    kv, rpc = object(), object()
+    context.kv = kv  # type: ignore[attr-defined]
+    context.rpc = rpc  # type: ignore[attr-defined]
+    assert context.require(KV) is kv
+    assert context.get(HTTP) is None
+    # An attribute fake never stands in for a key the declaration lacks.
+    for lookup in (lambda: context.require(RPC), lambda: context.get(RPC)):
+        with pytest.raises(KernelError) as caught:
+            lookup()
+        assert caught.value.diagnostic.code == "undeclared_key"

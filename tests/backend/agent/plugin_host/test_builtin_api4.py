@@ -2,9 +2,11 @@
 
 This is the P4-3 slice of the §5.2 contract check: every package under
 ``plugins/`` is api 4, its backend ``require`` / ``get`` / ``provide`` names
-match the manifest, and it no longer reads capability attributes. One host
-kernel case proves ``ctx.require(TOOLS)`` registers a tool and dispose
-removes it.
+match the manifest, and it no longer reads capability attributes. It checks
+repository content, so it is not in the default suite; ``select_tests`` runs
+it when ``plugins/`` or the plugin host changes. The api 4 host contract
+(manifest rejection, ``ctx.require(TOOLS)`` through the kernel) is in
+``test_kernel.py``.
 
 Hot-reload order equality, dispose-zero for every plugin, runtime channel
 registration and named frontend exports need the P5 harness and the P7
@@ -18,12 +20,10 @@ from pathlib import Path
 
 import pytest
 
-from agent.plugin_host.manifest import ManifestError, load_manifest
-from agent.tools.registry import ToolRegistry
-from bus.event_bus import EventBus
+from agent.plugin_host.manifest import load_manifest
 from shiori_sdk.kernel import Key
 from shiori_sdk.runtime import KNOWN_CAPABILITIES
-from tests.support.plugin_kernel import REPOSITORY_ROOT, make_kernel
+from tests.support.plugin_kernel import REPOSITORY_ROOT
 
 _PLUGINS = REPOSITORY_ROOT / "plugins"
 _CORE_MODULES = (
@@ -175,43 +175,3 @@ def test_api_2_manifest_still_loads() -> None:
     assert manifest is not None
     assert manifest.api == 2
     assert manifest.capabilities
-
-
-def test_api_4_rejects_capabilities(tmp_path: Path) -> None:
-    (tmp_path / "manifest.yaml").write_text(
-        "api: 4\nid: demo\ncapabilities: []\n", encoding="utf-8"
-    )
-    with pytest.raises(ManifestError, match="capabilities"):
-        load_manifest(tmp_path)
-
-
-@pytest.mark.asyncio
-async def test_api4_require_tools_registers_and_dispose_clears(tmp_path: Path) -> None:
-    """ctx.require(TOOLS) reaches the host registry, and dispose unregisters it."""
-    package = tmp_path / "demo"
-    (package / "backend").mkdir(parents=True)
-    (package / "manifest.yaml").write_text(
-        "api: 4\nid: demo\ninject:\n  - tools\n", encoding="utf-8"
-    )
-    (package / "backend/plugin.py").write_text(
-        "from shiori_sdk.core.services import TOOLS\n"
-        "from shiori_sdk.tools import Tool\n"
-        "\n"
-        "class DemoTool(Tool):\n"
-        "    name = 'demo_tool'\n"
-        "    description = 'demo'\n"
-        "    parameters = {'type': 'object', 'properties': {}}\n"
-        "\n"
-        "    async def execute(self, **kwargs):\n"
-        "        return 'ok'\n"
-        "\n"
-        "async def setup(ctx):\n"
-        "    ctx.require(TOOLS).register(DemoTool())\n",
-        encoding="utf-8",
-    )
-    tools = ToolRegistry()
-    kernel = make_kernel([tmp_path], event_bus=EventBus(), tools=tools)
-    await kernel.load_all()
-    assert tools.get_tool("demo_tool") is not None
-    await kernel.terminate_all(force=True)
-    assert tools.get_tool("demo_tool") is None

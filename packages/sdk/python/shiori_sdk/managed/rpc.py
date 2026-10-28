@@ -5,7 +5,6 @@ import re
 import stat
 from pathlib import Path
 
-from shiori_sdk.core.services import RPC
 from shiori_sdk.plugin_services import ServicePluginContext
 from shiori_sdk.rpc import Concurrency
 
@@ -122,7 +121,11 @@ def register_runtime_rpc(
     async def remove(_params: dict[str, object]):
         return runtime.remove()
 
-    rpc = ctx.require(RPC)
+    # The capability property, not ``ctx.require(RPC)``: an api: 2 plugin
+    # declares ``rpc`` in capabilities, which require rejects, and on an api: 4
+    # plugin with ``rpc`` in inject the property returns require's view. P4-4
+    # deletes the property; this switches to require then.
+    rpc = ctx.rpc
     rpc.register("runtime.status", status, concurrency=Concurrency.READ_ONLY)
     for name, handler in [
         ("prepare", prepare),

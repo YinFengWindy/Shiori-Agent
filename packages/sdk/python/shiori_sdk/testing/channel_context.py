@@ -44,7 +44,8 @@ class FakeChannelDeclarations:
             raise ValueError(f"manifest.yaml 格式错误，期望 dict: {path}")
         self.values = loaded
         # api: 4 declares channels under contributes. Tests read the same list
-        # the api: 2 manifests kept at the top level.
+        # the api: 2 manifests kept at the top level. P4-4 / P4-5 drop the
+        # top-level path along with api: 2.
         if "channels" not in self.values:
             contributes = self.values.get("contributes")
             if isinstance(contributes, dict) and "channels" in contributes:
@@ -93,7 +94,7 @@ class FakeChannelPluginContext(FakePluginContext):
         account_ids: Callable[[str], str] | None = None,
     ):
         """``account_ids`` maps a platform account ID to the host account ID."""
-        super().__init__(plugin_id, plugin_dir)
+        super().__init__(plugin_id, plugin_dir, package_dir=plugin_dir)
         self.manifest = FakeChannelDeclarations(plugin_dir)
         self.channels = FakeChannels()
         self.accounts = FakeAccounts(plugin_id, id_factory=account_ids)

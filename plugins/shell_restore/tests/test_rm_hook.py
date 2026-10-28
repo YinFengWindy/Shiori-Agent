@@ -8,6 +8,8 @@ from shiori_sdk.core.tools import ToolCalling
 from shiori_sdk.testing.extensions import FakeExtensionContext
 from plugins.shell_restore.backend.plugin import setup
 
+PACKAGE_DIR = Path(__file__).resolve().parents[1]
+
 
 def _make_plugin_root(tmp_path: Path) -> Path:
     return tmp_path / "plugins"
@@ -27,7 +29,11 @@ def _calling(command: str, tool_name: str = "shell") -> ToolCalling:
 
 def _run_shell(root: Path, command: str) -> ToolCalling:
     async def run():
-        ctx = FakeExtensionContext("shell_restore", workspace=root.parent / "workspace")
+        ctx = FakeExtensionContext(
+            "shell_restore",
+            workspace=root.parent / "workspace",
+            package_dir=PACKAGE_DIR,
+        )
         await setup(ctx)
         result = await ctx.emit(_calling(command))
         await ctx.aclose()
@@ -39,7 +45,9 @@ def _run_shell(root: Path, command: str) -> ToolCalling:
 
 @pytest.mark.asyncio
 async def test_setup_rewrites_only_shell_calls_until_closed(tmp_path):
-    ctx = FakeExtensionContext("shell_restore", workspace=tmp_path)
+    ctx = FakeExtensionContext(
+        "shell_restore", workspace=tmp_path, package_dir=PACKAGE_DIR
+    )
     await setup(ctx)
     rewritten = await ctx.emit(_calling("rm notes.txt"))
     assert isinstance(rewritten, ToolCalling)

@@ -885,7 +885,8 @@ class PluginKernel:
         setup_fn = cast("Callable[[SdkRuntimeContext], Awaitable[None]]", setup)
         manifest = handle.record.manifest
         grants = manifest.capabilities
-        injected = set(manifest.inject)
+        # Built for the names in either inject list, like config (P4-3).
+        injected = {*manifest.inject, *manifest.optional_inject}
         settings = self._settings
         binding = PluginBinding(
             plugin_id=handle.plugin_id,

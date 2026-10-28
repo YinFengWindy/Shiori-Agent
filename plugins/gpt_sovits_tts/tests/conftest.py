@@ -2,6 +2,7 @@
 
 import io
 import wave
+from pathlib import Path
 
 import pytest
 from shiori_sdk.testing.service_context import FakeServiceContext
@@ -10,12 +11,14 @@ from shiori_sdk.testing.services import FakePluginServices
 from plugins.gpt_sovits_tts.backend.references import References
 from plugins.gpt_sovits_tts.backend.settings import VoiceStore
 
+PACKAGE_DIR = Path(__file__).resolve().parents[1]
+
 
 class ProviderContext(FakeServiceContext):
     """Compose independent fake services for this provider's setup entry point."""
 
     def __init__(self, workspace):
-        super().__init__("gpt_sovits_tts", workspace)
+        super().__init__("gpt_sovits_tts", workspace, package_dir=PACKAGE_DIR)
         self.services = FakePluginServices(self)
 
 

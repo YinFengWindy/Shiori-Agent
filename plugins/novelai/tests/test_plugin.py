@@ -1,5 +1,6 @@
 """Independent plugin setup and configuration contracts."""
 
+from pathlib import Path
 import json
 import pytest
 from shiori_sdk.core.conversation import ReasoningFinished
@@ -7,12 +8,14 @@ from shiori_sdk.core.tools import ToolCalled
 from shiori_sdk.testing.service_context import FakeServiceContext
 from plugins.novelai.backend.plugin import setup
 
+PACKAGE_DIR = Path(__file__).resolve().parents[1]
+
 
 @pytest.mark.parametrize("pushed", [False, True])
 async def test_setup_tracks_generated_media_and_releases_contributions(
     tmp_path, pushed
 ):
-    context = FakeServiceContext("novelai", tmp_path)
+    context = FakeServiceContext("novelai", tmp_path, package_dir=PACKAGE_DIR)
     await setup(context.as_capability())
     assert context.exported is context.tools.get_tool("generate_image")
     assert "regenerateMessageMedia" in context.rpc.handlers

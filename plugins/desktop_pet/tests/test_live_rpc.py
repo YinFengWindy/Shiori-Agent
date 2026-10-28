@@ -1,14 +1,17 @@
 """``live.*`` RPCs: names, lanes, role scoping and partial autosave."""
 
+from pathlib import Path
 import pytest
 from shiori_sdk.rpc import Concurrency
 from shiori_sdk.testing.service_context import FakeServiceContext
 
 from plugins.desktop_pet.backend.plugin import setup
 
+PACKAGE_DIR = Path(__file__).resolve().parents[1]
+
 
 async def test_config_rpcs_merge_fields_and_explain_errors(tmp_path):
-    ctx = FakeServiceContext("desktop_pet", tmp_path)
+    ctx = FakeServiceContext("desktop_pet", tmp_path, package_dir=PACKAGE_DIR)
     ctx.roles.create_role(role_id="mira", name="Mira", system_prompt="")
     await setup(ctx.as_capability())
     handlers = ctx.rpc.handlers

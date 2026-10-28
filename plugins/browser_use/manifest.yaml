@@ -1,7 +1,7 @@
 api: 4
 id: browser_use
 display_name: Browser Use
-version: 0.1.1
+version: "0.1.1"
 desc: agent-browser 或 ego(lite) 中的网页操作与截图
 default_enabled: false
 config_model: config:BrowserUseConfig

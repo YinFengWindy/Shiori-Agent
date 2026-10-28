@@ -1,14 +1,19 @@
 """Policy thresholds, signatures and setup without any host runtime."""
 
+from pathlib import Path
 import pytest
 from pydantic import ValidationError
 from plugins.tool_loop_guard.backend.plugin import setup
 from shiori_sdk.core.tools import ToolCalling, ToolVeto
 from shiori_sdk.testing.extensions import FakeExtensionContext
 
+PACKAGE_DIR = Path(__file__).resolve().parents[1]
+
 
 async def _context(config=None):
-    ctx = FakeExtensionContext("tool_loop_guard", config=config)
+    ctx = FakeExtensionContext(
+        "tool_loop_guard", config=config, package_dir=PACKAGE_DIR
+    )
     await setup(ctx)
     return ctx
 
@@ -98,7 +103,9 @@ async def test_batch_counts_once_and_ignores_polling_but_preserves_order():
 @pytest.mark.asyncio
 @pytest.mark.parametrize("value", [1, "abc"])
 async def test_invalid_config_is_not_coerced_to_a_default(value):
-    ctx = FakeExtensionContext("tool_loop_guard", config={"repeat_limit": value})
+    ctx = FakeExtensionContext(
+        "tool_loop_guard", config={"repeat_limit": value}, package_dir=PACKAGE_DIR
+    )
     with pytest.raises(ValidationError, match="repeat_limit"):
         await setup(ctx)
     for _ in range(3):

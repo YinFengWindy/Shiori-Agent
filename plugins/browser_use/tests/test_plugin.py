@@ -1,8 +1,11 @@
 """Independent plugin setup and configuration contracts."""
 
+from pathlib import Path
 import pytest
 from shiori_sdk.testing.service_context import FakeServiceContext
 from plugins.browser_use.backend.plugin import setup
+
+PACKAGE_DIR = Path(__file__).resolve().parents[1]
 
 
 @pytest.mark.parametrize(
@@ -12,7 +15,9 @@ from plugins.browser_use.backend.plugin import setup
 async def test_setup_is_lazy_and_unload_retires_retained_tools(
     tmp_path, config, prefix, count
 ):
-    context = FakeServiceContext("browser_use", tmp_path, config=config)
+    context = FakeServiceContext(
+        "browser_use", tmp_path, config=config, package_dir=PACKAGE_DIR
+    )
     await setup(context.as_capability())
     tool = context.tools.get_tool(prefix + "snapshot")
     assert tool is not None and len(context.tools.tools) == count

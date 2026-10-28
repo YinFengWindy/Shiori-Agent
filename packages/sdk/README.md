@@ -193,7 +193,11 @@ in memory; they never open host persistence. `sdk_context` reads the nearest
 `manifest.yaml` above the test file (within the pytest rootdir; override the
 `sdk_plugin_dir` fixture otherwise) and grants only its declared `capabilities`,
 validated against the host's `KNOWN_CAPABILITIES`, so undeclared access raises
-`CapabilityNotGranted` as in the host. The manifest is only read: `plugin_dir`
+`CapabilityNotGranted` as in the host. It also declares the manifest's
+`inject` / `optional_inject` / `provides`: `ctx.require` / `ctx.get` of a key
+not listed there raises the kernel's `undeclared_key`, as in the host. Other
+fake contexts take `package_dir=` to read the same lists from a package's
+manifest. The manifest is only read: `plugin_dir`
 is an isolated temporary directory, and bundled files are package assets. A
 plugin test emits a turn event through the fake context
 (`await sdk_context.emit(StepFinished(...))`), which runs the plugin's `on`

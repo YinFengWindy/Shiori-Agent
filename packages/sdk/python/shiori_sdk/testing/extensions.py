@@ -77,8 +77,8 @@ class FakeExtensionContext(FakePluginContext):
 
     ``workspace`` left as ``None`` models a host that lacks the service:
     reading it raises ``HostServiceUnavailable`` like the host does.
-    ``kernel``, ``inject`` and ``optional_inject`` are those of
-    ``FakePluginContext``: provide a ``CommandRegistry`` as ``COMMANDS`` on
+    ``kernel``, ``inject``, ``optional_inject`` and ``package_dir`` are those
+    of ``FakePluginContext``: provide a ``CommandRegistry`` as ``COMMANDS`` on
     ``kernel`` for a command plugin, a ``FakeSessions`` as ``SESSIONS`` when
     the command rolls a turn back, and ``MEMORY_ENGINE`` when the test has one.
     """
@@ -93,9 +93,14 @@ class FakeExtensionContext(FakePluginContext):
         kernel: Kernel | None = None,
         inject: tuple[str, ...] = (),
         optional_inject: tuple[str, ...] = (),
+        package_dir: Path | None = None,
     ):
         super().__init__(
-            plugin_id, kernel=kernel, inject=inject, optional_inject=optional_inject
+            plugin_id,
+            kernel=kernel,
+            inject=inject,
+            optional_inject=optional_inject,
+            package_dir=package_dir,
         )
         self._workspace = workspace
         self.config = FakeConfig(config)

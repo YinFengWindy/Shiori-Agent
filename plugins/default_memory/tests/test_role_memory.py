@@ -12,6 +12,8 @@ from shiori_sdk.testing.memory_context import FakeMemoryPluginContext
 from plugins.default_memory.backend.role_memory import register_role_semantic_memory
 from plugins.default_memory.backend.semantic.store import MemoryStore2
 
+PACKAGE_DIR = Path(__file__).resolve().parents[1]
+
 
 @pytest.mark.asyncio
 async def test_semantic_rpc_filters_role_status_and_page_and_rejects_cross_role_detail(
@@ -47,7 +49,7 @@ async def test_semantic_rpc_filters_role_status_and_page_and_rejects_cross_role_
             list_role_filter_values=store.list_role_filter_values,
             get_item_for_admin=store.get_item_for_admin,
         )
-        ctx = FakeMemoryPluginContext(workspace, roles=roles)
+        ctx = FakeMemoryPluginContext(workspace, roles=roles, package_dir=PACKAGE_DIR)
         register_role_semantic_memory(ctx, cast(Any, engine))
         list_method = "roles.memory.semantic.list"
         detail_method = "roles.memory.semantic.detail"

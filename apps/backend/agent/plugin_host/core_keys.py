@@ -42,6 +42,7 @@ from shiori_sdk.roles import Roles, SceneObservations
 from shiori_sdk.rpc import RpcCapability
 from shiori_sdk.sessions import PluginSessions
 from shiori_sdk.tools import ToolsCapability
+from shiori_sdk.core import services
 from shiori_sdk.kernel import Key, Scope
 from shiori_sdk.runtime import EventsCapability, HostServiceUnavailable
 
@@ -227,6 +228,9 @@ class HostBuilt:
     plugin's context. The kernel still needs a provider so planning does
     not block a plugin that injects one. ``PluginSetupContext.require``
     replaces this marker with the plugin's object. It is not a service.
+
+    Transitional: P4-4 / P4-5 delete it with the capability properties, once
+    the assembly layer no longer builds a v2 context per plugin.
     """
 
 
@@ -247,15 +251,15 @@ PER_PLUGIN_PUBLIC_KEYS = frozenset(
     }
 )
 
-HOST_BUILT_KEY_NAMES = frozenset(
-    {
-        "config",
-        "kv",
-        "dependencies",
-        "runtime",
-        "services",
-        "storage",
-    }
+# The public keys ``HostBuilt`` stands in for; bootstrap provides the marker
+# under each.
+HOST_BUILT_KEYS: tuple[Key[Any], ...] = (
+    services.CONFIG,
+    services.KV,
+    services.DEPENDENCIES,
+    services.RUNTIME,
+    services.SERVICES,
+    services.STORAGE,
 )
 
 

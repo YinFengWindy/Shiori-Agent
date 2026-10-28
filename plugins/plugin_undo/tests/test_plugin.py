@@ -1,5 +1,6 @@
 """Undo command business outcomes through the sessions and memory sockets."""
 
+from pathlib import Path
 from typing import Any, cast
 
 import pytest
@@ -12,6 +13,8 @@ from shiori_sdk.kernel import Kernel, PluginSpec
 from shiori_sdk.memory.engine import TurnRollback
 from shiori_sdk.testing.commands import FakeSessions
 from shiori_sdk.testing.extensions import FakeExtensionContext
+
+PACKAGE_DIR = Path(__file__).resolve().parents[1]
 
 
 def _rolled_back(turn_id: str = "cli:1:0") -> RollbackResult:
@@ -27,8 +30,7 @@ def _context(manager, memory=None) -> tuple[FakeExtensionContext, CommandRegistr
     ctx = FakeExtensionContext(
         "plugin_undo",
         kernel=kernel,
-        inject=("sessions", "commands"),
-        optional_inject=("memory_engine",),
+        package_dir=PACKAGE_DIR,
     )
     return ctx, commands
 
@@ -250,8 +252,7 @@ async def test_undo_reads_the_engine_again_after_reload():
     ctx = FakeExtensionContext(
         "plugin_undo",
         kernel=kernel,
-        inject=("sessions", "commands"),
-        optional_inject=("memory_engine",),
+        package_dir=PACKAGE_DIR,
     )
     await setup(ctx)
     handler = commands.handler("/undo")

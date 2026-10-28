@@ -1,7 +1,7 @@
 api: 4
 id: qq
 display_name: QQ（NapCat）
-version: 0.1.2
+version: '0.1.2'
 desc: 通过插件托管的 NapCat 接入的 QQ 渠道
 inject:
   - channels

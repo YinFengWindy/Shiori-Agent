@@ -1,6 +1,7 @@
 """Independent public-service publication double; no host or network is imported."""
 
 from collections.abc import Mapping
+from pathlib import Path
 
 from shiori_sdk.services import ServiceHandler, ServiceProviderContext
 from .context import FakePluginContext
@@ -47,8 +48,8 @@ class FakePluginServices:
 class FakeServiceProviderContext(FakePluginContext):
     """Minimal independent setup context for dynamically discoverable providers."""
 
-    def __init__(self, plugin_id: str):
-        super().__init__(plugin_id, capabilities=("services",))
+    def __init__(self, plugin_id: str, *, package_dir: Path | None = None):
+        super().__init__(plugin_id, capabilities=("services",), package_dir=package_dir)
         self.services = FakePluginServices(self)
 
     def as_capability(self) -> ServiceProviderContext:

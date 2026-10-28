@@ -66,13 +66,15 @@ def sdk_plugin_dir(request: pytest.FixtureRequest) -> Path:
 async def sdk_context(
     sdk_plugin_dir: Path, tmp_path: Path
 ) -> AsyncIterator[FakePluginContext]:
-    """Grants only the manifest's capabilities and always runs registered cleanup.
+    """Grants only the manifest's capabilities and keys; always runs cleanup.
 
     The manifest is only read; ``plugin_dir`` is an isolated temporary directory so
     tests never write into the plugin package (bundled files are package assets).
     """
     plugin_id, capabilities = load_manifest_grants(sdk_plugin_dir)
-    context = FakePluginContext(plugin_id, tmp_path, capabilities=capabilities)
+    context = FakePluginContext(
+        plugin_id, tmp_path, capabilities=capabilities, package_dir=sdk_plugin_dir
+    )
     try:
         yield context
     finally:

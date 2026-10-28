@@ -1,7 +1,7 @@
 api: 4
 id: telegram
 display_name: Telegram
-version: 0.1.2
+version: '0.1.2'
 desc: Telegram Bot 渠道
 inject:
   - channels

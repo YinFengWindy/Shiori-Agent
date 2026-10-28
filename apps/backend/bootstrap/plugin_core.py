@@ -45,6 +45,7 @@ from agent.plugin_host.core_keys import (
     HOST_TOOLS,
     HOST_WORKSPACE,
     CoreModule,
+    HOST_BUILT_KEYS,
     CoreProvide,
     HostBuilt,
 )
@@ -81,12 +82,9 @@ from shiori_sdk.core.services import (
     BACKGROUND,
     BACKGROUND_RESULTS,
     CHANNELS,
-    CONFIG,
-    DEPENDENCIES,
     EVENTS,
     EXTERNAL_TURNS,
     HTTP,
-    KV,
     LIGHT_MODEL,
     LIGHT_PROVIDER,
     MEMORY,
@@ -96,11 +94,8 @@ from shiori_sdk.core.services import (
     RESOURCES,
     ROLES,
     RPC,
-    RUNTIME,
     SCENE_OBSERVATIONS,
-    SERVICES,
     SESSION_STORE,
-    STORAGE,
     TOOL_TURN,
     TOOLS,
     WORKSPACE,
@@ -194,7 +189,7 @@ def plugin_core_modules(inputs: PluginCoreInputs) -> tuple[CoreModule, ...]:
     def provide_plugin_locals(provide: CoreProvide) -> None:
         """Keys the assembly layer builds per plugin (config, kv, and the rest)."""
         marker = HostBuilt()
-        for key in (CONFIG, KV, DEPENDENCIES, RUNTIME, SERVICES, STORAGE):
+        for key in HOST_BUILT_KEYS:
             _publish(provide, key, marker)
 
     def provide_crash_reporting(provide: CoreProvide) -> None:

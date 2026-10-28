@@ -1,7 +1,7 @@
 api: 4
 id: computer_use
 display_name: Computer Use
-version: 0.1.1
+version: "0.1.1"
 desc: Windows 窗口操作与截图
 default_enabled: false
 config_model: config:ComputerUseConfig

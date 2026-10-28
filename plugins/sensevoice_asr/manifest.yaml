@@ -1,7 +1,7 @@
 api: 4
 id: sensevoice_asr
 display_name: SenseVoiceSmall 语音识别
-version: 0.2.0
+version: "0.2.0"
 desc: 本机 CPU SenseVoiceSmall 语音识别 provider
 default_enabled: false
 entry: backend/plugin.py
