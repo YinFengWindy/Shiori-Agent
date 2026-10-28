@@ -87,6 +87,7 @@ from shiori_sdk.kernel import (
     PackageContractError,
     PluginDiagnostic,
     PluginSpec,
+    PluginStatus,
     RendererActivationError,
 )
 
@@ -140,7 +141,7 @@ _RENDERER_GATED_KINDS: tuple[str, ...] = ("ui", "background")
 
 
 class _ActivationRefused(Exception):
-    """Spec setup refused to run plugin code; the host handle is already set."""
+    """Spec setup refused a start the host did not prepare; carries the reason."""
 
 
 def plugin_key(plugin_id: str) -> Key[Any]:
@@ -182,8 +183,10 @@ class PluginKernel:
     """宿主装配层：发现、准入、信任与 capability 注入，生命周期交给 ``shiori_sdk.kernel``。
 
     每个插件句柄对应内核里的一个 ``PluginSpec``。激活走 ``Kernel.start``：
-    内核只 setup 可运行且尚未运行的 spec。启用配置、执行前指纹复核、执行身份、
-    渲染入口 pending 与失败回滚都在 spec 的 setup 里，不能被 ``start`` 绕过。
+    内核只 setup 可运行且尚未运行的 spec。指纹与执行身份在 plan 之前复核，被拒的
+    插件只登记，不进 ``start``；spec 的 setup 只用复核过的那份内容导入，并兜底
+    拒绝未经宿主准备的启动。``runnable`` 表示宿主本轮打算运行：失败、依赖阻塞、
+    已卸载的插件都重新 plan 成只登记，``start`` 不会顺带重跑它们。
     """
 
     def __init__(
@@ -226,6 +229,9 @@ class PluginKernel:
         )
         self._strict = strict
         self._handles: dict[str, PluginHandle] = {}
+        # Screened package content per candidate id, from the check before the
+        # plan until the spec setup imports exactly these verified bytes.
+        self._contents: dict[str, PackageContent | None] = {}
         self._kernel = Kernel()
         for module in core:
             module(self._kernel.provide)
@@ -398,6 +404,12 @@ class PluginKernel:
         reload; their setup sees ``was_active`` and ``is_reload`` as True.
         Re-planning also loads the runnable plugins a plan exclusion had
         blocked and the new plan admits (see ``_lifted_exclusions``).
+
+        Fingerprint and execution identity are checked before the plan, so a
+        refused package is register-only and excludes no one: a duplicate
+        provider of the same key, say, starts in this same round. A selected
+        plugin this round does not start is re-planned register-only; a
+        failed or blocked one is retried only when a later round selects it.
         """
         records = self._records_by_id()
         selected: dict[str, PluginRecord] = {}
@@ -413,30 +425,132 @@ class PluginKernel:
                     for dependency in record.manifest.dependencies
                     if dependency in records
                 )
-        # Disabled and admission-failed plugins are planned as register-only.
-        # ``Kernel.start`` will not run them. Only conflicting candidates stay
-        # out of the plan: their id is ambiguous. They still get handles so
-        # the Plugins page can show the conflict.
-        order = await self._kernel.plan(
-            self._spec(record)
-            for record in selected.values()
-            if records.get(record.manifest.id) is record
-        )
-        planned = set(order)
-        for record in selected.values():
-            if not self._runnable(record):
-                self._materialize_inactive(record)
-            elif record.manifest.id not in planned:
-                self._block_excluded(record)
         activate: dict[str, PluginRecord] = {}
-        for record in selected.values():
-            if self._eligible(record, planned):
-                activate[record.manifest.id] = record
-        activate.update(self._lifted_exclusions(order))
-        await self._start_plugins(activate, reactivating)
+        try:
+            for record in selected.values():
+                if self._wants_start(record):
+                    _ = self._screen(record)
+            # Disabled and admission-failed plugins (including the ones just
+            # refused) are planned as register-only. Only conflicting
+            # candidates stay out of the plan: their id is ambiguous. They
+            # still get handles so the Plugins page can show the conflict.
+            order = await self._kernel.plan(
+                self._spec(record)
+                for record in selected.values()
+                if records.get(record.manifest.id) is record
+            )
+            planned = set(order)
+            for record in selected.values():
+                if not self._runnable(record):
+                    self._materialize_inactive(record)
+                elif record.manifest.id not in planned:
+                    self._block_excluded(record)
+            for record in selected.values():
+                if self._wants_start(record) and record.manifest.id in planned:
+                    activate[record.manifest.id] = record
+            activate.update(await self._admit_lifted(order))
+            # Planned runnable above, but not started now: a dependency-BLOCKED
+            # one, say, must not be run by this or a later ``start``.
+            await self._park(
+                record
+                for record in selected.values()
+                if record.manifest.id in planned
+                and record.manifest.id not in activate
+                and records.get(record.manifest.id) is record
+                and self._runnable(record)
+                and not self._running(record.manifest.id)
+            )
+            await self._start_plugins(activate, reactivating)
+        finally:
+            for record in (*selected.values(), *activate.values()):
+                _ = self._contents.pop(record.candidate_id, None)
 
     def _runnable(self, record: PluginRecord) -> bool:
         return record.admission is None and self._config_enabled(record.manifest)
+
+    def _wants_start(self, record: PluginRecord) -> bool:
+        """Whether a round selecting ``record`` should start it, if planned.
+
+        Not yet loaded, FAILED, RESTART_REQUIRED or disposed: yes, a selection
+        is an explicit retry. Running, disabled, BLOCKED and the like: no.
+        """
+        if not self._runnable(record):
+            return False
+        existing = self._handles.get(record.candidate_id)
+        return existing is None or existing.state not in _SETTLED_HANDLE_STATES
+
+    def _screen(self, record: PluginRecord) -> bool:
+        """Checks a package against its approval before it is planned runnable.
+
+        A workspace package whose bytes no longer match the approved
+        fingerprint, or whose id already executed other content in this
+        desktop session, gets an ``UNTRUSTED`` / ``RESTART_REQUIRED``
+        admission, so ``_spec`` makes it register-only. Otherwise the verified
+        content is kept for the spec setup to import: the bytes checked here
+        are the bytes executed, never read from disk again.
+        """
+        if record.source != "workspace":
+            self._contents[record.candidate_id] = None
+            return True
+        try:
+            content = inspect_package_content(record.plugin_dir)
+            if content.fingerprint != record.fingerprint:
+                raise PackageContractError(
+                    "trust_changed",
+                    "trust",
+                    "插件内容已变化，请重启并重新确认信任",
+                )
+            if self._settings.workspace is not None:
+                PluginExecutionIdentity(self._settings.workspace).verify(
+                    record.manifest.id, record.plugin_dir, content.fingerprint
+                )
+        except PackageContractError as exc:
+            execution_changed = exc.diagnostic.code == "executed_content_changed"
+            record.admission = PluginDiagnostic(
+                ("executed_content_changed" if execution_changed else "trust_changed"),
+                "trust",
+                "content",
+                str(exc),
+                str(record.plugin_dir),
+                "RESTART_REQUIRED" if execution_changed else "UNTRUSTED",
+            )
+            return False
+        self._contents[record.candidate_id] = content
+        return True
+
+    async def _admit_lifted(self, order: Sequence[str]) -> dict[str, PluginRecord]:
+        """Screens the plugins ``_lifted_exclusions`` releases; returns those to start.
+
+        A refused one is re-planned register-only, which may release another.
+        """
+        admitted: dict[str, PluginRecord] = {}
+        lifted = self._lifted_exclusions(order)
+        while lifted:
+            refused: list[PluginRecord] = []
+            for plugin_id, record in lifted.items():
+                if self._screen(record):
+                    admitted[plugin_id] = record
+                else:
+                    refused.append(record)
+            if not refused:
+                break
+            for record in refused:
+                self._materialize_inactive(record)
+            order = await self._kernel.plan(self._spec(record) for record in refused)
+            lifted = self._lifted_exclusions(order)
+        return admitted
+
+    async def _park(self, records: Iterable[PluginRecord]) -> None:
+        """Re-plans ``records`` register-only: the host no longer means to run them.
+
+        Keeps ``runnable`` equal to what the host intends, so ``Kernel.start``
+        never runs a failed, blocked or disposed plugin as a side effect of
+        another plugin's start. A later round that selects one plans it
+        runnable again (``_load_records``).
+        """
+        specs = [replace(self._spec(record), runnable=False) for record in records]
+        if specs:
+            _ = await self._kernel.plan(specs)
 
     def _lifted_exclusions(self, order: Sequence[str]) -> dict[str, PluginRecord]:
         """Runnable plugins a plan exclusion BLOCKED that the new plan admits.
@@ -496,19 +610,18 @@ class PluginKernel:
         """Adapts one record to a kernel spec whose setup is the v2 setup.
 
         Admission-failed and disabled records are register-only (``runnable``
-        false), so ``Kernel.start`` will not run them. The same gates run again
-        at the start of ``setup`` — enable flag, fingerprint, execution
-        identity — so a runnable spec still cannot import code the gates refuse.
+        false), so ``Kernel.start`` will not run them; callers make a spec
+        register-only too while the host does not mean to run it (``_park``).
+        ``setup`` still refuses a start the host did not prepare (see
+        ``_prepared``), so a stray ``Kernel.start`` cannot import unscreened
+        code.
         """
         manifest = record.manifest
 
         async def setup(ctx: Context) -> None:
-            handle = self._handles[record.candidate_id]
+            handle, content = self._prepared(record)
             try:
-                # Gates run before the entry is imported. A refusal leaves the
-                # host handle settled and raises; the kernel then releases the
-                # empty scope instead of marking the plugin ACTIVE.
-                content = self._pass_activation_gates(handle)
+                self._record_execution(record, content)
                 handle.effects = self._kernel.scope(manifest.id)
                 handle.effects.subscribe(
                     lambda: self._rpc.communication.remove_plugin(manifest.id),
@@ -571,13 +684,6 @@ class PluginKernel:
         handle = self._handles.get(record.candidate_id)
         return handle is not None and handle.state is PluginState.ACTIVE
 
-    def _eligible(self, record: PluginRecord, planned: set[str]) -> bool:
-        """Whether this round should let ``Kernel.start`` run ``record``."""
-        if not self._runnable(record) or record.manifest.id not in planned:
-            return False
-        existing = self._handles.get(record.candidate_id)
-        return existing is None or existing.state not in _SETTLED_HANDLE_STATES
-
     def _materialize_inactive(self, record: PluginRecord) -> None:
         """Records a register-only plugin without entering ``Kernel.start``."""
         existing = self._handles.get(record.candidate_id)
@@ -604,39 +710,34 @@ class PluginKernel:
     ) -> None:
         """Runs ``Kernel.start`` for ``activate`` and mirrors the result on handles.
 
-        Other runnable plugins that are not running are handed to ``start`` as
-        register-only for this call, then planned back. ``start`` would
-        otherwise set up every runnable spec that has no scope, including
-        failures and disposed reload neighbors this round is not loading.
+        Every runnable spec without a scope is in ``activate``: the host parks
+        whatever else it does not mean to run, so ``start`` runs exactly these.
+        The ones that do not become ACTIVE are parked afterwards.
         """
         if not activate:
             return
-        quiesced: list[PluginRecord] = []
-        activate_ids = set(activate)
-        for plugin_id in self._kernel.order():
-            if plugin_id in activate_ids or self._running(plugin_id):
-                continue
-            record = self._records_by_id().get(plugin_id)
-            if record is not None and self._runnable(record):
-                quiesced.append(record)
         # Handles must exist before setup. Insert them in kernel order so
         # ``states()`` stays dependency order, then plugin id.
+        previous: dict[str, PluginHandle | None] = {}
         for plugin_id in self._kernel.order():
             record = activate.get(plugin_id)
             if record is not None:
-                self._prepare_activation(record, reactivated=plugin_id in reactivating)
-        specs = [replace(self._spec(record), runnable=False) for record in quiesced]
+                previous[plugin_id] = self._handles.get(record.candidate_id)
+                self._handles[record.candidate_id] = PluginHandle(
+                    record=record,
+                    calls=PluginCallGate(record.manifest.id),
+                    reactivated=plugin_id in reactivating,
+                    state=PluginState.LOADING,
+                )
+        before = {plugin_id: self._kernel.status(plugin_id) for plugin_id in activate}
         try:
-            await self._kernel.start(specs)
+            await self._kernel.start(self._spec(record) for record in activate.values())
         except BaseException:
-            # Cancellation: sync what already finished, then propagate. The
-            # next ``await`` would raise again and skip the rollback.
-            self._sync_handles(activate)
+            # Cancellation: roll the handles back synchronously first, so they
+            # are right even if parking is interrupted too, then propagate.
+            await self._park(self._sync_handles(activate, before, previous))
             raise
-        if quiesced:
-            _ = await self._kernel.plan(self._spec(record) for record in quiesced)
-        refused = self._sync_handles(activate)
-        await self._absorb_refusals(refused, reactivating)
+        await self._park(self._sync_handles(activate, before, previous))
 
     def _running(self, plugin_id: str) -> bool:
         """Whether the kernel currently holds ``plugin_id``'s scope."""
@@ -646,59 +747,37 @@ class PluginKernel:
             return False
         return True
 
-    def _prepare_activation(self, record: PluginRecord, *, reactivated: bool) -> None:
-        """Installs a LOADING handle for a plugin ``Kernel.start`` is about to run."""
-        existing = self._handles.get(record.candidate_id)
-        if existing is not None and existing.state in _SETTLED_HANDLE_STATES:
-            return
-        self._handles[record.candidate_id] = PluginHandle(
-            record=record,
-            calls=PluginCallGate(record.manifest.id),
-            reactivated=reactivated,
-            state=PluginState.LOADING,
-        )
+    def _prepared(
+        self, record: PluginRecord
+    ) -> tuple[PluginHandle, PackageContent | None]:
+        """The LOADING handle and screened content of a start the host prepared.
 
-    def _pass_activation_gates(self, handle: PluginHandle) -> PackageContent | None:
-        """Enable, fingerprint and execution identity, before the entry is imported.
-
-        A disabled plugin, or a workspace package whose bytes no longer match
-        the approved fingerprint, never reaches ``_import_entry``. The handle
-        is already ``DISABLED``, ``UNTRUSTED`` or ``RESTART_REQUIRED`` when
-        this raises ``_ActivationRefused``.
+        A backstop: the host only lets ``Kernel.start`` run plugins it gave a
+        LOADING handle and screened (``_load_records``). Anything else raises
+        with the reason, before any plugin code is imported.
         """
-        record = handle.record
+        handle = self._handles.get(record.candidate_id)
+        plugin_id = record.manifest.id
+        if (
+            handle is None
+            or handle.record is not record
+            or handle.state is not PluginState.LOADING
+        ):
+            raise _ActivationRefused(f"插件 {plugin_id} 未经宿主准备，不能启动")
         if not self._config_enabled(record.manifest):
-            handle.state = PluginState.DISABLED
-            logger.info("插件已禁用（配置状态）: %s", record.name)
-            raise _ActivationRefused(record.manifest.id)
-        if record.source != "workspace":
-            return None
-        try:
-            content = inspect_package_content(record.plugin_dir)
-            if content.fingerprint != record.fingerprint:
-                raise PackageContractError(
-                    "trust_changed",
-                    "trust",
-                    "插件内容已变化，请重启并重新确认信任",
-                )
-            if self._settings.workspace is not None:
-                PluginExecutionIdentity(self._settings.workspace).record(
-                    record.manifest.id, record.plugin_dir, content.fingerprint
-                )
-        except PackageContractError as exc:
-            execution_changed = exc.diagnostic.code == "executed_content_changed"
-            record.admission = PluginDiagnostic(
-                ("executed_content_changed" if execution_changed else "trust_changed"),
-                "trust",
-                "content",
-                str(exc),
-                str(record.plugin_dir),
-                "RESTART_REQUIRED" if execution_changed else "UNTRUSTED",
+            raise _ActivationRefused(f"插件 {plugin_id} 已禁用，不能启动")
+        if record.candidate_id not in self._contents:
+            raise _ActivationRefused(f"插件 {plugin_id} 的包内容未经复核，不能启动")
+        return handle, self._contents.pop(record.candidate_id)
+
+    def _record_execution(
+        self, record: PluginRecord, content: PackageContent | None
+    ) -> None:
+        """Persists the execution identity of screened workspace content, before import."""
+        if content is not None and self._settings.workspace is not None:
+            PluginExecutionIdentity(self._settings.workspace).record(
+                record.manifest.id, record.plugin_dir, content.fingerprint
             )
-            handle.state = PluginState[record.admission.state]
-            handle.error = exc
-            raise _ActivationRefused(record.manifest.id) from exc
-        return content
 
     def _mark_renderer_pending(self, handle: PluginHandle) -> None:
         """Marks renderer kinds still to confirm, and mints this attempt's token.
@@ -710,58 +789,47 @@ class PluginKernel:
         handle.pending_renderer_kinds = _required_renderer_kinds(handle.record)
         handle.activation_token = uuid4().hex
 
-    def _sync_handles(self, activate: Mapping[str, PluginRecord]) -> list[PluginRecord]:
-        """Copies kernel status onto host handles. Returns gate refusals.
+    def _sync_handles(
+        self,
+        activate: Mapping[str, PluginRecord],
+        before: Mapping[str, PluginStatus | None],
+        previous: Mapping[str, PluginHandle | None],
+    ) -> list[PluginRecord]:
+        """Copies kernel status onto host handles; returns the ones not ACTIVE.
 
         One plugin's setup failure does not abort the sweep (#262): the kernel
         has already released its scope, and the handle becomes ``FAILED`` or
-        ``RESTART_REQUIRED``. A gate refusal keeps the state the gate set.
+        ``RESTART_REQUIRED``. A plugin ``start`` never reached (it was
+        cancelled first) gets back the handle it had before, or none; one
+        whose release was interrupted keeps its LOADING handle.
         """
-        refused: list[PluginRecord] = []
+        stopped: list[PluginRecord] = []
         for plugin_id, record in activate.items():
-            handle = self._handles.get(record.candidate_id)
-            if handle is None or handle.state is PluginState.ACTIVE:
-                continue
-            if handle.state in {
-                PluginState.DISABLED,
-                PluginState.UNTRUSTED,
-                PluginState.RESTART_REQUIRED,
-            }:
-                refused.append(record)
-                continue
+            handle = self._handles[record.candidate_id]
             status = self._kernel.status(plugin_id)
-            if status is None:
+            if handle.state is PluginState.ACTIVE:
+                continue
+            stopped.append(record)
+            if status is None or status is before[plugin_id]:
+                if self._running(plugin_id):
+                    # Cancelled again while releasing: the kernel still holds
+                    # the scope, and the LOADING handle lets force cleanup
+                    # (``terminate_all``) finish it.
+                    continue
+                if (earlier := previous[plugin_id]) is None:
+                    del self._handles[record.candidate_id]
+                else:
+                    self._handles[record.candidate_id] = earlier
                 continue
             if status.state in {KernelState.BLOCKED, KernelState.REPLACED}:
                 handle.state = PluginState.BLOCKED
                 assert status.diagnostic is not None
                 handle.error = self._dependency_error(record, status.diagnostic)
                 continue
-            if status.state is not KernelState.ACTIVE:
-                assert status.error is not None
-                logger.warning("插件 %s 加载失败，回滚: %s", record.name, status.error)
-                self._after_rollback(handle, status.error, status.cleanup_errors)
-                continue
-            handle.state = PluginState.ACTIVE
-            logger.info("插件已加载: %s", record.name)
-        return refused
-
-    async def _absorb_refusals(
-        self, refused: list[PluginRecord], reactivating: frozenset[str]
-    ) -> None:
-        """Re-plans gate refusals as register-only and starts anyone that unblocks.
-
-        A fingerprint failure is not a setup of the plugin's code. Leaving the
-        spec runnable would let the next ``Kernel.start`` import it. Re-planning
-        can also admit a plugin the refused one had excluded; that plugin loads
-        in this same generation.
-        """
-        if not refused:
-            return
-        _ = await self._kernel.plan(self._spec(record) for record in refused)
-        lifted = self._lifted_exclusions(self._kernel.order())
-        if lifted:
-            await self._start_plugins(lifted, reactivating)
+            assert status.error is not None
+            logger.warning("插件 %s 加载失败，回滚: %s", record.name, status.error)
+            self._after_rollback(handle, status.error, status.cleanup_errors)
+        return stopped
 
     def _config_enabled(self, manifest: PluginManifest) -> bool:
         """Reads the authoritative enable flag; absent falls back to the manifest."""
@@ -894,6 +962,8 @@ class PluginKernel:
         handle.calls.retire()
         cleanup_errors = await self._kernel.deactivate(handle.plugin_id)
         self._after_rollback(handle, error, cleanup_errors)
+        # Retried only when a later round selects it, like a setup failure.
+        await self._park([handle.record])
 
     def _after_rollback(
         self,
@@ -1290,6 +1360,10 @@ class PluginKernel:
         # The kernel releases subscriptions, tasks, then effects LIFO; a
         # failed instance whose release was interrupted finishes here.
         errors = await self._kernel.deactivate(handle.plugin_id)
+        if handle.record.admission is None:
+            # Disposed: no later ``start`` may set it up again unless a round
+            # selects it (an in-generation reload or enable does).
+            await self._park([handle.record])
         # 配置 schema 的生命周期绑定在 handle 本身（真正被卸载/整代被处置时），
         # 不是 setup 回滚 effect 的一部分：见 _register_config_schema 的文档。
         self.config_schemas.unregister(handle.plugin_id)

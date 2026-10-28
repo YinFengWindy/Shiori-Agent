@@ -128,18 +128,35 @@ consolidates these additions and the subsequent #847 breaking migration.
   generation's specs and call `Kernel.start`. The host no longer calls
   `Kernel.activate` itself. `start` still activates only runnable specs that
   are not already running (P4-1).
-  The host spec's `setup` runs the pre-activation gates before it imports the
-  plugin entry: the enable flag, the pre-execution fingerprint recheck, and
-  execution-identity recording. A fingerprint or execution-identity refusal
-  sets the host handle to `UNTRUSTED` or `RESTART_REQUIRED`, does not import
-  the package, and re-plans the spec as register-only, so a later `start`
-  cannot run it. If that re-plan lifts a plan exclusion (`replaces`,
-  `conflicts`, duplicate `provides`, or a cycle), the newly admitted plugin
-  is started in the same generation. Renderer pending
-  (`pending_renderer_kinds` and `activation_token`) is recorded at the end of
-  a successful spec setup, and the host handle is `ACTIVE` before `start`
-  moves on to the next plugin. A failed setup still rolls the host handle
-  back to `FAILED` or `RESTART_REQUIRED` after the kernel releases the scope.
+  The pre-execution gates run before the round is planned, not in the
+  kernel: the host rechecks a workspace package's fingerprint and its
+  execution identity for every plugin the round would start. A refusal sets
+  the host handle to `UNTRUSTED` or `RESTART_REQUIRED` and plans the spec as
+  register-only, so the package is never imported, the kernel records no
+  status for it and emits no `PluginFailed`, and it excludes no one: a
+  duplicate `provides` partner, for example, starts in the same round. A
+  plugin that a later plan exclusion lift releases is checked the same way
+  before it starts. The spec `setup` imports exactly the content that was
+  checked (the verified bytes are kept in memory, not read again) and records
+  the execution identity just before the import. As a backstop it refuses,
+  with the reason, a start the host did not prepare (no `LOADING` handle,
+  disabled, or unchecked content); that becomes a kernel `setup_failed`.
+  `runnable` now means the host intends to run the plugin in this round: a
+  runnable spec without a scope is either being started by the current
+  `start` or excluded by the plan. A plugin whose setup fails (`FAILED` /
+  `RESTART_REQUIRED`, including a renderer-entry rollback), one blocked on an
+  unavailable dependency, one the round selected but does not start, and one
+  disposed (reload neighbors, disabled closures, unload) are re-planned
+  register-only, so another plugin's `start` never runs them as a side
+  effect. A later round that selects one (`load`, a dependency pull, an
+  in-generation reload or enable, a generation swap) plans it runnable again
+  and retries it. Renderer pending (`pending_renderer_kinds` and
+  `activation_token`) is recorded at the end of a successful spec setup, and
+  the host handle is `ACTIVE` before `start` moves on to the next plugin. A
+  failed setup still rolls the host handle back to `FAILED` or
+  `RESTART_REQUIRED` after the kernel releases the scope. When `start` is
+  cancelled, plugins it had not reached get back the handle they had before
+  (or none) instead of staying `LOADING`.
   **breaking:** `PluginKernel.publish_accounts`, `publish_process_resources`
   and `active_contributions` are removed. Account publish
   (`publish_plugin_accounts`) runs when the app starts a generation and when
@@ -150,7 +167,9 @@ consolidates these additions and the subsequent #847 breaking migration.
   `PluginProcessResourceAttachments` moved from
   `agent.plugin_host.process_resources` to `infra.process.resources`
   (PROCESSES, with `HostProcesses`). `active_plugin_channels` reads
-  `host.channels` through `kernel.get`. No SDK or plugin version bump (D26).
+  `host.channels` from the kernel and fails when it is missing. These are
+  host assembly APIs: plugin packages are not affected and need no change.
+  No SDK or plugin version bump (D26).
   Still deferred: when a disable's commit fails, a provider loaded in its
   place can stay `ACTIVE` while the restored one is `BLOCKED` (within a
   generation the running provider wins; a generation swap blocks both).
@@ -178,12 +197,11 @@ consolidates these additions and the subsequent #847 breaking migration.
   declares a core key does not fail planning. Existing specs stay runnable.
   No SDK or plugin version bump (D26). The host sets `runnable` from admission
   and the enable flag and keeps it in step with each plugin's actual state
-  within a generation: enabling or disabling a plugin re-plans its spec, and
-  so does a load whose pre-execution gate fails after planning (package bytes
-  changed since discovery). When enabling, disabling, or that gate re-plans,
-  an enabled plugin that a lifted `conflicts` / `replaces` / duplicate
-  `provides` / cycle had `BLOCKED` is loaded within the generation. Activation
-  itself is `Kernel.start` (P4-2, above).
+  within a generation: enabling or disabling a plugin re-plans its spec.
+  When enabling or disabling re-plans, an enabled plugin that a lifted
+  `conflicts` / `replaces` / duplicate `provides` / cycle had `BLOCKED` is
+  loaded within the generation. Activation itself is `Kernel.start`, and the
+  pre-execution gate and failed plugins are handled as P4-2 (above) describes.
 
 - **breaking: capability `diagnostics` removed; observe injects `crash_reporting`
   (PR #940, issue #902, refactor P3-8, D13).** `CrashReporting` gains `session_key() ->
