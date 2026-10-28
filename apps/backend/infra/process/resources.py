@@ -1,4 +1,10 @@
-"""Application-lifetime resources, with isolated candidate-generation attachments."""
+"""Process-owned plugin resources, part of the PROCESSES provider.
+
+``ProcessResourceOwner`` outlives any one plugin generation: attachments are
+per generation, ``publish`` switches the active generation, and ``retain``
+keeps resources across an in-generation reload. ``HostProcesses`` (native
+processes) lives beside this module; bootstrap provides both under PROCESSES.
+"""
 
 import asyncio
 from collections.abc import Callable, Iterable

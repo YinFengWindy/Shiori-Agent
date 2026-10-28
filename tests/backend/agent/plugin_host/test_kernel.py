@@ -20,6 +20,10 @@ from shiori_sdk.storage import plugin_data_dir
 from core.roles.store import RoleStore
 from agent.tools.registry import ToolRegistry
 from conversation.commands import command_menu
+from core.accounts.plugin_capability import (
+    drop_plugin_accounts,
+    publish_plugin_accounts,
+)
 from core.channels.plugin_capability import active_plugin_channels
 from bus.event_bus import EventBus
 import sys
@@ -73,6 +77,7 @@ async def test_account_test_plugin_reports_and_withdraws_live_state(tmp_path):
         role_store=role_store,
     )
     await first_kernel.load_all()
+    publish_plugin_accounts(first_kernel.kernel)
     assert first_kernel.loaded_count == 1
     first, second = first_kernel._dependency_api("account_demo")
     assert role_store.accounts.get(first).connection == "online"
@@ -91,6 +96,7 @@ async def test_account_test_plugin_reports_and_withdraws_live_state(tmp_path):
     await discarded.load_all()
     assert role_store.accounts.get(first).connection == "online"
     await discarded.terminate_all(force=True)
+    drop_plugin_accounts(discarded.kernel)
     assert role_store.accounts.get(first).connection == "online"
 
     replacement = host_kernel(
@@ -102,11 +108,13 @@ async def test_account_test_plugin_reports_and_withdraws_live_state(tmp_path):
     assert replacement._dependency_api("account_demo") == (first, second)
     assert role_store.accounts.get(first).connection == "online"
     assert role_store.accounts.get(first).runtime_active
-    replacement.publish_accounts()
+    publish_plugin_accounts(replacement.kernel)
     await first_kernel.terminate_all(force=True)
+    drop_plugin_accounts(first_kernel.kernel)
     assert role_store.accounts.get(first).runtime_active
     # The unloaded plugin's accounts leave the index instead of lingering.
     await replacement.terminate_all(force=True)
+    drop_plugin_accounts(replacement.kernel)
     assert role_store.accounts.list() == []
 
     disabled = host_kernel(

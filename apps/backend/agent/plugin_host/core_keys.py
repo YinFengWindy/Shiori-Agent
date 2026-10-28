@@ -163,7 +163,7 @@ HOST_HTTP: Key[HttpClient] = Key("host.http")
 HOST_PROCESS_RESOURCES: Key[PluginCapabilityBinder[PluginProcessResources]] = Key(
     "host.process_resources"
 )
-"""The ``process_resources`` capability: process-owned resources (``plugin_host``)."""
+"""The ``process_resources`` capability: process-owned resources (``infra.process``)."""
 
 HOST_LIGHT_PROVIDER: Key[ChatProvider] = Key("host.light_provider")
 """The ``light_provider`` capability: the host's light chat provider."""

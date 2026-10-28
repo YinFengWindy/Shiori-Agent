@@ -97,7 +97,8 @@ from agent.turns.turn_pushes import current_turn_pushes
 from conversation.push_sync import ExternalPushSyncService
 from proactive_v2.presence import PresenceStore
 from session.manager import SessionManager
-from agent.plugin_host.process_resources import ProcessResourceOwner
+from core.accounts.plugin_capability import drop_plugin_accounts
+from infra.process.resources import ProcessResourceOwner
 from conversation.background_results import ResultRunner
 
 logger = logging.getLogger(__name__)
@@ -202,12 +203,16 @@ class CoreRuntime:
         # A failed drain must still allow every resource disposal to run.
         steps = [("work.drain", self.drain)]
         if self.plugin_manager is not None:
-            steps.append(
-                (
-                    "plugins.terminate",
-                    lambda: self.plugin_manager.terminate_all(force=force),
-                )
-            )
+            manager = self.plugin_manager
+
+            async def terminate_plugins() -> None:
+                await manager.terminate_all(force=force)
+
+            async def drop_accounts() -> None:
+                drop_plugin_accounts(manager.kernel)
+
+            steps.append(("plugins.terminate", terminate_plugins))
+            steps.append(("accounts.drop", drop_accounts))
         steps.extend(
             [
                 ("mcp.shutdown", self.mcp_registry.shutdown),

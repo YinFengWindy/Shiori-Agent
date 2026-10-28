@@ -14,7 +14,8 @@ from conversation.commands import command_menu
 from core.channels.plugin_capability import active_plugin_channels
 from bootstrap.tools import CoreRuntime, build_core_runtime
 from bootstrap.runtime.dispatcher import RuntimeDispatcher
-from agent.plugin_host.process_resources import ProcessResourceOwner
+from core.accounts.plugin_capability import publish_plugin_accounts
+from infra.process.resources import ProcessResourceOwner
 from bootstrap.runtime.events import RuntimeEventBus
 from bootstrap.runtime.generations import GenerationManager, RuntimeCandidate
 from bootstrap.runtime.reload import RuntimeReloadMixin
@@ -182,7 +183,11 @@ class AppRuntime(RuntimeReloadMixin, RuntimeBackgroundMixin, RuntimeShutdownMixi
             current = RuntimeCandidate(1, self.core, self.config, published=True)
             self._generation_manager.start(current)
             if self.core.plugin_manager is not None:
-                self.core.plugin_manager.publish_process_resources()
+                # Accounts and process resources become authoritative together,
+                # after plugins have registered and before channels start.
+                manager = self.core.plugin_manager
+                publish_plugin_accounts(manager.kernel)
+                self._plugin_process_resources.publish(manager.namespace)
             self.bus.bind_runtime_admission(self.acquire)
 
             plugin_manager = getattr(self.core, "plugin_manager", None)

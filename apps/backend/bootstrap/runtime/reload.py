@@ -14,6 +14,7 @@ from bootstrap.runtime.generations import RuntimeCandidate, RuntimeRetention
 from bootstrap.tools import build_core_runtime
 from bootstrap.channels import start_channels
 from conversation.commands import command_menu
+from core.accounts.plugin_capability import publish_plugin_accounts
 from core.channels.plugin_capability import active_plugin_channels
 from bootstrap.runtime.construction import prepare_core_runtime
 from bootstrap.runtime.channel_barrier import channel_handover_barrier
@@ -192,12 +193,14 @@ class RuntimeReloadMixin:
         if commit is not None:
             commit()
         if candidate.core.plugin_manager is not None:
-            candidate.core.plugin_manager.publish_accounts()
+            publish_plugin_accounts(candidate.core.plugin_manager.kernel)
         previous = self._generation_manager.publish(candidate)
         self.config = candidate.config
         self.core = candidate.core
         if candidate.core.plugin_manager is not None:
-            candidate.core.plugin_manager.publish_process_resources()
+            self._plugin_process_resources.publish(
+                candidate.core.plugin_manager.namespace
+            )
         self._publish_background(previous, candidate)
         # No await separates durable commit and pointer publication.
         self._generation_manager.retire(previous)

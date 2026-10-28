@@ -210,6 +210,71 @@ async def test_initial_setup_cancellation_releases_plugin_and_runtime(
     assert app.http_resources._closed
 
 
+@pytest.mark.asyncio
+async def test_start_publishes_accounts_and_stop_drops_the_generation(
+    tmp_path, monkeypatch
+):
+    """Load registers accounts; start is what publishes them and process resources.
+
+    Stop drops the account generation itself. An account registered into that
+    generation with no plugin effect would survive plugin teardown, so an
+    empty list afterwards means the generation index was discarded.
+    """
+    from agent.plugin_host.core_keys import HOST_ACCOUNTS
+    from bootstrap.app import RuntimeFeatures
+    from core.roles.store import RoleStore
+
+    package = tmp_path / "host_plugins" / "account_demo"
+    (package / "backend").mkdir(parents=True)
+    (package / "manifest.yaml").write_text(
+        "api: 2\nid: account_demo\ncapabilities: [accounts]\n",
+        encoding="utf-8",
+    )
+    (package / "backend/plugin.py").write_text(
+        "async def setup(ctx):\n"
+        "    ctx.accounts.register(platform='demo', platform_account_id='101',\n"
+        "        config_ref='one', role_id='mira', display_name='One')\n",
+        encoding="utf-8",
+    )
+    RoleStore(tmp_path).create_role(role_id="mira", name="Mira", system_prompt="Mira")
+    monkeypatch.setattr(
+        "bootstrap.tools._resolve_plugin_dirs", lambda _: [package.parent]
+    )
+    app = AppRuntime(
+        Config(
+            provider="",
+            model="",
+            api_key="",
+            model_registrations=[],
+            memory_optimizer_enabled=False,
+        ),
+        tmp_path,
+        features=RuntimeFeatures(enable_message_channels=False, enable_proactive=False),
+    )
+    await app.start()
+    assert app.core is not None and app.core.plugin_manager is not None
+    registry = app.core.role_runtime_registry.repository.store.accounts
+    assert [row.record.platform_account_id for row in registry.list()] == ["101"]
+    assert app._plugin_process_resources._active == app.core.plugin_manager.namespace
+    service = app.core.plugin_manager.kernel.get(HOST_ACCOUNTS)
+    assert service is not None
+    registry.register(
+        plugin_id="lingering",
+        platform="demo",
+        platform_account_id="orphan",
+        config_ref="orphan",
+        token="kept",
+        role_id="mira",
+        generation=service._generation,
+    )
+    assert {row.record.platform_account_id for row in registry.list()} == {
+        "101",
+        "orphan",
+    }
+    await app.shutdown()
+    assert registry.list() == []
+
+
 def test_desktop_presence_is_app_owned_and_present_before_any_report(
     tmp_path, empty_config
 ):

@@ -23,7 +23,7 @@ from agent.plugin_host import (
     PluginState,
 )
 from tests.support.plugin_kernel import host_kernel
-from agent.plugin_host.process_resources import ProcessResourceOwner
+from infra.process.resources import ProcessResourceOwner
 from agent.tools.registry import ToolRegistry
 from bus.event_bus import EventBus
 
@@ -218,7 +218,8 @@ async def _kernel(
     rpc = PluginRpcRegistry(EventBus())
     kernel = host_kernel([tmp_path], settings=settings, tools=tools, rpc=rpc)
     await kernel.load_all()
-    kernel.publish_process_resources()
+    assert settings.process_resources is not None
+    settings.process_resources.publish(kernel.namespace)
     return kernel, settings, tools, rpc
 
 
@@ -461,7 +462,7 @@ async def test_retired_generation_gate_never_admits_a_shared_tool_call(probe, tm
             tools=tools,
         )
         await kernel.load_all()
-        kernel.publish_process_resources()
+        owner.publish(kernel.namespace)
         return kernel, tools
 
     first, _ = await generation()
