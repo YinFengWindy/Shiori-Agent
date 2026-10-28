@@ -20,7 +20,7 @@ from .formatting import CHANNEL
 if TYPE_CHECKING:
     from shiori_sdk.channels.chat_types import ChatTypeDeclaration
     from shiori_sdk.channels import ChannelContext
-    from shiori_sdk.channels.context import ChannelPluginContext
+    from shiori_sdk.runtime import PluginRuntimeContext
 
 
 class QQBotAccountsChannel(
@@ -32,7 +32,7 @@ class QQBotAccountsChannel(
 
     def __init__(
         self,
-        ctx: ChannelPluginContext,
+        ctx: PluginRuntimeContext,
         store: QQBotAccountStore,
         chat_types: tuple[ChatTypeDeclaration, ...],
     ) -> None:

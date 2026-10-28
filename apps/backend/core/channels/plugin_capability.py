@@ -1,9 +1,9 @@
-"""The channel plugin capabilities: ``channels`` and ``avatars`` (#901 P2).
+"""The channel services: ``channels`` and ``avatars``.
 
-``PluginChannels`` is the ``host.channels`` core service: it keeps each plugin's
+``PluginChannels`` is the ``CHANNELS`` core service: it keeps each plugin's
 contributed transports and hands the channel host those of the active plugins,
 in the order the plugin kernel gives (dependency depth, then id).
-``PluginAvatars`` is the ``host.avatars`` core service over the shared cache of
+``PluginAvatars`` is the ``AVATARS`` core service over the shared cache of
 channel senders' and chats' platform avatars (#514).
 """
 
@@ -11,14 +11,16 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from typing import cast
 
 from shiori_sdk.channels import Channel
 from shiori_sdk.channels.avatars import AvatarFetch
 
 from agent.plugin_host import PluginKernel
 from agent.plugin_host.capabilities import ContributionsByPlugin, contribute_to_list
+from shiori_sdk.core.services import CHANNELS
+
 from agent.plugin_host.core_keys import (
-    HOST_CHANNELS,
     PluginBinding,
     required_core_key,
 )
@@ -30,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 
 class PluginChannels(ContributionsByPlugin[Channel]):
-    """The ``host.channels`` core service of one plugin kernel generation."""
+    """The ``CHANNELS`` core service of one plugin kernel generation."""
 
     def for_plugin(self, binding: PluginBinding) -> ChannelsCapability:
         """The channels capability of the plugin ``binding`` describes."""
@@ -40,10 +42,10 @@ class PluginChannels(ContributionsByPlugin[Channel]):
 def active_plugin_channels(kernel: PluginKernel) -> list[Channel]:
     """The channels the generation's active plugins contributed, in kernel order.
 
-    Read from the started kernel (``host.channels``), not a kernel forwarder.
+    Read from the started kernel (``CHANNELS``), not a kernel forwarder.
     """
-    channels = required_core_key(kernel.kernel.get, HOST_CHANNELS)
-    return list(channels.active(kernel.active_plugin_ids))
+    channels = required_core_key(kernel.kernel.get, CHANNELS)
+    return list(cast(PluginChannels, channels).active(kernel.active_plugin_ids))
 
 
 class ChannelsCapability:

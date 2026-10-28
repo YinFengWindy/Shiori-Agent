@@ -1,5 +1,6 @@
 """Host fixture with one scoped tool contribution."""
 
+from shiori_sdk.core.services import TOOLS
 from shiori_sdk.tools import Tool
 
 
@@ -20,6 +21,6 @@ class WeatherTool(Tool):
 
 async def setup(ctx):
     """Owns the tool registration until unload."""
-    ctx.tools.register(
+    ctx.require(TOOLS).register(
         WeatherTool(), risk="read-only", search_hint="get current weather for a city"
     )

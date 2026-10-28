@@ -47,7 +47,7 @@ from .store import NovelAIStore
 from .tool import GenerateImageTool
 
 if TYPE_CHECKING:
-    from shiori_sdk.plugin_services import ServicePluginContext as PluginRuntimeContext
+    from shiori_sdk.runtime import PluginRuntimeContext
 
 logger = logging.getLogger(__name__)
 

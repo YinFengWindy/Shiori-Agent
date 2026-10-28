@@ -5,7 +5,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from shiori_sdk.managed.child import private_environment, run_owned
 from shiori_sdk.managed.paths import environment_path
-from shiori_sdk.plugin_services import ServicePluginContext
+from shiori_sdk.runtime import PluginRuntimeContext
 from shiori_sdk.core.services import PROCESSES
 from .runtime_manifest import (
     CACHE_VARIABLES,
@@ -19,7 +19,7 @@ from .runtime_manifest import (
 async def build_runtime(
     staging: Path,
     resources: Mapping[str, Path],
-    ctx: ServicePluginContext,
+    ctx: PluginRuntimeContext,
     root: Path,
     install_root: Path,
 ):

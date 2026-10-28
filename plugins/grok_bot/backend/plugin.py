@@ -2,7 +2,7 @@
 
 from shiori_sdk.accounts.targets import ACCOUNT_SEND_METHOD, ACCOUNT_TARGETS_METHOD
 from shiori_sdk.accounts.routing import ACCOUNT_RESOLVE_METHOD
-from shiori_sdk.channels.context import ChannelPluginContext
+from shiori_sdk.runtime import PluginRuntimeContext
 from shiori_sdk.rpc import Concurrency
 from shiori_sdk.core.services import ACCOUNTS, CHANNELS, RPC
 
@@ -11,7 +11,7 @@ from .config import CHANNEL
 from .delivery import GrokDelivery
 
 
-async def setup(ctx: ChannelPluginContext) -> None:
+async def setup(ctx: PluginRuntimeContext) -> None:
     """Register independent saved role connections using the standard channel host."""
     group = ctx.require(CHANNELS).group(CHANNEL)
     ctx.require(CHANNELS).add(group)

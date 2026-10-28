@@ -1,5 +1,7 @@
 from pydantic import BaseModel, Field
 
+from shiori_sdk.core.services import CONFIG
+
 
 class ConfigFixtureModel(BaseModel):
     """Fields used to verify the host's generic plugin config transaction."""
@@ -11,4 +13,4 @@ class ConfigFixtureModel(BaseModel):
 
 async def setup(ctx):
     """Validate the values the host applies to this fixture."""
-    ConfigFixtureModel.model_validate(ctx.config.as_dict())
+    ConfigFixtureModel.model_validate(ctx.require(CONFIG).as_dict())

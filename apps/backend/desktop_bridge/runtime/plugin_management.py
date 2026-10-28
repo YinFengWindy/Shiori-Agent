@@ -119,6 +119,7 @@ class RuntimePluginManagement:
                     # Declared capabilities and static channel declarations let
                     # the desktop group channel plugins without activating them.
                     "capabilities": list(record.manifest.capabilities),
+                    "inject": list(record.manifest.inject),
                     "channels": [
                         declaration.to_dict()
                         for declaration in record.manifest.channels

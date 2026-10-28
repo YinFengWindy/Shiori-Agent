@@ -10,6 +10,7 @@ from shiori_sdk.managed.artifacts import Artifact
 from shiori_sdk.managed.controller import ManagedRuntime
 from shiori_sdk.managed.installation import Installation
 from shiori_sdk.managed.paths import native_path
+from shiori_sdk.kernel import KernelError
 from shiori_sdk.managed.rpc import register_runtime_rpc
 from shiori_sdk.managed.service import OwnedService
 from shiori_sdk.testing.processes import FakeProcesses
@@ -19,7 +20,7 @@ DATA = b"fixed archive"
 
 
 def _register(tmp_path: Path) -> tuple[FakeServiceContext, ManagedRuntime]:
-    ctx = FakeServiceContext("sample", tmp_path / "workspace")
+    ctx = FakeServiceContext("sample", tmp_path / "workspace", inject=("rpc",))
     asset = Artifact(
         "package.7z",
         "https://example.test/fixed",
@@ -59,8 +60,18 @@ async def rpc(tmp_path, monkeypatch):
     await ctx.aclose()
 
 
-async def test_a_context_without_inject_registers_every_runtime_method(tmp_path):
-    """An api: 2 plugin declares ``rpc`` in capabilities, not in inject."""
+async def test_register_runtime_rpc_requires_the_rpc_inject(tmp_path):
+    """``register_runtime_rpc`` takes the RPC service with ``ctx.require``."""
+    bare = FakeServiceContext("sample", tmp_path / "workspace")
+    runtime = _register(tmp_path)[1]
+    with pytest.raises(KernelError) as caught:
+        register_runtime_rpc(
+            bare,
+            runtime,
+            namespace="sample-runtime",
+            import_suffix=(".7z", ".zip"),
+        )
+    assert caught.value.diagnostic.code == "undeclared_key"
     ctx, _runtime = _register(tmp_path)
     assert sorted(ctx.rpc.handlers) == [
         "runtime." + name

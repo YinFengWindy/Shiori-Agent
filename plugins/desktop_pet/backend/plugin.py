@@ -16,7 +16,7 @@ from .live_wiring import setup_live_engine
 from shiori_sdk.core.services import EVENTS, ROLES, RPC, SESSION_STORE, TOOLS, WORKSPACE
 
 if TYPE_CHECKING:
-    from shiori_sdk.plugin_services import ServicePluginContext as PluginRuntimeContext
+    from shiori_sdk.runtime import PluginRuntimeContext
 
 
 async def setup(ctx: "PluginRuntimeContext") -> None:

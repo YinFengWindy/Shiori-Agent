@@ -1,6 +1,6 @@
 """Private configuration and reference RPCs; no role extensions or host config."""
 
-from shiori_sdk.plugin_services import ServicePluginContext
+from shiori_sdk.runtime import PluginRuntimeContext
 from shiori_sdk.rpc import Concurrency
 from shiori_sdk.managed.controller import ManagedRuntime
 from shiori_sdk.core.services import ROLES, RPC, WORKSPACE
@@ -10,7 +10,7 @@ from .settings import RoleVoice
 
 
 def register_rpc(
-    ctx: ServicePluginContext, engine: SynthesisEngine, runtime: ManagedRuntime
+    ctx: PluginRuntimeContext, engine: SynthesisEngine, runtime: ManagedRuntime
 ) -> None:
     """Expose the plugin's settings and explicit role-save transaction."""
     store, references = engine.store, engine.references

@@ -54,40 +54,9 @@
       "type": "string"
     },
     "capabilities": {
-      "description": "插件 setup 可用的宿主 capability，取值与 shiori_sdk.runtime.KNOWN_CAPABILITIES 一致。",
+      "description": "api: 2 遗留字段。不再授予服务；插件用 inject 与 ctx.require。P4-5 拒绝非 api: 4。",
       "type": "array",
-      "items": {
-        "enum": [
-          "accounts",
-          "avatars",
-          "background",
-          "background_results",
-          "channels",
-          "config",
-          "dependencies",
-          "events",
-          "external_turns",
-          "http",
-          "kv",
-          "light_model",
-          "light_provider",
-          "memory",
-          "models",
-          "process_resources",
-          "processes",
-          "resources",
-          "roles",
-          "rpc",
-          "runtime",
-          "scene_observations",
-          "services",
-          "sessions",
-          "storage",
-          "tool_turn",
-          "tools",
-          "workspace"
-        ]
-      }
+      "items": { "type": "string" }
     },
     "channels": {
       "description": "静态渠道声明；非空时 capabilities 必须含 channels。",

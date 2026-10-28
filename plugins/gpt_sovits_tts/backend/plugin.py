@@ -1,10 +1,7 @@
 """Public TTS registration, role reconciliation, and provider resource ownership."""
 
-from typing import Protocol
-
-from shiori_sdk.plugin_services import ServicePluginContext
+from shiori_sdk.runtime import PluginRuntimeContext
 from shiori_sdk.role_events import RoleDeleted
-from shiori_sdk.services import ServiceProviderContext
 from shiori_sdk.voice import TTS_CONTRACT
 from shiori_sdk.managed.rpc import register_runtime_rpc
 from shiori_sdk.core.services import BACKGROUND, EVENTS, ROLES, SERVICES, WORKSPACE
@@ -17,11 +14,7 @@ from .settings import VoiceStore
 from .runtime import create_runtime, effective_settings
 
 
-class Context(ServicePluginContext, ServiceProviderContext, Protocol):
-    """Compose SDK context capabilities, independent of all consuming plugins."""
-
-
-async def setup(ctx: Context) -> None:
+async def setup(ctx: PluginRuntimeContext) -> None:
     """Reconcile private data and publish one serialized v2ProPlus service."""
     store = VoiceStore(ctx.require(WORKSPACE))
     references = References(store)

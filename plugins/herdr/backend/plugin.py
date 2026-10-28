@@ -1,6 +1,6 @@
 """Register lazy local execution; enabling the plugin starts no processes."""
 
-from shiori_sdk.plugin_services import ServicePluginContext
+from shiori_sdk.runtime import PluginRuntimeContext
 from shiori_sdk.storage import plugin_data_dir
 from shiori_sdk.core.services import (
     BACKGROUND_RESULTS,
@@ -26,7 +26,7 @@ from .agent_tools import AgentTool
 from .agent_watch import AgentWatcher
 
 
-async def setup(ctx: ServicePluginContext) -> None:
+async def setup(ctx: PluginRuntimeContext) -> None:
     """Assemble the task service from public SDK capabilities only."""
     directory = plugin_data_dir(ctx.require(WORKSPACE), ctx.plugin_id)
     directory.mkdir(parents=True, exist_ok=True)

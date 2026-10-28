@@ -16,7 +16,7 @@ from shiori_sdk.channels.services import (
 from shiori_sdk.http import HttpResources
 from shiori_sdk.runtime import EventsCapability
 from shiori_sdk.channels.chat_types import ChatTypeDeclaration, parse_chat_type
-from shiori_sdk.channels.context import ChannelPluginContext
+from shiori_sdk.runtime import PluginRuntimeContext
 from .accounts import FakeAccounts
 from .extensions import FakeConfig
 from .context import FakePluginContext
@@ -42,14 +42,13 @@ class FakeChannelDeclarations:
         loaded = yaml.safe_load((path / "manifest.yaml").read_text(encoding="utf-8"))
         if not isinstance(loaded, dict):
             raise ValueError(f"manifest.yaml 格式错误，期望 dict: {path}")
-        self.values = loaded
-        # api: 4 declares channels under contributes. Tests read the same list
-        # the api: 2 manifests kept at the top level. P4-4 / P4-5 drop the
-        # top-level path along with api: 2.
-        if "channels" not in self.values:
-            contributes = self.values.get("contributes")
-            if isinstance(contributes, dict) and "channels" in contributes:
-                self.values = {**self.values, "channels": contributes["channels"]}
+        contributes = loaded.get("contributes")
+        channels: object = []
+        if isinstance(contributes, dict):
+            listed = contributes.get("channels", [])
+            if isinstance(listed, list):
+                channels = listed
+        self.values = {**loaded, "channels": channels}
 
     def channel_chat_types(self, name: str) -> tuple[ChatTypeDeclaration, ...]:
         """Return the public declarations that the real setup function consumes."""
@@ -107,8 +106,8 @@ class FakeChannelPluginContext(FakePluginContext):
         self.avatars = FakeAvatars()
         self.tools = FakeTools()
 
-    def as_capability(self) -> ChannelPluginContext:
-        """Check this composition at the same setup boundary as the host."""
+    def as_capability(self) -> PluginRuntimeContext:
+        """The same setup boundary the host passes to ``setup``."""
         return self
 
     async def aclose(self) -> None:

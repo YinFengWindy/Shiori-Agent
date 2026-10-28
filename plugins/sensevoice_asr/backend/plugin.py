@@ -2,13 +2,11 @@
 
 import base64
 import asyncio
-from typing import Protocol
 
 from shiori_sdk.files.audio import pcm_wav_duration
 from shiori_sdk.files.staging import staged_import_file
-from shiori_sdk.plugin_services import ServicePluginContext
+from shiori_sdk.runtime import PluginRuntimeContext
 from shiori_sdk.rpc import Concurrency
-from shiori_sdk.services import ServiceProviderContext
 from shiori_sdk.voice import ASR_CONTRACT
 from shiori_sdk.managed.rpc import register_runtime_rpc
 from shiori_sdk.core.services import RPC, SERVICES, WORKSPACE
@@ -18,11 +16,7 @@ from .settings import SettingsStore
 from .runtime import create_runtime, effective_settings
 
 
-class Context(ServicePluginContext, ServiceProviderContext, Protocol):
-    """Compose existing SDK services without depending on another plugin."""
-
-
-async def setup(ctx: Context) -> None:
+async def setup(ctx: PluginRuntimeContext) -> None:
     """Publish the public ASR contract and private settings/test endpoints."""
     store = SettingsStore(ctx.require(WORKSPACE))
     client = SenseVoiceClient()

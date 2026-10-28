@@ -3,8 +3,6 @@
 from collections.abc import Awaitable, Callable, Mapping
 from typing import Protocol, TypedDict
 
-from .runtime import PluginRuntimeContext
-
 type ServiceHandler = Callable[[dict[str, object]], Awaitable[dict[str, object]]]
 
 
@@ -27,10 +25,3 @@ class PluginServices(Protocol):
         methods: Mapping[str, ServiceHandler],
         metadata: Mapping[str, object] | None = None,
     ) -> None: ...
-
-
-class ServiceProviderContext(PluginRuntimeContext, Protocol):
-    """Setup context requiring the explicit services manifest capability."""
-
-    @property
-    def services(self) -> PluginServices: ...

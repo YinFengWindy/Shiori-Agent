@@ -28,7 +28,6 @@ from agent.plugin_host.core_keys import (
     HOST_CONFIG_REFERENCES,
     CoreModule,
     PluginBinding,
-    bind_core_capabilities,
     required_core_key,
 )
 from agent.plugin_host.config_schema import (
@@ -56,7 +55,7 @@ from agent.plugin_host.package_fingerprint import (
 from agent.plugin_host.plugin_data import (
     open_plugin_kv,
 )
-from agent.plugin_host.runtime_context import PluginRuntimeContext, PluginSetupContext
+from agent.plugin_host.runtime_context import PluginRuntimeContext
 from agent.plugin_host.runtime_lifecycle import PluginRuntimeLifecycle
 from agent.plugin_host.trust_store import PluginTrustStore
 from agent.plugin_host.execution_identity import PluginExecutionIdentity
@@ -884,8 +883,7 @@ class PluginKernel:
             )
         setup_fn = cast("Callable[[SdkRuntimeContext], Awaitable[None]]", setup)
         manifest = handle.record.manifest
-        grants = manifest.capabilities
-        # Built for the names in either inject list, like config (P4-3).
+        # Built for the names in either inject list, like config.
         injected = {*manifest.inject, *manifest.optional_inject}
         settings = self._settings
         binding = PluginBinding(
@@ -895,8 +893,7 @@ class PluginKernel:
             scope=handle.effects,
             calls=handle.calls,
         )
-        core_capabilities = bind_core_capabilities(grants, self._kernel.get, binding)
-        context: PluginSetupContext = PluginRuntimeContext(
+        context = PluginRuntimeContext(
             plugin_id=handle.plugin_id,
             plugin_dir=handle.record.plugin_dir,
             manifest=manifest,
@@ -912,11 +909,7 @@ class PluginKernel:
                 optional_declared=manifest.optional_dependencies,
             ),
             storage=PluginStorage(),
-            kv=(
-                self._open_kv(handle.plugin_id)
-                if "kv" in grants or "kv" in injected
-                else None
-            ),
+            kv=self._open_kv(handle.plugin_id) if "kv" in injected else None,
             runtime=PluginRuntimeLifecycle(
                 settings.is_reload or reactivated,
                 handle.effects.drainers,
@@ -927,25 +920,14 @@ class PluginKernel:
                 ScopedPluginServices(
                     self._rpc.services, handle.plugin_id, handle.effects, handle.calls
                 )
-                if "services" in grants or "services" in injected
+                if "services" in injected
                 else None
             ),
             publish_api=lambda api: setattr(handle, "instance", api),
             kernel_context=kernel_context,
             binding=binding,
-            **core_capabilities,
         )
-        context.as_service_provider_context()
-        context.as_hook_context()
-        context.as_command_context()
-        context.as_observe_context()
-        context.as_service_context()
-        context.as_channel_context()
-        await setup_fn(
-            context.as_memory_context()
-            if "memory" in handle.record.manifest.capabilities
-            else context.as_sdk_context()
-        )
+        await setup_fn(context)
 
     def _open_kv(self, plugin_id: str) -> PluginKVStore:
         """The plugin's KV store under the generation's workspace (``kv``).

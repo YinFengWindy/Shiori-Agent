@@ -6,10 +6,10 @@ from typing import TYPE_CHECKING
 from shiori_sdk.core.services import ACCOUNTS, CHANNELS, KV, RPC
 
 if TYPE_CHECKING:
-    from shiori_sdk.channels.context import ChannelPluginContext
+    from shiori_sdk.runtime import PluginRuntimeContext
 
 
-async def setup(ctx: "ChannelPluginContext") -> None:
+async def setup(ctx: "PluginRuntimeContext") -> None:
     """Registers saved Bots and the RPCs that add, connect and remove them."""
     from .account_api import TelegramAccountApi
     from .bots import TelegramBots

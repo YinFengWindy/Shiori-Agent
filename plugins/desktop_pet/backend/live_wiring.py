@@ -28,11 +28,11 @@ from .pet_state import RolePetStateStore
 from .voice_preferences import VoicePreferencesStore
 
 if TYPE_CHECKING:
-    from shiori_sdk.plugin_services import ServicePluginContext
+    from shiori_sdk.runtime import PluginRuntimeContext
 
 
 def setup_live_engine(
-    ctx: "ServicePluginContext",
+    ctx: "PluginRuntimeContext",
     login: BilibiliLoginService,
     output: LiveReplyOutput,
 ) -> LiveEngine:

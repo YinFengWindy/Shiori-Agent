@@ -10,7 +10,7 @@ import pytest
 
 from agent.plugin_host import PluginState
 from agent.plugin_host import PluginGenerationSettings, PluginRpcRegistry
-from agent.plugin_host.core_keys import HOST_LIGHT_PROVIDER
+from shiori_sdk.core.services import LIGHT_PROVIDER
 from agent.plugin_host.manifest import group_listening_channels
 from agent.plugin_host.package_fingerprint import inspect_package_content
 from agent.plugin_host.trust_store import PluginTrustStore
@@ -45,25 +45,27 @@ async def test_account_test_plugin_reports_and_withdraws_live_state(tmp_path):
     package = tmp_path / "account_demo"
     (package / "backend").mkdir(parents=True)
     (package / "manifest.yaml").write_text(
-        "api: 2\nid: account_demo\ncapabilities: [accounts]\n",
+        "api: 2\nid: account_demo\ncapabilities: [accounts]\ninject: [accounts]\n",
         encoding="utf-8",
     )
     (package / "backend/plugin.py").write_text(
+        "from shiori_sdk.core.services import ACCOUNTS\n"
         "async def setup(ctx):\n"
-        "    first = ctx.accounts.register(platform='demo', "
+        "    accounts = ctx.require(ACCOUNTS)\n"
+        "    first = accounts.register(platform='demo', "
         "platform_account_id='101', config_ref='one', role_id='mira', "
         "display_name='One')\n"
-        "    second = ctx.accounts.register(platform='demo', "
+        "    second = accounts.register(platform='demo', "
         "platform_account_id='102', config_ref='two', role_id='other', "
         "display_name='Two')\n"
-        "    ctx.accounts.report(first.record.id, connection='online', "
+        "    accounts.report(first.record.id, connection='online', "
         "capabilities=frozenset({'contacts'}))\n"
-        "    ctx.accounts.report(second.record.id, connection='login_required')\n"
-        "    ctx.accounts.unregister(second.record.id)\n"
-        "    second = ctx.accounts.register(platform='demo', "
+        "    accounts.report(second.record.id, connection='login_required')\n"
+        "    accounts.unregister(second.record.id)\n"
+        "    second = accounts.register(platform='demo', "
         "platform_account_id='102', config_ref='two', role_id='other', "
         "display_name='Two')\n"
-        "    ctx.accounts.report(second.record.id, connection='login_required')\n"
+        "    accounts.report(second.record.id, connection='login_required')\n"
         "    ctx.expose((first.record.id, second.record.id))\n",
         encoding="utf-8",
     )
@@ -133,12 +135,14 @@ async def test_failed_account_plugin_setup_discards_unpublished_identity(tmp_pat
     package = tmp_path / "failed_account_demo"
     (package / "backend").mkdir(parents=True)
     (package / "manifest.yaml").write_text(
-        "api: 2\nid: failed_account_demo\ncapabilities: [accounts]\n",
+        "api: 2\nid: failed_account_demo\ncapabilities: [accounts]\n"
+        "inject: [accounts]\n",
         encoding="utf-8",
     )
     (package / "backend/plugin.py").write_text(
+        "from shiori_sdk.core.services import ACCOUNTS\n"
         "async def setup(ctx):\n"
-        "    ctx.accounts.register(platform='demo', "
+        "    ctx.require(ACCOUNTS).register(platform='demo', "
         "platform_account_id='101', config_ref='one', role_id='mira')\n"
         "    raise RuntimeError('setup failed')\n",
         encoding="utf-8",
@@ -190,12 +194,13 @@ async def test_setup_cancellation_rolls_back_before_force_cleanup(tmp_path, stri
         package = tmp_path / name
         (package / "backend").mkdir(parents=True)
         (package / "manifest.yaml").write_text(
-            f"api: 2\nid: {name}\ncapabilities: [events]\n"
+            f"api: 2\nid: {name}\ncapabilities: [events]\ninject: [events]\n"
             "supports_hot_unload: false\n",
             encoding="utf-8",
         )
         (package / "backend/plugin.py").write_text(
             "import asyncio\n"
+            "from shiori_sdk.core.services import EVENTS\n"
             "async def setup(ctx):\n"
             "    state = ['started']\n"
             "    ctx.expose(state)\n"
@@ -203,7 +208,7 @@ async def test_setup_cancellation_rolls_back_before_force_cleanup(tmp_path, stri
             "    async def on_event(event):\n"
             f"        event.append('{name}')\n"
             "        return event\n"
-            "    ctx.events.on(list, on_event)\n"
+            "    ctx.require(EVENTS).on(list, on_event)\n"
             + ("    await asyncio.Event().wait()\n" if name == "waiting" else ""),
             encoding="utf-8",
         )
@@ -409,13 +414,14 @@ def test_discover_finds_all_top_level_plugins():
 
 _V2_PLUGIN = """
 from agent.lifecycle.types import BeforeTurnCtx
+from shiori_sdk.core.services import EVENTS, KV
 
 seen: list[str] = []
 
 
 async def setup(ctx):
-    ctx.events.on(BeforeTurnCtx, _on_turn)
-    ctx.kv.set("booted", True)
+    ctx.require(EVENTS).on(BeforeTurnCtx, _on_turn)
+    ctx.require(KV).set("booted", True)
 
 
 async def _on_turn(event):
@@ -424,7 +430,9 @@ async def _on_turn(event):
 """.strip()
 
 _V2_MANIFEST = (
-    "api: 2\nid: v2demo\nversion: '0.1'\n" "capabilities:\n  - events\n  - kv\n"
+    "api: 2\nid: v2demo\nversion: '0.1'\n"
+    "capabilities:\n  - events\n  - kv\n"
+    "inject:\n  - events\n  - kv\n"
 )
 
 
@@ -442,18 +450,21 @@ async def test_declared_dependency_loads_first_and_its_api_is_scoped(tmp_path):
         (
             "a_consumer",
             "[z_provider]",
-            "assert ctx.dependencies.require('z_provider') == {'ready': True}",
+            "assert ctx.require(DEPENDENCIES).require('z_provider') == {'ready': True}",
         ),
         ("z_provider", "[]", "ctx.expose({'ready': True})"),
     ):
         package = tmp_path / name
         (package / "backend").mkdir(parents=True)
         (package / "manifest.yaml").write_text(
-            f"api: 2\nid: {name}\ncapabilities: [dependencies]\ndependencies: {dependencies}\n",
+            f"api: 2\nid: {name}\ncapabilities: [dependencies]\n"
+            f"inject: [dependencies]\ndependencies: {dependencies}\n",
             encoding="utf-8",
         )
         (package / "backend/plugin.py").write_text(
-            f"async def setup(ctx):\n    {body}\n", encoding="utf-8"
+            "from shiori_sdk.core.services import DEPENDENCIES\n"
+            f"async def setup(ctx):\n    {body}\n",
+            encoding="utf-8",
         )
     kernel = make_kernel([tmp_path], event_bus=EventBus())
     await kernel.load_all()
@@ -599,14 +610,15 @@ async def test_v2_capability_gating(tmp_path: Path):
     (plugin_dir / "backend").mkdir(parents=True)
     (plugin_dir / "backend" / "plugin.py").write_text(
         """
+from shiori_sdk.core.services import TOOLS
+
 captured: dict = {}
 
 
 async def setup(ctx):
-    captured["granted"] = ctx.granted
     try:
-        _ = ctx.tools
-    except AttributeError as e:
+        ctx.require(TOOLS)
+    except Exception as e:
         captured["denied"] = str(e)
 """.strip(),
         encoding="utf-8",
@@ -625,8 +637,7 @@ async def setup(ctx):
         for k, m in sys.modules.items()
         if k.startswith("akasic_plugin_") and k.endswith("_gated")
     )
-    assert module.captured["granted"] == ("events",)
-    assert "未声明 capability" in module.captured["denied"]
+    assert "未在 manifest inject 中声明 tools" in module.captured["denied"]
 
 
 @pytest.mark.asyncio
@@ -636,10 +647,11 @@ async def test_v2_setup_failure_rolls_back_effects(tmp_path: Path):
     (plugin_dir / "backend" / "plugin.py").write_text(
         """
 from agent.lifecycle.types import BeforeTurnCtx
+from shiori_sdk.core.services import EVENTS
 
 
 async def setup(ctx):
-    ctx.events.on(BeforeTurnCtx, _on_turn)
+    ctx.require(EVENTS).on(BeforeTurnCtx, _on_turn)
     raise RuntimeError("v2 boom")
 
 
@@ -650,7 +662,7 @@ async def _on_turn(event):
         encoding="utf-8",
     )
     (plugin_dir / "manifest.yaml").write_text(
-        "api: 2\nid: v2broken\ncapabilities:\n  - events\n",
+        "api: 2\nid: v2broken\ncapabilities:\n  - events\ninject:\n  - events\n",
         encoding="utf-8",
     )
     bus = EventBus()
@@ -822,15 +834,18 @@ async def test_injected_commands_reach_the_menu_until_unload(tmp_path: Path):
 
 
 _RPC_PLUGIN = """
+from shiori_sdk.core.services import RPC
+
+
 async def _ping(payload):
     return {"pong": payload.get("value")}
 
 
 async def setup(ctx):
-    ctx.rpc.register("ping", _ping)
+    ctx.require(RPC).register("ping", _ping)
 """.strip()
 
-_RPC_MANIFEST = "api: 2\nid: rpcdemo\ncapabilities:\n  - rpc\n"
+_RPC_MANIFEST = "api: 2\nid: rpcdemo\ncapabilities:\n  - rpc\ninject:\n  - rpc\n"
 
 
 @pytest.mark.asyncio
@@ -856,19 +871,22 @@ async def test_v2_plugin_rpc_method_callable_then_gone_after_unload(tmp_path: Pa
 
 
 _HOST_SERVICES_PLUGIN = """
+from shiori_sdk.core.services import LIGHT_MODEL, LIGHT_PROVIDER, WORKSPACE
+
 captured: dict = {}
 
 
 async def setup(ctx):
-    captured["workspace"] = ctx.workspace
-    captured["light_provider"] = ctx.light_provider
-    captured["light_model"] = ctx.light_model
+    captured["workspace"] = ctx.require(WORKSPACE)
+    captured["light_provider"] = ctx.require(LIGHT_PROVIDER)
+    captured["light_model"] = ctx.require(LIGHT_MODEL)
 """.strip()
 
 _HOST_SERVICES_MANIFEST = (
     "api: 2\nid: hostrefs\ncapabilities:\n"
     "  - workspace\n"
     "  - light_provider\n  - light_model\n"
+    "inject:\n  - workspace\n  - light_provider\n  - light_model\n"
 )
 
 
@@ -914,30 +932,33 @@ async def test_v2_plugin_reads_host_service_references(tmp_path: Path):
         encoding="utf-8",
     )
     (light_plugin / "manifest.yaml").write_text(
-        "api: 2\nid: needs_light\ncapabilities:\n  - light_provider\n",
+        "api: 2\nid: needs_light\ncapabilities:\n  - light_provider\n"
+        "inject:\n  - light_provider\n",
         encoding="utf-8",
     )
-    withheld = host_kernel([withheld_root], withheld=frozenset({HOST_LIGHT_PROVIDER}))
+    withheld = host_kernel([withheld_root], withheld=frozenset({LIGHT_PROVIDER}))
     await withheld.load_all()
     [state] = withheld.states()
-    assert state["state"] == "FAILED"
-    assert "宿主未提供服务 host.light_provider" in state["error"]
+    assert state["state"] == "BLOCKED"
+    assert "不存在" in state["error"]
 
 
 @pytest.mark.asyncio
 async def test_v2_plugin_host_service_capabilities_are_gated(tmp_path: Path):
-    """未在 manifest 声明的直传型 capability 访问时必须抛 CapabilityNotGranted。"""
+    """未在 inject 声明的服务，require 拒绝，setup 仍能跑完。"""
     plugin_dir = tmp_path / "hostrefs_gated"
     (plugin_dir / "backend").mkdir(parents=True)
     (plugin_dir / "backend" / "plugin.py").write_text(
         """
+from shiori_sdk.core.services import LIGHT_PROVIDER
+
 captured: dict = {}
 
 
 async def setup(ctx):
     try:
-        _ = ctx.light_provider
-    except AttributeError as e:
+        ctx.require(LIGHT_PROVIDER)
+    except Exception as e:
         captured["denied"] = (type(e).__name__, str(e))
 """.strip(),
         encoding="utf-8",
@@ -957,8 +978,8 @@ async def setup(ctx):
         if k.startswith("akasic_plugin_") and k.endswith("_hostrefs_gated")
     )
     kind, message = module.captured["denied"]
-    assert kind == "CapabilityNotGranted"
-    assert "未声明 capability 'light_provider'" in message
+    assert kind == "KernelError"
+    assert "未在 manifest inject 中声明 light_provider" in message
 
 
 @pytest.mark.asyncio
@@ -966,27 +987,37 @@ async def setup(ctx):
 async def test_turn_services_reach_only_a_plugin_that_declares_them(
     tmp_path: Path, capability: str
 ):
-    for plugin_id, capabilities in (("submits", f"[{capability}]"), ("other", "[]")):
+    for plugin_id, declared in (("submits", f"[{capability}]"), ("other", "[]")):
         plugin_dir = tmp_path / plugin_id
         (plugin_dir / "backend").mkdir(parents=True)
         (plugin_dir / "backend" / "plugin.py").write_text(
             """
+from shiori_sdk.core.services import KEY
+
 captured = {}
 
 
 async def setup(ctx):
     try:
-        captured["turns"] = getattr(ctx, "CAPABILITY")
-    except AttributeError as error:
+        captured["turns"] = ctx.require(KEY)
+    except Exception as error:
         captured["denied"] = str(error)
-""".replace("CAPABILITY", capability),
+""".replace(
+                "KEY",
+                (
+                    "EXTERNAL_TURNS"
+                    if capability == "external_turns"
+                    else "BACKGROUND_RESULTS"
+                ),
+            ),
             encoding="utf-8",
         )
         (plugin_dir / "manifest.yaml").write_text(
             f"""
 api: 2
 id: {plugin_id}
-capabilities: {capabilities}
+capabilities: {declared}
+inject: {declared}
 """,
             encoding="utf-8",
         )
@@ -1009,25 +1040,24 @@ capabilities: {capabilities}
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("capability", "service", "with_workspace"),
+    ("name", "state", "fragment", "with_workspace"),
     [
-        ("roles", "host.roles", True),
-        ("models", "host.models", True),
-        ("sessions", "host.sessions", True),
-        ("external_turns", "host.external_turns", True),
-        ("background_results", "host.background_results", True),
-        ("memory", "host.memory", True),
-        ("memory", "host.memory", False),
-        ("http", "host.http", True),
-        ("light_model", "host.light_model", True),
-        ("tools", "host.tools", True),
-        ("kv", "workspace", False),
+        ("roles", "BLOCKED", "不存在", True),
+        ("models", "BLOCKED", "不存在", True),
+        ("sessions", "BLOCKED", "不存在", True),
+        ("external_turns", "BLOCKED", "不存在", True),
+        ("background_results", "BLOCKED", "不存在", True),
+        ("memory", "BLOCKED", "不存在", True),
+        ("http", "BLOCKED", "不存在", True),
+        ("light_model", "BLOCKED", "不存在", True),
+        ("tools", "BLOCKED", "不存在", True),
+        ("kv", "FAILED", "宿主未提供服务 workspace", False),
     ],
 )
-async def test_declared_capability_without_host_service_fails_before_setup(
-    tmp_path: Path, capability: str, service: str, with_workspace: bool
+async def test_injected_service_without_a_provider_fails_before_setup(
+    tmp_path: Path, name: str, state: str, fragment: str, with_workspace: bool
 ):
-    """宿主缺服务时报“宿主未提供服务”，而不是误报插件未申请，且不进入 setup。"""
+    """缺提供方时计划阶段 BLOCKED；kv 没有 workspace 时在构造上下文时失败。"""
     root = tmp_path / "plugins"
     plugin_dir = root / "needs_service"
     (plugin_dir / "backend").mkdir(parents=True)
@@ -1036,7 +1066,7 @@ async def test_declared_capability_without_host_service_fails_before_setup(
         encoding="utf-8",
     )
     (plugin_dir / "manifest.yaml").write_text(
-        f"api: 2\nid: needs_service\ncapabilities:\n  - {capability}\n",
+        f"api: 2\nid: needs_service\ncapabilities:\n  - {name}\ninject:\n  - {name}\n",
         encoding="utf-8",
     )
     kernel = host_kernel(
@@ -1047,10 +1077,10 @@ async def test_declared_capability_without_host_service_fails_before_setup(
     )
     await kernel.load_all()
 
-    state = next(row for row in kernel.states() if row["id"] == "needs_service")
-    assert state["state"] == "FAILED"
-    assert f"'{capability}'" in state["error"]
-    assert f"宿主未提供服务 {service}" in state["error"]
+    row = next(item for item in kernel.states() if item["id"] == "needs_service")
+    assert row["state"] == state
+    assert name in row["error"]
+    assert fragment in row["error"]
     # 缺 workspace 时不能退回写插件目录（#209）
     assert not (plugin_dir / ".kv.json").exists()
 
@@ -1073,17 +1103,19 @@ async def test_optional_provider_lifecycle_does_not_activate_or_unload_consumer(
     from agent.plugin_host.dependencies import PluginDependencyError
 
     for name, optional, body in (
-        ("consumer", "[provider]", "ctx.expose(ctx.dependencies)"),
+        ("consumer", "[provider]", "ctx.expose(ctx.require(DEPENDENCIES))"),
         ("provider", "[]", "ctx.expose({'version': 'first'})"),
     ):
         package = tmp_path / name
         (package / "backend").mkdir(parents=True)
         _ = (package / "manifest.yaml").write_text(
             f"api: 2\nid: {name}\ncapabilities: [dependencies]\n"
+            f"inject: [dependencies]\n"
             f"optional_dependencies: {optional}\n",
             encoding="utf-8",
         )
         _ = (package / "backend/plugin.py").write_text(
+            "from shiori_sdk.core.services import DEPENDENCIES\n"
             f"async def setup(ctx):\n    {body}\n",
             encoding="utf-8",
         )
@@ -1091,14 +1123,17 @@ async def test_optional_provider_lifecycle_does_not_activate_or_unload_consumer(
     # Optional reads must already report it unavailable at this boundary.
     _ = (tmp_path / "provider/manifest.yaml").write_text(
         "api: 2\nid: provider\ncapabilities: [dependencies]\n"
+        "inject: [dependencies]\n"
         "optional_dependencies: [consumer]\n",
         encoding="utf-8",
     )
     _ = (tmp_path / "provider/backend/plugin.py").write_text(
+        "from shiori_sdk.core.services import DEPENDENCIES\n"
         "async def setup(ctx):\n"
+        "    dependencies = ctx.require(DEPENDENCIES)\n"
         "    ctx.expose({'version': 'first'})\n"
         "    def on_unload():\n"
-        "        consumer = ctx.dependencies.get_optional('consumer')\n"
+        "        consumer = dependencies.get_optional('consumer')\n"
         "        if consumer is not None:\n"
         "            assert consumer.get_optional('provider') is None\n"
         "    ctx.effect('check-unloading', on_unload)\n",
@@ -1243,11 +1278,13 @@ async def test_unsafe_declaration_never_blocks_setup_failure_rollback(tmp_path):
     package = tmp_path / "broken"
     (package / "backend").mkdir(parents=True)
     (package / "manifest.yaml").write_text(
-        "api: 2\nid: broken\ncapabilities: [events]\nsupports_hot_unload: false\n",
+        "api: 2\nid: broken\ncapabilities: [events]\ninject: [events]\n"
+        "supports_hot_unload: false\n",
         encoding="utf-8",
     )
     (package / "backend/plugin.py").write_text(
-        'async def setup(ctx):\n    async def on_event(event):\n        event.append("leaked")\n        return event\n    ctx.events.on(list, on_event)\n    raise RuntimeError("setup failed")\n',
+        "from shiori_sdk.core.services import EVENTS\n"
+        'async def setup(ctx):\n    async def on_event(event):\n        event.append("leaked")\n        return event\n    ctx.require(EVENTS).on(list, on_event)\n    raise RuntimeError("setup failed")\n',
         encoding="utf-8",
     )
     bus = EventBus()
@@ -1265,7 +1302,7 @@ def _write_needs_config_plugin(package: Path) -> None:
     tool_loop_guard)."""
     (package / "backend").mkdir(parents=True)
     (package / "manifest.yaml").write_text(
-        "api: 2\nid: needs_config\ncapabilities: [config]\n"
+        "api: 2\nid: needs_config\ncapabilities: [config]\ninject: [config]\n"
         'config_model: "config:Config"\n',
         encoding="utf-8",
     )
@@ -1276,9 +1313,10 @@ def _write_needs_config_plugin(package: Path) -> None:
         encoding="utf-8",
     )
     (package / "backend/plugin.py").write_text(
+        "from shiori_sdk.core.services import CONFIG\n"
         "from .config import Config\n\n\n"
         "async def setup(ctx):\n"
-        "    Config.model_validate(ctx.config.as_dict())\n",
+        "    Config.model_validate(ctx.require(CONFIG).as_dict())\n",
         encoding="utf-8",
     )
 
@@ -1386,7 +1424,6 @@ async def test_optional_unsafe_consumer_does_not_block_provider_unload(tmp_path)
         "runtime_api: '>=2.0.0 <3.0.0'",
         "renderer: {surface: {entry: missing.mjs, css: []}}",
         "host_dependencies: {python: [not-installed]}",
-        "capabilities: [unknown]",
     ],
 )
 async def test_contract_rejection_precedes_backend_execution(
@@ -1778,10 +1815,13 @@ def _write_renderer_gated_plugin(
     """
     (directory / "backend").mkdir(parents=True)
     (directory / "manifest.yaml").write_text(
-        f"api: 2\nid: {plugin_id}\ncapabilities: {capabilities}\n{renderer}",
+        f"api: 2\nid: {plugin_id}\ncapabilities: {capabilities}\n"
+        "inject: [tools]\n"
+        f"{renderer}",
         encoding="utf-8",
     )
     (directory / "backend/plugin.py").write_text(
+        "from shiori_sdk.core.services import TOOLS\n"
         "from shiori_sdk.tools import Tool\n\n\n"
         "class DemoTool(Tool):\n"
         f"    name = {plugin_id + '_tool'!r}\n"
@@ -1790,7 +1830,7 @@ def _write_renderer_gated_plugin(
         "    async def execute(self, **kwargs):\n"
         "        return 'ok'\n\n\n"
         "async def setup(ctx):\n"
-        "    ctx.tools.register(DemoTool())\n",
+        "    ctx.require(TOOLS).register(DemoTool())\n",
         encoding="utf-8",
     )
 
@@ -2045,13 +2085,16 @@ async def test_rollback_that_cannot_dispose_every_effect_requires_a_restart(tmp_
 
 
 _CHANNEL_PLUGIN = """
+from shiori_sdk.core.services import CHANNELS
+
 class _Channel:
     def __init__(self, name):
         self.name = name
 
 async def setup(ctx):
-    ctx.channels.add(_Channel("declared"))
-    ctx.channels.add(_Channel({second!r}))
+    channels = ctx.require(CHANNELS)
+    channels.add(_Channel("declared"))
+    channels.add(_Channel({second!r}))
 """.strip()
 
 
@@ -2062,7 +2105,8 @@ def _write_channel_plugin(root: Path, plugin_id: str, second: str) -> None:
         _CHANNEL_PLUGIN.format(second=second), encoding="utf-8"
     )
     (package / "manifest.yaml").write_text(
-        f"api: 2\nid: {plugin_id}\ncapabilities: [channels]\nchannels:\n"
+        f"api: 2\nid: {plugin_id}\ncapabilities: [channels]\ninject: [channels]\n"
+        "channels:\n"
         "  - {name: declared, label: Declared, chat_types:"
         " [{type: private, label: 私聊, chat_id_label: ID}]}\n"
         "  - {name: also_declared, label: Also, chat_types:"

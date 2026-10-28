@@ -14,7 +14,7 @@ from shiori_sdk.core.services import ACCOUNTS, CHANNELS, KV, RPC
 from .accounts import QQBotAccountStore
 
 if TYPE_CHECKING:
-    from shiori_sdk.channels.context import ChannelPluginContext
+    from shiori_sdk.runtime import PluginRuntimeContext
 
 
 def _app_id(config_ref: str) -> str:
@@ -23,7 +23,7 @@ def _app_id(config_ref: str) -> str:
     return config_ref.removeprefix("app:")
 
 
-async def setup(ctx: "ChannelPluginContext") -> None:
+async def setup(ctx: "PluginRuntimeContext") -> None:
     """Contribute one multi-application channel over the plugin-owned accounts."""
     from shiori_sdk.rpc import Concurrency
 

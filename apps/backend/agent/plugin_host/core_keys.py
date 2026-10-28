@@ -1,68 +1,41 @@
-"""Transitional core keys the host assembly layer reads v2 capabilities from (#901).
+"""Host assembly keys and the per-plugin view a ``require`` returns.
 
-Core modules provide these keys to the kernel before any plugin starts, so the
-assembly layer builds each plugin's v2 context without importing them. The
-``host.`` prefix keeps these names apart from the public keys plugins inject
-(``shiori_sdk.core``). P4-3 provides the same object under both names. P4-4
-deletes the ``host.`` keys and the capability properties.
-
-Wiring one capability to a core module takes three edits: its key here, its
-row in ``CORE_CAPABILITIES`` and the provide call in ``bootstrap.plugin_core``;
-the v2 context property then reads it through ``_core_capability``. A
-capability whose contributions the host aggregates is a
-``PluginContributionService`` over ``capabilities.ContributionsByPlugin``.
-
-Core service classes are named by what the key holds. ``Plugin*`` (such as
-``PluginTools`` or ``PluginChannels``) is a binder with ``for_plugin``, or an
-aggregating service over ``ContributionsByPlugin``: each plugin gets its own
-view. ``Host*`` (such as ``HostRoles`` or ``HostSessions``) is itself the
-capability, one instance per generation shared by every plugin.
+Core modules provide public keys (``shiori_sdk.core``) before any plugin
+starts. A binder is stored as itself; ``PluginRuntimeContext.require`` calls
+``for_plugin`` so the plugin sees its own view. ``host.bridge`` and
+``host.config_references`` are host-internal and are not service keys plugins
+inject. api: 4 manifests cannot name a ``host.`` key. api: 2 may still list
+one until P4-5 rejects non-``api: 4`` packages.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, Protocol
 
 from shiori_sdk.accounts.capability import AccountsCapability
-from shiori_sdk.background_results import BackgroundResults
-from shiori_sdk.channels import Channel
-from shiori_sdk.channels.avatars import AvatarsCapability
-from shiori_sdk.channels.context import ChannelsCapability
-from shiori_sdk.extensions import BackgroundTasks
-from shiori_sdk.external_turns import ExternalTurns
-from shiori_sdk.http import HttpClient
-from shiori_sdk.memory.context import MemoryCapability
-from shiori_sdk.models import ChatProvider, RoleModels
-from shiori_sdk.process_resources import PluginProcessResources
-from shiori_sdk.processes import Processes, Resources, ToolTurn
-from shiori_sdk.roles import Roles, SceneObservations
-from shiori_sdk.rpc import RpcCapability
-from shiori_sdk.sessions import PluginSessions
-from shiori_sdk.tools import ToolsCapability
-from shiori_sdk.core import services
 from shiori_sdk.kernel import Key, Scope
-from shiori_sdk.runtime import EventsCapability, HostServiceUnavailable
+from shiori_sdk.runtime import HostServiceUnavailable
 
 from agent.plugin_host.call_gate import PluginCallGate
 from agent.plugin_host.manifest import PluginManifest
 from agent.plugin_host.rpc import PluginRpcRegistry
+from shiori_sdk.core import services
 
 
 @dataclass(frozen=True)
 class PluginBinding:
-    """One plugin activation, for the binders that scope a capability to it.
+    """One plugin activation, for the binders that scope a service to it.
 
-    ``scope`` releases what the capability registered when the plugin stops,
+    ``scope`` releases what the service registered when the plugin stops,
     and ``calls`` admits or refuses calls into the plugin. ``namespace`` is the
     kernel generation's import namespace; ``manifest`` is the plugin's parsed
-    manifest, for the static declarations a capability checks against.
+    manifest, for the static declarations a service checks against.
 
     Only the plugin's identity and static declarations (manifest), its scope
-    and its call gate belong here. Data one capability alone needs stays with
-    that capability's core service, never in this shared binding.
+    and its call gate belong here. Data one service alone needs stays with
+    that service, never in this shared binding.
     """
 
     plugin_id: str
@@ -73,10 +46,10 @@ class PluginBinding:
 
 
 class PluginCapabilityBinder[T](Protocol):
-    """A core service that hands each plugin its own v2 capability view."""
+    """A core service that hands each plugin its own view."""
 
     def for_plugin(self, binding: PluginBinding) -> T:
-        """The capability object for the plugin ``binding`` describes."""
+        """The object for the plugin ``binding`` describes."""
         ...
 
 
@@ -91,7 +64,7 @@ class ActiveContributions[T](Protocol):
 class PluginContributionService[C, T](
     PluginCapabilityBinder[C], ActiveContributions[T], Protocol
 ):
-    """A per-plugin capability ``C`` whose contributions ``T`` the host aggregates.
+    """A per-plugin view ``C`` whose contributions ``T`` the host aggregates.
 
     Each plugin adds through its own ``for_plugin`` view; consumers read the
     active plugins' contributions with ``active``.
@@ -108,24 +81,11 @@ class CoreProvide(Protocol):
 CoreModule = Callable[[CoreProvide], None]
 """Provides one core module's keys; raising aborts startup (§8.5)."""
 
-HOST_TOOLS: Key[PluginCapabilityBinder[ToolsCapability]] = Key("host.tools")
-"""The ``tools`` capability over the host ``ToolRegistry`` (``agent.tools``)."""
-
-
-HOST_TOOL_TURN: Key[Callable[[], ToolTurn]] = Key("host.tool_turn")
-"""The ``tool_turn`` capability: the tool turn running in the current task."""
-
-HOST_CHANNELS: Key[PluginContributionService[ChannelsCapability, Channel]] = Key(
-    "host.channels"
-)
-"""The ``channels`` capability: transports plugins contribute (``core.channels``)."""
-
 
 # Deliberately accounts-only, not a generic "generation lifecycle" protocol:
-# accounts is the only core service with per-generation publish/drop, and P4
-# moves publishing and dropping out of the kernel altogether (#903).
+# accounts is the only core service with per-generation publish/drop.
 class GenerationAccounts(PluginCapabilityBinder[AccountsCapability], Protocol):
-    """The ``host.accounts`` service: one kernel generation's account index.
+    """One kernel generation's account index, stored under ``ACCOUNTS``.
 
     Plugins register into the generation's own index; ``publish`` makes it the
     one routing, sending and the UI see, and ``drop`` discards it once the
@@ -141,82 +101,21 @@ class GenerationAccounts(PluginCapabilityBinder[AccountsCapability], Protocol):
         ...
 
 
-HOST_ACCOUNTS: Key[GenerationAccounts] = Key("host.accounts")
-"""The ``accounts`` capability over the ``AccountRegistry`` (``core.accounts``)."""
-
-HOST_AVATARS: Key[PluginCapabilityBinder[AvatarsCapability]] = Key("host.avatars")
-"""The ``avatars`` capability over the shared avatar cache (``core.channels``)."""
-
-HOST_SESSIONS: Key[PluginSessions] = Key("host.sessions")
-"""The ``sessions`` capability over the host ``SessionManager`` (``session``)."""
-
-HOST_ROLES: Key[Roles] = Key("host.roles")
-"""The ``roles`` capability over the canonical ``RoleStore`` (``core.roles``)."""
-
-HOST_MODELS: Key[RoleModels] = Key("host.models")
-"""The ``models`` capability over the ``RoleRuntimeRegistry`` (``core.roles``)."""
-
-HOST_WORKSPACE: Key[Path] = Key("host.workspace")
-"""The ``workspace`` capability: the host workspace directory, passed through."""
-
-HOST_HTTP: Key[HttpClient] = Key("host.http")
-"""The ``http`` capability: the host's shared external HTTP requester."""
-
-HOST_PROCESS_RESOURCES: Key[PluginCapabilityBinder[PluginProcessResources]] = Key(
-    "host.process_resources"
-)
-"""The ``process_resources`` capability: process-owned resources (``infra.process``)."""
-
-HOST_LIGHT_PROVIDER: Key[ChatProvider] = Key("host.light_provider")
-"""The ``light_provider`` capability: the host's light chat provider."""
-
-HOST_LIGHT_MODEL: Key[str] = Key("host.light_model")
-"""The ``light_model`` capability: the model name to use with ``light_provider``."""
-
-HOST_SCENE_OBSERVATIONS: Key[PluginCapabilityBinder[SceneObservations]] = Key(
-    "host.scene_observations"
-)
-"""The ``scene_observations`` capability over the shared demand (``core.scene``)."""
-
-HOST_MEMORY: Key[MemoryCapability] = Key("host.memory")
-"""The ``memory`` capability: the memory plugin's surface (``bootstrap.memory_capabilities``)."""
-
-HOST_PROCESSES: Key[Processes] = Key("host.processes")
-"""The ``processes`` capability: host-owned native processes (``infra.process``)."""
-
-HOST_RESOURCES: Key[Resources] = Key("host.resources")
-"""The ``resources`` capability: host-distributed resources (``bootstrap.plugin_capability``)."""
-
-HOST_EXTERNAL_TURNS: Key[ExternalTurns] = Key("host.external_turns")
-"""The ``external_turns`` capability (``conversation``)."""
-
-HOST_BACKGROUND_RESULTS: Key[BackgroundResults] = Key("host.background_results")
-"""The ``background_results`` capability (``conversation``)."""
-
-HOST_BACKGROUND: Key[PluginCapabilityBinder[BackgroundTasks]] = Key("host.background")
-"""The ``background`` capability: plugin-scoped tasks (``core.common``)."""
-
-HOST_EVENTS: Key[PluginCapabilityBinder[EventsCapability]] = Key("host.events")
-"""The ``events`` capability: a plugin-scoped view of the event bus (``bus``)."""
-
-HOST_RPC: Key[PluginCapabilityBinder[RpcCapability]] = Key("host.rpc")
-"""The ``rpc`` capability: bridge-callable plugin methods (``desktop_bridge``)."""
-
 # The policy type (``desktop_bridge.method_policy.MethodPolicy``) is a host
 # module this layer may not import; the kernel only binds and withdraws.
 HOST_BRIDGE: Key[PluginRpcRegistry[Any]] = Key("host.bridge")
 """The generation's plugin RPC registry, created by bootstrap (``desktop_bridge``).
 
-Not a capability row: the kernel binds renderer communication to it and the
-``services`` capability uses its service registry, so each generation requires
-it when it is constructed.
+Not a service plugins inject: the kernel binds renderer communication to it
+and the ``services`` key uses its service registry, so each generation
+requires it when it is constructed.
 """
 
 HOST_CONFIG_REFERENCES: Key[Callable[[str], str]] = Key("host.config_references")
 """Expands ``${NAME}`` references for ``config.resolve_reference``.
 
-Not a capability row: the assembly layer itself needs it for every plugin's
-``config``, so each generation requires it when it is constructed.
+Not a service plugins inject: the assembly layer itself needs it for every
+plugin's ``config``, so each generation requires it when it is constructed.
 """
 
 
@@ -226,11 +125,8 @@ class HostBuilt:
     ``config``, ``kv``, ``dependencies``, ``runtime``, ``services`` and
     ``storage`` do not exist until the assembly layer constructs that
     plugin's context. The kernel still needs a provider so planning does
-    not block a plugin that injects one. ``PluginSetupContext.require``
+    not block a plugin that injects one. ``PluginRuntimeContext.require``
     replaces this marker with the plugin's object. It is not a service.
-
-    Transitional: P4-4 / P4-5 delete it with the capability properties, once
-    the assembly layer no longer builds a v2 context per plugin.
     """
 
 
@@ -261,76 +157,6 @@ HOST_BUILT_KEYS: tuple[Key[Any], ...] = (
     services.SERVICES,
     services.STORAGE,
 )
-
-
-@dataclass(frozen=True)
-class CoreCapability:
-    """Where a v2 capability comes from: the core key that provides it.
-
-    ``per_plugin`` marks a key whose provider is a ``PluginCapabilityBinder``;
-    the plugin then gets ``for_plugin(binding)``. Otherwise the provided
-    instance itself is the capability, shared by every plugin.
-    """
-
-    key: Key[Any]
-    per_plugin: bool = False
-
-
-# v2 capability name (which is also the plugin context argument it fills) ->
-# the core key behind it. The capabilities missing here are kernel-native: the
-# assembly layer builds them itself (config, dependencies, runtime, kv, storage,
-# services).
-CORE_CAPABILITIES: Mapping[str, CoreCapability] = {
-    "tools": CoreCapability(HOST_TOOLS, per_plugin=True),
-    "tool_turn": CoreCapability(HOST_TOOL_TURN),
-    "channels": CoreCapability(HOST_CHANNELS, per_plugin=True),
-    "accounts": CoreCapability(HOST_ACCOUNTS, per_plugin=True),
-    "avatars": CoreCapability(HOST_AVATARS, per_plugin=True),
-    "sessions": CoreCapability(HOST_SESSIONS),
-    "roles": CoreCapability(HOST_ROLES),
-    "models": CoreCapability(HOST_MODELS),
-    "light_provider": CoreCapability(HOST_LIGHT_PROVIDER),
-    "light_model": CoreCapability(HOST_LIGHT_MODEL),
-    "scene_observations": CoreCapability(HOST_SCENE_OBSERVATIONS, per_plugin=True),
-    "memory": CoreCapability(HOST_MEMORY),
-    "processes": CoreCapability(HOST_PROCESSES),
-    "resources": CoreCapability(HOST_RESOURCES),
-    "external_turns": CoreCapability(HOST_EXTERNAL_TURNS),
-    "background_results": CoreCapability(HOST_BACKGROUND_RESULTS),
-    "background": CoreCapability(HOST_BACKGROUND, per_plugin=True),
-    "events": CoreCapability(HOST_EVENTS, per_plugin=True),
-    "rpc": CoreCapability(HOST_RPC, per_plugin=True),
-    "workspace": CoreCapability(HOST_WORKSPACE),
-    "http": CoreCapability(HOST_HTTP),
-    "process_resources": CoreCapability(HOST_PROCESS_RESOURCES, per_plugin=True),
-}
-
-
-def bind_core_capabilities(
-    capabilities: Iterable[str],
-    provided: Callable[[Key[Any]], object],
-    binding: PluginBinding,
-) -> dict[str, Any]:
-    """Plugin context arguments for the declared capabilities the core provides.
-
-    ``provided`` looks a key up in the kernel (``Kernel.get``). A declared
-    capability whose key nobody provides fails before setup, like a missing
-    host service.
-    """
-    arguments: dict[str, Any] = {}
-    for capability in capabilities:
-        if (row := CORE_CAPABILITIES.get(capability)) is None:
-            continue
-        value: Any = provided(row.key)
-        if value is None:
-            raise HostServiceUnavailable.for_capability(
-                binding.plugin_id, capability, [row.key.name]
-            )
-        if row.per_plugin:
-            arguments[capability] = value.for_plugin(binding)
-        else:
-            arguments[capability] = value
-    return arguments
 
 
 def required_core_key[T](provided: Callable[[Key[T]], T | None], key: Key[T]) -> T:

@@ -27,10 +27,10 @@ from shiori_sdk.core.services import (
 )
 
 if TYPE_CHECKING:
-    from shiori_sdk.channels.context import ChannelPluginContext
+    from shiori_sdk.runtime import PluginRuntimeContext
 
 
-async def setup(ctx: "ChannelPluginContext") -> None:
+async def setup(ctx: "PluginRuntimeContext") -> None:
     """Loads the plugin-owned accounts and contributes one multi-account channel."""
     from shiori_sdk.rpc import Concurrency
 

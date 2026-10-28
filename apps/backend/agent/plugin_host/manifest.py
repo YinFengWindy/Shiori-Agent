@@ -275,7 +275,11 @@ def _reject_removed_v4_fields(raw: dict[str, object]) -> None:
 
 
 def _reject_host_keys(**fields: tuple[str, ...]) -> None:
-    """api: 4 never names a ``host.`` key: those hold raw binders (P4-4 removes them)."""
+    """api: 4 never names a ``host.`` key.
+
+    ``host.bridge`` and ``host.config_references`` are host-internal. api: 2
+    may still list a ``host.`` name until P4-5 rejects non-``api: 4`` packages.
+    """
     for name_field, names in fields.items():
         host = [name for name in names if name.startswith("host.")]
         if host:
@@ -333,7 +337,7 @@ def _parse_frontend(raw: dict[str, object], plugin_dir: Path) -> str | None:
 
 
 def _parse_capabilities(raw: dict[str, object], manifest_path: Path) -> tuple[str, ...]:
-    # 校验规则与已知能力集合归 SDK，宿主与 SDK 测试替身共用同一份。
+    # api: 2 仍要有一份列表。名字不再是授权；P4-5 才拒绝非 api: 4。
     try:
         return parse_capabilities(raw.get("capabilities"), manifest_path)
     except ValueError as exc:

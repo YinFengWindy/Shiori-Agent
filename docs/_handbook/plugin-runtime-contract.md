@@ -123,6 +123,30 @@ consolidates these additions and the subsequent #847 breaking migration.
 
 <!-- Record the next contract batch here, with PR references and breaking markers. -->
 
+- **Capability properties and `host.*` dual-write are gone (issue #903, refactor P4-4).**
+  `KNOWN_CAPABILITIES`, `CapabilityNotGranted`, `require_known_capabilities`,
+  the capability attributes on the host context, and the
+  `*PluginContext` protocols (`ChannelPluginContext`, `ServicePluginContext`,
+  `MemoryPluginContext`, `HookPluginContext`, `CommandPluginContext`,
+  `ObservePluginContext`, `ServiceProviderContext`) are deleted. Setup is
+  `PluginRuntimeContext`: `ctx.require` / `ctx.get`, plus `on` / `watch` /
+  `emit`. `register_runtime_rpc` calls `ctx.require(RPC)`. The desktop
+  decides an account plugin by `inject` containing `accounts`, from the
+  roster field `inject`, not from `capabilities`.
+  The host still builds `config`, `dependencies`, `storage` and `runtime`
+  for every plugin, and `kv` / `services` when those names are injected;
+  the kernel sees a marker so planning does not block them. `PluginBinding`
+  still scopes tools, channels, accounts and the other per-plugin views.
+  `host.bridge` and `host.config_references` stay host-internal (the kernel
+  reads them at construction). The other `host.*` keys and their dual
+  `provide` are gone; readers use the public keys (`ACCOUNTS`, `CHANNELS`,
+  …). An `api: 2` manifest may still list a `capabilities` array, including
+  unknown names and `host.` names; that list no longer grants anything.
+  Rejecting non-`api: 4` packages, blocking old installs, and the reserved
+  public-key collision are P4-5.
+  **breaking** for any plugin that still reads `ctx.tools` / `ctx.rpc` / the
+  deleted protocols: declare the key in `inject` and call `ctx.require`.
+
 - **Built-in plugins use manifest `api: 4` (issue #903, refactor P4-3).**
   Each built-in manifest drops `capabilities`, `runtime_api`, `package_contract`
   and top-level `channels`. Services move to `inject` / `optional_inject` /
@@ -139,13 +163,10 @@ consolidates these additions and the subsequent #847 breaking migration.
   each public key beside the existing `host.*` key. `config`, `kv`,
   `dependencies`, `runtime`, `services` and `storage` are built per plugin
   at setup; the kernel sees a marker so planning does not block them.
-  Capability properties still return that object when the name is injected,
-  so `api: 2` plugins and the old property path keep working. SDK helpers
-  that plugins call keep using the capability property until P4-4 for the
-  same reason: `register_runtime_rpc` (`shiori_sdk.managed.rpc`) reads
-  `ctx.rpc`, which an `api: 2` plugin gets from `capabilities: [rpc]` and an
-  `api: 4` plugin from `inject: [rpc]`; `ctx.require(RPC)` would reject the
-  former. `kv` and `services` are built when listed in `inject` or
+  This slice left capability properties in place so an `api: 2` plugin
+  could still use them; P4-4 (above) deletes that bridge.
+  `register_runtime_rpc` at this slice read `ctx.rpc`. `kv` and `services`
+  are built when listed in `inject` or
   `optional_inject` (like `config`), so `ctx.get(KV)` is not None when the
   name is optional. An `api: 4` manifest may not list a `host.` name in
   `inject`, `optional_inject` or `provides`: those keys hold raw binders and

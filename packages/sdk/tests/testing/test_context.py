@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from shiori_sdk import CapabilityNotGranted, PluginRuntimeContext
-from shiori_sdk.core.services import HTTP, KV, RPC
+from shiori_sdk import PluginRuntimeContext
+from shiori_sdk.core.services import EVENTS, HTTP, KV, RPC
 from shiori_sdk.kernel import KernelError
 from shiori_sdk.testing import FakePluginContext
 
@@ -33,15 +33,14 @@ async def test_sdk_fixture_is_a_usable_setup_context(
     assert not (sdk_context.plugin_dir / "manifest.yaml").exists()
 
 
-async def test_sdk_fixture_grants_only_manifest_capabilities(
+async def test_sdk_fixture_records_capabilities_and_gates_require(
     sdk_context: FakePluginContext,
 ) -> None:
     assert sdk_context.plugin_id == "probe"
     assert sdk_context.granted == ("rpc",)
-    with pytest.raises(
-        CapabilityNotGranted, match="插件 probe 未声明 capability 'events'"
-    ):
-        _ = sdk_context.events
+    with pytest.raises(KernelError) as caught:
+        sdk_context.require(EVENTS)
+    assert caught.value.diagnostic.code == "undeclared_key"
 
 
 async def test_cleanup_is_lifo_stops_events_first_and_rejects_cached_registrations() -> (
@@ -86,18 +85,17 @@ async def test_cleanup_continues_after_a_failure() -> None:
     assert seen == ["first"]
 
 
-def test_only_requested_capabilities_are_accessible() -> None:
+def test_only_declared_inject_keys_are_accessible() -> None:
     context = FakePluginContext(capabilities=("rpc", "kv"))
     assert context.granted == ("kv", "rpc")
-    with pytest.raises(CapabilityNotGranted, match="events"):
-        _ = context.events
+    with pytest.raises(KernelError) as caught:
+        context.require(EVENTS)
+    assert caught.value.diagnostic.code == "undeclared_key"
 
 
-def test_unknown_capability_names_are_rejected_like_the_host() -> None:
-    with pytest.raises(
-        ValueError, match=r"manifest 声明了未知 capability \['host_storage'\]"
-    ):
-        FakePluginContext(capabilities=("events", "host_storage"))
+def test_capability_names_are_recorded_without_a_whitelist() -> None:
+    context = FakePluginContext(capabilities=("events", "host_storage"))
+    assert context.granted == ("events", "host_storage")
 
 
 def test_require_and_get_reject_undeclared_keys_like_the_host() -> None:

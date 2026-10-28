@@ -3,9 +3,6 @@
 from pathlib import Path
 from typing import Protocol
 
-from shiori_sdk.rpc import RpcCapability
-from shiori_sdk.runtime import PluginRuntimeContext
-
 from .access import MemoryRoles, MemoryStorage
 
 
@@ -24,12 +21,3 @@ class MemoryCapability(Protocol):
     def storage(self) -> MemoryStorage: ...
     def skill_names(self) -> list[str]: ...
     async def read_documents(self, payload: dict[str, object]) -> dict[str, object]: ...
-
-
-class MemoryPluginContext(PluginRuntimeContext, Protocol):
-    """Setup context for plugins declaring memory and RPC capabilities."""
-
-    @property
-    def memory(self) -> MemoryCapability: ...
-    @property
-    def rpc(self) -> RpcCapability: ...

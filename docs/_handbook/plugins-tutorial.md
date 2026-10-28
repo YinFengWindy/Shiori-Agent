@@ -37,7 +37,7 @@ config_model: config:ExampleConfig
 supports_hot_unload: true
 ```
 
-`capabilities` 必须显式列出，可以是空列表。只声明实际使用的能力；未授权属性访问会抛 `CapabilityNotGranted`。声明了能力而宿主缺少其背后的服务（如 workspace、roles、sessions、http）时，宿主在调用 `setup` 前抛 `HostServiceUnavailable` 并指明缺失的服务名，插件不需要也不应再对这些属性做 `is None` 判断。`config_model` 可以是入口中的类名，也可以是相对入口包的 `模块:类名`。模型必须继承 Pydantic `BaseModel`。
+`api: 4` 在 `inject` 里列出要用的服务，`setup` 里 `ctx.require` 取得。`api: 2` 仍要有 `capabilities` 列表（可以是空列表），但这份名单不再授予属性。宿主没有对应提供方时，计划阶段是 BLOCKED；`kv` 在没有 workspace 时，构造上下文会抛 `HostServiceUnavailable`。`config_model` 可以是入口中的类名，也可以是相对入口包的 `模块:类名`。模型必须继承 Pydantic `BaseModel`。
 
 `display_name` 是设置 › 插件里显示的名称（省略时显示 ID）。可选的 `category` 决定插件在列表中的分组：`feature`（功能）、`channel`（渠道）、`system`（系统组件，默认折叠，用于宿主内部护栏、诊断命令这类用户不需要日常操作的插件）。省略时，声明了渠道（`capabilities` 含 `channels`，或 `api: 4` 的 `contributes.channels`）的插件归入渠道，其余归入功能；`system` 只能显式声明。取值不在这三者之内时 manifest 被拒绝。Package Contract v1 的外部包自 Runtime API 3.1.1（#678）起也接受 `display_name` 与 `category`（含 `system`），校验规则相同；更早的宿主把它们当未知字段拒绝。
 
@@ -101,7 +101,7 @@ async def setup(ctx):
 
 外部上下文（群聊、陌生私聊）里，发送者不是已绑定用户的回合只能使用声明过外部可用的工具：`ctx.tools.register(tool, ..., external_allowed=True)`。默认不声明，即这类回合看不到、也调不动该工具；已绑定用户本人的消息不受限。只给陌生人触发也安全的工具声明，例如 NovelAI 的 `generate_image`。MCP 工具不能声明。规则见[运行时契约](plugin-runtime-contract.md#tools-in-external-contexts-489)。
 
-能力名的完整权威清单是 SDK 的 `shiori_sdk.runtime.KNOWN_CAPABILITIES`（宿主 `agent/plugin_host/manifest.py` 与 SDK 测试替身共用 `parse_capabilities` 校验）。不要自己构造另一份 RoleStore 来写同一份角色文件，应获取宿主共享的 `roles` 窄接口。渠道使用 `ChannelPluginContext` 的账号、渠道和头像等协议；桌宠使用 `ServicePluginContext` 的角色、存储、工具和 RPC 协议，renderer 通过 SDK surface 能力声明交互。能力是架构边界，不是 Python 进程内安全沙箱。
+服务键在 `shiori_sdk.core.services`（`TOOLS`、`RPC`、`ROLES` 等）。不要自己构造另一份 RoleStore 来写同一份角色文件，应 `ctx.require(ROLES)`。渠道、桌宠和其它插件的 `setup` 都用 `PluginRuntimeContext`。这些键是架构边界，不是 Python 进程内安全沙箱。
 
 其它外部资源用 `ctx.effect("label", disposer)` 登记清理；disposer 可同步或异步。Python 插件作用域分两段处置：先停止接收新事件并撤销所有 `ctx.events.on` 订阅，再按登记的逆序（LIFO）清理其余 effect，包括自定义 disposer、后台任务与贡献。订阅和资源的登记先后不影响退订优先规则；其它资源之间仍需按依赖顺序登记，例如先登记 writer，再登记需要向 writer 最终 flush 的采集器，使采集器先清理。
 
@@ -265,7 +265,7 @@ PLUGIN_DIR = Path(__file__).resolve().parents[1]
 # staged = stage_plugin_package(PLUGIN_DIR, tmp_path / "plugins/example")
 ```
 
-SDK 的 `sdk_context` fixture 从测试文件向上（不越过 pytest rootdir）找到本包 `manifest.yaml`，只授予其 `capabilities` 声明的能力（未知能力名与宿主一样报错）；访问未声明的能力抛 `CapabilityNotGranted`，与宿主一致。它同时按 manifest 的 `inject` / `optional_inject` / `provides` 声明服务 Key：`ctx.require` / `ctx.get` 未声明的 Key 抛内核的 `undeclared_key`，与宿主一致；其他假上下文（如 `FakeServiceContext`）传 `package_dir=` 读取同一份声明。manifest 只用于读取，`plugin_dir` 是隔离的临时目录；包内文件按包资源读取，不要写入 `plugin_dir`。测试不在包内时，在 `conftest.py` 覆盖 `sdk_plugin_dir` fixture。
+SDK 的 `sdk_context` fixture 从测试文件向上（不越过 pytest rootdir）找到本包 `manifest.yaml`，记下 `capabilities`（`api: 2` 缺列表或不是列表会报错；名字不再有白名单）。它按 manifest 的 `inject` / `optional_inject` / `provides` 声明服务 Key：`ctx.require` / `ctx.get` 未声明的 Key 抛内核的 `undeclared_key`，与宿主一致；其他假上下文（如 `FakeServiceContext`）传 `package_dir=` 或 `inject=` 读取同一份声明。manifest 只用于读取，`plugin_dir` 是隔离的临时目录；包内文件按包资源读取，不要写入 `plugin_dir`。测试不在包内时，在 `conftest.py` 覆盖 `sdk_plugin_dir` fixture。
 
 兄弟插件通过 `plugin_directory("novelai")` 定位，并在 `pyproject.toml` 明确声明安装依赖；不得推导原仓库路径，也不得导入宿主测试树。异步测试由 pytest-asyncio 执行，公共支持来自 SDK 的 pytest entry point；独立插件测试不安装宿主。真实 AppRuntime 集成 fixture 由宿主开发包 `shiori-host-testing` 提供，仅在显式安装该包时通过其 pytest entry point 注册。
 

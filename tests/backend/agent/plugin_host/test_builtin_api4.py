@@ -21,8 +21,8 @@ from pathlib import Path
 import pytest
 
 from agent.plugin_host.manifest import load_manifest
+from shiori_sdk.core import services as service_keys
 from shiori_sdk.kernel import Key
-from shiori_sdk.runtime import KNOWN_CAPABILITIES
 from tests.support.plugin_kernel import REPOSITORY_ROOT
 
 _PLUGINS = REPOSITORY_ROOT / "plugins"
@@ -35,14 +35,16 @@ _CORE_MODULES = (
     "shiori_sdk.core.sessions",
     "shiori_sdk.core.tools",
 )
-# Capability attributes, plus the public keys that were never properties.
-_BANNED_ATTRS = frozenset(KNOWN_CAPABILITIES) | {
+# Former capability attributes and the public keys that were never properties.
+_BANNED_ATTRS = frozenset(
+    value.name for value in vars(service_keys).values() if isinstance(value, Key)
+) | {
     "commands",
     "crash_reporting",
     "main_model",
     "main_provider",
     "memory_engine",
-    "session_store",
+    "sessions",
 }
 _CONTEXT_NAMES = frozenset({"ctx", "_ctx"})
 

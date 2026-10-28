@@ -1,7 +1,8 @@
 """Observable external lifecycle fixture using host-provided capabilities."""
 
-from shiori_sdk.tools import Tool
+from shiori_sdk.core.services import EVENTS, KV, RPC, TOOLS
 from shiori_sdk.role_events import RoleDeleted
+from shiori_sdk.tools import Tool
 
 VERSION = "__FIXTURE_VERSION__"
 
@@ -20,45 +21,49 @@ class FixtureTool(Tool):
 
 async def setup(ctx):
     """Own observable resources and keep user data across code replacement."""
-    ctx.kv.set("loads", ctx.kv.get("loads", 0) + 1)
-    ctx.kv.set("version", VERSION)
+    kv = ctx.require(KV)
+    tools = ctx.require(TOOLS)
+    events = ctx.require(EVENTS)
+    rpc = ctx.require(RPC)
+    kv.set("loads", kv.get("loads", 0) + 1)
+    kv.set("version", VERSION)
 
     def disposed():
-        ctx.kv.set(
+        kv.set(
             "backend_teardown",
             {
                 "version": VERSION,
-                "tool_absent": ctx.tools.get_tool(FixtureTool.name) is None,
+                "tool_absent": tools.get_tool(FixtureTool.name) is None,
             },
         )
 
     # Registered first: this runs after the later tool registration is revoked.
     ctx.effect("fixture_audit", disposed)
-    ctx.tools.register(FixtureTool(), risk="read-only", always_on=True)
+    tools.register(FixtureTool(), risk="read-only", always_on=True)
 
     def role_deleted(_event):
-        ctx.kv.set("role_events", ctx.kv.get("role_events", 0) + 1)
+        kv.set("role_events", kv.get("role_events", 0) + 1)
 
-    ctx.events.on(RoleDeleted, role_deleted)
+    events.on(RoleDeleted, role_deleted)
 
     async def inspect(_payload):
-        tool = ctx.tools.get_tool(FixtureTool.name)
+        tool = tools.get_tool(FixtureTool.name)
         return {
             "version": VERSION,
             "tool": await tool.execute(),
-            "saved": ctx.kv.get("saved", ""),
-            "loads": ctx.kv.get("loads", 0),
-            "role_events": ctx.kv.get("role_events", 0),
+            "saved": kv.get("saved", ""),
+            "loads": kv.get("loads", 0),
+            "role_events": kv.get("role_events", 0),
         }
 
     async def save(payload):
-        ctx.kv.set("saved", str(payload["value"]))
+        kv.set("saved", str(payload["value"]))
         return await inspect({})
 
     async def pulse(_payload):
-        await ctx.rpc.emit("pulse", {"version": VERSION})
+        await rpc.emit("pulse", {"version": VERSION})
         return {"version": VERSION}
 
-    ctx.rpc.register("inspect", inspect)
-    ctx.rpc.register("save", save)
-    ctx.rpc.register("pulse", pulse)
+    rpc.register("inspect", inspect)
+    rpc.register("save", save)
+    rpc.register("pulse", pulse)

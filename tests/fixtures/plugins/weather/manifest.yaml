@@ -2,3 +2,4 @@ api: 2
 id: weather
 version: "0.1.0"
 capabilities: [tools]
+inject: [tools]

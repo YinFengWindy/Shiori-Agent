@@ -51,7 +51,7 @@ const conflictWarnedIds = new Set<string>();
  * (via `PluginUiRegistry.unregisterPlugin`) — no parallel teardown path.
  */
 export function synchronizePluginSettingsAutoRegistration(
-  plugins: Array<Pick<PluginSummary, "id" | "name" | "hasConfigSchema"> & Partial<Pick<PluginSummary, "capabilities">>>,
+  plugins: Array<Pick<PluginSummary, "id" | "name" | "hasConfigSchema"> & Partial<Pick<PluginSummary, "inject">>>,
 ): void {
   // A plugin's own full unload (`unregisterPlugin`) may already have
   // removed this entry from the registry; forget it here too so a later
@@ -110,8 +110,8 @@ export function synchronizePluginSettingsAutoRegistration(
  * managed only on a role's 账号 tab, so it gets none; it may still hand-write
  * a settings.section for settings of its own.
  */
-function hasAutoSettings(plugin: Pick<PluginSummary, "hasConfigSchema"> & Partial<Pick<PluginSummary, "capabilities">>) {
-  return plugin.hasConfigSchema && !plugin.capabilities?.includes("accounts");
+function hasAutoSettings(plugin: Pick<PluginSummary, "hasConfigSchema"> & Partial<Pick<PluginSummary, "inject">>) {
+  return plugin.hasConfigSchema && !plugin.inject?.includes("accounts");
 }
 
 /** Test-only: clears bookkeeping so each test starts from a clean slate. */

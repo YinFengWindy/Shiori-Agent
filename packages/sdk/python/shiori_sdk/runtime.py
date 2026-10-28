@@ -11,89 +11,37 @@ type Dispose = Callable[[], Awaitable[None] | None]
 type EventHandler[EventT] = Callable[[EventT], Awaitable[EventT | None] | EventT | None]
 
 
-class CapabilityNotGranted(AttributeError):
-    """The plugin tried to access a capability absent from its manifest."""
-
-
 class HostServiceUnavailable(RuntimeError):
-    """The manifest declared a capability, but the host lacks the service behind it.
+    """The manifest asked for a service the host did not assemble.
 
-    Distinct from ``CapabilityNotGranted``: the plugin asked correctly and the host
-    is misassembled. The host raises it before calling ``setup`` and names the
-    missing service. Deliberately not an ``AttributeError`` so ``getattr`` defaults
-    and ``__getattr__`` fallbacks can never swallow it.
+    Raised while building that plugin's setup context, and the message names
+    the missing service. Deliberately not an ``AttributeError`` so ``getattr``
+    defaults can never swallow it.
     """
 
     @classmethod
     def for_capability(
         cls, plugin_id: str, capability: str, services: Iterable[str]
     ) -> "HostServiceUnavailable":
-        """Builds the shared message naming the declared capability and its services."""
+        """Builds the shared message naming the declared service and what is missing."""
         return cls(
             f"插件 {plugin_id} 声明了 capability {capability!r}，"
             f"但宿主未提供服务 {'、'.join(services)}"
         )
 
 
-# manifest 只能声明这里列出的宿主能力；宿主 manifest 解析与 SDK 测试替身共用这一份。
-KNOWN_CAPABILITIES = frozenset(
-    {
-        "services",
-        "tools",
-        "channels",
-        "accounts",
-        # 渠道发送者与群的头像缓存（#514）
-        "avatars",
-        # 插件为角色提交外部上下文回合（#721）
-        "external_turns",
-        "background_results",
-        "process_resources",
-        "events",
-        "scene_observations",
-        "kv",
-        "config",
-        "background",
-        "storage",
-        "roles",
-        "models",
-        "sessions",
-        "http",
-        "resources",
-        "processes",
-        "tool_turn",
-        "rpc",
-        "dependencies",
-        "runtime",
-        # 直传宿主服务引用，供渠道/事件/记忆壳插件读取（#183）；这些字段没有
-        # 装配/回滚语义，宿主直接透传同名服务，不各建 Capability 类。
-        "workspace",
-        "memory",
-        "light_provider",
-        "light_model",
-    }
-)
-
-
-def require_known_capabilities(names: Iterable[str], source: object) -> None:
-    """Rejects capability names outside ``KNOWN_CAPABILITIES`` as the host does."""
-    unknown = [name for name in names if name not in KNOWN_CAPABILITIES]
-    if unknown:
-        raise ValueError(f"manifest 声明了未知 capability {unknown}: {source}")
-
-
 def parse_capabilities(value: object, source: object) -> tuple[str, ...]:
-    """Validates a manifest ``capabilities`` value exactly as the host does.
+    """Validates an api: 2 manifest ``capabilities`` list.
 
-    ``source`` names the manifest in messages. Raises ``ValueError`` when the list
-    is missing, not a list, or names a capability outside ``KNOWN_CAPABILITIES``.
+    ``source`` names the manifest in messages. Raises ``ValueError`` when the
+    list is missing or not a list. Names are not a grant: plugins take services
+    with ``ctx.require``. P4-5 is what rejects a non-``api: 4`` package.
     """
     if value is None:
         raise ValueError(f"v2 manifest 缺少 capabilities 声明: {source}")
     if not isinstance(value, list):
         raise ValueError(f"capabilities 必须是列表: {source}")
-    names = tuple(str(item) for item in cast(list[object], value))
-    require_known_capabilities(names, source)
-    return names
+    return tuple(str(item) for item in cast(list[object], value))
 
 
 class EventsCapability(Protocol):
@@ -111,12 +59,13 @@ class EventsCapability(Protocol):
 
 
 class PluginRuntimeContext(Protocol):
-    """Public setup context. Undeclared capabilities raise CapabilityNotGranted.
+    """Public setup context.
 
     ``provide`` / ``require`` / ``get`` and ``on`` / ``watch`` / ``emit`` are the
     kernel ``Context`` members of the same names (``shiori_sdk.kernel``):
     service keys come from manifest ``provides`` / ``inject`` /
-    ``optional_inject``, events from ``shiori_sdk.core``.
+    ``optional_inject``. ``effect`` takes a label the host records with the
+    disposer.
     """
 
     @property
@@ -124,12 +73,6 @@ class PluginRuntimeContext(Protocol):
 
     @property
     def plugin_dir(self) -> Path: ...
-
-    @property
-    def granted(self) -> tuple[str, ...]: ...
-
-    @property
-    def events(self) -> EventsCapability: ...
 
     def expose(self, api: object) -> None: ...
 

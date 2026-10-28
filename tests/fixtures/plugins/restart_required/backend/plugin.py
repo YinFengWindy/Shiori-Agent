@@ -2,6 +2,8 @@
 
 from pydantic import BaseModel
 
+from shiori_sdk.core.services import EVENTS
+
 
 class RestartConfig(BaseModel):
     """A simple mutable value for config-channel regression tests."""
@@ -16,6 +18,6 @@ async def setup(ctx):
     async def on_event(event):
         return event
 
-    ctx.events.on(str, on_event)
+    ctx.require(EVENTS).on(str, on_event)
     ctx.effect("closed", lambda: state.append("closed"))
     ctx.expose(state)

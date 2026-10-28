@@ -157,17 +157,12 @@ The wheel contains contracts and pure values, without a dependency on the host.
 The core plugin surface includes `PluginRuntimeContext`, `EventsCapability`,
 `Dispose` and `EventHandler`; turn and tool events live in
 `shiori_sdk.core.conversation` and `shiori_sdk.core.tools`.
-The host owns turn execution, storage, capability authorization and cleanup.
-`setup(ctx)` receives its declared capabilities; undeclared access raises
-`CapabilityNotGranted`. A declared capability whose backing host service is
-missing fails before `setup` with `HostServiceUnavailable`, naming the service,
-so declared services such as `workspace` or `sessions` are never `None`.
-Runtime injection is checked through a static
-`PluginSetupContext` without the legacy context's dynamic attribute fallback.
-Typed setup contexts also cover memory, hooks, commands, observation, role/model
-and process services, channels and accounts. Their capability protocols and
-independent testing fixtures are documented below; host service implementations
-remain in the host.
+The host owns turn execution, storage and cleanup.
+`setup(ctx)` is a `PluginRuntimeContext`. Services listed in `inject` are
+taken with `ctx.require`; a key the manifest does not declare raises the
+kernel's `undeclared_key`. A missing provider blocks the plugin before
+`setup`. `kv` without a workspace fails while the host builds the context,
+with `HostServiceUnavailable`. Host service implementations remain in the host.
 
 ```python
 from dataclasses import replace
@@ -191,9 +186,8 @@ Install `shiori-sdk[testing]` for pytest/pytest-asyncio, `sdk_context`,
 bridge request helpers and shared test TLS contexts. Fakes store only test values
 in memory; they never open host persistence. `sdk_context` reads the nearest
 `manifest.yaml` above the test file (within the pytest rootdir; override the
-`sdk_plugin_dir` fixture otherwise) and grants only its declared `capabilities`,
-validated against the host's `KNOWN_CAPABILITIES`, so undeclared access raises
-`CapabilityNotGranted` as in the host. It also declares the manifest's
+`sdk_plugin_dir` fixture otherwise) and records its `capabilities` list
+(`api: 2` must have a list; names are not a whitelist). It also declares the manifest's
 `inject` / `optional_inject` / `provides`: `ctx.require` / `ctx.get` of a key
 not listed there raises the kernel's `undeclared_key`, as in the host. Other
 fake contexts take `package_dir=` to read the same lists from a package's

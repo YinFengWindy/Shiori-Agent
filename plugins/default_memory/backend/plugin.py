@@ -7,36 +7,13 @@ import threading
 from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Protocol, cast
+from typing import Any, cast
 
 from shiori_sdk.core.conversation import TurnStarting
 from shiori_sdk.core.tools import ToolCalled
-from shiori_sdk.extensions import ConfigValues
-from shiori_sdk.http import HttpClient
-from shiori_sdk.memory.context import MemoryPluginContext
-from shiori_sdk.models import ChatProvider
-from shiori_sdk.plugin_services import RuntimeLifecycle
+from shiori_sdk.runtime import PluginRuntimeContext
 from shiori_sdk.storage import plugin_data_dir
-from shiori_sdk.tools import ToolsCapability
 from shiori_sdk.core.services import MEMORY, RPC, RUNTIME, TOOLS
-
-
-class _DefaultMemorySetup(MemoryPluginContext, Protocol):
-    """记忆插件 setup 上下文：工具、配置、主模型、轻量模型与重载排空。"""
-
-    @property
-    def tools(self) -> ToolsCapability: ...
-    @property
-    def config(self) -> ConfigValues: ...
-    @property
-    def http(self) -> HttpClient: ...
-    @property
-    def light_provider(self) -> ChatProvider: ...
-    @property
-    def light_model(self) -> str: ...
-    @property
-    def runtime(self) -> RuntimeLifecycle: ...
-
 
 _ITEM_LINE_RE = re.compile(r"^-\s+\[([^\]]+)\]\s*(.*)$")
 _META_RE = re.compile(r"（(?P<meta>[^（）]*(?:证据|src|有印象|不确定)[^（）]*)）$")
@@ -145,7 +122,7 @@ class _DefaultMemoryRecorder:
                 _ = fh.write(line + "\n")
 
 
-async def setup(ctx: _DefaultMemorySetup) -> None:
+async def setup(ctx: PluginRuntimeContext) -> None:
     """构造默认记忆引擎并提供 ``MEMORY_ENGINE``，再注册工具与检索记录。
 
     向量凭据只读插件配置。缺凭据或向量空间不一致时这里抛出，内核把插件标为

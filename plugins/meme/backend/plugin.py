@@ -18,7 +18,7 @@ from .runtime import (
 )
 
 if TYPE_CHECKING:
-    from shiori_sdk.plugin_services import ServicePluginContext as PluginRuntimeContext
+    from shiori_sdk.runtime import PluginRuntimeContext
     from shiori_sdk.sessions import PluginSessions
     from shiori_sdk.roles import Roles
     from shiori_sdk.processes import Resources

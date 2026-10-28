@@ -36,6 +36,7 @@ def external_source_row(source: ExternalSourceDiagnostic) -> dict[str, Any]:
         "supports_hot_unload": manifest.supports_hot_unload,
         "dependencies": list(manifest.dependencies),
         "capabilities": list(manifest.capabilities),
+        "inject": list(manifest.inject),
         "channels": [],
         "category": manifest.category,
         "state": source.diagnostic.state,

@@ -5,6 +5,7 @@ version: 1.0.0
 runtime_api: '>=3.1.1 <4.0.0'
 entry: backend/plugin.py
 capabilities: [rpc, tools, events, kv]
+inject: [rpc, tools, events, kv]
 host_dependencies:
   python: []
 peer_dependencies:

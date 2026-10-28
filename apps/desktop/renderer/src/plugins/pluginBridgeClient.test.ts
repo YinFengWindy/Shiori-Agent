@@ -43,11 +43,13 @@ it("maps declared capabilities and channel declarations for plugin grouping (#36
       name: "QQBot", version: "1.0.0", description: "", enabled: true, can_toggle: true,
       state: "ACTIVE", error: "", diagnostic: null, has_config_schema: true, supports_hot_unload: true,
       capabilities: ["channels", "config"],
+      inject: ["channels", "accounts", "config"],
       channels: [{ name: "qqbot", label: "QQBot", contact_label: "QQBot 用户 OpenID", chat_types: [{ type: "private", label: "私聊", chat_id_label: "用户 OpenID", chat_id_hint: null, prefix: "c2c:" }] }],
     }] },
   }));
   const [plugin] = await client.listPlugins();
   assert.deepEqual(plugin.capabilities, ["channels", "config"]);
+  assert.deepEqual(plugin.inject, ["channels", "accounts", "config"]);
   assert.deepEqual(plugin.channels, [{
     name: "qqbot", label: "QQBot", contactLabel: "QQBot 用户 OpenID",
     chatTypes: [{ type: "private", label: "私聊", chatIdLabel: "用户 OpenID", chatIdHint: null, prefix: "c2c:" }],

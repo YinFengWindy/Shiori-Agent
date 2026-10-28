@@ -2,7 +2,7 @@
 
 from pathlib import Path
 from shiori_sdk.models import ChatProvider
-from shiori_sdk.plugin_services import ServicePluginContext
+from shiori_sdk.runtime import PluginRuntimeContext
 from .extensions import FakeExtensionContext
 from .memory_context import FakeRpc
 from .processes import FakeProcesses, current_tool_turn
@@ -30,10 +30,15 @@ class FakeServiceContext(FakeExtensionContext):
         *,
         config: dict[str, object] | None = None,
         package_dir: Path | None = None,
+        inject: tuple[str, ...] = (),
     ):
         """``package_dir`` declares inject from that package's manifest."""
         super().__init__(
-            plugin_id, workspace=workspace, config=config, package_dir=package_dir
+            plugin_id,
+            workspace=workspace,
+            config=config,
+            package_dir=package_dir,
+            inject=inject,
         )
         self.roles = FakeRoles(workspace)
         self.models = FakeModels()
@@ -54,8 +59,8 @@ class FakeServiceContext(FakeExtensionContext):
         self.light_provider: ChatProvider = FakeChatProvider()
         self.light_model = "fake-light-model"
 
-    def as_capability(self) -> ServicePluginContext:
-        """Check that fake and actual host implement the same setup surface."""
+    def as_capability(self) -> PluginRuntimeContext:
+        """The same setup boundary the host passes to ``setup``."""
         return self
 
     async def aclose(self) -> None:

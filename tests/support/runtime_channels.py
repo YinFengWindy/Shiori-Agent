@@ -106,12 +106,15 @@ def runtime_channels(tmp_path, monkeypatch):
     package = root / "lifecycle"
     (package / "backend").mkdir(parents=True)
     (package / "backend" / "plugin.py").write_text(
-        f"import sys\n\nasync def setup(ctx):\n"
-        f'    ctx.channels.add(sys.modules["{module_name}"].build_channel(ctx.accounts))\n',
+        "import sys\n"
+        "from shiori_sdk.core.services import ACCOUNTS, CHANNELS\n\n"
+        "async def setup(ctx):\n"
+        f'    ctx.require(CHANNELS).add(sys.modules["{module_name}"].build_channel(ctx.require(ACCOUNTS)))\n',
         encoding="utf-8",
     )
     (package / "manifest.yaml").write_text(
         "api: 2\nid: lifecycle\ncapabilities: [channels, accounts]\n"
+        "inject: [channels, accounts]\n"
         "channels:\n  - name: lifecycle\n    label: Lifecycle\n"
         "    chat_types: [{type: private, label: Private, chat_id_label: ID}]\n",
         encoding="utf-8",

@@ -57,13 +57,13 @@ def test_sdk_context_rejects_a_capability_the_manifest_does_not_declare(
     )
     result = _run_plugin_suite(
         tmp_path,
+        "from shiori_sdk.core.services import EVENTS\n"
         "async def test_setup(sdk_context):\n"
         "    assert sdk_context.granted == ('rpc',)\n"
-        "    sdk_context.events.on(str, print)\n",
+        "    sdk_context.require(EVENTS)\n",
     )
     assert result.returncode == 1, result.stdout + result.stderr
-    assert "CapabilityNotGranted" in result.stdout
-    assert "插件 probe 未声明 capability 'events'" in result.stdout
+    assert "未在 manifest inject 中声明 events" in result.stdout
 
 
 def test_find_plugin_dir_stops_at_the_test_root(tmp_path: Path) -> None:
@@ -82,7 +82,6 @@ def test_find_plugin_dir_stops_at_the_test_root(tmp_path: Path) -> None:
     [
         ("", "v2 manifest 缺少 capabilities 声明"),
         ("capabilities: events\n", "capabilities 必须是列表"),
-        ("capabilities: [events, host_storage]\n", "未知 capability"),
     ],
 )
 def test_manifest_capabilities_are_validated_like_the_host(

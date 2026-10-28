@@ -6,7 +6,7 @@ from shiori_sdk.managed.paths import environment_path
 from shiori_sdk.managed.controller import ManagedRuntime
 from shiori_sdk.managed.installation import Installation
 from shiori_sdk.managed.service import OwnedService
-from shiori_sdk.plugin_services import ServicePluginContext
+from shiori_sdk.runtime import PluginRuntimeContext
 from shiori_sdk.core.services import BACKGROUND, PROCESSES
 
 from .runtime_manifest import INSTALLED_SIZE, PYTHON_RELATIVE, REVISION, resources
@@ -15,7 +15,7 @@ from .runtime_environment import SCRATCH, runtime_environment
 from .settings import Settings, SettingsStore
 
 
-def create_runtime(ctx: ServicePluginContext, store: SettingsStore) -> ManagedRuntime:
+def create_runtime(ctx: PluginRuntimeContext, store: SettingsStore) -> ManagedRuntime:
     """Build from fixed offline packages; large files follow the chosen install root.
 
     Pointer, location, locks and logs stay in plugin data (``root``).

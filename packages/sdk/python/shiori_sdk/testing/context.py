@@ -7,21 +7,16 @@ from typing import cast
 
 from shiori_sdk.kernel import Context, Kernel, Key, PluginSpec, Scope, Veto
 from shiori_sdk.kernel.events import OnHandler, WatchHandler
-from shiori_sdk.runtime import (
-    CapabilityNotGranted,
-    Dispose,
-    require_known_capabilities,
-)
+from shiori_sdk.runtime import Dispose
 from .events import FakeEvents
 
 
 class FakePluginContext:
     """Records setup effects and exports without instantiating any host services.
 
-    ``capabilities`` are the grants, normally a manifest's declaration (see the
-    ``sdk_context`` fixture); names unknown to the host are rejected like the host
-    does. Only ``events`` has a fake here; other declared names are recorded in
-    ``granted`` for specialized fakes.
+    ``capabilities`` is recorded on ``granted`` for tests that still pass an
+    api: 2 list. It does not gate attributes. ``events`` is this fake's own
+    bus, used by cleanup tests; service keys go through ``require`` / ``get``.
 
     The kernel members (``provide`` / ``require`` / ``get``, ``on`` / ``watch``
     / ``emit``) run on a real ``Kernel``: ``kernel`` (a fresh one by default)
@@ -50,7 +45,6 @@ class FakePluginContext:
         provides: tuple[str, ...] = (),
         package_dir: Path | None = None,
     ) -> None:
-        require_known_capabilities(capabilities, f"FakePluginContext({plugin_id})")
         if package_dir is not None:
             if inject or optional_inject or provides:
                 raise ValueError(
@@ -77,19 +71,11 @@ class FakePluginContext:
         )
         self._kernel_context = Context(self.kernel, spec, self._scope)
 
-    def _check(self, name: str) -> None:
-        if self._closed:
-            raise RuntimeError("Plugin scope is closed")
-        declared = name in self._inject or name in self._optional_inject
-        if name not in self.granted and not declared:
-            raise CapabilityNotGranted(
-                f"插件 {self.plugin_id} 未声明 capability '{name}'"
-            )
-
     @property
     def events(self) -> FakeEvents:
-        """Returns the granted event fake."""
-        self._check("events")
+        """This fake's own event bus. Service keys use ``require``, not this."""
+        if self._closed:
+            raise RuntimeError("Plugin scope is closed")
         return self._events
 
     def expose(self, api: object) -> None:
@@ -123,7 +109,7 @@ class FakePluginContext:
             return None
         try:
             return cast(T, getattr(self, attribute))
-        except (AttributeError, CapabilityNotGranted):
+        except AttributeError:
             return None
 
     def on[E](self, event_type: type[E], handler: OnHandler[E]) -> None:

@@ -11,7 +11,7 @@ from .kvcache import KVCacheCommand
 from .memory_status import memory_status
 
 if TYPE_CHECKING:
-    from shiori_sdk.extensions import CommandPluginContext as PluginRuntimeContext
+    from shiori_sdk.runtime import PluginRuntimeContext
 
 
 async def setup(ctx: PluginRuntimeContext) -> None:

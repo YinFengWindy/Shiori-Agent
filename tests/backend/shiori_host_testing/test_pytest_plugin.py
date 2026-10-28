@@ -19,18 +19,20 @@ async def test_plugin_account_report_and_bridge_listing_share_role_store(
     package = tmp_path / "account_demo"
     (package / "backend").mkdir(parents=True)
     (package / "manifest.yaml").write_text(
-        "api: 2\nid: account_demo\ncapabilities: [accounts]\n",
+        "api: 2\nid: account_demo\ncapabilities: [accounts]\ninject: [accounts]\n",
         encoding="utf-8",
     )
     (package / "backend/plugin.py").write_text(
+        "from shiori_sdk.core.services import ACCOUNTS\n"
         "async def setup(ctx):\n"
-        "    account = ctx.accounts.register(platform='demo', "
+        "    accounts = ctx.require(ACCOUNTS)\n"
+        "    account = accounts.register(platform='demo', "
         "platform_account_id='101', config_ref='private', role_id='owner', "
         "display_name='Old', avatar_url='data:image/png;base64,iVBORw0KGgo=')\n"
-        "    account = ctx.accounts.register(platform='demo', "
+        "    account = accounts.register(platform='demo', "
         "platform_account_id='101', config_ref='private', role_id='owner', "
         "display_name='', avatar_url='')\n"
-        "    ctx.accounts.report(account.record.id, connection='online', "
+        "    accounts.report(account.record.id, connection='online', "
         "capabilities=frozenset({'contacts'}))\n",
         encoding="utf-8",
     )

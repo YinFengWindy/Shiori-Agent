@@ -2,6 +2,8 @@
 
 from pydantic import BaseModel, Field
 
+from shiori_sdk.core.services import CONFIG
+
 
 class NumericConfig(BaseModel):
     """A bounded integer used to exercise configuration plumbing only."""
@@ -11,4 +13,4 @@ class NumericConfig(BaseModel):
 
 async def setup(ctx):
     """Fail setup when persisted values are invalid, leaving schema repair available."""
-    NumericConfig.model_validate(ctx.config.as_dict())
+    NumericConfig.model_validate(ctx.require(CONFIG).as_dict())

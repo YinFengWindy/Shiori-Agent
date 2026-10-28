@@ -1,7 +1,7 @@
 """Registers Browser Use lazily and binds cleanup to the v2 plugin effect scope."""
 
 from shiori_sdk.storage import plugin_data_dir
-from shiori_sdk.plugin_services import ServicePluginContext as PluginRuntimeContext
+from shiori_sdk.runtime import PluginRuntimeContext
 from shiori_sdk.core.services import CONFIG, PROCESSES, RESOURCES, TOOLS, WORKSPACE
 
 from .browser import BrowserSessions

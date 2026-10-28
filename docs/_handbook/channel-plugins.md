@@ -17,7 +17,7 @@
 `read_attachment` 工具提供；宿主不注册这个工具，桌面文本附件继续用 `read_file`。
 下载要在账号准入、消息去重和回合触发之后进行，旁听记录只保留文件说明。
 
-`api: 2` 声明 `tools` capability，或 `api: 4` 把 `tools` 写进 `inject` 之后，渠道插件可通过 `ctx.require`（或仍可用的 `ChannelPluginContext.tools`）注册工具。仓库里的四个渠道插件已经是 `api: 4`：服务在 `inject`，渠道行在 `contributes.channels`。下面的示例仍是外部包的 Package Contract v1 形状。
+渠道插件把 `tools` 写进 `inject`，用 `ctx.require(TOOLS)` 注册工具。仓库里的四个渠道插件已经是 `api: 4`：服务在 `inject`，渠道行在 `contributes.channels`。下面的示例仍是外部包的 Package Contract v1 形状。
 宿主将当前入站消息（包括显式引用）的 `media` 冻结成
 `shiori_sdk.tools.ToolAttachmentScope(channel, paths)`，只在该回合的工具执行上下文
 `TOOL_ATTACHMENT_SCOPE_KEY`（`attachment_scope`）里传入，不放入共享工具状态。

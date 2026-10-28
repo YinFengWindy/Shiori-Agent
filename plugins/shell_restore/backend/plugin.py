@@ -11,7 +11,7 @@ from shiori_sdk.core.tools import ToolCalling
 from shiori_sdk.core.services import WORKSPACE
 
 if TYPE_CHECKING:
-    from shiori_sdk.extensions import HookPluginContext as PluginRuntimeContext
+    from shiori_sdk.runtime import PluginRuntimeContext
 
 logger = logging.getLogger("plugin.shell_restore")
 

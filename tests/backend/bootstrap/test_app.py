@@ -155,18 +155,20 @@ async def test_initial_setup_cancellation_releases_plugin_and_runtime(
     package = tmp_path / "host_plugins/waiting"
     (package / "backend").mkdir(parents=True)
     (package / "manifest.yaml").write_text(
-        "api: 2\nid: waiting\ncapabilities: [events]\nsupports_hot_unload: false\n",
+        "api: 2\nid: waiting\ncapabilities: [events]\ninject: [events]\n"
+        "supports_hot_unload: false\n",
         encoding="utf-8",
     )
     (package / "backend/plugin.py").write_text(
         "import asyncio\n"
+        "from shiori_sdk.core.services import EVENTS\n"
         "async def setup(ctx):\n"
         "    state = ['started']\n"
         "    ctx.expose(state)\n"
         "    ctx.effect('close', lambda: state.append('closed'))\n"
         "    async def on_event(event):\n"
         "        return event\n"
-        "    ctx.events.on(str, on_event)\n"
+        "    ctx.require(EVENTS).on(str, on_event)\n"
         "    await asyncio.Event().wait()\n",
         encoding="utf-8",
     )
@@ -220,19 +222,20 @@ async def test_start_publishes_accounts_and_stop_drops_the_generation(
     generation with no plugin effect would survive plugin teardown, so an
     empty list afterwards means the generation index was discarded.
     """
-    from agent.plugin_host.core_keys import HOST_ACCOUNTS
+    from shiori_sdk.core.services import ACCOUNTS
     from bootstrap.app import RuntimeFeatures
     from core.roles.store import RoleStore
 
     package = tmp_path / "host_plugins" / "account_demo"
     (package / "backend").mkdir(parents=True)
     (package / "manifest.yaml").write_text(
-        "api: 2\nid: account_demo\ncapabilities: [accounts]\n",
+        "api: 2\nid: account_demo\ncapabilities: [accounts]\ninject: [accounts]\n",
         encoding="utf-8",
     )
     (package / "backend/plugin.py").write_text(
+        "from shiori_sdk.core.services import ACCOUNTS\n"
         "async def setup(ctx):\n"
-        "    ctx.accounts.register(platform='demo', platform_account_id='101',\n"
+        "    ctx.require(ACCOUNTS).register(platform='demo', platform_account_id='101',\n"
         "        config_ref='one', role_id='mira', display_name='One')\n",
         encoding="utf-8",
     )
@@ -256,7 +259,7 @@ async def test_start_publishes_accounts_and_stop_drops_the_generation(
     registry = app.core.role_runtime_registry.repository.store.accounts
     assert [row.record.platform_account_id for row in registry.list()] == ["101"]
     assert app._plugin_process_resources._active == app.core.plugin_manager.namespace
-    service = app.core.plugin_manager.kernel.get(HOST_ACCOUNTS)
+    service = app.core.plugin_manager.kernel.get(ACCOUNTS)
     assert service is not None
     registry.register(
         plugin_id="lingering",

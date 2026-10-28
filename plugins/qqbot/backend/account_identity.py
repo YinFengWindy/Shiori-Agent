@@ -8,7 +8,7 @@ from shiori_sdk.accounts import ViaAccount, stored_response_rules, ConnectionSta
 from shiori_sdk.core.services import ACCOUNTS
 
 if TYPE_CHECKING:
-    from shiori_sdk.channels.context import ChannelPluginContext
+    from shiori_sdk.runtime import PluginRuntimeContext
 
     from .accounts import QQBotAccountStore
 
@@ -18,7 +18,7 @@ _CAPABILITIES = frozenset({"private", "c2c", "known_targets", "send"})
 class QQBotAccountIdentity:
     """Keep bot identity and connection reports separate from gateway routing."""
 
-    def __init__(self, ctx: ChannelPluginContext, store: QQBotAccountStore) -> None:
+    def __init__(self, ctx: PluginRuntimeContext, store: QQBotAccountStore) -> None:
         self._ctx = ctx
         self._store = store
         self._account_ids: dict[str, str] = {}

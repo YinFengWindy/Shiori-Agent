@@ -3,7 +3,8 @@
 from collections.abc import Mapping
 from pathlib import Path
 
-from shiori_sdk.services import ServiceHandler, ServiceProviderContext
+from shiori_sdk.runtime import PluginRuntimeContext
+from shiori_sdk.services import ServiceHandler
 from .context import FakePluginContext
 
 
@@ -52,6 +53,6 @@ class FakeServiceProviderContext(FakePluginContext):
         super().__init__(plugin_id, capabilities=("services",), package_dir=package_dir)
         self.services = FakePluginServices(self)
 
-    def as_capability(self) -> ServiceProviderContext:
-        """Check the same typed provider setup surface as the production host."""
+    def as_capability(self) -> PluginRuntimeContext:
+        """The same setup boundary the host passes to ``setup``."""
         return self

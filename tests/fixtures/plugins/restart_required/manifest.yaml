@@ -3,4 +3,5 @@ id: restart_required
 version: "0.1.0"
 supports_hot_unload: false
 capabilities: [config, events]
+inject: [events]
 config_model: RestartConfig
