@@ -12,15 +12,15 @@ a new capability is a new key or a new event.
 
 Everything a plugin's ``setup`` receives from the kernel.
 
-- `provide(key: Key[T], impl: T) -> None`
+- `provide(key: kernel.contracts.Key[T], impl: T) -> None`
 
   Publishes ``impl`` under a key this plugin declares in ``provides``.
 
-- `require(key: Key[T]) -> T`
+- `require(key: kernel.contracts.Key[T]) -> T`
 
   The current provider of a key declared in ``inject``.
 
-- `get(key: Key[T]) -> T | None`
+- `get(key: kernel.contracts.Key[T]) -> Optional[T]`
 
   The current provider of a key declared in ``optional_inject``, or None.
 
@@ -32,7 +32,7 @@ Everything a plugin's ``setup`` receives from the kernel.
 
   Listens read-only to the final event, serially, without delaying emit.
 
-- `async emit(event: E) -> E | Veto`
+- `async emit(event: E) -> Union[E, kernel.contracts.Veto]`
 
   Emits through the kernel; see ``Kernel.emit``.
 
@@ -40,7 +40,7 @@ Everything a plugin's ``setup`` receives from the kernel.
 
   Registers cleanup, run LIFO after subscriptions and tasks are gone.
 
-- `spawn(coro: Coroutine[Any, Any, T]) -> asyncio.Task[T]`
+- `spawn(coro: Coroutine[Any, Any, T]) -> _asyncio.Task[T]`
 
   Runs a task owned by this plugin; disposal cancels it (not drained, D25).
 
@@ -472,7 +472,7 @@ str(object='') -> str str(bytes_or_buffer[, encoding[, errors]]) -> str Create a
 
 - `isprintable()`
 
-  Return True if the string is printable, False otherwise. A string is printable if all of its characters are considered printable in repr() or if it is empty.
+  Return True if all characters in the string are printable, False otherwise. A character is printable if repr() may use it in its output.
 
 - `zfill(width)`
 
@@ -927,7 +927,7 @@ PurePath subclass that can make system calls. Path represents a filesystem path 
 
 - `open(mode = 'r', buffering = -1, encoding = None, errors = None, newline = None)`
 
-  Open the file pointed by this path and return a file object, as the built-in open() function does.
+  Open the file pointed to by this path and return a file object, as the built-in open() function does.
 
 - `read_bytes()`
 
