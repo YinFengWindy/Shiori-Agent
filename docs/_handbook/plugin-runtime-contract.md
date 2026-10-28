@@ -143,7 +143,9 @@ consolidates these additions and the subsequent #847 breaking migration.
   disabled, or unchecked content); that becomes a kernel `setup_failed`.
   `runnable` now means the host intends to run the plugin in this round: a
   runnable spec without a scope is either being started by the current
-  `start` or excluded by the plan. A plugin whose setup fails (`FAILED` /
+  `start` or excluded by the plan, with one window: when `unload` lifts an
+  exclusion, the freed plugin stays unstarted until the next load round picks
+  it up (screened like any other). A plugin whose setup fails (`FAILED` /
   `RESTART_REQUIRED`, including a renderer-entry rollback), one blocked on an
   unavailable dependency, one the round selected but does not start, and one
   disposed (reload neighbors, disabled closures, unload) are re-planned

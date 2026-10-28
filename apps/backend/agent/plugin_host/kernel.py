@@ -1360,10 +1360,6 @@ class PluginKernel:
         # The kernel releases subscriptions, tasks, then effects LIFO; a
         # failed instance whose release was interrupted finishes here.
         errors = await self._kernel.deactivate(handle.plugin_id)
-        if handle.record.admission is None:
-            # Disposed: no later ``start`` may set it up again unless a round
-            # selects it (an in-generation reload or enable does).
-            await self._park([handle.record])
         # 配置 schema 的生命周期绑定在 handle 本身（真正被卸载/整代被处置时），
         # 不是 setup 回滚 effect 的一部分：见 _register_config_schema 的文档。
         self.config_schemas.unregister(handle.plugin_id)
@@ -1371,6 +1367,11 @@ class PluginKernel:
         handle.instance = None
         handle.state = PluginState.DISPOSED
         self._handles.pop(handle.record.candidate_id, None)
+        if handle.record.admission is None:
+            # Disposed: no later ``start`` may set it up again unless a round
+            # selects it (an in-generation reload or enable does). Last, so a
+            # cancelled re-plan cannot skip the synchronous cleanup above.
+            await self._park([handle.record])
         return errors
 
     async def terminate_all(self, *, force: bool = False) -> None:
