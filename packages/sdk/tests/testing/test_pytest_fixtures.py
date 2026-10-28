@@ -6,7 +6,7 @@ import sys
 
 import pytest
 
-from shiori_sdk.testing.pytest_fixtures import find_plugin_dir, read_plugin_id
+from shiori_sdk.testing.pytest_fixtures import find_plugin_dir
 
 
 def _run_plugin_suite(
@@ -31,9 +31,7 @@ def _run_plugin_suite(
 
 
 def test_sdk_context_always_disposes_registered_effects(tmp_path: Path) -> None:
-    (tmp_path / "manifest.yaml").write_text(
-        "id: probe\ncapabilities: []\n", encoding="utf-8"
-    )
+    (tmp_path / "manifest.yaml").write_text("api: 4\nid: probe\n", encoding="utf-8")
     result = _run_plugin_suite(
         tmp_path,
         "from pathlib import Path\n\n"
@@ -74,21 +72,3 @@ def test_find_plugin_dir_stops_at_the_test_root(tmp_path: Path) -> None:
         find_plugin_dir(test_file, plugin)
     (plugin / "manifest.yaml").write_text("id: inner\n", encoding="utf-8")
     assert find_plugin_dir(test_file, plugin) == plugin.resolve()
-
-
-@pytest.mark.parametrize(
-    ("capabilities", "message"),
-    [
-        ("", "v2 manifest 缺少 capabilities 声明"),
-        ("capabilities: events\n", "capabilities 必须是列表"),
-        ("capabilities: [1]\n", "capabilities 必须是字符串列表"),
-    ],
-)
-def test_manifest_capabilities_are_validated_like_the_host(
-    tmp_path: Path, capabilities: str, message: str
-) -> None:
-    (tmp_path / "manifest.yaml").write_text(
-        f"id: probe\n{capabilities}", encoding="utf-8"
-    )
-    with pytest.raises(ValueError, match=message):
-        read_plugin_id(tmp_path)

@@ -116,9 +116,8 @@ class RuntimePluginManagement:
                     not in {"CONFLICT", "UNTRUSTED", "BLOCKED", "RESTART_REQUIRED"},
                     "supports_hot_unload": record.manifest.supports_hot_unload,
                     "dependencies": list(record.manifest.dependencies),
-                    # Declared capabilities and static channel declarations let
-                    # the desktop group channel plugins without activating them.
-                    "capabilities": list(record.manifest.capabilities),
+                    # Static channel declarations let the desktop group channel
+                    # plugins without activating them.
                     "inject": list(record.manifest.inject),
                     "channels": [
                         declaration.to_dict()

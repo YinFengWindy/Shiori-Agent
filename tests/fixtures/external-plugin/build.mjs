@@ -21,10 +21,10 @@ await mkdir(resolve(packageRoot, "backend"), { recursive: true });
 await mkdir(resolve(packageRoot, "assets"), { recursive: true });
 let manifest = (await readFile(resolve(root, "manifest.yaml"), "utf8")).replace(/^version: .+$/m, `version: ${version}`);
 if (variant === "incompatible") {
-  const runtimeRange = /^runtime_api: .+$/m;
-  // Fail loudly instead of silently shipping a compatible "incompatible" package.
-  if (!runtimeRange.test(manifest)) throw new Error("Fixture manifest has no runtime_api line to make incompatible");
-  manifest = manifest.replace(runtimeRange, "runtime_api: '>=99.0.0 <100.0.0'");
+  const apiLine = /^api: 4$/m;
+  // Fail loudly instead of silently shipping a package this host still accepts.
+  if (!apiLine.test(manifest)) throw new Error("Fixture manifest has no api: 4 line to make incompatible");
+  manifest = manifest.replace(apiLine, "api: 2");
 }
 await writeFile(resolve(packageRoot, "manifest.yaml"), manifest, "utf8");
 if (variant !== "missing-entry") {

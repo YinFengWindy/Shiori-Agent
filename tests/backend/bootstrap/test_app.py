@@ -155,8 +155,7 @@ async def test_initial_setup_cancellation_releases_plugin_and_runtime(
     package = tmp_path / "host_plugins/waiting"
     (package / "backend").mkdir(parents=True)
     (package / "manifest.yaml").write_text(
-        "api: 2\nid: waiting\ncapabilities: [events]\ninject: [events]\n"
-        "supports_hot_unload: false\n",
+        "api: 4\nid: waiting\ninject: [events]\nsupports_hot_unload: false\n",
         encoding="utf-8",
     )
     (package / "backend/plugin.py").write_text(
@@ -229,7 +228,7 @@ async def test_start_publishes_accounts_and_stop_drops_the_generation(
     package = tmp_path / "host_plugins" / "account_demo"
     (package / "backend").mkdir(parents=True)
     (package / "manifest.yaml").write_text(
-        "api: 2\nid: account_demo\ncapabilities: [accounts]\ninject: [accounts]\n",
+        "api: 4\nid: account_demo\ninject: [accounts]\n",
         encoding="utf-8",
     )
     (package / "backend/plugin.py").write_text(

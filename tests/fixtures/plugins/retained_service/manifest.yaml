@@ -1,9 +1,6 @@
-api: 2
-package_contract: 1
+api: 4
 distribution: external
 id: retained_service
 version: '1.0.0'
-runtime_api: '>=3.1.1 <4.0.0'
 entry: backend/plugin.py
-capabilities: [services, background]
 inject: [services, background]

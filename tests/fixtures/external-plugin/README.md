@@ -36,7 +36,7 @@ the surface uses host React and calls backend RPC. `Save retained data` writes t
 sentinel `retained-user-value` to the plugin KV. A teardown audit checks that the
 registered tool was removed. No network, model or paid API is called.
 
-The incompatible and missing-entry variants fail static admission. The renderer
+The incompatible variant is `api: 2` and fails static admission as an old package. The missing-entry variant fails static admission. The renderer
 failure variant has a valid package contract but throws a specific error while
 its UI module initializes. Corrupt-after-confirmation update coverage modifies
 only a staged QA copy of the valid v3 package; the distributed ZIP stays intact.

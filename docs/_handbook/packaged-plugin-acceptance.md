@@ -26,9 +26,9 @@ pnpm --filter shiori-desktop run verify:package
 Copy `tests/fixtures/external-plugin/` to a new directory outside the repository.
 Follow its README to install its own build dependency and generate all six ZIPs.
 The host is built once; v1/v2/v3 and invalid fixture versions are built separately.
-The current fixture declares `runtime_api: '>=3.1.1 <4.0.0'`, so the candidate's
-host must advertise at least Runtime API 3.1.1; the recorded 0.3.0-rc.1 run below
-used the fixture as it was at that revision.
+The current fixture declares `api: 4`, so the candidate's host must accept
+`api: 4` packages; the recorded 0.3.0-rc.1 run below used the fixture as it was
+at that revision.
 The runner never rebuilds the host while installing/updating a plugin.
 
 ## Automated packaged run

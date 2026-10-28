@@ -63,9 +63,9 @@ async function bundleContainsMarker(dir, needle) {
 
 async function main() {
   await mkdir(uiDir, { recursive: true });
-  await writeFile(join(pluginDir, "manifest.yaml"), `api: 2\nid: ${pluginId}\ncapabilities: []\n`, "utf8");
+  await writeFile(join(pluginDir, "manifest.yaml"), `api: 4\nid: ${pluginId}\n`, "utf8");
   await mkdir(externalDir, { recursive: true });
-  await writeFile(join(externalDir, "manifest.yaml"), `api: 2\nid: ${pluginId}_external\ndistribution: external\ncapabilities: []\n`, "utf8");
+  await writeFile(join(externalDir, "manifest.yaml"), `api: 4\nid: ${pluginId}_external\ndistribution: external\n`, "utf8");
   // A registration-time filter would still parse these invalid modules and fail.
   // A successful production build proves exclusion from all three dependency graphs.
   for (const [kind, extension] of [["ui", "tsx"], ["surface", "tsx"], ["background", "ts"]]) {

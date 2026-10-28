@@ -13,12 +13,11 @@ import { zipPluginDirectory } from "./plugin-zip.mjs";
 export async function buildPlugin({ plugin, output }) {
   const source = await realpath(resolve(plugin));
   const manifest = await readPluginManifest(source);
-  if (manifest.distribution !== "external" || manifest.api !== 2 || manifest.package_contract !== 1) {
-    throw new Error("ZIP sources require distribution: external, api: 2 and package_contract: 1");
+  if (manifest.distribution !== "external" || manifest.api !== 4) {
+    throw new Error("ZIP sources require distribution: external and api: 4");
   }
   if (typeof manifest.id !== "string" || !/^[a-z][a-z0-9_-]{0,63}$/.test(manifest.id)) throw new Error("Expected a portable plugin id");
   if (typeof manifest.version !== "string" || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(manifest.version)) throw new Error("Expected a semantic plugin version");
-  if (typeof manifest.runtime_api !== "string" || !manifest.runtime_api.trim()) throw new Error("Expected an explicit runtime_api compatibility range");
   if (!manifest.entry?.startsWith("backend/") || !manifest.entry.endsWith(".py")) throw new Error("Expected a backend/*.py entry");
   packageFile(source, manifest.entry);
   const outputRoot = resolve(output);

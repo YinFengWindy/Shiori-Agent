@@ -3,8 +3,9 @@
 import pytest
 import yaml
 
+from shiori_sdk import RUNTIME_API_VERSION
 from shiori_sdk.kernel import PackageContractError
-from agent.plugin_host.host_contract import HostRuntimeContract
+from agent.plugin_host.discovery import discover_plugins
 from agent.plugin_host.package_contract import validate_package
 
 
@@ -15,10 +16,9 @@ def _change(package, **values):
     path.write_text(yaml.safe_dump(raw), encoding="utf-8")
 
 
-def test_valid_package_separates_identity_version_and_runtime(contract_package):
+def test_valid_package_reads_version_and_every_renderer_entry(contract_package):
     result = validate_package(contract_package)
     assert result.manifest.version == "1.2.3"
-    assert result.runtime_api == ">=3.1.1 <4.0.0"
     assert [entry.kind for entry in result.renderer] == ["ui", "background", "surface"]
 
 
@@ -43,13 +43,8 @@ def test_package_accepts_host_supported_display_and_distribution_metadata(
 @pytest.mark.parametrize(
     "values, code, field",
     [
-        ({"runtime_api": ">=2.0.0 <3.0.0"}, "incompatible_runtime", "runtime_api"),
-        ({"runtime_api": ">=99.0.0 <100.0.0"}, "incompatible_runtime", "runtime_api"),
-        # Retracted unpublished 4.x range (#698): the host is back on 3.1.x.
-        ({"runtime_api": ">=4.3.0 <5.0.0"}, "incompatible_runtime", "runtime_api"),
+        ({"runtime_api": ">=3.1.1 <4.0.0"}, "invalid_manifest", "manifest"),
         ({"version": "1.2"}, "invalid_version", "version"),
-        ({"package_contract": True}, "unsupported_contract", "package_contract"),
-        ({"package_contract": 2}, "unsupported_contract", "package_contract"),
         (
             {
                 "renderer": {
@@ -60,21 +55,6 @@ def test_package_accepts_host_supported_display_and_distribution_metadata(
             "renderer.ui",
         ),
         ({"peer_dependencies": {}}, "missing_dependency", "peer_dependencies"),
-        (
-            {"host_dependencies": {"python": ["not-installed"]}},
-            "missing_dependency",
-            "host_dependencies.python[0]",
-        ),
-        (
-            {"host_dependencies": {"npm": ["lodash"]}},
-            "invalid_manifest",
-            "host_dependencies",
-        ),
-        (
-            {"host_dependencies": {"python": ["ncatbot"]}},
-            "missing_dependency",
-            "host_dependencies.python[0]",
-        ),
         ({"assets": ["../secret"]}, "invalid_path", "assets[0]"),
         ({"entry": "backend/missing.py"}, "missing_file", "entry"),
         (
@@ -117,48 +97,65 @@ def test_css_is_required(contract_package):
     assert caught.value.diagnostic.field == "renderer.ui.css[0]"
 
 
-def test_declared_host_python_dependency_uses_host_inventory(contract_package):
-    _change(contract_package, host_dependencies={"python": ["pydantic"]})
-    host = HostRuntimeContract(python_dependencies=frozenset({"pydantic"}))
-    assert validate_package(contract_package, host=host).manifest.id == "external_demo"
+_NO_API = object()
 
 
-def test_external_boundary_does_not_accept_legacy_manifest(contract_package):
+@pytest.mark.parametrize("api", [2, "4", 4.0, 5, _NO_API])
+def test_install_and_discovery_reject_every_api_but_integer_4(contract_package, api):
+    """Install refuses before the trust prompt; an installed copy is BLOCKED.
+
+    Both report ``unsupported_api``, and the installed copy keeps its name.
+    """
     path = contract_package / "manifest.yaml"
     raw = yaml.safe_load(path.read_text(encoding="utf-8"))
-    del raw["package_contract"]
+    raw.update(api=api, runtime_api=">=3.1.1 <4.0.0", package_contract=1)
+    if api is _NO_API:
+        del raw["api"]
     path.write_text(yaml.safe_dump(raw), encoding="utf-8")
     with pytest.raises(PackageContractError) as caught:
         validate_package(contract_package)
-    assert caught.value.diagnostic.field == "package_contract"
+    assert (caught.value.diagnostic.code, caught.value.diagnostic.field) == (
+        "unsupported_api",
+        "api",
+    )
+    # The directory name differs from the id, so the row must read the manifest.
+    installed = contract_package.rename(contract_package.parent / "installed_copy")
+    [record] = discover_plugins(
+        [installed.parent],
+        external_roots=[installed.parent],
+        namespace="t",
+        strict=True,
+        host=None,
+    )
+    assert (record.manifest.id, record.manifest.version) == ("external_demo", "1.2.3")
+    assert record.admission is not None
+    assert record.admission.to_dict() == caught.value.diagnostic.to_dict() | {
+        "path": str(installed / "manifest.yaml")
+    }
 
 
-@pytest.mark.parametrize(
-    "values, field", [({"api": 2.0}, "api"), ({"id": "con"}, "id")]
-)
-def test_external_schema_rejects_noninteger_api_and_device_id(
-    contract_package, values, field
-):
-    _change(contract_package, **values)
+def test_external_schema_rejects_a_device_id(contract_package):
+    _change(contract_package, id="con")
     with pytest.raises(PackageContractError) as caught:
         validate_package(contract_package)
-    assert caught.value.diagnostic.field == field
+    assert caught.value.diagnostic.field == "id"
 
 
 def test_external_package_may_declare_channels(contract_package):
     _change(
         contract_package,
-        capabilities=["channels"],
-        runtime_api=">=3.1.1 <4.0.0",
-        channels=[
-            {
-                "name": "demo_chat",
-                "label": "Demo",
-                "chat_types": [
-                    {"type": "private", "label": "私聊", "chat_id_label": "用户 ID"}
-                ],
-            }
-        ],
+        inject=["channels"],
+        contributes={
+            "channels": [
+                {
+                    "name": "demo_chat",
+                    "label": "Demo",
+                    "chat_types": [
+                        {"type": "private", "label": "私聊", "chat_id_label": "用户 ID"}
+                    ],
+                }
+            ]
+        },
     )
     result = validate_package(contract_package)
     assert [item.name for item in result.manifest.channels] == ["demo_chat"]
@@ -167,35 +164,13 @@ def test_external_package_may_declare_channels(contract_package):
 def test_external_channel_declaration_errors_block_the_package(contract_package):
     _change(
         contract_package,
-        capabilities=["channels"],
-        channels=[{"name": "desktop", "label": "Desktop"}],
+        inject=["channels"],
+        contributes={"channels": [{"name": "desktop", "label": "Desktop"}]},
     )
     with pytest.raises(PackageContractError) as caught:
         validate_package(contract_package)
     assert caught.value.diagnostic.code == "invalid_manifest"
     assert "desktop" in caught.value.diagnostic.reason
-
-
-def test_host_advertises_runtime_api_with_shared_visual_components():
-    from shiori_sdk import RUNTIME_API_VERSION
-
-    assert HostRuntimeContract().runtime_api == RUNTIME_API_VERSION
-
-
-def test_lower_bound_one_patch_above_the_host_is_rejected(contract_package):
-    # A package requiring a future release must be gated, even one patch ahead.
-    major, minor, patch = HostRuntimeContract().runtime_api.split(".")
-    declared = f">={major}.{minor}.{int(patch) + 1} <{int(major) + 1}.0.0"
-    _change(contract_package, runtime_api=declared)
-    with pytest.raises(PackageContractError) as caught:
-        validate_package(contract_package)
-    assert caught.value.diagnostic.code == "incompatible_runtime"
-    assert caught.value.diagnostic.field == "runtime_api"
-
-
-def test_explicit_cross_major_compatibility_is_accepted(contract_package):
-    _change(contract_package, runtime_api=">=2.16.0 <4.0.0")
-    assert validate_package(contract_package).runtime_api == ">=2.16.0 <4.0.0"
 
 
 def test_repository_plugin_declarations_admit_the_installed_sdk_and_siblings():
@@ -204,9 +179,8 @@ def test_repository_plugin_declarations_admit_the_installed_sdk_and_siblings():
     from packaging.utils import canonicalize_name
     from bootstrap.paths import plugin_roots
     from agent.plugin_host.manifest import load_manifest
-    from agent.plugin_host.package_schema import compatible_range
 
-    runtime = HostRuntimeContract().runtime_api
+    runtime = RUNTIME_API_VERSION
     projects: dict[str, str] = {}
     dependencies: dict[str, list[Requirement]] = {}
     for root in plugin_roots():
@@ -215,9 +189,6 @@ def test_repository_plugin_declarations_admit_the_installed_sdk_and_siblings():
                 continue
             manifest = load_manifest(directory)
             assert manifest is not None
-            declared = manifest.metadata.get("runtime_api")
-            if declared is not None:
-                assert compatible_range(runtime, declared, "runtime_api") == declared
             project = tomllib.loads(
                 (directory / "pyproject.toml").read_text(encoding="utf-8")
             )["project"]

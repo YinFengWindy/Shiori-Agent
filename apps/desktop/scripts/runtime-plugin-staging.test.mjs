@@ -32,7 +32,7 @@ test("frozen staging excludes external source before hidden-import collection", 
       await mkdir(join(source, id, ...parts.slice(0, -1)), { recursive: true });
       await writeFile(join(source, id, ...parts), "# test\n", "utf8");
     }
-    await writeFile(join(source, id, "manifest.yaml"), `api: 2\nid: ${id}\n${id === "separate" ? "distribution: external\n" : ""}`, "utf8");
+    await writeFile(join(source, id, "manifest.yaml"), `api: 4\nid: ${id}\n${id === "separate" ? "distribution: external\n" : ""}`, "utf8");
   }
   await stageBuiltinPlugins(source, staged);
   assert.deepEqual(await collectPluginBackendModules(staged), ["plugins.bundled.backend.plugin"]);

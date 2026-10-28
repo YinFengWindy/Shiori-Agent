@@ -113,10 +113,10 @@ def runtime_channels(tmp_path, monkeypatch):
         encoding="utf-8",
     )
     (package / "manifest.yaml").write_text(
-        "api: 2\nid: lifecycle\ncapabilities: [channels, accounts]\n"
+        "api: 4\nid: lifecycle\n"
         "inject: [channels, accounts]\n"
-        "channels:\n  - name: lifecycle\n    label: Lifecycle\n"
-        "    chat_types: [{type: private, label: Private, chat_id_label: ID}]\n",
+        "contributes:\n  channels:\n    - name: lifecycle\n      label: Lifecycle\n"
+        "      chat_types: [{type: private, label: Private, chat_id_label: ID}]\n",
         encoding="utf-8",
     )
     monkeypatch.setattr("bootstrap.tools._resolve_plugin_dirs", lambda _: [root])

@@ -1,5 +1,4 @@
-api: 2
+api: 4
 id: numeric_config
-capabilities: [config]
 inject: [config]
 config_model: NumericConfig

@@ -45,7 +45,7 @@ async def test_account_test_plugin_reports_and_withdraws_live_state(tmp_path):
     package = tmp_path / "account_demo"
     (package / "backend").mkdir(parents=True)
     (package / "manifest.yaml").write_text(
-        "api: 2\nid: account_demo\ncapabilities: [accounts]\ninject: [accounts]\n",
+        "api: 4\nid: account_demo\ninject: [accounts]\n",
         encoding="utf-8",
     )
     (package / "backend/plugin.py").write_text(
@@ -135,8 +135,7 @@ async def test_failed_account_plugin_setup_discards_unpublished_identity(tmp_pat
     package = tmp_path / "failed_account_demo"
     (package / "backend").mkdir(parents=True)
     (package / "manifest.yaml").write_text(
-        "api: 2\nid: failed_account_demo\ncapabilities: [accounts]\n"
-        "inject: [accounts]\n",
+        "api: 4\nid: failed_account_demo\ninject: [accounts]\n",
         encoding="utf-8",
     )
     (package / "backend/plugin.py").write_text(
@@ -194,8 +193,7 @@ async def test_setup_cancellation_rolls_back_before_force_cleanup(tmp_path, stri
         package = tmp_path / name
         (package / "backend").mkdir(parents=True)
         (package / "manifest.yaml").write_text(
-            f"api: 2\nid: {name}\ncapabilities: [events]\ninject: [events]\n"
-            "supports_hot_unload: false\n",
+            f"api: 4\nid: {name}\ninject: [events]\nsupports_hot_unload: false\n",
             encoding="utf-8",
         )
         (package / "backend/plugin.py").write_text(
@@ -252,7 +250,7 @@ async def test_invalid_yaml_is_diagnosed_without_blocking_valid_sibling(
 
     broken = tmp_path / "broken"
     broken.mkdir()
-    (broken / "manifest.yaml").write_text("api: 2\ncapabilities: [\n", encoding="utf-8")
+    (broken / "manifest.yaml").write_text("api: 4\ncapabilities: [\n", encoding="utf-8")
     stage_plugin_package(PLUGIN_FIXTURES / "hello", tmp_path / "hello")
     kernel = make_kernel([tmp_path], event_bus=EventBus())
     try:
@@ -287,18 +285,6 @@ def test_api_4_manifest_rejects_capabilities_and_host_keys(
         "api: 4\nid: demo\n" + lines, encoding="utf-8"
     )
     with pytest.raises(ManifestError, match=message):
-        load_manifest(tmp_path)
-
-
-def test_api_2_manifest_rejects_host_keys(tmp_path: Path):
-    """api: 2 cannot take the shared RPC registry either."""
-    from agent.plugin_host.manifest import ManifestError, load_manifest
-
-    (tmp_path / "manifest.yaml").write_text(
-        "api: 2\nid: demo\ncapabilities: []\ninject:\n  - host.bridge\n",
-        encoding="utf-8",
-    )
-    with pytest.raises(ManifestError, match="inject 不能声明宿主内部 Key"):
         load_manifest(tmp_path)
 
 
@@ -339,7 +325,7 @@ async def test_force_cleanup_recovers_effects_after_rollback_is_cancelled(tmp_pa
     package = tmp_path / "waiting"
     (package / "backend").mkdir(parents=True)
     (package / "manifest.yaml").write_text(
-        "api: 2\ncapabilities: []\nsupports_hot_unload: false\n", encoding="utf-8"
+        "api: 4\nsupports_hot_unload: false\n", encoding="utf-8"
     )
     (package / "backend/plugin.py").write_text(
         "import asyncio\n"
@@ -424,7 +410,7 @@ def test_discover_finds_all_top_level_plugins():
         ), f"{record.name} 的 entry_file 不存在: {record.entry_file}"
 
 
-_V2_PLUGIN = """
+_EVENTS_KV_PLUGIN = """
 from agent.lifecycle.types import BeforeTurnCtx
 from shiori_sdk.core.services import EVENTS, KV
 
@@ -441,18 +427,18 @@ async def _on_turn(event):
     return event
 """.strip()
 
-_V2_MANIFEST = (
-    "api: 2\nid: v2demo\nversion: '0.1'\n"
-    "capabilities:\n  - events\n  - kv\n"
-    "inject:\n  - events\n  - kv\n"
+_EVENTS_KV_MANIFEST = (
+    "api: 4\nid: kvdemo\nversion: '0.1'\ninject:\n  - events\n  - kv\n"
 )
 
 
-def _write_v2_plugin(root: Path) -> Path:
-    plugin_dir = root / "v2demo"
+def _write_kv_plugin(root: Path) -> Path:
+    plugin_dir = root / "kvdemo"
     (plugin_dir / "backend").mkdir(parents=True)
-    (plugin_dir / "backend" / "plugin.py").write_text(_V2_PLUGIN, encoding="utf-8")
-    (plugin_dir / "manifest.yaml").write_text(_V2_MANIFEST, encoding="utf-8")
+    (plugin_dir / "backend" / "plugin.py").write_text(
+        _EVENTS_KV_PLUGIN, encoding="utf-8"
+    )
+    (plugin_dir / "manifest.yaml").write_text(_EVENTS_KV_MANIFEST, encoding="utf-8")
     return plugin_dir
 
 
@@ -469,7 +455,7 @@ async def test_declared_dependency_loads_first_and_its_api_is_scoped(tmp_path):
         package = tmp_path / name
         (package / "backend").mkdir(parents=True)
         (package / "manifest.yaml").write_text(
-            f"api: 2\nid: {name}\ncapabilities: [dependencies]\n"
+            f"api: 4\nid: {name}\n"
             f"inject: [dependencies]\ndependencies: {dependencies}\n",
             encoding="utf-8",
         )
@@ -494,7 +480,7 @@ async def test_enabled_plugin_cycled_with_a_disabled_one_is_not_a_dependency_cyc
         package = tmp_path / name
         (package / "backend").mkdir(parents=True)
         (package / "manifest.yaml").write_text(
-            f"api: 2\nid: {name}\ncapabilities: []\ndependencies: {dependencies}\n",
+            f"api: 4\nid: {name}\ndependencies: {dependencies}\n",
             encoding="utf-8",
         )
         (package / "backend/plugin.py").write_text(
@@ -527,7 +513,7 @@ async def test_missing_or_cyclic_dependency_blocks_setup(tmp_path, dependencies)
     package = tmp_path / "blocked"
     (package / "backend").mkdir(parents=True)
     (package / "manifest.yaml").write_text(
-        f"api: 2\nid: blocked\ncapabilities: []\ndependencies: {dependencies}\n",
+        f"api: 4\nid: blocked\ndependencies: {dependencies}\n",
         encoding="utf-8",
     )
     (package / "backend/plugin.py").write_text(
@@ -554,12 +540,11 @@ async def test_uninstalled_external_source_is_never_a_kernel_candidate(
     )
     path = contract_package / "manifest.yaml"
     path.write_text(
-        path.read_text(encoding="utf-8").replace(
-            "capabilities: []\n",
-            "capabilities: [channels]\ndistribution: external\nchannels:\n"
-            "  - {name: listens, label: L, group_listening: true,"
-            " chat_types: [{type: private, label: P, chat_id_label: ID}]}\n",
-        ),
+        "api: 4\nid: external_demo\nversion: 1.2.3\nentry: backend/plugin.py\n"
+        "distribution: external\ninject: [channels]\n"
+        "contributes:\n  channels:\n"
+        "    - {name: listens, label: L, group_listening: true,"
+        " chat_types: [{type: private, label: P, chat_id_label: ID}]}\n",
         encoding="utf-8",
     )
     (contract_package / "backend/plugin.py").write_text(
@@ -585,20 +570,20 @@ async def test_uninstalled_external_source_is_never_a_kernel_candidate(
 
 
 @pytest.mark.asyncio
-async def test_v2_plugin_setup_and_unload(
+async def test_plugin_setup_and_unload(
     tmp_path: Path, tmp_path_factory: pytest.TempPathFactory
 ):
-    plugin_dir = _write_v2_plugin(tmp_path)
+    plugin_dir = _write_kv_plugin(tmp_path)
     # workspace 必须独立于插件扫描根（tmp_path），否则"kv 不写插件目录"这条
     # 断言即使内核实现退化成从插件目录派生 workspace 也检测不出来（#178 复审 #9）。
-    workspace = tmp_path_factory.mktemp("v2demo-workspace")
+    workspace = tmp_path_factory.mktemp("kvdemo-workspace")
     bus = EventBus()
     kernel = make_kernel([tmp_path], event_bus=bus, workspace=workspace)
     await kernel.load_all()
 
     assert kernel.loaded_count == 1
     # kv 落在 workspace 而不是插件目录（issue #209）
-    assert (plugin_data_dir(workspace, "v2demo") / "kv.json").exists()
+    assert (plugin_data_dir(workspace, "kvdemo") / "kv.json").exists()
     assert not (plugin_dir / ".kv.json").exists()
 
     import sys
@@ -606,23 +591,25 @@ async def test_v2_plugin_setup_and_unload(
     module = next(
         m
         for k, m in sys.modules.items()
-        if k.startswith("akasic_plugin_") and k.endswith("_v2demo")
+        if k.startswith("akasic_plugin_") and k.endswith("_kvdemo")
     )
     _ = await bus.emit(before_turn_ctx(session_key="test:v2"))
     assert module.seen == ["test:v2"]
 
-    _ = await kernel.unload("v2demo")
+    _ = await kernel.unload("kvdemo")
     _ = await bus.emit(before_turn_ctx(session_key="test:gone"))
     assert module.seen == ["test:v2"]
 
 
 @pytest.mark.asyncio
-async def test_v2_capability_gating(tmp_path: Path):
+async def test_undeclared_keys_are_refused_at_setup(tmp_path: Path):
+    """A ``host.`` name is never declarable, so providing one is refused too."""
     plugin_dir = tmp_path / "gated"
     (plugin_dir / "backend").mkdir(parents=True)
     (plugin_dir / "backend" / "plugin.py").write_text(
         """
 from shiori_sdk.core.services import TOOLS
+from shiori_sdk.kernel import Key
 
 captured: dict = {}
 
@@ -632,11 +619,15 @@ async def setup(ctx):
         ctx.require(TOOLS)
     except Exception as e:
         captured["denied"] = str(e)
+    try:
+        ctx.provide(Key("host.bridge"), object())
+    except Exception as e:
+        captured["provide"] = e
 """.strip(),
         encoding="utf-8",
     )
     (plugin_dir / "manifest.yaml").write_text(
-        "api: 2\nid: gated\ncapabilities:\n  - events\ninject:\n  - events\n",
+        "api: 4\nid: gated\ninject:\n  - events\n",
         encoding="utf-8",
     )
     kernel = make_kernel([tmp_path], event_bus=EventBus())
@@ -650,11 +641,14 @@ async def setup(ctx):
         if k.startswith("akasic_plugin_") and k.endswith("_gated")
     )
     assert "未在 manifest inject 中声明 tools" in module.captured["denied"]
+    assert module.captured["provide"].diagnostic.code == "undeclared_key"
+    assert kernel.kernel._providers["host.bridge"] == ("", kernel._rpc)
+    await kernel.terminate_all(force=True)
 
 
 @pytest.mark.asyncio
-async def test_v2_setup_failure_rolls_back_effects(tmp_path: Path):
-    plugin_dir = tmp_path / "v2broken"
+async def test_setup_failure_rolls_back_effects(tmp_path: Path):
+    plugin_dir = tmp_path / "rollback_demo"
     (plugin_dir / "backend").mkdir(parents=True)
     (plugin_dir / "backend" / "plugin.py").write_text(
         """
@@ -668,13 +662,13 @@ async def setup(ctx):
 
 
 async def _on_turn(event):
-    event.extra_metadata["v2broken_touched"] = True
+    event.extra_metadata["rollback_demo_touched"] = True
     return event
 """.strip(),
         encoding="utf-8",
     )
     (plugin_dir / "manifest.yaml").write_text(
-        "api: 2\nid: v2broken\ncapabilities:\n  - events\ninject:\n  - events\n",
+        "api: 4\nid: rollback_demo\ninject:\n  - events\n",
         encoding="utf-8",
     )
     bus = EventBus()
@@ -683,7 +677,7 @@ async def _on_turn(event):
 
     assert kernel.loaded_count == 0
     result = await bus.emit(before_turn_ctx())
-    assert "v2broken_touched" not in result.extra_metadata
+    assert "rollback_demo_touched" not in result.extra_metadata
 
 
 @pytest.mark.asyncio
@@ -804,7 +798,7 @@ async def test_load_all_is_idempotent(tmp_path: Path):
     assert result.extra_metadata.get("hello_touched") is True
 
 
-_V2_COMMANDS_PLUGIN = """
+_COMMANDS_PLUGIN = """
 from shiori_sdk.core.conversation import COMMANDS
 
 
@@ -819,7 +813,7 @@ async def setup(ctx):
     ctx.effect("command:chatid", remove)
 """.strip()
 
-_V2_COMMANDS_MANIFEST = "api: 2\nid: {id}\ncapabilities: []\ninject:\n  - commands\n"
+_COMMANDS_MANIFEST = "api: 4\nid: {id}\ninject:\n  - commands\n"
 
 
 @pytest.mark.asyncio
@@ -828,11 +822,9 @@ async def test_injected_commands_reach_the_menu_until_unload(tmp_path: Path):
     for plugin_id in ("v2cmds", "v2cmds_dup"):
         package = tmp_path / plugin_id
         (package / "backend").mkdir(parents=True)
-        (package / "backend/plugin.py").write_text(
-            _V2_COMMANDS_PLUGIN, encoding="utf-8"
-        )
+        (package / "backend/plugin.py").write_text(_COMMANDS_PLUGIN, encoding="utf-8")
         (package / "manifest.yaml").write_text(
-            _V2_COMMANDS_MANIFEST.format(id=plugin_id), encoding="utf-8"
+            _COMMANDS_MANIFEST.format(id=plugin_id), encoding="utf-8"
         )
     kernel = make_kernel([tmp_path], event_bus=EventBus())
     await kernel.load_all()
@@ -857,11 +849,11 @@ async def setup(ctx):
     ctx.require(RPC).register("ping", _ping)
 """.strip()
 
-_RPC_MANIFEST = "api: 2\nid: rpcdemo\ncapabilities:\n  - rpc\ninject:\n  - rpc\n"
+_RPC_MANIFEST = "api: 4\nid: rpcdemo\ninject:\n  - rpc\n"
 
 
 @pytest.mark.asyncio
-async def test_v2_plugin_rpc_method_callable_then_gone_after_unload(tmp_path: Path):
+async def test_plugin_rpc_method_callable_then_gone_after_unload(tmp_path: Path):
     plugin_dir = tmp_path / "rpcdemo"
     (plugin_dir / "backend").mkdir(parents=True)
     (plugin_dir / "backend" / "plugin.py").write_text(_RPC_PLUGIN, encoding="utf-8")
@@ -895,15 +887,13 @@ async def setup(ctx):
 """.strip()
 
 _HOST_SERVICES_MANIFEST = (
-    "api: 2\nid: hostrefs\ncapabilities:\n"
-    "  - workspace\n"
-    "  - light_provider\n  - light_model\n"
+    "api: 4\nid: hostrefs\n"
     "inject:\n  - workspace\n  - light_provider\n  - light_model\n"
 )
 
 
 @pytest.mark.asyncio
-async def test_v2_plugin_reads_host_service_references(tmp_path: Path):
+async def test_plugin_reads_host_service_references(tmp_path: Path):
     """直传型 capability（#183）必须原样透出核心提供的同一个对象。"""
     plugin_dir = tmp_path / "hostrefs"
     (plugin_dir / "backend").mkdir(parents=True)
@@ -944,8 +934,7 @@ async def test_v2_plugin_reads_host_service_references(tmp_path: Path):
         encoding="utf-8",
     )
     (light_plugin / "manifest.yaml").write_text(
-        "api: 2\nid: needs_light\ncapabilities:\n  - light_provider\n"
-        "inject:\n  - light_provider\n",
+        "api: 4\nid: needs_light\ninject:\n  - light_provider\n",
         encoding="utf-8",
     )
     withheld = host_kernel([withheld_root], withheld=frozenset({LIGHT_PROVIDER}))
@@ -953,29 +942,6 @@ async def test_v2_plugin_reads_host_service_references(tmp_path: Path):
     [state] = withheld.states()
     assert state["state"] == "BLOCKED"
     assert "不存在" in state["error"]
-
-
-@pytest.mark.asyncio
-async def test_v2_package_relying_only_on_capabilities_is_blocked(tmp_path: Path):
-    """Capabilities grant nothing: such a package is BLOCKED and never set up."""
-    plugin_dir = tmp_path / "legacy"
-    (plugin_dir / "backend").mkdir(parents=True)
-    (plugin_dir / "backend" / "plugin.py").write_text(
-        "async def setup(ctx):\n    raise AssertionError('setup must not run')\n",
-        encoding="utf-8",
-    )
-    (plugin_dir / "manifest.yaml").write_text(
-        "api: 2\nid: legacy\ncapabilities:\n  - rpc\n", encoding="utf-8"
-    )
-    kernel = make_kernel([tmp_path], event_bus=EventBus())
-    try:
-        await kernel.load_all()
-        [state] = kernel.states()
-        assert state["state"] == "BLOCKED"
-        assert state["diagnostic"]["code"] == "capabilities_retired"
-        assert "inject + ctx.require" in state["diagnostic"]["reason"]
-    finally:
-        await kernel.terminate_all(force=True)
 
 
 @pytest.mark.asyncio
@@ -1010,9 +976,8 @@ async def setup(ctx):
         )
         (plugin_dir / "manifest.yaml").write_text(
             f"""
-api: 2
+api: 4
 id: {plugin_id}
-capabilities: {declared}
 inject: {declared}
 """,
             encoding="utf-8",
@@ -1054,7 +1019,7 @@ async def test_injected_service_without_a_provider_fails_before_setup(
         encoding="utf-8",
     )
     (plugin_dir / "manifest.yaml").write_text(
-        f"api: 2\nid: needs_service\ncapabilities:\n  - {name}\ninject:\n  - {name}\n",
+        f"api: 4\nid: needs_service\ninject:\n  - {name}\n",
         encoding="utf-8",
     )
     kernel = host_kernel(
@@ -1097,7 +1062,7 @@ async def test_optional_provider_lifecycle_does_not_activate_or_unload_consumer(
         package = tmp_path / name
         (package / "backend").mkdir(parents=True)
         _ = (package / "manifest.yaml").write_text(
-            f"api: 2\nid: {name}\ncapabilities: [dependencies]\n"
+            f"api: 4\nid: {name}\n"
             f"inject: [dependencies]\n"
             f"optional_dependencies: {optional}\n",
             encoding="utf-8",
@@ -1110,7 +1075,7 @@ async def test_optional_provider_lifecycle_does_not_activate_or_unload_consumer(
     # Disposal runs while the provider is UNLOADING, before its export is cleared.
     # Optional reads must already report it unavailable at this boundary.
     _ = (tmp_path / "provider/manifest.yaml").write_text(
-        "api: 2\nid: provider\ncapabilities: [dependencies]\n"
+        "api: 4\nid: provider\n"
         "inject: [dependencies]\n"
         "optional_dependencies: [consumer]\n",
         encoding="utf-8",
@@ -1174,7 +1139,7 @@ async def test_optional_unavailable_exports_return_none_but_require_stays_strict
     package = tmp_path / "provider"
     (package / "backend").mkdir(parents=True)
     _ = (package / "manifest.yaml").write_text(
-        "api: 2\nid: provider\ncapabilities: []\n",
+        "api: 4\nid: provider\n",
         encoding="utf-8",
     )
     body = "raise RuntimeError('setup failure')" if provider == "failed" else "pass"
@@ -1211,7 +1176,7 @@ async def test_unsafe_strong_dependency_closure_is_rejected_before_any_effect(tm
         package = tmp_path / name
         (package / "backend").mkdir(parents=True)
         (package / "manifest.yaml").write_text(
-            f"api: 2\nid: {name}\ncapabilities: []\ndependencies: {dependencies}\nsupports_hot_unload: {str(safe).lower()}\n",
+            f"api: 4\nid: {name}\ndependencies: {dependencies}\nsupports_hot_unload: {str(safe).lower()}\n",
             encoding="utf-8",
         )
         (package / "backend/plugin.py").write_text(
@@ -1244,7 +1209,7 @@ async def test_force_cleanup_continues_after_an_unsafe_plugin_effect_fails(tmp_p
         package = tmp_path / name
         (package / "backend").mkdir(parents=True)
         (package / "manifest.yaml").write_text(
-            f"api: 2\nid: {name}\ncapabilities: []\nsupports_hot_unload: false\n",
+            f"api: 4\nid: {name}\nsupports_hot_unload: false\n",
             encoding="utf-8",
         )
         body = "raise OSError('close failed')" if fail else "pass"
@@ -1266,8 +1231,7 @@ async def test_unsafe_declaration_never_blocks_setup_failure_rollback(tmp_path):
     package = tmp_path / "broken"
     (package / "backend").mkdir(parents=True)
     (package / "manifest.yaml").write_text(
-        "api: 2\nid: broken\ncapabilities: [events]\ninject: [events]\n"
-        "supports_hot_unload: false\n",
+        "api: 4\nid: broken\ninject: [events]\nsupports_hot_unload: false\n",
         encoding="utf-8",
     )
     (package / "backend/plugin.py").write_text(
@@ -1290,7 +1254,7 @@ def _write_needs_config_plugin(package: Path) -> None:
     tool_loop_guard)."""
     (package / "backend").mkdir(parents=True)
     (package / "manifest.yaml").write_text(
-        "api: 2\nid: needs_config\ncapabilities: [config]\ninject: [config]\n"
+        "api: 4\nid: needs_config\ninject: [config]\n"
         'config_model: "config:Config"\n',
         encoding="utf-8",
     )
@@ -1362,11 +1326,11 @@ async def test_config_schema_is_unregistered_once_the_plugin_is_actually_dispose
 
 
 @pytest.mark.asyncio
-async def test_only_manifested_v2_entries_are_loaded(tmp_path):
+async def test_only_manifested_entries_are_loaded(tmp_path):
     for name, manifest in [
         ("missing", None),
         ("old", "api: 1\ncapabilities: []\n"),
-        ("missing_setup", "api: 2\ncapabilities: []\n"),
+        ("missing_setup", "api: 4\n"),
     ]:
         package = tmp_path / name
         (package / "backend").mkdir(parents=True)
@@ -1374,11 +1338,14 @@ async def test_only_manifested_v2_entries_are_loaded(tmp_path):
         if manifest is not None:
             (package / "manifest.yaml").write_text(manifest, encoding="utf-8")
     kernel = make_kernel([tmp_path], event_bus=EventBus())
-    assert [record.name for record in kernel.discover()] == ["missing_setup"]
+    assert {record.name for record in kernel.discover()} == {"old", "missing_setup"}
     await kernel.load_all()
     assert kernel.loaded_count == 0
-    assert kernel.states()[0]["state"] == "FAILED"
-    assert "setup(ctx)" in kernel.states()[0]["error"]
+    states = {row["id"]: row for row in kernel.states()}
+    assert states["old"]["state"] == "BLOCKED"
+    assert states["old"]["diagnostic"]["code"] == "unsupported_api"
+    assert states["missing_setup"]["state"] == "FAILED"
+    assert "setup(ctx)" in states["missing_setup"]["error"]
 
 
 @pytest.mark.asyncio
@@ -1393,7 +1360,7 @@ async def test_optional_unsafe_consumer_does_not_block_provider_unload(tmp_path)
             "async def setup(ctx):\n    pass\n", encoding="utf-8"
         )
         (package / "manifest.yaml").write_text(
-            f"api: 2\nid: {name}\ncapabilities: []\n" + body, encoding="utf-8"
+            f"api: 4\nid: {name}\n" + body, encoding="utf-8"
         )
     kernel = make_kernel([tmp_path], event_bus=EventBus())
     await kernel.load_all()
@@ -1430,7 +1397,11 @@ async def test_contract_rejection_precedes_backend_execution(
         "async def setup(ctx): pass\n",
         encoding="utf-8",
     )
-    kernel = make_kernel([contract_package.parent], event_bus=EventBus())
+    kernel = host_kernel(
+        [contract_package.parent],
+        external_plugin_dirs=[contract_package.parent],
+        event_bus=EventBus(),
+    )
     await kernel.load_all()
     assert not marker.exists()
     assert kernel.states()[0]["state"] == "BLOCKED"
@@ -1465,58 +1436,24 @@ async def test_runtime_contract_error_still_rolls_back_failed_setup(contract_pac
 
 
 @pytest.mark.asyncio
-async def test_contract_package_uses_explicit_host_build_inventory(contract_package):
-    import yaml
-
-    from agent.plugin_host import PluginGenerationSettings
-    from agent.plugin_host.host_contract import HostRuntimeContract
-
-    path = contract_package / "manifest.yaml"
-    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
-    raw["host_dependencies"] = {"python": ["host-build-library"]}
-    path.write_text(yaml.safe_dump(raw), encoding="utf-8")
-    kernel = host_kernel(
-        [contract_package.parent],
-        settings=PluginGenerationSettings(
-            plugin_runtime_contract=HostRuntimeContract(
-                python_dependencies=frozenset({"host-build-library"})
-            )
-        ),
-    )
-    await kernel.load_all()
-    assert kernel.states()[0]["state"] == "ACTIVE"
-    await kernel.terminate_all(force=True)
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("provider", "contract"),
-    [
-        ("missing", True),
-        ("disabled", True),
-        # Installed but not admitted (invalid contract): it exists, so the
-        # dependent reads "unavailable", not "missing".
-        ("unadmitted", True),
-        ("disabled", False),
-    ],
-)
+@pytest.mark.parametrize("provider", ["missing", "disabled", "unadmitted"])
 async def test_plugin_dependency_rejection_keeps_contract_diagnostic(
-    contract_package, provider, contract
+    contract_package, provider
 ):
     import yaml
 
     path = contract_package / "manifest.yaml"
     raw = yaml.safe_load(path.read_text(encoding="utf-8"))
     raw["dependencies"] = ["provider"]
-    if not contract:
-        del raw["package_contract"]
     path.write_text(yaml.safe_dump(raw), encoding="utf-8")
     if provider != "missing":
         package = contract_package.parent / "provider"
         package.mkdir()
-        contract_line = "package_contract: 1\n" if provider == "unadmitted" else ""
+        # An old package is on the roster but not runnable, so the dependent
+        # is "unavailable", not "missing".
+        api = 2 if provider == "unadmitted" else 4
         (package / "manifest.yaml").write_text(
-            f"api: 2\n{contract_line}id: provider\ncapabilities: []\n",
+            f"api: {api}\nid: provider\n",
             encoding="utf-8",
         )
     marker = contract_package / "executed.txt"
@@ -1535,16 +1472,13 @@ async def test_plugin_dependency_rejection_keeps_contract_diagnostic(
     assert not marker.exists()
     state = next(state for state in kernel.states() if state["id"] == "external_demo")
     assert state["state"] == "BLOCKED"
-    if contract:
-        assert state["diagnostic"]["code"] == (
-            "missing_dependency" if provider == "missing" else "dependency_unavailable"
-        )
-        assert state["diagnostic"]["stage"] == "dependency"
-        assert state["diagnostic"]["field"] == "dependencies[0]"
-        assert state["diagnostic"]["state"] == "BLOCKED"
-        assert state["diagnostic"]["reason"] == state["error"]
-    else:
-        assert state["diagnostic"] is None
+    assert state["diagnostic"]["code"] == (
+        "missing_dependency" if provider == "missing" else "dependency_unavailable"
+    )
+    assert state["diagnostic"]["stage"] == "dependency"
+    assert state["diagnostic"]["field"] == "dependencies[0]"
+    assert state["diagnostic"]["state"] == "BLOCKED"
+    assert state["diagnostic"]["reason"] == state["error"]
 
 
 @pytest.mark.asyncio
@@ -1633,8 +1567,8 @@ async def test_refused_duplicate_provider_leaves_the_key_to_the_other(tmp_path):
         package = workspace / plugin_id
         (package / "backend").mkdir(parents=True)
         (package / "manifest.yaml").write_text(
-            f"api: 2\nid: {plugin_id}\ncapabilities: []\npackage_contract: 1\n"
-            "version: 1.0.0\nruntime_api: '>=3.1.1 <4.0.0'\n"
+            f"api: 4\nid: {plugin_id}\n"
+            "version: 1.0.0\n"
             "entry: backend/plugin.py\nprovides: [shared.engine]\n",
             encoding="utf-8",
         )
@@ -1677,8 +1611,8 @@ async def test_rejected_provider_and_dependents_never_execute(tmp_path, conflict
     for package, plugin_id, extra in packages:
         (package / "backend").mkdir(parents=True)
         (package / "manifest.yaml").write_text(
-            f"api: 2\nid: {plugin_id}\ncapabilities: []\npackage_contract: 1\n"
-            "version: 1.0.0\nruntime_api: '>=3.1.1 <4.0.0'\n"
+            f"api: 4\nid: {plugin_id}\n"
+            "version: 1.0.0\n"
             "entry: backend/plugin.py\n" + extra,
             encoding="utf-8",
         )
@@ -1716,7 +1650,7 @@ async def test_identical_directory_names_keep_independent_runtime_handles(tmp_pa
         package = root / "same"
         (package / "backend").mkdir(parents=True)
         (package / "manifest.yaml").write_text(
-            f"api: 2\nid: plugin_{index}\ncapabilities: []\n", encoding="utf-8"
+            f"api: 4\nid: plugin_{index}\n", encoding="utf-8"
         )
         (package / "backend/plugin.py").write_text(
             "async def setup(ctx): pass\n", encoding="utf-8"
@@ -1755,8 +1689,8 @@ async def test_discovery_snapshot_preserves_admission_without_sharing_runtime_st
     assert first_record.import_path != next_record.import_path
     # The manifest metadata contains nested lists; shallow descriptor copying
     # would let one generation silently modify another generation's snapshot.
-    next_record.manifest.metadata["capabilities"].append("kv")
-    assert first_record.manifest.metadata["capabilities"] == ["events"]
+    next_record.manifest.metadata["inject"].append("kv")
+    assert first_record.manifest.metadata["inject"] == ["events"]
     await successor.load_all()
     assert first_record.import_path in sys.modules
     assert next_record.import_path in sys.modules
@@ -1790,22 +1724,17 @@ async def test_empty_startup_snapshot_does_not_rescan_new_packages(tmp_path):
 
 
 def _write_renderer_gated_plugin(
-    directory: Path, plugin_id: str, *, renderer: str, capabilities: str = "[tools]"
+    directory: Path, plugin_id: str, *, renderer: str
 ) -> None:
-    """Writes a plain (non package_contract) manifest declaring a renderer block.
+    """Writes an api: 4 builtin manifest whose ``renderer`` block gates display.
 
-    The generic v2 manifest loader captures every top-level key into
-    ``PluginManifest.metadata`` (see ``manifest.py``'s ``_parse_manifest``)
-    without validating unknown keys, so a builtin-source test plugin can
-    declare ``renderer:`` and exercise ``PluginKernel``'s gating/rollback
-    without any of the package-contract trust/UNTRUSTED machinery a real
-    external package would need.
+    The loader keeps ``renderer`` in metadata. A builtin source does not go
+    through package validation, so the activation gate can be exercised
+    without trust.
     """
     (directory / "backend").mkdir(parents=True)
     (directory / "manifest.yaml").write_text(
-        f"api: 2\nid: {plugin_id}\ncapabilities: {capabilities}\n"
-        "inject: [tools]\n"
-        f"{renderer}",
+        f"api: 4\nid: {plugin_id}\ninject: [tools]\n{renderer}",
         encoding="utf-8",
     )
     (directory / "backend/plugin.py").write_text(
@@ -1934,7 +1863,6 @@ async def test_stale_or_unknown_activation_reports_are_ignored(tmp_path):
         tmp_path / "demo",
         "demo",
         renderer="renderer:\n  ui: {entry: x}\n",
-        capabilities="[]",
     )
     kernel = make_kernel(
         [tmp_path],
@@ -2056,9 +1984,7 @@ async def test_rollback_that_cannot_dispose_every_effect_requires_a_restart(tmp_
     core `fail_renderer_entry` reuses."""
     package = tmp_path / "unclean"
     (package / "backend").mkdir(parents=True)
-    (package / "manifest.yaml").write_text(
-        "api: 2\nid: unclean\ncapabilities: []\n", encoding="utf-8"
-    )
+    (package / "manifest.yaml").write_text("api: 4\nid: unclean\n", encoding="utf-8")
     (package / "backend/plugin.py").write_text(
         "async def setup(ctx):\n"
         "    ctx.effect('poison', lambda: (_ for _ in ()).throw(RuntimeError('stuck')))\n"
@@ -2093,11 +2019,11 @@ def _write_channel_plugin(root: Path, plugin_id: str, second: str) -> None:
         _CHANNEL_PLUGIN.format(second=second), encoding="utf-8"
     )
     (package / "manifest.yaml").write_text(
-        f"api: 2\nid: {plugin_id}\ncapabilities: [channels]\ninject: [channels]\n"
-        "channels:\n"
-        "  - {name: declared, label: Declared, chat_types:"
+        f"api: 4\nid: {plugin_id}\ninject: [channels]\n"
+        "contributes:\n  channels:\n"
+        "    - {name: declared, label: Declared, chat_types:"
         " [{type: private, label: 私聊, chat_id_label: ID}]}\n"
-        "  - {name: also_declared, label: Also, chat_types:"
+        "    - {name: also_declared, label: Also, chat_types:"
         " [{type: private, label: 私聊, chat_id_label: ID}]}\n",
         encoding="utf-8",
     )
@@ -2146,5 +2072,103 @@ async def test_plugins_declaring_one_channel_both_stay_inactive(tmp_path: Path):
         assert {state["diagnostic"]["code"] for state in kernel.states()} == {
             "duplicate_channel"
         }
+    finally:
+        await kernel.terminate_all(force=True)
+
+
+@pytest.mark.asyncio
+async def test_installed_api2_package_is_blocked_without_losing_data(tmp_path: Path):
+    """An old package that provides a core key does not abort startup.
+
+    Its files and config stay, and a current sibling still loads.
+    """
+    builtin, installed = tmp_path / "builtin", tmp_path / "plugins"
+    legacy = installed / "legacy"
+    (legacy / "backend").mkdir(parents=True)
+    (legacy / "manifest.yaml").write_text(
+        "api: 2\nid: legacy\nprovides:\n  - tools\n",
+        encoding="utf-8",
+    )
+    marker = tmp_path / "executed.txt"
+    (legacy / "backend/plugin.py").write_text(
+        "from pathlib import Path\n"
+        f"Path({str(marker)!r}).write_text('executed', encoding='utf-8')\n"
+        "from shiori_sdk.kernel import Key\n"
+        "async def setup(ctx):\n"
+        "    ctx.provide(Key('host.bridge'), object())\n"
+        "    ctx.provide(Key('tools'), object())\n",
+        encoding="utf-8",
+    )
+    data = tmp_path / "plugin-data" / "legacy" / "kv.json"
+    data.parent.mkdir(parents=True)
+    data.write_text('{"saved": "keep"}', encoding="utf-8")
+    fresh = builtin / "fresh"
+    (fresh / "backend").mkdir(parents=True)
+    (fresh / "manifest.yaml").write_text(
+        "api: 4\nid: fresh\ninject: [tools]\n", encoding="utf-8"
+    )
+    (fresh / "backend/plugin.py").write_text(
+        "from shiori_sdk.core.services import TOOLS\n"
+        "from shiori_sdk.tools import Tool\n"
+        "class Fresh(Tool):\n"
+        "    name = 'fresh_tool'\n"
+        "    description = 'fresh'\n"
+        "    parameters = {'type': 'object', 'properties': {}}\n"
+        "    async def execute(self, **kwargs):\n"
+        "        return 'ok'\n"
+        "async def setup(ctx):\n"
+        "    ctx.require(TOOLS).register(Fresh(), risk='read-only')\n",
+        encoding="utf-8",
+    )
+    settings = PluginGenerationSettings(
+        workspace=tmp_path,
+        plugin_configs={"legacy": {"enabled": True, "note": "keep"}},
+    )
+    tools = ToolRegistry()
+    kernel = host_kernel(
+        [builtin, installed],
+        external_plugin_dirs=[installed],
+        settings=settings,
+        tools=tools,
+        strict=True,
+    )
+    await kernel.load_all()
+    try:
+        states = {row["id"]: row for row in kernel.states()}
+        assert states["legacy"]["state"] == "BLOCKED"
+        assert states["legacy"]["diagnostic"]["code"] == "unsupported_api"
+        assert states["fresh"]["state"] == "ACTIVE"
+        assert tools.get_tool("fresh_tool") is not None
+        assert not marker.exists()
+        assert data.read_text(encoding="utf-8") == '{"saved": "keep"}'
+        assert settings.plugin_configs["legacy"]["note"] == "keep"
+        assert (legacy / "manifest.yaml").is_file()
+        assert (legacy / "backend/plugin.py").is_file()
+    finally:
+        await kernel.terminate_all(force=True)
+
+
+@pytest.mark.asyncio
+async def test_api2_host_key_does_not_abort_startup(tmp_path: Path):
+    """A strict host still starts when an old manifest names ``host.bridge``."""
+    package = tmp_path / "legacy"
+    (package / "backend").mkdir(parents=True)
+    (package / "manifest.yaml").write_text(
+        "api: 2\nid: legacy\ninject:\n  - host.bridge\n",
+        encoding="utf-8",
+    )
+    (package / "backend/plugin.py").write_text(
+        "raise AssertionError('old package must not be imported')\n",
+        encoding="utf-8",
+    )
+    kernel = host_kernel([tmp_path], strict=True)
+    await kernel.load_all()
+    try:
+        [state] = kernel.states()
+        assert state["state"] == "BLOCKED"
+        assert state["diagnostic"]["code"] == "unsupported_api"
+        owner, impl = kernel.kernel._providers["host.bridge"]
+        assert owner == ""
+        assert impl is kernel._rpc
     finally:
         await kernel.terminate_all(force=True)

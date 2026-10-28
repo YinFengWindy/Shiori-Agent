@@ -7,7 +7,7 @@ function plugin(overrides: Partial<PluginSummary>): PluginSummary {
   return {
     id: "demo", candidateId: "builtin/demo", source: "builtin", directory: "plugins/demo", name: "demo", version: "0.1.0",
     description: "", enabled: true, canToggle: true, state: "ACTIVE", error: "", diagnostic: null, hasConfigSchema: false,
-    capabilities: [], inject: [], channels: [], category: "feature", supportsHotUnload: true, pendingRendererKinds: [],
+    inject: [], channels: [], category: "feature", supportsHotUnload: true, pendingRendererKinds: [],
     ...overrides,
   };
 }
@@ -47,6 +47,10 @@ describe("pluginPresentation", () => {
     assert.equal(
       pluginProblem(plugin({ state: "BLOCKED", diagnostic: { code: "external_not_installed", stage: "discovery", field: "distribution", reason: "x", path: "", state: "BLOCKED" } })),
       "无法加载：外部插件，需打包为 ZIP 安装",
+    );
+    assert.equal(
+      pluginProblem(plugin({ state: "BLOCKED", diagnostic: { code: "unsupported_api", stage: "validation", field: "api", reason: "旧版", path: "", state: "BLOCKED" } })),
+      "无法加载：旧版插件，请向作者获取新版本",
     );
     assert.equal(pluginProblem(plugin({ rendererError: "boom" })), "界面加载失败");
     assert.equal(pluginProblem(plugin({ state: "UNTRUSTED", error: "外部插件尚未获得信任" })), null);

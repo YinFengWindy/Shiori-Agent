@@ -177,7 +177,7 @@ def _write(root: Path, plugin_id: str, manifest: str, source: str) -> None:
     package = root / plugin_id
     (package / "backend").mkdir(parents=True)
     (package / "manifest.yaml").write_text(
-        f"api: 2\nid: {plugin_id}\n{manifest}", encoding="utf-8"
+        f"api: 4\nid: {plugin_id}\n{manifest}", encoding="utf-8"
     )
     (package / "backend/plugin.py").write_text(source, encoding="utf-8")
 
@@ -198,10 +198,17 @@ def probe(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
     return module
 
 
+_CONSUMER_INJECT = "dependencies, runtime, tools"
+_RELAY_CHANNEL = (
+    "contributes:\n  channels:\n    - {name: relay, label: Relay, chat_types:"
+    " [{type: private, label: Private, chat_id_label: ID}]}\n"
+)
+
+
 async def _kernel(
     tmp_path: Path,
     *,
-    consumer_capabilities: str = "",
+    consumer_inject: str = _CONSUMER_INJECT,
     consumer_manifest: str = "",
     configs: dict[str, dict] | None = None,
 ) -> tuple[
@@ -210,22 +217,19 @@ async def _kernel(
     _write(
         tmp_path,
         "provider",
-        "capabilities: [tools, rpc, services, process_resources, config, runtime]\n"
         "inject: [tools, rpc, services, process_resources, config, runtime]\n",
         _PROVIDER,
     )
     _write(
         tmp_path,
         "consumer",
-        f"capabilities: [dependencies, runtime, tools, {consumer_capabilities}]\n"
-        "inject: [dependencies, runtime, tools]\n"
-        f"dependencies: [provider]\n{consumer_manifest}",
+        f"inject: [{consumer_inject}]\ndependencies: [provider]\n{consumer_manifest}",
         _CONSUMER,
     )
     _write(
         tmp_path,
         "bystander",
-        "capabilities: [tools]\ninject: [tools]\n",
+        "inject: [tools]\n",
         _BYSTANDER,
     )
     tools = ToolRegistry()
@@ -489,7 +493,6 @@ async def test_retired_generation_gate_never_admits_a_shared_tool_call(probe, tm
     _write(
         tmp_path,
         "sharer",
-        "capabilities: [tools, process_resources]\n"
         "inject: [tools, process_resources]\n",
         _SHARER,
     )
@@ -614,11 +617,7 @@ async def test_failed_reload_restores_the_old_config_instance(probe, tmp_path):
 @pytest.mark.parametrize(
     ("consumer_manifest", "reason"),
     [
-        (
-            "channels:\n  - {name: relay, label: Relay, chat_types:"
-            " [{type: private, label: Private, chat_id_label: ID}]}\n",
-            "channels",
-        ),
+        (_RELAY_CHANNEL, "channels"),
         ("supports_hot_unload: false\n", "hot_unload"),
     ],
 )
@@ -627,7 +626,11 @@ async def test_reload_refuses_generation_only_closures_before_any_change(
 ):
     kernel, settings, _, _ = await _kernel(
         tmp_path,
-        consumer_capabilities="channels" if reason == "channels" else "",
+        consumer_inject=(
+            f"{_CONSUMER_INJECT}, channels"
+            if reason == "channels"
+            else _CONSUMER_INJECT
+        ),
         consumer_manifest=consumer_manifest,
     )
     probe.events.clear()
@@ -730,7 +733,7 @@ async def setup(ctx):
 
 
 async def _hooked_kernel(tmp_path: Path) -> PluginKernel:
-    _write(tmp_path, "hooked", "capabilities: [config]\ninject: [config]\n", _HOOKED)
+    _write(tmp_path, "hooked", "inject: [config]\n", _HOOKED)
     configs = {"hooked": {"label": "v1"}}
     kernel = host_kernel(
         [tmp_path],
@@ -916,11 +919,8 @@ async def test_toggle_refuses_closures_only_a_generation_swap_can_change(
 ):
     kernel, settings, _, _ = await _kernel(
         tmp_path,
-        consumer_capabilities="channels",
-        consumer_manifest=(
-            "channels:\n  - {name: relay, label: Relay, chat_types:"
-            " [{type: private, label: Private, chat_id_label: ID}]}\n"
-        ),
+        consumer_inject=f"{_CONSUMER_INJECT}, channels",
+        consumer_manifest=_RELAY_CHANNEL,
     )
     probe.events.clear()
 
@@ -978,7 +978,7 @@ async def test_failed_plugin_is_retried_only_when_a_load_selects_it(probe, tmp_p
     _write(
         tmp_path,
         "boom",
-        "capabilities: []\n",
+        "",
         "import sys\n\nasync def setup(ctx):\n"
         "    probe = sys.modules['reload_probe']\n"
         "    probe.events.append(('setup', 'boom'))\n"
@@ -988,7 +988,7 @@ async def test_failed_plugin_is_retried_only_when_a_load_selects_it(probe, tmp_p
     _write(
         tmp_path,
         "later",
-        "capabilities: []\n",
+        "",
         "import sys\n\nasync def setup(ctx):\n"
         "    sys.modules['reload_probe'].events.append(('setup', 'later'))\n",
     )
@@ -1030,7 +1030,7 @@ async def test_providers_of_one_key_take_over_from_each_other_within_the_generat
         _write(
             tmp_path,
             plugin_id,
-            "capabilities: []\nprovides: [shared.engine]\n",
+            "provides: [shared.engine]\n",
             "import sys\n\nasync def setup(ctx):\n"
             f"    sys.modules['reload_probe'].events.append(('setup', {plugin_id!r}))\n",
         )

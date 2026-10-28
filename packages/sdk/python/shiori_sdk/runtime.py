@@ -2,7 +2,7 @@
 
 from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Protocol, cast
+from typing import Protocol
 
 from .kernel import Key, Veto
 from .kernel.events import OnHandler, WatchHandler
@@ -18,24 +18,6 @@ class HostServiceUnavailable(RuntimeError):
     the missing service. Deliberately not an ``AttributeError`` so ``getattr``
     defaults can never swallow it.
     """
-
-
-def parse_capabilities(value: object, source: object) -> tuple[str, ...]:
-    """Validates an api: 2 manifest ``capabilities`` list.
-
-    ``source`` names the manifest in messages. Raises ``ValueError`` when the
-    list is missing, not a list, or has a non-string item. Names are not a
-    grant: plugins take services with ``ctx.require``. P4-5 is what rejects a
-    non-``api: 4`` package.
-    """
-    if value is None:
-        raise ValueError(f"v2 manifest 缺少 capabilities 声明: {source}")
-    if not isinstance(value, list):
-        raise ValueError(f"capabilities 必须是列表: {source}")
-    items = cast(list[object], value)
-    if not all(isinstance(item, str) for item in items):
-        raise ValueError(f"capabilities 必须是字符串列表: {source}")
-    return tuple(cast(list[str], items))
 
 
 class EventsCapability(Protocol):

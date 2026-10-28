@@ -1,5 +1,4 @@
-api: 2
+api: 4
 id: hello
 version: "0.1.0"
-capabilities: [events]
 inject: [events]

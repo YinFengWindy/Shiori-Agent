@@ -13,18 +13,16 @@ const executionFile = resolve(workspace, "backend-executions.txt");
 await mkdir(resolve(packageRoot, "backend"), { recursive: true });
 await mkdir(resolve(packageRoot, "ui", "dist"), { recursive: true });
 await writeFile(resolve(workspace, "config.toml"), "[llm]\nregistrations = []\n[agent.maintenance]\nmemory_optimizer_enabled = false\n[plugins.desktop_pet]\nenabled = false\n", "utf8");
-await writeFile(resolve(packageRoot, "manifest.yaml"), `api: 2
-package_contract: 1
+await writeFile(resolve(packageRoot, "manifest.yaml"), `api: 4
 id: manual_trust_qa
 version: 1.0.0
-runtime_api: '>=3.1.1 <4.0.0'
 entry: backend/plugin.py
-capabilities: [rpc]
+inject: [rpc]
 peer_dependencies: {react: '>=19.2.0 <20.0.0', react-dom: '>=19.2.0 <20.0.0'}
 renderer:
   ui: {entry: ui/dist/index.mjs, css: [ui/dist/style.css]}
 `, "utf8");
-await writeFile(resolve(packageRoot, "backend", "plugin.py"), "from pathlib import Path\nwith (Path(__file__).parents[3] / 'backend-executions.txt').open('a', encoding='utf-8') as marker: marker.write('executed\\n')\nasync def ping(payload): return {'pong': payload.get('value')}\nasync def setup(ctx): ctx.rpc.register('ping', ping)\n", "utf8");
+await writeFile(resolve(packageRoot, "backend", "plugin.py"), "from pathlib import Path\nwith (Path(__file__).parents[3] / 'backend-executions.txt').open('a', encoding='utf-8') as marker: marker.write('executed\\n')\nasync def ping(payload): return {'pong': payload.get('value')}\nfrom shiori_sdk.core.services import RPC\nasync def setup(ctx): ctx.require(RPC).register('ping', ping)\n", "utf8");
 const entryPath = resolve(packageRoot, "ui", "dist", "index.mjs");
 await writeFile(entryPath, `import React, {useState} from 'react';
 document.documentElement.dataset.manualTrustExecuted = 'true';

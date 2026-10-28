@@ -1,4 +1,7 @@
-"""Versioned, static external package validation. No plugin modules are imported."""
+"""Static external package validation. No plugin modules are imported.
+
+Install accepts only ``api: 4``.
+"""
 
 from __future__ import annotations
 
@@ -8,7 +11,12 @@ from pathlib import Path
 
 from shiori_sdk.kernel import PackageContractError
 from agent.plugin_host.host_contract import HostRuntimeContract
-from agent.plugin_host.manifest import ManifestError, PluginManifest, load_manifest
+from agent.plugin_host.manifest import (
+    ManifestError,
+    PluginManifest,
+    UnsupportedApiError,
+    load_manifest,
+)
 from agent.plugin_host.package_paths import contained_file, package_path
 from agent.plugin_host.package_artifacts import validate_artifact
 from agent.plugin_host.versions import SemVer
@@ -16,9 +24,35 @@ from agent.plugin_host.package_schema import (
     string_field,
     string_list,
     object_field,
-    compatible_range,
 )
 from agent.plugin_host.renderer_contract import RendererEntry, validate_renderer
+
+# api: 4 external package fields. ``renderer`` and its ``peer_dependencies``
+# stay until P7 unifies the frontend entry.
+_PACKAGE_FIELDS = {
+    "api",
+    "id",
+    "display_name",
+    "distribution",
+    "category",
+    "default_enabled",
+    "version",
+    "entry",
+    "desc",
+    "author",
+    "config_model",
+    "dependencies",
+    "optional_dependencies",
+    "inject",
+    "optional_inject",
+    "provides",
+    "supports_hot_unload",
+    "contributes",
+    "frontend",
+    "assets",
+    "renderer",
+    "peer_dependencies",
+}
 
 
 @dataclass(frozen=True)
@@ -26,7 +60,6 @@ class ValidatedPackage:
     """Static package descriptor; validation neither grants trust nor activates code."""
 
     manifest: PluginManifest
-    runtime_api: str
     renderer: tuple[RendererEntry, ...]
     assets: tuple[str, ...]
 
@@ -34,14 +67,17 @@ class ValidatedPackage:
 def validate_package(
     root: Path, *, host: HostRuntimeContract | None = None
 ) -> ValidatedPackage:
-    """Validate a directory package and every declared entry before any execution.
+    """Validate an ``api: 4`` directory package before any plugin code runs.
 
-    Directory and zip callers share this validator. Legacy bundled manifests use
-    load_manifest directly; this public external-package boundary requires v1.
+    Directory and zip callers share this validator. Anything that is not
+    integer ``api: 4`` is rejected here, before the trust prompt. Bundled
+    plugins use ``load_manifest`` directly.
     """
     _ = contained_file(root, "manifest.yaml", "manifest")
     try:
         manifest = load_manifest(root)
+    except UnsupportedApiError as exc:
+        raise PackageContractError("unsupported_api", "api", str(exc)) from exc
     except ManifestError as exc:
         raise PackageContractError("invalid_manifest", "manifest", str(exc)) from exc
     if manifest is None:
@@ -49,40 +85,7 @@ def validate_package(
             "invalid_manifest", "manifest", "Missing manifest.yaml"
         )
     raw = manifest.metadata
-    allowed = {
-        "api",
-        "package_contract",
-        "id",
-        "display_name",
-        "distribution",
-        "category",
-        "default_enabled",
-        "version",
-        "runtime_api",
-        "entry",
-        "capabilities",
-        "channels",
-        "desc",
-        "author",
-        "config_model",
-        "dependencies",
-        "optional_dependencies",
-        "inject",
-        "optional_inject",
-        "provides",
-        "supports_hot_unload",
-        "renderer",
-        "assets",
-        "host_dependencies",
-        "peer_dependencies",
-    }
-    _ = object_field(raw, "manifest", allowed)
-    if type(raw.get("package_contract")) is not int or raw["package_contract"] != 1:
-        raise PackageContractError(
-            "unsupported_contract", "package_contract", "Expected package_contract: 1"
-        )
-    if type(raw.get("api")) is not int or raw["api"] != 2:
-        raise PackageContractError("invalid_manifest", "api", "Expected integer api: 2")
+    _ = object_field(raw, "manifest", _PACKAGE_FIELDS)
     plugin_id = string_field(raw.get("id"), "id")
     if re.fullmatch(r"[a-z][a-z0-9_-]{0,63}", plugin_id) is None:
         raise PackageContractError(
@@ -95,24 +98,9 @@ def validate_package(
     except ValueError as exc:
         raise PackageContractError("invalid_version", "version", str(exc)) from exc
     runtime = host or HostRuntimeContract()
-    runtime_api = compatible_range(
-        runtime.runtime_api, raw.get("runtime_api"), "runtime_api"
-    )
-    dependencies = object_field(
-        raw.get("host_dependencies", {}), "host_dependencies", {"python"}
-    )
-    for index, name in enumerate(
-        string_list(dependencies.get("python", []), "host_dependencies.python")
-    ):
-        if not runtime.provides_python(name):
-            raise PackageContractError(
-                "missing_dependency",
-                f"host_dependencies.python[{index}]",
-                f"Host does not provide Python distribution {name}",
-            )
     _ = validate_artifact(root, raw.get("entry"), "entry", ".py")
     renderer = validate_renderer(root, raw, runtime)
     assets = string_list(raw.get("assets", []), "assets")
     for index, path in enumerate(assets):
         _ = contained_file(root, path, f"assets[{index}]")
-    return ValidatedPackage(manifest, runtime_api, renderer, assets)
+    return ValidatedPackage(manifest, renderer, assets)

@@ -39,7 +39,7 @@ async function fixture({ enabled = true, lostResponse = false } = {}) {
       return { id: "r", type: "response", method: request.method, error: null, payload: { plugins: [{
         id: "example", name: "Example", candidate_id: "workspace/example", source: "workspace", directory: "workspace/example", version: "1", description: "",
         enabled, can_toggle: trusted, state: trusted ? (enabled ? "ACTIVE" : "DISABLED") : "UNTRUSTED", error: "", diagnostic: null,
-        has_config_schema: false, capabilities: [], channels: [], supports_hot_unload: true,
+        has_config_schema: false, channels: [], supports_hot_unload: true,
         can_trust: !trusted, trusted, trust_fingerprint: trusted ? null : fingerprint, content_fingerprint: fingerprint,
       }] } };
     },

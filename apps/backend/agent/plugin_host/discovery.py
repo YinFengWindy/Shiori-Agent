@@ -10,7 +10,12 @@ from pathlib import Path
 from shiori_sdk.kernel import PackageContractError, PluginDiagnostic
 from agent.plugin_host.handle import PluginRecord
 from agent.plugin_host.host_contract import HostRuntimeContract
-from agent.plugin_host.manifest import ManifestError, PluginManifest, load_manifest
+from agent.plugin_host.manifest import (
+    ManifestError,
+    PluginManifest,
+    UnsupportedApiError,
+    load_manifest,
+)
 from agent.plugin_host.package_contract import validate_package
 from agent.plugin_host.package_paths import contained_file
 from agent.plugin_host.package_fingerprint import inspect_package_content
@@ -306,18 +311,25 @@ def _read_candidate(
     except PackageContractError as exc:
         manifest = PluginManifest(id=child.name)
         diagnostic = exc.diagnostic
+    except UnsupportedApiError as exc:
+        # Before trust and package validation, and in strict mode too: the old
+        # package stays on the roster as BLOCKED, never set up, files and
+        # config untouched.
+        manifest = _roster_manifest(child, exc)
+        diagnostic = PluginDiagnostic(
+            "unsupported_api",
+            "validation",
+            "api",
+            str(exc),
+            str(child / "manifest.yaml"),
+        )
     except ManifestError as exc:
         logger.warning("插件 manifest 无效: %s (%s)", child.name, exc)
-        if source == "builtin" and strict:
-            raise
-        metadata = exc.metadata or {}
-        if source == "builtin" and "package_contract" not in metadata:
+        if source == "builtin":
+            if strict:
+                raise
             return None
-        manifest = PluginManifest(
-            id=str(metadata.get("id") or child.name),
-            version=str(metadata.get("version") or ""),
-            metadata=metadata,
-        )
+        manifest = _roster_manifest(child, exc)
         diagnostic = PluginDiagnostic(
             "invalid_manifest",
             "validation",
@@ -337,13 +349,9 @@ def _read_candidate(
         # installed workspace copy enters package validation and trust admission.
         # The plugin list reports it via find_uninstalled_external_sources.
         return None
-    if diagnostic is None:
-        diagnostic = _capabilities_only(manifest, child)
-    if diagnostic is None and (
-        source == "workspace" or "package_contract" in manifest.metadata
-    ):
+    if diagnostic is None and source == "workspace":
         try:
-            validate_package(child, host=host)
+            _ = validate_package(child, host=host)
         except PackageContractError as exc:
             diagnostic = exc.diagnostic
     if diagnostic is None and source == "workspace":
@@ -395,27 +403,11 @@ def _read_candidate(
     )
 
 
-# Diagnostic code for an api: 2 package that still relies on ``capabilities``.
-CAPABILITIES_RETIRED_CODE = "capabilities_retired"
-
-
-def _capabilities_only(
-    manifest: PluginManifest, plugin_dir: Path
-) -> PluginDiagnostic | None:
-    """Blocks an api: 2 package that lists capabilities but injects nothing.
-
-    Capabilities stopped granting services in P4-4, so its setup could only
-    fail on a missing context attribute. Rejecting every non-``api: 4``
-    package is P4-5.
-    """
-    if manifest.api != 2 or not manifest.capabilities:
-        return None
-    if manifest.inject or manifest.optional_inject:
-        return None
-    return PluginDiagnostic(
-        CAPABILITIES_RETIRED_CODE,
-        "validation",
-        "capabilities",
-        "capabilities 已不再授权，请改用 inject + ctx.require",
-        str(plugin_dir / "manifest.yaml"),
+def _roster_manifest(child: Path, exc: ManifestError) -> PluginManifest:
+    """Names a rejected package from its raw fields so its BLOCKED row reads."""
+    metadata = exc.metadata or {}
+    return PluginManifest(
+        id=str(metadata.get("id") or child.name),
+        version=str(metadata.get("version") or ""),
+        metadata=metadata,
     )
