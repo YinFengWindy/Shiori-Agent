@@ -1,21 +1,23 @@
-api: 2
-runtime_api: ">=3.1.2 <4.0.0"
+api: 4
 id: feishu
 display_name: 飞书
 version: '0.1.2'
 desc: 飞书 / Lark 私聊渠道（长连接收消息，流式卡片回复）
-capabilities:
+inject:
   - channels
   - accounts
   - avatars
   - config
   - kv
   - rpc
-channels:
-  - name: feishu
-    label: 飞书
-    chat_types:
-      - type: private
-        label: 私聊
-        chat_id_label: 私聊 chat_id
-        chat_id_hint: oc_<私聊会话 ID>
+contributes:
+  channels:
+    - name: feishu
+      label: 飞书
+      chat_types:
+        - type: private
+          label: 私聊
+          chat_id_label: 私聊 chat_id
+          chat_id_hint: oc_<私聊会话 ID>
+frontend:
+  entry: ui/index.tsx

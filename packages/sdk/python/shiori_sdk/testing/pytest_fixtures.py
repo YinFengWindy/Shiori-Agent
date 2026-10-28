@@ -48,7 +48,11 @@ def load_manifest_grants(plugin_dir: Path) -> tuple[str, tuple[str, ...]]:
     plugin_id = values.get("id")
     if not isinstance(plugin_id, str) or not plugin_id:
         raise ValueError(f"manifest 缺少 id: {manifest}")
-    # Same list/known-name validation as the host's manifest loader.
+    # api: 4 grants no capabilities; the plugin takes services with require.
+    # A manifest that still has the key is validated like the host, including
+    # one that omits it and is not api: 4.
+    if values.get("api") == 4 and "capabilities" not in values:
+        return plugin_id, ()
     return plugin_id, parse_capabilities(values.get("capabilities"), manifest)
 
 
@@ -62,13 +66,15 @@ def sdk_plugin_dir(request: pytest.FixtureRequest) -> Path:
 async def sdk_context(
     sdk_plugin_dir: Path, tmp_path: Path
 ) -> AsyncIterator[FakePluginContext]:
-    """Grants only the manifest's capabilities and always runs registered cleanup.
+    """Grants only the manifest's capabilities and keys; always runs cleanup.
 
     The manifest is only read; ``plugin_dir`` is an isolated temporary directory so
     tests never write into the plugin package (bundled files are package assets).
     """
     plugin_id, capabilities = load_manifest_grants(sdk_plugin_dir)
-    context = FakePluginContext(plugin_id, tmp_path, capabilities=capabilities)
+    context = FakePluginContext(
+        plugin_id, tmp_path, capabilities=capabilities, package_dir=sdk_plugin_dir
+    )
     try:
         yield context
     finally:

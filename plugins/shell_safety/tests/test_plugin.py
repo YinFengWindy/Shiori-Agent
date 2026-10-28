@@ -7,6 +7,8 @@ from shiori_sdk.kernel import Veto
 from shiori_sdk.testing.extensions import FakeExtensionContext
 from plugins.shell_safety.backend.plugin import setup
 
+PACKAGE_DIR = Path(__file__).resolve().parents[1]
+
 
 def _make_plugin_root(tmp_path: Path) -> Path:
     return tmp_path / "plugins"
@@ -26,7 +28,9 @@ def _calling(command: str, tool_name: str = "shell") -> ToolCalling:
 
 def _run_shell(root: Path, command: str) -> ToolCalling | Veto:
     async def run():
-        ctx = FakeExtensionContext("shell_safety", workspace=root.parent / "workspace")
+        ctx = FakeExtensionContext(
+            "shell_safety", workspace=root.parent / "workspace", package_dir=PACKAGE_DIR
+        )
         await setup(ctx)
         result = await ctx.emit(_calling(command))
         await ctx.aclose()
@@ -37,7 +41,9 @@ def _run_shell(root: Path, command: str) -> ToolCalling | Veto:
 
 @pytest.mark.asyncio
 async def test_setup_joins_tool_calling_for_shell_only_until_closed(tmp_path):
-    ctx = FakeExtensionContext("shell_safety", workspace=tmp_path)
+    ctx = FakeExtensionContext(
+        "shell_safety", workspace=tmp_path, package_dir=PACKAGE_DIR
+    )
     await setup(ctx)
     assert isinstance(await ctx.emit(_calling("vim notes.txt")), ToolVeto)
     other = _calling("vim notes.txt", tool_name="write_file")

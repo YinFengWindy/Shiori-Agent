@@ -1,5 +1,6 @@
 """Chat reads and mutations cannot forge another role or bypass current attachment."""
 
+from pathlib import Path
 import json
 
 import pytest
@@ -10,9 +11,11 @@ from plugins.herdr.backend.service import TaskService
 from shiori_sdk.testing.background_results import FakeBackgroundResultTarget
 from shiori_sdk.testing.service_context import FakeServiceContext
 
+PACKAGE_DIR = Path(__file__).resolve().parents[1]
+
 
 async def test_list_filters_by_host_role_and_fake_arguments_do_not_change_it(tmp_path):
-    context = FakeServiceContext("herdr", tmp_path)
+    context = FakeServiceContext("herdr", tmp_path, package_dir=PACKAGE_DIR)
     service = TaskService(tmp_path)
     for role in ("role-a", "role-b"):
         service.tasks[role] = CodingTask(
@@ -42,7 +45,7 @@ async def test_list_filters_by_host_role_and_fake_arguments_do_not_change_it(tmp
 
 
 async def test_mutation_requires_authenticated_user_even_with_current_role(tmp_path):
-    context = FakeServiceContext("herdr", tmp_path)
+    context = FakeServiceContext("herdr", tmp_path, package_dir=PACKAGE_DIR)
     context.tools.context = {"role_id": "role-a"}
     service = TaskService(tmp_path)
     tool = TaskManagementTool(
@@ -63,7 +66,7 @@ async def test_current_tools_manage_retained_service_across_import_namespaces(
 ):
     retired, current = generations
     assert retired["cli"].CommandError is not current["cli"].CommandError
-    context = FakeServiceContext("herdr", tmp_path)
+    context = FakeServiceContext("herdr", tmp_path, package_dir=PACKAGE_DIR)
     context.tools.context = {"role_id": "role-a"}
     target = FakeBackgroundResultTarget("role-a", "thread-a")
     context.background_results.target = target

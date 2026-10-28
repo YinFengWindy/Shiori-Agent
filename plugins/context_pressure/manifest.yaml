@@ -1,8 +1,6 @@
-api: 2
-runtime_api: ">=3.1.0 <4.0.0"
+api: 4
 id: context_pressure
 display_name: 上下文压力收尾
-category: system
 version: '0.1.1'
 desc: 上下文压力过高时请求被动循环阶段性收尾
-capabilities: []
+category: system

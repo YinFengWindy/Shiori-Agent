@@ -1,16 +1,14 @@
-api: 2
-runtime_api: ">=3.1.0 <4.0.0"
+api: 4
 id: computer_use
 display_name: Computer Use
 version: "0.1.1"
 desc: Windows 窗口操作与截图
-capabilities:
+default_enabled: false
+config_model: config:ComputerUseConfig
+inject:
   - tool_turn
   - resources
   - processes
   - tools
   - workspace
   - config
-# 没有显式 enabled 时默认停用。
-default_enabled: false
-config_model: "config:ComputerUseConfig"

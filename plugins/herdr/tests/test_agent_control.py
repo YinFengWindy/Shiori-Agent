@@ -1,5 +1,6 @@
 """Shared agent sending: argv, per-agent records, failures and unconfirmed prompts."""
 
+from pathlib import Path
 import asyncio
 import json
 
@@ -20,6 +21,8 @@ from plugins.herdr.backend.service import TaskService
 from plugins.herdr.backend.sessions import SessionGate
 from shiori_sdk.testing.background_results import FakeBackgroundResultTarget
 from shiori_sdk.testing.service_context import FakeServiceContext
+
+PACKAGE_DIR = Path(__file__).resolve().parents[1]
 
 ROLE = CommandSource("role", "role-a", "Mira")
 
@@ -80,7 +83,7 @@ async def looks(herdr: Herdr, count: int) -> None:
 
 @pytest.fixture
 async def fixture(tmp_path, monkeypatch):
-    ctx = FakeServiceContext("herdr", tmp_path)
+    ctx = FakeServiceContext("herdr", tmp_path, package_dir=PACKAGE_DIR)
     # The smallest CLI timeout the config allows, shorter than Herdr's own wait.
     config = HerdrConfig(session="default", cli_timeout_seconds=5)
     cli = HerdrCli(config, ctx.processes, tmp_path)

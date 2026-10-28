@@ -883,23 +883,23 @@ class PluginKernel:
                 f"v2 插件 {handle.record.name} 的入口缺少 setup(ctx) 函数"
             )
         setup_fn = cast("Callable[[SdkRuntimeContext], Awaitable[None]]", setup)
-        grants = handle.record.manifest.capabilities
+        manifest = handle.record.manifest
+        grants = manifest.capabilities
+        # Built for the names in either inject list, like config (P4-3).
+        injected = {*manifest.inject, *manifest.optional_inject}
         settings = self._settings
-        core_capabilities = bind_core_capabilities(
-            grants,
-            self._kernel.get,
-            PluginBinding(
-                plugin_id=handle.plugin_id,
-                namespace=self._namespace,
-                manifest=handle.record.manifest,
-                scope=handle.effects,
-                calls=handle.calls,
-            ),
+        binding = PluginBinding(
+            plugin_id=handle.plugin_id,
+            namespace=self._namespace,
+            manifest=manifest,
+            scope=handle.effects,
+            calls=handle.calls,
         )
+        core_capabilities = bind_core_capabilities(grants, self._kernel.get, binding)
         context: PluginSetupContext = PluginRuntimeContext(
             plugin_id=handle.plugin_id,
             plugin_dir=handle.record.plugin_dir,
-            manifest=handle.record.manifest,
+            manifest=manifest,
             effects=handle.effects,
             config=PluginConfig(
                 self._settings.plugin_configs.get(handle.plugin_id, {}),
@@ -907,12 +907,16 @@ class PluginKernel:
                 raw_values=self._settings.raw_plugin_configs.get(handle.plugin_id),
             ),
             dependencies=PluginDependencies(
-                handle.record.manifest.dependencies,
+                manifest.dependencies,
                 self._dependency_api,
-                optional_declared=handle.record.manifest.optional_dependencies,
+                optional_declared=manifest.optional_dependencies,
             ),
             storage=PluginStorage(),
-            kv=self._open_kv(handle.plugin_id) if "kv" in grants else None,
+            kv=(
+                self._open_kv(handle.plugin_id)
+                if "kv" in grants or "kv" in injected
+                else None
+            ),
             runtime=PluginRuntimeLifecycle(
                 settings.is_reload or reactivated,
                 handle.effects.drainers,
@@ -923,11 +927,12 @@ class PluginKernel:
                 ScopedPluginServices(
                     self._rpc.services, handle.plugin_id, handle.effects, handle.calls
                 )
-                if "services" in grants
+                if "services" in grants or "services" in injected
                 else None
             ),
             publish_api=lambda api: setattr(handle, "instance", api),
             kernel_context=kernel_context,
+            binding=binding,
             **core_capabilities,
         )
         context.as_service_provider_context()

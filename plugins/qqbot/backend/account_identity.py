@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from shiori_sdk.accounts import ViaAccount, stored_response_rules, ConnectionState
+from shiori_sdk.core.services import ACCOUNTS
 
 if TYPE_CHECKING:
     from shiori_sdk.channels.context import ChannelPluginContext
@@ -25,17 +26,17 @@ class QQBotAccountIdentity:
         self._handoffs: set[str] = set()
         for row in store.list():
             role_id = row.get("role_id") or None
-            if role_id is not None and not ctx.accounts.role_exists(role_id):
+            if role_id is not None and not ctx.require(ACCOUNTS).role_exists(role_id):
                 # Deleted while this plugin was not loaded: purge the orphan.
                 store.remove(row["app_id"])
                 continue
             try:
                 rules = stored_response_rules(row.get("response_rules"))
             except ValueError as exc:
-                ctx.accounts.reject(f"app:{row['app_id']}", str(exc))
+                ctx.require(ACCOUNTS).reject(f"app:{row['app_id']}", str(exc))
                 continue
             # A stored application the host refuses is reported, not served.
-            snapshot = ctx.accounts.register_saved(
+            snapshot = ctx.require(ACCOUNTS).register_saved(
                 platform="qqbot",
                 platform_account_id=row["app_id"],
                 config_ref=f"app:{row['app_id']}",
@@ -50,7 +51,7 @@ class QQBotAccountIdentity:
     def register(self, row: dict[str, Any], name: str = "") -> str:
         """Associate an application ID with its owner role's host account."""
         app_id = row["app_id"]
-        snapshot = self._ctx.accounts.register(
+        snapshot = self._ctx.require(ACCOUNTS).register(
             platform="qqbot",
             platform_account_id=app_id,
             config_ref=f"app:{app_id}",
@@ -77,7 +78,7 @@ class QQBotAccountIdentity:
 
     def check_owner(self, app_id: str, role_id: str) -> None:
         """Raises unless ``role_id`` may own this application's account."""
-        self._ctx.accounts.check_owner(
+        self._ctx.require(ACCOUNTS).check_owner(
             config_ref=f"app:{app_id}",
             role_id=role_id,
             platform_account_id=app_id,
@@ -152,7 +153,7 @@ class QQBotAccountIdentity:
     def _report_connection(
         self, app_id: str, state: ConnectionState, error: str
     ) -> None:
-        self._ctx.accounts.report(
+        self._ctx.require(ACCOUNTS).report(
             self._account_ids[app_id],
             connection=state,
             capabilities=_CAPABILITIES if state == "online" else frozenset(),
@@ -168,4 +169,4 @@ class QQBotAccountIdentity:
     def unregister_all(self) -> None:
         """Discard runtime presence while retaining saved account records."""
         for account_id in self._account_ids.values():
-            self._ctx.accounts.unregister(account_id)
+            self._ctx.require(ACCOUNTS).unregister(account_id)

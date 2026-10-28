@@ -20,6 +20,8 @@ from shiori_sdk.testing.crash_reporting import FakeCrashReporting
 from shiori_sdk.testing.extensions import FakeExtensionContext
 from shiori_sdk.testing.kernel import KernelHarness
 
+PACKAGE_DIR = Path(__file__).resolve().parents[1]
+
 
 def _context(workspace: Path | None = None):
     kernel = Kernel()
@@ -29,7 +31,7 @@ def _context(workspace: Path | None = None):
         "observe",
         workspace=workspace,
         kernel=kernel,
-        inject=("crash_reporting",),
+        package_dir=PACKAGE_DIR,
     )
     return ctx, reporting
 

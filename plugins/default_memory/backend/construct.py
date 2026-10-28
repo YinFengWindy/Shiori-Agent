@@ -23,6 +23,14 @@ from shiori_sdk.memory.access import MemoryEvents
 from shiori_sdk.memory.events import MemoryWritten
 from shiori_sdk.models import ChatProvider
 from shiori_sdk.runtime import Dispose, EventHandler, PluginRuntimeContext
+from shiori_sdk.core.services import (
+    CONFIG,
+    EVENTS,
+    HTTP,
+    LIGHT_MODEL,
+    LIGHT_PROVIDER,
+    MEMORY,
+)
 
 from .config import (
     DefaultMemoryPluginConfig,
@@ -64,8 +72,8 @@ def construct_default_engine(ctx: _EngineSetup) -> DefaultMemoryEngine:
         raise RuntimeError(_CREDENTIALS_MISSING)
     provider = ctx.require(MAIN_PROVIDER)
     model = ctx.require(MAIN_MODEL)
-    workspace = ctx.memory.workspace
-    storage = ctx.memory.storage
+    workspace = ctx.require(MEMORY).workspace
+    storage = ctx.require(MEMORY).storage
     ensure_default_memory_config_file(workspace=workspace, storage=storage)
     default_config = load_default_memory_config(workspace=workspace, storage=storage)
     db_path = resolve_memory_db_path(workspace=workspace, default_config=default_config)
@@ -77,7 +85,7 @@ def construct_default_engine(ctx: _EngineSetup) -> DefaultMemoryEngine:
 
     return DefaultMemoryEngine(
         model=model,
-        light_model=ctx.light_model,
+        light_model=ctx.require(LIGHT_MODEL),
         embedding_base_url=base_url,
         embedding_api_key=api_key,
         embedding_model=embedding_model,
@@ -85,13 +93,15 @@ def construct_default_engine(ctx: _EngineSetup) -> DefaultMemoryEngine:
         default_config=default_config,
         workspace=workspace,
         provider=provider,
-        light_provider=ctx.light_provider,
-        requester=ctx.http,
+        light_provider=ctx.require(LIGHT_PROVIDER),
+        requester=ctx.require(HTTP),
         storage=storage,
-        roles=ctx.memory.roles,
-        skills=ctx.memory.skill_names,
+        roles=ctx.require(MEMORY).roles,
+        skills=ctx.require(MEMORY).skill_names,
         register=register,
-        event_publisher=_WatchingMemoryEvents(cast(MemoryEvents, ctx.events), ctx.emit),
+        event_publisher=_WatchingMemoryEvents(
+            cast(MemoryEvents, ctx.require(EVENTS)), ctx.emit
+        ),
     )
 
 
@@ -153,10 +163,10 @@ async def fanout_memory_observation(
 
 
 def _embedding_settings(ctx: _EngineSetup) -> tuple[str, str, str, int | None]:
-    settings = DefaultMemoryPluginConfig.model_validate(ctx.config.as_dict())
+    settings = DefaultMemoryPluginConfig.model_validate(ctx.require(CONFIG).as_dict())
 
     def resolve(value: str) -> str:
-        resolved = ctx.config.resolve_reference(value).strip()
+        resolved = ctx.require(CONFIG).resolve_reference(value).strip()
         # Any reference left over, even inside ``${BASE}/v1``, means missing.
         return "" if _UNRESOLVED_REFERENCE.search(resolved) else resolved
 

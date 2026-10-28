@@ -77,6 +77,7 @@ class FakeMemoryPluginContext(FakePluginContext):
         inject: tuple[str, ...] = (),
         optional_inject: tuple[str, ...] = (),
         provides: tuple[str, ...] = (),
+        package_dir: Path | None = None,
     ):
         super().__init__(
             "default_memory",
@@ -85,6 +86,7 @@ class FakeMemoryPluginContext(FakePluginContext):
             inject=inject,
             optional_inject=optional_inject,
             provides=provides,
+            package_dir=package_dir,
         )
         self.memory = FakeMemoryCapability(workspace, roles=roles, skills=skills)
         self.rpc = FakeRpc()

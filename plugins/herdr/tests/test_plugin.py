@@ -13,9 +13,11 @@ from plugins.herdr.backend.plugin import setup
 from shiori_sdk.testing.background_results import FakeBackgroundResultTarget
 from plugins.herdr.backend.service import TaskService
 
+PACKAGE_DIR = Path(__file__).resolve().parents[1]
+
 
 async def test_setup_uses_public_capabilities_without_starting_processes(tmp_path):
-    context = FakeServiceContext("herdr", tmp_path)
+    context = FakeServiceContext("herdr", tmp_path, package_dir=PACKAGE_DIR)
     await setup(context.as_capability())
     assert isinstance(context.exported, TaskService)
     assert context.exported.tasks == {}
@@ -31,7 +33,7 @@ async def test_setup_uses_public_capabilities_without_starting_processes(tmp_pat
 async def test_agent_tools_run_without_confirmation_and_declare_their_effect(
     tmp_path,
 ):
-    context = FakeServiceContext("herdr", tmp_path)
+    context = FakeServiceContext("herdr", tmp_path, package_dir=PACKAGE_DIR)
     await setup(context.as_capability())
     risks = {
         name: context.tools.options[name]["risk"]
@@ -95,7 +97,7 @@ async def test_a_watch_continues_on_the_generation_published_after_a_reload(
     monkeypatch.setattr(HerdrCli, "command", command)
     shared: dict[str, object] = {}
     target = FakeBackgroundResultTarget("role-a", "thread-a")
-    first = FakeServiceContext("herdr", tmp_path)
+    first = FakeServiceContext("herdr", tmp_path, package_dir=PACKAGE_DIR)
     first.process_resources = Generation(shared)  # type: ignore[assignment]
     first.tools.context = {"role_id": "role-a"}
     first.background_results.target = target
@@ -110,7 +112,7 @@ async def test_a_watch_continues_on_the_generation_published_after_a_reload(
     # The reload publishes a second generation and retires the first.
     first.process_resources.active = False
     revoked.append(first.processes)
-    second = FakeServiceContext("herdr", tmp_path)
+    second = FakeServiceContext("herdr", tmp_path, package_dir=PACKAGE_DIR)
     second.process_resources = Generation(shared)  # type: ignore[assignment]
     await setup(second.as_capability())
     state["agent_status"] = "idle"
@@ -201,7 +203,7 @@ async def test_a_task_is_monitored_and_verified_on_the_generation_published_afte
     monkeypatch.setattr(HerdrCli, "command", command)
     shared: dict[str, object] = {}
     target = FakeBackgroundResultTarget("role-a", "thread-a")
-    first = FakeServiceContext("herdr", tmp_path)
+    first = FakeServiceContext("herdr", tmp_path, package_dir=PACKAGE_DIR)
     first.process_resources = Generation(shared)  # type: ignore[assignment]
     first.tools.context = {"role_id": "role-a"}
     first.background_results.target = target
@@ -213,7 +215,7 @@ async def test_a_task_is_monitored_and_verified_on_the_generation_published_afte
             repository=str(repository), requirement="修滚动"
         )
     )
-    second = FakeServiceContext("herdr", tmp_path)
+    second = FakeServiceContext("herdr", tmp_path, package_dir=PACKAGE_DIR)
     try:
         [task] = service.tasks.values()
         assert task.id == started["task_id"] and task.worker is not None

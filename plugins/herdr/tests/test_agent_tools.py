@@ -1,5 +1,6 @@
 """Role tools over the session's agents: inputs, outputs, recorded source, errors."""
 
+from pathlib import Path
 import json
 
 import pytest
@@ -8,6 +9,8 @@ from plugins.herdr.backend.cli import CommandError, HerdrCli
 from plugins.herdr.backend.plugin import setup
 from shiori_sdk.testing.background_results import FakeBackgroundResultTarget
 from shiori_sdk.testing.service_context import FakeServiceContext
+
+PACKAGE_DIR = Path(__file__).resolve().parents[1]
 
 AGENT = {
     "agent": "claude",
@@ -64,7 +67,7 @@ class Herdr:
 
 @pytest.fixture
 async def plugin(tmp_path, monkeypatch):
-    ctx = FakeServiceContext("herdr", tmp_path)
+    ctx = FakeServiceContext("herdr", tmp_path, package_dir=PACKAGE_DIR)
     herdr = Herdr()
     monkeypatch.setattr(
         HerdrCli, "command", lambda _cli, argv, **kwargs: herdr.command(argv, **kwargs)

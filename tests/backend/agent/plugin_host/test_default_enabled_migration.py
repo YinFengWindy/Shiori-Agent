@@ -34,5 +34,5 @@ def test_builtin_channel_plugins_are_grouped_as_channels():
     assert manifests
     for manifest in manifests:
         assert manifest is not None
-        if "channels" in manifest.capabilities:
+        if manifest.channels:
             assert manifest.category == "channel", manifest.id

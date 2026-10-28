@@ -18,6 +18,7 @@ from shiori_sdk.models import ChatProvider
 from shiori_sdk.plugin_services import RuntimeLifecycle
 from shiori_sdk.storage import plugin_data_dir
 from shiori_sdk.tools import ToolsCapability
+from shiori_sdk.core.services import MEMORY, RPC, RUNTIME, TOOLS
 
 
 class _DefaultMemorySetup(MemoryPluginContext, Protocol):
@@ -163,18 +164,18 @@ async def setup(ctx: _DefaultMemorySetup) -> None:
     from .tools import register_memory_meta_tools
 
     engine = construct_default_engine(ctx)
-    ctx.runtime.on_drain(engine.wait_idle)
+    ctx.require(RUNTIME).on_drain(engine.wait_idle)
     ctx.provide(MEMORY_ENGINE, engine)
-    register_memory_meta_tools(ctx.tools, engine)
-    ctx.rpc.register(
+    register_memory_meta_tools(ctx.require(TOOLS), engine)
+    ctx.require(RPC).register(
         "roles.memory.documents",
-        ctx.memory.read_documents,
+        ctx.require(MEMORY).read_documents,
         concurrency=Concurrency.READ_ONLY,
     )
     register_role_semantic_memory(ctx, engine)
 
     recorder = _DefaultMemoryRecorder(
-        data_path=plugin_data_dir(ctx.memory.workspace, "default_memory")
+        data_path=plugin_data_dir(ctx.require(MEMORY).workspace, "default_memory")
         / "recall_inspector.jsonl",
     )
     ctx.on(TurnStarting, recorder.record_context_prepare)

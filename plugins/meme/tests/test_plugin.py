@@ -11,6 +11,8 @@ from shiori_sdk.testing.service_context import FakeServiceContext
 from shiori_sdk.testing.roles import FakeCategory
 from plugins.meme.backend.plugin import setup
 
+PACKAGE_DIR = Path(__file__).resolve().parents[1]
+
 
 def _reply(reply: str, *, session_key: str = "role:mira") -> ReasoningFinished:
     return ReasoningFinished(
@@ -68,7 +70,7 @@ def _write_library(workspace: Path) -> Path:
 
 
 async def _setup_role(tmp_path: Path, *, sendable: bool = True):
-    context = FakeServiceContext("meme", tmp_path)
+    context = FakeServiceContext("meme", tmp_path, package_dir=PACKAGE_DIR)
     role = context.roles.create_role(role_id="mira", name="Mira", system_prompt="test")
     source = tmp_path / "reaction.png"
     source.write_bytes(b"image")
@@ -109,7 +111,7 @@ async def test_role_prompt_lists_sendable_categories_and_shared_emoji(tmp_path):
 
 async def test_library_prompt_and_reply_without_a_role(tmp_path):
     image = _write_library(tmp_path)
-    context = FakeServiceContext("meme", tmp_path)
+    context = FakeServiceContext("meme", tmp_path, package_dir=PACKAGE_DIR)
     await setup(context.as_capability())
 
     prompt = await _emit(context, _prompt())
@@ -131,7 +133,7 @@ async def test_empty_or_unknown_meme_tag_is_stripped_without_media(
     tmp_path, reply, tag
 ):
     _write_library(tmp_path)
-    context = FakeServiceContext("meme", tmp_path)
+    context = FakeServiceContext("meme", tmp_path, package_dir=PACKAGE_DIR)
     await setup(context.as_capability())
     event = await _emit(context, _reply(reply, session_key="telegram:1"))
 

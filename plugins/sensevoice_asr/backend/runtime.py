@@ -7,6 +7,7 @@ from shiori_sdk.managed.controller import ManagedRuntime
 from shiori_sdk.managed.installation import Installation
 from shiori_sdk.managed.service import OwnedService
 from shiori_sdk.plugin_services import ServicePluginContext
+from shiori_sdk.core.services import BACKGROUND, PROCESSES
 
 from .runtime_manifest import INSTALLED_SIZE, PYTHON_RELATIVE, REVISION, resources
 from .runtime_build import build_runtime
@@ -47,8 +48,8 @@ def create_runtime(ctx: ServicePluginContext, store: SettingsStore) -> ManagedRu
 
     return ManagedRuntime(
         installation,
-        OwnedService(root, ctx.processes, launch),
-        ctx.background,
+        OwnedService(root, ctx.require(PROCESSES), launch),
+        ctx.require(BACKGROUND),
         lambda staging, _resources: build_runtime(
             staging, ctx, root, installation.install_root, artifacts
         ),

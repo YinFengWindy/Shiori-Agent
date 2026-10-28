@@ -16,6 +16,21 @@ from shiori_sdk.core.conversation import ReasoningFinished
 from shiori_sdk.core.tools import ToolCalled, ToolCalling, ToolVeto
 from shiori_sdk.role_events import RoleDeleted, SceneObservationCommitted
 from shiori_sdk.rpc import Concurrency
+from shiori_sdk.core.services import (
+    BACKGROUND,
+    CONFIG,
+    EVENTS,
+    HTTP,
+    KV,
+    LIGHT_MODEL,
+    LIGHT_PROVIDER,
+    ROLES,
+    RPC,
+    SCENE_OBSERVATIONS,
+    SESSION_STORE,
+    TOOLS,
+    WORKSPACE,
+)
 
 from .auto_cg import AutoCgPolicy
 from .api import ImageGenerationAPI
@@ -107,12 +122,12 @@ class _MediaTracker:
 async def setup(ctx: "PluginRuntimeContext") -> None:
     """装配 novelai：生图服务层、工具、自动 CG、桥接 RPC。"""
 
-    workspace = ctx.workspace
+    workspace = ctx.require(WORKSPACE)
     settings = _load_settings(ctx)
-    role_store = ctx.roles
+    role_store = ctx.require(ROLES)
     role_state = NovelAIRoleState(role_store)
     role_state.reconcile()
-    ctx.events.on(RoleDeleted, role_state.on_role_deleted)
+    ctx.require(EVENTS).on(RoleDeleted, role_state.on_role_deleted)
     ctx.effect(
         "role_settings",
         role_store.extensions.register(
@@ -120,18 +135,18 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
         ),
     )
     role_settings = NovelAIRoleSettingsRpc(role_state)
-    ctx.rpc.register(
+    ctx.require(RPC).register(
         "role_settings.get", role_settings.get, concurrency=Concurrency.READ_ONLY
     )
-    ctx.rpc.register("role_settings.set", role_settings.set)
+    ctx.require(RPC).register("role_settings.set", role_settings.set)
     novelai_store = NovelAIStore(
-        workspace, original_media=ctx.sessions.original_media_path
+        workspace, original_media=ctx.require(SESSION_STORE).original_media_path
     )
     prompt_tag_store = PromptTagStore(workspace)
     service = NovelAIService(
         settings=settings,
         client=NovelAIClient(
-            ctx.http,
+            ctx.require(HTTP),
             settings,
         ),
         store=novelai_store,
@@ -141,12 +156,12 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
     )
     tool = GenerateImageTool(
         service,
-        context_provider=ctx.tools.get_context,
+        context_provider=ctx.require(TOOLS).get_context,
     )
     # Dependent plugins receive this generation's NovelAI API, never a host image-provider abstraction.
     api: ImageGenerationAPI = tool
     ctx.expose(api)
-    ctx.tools.register(
+    ctx.require(TOOLS).register(
         tool,
         risk="external-side-effect",
         always_on=True,
@@ -155,22 +170,22 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
         external_allowed=True,
     )
 
-    auto_cg = AutoCgPolicy(ctx.kv)
+    auto_cg = AutoCgPolicy(ctx.require(KV))
     auto_cg_controller = AutoCgController(
         role_store=role_store,
         policy=auto_cg,
-        background=ctx.background,
-        session_manager=ctx.sessions,
+        background=ctx.require(BACKGROUND),
+        session_manager=ctx.require(SESSION_STORE),
         generate_tool=tool,
-        tool_registry=ctx.tools,
-        light_provider=ctx.light_provider,
-        light_model=ctx.light_model,
+        tool_registry=ctx.require(TOOLS),
+        light_provider=ctx.require(LIGHT_PROVIDER),
+        light_model=ctx.require(LIGHT_MODEL),
     )
     # 宿主先停用并退订所有事件，再清理资源，与这两项的登记先后无关。
     # terminate 仍负责取消并等待已经启动的生成任务。
     ctx.effect("auto_cg_controller", auto_cg_controller.terminate)
-    ctx.events.on(SceneObservationCommitted, auto_cg_controller.schedule)
-    ctx.scene_observations.request(lambda role: role_state.enabled(role.id))
+    ctx.require(EVENTS).on(SceneObservationCommitted, auto_cg_controller.schedule)
+    ctx.require(SCENE_OBSERVATIONS).request(lambda role: role_state.enabled(role.id))
 
     async def guard_auto_cg(event: ToolCalling) -> ToolCalling | ToolVeto:
         if event.tool_name != "generate_image":
@@ -194,7 +209,7 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
             novelai_service=service,
             novelai_store=novelai_store,
             prompt_tag_store=prompt_tag_store,
-            session_manager=ctx.sessions,
+            session_manager=ctx.require(SESSION_STORE),
         ),
     )
 
@@ -202,32 +217,38 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
 def _load_settings(ctx: "PluginRuntimeContext") -> NovelAISettings:
     """Builds the runtime settings dataclass from the validated ``[plugins.novelai]`` config.
 
-    ``ctx.config`` only carries the *overridden* raw values; running them
+    ``ctx.require(CONFIG)`` only carries the *overridden* raw values; running them
     through ``NovelAIConfig`` fills in the rest from its declared defaults
     (identical to ``NovelAISettings``'s own), so this is the single place that
     resolves "declared override + default" instead of duplicating defaults.
     """
 
-    config = NovelAIConfig.model_validate(ctx.config.as_dict())
+    config = NovelAIConfig.model_validate(ctx.require(CONFIG).as_dict())
     return NovelAISettings(**config.model_dump())
 
 
 def _register_rpc(ctx: "PluginRuntimeContext", handlers: NovelAIRpcHandlers) -> None:
-    ctx.rpc.register("generate", handlers.generate, concurrency=Concurrency.INTEGRATION)
-    ctx.rpc.register(
+    ctx.require(RPC).register(
+        "generate", handlers.generate, concurrency=Concurrency.INTEGRATION
+    )
+    ctx.require(RPC).register(
         "regenerateMessageMedia",
         handlers.regenerate_message_media,
         concurrency=Concurrency.INTEGRATION,
     )
-    ctx.rpc.register("history", handlers.history, concurrency=Concurrency.READ_ONLY)
-    ctx.rpc.register("status", handlers.status, concurrency=Concurrency.READ_ONLY)
-    ctx.rpc.register(
+    ctx.require(RPC).register(
+        "history", handlers.history, concurrency=Concurrency.READ_ONLY
+    )
+    ctx.require(RPC).register(
+        "status", handlers.status, concurrency=Concurrency.READ_ONLY
+    )
+    ctx.require(RPC).register(
         "prompt_tags.list",
         handlers.prompt_tags_list,
         concurrency=Concurrency.READ_ONLY,
     )
-    ctx.rpc.register("prompt_tags.upsert", handlers.prompt_tags_upsert)
-    ctx.rpc.register("prompt_tags.delete", handlers.prompt_tags_delete)
+    ctx.require(RPC).register("prompt_tags.upsert", handlers.prompt_tags_upsert)
+    ctx.require(RPC).register("prompt_tags.delete", handlers.prompt_tags_delete)
 
 
 def _safe_json(text: str) -> dict[str, Any]:

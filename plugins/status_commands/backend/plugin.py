@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from shiori_sdk.core.conversation import COMMANDS, CommandHandler
+from shiori_sdk.core.services import DEPENDENCIES
 
 from .kvcache import KVCacheCommand
 from .memory_status import memory_status
@@ -15,7 +16,7 @@ if TYPE_CHECKING:
 
 async def setup(ctx: PluginRuntimeContext) -> None:
     """Register diagnostic commands independently of optional observe telemetry."""
-    kvcache = KVCacheCommand(ctx.dependencies)
+    kvcache = KVCacheCommand(ctx.require(DEPENDENCIES))
     registrations: tuple[tuple[str, CommandHandler, str | None], ...] = (
         ("memorystatus", memory_status, "查看记忆整理状态"),
         ("memory_status", memory_status, None),

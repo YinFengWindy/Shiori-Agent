@@ -10,6 +10,7 @@ from shiori_sdk.accounts import (
 )
 from shiori_sdk.accounts.targets import ACCOUNT_SEND_METHOD, ACCOUNT_TARGETS_METHOD
 from shiori_sdk.accounts.routing import ACCOUNT_RESOLVE_METHOD
+from shiori_sdk.core.services import ACCOUNTS, CHANNELS, KV, RPC
 from .accounts import QQBotAccountStore
 
 if TYPE_CHECKING:
@@ -26,9 +27,9 @@ async def setup(ctx: "ChannelPluginContext") -> None:
     """Contribute one multi-application channel over the plugin-owned accounts."""
     from shiori_sdk.rpc import Concurrency
 
-    store = QQBotAccountStore(ctx.kv)
+    store = QQBotAccountStore(ctx.require(KV))
     channel = QQBotAccountsChannel(ctx, store, ctx.manifest.channel_chat_types("qqbot"))
-    ctx.channels.add(channel)
+    ctx.require(CHANNELS).add(channel)
 
     def delete_account(config_ref: str) -> AccountDeletionPlan:
         app_id = _app_id(config_ref)
@@ -40,18 +41,18 @@ async def setup(ctx: "ChannelPluginContext") -> None:
     def save_rules(config_ref: str, rules: AccountResponseRules) -> None:
         store.set_rules(_app_id(config_ref), response_rules_to_dict(rules))
 
-    ctx.accounts.on_delete(delete_account)
-    ctx.accounts.on_rules_change(save_rules)
-    ctx.rpc.register(
+    ctx.require(ACCOUNTS).on_delete(delete_account)
+    ctx.require(ACCOUNTS).on_rules_change(save_rules)
+    ctx.require(RPC).register(
         "account.detail", channel.detail, concurrency=Concurrency.READ_ONLY
     )
-    ctx.rpc.register(
+    ctx.require(RPC).register(
         ACCOUNT_TARGETS_METHOD, channel.targets, concurrency=Concurrency.READ_ONLY
     )
-    ctx.rpc.register("account.save", channel.save_and_connect)
-    ctx.rpc.register("account.disconnect", channel.disconnect)
-    ctx.rpc.register(ACCOUNT_SEND_METHOD, channel.account_send)
-    ctx.rpc.register(
+    ctx.require(RPC).register("account.save", channel.save_and_connect)
+    ctx.require(RPC).register("account.disconnect", channel.disconnect)
+    ctx.require(RPC).register(ACCOUNT_SEND_METHOD, channel.account_send)
+    ctx.require(RPC).register(
         ACCOUNT_RESOLVE_METHOD,
         channel.account_resolve,
         concurrency=Concurrency.READ_ONLY,

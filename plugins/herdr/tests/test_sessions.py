@@ -1,5 +1,6 @@
 """`sessions.list` reports local Herdr sessions and surfaces CLI failures."""
 
+from pathlib import Path
 import json
 from unittest.mock import AsyncMock
 
@@ -10,11 +11,16 @@ from shiori_sdk.testing.service_context import FakeServiceContext
 from plugins.herdr.backend.cli import CommandError, HerdrCli
 from plugins.herdr.backend.plugin import setup
 
+PACKAGE_DIR = Path(__file__).resolve().parents[1]
+
 
 @pytest.fixture
 async def context(tmp_path):
     context = FakeServiceContext(
-        "herdr", tmp_path, config={"executable": "custom-herdr", "session": "mine"}
+        "herdr",
+        tmp_path,
+        config={"executable": "custom-herdr", "session": "mine"},
+        package_dir=PACKAGE_DIR,
     )
     await setup(context.as_capability())
     yield context

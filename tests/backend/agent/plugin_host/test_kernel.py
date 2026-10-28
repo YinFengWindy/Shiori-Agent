@@ -263,6 +263,60 @@ async def test_invalid_yaml_is_diagnosed_without_blocking_valid_sibling(
         await strict_kernel.load_all()
 
 
+@pytest.mark.parametrize(
+    ("lines", "message"),
+    [
+        ("capabilities: []\n", "capabilities"),
+        ("inject:\n  - host.tools\n", "inject 不能声明宿主内部 Key"),
+        ("optional_inject:\n  - host.bridge\n", "optional_inject 不能声明宿主内部 Key"),
+        ("provides:\n  - host.rpc\n", "provides 不能声明宿主内部 Key"),
+    ],
+)
+def test_api_4_manifest_rejects_capabilities_and_host_keys(
+    tmp_path: Path, lines: str, message: str
+):
+    """``host.*`` keys hold raw binders that could act as another plugin."""
+    from agent.plugin_host.manifest import ManifestError, load_manifest
+
+    (tmp_path / "manifest.yaml").write_text(
+        "api: 4\nid: demo\n" + lines, encoding="utf-8"
+    )
+    with pytest.raises(ManifestError, match=message):
+        load_manifest(tmp_path)
+
+
+@pytest.mark.asyncio
+async def test_api_4_require_tools_registers_and_dispose_clears(tmp_path: Path):
+    """ctx.require(TOOLS) reaches the host registry, and dispose unregisters it."""
+    package = tmp_path / "demo"
+    (package / "backend").mkdir(parents=True)
+    (package / "manifest.yaml").write_text(
+        "api: 4\nid: demo\ninject:\n  - tools\n", encoding="utf-8"
+    )
+    (package / "backend/plugin.py").write_text(
+        "from shiori_sdk.core.services import TOOLS\n"
+        "from shiori_sdk.tools import Tool\n"
+        "\n"
+        "class DemoTool(Tool):\n"
+        "    name = 'demo_tool'\n"
+        "    description = 'demo'\n"
+        "    parameters = {'type': 'object', 'properties': {}}\n"
+        "\n"
+        "    async def execute(self, **kwargs):\n"
+        "        return 'ok'\n"
+        "\n"
+        "async def setup(ctx):\n"
+        "    ctx.require(TOOLS).register(DemoTool())\n",
+        encoding="utf-8",
+    )
+    tools = ToolRegistry()
+    kernel = make_kernel([tmp_path], event_bus=EventBus(), tools=tools)
+    await kernel.load_all()
+    assert tools.get_tool("demo_tool") is not None
+    await kernel.terminate_all(force=True)
+    assert tools.get_tool("demo_tool") is None
+
+
 @pytest.mark.asyncio
 async def test_force_cleanup_recovers_effects_after_rollback_is_cancelled(tmp_path):
     package = tmp_path / "waiting"

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, cast
 
 from shiori_sdk.core.tools import ToolCalling, ToolVeto
+from shiori_sdk.core.services import CONFIG
 
 from .config import ToolLoopGuardConfig
 
@@ -88,7 +89,7 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
     行为变化说明：旧 Plugin ABC 版本没有 ConfigModel / _conf_schema.json，
     因此旧 self.context.config 恒为 None，repeat_limit 实际上永远是这里的硬编码默认值 3，
     用户在 [plugins.tool_loop_guard] 里配置的 repeat_limit 从未生效过。迁移到 v2 后
-    ctx.config 读的是 PluginConfig(services.plugin_configs[id])，配置现在真的会生效
+    ctx.require(CONFIG) 读的是 PluginConfig(services.plugin_configs[id])，配置现在真的会生效
     （见 plugins/tool_loop_guard/tests/test_plugin.py 的
     test_configured_threshold_applies_and_requests_finalize）。
     这是修正一个既有 bug，不是刻意的新行为，默认值仍是 3。
@@ -96,8 +97,8 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
     #239：manifest 现在声明了 config_model（``ToolLoopGuardConfig``），所以这里
     不再需要 try/except 的临时兜底——非法配置（非整数、或 < 2）直接在这里
     model_validate 失败并抛出，由插件加载诊断呈现，不再被静默改写为默认值
-    （与 novelai 的 ``NovelAIConfig.model_validate(ctx.config.as_dict())`` 用法一致）。
+    （与 novelai 的 ``NovelAIConfig.model_validate(ctx.require(CONFIG).as_dict())`` 用法一致）。
     """
-    config = ToolLoopGuardConfig.model_validate(ctx.config.as_dict())
+    config = ToolLoopGuardConfig.model_validate(ctx.require(CONFIG).as_dict())
     guard = _ToolLoopGuard(config.repeat_limit)
     ctx.on(ToolCalling, guard.detect_repeated_tool_call)

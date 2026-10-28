@@ -10,6 +10,7 @@ from shiori_sdk.accounts import (
     response_rules_to_dict,
     stored_response_rules,
 )
+from shiori_sdk.core.services import ACCOUNTS, AVATARS, CONFIG, KV
 
 from .credentials import (
     avatar_key,
@@ -38,7 +39,7 @@ class TelegramBots:
         group: AccountChannelGroup,
     ) -> None:
         self._ctx = ctx
-        self._accounts = ctx.accounts
+        self._accounts = ctx.require(ACCOUNTS)
         self._store = store
         self._group = group
         # Registered host account ID per Bot ref.
@@ -46,7 +47,9 @@ class TelegramBots:
 
     async def verify_token(self, payload: dict[str, object]) -> dict[str, object]:
         """Resolve stored references through the granted host config policy."""
-        return await verify_bot_token(payload, self._ctx.config.resolve_reference)
+        return await verify_bot_token(
+            payload, self._ctx.require(CONFIG).resolve_reference
+        )
 
     async def load(self) -> None:
         """Registers every saved Bot; a Bot of a deleted role is deleted with its data."""
@@ -70,7 +73,7 @@ class TelegramBots:
                 platform_account_id=bot_id,
                 config_ref=ref,
                 role_id=role_id,
-                avatar_url=str(self._ctx.kv.get(avatar_key(ref), "")),
+                avatar_url=str(self._ctx.require(KV).get(avatar_key(ref), "")),
                 response_rules=rules,
             )
             if snapshot is None:
@@ -90,7 +93,7 @@ class TelegramBots:
             self._accounts.report(account_id, connection="offline")
             return
         token = resolve_token(
-            str(row.get("token") or ""), self._ctx.config.resolve_reference
+            str(row.get("token") or ""), self._ctx.require(CONFIG).resolve_reference
         )
         if not token:
             self._accounts.report(
@@ -105,8 +108,8 @@ class TelegramBots:
                 name=f"telegram_{ref}",
                 config_ref=ref,
                 accounts=self._accounts,
-                known_store=self._ctx.kv,
-                avatars=self._ctx.avatars,
+                known_store=self._ctx.require(KV),
+                avatars=self._ctx.require(AVATARS),
                 role_id=row["role_id"],
                 chat_types=self._ctx.manifest.channel_chat_types(_PLATFORM),
             )

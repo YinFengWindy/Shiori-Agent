@@ -13,6 +13,8 @@ from plugins.default_memory.backend.construct import construct_default_engine
 from plugins.default_memory.backend.engine import lifecycle
 from plugins.default_memory.backend.semantic.store import VEC_DIM
 
+PACKAGE_DIR = Path(__file__).resolve().parents[1]
+
 
 def _context(
     tmp_path: Path,
@@ -25,8 +27,7 @@ def _context(
     ctx = FakeMemoryPluginContext(
         tmp_path,
         kernel=kernel,
-        inject=("main_provider", "main_model"),
-        provides=("memory_engine",),
+        package_dir=PACKAGE_DIR,
     )
     config = FakeConfig(values)
     if references:

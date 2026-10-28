@@ -2,17 +2,20 @@
 
 import io
 import wave
+from pathlib import Path
 
 import pytest
 from shiori_sdk.testing.service_context import FakeServiceContext
 from shiori_sdk.testing.services import FakePluginServices
+
+PACKAGE_DIR = Path(__file__).resolve().parents[1]
 
 
 class ProviderContext(FakeServiceContext):
     """Compose the explicit public-service fixture with ordinary plugin capabilities."""
 
     def __init__(self, workspace):
-        super().__init__("sensevoice_asr", workspace)
+        super().__init__("sensevoice_asr", workspace, package_dir=PACKAGE_DIR)
         self.services = FakePluginServices(self)
 
 

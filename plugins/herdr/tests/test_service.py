@@ -15,6 +15,8 @@ from plugins.herdr.backend.cli import CommandError, HerdrCli
 from plugins.herdr.backend.config import HerdrConfig
 from plugins.herdr.backend.service import TaskService
 
+PACKAGE_DIR = Path(__file__).resolve().parents[1]
+
 
 class ScriptedCli(HerdrCli):
     """One explicit named-session script; no terminal or native agent starts."""
@@ -85,7 +87,7 @@ class ScriptedCli(HerdrCli):
 
 @pytest.fixture
 def fixture(tmp_path, monkeypatch):
-    context = FakeServiceContext("herdr", tmp_path)
+    context = FakeServiceContext("herdr", tmp_path, package_dir=PACKAGE_DIR)
     target = FakeBackgroundResultTarget("mira", "original-thread")
     cli = ScriptedCli(context, tmp_path)
     service = TaskService(tmp_path / "plugin-data")

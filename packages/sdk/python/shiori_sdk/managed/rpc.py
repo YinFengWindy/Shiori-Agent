@@ -121,7 +121,12 @@ def register_runtime_rpc(
     async def remove(_params: dict[str, object]):
         return runtime.remove()
 
-    ctx.rpc.register("runtime.status", status, concurrency=Concurrency.READ_ONLY)
+    # The capability property, not ``ctx.require(RPC)``: an api: 2 plugin
+    # declares ``rpc`` in capabilities, which require rejects, and on an api: 4
+    # plugin with ``rpc`` in inject the property returns require's view. P4-4
+    # deletes the property; this switches to require then.
+    rpc = ctx.rpc
+    rpc.register("runtime.status", status, concurrency=Concurrency.READ_ONLY)
     for name, handler in [
         ("prepare", prepare),
         ("relocate", relocate),
@@ -130,9 +135,7 @@ def register_runtime_rpc(
         ("cancel", cancel),
         ("remove", remove),
     ]:
-        ctx.rpc.register(
-            "runtime." + name, handler, concurrency=Concurrency.INTEGRATION
-        )
+        rpc.register("runtime." + name, handler, concurrency=Concurrency.INTEGRATION)
     # Disposal stops the service and releases its lease; generation retirement
     # drains first and disposes afterwards, so the next owner's start (which
     # waits on that lease) still follows. Nothing is registered for on_drain:

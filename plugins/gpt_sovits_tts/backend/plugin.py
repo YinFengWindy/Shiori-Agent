@@ -7,6 +7,7 @@ from shiori_sdk.role_events import RoleDeleted
 from shiori_sdk.services import ServiceProviderContext
 from shiori_sdk.voice import TTS_CONTRACT
 from shiori_sdk.managed.rpc import register_runtime_rpc
+from shiori_sdk.core.services import BACKGROUND, EVENTS, ROLES, SERVICES, WORKSPACE
 
 from .client import SovitsClient
 from .engine import SynthesisEngine
@@ -22,17 +23,18 @@ class Context(ServicePluginContext, ServiceProviderContext, Protocol):
 
 async def setup(ctx: Context) -> None:
     """Reconcile private data and publish one serialized v2ProPlus service."""
-    store = VoiceStore(ctx.workspace)
+    store = VoiceStore(ctx.require(WORKSPACE))
     references = References(store)
 
     def reconcile(_event: RoleDeleted | None = None) -> None:
-        with ctx.roles.read_scope():
+        with ctx.require(ROLES).read_scope():
             references.reconcile(
-                {role.id for role in ctx.roles.list_roles()}, sweep=_event is None
+                {role.id for role in ctx.require(ROLES).list_roles()},
+                sweep=_event is None,
             )
 
     reconcile()
-    ctx.events.on(RoleDeleted, reconcile)
+    ctx.require(EVENTS).on(RoleDeleted, reconcile)
     runtime = create_runtime(ctx, store)
 
     def managed_identity():
@@ -47,8 +49,8 @@ async def setup(ctx: Context) -> None:
         store,
         references,
         SovitsClient(),
-        ctx.background,
-        ctx.roles,
+        ctx.require(BACKGROUND),
+        ctx.require(ROLES),
         lambda: effective_settings(store.read().settings, runtime),
         managed_identity,
     )
@@ -66,7 +68,7 @@ async def setup(ctx: Context) -> None:
     register_rpc(ctx, engine, runtime)
     if runtime.mode() == "managed" and runtime.status()["installed"]:
         runtime.submit("start")
-    ctx.services.register(
+    ctx.require(SERVICES).register(
         "tts",
         contract=TTS_CONTRACT,
         label="GPT-SoVITS · v2ProPlus",

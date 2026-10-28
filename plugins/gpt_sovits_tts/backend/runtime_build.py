@@ -6,6 +6,7 @@ from pathlib import Path
 from shiori_sdk.managed.child import private_environment, run_owned
 from shiori_sdk.managed.paths import environment_path
 from shiori_sdk.plugin_services import ServicePluginContext
+from shiori_sdk.core.services import PROCESSES
 from .runtime_manifest import (
     CACHE_VARIABLES,
     OFFLINE_ENV,
@@ -36,7 +37,7 @@ async def build_runtime(
         overrides=OFFLINE_ENV,
     )
     await run_owned(
-        ctx.processes,
+        ctx.require(PROCESSES),
         [
             str(tool),
             "x",
@@ -60,7 +61,7 @@ async def build_runtime(
         app / "shiori_server.py",
     )
     await run_owned(
-        ctx.processes,
+        ctx.require(PROCESSES),
         [
             environment_path(app / "runtime/python.exe"),
             "-I",

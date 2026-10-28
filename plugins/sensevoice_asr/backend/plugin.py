@@ -11,6 +11,7 @@ from shiori_sdk.rpc import Concurrency
 from shiori_sdk.services import ServiceProviderContext
 from shiori_sdk.voice import ASR_CONTRACT
 from shiori_sdk.managed.rpc import register_runtime_rpc
+from shiori_sdk.core.services import RPC, SERVICES, WORKSPACE
 
 from .client import SenseVoiceClient
 from .settings import SettingsStore
@@ -23,7 +24,7 @@ class Context(ServicePluginContext, ServiceProviderContext, Protocol):
 
 async def setup(ctx: Context) -> None:
     """Publish the public ASR contract and private settings/test endpoints."""
-    store = SettingsStore(ctx.workspace)
+    store = SettingsStore(ctx.require(WORKSPACE))
     client = SenseVoiceClient()
     transcription = asyncio.Lock()
     ctx.effect("sensevoice_http", client.close)
@@ -68,7 +69,7 @@ async def setup(ctx: Context) -> None:
 
     async def test_file(params: dict[str, object]):
         path = staged_import_file(
-            ctx.workspace,
+            ctx.require(WORKSPACE),
             "sensevoice_asr-audio",
             str(params.get("source", "")),
             suffix=".wav",
@@ -84,11 +85,13 @@ async def setup(ctx: Context) -> None:
         finally:
             path.unlink(missing_ok=True)
 
-    ctx.rpc.register("settings.get", get, concurrency=Concurrency.READ_ONLY)
-    ctx.rpc.register("settings.set", save)
-    ctx.rpc.register("health", health, concurrency=Concurrency.READ_ONLY)
-    ctx.rpc.register("transcribe_file", test_file, concurrency=Concurrency.INTEGRATION)
-    ctx.services.register(
+    ctx.require(RPC).register("settings.get", get, concurrency=Concurrency.READ_ONLY)
+    ctx.require(RPC).register("settings.set", save)
+    ctx.require(RPC).register("health", health, concurrency=Concurrency.READ_ONLY)
+    ctx.require(RPC).register(
+        "transcribe_file", test_file, concurrency=Concurrency.INTEGRATION
+    )
+    ctx.require(SERVICES).register(
         "asr",
         contract=ASR_CONTRACT,
         label="SenseVoiceSmall · CPU",

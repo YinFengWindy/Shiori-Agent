@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from shiori_sdk.core.tools import ToolCalling
+from shiori_sdk.core.services import WORKSPACE
 
 if TYPE_CHECKING:
     from shiori_sdk.extensions import HookPluginContext as PluginRuntimeContext
@@ -95,5 +96,5 @@ class _RmRewriter:
 
 async def setup(ctx: "PluginRuntimeContext") -> None:
     """装配 shell_restore：在 ``ToolCalling`` 上把 shell 工具的 rm 改写为 mv。"""
-    rewriter = _RmRewriter(_restore_dir(ctx.workspace))
+    rewriter = _RmRewriter(_restore_dir(ctx.require(WORKSPACE)))
     ctx.on(ToolCalling, rewriter.rewrite_rm_to_mv)

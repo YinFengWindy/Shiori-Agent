@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+from shiori_sdk.core.services import ACCOUNTS, CHANNELS, KV, RPC
 
 if TYPE_CHECKING:
     from shiori_sdk.channels.context import ChannelPluginContext
@@ -14,12 +15,12 @@ async def setup(ctx: "ChannelPluginContext") -> None:
     from .bots import TelegramBots
     from .credentials import TelegramBotStore
 
-    group = ctx.channels.group("telegram")
-    ctx.channels.add(group)
-    bots = TelegramBots(ctx, TelegramBotStore(ctx.kv), group)
+    group = ctx.require(CHANNELS).group("telegram")
+    ctx.require(CHANNELS).add(group)
+    bots = TelegramBots(ctx, TelegramBotStore(ctx.require(KV)), group)
     await bots.load()
-    TelegramAccountApi(bots, ctx.rpc, ctx.kv).register()
-    ctx.rpc.register("bot.save", bots.save)
-    ctx.rpc.register("bot.disconnect", bots.disconnect)
-    ctx.accounts.on_delete(bots.delete_plan)
-    ctx.accounts.on_rules_change(bots.save_rules)
+    TelegramAccountApi(bots, ctx.require(RPC), ctx.require(KV)).register()
+    ctx.require(RPC).register("bot.save", bots.save)
+    ctx.require(RPC).register("bot.disconnect", bots.disconnect)
+    ctx.require(ACCOUNTS).on_delete(bots.delete_plan)
+    ctx.require(ACCOUNTS).on_rules_change(bots.save_rules)

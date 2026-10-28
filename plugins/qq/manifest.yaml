@@ -1,10 +1,9 @@
-api: 2
-runtime_api: ">=3.1.2 <4.0.0"
+api: 4
 id: qq
 display_name: QQ（NapCat）
 version: '0.1.2'
 desc: 通过插件托管的 NapCat 接入的 QQ 渠道
-capabilities:
+inject:
   - channels
   - accounts
   - avatars
@@ -13,19 +12,22 @@ capabilities:
   - workspace
   - rpc
   - tools
-channels:
-  - name: qq
-    label: QQ（NapCat）
-    contact_label: QQ 号
-    # NapCat delivers every group message, so a group can be listened to (#538).
-    group_listening: true
-    chat_types:
-      - type: private
-        label: 私聊
-        chat_id_label: QQ 号
-        chat_id_hint: 对方的 QQ 号
-      - type: group
-        label: 群聊
-        chat_id_label: 群号
-        chat_id_hint: QQ 群号
-        prefix: 'gqq:'
+contributes:
+  channels:
+    - name: qq
+      label: QQ（NapCat）
+      contact_label: QQ 号
+      # NapCat delivers every group message, so a group can be listened to (#538).
+      group_listening: true
+      chat_types:
+        - type: private
+          label: 私聊
+          chat_id_label: QQ 号
+          chat_id_hint: 对方的 QQ 号
+        - type: group
+          label: 群聊
+          chat_id_label: 群号
+          chat_id_hint: QQ 群号
+          prefix: 'gqq:'
+frontend:
+  entry: ui/index.tsx

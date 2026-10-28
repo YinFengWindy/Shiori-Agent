@@ -18,6 +18,7 @@ from shiori_sdk.channels.context import ChannelPluginContext
 from shiori_sdk.accounts.routing import AccountRoute
 from shiori_sdk.channels.group import AccountChannelGroup
 from shiori_sdk.storage import plugin_data_dir
+from shiori_sdk.core.services import ACCOUNTS, CONFIG, KV, WORKSPACE
 
 from .config import CHANNEL, ConnectionConfig, read_connection
 from .connection import GrokConnection
@@ -32,8 +33,8 @@ class GrokAccounts:
     def __init__(self, ctx: ChannelPluginContext, group: AccountChannelGroup) -> None:
         self.ctx = ctx
         self.group = group
-        self.store = ConnectionStore(ctx.kv)
-        self.data_dir = plugin_data_dir(ctx.workspace, CHANNEL)
+        self.store = ConnectionStore(ctx.require(KV))
+        self.data_dir = plugin_data_dir(ctx.require(WORKSPACE), CHANNEL)
         self.client_path = ctx.plugin_dir / (
             "client.ps1" if os.name == "nt" else "backend/client.py"
         )
@@ -43,7 +44,9 @@ class GrokAccounts:
 
     def _register(self, config: ConnectionConfig, *, saved: bool = False) -> bool:
         register = (
-            self.ctx.accounts.register_saved if saved else self.ctx.accounts.register
+            self.ctx.require(ACCOUNTS).register_saved
+            if saved
+            else self.ctx.require(ACCOUNTS).register
         )
         return (
             register(
@@ -65,7 +68,7 @@ class GrokAccounts:
         self, connection_id: str, state: ConnectionState, error: str = ""
     ) -> None:
         config = self.configs.get(connection_id)
-        self.ctx.accounts.report(
+        self.ctx.require(ACCOUNTS).report(
             account_id_for(CHANNEL, connection_id),
             connection=state,
             error=error,
@@ -84,7 +87,7 @@ class GrokAccounts:
         )
 
     def _resolve_key(self, config: ConnectionConfig) -> str:
-        secret = self.ctx.config.resolve_reference(config.webhook_key)
+        secret = self.ctx.require(CONFIG).resolve_reference(config.webhook_key)
         if not secret or secret.startswith("${"):
             raise ValueError("Webhook 密钥未配置或环境变量未解析")
         return secret
@@ -92,7 +95,7 @@ class GrokAccounts:
     def _make_connection(self, config: ConnectionConfig, secret: str) -> GrokConnection:
         return GrokConnection(
             config,
-            self.ctx.kv,
+            self.ctx.require(KV),
             self.data_dir,
             self.client_path,
             config_changed=self._changed,
@@ -110,7 +113,7 @@ class GrokAccounts:
                 config = read_connection(row)
                 if connection_id != config.connection_id:
                     raise ValueError("连接标识不匹配")
-                if not self.ctx.accounts.role_exists(config.role_id):
+                if not self.ctx.require(ACCOUNTS).role_exists(config.role_id):
                     self._purge(config)
                     continue
                 if not self._register(config, saved=True):
@@ -128,7 +131,7 @@ class GrokAccounts:
                 if registered:
                     self._report(connection_id, "error", str(error))
                 else:
-                    self.ctx.accounts.reject(connection_id, str(error))
+                    self.ctx.require(ACCOUNTS).reject(connection_id, str(error))
 
     def _config_for(self, payload: dict[str, object]) -> ConnectionConfig:
         account_id = str(payload.get("account_id") or "")
@@ -156,7 +159,7 @@ class GrokAccounts:
             if payload.get("account_id") and self._config_for(payload) != previous:
                 raise ValueError("Grok 连接与角色不匹配")
             connection_id = previous.connection_id if previous else uuid4().hex
-            self.ctx.accounts.check_owner(
+            self.ctx.require(ACCOUNTS).check_owner(
                 config_ref=connection_id,
                 role_id=role_id,
                 platform_account_id=connection_id,
@@ -221,7 +224,7 @@ class GrokAccounts:
                 raise
             if previous is not None and previous.peer_id != config.peer_id:
                 ExchangeJournal.purge_saved(
-                    self.ctx.kv, previous.connection_id, previous.peer_id
+                    self.ctx.require(KV), previous.connection_id, previous.peer_id
                 )
             return {"account_id": account_id_for(CHANNEL, connection_id)}
 
@@ -242,7 +245,9 @@ class GrokAccounts:
 
     def _purge(self, config: ConnectionConfig) -> None:
         # Keep the binding until every cleanup succeeds so a new plan can retry.
-        ExchangeJournal.purge_saved(self.ctx.kv, config.connection_id, config.peer_id)
+        ExchangeJournal.purge_saved(
+            self.ctx.require(KV), config.connection_id, config.peer_id
+        )
         (self.data_dir / config.connection_id / "client.json").unlink(missing_ok=True)
         self.store.remove(config.connection_id)
         self.configs.pop(config.connection_id, None)

@@ -80,3 +80,44 @@ async def test_manifest_keys_and_events_go_through_the_generation_kernel(
 
     assert hints == [("keyed",), ()]
     assert kernel.kernel.get(Key("keyed.api")) is None
+
+
+_OPTIONAL_PLUGIN = """
+from shiori_sdk.core.services import CONFIG, KV, SERVICES
+
+seen = {}
+
+
+async def setup(ctx):
+    seen.update(config=ctx.get(CONFIG), kv=ctx.get(KV), services=ctx.get(SERVICES))
+""".strip()
+
+
+async def test_optional_inject_gets_the_host_built_kv_and_services(
+    tmp_path: Path,
+) -> None:
+    """Built for ``optional_inject`` too, like ``config``; not None."""
+    plugin_dir = tmp_path / "plugins" / "optional"
+    (plugin_dir / "backend").mkdir(parents=True)
+    (plugin_dir / "backend" / "plugin.py").write_text(
+        _OPTIONAL_PLUGIN, encoding="utf-8"
+    )
+    (plugin_dir / "manifest.yaml").write_text(
+        "api: 4\nid: optional\noptional_inject:\n  - config\n  - kv\n  - services\n",
+        encoding="utf-8",
+    )
+    kernel = make_kernel(
+        [tmp_path / "plugins"], event_bus=EventBus(), workspace=tmp_path / "ws"
+    )
+    await kernel.load_all()
+    try:
+        [state] = kernel.states()
+        assert state["state"] == "ACTIVE", state["error"]
+        module = next(
+            m
+            for k, m in sys.modules.items()
+            if k.startswith("akasic_plugin_") and k.endswith("_optional")
+        )
+        assert all(value is not None for value in module.seen.values()), module.seen
+    finally:
+        await kernel.terminate_all(force=True)

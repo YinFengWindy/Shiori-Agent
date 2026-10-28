@@ -7,6 +7,7 @@ from shiori_sdk.managed.artifacts import Artifact
 from shiori_sdk.managed.child import run_owned
 from shiori_sdk.managed.paths import environment_path
 from shiori_sdk.plugin_services import ServicePluginContext
+from shiori_sdk.core.services import PROCESSES
 from .runtime_manifest import PYTHON_ARCHIVE, PYTHON_RELATIVE
 from .runtime_environment import runtime_environment
 from .runtime_packages import install_packages
@@ -39,7 +40,7 @@ async def build_runtime(
         staging / "server.py",
     )
     await run_owned(
-        ctx.processes,
+        ctx.require(PROCESSES),
         [
             environment_path(interpreter),
             "-I",

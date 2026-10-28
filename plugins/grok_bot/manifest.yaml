@@ -1,26 +1,28 @@
-api: 2
-distribution: builtin
-entry: backend/plugin.py
-runtime_api: '>=3.1.2 <4.0.0'
+api: 4
 id: grok_bot
 display_name: Grok Bot
 version: '0.1.0'
 desc: 角色与 Grok Bot 的双向私聊
+distribution: builtin
 category: channel
 default_enabled: false
-capabilities:
+entry: backend/plugin.py
+inject:
   - channels
   - accounts
   - config
   - kv
   - rpc
   - workspace
-channels:
-  - name: grok_bot
-    instance_prefix: grok_bot_
-    label: Grok Bot
-    chat_types:
-      - type: private
-        label: 私聊
-        chat_id_label: Bot
-        prefix: 'dm:'
+contributes:
+  channels:
+    - name: grok_bot
+      instance_prefix: grok_bot_
+      label: Grok Bot
+      chat_types:
+        - type: private
+          label: 私聊
+          chat_id_label: Bot
+          prefix: 'dm:'
+frontend:
+  entry: ui/index.tsx

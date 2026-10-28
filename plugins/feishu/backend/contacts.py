@@ -3,7 +3,7 @@
 A received message only carries the sender's open_id. The contact API answers
 their name and avatar, given the app's ``contact:user.base:readonly``
 permission. Both are fetched in the background with the host's avatar refresh
-(``ctx.avatars``, every 7 days per sender), so delivery never waits on it: the
+(``ctx.require(AVATARS)``, every 7 days per sender), so delivery never waits on it: the
 name reaches the messages after the fetch, the avatar the phone. Without the
 permission the fetch fails, the host logs a warning and the sender keeps the
 placeholder avatar and no name.

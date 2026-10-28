@@ -15,6 +15,8 @@ from shiori_sdk.testing.tools import FakeTools
 
 from plugins.default_memory.backend.plugin import _DefaultMemoryRecorder
 
+PACKAGE_DIR = Path(__file__).resolve().parents[1]
+
 
 def _turn_starting(
     *, retrieved_memory_block: str = "", retrieval_trace: object | None = None
@@ -131,8 +133,7 @@ async def test_setup_provides_the_engine_and_records_until_close(
     ctx = FakeMemoryPluginContext(
         tmp_path,
         kernel=kernel,
-        inject=("main_provider", "main_model"),
-        provides=("memory_engine",),
+        package_dir=PACKAGE_DIR,
     )
     ctx.config = FakeConfig(
         {"embedding_api_key": "k", "embedding_base_url": "http://embed"}

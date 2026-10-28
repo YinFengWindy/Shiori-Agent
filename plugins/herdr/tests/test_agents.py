@@ -1,5 +1,6 @@
 """Session agent RPC: workspace grouping, task links, session availability, commands."""
 
+from pathlib import Path
 import asyncio
 import json
 
@@ -17,6 +18,8 @@ from plugins.herdr.backend.sessions import SessionGate
 from shiori_sdk.rpc import Concurrency
 from shiori_sdk.testing.background_results import FakeBackgroundResultTarget
 from shiori_sdk.testing.service_context import FakeServiceContext
+
+PACKAGE_DIR = Path(__file__).resolve().parents[1]
 
 
 def agent(pane_id, workspace_id, kind="claude", status="working", title="标题"):
@@ -108,7 +111,7 @@ def make_task(tmp_path, task_id, *, pane_id, session="default", created_at="t1")
 
 @pytest.fixture
 def fixture(tmp_path):
-    ctx = FakeServiceContext("herdr", tmp_path)
+    ctx = FakeServiceContext("herdr", tmp_path, package_dir=PACKAGE_DIR)
     service = TaskService(tmp_path)
     cli = HerdrCli(HerdrConfig(session="default"), ctx.processes, tmp_path)
     herdr = ScriptedHerdr()

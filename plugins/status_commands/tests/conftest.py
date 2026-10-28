@@ -1,5 +1,6 @@
 """Commands registered on a real ``CommandRegistry``, answered like the host does."""
 
+from pathlib import Path
 from dataclasses import dataclass, field
 
 import pytest
@@ -10,6 +11,8 @@ from shiori_sdk.commands import CommandInput, CommandRegistry
 from shiori_sdk.core.conversation import COMMANDS
 from shiori_sdk.kernel import Kernel
 from shiori_sdk.testing.extensions import FakeDependencies, FakeExtensionContext
+
+PACKAGE_DIR = Path(__file__).resolve().parents[1]
 
 
 @dataclass
@@ -54,7 +57,7 @@ async def plugin():
         "status_commands",
         dependencies=FakeDependencies(exports),
         kernel=kernel,
-        inject=("commands",),
+        package_dir=PACKAGE_DIR,
     )
     await setup(ctx)
     yield Plugin(ctx, commands, exports)

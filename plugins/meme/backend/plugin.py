@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from shiori_sdk.core.conversation import PromptRendering, ReasoningFinished
 from shiori_sdk.prompting import PromptSectionRender
 from shiori_sdk.storage import plugin_data_dir
+from shiori_sdk.core.services import RESOURCES, ROLES, SESSION_STORE, WORKSPACE
 from .runtime import (
     MemeCatalog,
     RoleReactionCatalog,
@@ -104,11 +105,11 @@ class _MemeReactions:
 async def setup(ctx: "PluginRuntimeContext") -> None:
     """Register prompt and reply contributions within the plugin effect scope."""
     reactions = _MemeReactions(
-        ctx.workspace,
-        ctx.sessions,
-        ctx.roles,
-        ctx.resources,
-        plugin_data_dir(ctx.workspace, "meme") / "library",
+        ctx.require(WORKSPACE),
+        ctx.require(SESSION_STORE),
+        ctx.require(ROLES),
+        ctx.require(RESOURCES),
+        plugin_data_dir(ctx.require(WORKSPACE), "meme") / "library",
     )
     ctx.on(PromptRendering, reactions.append_prompt)
     # Runs on ReasoningFinished, before the core's post-chain check removes

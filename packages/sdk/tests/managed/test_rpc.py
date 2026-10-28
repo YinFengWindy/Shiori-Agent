@@ -59,6 +59,24 @@ async def rpc(tmp_path, monkeypatch):
     await ctx.aclose()
 
 
+async def test_a_context_without_inject_registers_every_runtime_method(tmp_path):
+    """An api: 2 plugin declares ``rpc`` in capabilities, not in inject."""
+    ctx, _runtime = _register(tmp_path)
+    assert sorted(ctx.rpc.handlers) == [
+        "runtime." + name
+        for name in (
+            "cancel",
+            "prepare",
+            "relocate",
+            "remove",
+            "start",
+            "status",
+            "stop",
+        )
+    ]
+    await ctx.aclose()
+
+
 async def test_draining_only_waits_and_disposal_stops_the_runtime(tmp_path):
     ctx, runtime = _register(tmp_path)
     for drain in ctx.runtime.drainers:

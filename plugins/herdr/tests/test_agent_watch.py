@@ -1,5 +1,6 @@
 """Watching a handed-over agent: when it is reported, what the report says, only once."""
 
+from pathlib import Path
 import asyncio
 import json
 
@@ -16,6 +17,8 @@ from plugins.herdr.backend.cli import HerdrCli
 from plugins.herdr.backend.config import HerdrConfig
 from shiori_sdk.testing.background_results import FakeBackgroundResultTarget
 from shiori_sdk.testing.service_context import FakeServiceContext
+
+PACKAGE_DIR = Path(__file__).resolve().parents[1]
 
 CONFIG = HerdrConfig(session="default", task_timeout_seconds=60)
 ROLE = CommandSource("role", "role-a", "Mira")
@@ -64,7 +67,7 @@ class Agent:
 
 @pytest.fixture
 async def watcher(tmp_path, monkeypatch):
-    ctx = FakeServiceContext("herdr", tmp_path)
+    ctx = FakeServiceContext("herdr", tmp_path, package_dir=PACKAGE_DIR)
     watcher = AgentWatcher()
     watcher.attach(ctx.process_resources, ctx.processes, tmp_path)
     watcher.poll_seconds = 0

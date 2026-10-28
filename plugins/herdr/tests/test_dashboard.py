@@ -1,5 +1,6 @@
 """Desktop global read/control and generation-scoped event lifetime."""
 
+from pathlib import Path
 import asyncio
 import json
 from unittest.mock import AsyncMock
@@ -14,10 +15,12 @@ from shiori_sdk.testing.background_results import FakeBackgroundResultTarget
 from shiori_sdk.testing.service_context import FakeServiceContext
 from shiori_sdk.rpc import Concurrency
 
+PACKAGE_DIR = Path(__file__).resolve().parents[1]
+
 
 @pytest.fixture
 def fixture(tmp_path):
-    ctx = FakeServiceContext("herdr", tmp_path)
+    ctx = FakeServiceContext("herdr", tmp_path, package_dir=PACKAGE_DIR)
     service = TaskService(tmp_path)
     dashboard = Dashboard(service, ctx.as_capability())
     dashboard.register()
@@ -156,7 +159,7 @@ async def test_current_rpc_namespace_uses_retained_owners_operations(
 ):
     retired, current = generations
     assert retired["cli"].CommandError is not current["cli"].CommandError
-    ctx = FakeServiceContext("herdr", tmp_path)
+    ctx = FakeServiceContext("herdr", tmp_path, package_dir=PACKAGE_DIR)
     target = FakeBackgroundResultTarget("role-a", "thread-a")
     service = retired["service"].TaskService(tmp_path)
     service.attach(ctx.process_resources, ctx.processes, tmp_path)

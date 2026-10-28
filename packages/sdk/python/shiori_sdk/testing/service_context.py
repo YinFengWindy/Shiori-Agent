@@ -29,8 +29,12 @@ class FakeServiceContext(FakeExtensionContext):
         workspace: Path,
         *,
         config: dict[str, object] | None = None,
+        package_dir: Path | None = None,
     ):
-        super().__init__(plugin_id, workspace=workspace, config=config)
+        """``package_dir`` declares inject from that package's manifest."""
+        super().__init__(
+            plugin_id, workspace=workspace, config=config, package_dir=package_dir
+        )
         self.roles = FakeRoles(workspace)
         self.models = FakeModels()
         self.sessions = FakeSessions()

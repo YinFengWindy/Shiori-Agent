@@ -44,8 +44,9 @@ _CHAT_TYPE_REQUIRED_FIELDS = ("type", "label", "chat_id_label")
 _CHAT_TYPE_OPTIONAL_FIELDS = ("chat_id_hint", "prefix")
 
 # 插件管理页的分组：feature 面向用户的功能，channel 外部渠道，system 宿主内部的
-# 护栏与诊断组件（默认折叠）。省略时由 capabilities 推断：声明 channels 即渠道，
-# 否则为功能；system 只能显式声明。
+# 护栏与诊断组件（默认折叠）。省略时：声明了渠道（api: 2 的 capabilities 含
+# channels，或 api: 4 的 contributes.channels 非空）即渠道，否则为功能；
+# system 只能显式声明。
 PLUGIN_CATEGORIES = ("feature", "channel", "system")
 
 
@@ -129,6 +130,8 @@ class PluginManifest:
     category: str = "feature"
     # ``[plugins.<id>]`` 没有显式 ``enabled`` 时是否启用；显式值始终优先。
     default_enabled: bool = True
+    # api: 4 的前端入口。宿主在 P7 前仍按目录发现 ui/background/surface。
+    frontend_entry: str | None = None
     metadata: dict[str, object] = field(default_factory=dict)
 
     def channel_chat_types(self, name: str) -> tuple[ChatTypeDeclaration, ...]:
@@ -153,7 +156,8 @@ class PluginManifest:
 def load_manifest(plugin_dir: Path) -> PluginManifest | None:
     """读取 manifest.yaml；不存在返回 None，格式非法抛 ManifestError。
 
-    只接受显式 ``api: 2``；没有 manifest 的目录不属于插件。
+    接受显式 ``api: 2`` 或 ``api: 4``。没有 manifest 的目录不属于插件。
+    拒绝非 2/4 是 P4-5，这里两者都加载。
     """
     manifest_path = plugin_dir / "manifest.yaml"
     import yaml
@@ -182,9 +186,15 @@ def _parse_manifest(
 ) -> PluginManifest:
     if any(not isinstance(key, str) for key in raw):
         raise ManifestError("manifest keys must be strings")
-    if raw.get("api") != 2 or isinstance(raw.get("api"), bool):
-        raise ManifestError(f"插件必须显式声明 api: 2: {manifest_path}")
-    api = 2
+    api_value = raw.get("api")
+    # ``2.0 == 2``, so a float slips past this comparison. Leave that for the
+    # external package contract, which reports the field as ``api``. A
+    # non-integer 4 is not a version this loader accepts.
+    if isinstance(api_value, bool) or api_value not in (2, 4):
+        raise ManifestError(f"插件必须显式声明 api: 2 或 api: 4: {manifest_path}")
+    if api_value == 4 and type(api_value) is not int:
+        raise ManifestError(f"插件必须显式声明 api: 2 或 api: 4: {manifest_path}")
+    api = 4 if api_value == 4 else 2
     plugin_id = str(raw.get("id") or raw.get("name") or directory_name)
     distribution = raw.get("distribution", "builtin")
     if not isinstance(distribution, str) or distribution not in ("builtin", "external"):
@@ -195,8 +205,6 @@ def _parse_manifest(
     default_enabled = raw.get("default_enabled", True)
     if not isinstance(default_enabled, bool):
         raise ManifestError("default_enabled 必须是布尔值")
-    capabilities = _parse_capabilities(raw, manifest_path)
-    channels = _parse_channels(raw, capabilities)
     dependencies = _parse_dependencies(raw, "dependencies")
     optional_dependencies = _parse_dependencies(raw, "optional_dependencies")
     if set(dependencies) & set(optional_dependencies):
@@ -205,8 +213,22 @@ def _parse_manifest(
         )
     inject = _parse_keys(raw, "inject")
     optional_inject = _parse_keys(raw, "optional_inject")
+    provides = _parse_keys(raw, "provides")
     if set(inject) & set(optional_inject):
         raise ManifestError("服务 Key 不能同时声明为 inject 和 optional_inject")
+    if api == 4:
+        _reject_removed_v4_fields(raw)
+        _reject_host_keys(
+            inject=inject, optional_inject=optional_inject, provides=provides
+        )
+        capabilities: tuple[str, ...] = ()
+        channels = _parse_contributed_channels(raw, inject)
+    else:
+        if "contributes" in raw:
+            raise ManifestError("api: 2 不接受 contributes；渠道声明写在 channels")
+        capabilities = _parse_capabilities(raw, manifest_path)
+        channels = _parse_channels(raw, capabilities)
+    frontend_entry = _parse_frontend(raw, manifest_path.parent)
     return PluginManifest(
         id=plugin_id,
         display_name=_optional_str(raw.get("display_name")),
@@ -221,14 +243,93 @@ def _parse_manifest(
         optional_dependencies=optional_dependencies,
         inject=inject,
         optional_inject=optional_inject,
-        provides=_parse_keys(raw, "provides"),
+        provides=provides,
         api=api,
         distribution=distribution,
         supports_hot_unload=supports_hot_unload,
-        category=_parse_category(raw, capabilities),
+        category=_parse_category(raw, capabilities, channels),
         default_enabled=default_enabled,
+        frontend_entry=frontend_entry,
         metadata={k: v for k, v in raw.items() if isinstance(k, str)},
     )
+
+
+_API4_REMOVED = (
+    "capabilities",
+    "runtime_api",
+    "package_contract",
+    "renderer",
+    "channels",
+)
+
+
+def _reject_removed_v4_fields(raw: dict[str, object]) -> None:
+    """api: 4 drops the v2 capability manifest. P4-5 is what rejects api: 2."""
+    present = [name for name in _API4_REMOVED if name in raw]
+    if present:
+        raise ManifestError(
+            "api: 4 不再接受 "
+            + "、".join(present)
+            + "（能力改 inject，渠道改 contributes.channels）"
+        )
+
+
+def _reject_host_keys(**fields: tuple[str, ...]) -> None:
+    """api: 4 never names a ``host.`` key: those hold raw binders (P4-4 removes them)."""
+    for name_field, names in fields.items():
+        host = [name for name in names if name.startswith("host.")]
+        if host:
+            raise ManifestError(f"api: 4 的 {name_field} 不能声明宿主内部 Key：{host}")
+
+
+def _parse_contributed_channels(
+    raw: dict[str, object], inject: tuple[str, ...]
+) -> tuple[ChannelDeclaration, ...]:
+    """``contributes.channels`` on an api: 4 manifest, same rows as ``channels``."""
+    contributes = raw.get("contributes")
+    if contributes is None:
+        return ()
+    if not isinstance(contributes, dict) or any(
+        not isinstance(key, str) for key in contributes
+    ):
+        raise ManifestError("contributes 必须是对象")
+    if unknown := sorted(set(contributes) - {"channels"}):
+        raise ManifestError(f"contributes 含未知字段 {unknown}")
+    value = contributes.get("channels", [])
+    if not isinstance(value, list):
+        raise ManifestError("contributes.channels 必须是渠道声明列表")
+    if value and "channels" not in inject:
+        raise ManifestError(
+            "声明 contributes.channels 的插件必须在 inject 中声明 channels"
+        )
+    declarations = [
+        _parse_channel(item, f"contributes.channels[{index}]")
+        for index, item in enumerate(value)
+    ]
+    names = [declaration.name for declaration in declarations]
+    if duplicates := sorted({name for name in names if names.count(name) > 1}):
+        raise ManifestError(f"channels 重复声明渠道名 {duplicates}")
+    return tuple(declarations)
+
+
+def _parse_frontend(raw: dict[str, object], plugin_dir: Path) -> str | None:
+    """``frontend.entry``, a file inside the package. The host still globs kinds."""
+    if "frontend" not in raw:
+        return None
+    value = raw["frontend"]
+    if not isinstance(value, dict) or any(not isinstance(key, str) for key in value):
+        raise ManifestError("frontend 必须是对象")
+    if set(value) != {"entry"}:
+        raise ManifestError("frontend 只能包含 entry")
+    entry = value.get("entry")
+    if not isinstance(entry, str) or not entry.strip() or entry != entry.strip():
+        raise ManifestError("frontend.entry 必须是非空相对路径")
+    path = Path(entry)
+    if path.is_absolute() or ".." in path.parts:
+        raise ManifestError("frontend.entry 必须是插件目录内的相对路径")
+    if not (plugin_dir / path).is_file():
+        raise ManifestError(f"frontend.entry 不存在: {entry}")
+    return entry
 
 
 def _parse_capabilities(raw: dict[str, object], manifest_path: Path) -> tuple[str, ...]:
@@ -428,10 +529,14 @@ class _DeclaredChatTypes(dict[str, tuple[ChatTypeDeclaration, ...]]):
             return default
 
 
-def _parse_category(raw: dict[str, object], capabilities: tuple[str, ...]) -> str:
+def _parse_category(
+    raw: dict[str, object],
+    capabilities: tuple[str, ...],
+    channels: tuple[ChannelDeclaration, ...],
+) -> str:
     value = raw.get("category")
     if value is None:
-        return "channel" if "channels" in capabilities else "feature"
+        return "channel" if "channels" in capabilities or channels else "feature"
     if not isinstance(value, str) or value not in PLUGIN_CATEGORIES:
         raise ManifestError(f"category 必须是 {' / '.join(PLUGIN_CATEGORIES)} 之一")
     return value

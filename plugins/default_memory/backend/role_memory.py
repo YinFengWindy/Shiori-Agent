@@ -12,6 +12,7 @@ from shiori_sdk.memory.requests import (
     require_memory_role,
 )
 from shiori_sdk.rpc import Concurrency
+from shiori_sdk.core.services import MEMORY, RPC
 
 from .semantic_requests import SEMANTIC_STATUS_FILTERS, readable_item
 
@@ -80,10 +81,10 @@ def register_role_semantic_memory(
     ctx: PluginRuntimeContext, engine: MemoryAdminApi
 ) -> None:
     """Register reads of the engine this plugin just constructed."""
-    reader = DefaultRoleMemoryReader(ctx.memory.roles, engine)
-    ctx.rpc.register(
+    reader = DefaultRoleMemoryReader(ctx.require(MEMORY).roles, engine)
+    ctx.require(RPC).register(
         "roles.memory.semantic.list", reader.list, concurrency=Concurrency.READ_ONLY
     )
-    ctx.rpc.register(
+    ctx.require(RPC).register(
         "roles.memory.semantic.detail", reader.detail, concurrency=Concurrency.READ_ONLY
     )

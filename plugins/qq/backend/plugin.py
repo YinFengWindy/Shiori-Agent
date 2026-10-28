@@ -15,6 +15,16 @@ from shiori_sdk.accounts.targets import (
     account_send_media,
     AccountTarget,
 )
+from shiori_sdk.core.services import (
+    ACCOUNTS,
+    AVATARS,
+    CHANNELS,
+    HTTP,
+    PROCESSES,
+    RPC,
+    TOOLS,
+    WORKSPACE,
+)
 
 if TYPE_CHECKING:
     from shiori_sdk.channels.context import ChannelPluginContext
@@ -28,22 +38,22 @@ async def setup(ctx: "ChannelPluginContext") -> None:
     from .accounts_store import QQAccountsStore
     from .read_attachment import ReadAttachmentTool
 
-    ctx.tools.register(
-        ReadAttachmentTool(ctx.tools),
+    ctx.require(TOOLS).register(
+        ReadAttachmentTool(ctx.require(TOOLS)),
         risk="read-only",
         search_hint="QQ 附件 txt md 文件正文 引用文件 read_attachment",
         external_allowed=True,
     )
 
     runtime = QQAccountsRuntime(
-        QQAccountsStore(ctx.workspace),
-        ctx.accounts,
-        ctx.avatars,
-        processes=ctx.processes,
-        http=ctx.http,
+        QQAccountsStore(ctx.require(WORKSPACE)),
+        ctx.require(ACCOUNTS),
+        ctx.require(AVATARS),
+        processes=ctx.require(PROCESSES),
+        http=ctx.require(HTTP),
     )
     await runtime.load()
-    ctx.channels.add(runtime)
+    ctx.require(CHANNELS).add(runtime)
 
     def delete_account(config_ref: str) -> AccountDeletionPlan:
         return AccountDeletionPlan(
@@ -51,50 +61,56 @@ async def setup(ctx: "ChannelPluginContext") -> None:
             purge=lambda: runtime.purge_account(config_ref),
         )
 
-    ctx.accounts.on_delete(delete_account)
-    ctx.accounts.on_rules_change(runtime.save_rules)
-    ctx.rpc.register(
+    ctx.require(ACCOUNTS).on_delete(delete_account)
+    ctx.require(ACCOUNTS).on_rules_change(runtime.save_rules)
+    ctx.require(RPC).register(
         "accounts.settings",
         lambda payload: _settings(runtime, payload),
         concurrency=Concurrency.READ_ONLY,
     )
-    ctx.rpc.register("accounts.begin", runtime.begin_login)
-    ctx.rpc.register("accounts.start", lambda payload: _start(runtime, payload))
-    ctx.rpc.register(
+    ctx.require(RPC).register("accounts.begin", runtime.begin_login)
+    ctx.require(RPC).register(
+        "accounts.start", lambda payload: _start(runtime, payload)
+    )
+    ctx.require(RPC).register(
         "accounts.disconnect", lambda payload: _disconnect(runtime, payload)
     )
-    ctx.rpc.register(
+    ctx.require(RPC).register(
         "accounts.stop",
         lambda payload: _stop(runtime, payload),
     )
-    ctx.rpc.register("accounts.cancel", lambda payload: _cancel(runtime, payload))
-    ctx.rpc.register("accounts.logout", lambda payload: _logout(runtime, payload))
-    ctx.rpc.register(
+    ctx.require(RPC).register(
+        "accounts.cancel", lambda payload: _cancel(runtime, payload)
+    )
+    ctx.require(RPC).register(
+        "accounts.logout", lambda payload: _logout(runtime, payload)
+    )
+    ctx.require(RPC).register(
         "accounts.managed_status",
         lambda payload: runtime.managed_status(str(payload["ref"])),
         concurrency=Concurrency.READ_ONLY,
     )
-    ctx.rpc.register(
+    ctx.require(RPC).register(
         "accounts.refresh_qrcode",
         lambda payload: runtime.refresh_qrcode(str(payload["ref"])),
     )
-    ctx.rpc.register(
+    ctx.require(RPC).register(
         "accounts.discover",
         lambda payload: _discover(runtime, payload),
         concurrency=Concurrency.READ_ONLY,
     )
-    ctx.rpc.register("accounts.send", lambda payload: _send(runtime, payload))
-    ctx.rpc.register(
+    ctx.require(RPC).register("accounts.send", lambda payload: _send(runtime, payload))
+    ctx.require(RPC).register(
         ACCOUNT_TARGETS_METHOD,
         lambda payload: _discover(runtime, payload),
         concurrency=Concurrency.READ_ONLY,
     )
-    ctx.rpc.register(
+    ctx.require(RPC).register(
         ACCOUNT_RESOLVE_METHOD,
         lambda payload: _resolve_account(runtime, payload),
         concurrency=Concurrency.READ_ONLY,
     )
-    ctx.rpc.register(
+    ctx.require(RPC).register(
         ACCOUNT_SEND_METHOD, lambda payload: _send_account(runtime, payload)
     )
 

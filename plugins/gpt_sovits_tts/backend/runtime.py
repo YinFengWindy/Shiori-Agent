@@ -4,6 +4,7 @@ from shiori_sdk.managed.controller import ManagedRuntime
 from shiori_sdk.managed.installation import Installation
 from shiori_sdk.managed.service import OwnedService
 from shiori_sdk.plugin_services import ServicePluginContext
+from shiori_sdk.core.services import BACKGROUND, PROCESSES
 from .runtime_build import build_runtime
 from .runtime_launch import launch_runtime
 from .runtime_manifest import (
@@ -31,12 +32,12 @@ def create_runtime(ctx: ServicePluginContext, store: VoiceStore) -> ManagedRunti
         installation,
         OwnedService(
             root,
-            ctx.processes,
+            ctx.require(PROCESSES),
             lambda path, port, token: launch_runtime(
                 path, port, token, root, installation.install_root
             ),
         ),
-        ctx.background,
+        ctx.require(BACKGROUND),
         lambda staging, resources: build_runtime(
             staging, resources, ctx, root, installation.install_root
         ),
