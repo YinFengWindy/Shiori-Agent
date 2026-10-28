@@ -9,8 +9,7 @@ it when ``plugins/`` or the plugin host changes. The api 4 host contract
 ``test_kernel.py``.
 
 Hot-reload order equality, dispose-zero for every plugin, runtime channel
-registration and named frontend exports need the P5 harness and the P7
-loader.
+registration and named frontend exports stay with the P7 loader.
 """
 
 from __future__ import annotations
@@ -21,6 +20,8 @@ from pathlib import Path
 import pytest
 
 from agent.plugin_host.manifest import load_manifest
+from agent.plugin_host.versions import satisfies
+from shiori_sdk import __version__
 from shiori_sdk.core import services as service_keys
 from shiori_sdk.kernel import Key
 from tests.support.plugin_kernel import REPOSITORY_ROOT
@@ -145,6 +146,7 @@ def test_builtin_plugin_manifest_matches_require(plugin_dir: Path) -> None:
     """api 4, inject lines up with require/get/provide, and the entry file exists."""
     manifest = load_manifest(plugin_dir)
     assert manifest is not None
+    assert satisfies(__version__, manifest.sdk)
     # The parser rejects the other removed fields; renderer is kept until P7.
     assert "renderer" not in manifest.metadata
     assert not ({"sessions", "session_store"} <= set(manifest.inject))

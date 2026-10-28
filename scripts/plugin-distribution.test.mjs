@@ -10,7 +10,7 @@ test("source classification defaults only when absent and rejects invalid explic
   t.after(() => rm(root, { recursive: true, force: true }));
   for (const [name, field] of [["builtin", ""], ["external", "distribution: external\n"], ["explicit", "distribution: builtin\n"]]) {
     await mkdir(join(root, name));
-    await writeFile(join(root, name, "manifest.yaml"), `api: 4\nid: ${name}\n${field}`, "utf8");
+    await writeFile(join(root, name, "manifest.yaml"), `api: 4\nsdk: '>=4.0.0'\nid: ${name}\n${field}`, "utf8");
   }
   assert.deepEqual(await builtinPluginDirectories(root), [join(root, "builtin"), join(root, "explicit")]);
   for (const value of ["null", "false", "[]", "other"]) {

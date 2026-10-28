@@ -286,6 +286,30 @@ class RoleStore:
                 return role
         raise RoleNotFoundError(role_id)
 
+    def write_plugin_namespace(
+        self, role_id: str, namespace: str, value: dict[str, Any]
+    ) -> None:
+        """Write one role namespace without the legacy candidate wipe.
+
+        Only ``proactive`` exists. It is still parsed by ``RoleProactiveConfig``
+        until proactive leaves the core. Extension ``plugin_data`` is left as
+        stored: this path does not pass a replacement plugin payload.
+        """
+        if namespace != "proactive":
+            raise KeyError(namespace)
+        normalized = RoleProactiveConfig.from_dict(value)
+        with self._lock:
+            roles = self.list_roles()
+            for index, role in enumerate(roles):
+                if role.id != role_id:
+                    continue
+                role.proactive = normalized
+                role.updated_at = now_iso()
+                roles[index] = role
+                self._repository.save_roles(roles)
+                return
+        raise RoleNotFoundError(role_id)
+
     def delete_role(self, role_id: str, *, remove_assets: bool = True) -> bool:
         with self._lock:
             roles = self.list_roles()

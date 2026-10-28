@@ -15,15 +15,15 @@ push-sender 删除与 `message_push` 异常语义，补丁编号不代表兼容�
 `FakePushSenders` 必须移除；角色向渠道发送使用 `account_send`。`message_push` 失败会
 抛异常，调用方不再匹配返回文本来判断失败，正常返回表示已发送或已加入当前回合队列。
 
-普通契约 PR 在 [运行时契约](../_handbook/plugin-runtime-contract.md#unreleased) 的 Unreleased 区
-记录变更、breaking 与 PR 溯源，不逐 PR 升号。正式发布 SDK **或包含新契约的桌面版本**前，
-维护者对照上次已发布契约统一定版，同一开发批次只定版一次。桌面包内置的 SDK 也是已分发契约，
-不能因为注册表尚未发布，就继续用已随桌面发出的版本号承载新契约。
+SDK 大版本是破坏性变更。manifest 写 `api: 4` 和 `sdk` 最低约束。4.x 内不给已有
+Key 加方法。没有 Unreleased 批次，也没有 `runtime_api`。正式发布 SDK 前，源版本、
+npm 包、宿主和 host-testing 的精确 pin 必须一致。桌面包内置的 SDK 也是已分发契约，
+不能因为注册表尚未发布，就继续用已随桌面发出的版本号承载不同源码。4.0.0 尚未发布。
 
-版本唯一来源是 `packages/sdk/python/shiori_sdk/_version.py`，SDK 与 Runtime API 同号。
-修改后运行 `node scripts/sync_sdk_version.mjs`，同步 npm 包以及宿主、host-testing 的精确版本约束；
-再统一本批新增接口的插件 `runtime_api` / Python SDK 最低版本，运行 `uv lock` 刷新锁文件。
-同步脚本只传播版本，不负责决定或递增版本。已发布历史与兼容插件的最低约束保持不变。
+版本唯一来源是 `packages/sdk/python/shiori_sdk/_version.py`。改版本时直接改 npm 包、
+`setup.py` 和 host-testing 的 pin，用 `node scripts/check_sdk_release.mjs --align` 核对。
+插件的 `shiori-sdk` 依赖要承认这个版本。改了插座契约就运行
+`python -m scripts.gen_plugin_api`。已发布历史的最低约束保持不变。
 
 本批插件以最近正式桌面 v0.5.5 为基线，只给有包内容或兼容声明变化的插件升一次 patch：
 
@@ -53,20 +53,19 @@ push-sender 删除与 `message_push` 异常语义，补丁编号不代表兼容�
 
 ## 契约定版检查
 
-`node scripts/check_sdk_release.mjs` 要求完整 Git 历史与标签、SDK/npm/宿主/host-testing
-版本一致、Runtime API 复用 SDK 版本，且契约文档的 Unreleased 正文为空（允许 HTML
-注释占位）。所有稳定 `sdk-vX.Y.Z` 和桌面 `vX.Y.Z` 标签都是不可复用的分发证据，
+`node scripts/check_sdk_release.mjs` 要求完整 Git 历史与标签，以及 SDK/npm/宿主/host-testing
+版本一致。所有稳定 `sdk-vX.Y.Z` 和桌面 `vX.Y.Z` 标签都是不可复用的分发证据，
 包括桌面先于注册表发布的情况；历史上尚无统一 SDK 目录的桌面标签明确跳过。
 检查拒绝 SDK 版本回退，或与任一同版本标签不同的 SDK 源码。当前 HEAD 上的新标签
 可通过，也会继续检查所有旧标签，不能借它掩盖历史冲突。
 
 指纹覆盖 `packages/sdk` 的 Python、renderer、公开 testing helpers、构建脚本和元数据，
 排除实际测试、说明文档、缓存和生成目录。只改 README/测试而运行时源码未变可继续
-使用已发布 SDK 版本；仅宿主中的契约变更靠 Unreleased 记录保护，维护者仍须正确
-登记和定版。检查不推断语义兼容性，也不查询注册表，不自动升号。
+使用已发布 SDK 版本。检查不推断语义兼容性，也不查询注册表，不自动升号。
+`node scripts/check_sdk_release.mjs --align` 只核对版本 pin，不读 Git 历史，供 lint 使用。
 
 Windows 的 schedule、tag、manual 三个入口都会在构建前执行；SDK 工作流仅 tag push
-执行，PR 与 workflow_dispatch 仍允许普通契约 PR 累积 Unreleased 并验证产物。
+执行完整检查。PR 与 workflow_dispatch 仍构建验证，不发布。
 Windows 在上传 artifact / 创建或公开 Release 前还会刷新远端标签并重新检查，
 防止构建期间另一发布冻结了同版本不同源码；刷新不会改变本次固定的 checkout SHA。
 CI checkout 必须保留 `fetch-depth: 0`；本地检查前先获取完整 tags。

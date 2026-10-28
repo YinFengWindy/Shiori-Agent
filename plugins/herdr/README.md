@@ -140,5 +140,5 @@ cmd 解析；如果程序路径或参数含 `& | < > ^ % !`、双引号、括号
 旧追踪记录；初始化、登录或交互请求会作为 blocked 回报，并保留终端和产物。
 任务文件与 worktree 位于插件私有数据目录，完整需求保存在 UTF-8 文件中。
 
-此插件依赖当前开发批次 Unreleased 的 `background_results` / `process_resources` / `host.openExternal` SDK 契约；正式发布前
-需按仓库统一定版流程更新 SDK/Runtime API 最低版本。
+此插件依赖 SDK 4.0 的 `background_results` / `process_resources` / `host.openExternal`。
+最低约束见本插件的 `pyproject.toml`（`shiori-sdk>=4.0.0,<5`）。

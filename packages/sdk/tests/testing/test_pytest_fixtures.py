@@ -31,7 +31,9 @@ def _run_plugin_suite(
 
 
 def test_sdk_context_always_disposes_registered_effects(tmp_path: Path) -> None:
-    (tmp_path / "manifest.yaml").write_text("api: 4\nid: probe\n", encoding="utf-8")
+    (tmp_path / "manifest.yaml").write_text(
+        "api: 4\nsdk: '>=4.0.0'\nid: probe\n", encoding="utf-8"
+    )
     result = _run_plugin_suite(
         tmp_path,
         "from pathlib import Path\n\n"
@@ -51,7 +53,7 @@ def test_sdk_context_rejects_a_key_the_manifest_does_not_inject(
     tmp_path: Path,
 ) -> None:
     (tmp_path / "manifest.yaml").write_text(
-        "api: 4\nid: probe\ninject:\n  - rpc\n", encoding="utf-8"
+        "api: 4\nsdk: '>=4.0.0'\nid: probe\ninject:\n  - rpc\n", encoding="utf-8"
     )
     result = _run_plugin_suite(
         tmp_path,

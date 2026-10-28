@@ -1,4 +1,8 @@
-"""Single version source for both SDK distributions and the runtime contract."""
+"""SDK semver. A new major is a breaking change (D22).
 
-__version__ = "3.1.2"
-RUNTIME_API_VERSION = __version__
+The npm package, the host pin and host-testing use this same number.
+``scripts/check_sdk_release.mjs --align`` checks they match. There is no
+runtime_api version and no Unreleased batch.
+"""
+
+__version__ = "4.0.0"

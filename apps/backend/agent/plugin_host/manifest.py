@@ -8,11 +8,13 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from shiori_sdk import __version__
 from shiori_sdk.channels.chat_types import (
     ChatTypeDeclaration,
     ChatTypeDeclarations,
     parse_chat_type,
 )
+from agent.plugin_host.versions import satisfies
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +65,22 @@ class UnsupportedApiError(ManifestError):
         super().__init__(UNSUPPORTED_API_REASON)
 
 
+class IncompatibleSdkError(Exception):
+    """manifest 合法，但 ``sdk`` 约束不包含当前 SDK。"""
+
+    def __init__(self, constraint: str, version: str) -> None:
+        self.constraint = constraint
+        self.version = version
+        super().__init__(f"插件要求 SDK {constraint}，当前是 {version}")
+
+
+def require_compatible_sdk(constraint: str, *, version: str | None = None) -> None:
+    """Reject a parsed ``sdk`` constraint that does not admit ``version``."""
+    current = __version__ if version is None else version
+    if not satisfies(current, constraint):
+        raise IncompatibleSdkError(constraint, current)
+
+
 @dataclass(frozen=True)
 class ChannelDeclaration:
     """manifest 静态声明的一个外部渠道：插件未激活或未填凭据时也能列出。
@@ -111,6 +129,8 @@ class PluginManifest:
     # User-facing title; the stable ID still owns lookup, configuration and imports.
     display_name: str | None = None
     version: str | None = None
+    # 最低 SDK 约束。省略时的默认只给程序构造的 BLOCKED 行；yaml 必须写出。
+    sdk: str = ">=4.0.0"
     desc: str | None = None
     author: str | None = None
     # 插件包统一为 plugins/<id>/{backend,ui,tests}/ 布局（#178），入口默认落在
@@ -161,8 +181,8 @@ class PluginManifest:
 def load_manifest(plugin_dir: Path) -> PluginManifest | None:
     """读取 manifest.yaml；不存在返回 None，格式非法抛 ManifestError。
 
-    只接受整数 ``api: 4``，其余抛 ``UnsupportedApiError``。没有 manifest 的
-    目录不属于插件。
+    只接受整数 ``api: 4``，其余抛 ``UnsupportedApiError``。``sdk`` 必须是可解析的
+    最低版本约束。没有 manifest 的目录不属于插件。
     """
     manifest_path = plugin_dir / "manifest.yaml"
     import yaml
@@ -194,6 +214,7 @@ def _parse_manifest(
     # declares. ``4.0``, ``"4"`` and ``True`` are not integer 4.
     if type(api) is not int or api != 4:
         raise UnsupportedApiError()
+    sdk = _parse_sdk(raw.get("sdk"))
     if any(not isinstance(key, str) for key in raw):
         raise ManifestError("manifest keys must be strings")
     plugin_id = str(raw.get("id") or raw.get("name") or directory_name)
@@ -225,6 +246,7 @@ def _parse_manifest(
         id=plugin_id,
         display_name=_optional_str(raw.get("display_name")),
         version=_optional_str(raw.get("version")),
+        sdk=sdk,
         desc=_optional_str(raw.get("desc")),
         author=_optional_str(raw.get("author")),
         entry=str(raw.get("entry") or DEFAULT_ENTRY),
@@ -252,6 +274,18 @@ _REMOVED_FIELDS = (
     "package_contract",
     "channels",
 )
+
+
+def _parse_sdk(value: object) -> str:
+    """Require a non-empty comparator list. Compatibility is checked later."""
+    if not isinstance(value, str) or not value.strip():
+        raise ManifestError("sdk 必须声明最低 SDK 版本约束")
+    constraint = value.strip()
+    try:
+        satisfies("0.0.0", constraint)
+    except ValueError as exc:
+        raise ManifestError(f"sdk 约束无法解析: {exc}") from exc
+    return constraint
 
 
 def _reject_removed_fields(raw: dict[str, object]) -> None:

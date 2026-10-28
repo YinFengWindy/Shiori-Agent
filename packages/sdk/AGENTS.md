@@ -1,6 +1,6 @@
 # SDK
 
-Python 包 `shiori_sdk` 在 `python/shiori_sdk/`，npm 包 `@yinfengwindy/shiori-sdk` 在 `src/`。版本只有 `python/shiori_sdk/_version.py`，用 `node scripts/sync_sdk_version.mjs` 同步。契约变更写进 `docs/_handbook/plugin-runtime-contract.md` 的 Unreleased 区。
+Python 包 `shiori_sdk` 在 `python/shiori_sdk/`，npm 包 `@yinfengwindy/shiori-sdk` 在 `src/`。版本只有 `python/shiori_sdk/_version.py`。npm 包和宿主 pin 用 `node scripts/check_sdk_release.mjs --align` 核对。插座契约改了就运行 `python -m scripts.gen_plugin_api`，说明在 `docs/_handbook/plugin-guide.md`。
 
 - `shiori_sdk.testing` 是插件 fake，不启动宿主。真实 `AppRuntime` 在 `packages/shiori-host-testing`。
 - `external_turns.py` 里的 `FakeExternalTurns` 只记录提交。宿主真实回合在 `tests/support/host_external_turns.py`。

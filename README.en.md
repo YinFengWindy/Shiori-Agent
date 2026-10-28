@@ -120,22 +120,22 @@ Desktop unit tests can take `--file` several times to combine filters, `--test-n
 
 ### Plugin SDK
 
-The SDK and Runtime API in the current source are both at **3.1.1**; earlier unreleased contract changes have been merged into this batch. **3.1.1** is published on both npm and PyPI, so this batch's interfaces can be installed and used directly. The frontend package is [@yinfengwindy/shiori-sdk](https://www.npmjs.com/package/@yinfengwindy/shiori-sdk) and the backend package is [shiori-sdk](https://pypi.org/project/shiori-sdk/) (Python 3.12+). These commands install the current public version:
+The SDK in the current source is **4.0.0** and is not published yet. The latest registry release is **3.1.2**. The frontend package is [@yinfengwindy/shiori-sdk](https://www.npmjs.com/package/@yinfengwindy/shiori-sdk) and the backend package is [shiori-sdk](https://pypi.org/project/shiori-sdk/) (Python 3.12+). These commands install the published 3.1.2 release; in-repo development uses the workspace 4.0.0 package.
 
 ```sh
-pnpm add -D "@yinfengwindy/shiori-sdk@^3.1.1"
-uv add "shiori-sdk>=3.1.1,<4"
+pnpm add -D "@yinfengwindy/shiori-sdk@^3.1.2"
+uv add "shiori-sdk>=3.1.2,<4"
 ```
 
-Plugins live in `plugins/<id>/`: `manifest.yaml` declares capabilities and compatibility, `backend/` holds the Python backend, `ui/` an optional React interface, and `tests/` the plugin's tests. Frontend builds must keep the SDK, React and React DOM external; Shiori provides them at runtime. Plugins that only use the earlier compatible interfaces can keep `runtime_api: ">=3.1.0 <4.0.0"`; plugins that use interfaces added in this batch declare `">=3.1.1 <4.0.0"` and set their Python SDK dependency's lower bound to `3.1.1` as well.
+Plugins live in `plugins/<id>/`: `manifest.yaml` declares `api: 4` and `sdk: ">=4.0.0"`, `backend/` holds the Python backend, `ui/` an optional React interface, and `tests/` the plugin's tests. Frontend builds must keep the SDK, React and React DOM external; Shiori provides them at runtime. The Python dependency lower bound admits 4.0 (`shiori-sdk>=4.0.0,<5`).
 
-**Compatibility note: 3.1.1 contains breaking changes.** The published `SurfaceHandle.voice` interface has been removed, and `closeness` in relationship snapshots has been replaced by affection; affected plugins must migrate, and a passing version range does not mean the old interfaces still work. See the [SDK compatibility notes](./packages/sdk/README.md#compatibility). From now on, ordinary contract PRs only accumulate unreleased records; versions are settled together when the SDK or a desktop release with new contracts is published.
+See the [SDK compatibility notes](./packages/sdk/README.md#compatibility). A breaking contract change is a new SDK major. There is no Unreleased batch.
 
-The desktop version, the SDK / Runtime API version and each plugin's own version are independent. The 20 existing plugins in the repository (including those with updated compatibility declarations) are at **0.1.1**, and the new SenseVoice ASR / GPT-SoVITS TTS plugins are at **0.2.0**; a plugin's `version` matches its Python package metadata, and `runtime_api` separately declares the host interfaces it needs.
+The desktop version, the SDK version and each plugin's own version are independent. A plugin's `version` matches its Python package metadata. `sdk` in the manifest declares the minimum SDK.
 
 - [SDK README](./packages/sdk/README.md): installation, React peers and standalone test setup.
 - [Plugin tutorial](./docs/_handbook/plugins-tutorial.md): from creating a plugin to building its interface.
-- [Runtime contract](./docs/_handbook/plugin-runtime-contract.md): package structure, capability boundaries and version compatibility.
+- [Plugin guide](./docs/_handbook/plugin-guide.md): package structure, `api: 4` and the SDK constraint. Method signatures are in the [API reference](./docs/_handbook/plugin-api.md).
 - [Plugin testing](./docs/agents/plugin-testing.md): running plugins standalone and host integration tests.
 
 ## License

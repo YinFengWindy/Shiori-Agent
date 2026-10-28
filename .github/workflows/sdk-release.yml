@@ -13,8 +13,11 @@ on:
       - "scripts/sdk_release.py"
       - "scripts/sdk_registry.py"
       - "scripts/verify_sdk.*"
-      - "scripts/sync_sdk_version.mjs"
       - "scripts/check_sdk_release.*"
+      - "scripts/gen_plugin_api.py"
+      - "docs/_handbook/plugin-guide.md"
+      - "docs/_handbook/plugin-api.md"
+      - "docs/_handbook/plugin-changelog.md"
       - "docs/_handbook/plugin-runtime-contract.md"
       - "tests/backend/scripts/test_sdk_release.py"
       - "tests/backend/scripts/test_sdk_registry.py"
@@ -60,7 +63,7 @@ jobs:
           pnpm install --frozen-lockfile
       - name: Build npm tarball and Python sdist, then wheel from sdist
         run: |
-          node scripts/sync_sdk_version.mjs --check
+          node scripts/check_sdk_release.mjs --align
           mkdir release-artifacts
           pnpm --filter @yinfengwindy/shiori-sdk pack --pack-destination "$PWD/release-artifacts"
           .venv/bin/uv build --sdist --no-create-gitignore --out-dir release-artifacts packages/sdk

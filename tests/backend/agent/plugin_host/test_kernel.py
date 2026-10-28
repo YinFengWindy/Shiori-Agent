@@ -45,7 +45,7 @@ async def test_account_test_plugin_reports_and_withdraws_live_state(tmp_path):
     package = tmp_path / "account_demo"
     (package / "backend").mkdir(parents=True)
     (package / "manifest.yaml").write_text(
-        "api: 4\nid: account_demo\ninject: [accounts]\n",
+        "api: 4\nsdk: '>=4.0.0'\nid: account_demo\ninject: [accounts]\n",
         encoding="utf-8",
     )
     (package / "backend/plugin.py").write_text(
@@ -135,7 +135,7 @@ async def test_failed_account_plugin_setup_discards_unpublished_identity(tmp_pat
     package = tmp_path / "failed_account_demo"
     (package / "backend").mkdir(parents=True)
     (package / "manifest.yaml").write_text(
-        "api: 4\nid: failed_account_demo\ninject: [accounts]\n",
+        "api: 4\nsdk: '>=4.0.0'\nid: failed_account_demo\ninject: [accounts]\n",
         encoding="utf-8",
     )
     (package / "backend/plugin.py").write_text(
@@ -193,7 +193,7 @@ async def test_setup_cancellation_rolls_back_before_force_cleanup(tmp_path, stri
         package = tmp_path / name
         (package / "backend").mkdir(parents=True)
         (package / "manifest.yaml").write_text(
-            f"api: 4\nid: {name}\ninject: [events]\nsupports_hot_unload: false\n",
+            f"api: 4\nsdk: '>=4.0.0'\nid: {name}\ninject: [events]\nsupports_hot_unload: false\n",
             encoding="utf-8",
         )
         (package / "backend/plugin.py").write_text(
@@ -250,7 +250,9 @@ async def test_invalid_yaml_is_diagnosed_without_blocking_valid_sibling(
 
     broken = tmp_path / "broken"
     broken.mkdir()
-    (broken / "manifest.yaml").write_text("api: 4\ncapabilities: [\n", encoding="utf-8")
+    (broken / "manifest.yaml").write_text(
+        "api: 4\nsdk: '>=4.0.0'\ncapabilities: [\n", encoding="utf-8"
+    )
     stage_plugin_package(PLUGIN_FIXTURES / "hello", tmp_path / "hello")
     kernel = make_kernel([tmp_path], event_bus=EventBus())
     try:
@@ -282,7 +284,7 @@ def test_api_4_manifest_rejects_capabilities_and_host_keys(
     from agent.plugin_host.manifest import ManifestError, load_manifest
 
     (tmp_path / "manifest.yaml").write_text(
-        "api: 4\nid: demo\n" + lines, encoding="utf-8"
+        "api: 4\nsdk: '>=4.0.0'\nid: demo\n" + lines, encoding="utf-8"
     )
     with pytest.raises(ManifestError, match=message):
         load_manifest(tmp_path)
@@ -294,7 +296,7 @@ async def test_api_4_require_tools_registers_and_dispose_clears(tmp_path: Path):
     package = tmp_path / "demo"
     (package / "backend").mkdir(parents=True)
     (package / "manifest.yaml").write_text(
-        "api: 4\nid: demo\ninject:\n  - tools\n", encoding="utf-8"
+        "api: 4\nsdk: '>=4.0.0'\nid: demo\ninject:\n  - tools\n", encoding="utf-8"
     )
     (package / "backend/plugin.py").write_text(
         "from shiori_sdk.core.services import TOOLS\n"
@@ -325,7 +327,7 @@ async def test_force_cleanup_recovers_effects_after_rollback_is_cancelled(tmp_pa
     package = tmp_path / "waiting"
     (package / "backend").mkdir(parents=True)
     (package / "manifest.yaml").write_text(
-        "api: 4\nsupports_hot_unload: false\n", encoding="utf-8"
+        "api: 4\nsdk: '>=4.0.0'\nsupports_hot_unload: false\n", encoding="utf-8"
     )
     (package / "backend/plugin.py").write_text(
         "import asyncio\n"
@@ -428,7 +430,7 @@ async def _on_turn(event):
 """.strip()
 
 _EVENTS_KV_MANIFEST = (
-    "api: 4\nid: kvdemo\nversion: '0.1'\ninject:\n  - events\n  - kv\n"
+    "api: 4\nsdk: '>=4.0.0'\nid: kvdemo\nversion: '0.1'\ninject:\n  - events\n  - kv\n"
 )
 
 
@@ -455,7 +457,7 @@ async def test_declared_dependency_loads_first_and_its_api_is_scoped(tmp_path):
         package = tmp_path / name
         (package / "backend").mkdir(parents=True)
         (package / "manifest.yaml").write_text(
-            f"api: 4\nid: {name}\n"
+            f"api: 4\nsdk: '>=4.0.0'\nid: {name}\n"
             f"inject: [dependencies]\ndependencies: {dependencies}\n",
             encoding="utf-8",
         )
@@ -480,7 +482,7 @@ async def test_enabled_plugin_cycled_with_a_disabled_one_is_not_a_dependency_cyc
         package = tmp_path / name
         (package / "backend").mkdir(parents=True)
         (package / "manifest.yaml").write_text(
-            f"api: 4\nid: {name}\ndependencies: {dependencies}\n",
+            f"api: 4\nsdk: '>=4.0.0'\nid: {name}\ndependencies: {dependencies}\n",
             encoding="utf-8",
         )
         (package / "backend/plugin.py").write_text(
@@ -513,7 +515,7 @@ async def test_missing_or_cyclic_dependency_blocks_setup(tmp_path, dependencies)
     package = tmp_path / "blocked"
     (package / "backend").mkdir(parents=True)
     (package / "manifest.yaml").write_text(
-        f"api: 4\nid: blocked\ndependencies: {dependencies}\n",
+        f"api: 4\nsdk: '>=4.0.0'\nid: blocked\ndependencies: {dependencies}\n",
         encoding="utf-8",
     )
     (package / "backend/plugin.py").write_text(
@@ -540,7 +542,7 @@ async def test_uninstalled_external_source_is_never_a_kernel_candidate(
     )
     path = contract_package / "manifest.yaml"
     path.write_text(
-        "api: 4\nid: external_demo\nversion: 1.2.3\nentry: backend/plugin.py\n"
+        "api: 4\nsdk: '>=4.0.0'\nid: external_demo\nversion: 1.2.3\nentry: backend/plugin.py\n"
         "distribution: external\ninject: [channels]\n"
         "contributes:\n  channels:\n"
         "    - {name: listens, label: L, group_listening: true,"
@@ -627,7 +629,7 @@ async def setup(ctx):
         encoding="utf-8",
     )
     (plugin_dir / "manifest.yaml").write_text(
-        "api: 4\nid: gated\ninject:\n  - events\n",
+        "api: 4\nsdk: '>=4.0.0'\nid: gated\ninject:\n  - events\n",
         encoding="utf-8",
     )
     kernel = make_kernel([tmp_path], event_bus=EventBus())
@@ -668,7 +670,7 @@ async def _on_turn(event):
         encoding="utf-8",
     )
     (plugin_dir / "manifest.yaml").write_text(
-        "api: 4\nid: rollback_demo\ninject:\n  - events\n",
+        "api: 4\nsdk: '>=4.0.0'\nid: rollback_demo\ninject:\n  - events\n",
         encoding="utf-8",
     )
     bus = EventBus()
@@ -813,7 +815,7 @@ async def setup(ctx):
     ctx.effect("command:chatid", remove)
 """.strip()
 
-_COMMANDS_MANIFEST = "api: 4\nid: {id}\ninject:\n  - commands\n"
+_COMMANDS_MANIFEST = "api: 4\nsdk: '>=4.0.0'\nid: {id}\ninject:\n  - commands\n"
 
 
 @pytest.mark.asyncio
@@ -849,7 +851,7 @@ async def setup(ctx):
     ctx.require(RPC).register("ping", _ping)
 """.strip()
 
-_RPC_MANIFEST = "api: 4\nid: rpcdemo\ninject:\n  - rpc\n"
+_RPC_MANIFEST = "api: 4\nsdk: '>=4.0.0'\nid: rpcdemo\ninject:\n  - rpc\n"
 
 
 @pytest.mark.asyncio
@@ -887,7 +889,7 @@ async def setup(ctx):
 """.strip()
 
 _HOST_SERVICES_MANIFEST = (
-    "api: 4\nid: hostrefs\n"
+    "api: 4\nsdk: '>=4.0.0'\nid: hostrefs\n"
     "inject:\n  - workspace\n  - light_provider\n  - light_model\n"
 )
 
@@ -934,7 +936,7 @@ async def test_plugin_reads_host_service_references(tmp_path: Path):
         encoding="utf-8",
     )
     (light_plugin / "manifest.yaml").write_text(
-        "api: 4\nid: needs_light\ninject:\n  - light_provider\n",
+        "api: 4\nsdk: '>=4.0.0'\nid: needs_light\ninject:\n  - light_provider\n",
         encoding="utf-8",
     )
     withheld = host_kernel([withheld_root], withheld=frozenset({LIGHT_PROVIDER}))
@@ -977,6 +979,7 @@ async def setup(ctx):
         (plugin_dir / "manifest.yaml").write_text(
             f"""
 api: 4
+sdk: ">=4.0.0"
 id: {plugin_id}
 inject: {declared}
 """,
@@ -1019,7 +1022,7 @@ async def test_injected_service_without_a_provider_fails_before_setup(
         encoding="utf-8",
     )
     (plugin_dir / "manifest.yaml").write_text(
-        f"api: 4\nid: needs_service\ninject:\n  - {name}\n",
+        f"api: 4\nsdk: '>=4.0.0'\nid: needs_service\ninject:\n  - {name}\n",
         encoding="utf-8",
     )
     kernel = host_kernel(
@@ -1062,7 +1065,7 @@ async def test_optional_provider_lifecycle_does_not_activate_or_unload_consumer(
         package = tmp_path / name
         (package / "backend").mkdir(parents=True)
         _ = (package / "manifest.yaml").write_text(
-            f"api: 4\nid: {name}\n"
+            f"api: 4\nsdk: '>=4.0.0'\nid: {name}\n"
             f"inject: [dependencies]\n"
             f"optional_dependencies: {optional}\n",
             encoding="utf-8",
@@ -1075,7 +1078,7 @@ async def test_optional_provider_lifecycle_does_not_activate_or_unload_consumer(
     # Disposal runs while the provider is UNLOADING, before its export is cleared.
     # Optional reads must already report it unavailable at this boundary.
     _ = (tmp_path / "provider/manifest.yaml").write_text(
-        "api: 4\nid: provider\n"
+        "api: 4\nsdk: '>=4.0.0'\nid: provider\n"
         "inject: [dependencies]\n"
         "optional_dependencies: [consumer]\n",
         encoding="utf-8",
@@ -1139,7 +1142,7 @@ async def test_optional_unavailable_exports_return_none_but_require_stays_strict
     package = tmp_path / "provider"
     (package / "backend").mkdir(parents=True)
     _ = (package / "manifest.yaml").write_text(
-        "api: 4\nid: provider\n",
+        "api: 4\nsdk: '>=4.0.0'\nid: provider\n",
         encoding="utf-8",
     )
     body = "raise RuntimeError('setup failure')" if provider == "failed" else "pass"
@@ -1176,7 +1179,7 @@ async def test_unsafe_strong_dependency_closure_is_rejected_before_any_effect(tm
         package = tmp_path / name
         (package / "backend").mkdir(parents=True)
         (package / "manifest.yaml").write_text(
-            f"api: 4\nid: {name}\ndependencies: {dependencies}\nsupports_hot_unload: {str(safe).lower()}\n",
+            f"api: 4\nsdk: '>=4.0.0'\nid: {name}\ndependencies: {dependencies}\nsupports_hot_unload: {str(safe).lower()}\n",
             encoding="utf-8",
         )
         (package / "backend/plugin.py").write_text(
@@ -1209,7 +1212,7 @@ async def test_force_cleanup_continues_after_an_unsafe_plugin_effect_fails(tmp_p
         package = tmp_path / name
         (package / "backend").mkdir(parents=True)
         (package / "manifest.yaml").write_text(
-            f"api: 4\nid: {name}\nsupports_hot_unload: false\n",
+            f"api: 4\nsdk: '>=4.0.0'\nid: {name}\nsupports_hot_unload: false\n",
             encoding="utf-8",
         )
         body = "raise OSError('close failed')" if fail else "pass"
@@ -1231,7 +1234,7 @@ async def test_unsafe_declaration_never_blocks_setup_failure_rollback(tmp_path):
     package = tmp_path / "broken"
     (package / "backend").mkdir(parents=True)
     (package / "manifest.yaml").write_text(
-        "api: 4\nid: broken\ninject: [events]\nsupports_hot_unload: false\n",
+        "api: 4\nsdk: '>=4.0.0'\nid: broken\ninject: [events]\nsupports_hot_unload: false\n",
         encoding="utf-8",
     )
     (package / "backend/plugin.py").write_text(
@@ -1254,7 +1257,7 @@ def _write_needs_config_plugin(package: Path) -> None:
     tool_loop_guard)."""
     (package / "backend").mkdir(parents=True)
     (package / "manifest.yaml").write_text(
-        "api: 4\nid: needs_config\ninject: [config]\n"
+        "api: 4\nsdk: '>=4.0.0'\nid: needs_config\ninject: [config]\n"
         'config_model: "config:Config"\n',
         encoding="utf-8",
     )
@@ -1330,7 +1333,7 @@ async def test_only_manifested_entries_are_loaded(tmp_path):
     for name, manifest in [
         ("missing", None),
         ("old", "api: 1\ncapabilities: []\n"),
-        ("missing_setup", "api: 4\n"),
+        ("missing_setup", "api: 4\nsdk: '>=4.0.0'\n"),
     ]:
         package = tmp_path / name
         (package / "backend").mkdir(parents=True)
@@ -1360,7 +1363,7 @@ async def test_optional_unsafe_consumer_does_not_block_provider_unload(tmp_path)
             "async def setup(ctx):\n    pass\n", encoding="utf-8"
         )
         (package / "manifest.yaml").write_text(
-            f"api: 4\nid: {name}\n" + body, encoding="utf-8"
+            f"api: 4\nsdk: '>=4.0.0'\nid: {name}\n" + body, encoding="utf-8"
         )
     kernel = make_kernel([tmp_path], event_bus=EventBus())
     await kernel.load_all()
@@ -1452,8 +1455,9 @@ async def test_plugin_dependency_rejection_keeps_contract_diagnostic(
         # An old package is on the roster but not runnable, so the dependent
         # is "unavailable", not "missing".
         api = 2 if provider == "unadmitted" else 4
+        sdk = "sdk: '>=4.0.0'\n" if api == 4 else ""
         (package / "manifest.yaml").write_text(
-            f"api: {api}\nid: provider\n",
+            f"api: {api}\n{sdk}id: provider\n",
             encoding="utf-8",
         )
     marker = contract_package / "executed.txt"
@@ -1567,7 +1571,7 @@ async def test_refused_duplicate_provider_leaves_the_key_to_the_other(tmp_path):
         package = workspace / plugin_id
         (package / "backend").mkdir(parents=True)
         (package / "manifest.yaml").write_text(
-            f"api: 4\nid: {plugin_id}\n"
+            f"api: 4\nsdk: '>=4.0.0'\nid: {plugin_id}\n"
             "version: 1.0.0\n"
             "entry: backend/plugin.py\nprovides: [shared.engine]\n",
             encoding="utf-8",
@@ -1611,7 +1615,7 @@ async def test_rejected_provider_and_dependents_never_execute(tmp_path, conflict
     for package, plugin_id, extra in packages:
         (package / "backend").mkdir(parents=True)
         (package / "manifest.yaml").write_text(
-            f"api: 4\nid: {plugin_id}\n"
+            f"api: 4\nsdk: '>=4.0.0'\nid: {plugin_id}\n"
             "version: 1.0.0\n"
             "entry: backend/plugin.py\n" + extra,
             encoding="utf-8",
@@ -1650,7 +1654,7 @@ async def test_identical_directory_names_keep_independent_runtime_handles(tmp_pa
         package = root / "same"
         (package / "backend").mkdir(parents=True)
         (package / "manifest.yaml").write_text(
-            f"api: 4\nid: plugin_{index}\n", encoding="utf-8"
+            f"api: 4\nsdk: '>=4.0.0'\nid: plugin_{index}\n", encoding="utf-8"
         )
         (package / "backend/plugin.py").write_text(
             "async def setup(ctx): pass\n", encoding="utf-8"
@@ -1734,7 +1738,7 @@ def _write_renderer_gated_plugin(
     """
     (directory / "backend").mkdir(parents=True)
     (directory / "manifest.yaml").write_text(
-        f"api: 4\nid: {plugin_id}\ninject: [tools]\n{renderer}",
+        f"api: 4\nsdk: '>=4.0.0'\nid: {plugin_id}\ninject: [tools]\n{renderer}",
         encoding="utf-8",
     )
     (directory / "backend/plugin.py").write_text(
@@ -1984,7 +1988,9 @@ async def test_rollback_that_cannot_dispose_every_effect_requires_a_restart(tmp_
     core `fail_renderer_entry` reuses."""
     package = tmp_path / "unclean"
     (package / "backend").mkdir(parents=True)
-    (package / "manifest.yaml").write_text("api: 4\nid: unclean\n", encoding="utf-8")
+    (package / "manifest.yaml").write_text(
+        "api: 4\nsdk: '>=4.0.0'\nid: unclean\n", encoding="utf-8"
+    )
     (package / "backend/plugin.py").write_text(
         "async def setup(ctx):\n"
         "    ctx.effect('poison', lambda: (_ for _ in ()).throw(RuntimeError('stuck')))\n"
@@ -2019,7 +2025,7 @@ def _write_channel_plugin(root: Path, plugin_id: str, second: str) -> None:
         _CHANNEL_PLUGIN.format(second=second), encoding="utf-8"
     )
     (package / "manifest.yaml").write_text(
-        f"api: 4\nid: {plugin_id}\ninject: [channels]\n"
+        f"api: 4\nsdk: '>=4.0.0'\nid: {plugin_id}\ninject: [channels]\n"
         "contributes:\n  channels:\n"
         "    - {name: declared, label: Declared, chat_types:"
         " [{type: private, label: 私聊, chat_id_label: ID}]}\n"
@@ -2105,7 +2111,7 @@ async def test_installed_api2_package_is_blocked_without_losing_data(tmp_path: P
     fresh = builtin / "fresh"
     (fresh / "backend").mkdir(parents=True)
     (fresh / "manifest.yaml").write_text(
-        "api: 4\nid: fresh\ninject: [tools]\n", encoding="utf-8"
+        "api: 4\nsdk: '>=4.0.0'\nid: fresh\ninject: [tools]\n", encoding="utf-8"
     )
     (fresh / "backend/plugin.py").write_text(
         "from shiori_sdk.core.services import TOOLS\n"

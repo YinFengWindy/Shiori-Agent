@@ -3,10 +3,11 @@
 import pytest
 import yaml
 
-from shiori_sdk import RUNTIME_API_VERSION
+from shiori_sdk import __version__
 from shiori_sdk.kernel import PackageContractError
 from agent.plugin_host.discovery import discover_plugins
 from agent.plugin_host.package_contract import validate_package
+from agent.plugin_host.versions import satisfies
 
 
 def _change(package, **values):
@@ -173,6 +174,36 @@ def test_external_channel_declaration_errors_block_the_package(contract_package)
     assert "desktop" in caught.value.diagnostic.reason
 
 
+def test_sdk_constraint_blocks_install_and_an_installed_copy(contract_package):
+    """A manifest that does not admit this SDK is refused and stays BLOCKED."""
+    _change(contract_package, sdk=">=99.0.0")
+    with pytest.raises(PackageContractError) as caught:
+        validate_package(contract_package)
+    assert (caught.value.diagnostic.code, caught.value.diagnostic.field) == (
+        "incompatible_sdk",
+        "sdk",
+    )
+    [record] = discover_plugins(
+        [contract_package.parent],
+        external_roots=[contract_package.parent],
+        namespace="t",
+        strict=True,
+        host=None,
+    )
+    assert record.admission is not None
+    assert record.admission.code == "incompatible_sdk"
+
+
+def test_missing_sdk_constraint_is_an_invalid_manifest(contract_package):
+    path = contract_package / "manifest.yaml"
+    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    del raw["sdk"]
+    path.write_text(yaml.safe_dump(raw), encoding="utf-8")
+    with pytest.raises(PackageContractError) as caught:
+        validate_package(contract_package)
+    assert caught.value.diagnostic.code == "invalid_manifest"
+
+
 def test_repository_plugin_declarations_admit_the_installed_sdk_and_siblings():
     import tomllib
     from packaging.requirements import Requirement
@@ -180,7 +211,7 @@ def test_repository_plugin_declarations_admit_the_installed_sdk_and_siblings():
     from bootstrap.paths import plugin_roots
     from agent.plugin_host.manifest import load_manifest
 
-    runtime = RUNTIME_API_VERSION
+    runtime = __version__
     projects: dict[str, str] = {}
     dependencies: dict[str, list[Requirement]] = {}
     for root in plugin_roots():
@@ -189,6 +220,7 @@ def test_repository_plugin_declarations_admit_the_installed_sdk_and_siblings():
                 continue
             manifest = load_manifest(directory)
             assert manifest is not None
+            assert satisfies(runtime, manifest.sdk), directory.name
             project = tomllib.loads(
                 (directory / "pyproject.toml").read_text(encoding="utf-8")
             )["project"]

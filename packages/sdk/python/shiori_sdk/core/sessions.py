@@ -1,4 +1,4 @@
-"""The ``sessions`` socket: roll back the latest passive turn (D10).
+"""The ``sessions`` socket: roll back the latest passive turn, and presence (D10, D19).
 
 The core session module provides ``SESSIONS``. A turn's ``turn_id`` is the
 anchor user message id of that turn — the id memory ``source_ref`` values
@@ -21,6 +21,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Protocol
 
 from shiori_sdk.kernel import Key
@@ -62,6 +63,32 @@ class TurnChanged:
     turn_id: str
 
 
+class Presence(Protocol):
+    """User and initiated-send heartbeats for one session.
+
+    The stored columns stay ``last_user_at`` and ``last_proactive_at``.
+    ``record_initiated_sent`` writes ``last_proactive_at``. A ``role:`` key is
+    used as-is; any other key follows ``metadata.role_id`` when that session
+    has one. This is the 4.0 baseline. 4.x cannot add methods here later.
+    """
+
+    def record_user_message(self, session_key: str, when: datetime) -> None:
+        """Record that the user spoke in ``session_key`` at ``when``."""
+        ...
+
+    def last_user_at(self, session_key: str) -> datetime | None:
+        """When the user last spoke, or None if this session has no record."""
+        ...
+
+    def record_initiated_sent(self, session_key: str, when: datetime) -> None:
+        """Record that an initiated reply was sent for ``session_key`` at ``when``."""
+        ...
+
+    def last_initiated_at(self, session_key: str) -> datetime | None:
+        """When an initiated reply was last sent, or None."""
+        ...
+
+
 class Sessions(Protocol):
     """Read or delete the latest committed passive turn of one session."""
 
@@ -88,6 +115,11 @@ class Sessions(Protocol):
         consolidation cursor back to the start of that window. Without them
         the cursor only rewinds for the deleted messages.
         """
+        ...
+
+    @property
+    def presence(self) -> Presence:
+        """Heartbeats for user messages and initiated sends (D19)."""
         ...
 
 

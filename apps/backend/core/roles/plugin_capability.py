@@ -8,11 +8,12 @@ keeps anything per plugin.
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
+from core.roles.errors import RoleNotFoundError
 from shiori_sdk.models import ModelSnapshot
 
 if TYPE_CHECKING:
@@ -58,6 +59,37 @@ class HostRoles:
     def extensions(self):
         """Opaque plugin namespaces use the same canonical manifest transaction."""
         return self._store.extensions
+
+    def plugin_settings(self, role_id: str, namespace: str):
+        """The baseline entry for one role namespace (D19).
+
+        Only ``proactive`` is stored. The core still parses that namespace
+        until proactive leaves it. The renderer ``roleSettings`` slot is separate.
+        """
+        return _RolePluginSettings(self._store, role_id, namespace)
+
+
+class _RolePluginSettings:
+    """Read and write one role namespace through the role owner."""
+
+    def __init__(self, store: RoleStore, role_id: str, namespace: str) -> None:
+        if namespace != "proactive":
+            raise KeyError(namespace)
+        self._store = store
+        self._role_id = role_id
+        self._namespace = namespace
+
+    def read(self) -> Mapping[str, object]:
+        role = self._store.get_role(self._role_id)
+        if role is None:
+            raise RoleNotFoundError(self._role_id)
+        value = role.to_dict().get(self._namespace, {})
+        if not isinstance(value, dict):
+            raise KeyError(self._namespace)
+        return value
+
+    def write(self, value: Mapping[str, object]) -> None:
+        self._store.write_plugin_namespace(self._role_id, self._namespace, dict(value))
 
 
 class HostRoleModels:

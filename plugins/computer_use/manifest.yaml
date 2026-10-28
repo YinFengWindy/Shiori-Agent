@@ -1,4 +1,5 @@
 api: 4
+sdk: ">=4.0.0"
 id: computer_use
 display_name: Computer Use
 version: "0.1.1"

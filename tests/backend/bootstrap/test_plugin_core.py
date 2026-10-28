@@ -59,7 +59,7 @@ async def test_crash_reporting_hooks_session_and_frame(tmp_path: Path) -> None:
     package = tmp_path / "plugins" / "crash_probe"
     (package / "backend").mkdir(parents=True)
     (package / "manifest.yaml").write_text(
-        "api: 4\nid: crash_probe\ninject:\n  - crash_reporting\n",
+        "api: 4\nsdk: '>=4.0.0'\nid: crash_probe\ninject:\n  - crash_reporting\n",
         encoding="utf-8",
     )
     (package / "backend/plugin.py").write_text(_CRASH_PROBE, encoding="utf-8")
@@ -102,7 +102,7 @@ async def test_avatars_capability_caches_into_the_host_role_store(
     package = tmp_path / "plugins" / "avatar_probe"
     (package / "backend").mkdir(parents=True)
     (package / "manifest.yaml").write_text(
-        "api: 4\nid: avatar_probe\ninject: [avatars]\n",
+        "api: 4\nsdk: '>=4.0.0'\nid: avatar_probe\ninject: [avatars]\n",
         encoding="utf-8",
     )
     (package / "backend/plugin.py").write_text(
@@ -136,7 +136,7 @@ async def test_scene_observation_requests_reach_the_generation_demand(
     package = tmp_path / "plugins" / "scene_probe"
     (package / "backend").mkdir(parents=True)
     (package / "manifest.yaml").write_text(
-        "api: 4\nid: scene_probe\ninject: [scene_observations]\n",
+        "api: 4\nsdk: '>=4.0.0'\nid: scene_probe\ninject: [scene_observations]\n",
         encoding="utf-8",
     )
     (package / "backend/plugin.py").write_text(

@@ -13,7 +13,7 @@ Shiori 是一个以角色为基底进行角色扮演的 Agent 助手：Python �
 | `packages/sdk/` | 统一 Shiori SDK（Python `shiori_sdk` + npm `@yinfengwindy/shiori-sdk`） |
 | `docs/knowledge/` | 架构与领域知识：从 `index.md`、`map.md` 开始定位 owning module |
 | `docs/decisions/` | 架构与产品决策：带日期的 Markdown（`YYYY-MM-DD-短标题.md`）。做或改这类决策时在这里新增或更新，不要写到其他 `docs/` 路径 |
-| `docs/_handbook/` | 设计系统、插件运行时契约、插件教程、渠道/记忆/主动推送等专题手册 |
+| `docs/_handbook/` | 设计系统、插件指南与生成的 API 参考、插件教程、渠道/记忆/主动推送等专题手册 |
 
 文档与源码冲突时以源码为准，并顺手修正文档。
 
@@ -23,8 +23,8 @@ Shiori 是一个以角色为基底进行角色扮演的 Agent 助手：Python �
 - `main` 上不直接提交。代码改动在功能分支上进行，一个完整、可验证的改动单元完成后 commit。
 - 功能分支默认推送并创建 Draft PR；未经明确要求不推送或合并到 `main`。
 - PR 必须关联 Issue（`YinFengWindy/Shiori-Agent`，见 `docs/agents/issue-tracker.md`），写明变更摘要、实际验证结果和已知阻塞项；测试与构建通过、阻塞项清零后才可转 Ready 或合并。
-- 普通 SDK / 运行时 API 契约 PR 不逐个升版本，在 `docs/_handbook/plugin-runtime-contract.md` 的 Unreleased 区累积变更与 PR 溯源，破坏性变更标注 **breaking**。正式发布 SDK 或包含新契约的桌面版本前，由维护者对照上次已发布契约统一定版；同一开发批次只定版一次，已发布的版本号不再承载新契约。版本唯一来源 `packages/sdk/python/shiori_sdk/_version.py`（SDK 与 Runtime API 同号），用 `node scripts/sync_sdk_version.mjs` 同步，并统一该批次的插件最低版本约束。
-- 插件自身的 `version` 独立于 SDK 和桌面版本。正式发版前对照上次发布批次，有包内容或兼容声明变化的已有插件只升一次 patch；新插件保留其选定的初始版本，未变插件不升号。`manifest.yaml` 与 `pyproject.toml` 的版本必须一致，同时更新消费方依赖约束和锁文件。
+- SDK 独立 semver，大版本是破坏性变更。版本唯一来源是 `packages/sdk/python/shiori_sdk/_version.py`。npm 包、宿主 `setup.py` 和 `packages/shiori-host-testing` 的精确 pin 必须与它相同，由 `node scripts/check_sdk_release.mjs --align` 核对；没有 Unreleased 批次，也没有 `sync_sdk_version.mjs`。manifest 写 `api: 4` 和 `sdk` 最低约束（基线 `>=4.0.0`）。4.x 内禁止给已有 Key 或 Protocol 新增方法，新能力用新 Key 或新 Event；缺 Key 时 setup 失败并留下 `PluginDiagnostic`。下一个大版本可以合并拆开的 Key，不要把临时拆名一直留着。指南和生成的 API 参考在 `docs/_handbook/plugin-guide.md` 与 `plugin-api.md`，定版记录在 `plugin-changelog.md`。改了插座契约就重新生成 API 参考。
+- 插件自身的 `version` 独立于 SDK 和桌面版本。SDK 升大版本不因此给每个插件升 patch；插件的 `shiori-sdk` 依赖要承认它要跑的 SDK。正式发版前，有包内容变化的已有插件只升一次 patch；新插件保留其选定的初始版本，未变插件不升号。`manifest.yaml` 与 `pyproject.toml` 的版本必须一致，同时更新消费方依赖约束和锁文件。
 - 架构决策和产品决策放在 `docs/decisions/`（`YYYY-MM-DD-短标题.md`）。做出或修订这类决策时，在该目录新增或更新文件，不要散落到 `docs/` 的其他位置。`docs/knowledge/` 描述现状，`docs/_handbook/` 是手册。
 - `docs/specs/`、`docs/plan/` 不进 git。
 - 搜索前先限定范围，排除 `node_modules`、`dist`、`renderer-dist`、`__pycache__` 与 worktree 副本（`D:/Coding/Shiori.worktrees/`）。

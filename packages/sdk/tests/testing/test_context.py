@@ -17,7 +17,7 @@ def sdk_plugin_dir(tmp_path: Path) -> Path:
     package = tmp_path / "package"
     package.mkdir()
     (package / "manifest.yaml").write_text(
-        "api: 4\nid: probe\ninject:\n  - rpc\n", encoding="utf-8"
+        "api: 4\nsdk: '>=4.0.0'\nid: probe\ninject:\n  - rpc\n", encoding="utf-8"
     )
     return package
 
