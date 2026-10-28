@@ -1,7 +1,7 @@
 """Telegram profile photos.
 
 The Bot's own photo becomes a data URI for its account in the role's list; the
-photos of message senders and chats go to the host's cache (``ctx.avatars``).
+photos of message senders and chats go to the host's cache (``ctx.require(AVATARS)``).
 """
 
 from __future__ import annotations

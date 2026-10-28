@@ -28,7 +28,7 @@ class _ToolLookup(Protocol):
     """Structural type for the one thing this controller needs: tool lookup.
 
     Satisfied by both the raw ``ToolRegistry`` and the ``ToolsCapability``
-    wrapper the v2 plugin runtime hands out (``ctx.tools``) — tests build the
+    wrapper the v2 plugin runtime hands out (``ctx.require(TOOLS)``) — tests build the
     former directly, ``plugin.py`` passes the latter.
     """
 

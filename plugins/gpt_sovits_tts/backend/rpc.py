@@ -3,6 +3,7 @@
 from shiori_sdk.plugin_services import ServicePluginContext
 from shiori_sdk.rpc import Concurrency
 from shiori_sdk.managed.controller import ManagedRuntime
+from shiori_sdk.core.services import ROLES, RPC, WORKSPACE
 
 from .engine import SynthesisEngine
 from .settings import RoleVoice
@@ -16,7 +17,7 @@ def register_rpc(
 
     def require_role(params: dict[str, object]) -> str:
         role_id = params.get("role_id")
-        if not isinstance(role_id, str) or ctx.roles.get_role(role_id) is None:
+        if not isinstance(role_id, str) or ctx.require(ROLES).get_role(role_id) is None:
             raise ValueError("角色不存在，请先保存角色")
         return role_id
 
@@ -41,12 +42,12 @@ def register_rpc(
         }
 
     async def role_get(params: dict[str, object]):
-        with ctx.roles.read_scope():
+        with ctx.require(ROLES).read_scope():
             role_id = require_role(params)
             return store.read().roles.get(role_id, RoleVoice()).model_dump()
 
     async def role_save(params: dict[str, object]):
-        with ctx.roles.read_scope():
+        with ctx.require(ROLES).read_scope():
             role_id = require_role(params)
             voice = RoleVoice.model_validate(params.get("voice"))
             references.validate(voice)
@@ -60,20 +61,24 @@ def register_rpc(
             return result.model_dump()
 
     async def import_reference(params: dict[str, object]):
-        with ctx.roles.read_scope():
+        with ctx.require(ROLES).read_scope():
             require_role(params)
-            return references.import_file(ctx.workspace, str(params.get("source", "")))
+            return references.import_file(
+                ctx.require(WORKSPACE), str(params.get("source", ""))
+            )
 
     for name, handler in [
         ("settings.get", get),
         ("health", health),
         ("role.get", role_get),
     ]:
-        ctx.rpc.register(name, handler, concurrency=Concurrency.READ_ONLY)
+        ctx.require(RPC).register(name, handler, concurrency=Concurrency.READ_ONLY)
     for name, handler in [
         ("settings.set", save),
         ("role.set", role_save),
         ("reference.import", import_reference),
     ]:
-        ctx.rpc.register(name, handler)
-    ctx.rpc.register("reconnect", engine.reconnect, concurrency=Concurrency.INTEGRATION)
+        ctx.require(RPC).register(name, handler)
+    ctx.require(RPC).register(
+        "reconnect", engine.reconnect, concurrency=Concurrency.INTEGRATION
+    )

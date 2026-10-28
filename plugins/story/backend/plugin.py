@@ -6,6 +6,15 @@ from uuid import uuid4
 
 from shiori_sdk.rpc import PluginRpcError
 from shiori_sdk.plugin_services import ServicePluginContext as PluginRuntimeContext
+from shiori_sdk.core.services import (
+    BACKGROUND,
+    DEPENDENCIES,
+    MODELS,
+    ROLES,
+    RPC,
+    RUNTIME,
+    WORKSPACE,
+)
 from plugins.novelai.backend.api import ImageGenerationAPI
 from .errors import StorySimulationError
 from .rpc import StorySimulationHandler
@@ -15,25 +24,25 @@ async def setup(ctx: PluginRuntimeContext) -> None:
     """Registers Story RPC, storage, background work and its required NovelAI API."""
     from shiori_sdk.rpc import Concurrency
 
-    novelai = ctx.dependencies.require("novelai")
+    novelai = ctx.require(DEPENDENCIES).require("novelai")
     if not isinstance(novelai, ImageGenerationAPI):
         raise TypeError("NovelAI dependency must export ImageGenerationAPI")
     handler = StorySimulationHandler(
-        workspace=ctx.workspace,
-        role_store=ctx.roles,
-        background=ctx.background,
-        models=ctx.models,
+        workspace=ctx.require(WORKSPACE),
+        role_store=ctx.require(ROLES),
+        background=ctx.require(BACKGROUND),
+        models=ctx.require(MODELS),
         image_tool=novelai,
     )
     # Only an already-active predecessor can own persisted in-flight turns.
     # First enabling Story after startup must still recover interrupted work.
-    if ctx.runtime.was_active:
+    if ctx.require(RUNTIME).was_active:
         handler.skip_startup_recovery()
     ctx.effect("story.close", handler.aclose)
-    ctx.runtime.on_drain(handler.drain)
+    ctx.require(RUNTIME).on_drain(handler.drain)
 
     async def emit(event: dict[str, Any]) -> None:
-        await ctx.rpc.emit(
+        await ctx.require(RPC).emit(
             str(event["method"]).removeprefix("stories."), event["payload"]
         )
 
@@ -59,7 +68,7 @@ async def setup(ctx: PluginRuntimeContext) -> None:
         "cg.retry",
         "cg.regenerate",
     ):
-        ctx.rpc.register(
+        ctx.require(RPC).register(
             method,
             partial(invoke, method),
             concurrency=(

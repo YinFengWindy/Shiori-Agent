@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from shiori_sdk.rpc import RpcCapability
 from shiori_sdk.kernel import Context, Key, Scope, Veto
@@ -25,6 +25,7 @@ from shiori_sdk.extensions import (
 )
 from shiori_sdk.runtime import (
     CapabilityNotGranted,
+    HostServiceUnavailable,
 )
 from shiori_sdk.runtime import (
     EventsCapability,
@@ -39,6 +40,7 @@ from shiori_sdk.external_turns import ExternalTurns
 from shiori_sdk.background_results import BackgroundResults
 from shiori_sdk.process_resources import PluginProcessResources
 from shiori_sdk.tools import ToolsCapability as SdkToolsCapability
+from agent.plugin_host.core_keys import HostBuilt, PER_PLUGIN_PUBLIC_KEYS, PluginBinding
 from agent.plugin_host.kv import PluginKVStore
 from shiori_sdk.http import HttpClient
 from shiori_sdk.processes import Processes, Resources, ToolTurn
@@ -54,9 +56,13 @@ class PluginSetupContext:
     未声明的能力访问时抛 CapabilityNotGranted；已声明但宿主缺少支撑服务时抛
     HostServiceUnavailable（内核在 setup 前已校验，这里是同一规则的属性侧）。
 
+    名字在 manifest ``inject`` 里时，属性返回 ``require`` 的同一个对象，所以
+    漏改的 ``ctx.tools`` 和 ``ctx.require(TOOLS)`` 登记进同一份视图。P4-4 删
+    掉这些属性。``api: 2`` 仍只走 capability。
+
     ``on`` / ``watch`` / ``emit`` 与 ``provide`` / ``require`` / ``get`` 是内核
-    ``Context`` 的同名成员，原样委托给本插件在内核里的上下文（manifest 的
-    ``inject`` / ``optional_inject`` / ``provides`` 声明可用的 Key）。
+    ``Context`` 的同名成员。``require`` / ``get`` 在内核结果上展开 per-plugin
+    视图和 setup 时才建好的本插件对象（``HostBuilt``）。
     """
 
     def __init__(
@@ -96,6 +102,7 @@ class PluginSetupContext:
         accounts: AccountsCapability | None = None,
         avatars: AvatarsCapability | None = None,
         services: PluginServices | None = None,
+        binding: PluginBinding,
     ) -> None:
         self.plugin_id = plugin_id
         self.plugin_dir = plugin_dir
@@ -131,10 +138,22 @@ class PluginSetupContext:
         self._accounts = accounts
         self._avatars = avatars
         self._services = services
+        self._binding = binding
+        self._views: dict[str, Any] = {}
+        self._host_built: dict[str, Any] = {
+            "config": config,
+            "kv": kv,
+            "dependencies": dependencies,
+            "runtime": runtime,
+            "services": services,
+            "storage": storage,
+        }
 
     @property
     def services(self) -> PluginServices:
         """Return this plugin's explicitly granted public service registration."""
+        if "services" in self.manifest.inject:
+            return self.require(Key("services"))
         if "services" not in self.granted or self._services is None:
             raise CapabilityNotGranted("Plugin did not request services")
         return self._services
@@ -180,11 +199,43 @@ class PluginSetupContext:
 
     def require[T](self, key: Key[T]) -> T:
         """The current provider of a key declared in manifest ``inject``."""
-        return self._kernel_context.require(key)
+        return self._present(key.name, self._kernel_context.require(key))
 
     def get[T](self, key: Key[T]) -> T | None:
         """The current provider of a key declared in ``optional_inject``, or None."""
-        return self._kernel_context.get(key)
+        value = self._kernel_context.get(key)
+        if value is None:
+            return None
+        if isinstance(value, HostBuilt):
+            return cast("T | None", self._host_built.get(key.name))
+        return self._present(key.name, value)
+
+    def _present[T](self, name: str, value: T) -> T:
+        """The object a plugin calls: a per-plugin view, or its own host-built one."""
+        if isinstance(value, HostBuilt):
+            local = self._host_built.get(name)
+            if local is None:
+                raise HostServiceUnavailable(
+                    f"插件 {self.plugin_id} 注入了 {name}，但宿主没有为它准备实例"
+                )
+            return cast(T, local)
+        if name in PER_PLUGIN_PUBLIC_KEYS:
+            cached = self._views.get(name)
+            if cached is None:
+                bind = getattr(value, "for_plugin", None)
+                cached = value if bind is None else bind(self._binding)
+                self._views[name] = cached
+            return cast(T, cached)
+        return value
+
+    def _capability(
+        self, name: str, value: Any, *, inject_as: str | None = None
+    ) -> Any:
+        """``require`` when ``name`` is injected, otherwise the capability property."""
+        key_name = name if inject_as is None else inject_as
+        if key_name in self.manifest.inject:
+            return self.require(Key(key_name))
+        return self._core_capability(name, value)
 
     def on[E](self, event_type: type[E], handler: OnHandler[E]) -> None:
         """Joins the ordered chain; return the (replaced) event or ``Veto``."""
@@ -209,26 +260,28 @@ class PluginSetupContext:
     @property
     def events(self) -> EventsCapability:
         """Returns the explicitly typed scoped event bus granted by the kernel."""
-        return self._core_capability("events", self._events)
+        return self._capability("events", self._events)
 
     @property
     def memory(self) -> MemoryCapability:
         """Returns the typed memory surface granted to this plugin."""
-        return self._core_capability("memory", self._memory)
+        return self._capability("memory", self._memory)
 
     @property
     def rpc(self) -> RpcCapability:
         """Returns scoped RPC registration without a dynamic capability escape."""
-        return self._core_capability("rpc", self._rpc)
+        return self._capability("rpc", self._rpc)
 
     @property
     def workspace(self) -> Path:
         """Return the explicitly granted workspace capability."""
-        return self._core_capability("workspace", self._workspace)
+        return self._capability("workspace", self._workspace)
 
     @property
     def config(self) -> ConfigValues:
         """Return the explicitly granted config capability."""
+        if "config" in self.manifest.inject:
+            return self.require(Key("config"))
         if "config" not in self.granted or self._config is None:
             raise CapabilityNotGranted("Plugin did not request config")
         return self._config
@@ -236,6 +289,8 @@ class PluginSetupContext:
     @property
     def dependencies(self) -> Dependencies:
         """Return the explicitly granted dependencies capability."""
+        if "dependencies" in self.manifest.inject:
+            return self.require(Key("dependencies"))
         if "dependencies" not in self.granted or self._dependencies is None:
             raise CapabilityNotGranted("Plugin did not request dependencies")
         return self._dependencies
@@ -243,11 +298,13 @@ class PluginSetupContext:
     @property
     def background(self) -> BackgroundTasks:
         """Return the explicitly granted background capability."""
-        return self._core_capability("background", self._background)
+        return self._capability("background", self._background)
 
     @property
     def storage(self) -> PrivateStorage:
         """Return the explicitly granted storage capability."""
+        if "storage" in self.manifest.inject:
+            return self.require(Key("storage"))
         if "storage" not in self.granted or self._storage is None:
             raise CapabilityNotGranted("Plugin did not request storage")
         return self._storage
@@ -267,66 +324,68 @@ class PluginSetupContext:
     @property
     def roles(self) -> Roles:
         """Return the explicitly granted roles SDK capability."""
-        return self._core_capability("roles", self._roles)
+        return self._capability("roles", self._roles)
 
     @property
     def models(self) -> RoleModels:
         """Return the explicitly granted models SDK capability."""
-        return self._core_capability("models", self._models)
+        return self._capability("models", self._models)
 
     @property
     def sessions(self) -> PluginSessions:
         """Return the explicitly granted sessions SDK capability."""
-        return self._core_capability("sessions", self._sessions)
+        return self._capability("sessions", self._sessions, inject_as="session_store")
 
     @property
     def process_resources(self) -> PluginProcessResources:
         """Access process-owned resources through this generation attachment."""
-        return self._core_capability("process_resources", self._process_resources)
+        return self._capability("process_resources", self._process_resources)
 
     @property
     def background_results(self) -> BackgroundResults:
         """Capture role-bound background result destinations."""
-        return self._core_capability("background_results", self._background_results)
+        return self._capability("background_results", self._background_results)
 
     @property
     def external_turns(self) -> ExternalTurns:
         """Return the explicitly granted external-turn submission capability."""
-        return self._core_capability("external_turns", self._external_turns)
+        return self._capability("external_turns", self._external_turns)
 
     @property
     def tools(self) -> SdkToolsCapability:
         """Return the explicitly granted tools SDK capability."""
-        return self._core_capability("tools", self._tools)
+        return self._capability("tools", self._tools)
 
     @property
     def kv(self) -> PluginKVStore:
         """Return the explicitly granted kv SDK capability."""
-        return self._core_capability("kv", self._kv)
+        return self._capability("kv", self._kv)
 
     @property
     def http(self) -> HttpClient:
         """Return the explicitly granted http SDK capability."""
-        return self._core_capability("http", self._http)
+        return self._capability("http", self._http)
 
     @property
     def resources(self) -> Resources:
         """Return the explicitly granted resources SDK capability."""
-        return self._core_capability("resources", self._resources)
+        return self._capability("resources", self._resources)
 
     @property
     def processes(self) -> Processes:
         """Return the explicitly granted processes SDK capability."""
-        return self._core_capability("processes", self._processes)
+        return self._capability("processes", self._processes)
 
     @property
     def tool_turn(self) -> Callable[[], ToolTurn]:
         """Return the explicitly granted tool_turn SDK capability."""
-        return self._core_capability("tool_turn", self._tool_turn)
+        return self._capability("tool_turn", self._tool_turn)
 
     @property
     def runtime(self) -> RuntimeLifecycle:
         """Return the explicitly granted runtime SDK capability."""
+        if "runtime" in self.manifest.inject:
+            return self.require(Key("runtime"))
         if "runtime" not in self.granted or self._runtime is None:
             raise CapabilityNotGranted("Plugin did not request runtime")
         return self._runtime
@@ -334,17 +393,17 @@ class PluginSetupContext:
     @property
     def scene_observations(self) -> SceneObservations:
         """Return the explicitly granted scene_observations SDK capability."""
-        return self._core_capability("scene_observations", self._scene_observations)
+        return self._capability("scene_observations", self._scene_observations)
 
     @property
     def light_provider(self) -> ChatProvider:
         """Return the explicitly granted light_provider SDK capability."""
-        return self._core_capability("light_provider", self._light_provider)
+        return self._capability("light_provider", self._light_provider)
 
     @property
     def light_model(self) -> str:
         """Return the explicitly granted light_model SDK capability."""
-        return self._core_capability("light_model", self._light_model)
+        return self._capability("light_model", self._light_model)
 
     def as_service_context(self) -> ServicePluginContext:
         """Check service injection without the legacy dynamic attribute path."""
@@ -353,12 +412,12 @@ class PluginSetupContext:
     @property
     def channels(self) -> ChannelsCapability:
         """Return statically checked channel contribution services."""
-        return self._core_capability("channels", self._channels)
+        return self._capability("channels", self._channels)
 
     @property
     def accounts(self) -> AccountsCapability:
         """Return statically checked account registration and lifecycle services."""
-        return self._core_capability("accounts", self._accounts)
+        return self._capability("accounts", self._accounts)
 
     def as_channel_context(self) -> ChannelPluginContext:
         """Check the actual setup boundary without dynamic legacy attributes."""
@@ -367,7 +426,7 @@ class PluginSetupContext:
     @property
     def avatars(self) -> AvatarsCapability:
         """Return the explicitly granted shared avatar-cache contract."""
-        return self._core_capability("avatars", self._avatars)
+        return self._capability("avatars", self._avatars)
 
 
 class PluginRuntimeContext(PluginSetupContext):

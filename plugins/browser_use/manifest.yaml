@@ -1,15 +1,13 @@
-api: 2
-runtime_api: ">=3.1.0 <4.0.0"
+api: 4
 id: browser_use
 display_name: Browser Use
-version: "0.1.1"
+version: 0.1.1
 desc: agent-browser 或 ego(lite) 中的网页操作与截图
-capabilities:
+default_enabled: false
+config_model: config:BrowserUseConfig
+inject:
   - resources
   - processes
   - tools
   - workspace
   - config
-# 没有显式 enabled 时默认停用。
-default_enabled: false
-config_model: "config:BrowserUseConfig"

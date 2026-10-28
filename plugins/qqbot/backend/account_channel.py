@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from shiori_sdk.channel_events import StreamDeltaReady, TurnCancelled, TurnStarted
+from shiori_sdk.core.services import CONFIG
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
@@ -36,7 +37,7 @@ class QQBotAccountsChannel(
         chat_types: tuple[ChatTypeDeclaration, ...],
     ) -> None:
         self._store = store
-        self._resolve_reference = ctx.config.resolve_reference
+        self._resolve_reference = ctx.require(CONFIG).resolve_reference
         self._chat_types = chat_types
         self._channels: dict[str, QQBotChannel] = {}
         self._identity = QQBotAccountIdentity(ctx, store)

@@ -19,7 +19,7 @@ plugins/example/
   README.md
 ```
 
-后端扫描 `bootstrap.paths.plugin_roots()` 返回的内置插件根目录，以及工作区的 `plugins/`。开发态和桌面 bundle 的内置包位于安装资源的顶层 `plugins/`；wheel 安装态使用已安装插件包。内置包保留显式 `api: 2` 协议，默认入口为 `backend/plugin.py`，入口作为包导入，内部可使用相对 import。
+后端扫描 `bootstrap.paths.plugin_roots()` 返回的内置插件根目录，以及工作区的 `plugins/`。开发态和桌面 bundle 的内置包位于安装资源的顶层 `plugins/`；wheel 安装态使用已安装插件包。仓库内的内置包声明 `api: 4`，把要用的服务写进 `inject`，代码里用 `ctx.require` 取得（见运行时契约 Unreleased 的 P4-3）。默认入口仍为 `backend/plugin.py`，入口作为包导入，内部可使用相对 import。工作区里的外部包仍走下面的 `api: 2` 与 `capabilities`，直到 P4-5 拒绝非 `api: 4`。
 
 工作区 `plugins/<目录>/manifest.yaml` 声明的外部包必须通过 [Package Contract v1](plugin-runtime-contract.md) 静态检查；合法包显示为 `UNTRUSTED`，在用户于设置 › 插件中经「信任…」（或 ZIP 安装/更新时的「信任并安装」「信任并更新」）确认并重启应用之前，不导入它的后端或 renderer；内容一变授信即失效（流程见[运行时契约](plugin-runtime-contract.md#main-window-ui-loader-213)）。配置 `enabled = true` 不代表信任。无效 manifest、入口和依赖显示为 `BLOCKED`；只有旧 `kv.json`、没有 manifest 的目录被忽略，数据不会因此删除。
 
@@ -39,7 +39,7 @@ supports_hot_unload: true
 
 `capabilities` 必须显式列出，可以是空列表。只声明实际使用的能力；未授权属性访问会抛 `CapabilityNotGranted`。声明了能力而宿主缺少其背后的服务（如 workspace、roles、sessions、http）时，宿主在调用 `setup` 前抛 `HostServiceUnavailable` 并指明缺失的服务名，插件不需要也不应再对这些属性做 `is None` 判断。`config_model` 可以是入口中的类名，也可以是相对入口包的 `模块:类名`。模型必须继承 Pydantic `BaseModel`。
 
-`display_name` 是设置 › 插件里显示的名称（省略时显示 ID）。可选的 `category` 决定插件在列表中的分组：`feature`（功能）、`channel`（渠道）、`system`（系统组件，默认折叠，用于宿主内部护栏、诊断命令这类用户不需要日常操作的插件）。省略时声明了 `channels` capability 的插件归入渠道，其余归入功能；`system` 只能显式声明。取值不在这三者之内时 manifest 被拒绝。Package Contract v1 的外部包自 Runtime API 3.1.1（#678）起也接受 `display_name` 与 `category`（含 `system`），校验规则相同；更早的宿主把它们当未知字段拒绝。
+`display_name` 是设置 › 插件里显示的名称（省略时显示 ID）。可选的 `category` 决定插件在列表中的分组：`feature`（功能）、`channel`（渠道）、`system`（系统组件，默认折叠，用于宿主内部护栏、诊断命令这类用户不需要日常操作的插件）。省略时，声明了渠道（`capabilities` 含 `channels`，或 `api: 4` 的 `contributes.channels`）的插件归入渠道，其余归入功能；`system` 只能显式声明。取值不在这三者之内时 manifest 被拒绝。Package Contract v1 的外部包自 Runtime API 3.1.1（#678）起也接受 `display_name` 与 `category`（含 `system`），校验规则相同；更早的宿主把它们当未知字段拒绝。
 
 可选的 `default_enabled`（严格布尔值，省略为 `true`）决定 `[plugins.<id>]` 没有显式 `enabled` 时插件是否启用；显式的 `enabled` 始终优先，设置 › 插件的开关写的就是显式值。目前 `browser_use`、`computer_use`、`novelai`、`gpt_sovits_tts`、`grok_bot`、`herdr`、`sensevoice_asr` 声明为 `false`，没有显式开关时默认停用。宿主加载配置时不改写这份开关。Package Contract v1 的外部包自 Runtime API 3.1.1 起也接受 `default_enabled`。
 

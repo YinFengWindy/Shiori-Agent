@@ -1,27 +1,29 @@
-api: 2
-runtime_api: ">=3.1.2 <4.0.0"
+api: 4
 id: telegram
 display_name: Telegram
-version: '0.1.2'
+version: 0.1.2
 desc: Telegram Bot 渠道
-capabilities:
+inject:
   - channels
   - accounts
   - avatars
   - config
   - kv
   - rpc
-channels:
-  - name: telegram
-    instance_prefix: telegram_
-    label: Telegram
-    contact_label: Telegram 用户 ID 或用户名
-    chat_types:
-      - type: private
-        label: 私聊
-        chat_id_label: 用户 ID
-        chat_id_hint: 对方的数字用户 ID
-      - type: group
-        label: 群聊
-        chat_id_label: 群组 ID
-        chat_id_hint: 以 - 开头的群组 ID
+contributes:
+  channels:
+    - name: telegram
+      instance_prefix: telegram_
+      label: Telegram
+      contact_label: Telegram 用户 ID 或用户名
+      chat_types:
+        - type: private
+          label: 私聊
+          chat_id_label: 用户 ID
+          chat_id_hint: 对方的数字用户 ID
+        - type: group
+          label: 群聊
+          chat_id_label: 群组 ID
+          chat_id_hint: 以 - 开头的群组 ID
+frontend:
+  entry: ui/index.tsx

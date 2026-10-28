@@ -9,6 +9,7 @@ from shiori_sdk.managed.artifacts import Artifact
 from shiori_sdk.managed.child import run_owned
 from shiori_sdk.managed.paths import environment_path, native_path
 from shiori_sdk.plugin_services import ServicePluginContext
+from shiori_sdk.core.services import PROCESSES
 
 from .runtime_environment import runtime_environment
 from .runtime_manifest import PYTHON_RELATIVE, SOURCE_PACKAGES, UV_ARCHIVE
@@ -76,7 +77,7 @@ async def install_packages(
                 encoding="utf-8",
             )
             await run_owned(
-                ctx.processes,
+                ctx.require(PROCESSES),
                 [*command, "-r", environment_path(requirements)],
                 cwd=Path(environment_path(staging)),
                 env=env,
@@ -84,7 +85,7 @@ async def install_packages(
             )
             requirements.unlink()
         await run_owned(
-            ctx.processes,
+            ctx.require(PROCESSES),
             [
                 environment_path(uv),
                 "--no-config",

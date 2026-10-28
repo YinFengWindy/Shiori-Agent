@@ -5,6 +5,7 @@ import re
 import stat
 from pathlib import Path
 
+from shiori_sdk.core.services import RPC
 from shiori_sdk.plugin_services import ServicePluginContext
 from shiori_sdk.rpc import Concurrency
 
@@ -121,7 +122,8 @@ def register_runtime_rpc(
     async def remove(_params: dict[str, object]):
         return runtime.remove()
 
-    ctx.rpc.register("runtime.status", status, concurrency=Concurrency.READ_ONLY)
+    rpc = ctx.require(RPC)
+    rpc.register("runtime.status", status, concurrency=Concurrency.READ_ONLY)
     for name, handler in [
         ("prepare", prepare),
         ("relocate", relocate),
@@ -130,9 +132,7 @@ def register_runtime_rpc(
         ("cancel", cancel),
         ("remove", remove),
     ]:
-        ctx.rpc.register(
-            "runtime." + name, handler, concurrency=Concurrency.INTEGRATION
-        )
+        rpc.register("runtime." + name, handler, concurrency=Concurrency.INTEGRATION)
     # Disposal stops the service and releases its lease; generation retirement
     # drains first and disposes afterwards, so the next owner's start (which
     # waits on that lease) still follows. Nothing is registered for on_drain:

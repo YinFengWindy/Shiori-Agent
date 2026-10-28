@@ -1,6 +1,7 @@
 """Owns the on-demand screen tool and its in-flight analyses."""
 
 from shiori_sdk.plugin_services import ServicePluginContext as PluginRuntimeContext
+from shiori_sdk.core.services import MODELS, ROLES, TOOLS
 
 from .capture import PrimaryScreenCapture
 from .model import ObservationModelAdapter
@@ -12,11 +13,11 @@ async def setup(ctx: PluginRuntimeContext) -> None:
     tool = ObserveScreenTool(
         capture=PrimaryScreenCapture(),
         analyzer=ObservationModelAdapter(
-            roles=ctx.roles,
-            models=ctx.models,
+            roles=ctx.require(ROLES),
+            models=ctx.require(MODELS),
         ),
     )
-    ctx.tools.register(
+    ctx.require(TOOLS).register(
         tool,
         always_on=True,
         risk="read-only",

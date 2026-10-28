@@ -48,7 +48,11 @@ def load_manifest_grants(plugin_dir: Path) -> tuple[str, tuple[str, ...]]:
     plugin_id = values.get("id")
     if not isinstance(plugin_id, str) or not plugin_id:
         raise ValueError(f"manifest 缺少 id: {manifest}")
-    # Same list/known-name validation as the host's manifest loader.
+    # api: 4 grants no capabilities; the plugin takes services with require.
+    # A manifest that still has the key is validated like the host, including
+    # one that omits it and is not api: 4.
+    if values.get("api") == 4 and "capabilities" not in values:
+        return plugin_id, ()
     return plugin_id, parse_capabilities(values.get("capabilities"), manifest)
 
 

@@ -123,6 +123,37 @@ consolidates these additions and the subsequent #847 breaking migration.
 
 <!-- Record the next contract batch here, with PR references and breaking markers. -->
 
+- **Built-in plugins use manifest `api: 4` (issue #903, refactor P4-3).**
+  Each built-in manifest drops `capabilities`, `runtime_api`, `package_contract`
+  and top-level `channels`. Services move to `inject` / `optional_inject` /
+  `provides`, and plugin code takes them with `ctx.require` / `ctx.get` /
+  `ctx.provide`. Channel rows move to `contributes.channels` (inject must
+  list `channels`). A package with `ui/index.tsx` sets `frontend.entry` to
+  that file; the host still discovers `ui` / `background` / `surface` by
+  directory until P7, and those entries stay default exports.
+  The former `sessions` capability is the key `session_store`
+  (`SESSION_STORE`). The key `sessions` remains the rollback socket and is
+  what `plugin_undo` injects. `shiori_sdk.core.services` holds the other
+  former capability keys, one name each (`tools`, `config`, `events`, …).
+  `events` is the domain bus, not kernel `on` / `watch`. The host provides
+  each public key beside the existing `host.*` key. `config`, `kv`,
+  `dependencies`, `runtime`, `services` and `storage` are built per plugin
+  at setup; the kernel sees a marker so planning does not block them.
+  Capability properties still return that object when the name is injected,
+  so `api: 2` plugins and the old property path keep working.
+  **Not in this slice:** deleting `KNOWN_CAPABILITIES`, `CapabilityNotGranted`,
+  the context properties and `*PluginContext` adapters (P4-4); rejecting
+  non-`api: 4` at install and deleting `runtime_api` / `package_contract`
+  (P4-5). `api: 2` still loads. No SDK or plugin version bump (D26). Built-in
+  `version` values are unchanged. User data paths (`plugin-data`, kv, config,
+  enable flags) are unchanged. Citation is not a plugin (P3-4); the built-in
+  set is the 23 packages under `plugins/`.
+  The contract test checks every built-in manifest and that backend
+  `require` / `get` / `provide` names match it, and that one `api: 4` plugin
+  registering through `ctx.require(TOOLS)` is gone after dispose. Hot-reload
+  order equality, dispose-zero for every plugin, runtime channel registration
+  and named frontend exports stay with the P5 harness and P7.
+
 - **Bootstrap activation goes through `Kernel.start` (issue #903, refactor P4-2).**
   `PluginKernel.load` / `load_all` and in-generation reload or enable plan the
   generation's specs and call `Kernel.start`. The host no longer calls
@@ -175,8 +206,9 @@ consolidates these additions and the subsequent #847 breaking migration.
   Still deferred: when a disable's commit fails, a provider loaded in its
   place can stay `ACTIVE` while the restored one is `BLOCKED` (within a
   generation the running provider wins; a generation swap blocks both).
-  P4-3+ still owns manifest `api: 4`, deleting `KNOWN_CAPABILITIES`, and
-  rejecting non-`api: 4` packages.
+  P4-3 (above) migrates built-in manifests to `api: 4`. P4-4 still deletes
+  `KNOWN_CAPABILITIES` and the capability properties. P4-5 still rejects
+  non-`api: 4` packages.
 
 - **Plugin kernel register-only specs (PR #941, issue #903, refactor P4-1).** `PluginSpec`
   gains `runnable: bool = True`. `False` means the spec is registered only

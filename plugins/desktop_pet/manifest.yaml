@@ -1,15 +1,16 @@
-api: 2
+api: 4
 id: desktop_pet
 display_name: 桌宠
-version: "0.1.1"
-runtime_api: ">=3.1.1 <4.0.0"
+version: 0.1.1
 desc: 桌宠：角色绑定解析、动作工具与透明置顶窗口
-capabilities:
+inject:
   - workspace
   - roles
   - events
   - tools
   - rpc
-  - sessions
+  - session_store
   - external_turns
   - background
+frontend:
+  entry: ui/index.tsx

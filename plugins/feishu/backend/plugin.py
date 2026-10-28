@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from shiori_sdk.accounts.targets import ACCOUNT_SEND_METHOD, ACCOUNT_TARGETS_METHOD
 from shiori_sdk.accounts.routing import ACCOUNT_RESOLVE_METHOD
+from shiori_sdk.core.services import ACCOUNTS, CHANNELS, RPC
 
 from .account_delivery import FeishuAccountDelivery
 from .accounts import FeishuAccounts
@@ -20,8 +21,8 @@ async def setup(ctx: "ChannelPluginContext") -> None:
     """Registers saved applications and the RPCs that manage them."""
     from shiori_sdk.rpc import Concurrency
 
-    group = ctx.channels.group(CHANNEL)
-    ctx.channels.add(group)
+    group = ctx.require(CHANNELS).group(CHANNEL)
+    ctx.require(CHANNELS).add(group)
     accounts = FeishuAccounts(ctx, group)
     delivery = FeishuAccountDelivery(ctx, accounts)
 
@@ -29,22 +30,24 @@ async def setup(ctx: "ChannelPluginContext") -> None:
         identity = await accounts.verify(FeishuAppConfig.model_validate(payload))
         return {"name": identity["name"], "open_id": identity["open_id"]}
 
-    ctx.rpc.register(
+    ctx.require(RPC).register(
         "accounts.profile", delivery.profile, concurrency=Concurrency.READ_ONLY
     )
-    ctx.rpc.register(
+    ctx.require(RPC).register(
         ACCOUNT_TARGETS_METHOD, delivery.targets, concurrency=Concurrency.READ_ONLY
     )
-    ctx.rpc.register("accounts.send", delivery.send)
-    ctx.rpc.register(ACCOUNT_SEND_METHOD, delivery.send_account)
-    ctx.rpc.register(
+    ctx.require(RPC).register("accounts.send", delivery.send)
+    ctx.require(RPC).register(ACCOUNT_SEND_METHOD, delivery.send_account)
+    ctx.require(RPC).register(
         ACCOUNT_RESOLVE_METHOD,
         delivery.resolve_account,
         concurrency=Concurrency.READ_ONLY,
     )
-    ctx.rpc.register("accounts.verify", verify, concurrency=Concurrency.INTEGRATION)
-    ctx.rpc.register("accounts.save", accounts.save)
-    ctx.rpc.register("accounts.disconnect", accounts.disconnect)
-    ctx.accounts.on_delete(accounts.delete_plan)
-    ctx.accounts.on_rules_change(accounts.save_rules)
+    ctx.require(RPC).register(
+        "accounts.verify", verify, concurrency=Concurrency.INTEGRATION
+    )
+    ctx.require(RPC).register("accounts.save", accounts.save)
+    ctx.require(RPC).register("accounts.disconnect", accounts.disconnect)
+    ctx.require(ACCOUNTS).on_delete(accounts.delete_plan)
+    ctx.require(ACCOUNTS).on_rules_change(accounts.save_rules)
     await accounts.load()

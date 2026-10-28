@@ -11,9 +11,10 @@ when the latest turn is no longer exactly that turn (same anchor and same
 message ids) by then. The two calls are not one
 transaction.
 
-This ``Key`` (name ``sessions``) is unrelated to the manifest capability
-``sessions`` (``host.sessions``, session metadata and media): a plugin
-declares this one in ``inject``, that one in ``capabilities``.
+This ``Key`` (name ``sessions``) is unrelated to session metadata and media.
+That surface is ``SESSION_STORE`` (name ``session_store``) in
+``shiori_sdk.core.services``. A plugin that rolls a turn back injects
+``sessions``; one that reads metadata or media injects ``session_store``.
 """
 
 from __future__ import annotations

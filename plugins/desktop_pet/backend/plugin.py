@@ -13,6 +13,7 @@ from .bilibili_credentials import BilibiliCredentialStore
 from .bilibili_login import BilibiliLoginService
 from .bilibili_login_rpc import register_bilibili_login
 from .live_wiring import setup_live_engine
+from shiori_sdk.core.services import EVENTS, ROLES, RPC, SESSION_STORE, TOOLS, WORKSPACE
 
 if TYPE_CHECKING:
     from shiori_sdk.plugin_services import ServicePluginContext as PluginRuntimeContext
@@ -28,8 +29,8 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
     from .pet_state import PLUGIN_ID, RolePetStateStore
     from .reconcile import PetStateReconciler
 
-    role_store = ctx.roles
-    reconciler = PetStateReconciler(role_store, ctx.workspace)
+    role_store = ctx.require(ROLES)
+    reconciler = PetStateReconciler(role_store, ctx.require(WORKSPACE))
     reconciler.reconcile()
     ctx.effect(
         "role_settings",
@@ -37,39 +38,45 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
             PLUGIN_ID, RolePetStateStore.write_draft, RolePetStateStore.project
         ),
     )
-    ctx.events.on(RoleDeleted, reconciler.on_role_deleted)
+    ctx.require(EVENTS).on(RoleDeleted, reconciler.on_role_deleted)
     # The live engine reads credentials through this same service.
     bilibili_login = BilibiliLoginService(
-        role_store, BilibiliCredentialStore(ctx.workspace), BilibiliLoginApi()
+        role_store, BilibiliCredentialStore(ctx.require(WORKSPACE)), BilibiliLoginApi()
     )
     bilibili_login.prune_deleted_roles()
-    ctx.events.on(RoleDeleted, bilibili_login.on_role_deleted)
-    ctx.tools.register(
+    ctx.require(EVENTS).on(RoleDeleted, bilibili_login.on_role_deleted)
+    ctx.require(TOOLS).register(
         DesktopPetActionTool(
             role_store=role_store,
-            rpc=ctx.rpc,
-            tool_registry=ctx.tools,
+            rpc=ctx.require(RPC),
+            tool_registry=ctx.require(TOOLS),
         ),
         risk="external-side-effect",
         always_on=True,
         search_hint="桌宠 移动 位置 动作 挥手 跳跃",
     )
-    handlers = DesktopPetRpcHandlers(role_store=role_store, workspace=ctx.workspace)
-    register_bubble_rpc(ctx.rpc)
+    handlers = DesktopPetRpcHandlers(
+        role_store=role_store, workspace=ctx.require(WORKSPACE)
+    )
+    register_bubble_rpc(ctx.require(RPC))
     # The one live-reply output of this setup (it owns the outcome RPC); the
     # live engine emits replies through it and paces on their outcomes.
-    live_output = LiveReplyOutput(ctx.rpc)
+    live_output = LiveReplyOutput(ctx.require(RPC))
     ctx.effect("live_outcome_log", live_output.subscribe(log_failed_outcome))
     setup_live_engine(ctx, bilibili_login, live_output)
-    register_voice_preferences(ctx.rpc, ctx.workspace)
-    register_voice_context(ctx.rpc, ctx.roles, ctx.sessions)
-    register_bilibili_login(ctx.rpc, bilibili_login)
-    ctx.rpc.register(
+    register_voice_preferences(ctx.require(RPC), ctx.require(WORKSPACE))
+    register_voice_context(
+        ctx.require(RPC), ctx.require(ROLES), ctx.require(SESSION_STORE)
+    )
+    register_bilibili_login(ctx.require(RPC), bilibili_login)
+    ctx.require(RPC).register(
         "binding.get", handlers.binding_get, concurrency=Concurrency.READ_ONLY
     )
-    ctx.rpc.register("pets.list", handlers.pets_list, concurrency=Concurrency.READ_ONLY)
+    ctx.require(RPC).register(
+        "pets.list", handlers.pets_list, concurrency=Concurrency.READ_ONLY
+    )
     # 三个写方法用默认的 Concurrency.MUTATION，与它们此前作为 roles.pets.*
     # 走 _DEFAULT_POLICY 时的并发语义一致。
-    ctx.rpc.register("pets.import", handlers.pets_import)
-    ctx.rpc.register("pets.remove", handlers.pets_remove)
-    ctx.rpc.register("pets.select", handlers.pets_select)
+    ctx.require(RPC).register("pets.import", handlers.pets_import)
+    ctx.require(RPC).register("pets.remove", handlers.pets_remove)
+    ctx.require(RPC).register("pets.select", handlers.pets_select)

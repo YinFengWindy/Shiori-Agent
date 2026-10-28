@@ -2,6 +2,7 @@
 
 import inspect
 from pathlib import Path
+from typing import cast
 
 from shiori_sdk.kernel import Context, Kernel, Key, PluginSpec, Scope, Veto
 from shiori_sdk.kernel.events import OnHandler, WatchHandler
@@ -48,6 +49,12 @@ class FakePluginContext:
         self._closed = False
         self.kernel = kernel if kernel is not None else Kernel()
         self._scope = Scope(plugin_id)
+        # Names in inject are taken from the kernel. Anything else falls back
+        # to an attribute the test assigned (``ctx.kv = ...`` before setup),
+        # so a plugin that moved to ``ctx.require`` keeps working against the
+        # fakes that set capability attributes. ``session_store`` is that
+        # attribute under the name ``sessions``.
+        self._injected = frozenset(inject)
         spec = PluginSpec(
             plugin_id,
             _no_setup,
@@ -82,8 +89,23 @@ class FakePluginContext:
         self._kernel_context.provide(key, impl)
 
     def require[T](self, key: Key[T]) -> T:
-        """The provider of a declared ``inject`` key on ``kernel``."""
-        return self._kernel_context.require(key)
+        """The provider of a declared ``inject`` key, or a test-assigned attribute.
+
+        A name listed in ``inject`` never falls back: a missing provider is
+        the kernel error. Other names read the attribute tests set before
+        setup, including a plain callable such as ``tool_turn``. A bound
+        method of this fake (``effect``, ``expose``) is not a service.
+        """
+        if key.name in self._injected:
+            return self._kernel_context.require(key)
+        attr = "sessions" if key.name == "session_store" else key.name
+        try:
+            value = getattr(self, attr)
+        except (AttributeError, CapabilityNotGranted):
+            return self._kernel_context.require(key)
+        if inspect.ismethod(value) and getattr(value, "__self__", None) is self:
+            return self._kernel_context.require(key)
+        return cast(T, value)
 
     def get[T](self, key: Key[T]) -> T | None:
         """The provider of a declared ``optional_inject`` key on ``kernel``, or None."""

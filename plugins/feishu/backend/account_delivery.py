@@ -18,6 +18,7 @@ from shiori_sdk.accounts.targets import (
     AccountTarget,
 )
 from shiori_sdk.media import detect_image_mime_from_header
+from shiori_sdk.core.services import KV
 
 from .accounts import FeishuAccounts
 from .channel import resolve_receive_id
@@ -45,8 +46,8 @@ class FeishuAccountDelivery:
         ref = str(payload.get("ref") or "")
         if self._accounts.application(ref) is None:
             raise KeyError("飞书账号不存在")
-        identity = self._ctx.kv.get(f"profile:{ref}", {})
-        targets = read_mapping(self._ctx.kv, f"targets:{ref}")
+        identity = self._ctx.require(KV).get(f"profile:{ref}", {})
+        targets = read_mapping(self._ctx.require(KV), f"targets:{ref}")
         return {
             "identity": identity,
             "targets": [
@@ -148,7 +149,7 @@ class FeishuAccountDelivery:
         receive_id, kind = resolve_receive_id(target)
         if kind == "chat_id":
             return receive_id
-        known = read_mapping(self._ctx.kv, f"targets:{ref}")
+        known = read_mapping(self._ctx.require(KV), f"targets:{ref}")
         chats = [
             chat
             for chat, sender in known.items()

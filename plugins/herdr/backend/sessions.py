@@ -6,6 +6,7 @@ from collections.abc import Awaitable, Callable
 from shiori_sdk.plugin_services import ServicePluginContext
 from shiori_sdk.process_resources import PluginProcessResources
 from shiori_sdk.rpc import Concurrency
+from shiori_sdk.core.services import RPC
 
 from .cli import CommandError, HerdrCli
 
@@ -38,7 +39,9 @@ def register_session_rpc(ctx: ServicePluginContext, cli: HerdrCli) -> None:
     async def handle(_payload: dict[str, object]) -> dict[str, object]:
         return {"sessions": await list_sessions(cli)}
 
-    ctx.rpc.register("sessions.list", handle, concurrency=Concurrency.READ_ONLY)
+    ctx.require(RPC).register(
+        "sessions.list", handle, concurrency=Concurrency.READ_ONLY
+    )
 
 
 class SessionGate:

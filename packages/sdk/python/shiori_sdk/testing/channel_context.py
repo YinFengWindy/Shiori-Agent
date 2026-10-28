@@ -39,9 +39,16 @@ class FakeChannelDeclarations:
     """Read plugin-owned declarations for tests; host manifest validation remains separate."""
 
     def __init__(self, path: Path):
-        self.values = yaml.safe_load(
-            (path / "manifest.yaml").read_text(encoding="utf-8")
-        )
+        loaded = yaml.safe_load((path / "manifest.yaml").read_text(encoding="utf-8"))
+        if not isinstance(loaded, dict):
+            raise ValueError(f"manifest.yaml 格式错误，期望 dict: {path}")
+        self.values = loaded
+        # api: 4 declares channels under contributes. Tests read the same list
+        # the api: 2 manifests kept at the top level.
+        if "channels" not in self.values:
+            contributes = self.values.get("contributes")
+            if isinstance(contributes, dict) and "channels" in contributes:
+                self.values = {**self.values, "channels": contributes["channels"]}
 
     def channel_chat_types(self, name: str) -> tuple[ChatTypeDeclaration, ...]:
         """Return the public declarations that the real setup function consumes."""

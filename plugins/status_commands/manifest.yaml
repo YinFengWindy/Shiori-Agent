@@ -1,13 +1,11 @@
-api: 2
-runtime_api: ">=3.1.0 <4.0.0"
+api: 4
 id: status_commands
 display_name: 状态诊断命令
-category: system
-version: '0.1.1'
+version: 0.1.1
 desc: 会话记忆整理与 KVCache 遥测诊断命令
-capabilities:
-  - dependencies
-inject:
-  - commands
+category: system
 optional_dependencies:
   - observe
+inject:
+  - commands
+  - dependencies

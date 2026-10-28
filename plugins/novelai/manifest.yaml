@@ -1,11 +1,11 @@
-api: 2
-runtime_api: ">=3.1.2 <4.0.0"
+api: 4
 id: novelai
 display_name: NovelAI 生图
-version: '0.1.2'
-default_enabled: false
+version: 0.1.2
 desc: NovelAI 生图集成——手动生图、提示词标签库、生成历史、消息图片重生成与自动场景 CG
-capabilities:
+default_enabled: false
+config_model: config:NovelAIConfig
+inject:
   - background
   - http
   - tools
@@ -18,5 +18,6 @@ capabilities:
   - rpc
   - workspace
   - roles
-  - sessions
-config_model: "config:NovelAIConfig"
+  - session_store
+frontend:
+  entry: ui/index.tsx

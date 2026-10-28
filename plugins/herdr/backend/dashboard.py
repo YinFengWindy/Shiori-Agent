@@ -4,6 +4,7 @@ import asyncio
 
 from shiori_sdk.plugin_services import ServicePluginContext
 from shiori_sdk.rpc import Concurrency
+from shiori_sdk.core.services import BACKGROUND, PROCESS_RESOURCES, RPC
 
 from .models import CodingTask
 from .service import TaskService
@@ -20,18 +21,18 @@ class Dashboard:
 
     def register(self) -> None:
         """Register readers and controls only in the current plugin's RPC namespace."""
-        self.ctx.rpc.register(
+        self.ctx.require(RPC).register(
             "tasks.list", self.list_tasks, concurrency=Concurrency.READ_ONLY
         )
-        self.ctx.rpc.register(
+        self.ctx.require(RPC).register(
             "tasks.get", self.get_task, concurrency=Concurrency.READ_ONLY
         )
-        self.ctx.rpc.register("tasks.continue", self.continue_task)
-        self.ctx.rpc.register("tasks.cancel", self.cancel_task)
+        self.ctx.require(RPC).register("tasks.continue", self.continue_task)
+        self.ctx.require(RPC).register("tasks.cancel", self.cancel_task)
         self.ctx.effect("dashboard.subscription", self.service.subscribe(self.changed))
 
     def _require_active(self) -> None:
-        if not self.ctx.process_resources.active:
+        if not self.ctx.require(PROCESS_RESOURCES).active:
             raise RuntimeError("Herdr 配置已替换，请刷新看板")
 
     def _task(self, payload: dict[str, object]) -> CodingTask:
@@ -79,18 +80,18 @@ class Dashboard:
 
     def changed(self, task: CodingTask) -> None:
         """Candidates and retired generations never take over the active event sink."""
-        if not self.ctx.process_resources.active:
+        if not self.ctx.require(PROCESS_RESOURCES).active:
             return
         self._pending[task.id] = task.revision
         if self._emitting is None or self._emitting.done():
-            self._emitting = self.ctx.background.spawn(
+            self._emitting = self.ctx.require(BACKGROUND).spawn(
                 self._emit(), name="dashboard-updates"
             )
 
     async def _emit(self) -> None:
-        while self._pending and self.ctx.process_resources.active:
+        while self._pending and self.ctx.require(PROCESS_RESOURCES).active:
             pending, self._pending = self._pending, {}
             for task_id, revision in pending.items():
-                _ = await self.ctx.rpc.emit(
+                _ = await self.ctx.require(RPC).emit(
                     "tasks.changed", {"task_id": task_id, "revision": revision}
                 )

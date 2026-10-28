@@ -5,6 +5,7 @@ from typing import Any
 
 from shiori_sdk.plugin_services import ServicePluginContext
 from shiori_sdk.rpc import Concurrency
+from shiori_sdk.core.services import RPC
 
 from .agent_commands import USER
 from .agent_control import AgentControl, require_pane_id
@@ -73,16 +74,16 @@ class SessionAgents:
 
     def register(self) -> None:
         """Readers run concurrently; commands take the bounded external-call lane."""
-        self.ctx.rpc.register(
+        self.ctx.require(RPC).register(
             "agents.list", self.list_agents, concurrency=Concurrency.READ_ONLY
         )
-        self.ctx.rpc.register(
+        self.ctx.require(RPC).register(
             "agents.get", self.get_agent, concurrency=Concurrency.READ_ONLY
         )
-        self.ctx.rpc.register(
+        self.ctx.require(RPC).register(
             "agents.prompt", self.prompt_agent, concurrency=Concurrency.INTEGRATION
         )
-        self.ctx.rpc.register(
+        self.ctx.require(RPC).register(
             "agents.keys", self.send_keys, concurrency=Concurrency.INTEGRATION
         )
 

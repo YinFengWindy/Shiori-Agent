@@ -72,7 +72,8 @@ def test_manifest_preserves_historical_channel_name() -> None:
     assert manifest is not None
     assert manifest.values["id"] == "qq"
     assert manifest.values["display_name"] == "QQ（NapCat）"
-    assert set(manifest.values["capabilities"]) == {
+    assert manifest.values["api"] == 4
+    assert set(manifest.values["inject"]) == {
         "channels",
         "accounts",
         "avatars",

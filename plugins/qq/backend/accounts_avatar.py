@@ -1,7 +1,7 @@
 """QQ avatars fetched from the public QQ avatar service.
 
 The account's own avatar becomes a data URI for its host registration; the
-avatars of message senders and groups go to the host's cache (``ctx.avatars``).
+avatars of message senders and groups go to the host's cache (``ctx.require(AVATARS)``).
 """
 
 from __future__ import annotations

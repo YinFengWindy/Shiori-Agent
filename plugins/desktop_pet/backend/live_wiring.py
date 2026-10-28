@@ -5,6 +5,14 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from shiori_sdk.role_events import RoleDeleted
+from shiori_sdk.core.services import (
+    BACKGROUND,
+    EVENTS,
+    EXTERNAL_TURNS,
+    ROLES,
+    RPC,
+    WORKSPACE,
+)
 
 from .bilibili_live_api import BilibiliLiveApi
 from .bilibili_live_source import BilibiliDanmakuSource
@@ -30,14 +38,14 @@ def setup_live_engine(
 ) -> LiveEngine:
     """Build the engine on real Bilibili clients; disable ends its run."""
     api = BilibiliLiveApi()
-    configs = LiveConfigStore(ctx.workspace)
-    is_pet_role = RolePetStateStore(ctx.roles).is_enabled
+    configs = LiveConfigStore(ctx.require(WORKSPACE))
+    is_pet_role = RolePetStateStore(ctx.require(ROLES)).is_enabled
     engine = LiveEngine(
-        roles=ctx.roles,
+        roles=ctx.require(ROLES),
         gate=LiveStartGate(
-            roles=ctx.roles,
+            roles=ctx.require(ROLES),
             configs=configs,
-            voice=VoicePreferencesStore(ctx.workspace),
+            voice=VoicePreferencesStore(ctx.require(WORKSPACE)),
             is_pet_role=is_pet_role,
             credentials=login.require_credentials,
         ),
@@ -45,17 +53,17 @@ def setup_live_engine(
         api=api,
         deps=LiveSessionDeps(
             source=BilibiliDanmakuSource(api),
-            turns=ctx.external_turns,
+            turns=ctx.require(EXTERNAL_TURNS),
             output=output,
             credentials=login.require_credentials,
             still_bound=is_pet_role,
             clock=SystemClock(),
-            spawn=ctx.background.spawn,
+            spawn=ctx.require(BACKGROUND).spawn,
         ),
     )
     engine.prune_deleted_roles()
-    ctx.events.on(RoleDeleted, engine.on_role_deleted)
+    ctx.require(EVENTS).on(RoleDeleted, engine.on_role_deleted)
     ctx.effect("live_outcome_route", output.subscribe(engine.outcome))
     ctx.effect("live_engine", engine.shutdown)
-    register_live_rpc(ctx.rpc, engine, configs)
+    register_live_rpc(ctx.require(RPC), engine, configs)
     return engine

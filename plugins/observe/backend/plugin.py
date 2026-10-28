@@ -9,6 +9,7 @@ from shiori_sdk.context import ContextBudgetObserved
 from shiori_sdk.core.crash_reporting import CRASH_REPORTING
 from shiori_sdk.memory.committed import TurnCommitted
 from shiori_sdk.memory.events import MemoryWritten
+from shiori_sdk.core.services import BACKGROUND, EVENTS, WORKSPACE
 
 from .collector import GlobalErrorCollector
 from .retention import run_retention_if_needed
@@ -35,11 +36,13 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
     """
     from .storage import database_path
 
-    db_path = database_path(ctx.workspace)
+    db_path = database_path(ctx.require(WORKSPACE))
     writer = TraceWriter(db_path)
-    writer_task = ctx.background.spawn(writer.run(), name="writer")
+    writer_task = ctx.require(BACKGROUND).spawn(writer.run(), name="writer")
     await writer.wait_ready(writer_task)
-    _ = ctx.background.spawn(run_retention_if_needed(db_path), name="retention")
+    _ = ctx.require(BACKGROUND).spawn(
+        run_retention_if_needed(db_path), name="retention"
+    )
 
     collector = GlobalErrorCollector(writer, ctx.require(CRASH_REPORTING))
     # 安装过程本身可能部分成功，先登记清理以覆盖 setup 的失败回滚。
@@ -48,7 +51,9 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
 
     # TurnCommitted 的载荷含 list/dict，P3 仍只走领域总线。预算与记忆写入由
     # 发布方 emit 只读副本，这里 watch，避免和总线监听各写一次。
-    ctx.events.on(TurnCommitted, lambda event: _observe_turn_committed(writer, event))
+    ctx.require(EVENTS).on(
+        TurnCommitted, lambda event: _observe_turn_committed(writer, event)
+    )
 
     async def watch_budget(event: ContextBudgetObserved) -> None:
         writer.emit(event)

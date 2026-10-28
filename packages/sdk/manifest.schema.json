@@ -1,16 +1,16 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/YinFengWindy/Shiori-Agent/blob/main/packages/sdk/manifest.schema.json",
-  "title": "Shiori plugin manifest (api: 2)",
-  "description": "plugins/<id>/manifest.yaml 的现行格式。字段与取值以 apps/backend/agent/plugin_host/manifest.py（所有插件）和 package_contract.py / renderer_contract.py（声明 package_contract 的外部包）为准。schema 只描述字段形状；跨字段规则（渠道名与会话类型不重复、前缀互不包含、dependencies 与 optional_dependencies、inject 与 optional_inject 不重叠、入口文件存在且可解析、版本范围与宿主兼容）仍由解析代码判定。",
+  "title": "Shiori plugin manifest (api: 2 or 4)",
+  "description": "plugins/<id>/manifest.yaml 的现行格式。字段与取值以 apps/backend/agent/plugin_host/manifest.py（所有插件）和 package_contract.py / renderer_contract.py（声明 package_contract 的外部包）为准。api: 2 仍加载（拒绝非 api: 4 是 P4-5）。schema 只描述字段形状；跨字段规则（渠道名与会话类型不重复、前缀互不包含、dependencies 与 optional_dependencies、inject 与 optional_inject 不重叠、入口文件存在且可解析、版本范围与宿主兼容、contributes.channels 要求 inject 含 channels）仍由解析代码判定。",
   "type": "object",
   "additionalProperties": false,
-  "required": ["api", "capabilities"],
+  "required": ["api"],
   "properties": {
     "api": {
-      "description": "插件 API 版本，只接受整数 2。",
+      "description": "插件 API 版本。2 使用 capabilities；4 使用 inject / contributes / frontend。",
       "type": "integer",
-      "const": 2
+      "enum": [2, 4]
     },
     "package_contract": {
       "description": "外部包契约版本。声明后按外部包规则校验（package_contract.py）。",
@@ -35,7 +35,7 @@
       "default": "builtin"
     },
     "category": {
-      "description": "插件管理页分组。省略时声明 channels capability 即 channel，否则 feature。",
+      "description": "插件管理页分组。省略时声明了渠道即 channel，否则 feature。",
       "enum": ["feature", "channel", "system"]
     },
     "default_enabled": { "type": "boolean", "default": true },
@@ -108,6 +108,26 @@
       "description": "插件经 ctx.provide 发布的服务 Key 名称。",
       "$ref": "#/$defs/keyNames"
     },
+    "contributes": {
+      "description": "静态贡献。api: 4 的渠道声明写在 contributes.channels，并且 inject 含 channels。",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "channels": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/channel" }
+        }
+      }
+    },
+    "frontend": {
+      "description": "前端入口文件。宿主在 P7 前仍按目录发现 ui / background / surface。",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entry"],
+      "properties": {
+        "entry": { "$ref": "#/$defs/nonEmptyString" }
+      }
+    },
     "renderer": {
       "description": "外部包的已编译前端入口（renderer_contract.py）。",
       "type": "object",
@@ -157,6 +177,45 @@
     {
       "if": { "required": ["package_contract"] },
       "then": { "required": ["id", "version", "runtime_api", "entry"] }
+    },
+    {
+      "if": {
+        "properties": { "api": { "const": 2 } },
+        "required": ["api"]
+      },
+      "then": {
+        "required": ["capabilities"],
+        "properties": { "contributes": false }
+      }
+    },
+    {
+      "if": {
+        "properties": { "api": { "const": 4 } },
+        "required": ["api"]
+      },
+      "then": {
+        "properties": {
+          "capabilities": false,
+          "runtime_api": false,
+          "package_contract": false,
+          "renderer": false,
+          "channels": false
+        }
+      }
+    },
+    {
+      "if": {
+        "required": ["contributes"],
+        "properties": {
+          "contributes": {
+            "required": ["channels"],
+            "properties": { "channels": { "minItems": 1 } }
+          }
+        }
+      },
+      "then": {
+        "properties": { "inject": { "contains": { "const": "channels" } } }
+      }
     }
   ],
   "$defs": {
