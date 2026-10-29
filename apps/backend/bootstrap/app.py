@@ -148,10 +148,6 @@ class AppRuntime(RuntimeReloadMixin, RuntimeBackgroundMixin, RuntimeShutdownMixi
     def presence(self) -> PresenceStore | None:
         return self.core.presence if self.core is not None else None
 
-    @property
-    def relationship_runtime(self):
-        return self.core.relationship_runtime if self.core is not None else None
-
     async def start(self) -> None:
         if self._started:
             return

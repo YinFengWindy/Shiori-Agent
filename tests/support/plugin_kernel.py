@@ -25,6 +25,8 @@ from agent.plugin_host.core_keys import CoreModule, CoreProvide
 from agent.tools.registry import ToolRegistry
 from bootstrap.plugin_core import PluginCoreInputs, plugin_core_modules
 from bus.event_bus import EventBus
+from core.roles.affection_access import AffectionGetter
+from shiori_sdk.core.affection import AFFECTION
 from shiori_sdk.kernel import Key
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
@@ -40,7 +42,6 @@ def host_kernel(
     provider: Any = None,
     model: str | None = None,
     http: Any = None,
-    relationship_runtime: Any = None,
     session_manager: Any = None,
     light_provider: Any = None,
     light_model: str | None = None,
@@ -63,10 +64,12 @@ def host_kernel(
     registry over that bus (pass one to read what plugins registered).
     ``withheld`` keys are dropped from the core
     provide list, as if no core module provided them. ``options`` are the
-    remaining ``PluginKernel`` keyword arguments.
+    remaining ``PluginKernel`` keyword arguments. As in bootstrap, the
+    core's ``affection`` getter reads this kernel's ``AFFECTION``.
     """
     generation = settings if settings is not None else PluginGenerationSettings()
     bus = event_bus if event_bus is not None else EventBus()
+    affection = AffectionGetter()
     inputs = PluginCoreInputs(
         plugin_dirs=tuple(plugin_dirs),
         event_bus=bus,
@@ -76,7 +79,7 @@ def host_kernel(
         tools=tools,
         role_store=role_store,
         session_manager=session_manager,
-        relationship_runtime=relationship_runtime,
+        affection=affection,
         role_runtime_registry=role_runtime_registry,
         provider=provider,
         model=model,
@@ -87,7 +90,7 @@ def host_kernel(
         http=http,
         process_resources=generation.process_resources,
     )
-    return PluginKernel(
+    kernel = PluginKernel(
         plugin_dirs,
         settings=generation,
         core=tuple(
@@ -96,6 +99,8 @@ def host_kernel(
         core_checks=partial(install_core_checks, workspace=generation.workspace),
         **options,
     )
+    affection.bind(lambda: kernel.kernel.get(AFFECTION))
+    return kernel
 
 
 def _withholding(module: CoreModule, withheld: frozenset[Key[Any]]) -> CoreModule:
@@ -125,7 +130,6 @@ def make_kernel(
     model: str | None = None,
     light_provider: object = None,
     light_model: str | None = None,
-    relationship_runtime: object = None,
     rpc: PluginRpcRegistry[Any] | None = None,
 ) -> PluginKernel:
     """Creates a kernel over real host services for the given plugin roots.
@@ -145,7 +149,6 @@ def make_kernel(
         ),
         provider=provider,
         model=model,
-        relationship_runtime=relationship_runtime,
         tools=tools,
         session_manager=session_manager,
         light_provider=light_provider,

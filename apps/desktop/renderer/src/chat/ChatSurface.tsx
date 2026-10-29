@@ -45,6 +45,7 @@ import {
   cx,
   sidebarContentMotionClass,
   useLatestRef,
+  type AffectionSummary,
   type RoleRecord,
   type SessionMessage,
   type SessionPayload,
@@ -52,7 +53,6 @@ import {
 import { sidebarTrackMotionClass } from "../shared/styles";
 import { useWindowActivity } from "../shared/useWindowActivity";
 import type { ChatSendRequest } from "../shared/types";
-import type { AffectionDisplay } from "./affectionDisplay";
 
 type ChatSurfaceProps = {
   activeRole: RoleRecord | null;
@@ -73,7 +73,7 @@ type ChatSurfaceProps = {
   roleSelfView: string;
   relationshipTags: string[];
   lonelinessValue: number;
-  affection: AffectionDisplay | null;
+  affection: AffectionSummary | null;
   conversationEndRef: React.RefObject<HTMLDivElement | null>;
   headerTitle: string;
   highlightedMessageKey: string;

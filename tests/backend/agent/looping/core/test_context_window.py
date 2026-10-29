@@ -1,5 +1,6 @@
 """Host admission, actual scope, shared role gate, and command lifecycle isolation."""
 
+from tests.support.generation_getters import bound_affection, bound_reply_policy
 import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
@@ -55,6 +56,7 @@ def _control(tmp_path, *, configured=True):
         ),
     )
     loop = _Harness()
+    loop.reply_policy, loop.affection = bound_reply_policy(), bound_affection()
     loop._role_runtime_registry = RoleRuntimeRegistry(
         RoleRepository(roles), model_resolver=models
     )

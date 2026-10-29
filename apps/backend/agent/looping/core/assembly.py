@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, cast
+from typing import cast
 from agent.context import ContextBuilder
 from agent.core.passive_turn import (
     AgentCore,
@@ -113,8 +113,8 @@ class _AssemblyMixin:
         self._configure_stream_events()
         # Bound in build_core to this generation's kernel. Turns copy them
         # onto the task so a turn without a runtime lease still sees them.
-        self.reply_policy: Any = None
-        self.affection: Any = None
+        self.reply_policy = deps.reply_policy
+        self.affection = deps.affection
 
     def share_execution(self, previous: _AssemblyMixin) -> None:
         """Preserves process-wide cancellation and resume state across generations."""

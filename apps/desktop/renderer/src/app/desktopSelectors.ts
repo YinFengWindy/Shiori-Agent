@@ -10,8 +10,7 @@ import { resolveChatHeaderTitle, resolveVisibleChatSessionKey } from "../chat/ch
 import { resolveCurrentMood, resolveCurrentMoodUpdatedAt, resolveCurrentThought, resolveMoodIllustration, roleSession } from "../roles/roleMoodSelectors";
 import { isRoleFormDirty } from "../roles/roleFormState";
 import { toFileUrl } from "../shared/format";
-import { resolveAffectionDisplay } from "../chat/affectionDisplay";
-import type { LonelinessRuntime, RelationshipSnapshot, RoleRecord, SessionPayload } from "@yinfengwindy/shiori-sdk";
+import type { AffectionSummary, LonelinessRuntime, RelationshipSnapshot, RoleRecord, SessionPayload } from "@yinfengwindy/shiori-sdk";
 import type { AppMainView, RoleFormState } from "../shared/types";
 
 type BuildDesktopViewModelArgs = {
@@ -99,7 +98,8 @@ export function buildDesktopViewModel({
   );
   const roleSelfView = resolveCurrentThought(currentRoleSession, activeRole);
   // The session refreshes after every turn; the role payload covers a session not yet loaded.
-  const affection = resolveAffectionDisplay(currentRoleSession?.metadata.affection ?? activeRole?.affection);
+  // The affection plugin's meter derives its own view from this summary.
+  const affection: AffectionSummary | null = currentRoleSession?.metadata.affection ?? activeRole?.affection ?? null;
   const relationshipTags = Array.isArray(relationshipSnapshot?.relation_tags)
     ? relationshipSnapshot.relation_tags
       .filter((tag): tag is string => typeof tag === "string")

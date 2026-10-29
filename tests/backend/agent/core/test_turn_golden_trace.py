@@ -58,7 +58,9 @@ from bus.event_bus import EventBus
 from conversation.service import desktop_thread_id
 from core.common.channel_directory import ChannelDirectory
 from core.roles import RoleRepository, RoleRuntimeRegistry, RoleStore
+from core.roles.affection_access import AffectionGetter
 from core.roles.reply_policy import ReplyPolicyGetter
+from shiori_sdk.core.affection import AFFECTION
 from plugins.natural_chat.backend.prompts import NATURAL_CHAT_PROMPT
 from prompts.natural_chat import FINISH_REPLY_TOOL_NAME
 from session.manager import SessionManager
@@ -308,7 +310,10 @@ async def golden_host(
 ) -> AsyncGenerator[GoldenHost]:
     """A real ``AgentLoop`` with every ``PLUGINS`` entry loaded by the kernel.
 
-    Without ``plugin_root`` no plugin generation is bound: the core runs alone.
+    Without ``plugin_root`` no plugin is loaded: the affection socket is
+    empty, and the reply-policy socket holds ``_SequencePolicy`` only when the
+    role selects natural chat, so the core's multi-message protocol runs with
+    no plugin consuming its markers.
     """
     _seed_workspace(workspace, natural_chat=natural_chat)
     roles = RoleStore(workspace)
@@ -336,8 +341,11 @@ async def golden_host(
         memory_services = MemoryServices(current_engine=lambda: memory_engine)
         retrieval_pipeline = retrieval
         context = None
+    policy, affection = ReplyPolicyGetter(), AffectionGetter()
     loop = AgentLoop(
         AgentLoopDeps(
+            reply_policy=policy,
+            affection=affection,
             bus=MagicMock(),
             provider=cast(Any, provider),
             light_provider=cast(Any, provider),
@@ -361,6 +369,9 @@ async def golden_host(
     host = GoldenHost(workspace, provider, shell, lookup, retrieval, manager, loop)
     observe_steps(bus, host.steps)
     if plugin_root is None:
+        selected = _SequencePolicy() if natural_chat else None
+        policy.bind(lambda: selected)
+        affection.bind(lambda: None)
         try:
             yield host
         finally:
@@ -383,11 +394,10 @@ async def golden_host(
     await kernel.load_all()
     assert sorted(kernel.active_plugin_ids) == sorted(PLUGINS)
     loop.bind_kernel(lambda: kernel.kernel)
-    # Production binds this getter, so the truth table applies: the plugin
-    # must be present as well as the role flag. Core-only leaves it unbound.
-    policy = ReplyPolicyGetter()
+    # Bound as in production, so the truth table applies: the plugin must be
+    # present as well as the role flag.
     policy.bind(lambda: kernel.kernel.get(REPLY_POLICY))
-    loop.reply_policy = policy
+    affection.bind(lambda: kernel.kernel.get(AFFECTION))
     generate = tools.get_tool("generate_image")
     assert generate is not None
 
@@ -400,6 +410,16 @@ async def golden_host(
     finally:
         await kernel.terminate_all()
         await bus.aclose()
+
+
+class _SequencePolicy:
+    """A filled ``REPLY_POLICY`` socket that adds no prompt text."""
+
+    def passive_prompt(self) -> str:
+        return ""
+
+    def draft_prompt(self) -> str:
+        return ""
 
 
 def _reply(content: str) -> LLMResponse:

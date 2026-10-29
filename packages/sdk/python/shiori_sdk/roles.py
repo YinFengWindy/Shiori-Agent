@@ -84,9 +84,3 @@ class Roles(Protocol):
         Unknown ``namespace`` fails. Only ``proactive`` is stored today.
         """
         ...
-
-
-class SceneObservations(Protocol):
-    """Request observations only while the current plugin generation is alive."""
-
-    def request(self, predicate: Callable[[RoleView], bool]) -> None: ...

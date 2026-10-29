@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from core.roles.affection_access import current_affection
+from core.roles.affection_access import AffectionGetter
 
 
 class DesktopRolePresenter:
@@ -12,18 +12,18 @@ class DesktopRolePresenter:
     def __init__(
         self,
         role_store: Any,
-        relationship_runtime: Any | None = None,
+        affection: AffectionGetter,
         *,
         last_message_for_role: Callable[[str], dict[str, Any] | None] | None = None,
     ) -> None:
         self._role_store = role_store
-        self._relationship_runtime = relationship_runtime
+        self._affection = affection
         self._last_message_for_role = last_message_for_role
 
     def serialize(self, role: Any) -> dict[str, Any]:
         """Returns role fields plus desktop asset and runtime state views."""
         payload = role.to_dict()
-        # Stage guidance has its own bridge method (roles.affection.stagePrompts.*).
+        # Stage guidance is the affection plugin's RPC (stage_prompts_get/set).
         payload.pop("affection_stage_prompts", None)
         avatar = payload.get("avatar")
         illustrations = payload.get("illustrations") or []
@@ -44,7 +44,7 @@ class DesktopRolePresenter:
             if isinstance(relative_path, str) and relative_path
         ]
         payload["plugin_state"] = self._role_store.extensions.project(role.id)
-        affection = current_affection(self._relationship_runtime)
+        affection = self._affection()
         if affection is not None:
             snapshot = affection.read_snapshot(role.id)
             runtime = affection.current_loneliness_runtime(role.id)

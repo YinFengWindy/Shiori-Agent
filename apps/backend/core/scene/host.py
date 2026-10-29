@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 from agent.core.passive_support import to_history_messages
@@ -13,10 +14,11 @@ from shiori_sdk.core.scene import SceneHistoryMessage, SceneSubject
 
 
 class HostSceneAdapter:
-    """Role identity, follow-up demand and recent proactive history.
+    """Role identity, follow-up demand, recent proactive history, publication.
 
     The proactive strategy flag stays on the host until proactive leaves.
     ``followup_wanted`` is that flag together with the role's own switch.
+    One adapter serves one generation; ``publish`` marks it published.
     """
 
     def __init__(
@@ -31,6 +33,8 @@ class HostSceneAdapter:
         self._roles = roles
         self._sessions = sessions
         self._scene_followup = scene_followup
+        self._published = False
+        self._starts: dict[object, Callable[[], None]] = {}
 
     def subject(self, session_key: str, role_id: str) -> SceneSubject | None:
         """The role of this turn, from ``role_id`` or the session."""
@@ -79,6 +83,29 @@ class HostSceneAdapter:
             SceneHistoryMessage(role=item.role, content=item.content)
             for item in messages
         )
+
+    def on_published(self, start: Callable[[], None]) -> Callable[[], None]:
+        """Runs ``start`` at publication, or now in a published generation."""
+        if self._published:
+            start()
+            return lambda: None
+        key = object()
+        self._starts[key] = start
+
+        def dispose() -> None:
+            self._starts.pop(key, None)
+
+        return dispose
+
+    def publish(self) -> None:
+        """Marks the generation published and runs the waiting starts once."""
+        if self._published:
+            return
+        self._published = True
+        starts = tuple(self._starts.values())
+        self._starts.clear()
+        for start in starts:
+            start()
 
     def legacy_state_paths(self) -> tuple[Path, ...]:
         """Roots a first live write may import ``scene_awareness`` state from."""

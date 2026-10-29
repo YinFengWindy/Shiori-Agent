@@ -20,6 +20,7 @@ from shiori_sdk.accounts.models import AccountResponseRules
 from agent.provider import LLMResponse, ToolCall
 from tests.support.host_external_turns import ExternalTurnHost
 from tests.support.chat_replies import chat_reply
+from tests.support.generation_getters import bound_affection, bound_reply_policy
 from session.manager import SessionManager
 
 
@@ -207,6 +208,8 @@ async def proactive_task(
             shared_tools=env.host.loop.tools,
             recent_chat_fn=recent_chat,
         ),
+        # The tick runs under the candidate's lease, which carries its getters.
+        bind_getters=False,
     )
     pipeline._turn_orchestrator = owner
     registry = env.host.loop.role_runtime_registry
@@ -515,6 +518,7 @@ async def test_desktop_supplements_stop_proactive_work_and_publish_only_committe
     async with natural_dispatcher(tmp_path, monkeypatch, stage=stage) as env:
         bridge = DesktopBridgeService(
             workspace=tmp_path,
+            affection=bound_affection(),
             role_store=env.host.roles,
             session_manager=env.host.manager,
             agent_loop=env.host.loop,
@@ -724,9 +728,19 @@ async def until(predicate):
 
 
 @asynccontextmanager
-async def natural_dispatcher(tmp_path, monkeypatch, *, stage="pacing", enabled=True):
-    """Real admission, dispatcher, role gate, reasoner, bus acknowledgements and DB."""
+async def natural_dispatcher(
+    tmp_path, monkeypatch, *, stage="pacing", enabled=True, natural_chat_plugin=True
+):
+    """Real admission, dispatcher, role gate, reasoner, bus acknowledgements and DB.
+
+    ``natural_chat_plugin`` fills the generation's reply-policy socket with the
+    plugin's policy, as an enabled natural_chat plugin does.
+    """
+    from plugins.natural_chat.backend.plugin import NaturalChatPolicy
+
     host = ExternalTurnHost(tmp_path)
+    policy = bound_reply_policy(NaturalChatPolicy() if natural_chat_plugin else None)
+    host.loop.reply_policy = policy
     host.roles.update_role("mira", runtime_config={"natural_chat_enabled": enabled})
     host.roles.create_role(
         role_id="other",
@@ -825,7 +839,10 @@ async def natural_dispatcher(tmp_path, monkeypatch, *, stage="pacing", enabled=T
     candidate = RuntimeCandidate(
         1,
         SimpleNamespace(
-            loop=host.loop, role_runtime_registry=host.loop.role_runtime_registry
+            loop=host.loop,
+            role_runtime_registry=host.loop.role_runtime_registry,
+            reply_policy=policy,
+            affection=host.loop.affection,
         ),
         SimpleNamespace(),
     )
@@ -1013,6 +1030,25 @@ async def test_flag_off_keeps_ordinary_serial_chat_behavior(tmp_path, monkeypatc
         ]
 
 
+async def test_disabled_plugin_keeps_a_selecting_role_on_single_replies(
+    tmp_path, monkeypatch
+):
+    """P3-9: plugin off with the role flag on still answers, in one message.
+
+    Admission must read the same generation policy the turn refreshes
+    against; otherwise the turn invalidates its own reply before any request.
+    """
+    async with natural_dispatcher(
+        tmp_path, monkeypatch, stage="none", natural_chat_plugin=False
+    ) as env:
+        await env.receive("first")
+        await until(lambda: env.bus.inbound_size == 0)
+        await until(lambda: env.candidate.references == 0)
+        await env.bus.drain_outbound()
+        assert len(env.requests) == 1
+        assert [m.content for m in env.sent] == ["prefix\n<message-break/>\ntail"]
+
+
 async def test_supplement_finishes_only_started_tool_and_next_turn_sees_its_fact(
     tmp_path, monkeypatch
 ):
@@ -1167,6 +1203,7 @@ async def test_spawn_completion_keeps_internal_tracking_and_dispatcher_alive(
 
     bus = MessageBus()
     loop = object.__new__(AgentLoop)
+    loop.reply_policy, loop.affection = bound_reply_policy(), bound_affection()
     loop.bus = bus
     loop._event_bus = EventBus()
     loop._processing_state = None

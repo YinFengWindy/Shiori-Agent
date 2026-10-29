@@ -8,17 +8,15 @@ A table this editor cannot locate raises and leaves the file unchanged.
 
 from __future__ import annotations
 
-import importlib.util
-import sys
 import tomllib
 from pathlib import Path
 from typing import Any
 
+from bootstrap.config_text_editor import plugin_table_editor
 from shiori_sdk.files.text import atomic_save_text
 
 SCENE_PLUGIN_ID = "scene"
 OBSERVATION_ENABLED_KEY = "observation_enabled"
-_EDITOR_MODULE = "_shiori_scene_migration_plugin_config_text"
 _UNLOCATABLE_MESSAGE = (
     "{path} 里的 agent.scene_observation 或 plugins.scene 写成了内联表或点分键，"
     "无法自动迁移；请先改成独立的 [agent.scene_observation] 与 [plugins.scene] 表"
@@ -39,7 +37,7 @@ def migrate_legacy_scene_config(path: Path) -> None:
         return
     enabled = _legacy_enabled(agent["scene_observation"])
     existing = _existing_plugin_values(data)
-    editor = _toml_editor()
+    editor = plugin_table_editor()
     updated = text
     if OBSERVATION_ENABLED_KEY not in existing:
         values = {**existing, OBSERVATION_ENABLED_KEY: enabled}
@@ -69,19 +67,3 @@ def _existing_plugin_values(data: dict[str, Any]) -> dict[str, Any]:
     plugins = data.get("plugins")
     existing = plugins.get(SCENE_PLUGIN_ID) if isinstance(plugins, dict) else None
     return dict(existing) if isinstance(existing, dict) else {}
-
-
-def _toml_editor() -> Any:
-    cached = sys.modules.get(_EDITOR_MODULE)
-    if cached is not None:
-        return cached
-    path = (
-        Path(__file__).resolve().parents[1] / "desktop_bridge" / "plugin_config_text.py"
-    )
-    spec = importlib.util.spec_from_file_location(_EDITOR_MODULE, path)
-    if spec is None or spec.loader is None:
-        raise ImportError(f"无法加载 TOML 表编辑器: {path}")
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[_EDITOR_MODULE] = module
-    spec.loader.exec_module(module)
-    return module

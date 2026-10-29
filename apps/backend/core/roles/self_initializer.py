@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 
 from core.memory.markdown_schema import normalize_memory_document
 
+from .affection_access import AffectionGetter
 from .memory_service import RoleMemoryService
 from .model_runtime import RoleModelSnapshot
 from shiori_sdk.values import now_iso
@@ -34,7 +35,7 @@ class RoleSelfInitializer:
         self,
         store: RoleStore,
         generator: LlmRoleSelfSeedGenerator,
-        affection: Any | None = None,
+        affection: AffectionGetter,
     ):
         self._store = store
         self._memory = RoleMemoryService(store.workspace)
@@ -108,11 +109,7 @@ class RoleSelfInitializer:
     async def _ensure_affection(
         self, role: RoleRecord, snapshot: RoleModelSnapshot
     ) -> None:
-        from core.roles.affection_access import current_affection
-
-        affection = (
-            self._affection if self._affection is not None else current_affection()
-        )
+        affection = self._affection()
         if affection is None:
             return
         try:

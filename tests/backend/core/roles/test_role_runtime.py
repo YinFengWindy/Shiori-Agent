@@ -20,13 +20,16 @@ from core.roles.model_runtime import RoleModelRuntime
 from core.roles.self_initializer import RoleSelfInitializer
 from core.roles.self_seed import LlmRoleSelfSeedGenerator
 from bus.event_bus import EventBus
+from tests.support.generation_getters import bound_affection
 from bus.events_context import ContextWindowChanged
 
 
 def _self_initializer(store: RoleStore) -> RoleSelfInitializer:
     # Affection seeding has its own tests; these cover the role gate around SELF.
     affection = SimpleNamespace(ensure_initialized=AsyncMock())
-    return RoleSelfInitializer(store, LlmRoleSelfSeedGenerator(), affection)
+    return RoleSelfInitializer(
+        store, LlmRoleSelfSeedGenerator(), bound_affection(affection)
+    )
 
 
 @pytest.mark.parametrize("fails", [False, True])

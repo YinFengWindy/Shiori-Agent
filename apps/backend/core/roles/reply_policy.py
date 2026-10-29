@@ -3,10 +3,8 @@
 The getter is owned by one runtime generation and bound to that generation's
 kernel. Turns set it for their task. Desktop admission and proactive drafts
 that already hold the runtime lease read the same object from the lease.
-Before anything is bound, the role flag alone still selects the core
-multi-message protocol, so a core-only turn keeps working. Once bound, a
-missing provider forces a single reply even if the role flag is on.
-Prompt text is read only from a bound policy.
+Reading before anything is bound raises. Once bound, a missing provider
+forces a single reply even if the role flag is on.
 """
 
 from __future__ import annotations
@@ -66,37 +64,34 @@ def active_reply_policy_getter() -> ReplyPolicyGetter | None:
     return getter if isinstance(getter, ReplyPolicyGetter) else None
 
 
+def _current_policy() -> ReplyPolicy | None:
+    """This task's bound policy, ``None`` for an empty socket.
+
+    Raises when no getter is reachable or it is not bound yet: deciding the
+    protocol before the generation's plugins are known is a wiring bug.
+    """
+    getter = active_reply_policy_getter()
+    if getter is None:
+        raise RuntimeError("当前任务没有可用的即时聊天策略 getter")
+    return getter()
+
+
 def natural_chat_selected(role: RoleRecord | None) -> bool:
     """Whether this turn uses the natural-chat prompts and sequence admission.
 
-    Unbound, the role flag is the protocol switch. Bound, the plugin must be
-    present as well: a disabled plugin does not select, and the reply stays
-    one message.
+    Both the plugin and the role flag must be on (P3-9 table). A disabled
+    plugin does not select, and the reply stays one message.
     """
-    flag = natural_chat_enabled(role)
-    getter = active_reply_policy_getter()
-    if getter is None or not getter.bound:
-        return flag
-    return getter() is not None and flag
+    return _current_policy() is not None and natural_chat_enabled(role)
 
 
 def natural_chat_passive_prompt() -> str | None:
-    """The chat prompt, only when a policy is bound and present."""
-    getter = active_reply_policy_getter()
-    if getter is None or not getter.bound:
-        return None
-    policy = getter()
-    if policy is None:
-        return None
-    return policy.passive_prompt()
+    """The chat prompt, or ``None`` while the plugin is off."""
+    policy = _current_policy()
+    return policy.passive_prompt() if policy is not None else None
 
 
 def natural_chat_draft_prompt() -> str | None:
-    """The proactive draft prompt, only when a policy is bound and present."""
-    getter = active_reply_policy_getter()
-    if getter is None or not getter.bound:
-        return None
-    policy = getter()
-    if policy is None:
-        return None
-    return policy.draft_prompt()
+    """The proactive draft prompt, or ``None`` while the plugin is off."""
+    policy = _current_policy()
+    return policy.draft_prompt() if policy is not None else None

@@ -374,7 +374,7 @@ class TurnOrchestrator:
                     self._session.presence.record_proactive_sent_by_role(role_id)
                 else:
                     self._session.presence.record_proactive_sent(session_key)
-            affection = current_affection(self._session.relationship_runtime)
+            affection = current_affection()
             if affection is not None:
                 affection.handle_proactive_sent(session_key)
             await self._run_effects(result.success_side_effects)
@@ -447,7 +447,7 @@ class TurnOrchestrator:
                 role_id = str(plan.origin.metadata.get("role_id") or "")
                 if self._session.presence:
                     self._session.presence.record_proactive_sent_by_role(role_id)
-                affection = current_affection(self._session.relationship_runtime)
+                affection = current_affection()
                 if affection is not None:
                     affection.handle_proactive_sent(session.key)
                 if self._event_bus is not None:

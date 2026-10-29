@@ -3,6 +3,7 @@
  * and the props each contributed component receives.
  */
 import type React from "react";
+import type { AffectionSummary } from "../domain/role";
 import type { PluginRpcClient } from "../rpc";
 import type { PluginChatImageActionProps, PluginRoleSettingsContribution } from "./features";
 import type { PluginHostServices } from "./hostServices";
@@ -67,11 +68,9 @@ export type PluginRoleAssetsContribution = {
 /** Plugin-authored account controls receive a scoped RPC client and host services. */
 export type PluginAccountDetailComponentProps = PluginAccountDetailProps & PluginInjectedProps;
 
-/** The chat sidebar passes the stage and its place on the -100–100 range. */
+/** The chat sidebar passes the current role's affection summary as the host received it. */
 export type PluginChatAffectionProps = {
-  stage: string;
-  /** Bar width, 0–100. */
-  percent: number;
+  summary: AffectionSummary;
 };
 
 /** The role page tells the affection tab which role is open and whether the bridge is up. */

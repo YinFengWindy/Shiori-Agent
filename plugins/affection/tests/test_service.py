@@ -1,54 +1,23 @@
+"""Relationship runtime: snapshots, loneliness, proactive triggers and heartbeat."""
+
 from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 
-from conversation.service import desktop_thread_id
-from shiori_sdk.channels.threads import network_thread_id
-from core.roles import RoleStore
-from core.roles.affection_host import HostAffectionSources
 from plugins.affection.backend.relationship import loops as loops_module
 from plugins.affection.backend.relationship import (
     LonelinessHeartbeatLoop,
     RoleRelationshipRuntimeService,
 )
-from proactive_v2.presence import PresenceStore
-from session.manager import SessionManager
 
 
 def _utc(year: int, month: int, day: int, hour: int = 0, minute: int = 0) -> datetime:
     return datetime(year, month, day, hour, minute, tzinfo=timezone.utc)
-
-
-def _runtime(
-    tmp_path: Path,
-) -> tuple[RoleRelationshipRuntimeService, SessionManager, PresenceStore]:
-    session_manager = SessionManager(tmp_path)
-    presence = PresenceStore(session_manager._store)
-    runtime = RoleRelationshipRuntimeService(
-        HostAffectionSources(
-            workspace=tmp_path,
-            role_store=RoleStore(tmp_path),
-            session_manager=session_manager,
-            presence=presence,
-        )
-    )
-    return runtime, session_manager, presence
-
-
-def _seed_role(tmp_path: Path, *, role_id: str = "mira") -> None:
-    role_store = RoleStore(tmp_path)
-    role_store.create_role(
-        role_id=role_id,
-        name="Mira",
-        description="",
-        system_prompt="you are mira",
-    )
 
 
 def _init_affection(
@@ -93,9 +62,8 @@ def test_normalize_message_count_accepts_json_scalars(value: object, expected: i
     assert RoleRelationshipRuntimeService._normalize_message_count(value) == expected
 
 
-def test_snapshot_rejects_non_first_person_self_view(tmp_path: Path):
-    _seed_role(tmp_path)
-    runtime, _, _ = _runtime(tmp_path)
+def test_snapshot_rejects_non_first_person_self_view(host):
+    runtime = RoleRelationshipRuntimeService(host)
 
     with pytest.raises(ValueError):
         runtime.write_snapshot(
@@ -107,9 +75,8 @@ def test_snapshot_rejects_non_first_person_self_view(tmp_path: Path):
         )
 
 
-def test_legacy_snapshot_file_with_closeness_loads_without_it(tmp_path: Path):
-    _seed_role(tmp_path)
-    runtime, _, _ = _runtime(tmp_path)
+def test_legacy_snapshot_file_with_closeness_loads_without_it(host):
+    runtime = RoleRelationshipRuntimeService(host)
     legacy = _snapshot_payload()
     legacy["internal_profile"]["relation_state"]["closeness"] = 0.9
     path = runtime.snapshot_path("mira")
@@ -124,9 +91,8 @@ def test_legacy_snapshot_file_with_closeness_loads_without_it(tmp_path: Path):
     assert relation_state["dependence"] == 0.62
 
 
-def test_user_message_clears_unanswered_state_and_reduces_loneliness(tmp_path: Path):
-    _seed_role(tmp_path)
-    runtime, session_manager, presence = _runtime(tmp_path)
+def test_user_message_clears_unanswered_state_and_reduces_loneliness(host):
+    runtime = RoleRelationshipRuntimeService(host)
     runtime.write_snapshot("mira", _snapshot_payload())
     runtime.write_loneliness_runtime(
         "mira",
@@ -144,10 +110,8 @@ def test_user_message_clears_unanswered_state_and_reduces_loneliness(tmp_path: P
     )
 
     now = _utc(2026, 7, 6, 12, 0)
-    presence.record_user_message(session_manager.role_session_key("mira"), now=now)
-    updated = runtime.handle_user_message(
-        session_manager.role_session_key("mira"), now=now
-    )
+    host.user_at[host.role_session_key("mira")] = now
+    updated = runtime.handle_user_message(host.role_session_key("mira"), now=now)
 
     assert updated is not None
     assert updated["awaiting_reply_after_proactive"] is False
@@ -157,16 +121,15 @@ def test_user_message_clears_unanswered_state_and_reduces_loneliness(tmp_path: P
         datetime.fromisoformat(updated["last_user_at"]).astimezone(timezone.utc) == now
     )
     scene_due, scene_meta = runtime.should_trigger_scene_followup(
-        session_manager.role_session_key("mira"),
+        host.role_session_key("mira"),
         now=now + timedelta(minutes=5),
     )
     assert scene_due is True
     assert scene_meta["attempt_index"] == 0
 
 
-def test_snapshot_growth_profile_is_raised_to_default_floor(tmp_path: Path):
-    _seed_role(tmp_path)
-    runtime, _, _ = _runtime(tmp_path)
+def test_snapshot_growth_profile_is_raised_to_default_floor(host):
+    runtime = RoleRelationshipRuntimeService(host)
     payload = _snapshot_payload()
     payload["internal_profile"]["behavior_profile"]["loneliness_growth_base"] = 1.2
     payload["internal_profile"]["behavior_profile"][
@@ -180,11 +143,8 @@ def test_snapshot_growth_profile_is_raised_to_default_floor(tmp_path: Path):
     assert profile["loneliness_growth_when_unanswered"] == 2.4
 
 
-def test_current_loneliness_runtime_grows_once_per_complete_ten_minute_tick(
-    tmp_path: Path,
-):
-    _seed_role(tmp_path)
-    runtime, _, _ = _runtime(tmp_path)
+def test_current_loneliness_runtime_grows_once_per_complete_ten_minute_tick(host):
+    runtime = RoleRelationshipRuntimeService(host)
     runtime.write_snapshot("mira", _snapshot_payload())
     _init_affection(runtime, 75)
     runtime.write_loneliness_runtime(
@@ -233,9 +193,8 @@ def test_current_loneliness_runtime_grows_once_per_complete_ten_minute_tick(
     ) == _utc(2026, 7, 6, 0, 20)
 
 
-def test_current_loneliness_runtime_adds_unanswered_growth_per_tick(tmp_path: Path):
-    _seed_role(tmp_path)
-    runtime, _, _ = _runtime(tmp_path)
+def test_current_loneliness_runtime_adds_unanswered_growth_per_tick(host):
+    runtime = RoleRelationshipRuntimeService(host)
     runtime.write_snapshot("mira", _snapshot_payload())
     _init_affection(runtime, 75)
     runtime.write_loneliness_runtime(
@@ -267,10 +226,9 @@ def test_current_loneliness_runtime_adds_unanswered_growth_per_tick(tmp_path: Pa
 
 @pytest.mark.parametrize("affection", [None, 59])
 def test_roles_below_intimate_affection_do_not_accumulate_loneliness(
-    tmp_path: Path, affection: int | None
+    host, affection: int | None
 ):
-    _seed_role(tmp_path)
-    runtime, _, _ = _runtime(tmp_path)
+    runtime = RoleRelationshipRuntimeService(host)
     runtime.write_snapshot("mira", _snapshot_payload())
     if affection is not None:
         _init_affection(runtime, affection)
@@ -303,9 +261,8 @@ def test_roles_below_intimate_affection_do_not_accumulate_loneliness(
     ) == _utc(2026, 7, 6, 1, 0)
 
 
-def test_intimate_stage_lower_bound_accumulates_loneliness(tmp_path: Path):
-    _seed_role(tmp_path)
-    runtime, _, _ = _runtime(tmp_path)
+def test_intimate_stage_lower_bound_accumulates_loneliness(host):
+    runtime = RoleRelationshipRuntimeService(host)
     runtime.write_snapshot("mira", _snapshot_payload())
     _init_affection(runtime, 60)
     runtime.write_loneliness_runtime(
@@ -329,15 +286,12 @@ def test_intimate_stage_lower_bound_accumulates_loneliness(tmp_path: Path):
     assert updated["loneliness_value"] == 24
 
 
-def test_proactive_sent_marks_unanswered_and_sets_cooldown(tmp_path: Path):
-    _seed_role(tmp_path)
-    runtime, session_manager, _ = _runtime(tmp_path)
+def test_proactive_sent_marks_unanswered_and_sets_cooldown(host):
+    runtime = RoleRelationshipRuntimeService(host)
     runtime.write_snapshot("mira", _snapshot_payload())
 
     now = _utc(2026, 7, 6, 8, 0)
-    updated = runtime.handle_proactive_sent(
-        session_manager.role_session_key("mira"), now=now
-    )
+    updated = runtime.handle_proactive_sent(host.role_session_key("mira"), now=now)
 
     assert updated is not None
     assert updated["awaiting_reply_after_proactive"] is True
@@ -354,9 +308,8 @@ def test_proactive_sent_marks_unanswered_and_sets_cooldown(tmp_path: Path):
     ) == now + timedelta(minutes=120)
 
 
-def test_should_trigger_proactive_respects_threshold(tmp_path: Path):
-    _seed_role(tmp_path)
-    runtime, session_manager, _ = _runtime(tmp_path)
+def test_should_trigger_proactive_respects_threshold(host):
+    runtime = RoleRelationshipRuntimeService(host)
     runtime.write_snapshot("mira", _snapshot_payload())
     _init_affection(runtime, 75)
     runtime.write_loneliness_runtime(
@@ -375,7 +328,7 @@ def test_should_trigger_proactive_respects_threshold(tmp_path: Path):
     )
 
     should_trigger, meta = runtime.should_trigger_proactive(
-        session_manager.role_session_key("mira"),
+        host.role_session_key("mira"),
         now=_utc(2026, 7, 6, 12, 0),
     )
 
@@ -383,9 +336,8 @@ def test_should_trigger_proactive_respects_threshold(tmp_path: Path):
     assert meta["reason"] == "threshold"
 
 
-def test_should_trigger_proactive_reports_active_cooldown(tmp_path: Path):
-    _seed_role(tmp_path)
-    runtime, session_manager, _ = _runtime(tmp_path)
+def test_should_trigger_proactive_reports_active_cooldown(host):
+    runtime = RoleRelationshipRuntimeService(host)
     runtime.write_snapshot("mira", _snapshot_payload())
     _init_affection(runtime, 75)
     runtime.write_loneliness_runtime(
@@ -404,7 +356,7 @@ def test_should_trigger_proactive_reports_active_cooldown(tmp_path: Path):
     )
 
     should_trigger, meta = runtime.should_trigger_proactive(
-        session_manager.role_session_key("mira"),
+        host.role_session_key("mira"),
         now=_utc(2026, 7, 6, 12, 0),
     )
 
@@ -418,9 +370,8 @@ def test_should_trigger_proactive_reports_active_cooldown(tmp_path: Path):
     }
 
 
-def test_should_trigger_proactive_accepts_positional_now_argument(tmp_path: Path):
-    _seed_role(tmp_path)
-    runtime, session_manager, _ = _runtime(tmp_path)
+def test_should_trigger_proactive_accepts_positional_now_argument(host):
+    runtime = RoleRelationshipRuntimeService(host)
     runtime.write_snapshot("mira", _snapshot_payload())
     _init_affection(runtime, 75)
     runtime.write_loneliness_runtime(
@@ -439,7 +390,7 @@ def test_should_trigger_proactive_accepts_positional_now_argument(tmp_path: Path
     )
 
     should_trigger, meta = runtime.should_trigger_proactive(
-        session_manager.role_session_key("mira"),
+        host.role_session_key("mira"),
         _utc(2026, 7, 6, 12, 0),
     )
 
@@ -449,10 +400,9 @@ def test_should_trigger_proactive_accepts_positional_now_argument(tmp_path: Path
 
 @pytest.mark.parametrize("affection", [None, 59])
 def test_should_trigger_proactive_requires_intimate_affection(
-    tmp_path: Path, affection: int | None
+    host, affection: int | None
 ):
-    _seed_role(tmp_path)
-    runtime, session_manager, _ = _runtime(tmp_path)
+    runtime = RoleRelationshipRuntimeService(host)
     runtime.write_snapshot("mira", _snapshot_payload())
     if affection is not None:
         _init_affection(runtime, affection)
@@ -472,7 +422,7 @@ def test_should_trigger_proactive_requires_intimate_affection(
     )
 
     should_trigger, meta = runtime.should_trigger_proactive(
-        session_manager.role_session_key("mira"),
+        host.role_session_key("mira"),
         now=_utc(2026, 7, 6, 12, 30),
     )
 
@@ -484,9 +434,8 @@ def test_should_trigger_proactive_requires_intimate_affection(
     assert frozen["awaiting_reply_since"] == ""
 
 
-def test_session_affection_summary_settles_overdue_decay(tmp_path: Path):
-    _seed_role(tmp_path)
-    runtime, _, _ = _runtime(tmp_path)
+def test_session_affection_summary_settles_overdue_decay(host):
+    runtime = RoleRelationshipRuntimeService(host)
     seeded_at = datetime.now().astimezone() - timedelta(days=4, hours=1)
     runtime.affection.initialize("mira", value=45, reason="测试初始化", now=seeded_at)
 
@@ -498,13 +447,13 @@ def test_session_affection_summary_settles_overdue_decay(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_heartbeat_keeps_settling_other_roles_when_one_role_is_broken(
-    tmp_path: Path, monkeypatch, caplog
+    host, monkeypatch, caplog
 ):
-    _seed_role(tmp_path, role_id="aria")
-    _seed_role(tmp_path, role_id="mira")
-    runtime, _, _ = _runtime(tmp_path)
-    roles = RoleStore(tmp_path)
-    broken, healthy = (role.id for role in roles.list_roles())
+    host.roles.clear()
+    host.add_role("aria")
+    host.add_role("mira")
+    runtime = RoleRelationshipRuntimeService(host)
+    broken, healthy = (role.id for role in host.list_roles())
     runtime.affection.state_path(broken).parent.mkdir(parents=True, exist_ok=True)
     runtime.affection.state_path(broken).write_text("{}", encoding="utf-8")
     seeded_at = datetime.now().astimezone() - timedelta(days=3, hours=1)
@@ -528,9 +477,8 @@ async def test_heartbeat_keeps_settling_other_roles_when_one_role_is_broken(
     assert f"role={broken}" in caplog.text
 
 
-def test_loneliness_heartbeat_loop_defaults_to_ten_minutes(tmp_path: Path):
-    _seed_role(tmp_path)
-    runtime, _, _ = _runtime(tmp_path)
+def test_loneliness_heartbeat_loop_defaults_to_ten_minutes(host):
+    runtime = RoleRelationshipRuntimeService(host)
 
     loop = LonelinessHeartbeatLoop(runtime)
 
@@ -538,32 +486,18 @@ def test_loneliness_heartbeat_loop_defaults_to_ten_minutes(tmp_path: Path):
 
 
 @pytest.mark.asyncio
-async def test_generate_snapshot_via_llm_accepts_prompt_json_example(tmp_path: Path):
-    _seed_role(tmp_path)
-    session_manager = SessionManager(tmp_path)
-    presence = PresenceStore(session_manager._store)
-
-    class _Sources(HostAffectionSources):
-        async def complete(self, role_id, messages, *, max_tokens):
-            return (
-                '{"role_self_view":"我会留意你有没有来找我。",'
-                '"relation_tags":["亲近"],'
-                '"relation_state":{"closeness":0.6,"dependence":0.5,"security":0.4,'
-                '"initiative_desire":0.7,"neglect_sensitivity":0.8},'
-                '"behavior_profile":{"loneliness_growth_base":1.5,'
-                '"loneliness_growth_when_unanswered":2.2,"trigger_threshold":60,'
-                '"post_trigger_cooldown_minutes":120,"night_suppression":0.4}}'
-            )
-
-    runtime = RoleRelationshipRuntimeService(
-        _Sources(
-            workspace=tmp_path,
-            role_store=RoleStore(tmp_path),
-            session_manager=session_manager,
-            presence=presence,
-        )
+async def test_generate_snapshot_via_llm_accepts_prompt_json_example(host):
+    host.completion = (
+        '{"role_self_view":"我会留意你有没有来找我。",'
+        '"relation_tags":["亲近"],'
+        '"relation_state":{"closeness":0.6,"dependence":0.5,"security":0.4,'
+        '"initiative_desire":0.7,"neglect_sensitivity":0.8},'
+        '"behavior_profile":{"loneliness_growth_base":1.5,'
+        '"loneliness_growth_when_unanswered":2.2,"trigger_threshold":60,'
+        '"post_trigger_cooldown_minutes":120,"night_suppression":0.4}}'
     )
-    session = session_manager.get_or_create(session_manager.role_session_key("mira"))
+    runtime = RoleRelationshipRuntimeService(host)
+    session = host.get_session(host.role_session_key("mira"))
     session.messages = [
         {"role": "user", "content": "你好"},
         {"role": "assistant", "content": "我在。"},
@@ -578,12 +512,9 @@ async def test_generate_snapshot_via_llm_accepts_prompt_json_example(tmp_path: P
 
 
 @pytest.mark.asyncio
-async def test_refresh_snapshot_after_consolidation_updates_session_metadata(
-    tmp_path: Path,
-):
-    _seed_role(tmp_path)
-    runtime, session_manager, _ = _runtime(tmp_path)
-    session = session_manager.get_or_create(session_manager.role_session_key("mira"))
+async def test_refresh_snapshot_after_consolidation_updates_session_metadata(host):
+    runtime = RoleRelationshipRuntimeService(host)
+    session = host.get_session(host.role_session_key("mira"))
     session.metadata["role_id"] = "mira"
     session.messages = [{"role": "user", "content": "你好"}] * 6
     expected_snapshot = {
@@ -602,31 +533,3 @@ async def test_refresh_snapshot_after_consolidation_updates_session_metadata(
     assert snapshot == expected_snapshot
     optimizer.optimize.assert_awaited_once_with(role_id="mira")
     assert session.metadata["relationship_snapshot"]["last_source_message_count"] == 6
-
-
-def test_snapshot_recent_messages_keep_only_the_users_own(tmp_path: Path):
-    _seed_role(tmp_path)
-    runtime, session_manager, _ = _runtime(tmp_path)
-    session = session_manager.get_or_create(session_manager.role_session_key("mira"))
-    group = network_thread_id("mira", "qq", "gqq:7")
-    session.add_message("user", "桌面里的你", thread_id=desktop_thread_id("mira"))
-    session.add_message(
-        "user",
-        "群里的你",
-        thread_id=group,
-        metadata={"message_source": {"sender_id": "902", "sender_is_user": True}},
-    )
-    session.add_message(
-        "user",
-        "群友",
-        thread_id=group,
-        metadata={"message_source": {"sender_id": "555"}},
-    )
-    session.add_message("assistant", "回群友", thread_id=group)
-
-    source = runtime.generate_snapshot_input("mira")
-
-    assert [item["content"] for item in source["recent_messages"]] == [
-        "桌面里的你",
-        "群里的你",
-    ]

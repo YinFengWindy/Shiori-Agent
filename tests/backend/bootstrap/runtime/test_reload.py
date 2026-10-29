@@ -284,6 +284,48 @@ async def test_partial_candidate_construction_closes_new_provider_and_preserves_
 
 
 @pytest.mark.asyncio
+async def test_scene_intake_starts_only_when_its_generation_is_published(
+    tmp_path, monkeypatch
+):
+    """A prepared generation's scene plugin waits; publication starts it."""
+    from shiori_sdk.core.scene import SCENE_HOST
+
+    monkeypatch.setattr("bootstrap.tools._resolve_plugin_dirs", lambda _: [])
+    config = Config(
+        provider="",
+        model="",
+        api_key="",
+        model_registrations=[],
+        memory_optimizer_enabled=False,
+    )
+    app = AppRuntime(
+        config,
+        tmp_path,
+        features=RuntimeFeatures(enable_message_channels=False, enable_proactive=False),
+    )
+    await app.start()
+    lease = app.acquire()
+    started: list[str] = []
+    try:
+        original = lease.core.plugin_manager.kernel.get(SCENE_HOST)
+        assert original is not None
+        _ = original.on_published(lambda: started.append("original"))
+        assert started == ["original"]
+        prepared = await app.prepare(replace(config, max_tokens=2048))
+        host = prepared.core.plugin_manager.kernel.get(SCENE_HOST)
+        assert host is not None
+        _ = host.on_published(lambda: started.append("prepared"))
+        assert started == ["original"]
+
+        await app.publish(prepared)
+
+        assert started == ["original", "prepared"]
+    finally:
+        await lease.release()
+        await app.shutdown()
+
+
+@pytest.mark.asyncio
 async def test_core_motives_follow_generation_publication_and_rollback(
     tmp_path, monkeypatch
 ):

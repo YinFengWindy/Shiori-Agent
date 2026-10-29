@@ -1,5 +1,6 @@
 """Host turn cancellation notifies transport stream owners before returning."""
 
+from tests.support.generation_getters import bound_affection, bound_reply_policy
 import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -27,6 +28,7 @@ from tests.support.tool_calls import (
 
 async def test_direct_child_turn_does_not_inherit_channel_reply_transport():
     loop = object.__new__(AgentLoop)
+    loop.reply_policy, loop.affection = bound_reply_policy(), bound_affection()
     loop._active_tasks = {}
     loop._active_turn_states = {}
     loop._compact_command = AsyncMock(return_value=None)
@@ -47,6 +49,7 @@ async def test_direct_child_turn_does_not_inherit_channel_reply_transport():
 @pytest.mark.asyncio
 async def test_cancelled_processing_emits_origin_identity_for_stream_cleanup():
     loop = object.__new__(AgentLoop)
+    loop.reply_policy, loop.affection = bound_reply_policy(), bound_affection()
     loop._event_bus = EventBus()
     loop._processing_state = None
     loop._interrupt_states = {}
@@ -74,6 +77,7 @@ async def test_cancelled_processing_emits_origin_identity_for_stream_cleanup():
 @pytest.mark.asyncio
 async def test_direct_desktop_turn_uses_persisted_sender_identity():
     loop = object.__new__(AgentLoop)
+    loop.reply_policy, loop.affection = bound_reply_policy(), bound_affection()
     loop._active_tasks = {}
     loop._active_turn_states = {}
     loop._session_services = SimpleNamespace(

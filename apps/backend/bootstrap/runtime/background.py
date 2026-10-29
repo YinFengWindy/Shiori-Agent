@@ -15,6 +15,8 @@ from typing import Any, Protocol
 from bootstrap.proactive import build_memory_optimizer_task, build_proactive_runtime
 from bootstrap.runtime.generations import RuntimeCandidate
 from core.common.runtime_scope import bind_runtime
+from core.scene.host import HostSceneAdapter
+from shiori_sdk.core.scene import SCENE_HOST
 
 
 class _Stoppable(Protocol):
@@ -80,11 +82,11 @@ class RuntimeBackground:
         from touching the same memory and proactive state concurrently.
         """
         if self._plugins is not None:
-            from shiori_sdk.core.scene import SCENE
-
-            scene = self._plugins.kernel.get(SCENE)
-            if scene is not None:
-                scene.activate()
+            # Scene intake waits for publication; later in-generation loads
+            # of the scene plugin start at once (``SceneHost.on_published``).
+            host = self._plugins.kernel.get(SCENE_HOST)
+            if isinstance(host, HostSceneAdapter):
+                host.publish()
         if not self._coroutines:
             return
         lease = self.candidate.acquire()

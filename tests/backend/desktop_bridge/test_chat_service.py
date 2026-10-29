@@ -1,5 +1,7 @@
 """Desktop admission reads the role record, not the session copy."""
 
+from plugins.natural_chat.backend.plugin import NaturalChatPolicy
+from tests.support.generation_getters import turn_getters
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -37,15 +39,17 @@ async def test_desktop_admission_reads_the_role_record_not_the_session_copy(tmp_
         emit_session_updated=AsyncMock(),
     )
     service.run_chat_turn = run_chat_turn
-    service.start_chat_turn(
-        request_id="req",
-        session_key="role:mira",
-        content="hello",
-        media=[],
-        metadata=None,
-        omit_user_turn=True,
-        emit_event=AsyncMock(),
-    )
+    # The bridge admits chat.send under the generation lease; its policy is on.
+    with turn_getters(policy=NaturalChatPolicy()):
+        service.start_chat_turn(
+            request_id="req",
+            session_key="role:mira",
+            content="hello",
+            media=[],
+            metadata=None,
+            omit_user_turn=True,
+            emit_event=AsyncMock(),
+        )
 
     turn = service._tasks_by_session["role:mira"]
     assert turn.reply_interruption is not None

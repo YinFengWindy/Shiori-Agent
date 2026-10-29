@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from agent.context import ContextBuilder
@@ -19,6 +19,8 @@ if TYPE_CHECKING:
     from shiori_sdk.memory.engine import MemoryEngine
     from core.memory.runtime import MemoryRuntime
     from proactive_v2.presence import PresenceStore
+    from core.roles.affection_access import AffectionGetter
+    from core.roles.reply_policy import ReplyPolicyGetter
     from core.roles.role_runtime import RoleRuntimeRegistry
     from conversation.service import ConversationService
     from core.common.channel_directory import ChannelDirectory
@@ -76,7 +78,6 @@ class MemoryServices:
 class SessionServices:
     session_manager: SessionManager
     presence: PresenceStore | None = None
-    relationship_runtime: Any | None = None
     conversation_service: "ConversationService | None" = None
 
 
@@ -87,6 +88,9 @@ class AgentLoopDeps:
     tools: "ToolRegistry"
     session_manager: "SessionManager"
     workspace: Path
+    # This generation's plugin sockets; each turn binds them to its task.
+    reply_policy: "ReplyPolicyGetter"
+    affection: "AffectionGetter"
     event_bus: "EventBus | None" = None
     presence: "PresenceStore | None" = None
     light_provider: "LLMProvider | None" = None

@@ -33,13 +33,11 @@ from shiori_sdk.accounts.models import AccountNotFoundError
 from dataclasses import replace
 
 from core.roles.reply_policy import (
-    ReplyPolicyGetter,
     bind_turn_reply_policy,
     natural_chat_selected,
     reset_turn_reply_policy,
 )
 from core.roles.affection_access import (
-    AffectionGetter,
     bind_turn_affection,
     reset_turn_affection,
 )
@@ -65,14 +63,8 @@ def _with_generation_plugins(method):
     """Copies this loop's getters onto the turn task."""
 
     async def wrapped(self, *args, **kwargs):
-        policy = getattr(self, "reply_policy", None)
-        affection = getattr(self, "affection", None)
-        policy_token = bind_turn_reply_policy(
-            policy if isinstance(policy, ReplyPolicyGetter) else None
-        )
-        affection_token = bind_turn_affection(
-            affection if isinstance(affection, AffectionGetter) else None
-        )
+        policy_token = bind_turn_reply_policy(self.reply_policy)
+        affection_token = bind_turn_affection(self.affection)
         try:
             return await method(self, *args, **kwargs)
         finally:
@@ -410,6 +402,7 @@ class _ProcessingMixin:
                 self._active_tasks.pop(key, None)
                 self._active_turn_states.pop(key, None)
 
+    @_with_generation_plugins
     async def process_external_turn(
         self,
         context: RoleExecutionContext,

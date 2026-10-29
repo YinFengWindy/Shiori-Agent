@@ -23,13 +23,12 @@ on ``default_memory``, and later engines are inserted only as plugins.
 
 from __future__ import annotations
 
-import importlib.util
 import logging
-import sys
 import tomllib
 from pathlib import Path
 from typing import Any
 
+from bootstrap.config_text_editor import plugin_table_editor
 from shiori_sdk.files.text import atomic_save_text
 
 logger = logging.getLogger(__name__)
@@ -44,7 +43,6 @@ DEFAULT_EMBEDDING_MODEL = "text-embedding-v3"
 # importing the kernel from this module.
 _ENABLED_KEY = "enabled"
 _LEGACY_DIMENSIONALITY = "memory.embedding.output_dimensionality"
-_EDITOR_MODULE = "_shiori_memory_migration_plugin_config_text"
 _UNLOCATABLE_MESSAGE = (
     "{path} 里的 memory 或 plugins.default_memory 写成了内联表或点分键，"
     "无法自动迁移；请先改成独立的 [memory] 与 [plugins.default_memory] 表"
@@ -179,7 +177,7 @@ def _apply(path: Path, text: str, values: dict[str, Any]) -> str:
     replace. Rewriting the whole document instead would drop every comment in
     the user's file, so such a config stops startup with a fix-it message.
     """
-    editor = _toml_editor()
+    editor = plugin_table_editor()
     try:
         merged = editor.merge_plugin_table(text, DEFAULT_MEMORY_PLUGIN_ID, values)
     except editor.PluginTableConflict as exc:
@@ -188,22 +186,6 @@ def _apply(path: Path, text: str, values: dict[str, Any]) -> str:
     if "memory" in tomllib.loads(updated):
         raise ValueError(_UNLOCATABLE_MESSAGE.format(path=path))
     return updated
-
-
-def _toml_editor() -> Any:
-    cached = sys.modules.get(_EDITOR_MODULE)
-    if cached is not None:
-        return cached
-    path = (
-        Path(__file__).resolve().parents[1] / "desktop_bridge" / "plugin_config_text.py"
-    )
-    spec = importlib.util.spec_from_file_location(_EDITOR_MODULE, path)
-    if spec is None or spec.loader is None:
-        raise ImportError(f"无法加载 TOML 表编辑器: {path}")
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[_EDITOR_MODULE] = module
-    spec.loader.exec_module(module)
-    return module
 
 
 def _as_dict(value: object) -> dict[str, Any]:

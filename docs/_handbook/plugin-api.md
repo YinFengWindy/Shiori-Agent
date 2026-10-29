@@ -463,7 +463,7 @@ Prompt text for a selected natural-chat turn. ``passive_prompt`` is the system s
 
 ## `shiori_sdk.core.scene`
 
-``SCENE`` and ``SCENE_HOST``: demand-driven scene observation (P6a, D7). Observation is not on the turn's critical path, so it stays a plugin. The ``scene`` plugin provides ``SCENE``. The host provides ``SCENE_HOST``: role identity, whether the host still wants a scene follow-up, and recent proactive history. ``None`` from ``get(SCENE)`` means observation is off; chat still runs. ``request`` returns a disposer. The caller effects it so demand leaves with the caller. The host calls ``activate`` when the generation is published and ``close`` before that generation is dropped.
+``SCENE`` and ``SCENE_HOST``: demand-driven scene observation (P6a, D7). Observation is not on the turn's critical path, so it stays a plugin. The ``scene`` plugin provides ``SCENE``. The host provides ``SCENE_HOST``: role identity, whether the host still wants a scene follow-up, and recent proactive history. ``None`` from ``get(SCENE)`` means observation is off; chat still runs. ``request`` returns a disposer. The caller effects it so demand leaves with the caller. The plugin starts intake through ``SceneHost.on_published``: at once when its setup runs in a published generation (an in-generation reload or enable), otherwise when the host publishes that generation. The host calls ``close`` before the generation is dropped.
 
 ### `scene`
 
@@ -476,10 +476,6 @@ The scene plugin's observation service.
 - `request(predicate: Callable[[roles.RoleView], bool]) -> Callable[[], None]`
 
   Register demand and return the disposer that drops it. The predicate sees a role view. Demand does not start observation.
-
-- `activate() -> None`
-
-  Start intake. Repeated calls do nothing.
 
 - `async close() -> None`
 
@@ -508,6 +504,10 @@ Host facts the scene plugin cannot import.
 - `legacy_state_paths() -> tuple[pathlib.Path, ...]`
 
   Extra files a first live write may import scene state from.
+
+- `on_published(start: Callable[[], None]) -> Callable[[], None]`
+
+  Run ``start`` once this generation is published, or now if it is. Returns the disposer that drops a ``start`` not yet run. The caller effects it.
 
 #### `shiori_sdk.core.scene.SceneHistoryMessage`
 
@@ -819,16 +819,6 @@ Retain accepted work until a replacing generation has drained it.
 - `on_drain(callback: Callable[[], Awaitable[None]]) -> None`
 
   Only wait for accepted work (no teardown); may run more than once, including while the instance stays active after an abandoned reload.
-
-### `scene_observations`
-
-Target `shiori_sdk.roles.SceneObservations`.
-
-#### `shiori_sdk.roles.SceneObservations`
-
-Request observations only while the current plugin generation is alive.
-
-- `request(predicate: Callable[[roles.RoleView], bool]) -> None`
 
 ### `services`
 

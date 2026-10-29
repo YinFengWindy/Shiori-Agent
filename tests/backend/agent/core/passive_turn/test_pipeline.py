@@ -40,6 +40,7 @@ from core.identity import IdentityChat, UserIdentityStore
 from core.roles import RoleStore
 from core.roles.reply_state import AffectionChange, RoleReply
 from desktop_bridge.service import DesktopBridgeService
+from tests.support.generation_getters import bound_affection, run_in_turn
 from session.manager import SessionManager
 from core.memory.group_environment import GroupEnvironment
 
@@ -53,6 +54,7 @@ async def runtime(tmp_path):
     push = MessagePushTool(role_target_validator=allow_every_role_target)
     bridge = DesktopBridgeService(
         workspace=tmp_path,
+        affection=bound_affection(),
         role_store=roles,
         session_manager=manager,
         group_listening=GroupListeningControl(
@@ -125,14 +127,10 @@ async def runtime(tmp_path):
         )
         return str(result.output)
 
-    def pipeline(reasoning, *, relationship_runtime=None, outbound_port=None):
-        return PassiveTurnPipeline(
+    def pipeline(reasoning, *, affection=None, outbound_port=None):
+        built = PassiveTurnPipeline(
             AgentCoreDeps(
-                session=SimpleNamespace(
-                    session_manager=manager,
-                    presence=None,
-                    relationship_runtime=relationship_runtime,
-                ),
+                session=SimpleNamespace(session_manager=manager, presence=None),
                 context_store=SimpleNamespace(
                     prepare=AsyncMock(return_value=ContextBundle())
                 ),
@@ -147,6 +145,8 @@ async def runtime(tmp_path):
                 outbound_port=outbound_port,
             )
         )
+        # The loop binds the generation's getters for each turn.
+        return run_in_turn(built, affection=affection)
 
     yield SimpleNamespace(
         manager=manager,
@@ -420,7 +420,7 @@ def _isolation_pipeline(manager, *, input_token_threshold=75000):
             event_bus=EventBus(),
         )
     )
-    return pipeline, reasoner
+    return run_in_turn(pipeline), reasoner
 
 
 @pytest.mark.parametrize("summary", [False, True])
@@ -934,7 +934,7 @@ async def test_a_failed_affection_write_is_logged_and_the_turn_still_completes(
     # Desktop turns run without dispatch; they too must not report failure.
     with caplog.at_level("ERROR", logger="agent.lifecycle.phases.after_turn"):
         result = await runtime.pipeline(
-            reasoning, relationship_runtime=relationship, outbound_port=port
+            reasoning, affection=relationship, outbound_port=port
         ).run(msg, runtime.session.key, dispatch_outbound=dispatch_outbound)
 
     relationship.apply_turn_affection.assert_awaited_once()

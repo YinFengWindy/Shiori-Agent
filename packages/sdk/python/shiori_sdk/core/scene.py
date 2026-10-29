@@ -6,8 +6,10 @@ identity, whether the host still wants a scene follow-up, and recent proactive
 history. ``None`` from ``get(SCENE)`` means observation is off; chat still runs.
 
 ``request`` returns a disposer. The caller effects it so demand leaves with
-the caller. The host calls ``activate`` when the generation is published and
-``close`` before that generation is dropped.
+the caller. The plugin starts intake through ``SceneHost.on_published``: at
+once when its setup runs in a published generation (an in-generation reload
+or enable), otherwise when the host publishes that generation. The host calls
+``close`` before the generation is dropped.
 """
 
 from __future__ import annotations
@@ -71,6 +73,14 @@ class SceneHost(Protocol):
         """Extra files a first live write may import scene state from."""
         ...
 
+    def on_published(self, start: Callable[[], None]) -> Callable[[], None]:
+        """Run ``start`` once this generation is published, or now if it is.
+
+        Returns the disposer that drops a ``start`` not yet run. The caller
+        effects it.
+        """
+        ...
+
 
 class Scene(Protocol):
     """The scene plugin's observation service."""
@@ -80,10 +90,6 @@ class Scene(Protocol):
 
         The predicate sees a role view. Demand does not start observation.
         """
-        ...
-
-    def activate(self) -> None:
-        """Start intake. Repeated calls do nothing."""
         ...
 
     async def close(self) -> None:

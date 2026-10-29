@@ -4,7 +4,7 @@ import { RoleTasksPanel } from "./RoleTasksPanel";
 import { toFileUrl } from "../shared/format";
 import type { RoleTask, ScheduleTaskFormData } from "../shared/types";
 import { chatSidebarPanelClass } from "./chatSidebarStyles";
-import type { AffectionDisplay } from "./affectionDisplay";
+import type { AffectionSummary } from "@yinfengwindy/shiori-sdk";
 
 export type ChatSidebarMode = "status" | "images" | "tasks";
 
@@ -14,7 +14,7 @@ type ChatRightSidebarProps = {
   currentMood: string;
   imagePath: string;
   lonelinessValue: number;
-  affection: AffectionDisplay | null;
+  affection: AffectionSummary | null;
   mode: ChatSidebarMode;
   moodIllustrationUrl: string;
   moodUpdatedAt: string;

@@ -1,12 +1,14 @@
 /// <reference types="node" />
 
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { afterEach, beforeEach, describe, it } from "node:test";
 import React from "react";
 import { act } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { changeInputValue, mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import { ChatSurface } from "./ChatSurface";
+import { affectionUiRegistry } from "../plugins/affectionUiRegistry";
+import { resetPluginEnabledStateForTests, setPluginEnabledSnapshot } from "../plugins/pluginEnabledStateStore";
 import type { RoleRecord, SessionPayload } from "@yinfengwindy/shiori-sdk";
 
 function createRole(overrides: Partial<RoleRecord> = {}): RoleRecord {
@@ -106,6 +108,10 @@ function chatSurfaceElement(
 }
 
 describe("ChatSurface", () => {
+  // A loaded roster: mounts read the enabled state without a bridge round-trip.
+  beforeEach(() => setPluginEnabledSnapshot([]));
+  afterEach(() => resetPluginEnabledStateForTests());
+
   it("restores text, picked attachments and an actual quoted message after role changes, loading and page unmount", async () => {
     const role = createRole({ id: "surface-draft" });
     const session = { ...createSession(), key: "role:surface-draft", messages: [{ id: "quoted-message", role: "assistant", content: "要引用的消息" }] };
@@ -356,12 +362,19 @@ describe("ChatSurface", () => {
     assert.doesNotMatch(markup, /aria-label="状态"[^>]*aria-disabled/);
   });
 
-  it("renders relationship summary, tags, and loneliness value inside the status sidebar", () => {
-    const markup = renderChatSurface(createRole(), "mira", {
-      currentMood: "开心",
-      moodIllustrationUrl: "shiori-asset://local/mood-happy-token",
-      chatLatestImageSidebarCollapsed: false,
-    });
+  it("renders relationship summary, tags, and the affection plugin's loneliness value inside the status sidebar", () => {
+    affectionUiRegistry.registerChat({ pluginId: "affection", Component: () => null });
+    setPluginEnabledSnapshot([{ id: "affection", enabled: true, state: "ACTIVE" }]);
+    let markup: string;
+    try {
+      markup = renderChatSurface(createRole(), "mira", {
+        currentMood: "开心",
+        moodIllustrationUrl: "shiori-asset://local/mood-happy-token",
+        chatLatestImageSidebarCollapsed: false,
+      });
+    } finally {
+      affectionUiRegistry.unregister("affection");
+    }
 
     assert.match(markup, />当下想法</);
     assert.match(markup, />我最近会不自觉地想起你。</);

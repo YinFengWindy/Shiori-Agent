@@ -21,9 +21,11 @@ async def setup(ctx: PluginRuntimeContext) -> None:
     tools.register(McpAddTool(registry), risk="external-side-effect")
     tools.register(McpRemoveTool(registry), risk="write")
     tools.register(McpListTool(registry), risk="read-only")
-    ctx.require(BACKGROUND).spawn(registry.load_and_connect_all(), name="mcp-connect")
 
     async def shutdown() -> None:
         await registry.shutdown()
 
+    # Effects run LIFO: the reconnect task, registered after this, is cancelled
+    # and awaited first, so no session connects after the disconnect.
     ctx.effect("mcp.shutdown", shutdown)
+    ctx.require(BACKGROUND).spawn(registry.load_and_connect_all(), name="mcp-connect")

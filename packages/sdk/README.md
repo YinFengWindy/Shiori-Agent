@@ -429,8 +429,8 @@ tool, HTTP, resource, process, RPC and task fixtures. Native calls fail until a
 test explicitly supplies their result. Plugin policy tests execute with only the
 SDK and declared sibling dependencies (Story → NovelAI).
 Individual fixtures live in their owning `testing.tools`, `testing.storage`,
-`testing.sessions`, `testing.resources`, `testing.models`, `testing.http`,
-`testing.runtime` and `testing.scene_observations` modules; the context only
+`testing.sessions`, `testing.resources`, `testing.models`, `testing.http`
+and `testing.runtime` modules; the context only
 assembles them. Role draft writers and covariant read-only projectors are defined
 once in `shiori_sdk.roles` and used by both the host and independent fixtures.
 Actual kernel ordering, role saves, session media adoption, runtime lease

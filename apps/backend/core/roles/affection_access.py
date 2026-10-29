@@ -1,16 +1,14 @@
 """Which generation's affection runtime a caller reads.
 
 Same shape as the reply-policy getter: one object per generation, bound to
-that generation's kernel. Unbound callers keep the instance they were given,
-so host tests that pass a runtime still reach it. A bound empty socket is
-``None`` and every affection side effect is skipped.
+that generation's kernel. Reading before it is bound raises. A bound empty
+socket is ``None`` and every affection side effect is skipped.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
 from contextvars import ContextVar
-from typing import Any
 
 from core.common.runtime_scope import current_runtime_lease
 from shiori_sdk.core.affection import Affection
@@ -62,9 +60,12 @@ def active_affection_getter() -> AffectionGetter | None:
     return getter if isinstance(getter, AffectionGetter) else None
 
 
-def current_affection(fallback: Any = None) -> Affection | None:
-    """The live affection runtime, or ``fallback`` while no getter is bound."""
+def current_affection() -> Affection | None:
+    """The live affection runtime, ``None`` while the plugin is off.
+
+    Raises when no getter is reachable or it is not bound yet.
+    """
     getter = active_affection_getter()
-    if getter is not None and getter.bound:
-        return getter()
-    return fallback
+    if getter is None:
+        raise RuntimeError("当前任务没有可用的好感 getter")
+    return getter()

@@ -90,6 +90,10 @@ async def serve_bridge(
         apply_pending_plugin_operations(
             workspace or resolve_default_workspace(), Path(config_path)
         )
+        from bootstrap.mcp_config_migration import migrate_mcp_enabled
+
+        # Needs the workspace's server list, so it runs here, not in load_config.
+        migrate_mcp_enabled(Path(config_path), workspace or resolve_default_workspace())
         runtime = build_app_runtime(
             Config.load(config_path),
             workspace=workspace or resolve_default_workspace(),

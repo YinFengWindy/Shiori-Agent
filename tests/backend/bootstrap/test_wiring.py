@@ -1,4 +1,5 @@
 from __future__ import annotations
+from tests.support.generation_getters import bound_affection, bound_reply_policy
 
 import json
 import subprocess
@@ -638,7 +639,8 @@ def test_build_loop_deps_uses_context_factory(monkeypatch, tmp_path: Path):
                 ),
             ),
         ),
-        relationship_runtime=cast(Any, SimpleNamespace()),
+        reply_policy=bound_reply_policy(),
+        affection=bound_affection(),
     )
 
     assert observed["name"] == "default"

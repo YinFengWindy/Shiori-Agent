@@ -98,7 +98,11 @@ class RuntimeDispatcher:
                             if dedupe is not None:
                                 accepted.discard(dedupe)
                             continue
-                        if natural_chat_selected(role):
+                        # Admission reads this generation's policy, the same
+                        # one the turn will refresh against (P3-9).
+                        with bind_runtime(lease):
+                            selected = natural_chat_selected(role)
+                        if selected:
                             background = lease.reply_sequences.background_tasks(origin)
                             interruption = (
                                 lease.reply_sequences.admit(item)

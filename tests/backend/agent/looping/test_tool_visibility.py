@@ -9,6 +9,8 @@ tool_search 可见性机制回归测试。
 - preloaded 工具在下一请求中直接可见
 """
 
+from tests.support.generation_getters import bound_affection, bound_reply_policy
+
 import asyncio
 from pathlib import Path
 from typing import Any, cast
@@ -76,6 +78,8 @@ def _make_loop(
     memory_engine = FakeMemoryEngine(tmp_path)
     return AgentLoop(
         AgentLoopDeps(
+            reply_policy=bound_reply_policy(),
+            affection=bound_affection(),
             bus=MagicMock(),
             provider=cast(Any, provider),
             tools=registry,

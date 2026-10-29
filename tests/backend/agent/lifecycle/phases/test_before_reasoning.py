@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from tests.support.generation_getters import run_in_turn
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -40,6 +41,7 @@ async def test_before_reasoning_syncs_session_key_and_role_id_into_tool_context(
         cast(Any, session_manager),
         cast(ContextBuilder, context_builder),
     )
+    run_in_turn(phase, method="run")
     session = Session("role:mira")
     session.metadata["role_id"] = "mira"
     timestamp = datetime.now().astimezone()
@@ -127,6 +129,7 @@ async def test_prompt_warmup_renders_external_turn_with_its_group_note(
         ),
         builder,
     )
+    run_in_turn(phase, method="run")
     session = Session("role:mira")
     session.metadata["role_id"] = "mira"
     timestamp = datetime.now().astimezone()

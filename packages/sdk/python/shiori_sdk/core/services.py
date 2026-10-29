@@ -36,7 +36,7 @@ from shiori_sdk.models import ChatProvider, RoleModels
 from shiori_sdk.plugin_services import RuntimeLifecycle
 from shiori_sdk.process_resources import PluginProcessResources
 from shiori_sdk.processes import Processes, Resources, ToolTurn
-from shiori_sdk.roles import Roles, SceneObservations
+from shiori_sdk.roles import Roles
 from shiori_sdk.rpc import RpcCapability
 from shiori_sdk.runtime import EventsCapability
 from shiori_sdk.services import PluginServices
@@ -77,14 +77,6 @@ LIGHT_PROVIDER: Key[ChatProvider] = Key("light_provider")
 
 LIGHT_MODEL: Key[str] = Key("light_model")
 """The model name paired with ``LIGHT_PROVIDER``."""
-
-SCENE_OBSERVATIONS: Key[SceneObservations] = Key("scene_observations")
-"""Legacy demand key. The host no longer provides it (P6a).
-
-Scene observation is ``SCENE`` (``shiori_sdk.core.scene``). This key stays so
-4.x does not add methods to it and an old manifest that still injects it fails
-closed instead of observing nothing. ``SceneObservations.request`` is unchanged.
-"""
 
 MEMORY: Key[MemoryCapability] = Key("memory")
 """The memory plugin's host surface. The engine is ``MEMORY_ENGINE``."""

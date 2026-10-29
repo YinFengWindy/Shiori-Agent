@@ -1,3 +1,4 @@
+from tests.support.generation_getters import run_in_turn
 from copy import deepcopy
 from datetime import datetime, timezone
 from types import SimpleNamespace
@@ -86,6 +87,7 @@ async def test_natural_correction_failure_is_terminal_after_original_work(
         context=AsyncMock(),
         session_manager=manager,
     )
+    run_in_turn(reasoner, method="run_turn")
     reasoner.render_prompt = AsyncMock(
         return_value=PromptRenderResult(
             messages=[{"role": "user", "content": "help"}], natural_chat=True
@@ -123,6 +125,7 @@ async def test_invalidated_natural_turn_returns_work_without_requiring_a_reply(
         context=AsyncMock(),
         session_manager=manager,
     )
+    run_in_turn(reasoner, method="run_turn")
     reasoner.render_prompt = AsyncMock(
         return_value=PromptRenderResult(
             messages=[{"role": "user", "content": "hi"}], natural_chat=True
@@ -176,6 +179,7 @@ async def test_reply_policy_filters_visible_tokens_but_preserves_thinking(
         context=AsyncMock(),
         session_manager=manager,
     )
+    run_in_turn(reasoner, method="run_turn")
     messages = ("one", "two") if enabled else ()
     reasoner.render_prompt = AsyncMock(
         return_value=PromptRenderResult(
@@ -283,11 +287,6 @@ async def test_builtin_natural_chat_controls_prompt_and_stream_on_supported_tran
     from agent.context import ContextBuilder
     from core.roles import RoleStore
     from core.roles.services import RoleSessionService
-    from core.roles.reply_policy import (
-        ReplyPolicyGetter,
-        bind_turn_reply_policy,
-        reset_turn_reply_policy,
-    )
     from plugins.natural_chat.backend.plugin import NaturalChatPolicy
     from prompts.natural_chat import FINISH_REPLY_TOOL_NAME
     from agent.turns.reply_sequence import reply_is_buffered
@@ -320,6 +319,9 @@ async def test_builtin_natural_chat_controls_prompt_and_stream_on_supported_tran
         context=ContextBuilder(tmp_path, memory=cast(Any, memory), runtime_roles=roles),
         session_manager=manager,
     )
+    # Production binds the generation's policy per turn; the prompt text
+    # belongs to the default-on natural_chat plugin, this reasoner has no kernel.
+    run_in_turn(reasoner, method="run_turn", policy=NaturalChatPolicy())
     visible = []
     reply = "第一句\n<message-break/>\n下一句"
 
@@ -349,31 +351,23 @@ async def test_builtin_natural_chat_controls_prompt_and_stream_on_supported_tran
     bus = MessageBus()
     if admitted:
         bus.subscribe_outbound(channel, AsyncMock(), supports_reply_sequence=True)
-    # Production binds this after the plugin kernel loads. The prompt text
-    # belongs to the default-on natural_chat plugin; this reasoner has no kernel.
-    getter = ReplyPolicyGetter()
-    getter.bind(lambda: NaturalChatPolicy())
-    token = bind_turn_reply_policy(getter)
-    try:
-        with ChannelSequenceOwner().bind(bus):
-            result = await reasoner.run_turn(
-                msg=InboundMessage(
-                    channel=channel,
-                    sender="user",
-                    chat_id="a",
-                    content="hi",
-                    metadata={
-                        **({"turn_id": "t"} if channel == "desktop" else {}),
-                        "request_id": "request",
-                        "source": source,
-                        "thread_id": thread,
-                    },
-                ),
-                session=session,
-                context_view=turn_context_view(tmp_path, "mira", thread),
-            )
-    finally:
-        reset_turn_reply_policy(token)
+    with ChannelSequenceOwner().bind(bus):
+        result = await reasoner.run_turn(
+            msg=InboundMessage(
+                channel=channel,
+                sender="user",
+                chat_id="a",
+                content="hi",
+                metadata={
+                    **({"turn_id": "t"} if channel == "desktop" else {}),
+                    "request_id": "request",
+                    "source": source,
+                    "thread_id": thread,
+                },
+            ),
+            session=session,
+            context_view=turn_context_view(tmp_path, "mira", thread),
+        )
     assert (result.reply_sequence is not None) is selected
     assert result.streamed is (not selected)
     assert visible == (
@@ -404,6 +398,7 @@ async def test_current_attachments_are_isolated_across_concurrent_and_followup_t
         context=AsyncMock(),
         session_manager=manager,
     )
+    run_in_turn(reasoner, method="run_turn")
     messages = [
         InboundMessage(
             channel="qq_bot",
@@ -554,6 +549,7 @@ async def test_minimal_request_uses_real_prompt_controller_and_transport(
         compaction_memory=h.maintenance,
         event_bus=bus,
     )
+    run_in_turn(reasoner, method="run_turn")
     monkeypatch.setattr(
         "agent.core.passive_turn.reasoning_loop.fetch_role_mood",
         AsyncMock(return_value=None),
@@ -813,6 +809,7 @@ async def test_run_turn_retry_preserves_persisted_history(
         context=AsyncMock(),
         session_manager=manager,
     )
+    run_in_turn(reasoner, method="run_turn")
     reasoner.render_prompt = AsyncMock(
         side_effect=lambda request: PromptRenderResult(
             messages=[
@@ -943,6 +940,7 @@ async def test_run_turn_restricts_tools_only_for_external_non_user_sender(
         context=AsyncMock(),
         session_manager=manager,
     )
+    run_in_turn(reasoner, method="run_turn")
     reasoner.render_prompt = AsyncMock(
         return_value=PromptRenderResult(messages=[{"role": "user", "content": "hi"}])
     )
@@ -1013,6 +1011,7 @@ async def test_real_turn_history_append_uses_usage_anchor_with_replaced_context_
         context=ContextBuilder(tmp_path, Memory(), runtime_roles=RoleStore(tmp_path)),
         session_manager=manager,
     )
+    run_in_turn(reasoner, method="run_turn")
     first = InboundMessage(
         channel="cli",
         sender="user",
@@ -1259,6 +1258,7 @@ async def test_all_request_boundaries_compact_without_replaying_current_tools(
         session_manager=h.manager,
         compaction_memory=h.maintenance,
     )
+    run_in_turn(reasoner, method="run_turn")
     reasoner.render_prompt = AsyncMock(
         side_effect=lambda request: PromptRenderResult(
             messages=[
@@ -1523,6 +1523,7 @@ async def test_real_prompt_renderer_continues_with_working_state_and_bounded_ori
         session_manager=h.manager,
         compaction_memory=h.maintenance,
     )
+    run_in_turn(reasoner, method="run_turn")
     try:
         result = await reasoner.run_turn(
             msg=InboundMessage(
@@ -1623,6 +1624,7 @@ async def test_window_turn_compacts_an_over_budget_background_passback(
         session_manager=h.manager,
         compaction_memory=h.maintenance,
     )
+    run_in_turn(reasoner, method="run_window_turn")
     try:
         result = await reasoner.run_window_turn(
             session=session,
@@ -1678,6 +1680,7 @@ async def test_provider_context_rejection_after_tools_never_restarts_turn(
         context=AsyncMock(),
         session_manager=h.manager,
     )
+    run_in_turn(reasoner, method="run_turn")
     reasoner.render_prompt = AsyncMock(
         return_value=PromptRenderResult(
             messages=[{"role": "user", "content": "do once"}]
@@ -1840,6 +1843,7 @@ async def test_safety_retry_reads_committed_compaction_with_frozen_input_and_his
         session_manager=h.manager,
         compaction_memory=h.maintenance,
     )
+    run_in_turn(reasoner, method="run_turn")
     reasoner.render_prompt = render
     try:
         result = await reasoner.run_turn(msg=msg, session=session, context_view=view)
@@ -1896,6 +1900,7 @@ async def test_context_budget_reaches_watchers_read_only_and_the_bus_as_a_dict()
         event_bus=bus,
         compaction_memory=SimpleNamespace(),
     )
+    run_in_turn(reasoner, method="run_turn")
     watched: list[ContextBudgetObserved] = []
 
     async def setup(ctx) -> None:

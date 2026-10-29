@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from tests.support.generation_getters import run_in_turn
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -135,6 +136,7 @@ async def test_context_store_commit_persists_commits_and_dispatches():
             history_window=500,
         )
     )
+    run_in_turn(agent_core, method="process")
 
     out = await agent_core.process(
         InboundMessage(
@@ -236,6 +238,7 @@ async def test_turn_committed_omits_user_message_when_user_turn_not_persisted():
             history_window=500,
         )
     )
+    run_in_turn(agent_core, method="process")
 
     await agent_core.process(
         InboundMessage(
@@ -363,6 +366,7 @@ async def test_new_chain_after_reasoning_persists_meme_and_fires_turn_committed(
             history_window=100,
         )
     )
+    run_in_turn(agent_core, method="process")
     agent_core.bind_kernel(lambda: kernel.kernel)
     wire_turn_lifecycle(
         lifecycle=TurnLifecycle(event_bus),

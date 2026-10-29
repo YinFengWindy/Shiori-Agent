@@ -32,7 +32,6 @@ _REMOVED_CAPABILITY_ATTRIBUTES = frozenset(
         "roles",
         "rpc",
         "runtime",
-        "scene_observations",
         "services",
         "sessions",
         "storage",

@@ -1,3 +1,8 @@
+from tests.support.generation_getters import (
+    bound_affection,
+    bound_reply_policy,
+    run_in_turn,
+)
 import asyncio
 from pathlib import Path
 from typing import Any, cast
@@ -109,6 +114,7 @@ class _StreamingChannel:
 
 def _stream_loop(channels: dict[str, object]) -> AgentLoop:
     loop = object.__new__(AgentLoop)
+    loop.reply_policy, loop.affection = bound_reply_policy(), bound_affection()
     loop._event_bus = EventBus()
     loop._active_turn_states = {}
     directory = ChannelDirectory()
@@ -164,6 +170,7 @@ def test_stream_event_sink_respects_suppression_flag():
 @pytest.mark.asyncio
 async def test_process_direct_suppresses_stream_and_memory_when_requested():
     loop = object.__new__(AgentLoop)
+    loop.reply_policy, loop.affection = bound_reply_policy(), bound_affection()
     loop._active_tasks = {}
     loop._active_turn_states = {}
     loop._process = AsyncMock(
@@ -201,6 +208,7 @@ async def test_process_direct_suppresses_stream_and_memory_when_requested():
 @pytest.mark.asyncio
 async def test_process_direct_registers_interruptible_active_task():
     loop = object.__new__(AgentLoop)
+    loop.reply_policy, loop.affection = bound_reply_policy(), bound_affection()
     loop._active_tasks = {}
     loop._active_turn_states = {}
     loop._interrupt_states = {}
@@ -243,6 +251,7 @@ async def test_run_role_operation_repairs_legacy_scheduled_context(tmp_path: Pat
     repository = RoleRepository(RoleStore(tmp_path))
     repository.create_role(role_id="mira", name="Mira", system_prompt="test")
     loop = object.__new__(AgentLoop)
+    loop.reply_policy, loop.affection = bound_reply_policy(), bound_affection()
     loop._role_runtime_registry = RoleRuntimeRegistry(repository)
     operation = AsyncMock(return_value="done")
 
@@ -281,6 +290,7 @@ async def test_role_scoped_scheduled_turn_uses_background_capability(tmp_path: P
         delivery_key="job-1",
     )
     loop = object.__new__(AgentLoop)
+    loop.reply_policy, loop.affection = bound_reply_policy(), bound_affection()
     loop._role_runtime_registry = registry
     loop._process = AsyncMock(
         return_value=OutboundMessage(
@@ -316,8 +326,10 @@ def _make_loop(
     tools = ToolRegistry()
     tools.register(_NoopTool())
     memory_engine = cast(Any, _FakeMemoryEngine())
-    return AgentLoop(
+    loop = AgentLoop(
         AgentLoopDeps(
+            reply_policy=bound_reply_policy(),
+            affection=bound_affection(),
             bus=MagicMock(),
             provider=cast(Any, _Provider()),
             light_provider=cast(Any, _Provider()),
@@ -331,6 +343,11 @@ def _make_loop(
         ),
         AgentLoopConfig(),
     )
+    # These tests drive the runner and reasoner past ``process_inbound``,
+    # which binds the generation's getters per turn.
+    run_in_turn(loop._core_runner, method="process")
+    run_in_turn(loop._reasoner, method="run_turn")
+    return loop
 
 
 def test_agent_loop_uses_custom_retrieval_pipeline(tmp_path: Path):

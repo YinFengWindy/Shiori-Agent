@@ -7,6 +7,5 @@ among the memory sockets: a plugin provides it. P6a adds more plugin-provided
 keys (``REPLY_POLICY``, ``SCENE``, ``AFFECTION``) and the host ports they
 require (``SCENE_HOST``, ``AFFECTION_HOST``, ``MCP_TOOLS``). ``services`` holds
 the keys for the former capability surface (P4-3); ``tools`` holds tool-call
-events, not the ``tools`` key. ``SCENE_OBSERVATIONS`` remains defined and gains
-no methods; the host no longer provides it.
+events, not the ``tools`` key.
 """

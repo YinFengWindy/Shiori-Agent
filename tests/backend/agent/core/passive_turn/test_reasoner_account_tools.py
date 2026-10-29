@@ -1,5 +1,7 @@
 """The real turn uses account grants for execution without importing private context."""
 
+from plugins.natural_chat.backend.plugin import NaturalChatPolicy
+from tests.support.generation_getters import turn_getters
 import asyncio
 from contextlib import nullcontext
 from unittest.mock import AsyncMock
@@ -160,10 +162,13 @@ async def test_account_rule_controls_search_dynamic_mcp_and_rewritten_call_execu
     routed = hub.route_account_inbound(incoming)
     assert routed is not None
     assert not MessageSource.from_inbound(routed).sender_is_user
+    # The loop binds the generation's getters per turn; this calls past it.
+    # The natural_chat plugin is on, as in a default install.
     with (
-        ChannelSequenceOwner().bind(host.loop.bus) if interrupted else nullcontext()
-    ), reply_interruption_scope(interruption), (
-        pytest.raises(asyncio.CancelledError) if interrupted else nullcontext()
+        turn_getters(policy=NaturalChatPolicy()),
+        ChannelSequenceOwner().bind(host.loop.bus) if interrupted else nullcontext(),
+        reply_interruption_scope(interruption),
+        pytest.raises(asyncio.CancelledError) if interrupted else nullcontext(),
     ):
         await host.loop._process_role_scoped(
             routed, routed.session_key, dispatch_outbound=False
@@ -216,9 +221,10 @@ async def test_account_rule_controls_search_dynamic_mcp_and_rewritten_call_execu
                 LLMResponse(content="不能执行", tool_calls=[]),
             ]
         )
-        await host.loop._process_role_scoped(
-            routed, routed.session_key, dispatch_outbound=False
-        )
+        with turn_getters(policy=NaturalChatPolicy()):
+            await host.loop._process_role_scoped(
+                routed, routed.session_key, dispatch_outbound=False
+            )
         assert calls == expected_calls
         if interrupted:
             assert "registered" in request_text(host.provider.requests[1])

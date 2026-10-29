@@ -37,15 +37,6 @@ class McpServerRegistry:
         self._sessions: dict[str, McpSession] = {}
         self._configs: dict[str, dict[str, Any]] = {}
         self._server_tools: dict[str, list[str]] = {}
-        self._connect_task: asyncio.Task[None] | None = None
-
-    def start_connect_all_background(self) -> asyncio.Task[None]:
-        """Reconnect every saved server without blocking plugin setup."""
-        if self._connect_task is None or self._connect_task.done():
-            self._connect_task = asyncio.create_task(
-                self.load_and_connect_all(), name="mcp_connect_all"
-            )
-        return self._connect_task
 
     async def load_and_connect_all(self) -> None:
         """Reconnect every server recorded in ``mcp_servers.json``."""
@@ -63,13 +54,7 @@ class McpServerRegistry:
         )
 
     async def shutdown(self) -> None:
-        """Cancel a pending reconnect and disconnect every session."""
-        if self._connect_task is not None and not self._connect_task.done():
-            self._connect_task.cancel()
-            try:
-                await self._connect_task
-            except asyncio.CancelledError:
-                pass
+        """Disconnect every session. The reconnect task is cancelled before this."""
         sessions = list(self._sessions.values())
         tool_names = [
             tool_name for names in self._server_tools.values() for tool_name in names

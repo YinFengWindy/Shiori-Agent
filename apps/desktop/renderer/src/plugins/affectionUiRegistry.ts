@@ -1,5 +1,6 @@
 import { useSyncExternalStore, type ComponentType } from "react";
 import type { PluginChatAffectionProps, PluginRoleAffectionProps } from "@yinfengwindy/shiori-sdk";
+import { PluginContributionRegistry } from "./pluginContributionRegistry";
 
 /** One plugin's 「好感度」 tab, already bound to that plugin's client. */
 export type RoleAffectionEntry = {
@@ -13,15 +14,17 @@ export type ChatAffectionEntry = {
   Component: ComponentType<PluginChatAffectionProps>;
 };
 
-const roleEntries = new Map<string, RoleAffectionEntry>();
-const chatEntries = new Map<string, ChatAffectionEntry>();
+const roleEntries = new PluginContributionRegistry<RoleAffectionEntry>("affectionUiRegistry", "roleAffection");
+const chatEntries = new PluginContributionRegistry<ChatAffectionEntry>("affectionUiRegistry", "chatAffection");
+// The first entry of each slot. Unchanged entries keep their reference, so
+// useSyncExternalStore sees the same snapshot until a slot really changes.
 let roleSnapshot: RoleAffectionEntry | null = null;
 let chatSnapshot: ChatAffectionEntry | null = null;
 const listeners = new Set<() => void>();
 
 function publish() {
-  roleSnapshot = roleEntries.values().next().value ?? null;
-  chatSnapshot = chatEntries.values().next().value ?? null;
+  roleSnapshot = roleEntries.list()[0] ?? null;
+  chatSnapshot = chatEntries.list()[0] ?? null;
   for (const listener of listeners) listener();
 }
 
@@ -33,18 +36,18 @@ function subscribe(listener: () => void) {
 /** Registers affection slots. The first plugin to claim a slot wins. */
 export const affectionUiRegistry = {
   registerRole(entry: RoleAffectionEntry) {
-    if (roleEntries.has(entry.pluginId)) return;
-    roleEntries.set(entry.pluginId, entry);
+    roleEntries.register(entry);
     publish();
   },
   registerChat(entry: ChatAffectionEntry) {
-    if (chatEntries.has(entry.pluginId)) return;
-    chatEntries.set(entry.pluginId, entry);
+    chatEntries.register(entry);
     publish();
   },
+  /** Drops the plugin from both slots. */
   unregister(pluginId: string) {
-    const changed = roleEntries.delete(pluginId) || chatEntries.delete(pluginId);
-    if (changed) publish();
+    roleEntries.unregister(pluginId);
+    chatEntries.unregister(pluginId);
+    publish();
   },
 };
 

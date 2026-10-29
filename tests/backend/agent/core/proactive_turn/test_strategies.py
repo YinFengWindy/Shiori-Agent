@@ -14,6 +14,7 @@ from agent.core.proactive_turn.strategies import (
     SceneFollowupStrategy,
     RelationshipStrategy,
 )
+from tests.support.generation_getters import bound_affection
 
 
 def _context():
@@ -26,8 +27,9 @@ def _context():
 def test_scene_claims_before_relationship_and_finalizes_exact_outcome(outcome):
     runtime = MagicMock()
     runtime.should_trigger_scene_followup.return_value = (True, {"attempt_index": 1})
+    affection = bound_affection(runtime)
     chain = ProactiveGateChain(
-        motives=[RelationshipStrategy(runtime), SceneFollowupStrategy(runtime)]
+        motives=[RelationshipStrategy(affection), SceneFollowupStrategy(affection)]
     )
     result = chain.evaluate(_context())
     assert result.activation is not None
@@ -50,8 +52,9 @@ def test_missing_relationship_preserves_diagnostics_and_does_not_block(reason):
         False,
         {"reason": reason, "loneliness_value": 20},
     )
+    affection = bound_affection(runtime)
     result = ProactiveGateChain(
-        motives=[SceneFollowupStrategy(runtime), RelationshipStrategy(runtime)]
+        motives=[SceneFollowupStrategy(affection), RelationshipStrategy(affection)]
     ).evaluate(_context())
     assert result.activation is None
     assert result.trace[0].reason == "not_due"

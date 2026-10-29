@@ -1,7 +1,7 @@
 import React, { useRef } from "react";
 import { CrossfadeLayers } from "@yinfengwindy/shiori-sdk";
 import { cx } from "@yinfengwindy/shiori-sdk";
-import type { AffectionDisplay } from "./affectionDisplay";
+import type { AffectionSummary } from "@yinfengwindy/shiori-sdk";
 import { useChatAffectionContribution } from "../plugins/affectionUiRegistry";
 import { usePluginEnabledState } from "../plugins/usePluginEnabledState";
 import { chatSidebarPanelClass } from "./chatSidebarStyles";
@@ -20,8 +20,8 @@ type ChatStatusSidebarProps = {
   roleSelfView: string;
   relationshipTags: string[];
   lonelinessValue: number;
-  /** Stage and its place on the whole -100–100 range only; absent until affection is initialized. */
-  affection: AffectionDisplay | null;
+  /** The role's affection summary, handed to the plugin's meter; absent until affection is initialized. */
+  affection: AffectionSummary | null;
   visualsActive?: boolean;
 };
 
@@ -41,6 +41,8 @@ export function ChatStatusSidebar({
   const contributed = useChatAffectionContribution();
   const pluginEnabled = usePluginEnabledState();
   const AffectionMeter = contributed && pluginEnabled(contributed.pluginId) ? contributed.Component : null;
+  // Loneliness belongs to the affection plugin too: without its meter neither row shows.
+  const showLoneliness = AffectionMeter !== null;
   const showAffection = Boolean(affection && AffectionMeter);
   const shouldRenderIllustration = Boolean(moodIllustrationUrl) && visualsActive;
   const layerRef = useRef<HTMLDivElement | null>(null);
@@ -54,7 +56,11 @@ export function ChatStatusSidebar({
       className={cx(
         chatSidebarPanelClass,
         "chat-status-sidebar relative gap-3",
-        showAffection ? "grid-rows-[minmax(0,1fr)_auto_auto_auto_auto_auto]" : "grid-rows-[minmax(0,1fr)_auto_auto_auto_auto]",
+        showAffection
+          ? "grid-rows-[minmax(0,1fr)_auto_auto_auto_auto_auto]"
+          : showLoneliness
+            ? "grid-rows-[minmax(0,1fr)_auto_auto_auto_auto]"
+            : "grid-rows-[minmax(0,1fr)_auto_auto_auto]",
       )}
     >
       {/* The illustration may shrink to zero; only its own pixels are clipped so text and controls take priority. */}
@@ -115,9 +121,11 @@ export function ChatStatusSidebar({
       )}
       {/* Affection shows only its stage and a thin bar of its place on the whole range: no value, no reasons. */}
       {showAffection && AffectionMeter && affection ? (
-        <AffectionMeter stage={affection.stage} percent={affection.percent} />
+        <AffectionMeter summary={affection} />
       ) : null}
-      <StatusMeter label="寂寞值" value={Math.round(normalizedLoneliness)} percent={normalizedLoneliness} heightClass="h-1.5" />
+      {showLoneliness ? (
+        <StatusMeter label="寂寞值" value={Math.round(normalizedLoneliness)} percent={normalizedLoneliness} heightClass="h-1.5" />
+      ) : null}
       {/* Mood-change particles fly over the whole panel without catching the pointer. */}
       <div ref={layerRef} className="mood-burst-layer" aria-hidden="true" />
     </div>

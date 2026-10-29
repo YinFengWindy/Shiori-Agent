@@ -36,6 +36,7 @@ from session.manager import SessionManager
 from agent.turns.outbound import BusOutboundPort
 from bus.event_bus import EventBus
 from bus.queue import MessageBus
+from tests.support.generation_getters import turn_getters
 
 
 @pytest.mark.asyncio
@@ -252,7 +253,8 @@ async def test_committed_affection_change_is_recorded_and_saved_with_the_session
         affection_change=AffectionChange(3, "他一直记得我说过的话。"),
     )
 
-    await _apply_turn_affection(relationship, cast(Any, state))
+    with turn_getters(affection=relationship):
+        await _apply_turn_affection(cast(Any, state))
 
     history = relationship.affection.read_history("yin")
     assert [(e.delta, e.reason, e.source) for e in history[1:]] == [

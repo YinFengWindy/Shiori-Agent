@@ -1,3 +1,4 @@
+from tests.support.generation_getters import run_in_turn
 import asyncio
 import json
 from dataclasses import replace
@@ -142,6 +143,7 @@ def test_default_reasoner_runs_tool_loop_and_returns_reasoner_result():
         discovery=ToolDiscoveryState(),
         tool_search_enabled=False,
     )
+    run_in_turn(reasoner, method="run_turn")
 
     result = asyncio.run(reasoner.run([{"role": "user", "content": "hi"}]))
 
@@ -192,6 +194,7 @@ def test_default_reasoner_run_turn_uses_tool_context_snapshot(tmp_path):
         context=cast(Any, SimpleNamespace(render=lambda *_args, **_kwargs: None)),
         session_manager=manager,
     )
+    run_in_turn(reasoner, method="run_turn")
     tools.set_context(
         session_key="telegram:123",
         role_id="mira",
@@ -294,6 +297,7 @@ def test_qq_group_attachment_reader_uses_real_pagination_without_filesystem_gran
         context=cast(Any, SimpleNamespace(render=lambda *_args, **_kwargs: None)),
         session_manager=manager,
     )
+    run_in_turn(reasoner, method="run_turn")
     reasoner.render_prompt = AsyncMock(
         return_value=PromptRenderResult(
             messages=[{"role": "user", "content": "读文章"}]
@@ -354,6 +358,7 @@ def test_default_reasoner_blocks_disabled_tool_even_if_model_calls_it():
         discovery=ToolDiscoveryState(),
         tool_search_enabled=False,
     )
+    run_in_turn(reasoner, method="run_turn")
 
     result = asyncio.run(
         reasoner.run(
@@ -402,6 +407,7 @@ def test_default_reasoner_tool_search_cannot_reunlock_disabled_tool():
         discovery=ToolDiscoveryState(),
         tool_search_enabled=True,
     )
+    run_in_turn(reasoner, method="run_turn")
 
     result = asyncio.run(
         reasoner.run(
@@ -448,6 +454,7 @@ def test_default_reasoner_zero_max_iterations_is_unlimited():
         discovery=ToolDiscoveryState(),
         tool_search_enabled=False,
     )
+    run_in_turn(reasoner, method="run_turn")
 
     result = asyncio.run(reasoner.run([{"role": "user", "content": "hi"}]))
 
@@ -485,6 +492,7 @@ def test_default_reasoner_honors_after_step_stop_after_tool_batch():
         discovery=ToolDiscoveryState(),
         tool_search_enabled=False,
     )
+    run_in_turn(reasoner, method="run_turn")
     kernel = kernel_with(on=((StepFinished, _request_summary),))
     reasoner.bind_kernel(lambda: kernel)
 
@@ -531,6 +539,7 @@ def test_default_reasoner_continues_without_after_step_stop_request():
         discovery=ToolDiscoveryState(),
         tool_search_enabled=False,
     )
+    run_in_turn(reasoner, method="run_turn")
 
     result = asyncio.run(reasoner.run([{"role": "user", "content": "hi"}]))
 
@@ -585,6 +594,7 @@ def test_default_reasoner_observes_tool_lifecycle_events(tmp_path):
         session_manager=manager,
         event_bus=event_bus,
     )
+    run_in_turn(reasoner, method="run_turn")
     session = manager.get_or_create("telegram:123")
     msg = InboundMessage(
         content="hi",
@@ -653,6 +663,7 @@ def test_default_reasoner_observes_blocked_tool_lifecycle_events():
         tool_search_enabled=True,
         event_bus=event_bus,
     )
+    run_in_turn(reasoner, method="run_turn")
 
     result = asyncio.run(
         reasoner.run(
@@ -702,6 +713,7 @@ def test_default_reasoner_unlocks_tool_search_visibility():
         discovery=ToolDiscoveryState(),
         tool_search_enabled=True,
     )
+    run_in_turn(reasoner, method="run_turn")
 
     result = asyncio.run(reasoner.run([{"role": "user", "content": "hi"}]))
 
@@ -742,6 +754,7 @@ def test_default_reasoner_preflight_includes_deferred_tool_names():
         discovery=ToolDiscoveryState(),
         tool_search_enabled=True,
     )
+    run_in_turn(reasoner, method="run_turn")
 
     # 调用方负责在调用 run() 前注入 hint。
     hint = build_turn_injection_prompt(
@@ -791,6 +804,7 @@ def test_default_reasoner_deferred_tool_direct_call_requires_select():
         discovery=ToolDiscoveryState(),
         tool_search_enabled=True,
     )
+    run_in_turn(reasoner, method="run_turn")
 
     result = asyncio.run(reasoner.run([{"role": "user", "content": "hi"}]))
 
@@ -823,6 +837,7 @@ def test_default_reasoner_preloaded_tool_not_in_deferred_list():
         discovery=ToolDiscoveryState(),
         tool_search_enabled=True,
     )
+    run_in_turn(reasoner, method="run_turn")
 
     asyncio.run(
         reasoner.run(
@@ -870,6 +885,7 @@ def test_default_reasoner_run_turn_uses_context_render(tmp_path):
         ),
         session_manager=manager,
     )
+    run_in_turn(reasoner, method="run_turn")
 
     session = manager.get_or_create("cli:1")
     session.add_message("user", "previous input")
@@ -916,6 +932,7 @@ def test_default_reasoner_run_turn_reports_llm_timeout(tmp_path):
         ),
         session_manager=manager,
     )
+    run_in_turn(reasoner, method="run_turn")
     session = manager.get_or_create("cli:1")
     msg = InboundMessage(
         content="hi",
@@ -953,6 +970,7 @@ def test_empty_content_with_thinking_triggers_retry_and_succeeds():
         discovery=ToolDiscoveryState(),
         tool_search_enabled=False,
     )
+    run_in_turn(reasoner, method="run_turn")
 
     result = asyncio.run(reasoner.run([{"role": "user", "content": "hi"}]))
 
@@ -985,6 +1003,7 @@ def test_empty_content_with_thinking_retry_still_empty_fails():
         discovery=ToolDiscoveryState(),
         tool_search_enabled=False,
     )
+    run_in_turn(reasoner, method="run_turn")
 
     with pytest.raises(EmptyReplyError):
         asyncio.run(reasoner.run([{"role": "user", "content": "hi"}]))
@@ -1013,6 +1032,7 @@ def test_empty_content_without_thinking_recovers():
         discovery=ToolDiscoveryState(),
         tool_search_enabled=False,
     )
+    run_in_turn(reasoner, method="run_turn")
 
     result = asyncio.run(reasoner.run([{"role": "user", "content": "hi"}]))
 

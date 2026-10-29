@@ -22,7 +22,7 @@ import { previewFromSessionMessages } from "../roles/roleChatPreview";
 import { usePluginUiVisibility } from "./usePluginUiVisibility";
 import { SettingsPage } from "../settings/SettingsPage";
 import { type SettingsSectionId } from "../settings/SettingsSidebar";
-import { cx, ghostButtonClass, type RoleAssetCategory, type RoleRecord, type SessionPayload } from "@yinfengwindy/shiori-sdk";
+import { cx, ghostButtonClass, type AffectionSummary, type RoleAssetCategory, type RoleRecord, type SessionPayload } from "@yinfengwindy/shiori-sdk";
 import { sidebarTrackMotionClass } from "../shared/styles";
 import { buildNavRailViews, NavRail, pluginNavRailViewId, type NavRailViewId } from "../shell/NavRail";
 import { useGlobalShortcuts } from "../shell/useGlobalShortcuts";
@@ -36,7 +36,6 @@ import type {
 } from "../shared/types";
 import type { RoleCardImportState } from "./roleCardImportState";
 import { TitleBar } from "../shell/TitleBar";
-import type { AffectionDisplay } from "../chat/affectionDisplay";
 
 type RightSidebarViewState = {
   collapsed: boolean;
@@ -95,7 +94,7 @@ type DesktopAppFrameProps = {
   roleSelfView: string;
   relationshipTags: string[];
   lonelinessValue: number;
-  affection: AffectionDisplay | null;
+  affection: AffectionSummary | null;
   conversationEndRef: React.RefObject<HTMLDivElement | null>;
   headerTitle: string;
   highlightedMessageKey: string;

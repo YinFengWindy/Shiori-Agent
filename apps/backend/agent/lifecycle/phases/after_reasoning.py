@@ -115,9 +115,6 @@ class AfterReasoningPhase:
         self._bus = bus
         self._events = events
         self._session_services = session_services
-        self._relationship_runtime = getattr(
-            session_services, "relationship_runtime", None
-        )
 
     async def run(self, input: AfterReasoningInput) -> AfterReasoningResult:
         """Commits the reply and returns its context and outbound message."""
@@ -254,7 +251,7 @@ class AfterReasoningPhase:
         """用户本人发来消息：刷新在场，并让关系状态（孤独值、等待回复）响应。"""
         if self._session_services.presence:
             self._session_services.presence.record_user_message(session_key)
-        affection = current_affection(self._relationship_runtime)
+        affection = current_affection()
         if affection is not None:
             affection.handle_user_message(session_key)
 
@@ -273,7 +270,7 @@ class AfterReasoningPhase:
             tool_chain=list(ctx.tool_chain),
             mood=None,
         )
-        affection = current_affection(self._relationship_runtime)
+        affection = current_affection()
         if affection is not None:
             session.metadata = affection.enrich_session_metadata(
                 cast(dict[str, Any], session.metadata),
@@ -304,7 +301,7 @@ class AfterReasoningPhase:
             ] = state.msg.timestamp.isoformat()
 
         def enrich(metadata: dict[str, Any]) -> dict[str, Any]:
-            affection = current_affection(self._relationship_runtime)
+            affection = current_affection()
             if affection is None:
                 return metadata
             return affection.enrich_session_metadata(metadata)

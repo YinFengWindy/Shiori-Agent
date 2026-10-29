@@ -30,6 +30,7 @@ from session.manager import SessionManager, ConsolidationCommitRequest
 from session.manager.models import whole_session
 from agent.turns.channel_sequence import ChannelSequenceOwner
 from bus.queue import MessageBus
+from tests.support.generation_getters import run_in_turn, turn_getters
 from shiori_sdk.messages import DeliveryOutcome
 from agent.turns.reply_sequence import ReplySequence
 
@@ -105,10 +106,12 @@ async def test_external_sequence_sends_each_committed_row_once_with_first_only_e
 
 
 def phase(manager):
-    return AfterReasoningPhase(
-        EventBus(),
-        TurnEvents(EventBus(), core_kernel),
-        SimpleNamespace(session_manager=manager, presence=None),
+    return run_in_turn(
+        AfterReasoningPhase(
+            EventBus(),
+            TurnEvents(EventBus(), core_kernel),
+            SimpleNamespace(session_manager=manager, presence=None),
+        )
     )
 
 
@@ -646,13 +649,12 @@ async def test_only_the_users_own_group_message_updates_relationship_state(
         {"chat_type": "group", "thread_id": group}
         | ({"sender_is_user": True} if sender_is_user else {})
     )
-    services = SimpleNamespace(
-        session_manager=manager, presence=presence, relationship_runtime=relationship
-    )
+    services = SimpleNamespace(session_manager=manager, presence=presence)
 
-    await AfterReasoningPhase(
-        EventBus(), TurnEvents(EventBus(), core_kernel), services
-    ).run(request)
+    with turn_getters(affection=relationship):
+        await AfterReasoningPhase(
+            EventBus(), TurnEvents(EventBus(), core_kernel), services
+        ).run(request)
 
     runtime = relationship.read_loneliness_runtime("yin")
     assert runtime is not None

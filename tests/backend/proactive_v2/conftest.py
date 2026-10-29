@@ -8,6 +8,7 @@ from datetime import datetime
 from types import SimpleNamespace
 from typing import Any, Callable, cast
 from unittest.mock import AsyncMock, MagicMock
+from tests.support.generation_getters import bound_affection, run_in_turn
 
 from agent.core.turn_events import core_kernel
 from proactive_v2.config import ProactiveConfig
@@ -260,7 +261,7 @@ def relationship_gate_chain(
     gates: list[ProactiveGateAdapter] = [_SceneGate()]
     if loneliness_evaluate is not None:
         runtime = SimpleNamespace(should_trigger_proactive=loneliness_evaluate)
-        gates.append(RelationshipStrategy(cast(Any, runtime)))
+        gates.append(RelationshipStrategy(bound_affection(runtime)))
     return ProactiveGateChain(motives=gates)
 
 
@@ -282,6 +283,7 @@ def make_proactive_pipeline(
     drift_pipeline: Any = None,
     target_transport_fn: Any = lambda: ("telegram", "test_chat_id"),
     proactive_gates: ProactiveGateChain | None = None,
+    bind_getters: bool = True,
 ):
     from agent.core.proactive_turn import (
         ProactiveTurnPipeline,
@@ -360,7 +362,7 @@ def make_proactive_pipeline(
         session_svc, _Outbound(), deliver=lambda content: sender.send(content)
     )
 
-    return ProactiveTurnPipeline(
+    pipeline = ProactiveTurnPipeline(
         ProactiveTurnPipelineDeps(
             cfg=cfg or cfg_with(),
             session_key=session_key,
@@ -382,3 +384,8 @@ def make_proactive_pipeline(
             proactive_gates=proactive_gates,
         )
     )
+    if not bind_getters:
+        return pipeline
+    # Production ticks run under the generation lease, which carries both
+    # getters; here both sockets are empty (plugins off).
+    return run_in_turn(pipeline)

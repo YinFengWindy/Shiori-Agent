@@ -86,7 +86,7 @@ UTF-8 YAML。字段在 `apps/backend/agent/plugin_host/manifest.py` 解析；外
 | `affection_host` | `AFFECTION_HOST` | 宿主事实：角色、会话、在场、记忆文档、对话模型 |
 | `mcp_tools` | `MCP_TOOLS` | 宿主。动态 MCP 工具的登记。管理工具仍走 `TOOLS.register` |
 
-`scene_observations` 这个 Key 还在，但宿主不再提供。声明 `inject: [scene_observations]` 会因为没有提供方而 `BLOCKED`。NovelAI 改为 `optional_inject: [scene]`，`get(SCENE)` 为空时不登记需求。`mcp` 是外部插件，默认关闭；没启用时没有 `mcp_add`。
+旧的 `scene_observations` Key 在 4.0.0 删除。NovelAI 改为 `optional_inject: [scene]`，`get(SCENE)` 为空时不登记需求。场景插件经 `SCENE_HOST.on_published` 开始观察：本代已发布时（代内重载、代内启用）立即开始，否则等宿主发布本代。`mcp` 是外部插件，新装默认关闭，没启用时没有 `mcp_add`；`mcp_servers.json` 里已有服务器的老工作区会在启动时一次性写入 `[plugins.mcp] enabled = true`（见[生命周期](plugin-lifecycle.md)）。
 
 即时聊天的选用：插件在提供，并且角色 `runtime_config.natural_chat_enabled` 是布尔 `True`。插件关闭时不选用，回复是单条。`natural_chat_enabled` 仍在角色 JSON，不进 `config.toml`。
 
@@ -153,7 +153,7 @@ UTF-8 YAML。字段在 `apps/backend/agent/plugin_host/manifest.py` 解析；外
 
 ### 角色数据
 
-- **好感度**：`AffectionSummary` 出现在 `RoleRecord.affection`、会话 metadata 和 `roles.affection.history`；第一次对话初始化之前没有。`value` 是 -100 到 100，七个阶段：「厌恶」-100～-50、「冷淡」-49～-1、「陌生」0～19、「熟悉」20～39、「朋友」40～59、「亲密」60～79、「挚爱」80～100；`progress` 是当前阶段内的 0～1。`floor` 是达到过的最高「熟悉」及以上阶段的起点（20 / 40 / 60 / 80），从没达到「熟悉」时为 `null`；好感不会再低于它。「陌生」的角色可以掉到负值，但衰减不会让好感变成负数。消费方要处理全部七个阶段。寂寞增长和关系主动动机要求好感至少 60（「亲密」起点）。
+- **好感度**：`AffectionSummary` 出现在 `RoleRecord.affection`、会话 metadata 和好感插件的 `history` RPC；第一次对话初始化之前没有。`value` 是 -100 到 100，七个阶段：「厌恶」-100～-50、「冷淡」-49～-1、「陌生」0～19、「熟悉」20～39、「朋友」40～59、「亲密」60～79、「挚爱」80～100；`progress` 是当前阶段内的 0～1。`floor` 是达到过的最高「熟悉」及以上阶段的起点（20 / 40 / 60 / 80），从没达到「熟悉」时为 `null`；好感不会再低于它。「陌生」的角色可以掉到负值，但衰减不会让好感变成负数。消费方要处理全部七个阶段。寂寞增长和关系主动动机要求好感至少 60（「亲密」起点）。
 - **关系状态**：`RelationshipSnapshot` 没有 `closeness`；`internal_profile.relation_state` 是固定字段的 `RelationState`（`dependence`、`security`、`initiative_desire`、`neglect_sensitivity`，各 0～1）。需要亲近程度的用好感。
 
 ## 版本
@@ -182,7 +182,7 @@ npm 包、宿主 `setup.py` 和 host-testing 的精确 pin 必须等于这个版
 
 testing 没有按 #904 原计划删掉约 2.7k 行，保留的模块现在是真内核 harness 加服务 stub（维护者确认的偏离）：
 
-- 保留：被插件测试直接或经由装配好的上下文使用的 stub。`channel_group`、`channel_intake`、`resources`、`scene_observations` 没有插件直接导入，但分别经 `FakeChannelSetupContext.fake_channels.group(...)`（grok_bot、telegram）、`fake_channel_context` 的默认 `intake_factory`（telegram）和 `FakeServiceContext` 提供的 `RESOURCES`（browser_use、computer_use、meme）在用，所以保留。`fake_scene_observations` 仍由 `FakeServiceContext` 提供；现行插件不再注入 `scene_observations`，NovelAI 用可选的 `scene`。
+- 保留：被插件测试直接或经由装配好的上下文使用的 stub。`channel_group`、`channel_intake`、`resources` 没有插件直接导入，但分别经 `FakeChannelSetupContext.fake_channels.group(...)`（grok_bot、telegram）、`fake_channel_context` 的默认 `intake_factory`（telegram）和 `FakeServiceContext` 提供的 `RESOURCES`（browser_use、computer_use、meme）在用，所以保留。`scene_observations` 随旧 Key 一起删除。
 - 移走：`bridge`（桌面 bridge 请求 helper）只有宿主集成测试用，已移到 `shiori_host_testing.bridge`。
 - `shiori_sdk.testing` 的模块顶层不能导入会拉进 `httpx` 的模块（例如 `shiori_sdk.core.services`），插件测试环境不一定装了它。
 

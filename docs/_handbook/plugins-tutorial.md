@@ -106,7 +106,7 @@ async def setup(ctx: PluginRuntimeContext) -> None:
 | `storage` | `STORAGE` | 宿主负责的插件私有文件迁移（`migrate_data`） |
 | `workspace` / `roles` / `session_store` | `WORKSPACE` / `ROLES` / `SESSION_STORE` | 工作区目录、角色快照/素材、会话元数据/素材替换；不导出完整存储聚合。回滚最近一轮被动回合是另一个 Key：`inject: [sessions]` 对应 `shiori_sdk.core.sessions.SESSIONS` |
 | `scene` | `SCENE` | 可选。场景插件提供。`request` 返回释放函数，交给 `ctx.effect`。没有提供方时 `get` 为 None，聊天照常 |
-| `models` | `MODELS` | 按角色持有的 chat/vision 模型快照。`scene_observations` 不再由宿主提供，注入它会 `BLOCKED` |
+| `models` | `MODELS` | 按角色持有的 chat/vision 模型快照 |
 | `light_provider` / `light_model` | `LIGHT_PROVIDER` / `LIGHT_MODEL` | 轻量模型及其模型名 |
 | `memory` | `MEMORY` | 记忆插件的宿主接口（引擎是 `MEMORY_ENGINE`，由插件提供） |
 | `external_turns` / `background_results` | `EXTERNAL_TURNS` / `BACKGROUND_RESULTS` | 提交非渠道来源的外部上下文回合；后台任务回报结果 |

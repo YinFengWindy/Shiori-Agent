@@ -1,5 +1,6 @@
 """Turn start events retain transport identity without requiring it."""
 
+from tests.support.generation_getters import bound_affection, bound_reply_policy
 import pytest
 import asyncio
 from unittest.mock import AsyncMock, Mock
@@ -16,6 +17,7 @@ from agent.looping.interrupt import turn_tracking_key
 @pytest.mark.parametrize("metadata", [{"external_message_id": "source-1"}, {}])
 async def test_turn_started_carries_originating_external_message_id(metadata):
     loop = object.__new__(AgentLoop)
+    loop.reply_policy, loop.affection = bound_reply_policy(), bound_affection()
     loop._event_bus = EventBus()
     observed: list[TurnStarted] = []
 
@@ -33,6 +35,7 @@ async def test_turn_started_carries_originating_external_message_id(metadata):
 
 async def test_two_chats_keep_progress_and_explicit_stop_separate():
     loop = object.__new__(AgentLoop)
+    loop.reply_policy, loop.affection = bound_reply_policy(), bound_affection()
     loop._active_turn_states = {}
     loop._active_tasks = {}
     loop._interrupt_states = {}
@@ -96,6 +99,8 @@ async def test_telegram_stop_requires_exact_origin_even_with_one_active_turn(
     from plugins.telegram.backend.channel.commands import _CommandMixin
 
     loop = object.__new__(AgentLoop)
+
+    loop.reply_policy, loop.affection = bound_reply_policy(), bound_affection()
     loop._active_turn_states = {}
     loop._active_tasks = {}
     loop._interrupt_states = {}
@@ -200,6 +205,8 @@ async def test_partial_control_plane_origin_never_selects_another_scope(target):
     from shiori_sdk.channels.services import InterruptController
 
     loop = object.__new__(AgentLoop)
+
+    loop.reply_policy, loop.affection = bound_reply_policy(), bound_affection()
     loop._active_turn_states = {}
     loop._active_tasks = {}
     loop._interrupt_states = {}

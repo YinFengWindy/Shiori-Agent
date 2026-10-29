@@ -187,5 +187,3 @@ push-sender 删除与 `message_push` 异常语义，补丁编号不代表兼容�
 | story | 0.1.2 | 自身 SDK 最低仍为 3.1.0；精确依赖 novelai==0.1.2 |
 
 其他插件未变，不升版本；herdr 的根开发依赖及 uv.lock 同步更新。
-
-上表是 3.1.2 批次的记录，不改。当前工作区里 novelai 与 story 是 0.1.3：NovelAI 改为可选注入 `scene`，story 的精确依赖跟着升到 `novelai==0.1.3`。SDK 仍是未发布的 4.0.0。

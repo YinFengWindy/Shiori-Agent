@@ -319,7 +319,7 @@ describe("desktopSelectors", () => {
     assert.equal(viewModel.lonelinessValue, 64);
   });
 
-  it("derives the affection stage display from the session before the role payload", () => {
+  it("takes the affection summary from the session before the role payload", () => {
     const build = (activeSession: SessionPayload | null, role: RoleRecord) => buildDesktopViewModel({
       roles: [role],
       activeRoleId: "mira",
@@ -336,8 +336,8 @@ describe("desktopSelectors", () => {
     const session = createSession();
     session.metadata = { role_id: "mira", affection: { value: 61, stage: "亲密", progress: 0.05, floor: 60 } };
 
-    assert.deepEqual(build(session, role).affection, { stage: "亲密", percent: 80.5 });
-    assert.deepEqual(build(null, role).affection, { stage: "朋友", percent: 72.5 });
+    assert.deepEqual(build(session, role).affection, { value: 61, stage: "亲密", progress: 0.05, floor: 60 });
+    assert.deepEqual(build(null, role).affection, { value: 45, stage: "朋友", progress: 0.25, floor: 40 });
     assert.equal(build(null, createRole()).affection, null);
   });
 

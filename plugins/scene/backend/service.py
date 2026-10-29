@@ -78,7 +78,7 @@ class SceneService:
         return self._demand.register(predicate)
 
     def activate(self) -> None:
-        """Starts intake only after the generation is published."""
+        """Starts intake. Runs through ``SceneHost.on_published``."""
         if self._active:
             return
         self._active = True

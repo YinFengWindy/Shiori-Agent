@@ -38,6 +38,7 @@ from core.roles import (
     RoleAggregateService,
     RoleStore,
 )
+from core.roles.affection_access import AffectionGetter
 from core.roles.role_runtime import RoleRuntimeRegistry
 from core.roles.model_runtime import ModelConfigurationError, RoleModelRuntime
 from desktop_bridge.app_service import DesktopAppService
@@ -85,7 +86,7 @@ class DesktopBridgeService:
         role_service: RoleAggregateService | None = None,
         config: Any = None,
         push_tool: MessagePushTool | None = None,
-        relationship_runtime: Any | None = None,
+        affection: AffectionGetter,
         presence: Any | None = None,
         scheduler: Any | None = None,
         subagent_manager: Any | None = None,
@@ -159,7 +160,6 @@ class DesktopBridgeService:
         self._role_deleting_listener = self._on_role_deleting
         self.role_service.add_role_deleting_listener(self._role_deleting_listener)
         self.conversation_service = ConversationService(session_manager)
-        self.relationship_runtime = relationship_runtime
         self.presence = presence
         self.scheduler = scheduler
         self.role_tasks = RoleTaskService(
@@ -172,16 +172,16 @@ class DesktopBridgeService:
             role_service=self.role_service,
             session_manager=session_manager,
             conversation_service=self.conversation_service,
-            relationship_runtime=relationship_runtime,
+            affection=affection,
             presence=presence,
         )
         self.session_presenter = DesktopSessionPresenter(
             self.conversation_service,
-            relationship_runtime,
+            affection,
         )
         self.role_presenter = DesktopRolePresenter(
             role_store,
-            relationship_runtime,
+            affection,
             last_message_for_role=lambda role_id: (
                 self.session_presenter.last_message_preview(
                     self.role_service.sessions.derive_session_key(role_id)
@@ -244,7 +244,6 @@ class DesktopBridgeService:
                 role_presenter=self.role_presenter,
                 card_import_service=self.role_card_import_service,
                 card_export_service=DesktopRoleCardExportService(role_store),
-                relationship_runtime=relationship_runtime,
                 publish_event=self._broadcast_event,
             ),
             sessions_and_tasks=DesktopSessionTaskRequestHandler(

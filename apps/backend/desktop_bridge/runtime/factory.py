@@ -23,7 +23,7 @@ def build_desktop_service(
         model_resolver=registry.model_resolver if registry is not None else None,
         activate_transport=activate_transport,
         push_tool=runtime.push_tool,
-        relationship_runtime=runtime.relationship_runtime,
+        affection=runtime.affection,
         presence=runtime.presence,
         scheduler=runtime.scheduler,
         subagent_manager=getattr(spawn, "manager", None),

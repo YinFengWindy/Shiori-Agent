@@ -25,6 +25,7 @@ from bus.event_bus import EventBus
 from bus.events_lifecycle import ProactiveMessageCommitted
 from agent.tools.message_push import MessagePushTool
 from tests.support.push import allow_every_role_target
+from tests.support.generation_getters import run_in_turn, turn_getters
 from agent.account_delivery import AccountDelivery
 from core.accounts import AccountRegistry
 from core.accounts.delivery_ledger import AccountDeliveryLedger
@@ -38,6 +39,29 @@ from bus.queue import MessageBus
 from bus.events_lifecycle import ReplyMessageCommitted
 from shiori_sdk.messages import InboundMessage
 from session.manager.models import whole_session
+
+
+class _Policy:
+    """A filled reply-policy socket: the natural_chat plugin is on."""
+
+    def passive_prompt(self) -> str:
+        return ""
+
+    def draft_prompt(self) -> str:
+        return ""
+
+
+_PRESENT = _Policy()
+
+
+def _in_turn(owner: TurnOrchestrator, affection: object = None) -> None:
+    """Binds the generation's getters around the calls a proactive tick makes.
+
+    Production runs these under the runtime lease; with no outer binding the
+    affection socket is empty and natural chat is available.
+    """
+    for method in ("handle_proactive_turn", "_deliver_before_commit"):
+        run_in_turn(owner, method=method, affection=affection, policy=_PRESENT)
 
 
 def _natural_chat_lookup(tmp_path: Path, enabled: bool):
@@ -110,6 +134,7 @@ async def test_explicit_proactive_account_target_records_receipt_without_default
             account_delivery=delivery,
         )
     )
+    _in_turn(orchestrator)
     message: dict[str, Any] = {"metadata": {}}
     delivered = await orchestrator._deliver_before_commit(
         message,
@@ -172,6 +197,7 @@ async def test_proactive_images_reach_the_bound_private_chat(tmp_path) -> None:
             ),
         )
     )
+    _in_turn(orchestrator)
     result = TurnResult(
         role_reply=RoleReply("", "平静", "我想给你看今天的天空。"),
         reply_context=RoleReplyContext(("平静",), ""),
@@ -222,6 +248,7 @@ async def test_failed_proactive_target_remains_durable_without_turn_commit(
             account_delivery=delivery,
         )
     )
+    _in_turn(orchestrator)
     with pytest.raises(ValueError, match="target rejected"):
         await orchestrator._deliver_before_commit(
             {"metadata": {}},
@@ -293,6 +320,7 @@ async def test_proactive_media_commit_notifies_shared_session(tmp_path) -> None:
             event_bus=event_bus,
         )
     )
+    _in_turn(orchestrator)
 
     result = TurnResult(
         role_reply=RoleReply("给你看张图", "平静", "我想和你聊聊。"),
@@ -374,6 +402,7 @@ async def test_proactive_dispatch_error_is_not_converted_to_false(tmp_path) -> N
             outbound=_Outbound(),
         )
     )
+    _in_turn(orchestrator)
     failure_effect = SimpleNamespace(run=AsyncMock())
 
     with pytest.raises(OutboundDispatchError, match="network unavailable"):
@@ -420,6 +449,7 @@ async def test_orchestrator_skip_runs_side_effects_without_dispatch():
             outbound=_Outbound(),
         )
     )
+    _in_turn(orchestrator)
 
     sent = await orchestrator.handle_proactive_turn(
         result=TurnResult(
@@ -473,6 +503,7 @@ async def test_orchestrator_proactive_reply_persists_dispatches_and_runs_success
             outbound=_Outbound(),
         )
     )
+    _in_turn(orchestrator)
 
     sent = await orchestrator.handle_proactive_turn(
         result=TurnResult(
@@ -533,6 +564,7 @@ async def test_orchestrator_proactive_reply_records_presence_by_role_when_availa
             outbound=_Outbound(),
         )
     )
+    _in_turn(orchestrator)
 
     sent = await orchestrator.handle_proactive_turn(
         result=TurnResult(
@@ -621,19 +653,21 @@ async def test_natural_proactive_keeps_sent_prefix_and_finishes_one_logical_turn
     relationship = SimpleNamespace(handle_proactive_sent=Mock())
     owner = TurnOrchestrator(
         TurnOrchestratorDeps(
-            session=SessionServices(
-                manager, presence=presence, relationship_runtime=relationship
-            ),
+            session=SessionServices(manager, presence=presence),
             outbound=SimpleNamespace(dispatch=dispatch),
             event_bus=event_bus,
             role_lookup=_natural_chat_lookup(tmp_path, True),
         )
     )
+    _in_turn(owner, affection=relationship)
     success, failure = AsyncMock(), AsyncMock()
     batches = ChannelSequenceOwner()
 
     async def run():
-        with batches.bind(MessageBus()):
+        with (
+            turn_getters(affection=relationship, policy=_PRESENT),
+            batches.bind(MessageBus()),
+        ):
             async with owner.natural_reply_scope(
                 "role:mira", "desktop", "role:mira", turn_id="tick:one"
             ):
@@ -696,8 +730,9 @@ async def test_natural_proactive_reads_role_flag_and_records_state_once(
             role_lookup=_natural_chat_lookup(tmp_path, enabled),
         )
     )
+    _in_turn(owner)
     success = AsyncMock()
-    with ChannelSequenceOwner().bind(MessageBus()):
+    with turn_getters(policy=_PRESENT), ChannelSequenceOwner().bind(MessageBus()):
         async with owner.natural_reply_scope(
             "role:mira", "desktop", "role:mira", turn_id="tick:one"
         ):
@@ -758,6 +793,7 @@ async def test_bound_private_natural_batch_uses_known_address_without_resolver_r
             role_lookup=_natural_chat_lookup(tmp_path, True),
         )
     )
+    _in_turn(owner)
     pause = asyncio.Event()
 
     async def pace(_):
@@ -768,7 +804,7 @@ async def test_bound_private_natural_batch_uses_known_address_without_resolver_r
     batches = ChannelSequenceOwner()
 
     async def run():
-        with batches.bind(MessageBus()):
+        with turn_getters(policy=_PRESENT), batches.bind(MessageBus()):
             async with owner.natural_reply_scope(
                 "role:mira", "chat_bot", "canonical-dm", turn_id="private:tick"
             ):
@@ -815,6 +851,7 @@ async def test_successive_proactive_commits_keep_one_state_per_reply(
     )
     outbound = SimpleNamespace(dispatch=AsyncMock(return_value=DeliveryReceipt.sent()))
     owner = TurnOrchestrator(TurnOrchestratorDeps(SessionServices(sessions), outbound))
+    _in_turn(owner)
     first = _formal_result(owner)
     assert await _send(owner, first)
     session = sessions.get_or_create("role:mira")
@@ -869,6 +906,7 @@ async def test_failed_proactive_delivery_does_not_publish_messages_or_state(
             SessionServices(sessions), SimpleNamespace(dispatch=dispatch)
         )
     )
+    _in_turn(owner)
     if failure == "projection":
 
         def fail_projection(_session):
@@ -917,6 +955,7 @@ async def test_passive_commit_waits_for_delivery_and_stale_generation_cannot_ove
             SessionServices(sessions), SimpleNamespace(dispatch=dispatch)
         )
     )
+    _in_turn(owner)
     result = _formal_result(owner)
     proactive = asyncio.create_task(_send(owner, result))
     await entered.wait()
@@ -971,6 +1010,7 @@ async def test_image_only_channel_cannot_commit_requested_text(tmp_path, content
             PushToolOutboundPort(push, execution_context={"role_id": "mira"}),
         )
     )
+    _in_turn(owner)
     result = _formal_result(owner, content=content, media=["/tmp/cat.png"])
 
     if content:
@@ -998,6 +1038,7 @@ async def test_refused_proactive_push_commits_no_delivery_record(tmp_path):
     sessions.save(session)
     outbound = SimpleNamespace(dispatch=AsyncMock(return_value=None))
     owner = TurnOrchestrator(TurnOrchestratorDeps(SessionServices(sessions), outbound))
+    _in_turn(owner)
 
     assert await _send(owner, _formal_result(owner)) is False
 
@@ -1051,6 +1092,7 @@ async def test_bound_private_chat_target_is_delivered_through_the_account(
             bound_chat_target=bound_chat_target,
         )
     )
+    _in_turn(owner)
 
     assert await owner.handle_proactive_turn(
         result=_formal_result(owner),

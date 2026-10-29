@@ -42,6 +42,7 @@ from core.roles.plugin_capability import HostRoleModels, HostRoles
 from core.roles.role_runtime import RoleRuntimeRegistry
 from core.roles.store import RoleStore
 from agent.tools.mcp_registration import HostMcpToolRegistration
+from core.roles.affection_access import AffectionGetter
 from core.roles.affection_host import HostAffectionSources
 from core.scene.host import HostSceneAdapter
 from desktop_bridge.method_policy import MethodPolicy
@@ -112,7 +113,7 @@ class PluginCoreInputs:
     - ``session_manager``: the ``sessions`` socket (``SESSIONS``) and, with
       the ``workspace`` holding session media, session metadata
       (``SESSION_STORE``), whose payloads the desktop
-      presenter projects with ``relationship_runtime``.
+      presenter enriches with the generation's ``affection`` getter.
     - ``role_runtime_registry``: ``models``.
     - ``provider`` / ``model``: the main chat pair, provided as
       ``MAIN_PROVIDER`` and ``MAIN_MODEL``. None means this generation has no
@@ -137,7 +138,7 @@ class PluginCoreInputs:
     role_store: RoleStore | None
     session_manager: SessionManager | None
     presence: Any | None = None
-    relationship_runtime: object
+    affection: AffectionGetter
     role_runtime_registry: RoleRuntimeRegistry | None
     provider: LLMProvider | None
     model: str | None
@@ -203,7 +204,7 @@ def plugin_core_modules(inputs: PluginCoreInputs) -> tuple[CoreModule, ...]:
         sessions_api: Sessions = inputs.session_manager
         provide(SESSIONS, sessions_api)
         if inputs.workspace is not None:
-            presenter = DesktopSessionPresenter(None, inputs.relationship_runtime)
+            presenter = DesktopSessionPresenter(None, inputs.affection)
             # Typed as the plugin contract, so pyright checks the host implementation.
             sessions: PluginSessions = HostSessions(
                 inputs.session_manager, inputs.workspace, presenter

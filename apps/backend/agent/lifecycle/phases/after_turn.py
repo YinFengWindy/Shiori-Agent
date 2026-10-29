@@ -51,7 +51,6 @@ class AfterTurnPhase:
         outbound: OutboundPort,
         context: ContextBuilder,
         history_window: int = 500,
-        relationship_runtime: object | None = None,
     ) -> None:
         # ``TurnCommitted`` is a core domain event, not a turn event: it fans
         # out on the core bus alone, without the plugin kernel.
@@ -60,7 +59,6 @@ class AfterTurnPhase:
         self._outbound = outbound
         self._context = context
         self._history_window = max(1, int(history_window))
-        self._relationship_runtime = relationship_runtime
 
     async def run(self, snap: TurnSnapshot) -> OutboundMessage:
         """Closes the turn and returns its outbound message."""
@@ -79,7 +77,7 @@ class AfterTurnPhase:
             history_window=hw,
         )
         react_stats = extract_react_stats(snap.ctx.context_retry)
-        await _apply_turn_affection(self._relationship_runtime, state)
+        await _apply_turn_affection(state)
         await self._bus.fanout(
             _turn_committed(snap, budget=budget, react_stats=react_stats)
         )
@@ -104,16 +102,14 @@ def _memory_extra(state: TurnState) -> dict[str, object]:
     return {}
 
 
-async def _apply_turn_affection(
-    relationship_runtime: object | None, state: TurnState
-) -> None:
+async def _apply_turn_affection(state: TurnState) -> None:
     """Applies the committed reply's affection change before the turn is announced.
 
     Running ahead of ``TurnCommitted`` lets every session refresh triggered by
     it carry the new summary.
     """
     change = state.affection_change
-    affection = current_affection(relationship_runtime)
+    affection = current_affection()
     if change is None or affection is None:
         return
     session = cast("Session", state.session)

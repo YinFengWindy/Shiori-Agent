@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from tests.support.generation_getters import run_in_turn
 from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
@@ -799,7 +800,9 @@ async def test_prompt_render_chain_respects_disabled_sections(tmp_path):
     context = ContextBuilder(
         tmp_path, memory=cast(Any, memory), runtime_roles=RoleStore(tmp_path)
     )
-    phase = PromptRenderPhase(TurnEvents(EventBus(), lambda: kernel), context)
+    phase = run_in_turn(
+        PromptRenderPhase(TurnEvents(EventBus(), lambda: kernel), context)
+    )
 
     result = await phase.run(
         PromptRenderInput(
@@ -936,6 +939,7 @@ async def test_after_reasoning_applies_reasoning_finished_to_store_and_outbound(
         TurnEvents(EventBus(), lambda: kernel),
         cast(Any, services),
     )
+    run_in_turn(phase, method="run")
 
     result = await phase.run(AfterReasoningInput(state=state, turn_result=turn_result))
 
@@ -980,8 +984,10 @@ async def test_after_reasoning_carries_the_persisted_assistant_message_id_into_o
         streamed=False,
         context_retry={},
     )
-    phase = AfterReasoningPhase(
-        EventBus(), TurnEvents(EventBus(), core_kernel), cast(Any, services)
+    phase = run_in_turn(
+        AfterReasoningPhase(
+            EventBus(), TurnEvents(EventBus(), core_kernel), cast(Any, services)
+        )
     )
 
     result = await phase.run(AfterReasoningInput(state=state, turn_result=turn_result))
@@ -1022,8 +1028,10 @@ async def test_after_reasoning_persists_user_display_content_without_internal_me
         streamed=False,
         context_retry={},
     )
-    phase = AfterReasoningPhase(
-        EventBus(), TurnEvents(EventBus(), core_kernel), cast(Any, services)
+    phase = run_in_turn(
+        AfterReasoningPhase(
+            EventBus(), TurnEvents(EventBus(), core_kernel), cast(Any, services)
+        )
     )
 
     await phase.run(AfterReasoningInput(state=state, turn_result=turn_result))
@@ -1066,60 +1074,16 @@ async def test_after_reasoning_copies_thread_id_into_persisted_messages():
         streamed=False,
         context_retry={},
     )
-    phase = AfterReasoningPhase(
-        EventBus(), TurnEvents(EventBus(), core_kernel), cast(Any, services)
+    phase = run_in_turn(
+        AfterReasoningPhase(
+            EventBus(), TurnEvents(EventBus(), core_kernel), cast(Any, services)
+        )
     )
 
     await phase.run(AfterReasoningInput(state=state, turn_result=turn_result))
 
     assert session.messages[0]["thread_id"] == "thread:mira:telegram:123"
     assert session.messages[1]["thread_id"] == "thread:mira:telegram:123"
-
-
-@pytest.mark.asyncio
-async def test_after_reasoning_enriches_session_metadata_with_relationship_runtime():
-    session = _DummySession("desktop:role:mira")
-    msg = InboundMessage(
-        channel="desktop",
-        sender="user",
-        chat_id="desktop:role:mira",
-        content="hi",
-        timestamp=_now,
-    )
-    state = TurnState(msg=msg, session_key=session.key, dispatch_outbound=True)
-    state.session = session
-    relationship_runtime = Mock()
-    relationship_runtime.enrich_session_metadata = Mock(
-        return_value={
-            "role_id": "mira",
-            "relationship_snapshot": {"role_self_view": "我在想你。"},
-        },
-    )
-    services = SimpleNamespace(
-        presence=Mock(),
-        session_manager=SimpleNamespace(append_messages=AsyncMock()),
-        relationship_runtime=relationship_runtime,
-    )
-    turn_result = TurnRunResult(
-        reply="reply",
-        tool_chain=[],
-        tools_used=[],
-        thinking=None,
-        streamed=False,
-        context_retry={},
-    )
-    phase = AfterReasoningPhase(
-        EventBus(), TurnEvents(EventBus(), core_kernel), cast(Any, services)
-    )
-
-    await phase.run(AfterReasoningInput(state=state, turn_result=turn_result))
-
-    relationship_runtime.enrich_session_metadata.assert_called_once()
-    relationship_snapshot = cast(
-        dict[str, object],
-        session.metadata["relationship_snapshot"],
-    )
-    assert relationship_snapshot["role_self_view"] == "我在想你。"
 
 
 class _RecordingConsolidator:

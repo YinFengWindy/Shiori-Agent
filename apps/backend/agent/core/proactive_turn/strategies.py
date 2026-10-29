@@ -9,7 +9,7 @@ from agent.core.proactive_turn.gates import (
     ProactiveGateDecision,
     ProactiveMode,
 )
-from core.roles.affection_access import current_affection
+from core.roles.affection_access import AffectionGetter
 
 
 class SceneFollowupStrategy(ProactiveGateAdapter):
@@ -18,12 +18,12 @@ class SceneFollowupStrategy(ProactiveGateAdapter):
     name = "relationship.scene_followup"
     priority = 100
 
-    def __init__(self, runtime: object | None) -> None:
-        self._runtime = runtime
+    def __init__(self, affection: AffectionGetter) -> None:
+        self._affection = affection
 
     def evaluate(self, ctx: ProactiveGateContext) -> ProactiveGateDecision:
         """Offers only scene followups that are due at this tick."""
-        runtime = current_affection(self._runtime)
+        runtime = self._affection()
         if runtime is None:
             return ProactiveGateDecision.continue_(reason="affection_unavailable")
         should_follow_up, metadata = runtime.should_trigger_scene_followup(
@@ -42,7 +42,7 @@ class SceneFollowupStrategy(ProactiveGateAdapter):
 
     def finalize(self, completion: ProactiveGateCompletion) -> None:
         """Advances successful followups or closes rejected scenes."""
-        runtime = current_affection(self._runtime)
+        runtime = self._affection()
         if runtime is None:
             return
         if completion.outcome == "delivered":
@@ -60,12 +60,12 @@ class RelationshipStrategy(ProactiveGateAdapter):
     name = "relationship.loneliness"
     priority = 0
 
-    def __init__(self, runtime: object | None) -> None:
-        self._runtime = runtime
+    def __init__(self, affection: AffectionGetter) -> None:
+        self._affection = affection
 
     def evaluate(self, ctx: ProactiveGateContext) -> ProactiveGateDecision:
         """Preserves relationship-specific misses in the shared diagnostic trace."""
-        runtime = current_affection(self._runtime)
+        runtime = self._affection()
         if runtime is None:
             return ProactiveGateDecision.continue_(reason="affection_unavailable")
         should_trigger, metadata = runtime.should_trigger_proactive(

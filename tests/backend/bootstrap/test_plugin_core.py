@@ -1,6 +1,7 @@
 """The core provide list: what plugins receive from the core modules it provides."""
 
 from __future__ import annotations
+from tests.support.generation_getters import bound_affection
 
 import asyncio
 import io
@@ -126,29 +127,6 @@ async def test_avatars_capability_caches_into_the_host_role_store(
 
 
 @pytest.mark.asyncio
-async def test_retired_scene_observations_key_blocks_the_plugin(tmp_path: Path) -> None:
-    """The host no longer provides ``scene_observations``; injecting it blocks setup."""
-    package = tmp_path / "plugins" / "scene_probe"
-    (package / "backend").mkdir(parents=True)
-    (package / "manifest.yaml").write_text(
-        "api: 4\nsdk: '>=4.0.0'\nid: scene_probe\ninject: [scene_observations]\n",
-        encoding="utf-8",
-    )
-    (package / "backend/plugin.py").write_text(
-        "from shiori_sdk.core.services import SCENE_OBSERVATIONS\n"
-        "async def setup(ctx):\n"
-        "    ctx.require(SCENE_OBSERVATIONS).request(lambda role: True)\n",
-        encoding="utf-8",
-    )
-    kernel = host_kernel([tmp_path / "plugins"])
-    await kernel.load_all()
-    try:
-        assert [state["state"] for state in kernel.states()] == ["BLOCKED"]
-    finally:
-        await kernel.terminate_all(force=True)
-
-
-@pytest.mark.asyncio
 async def test_scene_host_is_provided_with_the_role_store(tmp_path: Path) -> None:
     """``SCENE_HOST`` is a core key once this generation has roles and sessions."""
     package = tmp_path / "plugins" / "scene_probe"
@@ -187,6 +165,79 @@ async def test_scene_host_is_provided_with_the_role_store(tmp_path: Path) -> Non
         await kernel.terminate_all(force=True)
 
 
+@pytest.mark.asyncio
+async def test_scene_keeps_observing_after_an_in_generation_reload_or_re_enable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The plugin settings page reloads scene in place; intake must not stop."""
+    from session.manager import SessionManager
+    from shiori_sdk.core.scene import SCENE_HOST
+    from shiori_sdk.role_events import ProactiveMessageCommitted
+    from shiori_sdk.testing.packages import plugin_directory, stage_plugin_package
+
+    from core.scene.host import HostSceneAdapter
+
+    stage_plugin_package(plugin_directory("scene"), tmp_path / "plugins" / "scene")
+    workspace = tmp_path / "workspace"
+    role_store = RoleStore(workspace)
+    role_store.create_role(role_id="mira", name="Mira", system_prompt="stay")
+    bus = EventBus()
+    kernel = host_kernel(
+        [tmp_path / "plugins"],
+        settings=PluginGenerationSettings(workspace=workspace),
+        role_store=role_store,
+        session_manager=SessionManager(workspace),
+        light_provider=SimpleNamespace(),
+        light_model="light",
+        event_bus=bus,
+    )
+    await kernel.load_all()
+    host = kernel.kernel.get(SCENE_HOST)
+    assert isinstance(host, HostSceneAdapter)
+    reads: list[str] = []
+
+    def history(*, session_key, role_id, thread_id, limit):
+        # Only a listening intake reads history; None ends the observation.
+        reads.append(role_id)
+        return None
+
+    monkeypatch.setattr(host, "proactive_history", history)
+    event = ProactiveMessageCommitted(
+        session_key="role:mira",
+        channel="desktop",
+        role_id="mira",
+        thread_id="desktop:mira",
+        assistant_response="在吗？",
+    )
+    try:
+        await bus.fanout(event)
+        assert reads == []
+        host.publish()
+        await bus.fanout(event)
+        assert reads == ["mira"]
+
+        await kernel.reload(
+            "scene",
+            values={"observation_enabled": True},
+            raw_values={},
+            drain_timeout=1,
+        )
+        await bus.fanout(event)
+        assert reads == ["mira"] * 2
+
+        for enabled in (False, True):
+            await kernel.set_enabled(
+                "scene",
+                values={"enabled": enabled},
+                raw_values={},
+                drain_timeout=1,
+            )
+        await bus.fanout(event)
+        assert reads == ["mira"] * 3
+    finally:
+        await kernel.terminate_all(force=True)
+
+
 def test_core_module_provide_failure_aborts_startup(tmp_path: Path) -> None:
     """§8.5：核心模块自身 provide 失败时整个启动失败，不像插件 setup 失败那样记为 FAILED。"""
 
@@ -211,7 +262,7 @@ def test_core_module_provide_failure_aborts_startup(tmp_path: Path) -> None:
                         tools=None,
                         role_store=None,
                         session_manager=None,
-                        relationship_runtime=None,
+                        affection=bound_affection(),
                         role_runtime_registry=None,
                         provider=None,
                         model=None,

@@ -125,9 +125,6 @@ class ProactiveLoop:
         self._role_prompt_fn = role_prompt_fn
         self._workspace_context_mtime_ns: int | None = None
         self._workspace_context_text: str = ""
-        # The affection plugin owns the runtime. This loop reads it through
-        # the generation getter when a turn holds the runtime lease.
-        self._relationship_runtime = None
         self._init_runtime_state(config)
         self._init_runtime_components()
 
@@ -158,7 +155,6 @@ class ProactiveLoop:
                 session=SessionServices(
                     session_manager=self._sessions,
                     presence=self._presence,
-                    relationship_runtime=self._relationship_runtime,
                     conversation_service=ConversationService(self._sessions),
                 ),
                 outbound=PushToolOutboundPort(

@@ -153,9 +153,6 @@ METHOD_POLICIES: dict[str, MethodPolicy] = {
     "roles.list": MethodPolicy(
         concurrency=Concurrency.READ_ONLY, admission_exempt=True
     ),
-    "roles.affection.history": MethodPolicy(concurrency=Concurrency.READ_ONLY),
-    "roles.affection.stagePrompts.get": MethodPolicy(concurrency=Concurrency.READ_ONLY),
-    "roles.affection.stagePrompts.set": MethodPolicy(),
     "accounts.list": MethodPolicy(concurrency=Concurrency.READ_ONLY),
     "accounts.get": MethodPolicy(concurrency=Concurrency.READ_ONLY),
     "accounts.rules.set": MethodPolicy(),

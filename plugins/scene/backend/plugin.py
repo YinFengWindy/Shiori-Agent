@@ -23,7 +23,11 @@ from .state import SceneStateStore
 
 
 async def setup(ctx: PluginRuntimeContext) -> None:
-    """Provides ``SCENE``. Intake starts only when the host publishes the generation."""
+    """Provides ``SCENE``. Intake starts once the generation is published.
+
+    Set up in an already published generation (in-generation reload or
+    enable), intake starts at once.
+    """
     host = ctx.require(SCENE_HOST)
     background = ctx.require(BACKGROUND)
     events = ctx.require(EVENTS)
@@ -47,6 +51,7 @@ async def setup(ctx: PluginRuntimeContext) -> None:
         await service.close()
 
     ctx.effect("scene.close", close)
+    ctx.effect("scene.publication", host.on_published(service.activate))
 
 
 def _publish(

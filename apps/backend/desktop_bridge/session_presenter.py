@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Collection, Iterable
 from typing import Any
 
+from core.roles.affection_access import AffectionGetter
 from conversation.context_scope import desktop_view_thread_ids, in_desktop_view
 from desktop_bridge.tool_call_preview import truncate_desktop_tool_result
 from session.manager import Session
@@ -39,10 +40,10 @@ class DesktopSessionPresenter:
     def __init__(
         self,
         conversation_service,
-        relationship_runtime: Any | None = None,
+        affection: AffectionGetter,
     ) -> None:
         self._conversation_service = conversation_service
-        self._relationship_runtime = relationship_runtime
+        self._affection = affection
 
     def serialize(self, session: Session) -> dict[str, Any]:
         """Returns the desktop-compatible role session snapshot."""
@@ -235,9 +236,7 @@ class DesktopSessionPresenter:
         return store
 
     def _enrich_metadata(self, metadata: dict[str, Any]) -> dict[str, Any]:
-        from core.roles.affection_access import current_affection
-
-        affection = current_affection(self._relationship_runtime)
+        affection = self._affection()
         if affection is None:
             return metadata
         return affection.enrich_session_metadata(metadata)

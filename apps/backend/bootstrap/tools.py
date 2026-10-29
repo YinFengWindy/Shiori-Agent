@@ -110,7 +110,6 @@ class CoreRuntime:
     light_provider: LLMProvider | None
     memory_runtime: MemoryRuntime
     presence: PresenceStore
-    relationship_runtime: Any | None
     reply_policy: ReplyPolicyGetter
     affection: AffectionGetter
     role_runtime_registry: RoleRuntimeRegistry
@@ -321,7 +320,8 @@ def _build_loop_deps(
     processing_state: ProcessingState,
     event_bus: EventBus,
     memory_runtime: MemoryRuntime,
-    relationship_runtime: Any | None,
+    reply_policy: ReplyPolicyGetter,
+    affection: AffectionGetter,
     runtime_roles: RoleStore,
     group_environment: GroupEnvironment,
     role_runtime_registry: RoleRuntimeRegistry | None = None,
@@ -346,12 +346,11 @@ def _build_loop_deps(
     session_services = SessionServices(
         session_manager=session_manager,
         presence=presence,
-        relationship_runtime=relationship_runtime,
     )
     _bind_memory_lifecycle_if_supported(
         markdown=memory_runtime.markdown.maintenance,
         session_manager=session_manager,
-        relationship_runtime=relationship_runtime,
+        affection=affection,
         group_environment=group_environment,
         runtime_roles=runtime_roles,
     )
@@ -366,6 +365,8 @@ def _build_loop_deps(
         tools=tools,
         session_manager=session_manager,
         workspace=workspace,
+        reply_policy=reply_policy,
+        affection=affection,
         presence=presence,
         light_provider=light_provider,
         processing_state=processing_state,
@@ -384,18 +385,16 @@ def _bind_memory_lifecycle_if_supported(
     *,
     markdown: MarkdownMemoryMaintenance,
     session_manager: SessionManager,
-    relationship_runtime: Any | None,
+    affection: AffectionGetter,
     group_environment: GroupEnvironment,
     runtime_roles: RoleStore,
 ) -> None:
     async def _after_consolidation(session: object) -> None:
-        from core.roles.affection_access import current_affection
-
-        affection = current_affection(relationship_runtime)
+        runtime = affection()
         session_key = str(getattr(session, "key", "") or "")
-        if affection is None or not session_key:
+        if runtime is None or not session_key:
             return
-        await affection.refresh_snapshot_after_consolidation(session_key)
+        await runtime.refresh_snapshot_after_consolidation(session_key)
 
     markdown.bind_lifecycle(
         MemoryLifecycleBindRequest(
@@ -470,6 +469,9 @@ def build_core_runtime(
     )
     track_build_resource(role_model_resolver, role_model_resolver.aclose)
     role_repository = RoleRepository(role_store)
+    # This generation's affection runtime. Bound to the plugin kernel below,
+    # before any plugin starts; reading it earlier raises.
+    affection = AffectionGetter()
     role_runtime_registry = RoleRuntimeRegistry(
         role_repository,
         model_resolver=role_model_resolver,
@@ -477,6 +479,7 @@ def build_core_runtime(
         self_initializer=RoleSelfInitializer(
             role_store,
             LlmRoleSelfSeedGenerator(),
+            affection,
         ),
         event_bus=event_bus,
     )
@@ -518,11 +521,9 @@ def build_core_runtime(
         memory_runtime.markdown.maintenance.share_execution(
             shared.memory_runtime.markdown.maintenance
         )
-    # Affection lives in the plugin. An unbound caller still sees this None
-    # and skips the side effect; a bound getter reads the published service.
-    relationship_runtime = None
+    # Bound to this generation's kernel below, before any plugin starts;
+    # reading it earlier raises.
     reply_policy = ReplyPolicyGetter()
-    affection = AffectionGetter()
     processing_state = (
         shared.loop.processing_state if shared is not None else ProcessingState()
     )
@@ -555,7 +556,8 @@ def build_core_runtime(
         processing_state=processing_state,
         event_bus=event_bus,
         memory_runtime=memory_runtime,
-        relationship_runtime=relationship_runtime,
+        reply_policy=reply_policy,
+        affection=affection,
         role_runtime_registry=role_runtime_registry,
         channel_directory=channel_directory,
     )
@@ -577,8 +579,6 @@ def build_core_runtime(
             ),
         ),
     )
-    loop.reply_policy = reply_policy
-    loop.affection = affection
     loop_ref["loop"] = loop
     if shared is not None:
         loop.share_execution(shared.loop)
@@ -671,7 +671,7 @@ def build_core_runtime(
                 role_store=role_store,
                 session_manager=session_manager,
                 presence=presence,
-                relationship_runtime=relationship_runtime,
+                affection=affection,
                 role_runtime_registry=role_runtime_registry,
                 provider=loop_provider,
                 model=loop_model,
@@ -732,7 +732,6 @@ def build_core_runtime(
         agent_provider=agent_provider,
         memory_runtime=memory_runtime,
         presence=presence,
-        relationship_runtime=relationship_runtime,
         reply_policy=reply_policy,
         affection=affection,
         role_runtime_registry=role_runtime_registry,
@@ -743,12 +742,12 @@ def build_core_runtime(
         channel_directory=channel_directory,
         proactive_motives=[
             *(
-                [SceneFollowupStrategy(relationship_runtime)]
+                [SceneFollowupStrategy(affection)]
                 if config.proactive_strategies.scene_followup
                 else []
             ),
             *(
-                [RelationshipStrategy(relationship_runtime)]
+                [RelationshipStrategy(affection)]
                 if config.proactive_strategies.relationship
                 else []
             ),

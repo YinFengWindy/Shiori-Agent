@@ -6,6 +6,8 @@ handler that carries no plugin policy. Repeat thresholds and exclusions belong
 to the ``tool_loop_guard`` plugin's own tests.
 """
 
+from tests.support.generation_getters import bound_affection, bound_reply_policy
+
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any, cast
@@ -190,6 +192,8 @@ def make_agent_loop_with_tools(
     memory_engine = FakeMemoryEngine(tmp_path)
     loop = AgentLoop(
         AgentLoopDeps(
+            reply_policy=bound_reply_policy(),
+            affection=bound_affection(),
             bus=MagicMock(),
             provider=cast(Any, provider),
             tools=tools,
