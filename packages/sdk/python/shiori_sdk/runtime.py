@@ -35,13 +35,14 @@ class EventsCapability(Protocol):
 
 
 class PluginRuntimeContext(Protocol):
-    """Public setup context.
+    """What a plugin's ``setup(ctx)`` receives.
 
-    ``provide`` / ``require`` / ``get`` and ``on`` / ``watch`` / ``emit`` are the
-    kernel ``Context`` members of the same names (``shiori_sdk.kernel``):
-    service keys come from manifest ``provides`` / ``inject`` /
-    ``optional_inject``. ``effect`` takes a label the host records with the
-    disposer.
+    ``provide`` / ``require`` / ``get`` take service keys declared in manifest
+    ``provides`` / ``inject`` / ``optional_inject``; ``on`` / ``watch`` /
+    ``emit`` join the generation's event chain. ``effect`` takes a label the
+    host records with the disposer. Plugin tasks and reload draining are
+    services, not context members: ``BACKGROUND.spawn`` and
+    ``RUNTIME.on_drain`` (``shiori_sdk.core.services``).
     """
 
     @property

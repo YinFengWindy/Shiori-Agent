@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Literal
 
 from core.roles.errors import RoleNotFoundError
 from shiori_sdk.models import ModelSnapshot
+from shiori_sdk.roles import PluginSettings
 
 if TYPE_CHECKING:
     from core.roles import RoleStore
@@ -60,36 +61,33 @@ class HostRoles:
         """Opaque plugin namespaces use the same canonical manifest transaction."""
         return self._store.extensions
 
-    def plugin_settings(self, role_id: str, namespace: str):
+    def plugin_settings(self, role_id: str, namespace: str) -> PluginSettings:
         """The baseline entry for one role namespace (D19).
 
-        Only ``proactive`` is stored. The core still parses that namespace
-        until proactive leaves it. The renderer ``roleSettings`` slot is separate.
+        Only ``proactive`` is stored; any other name raises ``KeyError``. The
+        core still parses that namespace until proactive leaves it. The
+        renderer ``roleSettings`` slot is separate.
         """
-        return _RolePluginSettings(self._store, role_id, namespace)
-
-
-class _RolePluginSettings:
-    """Read and write one role namespace through the role owner."""
-
-    def __init__(self, store: RoleStore, role_id: str, namespace: str) -> None:
         if namespace != "proactive":
             raise KeyError(namespace)
+        return _RoleProactiveSettings(self._store, role_id)
+
+
+class _RoleProactiveSettings:
+    """Read and write one role's ``proactive`` namespace through the role owner."""
+
+    def __init__(self, store: RoleStore, role_id: str) -> None:
         self._store = store
         self._role_id = role_id
-        self._namespace = namespace
 
     def read(self) -> Mapping[str, object]:
         role = self._store.get_role(self._role_id)
         if role is None:
             raise RoleNotFoundError(self._role_id)
-        value = role.to_dict().get(self._namespace, {})
-        if not isinstance(value, dict):
-            raise KeyError(self._namespace)
-        return value
+        return role.proactive.to_dict()
 
     def write(self, value: Mapping[str, object]) -> None:
-        self._store.write_plugin_namespace(self._role_id, self._namespace, dict(value))
+        self._store.write_plugin_proactive(self._role_id, dict(value))
 
 
 class HostRoleModels:

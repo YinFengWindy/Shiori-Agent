@@ -17,7 +17,7 @@ from typing import Any, get_args, get_type_hints
 from shiori_sdk import __version__
 from shiori_sdk.kernel import Key
 from shiori_sdk.kernel.diagnostics import PluginDiagnostic
-from shiori_sdk.kernel.kernel import Context
+from shiori_sdk.runtime import HostServiceUnavailable, PluginRuntimeContext
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "docs" / "_handbook" / "plugin-api.md"
@@ -31,8 +31,11 @@ _CORE_MODULES = (
     "shiori_sdk.core.sessions",
     "shiori_sdk.core.tools",
 )
+# ``setup(ctx)`` receives ``PluginRuntimeContext``; the kernel's own
+# ``Context`` (with ``spawn`` / ``on_drain``) is host-side and not rendered.
 _KERNEL_TYPES = (
-    Context,
+    PluginRuntimeContext,
+    HostServiceUnavailable,
     Key,
     PluginDiagnostic,
 )
@@ -76,7 +79,7 @@ def render() -> str:
         for key_name, _attr, _value, target, label in _keys(module):
             lines.append(f"### `{key_name}`")
             lines.append("")
-            if isinstance(target, type):
+            if isinstance(target, type) and _from_sdk(target):
                 lines.append(f"Target `{target.__module__}.{target.__qualname__}`.")
                 lines.append("")
                 _render_type(target, lines, seen)
@@ -103,7 +106,8 @@ def _keys(module: Any) -> list[tuple[str, str, Key[Any], Any, str]]:
         hint = hints.get(name)
         args = get_args(hint) if hint is not None else ()
         target = args[0] if len(args) == 1 else None
-        label = "" if isinstance(target, type) else _fmt(target or hint)
+        own = isinstance(target, type) and _from_sdk(target)
+        label = "" if own else _fmt(target or hint)
         found.append((value.name, name, value, target, label))
     found.sort(key=lambda item: (item[0], item[1]))
     return found
@@ -119,6 +123,11 @@ def _local_types(module: Any) -> list[type]:
     ]
     classes.sort(key=lambda cls: cls.__qualname__)
     return classes
+
+
+def _from_sdk(cls: type) -> bool:
+    """Only SDK types are expanded: a builtin's members change with the interpreter."""
+    return cls.__module__.split(".")[0] == "shiori_sdk"
 
 
 def _interesting(cls: type) -> bool:
@@ -187,10 +196,7 @@ def _methods(cls: type) -> list[tuple[str, Any, str]]:
 
 
 def _signature(func: Any) -> str:
-    try:
-        signature = inspect.signature(func)
-    except (TypeError, ValueError):
-        return "()"
+    signature = inspect.signature(func)
     hints = _hints(func)
     chunks: list[str] = []
     saw_keyword = False
@@ -209,7 +215,7 @@ def _signature(func: Any) -> str:
         if rendered:
             piece = f"{piece}: {rendered}"
         if param.default is not inspect.Signature.empty:
-            piece = f"{piece} = {_default(param.default)}"
+            piece = f"{piece} = {param.default!r}"
         chunks.append(piece)
     returned = _fmt(hints.get("return", signature.return_annotation))
     suffix = f" -> {returned}" if returned else ""
@@ -217,10 +223,8 @@ def _signature(func: Any) -> str:
 
 
 def _hints(obj: Any) -> dict[str, Any]:
-    try:
-        return get_type_hints(obj)
-    except Exception:
-        return {}
+    """Resolved annotations; an unresolvable forward reference fails the run."""
+    return get_type_hints(obj)
 
 
 def _fmt(annotation: object) -> str:
@@ -230,15 +234,11 @@ def _fmt(annotation: object) -> str:
         text = annotation
     else:
         text = inspect.formatannotation(annotation)
+    # ``asyncio.Task`` reports the C module ``_asyncio`` as its ``__module__``.
+    text = text.replace("_asyncio.", "asyncio.")
     for prefix in ("typing.", "collections.abc.", "shiori_sdk."):
         text = text.replace(prefix, "")
     return text.replace("NoneType", "None")
-
-
-def _default(value: object) -> str:
-    if isinstance(value, str):
-        return repr(value)
-    return repr(value)
 
 
 def _paragraph(text: str) -> str:

@@ -8,17 +8,21 @@ a new capability is a new key or a new event.
 
 ## Kernel
 
-#### `shiori_sdk.kernel.kernel.Context`
+#### `shiori_sdk.runtime.PluginRuntimeContext`
 
-Everything a plugin's ``setup`` receives from the kernel.
+What a plugin's ``setup(ctx)`` receives. ``provide`` / ``require`` / ``get`` take service keys declared in manifest ``provides`` / ``inject`` / ``optional_inject``; ``on`` / ``watch`` / ``emit`` join the generation's event chain. ``effect`` takes a label the host records with the disposer. Plugin tasks and reload draining are services, not context members: ``BACKGROUND.spawn`` and ``RUNTIME.on_drain`` (``shiori_sdk.core.services``).
 
+- `plugin_id: str`
+- `plugin_dir: pathlib.Path`
+- `expose(api: object) -> None`
+- `effect(label: str, dispose: Dispose) -> None`
 - `provide(key: kernel.contracts.Key[T], impl: T) -> None`
 
-  Publishes ``impl`` under a key this plugin declares in ``provides``.
+  Publishes ``impl`` under a key declared in manifest ``provides``.
 
 - `require(key: kernel.contracts.Key[T]) -> T`
 
-  The current provider of a key declared in ``inject``.
+  The current provider of a key declared in manifest ``inject``.
 
 - `get(key: kernel.contracts.Key[T]) -> Optional[T]`
 
@@ -34,19 +38,11 @@ Everything a plugin's ``setup`` receives from the kernel.
 
 - `async emit(event: E) -> Union[E, kernel.contracts.Veto]`
 
-  Emits through the kernel; see ``Kernel.emit``.
+  Emits through the kernel: ``on`` chain, core checks, then watchers.
 
-- `effect(dispose: Dispose) -> None`
+#### `shiori_sdk.runtime.HostServiceUnavailable`
 
-  Registers cleanup, run LIFO after subscriptions and tasks are gone.
-
-- `spawn(coro: Coroutine[Any, Any, T]) -> _asyncio.Task[T]`
-
-  Runs a task owned by this plugin; disposal cancels it (not drained, D25).
-
-- `on_drain(callback: Callable[[], Awaitable[None]]) -> None`
-
-  Adds plugin-specific draining to the default one before a reload (D25).
+The manifest asked for a service the host did not assemble. Raised while building that plugin's setup context, and the message names the missing service. Deliberately not an ``AttributeError`` so ``getattr`` defaults can never swallow it.
 
 #### `shiori_sdk.kernel.contracts.Key`
 
@@ -296,199 +292,7 @@ Complete memory port implemented by independently installed engines.
 
 ### `main_model`
 
-Target `builtins.str`.
-
-#### `builtins.str`
-
-str(object='') -> str str(bytes_or_buffer[, encoding[, errors]]) -> str Create a new string object from the given object. If encoding or errors is specified, then the object must expose a data buffer that will be decoded using the given encoding and error handler. Otherwise, returns the result of object.__str__() (if defined) or repr(object). encoding defaults to sys.getdefaultencoding(). errors defaults to 'strict'.
-
-- `encode(encoding = 'utf-8', errors = 'strict')`
-
-  Encode the string using the codec registered for encoding. encoding The encoding in which to encode the string. errors The error handling scheme to use for encoding errors. The default is 'strict' meaning that encoding errors raise a UnicodeEncodeError. Other possible values are 'ignore', 'replace' and 'xmlcharrefreplace' as well as any other name registered with codecs.register_error that can handle UnicodeEncodeErrors.
-
-- `replace(old, new, count = -1)`
-
-  Return a copy with all occurrences of substring old replaced by new. count Maximum number of occurrences to replace. -1 (the default value) means replace all occurrences. If the optional argument count is given, only the first count occurrences are replaced.
-
-- `split(sep = None, maxsplit = -1)`
-
-  Return a list of the substrings in the string, using sep as the separator string. sep The separator used to split the string. When set to None (the default value), will split on any whitespace character (including \n \r \t \f and spaces) and will discard empty strings from the result. maxsplit Maximum number of splits. -1 (the default value) means no limit. Splitting starts at the front of the string and works to the end. Note, str.split() is mainly useful for data that has been intentionally delimited. With natural text that includes punctuation, consider using the regular expression module.
-
-- `rsplit(sep = None, maxsplit = -1)`
-
-  Return a list of the substrings in the string, using sep as the separator string. sep The separator used to split the string. When set to None (the default value), will split on any whitespace character (including \n \r \t \f and spaces) and will discard empty strings from the result. maxsplit Maximum number of splits. -1 (the default value) means no limit. Splitting starts at the end of the string and works to the front.
-
-- `join(iterable)`
-
-  Concatenate any number of strings. The string whose method is called is inserted in between each given string. The result is returned as a new string. Example: '.'.join(['ab', 'pq', 'rs']) -> 'ab.pq.rs'
-
-- `capitalize()`
-
-  Return a capitalized version of the string. More specifically, make the first character have upper case and the rest lower case.
-
-- `casefold()`
-
-  Return a version of the string suitable for caseless comparisons.
-
-- `title()`
-
-  Return a version of the string where each word is titlecased. More specifically, words start with uppercased characters and all remaining cased characters have lower case.
-
-- `center(width, fillchar = ' ')`
-
-  Return a centered string of length width. Padding is done using the specified fill character (default is a space).
-
-- `count()`
-
-  S.count(sub[, start[, end]]) -> int Return the number of non-overlapping occurrences of substring sub in string S[start:end]. Optional arguments start and end are interpreted as in slice notation.
-
-- `expandtabs(tabsize = 8)`
-
-  Return a copy where all tab characters are expanded using spaces. If tabsize is not given, a tab size of 8 characters is assumed.
-
-- `find()`
-
-  S.find(sub[, start[, end]]) -> int Return the lowest index in S where substring sub is found, such that sub is contained within S[start:end]. Optional arguments start and end are interpreted as in slice notation. Return -1 on failure.
-
-- `partition(sep)`
-
-  Partition the string into three parts using the given separator. This will search for the separator in the string. If the separator is found, returns a 3-tuple containing the part before the separator, the separator itself, and the part after it. If the separator is not found, returns a 3-tuple containing the original string and two empty strings.
-
-- `index()`
-
-  S.index(sub[, start[, end]]) -> int Return the lowest index in S where substring sub is found, such that sub is contained within S[start:end]. Optional arguments start and end are interpreted as in slice notation. Raises ValueError when the substring is not found.
-
-- `ljust(width, fillchar = ' ')`
-
-  Return a left-justified string of length width. Padding is done using the specified fill character (default is a space).
-
-- `lower()`
-
-  Return a copy of the string converted to lowercase.
-
-- `lstrip(chars = None)`
-
-  Return a copy of the string with leading whitespace removed. If chars is given and not None, remove characters in chars instead.
-
-- `rfind()`
-
-  S.rfind(sub[, start[, end]]) -> int Return the highest index in S where substring sub is found, such that sub is contained within S[start:end]. Optional arguments start and end are interpreted as in slice notation. Return -1 on failure.
-
-- `rindex()`
-
-  S.rindex(sub[, start[, end]]) -> int Return the highest index in S where substring sub is found, such that sub is contained within S[start:end]. Optional arguments start and end are interpreted as in slice notation. Raises ValueError when the substring is not found.
-
-- `rjust(width, fillchar = ' ')`
-
-  Return a right-justified string of length width. Padding is done using the specified fill character (default is a space).
-
-- `rstrip(chars = None)`
-
-  Return a copy of the string with trailing whitespace removed. If chars is given and not None, remove characters in chars instead.
-
-- `rpartition(sep)`
-
-  Partition the string into three parts using the given separator. This will search for the separator in the string, starting at the end. If the separator is found, returns a 3-tuple containing the part before the separator, the separator itself, and the part after it. If the separator is not found, returns a 3-tuple containing two empty strings and the original string.
-
-- `splitlines(keepends = False)`
-
-  Return a list of the lines in the string, breaking at line boundaries. Line breaks are not included in the resulting list unless keepends is given and true.
-
-- `strip(chars = None)`
-
-  Return a copy of the string with leading and trailing whitespace removed. If chars is given and not None, remove characters in chars instead.
-
-- `swapcase()`
-
-  Convert uppercase characters to lowercase and lowercase characters to uppercase.
-
-- `translate(table)`
-
-  Replace each character in the string using the given translation table. table Translation table, which must be a mapping of Unicode ordinals to Unicode ordinals, strings, or None. The table must implement lookup/indexing via __getitem__, for instance a dictionary or list. If this operation raises LookupError, the character is left untouched. Characters mapped to None are deleted.
-
-- `upper()`
-
-  Return a copy of the string converted to uppercase.
-
-- `startswith()`
-
-  S.startswith(prefix[, start[, end]]) -> bool Return True if S starts with the specified prefix, False otherwise. With optional start, test S beginning at that position. With optional end, stop comparing S at that position. prefix can also be a tuple of strings to try.
-
-- `endswith()`
-
-  S.endswith(suffix[, start[, end]]) -> bool Return True if S ends with the specified suffix, False otherwise. With optional start, test S beginning at that position. With optional end, stop comparing S at that position. suffix can also be a tuple of strings to try.
-
-- `removeprefix(prefix)`
-
-  Return a str with the given prefix string removed if present. If the string starts with the prefix string, return string[len(prefix):]. Otherwise, return a copy of the original string.
-
-- `removesuffix(suffix)`
-
-  Return a str with the given suffix string removed if present. If the string ends with the suffix string and that suffix is not empty, return string[:-len(suffix)]. Otherwise, return a copy of the original string.
-
-- `isascii()`
-
-  Return True if all characters in the string are ASCII, False otherwise. ASCII characters have code points in the range U+0000-U+007F. Empty string is ASCII too.
-
-- `islower()`
-
-  Return True if the string is a lowercase string, False otherwise. A string is lowercase if all cased characters in the string are lowercase and there is at least one cased character in the string.
-
-- `isupper()`
-
-  Return True if the string is an uppercase string, False otherwise. A string is uppercase if all cased characters in the string are uppercase and there is at least one cased character in the string.
-
-- `istitle()`
-
-  Return True if the string is a title-cased string, False otherwise. In a title-cased string, upper- and title-case characters may only follow uncased characters and lowercase characters only cased ones.
-
-- `isspace()`
-
-  Return True if the string is a whitespace string, False otherwise. A string is whitespace if all characters in the string are whitespace and there is at least one character in the string.
-
-- `isdecimal()`
-
-  Return True if the string is a decimal string, False otherwise. A string is a decimal string if all characters in the string are decimal and there is at least one character in the string.
-
-- `isdigit()`
-
-  Return True if the string is a digit string, False otherwise. A string is a digit string if all characters in the string are digits and there is at least one character in the string.
-
-- `isnumeric()`
-
-  Return True if the string is a numeric string, False otherwise. A string is numeric if all characters in the string are numeric and there is at least one character in the string.
-
-- `isalpha()`
-
-  Return True if the string is an alphabetic string, False otherwise. A string is alphabetic if all characters in the string are alphabetic and there is at least one character in the string.
-
-- `isalnum()`
-
-  Return True if the string is an alpha-numeric string, False otherwise. A string is alpha-numeric if all characters in the string are alpha-numeric and there is at least one character in the string.
-
-- `isidentifier()`
-
-  Return True if the string is a valid Python identifier, False otherwise. Call keyword.iskeyword(s) to test whether string s is a reserved identifier, such as "def" or "class".
-
-- `isprintable()`
-
-  Return True if all characters in the string are printable, False otherwise. A character is printable if repr() may use it in its output.
-
-- `zfill(width)`
-
-  Pad a numeric string with zeros on the left, to fill a field of the given width. The string is never truncated.
-
-- `format()`
-
-  S.format(*args, **kwargs) -> str Return a formatted version of S, using substitutions from args and kwargs. The substitutions are identified by braces ('{' and '}').
-
-- `format_map()`
-
-  S.format_map(mapping) -> str Return a formatted version of S, using substitutions from mapping. The substitutions are identified by braces ('{' and '}').
-
-- `maketrans()`
-
-  Return a translation table usable for str.translate(). If there is only one argument, it must be a dictionary mapping Unicode ordinals (integers) or characters to Unicode ordinals, strings or None. Character keys will be then converted to ordinals. If there are two arguments, they must be strings of equal length, and in the resulting dictionary, each character in x will be mapped to the character at the same position in y. If there is a third argument, it must be a string, whose characters will be mapped to None in the result.
+Target `str`.
 
 ### `main_provider`
 
@@ -556,7 +360,7 @@ Target `shiori_sdk.channels.avatars.AvatarsCapability`.
 
 Schedule due avatar refreshes; the host owns validation, storage and cancellation.
 
-- `refresh(kind: str, channel: str, subject_id: str, fetch: AvatarFetch) -> _asyncio.Task[None] | None`
+- `refresh(kind: str, channel: str, subject_id: str, fetch: AvatarFetch) -> asyncio.Task[None] | None`
 
 ### `background`
 
@@ -566,8 +370,8 @@ Target `shiori_sdk.extensions.BackgroundTasks`.
 
 Own cancellable coroutines until plugin cleanup finishes.
 
-- `spawn(coro: Coroutine[object, object, T], *, name: str) -> _asyncio.Task[T]`
-- `spawn_runtime(coro: Coroutine[object, object, T], *, name: str) -> _asyncio.Task[T]`
+- `spawn(coro: Coroutine[object, object, T], *, name: str) -> asyncio.Task[T]`
+- `spawn_runtime(coro: Coroutine[object, object, T], *, name: str) -> asyncio.Task[T]`
 
   Retain the calling runtime lease until task completion and cleanup.
 
@@ -670,11 +474,7 @@ Opaque plugin-owned JSON values retained across generations.
 
 ### `light_model`
 
-Target `builtins.str`.
-
-#### `builtins.str`
-
-Documented above.
+Target `str`.
 
 ### `light_provider`
 
@@ -868,170 +668,6 @@ Register scoped tools and inspect the current host execution context.
 ### `workspace`
 
 Target `pathlib.Path`.
-
-#### `pathlib.Path`
-
-PurePath subclass that can make system calls. Path represents a filesystem path but unlike PurePath, also offers methods to do system calls on path objects. Depending on your system, instantiating a Path will return either a PosixPath or a WindowsPath object. You can also instantiate a PosixPath or WindowsPath directly, but cannot instantiate a WindowsPath on a POSIX system or vice versa.
-
-- `stat(*, follow_symlinks = True)`
-
-  Return the result of the stat() system call on this path, like os.stat() does.
-
-- `lstat()`
-
-  Like stat(), except if the path points to a symlink, the symlink's status information is returned, rather than its target's.
-
-- `exists(*, follow_symlinks = True)`
-
-  Whether this path exists. This method normally follows symlinks; to check whether a symlink exists, add the argument follow_symlinks=False.
-
-- `is_dir()`
-
-  Whether this path is a directory.
-
-- `is_file()`
-
-  Whether this path is a regular file (also True for symlinks pointing to regular files).
-
-- `is_mount()`
-
-  Check if this path is a mount point
-
-- `is_symlink()`
-
-  Whether this path is a symbolic link.
-
-- `is_junction()`
-
-  Whether this path is a junction.
-
-- `is_block_device()`
-
-  Whether this path is a block device.
-
-- `is_char_device()`
-
-  Whether this path is a character device.
-
-- `is_fifo()`
-
-  Whether this path is a FIFO.
-
-- `is_socket()`
-
-  Whether this path is a socket.
-
-- `samefile(other_path)`
-
-  Return whether other_path is the same or not as this file (as returned by os.path.samefile()).
-
-- `open(mode = 'r', buffering = -1, encoding = None, errors = None, newline = None)`
-
-  Open the file pointed to by this path and return a file object, as the built-in open() function does.
-
-- `read_bytes()`
-
-  Open the file in bytes mode, read it, and close the file.
-
-- `read_text(encoding = None, errors = None)`
-
-  Open the file in text mode, read it, and close the file.
-
-- `write_bytes(data)`
-
-  Open the file in bytes mode, write to it, and close the file.
-
-- `write_text(data, encoding = None, errors = None, newline = None)`
-
-  Open the file in text mode, write to it, and close the file.
-
-- `iterdir()`
-
-  Yield path objects of the directory contents. The children are yielded in arbitrary order, and the special entries '.' and '..' are not included.
-
-- `glob(pattern, *, case_sensitive = None)`
-
-  Iterate over this subtree and yield all existing files (of any kind, including directories) matching the given relative pattern.
-
-- `rglob(pattern, *, case_sensitive = None)`
-
-  Recursively yield all existing files (of any kind, including directories) matching the given relative pattern, anywhere in this subtree.
-
-- `walk(top_down = True, on_error = None, follow_symlinks = False)`
-
-  Walk the directory tree from this directory, similar to os.walk().
-
-- `cwd(cls)`
-
-  Return a new path pointing to the current working directory.
-
-- `home(cls)`
-
-  Return a new path pointing to the user's home directory (as returned by os.path.expanduser('~')).
-
-- `absolute()`
-
-  Return an absolute version of this path by prepending the current working directory. No normalization or symlink resolution is performed. Use resolve() to get the canonical path to a file.
-
-- `resolve(strict = False)`
-
-  Make the path absolute, resolving all symlinks on the way and also normalizing it.
-
-- `owner()`
-
-  Return the login name of the file owner.
-
-- `group()`
-
-  Return the group name of the file gid.
-
-- `readlink()`
-
-  Return the path to which the symbolic link points.
-
-- `touch(mode = 438, exist_ok = True)`
-
-  Create this file with the given access mode, if it doesn't exist.
-
-- `mkdir(mode = 511, parents = False, exist_ok = False)`
-
-  Create a new directory at this given path.
-
-- `chmod(mode, *, follow_symlinks = True)`
-
-  Change the permissions of the path, like os.chmod().
-
-- `lchmod(mode)`
-
-  Like chmod(), except if the path points to a symlink, the symlink's permissions are changed, rather than its target's.
-
-- `unlink(missing_ok = False)`
-
-  Remove this file or link. If the path is a directory, use rmdir() instead.
-
-- `rmdir()`
-
-  Remove this directory. The directory must be empty.
-
-- `rename(target)`
-
-  Rename this path to the target path. The target path may be absolute or relative. Relative paths are interpreted relative to the current working directory, *not* the directory of the Path object. Returns the new Path instance pointing to the target path.
-
-- `replace(target)`
-
-  Rename this path to the target path, overwriting if that path exists. The target path may be absolute or relative. Relative paths are interpreted relative to the current working directory, *not* the directory of the Path object. Returns the new Path instance pointing to the target path.
-
-- `symlink_to(target, target_is_directory = False)`
-
-  Make this path a symlink pointing to the target path. Note the order of arguments (link, target) is the reverse of os.symlink.
-
-- `hardlink_to(target)`
-
-  Make this path a hard link pointing to the same file as *target*. Note the order of arguments (self, target) is the reverse of os.link's.
-
-- `expanduser()`
-
-  Return a new path with expanded ~ and ~user constructs (as returned by os.path.expanduser)
 
 ## `shiori_sdk.core.sessions`
 

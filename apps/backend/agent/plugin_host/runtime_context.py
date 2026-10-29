@@ -116,7 +116,7 @@ class PluginRuntimeContext:
         self._kernel_context.watch(event_type, handler)
 
     async def emit[E](self, event: E) -> E | Veto:
-        """Emits through the generation's kernel; see ``Kernel.emit``."""
+        """Emits through the kernel: ``on`` chain, core checks, then watchers."""
         return await self._kernel_context.emit(event)
 
     def effect(self, label: str, dispose: Dispose) -> None:

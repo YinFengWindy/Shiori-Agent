@@ -32,7 +32,7 @@ related:
 - [当前后端架构](architecture/current-backend.md)：Python 后端的装配、运行时换代、RoleRuntime、插件内核与关闭顺序。
 - [被动回合流程](flows/passive-turn.md)、[启动与关闭流程](flows/startup-and-shutdown.md)：两条关键时序。
 - [改动影响索引](impact/change-impact-index.md)：从准备修改的对象反查联动模块。
-- 专题手册（长文，所有权仍以本目录的模块页为准）：[插件指南](../_handbook/plugin-guide.md)、[插件 API 参考](../_handbook/plugin-api.md)、[插件教程](../_handbook/plugins-tutorial.md)、[渠道插件](../_handbook/channel-plugins.md)、[设计系统](../_handbook/design-system.md)、[主动推送](../_handbook/proactive-guide.md)、[Drift](../_handbook/drift-guide.md)、[Markdown 记忆](../_handbook/memory-markdown.md)、[模型输入预算](../_handbook/context-budget.md)、[打包插件验收](../_handbook/packaged-plugin-acceptance.md)。现行主动行为以 [主动行为与 Drift](modules/proactive-and-drift.md) 为准，不以两篇长文代替模块页。
+- 专题手册（长文，所有权仍以本目录的模块页为准）：[插件指南](../_handbook/plugin-guide.md)（含[生命周期与准入](../_handbook/plugin-lifecycle.md)、[前端契约](../_handbook/plugin-frontend.md)）、[插件 API 参考](../_handbook/plugin-api.md)、[插件教程](../_handbook/plugins-tutorial.md)、[渠道插件](../_handbook/channel-plugins.md)、[设计系统](../_handbook/design-system.md)、[主动推送](../_handbook/proactive-guide.md)、[Drift](../_handbook/drift-guide.md)、[Markdown 记忆](../_handbook/memory-markdown.md)、[模型输入预算](../_handbook/context-budget.md)、[打包插件验收](../_handbook/packaged-plugin-acceptance.md)。现行主动行为以 [主动行为与 Drift](modules/proactive-and-drift.md) 为准，不以两篇长文代替模块页。
 
 ## 完整验收问题矩阵
 

@@ -61,6 +61,14 @@ export function alignedSdkVersion(root) {
   return version;
 }
 
+const changelogPath = "docs/_handbook/plugin-changelog.md";
+
+/** A release states what it changes: the changelog needs a `## X.Y.Z` heading. */
+function requireChangelogEntry(root, version) {
+  const text = readFileSync(join(root, changelogPath), "utf8");
+  if (!text.split(/\r?\n/).includes(`## ${version}`)) throw new Error(`${changelogPath} has no ## ${version} entry`);
+}
+
 /** Check working-tree release inputs against every stable SDK and desktop tag. */
 export async function checkSdkRelease(root) {
   const git = (args, options = {}) => execFileSync("git", args, {
@@ -70,6 +78,7 @@ export async function checkSdkRelease(root) {
     throw new Error("SDK release checks require complete Git history and tags (fetch-depth: 0)");
   }
   const version = alignedSdkVersion(root);
+  requireChangelogEntry(root, version);
 
   // hash-object applies Git's clean filters (including CRLF normalization), so
   // Windows working trees compare to the same immutable blobs as Linux CI.

@@ -286,24 +286,21 @@ class RoleStore:
                 return role
         raise RoleNotFoundError(role_id)
 
-    def write_plugin_namespace(
-        self, role_id: str, namespace: str, value: dict[str, Any]
-    ) -> None:
-        """Write one role namespace without the legacy candidate wipe.
+    def write_plugin_proactive(self, role_id: str, value: dict[str, Any]) -> None:
+        """Write the ``proactive`` namespace for ``ROLES.plugin_settings``.
 
-        Only ``proactive`` exists. It is still parsed by ``RoleProactiveConfig``
-        until proactive leaves the core. Extension ``plugin_data`` is left as
-        stored: this path does not pass a replacement plugin payload.
+        Parsed by ``RoleProactiveConfig`` until proactive leaves the core.
+        Like ``update_role``, retired candidates are cleared (#427), so a
+        plugin read-then-write cannot bring old bindings back. Extension
+        ``plugin_data`` is left as stored.
         """
-        if namespace != "proactive":
-            raise KeyError(namespace)
         normalized = RoleProactiveConfig.from_dict(value)
         with self._lock:
             roles = self.list_roles()
             for index, role in enumerate(roles):
                 if role.id != role_id:
                     continue
-                role.proactive = normalized
+                role.proactive = replace(normalized, candidates=())
                 role.updated_at = now_iso()
                 roles[index] = role
                 self._repository.save_roles(roles)

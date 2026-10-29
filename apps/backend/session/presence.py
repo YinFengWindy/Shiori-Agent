@@ -9,21 +9,21 @@ its own store until initiated delivery moves; this object is what
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
 
 from core.common.timekit import format_iso, parse_iso
+from session.store import SessionStore
 
 
 class SessionPresence:
     """Map the sessions socket onto one session store."""
 
-    def __init__(self, store: Any) -> None:
+    def __init__(self, store: SessionStore) -> None:
         self._store = store
 
     def record_user_message(self, session_key: str, when: datetime) -> None:
         """Record that the user spoke in ``session_key`` at ``when``."""
         self._store.update_presence(
-            self._role_key(session_key), last_user_at=format_iso(when)
+            self._store.presence_key(session_key), last_user_at=format_iso(when)
         )
 
     def last_user_at(self, session_key: str) -> datetime | None:
@@ -33,7 +33,7 @@ class SessionPresence:
     def record_initiated_sent(self, session_key: str, when: datetime) -> None:
         """Record that an initiated reply was sent for ``session_key`` at ``when``."""
         self._store.update_presence(
-            self._role_key(session_key), last_proactive_at=format_iso(when)
+            self._store.presence_key(session_key), last_proactive_at=format_iso(when)
         )
 
     def last_initiated_at(self, session_key: str) -> datetime | None:
@@ -41,17 +41,5 @@ class SessionPresence:
         return self._read(session_key, "last_proactive_at")
 
     def _read(self, session_key: str, column: str) -> datetime | None:
-        row = self._store.get_presence(self._role_key(session_key)) or {}
-        return parse_iso(row.get(column))
-
-    def _role_key(self, session_key: str) -> str:
-        clean_key = str(session_key or "").strip()
-        if not clean_key or clean_key.startswith("role:"):
-            return clean_key
-        meta = self._store.get_session_meta(clean_key) or {}
-        metadata = meta.get("metadata") if isinstance(meta, dict) else {}
-        if isinstance(metadata, dict):
-            role_id = str(metadata.get("role_id") or "").strip()
-            if role_id:
-                return f"role:{role_id}"
-        return clean_key
+        row = self._store.get_presence(self._store.presence_key(session_key))
+        return None if row is None else parse_iso(row[column])

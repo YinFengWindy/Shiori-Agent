@@ -9,7 +9,7 @@ import pytest
 
 from core.roles.store import RoleStore
 from desktop_bridge.runtime.service import ReloadableDesktopService
-from shiori_sdk.testing.bridge import plugin_bridge_request
+from shiori_host_testing.bridge import plugin_bridge_request
 
 
 @pytest.mark.asyncio

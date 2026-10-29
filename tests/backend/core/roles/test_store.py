@@ -239,8 +239,8 @@ def test_role_store_persists_proactive_policy_without_legacy_candidates(
     assert reloaded.proactive.policy_configured is True
 
 
-def test_plugin_settings_writes_proactive_without_clearing_candidates(tmp_path):
-    """The namespace write keeps candidates that update_role still strips."""
+def test_plugin_settings_write_clears_candidates_like_update_role(tmp_path):
+    """A plugin write cannot bring back the bindings update_role retires (#427)."""
     from core.roles.plugin_capability import HostRoles
 
     store = RoleStore(tmp_path)
@@ -258,9 +258,9 @@ def test_plugin_settings_writes_proactive_without_clearing_candidates(tmp_path):
     reloaded = RoleStore(tmp_path).get_role("mira")
     assert saved["enabled"] is True
     assert saved["profile"] == "quiet"
-    assert saved["candidates"] == [{"channel": "telegram", "chat_id": "42"}]
+    assert saved["candidates"] == []
     assert reloaded is not None
-    assert reloaded.proactive.candidates[0].channel == "telegram"
+    assert reloaded.proactive.candidates == ()
     with pytest.raises(KeyError):
         roles.plugin_settings("mira", "other")
 

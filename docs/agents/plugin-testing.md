@@ -31,7 +31,7 @@ uv run pytest plugins/example/tests
 
 ## 可安装边界
 
-- `shiori-sdk[testing]` 提供契约 fake、包定位、bridge helper 与 pytest 支持，不安装或实例化宿主。
+- `shiori-sdk[testing]` 提供契约 fake、包定位与 pytest 支持，不安装或实例化宿主。桌面 bridge 请求 helper 只有宿主集成测试用，在 `shiori_host_testing.bridge`。
 - `shiori-agent` 是真实生产模块组成的私有 runtime wheel，明确依赖默认记忆；不包含宿主测试、其他插件或用户状态。
 - `shiori-host-testing` 提供真实宿主集成能力，只安装在宿主开发环境。
 - 插件 wheel 只包含本包后端、明确打包的 testing helper 与资源。Story→NovelAI 为公开运行时依赖；status_commands 的 test extra→Observe 是显式测试依赖。没有声明的兄弟插件不会被注入。

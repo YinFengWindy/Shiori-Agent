@@ -71,7 +71,10 @@ class IncompatibleSdkError(Exception):
     def __init__(self, constraint: str, version: str) -> None:
         self.constraint = constraint
         self.version = version
-        super().__init__(f"插件要求 SDK {constraint}，当前是 {version}")
+        super().__init__(
+            f"插件要求 SDK {constraint}，当前是 {version}；"
+            "请安装与当前 Shiori 兼容的插件版本，或更新 Shiori"
+        )
 
 
 def require_compatible_sdk(constraint: str, *, version: str | None = None) -> None:
@@ -126,11 +129,11 @@ class PluginManifest:
     """插件包声明：身份、入口与所需服务。"""
 
     id: str
+    # 最低 SDK 约束，解析时已校验可读；未通过解析的 BLOCKED 行写空串，不再检查。
+    sdk: str
     # User-facing title; the stable ID still owns lookup, configuration and imports.
     display_name: str | None = None
     version: str | None = None
-    # 最低 SDK 约束。省略时的默认只给程序构造的 BLOCKED 行；yaml 必须写出。
-    sdk: str = ">=4.0.0"
     desc: str | None = None
     author: str | None = None
     # 插件包统一为 plugins/<id>/{backend,ui,tests}/ 布局（#178），入口默认落在

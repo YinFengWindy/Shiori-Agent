@@ -21,7 +21,7 @@ plugins/example/
 
 后端扫描 `bootstrap.paths.plugin_roots()` 返回的内置插件根目录，以及工作区的 `plugins/`。开发态和桌面 bundle 的内置包位于安装资源的顶层 `plugins/`；wheel 安装态使用已安装插件包。插件声明 `api: 4`，把要用的服务写进 `inject`，代码里用 `ctx.require(KEY)` 取得。默认入口仍为 `backend/plugin.py`，入口作为包导入，内部可使用相对 import。不是 `api: 4` 的包无法安装；已经装上的在启动时标为 BLOCKED，文件和配置保留，提示向作者获取新版本。
 
-工作区 `plugins/<目录>/manifest.yaml` 声明的外部包必须通过 [Package Contract v1](plugin-guide.md) 静态检查；合法包显示为 `UNTRUSTED`，在用户于设置 › 插件中经「信任…」（或 ZIP 安装/更新时的「信任并安装」「信任并更新」）确认并重启应用之前，不导入它的后端或 renderer；内容一变授信即失效（流程见[运行时契约](plugin-guide.md)）。配置 `enabled = true` 不代表信任。无效 manifest、入口和依赖显示为 `BLOCKED`；只有旧 `kv.json`、没有 manifest 的目录被忽略，数据不会因此删除。
+工作区 `plugins/<目录>/manifest.yaml` 声明的外部包必须通过[manifest 与包](plugin-guide.md#manifest)的静态检查；合法包显示为 `UNTRUSTED`，在用户于设置 › 插件中经「信任…」（或 ZIP 安装/更新时的「信任并安装」「信任并更新」）确认并重启应用之前，不导入它的后端或 renderer；内容一变授信即失效（流程见[信任与外部包](plugin-lifecycle.md#信任与外部包)）。配置 `enabled = true` 不代表信任。无效 manifest、入口和依赖显示为 `BLOCKED`；只有旧 `kv.json`、没有 manifest 的目录被忽略，数据不会因此删除。
 
 按 manifest ID 检测全部候选：同 ID 的所有包均为 `CONFLICT`，不选择内置或工作区优先者；同目录名但不同 ID 的包分别显示。插件管理保留各候选的版本、来源、实际目录和结构化诊断，拒绝切换未通过准入的候选。目录级代码新增、替换、删除后重启应用；配置保存或启停插件产生的新运行代沿用本次应用启动的候选、manifest 和准入快照，应用重启后才重新扫描。各运行代的导入命名空间、句柄和 effect 仍独立。
 
@@ -42,9 +42,9 @@ supports_hot_unload: true
 
 `config_model` 可以是入口中的类名，也可以是相对入口包的 `模块:类名`。模型必须继承 Pydantic `BaseModel`。
 
-`display_name` 是设置 › 插件里显示的名称（省略时显示 ID）。可选的 `category` 决定插件在列表中的分组：`feature`（功能）、`channel`（渠道）、`system`（系统组件，默认折叠，用于宿主内部护栏、诊断命令这类用户不需要日常操作的插件）。省略时，声明了渠道（`contributes.channels` 非空）的插件归入渠道，其余归入功能；`system` 只能显式声明。取值不在这三者之内时 manifest 被拒绝。Package Contract v1 的外部包自 Runtime API 3.1.1（#678）起也接受 `display_name` 与 `category`（含 `system`），校验规则相同；更早的宿主把它们当未知字段拒绝。
+`display_name` 是设置 › 插件里显示的名称（省略时显示 ID）。可选的 `category` 决定插件在列表中的分组：`feature`（功能）、`channel`（渠道）、`system`（系统组件，默认折叠，用于宿主内部护栏、诊断命令这类用户不需要日常操作的插件）。省略时，声明了渠道（`contributes.channels` 非空）的插件归入渠道，其余归入功能；`system` 只能显式声明。取值不在这三者之内时 manifest 被拒绝。外部包同样接受 `display_name` 与 `category`（含 `system`），校验规则相同。
 
-可选的 `default_enabled`（严格布尔值，省略为 `true`）决定 `[plugins.<id>]` 没有显式 `enabled` 时插件是否启用；显式的 `enabled` 始终优先，设置 › 插件的开关写的就是显式值。目前 `browser_use`、`computer_use`、`novelai`、`gpt_sovits_tts`、`grok_bot`、`herdr`、`sensevoice_asr` 声明为 `false`，没有显式开关时默认停用。宿主加载配置时不改写这份开关。Package Contract v1 的外部包自 Runtime API 3.1.1 起也接受 `default_enabled`。
+可选的 `default_enabled`（严格布尔值，省略为 `true`）决定 `[plugins.<id>]` 没有显式 `enabled` 时插件是否启用；显式的 `enabled` 始终优先，设置 › 插件的开关写的就是显式值。目前 `browser_use`、`computer_use`、`novelai`、`gpt_sovits_tts`、`grok_bot`、`herdr`、`sensevoice_asr` 声明为 `false`，没有显式开关时默认停用。宿主加载配置时不改写这份开关。外部包同样接受 `default_enabled`。
 
 ## setup 与配置
 
@@ -95,7 +95,7 @@ async def setup(ctx: PluginRuntimeContext) -> None:
 | `tools` | `TOOLS` | 注册工具（工具执行前后的处理改用 `ctx.on(ToolCalling, …)` / `ctx.on(ToolCalled, …)`，不需要注入） |
 | `channels` | `CHANNELS` | 贡献 manifest 已声明的渠道（见[渠道声明](#渠道声明)） |
 | `accounts` | `ACCOUNTS` | `register` / `register_saved` / `report` 等：向宿主登记通信账号及其归属（见[渠道插件](channel-plugins.md)） |
-| `services` | `SERVICES` | `register(service_id, contract=, label=, methods=)`：发布可被 renderer 按契约发现、调用的 JSON 服务方法（Runtime API 3.1.1，如语音 `shiori.asr.v1` / `shiori.tts.v1`，见[运行时契约](plugin-guide.md)） |
+| `services` | `SERVICES` | `register(service_id, contract=, label=, methods=)`：发布可被 renderer 按契约发现、调用的 JSON 服务方法（如语音 `shiori.asr.v1` / `shiori.tts.v1`，见[宿主服务的约定](plugin-guide.md#宿主服务的约定)与[前端调用](plugin-frontend.md#注入的-client)） |
 | `avatars` | `AVATARS` | `refresh(kind, channel, id, fetch)`：到期时在后台用插件的下载把发送者或群的平台头像交给宿主缓存，`fetch` 返回 None 即记为无头像；卸载取消在途获取（见[渠道插件](channel-plugins.md)） |
 | `rpc` | `RPC` | 注册 `plugin.<id>.<method>`，发送同命名空间事件 |
 | `background` | `BACKGROUND` | `spawn` 管理作用域任务；`spawn_runtime` 另保留当前 runtime lease，卸载取消并等待任务。不是内核的 `spawn` |
@@ -113,7 +113,7 @@ async def setup(ctx: PluginRuntimeContext) -> None:
 
 机器人命令走核心 Key：manifest 写 `inject: [commands]`，`ctx.effect("command:<名>", ctx.require(COMMANDS).register(名, handler, description=...))`（`COMMANDS` 在 `shiori_sdk.core.conversation`）；带说明的命令进入渠道命令菜单。
 
-外部上下文（群聊、陌生私聊）里，发送者不是已绑定用户的回合只能使用声明过外部可用的工具：`ctx.require(TOOLS).register(tool, ..., external_allowed=True)`。默认不声明，即这类回合看不到、也调不动该工具；已绑定用户本人的消息不受限。只给陌生人触发也安全的工具声明，例如 NovelAI 的 `generate_image`。MCP 工具不能声明。规则见[运行时契约](plugin-guide.md)。
+外部上下文（群聊、陌生私聊）里，发送者不是已绑定用户的回合只能使用声明过外部可用的工具：`ctx.require(TOOLS).register(tool, ..., external_allowed=True)`。默认不声明，即这类回合看不到、也调不动该工具；已绑定用户本人的消息不受限。只给陌生人触发也安全的工具声明，例如 NovelAI 的 `generate_image`。MCP 工具不能声明。规则见[宿主服务的约定](plugin-guide.md#宿主服务的约定)。
 
 不要自己构造另一份 RoleStore 来写同一份角色文件，应 `ctx.require(ROLES)`。渠道、桌宠和其它插件的 `setup` 都用 `PluginRuntimeContext`，它上面没有按服务命名的属性。这些键是架构边界，不是 Python 进程内安全沙箱。
 
@@ -125,7 +125,7 @@ async def setup(ctx: PluginRuntimeContext) -> None:
 
 所有外部聊天渠道都是插件，宿主只拥有 `desktop`。从零写一个渠道插件（配置表单、渠道契约、入站路由、流式、测试）的完整步骤见 [写一个渠道插件](channel-plugins.md)；本节只列声明与钩子的规则。
 
-贡献外部聊天渠道的插件要在 manifest 里静态声明渠道，并注入 `channels`（Runtime API 2.2）。`api: 4` 写在 `contributes.channels`：
+贡献外部聊天渠道的插件要在 manifest 里静态声明渠道，并注入 `channels`。`api: 4` 写在 `contributes.channels`：
 
 ```yaml
 api: 4
@@ -147,14 +147,14 @@ contributes:
 
 - 渠道名是会话线程和消息引用的数据键，发布后不要改名。账号 ID 采用 `<插件 id>:<平台账号>`；渠道名必须是小写标识（`[a-z][a-z0-9_-]{0,63}`），`desktop` 由宿主保留。
 - 声明是静态的：插件停用、未信任或还没有账号时，桌面端也能经 `channels.list` 列出这个渠道。账号插件应始终贡献渠道，并从插件自己的存储恢复账号；凭据缺失只影响对应账号的连接状态。
-- `chat_types` 必填（Runtime API 2.5），声明渠道的会话类型（`private` / `group`，各带标签、号码标签与提示、可选内部前缀），缺失时宿主拒绝 manifest。渠道插件用它标注会话类型，并为 `/chatid` 等命令生成可识别的会话标识。
-- 渠道项还可选 `contact_label`（群聊黑名单里成员 ID 的说明）、`group_listening: true`（Runtime API 2.13，支持群聊旁听）和 `instance_prefix`（必须以 `<name>_` 开头，如 Telegram 的 `telegram_`）：按账号拆出的连接可用 `<instance_prefix><后缀>` 作渠道名，沿用该项的会话类型，`channels.list` 为启用且 `ACTIVE` 的插件每个实例列一行。
+- `chat_types` 必填，声明渠道的会话类型（`private` / `group`，各带标签、号码标签与提示、可选内部前缀），缺失时宿主拒绝 manifest。渠道插件用它标注会话类型，并为 `/chatid` 等命令生成可识别的会话标识。
+- 渠道项还可选 `contact_label`（群聊黑名单里成员 ID 的说明）、`group_listening: true`（支持群聊旁听）和 `instance_prefix`（必须以 `<name>_` 开头，如 Telegram 的 `telegram_`）：按账号拆出的连接可用 `<instance_prefix><后缀>` 作渠道名，沿用该项的会话类型，`channels.list` 为启用且 `ACTIVE` 的插件每个实例列一行。
 - `ctx.require(CHANNELS).add(channel)` 只接受本 manifest 声明过的 `channel.name`、声明的 `instance_prefix` 下的名字，或带非空 `account_id` 的 `<声明名>:<后缀>` 账号实例，否则 setup 失败，插件回滚为 `FAILED`，诊断码 `undeclared_channel`。
 - 两个插件声明同一个渠道名（或一方的 `instance_prefix` 与另一方的渠道名、前缀相互覆盖）时，两者都是 `CONFLICT`（诊断码 `duplicate_channel`），都不会激活。
 - 渠道的启停和换代由宿主的 ChannelHost 管理，不要用 `BACKGROUND` 自己起连接任务。跨代复用连接时，渠道提供 `configuration_key`，它变化就重建连接；声明了 `uses_bot_commands = True` 的渠道，宿主还会连同 bot 命令列表一起比较。
 - 渠道可以实现可选的 `status()`，返回 `{"connected": bool, "account": str, "detail": str}`（`account`、`detail` 可省略），`channels.list` 会原样带给桌面端。
 
-### 渠道钩子（Runtime API 2.3）
+### 渠道钩子
 
 核心不按渠道名写死策略，而是向渠道对象询问下面几个可选钩子；不实现就取中性默认值。协议定义在 `shiori_sdk.channels`：
 
@@ -238,13 +238,13 @@ const exampleUi: PluginUiModule = {
 export default exampleUi;
 ```
 
-`settings.section` 不再是设置侧栏的顶层条目：它注册为内建「插件」区块下的一个子页面。设置 › 插件的列表按 manifest 的 `category` 分成功能、渠道、系统组件三组，有设置页的插件在所在行显示「设置」按钮，点开进入它的设置页（页头带返回），不再作为「已安装」旁的子标签；侧栏始终只有模型/外观/高级/我的身份/插件/关于六项（「记忆」已随默认记忆插件迁出，#902；「频道」已随渠道插件化移除，#363；「语音」已随语音业务迁入插件移除，#677）。深链 `openSettingsWorkspace("plugins", { subsectionId: pluginId })` 直接打开该插件的设置页。manifest 声明了 `config_model` 的插件无需手写 `ui/index.tsx` 就能自动获得一个 schema 表单设置页，页标题取自后端 `plugins.list` 的回退链：manifest 的 `display_name` → 插件记录名（未声明 `display_name` 时即插件目录名）→ `id`，所以请在 manifest 里写出 `display_name`。账号插件的凭据与响应规则在角色页编辑，保存在插件自己的账号存储，不放在自动配置表单里。只有需要自定义表单组件、或额外贡献 `navPage`/`roleAssets` 等插槽时才需要手写（如 novelai——它的手写 `settingsSection` 会优先于自动注册，不会重复出现两个子标签）。已使用的插槽还包括 `nav.page`（story、novelai）、`role.assets`（desktop_pet）、`account.detail`（四个渠道插件的账号详情）。角色设置（`roleSettings`，并入宿主角色保存）与聊天图片动作（`chatImageActions`）也有独立贡献契约；插件私有的角色设置放在 `roleSettings` 卡片（`storage: "plugin"`）的 ⚙ 对话框里自动保存，如 gpt_sovits_tts。自管角色面板 `roleUi` 已在 Runtime API 3.1.1 移除，仍声明它的 UI 模块会在加载校验时被拒绝。插件 UI 只通过注入的服务和 RPC 协作，启停状态决定其可见性。
+`settings.section` 不再是设置侧栏的顶层条目：它注册为内建「插件」区块下的一个子页面。设置 › 插件的列表按 manifest 的 `category` 分成功能、渠道、系统组件三组，有设置页的插件在所在行显示「设置」按钮，点开进入它的设置页（页头带返回），不再作为「已安装」旁的子标签；侧栏始终只有模型/外观/高级/我的身份/插件/关于六项（「记忆」已随默认记忆插件迁出，#902；「频道」已随渠道插件化移除，#363；「语音」已随语音业务迁入插件移除，#677）。深链 `openSettingsWorkspace("plugins", { subsectionId: pluginId })` 直接打开该插件的设置页。manifest 声明了 `config_model` 的插件无需手写 `ui/index.tsx` 就能自动获得一个 schema 表单设置页，页标题取自后端 `plugins.list` 的回退链：manifest 的 `display_name` → 插件记录名（未声明 `display_name` 时即插件目录名）→ `id`，所以请在 manifest 里写出 `display_name`。账号插件的凭据与响应规则在角色页编辑，保存在插件自己的账号存储，不放在自动配置表单里。只有需要自定义表单组件、或额外贡献 `navPage`/`roleAssets` 等插槽时才需要手写（如 novelai——它的手写 `settingsSection` 会优先于自动注册，不会重复出现两个子标签）。已使用的插槽还包括 `nav.page`（story、novelai）、`role.assets`（desktop_pet）、`account.detail`（四个渠道插件的账号详情）。角色设置（`roleSettings`，并入宿主角色保存）与聊天图片动作（`chatImageActions`）也有独立贡献契约；插件私有的角色设置放在 `roleSettings` 卡片（`storage: "plugin"`）的 ⚙ 对话框里自动保存，如 gpt_sovits_tts。自管角色面板 `roleUi` 已移除，仍声明它的 UI 模块会在加载校验时被拒绝。插件 UI 只通过注入的服务和 RPC 协作，启停状态决定其可见性。
 
-Runtime API **2.4.0** 起，绑定的组件（`navPage` 及其侧栏、自定义 `settingsSection`、`roleAssets`、`accountDetail`）除了 `client` 还会收到 `host`（即宿主服务，内置插件也可以继续用 `usePluginHostServices()`）。其中三项是宿主的呈现：`host.feedback.error("加载失败", { detail, persona: true })` 把提示放进宿主唯一的提示队列；`<host.ui.InlineError persona message={error} actions={…} />` 是宿主的页面内报错块（`layout` 可选 `row` / `strip` / `card`）；`<host.ui.ConfirmDialog persona="destructive" … />` 是宿主的确认弹窗（参数与宿主自己的一致）。`persona` 默认 `false`；传 `true`（或 `"generic"`）让看板娘吟风用该处的通用台词出面（报错 / 警告带一句，成功 / 普通提示只露脸），传场景键（`not_configured` / `unauthorized` / `quota` / `network` / `upstream` / `destructive` / `discard` / `confirm`）用宿主为该场景写好的台词。台词永远由宿主写，插件只能选场景；用户在 设置 › 外观 关掉「看板娘」后，一律回到不带她的样式。`host` 还提供 `config`、`assets`（2.10）、`pickFiles` / `pickFilePaths` / `pickDirectory`（后两者 3.1.1）、设置页角标 `host.ui.SettingsSavedStatus`（3.1.1）以及账号详情用的 `AccountStatusCard`、`AccountDetailActions`、`Reveal`。细节见[运行时契约](plugin-guide.md)，NovelAI 生图的失败卡片和报错提示就是这样接的。
+绑定的组件（`navPage` 及其侧栏、自定义 `settingsSection`、`roleAssets`、`accountDetail`）除了 `client` 还会收到 `host`（即宿主服务，内置插件也可以继续用 `usePluginHostServices()`）。其中三项是宿主的呈现：`host.feedback.error("加载失败", { detail, persona: true })` 把提示放进宿主唯一的提示队列；`<host.ui.InlineError persona message={error} actions={…} />` 是宿主的页面内报错块（`layout` 可选 `row` / `strip` / `card`）；`<host.ui.ConfirmDialog persona="destructive" … />` 是宿主的确认弹窗（参数与宿主自己的一致）。`persona` 默认 `false`；传 `true`（或 `"generic"`）让看板娘吟风用该处的通用台词出面（报错 / 警告带一句，成功 / 普通提示只露脸），传场景键（`not_configured` / `unauthorized` / `quota` / `network` / `upstream` / `destructive` / `discard` / `confirm`）用宿主为该场景写好的台词。台词永远由宿主写，插件只能选场景；用户在 设置 › 外观 关掉「看板娘」后，一律回到不带她的样式。`host` 还提供 `config`、`assets`、`pickFiles` / `pickFilePaths` / `pickDirectory`、设置页角标 `host.ui.SettingsSavedStatus`以及账号详情用的 `AccountStatusCard`、`AccountDetailActions`、`Reveal`。细节见[前端契约](plugin-frontend.md#host-服务)，NovelAI 生图的失败卡片和报错提示就是这样接的。
 
 `app.background` 在隐藏的 plugin-host renderer 运行，入口是 `background/index.ts` 的 `{ pluginId, setup(ctx) }`。桌宠已通过它拥有控制器、surface、托盘项与订阅。它的 `BackgroundCtx` 不是 Python 上下文：通过自己的 `effect`、`events`、`hostEvents`、`rpc`、`surfaces`、`tray`、`store`、`assets` 管理资源，用 `reportFailure` 把已处理但需要人看到的失败写进桌面诊断日志（2.11）；3.1.1 起还有作用域内的原生资源 `native`（录音、播放、全局快捷键）与 `chat`（为角色发起、取消回合）。使用 `surface/` 入口渲染独立桌面窗口。
 
-Runtime API **2.1.0** 为 UI、surface 和后台注入同一套通信接口。它们沿用 manifest 的 `dependencies` / `optional_dependencies`；不会建立另一套依赖注册表，也不会隐式启用提供方。
+宿主为 UI、surface 和后台注入同一套通信接口（见[前端契约](plugin-frontend.md#注入的-client)）。它们沿用 manifest 的 `dependencies` / `optional_dependencies`；不会建立另一套依赖注册表，也不会隐式启用提供方。
 
 ```ts
 // UI / surface：自身后端、事件、后台都只传局部名称。
@@ -266,7 +266,7 @@ renderer 后台 `await ctx.events.on("action", handler)` 只订阅自身插件�
 
 注入 client 由挂载的 UI/surface 或后台作用域持有。React 订阅 effect 把 `client` 放入依赖数组，并返回 `events.on` 给出的 disposer；异步订阅完成前若组件已经卸载，立即调用该 disposer。宿主会在卸载、挂载失败、后台 setup 失败、窗口退出、主文档刷新/导航以及运行代际替换时统一回收订阅、方法注册和待返回请求。同页导航与子 frame 导航不会回收主文档的通信。真实配置发布或 bridge 重连会替换注入 client，并重建后台作用域；`runtime.applied.changed` 只表示实际发布新代，同代幂等重试、无变化保存与仅改角色模型绑定的事件为 `changed: false`，不会打断现有请求；返回旧代结果的重试不再发布事件。RPC 响应仍保留原操作的结果。保存插件配置时，宿主只在当前代内重载该插件及其强依赖消费者，并发出 `plugins.reloaded`（`plugin_ids`）：只有这些插件的注入 client、后台作用域和原生会话被替换，它们的渲染入口按新的激活令牌重新上报；其他插件与角色列表不刷新。渲染入口就绪或失败通过 `plugins.changed` 刷新名单：仍处于 ACTIVE 的插件保留通信 client 和后台作用域，失败插件仍回收自己的 UI、后台和 surface。后台已有业务工作若跨卸载仍在执行，仍应由插件的 effect 取消或等待，旧 handler 不得回复到新代。
 
-Python 端 `RPC` 的 `emit` 返回是否已经交给连接的桌面传输，不能解释成每个 renderer 都已消费。桌宠工具据此保留 `desktop_bridge_unavailable`，未投递的动作不占用冷却或本轮次数。桌宠动作、隐藏、包切换已走通用通道，宿主不再有桌宠动作事件或 `desktop:pet-sync`。回复气泡属于桌宠；屏幕感知插件独立。宿主自 Runtime API 3.1.1（#677）起不再有语音业务：识别与合成由 `sensevoice_asr`、`gpt_sovits_tts` 以 `services` 发布 `shiori.asr.v1` / `shiori.tts.v1`，桌宠拥有语音偏好、输入手势与播放编排，宿主只提供通用原生录音、播放与按键资源。
+Python 端 `RPC` 的 `emit` 返回是否已经交给连接的桌面传输，不能解释成每个 renderer 都已消费。桌宠工具据此保留 `desktop_bridge_unavailable`，未投递的动作不占用冷却或本轮次数。桌宠动作、隐藏、包切换已走通用通道，宿主不再有桌宠动作事件或 `desktop:pet-sync`。回复气泡属于桌宠；屏幕感知插件独立。宿主不再有语音业务（#677）：识别与合成由 `sensevoice_asr`、`gpt_sovits_tts` 以 `services` 发布 `shiori.asr.v1` / `shiori.tts.v1`，桌宠拥有语音偏好、输入手势与播放编排，宿主只提供通用原生录音、播放与按键资源。
 
 这些 API 是可表达、可观测的协作契约，不是安全隔离。同 realm 的受信插件仍有宿主权限；CSP 没有放宽。
 
@@ -296,10 +296,7 @@ SDK 的 `sdk_context` fixture 从测试文件向上（不越过 pytest rootdir�
 NovelAI 生成记录、原始请求、输出图和提示词库存于 `plugin-data/novelai/generation/`；参考图在保存时复制到其中的 `references/`，共享 imports 仅作导入来源，不能被插件整目录删除。Story 数据库位于 `plugin-data/story/stories/`，每个故事采用的 CG 复制到该故事目录的 `assets/`。会话在持久化本地图片时复制到 `sessions/media/` 并保留原始来源。清理 NovelAI 的私有数据不删除已经成为故事或会话内容的副本。重新生成仍需 NovelAI 的原始生成记录和请求；清掉这些记录后，会话图片可查看，但不再具备重新生成来源。完整工作区备份同时保留 `sessions.db`、`sessions/media/` 与使用中的插件数据目录。
 
 
-External package authors: see [External Plugin Runtime Contract v1](plugin-guide.md)
-for the versioned distribution layout, compatibility gate, ESM/CSS requirements
-and independent build example. The tutorial's bundled source-plugin workflow
-continues to use the existing v2 path.
+外部包作者另见[插件指南](plugin-guide.md#manifest)（manifest 与 `sdk` 约束）、[前端契约](plugin-frontend.md#入口与产物)（预编译 ESM / CSS 与构建命令）和[生命周期与准入](plugin-lifecycle.md#信任与外部包)（信任、安装与更新）。
 
 角色级的桌宠状态与 NovelAI 自动 CG 偏好采用 `roles/roles.json` 顶层的 `plugin_data.desktop_pet`、`plugin_data.novelai` 不透明命名空间，插件拥有 schema，宿主只协调角色字段与插件草稿的单次原子提交。清单 v5 在角色投影前完成旧字段捕获与移除，即使插件停用也不会因普通角色保存丢失数据；已有命名空间优先。桌宠最终素材单独归 `plugin-data/desktop_pet/pets-<role_id>/`，旧路径在素材副本完成后再原子改写。插件重新启用会清理已删角色、无效包记录及孤儿 pet 文件；清空素材后的同名包可以重新导入。
 
@@ -308,12 +305,12 @@ continues to use the existing v2 path.
 Story 播放偏好保留为设备 renderer 的 `localStorage["shiori.story-preferences.v1"]`；桌宠位置/窗口状态保留在 Electron `userData/plugin-data/desktop_pet.json`。它们不随工作区迁移或清理，复制设备体验时另行备份。shell_restore 的新默认是工作区内受保护的 `recovery/shell_restore/`，保存的是用户原文件，不能随普通插件数据删除。显式 `AKASIC_RESTORE_DIR` 保持原值；旧 `~/restore` 不自动归属任何工作区，也不移动或删除，须独立备份和恢复。
 
 
-## 统一 SDK 3.0
+## Shiori SDK
 
 新插件前端使用 `@yinfengwindy/shiori-sdk`，后端契约使用 `shiori_sdk`。SDK 主文档位于
 [packages/sdk/README.md](../../packages/sdk/README.md)，包括 wheel/tarball 构建、
 公开协议和 `shiori-sdk[testing]` 的无宿主测试入口。
-全部 22 个内置插件，包括四个外部渠道、桌宠和两个语音 provider，均使用 SDK 契约及 `shiori-sdk[testing]` 独立测试支持。
+全部内置插件，包括四个外部渠道、桌宠和两个语音 provider，均使用 SDK 契约及 `shiori-sdk[testing]` 独立测试支持。
 宿主导入守护没有迁移豁免，仓库外验证只安装目标及其显式依赖，不安装宿主。
 真实 AppRuntime、渠道、窗口和进程集成由宿主测试及 `shiori-host-testing` 验证；
 SDK 只定义公开协议和独立 fake，宿主保留服务实现。

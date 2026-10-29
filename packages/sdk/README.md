@@ -187,8 +187,9 @@ async def setup(ctx: PluginRuntimeContext) -> None:
 ```
 
 Install `shiori-sdk[testing]` for pytest/pytest-asyncio, `sdk_context`,
-`FakePluginContext`, `FakeEvents`, package staging,
-bridge request helpers and shared test TLS contexts. Fakes store only test values
+`FakePluginContext`, `FakeEvents`, package staging
+and shared test TLS contexts. The desktop bridge request helper lives in
+`shiori_host_testing.bridge`, since only host integration tests use it. Fakes store only test values
 in memory; they never open host persistence. `sdk_context` reads the nearest
 `manifest.yaml` above the test file (within the pytest rootdir; override the
 `sdk_plugin_dir` fixture otherwise) and declares the manifest's

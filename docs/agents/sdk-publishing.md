@@ -1,19 +1,6 @@
 # SDK 发布
 
 SDK 使用同一个版本号发布 `@yinfengwindy/shiori-sdk`（npm）与 `shiori-sdk`（PyPI）。
-**3.1.2 已于 2026-10-16 发布**到 [npm](https://www.npmjs.com/package/@yinfengwindy/shiori-sdk)
-与 [PyPI](https://pypi.org/project/shiori-sdk/)。[正式发布 run](https://github.com/YinFengWindy/Shiori-Agent/actions/runs/38855118971)
-的 build、npm 和 PyPI job 均成功，注册表产物校验和与该次 CI 归档一致。
-README 的 3.1.2 安装命令可直接使用。
-本批包括后台结果回报、跨代进程资源、外部链接、二级侧栏样式以及 #847 的渠道
-push-sender 删除与 `message_push` 异常语义，补丁编号不代表兼容；迁移说明见
-[SDK README](../../packages/sdk/README.md#compatibility)。
-
-桌面 v0.5.5 已将 #820/#821/#822/#827 的新增契约以旧版本号 3.1.1 分发，
-内容与注册表 3.1.1 不同。3.1.2 统一修正后续分发；不得重写 v0.5.5 / sdk-v3.1.1
-标签或覆盖旧注册表产物。`ChannelContext.push_tool` 注册及 `PushSenders` /
-`FakePushSenders` 必须移除；角色向渠道发送使用 `account_send`。`message_push` 失败会
-抛异常，调用方不再匹配返回文本来判断失败，正常返回表示已发送或已加入当前回合队列。
 
 SDK 大版本是破坏性变更。manifest 写 `api: 4` 和 `sdk` 最低约束。4.x 内不给已有
 Key 加方法。没有 Unreleased 批次，也没有 `runtime_api`。正式发布 SDK 前，源版本、
@@ -25,16 +12,7 @@ npm 包、宿主和 host-testing 的精确 pin 必须一致。桌面包内置的
 插件的 `shiori-sdk` 依赖要承认这个版本。改了插座契约就运行
 `python -m scripts.gen_plugin_api`。已发布历史的最低约束保持不变。
 
-本批插件以最近正式桌面 v0.5.5 为基线，只给有包内容或兼容声明变化的插件升一次 patch：
-
-| 插件 | 本批插件版本 | SDK / Runtime API 最低版本与依据 |
-| --- | --- | --- |
-| herdr | 0.1.1 | 3.1.2：四项新增接口；0.1.0 已随 v0.5.5 发布 |
-| novelai | 0.1.2 | 3.1.2：二级侧栏与 `message_push` 异常迁移 |
-| feishu / qq / qqbot / telegram | 各 0.1.2 | 3.1.2：移除渠道 push-sender 注册，并包含本批渠道改动 |
-| story | 0.1.2 | 自身 SDK 最低仍为 3.1.0；精确依赖 novelai==0.1.2 |
-
-其他插件未变，不升版本；herdr 的根开发依赖及 uv.lock 同步更新。
+正式发布前，`plugin-changelog.md` 必须有当前源版本的 `## X.Y.Z` 条目，`node scripts/check_sdk_release.mjs` 会检查这一点。
 
 工作流为 `.github/workflows/sdk-release.yml`：
 
@@ -181,3 +159,31 @@ uv run python -m scripts.verify_sdk
 `uv run python -m scripts.verify_sdk --wheel <路径.whl>`。它们不会重建指定产物。
 `sdk_release seal/verify` 负责归档与来源校验；`sdk_registry` 只查询注册表并准备待上传
 文件，不执行上传。发布 job 无需安装整个宿主或任何插件。
+
+## 历史记录：3.1.2 批次
+
+以下是 3.1.x 时期的发布记录，只作历史参考。当时的版本规则（Unreleased 批次、`runtime_api`、补丁号承载破坏性变更）已被 4.0 的大版本规则取代。
+
+3.1.2 已于 2026-10-16 发布到 [npm](https://www.npmjs.com/package/@yinfengwindy/shiori-sdk)
+与 [PyPI](https://pypi.org/project/shiori-sdk/)。[正式发布 run](https://github.com/YinFengWindy/Shiori-Agent/actions/runs/38855118971)
+的 build、npm 和 PyPI job 均成功，注册表产物校验和与该次 CI 归档一致。
+该批包括后台结果回报、跨代进程资源、外部链接、二级侧栏样式以及 #847 的渠道
+push-sender 删除与 `message_push` 异常语义，补丁编号不代表兼容；迁移说明见
+[SDK README](../../packages/sdk/README.md#compatibility)。
+
+桌面 v0.5.5 已将 #820/#821/#822/#827 的新增契约以旧版本号 3.1.1 分发，
+内容与注册表 3.1.1 不同。3.1.2 统一修正后续分发；不得重写 v0.5.5 / sdk-v3.1.1
+标签或覆盖旧注册表产物。`ChannelContext.push_tool` 注册及 `PushSenders` /
+`FakePushSenders` 必须移除；角色向渠道发送使用 `account_send`。`message_push` 失败会
+抛异常，调用方不再匹配返回文本来判断失败，正常返回表示已发送或已加入当前回合队列。
+
+3.1.2 批次的插件以当时最近的正式桌面 v0.5.5 为基线，只给有包内容或兼容声明变化的插件升一次 patch：
+
+| 插件 | 该批插件版本 | SDK / Runtime API 最低版本与依据 |
+| --- | --- | --- |
+| herdr | 0.1.1 | 3.1.2：四项新增接口；0.1.0 已随 v0.5.5 发布 |
+| novelai | 0.1.2 | 3.1.2：二级侧栏与 `message_push` 异常迁移 |
+| feishu / qq / qqbot / telegram | 各 0.1.2 | 3.1.2：移除渠道 push-sender 注册，并包含本批渠道改动 |
+| story | 0.1.2 | 自身 SDK 最低仍为 3.1.0；精确依赖 novelai==0.1.2 |
+
+其他插件未变，不升版本；herdr 的根开发依赖及 uv.lock 同步更新。

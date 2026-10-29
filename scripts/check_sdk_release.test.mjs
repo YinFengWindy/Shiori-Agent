@@ -22,6 +22,7 @@ function repository(t) {
     write("packages/sdk/package.json", JSON.stringify({ name: "sdk", version: value }));
     write("setup.py", `setup(install_requires=["shiori-sdk==${value}"])\n`);
     write("packages/shiori-host-testing/pyproject.toml", `dependencies = ["shiori-sdk[testing]==${value}"]\n`);
+    write("docs/_handbook/plugin-changelog.md", `# 插件变更\n\n## ${value}\n\n- fixture\n`);
   };
   const commit = () => {
     git("add", ".");
@@ -57,6 +58,12 @@ test("all exact consumers must agree with the Python version before release", as
     repo.write(path, content);
     await assert.rejects(checkSdkRelease(repo.root), /versions differ/);
   }
+});
+
+test("a release needs a changelog entry for its version", async (t) => {
+  const repo = repository(t);
+  repo.write("docs/_handbook/plugin-changelog.md", "# 插件变更\n\n## 3.1.10\n");
+  await assert.rejects(checkSdkRelease(repo.root), /plugin-changelog.md has no ## 3.1.1 entry/);
 });
 
 test("an SDK tag freezes both Python and renderer source", async (t) => {

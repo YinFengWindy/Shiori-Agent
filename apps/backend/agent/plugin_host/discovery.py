@@ -311,7 +311,7 @@ def _read_candidate(
             _ = contained_file(child, "manifest.yaml", "manifest")
         manifest = load_manifest(child)
     except PackageContractError as exc:
-        manifest = PluginManifest(id=child.name)
+        manifest = PluginManifest(id=child.name, sdk="")
         diagnostic = exc.diagnostic
     except UnsupportedApiError as exc:
         # Before trust and package validation, and in strict mode too: the old
@@ -422,6 +422,7 @@ def _roster_manifest(child: Path, exc: ManifestError) -> PluginManifest:
     metadata = exc.metadata or {}
     return PluginManifest(
         id=str(metadata.get("id") or child.name),
+        sdk="",
         version=str(metadata.get("version") or ""),
         metadata=metadata,
     )

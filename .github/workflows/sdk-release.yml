@@ -18,7 +18,6 @@ on:
       - "docs/_handbook/plugin-guide.md"
       - "docs/_handbook/plugin-api.md"
       - "docs/_handbook/plugin-changelog.md"
-      - "docs/_handbook/plugin-runtime-contract.md"
       - "tests/backend/scripts/test_sdk_release.py"
       - "tests/backend/scripts/test_sdk_registry.py"
       - "pnpm-lock.yaml"
