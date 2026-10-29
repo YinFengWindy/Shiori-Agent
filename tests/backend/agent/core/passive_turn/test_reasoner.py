@@ -283,6 +283,12 @@ async def test_builtin_natural_chat_controls_prompt_and_stream_on_supported_tran
     from agent.context import ContextBuilder
     from core.roles import RoleStore
     from core.roles.services import RoleSessionService
+    from core.roles.reply_policy import (
+        ReplyPolicyGetter,
+        bind_turn_reply_policy,
+        reset_turn_reply_policy,
+    )
+    from plugins.natural_chat.backend.plugin import NaturalChatPolicy
     from prompts.natural_chat import FINISH_REPLY_TOOL_NAME
     from agent.turns.reply_sequence import reply_is_buffered
     from conversation.context_scope import turn_context_view
@@ -343,23 +349,31 @@ async def test_builtin_natural_chat_controls_prompt_and_stream_on_supported_tran
     bus = MessageBus()
     if admitted:
         bus.subscribe_outbound(channel, AsyncMock(), supports_reply_sequence=True)
-    with ChannelSequenceOwner().bind(bus):
-        result = await reasoner.run_turn(
-            msg=InboundMessage(
-                channel=channel,
-                sender="user",
-                chat_id="a",
-                content="hi",
-                metadata={
-                    **({"turn_id": "t"} if channel == "desktop" else {}),
-                    "request_id": "request",
-                    "source": source,
-                    "thread_id": thread,
-                },
-            ),
-            session=session,
-            context_view=turn_context_view(tmp_path, "mira", thread),
-        )
+    # Production binds this after the plugin kernel loads. The prompt text
+    # belongs to the default-on natural_chat plugin; this reasoner has no kernel.
+    getter = ReplyPolicyGetter()
+    getter.bind(lambda: NaturalChatPolicy())
+    token = bind_turn_reply_policy(getter)
+    try:
+        with ChannelSequenceOwner().bind(bus):
+            result = await reasoner.run_turn(
+                msg=InboundMessage(
+                    channel=channel,
+                    sender="user",
+                    chat_id="a",
+                    content="hi",
+                    metadata={
+                        **({"turn_id": "t"} if channel == "desktop" else {}),
+                        "request_id": "request",
+                        "source": source,
+                        "thread_id": thread,
+                    },
+                ),
+                session=session,
+                context_view=turn_context_view(tmp_path, "mira", thread),
+            )
+    finally:
+        reset_turn_reply_policy(token)
     assert (result.reply_sequence is not None) is selected
     assert result.streamed is (not selected)
     assert visible == (

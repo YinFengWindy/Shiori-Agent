@@ -44,7 +44,7 @@ supports_hot_unload: true
 
 `display_name` 是设置 › 插件里显示的名称（省略时显示 ID）。可选的 `category` 决定插件在列表中的分组：`feature`（功能）、`channel`（渠道）、`system`（系统组件，默认折叠，用于宿主内部护栏、诊断命令这类用户不需要日常操作的插件）。省略时，声明了渠道（`contributes.channels` 非空）的插件归入渠道，其余归入功能；`system` 只能显式声明。取值不在这三者之内时 manifest 被拒绝。外部包同样接受 `display_name` 与 `category`（含 `system`），校验规则相同。
 
-可选的 `default_enabled`（严格布尔值，省略为 `true`）决定 `[plugins.<id>]` 没有显式 `enabled` 时插件是否启用；显式的 `enabled` 始终优先，设置 › 插件的开关写的就是显式值。目前 `browser_use`、`computer_use`、`novelai`、`gpt_sovits_tts`、`grok_bot`、`herdr`、`sensevoice_asr` 声明为 `false`，没有显式开关时默认停用。宿主加载配置时不改写这份开关。外部包同样接受 `default_enabled`。
+可选的 `default_enabled`（严格布尔值，省略为 `true`）决定 `[plugins.<id>]` 没有显式 `enabled` 时插件是否启用；显式的 `enabled` 始终优先，设置 › 插件的开关写的就是显式值。目前 `browser_use`、`computer_use`、`novelai`、`gpt_sovits_tts`、`grok_bot`、`herdr`、`mcp`、`sensevoice_asr` 声明为 `false`，没有显式开关时默认停用。宿主加载配置时不改写这份开关。外部包同样接受 `default_enabled`。
 
 ## setup 与配置
 
