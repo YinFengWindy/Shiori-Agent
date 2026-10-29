@@ -9,7 +9,7 @@ import pytest
 
 from core.roles.store import RoleStore
 from desktop_bridge.runtime.service import ReloadableDesktopService
-from shiori_sdk.testing.bridge import plugin_bridge_request
+from shiori_host_testing.bridge import plugin_bridge_request
 
 
 @pytest.mark.asyncio
@@ -19,7 +19,7 @@ async def test_plugin_account_report_and_bridge_listing_share_role_store(
     package = tmp_path / "account_demo"
     (package / "backend").mkdir(parents=True)
     (package / "manifest.yaml").write_text(
-        "api: 4\nid: account_demo\ninject: [accounts]\n",
+        "api: 4\nsdk: '>=4.0.0'\nid: account_demo\ninject: [accounts]\n",
         encoding="utf-8",
     )
     (package / "backend/plugin.py").write_text(

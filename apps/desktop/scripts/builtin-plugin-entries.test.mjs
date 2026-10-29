@@ -19,7 +19,7 @@ test("all three registries import only builtins and react to development manifes
   t.after(() => rm(root, { recursive: true, force: true }));
   for (const id of ["bundled", "separate"]) {
     await mkdir(join(root, id));
-    await writeFile(join(root, id, "manifest.yaml"), `api: 4\nid: ${id}\n${id === "separate" ? "distribution: external\n" : ""}`, "utf8");
+    await writeFile(join(root, id, "manifest.yaml"), `api: 4\nsdk: '>=4.0.0'\nid: ${id}\n${id === "separate" ? "distribution: external\n" : ""}`, "utf8");
     for (const [kind, extension] of [["ui", "tsx"], ["background", "ts"], ["surface", "tsx"]]) {
       await mkdir(join(root, id, kind));
       await writeFile(join(root, id, kind, `index.${extension}`), "INVALID source must not be parsed during inventory", "utf8");

@@ -177,7 +177,7 @@ def _write(root: Path, plugin_id: str, manifest: str, source: str) -> None:
     package = root / plugin_id
     (package / "backend").mkdir(parents=True)
     (package / "manifest.yaml").write_text(
-        f"api: 4\nid: {plugin_id}\n{manifest}", encoding="utf-8"
+        f"api: 4\nsdk: '>=4.0.0'\nid: {plugin_id}\n{manifest}", encoding="utf-8"
     )
     (package / "backend/plugin.py").write_text(source, encoding="utf-8")
 

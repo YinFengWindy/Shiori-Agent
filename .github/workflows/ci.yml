@@ -33,6 +33,8 @@ jobs:
         run: .venv/bin/black --check .
       - name: Run Ruff
         run: .venv/bin/ruff check .
+      - name: Check generated plugin API reference
+        run: .venv/bin/python -m scripts.gen_plugin_api --check
 
       - name: Enforce SDK and plugin dependency boundaries
         run: .venv/bin/python -m scripts.check_sdk_imports

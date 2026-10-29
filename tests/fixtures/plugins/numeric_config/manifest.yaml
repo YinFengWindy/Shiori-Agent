@@ -1,4 +1,5 @@
 api: 4
+sdk: ">=4.0.0"
 id: numeric_config
 inject: [config]
 config_model: NumericConfig

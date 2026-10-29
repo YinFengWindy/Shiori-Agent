@@ -49,6 +49,23 @@ class RoleExtensions(Protocol):
     ) -> Callable[[], None]: ...
 
 
+class PluginSettings(Protocol):
+    """Opaque read/write of one role namespace.
+
+    ``proactive`` is the namespace that exists today. The 4.0 host still parses
+    that namespace with the core proactive config until proactive leaves the
+    core. 4.x cannot add methods here later (D19, D22).
+    """
+
+    def read(self) -> Mapping[str, object]:
+        """The stored object for this namespace."""
+        ...
+
+    def write(self, value: Mapping[str, object]) -> None:
+        """Replace the stored object for this namespace."""
+        ...
+
+
 class Roles(Protocol):
     """Only operations consumed by role-based plugins; canonical storage stays host-owned."""
 
@@ -60,6 +77,13 @@ class Roles(Protocol):
     def read_scope(self) -> AbstractContextManager[object]: ...
     @property
     def extensions(self) -> RoleExtensions: ...
+    def plugin_settings(self, role_id: str, namespace: str) -> PluginSettings:
+        """Read and write one role's opaque namespace (D19).
+
+        ``roleSettings`` on the renderer is a separate slot and already exists.
+        Unknown ``namespace`` fails. Only ``proactive`` is stored today.
+        """
+        ...
 
 
 class SceneObservations(Protocol):

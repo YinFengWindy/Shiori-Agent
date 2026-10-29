@@ -2,16 +2,23 @@
 
 [@yinfengwindy/shiori-sdk](https://www.npmjs.com/package/@yinfengwindy/shiori-sdk)
 and [shiori-sdk](https://pypi.org/project/shiori-sdk/) are the TypeScript and Python distributions of the
-same plugin contract. The source and Runtime API version is **3.1.2**, published
-to both npm and PyPI on **2026-10-16**. The [release run](https://github.com/YinFengWindy/Shiori-Agent/actions/runs/38855118971)
-built, verified and published both distributions. The installation commands below
-use this published version and its testing support.
+same plugin contract. The source version is **4.0.0**. It is not published yet.
+The last registry release is **3.1.2** (2026-10-16,
+[release run](https://github.com/YinFengWindy/Shiori-Agent/actions/runs/38855118971)).
+The installation commands below install that published release. In-repo plugins
+depend on `shiori-sdk>=4.0.0,<5` and use the workspace package.
 
-Start with the [plugin tutorial](https://github.com/YinFengWindy/Shiori-Agent/blob/main/docs/_handbook/plugins-tutorial.md)
-and [runtime contract](https://github.com/YinFengWindy/Shiori-Agent/blob/main/docs/_handbook/plugin-runtime-contract.md)
+Start with the [plugin guide](https://github.com/YinFengWindy/Shiori-Agent/blob/main/docs/_handbook/plugin-guide.md)
+and the [generated API reference](https://github.com/YinFengWindy/Shiori-Agent/blob/main/docs/_handbook/plugin-api.md)
 for plugin layout, `inject` service declarations and packaging.
 
 ## Compatibility
+
+### 4.0.0
+
+Breaking major. Manifests declare `api: 4` and `sdk: ">=4.0.0"`. There is no
+`runtime_api` version. Within 4.x, existing keys do not gain methods. See the
+plugin guide. The 3.1.x notes below are history for the last published release.
 
 ### 3.1.2 migration
 
@@ -66,11 +73,10 @@ The unpublished `roleUi` contribution, `PluginRoleUiProps` /
 this release batch. They are not 3.1.1 APIs. Use `roleSettings` capability cards
 and `usePrivateAutosave` for plugin-owned settings.
 
-Ordinary contract PRs accumulate in the runtime contract's Unreleased section
-without incrementing the version. Before publishing the SDK or a desktop release
-with new contracts, the maintainer assigns one version to the whole batch,
-compared with the last published contract. SDK and runtime versions remain the
-same; a version already shipped in either form is not reused for new contracts.
+4.0.0 drops that batch. A breaking contract change is a new SDK major. The
+version source, npm package and host pins stay the same number, checked by
+`node scripts/check_sdk_release.mjs --align`. A version already shipped is not
+reused for different source.
 
 ## TypeScript
 
@@ -181,8 +187,9 @@ async def setup(ctx: PluginRuntimeContext) -> None:
 ```
 
 Install `shiori-sdk[testing]` for pytest/pytest-asyncio, `sdk_context`,
-`FakePluginContext`, `FakeEvents`, package staging,
-bridge request helpers and shared test TLS contexts. Fakes store only test values
+`FakePluginContext`, `FakeEvents`, package staging
+and shared test TLS contexts. The desktop bridge request helper lives in
+`shiori_host_testing.bridge`, since only host integration tests use it. Fakes store only test values
 in memory; they never open host persistence. `sdk_context` reads the nearest
 `manifest.yaml` above the test file (within the pytest rootdir; override the
 `sdk_plugin_dir` fixture otherwise) and declares the manifest's
@@ -221,9 +228,9 @@ See the [publishing guide](https://github.com/YinFengWindy/Shiori-Agent/blob/mai
 for registry setup, first publication and recovery.
 
 `python/shiori_sdk/_version.py` is the version source. Python packaging reads it
-directly. After changing it, run `node scripts/sync_sdk_version.mjs` from the root
-to update npm metadata, then update consumer constraints and locks. Lint and the
-npm build both run the consistency check.
+directly. After changing it, set the same version on the npm package, `setup.py`
+and host-testing. Lint and the npm build run `node scripts/check_sdk_release.mjs --align`.
+Socket changes also need `python -m scripts.gen_plugin_api`.
 
 ```sh
 pnpm lint

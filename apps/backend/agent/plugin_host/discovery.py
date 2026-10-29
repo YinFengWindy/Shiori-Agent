@@ -11,10 +11,12 @@ from shiori_sdk.kernel import PackageContractError, PluginDiagnostic
 from agent.plugin_host.handle import PluginRecord
 from agent.plugin_host.host_contract import HostRuntimeContract
 from agent.plugin_host.manifest import (
+    IncompatibleSdkError,
     ManifestError,
     PluginManifest,
     UnsupportedApiError,
     load_manifest,
+    require_compatible_sdk,
 )
 from agent.plugin_host.package_contract import validate_package
 from agent.plugin_host.package_paths import contained_file
@@ -309,7 +311,7 @@ def _read_candidate(
             _ = contained_file(child, "manifest.yaml", "manifest")
         manifest = load_manifest(child)
     except PackageContractError as exc:
-        manifest = PluginManifest(id=child.name)
+        manifest = PluginManifest(id=child.name, sdk="")
         diagnostic = exc.diagnostic
     except UnsupportedApiError as exc:
         # Before trust and package validation, and in strict mode too: the old
@@ -340,6 +342,18 @@ def _read_candidate(
     if manifest is None:
         # Old workspace/plugins/<id>/kv.json directories are data, not packages.
         return None
+    if diagnostic is None:
+        try:
+            require_compatible_sdk(manifest.sdk)
+        except IncompatibleSdkError as exc:
+            # Same roster shape as an old api: BLOCKED, including strict builtins.
+            diagnostic = PluginDiagnostic(
+                "incompatible_sdk",
+                "validation",
+                "sdk",
+                str(exc),
+                str(child / "manifest.yaml"),
+            )
     if (
         source == "builtin"
         and diagnostic is None
@@ -408,6 +422,7 @@ def _roster_manifest(child: Path, exc: ManifestError) -> PluginManifest:
     metadata = exc.metadata or {}
     return PluginManifest(
         id=str(metadata.get("id") or child.name),
+        sdk="",
         version=str(metadata.get("version") or ""),
         metadata=metadata,
     )

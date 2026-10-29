@@ -15,7 +15,7 @@ test("independent ZIP builds preserve peers and pass the actual host package val
   t.after(() => rm(root, { recursive: true, force: true }));
   const source = join(root, "source"), output = join(root, "output");
   const files = {
-    "manifest.yaml": "api: 4\ndistribution: external\nid: independent_demo\nversion: '1.0.0'\nentry: backend/plugin.py\npeer_dependencies: {react: '>=19.2.0 <20.0.0', react-dom: '>=19.2.0 <20.0.0'}\nrenderer:\n  ui: {entry: renderer/ui.mjs, css: [renderer/ui.css]}\nassets: [assets/label.txt]\n",
+    "manifest.yaml": "api: 4\nsdk: '>=4.0.0'\ndistribution: external\nid: independent_demo\nversion: '1.0.0'\nentry: backend/plugin.py\npeer_dependencies: {react: '>=19.2.0 <20.0.0', react-dom: '>=19.2.0 <20.0.0'}\nrenderer:\n  ui: {entry: renderer/ui.mjs, css: [renderer/ui.css]}\nassets: [assets/label.txt]\n",
     "backend/plugin.py": "from .helper import LABEL\nasync def setup(ctx):\n    pass\n",
     "backend/helper.py": "LABEL = 'self contained'\n",
     "backend/__pycache__/helper.pyc": "not shipped",

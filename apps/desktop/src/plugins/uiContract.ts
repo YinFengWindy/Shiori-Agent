@@ -33,7 +33,7 @@ export type RuntimePluginRendererEntry = RuntimePluginUi & { kind: PluginRendere
 /**
  * Module export names guaranteed by the renderer peer ABI, keyed by the bare
  * specifier a precompiled plugin imports. Adding a peer or an export name is a
- * runtime API change (`RUNTIME_API_VERSION` in `shiori_sdk/_version.py`); every
+ * runtime API change (`__version__` in `shiori_sdk/_version.py`); every
  * key must also be installed by `runtimePluginPeers.ts`.
  */
 export const pluginUiPeerExports: Record<string, string[]> = {

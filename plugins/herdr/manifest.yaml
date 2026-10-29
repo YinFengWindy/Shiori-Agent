@@ -1,4 +1,5 @@
 api: 4
+sdk: ">=4.0.0"
 id: herdr
 display_name: Herdr
 version: '0.1.1'

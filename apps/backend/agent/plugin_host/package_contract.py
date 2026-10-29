@@ -12,10 +12,12 @@ from pathlib import Path
 from shiori_sdk.kernel import PackageContractError
 from agent.plugin_host.host_contract import HostRuntimeContract
 from agent.plugin_host.manifest import (
+    IncompatibleSdkError,
     ManifestError,
     PluginManifest,
     UnsupportedApiError,
     load_manifest,
+    require_compatible_sdk,
 )
 from agent.plugin_host.package_paths import contained_file, package_path
 from agent.plugin_host.package_artifacts import validate_artifact
@@ -37,6 +39,7 @@ _PACKAGE_FIELDS = {
     "category",
     "default_enabled",
     "version",
+    "sdk",
     "entry",
     "desc",
     "author",
@@ -84,6 +87,10 @@ def validate_package(
         raise PackageContractError(
             "invalid_manifest", "manifest", "Missing manifest.yaml"
         )
+    try:
+        require_compatible_sdk(manifest.sdk)
+    except IncompatibleSdkError as exc:
+        raise PackageContractError("incompatible_sdk", "sdk", str(exc)) from exc
     raw = manifest.metadata
     _ = object_field(raw, "manifest", _PACKAGE_FIELDS)
     plugin_id = string_field(raw.get("id"), "id")

@@ -286,6 +286,27 @@ class RoleStore:
                 return role
         raise RoleNotFoundError(role_id)
 
+    def write_plugin_proactive(self, role_id: str, value: dict[str, Any]) -> None:
+        """Write the ``proactive`` namespace for ``ROLES.plugin_settings``.
+
+        Parsed by ``RoleProactiveConfig`` until proactive leaves the core.
+        Like ``update_role``, retired candidates are cleared (#427), so a
+        plugin read-then-write cannot bring old bindings back. Extension
+        ``plugin_data`` is left as stored.
+        """
+        normalized = RoleProactiveConfig.from_dict(value)
+        with self._lock:
+            roles = self.list_roles()
+            for index, role in enumerate(roles):
+                if role.id != role_id:
+                    continue
+                role.proactive = replace(normalized, candidates=())
+                role.updated_at = now_iso()
+                roles[index] = role
+                self._repository.save_roles(roles)
+                return
+        raise RoleNotFoundError(role_id)
+
     def delete_role(self, role_id: str, *, remove_assets: bool = True) -> bool:
         with self._lock:
             roles = self.list_roles()

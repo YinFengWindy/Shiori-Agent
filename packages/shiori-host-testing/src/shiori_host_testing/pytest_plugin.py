@@ -5,7 +5,7 @@ from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from pathlib import Path
 
 import pytest
-from shiori_sdk.testing.bridge import PluginBridgeService
+from shiori_host_testing.bridge import PluginBridgeService
 from shiori_sdk.testing.packages import plugin_directory, stage_plugin_package
 
 PluginRuntime = Callable[

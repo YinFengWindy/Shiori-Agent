@@ -7,7 +7,6 @@ import { pathToFileURL } from "node:url";
 import test from "node:test";
 import { checkSdkRelease } from "./check_sdk_release.mjs";
 
-const notesPath = "docs/_handbook/plugin-runtime-contract.md";
 const sourcePath = "packages/sdk/python/shiori_sdk/api.py";
 
 function repository(t) {
@@ -19,10 +18,11 @@ function repository(t) {
     writeFileSync(join(root, path), text, "utf8");
   };
   const version = (value) => {
-    write("packages/sdk/python/shiori_sdk/_version.py", `__version__ = "${value}"\nRUNTIME_API_VERSION = __version__\n`);
+    write("packages/sdk/python/shiori_sdk/_version.py", `__version__ = "${value}"\n`);
     write("packages/sdk/package.json", JSON.stringify({ name: "sdk", version: value }));
     write("setup.py", `setup(install_requires=["shiori-sdk==${value}"])\n`);
     write("packages/shiori-host-testing/pyproject.toml", `dependencies = ["shiori-sdk[testing]==${value}"]\n`);
+    write("docs/_handbook/plugin-changelog.md", `# 插件变更\n\n## ${value}\n\n- fixture\n`);
   };
   const commit = () => {
     git("add", ".");
@@ -34,7 +34,6 @@ function repository(t) {
   git("config", "user.name", "SDK Release Test");
   git("config", "commit.gpgsign", "false");
   git("config", "core.autocrlf", "false");
-  write(notesPath, "### Unreleased\n\n<!-- Record the next batch here. -->\n\n### 3.1.1 release batch\n\nPublished.\n");
   write(sourcePath, "def contract():\n    return 1\n");
   write("packages/sdk/src/index.ts", "export const contract = 1;\n");
   version("3.1.1");
@@ -47,32 +46,24 @@ test("a finalized first SDK release passes without published source history", as
   assert.deepEqual(await checkSdkRelease(repo.root), { version: "3.1.1", checked: 0 });
 });
 
-test("Unreleased content, including a host-only contract, blocks distribution", async (t) => {
-  const repo = repository(t);
-  repo.write(notesPath, "### Unreleased\n\n- Host message_push now raises.\n\n### 3.1.1 release batch\n");
-  await assert.rejects(checkSdkRelease(repo.root), /Unreleased is not empty/);
-});
-
-test("missing or duplicate Unreleased headings cannot silently bypass finalization", async (t) => {
-  const repo = repository(t);
-  for (const notes of ["### 3.1.1 release batch\n", "### Unreleased\n### Unreleased\n"]) {
-    repo.write(notesPath, notes);
-    await assert.rejects(checkSdkRelease(repo.root), /exactly one SDK Unreleased section/);
-  }
-});
-
-test("all exact consumers and the Runtime API must agree before release", async (t) => {
+test("all exact consumers must agree with the Python version before release", async (t) => {
   const repo = repository(t);
   for (const [path, content] of [
     ["packages/sdk/package.json", '{"version":"3.1.0"}'],
     ["setup.py", 'setup(install_requires=["shiori-sdk==3.1.0"])'],
     ["packages/shiori-host-testing/pyproject.toml", 'dependencies = ["shiori-sdk[testing]==3.1.0"]'],
-    ["packages/sdk/python/shiori_sdk/_version.py", '__version__ = "3.1.1"\nRUNTIME_API_VERSION = "3.1.0"\n'],
+    ["packages/sdk/python/shiori_sdk/_version.py", '__version__ = "3.1.0"\n'],
   ]) {
     repo.version("3.1.1");
     repo.write(path, content);
-    await assert.rejects(checkSdkRelease(repo.root), /versions differ|Runtime API version/);
+    await assert.rejects(checkSdkRelease(repo.root), /versions differ/);
   }
+});
+
+test("a release needs a changelog entry for its version", async (t) => {
+  const repo = repository(t);
+  repo.write("docs/_handbook/plugin-changelog.md", "# 插件变更\n\n## 3.1.10\n");
+  await assert.rejects(checkSdkRelease(repo.root), /plugin-changelog.md has no ## 3.1.1 entry/);
 });
 
 test("an SDK tag freezes both Python and renderer source", async (t) => {

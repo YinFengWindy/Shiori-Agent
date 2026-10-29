@@ -1,4 +1,5 @@
 api: 4
+sdk: ">=4.0.0"
 id: default_memory
 display_name: 默认记忆引擎
 version: 0.1.1

@@ -1,4 +1,5 @@
 api: 4
+sdk: ">=4.0.0"
 id: novelai
 display_name: NovelAI 生图
 version: '0.1.2'

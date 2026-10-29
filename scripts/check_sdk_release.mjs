@@ -3,8 +3,6 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { syncSdkVersion } from "./sync_sdk_version.mjs";
-
 const versionPath = "packages/sdk/python/shiori_sdk/_version.py";
 const stableVersion = "(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)";
 const releaseTag = new RegExp(`^(sdk-v|v)${stableVersion}$`);
@@ -36,13 +34,39 @@ function contractPath(path) {
   return !/\.(?:test|spec)\.[^/]+$|\.py[co]$|\.(?:md|rst)$/i.test(name) && !/^(?:README|LICENSE|NOTICE)(?:\.|$)/i.test(name);
 }
 
-function requireFinalizedNotes(root) {
-  const notes = readFileSync(join(root, "docs/_handbook/plugin-runtime-contract.md"), "utf8");
-  const headings = [...notes.matchAll(/^### Unreleased\s*$/gm)];
-  if (headings.length !== 1) throw new Error("Expected exactly one SDK Unreleased section");
-  const rest = notes.slice(headings[0].index + headings[0][0].length);
-  const section = rest.split(/^#{1,3} /m)[0].replace(/<!--[\s\S]*?-->/g, "").trim();
-  if (section) throw new Error("SDK Unreleased is not empty; finalize this contract batch before release");
+/** npm package and exact host pins must equal the Python version. No batch script. */
+export function alignedSdkVersion(root) {
+  const version = versionFrom(readFileSync(join(root, versionPath), "utf8"));
+  const files = [
+    { path: "packages/sdk/package.json" },
+    { path: "setup.py", pattern: /("shiori-sdk==)([^"\r\n]+)(")/g },
+    { path: "packages/shiori-host-testing/pyproject.toml", pattern: /("shiori-sdk\[testing\]==)([^"\r\n]+)(")/g },
+  ];
+  const changes = [];
+  for (const file of files) {
+    const content = readFileSync(join(root, file.path), "utf8");
+    let current;
+    if (file.pattern) {
+      const matches = [...content.matchAll(file.pattern)];
+      if (matches.length !== 1) throw new Error(`Expected exactly one SDK version pin in ${file.path}`);
+      current = matches[0][2];
+    } else {
+      current = JSON.parse(content).version;
+    }
+    if (current !== version) changes.push(`${file.path} (${current})`);
+  }
+  if (changes.length) {
+    throw new Error(`SDK versions differ from Python ${version}: ${changes.join(", ")}. Update the pin to match _version.py.`);
+  }
+  return version;
+}
+
+const changelogPath = "docs/_handbook/plugin-changelog.md";
+
+/** A release states what it changes: the changelog needs a `## X.Y.Z` heading. */
+function requireChangelogEntry(root, version) {
+  const text = readFileSync(join(root, changelogPath), "utf8");
+  if (!text.split(/\r?\n/).includes(`## ${version}`)) throw new Error(`${changelogPath} has no ## ${version} entry`);
 }
 
 /** Check working-tree release inputs against every stable SDK and desktop tag. */
@@ -53,12 +77,8 @@ export async function checkSdkRelease(root) {
   if (git(["rev-parse", "--is-shallow-repository"]).trim() !== "false") {
     throw new Error("SDK release checks require complete Git history and tags (fetch-depth: 0)");
   }
-  const version = versionFrom(readFileSync(join(root, versionPath), "utf8"));
-  await syncSdkVersion(root, { check: true });
-  if (!/^RUNTIME_API_VERSION = __version__\r?$/m.test(readFileSync(join(root, versionPath), "utf8"))) {
-    throw new Error("Runtime API version must be the SDK __version__");
-  }
-  requireFinalizedNotes(root);
+  const version = alignedSdkVersion(root);
+  requireChangelogEntry(root, version);
 
   // hash-object applies Git's clean filters (including CRLF normalization), so
   // Windows working trees compare to the same immutable blobs as Linux CI.
@@ -103,6 +123,11 @@ export async function checkSdkRelease(root) {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const root = fileURLToPath(new URL("../", import.meta.url));
-  const result = await checkSdkRelease(root);
-  console.log(`SDK ${result.version} finalized; ${result.checked} existing release source(s) match`);
+  if (process.argv.includes("--align")) {
+    const version = alignedSdkVersion(root);
+    console.log(`SDK ${version} metadata matches`);
+  } else {
+    const result = await checkSdkRelease(root);
+    console.log(`SDK ${result.version} finalized; ${result.checked} existing release source(s) match`);
+  }
 }

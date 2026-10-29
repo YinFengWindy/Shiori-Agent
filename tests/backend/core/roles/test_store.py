@@ -239,6 +239,32 @@ def test_role_store_persists_proactive_policy_without_legacy_candidates(
     assert reloaded.proactive.policy_configured is True
 
 
+def test_plugin_settings_write_clears_candidates_like_update_role(tmp_path):
+    """A plugin write cannot bring back the bindings update_role retires (#427)."""
+    from core.roles.plugin_capability import HostRoles
+
+    store = RoleStore(tmp_path)
+    store.create_role(name="Mira", system_prompt="mira", role_id="mira")
+    roles = HostRoles(store)
+    roles.plugin_settings("mira", "proactive").write(
+        {
+            "enabled": True,
+            "candidates": [{"channel": "telegram", "chat_id": "42"}],
+            "profile": "quiet",
+        }
+    )
+
+    saved = roles.plugin_settings("mira", "proactive").read()
+    reloaded = RoleStore(tmp_path).get_role("mira")
+    assert saved["enabled"] is True
+    assert saved["profile"] == "quiet"
+    assert saved["candidates"] == []
+    assert reloaded is not None
+    assert reloaded.proactive.candidates == ()
+    with pytest.raises(KeyError):
+        roles.plugin_settings("mira", "other")
+
+
 @pytest.mark.asyncio
 async def test_deleting_a_role_forgets_the_user_identity_on_its_accounts(tmp_path):
     from shiori_sdk.accounts.models import AccountDeletionPlan

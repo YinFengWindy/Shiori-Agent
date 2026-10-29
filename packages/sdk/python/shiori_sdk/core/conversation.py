@@ -1,4 +1,4 @@
-"""Turn events of the core conversation module and its ``COMMANDS`` socket (#902).
+"""Turn events, ``COMMANDS``, and the initiated-delivery socket (D19, #902).
 
 The host emits one event per turn stage through the plugin kernel: ``on``
 handlers run in plugin order and may return a replaced event, the core's
@@ -246,3 +246,39 @@ class Commands(Protocol):
 
 COMMANDS: Key[Commands] = Key("commands")
 """Provided by the core conversation module; plugins declare it in ``inject``."""
+
+
+@dataclass(frozen=True)
+class InitiatedMessageCommitted:
+    """An initiated reply was stored. ``source`` names who started it.
+
+    The host emits this when initiated delivery runs. Plugins watch it; they
+    do not construct it. Folded into the 4.0 baseline so 4.x does not need a
+    new method on an existing key (D19, D22).
+    """
+
+    session_key: str
+    source: str
+
+
+class Conversation(Protocol):
+    """Deliver a reply the host initiated, outside a user turn.
+
+    The signature is part of the 4.0 baseline. The host provides
+    ``CONVERSATION`` when initiated delivery is generalized, before the 4.0
+    desktop ships (D23). 4.x cannot add methods to this protocol later.
+    """
+
+    async def deliver_initiated_reply(
+        self, session_key: str, reply: str, source: str
+    ) -> None:
+        """Store ``reply`` on ``session_key`` and emit ``InitiatedMessageCommitted``.
+
+        ``source`` is the initiator (a plugin id or host component). It is
+        copied onto the committed event.
+        """
+        ...
+
+
+CONVERSATION: Key[Conversation] = Key("conversation")
+"""Not provided until initiated delivery is generalized. Injecting it blocks."""

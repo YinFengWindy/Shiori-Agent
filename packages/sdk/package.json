@@ -1,6 +1,6 @@
 {
   "name": "@yinfengwindy/shiori-sdk",
-  "version": "3.1.2",
+  "version": "4.0.0",
   "description": "Public Shiori plugin contracts, shared UI and independent test support.",
   "license": "MIT",
   "repository": {
@@ -42,7 +42,7 @@
     "README.md"
   ],
   "scripts": {
-    "build": "node ../../scripts/sync_sdk_version.mjs --check && node scripts/build.mjs && tsc -p tsconfig.build.json",
+    "build": "node ../../scripts/check_sdk_release.mjs --align && node scripts/build.mjs && tsc -p tsconfig.build.json",
     "prepack": "pnpm run build"
   },
   "publishConfig": {

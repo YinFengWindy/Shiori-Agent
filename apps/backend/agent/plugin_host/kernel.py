@@ -1139,10 +1139,11 @@ class PluginKernel:
         ``PluginGenerationSettings.plugin_configs``/``raw_plugin_configs`` (the live
         generation config); the enable flag inside them must stay on
         (``ValueError`` otherwise). The closure (target plus ACTIVE plugins
-        that hard-depend on it) is sealed, drained within ``drain_timeout``
-        seconds and disposed dependents-first, then set up again target-first
-        with ``ctx.runtime.was_active``/``is_reload`` True. Plugins outside it
-        are untouched; the closure's process resources survive.
+        that inject it, through ``inject`` or ``optional_inject``) is sealed,
+        drained within ``drain_timeout`` seconds and disposed dependents-first,
+        then set up again target-first with ``was_active`` / ``is_reload`` True
+        on the ``RUNTIME`` key. Plugins outside it are untouched; the closure's
+        process resources survive.
 
         ``commit`` (given the reloaded plugin ids) persists the new config
         once every closure plugin is ACTIVE with it. It runs synchronously in

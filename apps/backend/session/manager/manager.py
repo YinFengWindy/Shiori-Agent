@@ -10,6 +10,7 @@ from collections.abc import Callable
 
 from conversation.projector import ConversationStateProjector
 from conversation.store import ConversationStore
+from ..presence import SessionPresence
 from ..store import SessionStore
 
 from .models import Session
@@ -109,3 +110,8 @@ class _ManagerCoreMixin:
         if session.metadata.get(key) != value:
             session.metadata[key] = value
             await self.save_async(session)
+
+    @property
+    def presence(self) -> SessionPresence:
+        """User and initiated-send heartbeats for the sessions socket (D19)."""
+        return SessionPresence(self._store)

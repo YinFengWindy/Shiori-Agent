@@ -20,9 +20,9 @@ cron。GitHub 定时任务只在默认分支生效，排队可能延迟。
   不修改 `main` 的 `package.json`。构建期间 main 新增的提交留给下一版。
 
 所有 schedule、tag 与 manual 入口在构建前运行 `node scripts/check_sdk_release.mjs`：
-要求 SDK 版本同步且 Unreleased 已清空，拒绝复用任何 SDK/桌面稳定标签已分发的
-同版本不同 SDK 源码或回退版本。新契约必须先人工定版；不会自动升 SDK 号。
-README/实际测试变化不算 SDK 源码变化，宿主侧契约由 Unreleased 记录保护；
+要求 SDK 版本与 npm、宿主 pin 一致，拒绝复用任何 SDK/桌面稳定标签已分发的
+同版本不同 SDK 源码或回退版本。新的破坏性契约必须升 SDK 大版本；不会自动升号。
+README/实际测试变化不算 SDK 源码变化。
 上传 artifact / 创建或公开 Release 前刷新标签再检查一次，固定构建 SHA 不变，
 防止构建期间出现新的同版本分发冲突。
 详细规则见 [SDK 发布](sdk-publishing.md#契约定版检查)。

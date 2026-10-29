@@ -54,7 +54,7 @@ SDK 的 `shiori_sdk.channels.session_key`、`shiori_sdk.channels.reply_context` 
 
 ## 修改影响
 
-- 修改 Channel 合约或钩子：检查全部渠道插件、`start_channels`/ChannelHost、`channel_directory`、消息总线、测试替身，以及 `docs/_handbook/plugin-runtime-contract.md` 的 Runtime API 版本。
+- 修改 Channel 合约或钩子：检查全部渠道插件、`start_channels`/ChannelHost、`channel_directory`、消息总线、测试替身，以及 `docs/_handbook/plugin-guide.md` 与 `docs/_handbook/plugin-api.md`。
 - 修改聊天标识：检查角色绑定、Session/Conversation 键、群聊记忆域和推送目标。
 - 修改账号响应规则：检查插件的规则保存钩子（`ctx.require(ACCOUNTS)` 的 `on_rules_change`）、入站准入和账号详情里的规则编辑器。
 - 修改附件模型：检查 Telegram 媒体、QQ 适配、桌面桥接、自动 CG 和历史消息展示。

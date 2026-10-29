@@ -118,22 +118,22 @@ pnpm test --file RoleDetailPage.test.tsx
 
 ### 插件 SDK
 
-当前源码的 SDK 与 Runtime API 版本均为 **3.1.2**，已于 **2026-10-16** 发布到 npm 与 PyPI。前端包为 [@yinfengwindy/shiori-sdk](https://www.npmjs.com/package/@yinfengwindy/shiori-sdk)，后端包为 [shiori-sdk](https://pypi.org/project/shiori-sdk/)（Python 3.12+）。本批新增后台结果回报 `background_results`、跨运行时重载保留资源的 `process_resources`、外部链接 `host.openExternal` 和二级侧栏样式 `secondarySidebarShellClass`。以下命令安装当前公开版本：
+当前源码的 SDK 版本是 **4.0.0**，尚未发布。注册表上的最近版本是 **3.1.2**（2026-10-16）。前端包为 [@yinfengwindy/shiori-sdk](https://www.npmjs.com/package/@yinfengwindy/shiori-sdk)，后端包为 [shiori-sdk](https://pypi.org/project/shiori-sdk/)（Python 3.12+）。以下命令安装已发布的 3.1.2；仓库内开发使用工作区里的 4.0.0。
 
 ```sh
 pnpm add -D "@yinfengwindy/shiori-sdk@^3.1.2"
 uv add "shiori-sdk>=3.1.2,<4"
 ```
 
-插件位于 `plugins/<id>/`：`manifest.yaml` 声明能力与兼容范围，`backend/` 放 Python 后端，`ui/` 放可选 React 界面，`tests/` 放插件测试。前端构建需将 SDK、React 和 React DOM 保留为 external，由 Shiori 在运行时提供。仅使用原有兼容接口的插件可保留原最低版本；使用本批新增接口或渠道迁移的插件统一声明 `runtime_api: ">=3.1.2 <4.0.0"`，Python SDK 依赖下界也设为 `3.1.2`。
+插件位于 `plugins/<id>/`：`manifest.yaml` 写 `api: 4` 和 `sdk: ">=4.0.0"`，`backend/` 放 Python 后端，`ui/` 放可选 React 界面，`tests/` 放插件测试。前端构建需将 SDK、React 和 React DOM 保留为 external，由 Shiori 在运行时提供。Python 依赖下界与 `sdk` 约束都要承认 4.0（`shiori-sdk>=4.0.0,<5`）。
 
 **兼容提醒：3.1.2 包含破坏性变更。** `ChannelContext.push_tool` 与 `PushSenders` 已移除，角色向渠道发送使用 `account_send`；`message_push` 失败改为抛异常，调用方不再匹配返回文本判断失败。受影响插件须迁移，版本范围通过不代表旧接口仍可用。详见 [SDK 兼容说明](./packages/sdk/README.md#compatibility)。普通契约 PR 只累积未发布记录，正式发布 SDK 或带新契约的桌面版本时再统一定版。
 
-桌面版本、SDK / Runtime API 版本和插件自身版本各自独立。每个发布批次中，有包内容或兼容声明变化的已有插件只升一次 patch，新插件保留初始版本，未变插件不升号。插件 `version` 与 Python 包元数据保持一致，`runtime_api` 单独声明所需宿主接口。
+桌面版本、SDK 版本和插件自身版本各自独立。SDK 大版本是破坏性变更。有包内容变化的已有插件在正式发版前只升一次 patch，新插件保留初始版本，未变插件不升号。插件 `version` 与 Python 包元数据保持一致。
 
 - [SDK README](./packages/sdk/README.md)：安装、React peer 与独立测试配置。
 - [插件教程](./docs/_handbook/plugins-tutorial.md)：从创建插件到开发界面。
-- [运行时契约](./docs/_handbook/plugin-runtime-contract.md)：包结构、能力边界与版本兼容。
+- [插件指南](./docs/_handbook/plugin-guide.md)：包结构、`api: 4` 与 SDK 约束。方法签名见 [API 参考](./docs/_handbook/plugin-api.md)。
 - [插件测试](./docs/agents/plugin-testing.md)：插件独立运行与宿主集成测试。
 
 ## License

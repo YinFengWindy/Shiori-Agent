@@ -117,11 +117,7 @@ def audit() -> dict[str, object]:
     assert version("shiori-sdk") == config["sdk_version"]
     import shiori_sdk
 
-    assert (
-        shiori_sdk.__version__
-        == shiori_sdk.RUNTIME_API_VERSION
-        == config["sdk_version"]
-    )
+    assert shiori_sdk.__version__ == config["sdk_version"]
     result = {
         "modules": paths,
         "distributions": installed,

@@ -1,6 +1,6 @@
 # 写一个渠道插件
 
-所有外部聊天渠道（Telegram、QQ（NapCat）、官方 QQBot、飞书）都是插件，宿主只拥有 `desktop`。本篇按「新增一个渠道」的顺序说明要写什么；通用插件机制（`inject` 与服务 Key、作用域、热卸载）见 [插件开发](plugins-tutorial.md)，版本化契约见 [Runtime Contract](plugin-runtime-contract.md)。
+所有外部聊天渠道（Telegram、QQ（NapCat）、官方 QQBot、飞书）都是插件，宿主只拥有 `desktop`。本篇按「新增一个渠道」的顺序说明要写什么；通用插件机制（`inject` 与服务 Key、作用域、热卸载）见 [插件开发](plugins-tutorial.md)，契约见[插件指南](plugin-guide.md)。
 
 现有实现可以直接对照：
 
@@ -43,6 +43,7 @@ plugins/demo_chat/
 
 ```yaml
 api: 4
+sdk: ">=4.0.0"
 id: demo_chat
 display_name: Demo Chat
 version: '0.1.0'
@@ -58,7 +59,7 @@ contributes:
     - name: demo_chat                 # 渠道名：会话线程与账号路由的数据键
       label: Demo Chat                # 账号面板和消息来源里显示的名字
       contact_label: 用户 ID           # 可选，群聊响应规则里成员 ID 的说明
-      group_listening: true           # 可选（Runtime API 2.13），群里没 @ 账号的消息也交给宿主，支持群聊旁听
+      group_listening: true           # 可选，群里没 @ 账号的消息也交给宿主，支持群聊旁听
       chat_types:                     # 必填，渠道支持的会话类型
         - type: private               # private / group
           label: 私聊                  # 类型下拉里的名字
@@ -87,7 +88,7 @@ async def setup(ctx: PluginRuntimeContext) -> None:
 
 - 插件 id 建议与渠道名相同。渠道名写进会话线程，账号 ID 为 `<插件 id>:<平台账号>`；**发布后不能改名**，否则历史账号和线程无法定位。
 - 声明是静态的：插件停用、未授信或还没有账号时，桌面端也能通过 `channels.list` 列出这个渠道并标注状态。插件加载后再从自己的存储恢复账号。
-- `chat_types` 必须声明（Runtime API 2.5，规则见[运行时契约](plugin-runtime-contract.md#runtime-api-22-channel-declarations)），缺失时宿主拒绝整个 manifest；按类型的 `prefix` 拼出存储的 `chat_id`。
+- `chat_types` 必须声明（规则见[渠道声明](plugins-tutorial.md#渠道声明)），缺失时宿主拒绝整个 manifest；按类型的 `prefix` 拼出存储的 `chat_id`。
 - `group_listening: true` 表示插件把群里**所有**消息（不只是 @ 或回复账号的）交给 `route_account_inbound`，宿主据此在小手机为这个渠道的群显示「旁听」开关（#538）。声明前先把文本清理成宿主该保存的样子：没有 @ / 回复 / 图片这类平台码，因为旁听记录直接保存路由时的正文；图片只在消息真正触发回合（路由返回消息）后再下载。
 - 每个账号要用独立渠道名的连接（如 Telegram 每个 Bot）可在渠道项上声明 `instance_prefix`（以 `<name>_` 开头，Telegram 为 `telegram_`），连接名取 `<instance_prefix><后缀>`，共用该项的会话类型。
 - `ctx.require(CHANNELS).add()` 只接受本 manifest 声明过的名字（含 `instance_prefix` 下的实例名）；两个插件声明同一个名字会同时变成 `CONFLICT`。规则细节见 [渠道声明](plugins-tutorial.md#渠道声明)。
@@ -100,7 +101,7 @@ async def setup(ctx: PluginRuntimeContext) -> None:
 - 插件从 `KV` 或自己的工作区存储读取账号；凭据引用保持原文保存，在连接时调用注入的 `ctx.require(CONFIG).resolve_reference(value)`；恢复时先用 `ctx.require(ACCOUNTS).role_exists(role_id)` 清理所属角色已删除的账号，再用 `register_saved(...)` 登记。读取失败或无效数据用 `reject(...)` 报告，不影响其它账号。
 - 新增账号前校验平台身份，并用 `ACCOUNTS` 的 `check_owner(...)` 检查角色与账号归属；插件保存数据后用 `register(...)` 登记，再按连接状态调用 `report(...)`。账号 ID 由宿主生成，格式为 `<插件 id>:<平台账号>`。
 - 宿主对头像只有一条约定：`register(..., avatar_url=...)` / `register_saved(...)` 的 `avatar_url` 必须是空字符串（无头像），或不超过 256 KiB、内容与声明类型一致的 PNG/JPEG/GIF/WebP base64 `data:image/...` URI，否则登记被拒绝（远程 URL 同样被拒）。头像的获取、编码和缓存都由插件自己完成：插件在后台下载平台头像、自行转成 data URI 并存进插件存储，下载失败保留已存头像且不影响连接；后台任务由插件自己持有，并在断开、删除或停止时取消。
-- 发送者与群的头像交给宿主缓存（Runtime API 2.12，`inject` 写 `avatars`）：角色收下一条消息后调用 `ctx.require(AVATARS).refresh(kind, channel, id, fetch)`，`kind` 为 `"sender"`（发送者 ID）或 `"chat"`（会话 ID，群为群头像、私聊为对方头像），`fetch` 是插件自己的异步下载，返回图片字节，平台上没有头像时返回 None。宿主判断是否到期（7 天）、在后台执行、校验缩图并单独存文件；失败只记警告，不影响收发。细节见[运行时契约](plugin-runtime-contract.md#runtime-api-212-channel-avatars)，实现可对照 `plugins/qq/backend/accounts_avatar.py`。
+- 发送者与群的头像交给宿主缓存（`inject` 写 `avatars`）：角色收下一条消息后调用 `ctx.require(AVATARS).refresh(kind, channel, id, fetch)`，`kind` 为 `"sender"`（发送者 ID）或 `"chat"`（会话 ID，群为群头像、私聊为对方头像），`fetch` 是插件自己的异步下载，返回图片字节，平台上没有头像时返回 None。宿主判断是否到期（7 天）、在后台执行、校验缩图并单独存文件；失败只记警告，不影响收发。细节见[宿主服务的约定](plugin-guide.md#宿主服务的约定)，实现可对照 `plugins/qq/backend/accounts_avatar.py`。
 - 账号的连接、错误、昵称或头像实际变化（以及登记、移除）时，宿主向桌面端推送 `accounts.updated` 事件（payload `{"account_id": ...}`）；报告与之前相同时不推送。
 - 登记 `on_delete(...)`，提供断开连接与清除插件存储的计划；角色删除时宿主也会调用它。登记 `on_rules_change(...)`，把宿主编辑的响应规则写回同一份账号记录。账号创建、编辑和连接通过插件 RPC 与角色页中的账号界面协作。
 - 若插件还有不属于某个账号的全局设置，可单独声明 `config_model`，由「设置 › 插件」的自动表单编辑；账号凭据不放在该模型或 `config.toml` 中。
@@ -203,11 +204,11 @@ async def stop(self):
 - `account.send` 收到 `account_id`、`message`、`media`，以及 `AccountTarget.to_payload()`：`target_kind`、`target_id`、`message_thread_id`（整数或 `None`）、`group_id`（仅 `group_member`，否则为空字符串）、`mention_ids`（仅 `group`，可为空列表）。
 - 宿主只校验形状：`mention_ids` 只能用于 `target_kind="group"`；`target_kind="group_member"`（群临时会话，`target_id` 为成员 ID）必须带 `group_id`。平台能不能做由插件判断，做不到时明确报错，例如 QQBot、飞书没有群聊，收到 `mention_ids` 或 `group_member` 直接拒绝；Telegram 支持提及但没有群临时会话。
 - `media` 是要随消息发送的图片列表（按顺序，可为空列表），每项是本地图片路径或 http(s) URL，与主动推送、`message_push` 产出的形式相同；用 `account_send_media(payload)` 读取。`message` 与 `media` 可以有一个为空，但不会都为空。插件用自己平台的图片发送能力投递：能把文字和图片放进同一条消息的平台（如 QQ 的 CQ 图片码）发一条；否则由插件自己先发文字再逐张发图，已有部分送达后再失败时抛 `UncertainDeliveryError`（用户已收到一部分，不能记为未发送）。
-- 通常返回平台真实的 `message_id`（文字和图片分条发送时取第一条）。平台明确确认接收、但不提供消息 ID 时，可以返回 `{"accepted": true}`；不能用 `runUuid` 等任务运行 ID 冒充消息 ID。既没有真实消息回执，也没有明确接收确认时，抛 `UncertainDeliveryError`，宿主把尝试记为「不确定」。详见 [账号发送回执契约](plugin-runtime-contract.md#unreleased)。
+- 通常返回平台真实的 `message_id`（文字和图片分条发送时取第一条）。平台明确确认接收、但不提供消息 ID 时，可以返回 `{"accepted": true}`；不能用 `runUuid` 等任务运行 ID 冒充消息 ID。既没有真实消息回执，也没有明确接收确认时，抛 `UncertainDeliveryError`，宿主把尝试记为「不确定」。私聊发送确认后可以附带 `conversation`，见[宿主服务的约定](plugin-guide.md#宿主服务的约定)。
 
 ## 6. 可选钩子
 
-核心不按渠道名写死策略，而是询问渠道对象的可选钩子，表格与默认值见 [渠道钩子](plugins-tutorial.md#渠道钩子runtime-api-23)。实践要点：
+核心不按渠道名写死策略，而是询问渠道对象的可选钩子，表格与默认值见 [渠道钩子](plugins-tutorial.md#渠道钩子)。实践要点：
 
 - `supports_stream_events(chat_id)`：只对真能实时展示的会话返回 `True`（Telegram 和 QQBot 只开私聊）。返回 `True` 就必须消费流式事件，见下一节。
 - `system_prompt_hint(chat_id)`：只写渲染限制和渠道身份这类硬规则（例如 Telegram 禁止 Markdown 表格、QQBot 提醒主动推送用 `channel=qqbot`），保持简短，它每轮都会进系统提示词。
@@ -215,7 +216,7 @@ async def stop(self):
 - `uses_bot_commands = True`：只有在 `start` 里读取 `ctx.bot_commands`（如注册 Telegram 命令菜单）的渠道才声明；宿主会把命令列表并入复用键，其它插件增减命令时它才会重连。
 - `status()`：返回 `{"connected": bool, "account": str, "detail": str}`（后两项可省略），`channels.list` 原样带给桌面端。适合放机器人名称、断线原因或账号连接状态。`status()` 抛错时渠道显示为 `failed`。
 
-这些钩子和 `description` 参数属于 Runtime API 2.3。
+
 
 ## 7. 流式回复
 
@@ -246,7 +247,7 @@ async def stop(self):
 - **账号与 setup**：用 `shiori_sdk.testing.channel_context.FakeChannelSetupContext` 执行公开 `setup`（直接把它传给 `setup`）；它按包的 manifest 声明 `inject`，并已把 `ctx.fake_accounts`、`ctx.fake_channels`、`ctx.fake_kv`、`ctx.fake_rpc` 等假对象 serve 给对应 Key。断言真实 manifest 声明、插件存储恢复、孤立账号处理和这些假对象记录的调用。真实 PluginKernel/AppRuntime 重载与角色删除放在宿主集成测试。
 - **渠道行为**：平台 REST 用 `httpx.MockTransport` 替代，长连接用假连接；`ChannelContext` 直接构造，`channel_hub` 可用简单替身（参考 `plugins/feishu/tests/conftest.py`）。至少覆盖：未登记、离线或无所属角色的接收账号被拒绝，响应规则准入、入站去重、`pause_intake` 期间缓冲、`stop` 对未启动实例安全、流式收尾与失败回退。
 - **真实运行时**：宿主测试侧的 `shiori_host_testing` 提供 `plugin_runtime` fixture，验证设置保存、热换代、账号删除和 runtime drain；插件单测不加载它。
-- `pyproject.toml` 声明 `dependencies = ["shiori-sdk>=3.1.0,<4"]`、`test = ["shiori-sdk[testing]>=3.1.0,<4"]` extra 和 pytest 配置（`-W error`、`asyncio_mode = "auto"`），`TESTING.md` 写明仓库外运行方式和真机验收清单。
+- `pyproject.toml` 声明 `dependencies = ["shiori-sdk>=4.0.0,<5"]`、`test = ["shiori-sdk[testing]>=4.0.0,<5"]` extra 和 pytest 配置（`-W error`、`asyncio_mode = "auto"`），`TESTING.md` 写明仓库外运行方式和真机验收清单。
 
 仓库内运行 `uv run pytest -c pytest.ini plugins/<id>/tests`；合并前用隔离环境验收：
 

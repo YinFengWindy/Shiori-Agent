@@ -26,7 +26,7 @@ def environment(tmp_path: Path) -> Path:
     site = tmp_path / "site"
     (site / "shiori_sdk/testing").mkdir(parents=True)
     (site / "shiori_sdk/__init__.py").write_text(
-        "__version__ = RUNTIME_API_VERSION = '3.0.0'\n", encoding="utf-8"
+        "__version__ = '3.0.0'\n", encoding="utf-8"
     )
     (site / "shiori_sdk/testing/__init__.py").touch()
     metadata = site / "shiori_sdk-3.0.0.dist-info"

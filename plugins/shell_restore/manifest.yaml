@@ -1,4 +1,5 @@
 api: 4
+sdk: ">=4.0.0"
 id: shell_restore
 display_name: Shell 删除保护
 version: 0.1.1

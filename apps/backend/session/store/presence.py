@@ -40,6 +40,26 @@ class _PresenceMixin:
             )
             self._conn.commit()
 
+    def presence_key(self, session_key: str) -> str:
+        """The presence row a session's heartbeats go to.
+
+        A ``role:`` key is its own row. Any other session whose metadata names
+        a ``role_id`` shares ``role:<id>``, so the desktop and channel
+        heartbeats of one role land together; without one it keeps its key.
+        """
+        clean_key = session_key.strip()
+        if not clean_key or clean_key.startswith("role:"):
+            return clean_key
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT metadata FROM sessions WHERE key = ?", (clean_key,)
+            ).fetchone()
+        if row is None:
+            return clean_key
+        metadata = json.loads(row["metadata"] or "{}")
+        role_id = str(metadata.get("role_id") or "").strip()
+        return f"role:{role_id}" if role_id else clean_key
+
     def get_presence(self, key: str) -> dict[str, str | None] | None:
         with self._lock:
             row = self._conn.execute(

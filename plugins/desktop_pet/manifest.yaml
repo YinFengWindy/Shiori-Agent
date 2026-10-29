@@ -1,4 +1,5 @@
 api: 4
+sdk: ">=4.0.0"
 id: desktop_pet
 display_name: 桌宠
 version: "0.1.1"
