@@ -36,7 +36,6 @@ from core.memory.group_environment import GroupEnvironment
 from core.memory.member_profiles import MemberProfiles
 from core.roles import (
     RoleAggregateService,
-    RoleRelationshipRuntimeService,
     RoleStore,
 )
 from core.roles.role_runtime import RoleRuntimeRegistry
@@ -86,7 +85,7 @@ class DesktopBridgeService:
         role_service: RoleAggregateService | None = None,
         config: Any = None,
         push_tool: MessagePushTool | None = None,
-        relationship_runtime: RoleRelationshipRuntimeService | None = None,
+        relationship_runtime: Any | None = None,
         presence: Any | None = None,
         scheduler: Any | None = None,
         subagent_manager: Any | None = None,

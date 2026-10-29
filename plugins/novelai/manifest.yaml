@@ -2,7 +2,7 @@ api: 4
 sdk: ">=4.0.0"
 id: novelai
 display_name: NovelAI 生图
-version: '0.1.2'
+version: '0.1.3'
 desc: NovelAI 生图集成——手动生图、提示词标签库、生成历史、消息图片重生成与自动场景 CG
 default_enabled: false
 config_model: config:NovelAIConfig
@@ -11,7 +11,6 @@ inject:
   - http
   - tools
   - events
-  - scene_observations
   - light_provider
   - light_model
   - kv
@@ -20,5 +19,7 @@ inject:
   - workspace
   - roles
   - session_store
+optional_inject:
+  - scene
 frontend:
   entry: ui/index.tsx

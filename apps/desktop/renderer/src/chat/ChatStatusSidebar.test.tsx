@@ -6,6 +6,9 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ChatStatusSidebar } from "./ChatStatusSidebar";
 import { mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
+import { affectionUiRegistry } from "../plugins/affectionUiRegistry";
+import { resetPluginEnabledStateForTests, setPluginEnabledSnapshot } from "../plugins/pluginEnabledStateStore";
+import { ChatAffectionMeter } from "../../../../../plugins/affection/ui/ChatAffectionMeter";
 
 describe("ChatStatusSidebar", () => {
   it("renders historical thoughts verbatim alongside mood, relationship tags, and loneliness", () => {
@@ -34,19 +37,33 @@ describe("ChatStatusSidebar", () => {
     assert.ok(!markup.includes('data-testid="chat-affection"'));
   });
 
-  it("shows only the affection stage and a thin bar of its place on the whole range", () => {
+  it("leaves the affection meter to the plugin", () => {
     const markup = renderToStaticMarkup(
       <ChatStatusSidebar currentMood="" moodUpdatedAt="" moodScope="rin|role:rin" moodIllustrationUrl="" roleSelfView=""
         relationshipTags={[]} lonelinessValue={0} affection={{ stage: "亲密", percent: 82.5 }} />,
     );
-    const start = markup.indexOf('data-testid="chat-affection"');
-    const block = markup.slice(start, markup.indexOf('寂寞值', start));
+    assert.ok(!markup.includes('data-testid="chat-affection"'));
+    assert.ok(!markup.includes("亲密"));
+  });
 
-    assert.ok(start >= 0);
-    assert.match(block, />亲密</);
-    assert.match(block, /width:82.5%/);
-    // The bar width is the only number: no affection value or reason is printed.
-    assert.ok(!/>[^<]*\d[^<]*</.test(block));
+  it("mounts the contributed meter without printing the numeric value", () => {
+    affectionUiRegistry.registerChat({ pluginId: "affection", Component: ChatAffectionMeter });
+    setPluginEnabledSnapshot([{ id: "affection", enabled: true, state: "ACTIVE" }]);
+    try {
+      const markup = renderToStaticMarkup(
+        <ChatStatusSidebar currentMood="" moodUpdatedAt="" moodScope="rin|role:rin" moodIllustrationUrl="" roleSelfView=""
+          relationshipTags={[]} lonelinessValue={0} affection={{ stage: "亲密", percent: 82.5 }} />,
+      );
+      const start = markup.indexOf('data-testid="chat-affection"');
+      const block = markup.slice(start, markup.indexOf("寂寞值", start));
+      assert.ok(start >= 0);
+      assert.match(block, />亲密</);
+      assert.match(block, /width:82.5%/);
+      assert.ok(!/>[^<]*\d[^<]*</.test(block));
+    } finally {
+      affectionUiRegistry.unregister("affection");
+      resetPluginEnabledStateForTests();
+    }
   });
 
   it("replaces the complete thought and mood on turn updates and role switches", async () => {

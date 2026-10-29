@@ -21,7 +21,9 @@ from conversation.service import desktop_thread_id
 from core.identity import IdentityChat, UserIdentityStore
 from shiori_sdk.accounts.models import AccountRecord
 from shiori_sdk.channels.threads import network_thread_id
-from core.roles import RoleRelationshipRuntimeService, RoleStore
+from core.roles import RoleStore
+from core.roles.affection_host import HostAffectionSources
+from plugins.affection.backend.relationship import RoleRelationshipRuntimeService
 from core.roles.reply_state import AffectionChange, InvalidRoleReply, RoleReply
 from proactive_v2.presence import PresenceStore
 from session.manager import SessionManager, ConsolidationCommitRequest
@@ -606,10 +608,12 @@ async def test_only_the_users_own_group_message_updates_relationship_state(
     session = role_session(manager)
     presence = PresenceStore(manager._store)
     relationship = RoleRelationshipRuntimeService(
-        tmp_path,
-        role_store=RoleStore(tmp_path),
-        session_manager=manager,
-        presence=presence,
+        HostAffectionSources(
+            workspace=tmp_path,
+            role_store=RoleStore(tmp_path),
+            session_manager=manager,
+            presence=presence,
+        )
     )
     relationship.write_snapshot(
         "yin",

@@ -32,7 +32,17 @@ from functools import partial
 from shiori_sdk.accounts.models import AccountNotFoundError
 from dataclasses import replace
 
-from core.roles.natural_chat import natural_chat_enabled
+from core.roles.reply_policy import (
+    ReplyPolicyGetter,
+    bind_turn_reply_policy,
+    natural_chat_selected,
+    reset_turn_reply_policy,
+)
+from core.roles.affection_access import (
+    AffectionGetter,
+    bind_turn_affection,
+    reset_turn_affection,
+)
 from core.roles.role_runtime import RoleBusyError, RoleExecutionContext
 from core.roles.services import RoleSessionService
 from shiori_sdk.external_turns import ExternalTurnResult
@@ -51,6 +61,27 @@ from .helpers import (
 )
 
 
+def _with_generation_plugins(method):
+    """Copies this loop's getters onto the turn task."""
+
+    async def wrapped(self, *args, **kwargs):
+        policy = getattr(self, "reply_policy", None)
+        affection = getattr(self, "affection", None)
+        policy_token = bind_turn_reply_policy(
+            policy if isinstance(policy, ReplyPolicyGetter) else None
+        )
+        affection_token = bind_turn_affection(
+            affection if isinstance(affection, AffectionGetter) else None
+        )
+        try:
+            return await method(self, *args, **kwargs)
+        finally:
+            reset_turn_reply_policy(policy_token)
+            reset_turn_affection(affection_token)
+
+    return wrapped
+
+
 class _ProcessingMixin:
     async def run(self) -> None:
         self._running = True
@@ -63,6 +94,7 @@ class _ProcessingMixin:
 
             await self.process_inbound(item)
 
+    @_with_generation_plugins
     async def process_inbound(self, item: InboundItem) -> None:
         """Processes queued input or a typed internal completion on this runtime."""
         key = item.session_key
@@ -301,6 +333,7 @@ class _ProcessingMixin:
             return await registry.dispatch_background_task(context, operation)
         return await registry.dispatch_passive_turn(context, operation)
 
+    @_with_generation_plugins
     async def process_direct(
         self,
         content: str,
@@ -439,6 +472,7 @@ class _ProcessingMixin:
             name=f"agent_loop_external:{context.role_id}",
         )
 
+    @_with_generation_plugins
     async def process_background_result(
         self,
         context: RoleExecutionContext,
@@ -459,7 +493,7 @@ class _ProcessingMixin:
             ReplyInterruption(
                 role_lookup=lambda: registry.repository.store.get_role(context.role_id)
             )
-            if transport is not None and natural_chat_enabled(role)
+            if transport is not None and natural_chat_selected(role)
             else None
         )
         predecessors = (

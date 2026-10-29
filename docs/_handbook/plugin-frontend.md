@@ -12,11 +12,13 @@ P7 会统一前端入口（`frontend.entry`），并删掉下面的 `renderer` /
 
 | 入口 | 默认导出 |
 | --- | --- |
-| `ui` | `PluginUiModule`：`{ pluginId, navPage?, settingsSection?, roleAssets?, accountDetail?, roleSettings?, chatImageActions? }` |
+| `ui` | `PluginUiModule`：`{ pluginId, navPage?, settingsSection?, roleAssets?, accountDetail?, roleSettings?, chatImageActions?, roleAffection?, chatAffection? }` |
 | `background` | `PluginBackgroundContribution`：`{ pluginId, setup(ctx) }` |
 | `surface` | `PluginSurfaceModule`：`{ pluginId, surface: { component } }` |
 
 `pluginId` 必须等于 manifest 的 ID。声明已退役的 `roleMemory`（宿主自己渲染记忆页，记忆插件只提供 `roles.memory.*` RPC）或 `roleUi`（改用 `roleSettings` 卡片，私有设置放 `storage: "plugin"` 的对话框里用 `usePrivateAutosave`）的 UI 模块校验失败。代码不能依赖 Vite glob、宿主源码相对导入或宿主重新构建。
+
+`roleAffection` 挂在角色详情，`chatAffection` 挂在聊天状态栏。宿主只在该插件启用且登记了组件时显示；好感插件用 `client.call("history" | "stage_prompts_get" | "stage_prompts_set")` 读写，不从宿主页面导入。
 
 ## 对等依赖与 import map
 

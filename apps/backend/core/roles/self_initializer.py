@@ -18,7 +18,6 @@ from .store import RoleStore
 
 if TYPE_CHECKING:
     from .models import RoleRecord
-    from .relationship_runtime.affection_seed import RoleAffectionInitializer
 
 
 class SelfInitializationError(RuntimeError):
@@ -35,7 +34,7 @@ class RoleSelfInitializer:
         self,
         store: RoleStore,
         generator: LlmRoleSelfSeedGenerator,
-        affection: RoleAffectionInitializer,
+        affection: Any | None = None,
     ):
         self._store = store
         self._memory = RoleMemoryService(store.workspace)
@@ -109,8 +108,15 @@ class RoleSelfInitializer:
     async def _ensure_affection(
         self, role: RoleRecord, snapshot: RoleModelSnapshot
     ) -> None:
+        from core.roles.affection_access import current_affection
+
+        affection = (
+            self._affection if self._affection is not None else current_affection()
+        )
+        if affection is None:
+            return
         try:
-            await self._affection.ensure_initialized(role, snapshot)
+            await affection.ensure_initialized(role.id)
         except asyncio.CancelledError:
             raise
         except Exception as error:

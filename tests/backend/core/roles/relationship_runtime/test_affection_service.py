@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from core.roles.relationship_runtime import RoleAffectionService
+from plugins.affection.backend.relationship import RoleAffectionService
 
 _NOW = datetime(2026, 10, 8, 12, 0, tzinfo=timezone.utc)
 

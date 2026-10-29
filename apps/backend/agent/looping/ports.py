@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from agent.context import ContextBuilder
@@ -19,7 +19,6 @@ if TYPE_CHECKING:
     from shiori_sdk.memory.engine import MemoryEngine
     from core.memory.runtime import MemoryRuntime
     from proactive_v2.presence import PresenceStore
-    from core.roles.relationship_runtime import RoleRelationshipRuntimeService
     from core.roles.role_runtime import RoleRuntimeRegistry
     from conversation.service import ConversationService
     from core.common.channel_directory import ChannelDirectory
@@ -77,7 +76,7 @@ class MemoryServices:
 class SessionServices:
     session_manager: SessionManager
     presence: PresenceStore | None = None
-    relationship_runtime: "RoleRelationshipRuntimeService | None" = None
+    relationship_runtime: Any | None = None
     conversation_service: "ConversationService | None" = None
 
 

@@ -20,10 +20,10 @@ from bus.event_bus import EventBus
 from shiori_sdk.messages import OutboundMessage
 from bus.events_lifecycle import NOT_USER_AUTHORED_KEY, SKIP_POST_MEMORY_KEY
 from shiori_sdk.memory.committed import TurnCommitted
+from core.roles.affection_access import current_affection
 
 if TYPE_CHECKING:
     from agent.context import ContextBuilder
-    from core.roles.relationship_runtime import RoleRelationshipRuntimeService
     from session.manager import Session
 
 logger = logging.getLogger(__name__)
@@ -51,7 +51,7 @@ class AfterTurnPhase:
         outbound: OutboundPort,
         context: ContextBuilder,
         history_window: int = 500,
-        relationship_runtime: RoleRelationshipRuntimeService | None = None,
+        relationship_runtime: object | None = None,
     ) -> None:
         # ``TurnCommitted`` is a core domain event, not a turn event: it fans
         # out on the core bus alone, without the plugin kernel.
@@ -105,7 +105,7 @@ def _memory_extra(state: TurnState) -> dict[str, object]:
 
 
 async def _apply_turn_affection(
-    relationship_runtime: RoleRelationshipRuntimeService | None, state: TurnState
+    relationship_runtime: object | None, state: TurnState
 ) -> None:
     """Applies the committed reply's affection change before the turn is announced.
 
@@ -113,11 +113,14 @@ async def _apply_turn_affection(
     it carry the new summary.
     """
     change = state.affection_change
-    if change is None or relationship_runtime is None:
+    affection = current_affection(relationship_runtime)
+    if change is None or affection is None:
         return
     session = cast("Session", state.session)
     try:
-        await relationship_runtime.apply_turn_affection(session, change)
+        await affection.apply_turn_affection(
+            session.key, delta=change.delta, reason=change.reason
+        )
     except Exception:
         # Boundary: the reply is already committed and goes out regardless;
         # affection is a side record of it. Raising here would report a

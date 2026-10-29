@@ -180,8 +180,8 @@ path = "C:\\" # escaped slash before closing quote
 });
 
 
-describe("core scene observation settings", () => {
-  it("preserves an explicit core disable over the retired plugin preference", async () => {
+describe("scene observation settings", () => {
+  it("sends an explicit legacy disable as the plugin key and drops the old table", async () => {
     const directory = mkdtempSync(join(tmpdir(), "shiori-scene-settings-"));
     try {
       const path = join(directory, "config.toml");
@@ -191,9 +191,27 @@ describe("core scene observation settings", () => {
       assert.equal(form.advanced.sceneObservationEnabled, false);
       form.advanced.maxTokens += 1;
       await saveSettings(form, async (request) => {
-        assert.match(request.config_toml, /\[agent\.scene_observation\]\nenabled = false/);
+        assert.equal(request.scene_observation_enabled, false);
+        assert.doesNotMatch(request.config_toml, /\[agent\.scene_observation\]/);
+        assert.doesNotMatch(request.config_toml, /\[plugins/);
         return { success: true };
       });
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("prefers plugins.scene.observation_enabled over a leftover legacy table", () => {
+    const directory = mkdtempSync(join(tmpdir(), "shiori-scene-plugin-"));
+    try {
+      const path = join(directory, "config.toml");
+      writeFileSync(
+        path,
+        "[plugins.scene]\nobservation_enabled = false\nenabled = true\n[agent.scene_observation]\nenabled = true\n",
+        "utf-8",
+      );
+      configureSettingsConfigPath(path);
+      assert.equal(loadSettingsData().formData.advanced.sceneObservationEnabled, false);
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
@@ -211,6 +229,7 @@ for (const legacy of ["", "[plugins.scene_awareness]\nenabled = false\n"]) {
       const form = loadSettingsData().formData;
       assert.equal(form.advanced.sceneObservationEnabled, undefined);
       await saveSettings(form, async (request) => {
+        assert.equal(request.scene_observation_enabled, undefined);
         assert.doesNotMatch(request.config_toml, /\[agent\.scene_observation\]/);
         assert.equal(request.preserve_plugins, true);
         assert.doesNotMatch(request.config_toml, /\[plugins/);
@@ -232,7 +251,8 @@ it("preserves a core scene opt-in over an old plugin disable", async () => {
     const form = loadSettingsData().formData;
     assert.equal(form.advanced.sceneObservationEnabled, true);
     await saveSettings(form, async (request) => {
-      assert.match(request.config_toml, /\[agent\.scene_observation\]\nenabled = true/);
+      assert.equal(request.scene_observation_enabled, true);
+      assert.doesNotMatch(request.config_toml, /\[agent\.scene_observation\]/);
       return { success: true };
     });
   } finally {

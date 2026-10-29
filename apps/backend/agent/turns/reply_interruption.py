@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
-from core.roles.natural_chat import natural_chat_enabled
+from core.roles.reply_policy import natural_chat_selected
 
 if TYPE_CHECKING:
     from core.roles.store import RoleRecord
@@ -51,7 +51,7 @@ class ReplyInterruption:
                 # The deletion owner has removed its session too. No completion
                 # may recreate that session or publish the removed role's tail.
                 raise asyncio.CancelledError
-            if self.natural_chat and not natural_chat_enabled(role):
+            if self.natural_chat and not natural_chat_selected(role):
                 self.invalidate()
         return self.invalidated
 

@@ -58,9 +58,12 @@ from bus.event_bus import EventBus
 from conversation.service import desktop_thread_id
 from core.common.channel_directory import ChannelDirectory
 from core.roles import RoleRepository, RoleRuntimeRegistry, RoleStore
-from prompts.natural_chat import FINISH_REPLY_TOOL_NAME, NATURAL_CHAT_PROMPT
+from core.roles.reply_policy import ReplyPolicyGetter
+from plugins.natural_chat.backend.prompts import NATURAL_CHAT_PROMPT
+from prompts.natural_chat import FINISH_REPLY_TOOL_NAME
 from session.manager import SessionManager
 from shiori_sdk.core.conversation import StepFinished
+from shiori_sdk.core.reply_policy import REPLY_POLICY
 from shiori_sdk.memory.engine import MemoryQueryResult
 from shiori_sdk.storage import plugin_data_dir
 from shiori_sdk.testing.http import FakeHttp
@@ -74,6 +77,7 @@ from tests.support.plugin_kernel import host_kernel
 PLUGINS = (
     "context_pressure",
     "meme",
+    "natural_chat",
     "novelai",
     "plugin_undo",
     "shell_restore",
@@ -379,6 +383,11 @@ async def golden_host(
     await kernel.load_all()
     assert sorted(kernel.active_plugin_ids) == sorted(PLUGINS)
     loop.bind_kernel(lambda: kernel.kernel)
+    # Production binds this getter, so the truth table applies: the plugin
+    # must be present as well as the role flag. Core-only leaves it unbound.
+    policy = ReplyPolicyGetter()
+    policy.bind(lambda: kernel.kernel.get(REPLY_POLICY))
+    loop.reply_policy = policy
     generate = tools.get_tool("generate_image")
     assert generate is not None
 

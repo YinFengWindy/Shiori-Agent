@@ -1,7 +1,9 @@
 import React, { useRef } from "react";
 import { CrossfadeLayers } from "@yinfengwindy/shiori-sdk";
 import { cx } from "@yinfengwindy/shiori-sdk";
-import type { AffectionDisplay } from "../affection/affectionDisplay";
+import type { AffectionDisplay } from "./affectionDisplay";
+import { useChatAffectionContribution } from "../plugins/affectionUiRegistry";
+import { usePluginEnabledState } from "../plugins/usePluginEnabledState";
 import { chatSidebarPanelClass } from "./chatSidebarStyles";
 import { StatusMeter } from "../shared/ui/StatusMeter";
 import { moodTone } from "./moodTone";
@@ -36,6 +38,10 @@ export function ChatStatusSidebar({
   visualsActive = true,
 }: ChatStatusSidebarProps) {
   const normalizedLoneliness = Math.max(0, Math.min(100, Number.isFinite(lonelinessValue) ? lonelinessValue : 0));
+  const contributed = useChatAffectionContribution();
+  const pluginEnabled = usePluginEnabledState();
+  const AffectionMeter = contributed && pluginEnabled(contributed.pluginId) ? contributed.Component : null;
+  const showAffection = Boolean(affection && AffectionMeter);
   const shouldRenderIllustration = Boolean(moodIllustrationUrl) && visualsActive;
   const layerRef = useRef<HTMLDivElement | null>(null);
   const frameRef = useRef<HTMLDivElement | null>(null);
@@ -48,7 +54,7 @@ export function ChatStatusSidebar({
       className={cx(
         chatSidebarPanelClass,
         "chat-status-sidebar relative gap-3",
-        affection ? "grid-rows-[minmax(0,1fr)_auto_auto_auto_auto_auto]" : "grid-rows-[minmax(0,1fr)_auto_auto_auto_auto]",
+        showAffection ? "grid-rows-[minmax(0,1fr)_auto_auto_auto_auto_auto]" : "grid-rows-[minmax(0,1fr)_auto_auto_auto_auto]",
       )}
     >
       {/* The illustration may shrink to zero; only its own pixels are clipped so text and controls take priority. */}
@@ -108,8 +114,8 @@ export function ChatStatusSidebar({
         <div className="text-caption text-ink-muted">关系标签还在生成中</div>
       )}
       {/* Affection shows only its stage and a thin bar of its place on the whole range: no value, no reasons. */}
-      {affection ? (
-        <StatusMeter label="好感" value={affection.stage} percent={affection.percent} heightClass="h-1" testId="chat-affection" />
+      {showAffection && AffectionMeter && affection ? (
+        <AffectionMeter stage={affection.stage} percent={affection.percent} />
       ) : null}
       <StatusMeter label="寂寞值" value={Math.round(normalizedLoneliness)} percent={normalizedLoneliness} heightClass="h-1.5" />
       {/* Mood-change particles fly over the whole panel without catching the pointer. */}

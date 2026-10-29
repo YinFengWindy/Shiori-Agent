@@ -19,22 +19,23 @@ from agent.config_models import (
     ModelRegistration,
     WiringConfig,
 )
-from agent.scene_preferences import load_scene_preferences
 from core.common.workspace import resolve_default_workspace
 from proactive_v2.config import ProactiveConfig
 from proactive_v2.config_loader import ProactiveConfigError, load_proactive_config
 
 
 def load_config(path: str | Path = "config.toml") -> Config:
-    """Loads persisted TOML, migrating a legacy ``[memory]`` table once first.
+    """Loads persisted TOML, migrating legacy tables once first.
 
     ``load_config_text`` and ``load_config_data`` stay pure: only this path
-    rewrites the file, and only when a ``[memory]`` table is still present.
+    rewrites the file, and only when a legacy table is still present.
     """
     config_path = Path(path)
     from bootstrap.memory_config_migration import migrate_legacy_memory_config
+    from bootstrap.scene_config_migration import migrate_legacy_scene_config
 
     migrate_legacy_memory_config(config_path)
+    migrate_legacy_scene_config(config_path)
     return load_config_data(_load_config_data(config_path))
 
 
@@ -137,7 +138,6 @@ def load_config_data(data: dict[str, Any]) -> Config:
             for name, value in _as_dict(data.get("plugins")).items()
             if isinstance(value, dict)
         },
-        scene_observation_enabled=load_scene_preferences(data),
         model_registrations=model_registrations,
     )
 
@@ -218,10 +218,10 @@ def _load_wiring_config(data: dict) -> WiringConfig:
     raw = _as_dict(agent_cfg.get("wiring")) or data.get("wiring", {}) or {}
     toolsets = raw.get(
         "toolsets",
-        ["meta_common", "spawn", "schedule", "mcp"],
+        ["meta_common", "spawn", "schedule"],
     )
     if not isinstance(toolsets, list) or not toolsets:
-        toolsets = ["meta_common", "spawn", "schedule", "mcp"]
+        toolsets = ["meta_common", "spawn", "schedule"]
     return WiringConfig(
         context=str(raw.get("context", "default") or "default"),
         memory=str(raw.get("memory", "default") or "default"),

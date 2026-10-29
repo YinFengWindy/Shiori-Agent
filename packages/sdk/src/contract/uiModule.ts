@@ -67,6 +67,22 @@ export type PluginRoleAssetsContribution = {
 /** Plugin-authored account controls receive a scoped RPC client and host services. */
 export type PluginAccountDetailComponentProps = PluginAccountDetailProps & PluginInjectedProps;
 
+/** The chat sidebar passes the stage and its place on the -100–100 range. */
+export type PluginChatAffectionProps = {
+  stage: string;
+  /** Bar width, 0–100. */
+  percent: number;
+};
+
+/** The role page tells the affection tab which role is open and whether the bridge is up. */
+export type PluginRoleAffectionProps = {
+  roleId: string;
+  bridgeReady: boolean;
+};
+
+/** Role affection tab: slot props plus the injected client and host services. */
+export type PluginRoleAffectionComponentProps = PluginRoleAffectionProps & PluginInjectedProps;
+
 /** One platform's new-account and connection controls, opened from a role's account page. */
 export type PluginAccountDetailContribution = {
   /** Platform name in the role page's add-account choice. */
@@ -102,4 +118,8 @@ export type PluginUiModule = {
   accountDetail?: PluginAccountDetailContribution;
   roleSettings?: PluginRoleSettingsContribution;
   chatImageActions?: React.ComponentType<PluginChatImageActionProps>;
+  /** 「好感度」 tab on the role page. Absent means the host hides that tab. */
+  roleAffection?: React.ComponentType<PluginRoleAffectionComponentProps>;
+  /** Thin affection meter in the chat status sidebar. */
+  chatAffection?: React.ComponentType<PluginChatAffectionProps>;
 };

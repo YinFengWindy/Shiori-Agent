@@ -50,7 +50,7 @@ search_enabled = true
 
 # 可选：控制加载哪些工具集（默认值适合大多数场景）
 # [agent.wiring]
-# toolsets = ["meta_common", "spawn", "schedule", "mcp"]
+# toolsets = ["meta_common", "spawn", "schedule"]
 
 # =============================================================================
 # 可选：桌面端对话不需要外部渠道。要使用 Telegram、QQ（NapCat）、

@@ -31,7 +31,7 @@ Shiori 是本地优先应用。默认工作区为 `~/.shiori/workspace`（`core/
 | 数据 | Owning module | 注意事项 |
 | --- | --- | --- |
 | 角色定义、绑定、素材元数据 | `core/roles/`（`roles/roles.json` 与 `roles/<role_id>/`） | 经过 RoleStore/Service 修改 |
-| 角色关系、寂寞与场景追问状态 | `core/roles/relationship_runtime/`、`core/roles/scene_followup_runtime.py`（`roles/<role_id>/state/`） | 随角色删除清理 |
+| 角色关系、寂寞与场景追问状态 | `plugins/affection/`（`roles/<role_id>/state/affection.json` 及同目录的关系、寂寞、场景追问文件） | 路径和 `affection.json` 格式不变；随角色删除清理 |
 | 活跃 Session | `session/store/`（`sessions.db`） | 包含消息、presence 与搜索 |
 | Conversation 线程与群聊旁听 | `conversation/store.py`、`conversation/listening_store.py`（与 Session 共用 `sessions.db`） | 由 service/projector 维护一致性 |
 | 角色 Markdown 记忆 | `core/memory/`（`roles/<role_id>/memory`） | 删除角色时级联清理 |

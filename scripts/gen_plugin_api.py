@@ -23,10 +23,15 @@ ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "docs" / "_handbook" / "plugin-api.md"
 
 _CORE_MODULES = (
+    "shiori_sdk.core.affection",
+    "shiori_sdk.core.affection_host",
     "shiori_sdk.core.conversation",
     "shiori_sdk.core.crash_reporting",
+    "shiori_sdk.core.mcp_tools",
     "shiori_sdk.core.memory",
     "shiori_sdk.core.models",
+    "shiori_sdk.core.reply_policy",
+    "shiori_sdk.core.scene",
     "shiori_sdk.core.services",
     "shiori_sdk.core.sessions",
     "shiori_sdk.core.tools",

@@ -10,11 +10,12 @@ import pytest
 
 from conversation.service import desktop_thread_id
 from shiori_sdk.channels.threads import network_thread_id
-from core.roles.relationship_runtime import loops as loops_module
-from core.roles import (
+from core.roles import RoleStore
+from core.roles.affection_host import HostAffectionSources
+from plugins.affection.backend.relationship import loops as loops_module
+from plugins.affection.backend.relationship import (
     LonelinessHeartbeatLoop,
     RoleRelationshipRuntimeService,
-    RoleStore,
 )
 from proactive_v2.presence import PresenceStore
 from session.manager import SessionManager
@@ -27,14 +28,15 @@ def _utc(year: int, month: int, day: int, hour: int = 0, minute: int = 0) -> dat
 def _runtime(
     tmp_path: Path,
 ) -> tuple[RoleRelationshipRuntimeService, SessionManager, PresenceStore]:
-    role_store = RoleStore(tmp_path)
     session_manager = SessionManager(tmp_path)
     presence = PresenceStore(session_manager._store)
     runtime = RoleRelationshipRuntimeService(
-        tmp_path,
-        role_store=role_store,
-        session_manager=session_manager,
-        presence=presence,
+        HostAffectionSources(
+            workspace=tmp_path,
+            role_store=RoleStore(tmp_path),
+            session_manager=session_manager,
+            presence=presence,
+        )
     )
     return runtime, session_manager, presence
 
@@ -507,7 +509,7 @@ async def test_heartbeat_keeps_settling_other_roles_when_one_role_is_broken(
     runtime.affection.state_path(broken).write_text("{}", encoding="utf-8")
     seeded_at = datetime.now().astimezone() - timedelta(days=3, hours=1)
     runtime.affection.initialize(healthy, value=45, reason="测试初始化", now=seeded_at)
-    loop = LonelinessHeartbeatLoop(runtime, role_store=roles)
+    loop = LonelinessHeartbeatLoop(runtime)
     ticks = 0
 
     async def one_tick(_seconds: float) -> None:
@@ -530,10 +532,7 @@ def test_loneliness_heartbeat_loop_defaults_to_ten_minutes(tmp_path: Path):
     _seed_role(tmp_path)
     runtime, _, _ = _runtime(tmp_path)
 
-    loop = LonelinessHeartbeatLoop(
-        runtime,
-        role_store=RoleStore(tmp_path),
-    )
+    loop = LonelinessHeartbeatLoop(runtime)
 
     assert loop._interval == 10 * 60
 
@@ -541,30 +540,36 @@ def test_loneliness_heartbeat_loop_defaults_to_ten_minutes(tmp_path: Path):
 @pytest.mark.asyncio
 async def test_generate_snapshot_via_llm_accepts_prompt_json_example(tmp_path: Path):
     _seed_role(tmp_path)
-    runtime, session_manager, _ = _runtime(tmp_path)
+    session_manager = SessionManager(tmp_path)
+    presence = PresenceStore(session_manager._store)
+
+    class _Sources(HostAffectionSources):
+        async def complete(self, role_id, messages, *, max_tokens):
+            return (
+                '{"role_self_view":"我会留意你有没有来找我。",'
+                '"relation_tags":["亲近"],'
+                '"relation_state":{"closeness":0.6,"dependence":0.5,"security":0.4,'
+                '"initiative_desire":0.7,"neglect_sensitivity":0.8},'
+                '"behavior_profile":{"loneliness_growth_base":1.5,'
+                '"loneliness_growth_when_unanswered":2.2,"trigger_threshold":60,'
+                '"post_trigger_cooldown_minutes":120,"night_suppression":0.4}}'
+            )
+
+    runtime = RoleRelationshipRuntimeService(
+        _Sources(
+            workspace=tmp_path,
+            role_store=RoleStore(tmp_path),
+            session_manager=session_manager,
+            presence=presence,
+        )
+    )
     session = session_manager.get_or_create(session_manager.role_session_key("mira"))
     session.messages = [
         {"role": "user", "content": "你好"},
         {"role": "assistant", "content": "我在。"},
     ]
 
-    class _Resp:
-        content = (
-            '{"role_self_view":"我会留意你有没有来找我。",'
-            '"relation_tags":["亲近"],'
-            '"relation_state":{"closeness":0.6,"dependence":0.5,"security":0.4,"initiative_desire":0.7,"neglect_sensitivity":0.8},'
-            '"behavior_profile":{"loneliness_growth_base":1.5,"loneliness_growth_when_unanswered":2.2,"trigger_threshold":60,"post_trigger_cooldown_minutes":120,"night_suppression":0.4}}'
-        )
-
-    class _Provider:
-        async def chat(self, **kwargs):
-            return _Resp()
-
-    snapshot = await runtime.generate_snapshot_via_llm(
-        "mira",
-        provider=_Provider(),
-        model="test-model",
-    )
+    snapshot = await runtime.generate_snapshot_via_llm("mira")
 
     assert snapshot["role_self_view"] == "我会留意你有没有来找我。"
     assert snapshot["relation_tags"] == ["亲近"]
@@ -590,7 +595,7 @@ async def test_refresh_snapshot_after_consolidation_updates_session_metadata(
     )
 
     snapshot = await runtime.refresh_snapshot_after_consolidation(
-        session,
+        session.key,
         optimizer=optimizer,
     )
 

@@ -252,7 +252,7 @@ async def test_background_report_reads_disabled_role_without_sequence_protocol(
     from agent.provider import LLMResponse
     from agent.turns.channel_sequence import ChannelSequenceOwner
     from bus.queue import MessageBus
-    from prompts.natural_chat import NATURAL_CHAT_PROMPT
+    from plugins.natural_chat.backend.prompts import NATURAL_CHAT_PROMPT
 
     host.roles.update_role("mira", runtime_config={"natural_chat_enabled": True})
     target = await capture(host)

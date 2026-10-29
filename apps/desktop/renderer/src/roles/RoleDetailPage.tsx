@@ -10,7 +10,8 @@ import { selectRoleDetailSaveState } from "./roleDetailSaveState";
 import type { RoleDetailTabId } from "./RoleDetailTabs";
 import { RoleDetailToolbar } from "./RoleDetailToolbar";
 import { RoleMemoryPanel } from "../memory/RoleMemoryPanel";
-import { RoleAffectionPanel } from "../affection/RoleAffectionPanel";
+import { useRoleAffectionContribution } from "../plugins/affectionUiRegistry";
+import { usePluginEnabledState } from "../plugins/usePluginEnabledState";
 import { RoleProfilePanel } from "./RoleProfilePanel";
 import { RoleAccountsPanel } from "../accounts/RoleAccountsPanel";
 
@@ -59,6 +60,10 @@ export function RoleDetailPage({
   const pageRef = useRef<HTMLElement | null>(null);
   const pendingScrollTopRef = useRef<number | null>(null);
   const [activeTab, setActiveTab] = useState<RoleDetailTabId>("profile");
+  const affectionContribution = useRoleAffectionContribution();
+  const pluginEnabled = usePluginEnabledState();
+  const affectionEntry = affectionContribution && pluginEnabled(affectionContribution.pluginId) ? affectionContribution : null;
+  const tab: RoleDetailTabId = activeTab === "affection" && !affectionEntry ? "profile" : activeTab;
   // The first tab appears with the page; only later switches animate in.
   const [tabSwitched, setTabSwitched] = useState(false);
   const saveState = selectRoleDetailSaveState({ dirty: roleFormDirty, saving: savingRole, bridgeReady });
@@ -74,7 +79,8 @@ export function RoleDetailPage({
     onUpdateRoleForm(next);
   }
 
-  const content = activeTab === "profile" ? (
+  const AffectionPanel = affectionEntry?.Component;
+  const content = tab === "profile" ? (
     <RoleProfilePanel
       roleId={activeRole?.id ?? ""}
       roleRevision={activeRole?.updated_at ?? ""}
@@ -83,12 +89,12 @@ export function RoleDetailPage({
       onUpdate={updateRoleForm}
       onModelChanged={onRoleModelChanged}
     />
-  ) : activeTab === "accounts" ? (
+  ) : tab === "accounts" ? (
     activeRoleId ? <RoleAccountsPanel roleId={activeRoleId} /> : null
-  ) : activeTab === "memory" ? (
+  ) : tab === "memory" ? (
     <RoleMemoryPanel roleId={activeRoleId} bridgeReady={bridgeReady} />
-  ) : activeTab === "affection" ? (
-    <RoleAffectionPanel roleId={activeRoleId} bridgeReady={bridgeReady} />
+  ) : tab === "affection" && AffectionPanel ? (
+    <AffectionPanel roleId={activeRoleId} bridgeReady={bridgeReady} />
   ) : (
     <RoleCapabilitiesPanel activeRole={activeRole} bridgeReady={bridgeReady} roleForm={roleForm} onUpdate={updateRoleForm} />
   );
@@ -106,7 +112,8 @@ export function RoleDetailPage({
           onUpdate={updateRoleForm}
         />
         <RoleDetailToolbar
-          activeTab={activeTab}
+          activeTab={tab}
+          showAffection={affectionEntry !== null}
           canGoToChat={bridgeReady && Boolean(activeRole)}
           saveState={saveState}
           onBack={onBackToList}
@@ -116,7 +123,7 @@ export function RoleDetailPage({
           onSave={onSaveRole}
         />
         {/* Enter-only: the outgoing tab leaves at once so switching never waits on an exit. */}
-        <div key={activeTab} className={cx(tabSwitched && "motion-tab-enter")}>
+        <div key={tab} className={cx(tabSwitched && "motion-tab-enter")}>
           {content}
         </div>
       </div>

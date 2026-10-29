@@ -10,9 +10,8 @@ from agent.lifecycle.types import (
     PromptRenderInput,
     PromptRenderResult,
 )
-from core.roles.natural_chat import natural_chat_enabled
+from core.roles.reply_policy import natural_chat_passive_prompt, natural_chat_selected
 from core.roles.store import RoleStore
-from prompts.natural_chat import NATURAL_CHAT_PROMPT
 from shiori_sdk.core.conversation import PromptRendering, ReplyMode
 from shiori_sdk.prompting import PromptSectionRender
 
@@ -61,10 +60,11 @@ class PromptRenderPhase:
     ) -> PromptRenderResult:
         minimal = input.minimal_request
         bottom_sections = list(ctx.system_sections_bottom)
-        if natural_chat:
+        prompt = natural_chat_passive_prompt() if natural_chat else None
+        if prompt:
             bottom_sections.append(
                 PromptSectionRender(
-                    name="natural_chat", content=NATURAL_CHAT_PROMPT, is_static=False
+                    name="natural_chat", content=prompt, is_static=False
                 )
             )
         rendered = self._context.render(
@@ -163,7 +163,7 @@ def _role_reply_mode(roles: RoleStore, input: PromptRenderInput) -> ReplyMode:
     """
     role_id = str(input.session_metadata.get("role_id") or "").strip()
     role = roles.get_role(role_id) if role_id else None
-    return "sequence" if natural_chat_enabled(role) else "single"
+    return "sequence" if natural_chat_selected(role) else "single"
 
 
 def _rendered_reply_mode(event: PromptRendering, input: PromptRenderInput) -> ReplyMode:

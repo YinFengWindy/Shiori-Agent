@@ -32,7 +32,7 @@ related:
 
 ## 进程与装配
 
-`apps/backend/main.py` 的 `serve_bridge()` 先恢复未完成的配置事务（`ConfigTransaction.recover()`）并应用待处理的插件包安装/卸载操作，再构建 `AppRuntime`。`apps/backend/bootstrap/app.py` 的 `AppRuntime.start()` 经 `bootstrap/runtime/construction.py:prepare_core_runtime()` 调用 `apps/backend/bootstrap/tools.py:build_core_runtime()` 装配一代 `CoreRuntime`（构建失败时回收已分配资源）。CoreRuntime 持有 AgentLoop、MessageBus、EventBus、ToolRegistry、SessionManager、Scheduler、LLMProvider、MemoryRuntime、PresenceStore、RoleRelationshipRuntimeService、RoleRuntimeRegistry、GroupEnvironment、群聊旁听开关、MCP 和 PluginKernel。
+`apps/backend/main.py` 的 `serve_bridge()` 先恢复未完成的配置事务（`ConfigTransaction.recover()`）并应用待处理的插件包安装/卸载操作，再构建 `AppRuntime`。`apps/backend/bootstrap/app.py` 的 `AppRuntime.start()` 经 `bootstrap/runtime/construction.py:prepare_core_runtime()` 调用 `apps/backend/bootstrap/tools.py:build_core_runtime()` 装配一代 `CoreRuntime`（构建失败时回收已分配资源）。CoreRuntime 持有 AgentLoop、MessageBus、EventBus、ToolRegistry、SessionManager、Scheduler、LLMProvider、MemoryRuntime、PresenceStore、RoleRuntimeRegistry、GroupEnvironment、群聊旁听开关和 PluginKernel。好感、场景观察和 MCP 登记由插件提供；stdio MCP 客户端在 `infra/process/mcp_client.py`。
 
 ```mermaid
 flowchart TD

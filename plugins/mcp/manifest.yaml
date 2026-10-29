@@ -1,0 +1,14 @@
+api: 4
+sdk: ">=4.0.0"
+id: mcp
+display_name: MCP
+version: '0.1.0'
+desc: 用户配置的 MCP server。stdio 仍由宿主拉起；默认关闭。
+category: feature
+default_enabled: false
+inject:
+  - processes
+  - tools
+  - mcp_tools
+  - workspace
+  - background

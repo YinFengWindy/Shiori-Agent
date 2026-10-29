@@ -52,7 +52,6 @@ class WiringConfig:
             "meta_common",
             "spawn",
             "schedule",
-            "mcp",
         ]
     )
 
@@ -87,7 +86,6 @@ class Config:
     dev_mode: bool = False
     desktop_streaming_enabled: bool = False
     wiring: WiringConfig = field(default_factory=WiringConfig)
-    scene_observation_enabled: bool = True
     plugins: dict[str, dict[str, Any]] = field(default_factory=dict)
     raw_plugin_configs: dict[str, dict[str, Any]] = field(default_factory=dict)
     model_registrations: list[ModelRegistration] = field(

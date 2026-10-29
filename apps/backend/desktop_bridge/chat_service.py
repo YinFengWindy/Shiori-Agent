@@ -41,7 +41,7 @@ from session.manager import Session, SessionManager
 from session.manager.models import INTERRUPTED_TURN_METADATA_KEY
 from shiori_sdk.errors import public_validation_message, summarize_exception_for_user
 from core.roles.models import RoleRecord
-from core.roles.natural_chat import natural_chat_enabled
+from core.roles.reply_policy import natural_chat_selected
 from core.roles.self_initializer import SelfInitializationError
 from core.roles.model_errors import ModelConfigurationError
 from core.common.runtime_tasks import create_runtime_task
@@ -681,7 +681,7 @@ class DesktopChatService:
             emit_event=emit_event,
             previous=previous,
             reply_interruption=ReplyInterruption(
-                natural_chat=natural_chat_enabled(
+                natural_chat=natural_chat_selected(
                     self._role_lookup(self._role_id_from_session_key(session_key))
                 )
             ),

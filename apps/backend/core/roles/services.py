@@ -12,7 +12,7 @@ from session.manager import Session, SessionManager
 from .store import RoleRecord, RoleStore
 from .models import normalize_role_id as _clean_role_id
 from .memory_service import RoleMemoryService as RoleMemoryService
-from .relationship_runtime.affection_prompts import apply_stage_prompt_changes
+from core.roles.affection_access import current_affection
 
 
 @dataclass(frozen=True)
@@ -328,12 +328,11 @@ class RoleAggregateService:
         under the manifest lock, so concurrent writes of different stages
         both land.
         """
-        return self.repository.update_role(
-            role_id,
-            change_affection_stage_prompts=lambda current: apply_stage_prompt_changes(
-                current, changes
-            ),
-        )
+        affection = current_affection()
+        if affection is None:
+            raise RuntimeError("好感插件未启用")
+        affection.apply_stage_prompts(role_id, changes)
+        return self.repository.get_required(role_id)
 
     def delete_role(self, role_id: str) -> tuple[bool, bool]:
         clean_role_id = _clean_role_id(role_id)

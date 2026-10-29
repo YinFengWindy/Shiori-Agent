@@ -1131,8 +1131,8 @@ async def test_mcp_image_and_sibling_tool_replies_reach_current_model_in_valid_o
     from copy import deepcopy
     import sys
 
-    from agent.mcp.client import McpClient
-    from agent.mcp.tool import McpToolWrapper
+    from infra.process.mcp_client import McpClient
+    from plugins.mcp.backend.tool import McpToolWrapper
 
     image_data = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aE3sAAAAASUVORK5CYII="
     script = tmp_path / "mcp_image.py"
@@ -1155,7 +1155,7 @@ for line in sys.stdin:
     try:
         infos = await client.connect()
         tools = ToolRegistry()
-        image_tool = McpToolWrapper(client, infos[0])
+        image_tool = McpToolWrapper("test_image", client, infos[0])
         tools.register(image_tool)
         tools.register(CounterTool())
         responses = [

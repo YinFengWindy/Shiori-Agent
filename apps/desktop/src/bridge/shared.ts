@@ -154,6 +154,11 @@ export type SettingsSaveOptions = {
 export type RuntimeApplyRequest = {
   /** Ordinary settings drafts preserve current plugin configuration inside the host transaction. */
   preserve_plugins?: boolean;
+  /**
+   * Written into preserved `[plugins.scene].observation_enabled`.
+   * Omitted means the save does not touch that key.
+   */
+  scene_observation_enabled?: boolean;
   config_toml: string;
   expected_generation?: number;
   operation_id: string;

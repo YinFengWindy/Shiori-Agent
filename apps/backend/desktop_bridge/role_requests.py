@@ -2,16 +2,13 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 import inspect
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-from core.roles import RoleAggregateService, RoleRecord
-from core.roles.relationship_runtime.affection_prompts import stage_prompts_view
+from core.roles import RoleAggregateService
+from core.roles.affection_access import current_affection
 
 from .role_presenter import DesktopRolePresenter
 from .role_card_export_service import DesktopRoleCardExportService
-
-if TYPE_CHECKING:
-    from core.roles import RoleRelationshipRuntimeService
 
 # Same bounds as the memory timeline's page options.
 _DEFAULT_PAGE_SIZE = 20
@@ -33,7 +30,7 @@ class DesktopRoleRequestHandler:
         role_presenter: DesktopRolePresenter,
         card_import_service: Any | None = None,
         card_export_service: DesktopRoleCardExportService | None = None,
-        relationship_runtime: RoleRelationshipRuntimeService | None = None,
+        relationship_runtime: Any | None = None,
         publish_event: Callable[[dict[str, Any]], Awaitable[None]],
     ) -> None:
         self._role_service = role_service
@@ -208,9 +205,10 @@ class DesktopRoleRequestHandler:
         Pages are 1-based like the memory timeline; an uninitialized role
         answers ``affection: None`` with no items.
         """
-        if self._relationship_runtime is None:
+        affection_runtime = current_affection(self._relationship_runtime)
+        if affection_runtime is None:
             raise RuntimeError("relationship runtime unavailable")
-        affection = self._relationship_runtime.affection
+        affection = affection_runtime.affection
         role_id = str(payload.get("role_id") or "").strip()
         self._role_service.repository.get_required(role_id)
         page = max(1, int(payload.get("page") or 1))
@@ -230,10 +228,15 @@ class DesktopRoleRequestHandler:
 
     def _stage_prompts(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Each stage's injected guidance, its default and whether it is overridden."""
-        role = self._role_service.repository.get_required(
-            str(payload.get("role_id") or "").strip()
-        )
-        return self._stage_prompts_payload(role)
+        role_id = str(payload.get("role_id") or "").strip()
+        self._role_service.repository.get_required(role_id)
+        affection_runtime = current_affection(self._relationship_runtime)
+        if affection_runtime is None:
+            raise RuntimeError("relationship runtime unavailable")
+        return {
+            "role_id": role_id,
+            "stages": affection_runtime.stage_prompts_view(role_id),
+        }
 
     def _set_stage_prompts(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Writes the given stages' guidance; ``null``, blank or default text restores the default.
@@ -244,16 +247,14 @@ class DesktopRoleRequestHandler:
         changes = payload.get("prompts")
         if not isinstance(changes, dict):
             raise ValueError("prompts 必须是以阶段名为键的对象")
-        role = self._role_service.update_affection_stage_prompts(
-            str(payload.get("role_id") or "").strip(), changes
-        )
-        return self._stage_prompts_payload(role)
-
-    @staticmethod
-    def _stage_prompts_payload(role: RoleRecord) -> dict[str, Any]:
+        role_id = str(payload.get("role_id") or "").strip()
+        affection_runtime = current_affection(self._relationship_runtime)
+        if affection_runtime is None:
+            raise RuntimeError("relationship runtime unavailable")
+        affection_runtime.apply_stage_prompts(role_id, changes)
         return {
-            "role_id": role.id,
-            "stages": stage_prompts_view(role.affection_stage_prompts),
+            "role_id": role_id,
+            "stages": affection_runtime.stage_prompts_view(role_id),
         }
 
     @staticmethod

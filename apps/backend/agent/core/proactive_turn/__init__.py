@@ -21,7 +21,7 @@ from agent.turns.reply_interruption import (
     reply_was_invalidated,
 )
 from core.common.cancellation import finish_started
-from prompts.natural_chat import NATURAL_CHAT_DRAFT_PROMPT
+from core.roles.reply_policy import natural_chat_draft_prompt
 
 from .delivery import (
     deliver_execute as _deliver_execute,
@@ -359,8 +359,13 @@ class ProactiveTurnPipeline:
         prompt = _build_system_prompt(
             self._role_prompt_fn(), natural_chat=current_proactive_reply() is not None
         )
-        if current_proactive_reply() is not None:
-            prompt += "\n\n" + NATURAL_CHAT_DRAFT_PROMPT
+        draft = (
+            natural_chat_draft_prompt()
+            if current_proactive_reply() is not None
+            else None
+        )
+        if draft:
+            prompt += "\n\n" + draft
         return prompt
 
     def _build_runtime_context_message(

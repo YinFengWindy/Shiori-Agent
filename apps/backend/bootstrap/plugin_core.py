@@ -41,8 +41,9 @@ from core.common.plugin_capability import PluginBackground
 from core.roles.plugin_capability import HostRoleModels, HostRoles
 from core.roles.role_runtime import RoleRuntimeRegistry
 from core.roles.store import RoleStore
-from core.scene.demand import SceneObservationDemand
-from core.scene.plugin_capability import PluginSceneObservations
+from agent.tools.mcp_registration import HostMcpToolRegistration
+from core.roles.affection_host import HostAffectionSources
+from core.scene.host import HostSceneAdapter
 from desktop_bridge.method_policy import MethodPolicy
 from desktop_bridge.plugin_capability import PluginRpc
 from desktop_bridge.session_presenter import DesktopSessionPresenter
@@ -51,7 +52,10 @@ from session.manager import SessionManager
 from session.plugin_capability import HostSessions
 from shiori_sdk.background_results import BackgroundResults
 from shiori_sdk.commands import CommandRegistry
+from shiori_sdk.core.affection_host import AFFECTION_HOST
 from shiori_sdk.core.conversation import COMMANDS
+from shiori_sdk.core.mcp_tools import MCP_TOOLS
+from shiori_sdk.core.scene import SCENE_HOST
 from shiori_sdk.core.crash_reporting import CRASH_REPORTING
 from shiori_sdk.core.models import MAIN_MODEL, MAIN_PROVIDER
 from shiori_sdk.core.services import (
@@ -72,7 +76,6 @@ from shiori_sdk.core.services import (
     RESOURCES,
     ROLES,
     RPC,
-    SCENE_OBSERVATIONS,
     SESSION_STORE,
     TOOL_TURN,
     TOOLS,
@@ -96,8 +99,8 @@ class PluginCoreInputs:
     is a directory directly under one, which is how crash reporting attributes
     a traceback frame to ``plugins/<directory>/...``. ``event_bus`` is the
     generation's event bus and ``rpc`` its plugin RPC registry, created over
-    that bus. ``scene_observations`` is the demand registry the scene
-    controller reads.
+    that bus. ``scene_followup`` is the host strategy flag the scene plugin
+    reads through ``SCENE_HOST``; the plugin does not own that flag.
 
     The rest back capabilities; when one is None (host tests), a plugin
     declaring a capability over it fails before setup:
@@ -125,7 +128,7 @@ class PluginCoreInputs:
     plugin_dirs: tuple[Path, ...]
     event_bus: EventBus
     rpc: PluginRpcRegistry[MethodPolicy]
-    scene_observations: SceneObservationDemand
+    scene_followup: bool = False
     # The same directory as ``PluginGenerationSettings.workspace``: there the
     # kernel's trust store, execution identity and KV root; here the
     # ``workspace``, ``memory`` and ``sessions`` capabilities.
@@ -133,6 +136,7 @@ class PluginCoreInputs:
     tools: ToolRegistry | None
     role_store: RoleStore | None
     session_manager: SessionManager | None
+    presence: Any | None = None
     relationship_runtime: object
     role_runtime_registry: RoleRuntimeRegistry | None
     provider: LLMProvider | None
@@ -225,12 +229,44 @@ def plugin_core_modules(inputs: PluginCoreInputs) -> tuple[CoreModule, ...]:
             provide(LIGHT_MODEL, inputs.light_model)
 
     def provide_scene(provide: CoreProvide) -> None:
-        """Plugin demand for scene observations (``core.scene``)."""
-        _publish(
-            provide,
-            SCENE_OBSERVATIONS,
-            PluginSceneObservations(inputs.scene_observations),
-        )
+        """Host facts for the scene plugin. The plugin provides ``SCENE``."""
+        if (
+            inputs.workspace is not None
+            and inputs.role_store is not None
+            and inputs.session_manager is not None
+        ):
+            provide(
+                SCENE_HOST,
+                HostSceneAdapter(
+                    workspace=inputs.workspace,
+                    roles=inputs.role_store,
+                    sessions=inputs.session_manager,
+                    scene_followup=inputs.scene_followup,
+                ),
+            )
+
+    def provide_affection(provide: CoreProvide) -> None:
+        """Host facts for the affection plugin. The plugin provides ``AFFECTION``."""
+        if (
+            inputs.workspace is not None
+            and inputs.role_store is not None
+            and inputs.session_manager is not None
+        ):
+            provide(
+                AFFECTION_HOST,
+                HostAffectionSources(
+                    workspace=inputs.workspace,
+                    role_store=inputs.role_store,
+                    session_manager=inputs.session_manager,
+                    presence=inputs.presence,
+                    role_runtime=inputs.role_runtime_registry,
+                ),
+            )
+
+    def provide_mcp_tools(provide: CoreProvide) -> None:
+        """Registration of dynamic MCP tools. The mcp plugin calls this."""
+        if inputs.tools is not None:
+            provide(MCP_TOOLS, HostMcpToolRegistration(inputs.tools))
 
     def provide_memory(provide: CoreProvide) -> None:
         """The memory plugin's surface (``bootstrap.memory_capabilities``).
@@ -293,6 +329,8 @@ def plugin_core_modules(inputs: PluginCoreInputs) -> tuple[CoreModule, ...]:
         provide_sessions,
         provide_roles,
         provide_scene,
+        provide_affection,
+        provide_mcp_tools,
         provide_memory,
         provide_processes,
         provide_conversation,

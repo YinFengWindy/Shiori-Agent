@@ -14,6 +14,7 @@ type RoleDetailToolbarProps = {
   onGoToChat: () => void;
   onReset: () => void;
   onSave: () => void;
+  showAffection: boolean;
 };
 
 /**
@@ -21,7 +22,7 @@ type RoleDetailToolbarProps = {
  * It sticks to the top of the scrolling page so 保存 is always one click away,
  * however far down a long setting the user has scrolled.
  */
-export function RoleDetailToolbar({ activeTab, canGoToChat, saveState, onBack, onChangeTab, onGoToChat, onReset, onSave }: RoleDetailToolbarProps) {
+export function RoleDetailToolbar({ activeTab, canGoToChat, saveState, onBack, onChangeTab, onGoToChat, onReset, onSave, showAffection }: RoleDetailToolbarProps) {
   return (
     <div
       className={roleEditorToolbarClass}
@@ -31,7 +32,7 @@ export function RoleDetailToolbar({ activeTab, canGoToChat, saveState, onBack, o
         <BackIcon className="h-5 w-5 fill-current" />
       </button>
       <div className="flex min-w-0 flex-1 items-end">
-        <RoleDetailTabs activeTab={activeTab} onChange={onChangeTab} />
+        <RoleDetailTabs activeTab={activeTab} onChange={onChangeTab} showAffection={showAffection} />
       </div>
       <div className="self-center">
         <RoleDetailActions canGoToChat={canGoToChat} showEditorActions={roleDetailTabEditsDraft(activeTab)} saveState={saveState} onGoToChat={onGoToChat} onReset={onReset} onSave={onSave} />

@@ -4,7 +4,8 @@ from typing import Any
 
 from conversation.service import ConversationService
 from shiori_sdk.channels.message_source import PERSISTED_USER_CONTENT_KEY
-from core.roles import RoleAggregateService, RoleRelationshipRuntimeService
+from core.roles import RoleAggregateService
+from core.roles.affection_access import current_affection
 from session.manager import Session, SessionManager
 from session.manager.helpers import role_id_from_session_key
 from session.manager.models import build_session_message
@@ -19,7 +20,7 @@ class DesktopAppService:
         role_service: RoleAggregateService,
         session_manager: SessionManager,
         conversation_service: ConversationService,
-        relationship_runtime: RoleRelationshipRuntimeService | None = None,
+        relationship_runtime: Any | None = None,
         presence: Any | None = None,
     ) -> None:
         self.role_service = role_service
@@ -166,11 +167,7 @@ class DesktopAppService:
                 if self.presence is not None
                 else None
             ),
-            handle_relationship=(
-                self.relationship_runtime.handle_proactive_sent
-                if self.relationship_runtime is not None
-                else None
-            ),
+            handle_relationship="proactive",
         )
 
     async def persist_desktop_user_message(
@@ -209,11 +206,7 @@ class DesktopAppService:
             record_presence=(
                 self.presence.record_user_message if self.presence is not None else None
             ),
-            handle_relationship=(
-                self.relationship_runtime.handle_user_message
-                if self.relationship_runtime is not None
-                else None
-            ),
+            handle_relationship="user",
         )
         return persisted_message
 
@@ -264,9 +257,13 @@ class DesktopAppService:
         if record_presence is not None:
             record_presence(session.key)
         metadata_changed = False
-        if handle_relationship is not None and self.relationship_runtime is not None:
-            handle_relationship(session.key)
-            enriched_metadata = self.relationship_runtime.enrich_session_metadata(
+        affection = current_affection(self.relationship_runtime)
+        if affection is not None and handle_relationship == "proactive":
+            affection.handle_proactive_sent(session.key)
+        elif affection is not None and handle_relationship == "user":
+            affection.handle_user_message(session.key)
+        if affection is not None and handle_relationship in {"proactive", "user"}:
+            enriched_metadata = affection.enrich_session_metadata(
                 dict(session.metadata),
             )
             if enriched_metadata != session.metadata:

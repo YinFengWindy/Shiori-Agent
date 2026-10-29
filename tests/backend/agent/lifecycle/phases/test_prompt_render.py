@@ -14,7 +14,12 @@ from agent.lifecycle.phases.prompt_render import PromptRenderPhase
 from agent.lifecycle.types import PromptRenderInput, PromptRenderResult
 from bus.event_bus import EventBus
 from core.roles import RoleStore
-from prompts.natural_chat import NATURAL_CHAT_PROMPT
+from core.roles.reply_policy import (
+    ReplyPolicyGetter,
+    bind_turn_reply_policy,
+    reset_turn_reply_policy,
+)
+from plugins.natural_chat.backend.prompts import NATURAL_CHAT_PROMPT
 from shiori_sdk.core.conversation import PromptRendering
 from shiori_sdk.kernel import Context, Kernel, PluginSpec
 from shiori_sdk.prompting import PromptSectionRender
@@ -92,7 +97,9 @@ async def test_natural_chat_is_host_owned_and_excludes_previews_and_minimal_requ
         minimal=minimal,
     )
     assert result.natural_chat is selected
-    assert (NATURAL_CHAT_PROMPT in str(result.messages[0]["content"])) is selected
+    # Unbound, the role flag still selects the protocol, but the prompt text
+    # belongs to a bound policy.
+    assert NATURAL_CHAT_PROMPT not in str(result.messages[0]["content"])
 
 
 async def test_prompt_rendering_handlers_choose_reply_mode_and_add_sections(tmp_path):
@@ -114,3 +121,37 @@ async def test_prompt_rendering_handlers_choose_reply_mode_and_add_sections(tmp_
     system = str(result.messages[0]["content"])
     assert NATURAL_CHAT_PROMPT not in system
     assert "# Probe" in system
+
+
+class _Policy:
+    def passive_prompt(self) -> str:
+        return NATURAL_CHAT_PROMPT
+
+    def draft_prompt(self) -> str:
+        return "draft"
+
+
+async def test_bound_policy_appends_the_chat_prompt(tmp_path):
+    getter = ReplyPolicyGetter()
+    getter.bind(lambda: _Policy())
+    token = bind_turn_reply_policy(getter)
+    try:
+        result = await _render(tmp_path)
+    finally:
+        reset_turn_reply_policy(token)
+
+    assert result.natural_chat is True
+    assert NATURAL_CHAT_PROMPT in str(result.messages[0]["content"])
+
+
+async def test_bound_missing_policy_forces_a_single_reply(tmp_path):
+    getter = ReplyPolicyGetter()
+    getter.bind(lambda: None)
+    token = bind_turn_reply_policy(getter)
+    try:
+        result = await _render(tmp_path)
+    finally:
+        reset_turn_reply_policy(token)
+
+    assert result.natural_chat is False
+    assert NATURAL_CHAT_PROMPT not in str(result.messages[0]["content"])

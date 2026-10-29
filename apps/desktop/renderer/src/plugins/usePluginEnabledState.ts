@@ -26,9 +26,13 @@ export function usePluginEnabledState(): (pluginId: string) => boolean {
     // This mount-time load is a boundary with nothing to show: the user already
     // sees an unreachable bridge (offline banner / onboarding error), and the
     // bridge lifecycle refresh reports roster failures as feedback. Record it
-    // as a diagnostic instead of leaving an unhandled rejection.
+    // as a diagnostic instead of leaving an unhandled rejection. The bridge
+    // (or the window itself) may already be gone — a unit mount with no
+    // preload, or cleanup after happy-dom closed — and a throw here would
+    // replace the roster failure with a second one.
     ensurePluginEnabledStateLoaded().catch((error: unknown) => {
-      window.miraDesktop.reportRendererDiagnostic({
+      if (typeof window === "undefined") return;
+      window.miraDesktop?.reportRendererDiagnostic?.({
         kind: "error",
         message: `插件状态加载失败：${errorMessage(error, { includeDetail: true })}`,
         stack: error instanceof Error ? error.stack : undefined,

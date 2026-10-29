@@ -21,7 +21,7 @@ from agent.turns.proactive_sequence import (
     current_proactive_reply,
     record_proactive_tool_fact,
 )
-from prompts.natural_chat import NATURAL_CHAT_DRAFT_PROMPT
+from core.roles.reply_policy import natural_chat_draft_prompt
 
 from agent.tools.turn_scope import tool_turn
 
@@ -516,8 +516,13 @@ class DriftTurnPipeline:
             "fetch_messages, search_messages, shell, message_push, finish_drift；"
             "若 context frame 里列出了可挂载外部能力，可用 mount_server 挂载。"
         )
-        if current_proactive_reply() is not None:
-            prompt += "\n\n" + NATURAL_CHAT_DRAFT_PROMPT
+        draft = (
+            natural_chat_draft_prompt()
+            if current_proactive_reply() is not None
+            else None
+        )
+        if draft:
+            prompt += "\n\n" + draft
         return prompt
 
     # ── 工具消息追加 ────────────────────────────────────────────────────

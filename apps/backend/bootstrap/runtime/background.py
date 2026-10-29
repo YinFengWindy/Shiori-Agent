@@ -28,7 +28,7 @@ class RuntimeBackground:
         core = candidate.core
         config = candidate.config
         self.candidate = candidate
-        self._scene = getattr(core, "scene_service", None)
+        self._plugins = getattr(core, "plugin_manager", None)
         self._loops: list[_Stoppable] = []
         self._coroutines: list[Coroutine[Any, Any, None]] = []
         self._tasks: list[asyncio.Task[None]] = []
@@ -79,8 +79,12 @@ class RuntimeBackground:
         Starting only after ``previous`` drains keeps two generations' loops
         from touching the same memory and proactive state concurrently.
         """
-        if self._scene is not None:
-            self._scene.activate()
+        if self._plugins is not None:
+            from shiori_sdk.core.scene import SCENE
+
+            scene = self._plugins.kernel.get(SCENE)
+            if scene is not None:
+                scene.activate()
         if not self._coroutines:
             return
         lease = self.candidate.acquire()

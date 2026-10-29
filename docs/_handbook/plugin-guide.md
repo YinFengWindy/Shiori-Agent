@@ -73,6 +73,23 @@ UTF-8 YAML。字段在 `apps/backend/agent/plugin_host/manifest.py` 解析；外
 
 `EVENTS` 是领域事件总线（`on` / `off` / `emit`），和下面的内核事件不是一回事。
 
+### P6a 的新 Key
+
+这些是新 Key，没有加在已有 Protocol 上。契约放在 `shiori_sdk.core`，因为核心或别的插件要消费，不能从插件包导入。
+
+| 名字 | Key | 谁提供 |
+| --- | --- | --- |
+| `reply_policy` | `REPLY_POLICY` | 系统插件 `natural_chat`。只有提示和选用。多条消息的协议和发送留在核心 |
+| `scene` | `SCENE` | 系统插件 `scene`。`request` 返回释放函数，调用方交给 `ctx.effect` |
+| `scene_host` | `SCENE_HOST` | 宿主。`followup_wanted` 读主动策略，不是 `Roles` 上的新方法 |
+| `affection` | `AFFECTION` | 系统插件 `affection`。状态文件仍是 `roles/<id>/state/affection.json` |
+| `affection_host` | `AFFECTION_HOST` | 宿主事实：角色、会话、在场、记忆文档、对话模型 |
+| `mcp_tools` | `MCP_TOOLS` | 宿主。动态 MCP 工具的登记。管理工具仍走 `TOOLS.register` |
+
+`scene_observations` 这个 Key 还在，但宿主不再提供。声明 `inject: [scene_observations]` 会因为没有提供方而 `BLOCKED`。NovelAI 改为 `optional_inject: [scene]`，`get(SCENE)` 为空时不登记需求。`mcp` 是外部插件，默认关闭；没启用时没有 `mcp_add`。
+
+即时聊天的选用：插件在提供，并且角色 `runtime_config.natural_chat_enabled` 是布尔 `True`。插件关闭时不选用，回复是单条。`natural_chat_enabled` 仍在角色 JSON，不进 `config.toml`。
+
 ## 事件
 
 事件是 frozen dataclass，顶层字段不能是 list、dict、set（用 tuple、frozenset 或只读 mapping）；否则 `emit` 抛 `TypeError`，`watch` 在登记时就拒绝。
@@ -165,7 +182,7 @@ npm 包、宿主 `setup.py` 和 host-testing 的精确 pin 必须等于这个版
 
 testing 没有按 #904 原计划删掉约 2.7k 行，保留的模块现在是真内核 harness 加服务 stub（维护者确认的偏离）：
 
-- 保留：被插件测试直接或经由装配好的上下文使用的 stub。`channel_group`、`channel_intake`、`resources`、`scene_observations` 没有插件直接导入，但分别经 `FakeChannelSetupContext.fake_channels.group(...)`（grok_bot、telegram）、`fake_channel_context` 的默认 `intake_factory`（telegram）、`FakeServiceContext` 提供的 `RESOURCES`（browser_use、computer_use、meme）和 `fake_scene_observations`（novelai）在用，所以保留。
+- 保留：被插件测试直接或经由装配好的上下文使用的 stub。`channel_group`、`channel_intake`、`resources`、`scene_observations` 没有插件直接导入，但分别经 `FakeChannelSetupContext.fake_channels.group(...)`（grok_bot、telegram）、`fake_channel_context` 的默认 `intake_factory`（telegram）和 `FakeServiceContext` 提供的 `RESOURCES`（browser_use、computer_use、meme）在用，所以保留。`fake_scene_observations` 仍由 `FakeServiceContext` 提供；现行插件不再注入 `scene_observations`，NovelAI 用可选的 `scene`。
 - 移走：`bridge`（桌面 bridge 请求 helper）只有宿主集成测试用，已移到 `shiori_host_testing.bridge`。
 - `shiori_sdk.testing` 的模块顶层不能导入会拉进 `httpx` 的模块（例如 `shiori_sdk.core.services`），插件测试环境不一定装了它。
 

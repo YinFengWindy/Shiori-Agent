@@ -235,9 +235,12 @@ class DesktopSessionPresenter:
         return store
 
     def _enrich_metadata(self, metadata: dict[str, Any]) -> dict[str, Any]:
-        if self._relationship_runtime is None:
+        from core.roles.affection_access import current_affection
+
+        affection = current_affection(self._relationship_runtime)
+        if affection is None:
             return metadata
-        return self._relationship_runtime.enrich_session_metadata(metadata)
+        return affection.enrich_session_metadata(metadata)
 
     @staticmethod
     def _serialize_message(message: dict[str, Any]) -> dict[str, Any]:

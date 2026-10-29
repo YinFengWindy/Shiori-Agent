@@ -1,0 +1,14 @@
+api: 4
+sdk: ">=4.0.0"
+id: affection
+display_name: 好感
+version: '0.1.0'
+desc: 角色好感、关系快照与寂寞。状态文件仍在 roles/<id>/state。
+category: system
+inject:
+  - affection_host
+  - background
+provides:
+  - affection
+frontend:
+  entry: ui/index.tsx

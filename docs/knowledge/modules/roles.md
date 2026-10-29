@@ -18,8 +18,8 @@ source_paths:
   - plugins/desktop_pet/backend/pet_packages.py
   - apps/backend/core/roles/services.py
   - apps/backend/core/roles/role_runtime.py
-  - apps/backend/core/roles/relationship_runtime/
-  - apps/backend/core/roles/scene_followup_runtime.py
+  - plugins/affection/
+  - apps/backend/core/roles/affection_host.py
   - apps/desktop/src/bridge/bridgeClient.ts
   - apps/desktop/renderer/src/roles/RoleAssetCategoryGroups.tsx
 related:
@@ -38,7 +38,7 @@ related:
 
 素材页只管理已有素材与手动心情绑定；一键生成差分及其 RPC 已移除。自动场景 CG 偏好由 NovelAI 插件的角色设置扩展管理，停用时隐藏控件并保留配置。
 
-自然聊天是「能力」页中的内置角色开关，保存为 `runtime_config.natural_chat_enabled`，缺省关闭。读取只经过 `core.roles.natural_chat.natural_chat_enabled`，只认角色记录上的布尔值 `True`；会话 metadata 里的 `role_runtime_config` 副本不参与。v10 将旧 `plugin_data.natural_chat` 中的角色选择原子迁入该字段并移除旧命名空间；已有内置字段（含 `false`）优先。宿主 `prompt_render` 为支持分条的回合加入即时聊天场景提示，模型通过 `finish_reply` 的 `messages` 列表提交独立消息，`agent/core/passive_turn/natural_reply.py` 负责校验与一次格式纠正。`agent/turns/reply_sequence.py` 继续负责通用消息序列与发送，能力不依赖插件注册或启用状态。
+自然聊天是「能力」页中的内置角色开关，保存为 `runtime_config.natural_chat_enabled`，缺省关闭。读取只经过 `core.roles.natural_chat.natural_chat_enabled`，只认角色记录上的布尔值 `True`；会话 metadata 里的 `role_runtime_config` 副本不参与。v10 将旧 `plugin_data.natural_chat` 中的角色选择原子迁入该字段并移除旧命名空间；已有内置字段（含 `false`）优先。提示词在系统插件 `plugins/natural_chat`。宿主在回复策略 getter 已绑定、插件提供了策略、并且角色开关为真时，把策略的 passive prompt 追加到系统提示末尾。模型通过 `finish_reply` 的 `messages` 列表提交独立消息，`agent/core/passive_turn/natural_reply.py` 负责校验与一次格式纠正。`agent/turns/reply_sequence.py` 继续负责通用消息序列与发送。插件关闭且 getter 已绑定时，即使角色开关为真也是单条回复；协议本身仍在核心。
 
 完成回复工具不直接发送消息，也不计作业务工具调用。业务工具先完成，再提交消息列表；列表格式不合规时，只开放完成回复工具做一次辅助纠正，不重跑业务操作。正常生成保留角色 thinking 设置；纠正请求使用辅助模式以兼容 DeepSeek 对强制工具选择的限制。仍然无效时进入错误边界，不把普通正文默认为合法单条。宿主内部用不与消息正文冲突的边界保持整轮装饰与媒体处理，诊断记录保留原始工具参数；内部边界不进入模型历史或可见正文。
 
@@ -46,9 +46,9 @@ related:
 
 ## 关系与场景
 
-`apps/backend/core/roles/relationship_runtime/` 负责关系快照、持久化、寂寞计算和维护循环。关系快照只含依赖、安全感、主动意愿、被冷落敏感度 4 个维度，不再有 closeness（旧快照文件中的该字段读取时忽略）；寂寞增长与关系主动动机的门槛是好感 ≥ 60（「亲密」阶段起点），好感未初始化时不增长也不触发。`SceneFollowupRuntime` 负责场景追问状态。它们为 Proactive、Drift 和自动 CG 提供上下文，但不直接拥有 Agent 回合。
+`plugins/affection/` 负责关系快照、持久化、寂寞计算和维护循环，经 `AFFECTION` 提供给宿主。宿主只保留 `affection_host.py` 里的事实（角色、会话、在场、记忆文档、对话模型）。关系快照只含依赖、安全感、主动意愿、被冷落敏感度 4 个维度，不再有 closeness（旧快照文件中的该字段读取时忽略）；寂寞增长与关系主动动机的门槛是好感 ≥ 60（「亲密」阶段起点），好感未初始化时不增长也不触发。`SceneFollowupRuntime` 仍负责场景追问状态，文件名仍是 `scene_followup_runtime.json`。它们为 Proactive、Drift 和自动 CG 提供上下文，但不直接拥有 Agent 回合。桌面角色页和聊天状态栏只在插件启用并登记了 `roleAffection` / `chatAffection` 时显示好感。
 
-好感度（`relationship_runtime/affection.py`，状态存于角色 `state/affection.json`）范围 -100–100，分厌恶、冷淡、陌生、熟悉、朋友、亲密、挚爱 7 个固定阶段。达到过「熟悉」及以上后，阶段下限是到过的最高阶段起点、只升不降；此前没有下限（`stage_floor` 为 `null`，#749 之前的旧状态文件存的 `0` 读取时按同义处理），陌生角色被扣分可以降为负数。长时间未联系的衰减最多降到 max(阶段下限, 0)，好感 ≤ 0 时不衰减。
+好感度（`plugins/affection/backend/relationship/affection.py`，状态存于角色 `state/affection.json`）范围 -100–100，分厌恶、冷淡、陌生、熟悉、朋友、亲密、挚爱 7 个固定阶段。达到过「熟悉」及以上后，阶段下限是到过的最高阶段起点、只升不降；此前没有下限（`stage_floor` 为 `null`，#749 之前的旧状态文件存的 `0` 读取时按同义处理），陌生角色被扣分可以降为负数。长时间未联系的衰减最多降到 max(阶段下限, 0)，好感 ≤ 0 时不衰减。路径和文件格式不变。
 
 ## 修改影响
 

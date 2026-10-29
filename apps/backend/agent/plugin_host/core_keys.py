@@ -142,7 +142,6 @@ PER_PLUGIN_PUBLIC_KEYS = frozenset(
         "channels",
         "accounts",
         "avatars",
-        "scene_observations",
         "background",
         "events",
         "rpc",

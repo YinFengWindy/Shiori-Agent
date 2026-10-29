@@ -3,6 +3,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from core.roles.affection_access import current_affection
+
 
 class DesktopRolePresenter:
     """Builds desktop-safe role payloads without owning role operations."""
@@ -42,17 +44,17 @@ class DesktopRolePresenter:
             if isinstance(relative_path, str) and relative_path
         ]
         payload["plugin_state"] = self._role_store.extensions.project(role.id)
-        if self._relationship_runtime is not None:
-            snapshot = self._relationship_runtime.read_snapshot(role.id)
-            runtime = self._relationship_runtime.current_loneliness_runtime(role.id)
+        affection = current_affection(self._relationship_runtime)
+        if affection is not None:
+            snapshot = affection.read_snapshot(role.id)
+            runtime = affection.current_loneliness_runtime(role.id)
             if snapshot is not None:
                 payload["relationship_snapshot"] = snapshot
             if runtime is not None:
                 payload["loneliness_runtime"] = runtime
-            # Absent until the role's first turn initializes affection.
-            affection = self._relationship_runtime.affection.current_summary(role.id)
-            if affection is not None:
-                payload["affection"] = affection
+            summary = affection.affection.current_summary(role.id)
+            if summary is not None:
+                payload["affection"] = summary
         if self._last_message_for_role is not None:
             # Chat list preview: the newest message of the role's single session.
             payload["last_message"] = self._last_message_for_role(role.id)

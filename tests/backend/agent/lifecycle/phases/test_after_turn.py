@@ -27,7 +27,9 @@ from shiori_sdk.accounts.targets import AccountTarget
 from shiori_sdk.memory.committed import TurnCommitted
 from core.accounts.delivery_ledger import AccountDeliveryLedger
 from core.identity import UserIdentityStore
-from core.roles import RoleRelationshipRuntimeService, RoleStore
+from core.roles import RoleStore
+from core.roles.affection_host import HostAffectionSources
+from plugins.affection.backend.relationship import RoleRelationshipRuntimeService
 from core.roles.reply_state import AffectionChange
 from proactive_v2.presence import PresenceStore
 from session.manager import SessionManager
@@ -237,10 +239,12 @@ async def test_committed_affection_change_is_recorded_and_saved_with_the_session
     session = manager.get_or_create("role:yin")
     session.metadata["role_id"] = "yin"
     relationship = RoleRelationshipRuntimeService(
-        tmp_path,
-        role_store=RoleStore(tmp_path),
-        session_manager=manager,
-        presence=PresenceStore(manager._store),
+        HostAffectionSources(
+            workspace=tmp_path,
+            role_store=RoleStore(tmp_path),
+            session_manager=manager,
+            presence=PresenceStore(manager._store),
+        )
     )
     relationship.affection.initialize("yin", value=50, reason="初识")
     state = SimpleNamespace(
