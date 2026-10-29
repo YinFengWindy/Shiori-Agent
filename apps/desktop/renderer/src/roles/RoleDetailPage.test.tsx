@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { afterEach, beforeEach, describe, it } from "node:test";
 import { act, useState } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { changeInputValue, chooseSelectOption, mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
@@ -75,6 +75,10 @@ const role: RoleRecord = {
 };
 
 describe("RoleDetailPage", () => {
+  // A loaded roster: mounts read the enabled state without a bridge round-trip.
+  beforeEach(() => setPluginEnabledSnapshot([]));
+  afterEach(() => resetPluginEnabledStateForTests());
+
   it("carries role-field and roleSettings drafts across tabs into one save, and resets both", async () => {
     function SampleCard({ values, onChange }: PluginRoleSettingsProps) {
       return <button onClick={() => onChange({ ...values, picked: true })}>{values.picked ? "已选" : "未选"}</button>;
