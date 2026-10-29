@@ -55,7 +55,7 @@ UTF-8 YAML。字段在 `apps/backend/agent/plugin_host/manifest.py` 解析；外
 上下文上**没有** `spawn`、`on_drain`、`log`、`config`、`data_dir`。它们都是服务：
 
 - 后台任务：`ctx.require(BACKGROUND).spawn(coro, name=...)`；需要保留调用方运行租约直到任务结束的用 `spawn_runtime`。卸载时取消，不排空。
-- 重载前的排空：`ctx.require(RUNTIME).on_drain(callback)`；`RUNTIME.was_active` 表示本次 setup 是不是代内重载出来的新实例。语义见[生命周期](plugin-lifecycle.md#代内重载)。
+- 重载前的排空：`ctx.require(RUNTIME).on_drain(callback)`；`RUNTIME.was_active` 为 `True` 表示这个插件在本次 setup 之前已经在运行：代内重载重新拉起的实例是这样，换代时上一代处于 `ACTIVE` 的插件也是这样；首次启动和从停用状态启用时为 `False`。用它跳过只该做一次的启动恢复。语义见[生命周期](plugin-lifecycle.md#代内重载)。
 - 配置：`ctx.require(CONFIG)`；私有数据目录与迁移：`STORAGE`；工作区目录：`WORKSPACE`。
 - 日志：用标准库 `logging`。
 
@@ -88,6 +88,11 @@ UTF-8 YAML。字段在 `apps/backend/agent/plugin_host/manifest.py` 解析；外
 - `fail_open`（默认）：记日志，事件原样传给下一个处理器。
 - `fail_closed`：链停止，`emit` 返回 `Veto("插件 <id> 处理 <事件> 失败: …")`。目前只有 `ToolCalling` 是 `fail_closed`：护栏出错时这次工具调用被拒，记为 `denied`。
 
+目前的核心检查：
+
+- **`ToolCalling`**（`agent/tools/execution.py`）：外部上下文的工具限制（见下文），以及最小 shell 护栏（`agent/tools/shell/guard.py`）。护栏只拒绝三类：整个删除或移走文件系统根、盘符根、用户主目录、工作区根（或其下全部内容）；写块设备（`dd of=`、重定向、对设备 `mkfs`）；格式化磁盘（`Format-Volume`、`Clear-Disk`、`format X:`）。会拆开 `;`、`&&`、管道等，并进入 `sh -c`、`pwsh -Command`、`cmd /c`（最多两层）。交互命令拒绝和 rm→mv 改写仍归 shell_safety / shell_restore 插件。
+- **`ReasoningFinished`**（`agent/core/citation.py`）：记忆引用归核心，任何记忆引擎（或没有）都一样。链之前，核心读每条消息末尾的 `§cited:[...]§` 标记（没有时用 `recall_memory` 返回的 ID）记为 `cited_memory_ids` 并去掉标记；链之后的检查去掉没人消费的末尾协议标签（`<name:value>`）和行内 `[§id]` 引用，包括插件写回的。其它位置残留的标记在投递时去掉。标记格式在 `shiori_sdk.memory.engine`（`CITED_MARKER_PATTERN` 等）。
+
 `Veto` 在哪些事件上能停下回合，写在各事件的 docstring 里（`shiori_sdk.core.conversation`、`shiori_sdk.core.tools`）。代内重载时，内核会等正在执行的 `on` / `watch` 处理器跑完；旧实例释放后、新实例 setup 前，这个插件的处理器暂时不存在，事件照常由其它插件和核心检查处理。
 
 ## 宿主服务的约定
@@ -98,6 +103,41 @@ UTF-8 YAML。字段在 `apps/backend/agent/plugin_host/manifest.py` 解析；外
 - **可发现服务**（`SERVICES`）：`register(service_id, contract=, label=, methods={...}, metadata=)` 发布只活在本实例生命期内的异步 JSON 方法，renderer 用 `client.services` 发现和调用，见[前端契约](plugin-frontend.md#注入的-client)。
 - **账号发送回执**：`account.send` 通常返回平台真实的 `message_id`；平台明确接收但不给消息 ID 时返回 `accepted: true`（只有布尔 `true` 允许空 ID），不能用任务运行 ID 冒充。确认送达的私聊可以附带 `conversation: {channel, chat_id, chat_type: "private"}`（`shiori_sdk.accounts.routing.AccountRoute`），必须是插件解析出的规范入站地址，不能从目标 ID 猜。宿主按账号平台校验渠道；地址无效时记日志并省略，不重试已经发生的发送。
 - **命令**（`COMMANDS`）：`register(name, handler, description=...)`，把返回的移除函数交给 `ctx.effect`。名字已被占用、或不是不含 `/`、`@`、空白的小写，抛 `ValueError`，setup 失败。命令处理器不算 `on` 处理器，重载时不等它。
+
+- **外部回合的结果**：`ExternalTurnResult.status` 是 `replied`（带 `reply` 文本）、`busy` 或 `duplicate`。
+- **后台结果回报**（`BACKGROUND_RESULTS`）：只能在已认证的角色工具回合里 `capture()`，得到的目标保留原角色、线程、实际渠道和绑定发送者，插件不能另选。`report(result_id, text)` 在角色闸门内重新校验后经角色正常出站路径回报；同一个 ID 只回报一次（含失败不明的情况），返回 `False` 表示已经试过。只在进程内，不跨重启恢复。
+- **进程资源**（`PROCESS_RESOURCES`）：`acquire(key, factory)` 按插件私有、带版本的 key（如 `tasks-v1`）取同一进程内的资源。工厂只能构造空闲对象，不得持有代际上下文、提供方、RPC 或任务。候选代际只挂接、不激活；发布后激活新挂接并关闭被移除的资源，回滚只关闭无主的临时资源，退出时全部关闭。不持久化，重启后不重建。
+- **HTTP 上限**：`HttpGet.get` 和 `ChannelHttp.request` 接受 `max_response_bytes`。非负上限同时检查 `Content-Length` 和流式解码后的字节（含重定向），超限时关闭响应、不重试，抛 `shiori_sdk.http.ResponseTooLarge`（带 `max_response_bytes`）。不传时行为不变；testing 里的 HTTP fake 实现同样的约定。
+- **`message_push`**：插件经 `TOOLS` 拿到的 `message_push` 失败时抛异常（未知渠道、不支持的载荷、发送失败、角色未绑定的目标），正常返回就表示已发送或已随当前回合排队，不要再解析返回文本。角色只能经它发到自己的桌面会话；发往渠道用 `account_send`。宿主专用的 `push_proactive=False` 把文字 / 图片记为补充内容，不标为主动消息；它必须是严格布尔，只来自宿主的执行上下文，模型参数和工具 schema 里都没有；`False` 时带 `file` 直接拒绝。`account_send` 的同名参数（配 `push_chat_id`）语义相同。
+
+### 渠道与账号
+
+渠道插件的写法见[渠道插件](channel-plugins.md)，这里只列宿主侧的约定：
+
+- **附件工具**：宿主为每个回合建一份不可变的 `ToolAttachmentScope(channel, paths)`（本回合收到和明确引用的附件），放在工具执行上下文的 `TOOL_ATTACHMENT_SCOPE_KEY` 下。消费方要用 `Tool.context_precedence` 保护这个键、缺失时拒绝，并自己执行渠道与文件策略。
+- **只读改投地址** `account.resolve`：收到 `account_id` 和 `AccountTarget.to_payload()`，返回 `AccountRoute.to_payload()`（规范 `channel`、`chat_id`、`chat_type`、可选正整数 `message_thread_id`），不发送任何东西，也不扩大平台权限。自然主动改投必须有它，缺了会明确失败，宿主不猜平台地址。普通 `account.send` 不调用它。
+- **工具授权**：账号声明 `full_tools` 能力时才显示「完整工具」开关（`AccountResponseRules.allow_full_tools`，缺省 `false`）。授权只对 `accounts.report(tool_conversation=AccountRoute(...))` 报告的当前私聊地址生效；不报告就不授权，地址变了旧的排队消息和后台目标都失去授权。插件放进入站 metadata 的 `account_full_tools` 会被渠道中心丢掉。
+- **固定对端**：账号报告 `fixed_peer` 能力表示连接本身决定准入，桌面隐藏私聊 / 群聊开关和发送者黑名单，`full_tools` 仍单独控制。提供方要在登记前归一化旧的准入规则，拒绝不支持的修改；这个能力不绕过宿主的准入和授权检查。
+- **分条回复**：`ChannelsCapability.subscribe_outbound(..., supports_reply_sequence=True)` 让普通渠道回合可以按条发送。每条发完后渠道在 `OutboundMessage.delivery_outcome` 写 `DeliveryOutcome(status, external_message_id)`；入队不是送达回执，`uncertain` 不能自动重发。失败或不明时停止这一批，不重试。
+- **打断**：`InterruptController.request_interrupt` 要带接收渠道、chat、`account_id`、`chat_type` 和 `message_thread_id`；只给 session 或部分地址时不会推断账号 / 话题的回合。
+- **入站 ID**：`TurnCommitted.external_message_id` 带原始入站消息 ID（非渠道回合为空），角色决定不回复时渠道也能据此完成持久化的入站处理。
+
+### 托管环境
+
+`shiori_sdk.managed` 给需要私有运行环境的插件（如语音）提供固定产物下载、原子安装、自有进程和后台操作；`register_runtime_rpc` 登记一组 `runtime.*` RPC，前端用 SDK 的 `ManagedRuntimePanel` / `useManagedRuntime`。模型、安装内容和编排策略归提供方。目前只支持 Windows x64。
+
+- **两个根**：状态根（`current.json`、`location.json`、锁、日志、提供方文件）与 `install_root`（下载、`s/` 暂存、`v/` 版本、子进程临时 / 缓存和提供方声明的 `scratch` 目录）分开。位置跨代保留，`OwnedService.root` 仍是状态根。
+- **`runtime.relocate {directory?}`**（`ManagedRuntime.relocate` / `Installation.relocate`）：在已存在的本地盘目录里建一个专用子目录作安装根；不带 `directory` 恢复默认。只有什么都没装、没保留、没有任务时才行；UNC / 设备路径和已有安装条目的目标被拒，Windows 上按不区分大小写比较。位置记录读不出来时报在 `error` 里，可以在没有指针时直接重设位置，或者删除环境来修复。
+- **`runtime.remove`**（`ManagedRuntime.remove`）：要求没有运行中的服务、没有任务；没装过也能执行。先删指针，再删安装根里的安装条目；链接 / junction 只解除、不跟进；自选的安装根删空后一并删除；状态根里的文件都保留。阶段是 `removing`。
+- **空闲空间检查**：复制前检查安装卷：缺的产物字节 + 安装后大小，再加 `max(1 GiB, 5%)` 余量；不够就以「磁盘空间不足」失败。原地导入单个文件不计下载副本。
+- **`runtime.prepare {source}`**：`source` 是用户选的原始绝对路径文件（不能是链接 / junction），可以是全部产物的 ZIP，或 `import_asset` 指定的单个产物；校验后缀、单产物的精确大小和 SHA-256 后才构建。原文件从不复制、移动或删除，ZIP 成员解压到暂存区。构建回调是 `build(staging, resources)`。成功后清掉下载缓存和其它版本；失败或取消保留缓存；清理失败只写进 `error`，不撤销发布。
+- **状态**：除阶段与进度外，含 `reclaimable`（可回收的下载字节）、`staging`、`location`、`customized`、`required`、`required_import`、`free`、`removable`、`relocatable`。
+- 托管服务在插件释放时停止，不在 `on_drain` 里停。
+
+### 角色数据
+
+- **好感度**：`AffectionSummary` 出现在 `RoleRecord.affection`、会话 metadata 和 `roles.affection.history`；第一次对话初始化之前没有。`value` 是 -100 到 100，七个阶段：「厌恶」-100～-50、「冷淡」-49～-1、「陌生」0～19、「熟悉」20～39、「朋友」40～59、「亲密」60～79、「挚爱」80～100；`progress` 是当前阶段内的 0～1。`floor` 是达到过的最高「熟悉」及以上阶段的起点（20 / 40 / 60 / 80），从没达到「熟悉」时为 `null`；好感不会再低于它。「陌生」的角色可以掉到负值，但衰减不会让好感变成负数。消费方要处理全部七个阶段。寂寞增长和关系主动动机要求好感至少 60（「亲密」起点）。
+- **关系状态**：`RelationshipSnapshot` 没有 `closeness`；`internal_profile.relation_state` 是固定字段的 `RelationState`（`dependence`、`security`、`initiative_desire`、`neglect_sensitivity`，各 0～1）。需要亲近程度的用好感。
 
 ## 版本
 

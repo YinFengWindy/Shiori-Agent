@@ -208,7 +208,8 @@ def _signature(func: Any) -> str:
             saw_keyword = True
         piece = name
         if param.kind is inspect.Parameter.VAR_POSITIONAL:
-            piece = f"*{name}"
+            # ``*args`` already ends the positional parameters; no bare ``*``.
+            piece, saw_keyword = f"*{name}", True
         elif param.kind is inspect.Parameter.VAR_KEYWORD:
             piece = f"**{name}"
         rendered = _fmt(hints.get(name, param.annotation))

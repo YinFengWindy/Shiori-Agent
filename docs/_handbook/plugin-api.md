@@ -535,7 +535,7 @@ Target `shiori_sdk.processes.Processes`.
 Host process services shared by browser, computer and channel adapters.
 
 - `mcp(name: str, command: list[str], env: dict[str, str] | None = None, cwd: str | None = None, *, own_process_tree: bool = False, inherit_env: bool = True) -> mcp.McpSession`
-- `async spawn(*command: str, *, env: dict[str, str], cwd: str, stdin: int, stdout: int | BinaryIO, stderr: int | BinaryIO, own_process_tree: bool = True) -> tuple[asyncio.subprocess.Process, processes.ProcessOwner | None]`
+- `async spawn(*command: str, env: dict[str, str], cwd: str, stdin: int, stdout: int | BinaryIO, stderr: int | BinaryIO, own_process_tree: bool = True) -> tuple[asyncio.subprocess.Process, processes.ProcessOwner | None]`
 
   Start an asyncio child with host-selected tree ownership before execution. ``stdout`` / ``stderr`` take a binary file or an ``asyncio.subprocess`` constant (``PIPE``, ``STDOUT``, ``DEVNULL``), exactly as ``asyncio.create_subprocess_exec``; a piped stream must be drained. Set ``own_process_tree=False`` for a client of a user-owned application; the caller must reap the client and separately stop its remote work.
 

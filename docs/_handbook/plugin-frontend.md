@@ -59,6 +59,12 @@ UI 组件、surface 和后台模块都收到注入的 `client`（`PluginRpcClien
 
 `persona` 默认 `false`，插件逐次选择是否让看板娘出面：`true` / `"generic"` 用该处的通用台词，场景键（`PersonaSceneKey`：`not_configured`、`unauthorized`、`quota`、`network`、`upstream`、`destructive`、`discard`、`confirm`）用宿主为该场景写的台词，表在宿主 `shared/mascot/mascotLines.ts` 的 `personaSceneLines`。台词永远由宿主写，插件只能选场景；用户在 设置 › 外观 关掉看板娘后一律按 `persona: false` 渲染。设计约束见[设计系统](design-system.md)。
 
+## 设置与角色能力卡
+
+- **插件配置的自动表单**：声明了 `config_model` 的插件由宿主生成 schema 表单。编辑停 400 ms（`autosaveDebounceMs`）后合并保存；同一时间只提交一份完整草稿，之后的编辑替换排队中的草稿。离开或切换表单时按原插件 ID 冲刷最后一份草稿；改回已保存的值会取消尚未开始的保存。每次实际改动仍走完整的运行时配置事务（多数情况是[代内重载](plugin-lifecycle.md#代内重载)）。`host.config.save()` 不防抖。
+- **私有设置**：`usePrivateAutosave`、`SettingsField`、`SettingsToggleField`、`SettingsGroup`、`SettingsSectionCard`、`settingsInputClass`、`settingsGroupStackClass` 与 `host.ui.SettingsSavedStatus` 组成插件自写设置页的自动保存和布局。
+- **角色能力卡**（`roleSettings` → `RoleCapabilityCard`）：`settings` 打开卡片的设置对话框，Esc、点背景、关闭按钮都会关掉并把焦点还给触发按钮。对话框内容首次打开时挂载，关闭后保持挂载，未完成的自动保存和重试不丢；挂载本身不写任何东西，对话框也不持有保存事务。`PluginRoleSettingsProps` 给出 `roleId`（新建角色时为 `null`）、限定作用域的 `client` 和 `moodCatalog`；角色设置在 `PluginHostServicesProvider` 下渲染，换角色时重新挂载。`storage: "plugin"` 配 `read: () => ({})` 让私有设置不进宿主的角色草稿；`onSettingsOpenChange`（`CapabilitySettingsDialog.onOpenChange`）可以在关闭时冲刷自动保存。角色编辑器的未保存提醒只管宿主的角色草稿。
+
 ## 后台模块
 
 后台模块在隐藏窗口里运行，`setup(ctx)` 收到 `BackgroundCtx`：
@@ -76,3 +82,5 @@ surface 组件收到 `SurfaceHandle`（`PluginSurfaceComponentProps`）。`onRol
 ## 测试入口
 
 `@yinfengwindy/shiori-sdk/testing`：`mountTestComponent` / `changeInputValue` / `mockableWindowTimers`（happy-dom 挂载）、`chooseSelectOption`、`deferred`、`createFakeHostServices`（可断言的内存 `host`）、`createFakeSurfaceHandle`、`createFakePluginClient`。假的 `host.ui` 组件只渲染文本、按钮和 ARIA，不带宿主样式和看板娘，`persona` 在记录下来的 props 上断言。宿主侧的插件 UI 测试用 `pnpm desktop:test:plugin-ui`。
+
+独立构建的示例在 `tests/fixtures/external-plugin/`：复制到仓库外即可用它自己固定版本的 pnpm / esbuild 构建，把 TSX / TS 编成 ESM、把宿主对等依赖设为 external，不需要宿主源码；构建和校验命令见该目录的 README。
