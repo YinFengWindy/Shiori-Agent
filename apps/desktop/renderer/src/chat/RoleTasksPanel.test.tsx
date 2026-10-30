@@ -46,7 +46,7 @@ async function withSchedule<T>(enabled: boolean, run: () => Promise<T> | T): Pro
 }
 
 function buttonNamed(container: HTMLElement, text: string) {
-  return [...container.querySelectorAll("button")].find((button) => button.textContent === text);
+  return Array.from(container.querySelectorAll("button")).find((button) => button.textContent === text);
 }
 
 describe("RoleTasksPanel", () => {
