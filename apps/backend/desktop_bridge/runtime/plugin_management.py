@@ -179,9 +179,10 @@ class RuntimePluginManagement:
     ) -> dict[str, Any]:
         """Persists a plugin's enabled flag and loads or unloads it in the generation.
 
-        ``reloaded_plugins`` in the result lists the plugins loaded or unloaded
-        (the target and the plugins that depend on it); it is absent when the
-        state did not change or a generation swap applied the change.
+        ``reloaded_plugins`` in the result lists the plugins loaded, unloaded or
+        set up again (the target and the plugins that depend on it, optionally
+        or not); it is absent when the state did not change or a generation
+        swap applied the change.
         """
         plugin_id = str(payload.get("plugin_id") or "").strip()
         enabled = payload.get("enabled")

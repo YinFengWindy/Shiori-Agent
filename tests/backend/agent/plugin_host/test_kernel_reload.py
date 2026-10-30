@@ -913,6 +913,79 @@ async def test_enabling_a_plugin_whose_setup_fails_keeps_it_failed(probe, tmp_pa
     await kernel.terminate_all(force=True)
 
 
+_WATCHER = """
+import sys
+from shiori_sdk.core.services import DEPENDENCIES, RUNTIME
+
+probe = sys.modules["reload_probe"]
+
+
+async def setup(ctx):
+    runtime = ctx.require(RUNTIME)
+    # Read once at setup, as an optional consumer that registers with its
+    # provider only when there is one.
+    provider = ctx.require(DEPENDENCIES).get_optional("provider")
+    label = None if provider is None else provider.label
+    probe.events.append(
+        ("setup", "watcher", label, runtime.was_active, runtime.is_reload)
+    )
+
+    async def drain():
+        probe.events.append(("drain", "watcher"))
+
+    runtime.on_drain(drain)
+    ctx.effect("dispose", lambda: probe.events.append(("dispose", "watcher")))
+"""
+
+
+@pytest.mark.asyncio
+async def test_toggling_a_provider_sets_up_its_running_optional_consumers_again(
+    probe, tmp_path
+):
+    _write(
+        tmp_path,
+        "watcher",
+        "inject: [dependencies, runtime]\noptional_dependencies: [provider]\n",
+        _WATCHER,
+    )
+    kernel, _, _, _ = await _kernel(tmp_path)
+    probe.events.clear()
+
+    disabled = await _toggle(kernel, False)
+
+    # The optional consumer stays up: drained like on a reload, then set up
+    # again without the provider, as the running instance it was.
+    assert disabled.plugin_ids == ("provider", "consumer", "watcher")
+    assert probe.events == [
+        ("drain", "watcher"),
+        ("dispose", "watcher"),
+        ("dispose", "consumer"),
+        ("dispose", "provider", "v1"),
+        ("setup", "watcher", None, True, True),
+    ]
+    assert _states(kernel) == {
+        "provider": "DISABLED",
+        "consumer": "BLOCKED",
+        "bystander": "ACTIVE",
+        "watcher": "ACTIVE",
+    }
+
+    probe.events.clear()
+    enabled = await _toggle(kernel, True)
+
+    # Set up again after the provider it now gets.
+    assert enabled.plugin_ids == ("provider", "consumer", "watcher")
+    assert probe.events == [
+        ("drain", "watcher"),
+        ("dispose", "watcher"),
+        ("setup", "provider", "v1", False, False),
+        ("setup", "consumer", "v1", False, False),
+        ("setup", "watcher", "v1", True, True),
+    ]
+    assert all(state == "ACTIVE" for state in _states(kernel).values())
+    await kernel.terminate_all(force=True)
+
+
 @pytest.mark.asyncio
 async def test_toggle_refuses_closures_only_a_generation_swap_can_change(
     probe, tmp_path

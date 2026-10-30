@@ -62,7 +62,7 @@ flowchart TD
 - `RuntimeBackground` 为每一代准备主动循环与记忆优化任务。换代或关闭时 `stop()` 取消上一代在途的后台工作（记忆整理回滚 PENDING 快照，主动 tick 放弃未发出的部分，已进出站队列的回复照常发出），新一代等它退出后按自身间隔重新调度；切换不等待卡在模型重试里的后台任务。
 - `ChannelHost`（`bootstrap/channel_host.py`）是跨代长驻的渠道宿主，负责渠道启动、交接与失败快照。
 - 例外：`plugin.config.set` 只改一张插件表时不换代（#857）。`RuntimeSettingsApplication._reload_plugin` 调 `PluginKernel.reload` 在当前代内重载目标及其强依赖消费者（排空它们自己的在途调用，含正在执行的 `on` / `watch` 事件处理器，最长 60 秒），落盘在内核不可取消的替换步骤里完成，桥接发 `plugins.reloaded`。闭包含渠道或不支持热卸载的插件、目标非 ACTIVE 时仍走整代切换；已停用插件只落盘。
-- 例外：`plugins.setEnabled` 同样不换代（#858）。`_reload_plugin` 改调 `PluginKernel.set_enabled`：停用直接处置目标及其活动的强依赖消费者（不排空，在途工作随之取消，进程资源关闭），留下 DISABLED / BLOCKED 句柄；启用加载 DISABLED 的目标和因它而 BLOCKED 的消费者，setup 失败照整代切换的做法保留为 FAILED。落盘失败恢复原状态，桥接同样发 `plugins.reloaded`。闭包含渠道或不支持热卸载的插件、启用目标的依赖处于 FAILED 等只能整代重试的状态时仍走整代切换。
+- 例外：`plugins.setEnabled` 同样不换代（#858）。`_reload_plugin` 改调 `PluginKernel.set_enabled`：停用直接处置目标及其活动的强依赖消费者（不排空，在途工作随之取消，进程资源关闭），留下 DISABLED / BLOCKED 句柄；启用加载 DISABLED 的目标和因它而 BLOCKED 的消费者，setup 失败照整代切换的做法保留为 FAILED。启停都带上活动的可选消费者（`optional_inject` / `optional_dependencies`，#949）：先排空，再随切换重新 setup（`was_active` 为真），失败同样保留为 FAILED。落盘失败恢复原状态，桥接同样发 `plugins.reloaded`。闭包含渠道或不支持热卸载的插件、启用目标的依赖处于 FAILED 等只能整代重试的状态时仍走整代切换。
 
 ## Bridge 与消息入口
 

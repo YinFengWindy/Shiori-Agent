@@ -146,6 +146,7 @@ async def toggle_closure(
     closure: list[PluginHandle],
     *,
     enabled: bool,
+    staying: frozenset[str],
     values: dict[str, Any],
     raw_values: dict[str, Any],
     tables: ConfigTables,
@@ -155,13 +156,23 @@ async def toggle_closure(
 ) -> PluginReloadResult:
     """Loads (``enabled``) or unloads ``closure`` (dependents first, target last).
 
-    Nothing is drained: disabling cancels in-flight work, as a generation swap
-    does. The closure is disposed and loaded again under the new tables, which
-    leaves disabled plugins DISABLED or BLOCKED and enabled ones ACTIVE, or
-    FAILED when their setup fails (kept, as a generation swap would). Only a
-    failing ``commit`` restores the previous tables and states. Runs to
-    completion even if the caller is cancelled (see ``PluginKernel.set_enabled``).
+    ``staying`` names the ACTIVE plugins in ``closure`` the toggle does not
+    turn on or off (optional consumers of the target, with their dependents).
+    They are only set up again around the target, so they are drained first
+    as on a reload (abandoning unchanged on timeout or cancellation) and their
+    setup sees ``was_active``. Nothing else is drained: disabling cancels
+    in-flight work, as a generation swap does. The closure is disposed and
+    loaded again under the new tables, which leaves disabled plugins DISABLED
+    or BLOCKED and enabled ones ACTIVE, or FAILED when their setup fails (kept,
+    as a generation swap would). Only a failing ``commit`` restores the
+    previous tables and states. Once draining succeeded it runs to completion
+    even if the caller is cancelled (see ``PluginKernel.set_enabled``).
     """
+    if staying:
+        await steps.drain(
+            [handle for handle in closure if handle.plugin_id in staying],
+            drain_timeout,
+        )
     replacement = asyncio.create_task(
         _replace(
             closure,
@@ -172,10 +183,10 @@ async def toggle_closure(
             drain_timeout=drain_timeout,
             commit=commit,
             # Neither a newly enabled plugin nor one turned off was active
-            # right before this setup; a restored one was.
-            reactivating=frozenset(),
+            # right before this setup; a staying or restored one was.
+            reactivating=staying,
             restoring=(
-                frozenset()
+                staying
                 if enabled
                 else frozenset(handle.plugin_id for handle in closure)
             ),

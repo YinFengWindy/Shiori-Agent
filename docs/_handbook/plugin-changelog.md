@@ -21,3 +21,4 @@ SDK 源版本是 `packages/sdk/python/shiori_sdk/_version.py`。大版本是破�
 - `AFFECTION` 只保留核心实际调用的方法（提示、记账、场景与主动策略、记忆整理后的快照刷新、初始化）；`AFFECTION_HOST` 删除 `save_session`，`AffectionSession.metadata` 只读。
 - **breaking**：删除 `SCENE_OBSERVATIONS`（`scene_observations`）、`shiori_sdk.roles.SceneObservations` 与 testing 里的 `FakeSceneObservations` / `fake_scene_observations`。改用可选注入 `scene`，`get(SCENE)` 为 `None` 时不登记需求。
 - 系统插件 `natural_chat`、`affection`、`scene` 默认启用。外部插件 `mcp` 新装默认关闭；`mcp_servers.json` 里已有服务器、且 `[plugins.mcp]` 未显式写 `enabled` 的工作区，启动时一次性写入 `enabled = true`（见[生命周期](plugin-lifecycle.md#启动时的配置迁移)）。`[agent.scene_observation]` 一次性迁到 `[plugins.scene]`。
+- 代内启用或停用插件时，正在运行、用 `optional_inject` / `optional_dependencies` 依赖它的插件（及其硬依赖方）先排空，再随切换重新 setup，`was_active` / `is_reload` 为 `True`，不再保留切换前读到的可选依赖（#949，见[生命周期](plugin-lifecycle.md#启用与停用)）。

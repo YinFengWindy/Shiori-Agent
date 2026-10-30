@@ -1070,7 +1070,8 @@ class PluginKernel:
         )
 
     def _enable_closure(self, target: PluginHandle) -> list[PluginHandle]:
-        """A DISABLED target plus the plugins its absence blocks, dependents first.
+        """A DISABLED target, the plugins its absence blocks and its running
+        optional consumers (with their dependents), dependents first.
 
         Its hard dependencies are not loaded with it: a DISABLED one leaves the
         target BLOCKED, as a generation swap would, while one in any other
@@ -1090,15 +1091,22 @@ class PluginKernel:
             for handle in self._handles.values()
             if handle.state is PluginState.BLOCKED and handle.record.admission is None
         ]
+        running = [handle.plugin_id for handle in self._active_handles()]
         return self._handles_by_id(
-            self._kernel.closure(target.plugin_id, optional=False, among=blocked)
+            self._kernel.closure(
+                target.plugin_id, optional=True, among=[*blocked, *running]
+            )
         )
 
     def _disable_closure(self, target: PluginHandle) -> list[PluginHandle] | None:
-        """Handles to unload when disabling ``target``; None when its state stays."""
+        """Handles to unload when disabling ``target``; None when its state stays.
+
+        An ACTIVE target takes its hard dependents down and its running
+        optional consumers (with their dependents) through a new setup.
+        """
         if target.state is PluginState.ACTIVE:
             return self._handles_by_id(
-                self._kernel.closure(target.plugin_id, optional=False)
+                self._kernel.closure(target.plugin_id, optional=True)
             )
         if target.record.admission is None and target.state in {
             PluginState.FAILED,
@@ -1269,17 +1277,25 @@ class PluginKernel:
         - Enabling a DISABLED plugin loads it and the dependency-BLOCKED
           plugins it unblocks. A setup failure leaves that plugin FAILED (and
           the change persisted), as a generation swap would.
+        - Either way the ACTIVE plugins that inject the target through
+          ``optional_inject`` / ``optional_dependencies`` (and their hard
+          dependents) stay ACTIVE but are drained like on a ``reload`` and set
+          up again after the change, with ``was_active`` / ``is_reload`` True,
+          so none keeps the provider state it read before. A failing setup
+          leaves such a plugin FAILED, as for the plugins toggled.
         - When the plugin's state does not change, only the tables are replaced
           (``plugin_ids`` empty).
 
         ``commit`` (given the affected plugin ids) persists the change inside
         the same uninterruptible transition; when it raises, the previous tables
         and states are restored and ``PluginReloadFailed`` (or, when nothing was
-        loaded or unloaded, the commit error itself) is raised. Raises
-        ``PluginReloadUnsupported`` with nothing changed when only a generation
-        swap applies: the generation is retired, the closure has channels or
+        loaded or unloaded, the commit error itself) is raised. Raises, with
+        nothing changed: ``PluginReloadUnsupported`` when only a generation
+        swap applies (the generation is retired, the closure has channels or
         cannot be hot unloaded, or a plugin involved is in a state only a swap
-        can retry. See ``agent.plugin_host.reload.toggle_closure``.
+        can retry), and ``PluginReloadTimeout`` (or the ``on_drain`` error, or
+        cancellation) when draining the optional consumers did not finish. See
+        ``agent.plugin_host.reload.toggle_closure``.
         """
         async with self._transition_lock:
             record = self._find_record(name)
@@ -1313,9 +1329,19 @@ class PluginKernel:
                     raise
                 return PluginReloadResult((), ())
             self._refuse_restart_only(closure)
+            # What the toggle itself takes down or brings up: the target and
+            # its running hard dependents. The other ACTIVE members stay up.
+            toggled = set(self._kernel.closure(plugin_id, optional=False))
+            staying = frozenset(
+                handle.plugin_id
+                for handle in closure
+                if handle.state is PluginState.ACTIVE
+                and handle.plugin_id not in toggled
+            )
             result = await toggle_closure(
                 closure,
                 enabled=enabled,
+                staying=staying,
                 values=values,
                 raw_values=raw_values,
                 tables=tables,
@@ -1325,7 +1351,9 @@ class PluginKernel:
             )
             if not enabled:
                 # A later re-enable within this generation is a fresh start.
-                self._settings.previously_active_plugins -= frozenset(result.plugin_ids)
+                self._settings.previously_active_plugins -= (
+                    frozenset(result.plugin_ids) - staying
+                )
             return result
 
     async def _activate_reloaded(
