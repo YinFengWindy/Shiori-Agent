@@ -14,9 +14,18 @@ from agent.scheduler import (
 )
 from shiori_sdk.tools import Tool
 
+# The job's owner and the turn it was created in come from the execution
+# context; model arguments of the same name must not rewrite them.
+_JOB_OWNER_KEYS = frozenset(
+    {"role_id", "role_config_version", "thread_id", "delivery_key"}
+)
+# Listing and cancelling only see the calling role's jobs.
+_ROLE_KEYS = frozenset({"role_id"})
+
 
 class ScheduleTool(Tool):
     name = "schedule"
+    context_precedence = _JOB_OWNER_KEYS
     description = (
         "注册定时任务。支持三种触发模式：\n"
         "  at    — 指定绝对时间，如 '14:30' 或 '2025-06-01T09:00'\n"
@@ -171,6 +180,7 @@ class ScheduleTool(Tool):
 
 class ListSchedulesTool(Tool):
     name = "list_schedules"
+    context_precedence = _ROLE_KEYS
     description = "列出所有待执行的定时任务"
     parameters = {"type": "object", "properties": {}}
 
@@ -210,6 +220,7 @@ class ListSchedulesTool(Tool):
 
 class CancelScheduleTool(Tool):
     name = "cancel_schedule"
+    context_precedence = _ROLE_KEYS
     description = "取消定时任务。可按任务 ID 或名称取消"
     parameters = {
         "type": "object",

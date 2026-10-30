@@ -9,6 +9,7 @@ from conversation.models import ContactRecord, ThreadRecord
 from conversation.projector import ConversationStateProjector
 from conversation.store import ConversationStore
 from shiori_sdk.channels.threads import network_thread_id, role_thread_prefix
+from shiori_sdk.core.schedule_host import scheduler_thread_id
 from shiori_sdk.channels.chat_types import (
     CHAT_TYPE_GROUP,
     CHAT_TYPE_PRIVATE,
@@ -32,14 +33,9 @@ def desktop_thread_id(role_id: str) -> str:
     return f"{role_thread_prefix(role_id)}desktop"
 
 
-def scheduler_thread_id(role_id: str, job_id: str) -> str:
-    """Returns the thread ID of a scheduled job created without a source thread."""
-    return f"thread:{role_id}:scheduler:{job_id}"
-
-
 def is_scheduler_thread(role_id: str, thread_id: str) -> bool:
     """Whether ``thread_id`` is one of ``role_id``'s ``scheduler_thread_id`` threads."""
-    prefix = f"thread:{role_id}:scheduler:"
+    prefix = scheduler_thread_id(role_id, "")
     return thread_id.startswith(prefix) and len(thread_id) > len(prefix)
 
 

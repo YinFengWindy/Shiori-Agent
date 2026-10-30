@@ -56,6 +56,7 @@ from shiori_sdk.core.affection_host import AFFECTION_HOST
 from shiori_sdk.core.conversation import COMMANDS
 from shiori_sdk.core.mcp_tools import MCP_TOOLS
 from shiori_sdk.core.scene import SCENE_HOST
+from shiori_sdk.core.schedule_host import SCHEDULE_HOST, ScheduleHost
 from shiori_sdk.core.crash_reporting import CRASH_REPORTING
 from shiori_sdk.core.models import MAIN_MODEL, MAIN_PROVIDER
 from shiori_sdk.core.services import (
@@ -122,6 +123,8 @@ class PluginCoreInputs:
     - ``workspace`` and ``http``: passed through as they are.
     - ``process_resources``: the process-level owner whose per-generation
       attachments plugins get.
+    - ``schedule_host``: scheduled role turns and deliveries
+      (``SCHEDULE_HOST``). One instance serves every generation.
     """
 
     plugin_dirs: tuple[Path, ...]
@@ -148,6 +151,7 @@ class PluginCoreInputs:
     # the kernel publishes and retains the generation's attachments; here
     # each plugin gets its attachment (``process_resources``).
     process_resources: ProcessResourceOwner | None
+    schedule_host: ScheduleHost | None = None
 
 
 def _publish(provide: CoreProvide, key: object, impl: object) -> None:
@@ -261,6 +265,11 @@ def plugin_core_modules(inputs: PluginCoreInputs) -> tuple[CoreModule, ...]:
                 ),
             )
 
+    def provide_schedule(provide: CoreProvide) -> None:
+        """Scheduled role turns and deliveries (``agent.schedule_host``)."""
+        if inputs.schedule_host is not None:
+            provide(SCHEDULE_HOST, inputs.schedule_host)
+
     def provide_mcp_tools(provide: CoreProvide) -> None:
         """Registration of dynamic MCP tools. The mcp plugin calls this."""
         if inputs.tools is not None:
@@ -328,6 +337,7 @@ def plugin_core_modules(inputs: PluginCoreInputs) -> tuple[CoreModule, ...]:
         provide_roles,
         provide_scene,
         provide_affection,
+        provide_schedule,
         provide_mcp_tools,
         provide_memory,
         provide_processes,

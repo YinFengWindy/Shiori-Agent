@@ -13,7 +13,7 @@ from agent.core.turn_events import TurnEvents, core_kernel
 from agent.core.runtime_support import TurnRunResult
 from agent.lifecycle.phases.after_reasoning import AfterReasoningPhase
 from agent.lifecycle.types import AfterReasoningInput, TurnState
-from agent.scheduler import ScheduledJob, SchedulerService
+from agent.schedule_host import scheduled_run_metadata
 from bus.event_bus import EventBus
 from shiori_sdk.messages import InboundMessage
 from conversation.context_scope import turn_context_view, user_context_view
@@ -21,6 +21,7 @@ from conversation.service import desktop_thread_id
 from core.identity import IdentityChat, UserIdentityStore
 from shiori_sdk.accounts.models import AccountRecord
 from shiori_sdk.channels.threads import network_thread_id
+from shiori_sdk.core.schedule_host import ScheduledRun, scheduler_thread_id
 from core.roles import RoleStore
 from core.roles.affection_host import HostAffectionSources
 from plugins.affection.backend.relationship import RoleRelationshipRuntimeService
@@ -701,17 +702,18 @@ async def test_only_the_users_own_message_changes_affection(tmp_path, trigger, c
         request.state.msg.sender = "456"
         metadata.update({"chat_type": "group", "thread_id": thread})
     else:
-        job = ScheduledJob(
-            trigger="after",
-            tier="soft",
-            fire_at=datetime.now(timezone.utc),
+        now = datetime.now(timezone.utc)
+        occurrence = ScheduledRun(
+            job_id="job-1",
+            fire_at=now,
+            created_at=now,
+            role_id="yin",
+            role_config_version="",
+            thread_id=scheduler_thread_id("yin", "job-1"),
             channel="desktop",
             chat_id="role:yin",
-            role_id="yin",
-            prompt="提醒喝水",
         )
-        scheduler = SchedulerService(tmp_path / "jobs.json", push_tool=None)
-        metadata.update(scheduler._job_role_metadata(job), omit_user_turn=True)
+        metadata.update(scheduled_run_metadata(occurrence), omit_user_turn=True)
         thread = metadata["thread_id"]
     request.state.context_view = turn_context_view(tmp_path, "yin", thread)
 

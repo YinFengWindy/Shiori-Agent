@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Callable
 
 from agent.scheduler import LatencyTracker, SchedulerService
-from agent.tools.message_push import MessagePushTool
 from agent.tools.registry import ToolRegistry
 from agent.tools.schedule import CancelScheduleTool, ListSchedulesTool, ScheduleTool
 from core.roles.store import RoleStore
@@ -13,6 +11,7 @@ from bootstrap.toolsets.protocol import (
     ToolsetProvider,
     build_registration_result,
 )
+from shiori_sdk.core.schedule_host import ScheduleHost
 
 
 class SchedulerToolsetProvider(ToolsetProvider):
@@ -48,18 +47,15 @@ class SchedulerToolsetProvider(ToolsetProvider):
 
 def build_scheduler(
     workspace: Path,
-    push_tool: MessagePushTool,
+    host: ScheduleHost,
     *,
-    agent_loop_provider: Callable[[], Any] | None = None,
     role_store: RoleStore | None = None,
 ) -> SchedulerService:
     """Builds a scheduler that validates persisted owners against the role store."""
     roles = role_store if role_store is not None else RoleStore(workspace)
     return SchedulerService(
         store_path=workspace / "schedules.json",
-        push_tool=push_tool,
-        agent_loop=None,
-        agent_loop_provider=agent_loop_provider,
+        host=host,
         tracker=LatencyTracker(),
         role_exists=lambda role_id: roles.get_role(role_id) is not None,
     )

@@ -16,14 +16,6 @@ from tests.support.default_suite import (
     selection_is_default_root,
     should_ignore_collect,
 )
-from tests.support.scheduler import (
-    fixed_now,
-    mock_loop,
-    mock_push,
-    service,
-    store_path,
-    tracker,
-)
 from tests.support.runtime_channels import runtime_channels
 
 
