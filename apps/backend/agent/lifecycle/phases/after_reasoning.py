@@ -32,6 +32,7 @@ from agent.lifecycle.types import (
     TurnState,
 )
 from shiori_sdk.core.conversation import ReasoningFinished
+from core.common.timekit import utcnow
 from core.roles.affection_access import current_affection
 from shiori_sdk.messages import OutboundMessage
 from agent.turns.reply_sequence import ReplySequence
@@ -250,7 +251,7 @@ class AfterReasoningPhase:
     def _record_user_activity(self, session_key: str) -> None:
         """用户本人发来消息：刷新在场，并让关系状态（孤独值、等待回复）响应。"""
         if self._session_services.presence:
-            self._session_services.presence.record_user_message(session_key)
+            self._session_services.presence.record_user_message(session_key, utcnow())
         affection = current_affection()
         if affection is not None:
             affection.handle_user_message(session_key)

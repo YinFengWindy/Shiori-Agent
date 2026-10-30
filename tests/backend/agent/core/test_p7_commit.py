@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import ANY, AsyncMock, MagicMock
 
 import pytest
 from shiori_sdk.testing.packages import plugin_directory, stage_plugin_package
@@ -58,7 +58,7 @@ async def test_context_store_commit_persists_commits_and_dispatches():
     order: list[str] = []
     session = _DummySession("telegram:123")
     presence = SimpleNamespace(
-        record_user_message=MagicMock(side_effect=lambda _key: None)
+        record_user_message=MagicMock(side_effect=lambda _key, _when: None)
     )
     session_manager = SimpleNamespace(
         get_or_create=MagicMock(return_value=session),
@@ -157,7 +157,7 @@ async def test_context_store_commit_persists_commits_and_dispatches():
     assert out.metadata["tools_used"] == ["noop"]
     assert out.metadata["streamed_reply"] is True
     assert order == ["persist", "committed", "dispatch"]
-    presence.record_user_message.assert_called_once_with("telegram:123")
+    presence.record_user_message.assert_called_once_with("telegram:123", ANY)
     session_manager.append_messages.assert_awaited_once()
     assert session.messages[-1]["content"] == "整理好了"
     assert session.messages[-1]["reasoning_content"] == "思考"
@@ -290,7 +290,7 @@ async def test_new_chain_after_reasoning_persists_meme_and_fires_turn_committed(
     session = _DummySession("telegram:456")
     presence = SimpleNamespace(
         record_user_message=MagicMock(
-            side_effect=lambda _key: order.append("presence")
+            side_effect=lambda _key, _when: order.append("presence")
         ),
     )
     session_manager = SimpleNamespace(
@@ -400,7 +400,7 @@ async def test_new_chain_after_reasoning_persists_meme_and_fires_turn_committed(
     assert session.messages[1]["reasoning_content"] == "思考"
     assert session.messages[1]["cited_memory_ids"] == ["mem_1"]
     assert session.messages[1]["media"] == [str(migrated_image)]
-    presence.record_user_message.assert_called_once_with("telegram:456")
+    presence.record_user_message.assert_called_once_with("telegram:456", ANY)
     session_manager.append_messages.assert_awaited_once()
 
     # 4. TurnCommitted 字段正确

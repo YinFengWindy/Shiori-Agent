@@ -8,7 +8,7 @@ from core.roles.store import RoleStore
 
 from typing import Any, cast
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import ANY, AsyncMock
 
 import pytest
 
@@ -488,7 +488,7 @@ async def test_orchestrator_proactive_reply_persists_dispatches_and_runs_success
             return DeliveryReceipt.sent()
 
     presence = SimpleNamespace(
-        record_proactive_sent=lambda _key: order.append("presence")
+        record_initiated_sent=lambda _key, _when: order.append("presence")
     )
     initial_metadata = dict(session.metadata)
     session_manager = SessionManager(tmp_path)
@@ -541,15 +541,14 @@ async def test_orchestrator_proactive_reply_records_presence_by_role_when_availa
 ):
     session = _DummySession("role:mira")
     session.metadata["role_id"] = "mira"
-    calls: list[tuple[str, str]] = []
+    calls: list[str] = []
 
     class _Outbound:
         async def dispatch(self, outbound: OutboundDispatch) -> DeliveryReceipt | None:
             return DeliveryReceipt.sent()
 
     presence = SimpleNamespace(
-        record_proactive_sent=lambda _key: calls.append(("session", _key)),
-        record_proactive_sent_by_role=lambda role_id: calls.append(("role", role_id)),
+        record_initiated_sent=lambda key, _when: calls.append(key),
     )
     initial_metadata = dict(session.metadata)
     session_manager = SessionManager(tmp_path)
@@ -579,7 +578,7 @@ async def test_orchestrator_proactive_reply_records_presence_by_role_when_availa
     )
 
     assert sent is True
-    assert calls == [("role", "mira")]
+    assert calls == ["role:mira"]
 
 
 def _formal_result(owner, content="hello", media=None):
@@ -645,11 +644,9 @@ async def test_natural_proactive_keeps_sent_prefix_and_finishes_one_logical_turn
         return DeliveryReceipt.sent()
 
     monkeypatch.setattr("agent.turns.reply_sequence.wait_between_messages", pause)
-    presence = SimpleNamespace(record_proactive_sent_by_role=AsyncMock())
-    # Presence is synchronous; retain call counts without an unawaited coroutine.
     from unittest.mock import Mock
 
-    presence.record_proactive_sent_by_role = Mock()
+    presence = SimpleNamespace(record_initiated_sent=Mock())
     relationship = SimpleNamespace(handle_proactive_sent=Mock())
     owner = TurnOrchestrator(
         TurnOrchestratorDeps(
@@ -703,7 +700,7 @@ async def test_natural_proactive_keeps_sent_prefix_and_finishes_one_logical_turn
     assert not reloaded.metadata.get("current_mood")
     success.assert_not_awaited()
     failure.assert_awaited_once()
-    presence.record_proactive_sent_by_role.assert_called_once_with("mira")
+    presence.record_initiated_sent.assert_called_once_with("role:mira", ANY)
     relationship.handle_proactive_sent.assert_called_once_with("role:mira")
     await event_bus.aclose()
 

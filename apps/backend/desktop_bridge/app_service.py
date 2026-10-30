@@ -3,12 +3,14 @@ from __future__ import annotations
 from typing import Any
 
 from conversation.service import ConversationService
+from core.common.timekit import utcnow
 from shiori_sdk.channels.message_source import PERSISTED_USER_CONTENT_KEY
 from core.roles import RoleAggregateService
 from core.roles.affection_access import AffectionGetter
 from session.manager import Session, SessionManager
 from session.manager.helpers import role_id_from_session_key
 from session.manager.models import build_session_message
+from shiori_sdk.core.sessions import Presence
 
 
 class DesktopAppService:
@@ -21,7 +23,7 @@ class DesktopAppService:
         session_manager: SessionManager,
         conversation_service: ConversationService,
         affection: AffectionGetter,
-        presence: Any | None = None,
+        presence: Presence | None = None,
     ) -> None:
         self.role_service = role_service
         self.session_manager = session_manager
@@ -163,7 +165,7 @@ class DesktopAppService:
         return await self._apply_post_persist_runtime_effects(
             session,
             record_presence=(
-                self.presence.record_proactive_sent
+                self.presence.record_initiated_sent
                 if self.presence is not None
                 else None
             ),
@@ -255,7 +257,7 @@ class DesktopAppService:
         handle_relationship,
     ) -> Session:
         if record_presence is not None:
-            record_presence(session.key)
+            record_presence(session.key, utcnow())
         affection = self._affection()
         if affection is not None and handle_relationship == "proactive":
             affection.handle_proactive_sent(session.key)

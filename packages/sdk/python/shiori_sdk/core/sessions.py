@@ -64,7 +64,7 @@ class TurnChanged:
 
 
 class Presence(Protocol):
-    """User and initiated-send heartbeats for one session.
+    """User and initiated-send heartbeats, kept per session.
 
     The stored columns stay ``last_user_at`` and ``last_proactive_at``.
     ``record_initiated_sent`` writes ``last_proactive_at``. A ``role:`` key is
@@ -86,6 +86,10 @@ class Presence(Protocol):
 
     def last_initiated_at(self, session_key: str) -> datetime | None:
         """When an initiated reply was last sent, or None."""
+        ...
+
+    def most_recent_user_at(self) -> datetime | None:
+        """When the user last spoke in any session, or None if never."""
         ...
 
 

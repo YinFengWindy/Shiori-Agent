@@ -19,6 +19,7 @@ from shiori_sdk.accounts.targets import AccountTarget
 from shiori_sdk.accounts.routing import AccountRoute
 from shiori_sdk.channels.chat_types import CHAT_TYPE_PRIVATE
 from core.common.channel_directory import DESKTOP_CHANNEL
+from core.common.timekit import utcnow
 from core.roles.affection_access import current_affection
 from core.roles.reply_policy import natural_chat_selected
 from core.roles.services import RoleSessionService
@@ -54,6 +55,14 @@ logger = logging.getLogger("agent.turn_orchestrator")
 # (role_id, channel, chat_id) of an external proactive target -> the account
 # channel and private target reaching it; raises LookupError for any other chat.
 BoundChatTargetLookup = Callable[[str, str, str], tuple[str, AccountTarget]]
+
+
+def _role_presence_key(role_id: str) -> str:
+    """The presence row of ``role_id``; an empty id is a caller bug."""
+    clean_role_id = role_id.strip()
+    if not clean_role_id:
+        raise ValueError("role_id 不能为空")
+    return f"role:{clean_role_id}"
 
 
 @dataclass
@@ -370,10 +379,10 @@ class TurnOrchestrator:
                 role_id = str(
                     getattr(session, "metadata", {}).get("role_id") or ""
                 ).strip()
-                if role_id:
-                    self._session.presence.record_proactive_sent_by_role(role_id)
-                else:
-                    self._session.presence.record_proactive_sent(session_key)
+                self._session.presence.record_initiated_sent(
+                    _role_presence_key(role_id) if role_id else session_key,
+                    utcnow(),
+                )
             affection = current_affection()
             if affection is not None:
                 affection.handle_proactive_sent(session_key)
@@ -446,7 +455,9 @@ class TurnOrchestrator:
                     return
                 role_id = str(plan.origin.metadata.get("role_id") or "")
                 if self._session.presence:
-                    self._session.presence.record_proactive_sent_by_role(role_id)
+                    self._session.presence.record_initiated_sent(
+                        _role_presence_key(role_id), utcnow()
+                    )
                 affection = current_affection()
                 if affection is not None:
                     affection.handle_proactive_sent(session.key)

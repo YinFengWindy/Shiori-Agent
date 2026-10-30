@@ -26,7 +26,6 @@ from core.roles import RoleStore
 from core.roles.affection_host import HostAffectionSources
 from plugins.affection.backend.relationship import RoleRelationshipRuntimeService
 from core.roles.reply_state import AffectionChange, InvalidRoleReply, RoleReply
-from proactive_v2.presence import PresenceStore
 from session.manager import SessionManager, ConsolidationCommitRequest
 from session.manager.models import whole_session
 from agent.turns.channel_sequence import ChannelSequenceOwner
@@ -602,7 +601,7 @@ async def test_only_the_users_own_group_message_updates_relationship_state(
 ):
     manager = SessionManager(tmp_path)
     session = role_session(manager)
-    presence = PresenceStore(manager._store)
+    presence = manager.presence
     relationship = RoleRelationshipRuntimeService(
         HostAffectionSources(
             workspace=tmp_path,
@@ -651,7 +650,7 @@ async def test_only_the_users_own_group_message_updates_relationship_state(
 
     runtime = relationship.read_loneliness_runtime("yin")
     assert runtime is not None
-    last_user_at = presence.get_last_user_at(session.key)
+    last_user_at = presence.last_user_at(session.key)
     affection = relationship.affection.read_state("yin")
     assert affection is not None
     # The affection decay timer restarts only on the user's own message.

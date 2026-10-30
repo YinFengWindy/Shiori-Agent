@@ -23,3 +23,17 @@ def test_presence_records_user_and_initiated_on_the_role_session(tmp_path):
     assert manager.presence.last_user_at("desktop:1") == when
     assert manager.presence.last_initiated_at("role:mira") == later
     assert manager.presence.last_user_at("desktop:other") is None
+
+
+def test_most_recent_user_at_is_the_latest_user_message_across_sessions(tmp_path):
+    manager = SessionManager(tmp_path)
+    early = datetime(2026, 10, 28, 1, 0, 0, tzinfo=timezone.utc)
+    late = datetime(2026, 10, 28, 2, 0, 0, tzinfo=timezone.utc)
+    latest_send = datetime(2026, 10, 28, 3, 0, 0, tzinfo=timezone.utc)
+    assert manager.presence.most_recent_user_at() is None
+
+    manager.presence.record_user_message("role:mira", late)
+    manager.presence.record_user_message("role:ayu", early)
+    manager.presence.record_initiated_sent("role:ayu", latest_send)
+
+    assert manager.presence.most_recent_user_at() == late

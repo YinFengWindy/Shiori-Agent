@@ -55,7 +55,6 @@ from core.roles.affection_access import AffectionGetter
 from plugins.natural_chat.backend.plugin import NaturalChatPolicy
 from shiori_sdk.core.affection import Affection
 from proactive_v2.loop import ProactiveLoop
-from proactive_v2.presence import PresenceStore
 from session.manager import SessionManager
 from tests.support.generation_getters import turn_getters
 from tests.support.push import allow_every_role_target
@@ -299,8 +298,8 @@ async def proactive_host(
     )
     affection_getter = AffectionGetter()
     affection_getter.bind(lambda: cast(Affection, affection))
-    # The production presence store of this session store (bootstrap/tools.py).
-    presence = PresenceStore(sessions._store)  # pyright: ignore[reportPrivateUsage]
+    # The production presence of this session store (bootstrap/tools.py).
+    presence = sessions.presence
     tasks, loops = (  # pyright: ignore[reportUnknownVariableType]
         build_proactive_runtime(
             Config(provider="test", model="m", api_key=""),

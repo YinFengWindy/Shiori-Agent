@@ -31,7 +31,6 @@ from core.roles import RoleStore
 from core.roles.affection_host import HostAffectionSources
 from plugins.affection.backend.relationship import RoleRelationshipRuntimeService
 from core.roles.reply_state import AffectionChange
-from proactive_v2.presence import PresenceStore
 from session.manager import SessionManager
 from agent.turns.outbound import BusOutboundPort
 from bus.event_bus import EventBus
@@ -244,7 +243,7 @@ async def test_committed_affection_change_is_recorded(
             workspace=tmp_path,
             role_store=RoleStore(tmp_path),
             session_manager=manager,
-            presence=PresenceStore(manager._store),
+            presence=manager.presence,
         )
     )
     relationship.affection.initialize("yin", value=50, reason="初识")

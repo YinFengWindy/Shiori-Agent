@@ -10,10 +10,10 @@ from typing import TYPE_CHECKING, Any
 from shiori_sdk.prompting import is_context_frame
 from conversation.context_scope import user_context_view
 from proactive_v2.energy import compute_energy, d_recent
-from proactive_v2.presence import PresenceStore
 from proactive_v2.state import ProactiveStateStore
 from proactive_v2.target_selection import ProactiveTargetResolver
 from session.manager import SessionManager
+from shiori_sdk.core.sessions import Presence
 
 if TYPE_CHECKING:
     from core.memory.markdown import MemoryProfileApi
@@ -37,7 +37,7 @@ class Sensor:
         sessions: SessionManager,
         state: ProactiveStateStore,
         memory: "MemoryProfileApi | None",
-        presence: PresenceStore | None,
+        presence: Presence | None,
         rng: Any,
         target_resolver: ProactiveTargetResolver | None = None,
     ) -> None:
@@ -89,14 +89,14 @@ class Sensor:
     def last_user_at(self) -> datetime | None:
         if not self._presence:
             return None
-        return self._presence.get_last_user_at(self.target_session_key())
+        return self._presence.last_user_at(self.target_session_key())
 
     def compute_energy(self) -> float:
         presence = self._presence
         if presence is None:
             return 0.0
         session_key = self.target_session_key()
-        last_target = presence.get_last_user_at(session_key)
+        last_target = presence.last_user_at(session_key)
         last_global = presence.most_recent_user_at()
         energy_target = compute_energy(last_target)
         energy_global = compute_energy(last_global) * 0.6
@@ -203,8 +203,8 @@ class Sensor:
         presence = self._presence
         if presence is None:
             return 0.6
-        last_user = presence.get_last_user_at(session_key)
-        last_proactive = presence.get_last_proactive_at(session_key)
+        last_user = presence.last_user_at(session_key)
+        last_proactive = presence.last_initiated_at(session_key)
         if last_proactive is None:
             return 0.6
         if last_user is not None and last_user > last_proactive:

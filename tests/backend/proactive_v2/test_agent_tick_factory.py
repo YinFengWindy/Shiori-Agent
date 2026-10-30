@@ -42,7 +42,7 @@ def _build_deps(*, with_pool: bool):
     deps = AgentTickDeps(
         cfg=cfg,
         sense=sense,
-        presence=SimpleNamespace(get_last_user_at=lambda _: None),
+        presence=SimpleNamespace(last_user_at=lambda _: None),
         provider=_FakeProvider(),
         model="m",
         max_tokens=128,

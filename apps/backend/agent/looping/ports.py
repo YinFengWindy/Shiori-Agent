@@ -16,9 +16,9 @@ if TYPE_CHECKING:
     from bus.event_bus import EventBus
     from bus.processing import ProcessingState
     from bus.queue import MessageBus
+    from shiori_sdk.core.sessions import Presence
     from shiori_sdk.memory.engine import MemoryEngine
     from core.memory.runtime import MemoryRuntime
-    from proactive_v2.presence import PresenceStore
     from core.roles.affection_access import AffectionGetter
     from core.roles.reply_policy import ReplyPolicyGetter
     from core.roles.role_runtime import RoleRuntimeRegistry
@@ -77,7 +77,7 @@ class MemoryServices:
 @dataclass
 class SessionServices:
     session_manager: SessionManager
-    presence: PresenceStore | None = None
+    presence: Presence | None = None
     conversation_service: "ConversationService | None" = None
 
 
@@ -92,7 +92,7 @@ class AgentLoopDeps:
     reply_policy: "ReplyPolicyGetter"
     affection: "AffectionGetter"
     event_bus: "EventBus | None" = None
-    presence: "PresenceStore | None" = None
+    presence: "Presence | None" = None
     light_provider: "LLMProvider | None" = None
     processing_state: "ProcessingState | None" = None
     memory_runtime: "MemoryRuntime | None" = None

@@ -970,7 +970,7 @@ The latest committed passive turn of one session, read before deleting. ``messag
 
 #### `shiori_sdk.core.sessions.Presence`
 
-User and initiated-send heartbeats for one session. The stored columns stay ``last_user_at`` and ``last_proactive_at``. ``record_initiated_sent`` writes ``last_proactive_at``. A ``role:`` key is used as-is; any other key follows ``metadata.role_id`` when that session has one. This is the 4.0 baseline. 4.x cannot add methods here later.
+User and initiated-send heartbeats, kept per session. The stored columns stay ``last_user_at`` and ``last_proactive_at``. ``record_initiated_sent`` writes ``last_proactive_at``. A ``role:`` key is used as-is; any other key follows ``metadata.role_id`` when that session has one. This is the 4.0 baseline. 4.x cannot add methods here later.
 
 - `record_user_message(session_key: str, when: datetime.datetime) -> None`
 
@@ -987,6 +987,10 @@ User and initiated-send heartbeats for one session. The stored columns stay ``la
 - `last_initiated_at(session_key: str) -> datetime.datetime | None`
 
   When an initiated reply was last sent, or None.
+
+- `most_recent_user_at() -> datetime.datetime | None`
+
+  When the user last spoke in any session, or None if never.
 
 #### `shiori_sdk.core.sessions.RollbackResult`
 
