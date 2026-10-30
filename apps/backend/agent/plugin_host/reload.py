@@ -105,7 +105,21 @@ def hot_unload_blockers(handles: Iterable[PluginHandle]) -> list[str]:
     ]
 
 
+def _target_last(closure: list[PluginHandle], target: str) -> list[PluginHandle]:
+    """``closure`` with ``target`` moved last, the others in their order.
+
+    The kernel ranks a closure dependents first, but plugins that inject each
+    other optionally may rank the target before a consumer; the target is
+    still disposed last and set up first, so its consumers see the new one.
+    """
+    return [
+        *(handle for handle in closure if handle.plugin_id != target),
+        *(handle for handle in closure if handle.plugin_id == target),
+    ]
+
+
 async def reload_closure(
+    target: str,
     closure: list[PluginHandle],
     *,
     values: dict[str, Any],
@@ -115,7 +129,7 @@ async def reload_closure(
     drain_timeout: float,
     commit: Callable[[tuple[str, ...]], None] | None = None,
 ) -> PluginReloadResult:
-    """Drains ``closure`` (dependents first, target last), then replaces it.
+    """Drains ``closure`` (dependents first, ``target`` last), then replaces it.
 
     Until the drain completes nothing is disposed: a timeout, an ``on_drain``
     failure or caller cancellation reopens every gate and leaves the old
@@ -123,10 +137,12 @@ async def reload_closure(
     runs to completion even if the caller is cancelled meanwhile, including
     ``commit`` (see ``PluginKernel.reload``).
     """
+    closure = _target_last(closure, target)
     await steps.drain(closure, drain_timeout)
     plugin_ids = frozenset(handle.plugin_id for handle in closure)
     replacement = asyncio.create_task(
         _replace(
+            target,
             closure,
             values=values,
             raw_values=raw_values,
@@ -143,9 +159,11 @@ async def reload_closure(
 
 
 async def toggle_closure(
+    target: str,
     closure: list[PluginHandle],
     *,
     enabled: bool,
+    staying: frozenset[str],
     values: dict[str, Any],
     raw_values: dict[str, Any],
     tables: ConfigTables,
@@ -153,17 +171,29 @@ async def toggle_closure(
     drain_timeout: float,
     commit: Callable[[tuple[str, ...]], None] | None = None,
 ) -> PluginReloadResult:
-    """Loads (``enabled``) or unloads ``closure`` (dependents first, target last).
+    """Loads (``enabled``) or unloads ``closure``, dependents first, ``target`` last.
 
-    Nothing is drained: disabling cancels in-flight work, as a generation swap
-    does. The closure is disposed and loaded again under the new tables, which
-    leaves disabled plugins DISABLED or BLOCKED and enabled ones ACTIVE, or
-    FAILED when their setup fails (kept, as a generation swap would). Only a
-    failing ``commit`` restores the previous tables and states. Runs to
-    completion even if the caller is cancelled (see ``PluginKernel.set_enabled``).
+    ``staying`` names the ACTIVE plugins in ``closure`` the toggle does not
+    turn on or off (optional consumers of the target, with their dependents).
+    They are only set up again around the target, so they are drained first
+    as on a reload (abandoning unchanged on timeout or cancellation) and their
+    setup sees ``was_active``. Nothing else is drained: disabling cancels
+    in-flight work, as a generation swap does. The closure is disposed and
+    loaded again under the new tables, which leaves disabled plugins DISABLED
+    or BLOCKED and enabled ones ACTIVE, or FAILED when their setup fails (kept,
+    as a generation swap would). Only a failing ``commit`` restores the
+    previous tables and states. Once draining succeeded it runs to completion
+    even if the caller is cancelled (see ``PluginKernel.set_enabled``).
     """
+    closure = _target_last(closure, target)
+    if staying:
+        await steps.drain(
+            [handle for handle in closure if handle.plugin_id in staying],
+            drain_timeout,
+        )
     replacement = asyncio.create_task(
         _replace(
+            target,
             closure,
             values=values,
             raw_values=raw_values,
@@ -172,10 +202,10 @@ async def toggle_closure(
             drain_timeout=drain_timeout,
             commit=commit,
             # Neither a newly enabled plugin nor one turned off was active
-            # right before this setup; a restored one was.
-            reactivating=frozenset(),
+            # right before this setup; a staying or restored one was.
+            reactivating=staying,
             restoring=(
-                frozenset()
+                staying
                 if enabled
                 else frozenset(handle.plugin_id for handle in closure)
             ),
@@ -218,6 +248,7 @@ async def _run_to_completion(
 
 
 async def _replace(
+    target: str,
     closure: list[PluginHandle],
     *,
     values: dict[str, Any],
@@ -230,7 +261,7 @@ async def _replace(
     restoring: frozenset[str],
     strict: bool,
 ) -> PluginReloadResult:
-    """Disposes ``closure`` and loads it again under the new tables.
+    """Disposes ``closure`` (``target`` last) and loads it again under the new tables.
 
     ``reactivating`` / ``restoring`` name the plugins whose setup sees
     ``was_active`` when loading the new / restoring the old tables. With
@@ -238,7 +269,6 @@ async def _replace(
     a failing ``commit``; a failed transition restores every closure plugin to
     its previous state.
     """
-    target = closure[-1].plugin_id
     records = [handle.record for handle in reversed(closure)]
     plugin_ids = tuple(record.manifest.id for record in records)
     before = {handle.plugin_id: handle.state for handle in closure}

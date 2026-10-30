@@ -72,12 +72,13 @@ spec 的 `runnable = False` 表示只登记：已停用、未信任、准入失�
 
 - **停用**：释放目标和正在运行、硬依赖它的插件，**不排空**：`on_drain` 不跑，后台任务（包括 `spawn_runtime`）取消，调用以 `plugin_unavailable` 拒绝，进程资源关闭。目标变 `DISABLED`，依赖方变 `BLOCKED`。目标原本是 `FAILED` 或因依赖 `BLOCKED` 时只变成 `DISABLED`。
 - **启用**：setup 目标和只因它而 `BLOCKED` 的插件，`was_active` 为 `False`。setup 失败的插件留在 `FAILED`，开关照样保存。
+- **可选消费方**：停用和启用都会带上正在运行、用 `optional_inject`（或 `optional_dependencies`）依赖目标的插件及其硬依赖方。它们保持启用，像代内重载一样先排空：排空超时（消费方忙）时这次启停被拒，停用提供方也一样，报 `plugin_reload_busy`，配置不保存，什么都没变。排空完成后，停用时在目标释放后、启用时在目标 setup 之后重新 setup，`was_active` 与 `is_reload` 为 `True`，`get` 拿到的是切换后的提供方（停用时为 `None`）。重新 setup 失败的留在 `FAILED`，开关照样保存。
 - 结果里的 `reloaded_plugins` 与 `plugins.reloaded` 事件同上；renderer 刷新名册，停用插件的 surface 随名册消失而关闭。写配置失败时恢复原状态，报 `runtime_commit_failed`。
 - 与重载相同的只能重启的情况（渠道、`supports_hot_unload: false`），以及启用时依赖了只有重新加载才能重试的插件（比如 `FAILED`），改走代际替换。
 
 安装、更新、卸载外部包总是走代际替换或下次启动，见下文。
 
-场景插件在本代发布时开始观察（`SCENE_HOST.on_published`）。代内重载或代内启用时本代已经发布，新实例 setup 完立即开始观察，不用等下次代际替换。可选注入 `scene` 的 NovelAI 会随 scene 的代内重载一起重载；但单独代内启用 scene 时，已在运行的 NovelAI 不在启用集合里，要等下次代际替换才登记场景需求。
+场景插件在本代发布时开始观察（`SCENE_HOST.on_published`）。代内重载或代内启用时本代已经发布，新实例 setup 完立即开始观察，不用等下次代际替换。可选注入 `scene` 的 NovelAI 随 scene 的代内重载、启用和停用一起重新 setup，启用后立即登记场景需求，停用后不再持有旧的 scene。
 
 ## 启动时的配置迁移
 

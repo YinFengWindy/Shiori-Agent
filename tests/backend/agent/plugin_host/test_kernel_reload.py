@@ -913,6 +913,150 @@ async def test_enabling_a_plugin_whose_setup_fails_keeps_it_failed(probe, tmp_pa
     await kernel.terminate_all(force=True)
 
 
+_WATCHER = """
+import sys
+from shiori_sdk.core.services import DEPENDENCIES, RUNTIME
+
+probe = sys.modules["reload_probe"]
+
+
+async def setup(ctx):
+    runtime = ctx.require(RUNTIME)
+    # Read once at setup, as an optional consumer that registers with its
+    # provider only when there is one.
+    provider = ctx.require(DEPENDENCIES).get_optional("provider")
+    label = None if provider is None else provider.label
+    probe.events.append(
+        ("setup", "watcher", label, runtime.was_active, runtime.is_reload)
+    )
+
+    async def drain():
+        probe.events.append(("drain", "watcher"))
+
+    runtime.on_drain(drain)
+    ctx.effect("dispose", lambda: probe.events.append(("dispose", "watcher")))
+"""
+
+
+@pytest.mark.asyncio
+async def test_toggling_a_provider_sets_up_its_running_optional_consumers_again(
+    probe, tmp_path
+):
+    _write(
+        tmp_path,
+        "watcher",
+        "inject: [dependencies, runtime]\noptional_dependencies: [provider]\n",
+        _WATCHER,
+    )
+    kernel, _, _, _ = await _kernel(tmp_path)
+    probe.events.clear()
+
+    disabled = await _toggle(kernel, False)
+
+    # The optional consumer stays up: drained like on a reload, then set up
+    # again without the provider, as the running instance it was.
+    assert disabled.plugin_ids == ("provider", "consumer", "watcher")
+    assert probe.events == [
+        ("drain", "watcher"),
+        ("dispose", "watcher"),
+        ("dispose", "consumer"),
+        ("dispose", "provider", "v1"),
+        ("setup", "watcher", None, True, True),
+    ]
+    assert _states(kernel) == {
+        "provider": "DISABLED",
+        "consumer": "BLOCKED",
+        "bystander": "ACTIVE",
+        "watcher": "ACTIVE",
+    }
+
+    probe.events.clear()
+    enabled = await _toggle(kernel, True)
+
+    # Set up again after the provider it now gets.
+    assert enabled.plugin_ids == ("provider", "consumer", "watcher")
+    assert probe.events == [
+        ("drain", "watcher"),
+        ("dispose", "watcher"),
+        ("setup", "provider", "v1", False, False),
+        ("setup", "consumer", "v1", False, False),
+        ("setup", "watcher", "v1", True, True),
+    ]
+    assert all(state == "ACTIVE" for state in _states(kernel).values())
+    await kernel.terminate_all(force=True)
+
+
+_MUTUAL = """
+import sys
+from shiori_sdk.core.services import CONFIG, DEPENDENCIES
+
+probe = sys.modules["reload_probe"]
+
+
+async def setup(ctx):
+    other = ctx.require(DEPENDENCIES).get_optional("{other}")
+    label = ctx.require(CONFIG).get("label")
+    probe.events.append(("setup", "{me}", label, other is not None))
+    ctx.effect("dispose", lambda: probe.events.append(("dispose", "{me}")))
+    ctx.expose({{"id": "{me}"}})
+"""
+
+
+@pytest.mark.asyncio
+async def test_mutually_optional_plugins_reload_and_toggle_the_named_target(
+    probe, tmp_path
+):
+    for me, other in (("aaa", "zzz"), ("zzz", "aaa")):
+        _write(
+            tmp_path,
+            me,
+            f"inject: [dependencies, config]\noptional_dependencies: [{other}]\n",
+            _MUTUAL.format(me=me, other=other),
+        )
+    configs = {"aaa": {"label": "a1"}, "zzz": {"label": "z1"}}
+    kernel = host_kernel(
+        [tmp_path],
+        settings=PluginGenerationSettings(
+            workspace=tmp_path / "workspace",
+            plugin_configs=configs,
+            raw_plugin_configs={key: dict(value) for key, value in configs.items()},
+        ),
+    )
+    await kernel.load_all()
+    probe.events.clear()
+
+    # Mutual optional injection does not rank the target last in the closure;
+    # the named target still takes the table and is set up before its consumer.
+    reloaded = await kernel.reload(
+        "aaa", values={"label": "a2"}, raw_values={"label": "a2"}, drain_timeout=5
+    )
+
+    assert reloaded.plugin_ids == ("aaa", "zzz")
+    assert configs == {"aaa": {"label": "a2"}, "zzz": {"label": "z1"}}
+    assert probe.events == [
+        ("dispose", "zzz"),
+        ("dispose", "aaa"),
+        ("setup", "aaa", "a2", False),
+        ("setup", "zzz", "z1", True),
+    ]
+
+    probe.events.clear()
+    table = {"label": "a2", "enabled": False}
+    disabled = await kernel.set_enabled(
+        "aaa", values=table, raw_values=dict(table), drain_timeout=5
+    )
+
+    assert disabled.plugin_ids == ("aaa", "zzz")
+    assert _states(kernel) == {"aaa": "DISABLED", "zzz": "ACTIVE"}
+    assert configs == {"aaa": table, "zzz": {"label": "z1"}}
+    assert probe.events == [
+        ("dispose", "zzz"),
+        ("dispose", "aaa"),
+        ("setup", "zzz", "z1", False),
+    ]
+    await kernel.terminate_all(force=True)
+
+
 @pytest.mark.asyncio
 async def test_toggle_refuses_closures_only_a_generation_swap_can_change(
     probe, tmp_path

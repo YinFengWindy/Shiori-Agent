@@ -55,7 +55,7 @@ UTF-8 YAML。字段在 `apps/backend/agent/plugin_host/manifest.py` 解析；外
 上下文上**没有** `spawn`、`on_drain`、`log`、`config`、`data_dir`。它们都是服务：
 
 - 后台任务：`ctx.require(BACKGROUND).spawn(coro, name=...)`；需要保留调用方运行租约直到任务结束的用 `spawn_runtime`。卸载时取消，不排空。
-- 重载前的排空：`ctx.require(RUNTIME).on_drain(callback)`；`RUNTIME.was_active` 为 `True` 表示这个插件在本次 setup 之前已经在运行：代内重载重新拉起的实例是这样，换代时上一代处于 `ACTIVE` 的插件也是这样；首次启动和从停用状态启用时为 `False`。用它跳过只该做一次的启动恢复。语义见[生命周期](plugin-lifecycle.md#代内重载)。
+- 重载前的排空：`ctx.require(RUNTIME).on_drain(callback)`；`RUNTIME.was_active` 为 `True` 表示这个插件在本次 setup 之前已经在运行：代内重载重新拉起的实例、可选依赖的提供方代内启停时随之重新 setup 的实例都是这样，换代时上一代处于 `ACTIVE` 的插件也是这样；首次启动和从停用状态启用时为 `False`。用它跳过只该做一次的启动恢复。语义见[生命周期](plugin-lifecycle.md#代内重载)。
 - 配置：`ctx.require(CONFIG)`；私有数据目录与迁移：`STORAGE`；工作区目录：`WORKSPACE`。
 - 日志：用标准库 `logging`。
 
