@@ -22,7 +22,7 @@ import { previewFromSessionMessages } from "../roles/roleChatPreview";
 import { usePluginUiVisibility } from "./usePluginUiVisibility";
 import { SettingsPage } from "../settings/SettingsPage";
 import { type SettingsSectionId } from "../settings/SettingsSidebar";
-import { cx, ghostButtonClass, type AffectionSummary, type RoleAssetCategory, type RoleRecord, type SessionPayload } from "@yinfengwindy/shiori-sdk";
+import { cx, ghostButtonClass, type RoleAssetCategory, type RoleRecord, type SessionPayload } from "@yinfengwindy/shiori-sdk";
 import { sidebarTrackMotionClass } from "../shared/styles";
 import { buildNavRailViews, NavRail, pluginNavRailViewId, type NavRailViewId } from "../shell/NavRail";
 import { useGlobalShortcuts } from "../shell/useGlobalShortcuts";
@@ -92,9 +92,6 @@ type DesktopAppFrameProps = {
   /** When the session last set the mood (`current_mood_updated_at`). */
   moodUpdatedAt: string;
   roleSelfView: string;
-  relationshipTags: string[];
-  lonelinessValue: number;
-  affection: AffectionSummary | null;
   conversationEndRef: React.RefObject<HTMLDivElement | null>;
   headerTitle: string;
   highlightedMessageKey: string;
@@ -233,9 +230,6 @@ export function DesktopAppFrame({
   moodIllustrationUrl,
   moodUpdatedAt,
   roleSelfView,
-  relationshipTags,
-  lonelinessValue,
-  affection,
   conversationEndRef,
   headerTitle,
   highlightedMessageKey,
@@ -482,9 +476,6 @@ export function DesktopAppFrame({
               moodIllustrationUrl={moodIllustrationUrl}
               moodUpdatedAt={moodUpdatedAt}
               roleSelfView={roleSelfView}
-              relationshipTags={relationshipTags}
-              lonelinessValue={lonelinessValue}
-              affection={affection}
               conversationEndRef={conversationEndRef}
               headerTitle={headerTitle}
               highlightedMessageKey={highlightedMessageKey}

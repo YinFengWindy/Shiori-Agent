@@ -4,7 +4,6 @@ import { RoleTasksPanel } from "./RoleTasksPanel";
 import { toFileUrl } from "../shared/format";
 import type { RoleTask, ScheduleTaskFormData } from "../shared/types";
 import { chatSidebarPanelClass } from "./chatSidebarStyles";
-import type { AffectionSummary } from "@yinfengwindy/shiori-sdk";
 
 export type ChatSidebarMode = "status" | "images" | "tasks";
 
@@ -13,14 +12,13 @@ type ChatRightSidebarProps = {
   canGoToPreviousImage: boolean;
   currentMood: string;
   imagePath: string;
-  lonelinessValue: number;
-  affection: AffectionSummary | null;
   mode: ChatSidebarMode;
   moodIllustrationUrl: string;
   moodUpdatedAt: string;
   moodScope: string;
-  relationshipTags: string[];
   renderHeavyVisuals: boolean;
+  /** The open role; the affection plugin reads its own sidebar data for it. */
+  roleId: string;
   roleSelfView: string;
   tasks: RoleTask[];
   taskError: string;
@@ -40,14 +38,12 @@ export const ChatRightSidebar = React.memo(function ChatRightSidebar({
   canGoToPreviousImage,
   currentMood,
   imagePath,
-  lonelinessValue,
-  affection,
   mode,
   moodIllustrationUrl,
   moodUpdatedAt,
   moodScope,
-  relationshipTags,
   renderHeavyVisuals,
+  roleId,
   roleSelfView,
   tasks,
   taskError,
@@ -69,10 +65,8 @@ export const ChatRightSidebar = React.memo(function ChatRightSidebar({
         moodIllustrationUrl={moodIllustrationUrl}
         moodUpdatedAt={moodUpdatedAt}
         moodScope={moodScope}
+        roleId={roleId}
         roleSelfView={roleSelfView}
-        relationshipTags={relationshipTags}
-        lonelinessValue={lonelinessValue}
-        affection={affection}
         visualsActive={renderHeavyVisuals}
       />
     );

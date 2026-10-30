@@ -1,7 +1,6 @@
 """HostExternalTurns.submit runs a submission as an external group turn (#721)."""
 
 from __future__ import annotations
-from tests.support.generation_getters import bound_affection
 
 import asyncio
 from pathlib import Path
@@ -89,7 +88,7 @@ async def test_submission_is_listed_in_the_phone_and_consolidated_externally(hos
         conversations=conversation,
         accounts=AccountRegistry({"mira"}.__contains__),
         identities=UserIdentityStore(workspace),
-        messages=DesktopSessionPresenter(conversation, bound_affection()),
+        messages=DesktopSessionPresenter(conversation),
         avatars=ChannelAvatarStore(workspace),
         listening=GroupListeningControl(conversation, lambda _channel: False),
     )

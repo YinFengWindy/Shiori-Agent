@@ -3,8 +3,6 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from core.roles.affection_access import AffectionGetter
-
 
 class DesktopRolePresenter:
     """Builds desktop-safe role payloads without owning role operations."""
@@ -12,12 +10,10 @@ class DesktopRolePresenter:
     def __init__(
         self,
         role_store: Any,
-        affection: AffectionGetter,
         *,
         last_message_for_role: Callable[[str], dict[str, Any] | None] | None = None,
     ) -> None:
         self._role_store = role_store
-        self._affection = affection
         self._last_message_for_role = last_message_for_role
 
     def serialize(self, role: Any) -> dict[str, Any]:
@@ -44,17 +40,6 @@ class DesktopRolePresenter:
             if isinstance(relative_path, str) and relative_path
         ]
         payload["plugin_state"] = self._role_store.extensions.project(role.id)
-        affection = self._affection()
-        if affection is not None:
-            snapshot = affection.read_snapshot(role.id)
-            runtime = affection.current_loneliness_runtime(role.id)
-            if snapshot is not None:
-                payload["relationship_snapshot"] = snapshot
-            if runtime is not None:
-                payload["loneliness_runtime"] = runtime
-            summary = affection.affection.current_summary(role.id)
-            if summary is not None:
-                payload["affection"] = summary
         if self._last_message_for_role is not None:
             # Chat list preview: the newest message of the role's single session.
             payload["last_message"] = self._last_message_for_role(role.id)

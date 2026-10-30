@@ -69,10 +69,6 @@ class HostAffectionSources:
         """The live session. Later mutations are visible to the caller."""
         return self._sessions.get_or_create(session_key)
 
-    async def save_session(self, session: Session) -> None:
-        """Persists the session the plugin just updated."""
-        await self._sessions.save_async(session)
-
     def last_user_at(self, session_key: str) -> datetime | None:
         """Presence of the user's own last message."""
         if self._presence is None:

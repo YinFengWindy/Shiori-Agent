@@ -45,7 +45,6 @@ import {
   cx,
   sidebarContentMotionClass,
   useLatestRef,
-  type AffectionSummary,
   type RoleRecord,
   type SessionMessage,
   type SessionPayload,
@@ -71,9 +70,6 @@ type ChatSurfaceProps = {
   /** When the session last set the mood (`current_mood_updated_at`). */
   moodUpdatedAt: string;
   roleSelfView: string;
-  relationshipTags: string[];
-  lonelinessValue: number;
-  affection: AffectionSummary | null;
   conversationEndRef: React.RefObject<HTMLDivElement | null>;
   headerTitle: string;
   highlightedMessageKey: string;
@@ -125,9 +121,6 @@ export function ChatSurface({
   moodIllustrationUrl,
   moodUpdatedAt,
   roleSelfView,
-  relationshipTags,
-  lonelinessValue,
-  affection,
   conversationEndRef,
   headerTitle,
   highlightedMessageKey,
@@ -505,14 +498,12 @@ export function ChatSurface({
                 canGoToPreviousImage={canGoToPreviousChatImage}
                 currentMood={currentMood}
                 imagePath={chatLatestImagePath}
-                lonelinessValue={lonelinessValue}
-                affection={affection}
                 mode={sidebarMode}
                 moodIllustrationUrl={moodIllustrationUrl}
                 moodUpdatedAt={moodUpdatedAt}
                 moodScope={`${activeRoleId}|${activeSession?.key ?? ""}`}
-                relationshipTags={relationshipTags}
                 renderHeavyVisuals={renderHeavyVisuals}
+                roleId={activeRoleId}
                 roleSelfView={roleSelfView}
                 tasks={roleTasks.tasks}
                 taskError={roleTasks.error}

@@ -3,7 +3,6 @@
  * and the props each contributed component receives.
  */
 import type React from "react";
-import type { AffectionSummary } from "../domain/role";
 import type { PluginRpcClient } from "../rpc";
 import type { PluginChatImageActionProps, PluginRoleSettingsContribution } from "./features";
 import type { PluginHostServices } from "./hostServices";
@@ -68,10 +67,14 @@ export type PluginRoleAssetsContribution = {
 /** Plugin-authored account controls receive a scoped RPC client and host services. */
 export type PluginAccountDetailComponentProps = PluginAccountDetailProps & PluginInjectedProps;
 
-/** The chat sidebar passes the current role's affection summary as the host received it. */
+/** The chat sidebar tells the affection block which role is open; nothing of the plugin's data. */
 export type PluginChatAffectionProps = {
-  summary: AffectionSummary;
+  /** The role whose chat is open. The plugin reads its own data for it. */
+  roleId: string;
 };
+
+/** Chat affection block: slot props plus the injected client and host services. */
+export type PluginChatAffectionComponentProps = PluginChatAffectionProps & PluginInjectedProps;
 
 /** The role page tells the affection tab which role is open and whether the bridge is up. */
 export type PluginRoleAffectionProps = {
@@ -119,6 +122,6 @@ export type PluginUiModule = {
   chatImageActions?: React.ComponentType<PluginChatImageActionProps>;
   /** 「好感度」 tab on the role page. Absent means the host hides that tab. */
   roleAffection?: React.ComponentType<PluginRoleAffectionComponentProps>;
-  /** Thin affection meter in the chat status sidebar. */
-  chatAffection?: React.ComponentType<PluginChatAffectionProps>;
+  /** The chat status sidebar's affection block (meter, relationship tags, loneliness). */
+  chatAffection?: React.ComponentType<PluginChatAffectionComponentProps>;
 };

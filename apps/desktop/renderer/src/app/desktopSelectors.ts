@@ -10,7 +10,7 @@ import { resolveChatHeaderTitle, resolveVisibleChatSessionKey } from "../chat/ch
 import { resolveCurrentMood, resolveCurrentMoodUpdatedAt, resolveCurrentThought, resolveMoodIllustration, roleSession } from "../roles/roleMoodSelectors";
 import { isRoleFormDirty } from "../roles/roleFormState";
 import { toFileUrl } from "../shared/format";
-import type { AffectionSummary, LonelinessRuntime, RelationshipSnapshot, RoleRecord, SessionPayload } from "@yinfengwindy/shiori-sdk";
+import type { RoleRecord, SessionPayload } from "@yinfengwindy/shiori-sdk";
 import type { AppMainView, RoleFormState } from "../shared/types";
 
 type BuildDesktopViewModelArgs = {
@@ -86,31 +86,9 @@ export function buildDesktopViewModel({
   const resolvedChatImagePath = selectedChatImageEntry?.path ?? "";
   const latestChatGeneratedImageKey = chatImageHistory[chatImageHistory.length - 1]?.historyKey ?? "";
   const selectedChatImagePosition = selectedChatImageIndex >= 0 ? selectedChatImageIndex + 1 : 0;
-  const relationshipSnapshot = (
-    (currentRoleSession?.metadata.relationship_snapshot as RelationshipSnapshot | null | undefined)
-    ?? activeRole?.relationship_snapshot
-    ?? null
-  );
-  const lonelinessRuntime = (
-    (currentRoleSession?.metadata.loneliness_runtime as LonelinessRuntime | null | undefined)
-    ?? activeRole?.loneliness_runtime
-    ?? null
-  );
-  const roleSelfView = resolveCurrentThought(currentRoleSession, activeRole);
-  // The session refreshes after every turn; the role payload covers a session not yet loaded.
-  // The affection plugin's meter derives its own view from this summary.
-  const affection: AffectionSummary | null = currentRoleSession?.metadata.affection ?? activeRole?.affection ?? null;
-  const relationshipTags = Array.isArray(relationshipSnapshot?.relation_tags)
-    ? relationshipSnapshot.relation_tags
-      .filter((tag): tag is string => typeof tag === "string")
-      .map((tag) => tag.trim())
-      .filter(Boolean)
-      .slice(0, 4)
-    : [];
-  const normalizedLonelinessValue = Number(lonelinessRuntime?.loneliness_value);
-  const lonelinessValue = Number.isFinite(normalizedLonelinessValue)
-    ? normalizedLonelinessValue
-    : 0;
+  // Affection, relationship tags and loneliness belong to the affection plugin,
+  // which reads them through its own RPC; only the core's own thought is here.
+  const roleSelfView = resolveCurrentThought(activeSession, activeRoleId);
 
   return {
     activeRole,
@@ -138,11 +116,6 @@ export function buildDesktopViewModel({
     selectedChatImageEntry,
     latestChatGeneratedImageKey,
     selectedChatImagePosition,
-    relationshipSnapshot,
-    lonelinessRuntime,
     roleSelfView,
-    relationshipTags,
-    lonelinessValue,
-    affection,
   };
 }

@@ -105,8 +105,8 @@ def _memory_extra(state: TurnState) -> dict[str, object]:
 async def _apply_turn_affection(state: TurnState) -> None:
     """Applies the committed reply's affection change before the turn is announced.
 
-    Running ahead of ``TurnCommitted`` lets every session refresh triggered by
-    it carry the new summary.
+    Running ahead of ``TurnCommitted`` means the ``session.updated`` it
+    triggers finds the new value when the plugin's sidebar re-reads it.
     """
     change = state.affection_change
     affection = current_affection()

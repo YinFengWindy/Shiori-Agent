@@ -153,8 +153,8 @@ UTF-8 YAML。字段在 `apps/backend/agent/plugin_host/manifest.py` 解析；外
 
 ### 角色数据
 
-- **好感度**：`AffectionSummary` 出现在 `RoleRecord.affection`、会话 metadata 和好感插件的 `history` RPC；第一次对话初始化之前没有。`value` 是 -100 到 100，七个阶段：「厌恶」-100～-50、「冷淡」-49～-1、「陌生」0～19、「熟悉」20～39、「朋友」40～59、「亲密」60～79、「挚爱」80～100；`progress` 是当前阶段内的 0～1。`floor` 是达到过的最高「熟悉」及以上阶段的起点（20 / 40 / 60 / 80），从没达到「熟悉」时为 `null`；好感不会再低于它。「陌生」的角色可以掉到负值，但衰减不会让好感变成负数。消费方要处理全部七个阶段。寂寞增长和关系主动动机要求好感至少 60（「亲密」起点）。
-- **关系状态**：`RelationshipSnapshot` 没有 `closeness`；`internal_profile.relation_state` 是固定字段的 `RelationState`（`dependence`、`security`、`initiative_desire`、`neglect_sensitivity`，各 0～1）。需要亲近程度的用好感。
+- **好感度**：`AffectionSummary` 只由好感插件的 `history`、`chat_status` RPC 返回，`RoleRecord` 与会话 metadata 不带它；第一次对话初始化之前为 `null`。`value` 是 -100 到 100，七个阶段：「厌恶」-100～-50、「冷淡」-49～-1、「陌生」0～19、「熟悉」20～39、「朋友」40～59、「亲密」60～79、「挚爱」80～100；`progress` 是当前阶段内的 0～1。`floor` 是达到过的最高「熟悉」及以上阶段的起点（20 / 40 / 60 / 80），从没达到「熟悉」时为 `null`；好感不会再低于它。「陌生」的角色可以掉到负值，但衰减不会让好感变成负数。消费方要处理全部七个阶段。寂寞增长和关系主动动机要求好感至少 60（「亲密」起点）。
+- **关系状态**：关系快照是好感插件的私有数据（`relationship_snapshot.json`），SDK 不再导出它的类型；聊天侧栏要的关系标签由 `chat_status` 返回。需要亲近程度的用好感。
 
 ## 版本
 

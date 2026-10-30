@@ -1,7 +1,6 @@
 """The core provide list: what plugins receive from the core modules it provides."""
 
 from __future__ import annotations
-from tests.support.generation_getters import bound_affection
 
 import asyncio
 import io
@@ -262,7 +261,6 @@ def test_core_module_provide_failure_aborts_startup(tmp_path: Path) -> None:
                         tools=None,
                         role_store=None,
                         session_manager=None,
-                        affection=bound_affection(),
                         role_runtime_registry=None,
                         provider=None,
                         model=None,

@@ -183,16 +183,7 @@ class RoleRelationshipRuntimeService(_RelationshipPersistenceMixin):
             return None
         if optimizer is None:
             optimizer = RelationshipSnapshotOptimizer(self)
-        snapshot = await optimizer.optimize(role_id=role_id)
-        metadata = getattr(session, "metadata", None)
-        if isinstance(metadata, dict):
-            next_metadata = dict(metadata)
-            next_metadata["relationship_snapshot"] = snapshot
-            runtime = self.current_loneliness_runtime(role_id)
-            if runtime is not None:
-                next_metadata["loneliness_runtime"] = runtime
-            session.metadata = next_metadata
-        return snapshot
+        return await optimizer.optimize(role_id=role_id)
 
     def recompute_loneliness(
         self, role_id: str, *, now: datetime | None = None
@@ -372,7 +363,7 @@ class RoleRelationshipRuntimeService(_RelationshipPersistenceMixin):
     async def apply_turn_affection(
         self, session_key: str, *, delta: int, reason: str
     ) -> None:
-        """Applies one committed turn's affection change and saves the session.
+        """Applies one committed turn's affection change.
 
         Callers invoke this only after the formal reply has been committed.
         The role's passive turn seeds affection before it starts, so an
@@ -385,8 +376,6 @@ class RoleRelationshipRuntimeService(_RelationshipPersistenceMixin):
         _ = self._affection.apply_delta(
             role_id, delta=delta, reason=reason, source="turn"
         )
-        session.metadata = self.enrich_session_metadata(session.metadata)
-        await self._sources.save_session(session)
 
     def render_prompt(self, role_id: str) -> str | None:
         """The affection context block, or ``None`` while uninitialized."""
@@ -414,21 +403,23 @@ class RoleRelationshipRuntimeService(_RelationshipPersistenceMixin):
             self._sources, self._affection
         ).ensure_initialized(role_id)
 
-    def enrich_session_metadata(self, metadata: dict[str, Any]) -> dict[str, Any]:
-        next_metadata = dict(metadata or {})
-        role_id = str(next_metadata.get("role_id") or "").strip()
-        if not role_id:
-            return next_metadata
+    def chat_status(self, role_id: str) -> dict[str, Any]:
+        """What the chat sidebar shows: summary, relationship tags, loneliness.
+
+        ``affection`` is ``None`` until initialized; ``loneliness`` is 0 until
+        a loneliness runtime exists. Reading settles overdue decay and ticks.
+        """
         snapshot = self.read_snapshot(role_id)
+        # Reading normalizes the snapshot: at most four trimmed, distinct tags.
+        tags = list(snapshot["relation_tags"]) if snapshot is not None else []
         runtime = self.current_loneliness_runtime(role_id)
-        if snapshot is not None:
-            next_metadata["relationship_snapshot"] = snapshot
-        if runtime is not None:
-            next_metadata["loneliness_runtime"] = runtime
-        affection = self._affection.current_summary(role_id)
-        if affection is not None:
-            next_metadata["affection"] = affection
-        return next_metadata
+        loneliness = float(runtime["loneliness_value"]) if runtime is not None else 0.0
+        return {
+            "role_id": role_id,
+            "affection": self._affection.current_summary(role_id),
+            "relation_tags": tags,
+            "loneliness": loneliness,
+        }
 
     def _behavior_profile(self, snapshot: dict[str, Any]) -> dict[str, float | int]:
         internal = (

@@ -256,21 +256,11 @@ class DesktopAppService:
     ) -> Session:
         if record_presence is not None:
             record_presence(session.key)
-        metadata_changed = False
         affection = self._affection()
         if affection is not None and handle_relationship == "proactive":
             affection.handle_proactive_sent(session.key)
         elif affection is not None and handle_relationship == "user":
             affection.handle_user_message(session.key)
-        if affection is not None and handle_relationship in {"proactive", "user"}:
-            enriched_metadata = affection.enrich_session_metadata(
-                dict(session.metadata),
-            )
-            if enriched_metadata != session.metadata:
-                session.metadata = enriched_metadata
-                metadata_changed = True
-        if metadata_changed:
-            await self.session_manager.save_async(session)
         return session
 
     @staticmethod

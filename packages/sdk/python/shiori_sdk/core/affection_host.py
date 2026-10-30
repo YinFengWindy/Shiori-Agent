@@ -29,16 +29,13 @@ class AffectionRole(Protocol):
 
 
 class AffectionSession(Protocol):
-    """The live session the plugin updates in place."""
+    """A live session the plugin reads; the plugin does not write it."""
 
     @property
     def key(self) -> str: ...
 
     @property
     def metadata(self) -> dict[str, Any]: ...
-
-    @metadata.setter
-    def metadata(self, value: dict[str, Any]) -> None: ...
 
     @property
     def messages(self) -> list[Any]: ...
@@ -59,8 +56,6 @@ class AffectionHost(Protocol):
     def role_session_key(self, role_id: str) -> str: ...
 
     def get_session(self, session_key: str) -> AffectionSession: ...
-
-    async def save_session(self, session: AffectionSession) -> None: ...
 
     def last_user_at(self, session_key: str) -> datetime | None: ...
 

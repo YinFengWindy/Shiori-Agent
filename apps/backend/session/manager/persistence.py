@@ -295,7 +295,6 @@ class _PersistenceMixin:
         expected_mood_updated_at: str | None = None,
         pending_messages: bool = False,
         removed_metadata_keys: tuple[str, ...] = (),
-        metadata_enricher: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         before_commit: Callable[[], Awaitable[bool]] | None = None,
     ) -> bool:
         """Serialize formal replies and commit private messages only after delivery.
@@ -327,7 +326,6 @@ class _PersistenceMixin:
                 expected_mood_updated_at=expected_mood_updated_at,
                 pending_messages=pending_messages,
                 removed_metadata_keys=removed_metadata_keys,
-                metadata_enricher=metadata_enricher,
             )
             return True
 
@@ -345,7 +343,6 @@ class _PersistenceMixin:
         expected_mood_updated_at: str | None = None,
         pending_messages: bool = False,
         removed_metadata_keys: tuple[str, ...] = (),
-        metadata_enricher: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
     ) -> None:
         """Commit message facts and state together; optionally publish private drafts.
 
@@ -366,8 +363,6 @@ class _PersistenceMixin:
             metadata = {**session.metadata, **(metadata_updates or {})}
             for key in removed_metadata_keys:
                 metadata.pop(key, None)
-            if metadata_enricher is not None:
-                metadata = metadata_enricher(metadata)
             staged = replace(
                 session,
                 metadata=metadata,

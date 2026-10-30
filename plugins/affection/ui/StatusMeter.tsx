@@ -1,4 +1,3 @@
-import React from "react";
 import { cx } from "@yinfengwindy/shiori-sdk";
 
 type StatusMeterProps = {
@@ -12,7 +11,7 @@ type StatusMeterProps = {
   testId?: string;
 };
 
-/** A labelled status row with a decorative progress track shared by the chat status sidebar and the role affection tab. */
+/** A labelled status row with a decorative progress track (the sidebar's affection and loneliness rows). */
 export function StatusMeter({ label, value, percent, heightClass, testId }: StatusMeterProps) {
   return (
     <div data-testid={testId}>
@@ -22,7 +21,7 @@ export function StatusMeter({ label, value, percent, heightClass, testId }: Stat
       </div>
       <div className={cx("mt-1 overflow-hidden rounded-full bg-accent-soft", heightClass)} aria-hidden="true">
         <div
-          className="h-full rounded-full bg-gradient-accent-medium transition-[width] duration-300"
+          className="h-full rounded-full bg-gradient-accent-medium transition-[width] duration-300 motion-reduce:transition-none"
           style={{ width: `${percent}%` }}
         />
       </div>

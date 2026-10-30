@@ -1,12 +1,12 @@
 import type { PluginUiModule } from "@yinfengwindy/shiori-sdk";
-import { ChatAffectionMeter } from "./ChatAffectionMeter";
+import { ChatAffectionStatus } from "./ChatAffectionStatus";
 import { RoleAffectionPanel } from "./RoleAffectionPanel";
 
-/** Affection's role tab and the chat sidebar's thin meter. */
+/** Affection's role tab and its block in the chat status sidebar. */
 const affectionUiModule: PluginUiModule = {
   pluginId: "affection",
   roleAffection: RoleAffectionPanel,
-  chatAffection: ChatAffectionMeter,
+  chatAffection: ChatAffectionStatus,
 };
 
 export default affectionUiModule;

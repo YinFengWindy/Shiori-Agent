@@ -434,15 +434,47 @@ def test_should_trigger_proactive_requires_intimate_affection(
     assert frozen["awaiting_reply_since"] == ""
 
 
-def test_session_affection_summary_settles_overdue_decay(host):
+def test_chat_status_settles_overdue_decay(host):
     runtime = RoleRelationshipRuntimeService(host)
     seeded_at = datetime.now().astimezone() - timedelta(days=4, hours=1)
     runtime.affection.initialize("mira", value=45, reason="测试初始化", now=seeded_at)
 
-    metadata = runtime.enrich_session_metadata({"role_id": "mira"})
+    status = runtime.chat_status("mira")
 
     # Days 3 and 4 without a user message are settled on read.
-    assert metadata["affection"]["value"] == 43
+    assert status["affection"]["value"] == 43
+
+
+def test_chat_status_shows_the_snapshot_tags_and_the_loneliness_value(host):
+    runtime = RoleRelationshipRuntimeService(host)
+    runtime.write_snapshot(
+        "mira",
+        {
+            **_snapshot_payload(),
+            "relation_tags": ["亲近", "安心", "期待见面"],
+        },
+    )
+    now = datetime.now().astimezone().isoformat()
+    runtime.write_loneliness_runtime(
+        "mira",
+        {"role_id": "mira", "loneliness_value": 37, "last_calculated_at": now},
+    )
+
+    status = runtime.chat_status("mira")
+
+    assert status["relation_tags"] == ["亲近", "安心", "期待见面"]
+    assert status["loneliness"] == 37
+
+
+def test_chat_status_of_an_uninitialized_role_is_empty(host):
+    status = RoleRelationshipRuntimeService(host).chat_status("mira")
+
+    assert status == {
+        "role_id": "mira",
+        "affection": None,
+        "relation_tags": [],
+        "loneliness": 0.0,
+    }
 
 
 @pytest.mark.asyncio
@@ -512,7 +544,7 @@ async def test_generate_snapshot_via_llm_accepts_prompt_json_example(host):
 
 
 @pytest.mark.asyncio
-async def test_refresh_snapshot_after_consolidation_updates_session_metadata(host):
+async def test_refresh_snapshot_after_consolidation_uses_the_sessions_role(host):
     runtime = RoleRelationshipRuntimeService(host)
     session = host.get_session(host.role_session_key("mira"))
     session.metadata["role_id"] = "mira"
@@ -532,4 +564,3 @@ async def test_refresh_snapshot_after_consolidation_updates_session_metadata(hos
 
     assert snapshot == expected_snapshot
     optimizer.optimize.assert_awaited_once_with(role_id="mira")
-    assert session.metadata["relationship_snapshot"]["last_source_message_count"] == 6

@@ -44,6 +44,13 @@ class AffectionApi:
             "page_size": page_size,
         }
 
+    def chat_status(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """The chat sidebar's summary, relationship tags and loneliness."""
+        role_id = str(payload.get("role_id") or "").strip()
+        if self._runtime.sources.get_role(role_id) is None:
+            raise ValueError(f"role not found: {role_id}")
+        return self._runtime.chat_status(role_id)
+
     def stage_prompts_get(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Each stage's injected guidance."""
         role_id = str(payload.get("role_id") or "").strip()

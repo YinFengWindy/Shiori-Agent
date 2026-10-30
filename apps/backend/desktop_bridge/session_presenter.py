@@ -3,7 +3,6 @@ from __future__ import annotations
 from collections.abc import Collection, Iterable
 from typing import Any
 
-from core.roles.affection_access import AffectionGetter
 from conversation.context_scope import desktop_view_thread_ids, in_desktop_view
 from desktop_bridge.tool_call_preview import truncate_desktop_tool_result
 from session.manager import Session
@@ -40,10 +39,8 @@ class DesktopSessionPresenter:
     def __init__(
         self,
         conversation_service,
-        affection: AffectionGetter,
     ) -> None:
         self._conversation_service = conversation_service
-        self._affection = affection
 
     def serialize(self, session: Session) -> dict[str, Any]:
         """Returns the desktop-compatible role session snapshot."""
@@ -60,7 +57,7 @@ class DesktopSessionPresenter:
             "created_at": session.created_at.isoformat(),
             "updated_at": session.updated_at.isoformat(),
             "last_consolidated": session.last_consolidated,
-            "metadata": self._enrich_metadata(dict(session.metadata)),
+            "metadata": dict(session.metadata),
         }
 
     def serialize_message(self, message: dict[str, Any]) -> dict[str, Any]:
@@ -234,12 +231,6 @@ class DesktopSessionPresenter:
         if store is None:
             raise RuntimeError("session store unavailable for desktop pagination")
         return store
-
-    def _enrich_metadata(self, metadata: dict[str, Any]) -> dict[str, Any]:
-        affection = self._affection()
-        if affection is None:
-            return metadata
-        return affection.enrich_session_metadata(metadata)
 
     @staticmethod
     def _serialize_message(message: dict[str, Any]) -> dict[str, Any]:

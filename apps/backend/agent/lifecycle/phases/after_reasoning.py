@@ -270,11 +270,6 @@ class AfterReasoningPhase:
             tool_chain=list(ctx.tool_chain),
             mood=None,
         )
-        affection = current_affection()
-        if affection is not None:
-            session.metadata = affection.enrich_session_metadata(
-                cast(dict[str, Any], session.metadata),
-            )
         return dict(session.metadata)
 
     async def _commit_messages(
@@ -300,18 +295,11 @@ class AfterReasoningPhase:
                 CONTEXT_TURN_STARTED_AT
             ] = state.msg.timestamp.isoformat()
 
-        def enrich(metadata: dict[str, Any]) -> dict[str, Any]:
-            affection = current_affection()
-            if affection is None:
-                return metadata
-            return affection.enrich_session_metadata(metadata)
-
         state_kwargs = (
             {
                 "metadata_updates": metadata_updates,
                 "pending_messages": True,
                 "removed_metadata_keys": (INTERRUPTED_TURN_METADATA_KEY,),
-                "metadata_enricher": enrich,
             }
             if private
             else {}
@@ -335,7 +323,6 @@ class AfterReasoningPhase:
                 },
                 "pending_messages": True,
                 "removed_metadata_keys": (INTERRUPTED_TURN_METADATA_KEY,),
-                "metadata_enricher": enrich,
                 "expected_mood_updated_at": str(
                     input.turn_result.context_retry.get(
                         "role_reply_previous_updated_at",

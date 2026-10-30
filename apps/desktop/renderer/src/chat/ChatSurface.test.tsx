@@ -81,9 +81,6 @@ function chatSurfaceElement(
       moodIllustrationUrl={options.moodIllustrationUrl ?? ""}
       moodUpdatedAt=""
       roleSelfView={options.roleSelfView ?? "我最近会不自觉地想起你。"}
-      relationshipTags={["亲近", "等你主动"]}
-      lonelinessValue={72}
-      affection={null}
       conversationEndRef={React.createRef<HTMLDivElement>()}
       headerTitle={activeRole?.name ?? "Mira"}
       highlightedMessageKey=""
@@ -362,8 +359,8 @@ describe("ChatSurface", () => {
     assert.doesNotMatch(markup, /aria-label="状态"[^>]*aria-disabled/);
   });
 
-  it("renders relationship summary, tags, and the affection plugin's loneliness value inside the status sidebar", () => {
-    affectionUiRegistry.registerChat({ pluginId: "affection", Component: () => null });
+  it("renders the core thought and the affection plugin's block for the active role inside the status sidebar", () => {
+    affectionUiRegistry.registerChat({ pluginId: "affection", Component: ({ roleId }) => <div>好感区块:{roleId}</div> });
     setPluginEnabledSnapshot([{ id: "affection", enabled: true, state: "ACTIVE" }]);
     let markup: string;
     try {
@@ -378,10 +375,7 @@ describe("ChatSurface", () => {
 
     assert.match(markup, />当下想法</);
     assert.match(markup, />我最近会不自觉地想起你。</);
-    assert.match(markup, />亲近</);
-    assert.match(markup, />等你主动</);
-    assert.match(markup, />寂寞值</);
-    assert.match(markup, />72</);
+    assert.match(markup, /好感区块:mira/);
   });
 
   it("unmounts the status illustration when the desktop window is hidden", () => {

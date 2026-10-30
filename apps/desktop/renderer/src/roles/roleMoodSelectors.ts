@@ -51,15 +51,14 @@ export function roleSession(session: SessionPayload | null, roleId: string | und
   return (sessionRole ? sessionRole === roleId : session.key === `role:${roleId}`) ? session : null;
 }
 
-/** Uses legacy relationship text only until the role has a formal turn thought. */
-export function resolveCurrentThought(session: SessionPayload | null, role: RoleRecord | null) {
-  const loadedSession = roleSession(session, role?.id);
-  // Wait for the role's session before deciding whether an upgrade fallback is needed.
-  if (!loadedSession) return "";
-  const metadata = loadedSession.metadata;
-  if (typeof metadata.current_thought === "string") return metadata.current_thought.trim();
-  const legacy = metadata.relationship_snapshot ?? role?.relationship_snapshot;
-  return typeof legacy?.role_self_view === "string" ? legacy.role_self_view.trim() : "";
+/**
+ * The thought the core writes with every formal reply, from the role's own
+ * session only. A session without one (no reply since the upgrade) shows the
+ * sidebar's placeholder.
+ */
+export function resolveCurrentThought(session: SessionPayload | null, roleId: string | undefined) {
+  const thought = roleSession(session, roleId)?.metadata.current_thought;
+  return typeof thought === "string" ? thought.trim() : "";
 }
 
 /** Resolves which illustration should represent the current mood in the chat sidebar. */

@@ -64,7 +64,7 @@ export function applyPluginUiModules(
       pluginId, Component: bindPluginClient(pluginId, uiModule.roleAffection),
     });
     if (uiModule.chatAffection) affectionUiRegistry.registerChat({
-      pluginId, Component: uiModule.chatAffection,
+      pluginId, Component: bindPluginClient(pluginId, uiModule.chatAffection),
     });
     if (settingsSection) {
       // Registers as a subtab of the built-in "plugins" section rather than

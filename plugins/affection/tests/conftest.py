@@ -26,7 +26,6 @@ class FakeAffectionHost:
         self.proactive_at: dict[str, datetime] = {}
         self.stage_prompts: dict[str, dict[str, str]] = {}
         self.completion = ""
-        self.saved: list[str] = []
 
     def add_role(self, role_id: str) -> None:
         self.roles[role_id] = SimpleNamespace(
@@ -50,9 +49,6 @@ class FakeAffectionHost:
         return self.sessions.setdefault(
             session_key, SimpleNamespace(key=session_key, metadata={}, messages=[])
         )
-
-    async def save_session(self, session: Any) -> None:
-        self.saved.append(session.key)
 
     def last_user_at(self, session_key: str) -> datetime | None:
         return self.user_at.get(session_key)

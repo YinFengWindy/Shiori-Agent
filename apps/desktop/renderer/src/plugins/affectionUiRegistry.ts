@@ -8,7 +8,7 @@ export type RoleAffectionEntry = {
   Component: ComponentType<PluginRoleAffectionProps>;
 };
 
-/** One plugin's chat affection meter. */
+/** One plugin's chat affection block, already bound to that plugin's client. */
 export type ChatAffectionEntry = {
   pluginId: string;
   Component: ComponentType<PluginChatAffectionProps>;

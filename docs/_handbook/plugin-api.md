@@ -90,7 +90,7 @@ A plugin's scope was released (stop, reload or host unload).
 
 ## `shiori_sdk.core.affection`
 
-``AFFECTION``: relationship, loneliness and affection (P6a, D12). The ``affection`` plugin provides this key. The host ``get``s it on every use and does nothing when it is ``None``. State files stay at ``workspace/roles/<role_id>/state/affection.json`` and the sibling runtime files; this key does not change their format.
+``AFFECTION``: relationship, loneliness and affection (P6a, D12). The ``affection`` plugin provides this key. The host ``get``s it on every use and does nothing when it is ``None``. State files stay at ``workspace/roles/<role_id>/state/affection.json`` and the sibling runtime files; this key does not change their format. Display data (summary, relationship tags, loneliness) is read by the plugin's own UI through its RPC; the host neither reads nor forwards it.
 
 ### `affection`
 
@@ -100,21 +100,12 @@ Target `shiori_sdk.core.affection.Affection`.
 
 Relationship runtime the host calls. Delivery and turns stay in the core.
 
-- `affection: core.affection.AffectionRecords`
-
-  The affection state and history of this runtime.
-
-- `read_snapshot(role_id: str) -> dict[str, Any] | None`
-- `current_loneliness_runtime(role_id: str, *, now: datetime.datetime | None = None) -> dict[str, Any] | None`
 - `render_prompt(role_id: str) -> str | None`
 
   The affection context block, or ``None`` while uninitialized.
 
-- `stage_prompts_view(role_id: str) -> list[dict[str, Any]]`
-- `apply_stage_prompts(role_id: str, changes: Mapping[str, Any]) -> None`
 - `handle_user_message(session_key: str) -> None`
 - `handle_proactive_sent(session_key: str) -> None`
-- `enrich_session_metadata(metadata: dict[str, Any]) -> dict[str, Any]`
 - `async apply_turn_affection(session_key: str, *, delta: int, reason: str) -> None`
 - `apply_scene_decision(session_key: str, transition: str, scene_key: str = '') -> None`
 - `should_trigger_scene_followup(session_key: str, now: datetime.datetime) -> tuple[bool, dict[str, Any]]`
@@ -125,26 +116,6 @@ Relationship runtime the host calls. Delivery and turns stay in the core.
 - `async ensure_initialized(role_id: str) -> None`
 
   Seed affection once SELF is ready. Failures propagate.
-
-#### `shiori_sdk.core.affection.AffectionRecords`
-
-Per-role affection state and history.
-
-- `current_summary(role_id: str, *, now: datetime.datetime | None = None) -> dict[str, Any] | None`
-
-  The display summary, or ``None`` while affection is uninitialized.
-
-- `history_page(role_id: str, *, page: int, page_size: int) -> tuple[list[tuple[Any, Any]], int]`
-
-  One newest-first page of ``(id, entry)`` plus the total count.
-
-- `settle_decay(role_id: str, *, now: datetime.datetime | None = None) -> None`
-
-  Apply decay that is due. An uninitialized role is unchanged.
-
-- `read_state(role_id: str) -> Any`
-
-  The stored state, or ``None`` while uninitialized.
 
 ## `shiori_sdk.core.affection_host`
 
@@ -166,7 +137,6 @@ Host-owned inputs of one relationship runtime.
 - `list_roles() -> Sequence[core.affection_host.AffectionRole]`
 - `role_session_key(role_id: str) -> str`
 - `get_session(session_key: str) -> core.affection_host.AffectionSession`
-- `async save_session(session: core.affection_host.AffectionSession) -> None`
 - `last_user_at(session_key: str) -> datetime.datetime | None`
 - `last_proactive_at(session_key: str) -> datetime.datetime | None`
 - `read_self(role_id: str) -> str`
@@ -199,7 +169,7 @@ The role fields relationship snapshots and seeds read.
 
 #### `shiori_sdk.core.affection_host.AffectionSession`
 
-The live session the plugin updates in place.
+A live session the plugin reads; the plugin does not write it.
 
 - `key: str`
 - `metadata: dict[str, Any]`

@@ -911,7 +911,6 @@ async def test_a_failed_affection_write_is_logged_and_the_turn_still_completes(
     runtime, caplog, dispatch_outbound
 ):
     relationship = SimpleNamespace(
-        enrich_session_metadata=lambda metadata: metadata,
         handle_user_message=Mock(),
         apply_turn_affection=AsyncMock(side_effect=OSError("affection disk full")),
     )

@@ -177,11 +177,9 @@ class DesktopBridgeService:
         )
         self.session_presenter = DesktopSessionPresenter(
             self.conversation_service,
-            affection,
         )
         self.role_presenter = DesktopRolePresenter(
             role_store,
-            affection,
             last_message_for_role=lambda role_id: (
                 self.session_presenter.last_message_preview(
                     self.role_service.sessions.derive_session_key(role_id)

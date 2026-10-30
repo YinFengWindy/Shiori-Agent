@@ -1,11 +1,9 @@
 import React, { useRef } from "react";
 import { CrossfadeLayers } from "@yinfengwindy/shiori-sdk";
 import { cx } from "@yinfengwindy/shiori-sdk";
-import type { AffectionSummary } from "@yinfengwindy/shiori-sdk";
 import { useChatAffectionContribution } from "../plugins/affectionUiRegistry";
 import { usePluginEnabledState } from "../plugins/usePluginEnabledState";
 import { chatSidebarPanelClass } from "./chatSidebarStyles";
-import { StatusMeter } from "../shared/ui/StatusMeter";
 import { moodTone } from "./moodTone";
 import { useMoodChangeCue } from "./useMoodChangeCue";
 import { useMoodChangeMotion } from "./useMoodChangeMotion";
@@ -17,11 +15,9 @@ type ChatStatusSidebarProps = {
   /** Role + session the mood belongs to; changing it (a role switch) never performs. */
   moodScope: string;
   moodIllustrationUrl: string;
+  /** The role whose chat is open; the affection plugin's block reads its own data for it. */
+  roleId: string;
   roleSelfView: string;
-  relationshipTags: string[];
-  lonelinessValue: number;
-  /** The role's affection summary, handed to the plugin's meter; absent until affection is initialized. */
-  affection: AffectionSummary | null;
   visualsActive?: boolean;
 };
 
@@ -31,21 +27,15 @@ export function ChatStatusSidebar({
   moodUpdatedAt,
   moodScope,
   moodIllustrationUrl,
+  roleId,
   roleSelfView,
-  relationshipTags,
-  lonelinessValue,
-  affection,
   visualsActive = true,
 }: ChatStatusSidebarProps) {
-  const normalizedLoneliness = Math.max(0, Math.min(100, Number.isFinite(lonelinessValue) ? lonelinessValue : 0));
   const contributed = useChatAffectionContribution();
   const pluginEnabled = usePluginEnabledState();
-  const AffectionMeter = contributed && pluginEnabled(contributed.pluginId) ? contributed.Component : null;
-  // Loneliness and relationship tags belong to the affection plugin too (its relationship
-  // snapshot is their only source): without its meter none of these rows show.
-  const showLoneliness = AffectionMeter !== null;
-  const showRelationshipTags = AffectionMeter !== null;
-  const showAffection = Boolean(affection && AffectionMeter);
+  // Affection, relationship tags and loneliness are the plugin's own block; the
+  // sidebar only mounts the slot while the plugin is on.
+  const AffectionBlock = contributed && pluginEnabled(contributed.pluginId) && roleId ? contributed.Component : null;
   const shouldRenderIllustration = Boolean(moodIllustrationUrl) && visualsActive;
   const layerRef = useRef<HTMLDivElement | null>(null);
   const frameRef = useRef<HTMLDivElement | null>(null);
@@ -58,11 +48,7 @@ export function ChatStatusSidebar({
       className={cx(
         chatSidebarPanelClass,
         "chat-status-sidebar relative gap-3",
-        showAffection
-          ? "grid-rows-[minmax(0,1fr)_auto_auto_auto_auto_auto]"
-          : showLoneliness
-            ? "grid-rows-[minmax(0,1fr)_auto_auto_auto_auto]"
-            : "grid-rows-[minmax(0,1fr)_auto_auto_auto]",
+        AffectionBlock ? "grid-rows-[minmax(0,1fr)_auto_auto_auto]" : "grid-rows-[minmax(0,1fr)_auto_auto]",
       )}
     >
       {/* The illustration may shrink to zero; only its own pixels are clipped so text and controls take priority. */}
@@ -107,27 +93,8 @@ export function ChatStatusSidebar({
           {roleSelfView || "我还在慢慢整理自己现在对你的想法。"}
         </div>
       </div>
-      {!showRelationshipTags ? null : relationshipTags.length ? (
-        <div className="flex flex-wrap gap-1">
-          {relationshipTags.map((tag) => (
-            <span
-              key={tag}
-              className="rounded-full bg-accent-soft px-1.5 py-0.5 text-caption text-accent-text"
-            >
-              {tag}
-            </span>
-          ))}
-        </div>
-      ) : (
-        <div className="text-caption text-ink-muted">关系标签还在生成中</div>
-      )}
-      {/* Affection shows only its stage and a thin bar of its place on the whole range: no value, no reasons. */}
-      {showAffection && AffectionMeter && affection ? (
-        <AffectionMeter summary={affection} />
-      ) : null}
-      {showLoneliness ? (
-        <StatusMeter label="寂寞值" value={Math.round(normalizedLoneliness)} percent={normalizedLoneliness} heightClass="h-1.5" />
-      ) : null}
+      {/* Keyed by role so a switch never shows the previous role's data while it reloads. */}
+      {AffectionBlock ? <AffectionBlock key={roleId} roleId={roleId} /> : null}
       {/* Mood-change particles fly over the whole panel without catching the pointer. */}
       <div ref={layerRef} className="mood-burst-layer" aria-hidden="true" />
     </div>

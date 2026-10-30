@@ -671,7 +671,6 @@ def build_core_runtime(
                 role_store=role_store,
                 session_manager=session_manager,
                 presence=presence,
-                affection=affection,
                 role_runtime_registry=role_runtime_registry,
                 provider=loop_provider,
                 model=loop_model,
