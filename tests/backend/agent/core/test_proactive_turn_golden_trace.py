@@ -10,8 +10,10 @@ model was offered. They never name a phase, gate, pipeline or tool module, so
 the moved code must pass them unchanged.
 
 Allowed edits during P6b: ``proactive_host`` (the assembly: today
-``build_proactive_runtime`` and the role tick dispatcher, later the plugin)
-and ``ProactiveHost.tick`` (how one tick is driven), plus the event and
+``build_proactive_runtime`` and the role tick dispatcher, later the plugin),
+``_seed_role`` and ``_bind_private_chat`` (how the role is switched on and
+bound; PR5 moves the proactive switch from ``roles.update`` to the plugin's
+settings) and ``ProactiveHost.tick`` (how one tick is driven), plus the event and
 affection method names where #907 renames them on purpose
 (``InitiatedMessageCommitted``, ``handle_initiated_sent``). Scenario
 assertions stay as they are.
@@ -107,12 +109,19 @@ class RecordingAffection:
 
 @dataclass(frozen=True)
 class Delivered:
-    """One transport send and how many role messages were stored before it."""
+    """One transport send and how many role messages were stored before it.
+
+    ``owner_commits`` is the desktop transport contract: True when the send is
+    marked ``pending_commit``, so the desktop bridge leaves storing the message
+    to the turn owner instead of storing it a second time. Account sends have
+    no such contract and record None.
+    """
 
     channel: str
     chat_id: str
     text: str
     stored_before: int
+    owner_commits: bool | None
 
 
 class _ModelRuntime:
@@ -135,6 +144,11 @@ class ProactiveHost:
     events: list[ProactiveMessageCommitted] = field(
         default_factory=list[ProactiveMessageCommitted]
     )
+    # Per event: whether its message_id was already stored when it arrived
+    # (the desktop bridge looks the message up by that id).
+    events_after_store: list[bool] = field(default_factory=list[bool])
+    # Ticks that failed; the runtime loop logs them and keeps running.
+    tick_errors: list[Exception] = field(default_factory=list[Exception])
     busy: bool = False
     # Raised by the desktop sender instead of sending, while set.
     desktop_failure: Exception | None = None
@@ -143,13 +157,17 @@ class ProactiveHost:
         """Runs one proactive tick as the runtime does for a due role.
 
         The natural_chat plugin is on, as by default; the role's own flag
-        decides whether the tick replies naturally.
+        decides whether the tick replies naturally. Like the runtime loop, a
+        failed tick is kept (in ``tick_errors``) rather than raised.
         """
         with (
             turn_getters(affection=self.affection, policy=NaturalChatPolicy()),
             ChannelSequenceOwner().bind(MessageBus()),
         ):
-            _ = await self.loop._run_tick()  # pyright: ignore[reportPrivateUsage]
+            try:
+                _ = await self.loop._run_tick()  # pyright: ignore[reportPrivateUsage]
+            except Exception as error:
+                self.tick_errors.append(error)
 
     def stored(self) -> list[dict[str, Any]]:
         """The role session's assistant messages as reloaded from disk."""
@@ -227,11 +245,14 @@ async def proactive_host(
     def stored_now() -> int:
         return len(holder["host"].stored())
 
-    async def desktop_send(chat_id: str, text: str, _: dict[str, object]) -> str:
+    async def desktop_send(chat_id: str, text: str, metadata: dict[str, object]) -> str:
         host = holder["host"]
         if host.desktop_failure is not None:
             raise host.desktop_failure
-        host.delivered.append(Delivered("desktop", chat_id, text, stored_now()))
+        owner_commits = metadata.get("pending_commit") is True
+        host.delivered.append(
+            Delivered("desktop", chat_id, text, stored_now(), owner_commits)
+        )
         return f"desktop-{len(host.delivered)}"
 
     async def platform_send(payload: dict[str, Any]) -> dict[str, Any]:
@@ -242,6 +263,7 @@ async def proactive_host(
                 f"{payload['target_kind']}:{payload['target_id']}",
                 str(payload["message"]),
                 stored_now(),
+                None,
             )
         )
         return {"message_id": f"platform-{len(host.delivered)}"}
@@ -303,7 +325,13 @@ async def proactive_host(
         workspace, provider, affection, desktop_presence, loops["mira"]
     )
     holder["host"] = host
-    bus.on(ProactiveMessageCommitted, host.events.append)
+
+    def committed(event: ProactiveMessageCommitted) -> None:
+        host.events.append(event)
+        stored_ids = {str(message["id"]) for message in host.stored()}
+        host.events_after_store.append(event.message_id in stored_ids)
+
+    bus.on(ProactiveMessageCommitted, committed)
 
     # Natural messages are paced like typing; the golden trace does not wait.
     async def no_pause(_: object) -> None:
@@ -348,6 +376,7 @@ def _assert_one_event(host: ProactiveHost, *, channel: str, chat_id: str) -> Non
     assert event.message_id == stored[-1]["id"]
     assert event.assistant_response == "\n\n".join(m["content"] for m in stored)
     assert event.tools_used == ("message_push",)
+    assert host.events_after_store == [True]
 
 
 async def scenario_lonely_tick_speaks_on_desktop(host: ProactiveHost) -> None:
@@ -362,7 +391,9 @@ async def scenario_lonely_tick_speaks_on_desktop(host: ProactiveHost) -> None:
 
     await host.tick()
 
-    assert host.delivered == [Delivered("desktop", SESSION_KEY, "在忙吗？想你了。", 0)]
+    assert host.delivered == [
+        Delivered("desktop", SESSION_KEY, "在忙吗？想你了。", 0, True)
+    ]
     [message] = host.stored()
     assert (message["content"], message["proactive"], message["tools_used"]) == (
         "在忙吗？想你了。",
@@ -380,7 +411,7 @@ async def scenario_lonely_tick_speaks_on_desktop(host: ProactiveHost) -> None:
     assert host.mood() == MOOD
     _assert_one_event(host, channel="desktop", chat_id=SESSION_KEY)
     last = host.last_initiated_at()
-    assert last is not None and last >= before.replace(microsecond=0)
+    assert last is not None and last >= before
     assert host.affection.sent == [SESSION_KEY]
     # The model saw the role and was offered the push and the closing decision.
     assert ROLE_PROMPT in str(host.provider.requests[0]["messages"][0]["content"])
@@ -400,8 +431,8 @@ async def scenario_natural_reply_sends_each_message(host: ProactiveHost) -> None
     await host.tick()
 
     assert host.delivered == [
-        Delivered("desktop", SESSION_KEY, "在吗？", 0),
-        Delivered("desktop", SESSION_KEY, "外面下雨了，记得带伞。", 1),
+        Delivered("desktop", SESSION_KEY, "在吗？", 0, True),
+        Delivered("desktop", SESSION_KEY, "外面下雨了，记得带伞。", 1, True),
     ]
     stored = host.stored()
     assert [m["content"] for m in stored] == messages
@@ -429,13 +460,17 @@ async def scenario_away_user_is_reached_in_bound_private_chat(
 
     await host.tick()
 
-    assert host.delivered == [Delivered("chat", "private:user-1", "到家了吗？", 0)]
+    assert host.delivered == [
+        Delivered("chat", "private:user-1", "到家了吗？", 0, None)
+    ]
     [message] = host.stored()
     assert (message["delivery_status"], message["external_message_id"]) == (
         "sent",
         "platform-1",
     )
     assert message["metadata"]["chat_type"] == "private"
+    assert (message["proactive"], message["metadata"]["source"]) == (True, "proactive")
+    assert host.mood() == MOOD
     assert message["metadata"]["thread_id"] == "thread:mira:chat:dm:user-1"
     _assert_one_event(host, channel=BOUND_CHAT[0], chat_id=BOUND_CHAT[1])
     assert host.affection.sent == [SESSION_KEY]
@@ -488,15 +523,17 @@ async def scenario_repeated_message_is_not_sent_again(host: ProactiveHost) -> No
 async def scenario_failed_send_keeps_nothing_and_retries(host: ProactiveHost) -> None:
     """A send that fails stores and announces nothing; the next tick sends it.
 
-    The tick fails at the loop boundary, and the failed text is not counted as
-    sent, so the identical message is not suppressed afterwards.
+    The tick fails (the runtime loop logs it and carries on), and the failed
+    text is not counted as sent, so the identical message is not suppressed
+    afterwards.
     """
     host.desktop_failure = ConnectionError("桌面端未连接")
     host.provider.script = [_push("你还好吗？"), _REPLY]
 
-    with pytest.raises(Exception, match="桌面端未连接"):
-        await host.tick()
+    await host.tick()
 
+    assert host.tick_errors
+    host.tick_errors.clear()
     assert host.delivered == []
     assert host.stored() == []
     assert host.events == []
@@ -539,7 +576,7 @@ async def scenario_idle_drift_shares_and_records_run(host: ProactiveHost) -> Non
     await host.tick()
 
     assert host.delivered == [
-        Delivered("desktop", SESSION_KEY, "今天的晚霞好好看。", 0)
+        Delivered("desktop", SESSION_KEY, "今天的晚霞好好看。", 0, True)
     ]
     [message] = host.stored()
     assert (message["content"], message["proactive"]) == ("今天的晚霞好好看。", True)
@@ -592,3 +629,5 @@ async def test_proactive_turn_golden_trace(
 ) -> None:
     async with proactive_host(tmp_path, monkeypatch, natural=natural) as host:
         await scenario(host)
+        # A scenario that expects a failed tick clears what it checked.
+        assert host.tick_errors == []

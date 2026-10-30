@@ -106,7 +106,9 @@ DEFAULT_FILES: frozenset[str] = frozenset(
 DEFAULT_CASE_MIN = 950
 # P3 golden trace，维护者 2026-10-23 确认，#902：上限从 1050 上调到 1058，当时为它的 8 条
 # 场景用例留位。同一文件里的 core-only 冒烟（§5.3，P3-4 加入，2 条）也是每次 CI 都必须
-# 守住的宿主契约；加入它之后计数仍在上限内，上限不变。
+# 守住的宿主契约；加入它之后计数仍在上限内，上限不变。P6b 主动回合 golden trace（#907 PR0）
+# 的 8 条也放进了这份余量，没有再上调：加入后按字面 parametrize 计数为 1019（实际收集
+# 1035 条），离上限 1058 还剩 39。
 DEFAULT_CASE_MAX = 1058
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
