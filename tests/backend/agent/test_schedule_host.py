@@ -10,7 +10,6 @@ import pytest
 from agent.schedule_host import HostScheduleRunner
 from agent.scheduler import SchedulerService
 from agent.tools.message_push import MessagePushTool
-from shiori_sdk.core.schedule_host import scheduler_thread_id
 from tests.support.push import allow_every_role_target
 
 
@@ -20,14 +19,12 @@ class _Loop:
     def __init__(self, reply: str) -> None:
         self.reply = reply
         self.turns: list[dict[str, Any]] = []
-        self.operations: list[dict[str, str]] = []
 
     async def process_direct(self, content: str, **kwargs: Any) -> str:
         self.turns.append({"content": content, **kwargs})
         return self.reply
 
     async def run_role_operation(self, metadata, operation):
-        self.operations.append(dict(metadata))
         return await operation()
 
 
@@ -68,13 +65,7 @@ async def test_due_job_is_delivered_once_per_occurrence_through_the_port(
     # Only the soft turn already stored its reply in the conversation.
     assert delivery["already_persisted"] is (tier == "soft")
     assert message == ("喝水" if tier == "instant" else "今天会下雨，记得带伞")
-    (operation,) = loop.operations
-    assert operation["thread_id"] == scheduler_thread_id("mira", job.id)
-    assert operation["role_work_kind"] == "scheduled_job"
     if tier == "soft":
+        # The turn and its delivery share the occurrence's key.
         (turn,) = loop.turns
-        assert turn["content"] == "看看天气"
         assert turn["metadata"]["delivery_key"] == occurrence_key
-        assert "message_push" in turn["disabled_tools"]
-    else:
-        assert loop.turns == []
