@@ -85,7 +85,6 @@ class RuntimeChannelHarness:
             model="",
             api_key="",
             model_registrations=[],
-            memory_optimizer_enabled=False,
         )
         self.app = AppRuntime(
             config, self.workspace, features=RuntimeFeatures(enable_proactive=False)

@@ -25,7 +25,6 @@ def stub_core_runtime():
             push_tool=None,
             presence=None,
             affection=bound_affection(),
-            memory_optimizer=None,
             role_runtime_registry=None,
             memory_runtime=SimpleNamespace(current_engine=lambda: None),
             plugin_manager=None,

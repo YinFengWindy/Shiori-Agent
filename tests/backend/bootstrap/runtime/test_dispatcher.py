@@ -1113,7 +1113,6 @@ async def test_background_result_runs_on_new_loop_and_releases_short_lease(
         model="",
         api_key="",
         model_registrations=[],
-        memory_optimizer_enabled=False,
     )
     app = AppRuntime(
         config,

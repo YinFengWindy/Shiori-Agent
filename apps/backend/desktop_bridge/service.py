@@ -6,6 +6,7 @@ from shiori_sdk.errors import public_validation_message, summarize_exception_for
 
 from agent.plugin_host.bridge_events import PluginBridgeEvent
 from shiori_sdk.rpc import PluginRpcError
+from shiori_sdk.core.memory_optimizer import MemoryOptimizer
 
 from contextlib import ExitStack
 from shiori_sdk.accounts.models import AccountDeletingError, AccountNotFoundError
@@ -90,7 +91,7 @@ class DesktopBridgeService:
         affection: AffectionGetter,
         presence: Presence | None = None,
         subagent_manager: Any | None = None,
-        memory_optimizer: Any | None = None,
+        memory_optimizer: Callable[[], MemoryOptimizer | None] = lambda: None,
         role_runtime_registry: RoleRuntimeRegistry | None = None,
         current_memory_engine: Callable[[], MemoryEngine | None] = lambda: None,
         card_import_service: Any | None = None,

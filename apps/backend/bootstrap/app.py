@@ -92,7 +92,6 @@ class AppRuntime(RuntimeReloadMixin, RuntimeBackgroundMixin, RuntimeShutdownMixi
         # it and proactive delivery reads it to pick where to reach the user.
         self.desktop_presence = DesktopPresence()
         self._background_tasks: list[asyncio.Task[None]] = []
-        self._memory_optimizer = None
         self._shutdown = False
         self._shutdown_task: asyncio.Task[None] | None = None
         self._started = False

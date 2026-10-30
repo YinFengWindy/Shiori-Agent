@@ -36,8 +36,6 @@ export const advancedSettingsGroups: readonly AdvancedSettingsGroup[] = [
     title: "记忆整理",
     fields: [
       { kind: "number", key: "memoryWindow", configKey: "memory_window", label: "记忆整理消息基数", unit: "条" },
-      { kind: "toggle", key: "memoryOptimizerEnabled", configKey: "memory_optimizer_enabled", label: "后台整理记忆" },
-      { kind: "number", key: "memoryOptimizerIntervalSeconds", configKey: "memory_optimizer_interval_seconds", label: "整理间隔", unit: "秒" },
     ],
   },
   {

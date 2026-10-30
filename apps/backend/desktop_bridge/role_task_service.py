@@ -1,7 +1,21 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+from shiori_sdk.core.memory_optimizer import MEMORY_OPTIMIZER, MemoryOptimizer
+
+if TYPE_CHECKING:
+    from agent.plugin_host import PluginKernel
+
+
+def memory_optimizer_getter(
+    plugin_manager: PluginKernel | None,
+) -> Callable[[], MemoryOptimizer | None]:
+    """Reads ``MEMORY_OPTIMIZER`` live, so the plugin's enable state applies at once."""
+    if plugin_manager is None:
+        return lambda: None
+    return lambda: plugin_manager.kernel.get(MEMORY_OPTIMIZER)
 
 
 class RoleTaskService:
@@ -9,13 +23,15 @@ class RoleTaskService:
 
     Background (subagent) and memory maintenance tasks only; the schedule
     plugin lists and edits scheduled jobs in its own block of the panel.
+    Memory maintenance is the ``memory_optimizer`` plugin's running role,
+    read through ``memory_optimizer`` (``None`` while the plugin is off).
     """
 
     def __init__(
         self,
         *,
         subagent_manager: Any | None,
-        memory_optimizer: Any | None,
+        memory_optimizer: Callable[[], MemoryOptimizer | None],
         session_key_for_role: Callable[[str], str],
     ) -> None:
         self._subagent_manager = subagent_manager
@@ -77,8 +93,9 @@ class RoleTaskService:
         ]
 
     def _list_memory_tasks(self, role_id: str) -> list[dict[str, object]]:
-        optimizer = self._memory_optimizer
-        if optimizer is None or optimizer.active_role_id != role_id:
+        optimizer = self._memory_optimizer()
+        run = optimizer.active_run() if optimizer is not None else None
+        if run is None or run.role_id != role_id:
             return []
         return [
             {
@@ -88,7 +105,7 @@ class RoleTaskService:
                 "status": "running",
                 "label": "记忆维护",
                 "detail": "整理角色记忆与自我认知",
-                "created_at": optimizer.active_started_at,
+                "created_at": run.started_at.isoformat(),
                 "cancellable": False,
             }
         ]

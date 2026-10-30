@@ -122,7 +122,6 @@ class CoreRuntime:
     image_sync_service: ExternalPushSyncService | None = None
     agent_provider: LLMProvider | None = None
     plugin_manager: "PluginKernel | None" = None
-    memory_optimizer: Any | None = None
     additional_providers: list[LLMProvider] = field(default_factory=list)
     proactive_motives: list[ProactiveGate] = field(default_factory=list)
     scene_followup_subscription: SceneFollowupSubscription | None = None

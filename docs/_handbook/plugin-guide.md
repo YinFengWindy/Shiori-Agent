@@ -73,7 +73,7 @@ UTF-8 YAML。字段在 `apps/backend/agent/plugin_host/manifest.py` 解析；外
 
 `EVENTS` 是领域事件总线（`on` / `off` / `emit`），和下面的内核事件不是一回事。
 
-### P6a / P6s 的新 Key
+### P6a / P6s / P6b 的新 Key
 
 这些是新 Key，没有加在已有 Protocol 上。契约放在 `shiori_sdk.core`，因为核心或别的插件要消费，不能从插件包导入。
 
@@ -87,6 +87,8 @@ UTF-8 YAML。字段在 `apps/backend/agent/plugin_host/manifest.py` 解析；外
 | `mcp_tools` | `MCP_TOOLS` | 宿主。动态 MCP 工具的登记。管理工具仍走 `TOOLS.register` |
 | `schedule_host` | `SCHEDULE_HOST` | 宿主（P6s）。按角色跑定时回合（`run_turn`）或直接投递（`deliver`），走当前发布代；端口本身跨代 |
 | `scheduler` | `SCHEDULER` | 系统插件 `schedule`（P6s）。只有创建、列出、取消角色的任务。消费方用 `optional_inject`，`get` 为 `None` 时不用定时能力。任务仍在 `<workspace>/schedules.json` |
+| `markdown_memory` | `MARKDOWN_MEMORY` | 宿主（P6b）。`role(role_id)` 给出角色的 Markdown 记忆：读 `MEMORY.md` / `SELF.md`、写 `SELF.md`、`PENDING.md` 两阶段合并（`snapshot_pending` → `commit_long_term` / `rollback_pending_snapshot`）、首版 SELF 是否待生成，以及角色 `memory_init_state` 里插件自有的键（`read_state` / `write_state`）。端口本身跨代 |
+| `memory_optimizer` | `MEMORY_OPTIMIZER` | 系统插件 `memory_optimizer`（P6b）。只有 `active_run()`：正在整理的角色与开始时间。核心 `get` 它在任务面板列出记忆维护，`None` 时不列 |
 
 旧的 `scene_observations` Key 在 4.0.0 删除。NovelAI 改为 `optional_inject: [scene]`，`get(SCENE)` 为空时不登记需求。场景插件经 `SCENE_HOST.on_published` 开始观察：本代已发布时（代内重载、代内启用）立即开始，否则等宿主发布本代。`mcp` 是外部插件，新装默认关闭，没启用时没有 `mcp_add`；`mcp_servers.json` 里已有服务器的老工作区会在启动时一次性写入 `[plugins.mcp] enabled = true`（见[生命周期](plugin-lifecycle.md)）。
 

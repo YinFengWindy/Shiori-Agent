@@ -42,11 +42,12 @@ memory_window = 40
 [agent.tools]
 search_enabled = true
 
-# 可选：长期记忆整理任务（默认已启用，通常无需修改）
-# [agent.maintenance]
-# memory_optimizer_enabled = true
-# memory_optimizer_interval_seconds = 64800
 # 输入预算策略见 [agent.context]，不再使用固定历史 token 阈值。
+
+# 可选：长期记忆整理（系统插件 memory_optimizer，默认启用；设置 › 插件 › 记忆整理）
+# [plugins.memory_optimizer]
+# enabled = true
+# interval_seconds = 64800
 
 # 可选：控制加载哪些工具集（默认值适合大多数场景）
 # [agent.wiring]

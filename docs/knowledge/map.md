@@ -31,6 +31,7 @@ related:
 | 对话持久化与群聊旁听 | `apps/backend/conversation/`（含 `listening*.py`） | 线程投影、旧数据迁移、跨入口消息连续性、群聊旁听窗口 |
 | 上下文压缩 | `apps/backend/core/compaction*.py`（`CompactionController`）、`apps/backend/agent/core/passive_turn/compaction*.py`、`apps/backend/agent/prompting/input_budget.py` | 按 `model_context_window` 计算输入预算、自动/手动 `/compact`、上下文窗口展示 |
 | 记忆契约 | `packages/sdk/python/shiori_sdk/memory/`（`MemoryEngine`、`MemoryQuery`、`MemoryMutation`）、`apps/backend/core/memory/`（`MemoryRuntime`、Markdown 记忆、群环境、角色记忆路径） | Agent 检索与生命周期插件 |
+| 记忆整理 | `plugins/memory_optimizer/`（系统插件：整理循环、`MEMORY_OPTIMIZER`）、`apps/backend/core/memory/markdown/host.py`（`MARKDOWN_MEMORY`） | Markdown 记忆、角色模型、任务面板 |
 | 默认记忆引擎 | `plugins/default_memory/backend/`（`engine/` 查询与写入策略，`semantic/` 向量存储、召回、响应后写入；原 `memory2` 已并入此处） | 查询与提取策略、向量存储、召回与上下文注入、响应后写入 |
 | 主动行为 | `apps/backend/proactive_v2/` | 传感、裁定、Agent tick、投递、状态持久化 |
 | Drift | `apps/backend/agent/core/drift_turn.py`、`apps/backend/proactive_v2/drift_state.py`、`apps/backend/proactive_v2/drift_tools.py` | 特殊回合、工具、主动状态 |
@@ -42,7 +43,7 @@ related:
 | 工具、MCP | `apps/backend/agent/tools/`、`apps/backend/infra/process/mcp_client.py`（stdio）、`plugins/mcp/`（登记与管理工具，默认关）、`apps/backend/bootstrap/toolsets/` | ToolRegistry、ToolExecutor、远端工具连接 |
 | 插件宿主与 SDK | `apps/backend/agent/plugin_host/`（`PluginKernel`）、`packages/sdk/`（`shiori_sdk`，版本源 `packages/sdk/python/shiori_sdk/_version.py`）、`packages/shiori-host-testing/` | 插件发现/加载/卸载、回合与工具事件、渠道、RPC、服务注册 |
 | 插件包管理 | `apps/backend/desktop_bridge/runtime/plugin_*.py`、`scripts/build-plugin.mjs`、`scripts/plugin-distribution.mjs` | 外部插件安装/卸载事务、信任、`workspace/plugins/` 与 `workspace/plugin-data/` |
-| 调度任务 | `plugins/schedule/`（系统插件：调度器、工具、`SCHEDULER`、任务面板区块）、`apps/backend/agent/schedule_host.py`（`SCHEDULE_HOST`）、`apps/backend/desktop_bridge/role_task_service.py`（面板里的后台与记忆任务） | 定时触发、角色任务、桌面展示 |
+| 调度任务 | `plugins/schedule/`（系统插件：调度器、工具、`SCHEDULER`、任务面板区块）、`apps/backend/agent/schedule_host.py`（`SCHEDULE_HOST`）、`apps/backend/desktop_bridge/role_task_service.py`（面板里的后台任务与读 `MEMORY_OPTIMIZER` 的记忆维护） | 定时触发、角色任务、桌面展示 |
 | 桌面桥接 | `apps/backend/desktop_bridge/` | Electron 主进程、React renderer、后端服务 |
 | 桌面界面 | `apps/desktop/src/`、`apps/desktop/renderer/src/` | 角色管理、聊天、设置、图片、任务 |
 | 官网 | `apps/site/`（Astro 静态站，`https://www.windchant.online`；设计 token、Tailwind 主题、场景背景直接引用 `apps/desktop/renderer/`） | Vercel 部署（`vercel.json`，忽略构建脚本 `apps/site/scripts/vercel-ignore-build.sh`）、GitHub Pages 工作流（`.github/workflows/site-pages.yml`）；更新日志 `/changelog/` 构建期经 GitHub API 读取 Release（`GITHUB_TOKEN`），Release 发布后由 `.github/workflows/site-redeploy-on-release.yml` 调 Vercel Deploy Hook 重部署 |

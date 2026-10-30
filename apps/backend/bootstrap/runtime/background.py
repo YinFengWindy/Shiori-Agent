@@ -1,7 +1,7 @@
-"""Handoff of proactive and optimizer scheduling between runtime versions.
+"""Handoff of proactive scheduling between runtime versions.
 
-Background loops only do maintenance the next generation redoes on its own
-schedule (memory optimizing, proactive ticks), so replacing a version
+Background loops only do work the next generation redoes on its own
+schedule (proactive ticks), so replacing a version
 interrupts their in-flight work instead of waiting for it: a model call stuck
 in retries must never hold a settings switch or shutdown.
 """
@@ -12,7 +12,7 @@ import asyncio
 from collections.abc import Coroutine
 from typing import Any, Protocol
 
-from bootstrap.proactive import build_memory_optimizer_task, build_proactive_runtime
+from bootstrap.proactive import build_proactive_runtime
 from bootstrap.runtime.generations import RuntimeCandidate
 from core.common.runtime_scope import bind_runtime
 from core.scene.host import HostSceneAdapter
@@ -37,15 +37,6 @@ class RuntimeBackground:
         self._runner: asyncio.Task[None] | None = None
         self._stopped = False
         self.proactive_loops = {}
-        tasks, self.optimizer = build_memory_optimizer_task(
-            config,
-            provider=core.provider,
-            memory_store=core.memory_runtime.markdown.store,
-            role_runtime_registry=core.role_runtime_registry,
-            loop_consumer=self._loops.append,
-        )
-        self._coroutines.extend(tasks)
-        core.memory_optimizer = self.optimizer
         if app.features.enable_proactive and config.model_registrations:
             manager = core.plugin_manager
             if manager is None:
@@ -174,7 +165,6 @@ class RuntimeBackgroundMixin:
         if candidate.core.scene_followup_subscription is not None:
             candidate.core.scene_followup_subscription.start()
         self.proactive_loops = group.proactive_loops
-        self._memory_optimizer = group.optimizer
         group.start(old_group)
 
     def _discard_background(self, candidate: RuntimeCandidate) -> None:

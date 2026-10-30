@@ -71,8 +71,6 @@ class Config:
     proactive_strategies: ProactiveStrategiesConfig = field(
         default_factory=ProactiveStrategiesConfig
     )
-    memory_optimizer_enabled: bool = True
-    memory_optimizer_interval_seconds: int = 64800
     light_model: str = ""
     light_api_key: str = ""
     light_base_url: str = ""

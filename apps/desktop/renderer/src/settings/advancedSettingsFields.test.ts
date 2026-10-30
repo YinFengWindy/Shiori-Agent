@@ -26,7 +26,6 @@ describe("advancedSettingsGroups", () => {
       memory_window: "条",
       compaction_retained_turns: "轮",
       summary_token_limit: "token",
-      memory_optimizer_interval_seconds: "秒",
       trigger_ratio: undefined,
       target_ratio: undefined,
       safety_margin_tokens: "token",

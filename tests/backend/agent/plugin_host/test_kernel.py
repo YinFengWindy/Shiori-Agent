@@ -374,6 +374,7 @@ _EXPECTED_TOP_LEVEL_PLUGINS = {
     "grok_bot",
     "herdr",
     "mcp",
+    "memory_optimizer",
     "meme",
     "natural_chat",
     "novelai",

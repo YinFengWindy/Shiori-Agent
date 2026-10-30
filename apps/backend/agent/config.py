@@ -32,10 +32,14 @@ def load_config(path: str | Path = "config.toml") -> Config:
     """
     config_path = Path(path)
     from bootstrap.memory_config_migration import migrate_legacy_memory_config
+    from bootstrap.memory_optimizer_config_migration import (
+        migrate_legacy_memory_optimizer_config,
+    )
     from bootstrap.scene_config_migration import migrate_legacy_scene_config
 
     migrate_legacy_memory_config(config_path)
     migrate_legacy_scene_config(config_path)
+    migrate_legacy_memory_optimizer_config(config_path)
     return load_config_data(_load_config_data(config_path))
 
 
@@ -52,7 +56,6 @@ def load_config_data(data: dict[str, Any]) -> Config:
     desktop_chat_cfg = _as_dict(desktop_cfg.get("chat"))
     agent_context = _as_dict(agent_cfg.get("context"))
     agent_tools = _as_dict(agent_cfg.get("tools"))
-    agent_maintenance = _as_dict(agent_cfg.get("maintenance"))
     proactive = _load_proactive_config(data)
     from agent.proactive_preferences import load_proactive_preferences
 
@@ -90,18 +93,6 @@ def load_config_data(data: dict[str, Any]) -> Config:
         ),
         proactive=proactive,
         proactive_strategies=proactive_strategies,
-        memory_optimizer_enabled=bool(
-            agent_maintenance.get(
-                "memory_optimizer_enabled",
-                data.get("memory_optimizer_enabled", True),
-            )
-        ),
-        memory_optimizer_interval_seconds=int(
-            agent_maintenance.get(
-                "memory_optimizer_interval_seconds",
-                data.get("memory_optimizer_interval_seconds", 64800),
-            )
-        ),
         light_model=str(llm_fast.get("model") or data.get("light_model", "")),
         light_api_key=resolve_config_reference(
             str(llm_fast.get("api_key") or data.get("light_api_key", ""))

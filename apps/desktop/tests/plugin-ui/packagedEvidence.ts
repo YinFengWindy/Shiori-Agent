@@ -45,7 +45,7 @@ export async function preparePackagedRun(app: string, output: string) {
   const profile = ownedPath(output, "profile");
   await mkdir(workspace);
   await mkdir(profile);
-  await writeFile(resolve(workspace, "config.toml"), '[llm]\nregistrations = []\n[agent.maintenance]\nmemory_optimizer_enabled = false\n[plugins.desktop_pet]\nenabled = false\n', "utf8");
+  await writeFile(resolve(workspace, "config.toml"), '[llm]\nregistrations = []\n[plugins.memory_optimizer]\nenabled = false\n[plugins.desktop_pet]\nenabled = false\n', "utf8");
   return { application, workspace, profile, executable: resolve(application, "Shiori.exe") };
 }
 

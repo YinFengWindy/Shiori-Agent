@@ -17,7 +17,6 @@ async def start_app(tmp_path, monkeypatch):
         model="",
         api_key="",
         model_registrations=[],
-        memory_optimizer_enabled=False,
     )
     app = AppRuntime(
         config,

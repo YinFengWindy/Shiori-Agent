@@ -44,6 +44,7 @@ from core.roles.store import RoleStore
 from agent.tools.mcp_registration import HostMcpToolRegistration
 from core.roles.affection_host import HostAffectionSources
 from core.scene.host import HostSceneAdapter
+from core.memory.markdown.host import HostMarkdownMemory
 from desktop_bridge.method_policy import MethodPolicy
 from desktop_bridge.plugin_capability import PluginRpc
 from desktop_bridge.session_presenter import DesktopSessionPresenter
@@ -54,6 +55,7 @@ from shiori_sdk.background_results import BackgroundResults
 from shiori_sdk.commands import CommandRegistry
 from shiori_sdk.core.affection_host import AFFECTION_HOST
 from shiori_sdk.core.conversation import COMMANDS
+from shiori_sdk.core.markdown_memory import MARKDOWN_MEMORY, MarkdownMemory
 from shiori_sdk.core.mcp_tools import MCP_TOOLS
 from shiori_sdk.core.scene import SCENE_HOST
 from shiori_sdk.core.schedule_host import SCHEDULE_HOST, ScheduleHost
@@ -109,7 +111,7 @@ class PluginCoreInputs:
     - ``tools``: the generation's tool registry.
     - ``role_store``: the canonical role store, behind ``roles``, ``accounts``
       and ``avatars`` (its account index and avatar cache) and, with the
-      ``workspace``, ``memory``.
+      ``workspace``, ``memory`` and ``markdown_memory``.
     - ``session_manager``: the ``sessions`` socket (``SESSIONS``) and, with
       the ``workspace`` holding session media, session metadata
       (``SESSION_STORE``), whose payloads the desktop presenter projects.
@@ -276,12 +278,19 @@ def plugin_core_modules(inputs: PluginCoreInputs) -> tuple[CoreModule, ...]:
             provide(MCP_TOOLS, HostMcpToolRegistration(inputs.tools))
 
     def provide_memory(provide: CoreProvide) -> None:
-        """The memory plugin's surface (``bootstrap.memory_capabilities``).
+        """The memory plugin's surface and roles' Markdown documents.
 
-        The engine itself is provided by a plugin as ``MEMORY_ENGINE``.
+        ``MEMORY`` is ``bootstrap.memory_capabilities``; ``MARKDOWN_MEMORY`` is
+        ``core.memory.markdown.host``. The engine itself is provided by a
+        plugin as ``MEMORY_ENGINE``.
         """
         if inputs.workspace is not None and inputs.role_store is not None:
             provide(MEMORY, HostMemoryCapability(inputs.workspace, inputs.role_store))
+            # Typed as the plugin contract, so pyright checks the host implementation.
+            markdown: MarkdownMemory = HostMarkdownMemory(
+                inputs.workspace, inputs.role_store
+            )
+            provide(MARKDOWN_MEMORY, markdown)
 
     def provide_processes(provide: CoreProvide) -> None:
         """Native processes, process-owned resources and distributed resources."""
