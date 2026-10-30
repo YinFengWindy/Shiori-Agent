@@ -13,7 +13,7 @@ from .loneliness import (
     _loneliness_tick_count,
     _parse_iso,
 )
-from .loops import LonelinessHeartbeatLoop, RelationshipSnapshotLoop
+from .loops import LonelinessHeartbeatLoop
 from .models import (
     RELATION_STATE_KEYS,
     RelationshipSnapshot,
@@ -40,7 +40,6 @@ __all__ = [
     "LonelinessHeartbeatLoop",
     "LonelinessRuntimeState",
     "RelationshipSnapshot",
-    "RelationshipSnapshotLoop",
     "RelationshipSnapshotOptimizer",
     "RoleAffectionService",
     "RoleRelationshipRuntimeService",
