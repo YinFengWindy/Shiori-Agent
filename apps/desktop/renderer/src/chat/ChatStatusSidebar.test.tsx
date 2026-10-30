@@ -14,20 +14,28 @@ import { ChatAffectionMeter } from "../../../../../plugins/affection/ui/ChatAffe
 const affectionSummary: AffectionSummary = { value: 65, stage: "亲密", progress: 0.25, floor: 60 };
 
 describe("ChatStatusSidebar", () => {
-  it("renders historical thoughts verbatim alongside mood and relationship tags", () => {
+  it("renders historical thoughts verbatim alongside mood and the affection plugin's relationship tags", () => {
     const thought = "我记得窗外的雨慢慢停了，也记得你说今天想早点休息。".repeat(7) + "\n等明天见面，再和你慢慢聊。";
-    const markup = renderToStaticMarkup(
-      <ChatStatusSidebar
-        currentMood="开心"
-        moodUpdatedAt=""
-        moodScope="rin|role:rin"
-        moodIllustrationUrl=""
-        roleSelfView={thought}
-        relationshipTags={["亲近", "安心", "期待见面", "默契"]}
-        lonelinessValue={72}
-        affection={null}
-      />,
-    );
+    affectionUiRegistry.registerChat({ pluginId: "affection", Component: ChatAffectionMeter });
+    setPluginEnabledSnapshot([{ id: "affection", enabled: true, state: "ACTIVE" }]);
+    let markup: string;
+    try {
+      markup = renderToStaticMarkup(
+        <ChatStatusSidebar
+          currentMood="开心"
+          moodUpdatedAt=""
+          moodScope="rin|role:rin"
+          moodIllustrationUrl=""
+          roleSelfView={thought}
+          relationshipTags={["亲近", "安心", "期待见面", "默契"]}
+          lonelinessValue={72}
+          affection={null}
+        />,
+      );
+    } finally {
+      affectionUiRegistry.unregister("affection");
+      resetPluginEnabledStateForTests();
+    }
 
     assert.match(markup, /role="region" aria-label="当下想法"/);
     assert.ok(markup.includes(thought));
@@ -39,16 +47,19 @@ describe("ChatStatusSidebar", () => {
     assert.ok(!markup.includes('data-testid="chat-affection"'));
   });
 
-  it("hides loneliness while the affection plugin is off", () => {
+  it("hides loneliness and relationship tags while the affection plugin is off, keeping the core thought", () => {
     affectionUiRegistry.registerChat({ pluginId: "affection", Component: ChatAffectionMeter });
     setPluginEnabledSnapshot([{ id: "affection", enabled: false, state: "DISABLED" }]);
     try {
       const markup = renderToStaticMarkup(
-        <ChatStatusSidebar currentMood="" moodUpdatedAt="" moodScope="rin|role:rin" moodIllustrationUrl="" roleSelfView=""
-          relationshipTags={[]} lonelinessValue={72} affection={affectionSummary} />,
+        <ChatStatusSidebar currentMood="" moodUpdatedAt="" moodScope="rin|role:rin" moodIllustrationUrl=""
+          roleSelfView="我在等你回来。" relationshipTags={["亲近"]} lonelinessValue={72} affection={affectionSummary} />,
       );
       assert.ok(!markup.includes("寂寞值"));
       assert.ok(!markup.includes('data-testid="chat-affection"'));
+      assert.ok(!markup.includes(">亲近<"));
+      assert.ok(!markup.includes("关系标签还在生成中"));
+      assert.ok(markup.includes("我在等你回来。"));
     } finally {
       affectionUiRegistry.unregister("affection");
       resetPluginEnabledStateForTests();

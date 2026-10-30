@@ -41,8 +41,10 @@ export function ChatStatusSidebar({
   const contributed = useChatAffectionContribution();
   const pluginEnabled = usePluginEnabledState();
   const AffectionMeter = contributed && pluginEnabled(contributed.pluginId) ? contributed.Component : null;
-  // Loneliness belongs to the affection plugin too: without its meter neither row shows.
+  // Loneliness and relationship tags belong to the affection plugin too (its relationship
+  // snapshot is their only source): without its meter none of these rows show.
   const showLoneliness = AffectionMeter !== null;
+  const showRelationshipTags = AffectionMeter !== null;
   const showAffection = Boolean(affection && AffectionMeter);
   const shouldRenderIllustration = Boolean(moodIllustrationUrl) && visualsActive;
   const layerRef = useRef<HTMLDivElement | null>(null);
@@ -105,7 +107,7 @@ export function ChatStatusSidebar({
           {roleSelfView || "我还在慢慢整理自己现在对你的想法。"}
         </div>
       </div>
-      {relationshipTags.length ? (
+      {!showRelationshipTags ? null : relationshipTags.length ? (
         <div className="flex flex-wrap gap-1">
           {relationshipTags.map((tag) => (
             <span
