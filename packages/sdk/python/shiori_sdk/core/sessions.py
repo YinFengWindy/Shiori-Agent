@@ -64,7 +64,8 @@ class TurnChanged:
 
 
 class Presence(Protocol):
-    """User and initiated-send heartbeats, kept per session.
+    """User and initiated-send heartbeats, kept per session; the latest user
+    message across all sessions can also be read.
 
     The stored columns stay ``last_user_at`` and ``last_proactive_at``.
     ``record_initiated_sent`` writes ``last_proactive_at``. A ``role:`` key is

@@ -29,6 +29,7 @@ from core.roles.reply_state import (
     reply_state_metadata,
     validate_role_reply,
 )
+from session.manager.helpers import role_session_key
 from session.manager.models import build_session_message
 from agent.account_delivery.service import ResolvedAccountTarget
 from agent.turns.channel_sequence import channel_sequence_context
@@ -55,14 +56,6 @@ logger = logging.getLogger("agent.turn_orchestrator")
 # (role_id, channel, chat_id) of an external proactive target -> the account
 # channel and private target reaching it; raises LookupError for any other chat.
 BoundChatTargetLookup = Callable[[str, str, str], tuple[str, AccountTarget]]
-
-
-def _role_presence_key(role_id: str) -> str:
-    """The presence row of ``role_id``; an empty id is a caller bug."""
-    clean_role_id = role_id.strip()
-    if not clean_role_id:
-        raise ValueError("role_id 不能为空")
-    return f"role:{clean_role_id}"
 
 
 @dataclass
@@ -380,7 +373,7 @@ class TurnOrchestrator:
                     getattr(session, "metadata", {}).get("role_id") or ""
                 ).strip()
                 self._session.presence.record_initiated_sent(
-                    _role_presence_key(role_id) if role_id else session_key,
+                    role_session_key(role_id) if role_id else session_key,
                     utcnow(),
                 )
             affection = current_affection()
@@ -456,7 +449,7 @@ class TurnOrchestrator:
                 role_id = str(plan.origin.metadata.get("role_id") or "")
                 if self._session.presence:
                     self._session.presence.record_initiated_sent(
-                        _role_presence_key(role_id), utcnow()
+                        role_session_key(role_id), utcnow()
                     )
                 affection = current_affection()
                 if affection is not None:
