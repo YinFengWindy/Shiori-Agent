@@ -72,7 +72,7 @@ spec 的 `runnable = False` 表示只登记：已停用、未信任、准入失�
 
 - **停用**：释放目标和正在运行、硬依赖它的插件，**不排空**：`on_drain` 不跑，后台任务（包括 `spawn_runtime`）取消，调用以 `plugin_unavailable` 拒绝，进程资源关闭。目标变 `DISABLED`，依赖方变 `BLOCKED`。目标原本是 `FAILED` 或因依赖 `BLOCKED` 时只变成 `DISABLED`。
 - **启用**：setup 目标和只因它而 `BLOCKED` 的插件，`was_active` 为 `False`。setup 失败的插件留在 `FAILED`，开关照样保存。
-- **可选消费方**：停用和启用都会带上正在运行、用 `optional_inject`（或 `optional_dependencies`）依赖目标的插件及其硬依赖方。它们保持启用，像代内重载一样先排空（超时报 `plugin_reload_busy`，什么都没变），停用时在目标释放后、启用时在目标 setup 之后重新 setup，`was_active` 与 `is_reload` 为 `True`，`get` 拿到的是切换后的提供方（停用时为 `None`）。重新 setup 失败的留在 `FAILED`，开关照样保存。
+- **可选消费方**：停用和启用都会带上正在运行、用 `optional_inject`（或 `optional_dependencies`）依赖目标的插件及其硬依赖方。它们保持启用，像代内重载一样先排空：排空超时（消费方忙）时这次启停被拒，停用提供方也一样，报 `plugin_reload_busy`，配置不保存，什么都没变。排空完成后，停用时在目标释放后、启用时在目标 setup 之后重新 setup，`was_active` 与 `is_reload` 为 `True`，`get` 拿到的是切换后的提供方（停用时为 `None`）。重新 setup 失败的留在 `FAILED`，开关照样保存。
 - 结果里的 `reloaded_plugins` 与 `plugins.reloaded` 事件同上；renderer 刷新名册，停用插件的 surface 随名册消失而关闭。写配置失败时恢复原状态，报 `runtime_commit_failed`。
 - 与重载相同的只能重启的情况（渠道、`supports_hot_unload: false`），以及启用时依赖了只有重新加载才能重试的插件（比如 `FAILED`），改走代际替换。
 

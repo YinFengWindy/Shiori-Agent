@@ -986,6 +986,77 @@ async def test_toggling_a_provider_sets_up_its_running_optional_consumers_again(
     await kernel.terminate_all(force=True)
 
 
+_MUTUAL = """
+import sys
+from shiori_sdk.core.services import CONFIG, DEPENDENCIES
+
+probe = sys.modules["reload_probe"]
+
+
+async def setup(ctx):
+    other = ctx.require(DEPENDENCIES).get_optional("{other}")
+    label = ctx.require(CONFIG).get("label")
+    probe.events.append(("setup", "{me}", label, other is not None))
+    ctx.effect("dispose", lambda: probe.events.append(("dispose", "{me}")))
+    ctx.expose({{"id": "{me}"}})
+"""
+
+
+@pytest.mark.asyncio
+async def test_mutually_optional_plugins_reload_and_toggle_the_named_target(
+    probe, tmp_path
+):
+    for me, other in (("aaa", "zzz"), ("zzz", "aaa")):
+        _write(
+            tmp_path,
+            me,
+            f"inject: [dependencies, config]\noptional_dependencies: [{other}]\n",
+            _MUTUAL.format(me=me, other=other),
+        )
+    configs = {"aaa": {"label": "a1"}, "zzz": {"label": "z1"}}
+    kernel = host_kernel(
+        [tmp_path],
+        settings=PluginGenerationSettings(
+            workspace=tmp_path / "workspace",
+            plugin_configs=configs,
+            raw_plugin_configs={key: dict(value) for key, value in configs.items()},
+        ),
+    )
+    await kernel.load_all()
+    probe.events.clear()
+
+    # Mutual optional injection does not rank the target last in the closure;
+    # the named target still takes the table and is set up before its consumer.
+    reloaded = await kernel.reload(
+        "aaa", values={"label": "a2"}, raw_values={"label": "a2"}, drain_timeout=5
+    )
+
+    assert reloaded.plugin_ids == ("aaa", "zzz")
+    assert configs == {"aaa": {"label": "a2"}, "zzz": {"label": "z1"}}
+    assert probe.events == [
+        ("dispose", "zzz"),
+        ("dispose", "aaa"),
+        ("setup", "aaa", "a2", False),
+        ("setup", "zzz", "z1", True),
+    ]
+
+    probe.events.clear()
+    table = {"label": "a2", "enabled": False}
+    disabled = await kernel.set_enabled(
+        "aaa", values=table, raw_values=dict(table), drain_timeout=5
+    )
+
+    assert disabled.plugin_ids == ("aaa", "zzz")
+    assert _states(kernel) == {"aaa": "DISABLED", "zzz": "ACTIVE"}
+    assert configs == {"aaa": table, "zzz": {"label": "z1"}}
+    assert probe.events == [
+        ("dispose", "zzz"),
+        ("dispose", "aaa"),
+        ("setup", "zzz", "z1", False),
+    ]
+    await kernel.terminate_all(force=True)
+
+
 @pytest.mark.asyncio
 async def test_toggle_refuses_closures_only_a_generation_swap_can_change(
     probe, tmp_path

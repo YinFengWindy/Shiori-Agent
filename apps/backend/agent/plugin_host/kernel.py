@@ -1174,6 +1174,7 @@ class PluginKernel:
             if not plugin_enabled(record.manifest, values):
                 raise ValueError(f"重载不能停用插件 {record.manifest.id}")
             return await reload_closure(
+                record.manifest.id,
                 closure,
                 values=values,
                 raw_values=raw_values,
@@ -1294,8 +1295,9 @@ class PluginKernel:
         swap applies (the generation is retired, the closure has channels or
         cannot be hot unloaded, or a plugin involved is in a state only a swap
         can retry), and ``PluginReloadTimeout`` (or the ``on_drain`` error, or
-        cancellation) when draining the optional consumers did not finish. See
-        ``agent.plugin_host.reload.toggle_closure``.
+        cancellation) when draining the optional consumers did not finish: a
+        busy consumer refuses the toggle, disabling included, and ``commit``
+        never runs. See ``agent.plugin_host.reload.toggle_closure``.
         """
         async with self._transition_lock:
             record = self._find_record(name)
@@ -1339,6 +1341,7 @@ class PluginKernel:
                 and handle.plugin_id not in toggled
             )
             result = await toggle_closure(
+                plugin_id,
                 closure,
                 enabled=enabled,
                 staying=staying,
