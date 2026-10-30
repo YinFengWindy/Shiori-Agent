@@ -124,7 +124,7 @@ export function secondarySidebarShellClass({ animating, collapsed, inset }: { an
  */
 export const primaryButtonSurfaceClass = cx(
   pressableClass,
-  "cursor-pointer rounded-md border border-white/70 bg-gradient-accent text-ink shadow-soft hover:brightness-[1.03] hover:shadow-panel active:brightness-[0.97] disabled:cursor-default disabled:opacity-50 disabled:shadow-none",
+  "cursor-pointer rounded-md border border-line-glass bg-gradient-accent text-ink shadow-soft hover:brightness-[1.03] hover:shadow-panel active:brightness-[0.97] disabled:cursor-default disabled:opacity-50 disabled:shadow-none",
 );
 
 /** Size-free secondary button surface; see `primaryButtonSurfaceClass`. */
