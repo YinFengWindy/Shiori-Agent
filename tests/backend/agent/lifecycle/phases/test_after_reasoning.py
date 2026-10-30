@@ -21,13 +21,16 @@ from conversation.service import desktop_thread_id
 from core.identity import IdentityChat, UserIdentityStore
 from shiori_sdk.accounts.models import AccountRecord
 from shiori_sdk.channels.threads import network_thread_id
-from core.roles import RoleRelationshipRuntimeService, RoleStore
+from core.roles import RoleStore
+from core.roles.affection_host import HostAffectionSources
+from plugins.affection.backend.relationship import RoleRelationshipRuntimeService
 from core.roles.reply_state import AffectionChange, InvalidRoleReply, RoleReply
 from proactive_v2.presence import PresenceStore
 from session.manager import SessionManager, ConsolidationCommitRequest
 from session.manager.models import whole_session
 from agent.turns.channel_sequence import ChannelSequenceOwner
 from bus.queue import MessageBus
+from tests.support.generation_getters import run_in_turn, turn_getters
 from shiori_sdk.messages import DeliveryOutcome
 from agent.turns.reply_sequence import ReplySequence
 
@@ -103,10 +106,12 @@ async def test_external_sequence_sends_each_committed_row_once_with_first_only_e
 
 
 def phase(manager):
-    return AfterReasoningPhase(
-        EventBus(),
-        TurnEvents(EventBus(), core_kernel),
-        SimpleNamespace(session_manager=manager, presence=None),
+    return run_in_turn(
+        AfterReasoningPhase(
+            EventBus(),
+            TurnEvents(EventBus(), core_kernel),
+            SimpleNamespace(session_manager=manager, presence=None),
+        )
     )
 
 
@@ -319,9 +324,6 @@ async def test_two_turns_commit_correct_state_without_consolidation_and_survive_
         assert session.metadata["current_mood"] == mood
         assert session.metadata["current_thought"] == thought
         assert session.last_consolidated == 0
-    session.metadata["relationship_snapshot"] = {
-        "role_self_view": "我是不应覆盖当轮想法的旧快照。"
-    }
     manager.save(session)
     reloaded = SessionManager(tmp_path).get_or_create(session.key)
     assert reloaded.metadata["current_thought"] == "我还是有点不好意思。"
@@ -368,16 +370,14 @@ async def test_missing_role_reply_state_fails_the_turn_instead_of_guessing(tmp_p
 
 
 @pytest.mark.parametrize("failure", [OSError("disk full"), asyncio.CancelledError()])
-async def test_failed_append_rolls_back_turn_fields_but_preserves_independent_snapshot(
+async def test_failed_append_rolls_back_turn_fields_but_preserves_independent_metadata(
     tmp_path, failure
 ):
     manager = SessionManager(tmp_path)
     session = role_session(manager)
 
     async def failed_append(*args, **kwargs):
-        session.metadata["relationship_snapshot"] = {
-            "role_self_view": "我来自独立的更新。"
-        }
+        session.metadata["independent_note"] = "我来自独立的更新。"
         raise failure
 
     manager.append_messages = AsyncMock(side_effect=failed_append)
@@ -386,10 +386,7 @@ async def test_failed_append_rolls_back_turn_fields_but_preserves_independent_sn
     assert session.metadata["current_mood"] == "害羞"
     assert session.metadata["current_thought"] == "我在等你。"
     assert session.metadata["current_thought_updated_at"] == "old"
-    assert (
-        session.metadata["relationship_snapshot"]["role_self_view"]
-        == "我来自独立的更新。"
-    )
+    assert session.metadata["independent_note"] == "我来自独立的更新。"
     assert session.messages == []
 
 
@@ -606,10 +603,12 @@ async def test_only_the_users_own_group_message_updates_relationship_state(
     session = role_session(manager)
     presence = PresenceStore(manager._store)
     relationship = RoleRelationshipRuntimeService(
-        tmp_path,
-        role_store=RoleStore(tmp_path),
-        session_manager=manager,
-        presence=presence,
+        HostAffectionSources(
+            workspace=tmp_path,
+            role_store=RoleStore(tmp_path),
+            session_manager=manager,
+            presence=presence,
+        )
     )
     relationship.write_snapshot(
         "yin",
@@ -642,13 +641,12 @@ async def test_only_the_users_own_group_message_updates_relationship_state(
         {"chat_type": "group", "thread_id": group}
         | ({"sender_is_user": True} if sender_is_user else {})
     )
-    services = SimpleNamespace(
-        session_manager=manager, presence=presence, relationship_runtime=relationship
-    )
+    services = SimpleNamespace(session_manager=manager, presence=presence)
 
-    await AfterReasoningPhase(
-        EventBus(), TurnEvents(EventBus(), core_kernel), services
-    ).run(request)
+    with turn_getters(affection=relationship):
+        await AfterReasoningPhase(
+            EventBus(), TurnEvents(EventBus(), core_kernel), services
+        ).run(request)
 
     runtime = relationship.read_loneliness_runtime("yin")
     assert runtime is not None

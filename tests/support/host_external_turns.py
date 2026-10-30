@@ -10,6 +10,8 @@ that an external turn must never see.
 
 from __future__ import annotations
 
+from tests.support.generation_getters import bound_affection, bound_reply_policy
+
 import asyncio
 from contextlib import contextmanager
 from pathlib import Path
@@ -35,6 +37,7 @@ from core.memory.markdown_schema import (
     SELF_UNDERSTANDING_SECTION,
 )
 from core.roles import RoleRepository, RoleRuntimeRegistry, RoleStore
+from plugins.natural_chat.backend.plugin import NaturalChatPolicy
 from session.manager import SessionManager
 from shiori_sdk.accounts.models import AccountRecord
 from shiori_sdk.channels.threads import network_thread_id
@@ -214,8 +217,12 @@ class ExternalTurnHost:
         tools.register(NamedTool("public"), always_on=True, external_allowed=True)
         directory = ChannelDirectory()
         memory_engine = cast(Any, _MemoryEngine())
+        # natural_chat is a default-on system plugin: its policy fills the socket,
+        # so the role flag alone decides selection, as in a default install.
         self.loop = AgentLoop(
             AgentLoopDeps(
+                reply_policy=bound_reply_policy(NaturalChatPolicy()),
+                affection=bound_affection(),
                 bus=MagicMock(),
                 provider=cast(Any, self.provider),
                 light_provider=cast(Any, self.provider),

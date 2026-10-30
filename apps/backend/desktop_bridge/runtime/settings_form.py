@@ -13,6 +13,7 @@ from infra.persistence.toml_store import render_toml
 # table. The next config load migrates that table; owning it here would delete
 # it on save before the credentials were copied.
 _FORM_OWNED_TABLES = frozenset({"llm", "agent", "desktop"})
+_MISSING = object()
 
 
 def settings_form_write(payload: dict[str, Any]) -> DerivedWrite | None:
@@ -45,6 +46,11 @@ def settings_form_write(payload: dict[str, Any]) -> DerivedWrite | None:
             "runtime_invalid_request",
             f"普通设置草稿不能修改独立配置: {', '.join(sorted(unowned))}",
         )
+    scene_enabled = payload.get("scene_observation_enabled", _MISSING)
+    if scene_enabled is not _MISSING and not isinstance(scene_enabled, bool):
+        raise RuntimeApplyError(
+            "runtime_invalid_request", "scene_observation_enabled 必须是布尔值"
+        )
 
     def build(current: str) -> str:
         document = tomllib.loads(current)
@@ -53,17 +59,39 @@ def settings_form_write(payload: dict[str, Any]) -> DerivedWrite | None:
             for key, value in document.items()
             if key not in _FORM_OWNED_TABLES
         }
+        if isinstance(scene_enabled, bool):
+            _merge_scene_observation(preserved, scene_enabled)
         if not preserved:
             return candidate
         # Serialize only the separately owned subtrees, retaining the ordinary
         # settings candidate's intentional deletion/default behavior.
         return candidate.rstrip() + "\n\n" + render_toml(preserved)
 
+    fingerprint: dict[str, Any] = {
+        "kind": "settings-form",
+        "config_toml": candidate,
+        "preserve_plugins": True,
+    }
+    if isinstance(scene_enabled, bool):
+        fingerprint["scene_observation_enabled"] = scene_enabled
     return DerivedWrite(
         build_config_toml=build,
-        fingerprint_payload={
-            "kind": "settings-form",
-            "config_toml": candidate,
-            "preserve_plugins": True,
-        },
+        fingerprint_payload=fingerprint,
     )
+
+
+def _merge_scene_observation(preserved: dict[str, Any], enabled: bool) -> None:
+    """Sets ``observation_enabled`` and keeps every other plugin key."""
+    plugins = preserved.get("plugins")
+    if plugins is None:
+        plugins = {}
+        preserved["plugins"] = plugins
+    if not isinstance(plugins, dict):
+        raise RuntimeApplyError("runtime_invalid_request", "plugins 必须是表")
+    scene = plugins.get("scene")
+    if scene is None:
+        scene = {}
+        plugins["scene"] = scene
+    if not isinstance(scene, dict):
+        raise RuntimeApplyError("runtime_invalid_request", "plugins.scene 必须是表")
+    scene["observation_enabled"] = enabled

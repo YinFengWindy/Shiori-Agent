@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import BinaryIO
 
 
-from agent.mcp.client import McpClient
+from infra.process.mcp_client import McpClient
 from infra.process.owned_spawn import popen_owned, spawn_owned
 
 

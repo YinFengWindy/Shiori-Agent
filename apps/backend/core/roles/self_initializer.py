@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 
 from core.memory.markdown_schema import normalize_memory_document
 
+from .affection_access import AffectionGetter
 from .memory_service import RoleMemoryService
 from .model_runtime import RoleModelSnapshot
 from shiori_sdk.values import now_iso
@@ -18,7 +19,6 @@ from .store import RoleStore
 
 if TYPE_CHECKING:
     from .models import RoleRecord
-    from .relationship_runtime.affection_seed import RoleAffectionInitializer
 
 
 class SelfInitializationError(RuntimeError):
@@ -35,7 +35,7 @@ class RoleSelfInitializer:
         self,
         store: RoleStore,
         generator: LlmRoleSelfSeedGenerator,
-        affection: RoleAffectionInitializer,
+        affection: AffectionGetter,
     ):
         self._store = store
         self._memory = RoleMemoryService(store.workspace)
@@ -109,8 +109,11 @@ class RoleSelfInitializer:
     async def _ensure_affection(
         self, role: RoleRecord, snapshot: RoleModelSnapshot
     ) -> None:
+        affection = self._affection()
+        if affection is None:
+            return
         try:
-            await self._affection.ensure_initialized(role, snapshot)
+            await affection.ensure_initialized(role.id)
         except asyncio.CancelledError:
             raise
         except Exception as error:

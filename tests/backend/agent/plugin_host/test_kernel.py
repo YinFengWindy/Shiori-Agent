@@ -363,6 +363,7 @@ async def test_force_cleanup_recovers_effects_after_rollback_is_cancelled(tmp_pa
 
 
 _EXPECTED_TOP_LEVEL_PLUGINS = {
+    "affection",
     "browser_use",
     "computer_use",
     "context_pressure",
@@ -372,11 +373,14 @@ _EXPECTED_TOP_LEVEL_PLUGINS = {
     "gpt_sovits_tts",
     "grok_bot",
     "herdr",
+    "mcp",
     "meme",
+    "natural_chat",
     "novelai",
     "story",
     "observe",
     "plugin_undo",
+    "scene",
     "qq",
     "qqbot",
     "screen_perception",

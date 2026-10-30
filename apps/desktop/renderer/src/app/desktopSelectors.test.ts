@@ -3,16 +3,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { buildDesktopViewModel } from "./desktopSelectors";
-import type { RelationState, RoleRecord, SessionPayload } from "@yinfengwindy/shiori-sdk";
+import type { RoleRecord, SessionPayload } from "@yinfengwindy/shiori-sdk";
 import type { RoleFormState } from "../shared/types";
-
-/** A complete relation state; the values don't matter to these selectors. */
-const RELATION_STATE: RelationState = {
-  dependence: 0.5,
-  security: 0.5,
-  initiative_desire: 0.5,
-  neglect_sensitivity: 0.5,
-};
 
 function createRole(overrides: Partial<RoleRecord> = {}): RoleRecord {
   return {
@@ -29,9 +21,6 @@ function createRole(overrides: Partial<RoleRecord> = {}): RoleRecord {
     illustrations_abs: overrides.illustrations_abs ?? ["D:\\bg\\mira.png"],
     asset_categories: [{ id: "default", name: "默认", allow_role_send: false }],
     asset_category_bindings: {},
-    relationship_snapshot: overrides.relationship_snapshot ?? null,
-    loneliness_runtime: overrides.loneliness_runtime ?? null,
-    affection: overrides.affection ?? null,
     created_at: overrides.created_at ?? "2026-07-04T12:00:00+08:00",
     updated_at: overrides.updated_at ?? "2026-07-04T12:00:00+08:00",
   };
@@ -271,39 +260,12 @@ describe("desktopSelectors", () => {
     assert.equal(viewModel.moodIllustrationUrl, "shiori-asset://local/unavailable");
   });
 
-  it("derives relationship summary, tags, and loneliness value from session metadata first", () => {
+  it("takes the current thought from the active role's session only", () => {
     const session = createSession();
-    session.metadata = {
-      role_id: "mira",
-      relationship_snapshot: {
-        role_id: "mira",
-        role_self_view: "我最近会不自觉地去想你会不会来找我。",
-        relation_tags: ["亲近", "怕被冷落"],
-        internal_profile: {
-          relation_state: RELATION_STATE,
-          behavior_profile: {},
-        },
-        source_summary: {},
-        generated_at: "2026-07-06T18:00:00+08:00",
-        last_attempted_at: "2026-07-06T18:00:00+08:00",
-        last_error: "",
-      },
-      loneliness_runtime: {
-        role_id: "mira",
-        loneliness_value: 64,
-        last_calculated_at: "2026-07-06T18:00:00+08:00",
-        last_user_at: "",
-        last_proactive_at: "",
-        awaiting_reply_after_proactive: false,
-        awaiting_reply_since: "",
-        last_triggered_at: "",
-        cooldown_until: "",
-      },
-    };
-
-    const viewModel = buildDesktopViewModel({
-      roles: [createRole()],
-      activeRoleId: "mira",
+    session.metadata = { role_id: "mira", current_thought: "我在等你回来。" };
+    const build = (activeRoleId: string) => buildDesktopViewModel({
+      roles: [createRole(), createRole({ id: "yin", name: "Yin" })],
+      activeRoleId,
       mainView: { kind: "chat" },
       roleForm: createRoleForm(),
       activeIllustration: "",
@@ -314,109 +276,7 @@ describe("desktopSelectors", () => {
       cancellingSessions: {},
     });
 
-    assert.equal(viewModel.roleSelfView, "我最近会不自觉地去想你会不会来找我。");
-    assert.deepEqual(viewModel.relationshipTags, ["亲近", "怕被冷落"]);
-    assert.equal(viewModel.lonelinessValue, 64);
-  });
-
-  it("derives the affection stage display from the session before the role payload", () => {
-    const build = (activeSession: SessionPayload | null, role: RoleRecord) => buildDesktopViewModel({
-      roles: [role],
-      activeRoleId: "mira",
-      mainView: { kind: "chat" },
-      roleForm: createRoleForm(),
-      activeIllustration: "",
-      activeSession,
-      selectedChatImageKey: "",
-      health: "online",
-      sendingSessions: {},
-      cancellingSessions: {},
-    });
-    const role = createRole({ affection: { value: 45, stage: "朋友", progress: 0.25, floor: 40 } });
-    const session = createSession();
-    session.metadata = { role_id: "mira", affection: { value: 61, stage: "亲密", progress: 0.05, floor: 60 } };
-
-    assert.deepEqual(build(session, role).affection, { stage: "亲密", percent: 80.5 });
-    assert.deepEqual(build(null, role).affection, { stage: "朋友", percent: 72.5 });
-    assert.equal(build(null, createRole()).affection, null);
-  });
-
-  it("falls back to the role payload relationship runtime when the session metadata is empty", () => {
-    const role = createRole({
-      relationship_snapshot: {
-        role_id: "mira",
-        role_self_view: "我还是会留意你有没有想起我。",
-        relation_tags: ["嘴硬", "等你主动"],
-        internal_profile: {
-          relation_state: RELATION_STATE,
-          behavior_profile: {},
-        },
-        source_summary: {},
-        generated_at: "2026-07-06T18:00:00+08:00",
-        last_attempted_at: "2026-07-06T18:00:00+08:00",
-        last_error: "",
-      },
-      loneliness_runtime: {
-        role_id: "mira",
-        loneliness_value: 52,
-        last_calculated_at: "2026-07-06T18:00:00+08:00",
-        last_user_at: "",
-        last_proactive_at: "",
-        awaiting_reply_after_proactive: false,
-        awaiting_reply_since: "",
-        last_triggered_at: "",
-        cooldown_until: "",
-      },
-    });
-
-    const viewModel = buildDesktopViewModel({
-      roles: [role],
-      activeRoleId: "mira",
-      mainView: { kind: "chat" },
-      roleForm: createRoleForm(),
-      activeIllustration: "",
-      activeSession: createSession(),
-      selectedChatImageKey: "",
-      health: "online",
-      sendingSessions: {},
-      cancellingSessions: {},
-    });
-
-    assert.equal(viewModel.roleSelfView, "我还是会留意你有没有想起我。");
-    assert.deepEqual(viewModel.relationshipTags, ["嘴硬", "等你主动"]);
-    assert.equal(viewModel.lonelinessValue, 52);
-  });
-
-  it("drops malformed relationship fields so renderer summaries stay safe", () => {
-    const session = createSession();
-    session.metadata = {
-      role_id: "mira",
-      relationship_snapshot: {
-        role_id: "mira",
-        role_self_view: { text: "bad" },
-        relation_tags: ["亲近", { text: "bad" }, "等你主动"],
-      },
-      loneliness_runtime: {
-        role_id: "mira",
-        loneliness_value: "61",
-      },
-    } as unknown as SessionPayload["metadata"];
-
-    const viewModel = buildDesktopViewModel({
-      roles: [createRole()],
-      activeRoleId: "mira",
-      mainView: { kind: "chat" },
-      roleForm: createRoleForm(),
-      activeIllustration: "",
-      activeSession: session,
-      selectedChatImageKey: "",
-      health: "online",
-      sendingSessions: {},
-      cancellingSessions: {},
-    });
-
-    assert.equal(viewModel.roleSelfView, "");
-    assert.deepEqual(viewModel.relationshipTags, ["亲近", "等你主动"]);
-    assert.equal(viewModel.lonelinessValue, 61);
+    assert.equal(build("mira").roleSelfView, "我在等你回来。");
+    assert.equal(build("yin").roleSelfView, "");
   });
 });

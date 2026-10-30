@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from bootstrap.runtime.generations import RuntimeLease
 
 from core.common.runtime_scope import bind_runtime, current_runtime_lease
-from core.roles.natural_chat import natural_chat_enabled
+from core.roles.reply_policy import natural_chat_selected
 from agent.turns.channel_sequence import channel_reply_scope
 from agent.turns.reply_interruption import ReplyInterruption, reply_interruption_scope
 from bus.events import SpawnCompletionItem
@@ -98,7 +98,11 @@ class RuntimeDispatcher:
                             if dedupe is not None:
                                 accepted.discard(dedupe)
                             continue
-                        if natural_chat_enabled(role):
+                        # Admission reads this generation's policy, the same
+                        # one the turn will refresh against (P3-9).
+                        with bind_runtime(lease):
+                            selected = natural_chat_selected(role)
+                        if selected:
                             background = lease.reply_sequences.background_tasks(origin)
                             interruption = (
                                 lease.reply_sequences.admit(item)

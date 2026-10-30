@@ -20,10 +20,10 @@ from bus.event_bus import EventBus
 from shiori_sdk.messages import OutboundMessage
 from bus.events_lifecycle import NOT_USER_AUTHORED_KEY, SKIP_POST_MEMORY_KEY
 from shiori_sdk.memory.committed import TurnCommitted
+from core.roles.affection_access import current_affection
 
 if TYPE_CHECKING:
     from agent.context import ContextBuilder
-    from core.roles.relationship_runtime import RoleRelationshipRuntimeService
     from session.manager import Session
 
 logger = logging.getLogger(__name__)
@@ -51,7 +51,6 @@ class AfterTurnPhase:
         outbound: OutboundPort,
         context: ContextBuilder,
         history_window: int = 500,
-        relationship_runtime: RoleRelationshipRuntimeService | None = None,
     ) -> None:
         # ``TurnCommitted`` is a core domain event, not a turn event: it fans
         # out on the core bus alone, without the plugin kernel.
@@ -60,7 +59,6 @@ class AfterTurnPhase:
         self._outbound = outbound
         self._context = context
         self._history_window = max(1, int(history_window))
-        self._relationship_runtime = relationship_runtime
 
     async def run(self, snap: TurnSnapshot) -> OutboundMessage:
         """Closes the turn and returns its outbound message."""
@@ -79,7 +77,7 @@ class AfterTurnPhase:
             history_window=hw,
         )
         react_stats = extract_react_stats(snap.ctx.context_retry)
-        await _apply_turn_affection(self._relationship_runtime, state)
+        await _apply_turn_affection(state)
         await self._bus.fanout(
             _turn_committed(snap, budget=budget, react_stats=react_stats)
         )
@@ -104,20 +102,21 @@ def _memory_extra(state: TurnState) -> dict[str, object]:
     return {}
 
 
-async def _apply_turn_affection(
-    relationship_runtime: RoleRelationshipRuntimeService | None, state: TurnState
-) -> None:
+async def _apply_turn_affection(state: TurnState) -> None:
     """Applies the committed reply's affection change before the turn is announced.
 
-    Running ahead of ``TurnCommitted`` lets every session refresh triggered by
-    it carry the new summary.
+    Running ahead of ``TurnCommitted`` means the ``session.updated`` it
+    triggers finds the new value when the plugin's sidebar re-reads it.
     """
     change = state.affection_change
-    if change is None or relationship_runtime is None:
+    affection = current_affection()
+    if change is None or affection is None:
         return
     session = cast("Session", state.session)
     try:
-        await relationship_runtime.apply_turn_affection(session, change)
+        await affection.apply_turn_affection(
+            session.key, delta=change.delta, reason=change.reason
+        )
     except Exception:
         # Boundary: the reply is already committed and goes out regardless;
         # affection is a side record of it. Raising here would report a

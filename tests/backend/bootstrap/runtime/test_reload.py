@@ -284,10 +284,51 @@ async def test_partial_candidate_construction_closes_new_provider_and_preserves_
 
 
 @pytest.mark.asyncio
+async def test_scene_intake_starts_only_when_its_generation_is_published(
+    tmp_path, monkeypatch
+):
+    """A prepared generation's scene plugin waits; publication starts it."""
+    from shiori_sdk.core.scene import SCENE_HOST
+
+    monkeypatch.setattr("bootstrap.tools._resolve_plugin_dirs", lambda _: [])
+    config = Config(
+        provider="",
+        model="",
+        api_key="",
+        model_registrations=[],
+        memory_optimizer_enabled=False,
+    )
+    app = AppRuntime(
+        config,
+        tmp_path,
+        features=RuntimeFeatures(enable_message_channels=False, enable_proactive=False),
+    )
+    await app.start()
+    lease = app.acquire()
+    started: list[str] = []
+    try:
+        original = lease.core.plugin_manager.kernel.get(SCENE_HOST)
+        assert original is not None
+        _ = original.on_published(lambda: started.append("original"))
+        assert started == ["original"]
+        prepared = await app.prepare(replace(config, max_tokens=2048))
+        host = prepared.core.plugin_manager.kernel.get(SCENE_HOST)
+        assert host is not None
+        _ = host.on_published(lambda: started.append("prepared"))
+        assert started == ["original"]
+
+        await app.publish(prepared)
+
+        assert started == ["original", "prepared"]
+    finally:
+        await lease.release()
+        await app.shutdown()
+
+
+@pytest.mark.asyncio
 async def test_core_motives_follow_generation_publication_and_rollback(
     tmp_path, monkeypatch
 ):
-    from unittest.mock import MagicMock
     from shiori_sdk.role_events import SceneObservationCommitted
     from proactive_v2.config import ProactiveStrategiesConfig
 
@@ -307,8 +348,16 @@ async def test_core_motives_follow_generation_publication_and_rollback(
     await app.start()
     lease = app.acquire()
     original = lease.core
-    apply = MagicMock()
-    monkeypatch.setattr(original.relationship_runtime, "apply_scene_decision", apply)
+
+    class _Affection:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def apply_scene_decision(self, session_key, transition, scene_key) -> None:
+            self.calls += 1
+
+    original_affection = _Affection()
+    original.affection.bind(lambda: original_affection)
     event = SceneObservationCommitted(
         session_key="role:mira",
         channel="desktop",
@@ -325,22 +374,30 @@ async def test_core_motives_follow_generation_publication_and_rollback(
             "relationship.loneliness",
         ]
         prepared = await app.prepare(replace(config, max_tokens=2048))
+        prepared_affection = _Affection()
+        prepared.core.affection.bind(lambda: prepared_affection)
         await prepared.core.event_bus.fanout(event)
-        apply.assert_not_called()
+        assert prepared_affection.calls == 0
+        assert original_affection.calls == 0
         await original.event_bus.fanout(event)
-        assert apply.call_count == 1
+        assert original_affection.calls == 1
         await app.publish(prepared)
         await prepared.core.event_bus.fanout(event)
-        assert apply.call_count == 2
+        assert prepared_affection.calls == 1
+        assert original_affection.calls == 1
         await original.event_bus.fanout(event)
-        assert apply.call_count == 3
+        assert original_affection.calls == 2
         await lease.release()
         await original.event_bus.fanout(event)
-        assert apply.call_count == 3
+        assert original_affection.calls == 2
         failed = await app.prepare(replace(prepared.config, max_tokens=4096))
+        failed_affection = _Affection()
+        failed.core.affection.bind(lambda: failed_affection)
         await app.discard(failed)
         await failed.core.event_bus.fanout(event)
-        assert apply.call_count == 3
+        assert failed_affection.calls == 0
+        assert prepared_affection.calls == 1
+        assert original_affection.calls == 2
         disabled = await app.prepare(
             replace(
                 prepared.config,
@@ -351,7 +408,8 @@ async def test_core_motives_follow_generation_publication_and_rollback(
         assert disabled.core.scene_followup_subscription is None
         await app.publish(disabled)
         await disabled.core.event_bus.fanout(event)
-        assert apply.call_count == 3
+        assert prepared_affection.calls == 1
+        assert original_affection.calls == 2
     finally:
         await lease.release()
         await app.shutdown()

@@ -2,20 +2,14 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 import inspect
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-from core.roles import RoleAggregateService, RoleRecord
-from core.roles.relationship_runtime.affection_prompts import stage_prompts_view
+from core.roles import RoleAggregateService
 
 from .role_presenter import DesktopRolePresenter
 from .role_card_export_service import DesktopRoleCardExportService
 
-if TYPE_CHECKING:
-    from core.roles import RoleRelationshipRuntimeService
-
 # Same bounds as the memory timeline's page options.
-_DEFAULT_PAGE_SIZE = 20
-_MAX_PAGE_SIZE = 100
 
 
 class DesktopRoleRequestHandler:
@@ -33,14 +27,12 @@ class DesktopRoleRequestHandler:
         role_presenter: DesktopRolePresenter,
         card_import_service: Any | None = None,
         card_export_service: DesktopRoleCardExportService | None = None,
-        relationship_runtime: RoleRelationshipRuntimeService | None = None,
         publish_event: Callable[[dict[str, Any]], Awaitable[None]],
     ) -> None:
         self._role_service = role_service
         self._role_presenter = role_presenter
         self._card_import_service = card_import_service
         self._card_export_service = card_export_service
-        self._relationship_runtime = relationship_runtime
         self._publish_event = publish_event
 
     async def handle(
@@ -123,12 +115,6 @@ class DesktopRoleRequestHandler:
                 "roles.cardExport.release": self._card_export_service.release,
             }
             return await handlers[method](payload)
-        if method == "roles.affection.history":
-            return self._affection_history(payload)
-        if method == "roles.affection.stagePrompts.get":
-            return self._stage_prompts(payload)
-        if method == "roles.affection.stagePrompts.set":
-            return self._set_stage_prompts(payload)
         if method == "roles.update":
             role_id = str(payload.get("role_id") or "")
             previous = self._role_service.repository.get_required(role_id)
@@ -201,60 +187,6 @@ class DesktopRoleRequestHandler:
         # is — and the desktop's package manager, which is now plugin UI, can
         # only reach its own namespace anyway.
         return None
-
-    def _affection_history(self, payload: dict[str, Any]) -> dict[str, Any]:
-        """One newest-first history page plus the current summary.
-
-        Pages are 1-based like the memory timeline; an uninitialized role
-        answers ``affection: None`` with no items.
-        """
-        if self._relationship_runtime is None:
-            raise RuntimeError("relationship runtime unavailable")
-        affection = self._relationship_runtime.affection
-        role_id = str(payload.get("role_id") or "").strip()
-        self._role_service.repository.get_required(role_id)
-        page = max(1, int(payload.get("page") or 1))
-        page_size = int(payload.get("page_size") or _DEFAULT_PAGE_SIZE)
-        page_size = max(1, min(_MAX_PAGE_SIZE, page_size))
-        # Settle overdue decay before paging so its entries are on the page.
-        summary = affection.current_summary(role_id)
-        entries, total = affection.history_page(role_id, page=page, page_size=page_size)
-        return {
-            "role_id": role_id,
-            "affection": summary,
-            "items": [{"id": id_, **entry.to_dict()} for id_, entry in entries],
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-        }
-
-    def _stage_prompts(self, payload: dict[str, Any]) -> dict[str, Any]:
-        """Each stage's injected guidance, its default and whether it is overridden."""
-        role = self._role_service.repository.get_required(
-            str(payload.get("role_id") or "").strip()
-        )
-        return self._stage_prompts_payload(role)
-
-    def _set_stage_prompts(self, payload: dict[str, Any]) -> dict[str, Any]:
-        """Writes the given stages' guidance; ``null``, blank or default text restores the default.
-
-        ``prompts`` maps stage names to text and may name only some stages;
-        the others keep their current guidance. Answers like the read.
-        """
-        changes = payload.get("prompts")
-        if not isinstance(changes, dict):
-            raise ValueError("prompts 必须是以阶段名为键的对象")
-        role = self._role_service.update_affection_stage_prompts(
-            str(payload.get("role_id") or "").strip(), changes
-        )
-        return self._stage_prompts_payload(role)
-
-    @staticmethod
-    def _stage_prompts_payload(role: RoleRecord) -> dict[str, Any]:
-        return {
-            "role_id": role.id,
-            "stages": stage_prompts_view(role.affection_stage_prompts),
-        }
 
     @staticmethod
     def _dict_payload(payload: dict[str, Any], key: str) -> dict[str, Any] | None:

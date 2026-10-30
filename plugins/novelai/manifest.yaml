@@ -11,7 +11,6 @@ inject:
   - http
   - tools
   - events
-  - scene_observations
   - light_provider
   - light_model
   - kv
@@ -20,5 +19,7 @@ inject:
   - workspace
   - roles
   - session_store
+optional_inject:
+  - scene
 frontend:
   entry: ui/index.tsx

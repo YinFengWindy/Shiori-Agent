@@ -15,7 +15,6 @@ from shiori_sdk.core.services import (
     ROLES,
     RPC,
     RUNTIME,
-    SCENE_OBSERVATIONS,
     SESSION_STORE,
     TOOLS,
     TOOL_TURN,
@@ -34,7 +33,6 @@ from .background_results import FakeBackgroundResults
 from .process_resources import FakeProcessResources
 from .http import FakeHttp
 from .runtime import FakeRuntimeLifecycle
-from .scene_observations import FakeSceneObservations
 from .models import FakeChatProvider, FakeModels
 
 
@@ -71,7 +69,6 @@ class FakeServiceContext(FakeExtensionContext):
         self.fake_resources = FakeResources(workspace)
         self.fake_processes = FakeProcesses()
         self.fake_runtime = FakeRuntimeLifecycle()
-        self.fake_scene_observations = FakeSceneObservations()
         self.effect("process_resources", self.fake_process_resources.close)
         self.fake_light_provider: ChatProvider = FakeChatProvider()
         self.serve(ROLES, self.fake_roles)
@@ -87,7 +84,6 @@ class FakeServiceContext(FakeExtensionContext):
         self.serve(RESOURCES, self.fake_resources)
         self.serve(PROCESSES, self.fake_processes)
         self.serve(RUNTIME, self.fake_runtime)
-        self.serve(SCENE_OBSERVATIONS, self.fake_scene_observations)
         self.serve(TOOL_TURN, current_tool_turn)
         self.serve(LIGHT_PROVIDER, self.fake_light_provider)
         self.serve(LIGHT_MODEL, "fake-light-model")
@@ -101,4 +97,3 @@ class FakeServiceContext(FakeExtensionContext):
             self.fake_rpc.handlers.clear()
             self.fake_rpc.concurrency.clear()
             self.fake_rpc.admission_exempt.clear()
-            self.fake_scene_observations.predicates.clear()

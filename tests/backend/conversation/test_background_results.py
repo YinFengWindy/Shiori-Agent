@@ -19,6 +19,7 @@ from conversation.service import (
     desktop_thread_id,
 )
 from tests.support.host_external_turns import ExternalTurnHost, USER_DM
+from tests.support.generation_getters import bound_affection
 from desktop_bridge.service import DesktopBridgeService
 from core.channels.hub import ChannelHub
 from shiori_sdk.accounts import AccountResponseRules
@@ -54,6 +55,7 @@ def host(tmp_path):
 async def bridge(host, tmp_path):
     service = DesktopBridgeService(
         workspace=tmp_path,
+        affection=bound_affection(),
         role_store=host.roles,
         session_manager=host.manager,
         agent_loop=host.loop,
@@ -139,7 +141,15 @@ async def test_natural_background_report_yields_to_desktop_input_without_losing_
 
     monkeypatch.setattr(host.provider, "chat", model)
     monkeypatch.setattr("agent.turns.reply_sequence.wait_between_messages", pause)
-    candidate = RuntimeCandidate(1, SimpleNamespace(loop=host.loop), SimpleNamespace())
+    candidate = RuntimeCandidate(
+        1,
+        SimpleNamespace(
+            loop=host.loop,
+            reply_policy=host.loop.reply_policy,
+            affection=host.loop.affection,
+        ),
+        SimpleNamespace(),
+    )
     target = await capture(host)
     # The capability is read when the result is ready, not frozen at capture.
     host.roles.update_role("mira", runtime_config={"natural_chat_enabled": True})
@@ -252,7 +262,7 @@ async def test_background_report_reads_disabled_role_without_sequence_protocol(
     from agent.provider import LLMResponse
     from agent.turns.channel_sequence import ChannelSequenceOwner
     from bus.queue import MessageBus
-    from prompts.natural_chat import NATURAL_CHAT_PROMPT
+    from plugins.natural_chat.backend.prompts import NATURAL_CHAT_PROMPT
 
     host.roles.update_role("mira", runtime_config={"natural_chat_enabled": True})
     target = await capture(host)

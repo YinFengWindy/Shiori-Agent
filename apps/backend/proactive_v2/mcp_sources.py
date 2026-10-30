@@ -4,7 +4,7 @@ proactive/mcp_sources.py — 从 MCP server 拉取 ProactiveEvent 的通用客�
 读取 ~/.shiori/workspace/proactive_sources.json 中的配置，
 动态调用各 MCP server 的 get_tool / ack_tool。
 
-使用项目自带的 agent.mcp.client.McpClient，无需额外依赖。
+使用宿主 stdio 客户端 ``infra.process.mcp_client.McpClient``。用户服务器登记在插件 mcp。
 """
 
 from __future__ import annotations
@@ -102,7 +102,7 @@ class McpClientPool:
             await self._connect(server)
 
     async def _connect(self, server: str) -> bool:
-        from agent.mcp.client import McpClient
+        from infra.process.mcp_client import McpClient
 
         command, env = self._configs.get(server, ([], {}))
         if not command:

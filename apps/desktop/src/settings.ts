@@ -43,6 +43,25 @@ function optionalBoolean(value: unknown, field: string): boolean | undefined {
   throw new Error(`${field} 必须是布尔值`);
 }
 
+/** Plugin config wins. A missing key stays undefined so a save does not invent it. */
+function sceneObservationEnabled(
+  parsed: unknown,
+  agent: Record<string, unknown>,
+): boolean | undefined {
+  const scene = asRecord(asRecord(parsed).plugins).scene;
+  if (scene && typeof scene === "object" && !Array.isArray(scene) && "observation_enabled" in scene) {
+    return optionalBoolean(
+      (scene as Record<string, unknown>).observation_enabled,
+      "plugins.scene.observation_enabled",
+    );
+  }
+  if (!("scene_observation" in agent)) return undefined;
+  return optionalBoolean(
+    asRecord(agent.scene_observation).enabled,
+    "agent.scene_observation.enabled",
+  );
+}
+
 function loadProactiveStrategies(values: Record<string, unknown>): SettingsFormData["proactiveStrategies"] {
   const sceneFollowup = optionalBoolean(values.scene_followup, "agent.proactive_strategies.scene_followup");
   const relationship = optionalBoolean(values.relationship, "agent.proactive_strategies.relationship");
@@ -119,9 +138,7 @@ export function loadSettingsData(contentOverride?: string): SettingsSnapshot {
         contextSafetyMarginTokens: Number(agentContext.safety_margin_tokens ?? 4096),
         searchEnabled: Boolean(agentTools.search_enabled),
         spawnEnabled: Boolean(agentTools.spawn_enabled ?? true),
-        sceneObservationEnabled: optionalBoolean(
-          asRecord(agent.scene_observation).enabled, "agent.scene_observation.enabled",
-        ),
+        sceneObservationEnabled: sceneObservationEnabled(parsed, agent),
         memoryOptimizerEnabled: Boolean(
           agentMaintenance.memory_optimizer_enabled ?? true,
         ),
@@ -171,11 +188,6 @@ function renderSettingsToml(formData: SettingsFormData): string {
     `search_enabled = ${formData.advanced.searchEnabled ? "true" : "false"}`,
     `spawn_enabled = ${formData.advanced.spawnEnabled ? "true" : "false"}`,
     "",
-    ...(formData.advanced.sceneObservationEnabled === undefined ? [] : [
-      "[agent.scene_observation]",
-      `enabled = ${formData.advanced.sceneObservationEnabled}`,
-      "",
-    ]),
     "[agent.maintenance]",
     `memory_optimizer_enabled = ${
       formData.advanced.memoryOptimizerEnabled ? "true" : "false"
@@ -244,6 +256,9 @@ export async function saveSettings(
   return applySettings({
     config_toml: renderSettingsToml(formData),
     preserve_plugins: true,
+    ...(formData.advanced.sceneObservationEnabled === undefined
+      ? {}
+      : { scene_observation_enabled: formData.advanced.sceneObservationEnabled }),
     expected_generation: options.expectedGeneration,
     operation_id: options.operationId ?? randomUUID(),
     role_model_updates: (formData.pendingRoleModelUpdates ?? []).map((update) => ({

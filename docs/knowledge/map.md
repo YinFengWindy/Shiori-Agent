@@ -26,7 +26,7 @@ related:
 | 应用启动与装配 | `apps/backend/main.py`、`apps/backend/bootstrap/app.py`（`AppRuntime`）、`apps/backend/bootstrap/tools.py`（`build_core_runtime` / `CoreRuntime`）、`apps/backend/bootstrap/wiring.py`（memory/context/toolset 注册表） | 渠道、Agent、角色运行时、主动循环、桌面桥接 |
 | 运行时换代与热重载 | `apps/backend/bootstrap/runtime/`（`GenerationManager`、`RuntimeLease`、`RuntimeDispatcher`、`RuntimeBackground`、prepare/publish、关闭顺序） | 设置保存后的配置发布、渠道交接、后台任务交接 |
 | 角色聚合 | `apps/backend/core/roles/store.py`、`apps/backend/core/roles/services.py`、`apps/backend/core/roles/role_runtime.py` | 会话绑定、关系、记忆、主动行为、桌面 UI |
-| 关系与场景 | `apps/backend/core/roles/relationship_runtime/`、`apps/backend/core/roles/scene_followup_runtime.py`、`apps/backend/core/scene/` | 心情/寂寞、主动触发、场景追问、自动 CG |
+| 关系与场景 | `plugins/affection/`（关系、好感、寂寞、场景追问状态）、`plugins/scene/`（场景观察）、`apps/backend/core/roles/affection_host.py`、`apps/backend/core/scene/host.py` | 心情/寂寞、主动触发、场景追问、自动 CG |
 | 会话 | `apps/backend/session/` | Agent 回合、在线状态、消息历史、搜索 |
 | 对话持久化与群聊旁听 | `apps/backend/conversation/`（含 `listening*.py`） | 线程投影、旧数据迁移、跨入口消息连续性、群聊旁听窗口 |
 | 上下文压缩 | `apps/backend/core/compaction*.py`（`CompactionController`）、`apps/backend/agent/core/passive_turn/compaction*.py`、`apps/backend/agent/prompting/input_budget.py` | 按 `model_context_window` 计算输入预算、自动/手动 `/compact`、上下文窗口展示 |
@@ -35,11 +35,11 @@ related:
 | 主动行为 | `apps/backend/proactive_v2/` | 传感、裁定、Agent tick、投递、状态持久化 |
 | Drift | `apps/backend/agent/core/drift_turn.py`、`apps/backend/proactive_v2/drift_state.py`、`apps/backend/proactive_v2/drift_tools.py` | 特殊回合、工具、主动状态 |
 | NovelAI | `plugins/novelai/backend/`（`service.py`、`client.py`、`store.py`、`tool.py`、`rpc.py`）、`plugins/novelai/ui/` | 手动图片生成、自动 CG、桌面图片面板 |
-| 自动 CG | `plugins/novelai/backend/auto_cg.py`、`plugins/novelai/backend/auto_cg_controller.py`，场景判断契约在 `apps/backend/core/scene/` | 场景判断、生成、消息推送、权威角色会话 |
+| 自动 CG | `plugins/novelai/backend/auto_cg.py`、`plugins/novelai/backend/auto_cg_controller.py`，场景判断在 `plugins/scene/` | 场景判断、生成、消息推送、权威角色会话 |
 | 渠道 | `apps/backend/infra/channels/`、`apps/backend/bootstrap/channels.py`、`apps/backend/bootstrap/channel_host.py`（`ChannelHost`）、`apps/backend/core/channels/hub.py`、`apps/backend/core/common/channel_directory.py`；合约在 `shiori_sdk.channels`；外部渠道全部是插件：`plugins/telegram/`、`plugins/qq/`、`plugins/qqbot/`、`plugins/feishu/`、`plugins/grok_bot/`（Grok Bot 双向私聊） | 消息总线、会话定位、媒体发送、角色绑定 |
 | 账号与身份 | `apps/backend/core/accounts/`、`apps/backend/agent/account_delivery/`、`apps/backend/core/identity/` | 渠道账号投递、用户身份配对 |
 | Agent 回合 | `apps/backend/agent/core/`、`apps/backend/agent/looping/`、`apps/backend/agent/turns/`、`apps/backend/agent/lifecycle/` | 上下文、推理、工具、输出、生命周期事件 |
-| 工具、MCP | `apps/backend/agent/tools/`、`apps/backend/agent/mcp/`、`apps/backend/bootstrap/toolsets/` | ToolRegistry、ToolExecutor、远端工具连接 |
+| 工具、MCP | `apps/backend/agent/tools/`、`apps/backend/infra/process/mcp_client.py`（stdio）、`plugins/mcp/`（登记与管理工具，默认关）、`apps/backend/bootstrap/toolsets/` | ToolRegistry、ToolExecutor、远端工具连接 |
 | 插件宿主与 SDK | `apps/backend/agent/plugin_host/`（`PluginKernel`）、`packages/sdk/`（`shiori_sdk`，版本源 `packages/sdk/python/shiori_sdk/_version.py`）、`packages/shiori-host-testing/` | 插件发现/加载/卸载、回合与工具事件、渠道、RPC、服务注册 |
 | 插件包管理 | `apps/backend/desktop_bridge/runtime/plugin_*.py`、`scripts/build-plugin.mjs`、`scripts/plugin-distribution.mjs` | 外部插件安装/卸载事务、信任、`workspace/plugins/` 与 `workspace/plugin-data/` |
 | 调度任务 | `apps/backend/agent/scheduler.py`、`apps/backend/agent/tools/schedule.py`、`apps/backend/desktop_bridge/schedule_role_task_service.py`、`apps/backend/desktop_bridge/role_task_service.py` | 主动触发、角色任务、桌面展示 |

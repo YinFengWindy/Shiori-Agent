@@ -1,3 +1,8 @@
+from tests.support.generation_getters import (
+    bound_affection,
+    bound_reply_policy,
+    turn_getters,
+)
 from typing import Any, cast
 from unittest.mock import MagicMock
 
@@ -37,6 +42,8 @@ async def test_spawn_completion_updates_original_session_without_raw_result(tmp_
     memory_engine = FakeMemoryEngine(tmp_path)
     loop = AgentLoop(
         AgentLoopDeps(
+            reply_policy=bound_reply_policy(),
+            affection=bound_affection(),
             bus=MagicMock(),
             provider=cast(Any, provider),
             tools=tools,
@@ -66,7 +73,11 @@ async def test_spawn_completion_updates_original_session_without_raw_result(tmp_
         ),
     )
 
-    response = await loop._process(item)
+    # process_inbound binds the loop's getters; this drives the step under it.
+
+    with turn_getters():
+
+        response = await loop._process(item)
     updated = session_manager.get_or_create("telegram:123")
 
     assert response.channel == "telegram"
@@ -92,6 +103,8 @@ async def test_spawn_completion_retry_count_one_disables_retry_guidance(tmp_path
     memory_engine = FakeMemoryEngine(tmp_path)
     loop = AgentLoop(
         AgentLoopDeps(
+            reply_policy=bound_reply_policy(),
+            affection=bound_affection(),
             bus=MagicMock(),
             provider=cast(Any, provider),
             tools=tools,
@@ -121,7 +134,8 @@ async def test_spawn_completion_retry_count_one_disables_retry_guidance(tmp_path
         ),
     )
 
-    await loop._process(item)
+    with turn_getters():
+        await loop._process(item)
 
     joined_messages = "\n".join(
         str(message.get("content", ""))

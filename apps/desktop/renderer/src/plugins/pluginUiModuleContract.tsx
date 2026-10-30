@@ -2,6 +2,7 @@ import type React from "react";
 import { PluginHostServicesProvider, type PluginInjectedProps, type PluginUiModule } from "@yinfengwindy/shiori-sdk";
 import { usePluginRpcClient } from "./usePluginRpcClient";
 import { pluginHostServicesFor } from "./pluginHostServices";
+import { affectionUiRegistry } from "./affectionUiRegistry";
 import { pluginChatImageActionsRegistry, pluginRoleSettingsRegistry } from "./pluginFeatureRegistry";
 import { createPluginSchemaSettingsSection } from "./pluginSchemaSettingsSectionFactory";
 import { retiredPluginUiContribution } from "./runtimePluginUiValidation";
@@ -58,6 +59,12 @@ export function applyPluginUiModules(
     if (uiModule.roleSettings) pluginRoleSettingsRegistry.register({ pluginId, ...uiModule.roleSettings });
     if (uiModule.chatImageActions) pluginChatImageActionsRegistry.register({
       pluginId, Component: uiModule.chatImageActions,
+    });
+    if (uiModule.roleAffection) affectionUiRegistry.registerRole({
+      pluginId, Component: bindPluginClient(pluginId, uiModule.roleAffection),
+    });
+    if (uiModule.chatAffection) affectionUiRegistry.registerChat({
+      pluginId, Component: bindPluginClient(pluginId, uiModule.chatAffection),
     });
     if (settingsSection) {
       // Registers as a subtab of the built-in "plugins" section rather than

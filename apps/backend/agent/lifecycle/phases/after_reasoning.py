@@ -32,6 +32,7 @@ from agent.lifecycle.types import (
     TurnState,
 )
 from shiori_sdk.core.conversation import ReasoningFinished
+from core.roles.affection_access import current_affection
 from shiori_sdk.messages import OutboundMessage
 from agent.turns.reply_sequence import ReplySequence
 from agent.turns.reply_interruption import reply_was_invalidated
@@ -114,9 +115,6 @@ class AfterReasoningPhase:
         self._bus = bus
         self._events = events
         self._session_services = session_services
-        self._relationship_runtime = getattr(
-            session_services, "relationship_runtime", None
-        )
 
     async def run(self, input: AfterReasoningInput) -> AfterReasoningResult:
         """Commits the reply and returns its context and outbound message."""
@@ -253,8 +251,9 @@ class AfterReasoningPhase:
         """用户本人发来消息：刷新在场，并让关系状态（孤独值、等待回复）响应。"""
         if self._session_services.presence:
             self._session_services.presence.record_user_message(session_key)
-        if self._relationship_runtime is not None:
-            self._relationship_runtime.handle_user_message(session_key)
+        affection = current_affection()
+        if affection is not None:
+            affection.handle_user_message(session_key)
 
     def _update_session_metadata(
         self, ctx: AfterReasoningCtx, session: Session
@@ -271,10 +270,6 @@ class AfterReasoningPhase:
             tool_chain=list(ctx.tool_chain),
             mood=None,
         )
-        if self._relationship_runtime is not None:
-            session.metadata = self._relationship_runtime.enrich_session_metadata(
-                cast(dict[str, Any], session.metadata),
-            )
         return dict(session.metadata)
 
     async def _commit_messages(
@@ -299,17 +294,12 @@ class AfterReasoningPhase:
             message.setdefault("metadata", {})[
                 CONTEXT_TURN_STARTED_AT
             ] = state.msg.timestamp.isoformat()
-        relationship_runtime = self._relationship_runtime
+
         state_kwargs = (
             {
                 "metadata_updates": metadata_updates,
                 "pending_messages": True,
                 "removed_metadata_keys": (INTERRUPTED_TURN_METADATA_KEY,),
-                "metadata_enricher": (
-                    relationship_runtime.enrich_session_metadata
-                    if relationship_runtime is not None
-                    else None
-                ),
             }
             if private
             else {}
@@ -333,11 +323,6 @@ class AfterReasoningPhase:
                 },
                 "pending_messages": True,
                 "removed_metadata_keys": (INTERRUPTED_TURN_METADATA_KEY,),
-                "metadata_enricher": (
-                    relationship_runtime.enrich_session_metadata
-                    if relationship_runtime is not None
-                    else None
-                ),
                 "expected_mood_updated_at": str(
                     input.turn_result.context_retry.get(
                         "role_reply_previous_updated_at",

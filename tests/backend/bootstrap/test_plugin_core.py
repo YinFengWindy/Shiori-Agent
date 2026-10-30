@@ -8,7 +8,6 @@ import sys
 import threading
 from pathlib import Path
 from types import SimpleNamespace
-from typing import cast
 
 import pytest
 from PIL import Image
@@ -23,9 +22,7 @@ from agent.core.turn_events import install_core_checks
 from bootstrap.plugin_core import PluginCoreInputs, plugin_core_modules
 from bus.event_bus import EventBus
 from core.error_context import current_session_key
-from core.roles.models import RoleRecord
 from core.roles.store import RoleStore
-from core.scene.demand import SceneObservationDemand
 from tests.support.plugin_kernel import host_kernel, make_kernel
 
 _CRASH_PROBE = """\
@@ -129,31 +126,113 @@ async def test_avatars_capability_caches_into_the_host_role_store(
 
 
 @pytest.mark.asyncio
-async def test_scene_observation_requests_reach_the_generation_demand(
-    tmp_path: Path,
-) -> None:
-    """scene_observations 由核心 scene 模块提供：插件的观测需求登记进本代宿主共用的那份 demand。"""
+async def test_scene_host_is_provided_with_the_role_store(tmp_path: Path) -> None:
+    """``SCENE_HOST`` is a core key once this generation has roles and sessions."""
     package = tmp_path / "plugins" / "scene_probe"
     (package / "backend").mkdir(parents=True)
     (package / "manifest.yaml").write_text(
-        "api: 4\nsdk: '>=4.0.0'\nid: scene_probe\ninject: [scene_observations]\n",
+        "api: 4\nsdk: '>=4.0.0'\nid: scene_probe\ninject: [scene_host]\n",
         encoding="utf-8",
     )
+    sentinel = tmp_path / "followup.txt"
     (package / "backend/plugin.py").write_text(
-        "from shiori_sdk.core.services import SCENE_OBSERVATIONS\n"
+        "from pathlib import Path\n"
+        "from shiori_sdk.core.scene import SCENE_HOST\n"
+        f"SENTINEL = Path({str(sentinel)!r})\n"
         "async def setup(ctx):\n"
-        "    ctx.require(SCENE_OBSERVATIONS).request(lambda role: role.id == 'mira')\n",
+        "    wanted = ctx.require(SCENE_HOST).followup_wanted('mira')\n"
+        "    SENTINEL.write_text('yes' if wanted else 'no', encoding='utf-8')\n",
         encoding="utf-8",
     )
-    demand = SceneObservationDemand()
+    workspace = tmp_path / "workspace"
+    role_store = RoleStore(workspace)
+    role_store.create_role(
+        role_id="mira", name="Mira", description="", system_prompt="stay"
+    )
     kernel = host_kernel(
         [tmp_path / "plugins"],
-        scene_observations=demand,
+        settings=PluginGenerationSettings(workspace=workspace),
+        role_store=role_store,
+        session_manager=SimpleNamespace(),
+        scene_followup=False,
     )
     await kernel.load_all()
     try:
         assert [state["state"] for state in kernel.states()] == ["ACTIVE"]
-        assert demand.needed(cast(RoleRecord, SimpleNamespace(id="mira")))
+        assert sentinel.read_text(encoding="utf-8") == "no"
+    finally:
+        await kernel.terminate_all(force=True)
+
+
+@pytest.mark.asyncio
+async def test_scene_keeps_observing_after_an_in_generation_reload_or_re_enable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The plugin settings page reloads scene in place; intake must not stop."""
+    from session.manager import SessionManager
+    from shiori_sdk.core.scene import SCENE_HOST
+    from shiori_sdk.role_events import ProactiveMessageCommitted
+    from shiori_sdk.testing.packages import plugin_directory, stage_plugin_package
+
+    from core.scene.host import HostSceneAdapter
+
+    stage_plugin_package(plugin_directory("scene"), tmp_path / "plugins" / "scene")
+    workspace = tmp_path / "workspace"
+    role_store = RoleStore(workspace)
+    role_store.create_role(role_id="mira", name="Mira", system_prompt="stay")
+    bus = EventBus()
+    kernel = host_kernel(
+        [tmp_path / "plugins"],
+        settings=PluginGenerationSettings(workspace=workspace),
+        role_store=role_store,
+        session_manager=SessionManager(workspace),
+        light_provider=SimpleNamespace(),
+        light_model="light",
+        event_bus=bus,
+    )
+    await kernel.load_all()
+    host = kernel.kernel.get(SCENE_HOST)
+    assert isinstance(host, HostSceneAdapter)
+    reads: list[str] = []
+
+    def history(*, session_key, role_id, thread_id, limit):
+        # Only a listening intake reads history; None ends the observation.
+        reads.append(role_id)
+        return None
+
+    monkeypatch.setattr(host, "proactive_history", history)
+    event = ProactiveMessageCommitted(
+        session_key="role:mira",
+        channel="desktop",
+        role_id="mira",
+        thread_id="desktop:mira",
+        assistant_response="在吗？",
+    )
+    try:
+        await bus.fanout(event)
+        assert reads == []
+        host.publish()
+        await bus.fanout(event)
+        assert reads == ["mira"]
+
+        await kernel.reload(
+            "scene",
+            values={"observation_enabled": True},
+            raw_values={},
+            drain_timeout=1,
+        )
+        await bus.fanout(event)
+        assert reads == ["mira"] * 2
+
+        for enabled in (False, True):
+            await kernel.set_enabled(
+                "scene",
+                values={"enabled": enabled},
+                raw_values={},
+                drain_timeout=1,
+            )
+        await bus.fanout(event)
+        assert reads == ["mira"] * 3
     finally:
         await kernel.terminate_all(force=True)
 
@@ -178,12 +257,10 @@ def test_core_module_provide_failure_aborts_startup(tmp_path: Path) -> None:
                         plugin_dirs=(tmp_path,),
                         event_bus=bus,
                         rpc=PluginRpcRegistry(bus),
-                        scene_observations=SceneObservationDemand(),
                         workspace=None,
                         tools=None,
                         role_store=None,
                         session_manager=None,
-                        relationship_runtime=None,
                         role_runtime_registry=None,
                         provider=None,
                         model=None,

@@ -20,13 +20,17 @@ export function roleDetailTabEditsDraft(tab: RoleDetailTabId) {
 export function RoleDetailTabs({
   activeTab,
   onChange,
+  showAffection,
 }: {
   activeTab: RoleDetailTabId;
   onChange: (tab: RoleDetailTabId) => void;
+  /** The affection plugin's tab. Hidden while that plugin contributes nothing. */
+  showAffection: boolean;
 }) {
+  const visible = tabs.filter((tab) => tab.id !== "affection" || showAffection);
   return (
     <nav className="-mb-px flex min-w-0 items-center gap-6 overflow-x-auto" aria-label="角色详情分区">
-      {tabs.map((tab) => {
+      {visible.map((tab) => {
         const selected = activeTab === tab.id;
         return (
           <button

@@ -1,3 +1,4 @@
+from tests.support.generation_getters import bound_affection, bound_reply_policy
 from pathlib import Path
 from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock
@@ -42,6 +43,8 @@ def _make_loop(
     memory_engine = FakeMemoryEngine(tmp_path)
     return AgentLoop(
         AgentLoopDeps(
+            reply_policy=bound_reply_policy(),
+            affection=bound_affection(),
             bus=MagicMock(),
             provider=cast(Any, provider),
             tools=tools,

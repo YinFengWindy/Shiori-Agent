@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from tests.support.generation_getters import run_in_turn
 from dataclasses import replace
 from datetime import datetime
 from types import SimpleNamespace
@@ -112,6 +113,7 @@ async def test_agent_core_process_runs_prepare_prompt_run_commit_in_order():
             reasoner=cast(Reasoner, reasoner),
         )
     )
+    run_in_turn(agent_core, method="process")
     msg = InboundMessage(
         channel="telegram",
         sender="hua",
@@ -196,6 +198,7 @@ async def test_agent_core_process_coerces_empty_reply_before_commit():
             ),
         )
     )
+    run_in_turn(agent_core, method="process")
     msg = InboundMessage(channel="cli", sender="hua", chat_id="1", content="hi")
 
     out = await agent_core.process(msg, "cli:1")
@@ -249,6 +252,7 @@ async def test_agent_core_before_reasoning_can_patch_context():
             event_bus=event_bus,
         )
     )
+    run_in_turn(agent_core, method="process")
     agent_core.bind_kernel(lambda: kernel)
     msg = InboundMessage(channel="telegram", sender="hua", chat_id="123", content="hi")
 
@@ -310,6 +314,7 @@ async def test_before_turn_abort_skips_reasoner_and_commit_and_dispatches():
             outbound_port=cast(OutboundPort, dispatch_port),
         )
     )
+    run_in_turn(agent_core, method="process")
     agent_core.bind_kernel(lambda: kernel)
     msg = InboundMessage(channel="telegram", sender="hua", chat_id="123", content="hi")
 
@@ -361,6 +366,7 @@ async def test_before_reasoning_abort_skips_reasoner_and_commit_and_dispatches()
             outbound_port=cast(OutboundPort, dispatch_port),
         )
     )
+    run_in_turn(agent_core, method="process")
     agent_core.bind_kernel(lambda: kernel)
     msg = InboundMessage(channel="telegram", sender="hua", chat_id="123", content="hi")
 
@@ -410,6 +416,7 @@ async def test_abort_does_not_dispatch_when_dispatch_outbound_false():
             outbound_port=cast(OutboundPort, dispatch_port),
         )
     )
+    run_in_turn(agent_core, method="process")
     agent_core.bind_kernel(lambda: kernel)
     msg = InboundMessage(channel="telegram", sender="hua", chat_id="123", content="hi")
 
@@ -455,6 +462,7 @@ async def test_reasoner_exception_turn_returns_control_outbound():
             outbound_port=cast(OutboundPort, dispatch_port),
         )
     )
+    run_in_turn(agent_core, method="process")
     msg = InboundMessage(channel="telegram", sender="hua", chat_id="123", content="hi")
 
     out = await agent_core.process(msg, "telegram:123", dispatch_outbound=True)
@@ -500,6 +508,7 @@ async def test_memory_consolidation_failure_propagates_to_transport_error():
             memory_consolidator=_FailedConsolidator(),
         )
     )
+    run_in_turn(agent_core, method="process")
     msg = InboundMessage(
         channel="desktop", sender="user", chat_id="role:mira", content="hi"
     )
@@ -559,6 +568,7 @@ async def test_after_turn_dispatch_exception_is_not_wrapped_by_control_outbound(
             outbound_port=cast(OutboundPort, dispatch_port),
         )
     )
+    run_in_turn(agent_core, method="process")
     msg = InboundMessage(channel="telegram", sender="hua", chat_id="123", content="hi")
 
     with pytest.raises(RuntimeError, match="dispatch failed"):

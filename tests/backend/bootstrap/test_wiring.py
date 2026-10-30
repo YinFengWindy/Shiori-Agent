@@ -1,4 +1,5 @@
 from __future__ import annotations
+from tests.support.generation_getters import bound_affection, bound_reply_policy
 
 import json
 import subprocess
@@ -164,7 +165,7 @@ def test_config_load_defaults_empty_toolsets_to_full_wiring(tmp_path: Path):
 
     cfg = Config.load(cfg_path)
 
-    assert cfg.wiring.toolsets == ["meta_common", "spawn", "schedule", "mcp"]
+    assert cfg.wiring.toolsets == ["meta_common", "spawn", "schedule"]
 
 
 def test_config_load_migrates_legacy_memory_table(tmp_path: Path, caplog):
@@ -638,7 +639,8 @@ def test_build_loop_deps_uses_context_factory(monkeypatch, tmp_path: Path):
                 ),
             ),
         ),
-        relationship_runtime=cast(Any, SimpleNamespace()),
+        reply_policy=bound_reply_policy(),
+        affection=bound_affection(),
     )
 
     assert observed["name"] == "default"
@@ -743,14 +745,15 @@ async def test_buffered_progress_retains_tools_without_claiming_unsent_dialogue(
     assert state.tool_chain_partial == [{"text": "", "calls": [{"name": "lookup"}]}]
 
 
-def test_build_registered_tools_without_mcp_toolset_still_returns_empty_registry(
+def test_build_registered_tools_without_mcp_toolset_still_returns_memory(
     monkeypatch, tmp_path: Path
 ):
+    memory = SimpleNamespace()
     monkeypatch.setattr(
         "bootstrap.tools.resolve_memory_toolset_provider",
         lambda name: SimpleNamespace(
             register=lambda registry, deps: SimpleNamespace(
-                extras={"memory_runtime": SimpleNamespace()}
+                extras={"memory_runtime": memory}
             )
         ),
     )
@@ -771,7 +774,7 @@ def test_build_registered_tools_without_mcp_toolset_still_returns_empty_registry
         api_key="k",
         wiring=WiringConfig(toolsets=["schedule"]),
     )
-    _, _, mcp_registry, _ = build_registered_tools(
+    _tools, _scheduler, memory_runtime = build_registered_tools(
         config=config,
         workspace=tmp_path,
         http_resources=cast(Any, SimpleNamespace()),
@@ -785,8 +788,7 @@ def test_build_registered_tools_without_mcp_toolset_still_returns_empty_registry
         push_tool=MessagePushTool(role_target_validator=allow_every_role_target),
     )
 
-    assert mcp_registry is not None
-    assert mcp_registry.list_servers() == "当前没有已注册的 MCP server。"
+    assert memory_runtime is memory
 
 
 def test_wiring_imports_without_preloading_the_plugin_kernel():

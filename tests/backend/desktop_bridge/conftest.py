@@ -7,6 +7,7 @@ import pytest
 from agent.tools.registry import ToolRegistry
 from conversation.listening import GroupListeningControl
 from conversation.service import ConversationService
+from tests.support.generation_getters import bound_affection
 
 
 @pytest.fixture
@@ -24,7 +25,7 @@ def stub_core_runtime():
             push_tool=None,
             scheduler=None,
             presence=None,
-            relationship_runtime=None,
+            affection=bound_affection(),
             memory_optimizer=None,
             role_runtime_registry=None,
             memory_runtime=SimpleNamespace(current_engine=lambda: None),

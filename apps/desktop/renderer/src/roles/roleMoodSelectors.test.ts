@@ -2,17 +2,9 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { RelationState, RoleRecord, SessionPayload } from "@yinfengwindy/shiori-sdk";
+import type { RoleRecord, SessionPayload } from "@yinfengwindy/shiori-sdk";
 import type { RoleFormState } from "../shared/types";
 import { resolveCurrentMood, resolveCurrentThought, resolveMoodIllustration } from "./roleMoodSelectors";
-
-/** A complete relation state; the values don't matter to these selectors. */
-const RELATION_STATE: RelationState = {
-  dependence: 0.5,
-  security: 0.5,
-  initiative_desire: 0.5,
-  neglect_sensitivity: 0.5,
-};
 
 function createRole(overrides: Partial<RoleRecord> = {}): RoleRecord {
   return {
@@ -63,25 +55,19 @@ function createSession(metadata: Record<string, unknown>): SessionPayload {
 }
 
 describe("roleMoodSelectors", () => {
-  it("keeps formal thought independent of later relationship snapshots", () => {
+  it("reads only the core's turn thought, never the affection plugin's snapshot", () => {
     const session = createSession({ current_thought: "我终于放心了。" });
-    session.metadata.relationship_snapshot = {
-      role_id: "mira", role_self_view: "我来自旧快照。", relation_tags: [],
-      internal_profile: { relation_state: RELATION_STATE, behavior_profile: {} }, source_summary: {},
-      generated_at: "", last_attempted_at: "", last_error: "",
-    };
-    assert.equal(resolveCurrentThought(session, createRole()), "我终于放心了。");
-    session.metadata.relationship_snapshot.role_self_view = "我来自刚生成的长期快照。";
-    assert.equal(resolveCurrentThought(session, createRole()), "我终于放心了。");
+    assert.equal(resolveCurrentThought(session, "mira"), "我终于放心了。");
     delete session.metadata.current_thought;
-    assert.equal(resolveCurrentThought(session, createRole()), "我来自刚生成的长期快照。");
+    (session.metadata as Record<string, unknown>).relationship_snapshot = { role_self_view: "我来自插件快照。" };
+    assert.equal(resolveCurrentThought(session, "mira"), "");
   });
 
   it("ignores stale role session and form data during a chat role switch", () => {
     const session = createSession({ role_id: "mira", current_mood: "开心", current_thought: "我属于Mira。" });
     const role = createRole({ id: "yin", runtime_config: { default_mood: "平静", mood_illustration_bindings: { 平静: "D:/yin/calm.png" } } });
     const roleForm = createRoleForm({ defaultMood: "开心", moodIllustrationBindings: { 平静: "D:/mira/calm.png", 开心: "D:/mira/happy.png" } });
-    assert.equal(resolveCurrentThought(session, role), "");
+    assert.equal(resolveCurrentThought(session, role.id), "");
     assert.equal(resolveCurrentMood({ activeSession: session, detailRole: role, roleForm, useRoleForm: false }), "平静");
     assert.equal(resolveMoodIllustration({ activeSession: session, detailRole: role, roleForm, useRoleForm: false }), "D:/yin/calm.png");
   });

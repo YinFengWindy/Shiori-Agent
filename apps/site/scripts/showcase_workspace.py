@@ -38,7 +38,7 @@ from conversation.service import (  # noqa: E402
     ConversationService,
     LegacySessionDescriptor,
 )
-from core.roles.relationship_runtime.affection_service import (  # noqa: E402
+from plugins.affection.backend.relationship.affection_service import (  # noqa: E402
     RoleAffectionService,
 )
 from core.roles.store import RoleStore  # noqa: E402

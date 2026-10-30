@@ -25,9 +25,6 @@ from bootstrap.runtime.construction import prepare_core_runtime
 from bus.event_bus import EventBus
 from core.common.workspace import resolve_default_workspace
 from core.desktop_presence import DesktopPresence
-from core.roles import (
-    LonelinessHeartbeatLoop,
-)
 from core.net.http import (
     SharedHttpResources,
     configure_default_shared_http_resources,
@@ -35,14 +32,12 @@ from core.net.http import (
 
 if TYPE_CHECKING:
     from agent.looping.core import AgentLoop
-    from agent.mcp.registry import McpServerRegistry
     from agent.provider import LLMProvider
     from agent.scheduler import SchedulerService
     from agent.tools.message_push import MessagePushTool
     from agent.tools.registry import ToolRegistry
     from bus.queue import MessageBus
     from core.memory.runtime import MemoryRuntime
-    from core.roles import RoleRelationshipRuntimeService
     from proactive_v2.presence import PresenceStore
     from session.manager import SessionManager
 
@@ -146,20 +141,12 @@ class AppRuntime(RuntimeReloadMixin, RuntimeBackgroundMixin, RuntimeShutdownMixi
         return self.core.light_provider if self.core is not None else None
 
     @property
-    def mcp_registry(self) -> McpServerRegistry | None:
-        return self.core.mcp_registry if self.core is not None else None
-
-    @property
     def memory_runtime(self) -> MemoryRuntime | None:
         return self.core.memory_runtime if self.core is not None else None
 
     @property
     def presence(self) -> PresenceStore | None:
         return self.core.presence if self.core is not None else None
-
-    @property
-    def relationship_runtime(self) -> RoleRelationshipRuntimeService | None:
-        return self.core.relationship_runtime if self.core is not None else None
 
     async def start(self) -> None:
         if self._started:
@@ -221,19 +208,6 @@ class AppRuntime(RuntimeReloadMixin, RuntimeBackgroundMixin, RuntimeShutdownMixi
             ]
             self._prepare_background(current)
             self._publish_background(None, current)
-            if self.relationship_runtime is not None:
-                loneliness_loop = LonelinessHeartbeatLoop(
-                    self.relationship_runtime,
-                    role_store=self.core.relationship_runtime.role_store,
-                )
-                self._background_tasks.extend(
-                    [
-                        asyncio.create_task(
-                            loneliness_loop.run(),
-                            name="loneliness_heartbeat_loop",
-                        ),
-                    ]
-                )
             self._started = True
         except BaseException:
             await self.shutdown()

@@ -9,7 +9,7 @@ from agent.core.proactive_turn.gates import (
     ProactiveGateDecision,
     ProactiveMode,
 )
-from core.roles.relationship_runtime import RoleRelationshipRuntimeService
+from core.roles.affection_access import AffectionGetter
 
 
 class SceneFollowupStrategy(ProactiveGateAdapter):
@@ -18,12 +18,15 @@ class SceneFollowupStrategy(ProactiveGateAdapter):
     name = "relationship.scene_followup"
     priority = 100
 
-    def __init__(self, runtime: RoleRelationshipRuntimeService) -> None:
-        self._runtime = runtime
+    def __init__(self, affection: AffectionGetter) -> None:
+        self._affection = affection
 
     def evaluate(self, ctx: ProactiveGateContext) -> ProactiveGateDecision:
         """Offers only scene followups that are due at this tick."""
-        should_follow_up, metadata = self._runtime.should_trigger_scene_followup(
+        runtime = self._affection()
+        if runtime is None:
+            return ProactiveGateDecision.continue_(reason="affection_unavailable")
+        should_follow_up, metadata = runtime.should_trigger_scene_followup(
             ctx.session_key,
             ctx.now_utc,
         )
@@ -39,13 +42,16 @@ class SceneFollowupStrategy(ProactiveGateAdapter):
 
     def finalize(self, completion: ProactiveGateCompletion) -> None:
         """Advances successful followups or closes rejected scenes."""
+        runtime = self._affection()
+        if runtime is None:
+            return
         if completion.outcome == "delivered":
-            self._runtime.handle_scene_followup_sent(
+            runtime.handle_scene_followup_sent(
                 completion.session_key,
                 completion.occurred_at,
             )
             return
-        self._runtime.close_scene_followup(completion.session_key)
+        runtime.close_scene_followup(completion.session_key)
 
 
 class RelationshipStrategy(ProactiveGateAdapter):
@@ -54,12 +60,15 @@ class RelationshipStrategy(ProactiveGateAdapter):
     name = "relationship.loneliness"
     priority = 0
 
-    def __init__(self, runtime: RoleRelationshipRuntimeService) -> None:
-        self._runtime = runtime
+    def __init__(self, affection: AffectionGetter) -> None:
+        self._affection = affection
 
     def evaluate(self, ctx: ProactiveGateContext) -> ProactiveGateDecision:
         """Preserves relationship-specific misses in the shared diagnostic trace."""
-        should_trigger, metadata = self._runtime.should_trigger_proactive(
+        runtime = self._affection()
+        if runtime is None:
+            return ProactiveGateDecision.continue_(reason="affection_unavailable")
+        should_trigger, metadata = runtime.should_trigger_proactive(
             ctx.session_key,
             ctx.now_utc,
         )

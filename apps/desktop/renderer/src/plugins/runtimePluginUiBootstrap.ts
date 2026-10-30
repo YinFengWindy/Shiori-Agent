@@ -1,5 +1,6 @@
 import { applyPluginUiModules } from "./pluginUiModuleContract";
 import { pluginUiRegistry } from "./pluginUiRegistry";
+import { affectionUiRegistry } from "./affectionUiRegistry";
 import { pluginChatImageActionsRegistry, pluginRoleSettingsRegistry } from "./pluginFeatureRegistry";
 import { createRuntimePluginUiSynchronization } from "./runtimePluginUiSynchronization";
 import { registerPluginUiSynchronization } from "./pluginEnabledStateStore";
@@ -18,6 +19,7 @@ export function initializeRuntimePluginUi() {
       pluginUiRegistry.unregisterPlugin(pluginId);
       pluginRoleSettingsRegistry.unregister(pluginId);
       pluginChatImageActionsRegistry.unregister(pluginId);
+      affectionUiRegistry.unregister(pluginId);
     },
     // Tells the backend this window's `ui` entry is ready, clearing it from
     // `pendingRendererKinds` (#262 AC1).

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from plugins.natural_chat.backend.plugin import NaturalChatPolicy
+from tests.support.generation_getters import turn_getters
 import json
 
 
@@ -198,7 +200,8 @@ async def test_natural_drift_uses_shared_messages_and_preserves_thinking(
     )
     monkeypatch.setattr("agent.turns.reply_sequence.wait_between_messages", AsyncMock())
     batches = ChannelSequenceOwner()
-    with batches.bind(MessageBus()):
+    # The natural_chat plugin is on, as the drift tick's lease would say.
+    with turn_getters(policy=NaturalChatPolicy()), batches.bind(MessageBus()):
         async with owner.natural_reply_scope(
             "role:mira", "desktop", "role:mira", turn_id="drift:test"
         ):

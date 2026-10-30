@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { afterEach, beforeEach, describe, it } from "node:test";
 import { act, useState } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { changeInputValue, chooseSelectOption, mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
@@ -11,6 +11,7 @@ import type { RoleRecord } from "@yinfengwindy/shiori-sdk";
 import type { RoleFormState } from "../shared/types";
 import { RoleDetailPage } from "./RoleDetailPage";
 import { pluginRoleSettingsRegistry } from "../plugins/pluginFeatureRegistry";
+import { affectionUiRegistry } from "../plugins/affectionUiRegistry";
 import type { PluginRoleSettingsProps } from "@yinfengwindy/shiori-sdk";
 
 type PageProps = Parameters<typeof RoleDetailPage>[0];
@@ -74,6 +75,10 @@ const role: RoleRecord = {
 };
 
 describe("RoleDetailPage", () => {
+  // A loaded roster: mounts read the enabled state without a bridge round-trip.
+  beforeEach(() => setPluginEnabledSnapshot([]));
+  afterEach(() => resetPluginEnabledStateForTests());
+
   it("carries role-field and roleSettings drafts across tabs into one save, and resets both", async () => {
     function SampleCard({ values, onChange }: PluginRoleSettingsProps) {
       return <button onClick={() => onChange({ ...values, picked: true })}>{values.picked ? "已选" : "未选"}</button>;
@@ -121,8 +126,9 @@ describe("RoleDetailPage", () => {
     assert.doesNotMatch(markup, /知识库/);
     assert.match(markup, /能力/);
     assert.doesNotMatch(markup, /主动推送/);
-    // Tabs read 资料 / 记忆 / 好感度 / 能力 / 账号; accounts live only in their own tab.
-    assert.match(markup, /资料<\/button>.*记忆<\/button>.*好感度<\/button>.*能力<\/button>.*账号<\/button>/);
+    // Tabs read 资料 / 记忆 / 能力 / 账号 until the affection plugin contributes 好感度.
+    assert.match(markup, /资料<\/button>.*记忆<\/button>.*能力<\/button>.*账号<\/button>/);
+    assert.doesNotMatch(markup, /好感度/);
     assert.doesNotMatch(markup, /添加账号/);
     assert.doesNotMatch(markup, /渠道绑定/);
     assert.match(markup, /aria-current="page"[^>]*>.*资料/);
@@ -266,16 +272,17 @@ describe("RoleDetailPage", () => {
   });
 
   it("opens the 好感度 tab without the draft's 重置 / 保存", async () => {
+    function Meter() {
+      return <div data-testid="role-affection-meter" />;
+    }
+    affectionUiRegistry.registerRole({ pluginId: "affection", Component: Meter });
+    setPluginEnabledSnapshot([{ id: "affection", enabled: true, state: "ACTIVE" }]);
     const view = await mountTestComponent(pageElement({ activeRole: role }), { windowGlobals: { miraDesktop: {
       onEvent: () => () => {},
       readSettings: async () => ({ formData: createSettingsDraft() }),
-      invoke: async ({ method, payload }: { method: string; payload: Record<string, unknown> }) => ({
+      invoke: async ({ method }: { method: string }) => ({
         id: "test", type: "response", method, error: null,
-        payload: method === "roles.affection.history"
-          ? { role_id: payload.role_id, affection: { value: 45, stage: "朋友", progress: 5 / 19 }, items: [], total: 0, page: 1, page_size: 20 }
-          : method === "roles.affection.stagePrompts.get"
-            ? { role_id: payload.role_id, stages: [] }
-            : { generation: "g", slots: [], registrations: [] },
+        payload: { generation: "g", slots: [], registrations: [] },
       }),
     } } });
     try {
@@ -285,7 +292,11 @@ describe("RoleDetailPage", () => {
       assert.ok(view.container.querySelector('[data-testid="role-affection-meter"]'));
       assert.equal(view.container.querySelector('[data-testid="save-role-button"]'), null);
       assert.equal(view.container.querySelector('[data-testid="reset-role-button"]'), null);
-    } finally { await view.cleanup(); }
+    } finally {
+      await view.cleanup();
+      affectionUiRegistry.unregister("affection");
+      resetPluginEnabledStateForTests();
+    }
   });
 
   it("shows the current mood and a visible 更换形象 action in the character header", () => {

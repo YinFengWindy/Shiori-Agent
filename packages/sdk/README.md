@@ -57,10 +57,10 @@ published 3.1.0:
 - `SurfaceHandle.voice` and its voice-state/gesture types are removed. Speech
   consumers must own their orchestration and use scoped native resources and
   surface-to-background messages.
-- Relationship snapshots no longer carry `closeness`.
-  `RelationshipSnapshot.internal_profile.relation_state` is the explicit
-  `RelationState` type; consumers of closeness must use `RoleRecord.affection`
-  (`AffectionSummary`) instead.
+- Relationship snapshots no longer carry `closeness`; consumers of closeness
+  use the role's affection (`AffectionSummary`) instead. (4.0.0 removes the
+  snapshot types and `RoleRecord.affection` altogether: the affection plugin
+  serves its data through its own RPC.)
 
 The host's range check still accepts `>=3.1.0 <4.0.0`, so it does not protect a
 plugin that uses these removed APIs. Affected authors must migrate, rebuild and
@@ -429,8 +429,8 @@ tool, HTTP, resource, process, RPC and task fixtures. Native calls fail until a
 test explicitly supplies their result. Plugin policy tests execute with only the
 SDK and declared sibling dependencies (Story → NovelAI).
 Individual fixtures live in their owning `testing.tools`, `testing.storage`,
-`testing.sessions`, `testing.resources`, `testing.models`, `testing.http`,
-`testing.runtime` and `testing.scene_observations` modules; the context only
+`testing.sessions`, `testing.resources`, `testing.models`, `testing.http`
+and `testing.runtime` modules; the context only
 assembles them. Role draft writers and covariant read-only projectors are defined
 once in `shiori_sdk.roles` and used by both the host and independent fixtures.
 Actual kernel ordering, role saves, session media adoption, runtime lease

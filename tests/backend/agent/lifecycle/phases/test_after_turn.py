@@ -27,13 +27,16 @@ from shiori_sdk.accounts.targets import AccountTarget
 from shiori_sdk.memory.committed import TurnCommitted
 from core.accounts.delivery_ledger import AccountDeliveryLedger
 from core.identity import UserIdentityStore
-from core.roles import RoleRelationshipRuntimeService, RoleStore
+from core.roles import RoleStore
+from core.roles.affection_host import HostAffectionSources
+from plugins.affection.backend.relationship import RoleRelationshipRuntimeService
 from core.roles.reply_state import AffectionChange
 from proactive_v2.presence import PresenceStore
 from session.manager import SessionManager
 from agent.turns.outbound import BusOutboundPort
 from bus.event_bus import EventBus
 from bus.queue import MessageBus
+from tests.support.generation_getters import turn_getters
 
 
 @pytest.mark.asyncio
@@ -230,17 +233,19 @@ def test_only_the_users_own_group_turn_is_offered_to_memory_extraction(
 
 
 @pytest.mark.asyncio
-async def test_committed_affection_change_is_recorded_and_saved_with_the_session(
+async def test_committed_affection_change_is_recorded(
     tmp_path,
 ) -> None:
     manager = SessionManager(tmp_path)
     session = manager.get_or_create("role:yin")
     session.metadata["role_id"] = "yin"
     relationship = RoleRelationshipRuntimeService(
-        tmp_path,
-        role_store=RoleStore(tmp_path),
-        session_manager=manager,
-        presence=PresenceStore(manager._store),
+        HostAffectionSources(
+            workspace=tmp_path,
+            role_store=RoleStore(tmp_path),
+            session_manager=manager,
+            presence=PresenceStore(manager._store),
+        )
     )
     relationship.affection.initialize("yin", value=50, reason="初识")
     state = SimpleNamespace(
@@ -248,12 +253,10 @@ async def test_committed_affection_change_is_recorded_and_saved_with_the_session
         affection_change=AffectionChange(3, "他一直记得我说过的话。"),
     )
 
-    await _apply_turn_affection(relationship, cast(Any, state))
+    with turn_getters(affection=relationship):
+        await _apply_turn_affection(cast(Any, state))
 
     history = relationship.affection.read_history("yin")
     assert [(e.delta, e.reason, e.source) for e in history[1:]] == [
         (3, "他一直记得我说过的话。", "turn")
     ]
-    # The saved session carries the new summary the sidebar shows.
-    reloaded = SessionManager(tmp_path).get_or_create("role:yin")
-    assert reloaded.metadata["affection"]["value"] == 53

@@ -36,7 +36,6 @@ import type {
 } from "../shared/types";
 import type { RoleCardImportState } from "./roleCardImportState";
 import { TitleBar } from "../shell/TitleBar";
-import type { AffectionDisplay } from "../affection/affectionDisplay";
 
 type RightSidebarViewState = {
   collapsed: boolean;
@@ -93,9 +92,6 @@ type DesktopAppFrameProps = {
   /** When the session last set the mood (`current_mood_updated_at`). */
   moodUpdatedAt: string;
   roleSelfView: string;
-  relationshipTags: string[];
-  lonelinessValue: number;
-  affection: AffectionDisplay | null;
   conversationEndRef: React.RefObject<HTMLDivElement | null>;
   headerTitle: string;
   highlightedMessageKey: string;
@@ -234,9 +230,6 @@ export function DesktopAppFrame({
   moodIllustrationUrl,
   moodUpdatedAt,
   roleSelfView,
-  relationshipTags,
-  lonelinessValue,
-  affection,
   conversationEndRef,
   headerTitle,
   highlightedMessageKey,
@@ -483,9 +476,6 @@ export function DesktopAppFrame({
               moodIllustrationUrl={moodIllustrationUrl}
               moodUpdatedAt={moodUpdatedAt}
               roleSelfView={roleSelfView}
-              relationshipTags={relationshipTags}
-              lonelinessValue={lonelinessValue}
-              affection={affection}
               conversationEndRef={conversationEndRef}
               headerTitle={headerTitle}
               highlightedMessageKey={highlightedMessageKey}

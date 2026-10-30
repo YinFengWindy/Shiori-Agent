@@ -1,5 +1,6 @@
 """The host stream sink: gated by the published channel, carrying the source identity."""
 
+from tests.support.generation_getters import bound_affection, bound_reply_policy
 from unittest.mock import Mock
 
 import pytest
@@ -15,6 +16,7 @@ from shiori_sdk.channel_events import StreamDeltaReady, TurnStarted
 @pytest.mark.parametrize("source_id", ["source-1", ""])
 async def test_stream_sink_captures_original_external_message_id(source_id):
     loop = object.__new__(AgentLoop)
+    loop.reply_policy, loop.affection = bound_reply_policy(), bound_affection()
     loop._event_bus = EventBus()
     loop._active_turn_states = {}
     loop._channel_directory = Mock()
@@ -64,6 +66,7 @@ async def test_published_channel_decides_streaming_and_receives_turn_events():
     directory = ChannelDirectory()
     directory.bind({channel.name: channel}.get)
     loop = object.__new__(AgentLoop)
+    loop.reply_policy, loop.affection = bound_reply_policy(), bound_affection()
     loop._event_bus = events
     loop._active_turn_states = {}
     loop._channel_directory = directory

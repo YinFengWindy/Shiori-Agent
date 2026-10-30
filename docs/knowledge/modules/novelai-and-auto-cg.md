@@ -4,13 +4,14 @@ kind: 领域说明
 status: 当前有效
 last_verified_commit: bdfdae59
 source_paths:
-  - apps/backend/core/scene/
+  - plugins/scene/
+  - apps/backend/core/scene/host.py
   - plugins/novelai/
   - plugins/story/
   - apps/backend/agent/plugin_host/
   - apps/desktop/renderer/src/plugins/
   - apps/backend/bus/events_lifecycle.py
-  - apps/backend/agent/scene_preferences.py
+  - apps/backend/bootstrap/scene_config_migration.py
   - apps/backend/agent/plugin_host/manifest.py
   - apps/backend/core/roles/migration.py
 related:
@@ -51,10 +52,10 @@ NovelAI 与故事的业务回归分别随 `plugins/novelai/tests/`、`plugins/st
 
 ## 自动 CG 生命周期
 
-1. 核心场景服务在 `BeforeTurn` 捕获被动回合上下文，并在 `AfterTurn` 对非空回复调度场景判断；主动消息则从 `ProactiveMessageCommitted` 接入同一判断链。
-2. `apps/backend/core/scene/decision.py` 使用独立观察器 system prompt，并强制模型调用内部函数 `submit_scene_observation`，将结果归为 `started`、`same`、`changed`、`closed` 或 `none`。观察结果同时携带持续场景 `scene_key` 与可见定格 `visual_key`。
-3. 核心场景服务对函数参数执行协议和语义校验；有效结果才会持久化这两个键并发布 `SceneObservationCommitted`。`scene_key` 供场景追问保持连续性，`visual_key` 供图片生成判断重复。
-4. NovelAI 插件通过 `scene_observations` capability 登记角色消费需求，订阅场景事件。`AutoCgController` 独立检查自动 CG 开关、视觉去重、冷却与手动生成抑制；通过后才由 `scene_prompt.py` 使用既有 light 模型把冻结的中立场景事实转换为 NovelAI tags 和画幅，并校验供应商参数。角色能力中的自动场景 CG 卡片通过齿轮弹层编辑中文或多行「补充要求」，独立自动保存至 `plugin_data.novelai.<role_id>.auto_scene_cg_prompt_instructions`；开关仍跟随角色页保存，两种保存只修改各自字段。控制器在调度时读取要求快照，提示词模型将其作为绘图要求理解，空白时不注入；后续编辑影响下一次自动 CG，不改变手动生图、Story 或历史图片的请求重放。删除角色时随该角色的 NovelAI 偏好一同清理。
+1. 系统插件 `plugins/scene` 在代际发布后订阅 `TurnStarting`、`TurnFinished` 和 `ProactiveMessageCommitted`。观察不在回合关键路径上。
+2. `plugins/scene/backend/decision.py` 使用独立观察器 system prompt，并强制模型调用内部函数 `submit_scene_observation`，将结果归为 `started`、`same`、`changed`、`closed` 或 `none`。观察结果同时携带持续场景 `scene_key` 与可见定格 `visual_key`。
+3. 场景插件对函数参数执行协议和语义校验；有效结果才会持久化这两个键并发布 `SceneObservationCommitted`。`scene_key` 供场景追问保持连续性，`visual_key` 供图片生成判断重复。
+4. NovelAI 用 `optional_inject: [scene]` 调用 `SCENE.request`，把返回的释放函数交给 `ctx.effect`。场景插件未启用时不登记需求。`AutoCgController` 独立检查自动 CG 开关、视觉去重、冷却与手动生成抑制；通过后才由 `scene_prompt.py` 使用既有 light 模型把冻结的中立场景事实转换为 NovelAI tags 和画幅，并校验供应商参数。角色能力中的自动场景 CG 卡片通过齿轮弹层编辑中文或多行「补充要求」，独立自动保存至 `plugin_data.novelai.<role_id>.auto_scene_cg_prompt_instructions`；开关仍跟随角色页保存，两种保存只修改各自字段。控制器在调度时读取要求快照，提示词模型将其作为绘图要求理解，空白时不注入；后续编辑影响下一次自动 CG，不改变手动生图、Story 或历史图片的请求重放。删除角色时随该角色的 NovelAI 偏好一同清理。
 5. 图片生成成功后立即记录冷却和视觉去重，再执行非主动补发。桌面通过 `message_push`，外部渠道通过 `account_send` 的宿主补发参数，由账号投递服务匹配原始 transport/channel 与 chat ID 对应的当前绑定用户私聊，并同步回权威角色会话；绑定消失或地址变化时明确拒绝，不改发其他用户或会话。
 
 `TurnFinished.will_dispatch` 只表示核心消息总线是否还需下发回复，不表示回合是否完成。桌面桥接直接取得回复时该值为 `false`，场景观察仍必须处理这个有效回合。
@@ -72,13 +73,11 @@ NovelAI 与故事的业务回归分别随 `plugins/novelai/tests/`、`plugins/st
 - `started` 建立首个场景，`same` 延续当前场景，`changed` 建立新场景，`closed` 关闭场景状态，`none` 表示当前没有可观测场景。
 - 可见场景携带 `scene_key`、`visual_key` 和中立自然语言 `visual_description`；事件冻结该回合的角色描述、用户内容和回复，异步提示词模型不会读取之后改变的会话。`closed` 和 `none` 的场景键与视觉描述为空。
 
-## 核心服务所有权与迁移
+## 场景插件与配置迁移
 
-`[agent.scene_observation].enabled` 控制核心服务，默认开启。角色开启主动且核心 `agent.proactive_strategies.scene_followup` 开启，或至少一个已装配消费者请求时才调用观察模型；仅残留角色自动 CG 偏好但 NovelAI 已停用或卸载，不会形成消费需求。没有 NovelAI 时核心观察和场景跟进照常可用。桌面设置保留显式核心开关，不把缺省值提前写成启用。
+`[plugins.scene].observation_enabled` 控制场景插件是否观察，缺省为真。旧的 `[agent.scene_observation].enabled` 在 `load_config` 里迁入：插件配置还没有这个键才复制，成功后删掉旧表；插件里已有的值不覆盖；内联表迁不了就抛错且不改文件。角色开启主动且宿主 `agent.proactive_strategies.scene_followup` 为真，或至少一个已装配消费者 `SCENE.request` 时才调用观察模型。没有 NovelAI 时场景观察和场景跟进照常可用。桌面设置把显式开关交给 `scene_observation_enabled`，不把缺省值写进 toml。场景插件经 `SCENE_HOST.on_published` 在本代发布时开始观察，设置页改配置触发的代内重载、以及代内重新启用后立即恢复；NovelAI 随 scene 的代内重载一起重载，但单独代内启用 scene 时 NovelAI 不重载，要等下次代际替换才重新登记需求。
 
-候选 runtime 只构造服务，发布时在该代局部事件总线上激活。旧代已接受的回合仍可完成观察，包括发布前捕获、发布后才结束的回合；代际 lease 排空后才退订、取消并等待剩余任务。跨代共享场景 state owner，以同会话观察序号防止较慢旧结果覆盖较新事实。
-
-状态读取优先 `workspace/scene/state.json`。若不存在，读取 `workspace/plugins/scene_awareness/kv.json`，再依次读取新旧插件代码目录的 `.kv.json`；首次真实场景写入原子导入全部旧 key，已存在的新状态始终优先。候选准备不写迁移数据。旧 TOML 停用配置和两处 `plugin.disabled` 在配置加载时幂等转换为核心开关；旧文件不删除。场景插件包已移除，发现和打包仅保留核心模块及实际插件。
+宿主在代际发布时 `activate` 场景服务，排空前 `close`。插件 setup 只构造服务，不在 setup 里订阅。状态文件仍是 `workspace/scene/state.json`。若不存在，首次真实写入从 `workspace/plugins/scene_awareness/kv.json` 和遗留 `.kv.json` 导入；已有新状态优先。
 
 ## 修改影响
 

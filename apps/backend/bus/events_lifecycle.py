@@ -3,6 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from shiori_sdk.role_events import (
+    ProactiveMessageCommitted as ProactiveMessageCommitted,
+)
+
 if TYPE_CHECKING:
     from shiori_sdk.tool_chain import ToolCallGroup
 
@@ -68,27 +72,6 @@ class TurnFailed:
 
     session_key: str
     error_summary: str
-
-
-@dataclass(frozen=True)
-class ProactiveMessageCommitted:
-    """Signals that a proactive role message is available in its shared session.
-
-    ``thread_id`` 是这条消息所在的会话；角色共享会话混存各会话的消息，订阅者
-    读取历史时按它判定上下文归属。非角色共享会话没有会话划分，传空串。
-
-    ``message_id`` names the committed message, so listeners publish exactly it
-    instead of guessing from the session tail.
-    """
-
-    session_key: str
-    channel: str
-    role_id: str
-    thread_id: str
-    chat_id: str = ""
-    assistant_response: str = ""
-    tools_used: tuple[str, ...] = ()
-    message_id: str = ""
 
 
 @dataclass(frozen=True)

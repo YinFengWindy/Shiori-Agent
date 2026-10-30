@@ -23,8 +23,7 @@ from core.memory.markdown_schema import (
     DOCUMENT_SECTIONS,
     select_memory_sections,
 )
-from core.roles.relationship_runtime.affection_prompts import render_affection_prompt
-from core.roles.relationship_runtime.affection_service import RoleAffectionService
+from core.roles.affection_access import current_affection
 from prompts.agent import (
     EXTERNAL_TURN_RULES_PROMPT,
     UserChannelIdentity,
@@ -361,8 +360,10 @@ def build_role_affection_prompt(role_id: str, roles: "RoleStore") -> str | None:
     role = roles.get_role(role_id)
     if role is None:
         raise ValueError(f"role not found for affection prompt: {role_id}")
-    state = RoleAffectionService(roles.workspace).read_state(role_id)
-    return render_affection_prompt(state, role.affection_stage_prompts)
+    affection = current_affection()
+    if affection is None:
+        return None
+    return affection.render_prompt(role_id)
 
 
 class AffectionPromptBlock:

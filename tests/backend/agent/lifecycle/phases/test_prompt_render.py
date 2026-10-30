@@ -14,10 +14,22 @@ from agent.lifecycle.phases.prompt_render import PromptRenderPhase
 from agent.lifecycle.types import PromptRenderInput, PromptRenderResult
 from bus.event_bus import EventBus
 from core.roles import RoleStore
-from prompts.natural_chat import NATURAL_CHAT_PROMPT
+from plugins.natural_chat.backend.prompts import NATURAL_CHAT_PROMPT
 from shiori_sdk.core.conversation import PromptRendering
 from shiori_sdk.kernel import Context, Kernel, PluginSpec
 from shiori_sdk.prompting import PromptSectionRender
+from tests.support.generation_getters import turn_getters
+
+
+class _Policy:
+    def passive_prompt(self) -> str:
+        return NATURAL_CHAT_PROMPT
+
+    def draft_prompt(self) -> str:
+        return "draft"
+
+
+_PRESENT = _Policy()
 
 
 async def _render(
@@ -27,7 +39,9 @@ async def _render(
     enabled: bool | None = True,
     supported: bool = True,
     minimal: bool = False,
+    policy: object = _PRESENT,
 ) -> PromptRenderResult:
+    """Renders with ``policy`` in the reply-policy socket (``None``: plugin off)."""
     roles = RoleStore(tmp_path)
     roles.create_role(
         role_id="mira",
@@ -48,28 +62,31 @@ async def _render(
         TurnEvents(bus, kernel),
         ContextBuilder(tmp_path, memory=cast(Any, memory), runtime_roles=roles),
     )
-    return await phase.run(
-        PromptRenderInput(
-            session_key="role:mira",
-            channel="desktop",
-            chat_id="mira",
-            content="hello",
-            media=None,
-            timestamp=datetime.now(timezone.utc),
-            history=[],
-            skill_names=None,
-            retrieved_memory_block="",
-            disabled_sections=set(),
-            turn_injection_prompt="",
-            session_metadata={
-                "role_id": "mira",
-                # The copy disagrees with the role record. The record wins.
-                "role_runtime_config": {"natural_chat_enabled": enabled is not True},
-            },
-            supports_reply_sequence=supported,
-            minimal_request=minimal,
+    with turn_getters(policy=policy):
+        return await phase.run(
+            PromptRenderInput(
+                session_key="role:mira",
+                channel="desktop",
+                chat_id="mira",
+                content="hello",
+                media=None,
+                timestamp=datetime.now(timezone.utc),
+                history=[],
+                skill_names=None,
+                retrieved_memory_block="",
+                disabled_sections=set(),
+                turn_injection_prompt="",
+                session_metadata={
+                    "role_id": "mira",
+                    # The copy disagrees with the role record. The record wins.
+                    "role_runtime_config": {
+                        "natural_chat_enabled": enabled is not True
+                    },
+                },
+                supports_reply_sequence=supported,
+                minimal_request=minimal,
+            )
         )
-    )
 
 
 @pytest.mark.parametrize(
@@ -92,7 +109,6 @@ async def test_natural_chat_is_host_owned_and_excludes_previews_and_minimal_requ
         minimal=minimal,
     )
     assert result.natural_chat is selected
-    assert (NATURAL_CHAT_PROMPT in str(result.messages[0]["content"])) is selected
 
 
 async def test_prompt_rendering_handlers_choose_reply_mode_and_add_sections(tmp_path):
@@ -114,3 +130,17 @@ async def test_prompt_rendering_handlers_choose_reply_mode_and_add_sections(tmp_
     system = str(result.messages[0]["content"])
     assert NATURAL_CHAT_PROMPT not in system
     assert "# Probe" in system
+
+
+async def test_bound_policy_appends_the_chat_prompt(tmp_path):
+    result = await _render(tmp_path)
+
+    assert result.natural_chat is True
+    assert NATURAL_CHAT_PROMPT in str(result.messages[0]["content"])
+
+
+async def test_bound_missing_policy_forces_a_single_reply(tmp_path):
+    result = await _render(tmp_path, policy=None)
+
+    assert result.natural_chat is False
+    assert NATURAL_CHAT_PROMPT not in str(result.messages[0]["content"])

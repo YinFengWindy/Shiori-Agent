@@ -77,6 +77,22 @@ spec 的 `runnable = False` 表示只登记：已停用、未信任、准入失�
 
 安装、更新、卸载外部包总是走代际替换或下次启动，见下文。
 
+场景插件在本代发布时开始观察（`SCENE_HOST.on_published`）。代内重载或代内启用时本代已经发布，新实例 setup 完立即开始观察，不用等下次代际替换。可选注入 `scene` 的 NovelAI 会随 scene 的代内重载一起重载；但单独代内启用 scene 时，已在运行的 NovelAI 不在启用集合里，要等下次代际替换才登记场景需求。
+
+## 启动时的配置迁移
+
+宿主启动时把旧配置一次性搬到插件表。三条迁移都只改 `config.toml` 里涉及的表，保留注释与其他表，原子写入，再跑一次文件字节不变。目标表写成内联表或点分键、编辑器定位不到时抛错，文件不动，启动失败并给出改法。
+
+| 迁移 | 何时执行 | 写入 |
+| --- | --- | --- |
+| 记忆 | 还有顶层 `[memory]`，或 `[plugins.default_memory]` 没有显式 `enabled` | 旧值写进 `[plugins.default_memory]`（含显式 `enabled`），删除 `[memory]` |
+| 场景 | 还有 `[agent.scene_observation]` | `enabled` 写成 `[plugins.scene].observation_enabled`（插件表已有该键时不覆盖），删除旧表 |
+| MCP | `<workspace>/mcp_servers.json` 的 `servers` 非空，且 `[plugins.mcp]` 没有显式 `enabled` | `[plugins.mcp] enabled = true`。显式写过 `true` 或 `false` 都不动；新装的空服务器列表保持关闭 |
+
+记忆与场景迁移在 `load_config` 里依次执行；MCP 迁移要读工作区，在桌面桥接启动、读配置之前执行。
+
+会话库（`<workspace>/sessions.db`）在每次打开时也做一次就地清理：宿主以前替好感插件抄进会话 metadata 的 `relationship_snapshot`、`loneliness_runtime`、`affection` 三个键被删掉，其他字段不动；没有这三个键的会话不改写，所以再次打开不变。和其它会话库升级一样在建表的同一事务里完成。
+
 ## 诊断
 
 静态拒绝抛 `PackageContractError`，诊断是 `PluginDiagnostic`：

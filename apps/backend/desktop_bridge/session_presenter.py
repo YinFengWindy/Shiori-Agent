@@ -39,10 +39,8 @@ class DesktopSessionPresenter:
     def __init__(
         self,
         conversation_service,
-        relationship_runtime: Any | None = None,
     ) -> None:
         self._conversation_service = conversation_service
-        self._relationship_runtime = relationship_runtime
 
     def serialize(self, session: Session) -> dict[str, Any]:
         """Returns the desktop-compatible role session snapshot."""
@@ -59,7 +57,7 @@ class DesktopSessionPresenter:
             "created_at": session.created_at.isoformat(),
             "updated_at": session.updated_at.isoformat(),
             "last_consolidated": session.last_consolidated,
-            "metadata": self._enrich_metadata(dict(session.metadata)),
+            "metadata": dict(session.metadata),
         }
 
     def serialize_message(self, message: dict[str, Any]) -> dict[str, Any]:
@@ -233,11 +231,6 @@ class DesktopSessionPresenter:
         if store is None:
             raise RuntimeError("session store unavailable for desktop pagination")
         return store
-
-    def _enrich_metadata(self, metadata: dict[str, Any]) -> dict[str, Any]:
-        if self._relationship_runtime is None:
-            return metadata
-        return self._relationship_runtime.enrich_session_metadata(metadata)
 
     @staticmethod
     def _serialize_message(message: dict[str, Any]) -> dict[str, Any]:

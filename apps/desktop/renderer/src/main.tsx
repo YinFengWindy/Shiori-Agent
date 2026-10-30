@@ -398,9 +398,6 @@ function App(): React.ReactElement {
     moodIllustrationUrl,
     moodUpdatedAt,
     roleSelfView,
-    relationshipTags,
-    lonelinessValue,
-    affection,
     visibleIllustrationUrl,
     activeSessionKey,
     isVisibleChatSending,
@@ -658,9 +655,6 @@ function App(): React.ReactElement {
         moodIllustrationUrl={moodIllustrationUrl}
         moodUpdatedAt={moodUpdatedAt}
         roleSelfView={roleSelfView}
-        relationshipTags={relationshipTags}
-        lonelinessValue={lonelinessValue}
-        affection={affection}
         conversationEndRef={conversationEndRef}
         headerTitle={headerTitle}
         highlightedMessageKey={highlightedMessageKey}

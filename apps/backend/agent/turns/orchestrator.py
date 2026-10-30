@@ -19,7 +19,8 @@ from shiori_sdk.accounts.targets import AccountTarget
 from shiori_sdk.accounts.routing import AccountRoute
 from shiori_sdk.channels.chat_types import CHAT_TYPE_PRIVATE
 from core.common.channel_directory import DESKTOP_CHANNEL
-from core.roles.natural_chat import natural_chat_enabled as read_natural_chat_enabled
+from core.roles.affection_access import current_affection
+from core.roles.reply_policy import natural_chat_selected
 from core.roles.services import RoleSessionService
 from core.roles.reply_state import (
     RoleReplyContext,
@@ -89,7 +90,7 @@ class TurnOrchestrator:
         """
         if self._role_lookup is None:
             return False
-        return read_natural_chat_enabled(
+        return natural_chat_selected(
             self._role_lookup(session_key.removeprefix("role:"))
         )
 
@@ -373,8 +374,9 @@ class TurnOrchestrator:
                     self._session.presence.record_proactive_sent_by_role(role_id)
                 else:
                     self._session.presence.record_proactive_sent(session_key)
-            if self._session.relationship_runtime is not None:
-                self._session.relationship_runtime.handle_proactive_sent(session_key)
+            affection = current_affection()
+            if affection is not None:
+                affection.handle_proactive_sent(session_key)
             await self._run_effects(result.success_side_effects)
             if self._event_bus is not None:
                 await self._event_bus.fanout(
@@ -445,10 +447,9 @@ class TurnOrchestrator:
                 role_id = str(plan.origin.metadata.get("role_id") or "")
                 if self._session.presence:
                     self._session.presence.record_proactive_sent_by_role(role_id)
-                if self._session.relationship_runtime is not None:
-                    self._session.relationship_runtime.handle_proactive_sent(
-                        session.key
-                    )
+                affection = current_affection()
+                if affection is not None:
+                    affection.handle_proactive_sent(session.key)
                 if self._event_bus is not None:
                     await self._event_bus.fanout(
                         ProactiveMessageCommitted(

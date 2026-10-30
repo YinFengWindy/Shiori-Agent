@@ -32,7 +32,6 @@ from agent.looping.ports import (
     MemoryServices,
     SessionServices,
 )
-from agent.mcp.registry import McpServerRegistry
 from agent.provider import LLMProvider
 from agent.retrieval.default_pipeline import DefaultMemoryRetrievalPipeline
 from agent.scheduler import SchedulerService
@@ -48,12 +47,8 @@ from core.accounts.delivery_ledger import AccountDeliveryLedger
 from agent.tools.registry import ToolRegistry
 from agent.tools.spawn import SpawnTool
 from conversation.listening import GroupListeningControl
-from core.scene.controller import SceneAwarenessController
-from core.scene.demand import SceneObservationDemand
-from core.scene.service import SceneObservationService
-from core.scene.state import SceneStateStore
 from core.common.cleanup import run_cleanup_steps
-from bootstrap.paths import REPOSITORY_ROOT, resource_root, plugin_roots
+from bootstrap.paths import plugin_roots
 from bootstrap.runtime.construction import track_build_resource
 from bootstrap.toolsets.meta import (
     build_readonly_tools,
@@ -80,17 +75,13 @@ from core.memory.markdown import MemoryLifecycleBindRequest, MarkdownMemoryMaint
 from core.memory.runtime import MemoryRuntime
 from core.net.http import SharedHttpResources
 from core.roles import (
-    RelationshipSnapshotOptimizer,
-    RoleRelationshipRuntimeService,
     RoleRepository,
     RoleStore,
     RoleRuntimeRegistry,
 )
+from core.roles.affection_access import AffectionGetter
 from core.roles.model_runtime import RoleModelRuntime
-from core.roles.relationship_runtime.affection_seed import (
-    LlmAffectionSeedGenerator,
-    RoleAffectionInitializer,
-)
+from core.roles.reply_policy import ReplyPolicyGetter
 from core.roles.self_initializer import RoleSelfInitializer
 from core.roles.self_seed import LlmRoleSelfSeedGenerator
 from agent.turns.turn_pushes import current_turn_pushes
@@ -117,10 +108,10 @@ class CoreRuntime:
     scheduler: SchedulerService
     provider: LLMProvider
     light_provider: LLMProvider | None
-    mcp_registry: McpServerRegistry
     memory_runtime: MemoryRuntime
     presence: PresenceStore
-    relationship_runtime: RoleRelationshipRuntimeService
+    reply_policy: ReplyPolicyGetter
+    affection: AffectionGetter
     role_runtime_registry: RoleRuntimeRegistry
     # 群环境层（#497）：被动回合、记忆整理与主动/发呆回合共用这一个实例。
     group_environment: GroupEnvironment
@@ -129,7 +120,6 @@ class CoreRuntime:
     # The generation's plugin RPC registry, shared by the kernel (``host.bridge``),
     # account delivery and the desktop bridge's dispatch.
     plugin_rpc: PluginRpcRegistry[MethodPolicy]
-    scene_service: SceneObservationService | None = None
     image_sync_service: ExternalPushSyncService | None = None
     agent_provider: LLMProvider | None = None
     plugin_manager: "PluginKernel | None" = None
@@ -142,7 +132,6 @@ class CoreRuntime:
     _drain_task: asyncio.Task[None] | None = field(default=None, init=False, repr=False)
 
     async def start(self) -> None:
-        self.mcp_registry.start_connect_all_background()
         # 旁听整理的定时检查（#541）：启动即扫一遍积压，停止时随 detach 结束。
         self.memory_runtime.markdown.maintenance.listening_trigger.start()
         if self.plugin_manager is not None:
@@ -169,8 +158,16 @@ class CoreRuntime:
 
     async def _drain_work(self) -> None:
         steps = []
-        if self.scene_service is not None:
-            steps.append(("scene.close", self.scene_service.close))
+        if self.plugin_manager is not None:
+            from shiori_sdk.core.scene import SCENE
+
+            scene = self.plugin_manager.kernel.get(SCENE)
+
+            async def close_scene() -> None:
+                if scene is not None:
+                    await scene.close()
+
+            steps.append(("scene.close", close_scene))
         spawn = self.tools.get_tool("spawn")
         if spawn is not None:
             steps.append(("spawn.drain", spawn.manager.drain))
@@ -215,7 +212,6 @@ class CoreRuntime:
             steps.append(("accounts.drop", drop_accounts))
         steps.extend(
             [
-                ("mcp.shutdown", self.mcp_registry.shutdown),
                 ("event_bus.aclose", self.event_bus.aclose),
                 ("provider.aclose", self.provider.aclose),
             ]
@@ -248,7 +244,6 @@ def build_registered_tools(
 ) -> tuple[
     ToolRegistry,
     SchedulerService,
-    McpServerRegistry,
     MemoryRuntime,
 ]:
     from session.store import SessionStore
@@ -284,13 +279,12 @@ def build_registered_tools(
     )
 
     # ── 第二阶段：注册工具（所有服务已就绪）──────────────────────────────────
-    mcp_registry = None
     for name in wiring.toolsets:
         provider_obj = resolve_toolset_provider(
             name,
             readonly_tools=readonly_tools if name == "meta_common" else None,
         )
-        result = provider_obj.register(
+        provider_obj.register(
             tools,
             ToolsetDeps(
                 config=config,
@@ -306,22 +300,9 @@ def build_registered_tools(
                 role_runtime_registry=role_runtime_registry,
             ),
         )
-        maybe_mcp = result.extras.get("mcp_registry")
-        if maybe_mcp is not None:
-            mcp_registry = maybe_mcp
-    if mcp_registry is None:
-        from agent.mcp.registry import McpServerRegistry
-
-        mcp_registry = McpServerRegistry(
-            config_path=workspace / "mcp_servers.json",
-            tool_registry=tools,
-        )
-
-    track_build_resource(mcp_registry, mcp_registry.shutdown)
     return (
         tools,
         scheduler,
-        mcp_registry,
         memory_runtime,
     )
 
@@ -339,7 +320,8 @@ def _build_loop_deps(
     processing_state: ProcessingState,
     event_bus: EventBus,
     memory_runtime: MemoryRuntime,
-    relationship_runtime: RoleRelationshipRuntimeService,
+    reply_policy: ReplyPolicyGetter,
+    affection: AffectionGetter,
     runtime_roles: RoleStore,
     group_environment: GroupEnvironment,
     role_runtime_registry: RoleRuntimeRegistry | None = None,
@@ -364,19 +346,11 @@ def _build_loop_deps(
     session_services = SessionServices(
         session_manager=session_manager,
         presence=presence,
-        relationship_runtime=relationship_runtime,
-    )
-    relationship_optimizer = RelationshipSnapshotOptimizer(
-        relationship_runtime,
-        provider=provider,
-        model=config.agent_model or config.model,
-        role_runtime_registry=role_runtime_registry,
     )
     _bind_memory_lifecycle_if_supported(
         markdown=memory_runtime.markdown.maintenance,
         session_manager=session_manager,
-        relationship_runtime=relationship_runtime,
-        relationship_optimizer=relationship_optimizer,
+        affection=affection,
         group_environment=group_environment,
         runtime_roles=runtime_roles,
     )
@@ -391,6 +365,8 @@ def _build_loop_deps(
         tools=tools,
         session_manager=session_manager,
         workspace=workspace,
+        reply_policy=reply_policy,
+        affection=affection,
         presence=presence,
         light_provider=light_provider,
         processing_state=processing_state,
@@ -409,16 +385,16 @@ def _bind_memory_lifecycle_if_supported(
     *,
     markdown: MarkdownMemoryMaintenance,
     session_manager: SessionManager,
-    relationship_runtime: RoleRelationshipRuntimeService,
-    relationship_optimizer: RelationshipSnapshotOptimizer,
+    affection: AffectionGetter,
     group_environment: GroupEnvironment,
     runtime_roles: RoleStore,
 ) -> None:
     async def _after_consolidation(session: object) -> None:
-        await relationship_runtime.refresh_snapshot_after_consolidation(
-            session,
-            optimizer=relationship_optimizer,
-        )
+        runtime = affection()
+        session_key = str(getattr(session, "key", "") or "")
+        if runtime is None or not session_key:
+            return
+        await runtime.refresh_snapshot_after_consolidation(session_key)
 
     markdown.bind_lifecycle(
         MemoryLifecycleBindRequest(
@@ -493,6 +469,9 @@ def build_core_runtime(
     )
     track_build_resource(role_model_resolver, role_model_resolver.aclose)
     role_repository = RoleRepository(role_store)
+    # This generation's affection runtime. Bound to the plugin kernel below,
+    # before any plugin starts; reading it earlier raises.
+    affection = AffectionGetter()
     role_runtime_registry = RoleRuntimeRegistry(
         role_repository,
         model_resolver=role_model_resolver,
@@ -500,11 +479,7 @@ def build_core_runtime(
         self_initializer=RoleSelfInitializer(
             role_store,
             LlmRoleSelfSeedGenerator(),
-            RoleAffectionInitializer(
-                workspace,
-                session_manager=session_manager,
-                generator=LlmAffectionSeedGenerator(),
-            ),
+            affection,
         ),
         event_bus=event_bus,
     )
@@ -525,7 +500,7 @@ def build_core_runtime(
         )
     )
     loop_ref: dict[str, AgentLoop] = {}
-    tools, scheduler, mcp_registry, memory_runtime = build_registered_tools(
+    tools, scheduler, memory_runtime = build_registered_tools(
         config,
         workspace,
         http_resources,
@@ -546,16 +521,9 @@ def build_core_runtime(
         memory_runtime.markdown.maintenance.share_execution(
             shared.memory_runtime.markdown.maintenance
         )
-    relationship_runtime = (
-        shared.relationship_runtime
-        if shared is not None
-        else RoleRelationshipRuntimeService(
-            workspace,
-            role_store=role_store,
-            session_manager=session_manager,
-            presence=presence,
-        )
-    )
+    # Bound to this generation's kernel below, before any plugin starts;
+    # reading it earlier raises.
+    reply_policy = ReplyPolicyGetter()
     processing_state = (
         shared.loop.processing_state if shared is not None else ProcessingState()
     )
@@ -588,7 +556,8 @@ def build_core_runtime(
         processing_state=processing_state,
         event_bus=event_bus,
         memory_runtime=memory_runtime,
-        relationship_runtime=relationship_runtime,
+        reply_policy=reply_policy,
+        affection=affection,
         role_runtime_registry=role_runtime_registry,
         channel_directory=channel_directory,
     )
@@ -630,40 +599,15 @@ def build_core_runtime(
     from conversation.service import ConversationService
     from core.channels.role_routing import RoleTurnRouter
     from shiori_sdk.background_results import BackgroundResults
+    from shiori_sdk.core.affection import AFFECTION
     from shiori_sdk.core.memory import MEMORY_ENGINE
+    from shiori_sdk.core.reply_policy import REPLY_POLICY
     from shiori_sdk.external_turns import ExternalTurns
 
     plugin_light_provider, plugin_light_model = _resolve_plugin_llm_dependencies(
         config,
         provider,
         light_provider,
-    )
-    scene_demand = SceneObservationDemand()
-    scene_service = SceneObservationService(
-        SceneAwarenessController(
-            role_store=RoleStore(workspace),
-            session_manager=session_manager,
-            event_bus=event_bus,
-            kv_store=(
-                shared.scene_service.controller.state
-                if shared is not None and shared.scene_service is not None
-                else SceneStateStore(
-                    workspace,
-                    (
-                        resource_root() / "plugins",
-                        REPOSITORY_ROOT / "apps" / "backend" / "plugins",
-                    ),
-                )
-            ),
-            light_provider=plugin_light_provider,
-            light_model=plugin_light_model,
-            needs_observation=lambda role: config.scene_observation_enabled
-            and (
-                (role.proactive.enabled and config.proactive_strategies.scene_followup)
-                or scene_demand.needed(role)
-            ),
-        ),
-        event_bus,
     )
     # external_turns and background_results are typed as the plugin contracts,
     # so pyright checks both host implementations.
@@ -721,12 +665,12 @@ def build_core_runtime(
                 plugin_dirs=tuple(plugin_dirs),
                 event_bus=event_bus,
                 rpc=plugin_rpc,
-                scene_observations=scene_demand,
                 workspace=workspace,
+                scene_followup=config.proactive_strategies.scene_followup,
                 tools=tools,
                 role_store=role_store,
                 session_manager=session_manager,
-                relationship_runtime=relationship_runtime,
+                presence=presence,
                 role_runtime_registry=role_runtime_registry,
                 provider=loop_provider,
                 model=loop_model,
@@ -742,6 +686,8 @@ def build_core_runtime(
     # The loop already holds this getter. Bind it before plugins start so the
     # first turn reads whoever provides MEMORY_ENGINE (D25).
     memory_runtime.current_engine.bind(lambda: plugin_manager.kernel.get(MEMORY_ENGINE))
+    reply_policy.bind(lambda: plugin_manager.kernel.get(REPLY_POLICY))
+    affection.bind(lambda: plugin_manager.kernel.get(AFFECTION))
     account_delivery = AccountDelivery(
         role_store.accounts,
         plugin_rpc,
@@ -783,31 +729,30 @@ def build_core_runtime(
         provider=provider,
         light_provider=light_provider,
         agent_provider=agent_provider,
-        mcp_registry=mcp_registry,
         memory_runtime=memory_runtime,
         presence=presence,
-        relationship_runtime=relationship_runtime,
+        reply_policy=reply_policy,
+        affection=affection,
         role_runtime_registry=role_runtime_registry,
         group_environment=group_environment,
         group_listening=group_listening,
         plugin_manager=plugin_manager,
         plugin_rpc=plugin_rpc,
-        scene_service=scene_service,
         channel_directory=channel_directory,
         proactive_motives=[
             *(
-                [SceneFollowupStrategy(relationship_runtime)]
+                [SceneFollowupStrategy(affection)]
                 if config.proactive_strategies.scene_followup
                 else []
             ),
             *(
-                [RelationshipStrategy(relationship_runtime)]
+                [RelationshipStrategy(affection)]
                 if config.proactive_strategies.relationship
                 else []
             ),
         ],
         scene_followup_subscription=(
-            SceneFollowupSubscription(event_bus, relationship_runtime)
+            SceneFollowupSubscription(event_bus, affection)
             if config.proactive_strategies.scene_followup
             else None
         ),

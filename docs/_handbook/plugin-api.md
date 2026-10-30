@@ -88,6 +88,93 @@ A plugin's scope was released (stop, reload or host unload).
 
 - `plugin_id: str`
 
+## `shiori_sdk.core.affection`
+
+``AFFECTION``: relationship, loneliness and affection (P6a, D12). The ``affection`` plugin provides this key. The host ``get``s it on every use and does nothing when it is ``None``. State files stay at ``workspace/roles/<role_id>/state/affection.json`` and the sibling runtime files; this key does not change their format. Display data (summary, relationship tags, loneliness) is read by the plugin's own UI through its RPC; the host neither reads nor forwards it.
+
+### `affection`
+
+Target `shiori_sdk.core.affection.Affection`.
+
+#### `shiori_sdk.core.affection.Affection`
+
+Relationship runtime the host calls. Delivery and turns stay in the core.
+
+- `render_prompt(role_id: str) -> str | None`
+
+  The affection context block, or ``None`` while uninitialized.
+
+- `handle_user_message(session_key: str) -> None`
+- `handle_proactive_sent(session_key: str) -> None`
+- `async apply_turn_affection(session_key: str, *, delta: int, reason: str) -> None`
+- `apply_scene_decision(session_key: str, transition: str, scene_key: str = '') -> None`
+- `should_trigger_scene_followup(session_key: str, now: datetime.datetime) -> tuple[bool, dict[str, Any]]`
+- `handle_scene_followup_sent(session_key: str, occurred_at: datetime.datetime) -> None`
+- `close_scene_followup(session_key: str) -> None`
+- `should_trigger_proactive(session_key: str, now: datetime.datetime) -> tuple[bool, dict[str, Any]]`
+- `async refresh_snapshot_after_consolidation(session_key: str) -> dict[str, Any] | None`
+- `async ensure_initialized(role_id: str) -> None`
+
+  Seed affection once SELF is ready. Failures propagate.
+
+## `shiori_sdk.core.affection_host`
+
+``AFFECTION_HOST``: host facts the affection plugin cannot import (P6a). The plugin keeps the relationship algorithms. Role records, sessions, presence, memory documents and the dialogue model stay on the host. The host provides this key before any plugin starts.
+
+### `affection_host`
+
+Target `shiori_sdk.core.affection_host.AffectionHost`.
+
+#### `shiori_sdk.core.affection_host.AffectionHost`
+
+Host-owned inputs of one relationship runtime.
+
+- `workspace: pathlib.Path`
+
+  The workspace. Affection files stay under ``roles/<id>/state``.
+
+- `get_role(role_id: str) -> core.affection_host.AffectionRole | None`
+- `list_roles() -> Sequence[core.affection_host.AffectionRole]`
+- `role_session_key(role_id: str) -> str`
+- `get_session(session_key: str) -> core.affection_host.AffectionSession`
+- `last_user_at(session_key: str) -> datetime.datetime | None`
+- `last_proactive_at(session_key: str) -> datetime.datetime | None`
+- `read_self(role_id: str) -> str`
+- `read_long_term(role_id: str) -> str`
+- `memory_is_template(text: str) -> bool`
+
+  Whether ``text`` is still the untouched MEMORY.md template.
+
+- `recent_user_messages(role_id: str, messages: list[Any]) -> list[dict[str, str]]`
+
+  User-authored recent messages. External speakers are already dropped.
+
+- `stage_prompt_overrides(role_id: str) -> Mapping[str, str]`
+- `update_stage_prompts(role_id: str, change: Callable[[Mapping[str, str]], Mapping[str, str]]) -> None`
+
+  Apply ``change`` under the role lock and persist the overrides.
+
+- `compile_role_prompt(role_id: str) -> str`
+- `async complete(role_id: str, messages: list[dict[str, str]], *, max_tokens: int | None) -> str`
+
+  One dialogue-model completion. Empty content is an empty string.
+
+#### `shiori_sdk.core.affection_host.AffectionRole`
+
+The role fields relationship snapshots and seeds read.
+
+- `id: str`
+- `name: str`
+- `description: str`
+
+#### `shiori_sdk.core.affection_host.AffectionSession`
+
+A live session the plugin reads; the plugin does not write it.
+
+- `key: str`
+- `metadata: dict[str, Any]`
+- `messages: list[Any]`
+
 ## `shiori_sdk.core.conversation`
 
 Turn events, ``COMMANDS``, and the initiated-delivery socket (D19, #902). The host emits one event per turn stage through the plugin kernel: ``on`` handlers run in plugin order and may return a replaced event, the core's fixed checks run on the final one, then ``watch`` handlers see it. Every event is a frozen projection of the host's turn state, never the state itself: the host applies only the fields documented as *writable* back to the turn and ignores changes to the others. Container fields are tuples, frozensets or read-only mappings. ``Veto`` stops a stage where it can stop: it aborts the turn with ``Veto.reason`` as the reply (``TurnStarting``, ``ReasoningStarting``) or ends the tool loop with it (``StepStarting``). The other events cannot be vetoed; a veto there fails the turn. A vetoed event reaches no watcher.
@@ -274,6 +361,26 @@ Installs one active crash collector at a time, stacked by ``owner``.
 
   The first frame the host or a plugin owns, else the innermost filename.
 
+## `shiori_sdk.core.mcp_tools`
+
+``MCP_TOOLS``: register a remote MCP tool with source metadata (P6a). ``ToolsCapability.register`` cannot grow a ``source_type`` parameter (D22). Drift and search still group dynamic MCP tools by ``source_type="mcp"`` and ``source_name`` equal to the server. The host provides this key and writes that metadata. The ``mcp`` plugin calls it. Manage tools (``mcp_add`` and the rest) use ordinary ``TOOLS.register``.
+
+### `mcp_tools`
+
+Target `shiori_sdk.core.mcp_tools.McpToolRegistration`.
+
+#### `shiori_sdk.core.mcp_tools.McpToolRegistration`
+
+Puts one remote tool in the host registry and takes it out again.
+
+- `add(tool: tools.Tool, *, server: str, risk: str = 'external-side-effect') -> None`
+
+  Register ``tool`` as an MCP tool of ``server``.
+
+- `remove(name: str) -> None`
+
+  Drop a previously registered tool. Missing names are ignored.
+
 ## `shiori_sdk.core.memory`
 
 ``MEMORY_ENGINE``: the memory engine socket (D1). The host does not construct an engine. A plugin that declares ``provides: [memory_engine]`` builds one in ``setup`` and ``provide``s it. Consumers declare ``optional_inject: [memory_engine]`` and ``get`` it on every use. ``None`` means this generation has no engine: retrieval is skipped and chat still runs.
@@ -303,6 +410,89 @@ Target `shiori_sdk.models.ModelProvider`.
 Runs a bounded chat request using the injected provider's routing.
 
 - `async chat(messages: list[dict[str, object]], tools: list[dict[str, object]], model: str, max_tokens: int | None, *, call_purpose: Literal['default', 'auxiliary'] = 'default') -> models.ModelResponse`
+
+## `shiori_sdk.core.reply_policy`
+
+``REPLY_POLICY``: natural-chat prompts and strategy (P6a, D8). The host does not own the prompt text. The ``natural_chat`` plugin provides this key. Consumers ``get`` it on every use. ``None`` means the plugin is off: the core still speaks, in a single message, and does not add the chat prompt. Selection is this provider together with the role flag ``runtime_config["natural_chat_enabled"] is True``. The core keeps the multi-message delivery protocol either way. Proactive and drift drafts do not pass through ``PromptRendering``; they read ``draft_prompt`` from this key.
+
+### `reply_policy`
+
+Target `shiori_sdk.core.reply_policy.ReplyPolicy`.
+
+#### `shiori_sdk.core.reply_policy.ReplyPolicy`
+
+Prompt text for a selected natural-chat turn. ``passive_prompt`` is the system section of a passive turn. ``draft_prompt`` is the extra system text of a proactive or drift draft, whose send tool is ``message_push`` rather than ``finish_reply``.
+
+- `passive_prompt() -> str`
+
+  The passive-turn system section.
+
+- `draft_prompt() -> str`
+
+  The proactive and drift draft system section.
+
+## `shiori_sdk.core.scene`
+
+``SCENE`` and ``SCENE_HOST``: demand-driven scene observation (P6a, D7). Observation is not on the turn's critical path, so it stays a plugin. The ``scene`` plugin provides ``SCENE``. The host provides ``SCENE_HOST``: role identity, whether the host still wants a scene follow-up, and recent proactive history. ``None`` from ``get(SCENE)`` means observation is off; chat still runs. ``request`` returns a disposer. The caller effects it so demand leaves with the caller. The plugin starts intake through ``SceneHost.on_published``: at once when its setup runs in a published generation (an in-generation reload or enable), otherwise when the host publishes that generation. The host calls ``close`` before the generation is dropped.
+
+### `scene`
+
+Target `shiori_sdk.core.scene.Scene`.
+
+#### `shiori_sdk.core.scene.Scene`
+
+The scene plugin's observation service.
+
+- `request(predicate: Callable[[roles.RoleView], bool]) -> Callable[[], None]`
+
+  Register demand and return the disposer that drops it. The predicate sees a role view. Demand does not start observation.
+
+- `async close() -> None`
+
+  Stop intake and wait for in-flight observations.
+
+### `scene_host`
+
+Target `shiori_sdk.core.scene.SceneHost`.
+
+#### `shiori_sdk.core.scene.SceneHost`
+
+Host facts the scene plugin cannot import.
+
+- `subject(session_key: str, role_id: str) -> core.scene.SceneSubject | None`
+
+  The role of this turn, from ``role_id`` or the session. None if absent.
+
+- `followup_wanted(role_id: str) -> bool`
+
+  Whether the host's scene-follow-up strategy applies to this role. The proactive strategy flag stays on the host until proactive leaves. This is not a method on ``Roles``.
+
+- `proactive_history(*, session_key: str, role_id: str, thread_id: str, limit: int) -> tuple[core.scene.SceneHistoryMessage, ...] | None`
+
+  Recent messages for a proactive turn. ``None`` means the turn is external context and must not be observed.
+
+- `legacy_state_paths() -> tuple[pathlib.Path, ...]`
+
+  Extra files a first live write may import scene state from.
+
+- `on_published(start: Callable[[], None]) -> Callable[[], None]`
+
+  Run ``start`` once this generation is published, or now if it is. Returns the disposer that drops a ``start`` not yet run. The caller effects it.
+
+#### `shiori_sdk.core.scene.SceneHistoryMessage`
+
+One recent message, already limited to the user's own context.
+
+- `role: str`
+- `content: str`
+
+#### `shiori_sdk.core.scene.SceneSubject`
+
+The role a scene observation is about.
+
+- `id: str`
+- `name: str`
+- `system_prompt: str`
 
 ## `shiori_sdk.core.services`
 
@@ -599,16 +789,6 @@ Retain accepted work until a replacing generation has drained it.
 - `on_drain(callback: Callable[[], Awaitable[None]]) -> None`
 
   Only wait for accepted work (no teardown); may run more than once, including while the instance stays active after an abandoned reload.
-
-### `scene_observations`
-
-Target `shiori_sdk.roles.SceneObservations`.
-
-#### `shiori_sdk.roles.SceneObservations`
-
-Request observations only while the current plugin generation is alive.
-
-- `request(predicate: Callable[[roles.RoleView], bool]) -> None`
 
 ### `services`
 

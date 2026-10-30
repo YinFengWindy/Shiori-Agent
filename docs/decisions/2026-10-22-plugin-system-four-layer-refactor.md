@@ -99,7 +99,7 @@ class Context:
 ```
 
 - 内核代码位于 `shiori_sdk.kernel`（D3），宿主和测试共用。ctx 之外内核只对宿主暴露 `start`/`stop`/`reload(plugin_id)`（D14），并发出 `PluginStarted`/`PluginFailed`/`PluginStopped` 事件供 observe 消费（D13）。
-- `Key[T]("tools")` 和事件 dataclass 由**提供方**定义。插座类 Key（如 `MEMORY_ENGINE`）由核心定义契约，由插件 provide；消费方用 `get` 时允许没有 provider。核心插座的契约放在 SDK（`shiori_sdk.core.tools` 等），系统插件自有的契约放在插件包里（例如 `plugins/affection/contract.py`）。
+- `Key[T]("tools")` 和事件 dataclass 由**提供方**定义。插座类 Key（如 `MEMORY_ENGINE`）由核心定义契约，由插件 provide；消费方用 `get` 时允许没有 provider。核心要消费的契约（`REPLY_POLICY`、`AFFECTION`、`SCENE` 等）是核心插座，放在 SDK 的 `shiori_sdk.core`（`shiori_sdk.core.tools` 等），即使提供方是系统插件；只在插件之间私有的契约才放在插件包里（`plugins/<id>/contract.py`）。（维护者确认（2026-10-29），PR #948 评审）
 - 前端入口：`setup(ctx)` 里通过核心模块 `BRIDGE` 服务注册 rpc handler、推送事件；renderer 只负责挂载入口，并按 `pluginId.method` 转发。
 
 ### manifest v4（api 只看大版本）
@@ -221,10 +221,10 @@ py/fe 为非测试 LOC。"默认关"取自 manifest 的 `default_enabled: false`
 | roles、role_store、role_runtime_registry | `ROLES`（后两个 0 使用，删掉） | Key |
 | models、light_provider、light_model | `MODELS` | Key |
 | memory、memory_engine | `MEMORY`（核心 markdown 存储）+ `MEMORY_ENGINE`（核心只持有插座契约和 Key；实现由 default_memory 等插件 provide；消费方用 `get`，None 表示无记忆；契约新增 `rollback_turn`，D10） | Key |
-| relationship_runtime（0 使用） | affection 插件 provide `AFFECTION` | 插件自有 Key |
+| relationship_runtime（0 使用） | affection 插件 provide `AFFECTION` | 核心插座 Key（`shiori_sdk.core`，见上文契约位置） |
 | （非 capability）agent/scheduler | schedule 系统插件 provide `SCHEDULER`（D17）；proactive 用 `get(SCHEDULER)`，None 时不用定时能力 | 插件自有 Key |
 | processes、process_resources、resources | `PROCESSES`（核心基础设施） | Key |
-| scene_observations | `SCENE`（scene 系统插件 provide，D7 暂定；消费方用 `get`） | 插件自有 Key |
+| scene_observations | `SCENE`（scene 系统插件 provide，D7 暂定；消费方用 `get`） | 核心插座 Key（`shiori_sdk.core`）；旧 Key 在 4.0.0 删除 |
 | rpc（含 Concurrency）、renderer 推送 | bridge 模块的 `BRIDGE.expose(ctx, handlers)` / `BRIDGE.push(ctx, event, payload)`；Concurrency 改成 handler 装饰器 | Key |
 | services（PluginServiceRegistry） | 内核 provide/require 本身 | 内核 |
 | dependencies | `require` / `get` + manifest inject | 内核 |

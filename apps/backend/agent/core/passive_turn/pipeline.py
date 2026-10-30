@@ -162,7 +162,6 @@ class PassiveTurnPipeline:
             self._outbound_port,
             self._context,
             self._history_window,
-            relationship_runtime=getattr(self._session, "relationship_runtime", None),
         )
 
     def bind_kernel(self, kernel: Callable[[], Kernel]) -> None:

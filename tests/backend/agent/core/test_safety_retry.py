@@ -1,3 +1,4 @@
+from tests.support.generation_getters import run_in_turn
 from typing import Any, cast
 import asyncio
 from copy import deepcopy
@@ -111,7 +112,7 @@ def _make_reasoner(
             debug_breakdown=[],
         )
 
-    return DefaultReasoner(
+    reasoner = DefaultReasoner(
         llm=cast(
             Any,
             LLMServices(
@@ -136,6 +137,7 @@ def _make_reasoner(
         ),
         session_manager=manager,
     )
+    return run_in_turn(reasoner, method="run_turn")
 
 
 def test_reasoner_run_turn_retries_and_preloads_history_tools(tmp_path):
@@ -227,6 +229,7 @@ def test_reasoner_run_turn_content_safety_trims_dynamic_sections_before_history(
         ),
         session_manager=manager,
     )
+    run_in_turn(reasoner, method="run_turn")
     reasoner.run = AsyncMock(
         side_effect=[
             ContentSafetyError("blocked"),

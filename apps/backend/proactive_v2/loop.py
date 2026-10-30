@@ -39,7 +39,6 @@ from core.common.strategy_trace import StrategyTraceType, build_strategy_trace_e
 from core.common.diagnostic_log import diagnostic_context, diagnostic_line
 from core.desktop_presence import DesktopPresence
 from core.roles import RoleStore
-from core.roles.relationship_runtime import RoleRelationshipRuntimeService
 from proactive_v2.energy import (
     compute_energy,
     d_energy,
@@ -126,7 +125,6 @@ class ProactiveLoop:
         self._role_prompt_fn = role_prompt_fn
         self._workspace_context_mtime_ns: int | None = None
         self._workspace_context_text: str = ""
-        self._relationship_runtime = self._build_relationship_runtime()
         self._init_runtime_state(config)
         self._init_runtime_components()
 
@@ -157,7 +155,6 @@ class ProactiveLoop:
                 session=SessionServices(
                     session_manager=self._sessions,
                     presence=self._presence,
-                    relationship_runtime=self._relationship_runtime,
                     conversation_service=ConversationService(self._sessions),
                 ),
                 outbound=PushToolOutboundPort(
@@ -173,17 +170,6 @@ class ProactiveLoop:
                     self._role_store.get_role if self._role_store is not None else None
                 ),
             )
-        )
-
-    def _build_relationship_runtime(self) -> RoleRelationshipRuntimeService | None:
-        workspace = getattr(self._sessions, "workspace", None)
-        if workspace is None or self._presence is None:
-            return None
-        return RoleRelationshipRuntimeService(
-            Path(workspace),
-            role_store=RoleStore(Path(workspace)),
-            session_manager=self._sessions,
-            presence=self._presence,
         )
 
     def _build_sense(self) -> Sensor:

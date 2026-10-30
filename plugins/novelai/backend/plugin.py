@@ -13,6 +13,7 @@ from dataclasses import replace
 from typing import TYPE_CHECKING, Any, cast
 
 from shiori_sdk.core.conversation import ReasoningFinished
+from shiori_sdk.core.scene import SCENE
 from shiori_sdk.core.tools import ToolCalled, ToolCalling, ToolVeto
 from shiori_sdk.role_events import RoleDeleted, SceneObservationCommitted
 from shiori_sdk.rpc import Concurrency
@@ -26,7 +27,6 @@ from shiori_sdk.core.services import (
     LIGHT_PROVIDER,
     ROLES,
     RPC,
-    SCENE_OBSERVATIONS,
     SESSION_STORE,
     TOOLS,
     WORKSPACE,
@@ -185,7 +185,12 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
     # terminate 仍负责取消并等待已经启动的生成任务。
     ctx.effect("auto_cg_controller", auto_cg_controller.terminate)
     ctx.require(EVENTS).on(SceneObservationCommitted, auto_cg_controller.schedule)
-    ctx.require(SCENE_OBSERVATIONS).request(lambda role: role_state.enabled(role.id))
+    scene = ctx.get(SCENE)
+    if scene is not None:
+        ctx.effect(
+            "novelai.scene",
+            scene.request(lambda role: role_state.enabled(role.id)),
+        )
 
     async def guard_auto_cg(event: ToolCalling) -> ToolCalling | ToolVeto:
         if event.tool_name != "generate_image":

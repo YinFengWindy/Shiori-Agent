@@ -1,0 +1,550 @@
+"""Relationship runtime: snapshots, loneliness, proactive triggers and heartbeat."""
+
+from __future__ import annotations
+
+import json
+from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
+
+import pytest
+
+from plugins.affection.backend.relationship import loops as loops_module
+from plugins.affection.backend.relationship import (
+    LonelinessHeartbeatLoop,
+    RoleRelationshipRuntimeService,
+)
+
+
+def _utc(year: int, month: int, day: int, hour: int = 0, minute: int = 0) -> datetime:
+    return datetime(year, month, day, hour, minute, tzinfo=timezone.utc)
+
+
+def _init_affection(
+    runtime: RoleRelationshipRuntimeService, value: int, *, role_id: str = "mira"
+) -> None:
+    runtime.affection.initialize(role_id, value=value, reason="测试初始化")
+
+
+def _snapshot_payload(*, role_id: str = "mira") -> dict:
+    return {
+        "role_id": role_id,
+        "role_self_view": "我最近会不自觉地去想你会不会来找我。",
+        "relation_tags": ["亲近", "等你主动"],
+        "internal_profile": {
+            "relation_state": {
+                "dependence": 0.62,
+                "security": 0.35,
+                "initiative_desire": 0.7,
+                "neglect_sensitivity": 0.8,
+            },
+            "behavior_profile": {
+                "loneliness_growth_base": 2.0,
+                "loneliness_growth_when_unanswered": 3.0,
+                "trigger_threshold": 60.0,
+                "post_trigger_cooldown_minutes": 120,
+                "night_suppression": 0.4,
+            },
+        },
+        "source_summary": {},
+        "generated_at": "2026-07-06T18:00:00+08:00",
+        "last_attempted_at": "2026-07-06T18:00:00+08:00",
+        "last_source_message_count": 4,
+        "last_error": "",
+    }
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [(12, 12), ("12", 12), (-4, 0), ("invalid", 0), ([], 0)],
+)
+def test_normalize_message_count_accepts_json_scalars(value: object, expected: int):
+    assert RoleRelationshipRuntimeService._normalize_message_count(value) == expected
+
+
+def test_snapshot_rejects_non_first_person_self_view(host):
+    runtime = RoleRelationshipRuntimeService(host)
+
+    with pytest.raises(ValueError):
+        runtime.write_snapshot(
+            "mira",
+            {
+                **_snapshot_payload(),
+                "role_self_view": "她最近越来越在意用户会不会主动。",
+            },
+        )
+
+
+def test_legacy_snapshot_file_with_closeness_loads_without_it(host):
+    runtime = RoleRelationshipRuntimeService(host)
+    legacy = _snapshot_payload()
+    legacy["internal_profile"]["relation_state"]["closeness"] = 0.9
+    path = runtime.snapshot_path("mira")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(legacy, ensure_ascii=False), encoding="utf-8")
+
+    snapshot = runtime.read_snapshot("mira")
+
+    assert snapshot is not None
+    relation_state = snapshot["internal_profile"]["relation_state"]
+    assert "closeness" not in relation_state
+    assert relation_state["dependence"] == 0.62
+
+
+def test_user_message_clears_unanswered_state_and_reduces_loneliness(host):
+    runtime = RoleRelationshipRuntimeService(host)
+    runtime.write_snapshot("mira", _snapshot_payload())
+    runtime.write_loneliness_runtime(
+        "mira",
+        {
+            "role_id": "mira",
+            "loneliness_value": 80,
+            "last_calculated_at": "2026-07-06T10:00:00+00:00",
+            "last_user_at": "",
+            "last_proactive_at": "",
+            "awaiting_reply_after_proactive": True,
+            "awaiting_reply_since": "2026-07-06T09:00:00+00:00",
+            "last_triggered_at": "",
+            "cooldown_until": "",
+        },
+    )
+
+    now = _utc(2026, 7, 6, 12, 0)
+    host.user_at[host.role_session_key("mira")] = now
+    updated = runtime.handle_user_message(host.role_session_key("mira"), now=now)
+
+    assert updated is not None
+    assert updated["awaiting_reply_after_proactive"] is False
+    assert updated["awaiting_reply_since"] == ""
+    assert updated["loneliness_value"] < 80
+    assert (
+        datetime.fromisoformat(updated["last_user_at"]).astimezone(timezone.utc) == now
+    )
+    scene_due, scene_meta = runtime.should_trigger_scene_followup(
+        host.role_session_key("mira"),
+        now=now + timedelta(minutes=5),
+    )
+    assert scene_due is True
+    assert scene_meta["attempt_index"] == 0
+
+
+def test_snapshot_growth_profile_is_raised_to_default_floor(host):
+    runtime = RoleRelationshipRuntimeService(host)
+    payload = _snapshot_payload()
+    payload["internal_profile"]["behavior_profile"]["loneliness_growth_base"] = 1.2
+    payload["internal_profile"]["behavior_profile"][
+        "loneliness_growth_when_unanswered"
+    ] = 1.8
+
+    saved = runtime.write_snapshot("mira", payload)
+
+    profile = saved["internal_profile"]["behavior_profile"]
+    assert profile["loneliness_growth_base"] == 1.6
+    assert profile["loneliness_growth_when_unanswered"] == 2.4
+
+
+def test_current_loneliness_runtime_grows_once_per_complete_ten_minute_tick(host):
+    runtime = RoleRelationshipRuntimeService(host)
+    runtime.write_snapshot("mira", _snapshot_payload())
+    _init_affection(runtime, 75)
+    runtime.write_loneliness_runtime(
+        "mira",
+        {
+            "role_id": "mira",
+            "loneliness_value": 10,
+            "last_calculated_at": "2026-07-06T00:00:00+00:00",
+            "last_user_at": "",
+            "last_proactive_at": "",
+            "awaiting_reply_after_proactive": False,
+            "awaiting_reply_since": "",
+            "last_triggered_at": "",
+            "cooldown_until": "",
+        },
+    )
+
+    before_tick = runtime.current_loneliness_runtime(
+        "mira",
+        now=_utc(2026, 7, 6, 0, 9),
+    )
+    assert before_tick is not None
+    assert before_tick["loneliness_value"] == 10
+    assert datetime.fromisoformat(before_tick["last_calculated_at"]).astimezone(
+        timezone.utc
+    ) == _utc(2026, 7, 6, 0, 0)
+
+    first_tick = runtime.current_loneliness_runtime(
+        "mira",
+        now=_utc(2026, 7, 6, 0, 10),
+    )
+    assert first_tick is not None
+    assert first_tick["loneliness_value"] == 12
+    assert datetime.fromisoformat(first_tick["last_calculated_at"]).astimezone(
+        timezone.utc
+    ) == _utc(2026, 7, 6, 0, 10)
+
+    second_tick = runtime.current_loneliness_runtime(
+        "mira",
+        now=_utc(2026, 7, 6, 0, 21),
+    )
+    assert second_tick is not None
+    assert second_tick["loneliness_value"] == 14
+    assert datetime.fromisoformat(second_tick["last_calculated_at"]).astimezone(
+        timezone.utc
+    ) == _utc(2026, 7, 6, 0, 20)
+
+
+def test_current_loneliness_runtime_adds_unanswered_growth_per_tick(host):
+    runtime = RoleRelationshipRuntimeService(host)
+    runtime.write_snapshot("mira", _snapshot_payload())
+    _init_affection(runtime, 75)
+    runtime.write_loneliness_runtime(
+        "mira",
+        {
+            "role_id": "mira",
+            "loneliness_value": 10,
+            "last_calculated_at": "2026-07-06T00:00:00+00:00",
+            "last_user_at": "",
+            "last_proactive_at": "",
+            "awaiting_reply_after_proactive": True,
+            "awaiting_reply_since": "2026-07-05T23:30:00+00:00",
+            "last_triggered_at": "",
+            "cooldown_until": "",
+        },
+    )
+
+    updated = runtime.current_loneliness_runtime(
+        "mira",
+        now=_utc(2026, 7, 6, 0, 20),
+    )
+
+    assert updated is not None
+    assert updated["loneliness_value"] == 20
+    assert datetime.fromisoformat(updated["last_calculated_at"]).astimezone(
+        timezone.utc
+    ) == _utc(2026, 7, 6, 0, 20)
+
+
+@pytest.mark.parametrize("affection", [None, 59])
+def test_roles_below_intimate_affection_do_not_accumulate_loneliness(
+    host, affection: int | None
+):
+    runtime = RoleRelationshipRuntimeService(host)
+    runtime.write_snapshot("mira", _snapshot_payload())
+    if affection is not None:
+        _init_affection(runtime, affection)
+    runtime.write_loneliness_runtime(
+        "mira",
+        {
+            "role_id": "mira",
+            "loneliness_value": 22,
+            "last_calculated_at": "2026-07-06T00:00:00+00:00",
+            "last_user_at": "",
+            "last_proactive_at": "",
+            "awaiting_reply_after_proactive": True,
+            "awaiting_reply_since": "2026-07-05T23:30:00+00:00",
+            "last_triggered_at": "",
+            "cooldown_until": "",
+        },
+    )
+
+    updated = runtime.current_loneliness_runtime(
+        "mira",
+        now=_utc(2026, 7, 6, 1, 0),
+    )
+
+    assert updated is not None
+    assert updated["loneliness_value"] == 22
+    assert updated["awaiting_reply_after_proactive"] is False
+    assert updated["awaiting_reply_since"] == ""
+    assert datetime.fromisoformat(updated["last_calculated_at"]).astimezone(
+        timezone.utc
+    ) == _utc(2026, 7, 6, 1, 0)
+
+
+def test_intimate_stage_lower_bound_accumulates_loneliness(host):
+    runtime = RoleRelationshipRuntimeService(host)
+    runtime.write_snapshot("mira", _snapshot_payload())
+    _init_affection(runtime, 60)
+    runtime.write_loneliness_runtime(
+        "mira",
+        {
+            "role_id": "mira",
+            "loneliness_value": 22,
+            "last_calculated_at": "2026-07-06T00:00:00+00:00",
+            "last_user_at": "",
+            "last_proactive_at": "",
+            "awaiting_reply_after_proactive": False,
+            "awaiting_reply_since": "",
+            "last_triggered_at": "",
+            "cooldown_until": "",
+        },
+    )
+
+    updated = runtime.current_loneliness_runtime("mira", now=_utc(2026, 7, 6, 0, 10))
+
+    assert updated is not None
+    assert updated["loneliness_value"] == 24
+
+
+def test_proactive_sent_marks_unanswered_and_sets_cooldown(host):
+    runtime = RoleRelationshipRuntimeService(host)
+    runtime.write_snapshot("mira", _snapshot_payload())
+
+    now = _utc(2026, 7, 6, 8, 0)
+    updated = runtime.handle_proactive_sent(host.role_session_key("mira"), now=now)
+
+    assert updated is not None
+    assert updated["awaiting_reply_after_proactive"] is True
+    assert (
+        datetime.fromisoformat(updated["awaiting_reply_since"]).astimezone(timezone.utc)
+        == now
+    )
+    assert (
+        datetime.fromisoformat(updated["last_triggered_at"]).astimezone(timezone.utc)
+        == now
+    )
+    assert datetime.fromisoformat(updated["cooldown_until"]).astimezone(
+        timezone.utc
+    ) == now + timedelta(minutes=120)
+
+
+def test_should_trigger_proactive_respects_threshold(host):
+    runtime = RoleRelationshipRuntimeService(host)
+    runtime.write_snapshot("mira", _snapshot_payload())
+    _init_affection(runtime, 75)
+    runtime.write_loneliness_runtime(
+        "mira",
+        {
+            "role_id": "mira",
+            "loneliness_value": 70,
+            "last_calculated_at": "2026-07-06T12:00:00+00:00",
+            "last_user_at": "",
+            "last_proactive_at": "",
+            "awaiting_reply_after_proactive": False,
+            "awaiting_reply_since": "",
+            "last_triggered_at": "",
+            "cooldown_until": "",
+        },
+    )
+
+    should_trigger, meta = runtime.should_trigger_proactive(
+        host.role_session_key("mira"),
+        now=_utc(2026, 7, 6, 12, 0),
+    )
+
+    assert should_trigger is True
+    assert meta["reason"] == "threshold"
+
+
+def test_should_trigger_proactive_reports_active_cooldown(host):
+    runtime = RoleRelationshipRuntimeService(host)
+    runtime.write_snapshot("mira", _snapshot_payload())
+    _init_affection(runtime, 75)
+    runtime.write_loneliness_runtime(
+        "mira",
+        {
+            "role_id": "mira",
+            "loneliness_value": 100,
+            "last_calculated_at": "2026-07-06T12:00:00+00:00",
+            "last_user_at": "",
+            "last_proactive_at": "2026-07-06T11:00:00+00:00",
+            "awaiting_reply_after_proactive": False,
+            "awaiting_reply_since": "",
+            "last_triggered_at": "2026-07-06T11:00:00+00:00",
+            "cooldown_until": "2026-07-06T13:00:00+00:00",
+        },
+    )
+
+    should_trigger, meta = runtime.should_trigger_proactive(
+        host.role_session_key("mira"),
+        now=_utc(2026, 7, 6, 12, 0),
+    )
+
+    assert should_trigger is False
+    assert meta == {
+        "reason": "cooldown",
+        "loneliness_value": 100.0,
+        "effective_loneliness_value": 100.0,
+        "trigger_threshold": 60.0,
+        "cooldown_until": "2026-07-06T13:00:00+00:00",
+    }
+
+
+def test_should_trigger_proactive_accepts_positional_now_argument(host):
+    runtime = RoleRelationshipRuntimeService(host)
+    runtime.write_snapshot("mira", _snapshot_payload())
+    _init_affection(runtime, 75)
+    runtime.write_loneliness_runtime(
+        "mira",
+        {
+            "role_id": "mira",
+            "loneliness_value": 70,
+            "last_calculated_at": "2026-07-06T12:00:00+00:00",
+            "last_user_at": "",
+            "last_proactive_at": "",
+            "awaiting_reply_after_proactive": False,
+            "awaiting_reply_since": "",
+            "last_triggered_at": "",
+            "cooldown_until": "",
+        },
+    )
+
+    should_trigger, meta = runtime.should_trigger_proactive(
+        host.role_session_key("mira"),
+        _utc(2026, 7, 6, 12, 0),
+    )
+
+    assert should_trigger is True
+    assert meta["reason"] == "threshold"
+
+
+@pytest.mark.parametrize("affection", [None, 59])
+def test_should_trigger_proactive_requires_intimate_affection(
+    host, affection: int | None
+):
+    runtime = RoleRelationshipRuntimeService(host)
+    runtime.write_snapshot("mira", _snapshot_payload())
+    if affection is not None:
+        _init_affection(runtime, affection)
+    runtime.write_loneliness_runtime(
+        "mira",
+        {
+            "role_id": "mira",
+            "loneliness_value": 90,
+            "last_calculated_at": "2026-07-06T12:00:00+00:00",
+            "last_user_at": "",
+            "last_proactive_at": "",
+            "awaiting_reply_after_proactive": True,
+            "awaiting_reply_since": "2026-07-06T11:30:00+00:00",
+            "last_triggered_at": "",
+            "cooldown_until": "",
+        },
+    )
+
+    should_trigger, meta = runtime.should_trigger_proactive(
+        host.role_session_key("mira"),
+        now=_utc(2026, 7, 6, 12, 30),
+    )
+
+    assert should_trigger is False
+    assert meta["reason"] == "affection_below_intimate"
+    frozen = runtime.read_loneliness_runtime("mira")
+    assert frozen is not None
+    assert frozen["awaiting_reply_after_proactive"] is False
+    assert frozen["awaiting_reply_since"] == ""
+
+
+def test_chat_status_settles_overdue_decay(host):
+    runtime = RoleRelationshipRuntimeService(host)
+    seeded_at = datetime.now().astimezone() - timedelta(days=4, hours=1)
+    runtime.affection.initialize("mira", value=45, reason="测试初始化", now=seeded_at)
+
+    status = runtime.chat_status("mira")
+
+    # Days 3 and 4 without a user message are settled on read.
+    assert status["affection"]["value"] == 43
+
+
+def test_chat_status_shows_the_snapshot_tags_and_the_loneliness_value(host):
+    runtime = RoleRelationshipRuntimeService(host)
+    runtime.write_snapshot(
+        "mira",
+        {
+            **_snapshot_payload(),
+            "relation_tags": ["亲近", "安心", "期待见面"],
+        },
+    )
+    now = datetime.now().astimezone().isoformat()
+    runtime.write_loneliness_runtime(
+        "mira",
+        {"role_id": "mira", "loneliness_value": 37, "last_calculated_at": now},
+    )
+
+    status = runtime.chat_status("mira")
+
+    assert status["relation_tags"] == ["亲近", "安心", "期待见面"]
+    assert status["loneliness"] == 37
+
+
+def test_chat_status_of_an_uninitialized_role_is_empty(host):
+    status = RoleRelationshipRuntimeService(host).chat_status("mira")
+
+    assert status == {
+        "role_id": "mira",
+        "affection": None,
+        "relation_tags": [],
+        "loneliness": 0.0,
+    }
+
+
+@pytest.mark.asyncio
+async def test_heartbeat_keeps_settling_other_roles_when_one_role_is_broken(
+    host, monkeypatch, caplog
+):
+    host.roles.clear()
+    host.add_role("aria")
+    host.add_role("mira")
+    notified: list[str] = []
+
+    async def status_changed(role_id: str) -> None:
+        notified.append(role_id)
+
+    runtime = RoleRelationshipRuntimeService(host, status_changed=status_changed)
+    broken, healthy = (role.id for role in host.list_roles())
+    runtime.affection.state_path(broken).parent.mkdir(parents=True, exist_ok=True)
+    runtime.affection.state_path(broken).write_text("{}", encoding="utf-8")
+    seeded_at = datetime.now().astimezone() - timedelta(days=3, hours=1)
+    runtime.affection.initialize(healthy, value=45, reason="测试初始化", now=seeded_at)
+    loop = LonelinessHeartbeatLoop(runtime)
+    ticks = 0
+
+    async def one_tick(_seconds: float) -> None:
+        nonlocal ticks
+        ticks += 1
+        if ticks > 1:
+            loop.stop()
+
+    monkeypatch.setattr(loops_module, "asyncio", SimpleNamespace(sleep=one_tick))
+
+    with caplog.at_level("ERROR", logger=loops_module.__name__):
+        await loop.run()
+
+    # Only the role that settled is announced to the sidebar.
+    assert notified == [healthy]
+
+    state = runtime.affection.read_state(healthy)
+    assert state is not None and state.value == 44
+    assert f"role={broken}" in caplog.text
+
+
+def test_loneliness_heartbeat_loop_defaults_to_ten_minutes(host):
+    runtime = RoleRelationshipRuntimeService(host)
+
+    loop = LonelinessHeartbeatLoop(runtime)
+
+    assert loop._interval == 10 * 60
+
+
+@pytest.mark.asyncio
+async def test_generate_snapshot_via_llm_accepts_prompt_json_example(host):
+    host.completion = (
+        '{"role_self_view":"我会留意你有没有来找我。",'
+        '"relation_tags":["亲近"],'
+        '"relation_state":{"closeness":0.6,"dependence":0.5,"security":0.4,'
+        '"initiative_desire":0.7,"neglect_sensitivity":0.8},'
+        '"behavior_profile":{"loneliness_growth_base":1.5,'
+        '"loneliness_growth_when_unanswered":2.2,"trigger_threshold":60,'
+        '"post_trigger_cooldown_minutes":120,"night_suppression":0.4}}'
+    )
+    runtime = RoleRelationshipRuntimeService(host)
+    session = host.get_session(host.role_session_key("mira"))
+    session.messages = [
+        {"role": "user", "content": "你好"},
+        {"role": "assistant", "content": "我在。"},
+    ]
+
+    snapshot = await runtime.generate_snapshot_via_llm("mira")
+
+    assert snapshot["role_self_view"] == "我会留意你有没有来找我。"
+    assert snapshot["relation_tags"] == ["亲近"]
+    assert snapshot["last_source_message_count"] == 2
+    assert "closeness" not in snapshot["internal_profile"]["relation_state"]

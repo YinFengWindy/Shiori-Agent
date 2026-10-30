@@ -25,7 +25,6 @@ from agent.plugin_host.core_keys import CoreModule, CoreProvide
 from agent.tools.registry import ToolRegistry
 from bootstrap.plugin_core import PluginCoreInputs, plugin_core_modules
 from bus.event_bus import EventBus
-from core.scene.demand import SceneObservationDemand
 from shiori_sdk.kernel import Key
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
@@ -41,12 +40,11 @@ def host_kernel(
     provider: Any = None,
     model: str | None = None,
     http: Any = None,
-    relationship_runtime: Any = None,
     session_manager: Any = None,
     light_provider: Any = None,
     light_model: str | None = None,
     role_runtime_registry: Any = None,
-    scene_observations: SceneObservationDemand | None = None,
+    scene_followup: bool = False,
     external_turns: Any = None,
     background_results: Any = None,
     event_bus: EventBus | None = None,
@@ -60,9 +58,9 @@ def host_kernel(
     keywords are the ``PluginCoreInputs`` fields, real services or test
     doubles; one left None makes a plugin declaring a capability over it fail
     before setup. The core's ``workspace`` and ``process_resources`` are those
-    of ``settings``; ``scene_observations`` and ``event_bus`` default to fresh
-    ones and ``rpc`` to a new registry over that bus (pass one to read what
-    plugins registered). ``withheld`` keys are dropped from the core
+    of ``settings``. ``event_bus`` defaults to a fresh one and ``rpc`` to a new
+    registry over that bus (pass one to read what plugins registered).
+    ``withheld`` keys are dropped from the core
     provide list, as if no core module provided them. ``options`` are the
     remaining ``PluginKernel`` keyword arguments.
     """
@@ -72,16 +70,11 @@ def host_kernel(
         plugin_dirs=tuple(plugin_dirs),
         event_bus=bus,
         rpc=rpc if rpc is not None else PluginRpcRegistry(bus),
-        scene_observations=(
-            scene_observations
-            if scene_observations is not None
-            else SceneObservationDemand()
-        ),
+        scene_followup=scene_followup,
         workspace=generation.workspace,
         tools=tools,
         role_store=role_store,
         session_manager=session_manager,
-        relationship_runtime=relationship_runtime,
         role_runtime_registry=role_runtime_registry,
         provider=provider,
         model=model,
@@ -130,7 +123,6 @@ def make_kernel(
     model: str | None = None,
     light_provider: object = None,
     light_model: str | None = None,
-    relationship_runtime: object = None,
     rpc: PluginRpcRegistry[Any] | None = None,
 ) -> PluginKernel:
     """Creates a kernel over real host services for the given plugin roots.
@@ -150,7 +142,6 @@ def make_kernel(
         ),
         provider=provider,
         model=model,
-        relationship_runtime=relationship_runtime,
         tools=tools,
         session_manager=session_manager,
         light_provider=light_provider,

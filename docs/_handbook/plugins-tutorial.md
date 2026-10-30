@@ -44,7 +44,7 @@ supports_hot_unload: true
 
 `display_name` 是设置 › 插件里显示的名称（省略时显示 ID）。可选的 `category` 决定插件在列表中的分组：`feature`（功能）、`channel`（渠道）、`system`（系统组件，默认折叠，用于宿主内部护栏、诊断命令这类用户不需要日常操作的插件）。省略时，声明了渠道（`contributes.channels` 非空）的插件归入渠道，其余归入功能；`system` 只能显式声明。取值不在这三者之内时 manifest 被拒绝。外部包同样接受 `display_name` 与 `category`（含 `system`），校验规则相同。
 
-可选的 `default_enabled`（严格布尔值，省略为 `true`）决定 `[plugins.<id>]` 没有显式 `enabled` 时插件是否启用；显式的 `enabled` 始终优先，设置 › 插件的开关写的就是显式值。目前 `browser_use`、`computer_use`、`novelai`、`gpt_sovits_tts`、`grok_bot`、`herdr`、`sensevoice_asr` 声明为 `false`，没有显式开关时默认停用。宿主加载配置时不改写这份开关。外部包同样接受 `default_enabled`。
+可选的 `default_enabled`（严格布尔值，省略为 `true`）决定 `[plugins.<id>]` 没有显式 `enabled` 时插件是否启用；显式的 `enabled` 始终优先，设置 › 插件的开关写的就是显式值。目前 `browser_use`、`computer_use`、`novelai`、`gpt_sovits_tts`、`grok_bot`、`herdr`、`mcp`、`sensevoice_asr` 声明为 `false`，没有显式开关时默认停用。宿主加载配置时不改写这份开关。外部包同样接受 `default_enabled`。
 
 ## setup 与配置
 
@@ -105,7 +105,8 @@ async def setup(ctx: PluginRuntimeContext) -> None:
 | `runtime` | `RUNTIME` | 本代是否重载、前代是否活动，以及收尾任务登记 |
 | `storage` | `STORAGE` | 宿主负责的插件私有文件迁移（`migrate_data`） |
 | `workspace` / `roles` / `session_store` | `WORKSPACE` / `ROLES` / `SESSION_STORE` | 工作区目录、角色快照/素材、会话元数据/素材替换；不导出完整存储聚合。回滚最近一轮被动回合是另一个 Key：`inject: [sessions]` 对应 `shiori_sdk.core.sessions.SESSIONS` |
-| `scene_observations` / `models` | `SCENE_OBSERVATIONS` / `MODELS` | 场景观察需求与按角色持有的 chat/vision 模型快照 |
+| `scene` | `SCENE` | 可选。场景插件提供。`request` 返回释放函数，交给 `ctx.effect`。没有提供方时 `get` 为 None，聊天照常 |
+| `models` | `MODELS` | 按角色持有的 chat/vision 模型快照 |
 | `light_provider` / `light_model` | `LIGHT_PROVIDER` / `LIGHT_MODEL` | 轻量模型及其模型名 |
 | `memory` | `MEMORY` | 记忆插件的宿主接口（引擎是 `MEMORY_ENGINE`，由插件提供） |
 | `external_turns` / `background_results` | `EXTERNAL_TURNS` / `BACKGROUND_RESULTS` | 提交非渠道来源的外部上下文回合；后台任务回报结果 |

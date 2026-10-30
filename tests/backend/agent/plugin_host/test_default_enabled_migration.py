@@ -23,6 +23,7 @@ def test_builtin_default_disabled_plugins_are_the_declared_set():
         "grok_bot",
         "gpt_sovits_tts",
         "herdr",
+        "mcp",
         "novelai",
         "sensevoice_asr",
     }
