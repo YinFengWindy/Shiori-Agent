@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Any
 
 from shiori_sdk.core.affection import AFFECTION
 from shiori_sdk.core.affection_host import AFFECTION_HOST
-from shiori_sdk.core.services import BACKGROUND
+from shiori_sdk.core.services import BACKGROUND, RPC
+from shiori_sdk.rpc import Concurrency
 from shiori_sdk.runtime import PluginRuntimeContext
 
 from .relationship.loops import LonelinessHeartbeatLoop
@@ -16,20 +16,25 @@ _DEFAULT_PAGE_SIZE = 20
 _MAX_PAGE_SIZE = 100
 
 
+def _whole(value: object, default: int) -> int:
+    """A JSON page number or size; empty or 0 means ``default``. Non-numbers raise."""
+    return int(str(value)) if value else default
+
+
 class AffectionApi:
     """Plugin RPC the affection page calls."""
 
     def __init__(self, runtime: RoleRelationshipRuntimeService) -> None:
         self._runtime = runtime
 
-    def history(self, payload: dict[str, Any]) -> dict[str, Any]:
+    async def history(self, payload: dict[str, object]) -> dict[str, object]:
         """One newest-first page plus the current summary."""
         role_id = str(payload.get("role_id") or "").strip()
         if self._runtime.sources.get_role(role_id) is None:
             raise ValueError(f"role not found: {role_id}")
-        page = max(1, int(payload.get("page") or 1))
+        page = max(1, _whole(payload.get("page"), 1))
         page_size = max(
-            1, min(_MAX_PAGE_SIZE, int(payload.get("page_size") or _DEFAULT_PAGE_SIZE))
+            1, min(_MAX_PAGE_SIZE, _whole(payload.get("page_size"), _DEFAULT_PAGE_SIZE))
         )
         summary = self._runtime.affection.current_summary(role_id)
         entries, total = self._runtime.affection.history_page(
@@ -44,21 +49,21 @@ class AffectionApi:
             "page_size": page_size,
         }
 
-    def chat_status(self, payload: dict[str, Any]) -> dict[str, Any]:
+    async def chat_status(self, payload: dict[str, object]) -> dict[str, object]:
         """The chat sidebar's summary, relationship tags and loneliness."""
         role_id = str(payload.get("role_id") or "").strip()
         if self._runtime.sources.get_role(role_id) is None:
             raise ValueError(f"role not found: {role_id}")
         return self._runtime.chat_status(role_id)
 
-    def stage_prompts_get(self, payload: dict[str, Any]) -> dict[str, Any]:
+    async def stage_prompts_get(self, payload: dict[str, object]) -> dict[str, object]:
         """Each stage's injected guidance."""
         role_id = str(payload.get("role_id") or "").strip()
         if self._runtime.sources.get_role(role_id) is None:
             raise ValueError(f"role not found: {role_id}")
         return {"role_id": role_id, "stages": self._runtime.stage_prompts_view(role_id)}
 
-    def stage_prompts_set(self, payload: dict[str, Any]) -> dict[str, Any]:
+    async def stage_prompts_set(self, payload: dict[str, object]) -> dict[str, object]:
         """Writes named stages and answers with every stage as stored."""
         changes = payload.get("prompts")
         if not isinstance(changes, dict):
@@ -68,11 +73,31 @@ class AffectionApi:
         return {"role_id": role_id, "stages": self._runtime.stage_prompts_view(role_id)}
 
 
+# Renderer event after a role's sidebar data changed outside a turn
+# (``plugin.affection.chat_status.changed``, payload ``{role_id}``).
+STATUS_CHANGED_EVENT = "chat_status.changed"
+
+
 async def setup(ctx: PluginRuntimeContext) -> None:
-    """Provides ``AFFECTION`` and starts the loneliness heartbeat."""
-    runtime = RoleRelationshipRuntimeService(ctx.require(AFFECTION_HOST))
+    """Provides ``AFFECTION``, serves the UI's RPC and starts the heartbeat."""
+    rpc = ctx.require(RPC)
+
+    async def status_changed(role_id: str) -> None:
+        _ = await rpc.emit(STATUS_CHANGED_EVENT, {"role_id": role_id})
+
+    runtime = RoleRelationshipRuntimeService(
+        ctx.require(AFFECTION_HOST), status_changed=status_changed
+    )
     ctx.provide(AFFECTION, runtime)
-    ctx.expose(AffectionApi(runtime))
+    api = AffectionApi(runtime)
+    # Reading the summary settles due decay and loneliness ticks, so the reads
+    # that do so write files and stay on the mutation lane.
+    rpc.register("history", api.history)
+    rpc.register("chat_status", api.chat_status)
+    rpc.register(
+        "stage_prompts_get", api.stage_prompts_get, concurrency=Concurrency.READ_ONLY
+    )
+    rpc.register("stage_prompts_set", api.stage_prompts_set)
     loop = LonelinessHeartbeatLoop(runtime)
     task = ctx.require(BACKGROUND).spawn(loop.run(), name="loneliness")
 

@@ -2,13 +2,18 @@ import { useEffect, useState } from "react";
 import { errorMessage, type PluginHostServices, type PluginRpcClient } from "@yinfengwindy/shiori-sdk";
 import { readAffectionChatStatus, type AffectionChatStatus } from "./chatStatus";
 
+/** The plugin's own event after a role's data changed outside a turn (heartbeat, snapshot refresh). */
+export const affectionStatusChangedEvent = "plugin.affection.chat_status.changed";
+
 /**
- * The role's sidebar data, re-read after each committed turn of that role.
+ * The role's sidebar data, re-read whenever it may have changed.
  *
  * The host broadcasts `session.updated` (with `role_id`) once a turn, a
  * proactive message or a channel turn is stored; affection is applied before
- * that, so the re-read sees the new value. The caller keys the component by
- * role, so one hook instance serves one role.
+ * that, so the re-read sees the new value. The plugin's backend emits
+ * `chat_status.changed` after each loneliness heartbeat (which also settles
+ * decay) and snapshot refresh. The caller keys the component by role, so one
+ * hook instance serves one role.
  */
 export function useAffectionChatStatus(client: PluginRpcClient, host: PluginHostServices, roleId: string) {
   const [revision, setRevision] = useState(0);
@@ -16,7 +21,8 @@ export function useAffectionChatStatus(client: PluginRpcClient, host: PluginHost
   const [error, setError] = useState("");
 
   useEffect(() => host.onEvent((event) => {
-    if (event.method === "session.updated" && event.payload.role_id === roleId) {
+    const refreshes = event.method === "session.updated" || event.method === affectionStatusChangedEvent;
+    if (refreshes && event.payload.role_id === roleId) {
       setRevision((current) => current + 1);
     }
   }), [host, roleId]);

@@ -74,6 +74,20 @@ it("shows the placeholder before tags exist and no meter before affection is ini
   }
 });
 
+it("re-reads after its plugin's heartbeat event for its role", async () => {
+  const next: AffectionChatStatus = { ...first, loneliness: 80 };
+  const { view, calls, emit } = await mountStatus([first, next]);
+  try {
+    await emit("plugin.affection.chat_status.changed", { role_id: "yin" });
+    assert.equal(calls.length, 1);
+    await emit("plugin.affection.chat_status.changed", { role_id: "mira" });
+    assert.equal(calls.length, 2);
+    assert.match(view.container.textContent ?? "", /寂寞值80/);
+  } finally {
+    await view.cleanup();
+  }
+});
+
 it("re-reads after a stored turn of its role and ignores other roles", async () => {
   const next: AffectionChatStatus = { ...first, affection: { value: 81, stage: "挚爱", progress: 0.05, floor: 80 }, loneliness: 10 };
   const { view, calls, emit } = await mountStatus([first, next]);

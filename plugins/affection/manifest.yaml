@@ -8,6 +8,7 @@ category: system
 inject:
   - affection_host
   - background
+  - rpc
 provides:
   - affection
 frontend:

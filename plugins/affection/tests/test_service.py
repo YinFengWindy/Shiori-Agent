@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
 
 import pytest
 
@@ -484,7 +483,12 @@ async def test_heartbeat_keeps_settling_other_roles_when_one_role_is_broken(
     host.roles.clear()
     host.add_role("aria")
     host.add_role("mira")
-    runtime = RoleRelationshipRuntimeService(host)
+    notified: list[str] = []
+
+    async def status_changed(role_id: str) -> None:
+        notified.append(role_id)
+
+    runtime = RoleRelationshipRuntimeService(host, status_changed=status_changed)
     broken, healthy = (role.id for role in host.list_roles())
     runtime.affection.state_path(broken).parent.mkdir(parents=True, exist_ok=True)
     runtime.affection.state_path(broken).write_text("{}", encoding="utf-8")
@@ -503,6 +507,9 @@ async def test_heartbeat_keeps_settling_other_roles_when_one_role_is_broken(
 
     with caplog.at_level("ERROR", logger=loops_module.__name__):
         await loop.run()
+
+    # Only the role that settled is announced to the sidebar.
+    assert notified == [healthy]
 
     state = runtime.affection.read_state(healthy)
     assert state is not None and state.value == 44
@@ -541,26 +548,3 @@ async def test_generate_snapshot_via_llm_accepts_prompt_json_example(host):
     assert snapshot["relation_tags"] == ["亲近"]
     assert snapshot["last_source_message_count"] == 2
     assert "closeness" not in snapshot["internal_profile"]["relation_state"]
-
-
-@pytest.mark.asyncio
-async def test_refresh_snapshot_after_consolidation_uses_the_sessions_role(host):
-    runtime = RoleRelationshipRuntimeService(host)
-    session = host.get_session(host.role_session_key("mira"))
-    session.metadata["role_id"] = "mira"
-    session.messages = [{"role": "user", "content": "你好"}] * 6
-    expected_snapshot = {
-        **_snapshot_payload(),
-        "last_source_message_count": 6,
-    }
-    optimizer = SimpleNamespace(
-        optimize=AsyncMock(return_value=expected_snapshot),
-    )
-
-    snapshot = await runtime.refresh_snapshot_after_consolidation(
-        session.key,
-        optimizer=optimizer,
-    )
-
-    assert snapshot == expected_snapshot
-    optimizer.optimize.assert_awaited_once_with(role_id="mira")

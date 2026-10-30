@@ -7,7 +7,7 @@ import {
   resolveChatImageSelectionKey,
 } from "../chat/chatImageHistory";
 import { resolveChatHeaderTitle, resolveVisibleChatSessionKey } from "../chat/chatHeaderState";
-import { resolveCurrentMood, resolveCurrentMoodUpdatedAt, resolveCurrentThought, resolveMoodIllustration, roleSession } from "../roles/roleMoodSelectors";
+import { resolveCurrentMood, resolveCurrentMoodUpdatedAt, resolveCurrentThought, resolveMoodIllustration } from "../roles/roleMoodSelectors";
 import { isRoleFormDirty } from "../roles/roleFormState";
 import { toFileUrl } from "../shared/format";
 import type { RoleRecord, SessionPayload } from "@yinfengwindy/shiori-sdk";
@@ -44,7 +44,6 @@ export function buildDesktopViewModel({
   const activeRole = roles.find((role) => role.id === activeRoleId) ?? null;
   const detailRoleId = mainView.kind === "role-detail" ? mainView.roleId : activeRoleId;
   const detailRole = roles.find((role) => role.id === detailRoleId) ?? null;
-  const currentRoleSession = roleSession(activeSession, activeRoleId);
   const bridgeReady = health === "online";
   const roleFormDirty = isRoleFormDirty(roleForm, detailRole);
 

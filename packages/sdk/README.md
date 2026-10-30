@@ -57,10 +57,10 @@ published 3.1.0:
 - `SurfaceHandle.voice` and its voice-state/gesture types are removed. Speech
   consumers must own their orchestration and use scoped native resources and
   surface-to-background messages.
-- Relationship snapshots no longer carry `closeness`.
-  `RelationshipSnapshot.internal_profile.relation_state` is the explicit
-  `RelationState` type; consumers of closeness must use `RoleRecord.affection`
-  (`AffectionSummary`) instead.
+- Relationship snapshots no longer carry `closeness`; consumers of closeness
+  use the role's affection (`AffectionSummary`) instead. (4.0.0 removes the
+  snapshot types and `RoleRecord.affection` altogether: the affection plugin
+  serves its data through its own RPC.)
 
 The host's range check still accepts `>=3.1.0 <4.0.0`, so it does not protect a
 plugin that uses these removed APIs. Affected authors must migrate, rebuild and

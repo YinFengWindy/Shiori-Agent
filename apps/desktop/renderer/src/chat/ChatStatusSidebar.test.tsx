@@ -60,18 +60,6 @@ describe("ChatStatusSidebar", () => {
     assert.ok(markup.includes("我在等你回来。"));
   });
 
-  it("shows nothing of affection when no plugin contributes the slot", () => {
-    setPluginEnabledSnapshot([{ id: "affection", enabled: true, state: "ACTIVE" }]);
-    try {
-      const markup = renderSidebar("");
-      assert.ok(!markup.includes("寂寞值"));
-      assert.ok(!markup.includes("关系标签"));
-      assert.ok(!markup.includes("好感"));
-    } finally {
-      resetPluginEnabledStateForTests();
-    }
-  });
-
   it("replaces the complete thought and mood on turn updates and role switches", async () => {
     const renderState = (currentMood: string, roleSelfView: string) => (
       <ChatStatusSidebar currentMood={currentMood} roleSelfView={roleSelfView} moodUpdatedAt="" moodScope="rin|role:rin"

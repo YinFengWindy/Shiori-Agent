@@ -324,9 +324,6 @@ async def test_two_turns_commit_correct_state_without_consolidation_and_survive_
         assert session.metadata["current_mood"] == mood
         assert session.metadata["current_thought"] == thought
         assert session.last_consolidated == 0
-    session.metadata["relationship_snapshot"] = {
-        "role_self_view": "我是不应覆盖当轮想法的旧快照。"
-    }
     manager.save(session)
     reloaded = SessionManager(tmp_path).get_or_create(session.key)
     assert reloaded.metadata["current_thought"] == "我还是有点不好意思。"
@@ -373,16 +370,14 @@ async def test_missing_role_reply_state_fails_the_turn_instead_of_guessing(tmp_p
 
 
 @pytest.mark.parametrize("failure", [OSError("disk full"), asyncio.CancelledError()])
-async def test_failed_append_rolls_back_turn_fields_but_preserves_independent_snapshot(
+async def test_failed_append_rolls_back_turn_fields_but_preserves_independent_metadata(
     tmp_path, failure
 ):
     manager = SessionManager(tmp_path)
     session = role_session(manager)
 
     async def failed_append(*args, **kwargs):
-        session.metadata["relationship_snapshot"] = {
-            "role_self_view": "我来自独立的更新。"
-        }
+        session.metadata["independent_note"] = "我来自独立的更新。"
         raise failure
 
     manager.append_messages = AsyncMock(side_effect=failed_append)
@@ -391,10 +386,7 @@ async def test_failed_append_rolls_back_turn_fields_but_preserves_independent_sn
     assert session.metadata["current_mood"] == "害羞"
     assert session.metadata["current_thought"] == "我在等你。"
     assert session.metadata["current_thought_updated_at"] == "old"
-    assert (
-        session.metadata["relationship_snapshot"]["role_self_view"]
-        == "我来自独立的更新。"
-    )
+    assert session.metadata["independent_note"] == "我来自独立的更新。"
     assert session.messages == []
 
 

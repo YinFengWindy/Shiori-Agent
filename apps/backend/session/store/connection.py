@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 import threading
 from contextlib import contextmanager
@@ -12,6 +13,9 @@ from infra.persistence.sqlite_transaction import immediate_transaction
 
 # Triggers that keep the external-content messages_fts index in sync with messages.
 _FTS_TRIGGERS = ("messages_ai", "messages_ad", "messages_au")
+# Session metadata keys the host once copied from the affection plugin for the
+# renderer (P6a). The plugin's UI now reads them through its own RPC.
+_RETIRED_METADATA_KEYS = ("relationship_snapshot", "loneliness_runtime", "affection")
 
 
 class _SessionConnection:
@@ -78,6 +82,7 @@ class _SessionConnection:
                 """)
             ensure_conversation_schema(self._conn)
             self._ensure_next_seq_values()
+            self._drop_retired_metadata_keys()
             self._ensure_fts()
 
     def _ensure_next_seq_values(self) -> None:
@@ -95,6 +100,33 @@ class _SessionConnection:
                     "UPDATE sessions SET next_seq = ? WHERE key = ?",
                     (required, session_key),
                 )
+
+    def _drop_retired_metadata_keys(self) -> None:
+        """Removes the affection copies from stored session metadata, once.
+
+        Only those three top-level keys go; every other field keeps its value.
+        A session without them is not rewritten, so a later open changes nothing.
+        """
+        rows = self._conn.execute(
+            "SELECT key, metadata FROM sessions WHERE "
+            + " OR ".join(
+                "COALESCE(metadata, '') LIKE ?" for _ in _RETIRED_METADATA_KEYS
+            ),
+            tuple(f'%"{key}"%' for key in _RETIRED_METADATA_KEYS),
+        ).fetchall()
+        for row in rows:
+            metadata = json.loads(row["metadata"])
+            if not isinstance(metadata, dict):
+                continue
+            retired = [key for key in _RETIRED_METADATA_KEYS if key in metadata]
+            if not retired:
+                continue
+            for key in retired:
+                del metadata[key]
+            self._conn.execute(
+                "UPDATE sessions SET metadata = ? WHERE key = ?",
+                (json.dumps(metadata, ensure_ascii=False), str(row["key"])),
+            )
 
     def _ensure_fts(self) -> None:
         # FTS is optional: a savepoint confines a failed FTS setup to its own

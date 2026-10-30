@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
@@ -46,12 +46,27 @@ from .snapshot import (
 )
 
 
+async def _nobody_listens(_role_id: str) -> None:
+    """The default ``status_changed``: no sidebar is wired."""
+
+
 class RoleRelationshipRuntimeService(_RelationshipPersistenceMixin):
     """Owns role runtime relationship snapshot and loneliness state."""
 
-    def __init__(self, sources: AffectionHost) -> None:
-        """Relationship algorithms over host facts. State files stay on disk."""
+    def __init__(
+        self,
+        sources: AffectionHost,
+        *,
+        status_changed: Callable[[str], Awaitable[None]] = _nobody_listens,
+    ) -> None:
+        """Relationship algorithms over host facts. State files stay on disk.
+
+        ``status_changed`` is awaited with a role id whenever that role's
+        sidebar data changes outside a turn (heartbeat, snapshot refresh); the
+        plugin wires it to its renderer event.
+        """
         self._sources = sources
+        self._status_changed = status_changed
         self._workspace = Path(sources.workspace)
         self._scene_followup = SceneFollowupRuntime(self._workspace)
         self._affection = RoleAffectionService(self._workspace)
@@ -166,24 +181,25 @@ class RoleRelationshipRuntimeService(_RelationshipPersistenceMixin):
         )
         return self.write_snapshot(role_id, snapshot)
 
+    async def notify_status_changed(self, role_id: str) -> None:
+        """Tells the plugin's sidebar that ``role_id``'s data changed."""
+        await self._status_changed(role_id)
+
     async def refresh_snapshot_after_consolidation(
-        self,
-        session_key: str,
-        *,
-        optimizer: "RelationshipSnapshotOptimizer | None" = None,
+        self, session_key: str
     ) -> dict[str, Any] | None:
         """Refreshes the role snapshot after consolidation when the session is role-bound.
 
-        ``optimizer`` is optional so a caller can supply one; otherwise this
-        runtime uses its own, which completes through the host port.
+        The optimizer completes through the host port; the new tags reach the
+        sidebar through ``status_changed``.
         """
         session = self._sources.get_session(session_key)
         role_id = self._role_id_from_session(session)
         if not role_id or self._sources.get_role(role_id) is None:
             return None
-        if optimizer is None:
-            optimizer = RelationshipSnapshotOptimizer(self)
-        return await optimizer.optimize(role_id=role_id)
+        snapshot = await RelationshipSnapshotOptimizer(self).optimize(role_id=role_id)
+        await self.notify_status_changed(role_id)
+        return snapshot
 
     def recompute_loneliness(
         self, role_id: str, *, now: datetime | None = None

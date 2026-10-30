@@ -91,6 +91,8 @@ spec 的 `runnable = False` 表示只登记：已停用、未信任、准入失�
 
 记忆与场景迁移在 `load_config` 里依次执行；MCP 迁移要读工作区，在桌面桥接启动、读配置之前执行。
 
+会话库（`<workspace>/sessions.db`）在每次打开时也做一次就地清理：宿主以前替好感插件抄进会话 metadata 的 `relationship_snapshot`、`loneliness_runtime`、`affection` 三个键被删掉，其他字段不动；没有这三个键的会话不改写，所以再次打开不变。和其它会话库升级一样在建表的同一事务里完成。
+
 ## 诊断
 
 静态拒绝抛 `PackageContractError`，诊断是 `PluginDiagnostic`：

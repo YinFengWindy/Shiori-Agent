@@ -117,6 +117,7 @@ class LonelinessHeartbeatLoop:
                     # keeps 亲密), so the two settle independently.
                     self._runtime.affection.settle_decay(role.id, now=now)
                     self._runtime.recompute_loneliness(role.id, now=now)
+                    await self._runtime.notify_status_changed(role.id)
                 except Exception:
                     # This loop is the boundary: nobody awaits it, so an error
                     # raised here would silently stop the heartbeat for every
