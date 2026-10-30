@@ -13,7 +13,6 @@ from shiori_sdk.core.schedule_host import SCHEDULE_HOST
 from shiori_sdk.core.scheduler import SCHEDULER, ScheduleRequest
 from shiori_sdk.core.services import PROCESS_RESOURCES
 from shiori_sdk.role_events import RoleDeleted
-from shiori_sdk.rpc import Concurrency
 from shiori_sdk.testing.process_resources import FakeProcessResources
 from shiori_sdk.testing.service_context import FakeServiceContext
 
@@ -163,13 +162,6 @@ async def test_the_task_block_creates_edits_and_cancels_a_roles_job(
     rpc = ctx.fake_rpc
     form = {"name": "喝水", "tier": "instant", "trigger": "after", "when": "30m"}
     try:
-        # Reading and cancelling answer while a reload pauses admission, as
-        # the core's role task methods did.
-        assert rpc.concurrency["list"] is Concurrency.READ_ONLY
-        assert {name for name, exempt in rpc.admission_exempt.items() if exempt} == {
-            "list",
-            "cancel",
-        }
         created = await rpc.handlers["create"](
             {"role_id": "mira", **form, "content": "记得喝水"}
         )

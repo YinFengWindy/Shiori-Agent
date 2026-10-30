@@ -27,17 +27,19 @@ function job(id: string, label: string, status: ScheduledTask["status"] = "sched
   };
 }
 
-/** A plugin client answering from `jobs`; `cancel` removes the job. */
+/** A plugin client answering from `jobs`; `cancel` removes the job; `list` fails while `failReads`. */
 function fakeBackend(jobs: ScheduledTask[]) {
   const calls: Array<{ method: string; payload?: Record<string, unknown> }> = [];
+  const backend = { failReads: false };
   const client = {
     async call(method: string, payload?: Record<string, unknown>) {
       calls.push({ method, payload });
+      if (method === "list" && backend.failReads) throw new Error("读取失败");
       if (method === "cancel") jobs.splice(jobs.findIndex((item) => item.id === payload?.task_id), 1);
       return { tasks: [...jobs] };
     },
   } as PluginRpcClient;
-  return { client, calls };
+  return { client, calls, backend };
 }
 
 function buttonNamed(container: HTMLElement, text: string) {
@@ -85,6 +87,32 @@ describe("ScheduleTasksBlock", () => {
       assert.equal(views.at(-1), "");
     } finally {
       await view.cleanup();
+    }
+  });
+
+  it("treats a cancel whose re-read failed as done, and clears a read error once a read succeeds", async () => {
+    const { client, backend } = fakeBackend([job("job-1", "天气"), job("job-2", "喝水")]);
+    const fake = createFakeHostServices();
+    const views: string[] = [];
+    const block = (view: string) => (
+      <ScheduleTasksBlock roleId="yin" view={view} onViewChange={(next) => views.push(next)} client={client} host={fake.host} />
+    );
+    const mounted = await mountTestComponent(block("detail:job-1"));
+    try {
+      backend.failReads = true;
+      await act(async () => buttonNamed(mounted.container, "取消")?.click());
+      await act(async () => buttonNamed(mounted.container, "确认取消")?.click());
+      // The cancel happened: the panel goes back to the list instead of offering a retry.
+      assert.equal(views.at(-1), "");
+
+      await mounted.render(block(""));
+      assert.match(mounted.container.textContent ?? "", /读取失败/);
+      backend.failReads = false;
+      await act(async () => fake.emit({ id: "", type: "event", method: "plugin.schedule.tasks.changed", payload: { role_id: "yin" } }));
+      assert.doesNotMatch(mounted.container.textContent ?? "", /读取失败/);
+      assert.match(mounted.container.textContent ?? "", /计划任务1喝水/);
+    } finally {
+      await mounted.cleanup();
     }
   });
 

@@ -1,4 +1,3 @@
-import { useEffect } from "react";
 import type { PluginRoleTasksComponentProps } from "@yinfengwindy/shiori-sdk";
 import { formatBlockView, parseBlockView, reconcileBlockView, type ScheduleBlockView } from "./blockView";
 import { ScheduleTaskDetails } from "./ScheduleTaskDetails";
@@ -12,15 +11,14 @@ import { useScheduledTasks } from "./useScheduledTasks";
  * list, and their detail, create and edit views, which fill the panel.
  */
 export function ScheduleTasksBlock({ roleId, view, onViewChange, client, host }: PluginRoleTasksComponentProps) {
-  const scheduled = useScheduledTasks(client, host, roleId);
+  const requested = parseBlockView(view);
+  const scheduled = useScheduledTasks(client, host, roleId, {
+    openTaskId: requested.kind === "detail" || requested.kind === "edit" ? requested.taskId : "",
+    // The read that no longer has the open job hands the panel back in the same update.
+    onOpenTaskGone: () => onViewChange(""),
+  });
   const { tasks, operation, error } = scheduled;
-  const current = reconcileBlockView(parseBlockView(view), tasks);
-  // The open job was removed (cancelled elsewhere, or it fired for the last
-  // time): the block gives the panel back to the host's task list.
-  const lost = Boolean(view) && current.kind === "list";
-  useEffect(() => {
-    if (lost) onViewChange("");
-  }, [lost, onViewChange]);
+  const current = reconcileBlockView(requested, tasks);
   const show = (next: ScheduleBlockView) => {
     scheduled.clearError();
     onViewChange(formatBlockView(next));
@@ -78,8 +76,9 @@ export function ScheduleTasksBlock({ roleId, view, onViewChange, client, host }:
     );
   }
 
-  // A view opened before the first read waits for it; a lost one is handing the panel back.
-  if (current.kind !== "list" || lost) return null;
+  // A view opened before the first read waits for it. A job missing from
+  // the last read was already reported through `onOpenTaskGone`.
+  if (current.kind !== "list" || view) return null;
   return (
     <ScheduleTaskGroup
       tasks={tasks ?? []}

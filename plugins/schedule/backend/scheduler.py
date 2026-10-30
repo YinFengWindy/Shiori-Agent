@@ -260,6 +260,12 @@ class JobStore:
 # ── SchedulerService ─────────────────────────────────────────────
 
 
+def _report_tick_death(task: "asyncio.Task[None]") -> None:
+    """Logs the tick loop's failure when it happens; ``close`` raises it later."""
+    if not task.cancelled() and (error := task.exception()) is not None:
+        logger.error("计划任务调度循环异常退出，任务已停止执行", exc_info=error)
+
+
 class SchedulerService:
     """
     asyncio 定时任务服务，作为插件的进程资源跨代只有一份。
@@ -311,19 +317,30 @@ class SchedulerService:
         self._ticking = asyncio.create_task(
             self._tick_forever(), name="schedule:tick", context=Context()
         )
+        self._ticking.add_done_callback(_report_tick_death)
         logger.info("SchedulerService started")
 
     async def close(self) -> None:
-        """Stops ticking and cancels running jobs; the store keeps every job."""
+        """Stops ticking and cancels running jobs; the store keeps every job.
+
+        Raises the tick loop's failure if it died before, so the host reports
+        it when it closes the resource. A job's own failure was already logged
+        where it ran.
+        """
         self._closed = True
-        tasks = [*self._active_tasks.values()]
-        if self._ticking is not None:
-            tasks.append(self._ticking)
-        for task in tasks:
+        jobs = [*self._active_tasks.values()]
+        for task in jobs:
             task.cancel()
         self._active_tasks.clear()
         self._listeners.clear()
-        _ = await asyncio.gather(*tasks, return_exceptions=True)
+        _ = await asyncio.gather(*jobs, return_exceptions=True)
+        ticking = self._ticking
+        if ticking is None:
+            return
+        _ = ticking.cancel()
+        _ = await asyncio.wait({ticking})
+        if not ticking.cancelled() and (error := ticking.exception()) is not None:
+            raise error
 
     def subscribe(self, listener: Callable[[str], None]) -> Callable[[], None]:
         """Calls ``listener(role_id)`` after that role's jobs changed or ran."""

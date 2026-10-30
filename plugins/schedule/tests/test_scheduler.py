@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -43,3 +44,28 @@ async def test_a_due_job_reaches_the_host_once(tmp_path: Path, host, tier):
     assert message == ("喝水" if tier == "instant" else host.reply)
     if tier == "soft":
         assert [prompt for _run, prompt in host.turns] == ["看看天气"]
+
+
+async def test_closing_reports_a_tick_loop_that_died(tmp_path: Path, host):
+    scheduler = SchedulerService(tmp_path / "schedules.json")
+    scheduler.create_job(
+        name="提醒",
+        tier="instant",
+        trigger="at",
+        when=datetime.now(timezone.utc).isoformat(),
+        content="喝水",
+        timezone_name="UTC",
+        channel="desktop",
+        chat_id="role:mira",
+        role_id="mira",
+    )
+    scheduler.start(host, role_exists=lambda _role_id: True)
+
+    def broken(_role_id: str) -> None:
+        raise ZeroDivisionError
+
+    scheduler.subscribe(broken)
+    await asyncio.sleep(1.5)
+
+    with pytest.raises(ZeroDivisionError):
+        await scheduler.close()
