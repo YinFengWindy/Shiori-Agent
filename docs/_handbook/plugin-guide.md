@@ -170,7 +170,7 @@ npm 包、宿主 `setup.py` 和 host-testing 的精确 pin 必须等于这个版
 
 回滚在 `SESSIONS`：`last_passive_turn`、`rollback_last_turn`。记忆引擎的 `rollback_turn` 在 `MEMORY_ENGINE` 上。
 
-在场心跳在 `SESSIONS.presence`：`record_user_message`、`last_user_at`、`record_initiated_sent`、`last_initiated_at`。表列仍是 `last_user_at` / `last_proactive_at`。`role:` 会话用原 key，其他会话在有 `metadata.role_id` 时记到 `role:<id>`；这条映射和 `proactive_v2` 共用 `SessionStore.presence_key`。
+在场心跳在 `SESSIONS.presence`：`record_user_message`、`last_user_at`、`record_initiated_sent`、`last_initiated_at`，以及跨全部会话的 `most_recent_user_at`。表列仍是 `last_user_at` / `last_proactive_at`。`role:` 会话用原 key，其他会话在有 `metadata.role_id` 时记到 `role:<id>`；宿主自己的心跳写入方（被动回合、桌面、主动投递）也走这个对象。
 
 角色命名空间在 `ROLES.plugin_settings(role_id, namespace)`。目前只有 `proactive`，其它名字抛 `KeyError`。宿主仍用核心的主动配置解析它，直到主动行为移出核心。写入和桌面保存角色一样会清空已退役的 `candidates`（#427），插件读出再写回不会把旧绑定带回来。渲染侧的 `roleSettings` 槽已经存在，不是这次新加的。
 

@@ -19,8 +19,8 @@ from core.memory.markdown_schema import DOCUMENT_DEFAULTS
 from core.roles.role_prompt_compiler import RolePromptCompiler
 from core.roles.self_seed_state import self_fingerprint
 from core.roles.store import RoleStore
-from proactive_v2.presence import PresenceStore
 from session.manager import Session, SessionManager
+from shiori_sdk.core.sessions import Presence
 
 from core.roles.role_runtime import RoleRuntimeRegistry
 
@@ -38,7 +38,7 @@ class HostAffectionSources:
         workspace: Path,
         role_store: RoleStore,
         session_manager: SessionManager,
-        presence: PresenceStore | None,
+        presence: Presence | None,
         role_runtime: RoleRuntimeRegistry | None = None,
     ) -> None:
         self._workspace = Path(workspace)
@@ -73,13 +73,13 @@ class HostAffectionSources:
         """Presence of the user's own last message."""
         if self._presence is None:
             return None
-        return self._presence.get_last_user_at(session_key)
+        return self._presence.last_user_at(session_key)
 
     def last_proactive_at(self, session_key: str) -> datetime | None:
         """Presence of the last proactive message."""
         if self._presence is None:
             return None
-        return self._presence.get_last_proactive_at(session_key)
+        return self._presence.last_initiated_at(session_key)
 
     def read_self(self, role_id: str) -> str:
         """Current SELF.md text."""

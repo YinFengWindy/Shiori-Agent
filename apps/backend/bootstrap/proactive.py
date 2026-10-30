@@ -21,9 +21,9 @@ from core.roles.role_prompt_compiler import RolePromptCompiler
 from proactive_v2.config_loader import load_proactive_config
 from proactive_v2.loop import ProactiveLoop
 from proactive_v2.memory_optimizer import MemoryOptimizer, MemoryOptimizerLoop
-from proactive_v2.presence import PresenceStore
 from proactive_v2.state import ProactiveStateStore
 from session.manager import SessionManager
+from shiori_sdk.core.sessions import Presence
 
 if TYPE_CHECKING:
     from bus.event_bus import EventBus
@@ -60,7 +60,7 @@ def build_proactive_runtime(
     light_provider: LLMProvider | None,
     push_tool: MessagePushTool,
     memory_store: "MemoryRuntime | None",
-    presence: PresenceStore,
+    presence: Presence,
     agent_loop: AgentLoop,
     kernel: KernelSource,
     proactive_motives: list[ProactiveGate] | None = None,

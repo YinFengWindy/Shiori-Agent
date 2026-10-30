@@ -19,6 +19,7 @@ from shiori_sdk.accounts.targets import AccountTarget
 from shiori_sdk.accounts.routing import AccountRoute
 from shiori_sdk.channels.chat_types import CHAT_TYPE_PRIVATE
 from core.common.channel_directory import DESKTOP_CHANNEL
+from core.common.timekit import utcnow
 from core.roles.affection_access import current_affection
 from core.roles.reply_policy import natural_chat_selected
 from core.roles.services import RoleSessionService
@@ -28,6 +29,7 @@ from core.roles.reply_state import (
     reply_state_metadata,
     validate_role_reply,
 )
+from session.manager.helpers import role_session_key
 from session.manager.models import build_session_message
 from agent.account_delivery.service import ResolvedAccountTarget
 from agent.turns.channel_sequence import channel_sequence_context
@@ -370,10 +372,10 @@ class TurnOrchestrator:
                 role_id = str(
                     getattr(session, "metadata", {}).get("role_id") or ""
                 ).strip()
-                if role_id:
-                    self._session.presence.record_proactive_sent_by_role(role_id)
-                else:
-                    self._session.presence.record_proactive_sent(session_key)
+                self._session.presence.record_initiated_sent(
+                    role_session_key(role_id) if role_id else session_key,
+                    utcnow(),
+                )
             affection = current_affection()
             if affection is not None:
                 affection.handle_proactive_sent(session_key)
@@ -446,7 +448,9 @@ class TurnOrchestrator:
                     return
                 role_id = str(plan.origin.metadata.get("role_id") or "")
                 if self._session.presence:
-                    self._session.presence.record_proactive_sent_by_role(role_id)
+                    self._session.presence.record_initiated_sent(
+                        role_session_key(role_id), utcnow()
+                    )
                 affection = current_affection()
                 if affection is not None:
                     affection.handle_proactive_sent(session.key)

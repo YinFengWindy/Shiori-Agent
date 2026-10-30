@@ -83,8 +83,8 @@ from core.roles.self_initializer import RoleSelfInitializer
 from core.roles.self_seed import LlmRoleSelfSeedGenerator
 from agent.turns.turn_pushes import current_turn_pushes
 from conversation.push_sync import ExternalPushSyncService
-from proactive_v2.presence import PresenceStore
 from session.manager import SessionManager
+from shiori_sdk.core.sessions import Presence
 from core.accounts.plugin_capability import drop_plugin_accounts
 from infra.process.resources import ProcessResourceOwner
 from conversation.background_results import ResultRunner
@@ -108,7 +108,7 @@ class CoreRuntime:
     provider: LLMProvider
     light_provider: LLMProvider | None
     memory_runtime: MemoryRuntime
-    presence: PresenceStore
+    presence: Presence
     reply_policy: ReplyPolicyGetter
     affection: AffectionGetter
     role_runtime_registry: RoleRuntimeRegistry
@@ -302,7 +302,7 @@ def _build_loop_deps(
     light_provider: LLMProvider | None,
     tools: ToolRegistry,
     session_manager: SessionManager,
-    presence: PresenceStore,
+    presence: Presence,
     processing_state: ProcessingState,
     event_bus: EventBus,
     memory_runtime: MemoryRuntime,
@@ -505,9 +505,7 @@ def build_core_runtime(
         role_runtime_registry=role_runtime_registry,
         push_tool=push_tool,
     )
-    presence = (
-        shared.presence if shared is not None else PresenceStore(session_manager._store)
-    )
+    presence = session_manager.presence
     if shared is not None:
         memory_runtime.markdown.maintenance.share_execution(
             shared.memory_runtime.markdown.maintenance

@@ -47,11 +47,11 @@ from proactive_v2.energy import (
 from proactive_v2.judge import MessageDeduper
 from proactive_v2.config import ProactiveConfig
 from proactive_v2.memory_sampler import sample_memory_chunks
-from proactive_v2.presence import PresenceStore
 from proactive_v2.sensor import Sensor
 from proactive_v2.state import ProactiveStateStore
 from proactive_v2.target_selection import ProactiveTargetResolver
 from session.manager import SessionManager
+from shiori_sdk.core.sessions import Presence
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +81,7 @@ class ProactiveLoop:
         state_store: ProactiveStateStore | None = None,
         state_path: Path | None = None,
         memory_store: "MemoryProfileApi | MemoryRetrievalApi | None" = None,
-        presence: PresenceStore | None = None,
+        presence: Presence | None = None,
         rng: _random_module.Random | None = None,
         light_provider: LLMProvider | None = None,
         light_model: str = "",
@@ -444,7 +444,7 @@ class ProactiveLoop:
         # base_score 由 _tick 传入;首次启动时用电量估算一个初始值
         if base_score is None:
             session_key = self._target_session_key()
-            last_user_at = self._presence.get_last_user_at(session_key)
+            last_user_at = self._presence.last_user_at(session_key)
             energy = compute_energy(last_user_at)
             base_score = d_energy(energy) * self._cfg.score_weight_energy
         interval = next_tick_from_score(

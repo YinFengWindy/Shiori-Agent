@@ -37,8 +37,8 @@ if TYPE_CHECKING:
     from agent.tools.registry import ToolRegistry
     from bus.queue import MessageBus
     from core.memory.runtime import MemoryRuntime
-    from proactive_v2.presence import PresenceStore
     from session.manager import SessionManager
+    from shiori_sdk.core.sessions import Presence
 
 
 def configure_logging_stream(stream) -> None:
@@ -140,7 +140,7 @@ class AppRuntime(RuntimeReloadMixin, RuntimeBackgroundMixin, RuntimeShutdownMixi
         return self.core.memory_runtime if self.core is not None else None
 
     @property
-    def presence(self) -> PresenceStore | None:
+    def presence(self) -> Presence | None:
         return self.core.presence if self.core is not None else None
 
     async def start(self) -> None:

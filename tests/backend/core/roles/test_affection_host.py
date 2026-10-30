@@ -7,7 +7,6 @@ from pathlib import Path
 from conversation.service import desktop_thread_id
 from core.roles import RoleStore
 from core.roles.affection_host import HostAffectionSources
-from proactive_v2.presence import PresenceStore
 from session.manager import SessionManager
 from shiori_sdk.channels.threads import network_thread_id
 
@@ -20,7 +19,7 @@ def test_recent_user_messages_keep_only_the_users_own(tmp_path: Path) -> None:
         workspace=tmp_path,
         role_store=roles,
         session_manager=manager,
-        presence=PresenceStore(manager._store),
+        presence=manager.presence,
     )
     session = sources.get_session(sources.role_session_key("mira"))
     group = network_thread_id("mira", "qq", "gqq:7")

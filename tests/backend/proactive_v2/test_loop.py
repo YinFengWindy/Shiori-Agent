@@ -59,7 +59,7 @@ async def test_proactive_loop_wrapper_methods_cover_paths(tmp_path: Path):
     )
     loop._trace_proactive_rate_decision = MagicMock()
     loop._presence = SimpleNamespace(
-        get_last_user_at=lambda session_key: datetime.now(timezone.utc)
+        last_user_at=lambda session_key: datetime.now(timezone.utc)
     )
     loop._sense = SimpleNamespace(
         target_session_key=lambda: "telegram:1",

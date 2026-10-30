@@ -1,9 +1,8 @@
 """Session presence over the existing heartbeat columns (D19).
 
 The table columns stay ``last_user_at`` and ``last_proactive_at``.
-``record_initiated_sent`` writes ``last_proactive_at``. ``proactive_v2`` keeps
-its own store until initiated delivery moves; this object is what
-``SessionManager.presence`` exposes to plugins.
+``record_initiated_sent`` writes ``last_proactive_at``. This object is what
+``SessionManager.presence`` exposes to plugins and to the host's own writers.
 """
 
 from __future__ import annotations
@@ -39,6 +38,10 @@ class SessionPresence:
     def last_initiated_at(self, session_key: str) -> datetime | None:
         """When an initiated reply was last sent, or None."""
         return self._read(session_key, "last_proactive_at")
+
+    def most_recent_user_at(self) -> datetime | None:
+        """When the user last spoke in any session, or None if never."""
+        return parse_iso(self._store.most_recent_user_at())
 
     def _read(self, session_key: str, column: str) -> datetime | None:
         row = self._store.get_presence(self._store.presence_key(session_key))

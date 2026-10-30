@@ -9,6 +9,7 @@ SDK 源版本是 `packages/sdk/python/shiori_sdk/_version.py`。大版本是破�
 - manifest 只接受 `api: 4`，并要求 `sdk` 最低约束。基线是 `>=4.0.0`。
 - 删除 `runtime_api`。SDK 版本就是唯一版本号。
 - `SESSIONS.presence`、`ROLES.plugin_settings`、`CONVERSATION.deliver_initiated_reply` 和 `InitiatedMessageCommitted` 进入 4.0 基线。`ROLES.plugin_settings` 写入 `proactive` 时清空已退役的 `candidates`，与桌面保存角色一致。
+- `SESSIONS.presence` 新增 `most_recent_user_at()`：所有会话里用户最近一次发言的时间（#907 P6b-1a，主动循环的传感器用它）。宿主旧的 `proactive_v2` 心跳存储删除，核心与主动循环都改用 `SESSIONS.presence`，存储列不变。
 - **发版门闩**：`CONVERSATION` 现在没有提供方。带 SDK 4.0 的桌面版本发出之前，宿主必须提供 `CONVERSATION`（`deliver_initiated_reply` 与 `InitiatedMessageCommitted`）。
 - 同一次大版本内，已有 Key 不再加方法。新能力用新 Key 或新 Event。
 - 运行时契约长文改为本目录的[指南](plugin-guide.md)、[生命周期与准入](plugin-lifecycle.md)、[前端契约](plugin-frontend.md)和生成的 [API 参考](plugin-api.md)。
