@@ -567,8 +567,8 @@ def test_build_registered_tools_respects_toolset_order_and_subset(
         session_store=object(),
         tools=ToolRegistry(),
         event_publisher=EventBus(),
-        agent_loop_provider=lambda: None,
         push_tool=MessagePushTool(role_target_validator=allow_every_role_target),
+        schedule_host=cast(Any, SimpleNamespace()),
     )
 
     assert calls == ["memory", "schedule", "mcp"]
@@ -784,8 +784,8 @@ def test_build_registered_tools_without_mcp_toolset_still_returns_memory(
         session_store=object(),
         tools=ToolRegistry(),
         event_publisher=EventBus(),
-        agent_loop_provider=lambda: None,
         push_tool=MessagePushTool(role_target_validator=allow_every_role_target),
+        schedule_host=cast(Any, SimpleNamespace()),
     )
 
     assert memory_runtime is memory

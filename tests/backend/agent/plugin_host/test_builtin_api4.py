@@ -37,6 +37,7 @@ _CORE_MODULES = (
     "shiori_sdk.core.models",
     "shiori_sdk.core.reply_policy",
     "shiori_sdk.core.scene",
+    "shiori_sdk.core.schedule_host",
     "shiori_sdk.core.services",
     "shiori_sdk.core.sessions",
     "shiori_sdk.core.tools",

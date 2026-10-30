@@ -27,8 +27,11 @@ from typing import Any, Callable
 
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from conversation.service import scheduler_thread_id
-from core.common.timekit import parse_iso as _parse_iso
+from shiori_sdk.core.schedule_host import (
+    ScheduledRun,
+    ScheduleHost,
+    scheduler_thread_id,
+)
 from shiori_sdk.files.json import atomic_save_json, load_json
 from agent.scheduler_cron import is_cron_expr, next_cron_fire
 
@@ -244,7 +247,12 @@ class JobStore:
 
     @staticmethod
     def _parse_dt(s: str) -> datetime:
-        return _parse_iso(s) or datetime.now(timezone.utc)
+        """Parses a stored ISO time; naive is UTC, unreadable is now."""
+        try:
+            dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+        except (AttributeError, TypeError, ValueError):
+            return datetime.now(timezone.utc)
+        return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
 
 
 # ── SchedulerService ─────────────────────────────────────────────
@@ -255,8 +263,8 @@ class SchedulerService:
     asyncio 定时任务服务。
 
     - 每秒 tick 一次，检查 actual_trigger <= now 的 job
-    - INSTANT: 直接 message_push
-    - SOFT: process_direct + 记录延迟 + push 响应
+    - INSTANT: 经 ``ScheduleHost.deliver`` 直接投递
+    - SOFT: ``ScheduleHost.run_turn`` + 记录延迟 + 有内容时投递
     - 持久化到 JSON，重启后自动恢复
     """
 
@@ -265,17 +273,13 @@ class SchedulerService:
     def __init__(
         self,
         store_path: Path,
-        push_tool: Any,
-        agent_loop: Any = None,
-        agent_loop_provider: Callable[[], Any] | None = None,
+        host: ScheduleHost,
         tracker: LatencyTracker | None = None,
         _now_fn: Callable[[], datetime] | None = None,
         role_exists: Callable[[str], bool] | None = None,
     ) -> None:
         self.store = JobStore(store_path)
-        self.push_tool = push_tool
-        self.agent_loop = agent_loop
-        self._agent_loop_provider = agent_loop_provider
+        self._host = host
         self.tracker = tracker or LatencyTracker()
         self._now = _now_fn or (lambda: datetime.now(timezone.utc))
         self._role_exists = role_exists
@@ -624,95 +628,39 @@ class SchedulerService:
             self._active_tasks.pop(job_id, None)
 
     async def _execute(self, job: ScheduledJob) -> None:
-        self._require_role_id(job.role_id)
+        run = self._scheduled_run(job)
         label = job.name or job.id[:8]
         if job.tier == "instant":
-            result = await self._run_role_scoped(
-                job,
-                lambda: self.push_tool.execute(
-                    channel=job.channel,
-                    chat_id=job.chat_id,
-                    message=job.message,
-                    role_id=job.role_id,
-                    push_delivery_key=self._job_role_metadata(job)["delivery_key"],
-                ),
-            )
+            result = await self._host.deliver(run, job.message or "")
             logger.info(f"[scheduler] instant 推送完成 {label!r}: {result}")
-        else:
-            loop = self._get_agent_loop()
-            t0 = time.monotonic()
-            content = await loop.process_direct(
-                content=job.prompt,
-                channel=job.channel,
-                chat_id=job.chat_id,
-                session_key=f"scheduler:{job.id}",
-                omit_user_turn=True,
-                skip_post_memory=True,
-                skip_memory_retrieval=True,
-                disabled_tools=[
-                    "message_push",
-                    "recall_memory",
-                    "memorize",
-                    "forget_memory",
-                ],
-                metadata=self._job_role_metadata(job),
-            )
-            if self._jobs.get(job.id) is not job:
-                return
-            elapsed = time.monotonic() - t0
-            self.tracker.record(elapsed)
-            logger.info(
-                f"[scheduler] soft AI 完成 {label!r}  耗时={elapsed:.1f}s  P90={self.tracker.lead:.1f}s"
-            )
-            if content:
-                result = await self._run_role_scoped(
-                    job,
-                    lambda: self.push_tool.execute(
-                        channel=job.channel,
-                        chat_id=job.chat_id,
-                        message=content,
-                        role_id=job.role_id,
-                        push_delivery_key=self._job_role_metadata(job)["delivery_key"],
-                        push_message_already_persisted=True,
-                    ),
-                )
-                logger.info(f"[scheduler] soft 推送完成 {label!r}: {result}")
-            else:
-                logger.warning(f"[scheduler] soft AI 返回空内容 {label!r}，跳过推送")
-
-    def _get_agent_loop(self) -> Any:
-        loop = (
-            self._agent_loop_provider()
-            if self._agent_loop_provider
-            else self.agent_loop
+            return
+        t0 = time.monotonic()
+        content = await self._host.run_turn(run, job.prompt or "")
+        if self._jobs.get(job.id) is not job:
+            return
+        elapsed = time.monotonic() - t0
+        self.tracker.record(elapsed)
+        logger.info(
+            f"[scheduler] soft AI 完成 {label!r}  耗时={elapsed:.1f}s  P90={self.tracker.lead:.1f}s"
         )
-        if loop is None:
-            raise RuntimeError("scheduler soft job requires agent_loop")
-        return loop
+        if content:
+            result = await self._host.deliver(run, content, already_persisted=True)
+            logger.info(f"[scheduler] soft 推送完成 {label!r}: {result}")
+        else:
+            logger.warning(f"[scheduler] soft AI 返回空内容 {label!r}，跳过推送")
 
-    def _job_role_metadata(self, job: ScheduledJob) -> dict[str, str]:
-        self._require_role_id(job.role_id)
-        return {
-            "role_id": job.role_id,
-            "role_config_version": job.role_config_version,
-            "thread_id": job.thread_id or scheduler_thread_id(job.role_id, job.id),
-            # The creating turn may own several jobs. Identify this job occurrence,
-            # keeping nominal fire time stable across retries and process restarts.
-            "delivery_key": f"scheduler:{job.id}:{job.fire_at.isoformat()}",
-            "transport_channel": job.channel,
-            "transport_chat_id": job.chat_id,
-            "role_source": "scheduler",
-            "role_work_kind": "scheduled_job",
-            "request_id": job.id,
-            "role_context_created_at": job.created_at.isoformat(),
-        }
-
-    async def _run_role_scoped(self, job: ScheduledJob, operation):
-        self._require_role_id(job.role_id)
-        loop = self._get_agent_loop()
-        return await loop.run_role_operation(
-            self._job_role_metadata(job),
-            operation,
+    def _scheduled_run(self, job: ScheduledJob) -> ScheduledRun:
+        """The due occurrence the host runs, at the job's nominal fire time."""
+        role_id = self._require_role_id(job.role_id)
+        return ScheduledRun(
+            job_id=job.id,
+            fire_at=job.fire_at,
+            created_at=job.created_at,
+            role_id=role_id,
+            role_config_version=job.role_config_version,
+            thread_id=job.thread_id or scheduler_thread_id(role_id, job.id),
+            channel=job.channel,
+            chat_id=job.chat_id,
         )
 
     @staticmethod

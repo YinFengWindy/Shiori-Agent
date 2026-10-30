@@ -34,6 +34,8 @@ from agent.looping.ports import (
 )
 from agent.provider import LLMProvider
 from agent.retrieval.default_pipeline import DefaultMemoryRetrievalPipeline
+from agent.schedule_host import HostScheduleRunner
+from shiori_sdk.core.schedule_host import ScheduleHost
 from agent.scheduler import SchedulerService
 from agent.tools.message_push import MessagePushTool
 from agent.account_delivery import AccountDelivery
@@ -106,6 +108,8 @@ class CoreRuntime:
     push_tool: MessagePushTool
     session_manager: SessionManager
     scheduler: SchedulerService
+    # ``SCHEDULE_HOST``: like the scheduler, shared by every generation.
+    schedule_host: HostScheduleRunner
     provider: LLMProvider
     light_provider: LLMProvider | None
     memory_runtime: MemoryRuntime
@@ -237,9 +241,9 @@ def build_registered_tools(
     session_store=None,
     tools: ToolRegistry | None = None,
     event_publisher: EventBus | None = None,
-    agent_loop_provider: Callable[[], Any] | None = None,
     role_runtime_registry: RoleRuntimeRegistry | None = None,
     push_tool: MessagePushTool,
+    schedule_host: ScheduleHost,
     shared_scheduler: SchedulerService | None = None,
 ) -> tuple[
     ToolRegistry,
@@ -271,8 +275,7 @@ def build_registered_tools(
     memory_runtime = memory_result.extras["memory_runtime"]
     scheduler = shared_scheduler or build_scheduler(
         workspace,
-        push_tool,
-        agent_loop_provider=agent_loop_provider,
+        schedule_host,
         role_store=(
             role_runtime_registry.repository.store if role_runtime_registry else None
         ),
@@ -500,6 +503,13 @@ def build_core_runtime(
         )
     )
     loop_ref: dict[str, AgentLoop] = {}
+    schedule_host = (
+        shared.schedule_host
+        if shared is not None
+        else HostScheduleRunner(
+            agent_loop_provider or (lambda: loop_ref.get("loop")), push_tool
+        )
+    )
     tools, scheduler, memory_runtime = build_registered_tools(
         config,
         workspace,
@@ -510,8 +520,8 @@ def build_core_runtime(
         session_store=session_manager._store,
         event_publisher=event_bus,
         role_runtime_registry=role_runtime_registry,
-        agent_loop_provider=agent_loop_provider or (lambda: loop_ref.get("loop")),
         push_tool=push_tool,
+        schedule_host=schedule_host,
         shared_scheduler=shared.scheduler if shared else None,
     )
     presence = (
@@ -680,6 +690,7 @@ def build_core_runtime(
                 background_results=background_results,
                 http=http_resources.external_default,
                 process_resources=process_resources,
+                schedule_host=schedule_host,
             )
         ),
     )
@@ -726,6 +737,7 @@ def build_core_runtime(
         image_sync_service=image_sync_service,
         session_manager=session_manager,
         scheduler=scheduler,
+        schedule_host=schedule_host,
         provider=provider,
         light_provider=light_provider,
         agent_provider=agent_provider,
