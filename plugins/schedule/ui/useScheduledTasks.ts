@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { errorMessage, useLatestRef, type PluginHostServices, type PluginRpcClient } from "@yinfengwindy/shiori-sdk";
 import type { ScheduledTask, ScheduleTaskFormData } from "./types";
 
@@ -16,14 +16,29 @@ type TasksChange = (current: ScheduledTask[] | null) => ScheduledTask[];
 // on every such move; a fresh read still follows each mount.
 const lastRead = new Map<string, ScheduledTask[]>();
 
+/** `change`, also kept as the role's last read. */
+function remembered(roleId: string, change: TasksChange): TasksChange {
+  return (current) => {
+    const next = change(current);
+    lastRead.set(roleId, next);
+    return next;
+  };
+}
+
 function withTask(task: ScheduledTask): TasksChange {
   return (current) => [...(current ?? []).filter((item) => item.id !== task.id), task];
 }
 
+async function readTasks(client: PluginRpcClient, roleId: string) {
+  const { tasks } = await client.call<{ tasks: ScheduledTask[] }>("list", { role_id: roleId });
+  return tasks;
+}
+
 /**
- * The role's jobs, re-read whenever the plugin reports a change for the role,
- * and the block's mutations. `tasks` is `null` until the first read. The
- * caller keys the block by role, so one hook instance serves one role.
+ * The role's jobs, re-read on mount, after each write and whenever the
+ * plugin reports a change for the role, and the block's mutations. `tasks`
+ * is `null` until the first read. The caller keys the block by role, so one
+ * hook instance serves one role.
  *
  * `openTaskId` is the job the block's open view shows. When a read no longer
  * has it (cancelled elsewhere, or it fired for the last time),
@@ -41,22 +56,6 @@ export function useScheduledTasks(client: PluginRpcClient, host: PluginHostServi
   const [mutationError, setMutationError] = useState("");
   const open = useLatestRef({ openTaskId, onOpenTaskGone });
 
-  const keep = useCallback((change: TasksChange) => {
-    setTasks((current) => {
-      const next = change(current);
-      lastRead.set(roleId, next);
-      return next;
-    });
-  }, [roleId]);
-
-  const read = useCallback(async () => {
-    const { tasks: next } = await client.call<{ tasks: ScheduledTask[] }>("list", { role_id: roleId });
-    keep(() => next);
-    setLoadError("");
-    const { openTaskId: openId, onOpenTaskGone: gone } = open.current;
-    if (openId && !next.some((task) => task.id === openId)) gone();
-  }, [client, keep, open, roleId]);
-
   useEffect(() => host.onEvent((event) => {
     if (event.method === scheduleTasksChangedEvent && event.payload.role_id === roleId) {
       setRevision((current) => current + 1);
@@ -65,63 +64,73 @@ export function useScheduledTasks(client: PluginRpcClient, host: PluginHostServi
 
   useEffect(() => {
     let cancelled = false;
-    read().catch((cause: unknown) => {
+    readTasks(client, roleId).then((next) => {
+      if (cancelled) return;
+      setTasks(remembered(roleId, () => next));
+      setLoadError("");
+      const { openTaskId: openId, onOpenTaskGone: gone } = open.current;
+      if (openId && !next.some((task) => task.id === openId)) gone();
+    }, (cause: unknown) => {
       if (!cancelled) setLoadError(errorMessage(cause, { includeDetail: true }));
     });
     return () => { cancelled = true; };
-  }, [read, revision]);
+  }, [client, open, revision, roleId]);
 
   /**
    * Runs one write. Only the write's own failure is a mutation error and
-   * rejects. Once it succeeded, `applied` puts its result into the list and a
-   * failing re-read is just a load error, so the user is never told to retry
-   * a write that already happened (which would create a second job).
+   * rejects. Once it succeeded, `applied` puts its result into the list right
+   * away and a re-read follows; that read failing is only a load error, so
+   * the user is never told to retry a write that already happened (which
+   * would create a second job).
    */
-  const mutate = useCallback(async <T>(next: NonNullable<ScheduleOperation>, write: () => Promise<T>, applied: (result: T) => TasksChange) => {
+  async function mutate<T>(next: NonNullable<ScheduleOperation>, write: () => Promise<T>, applied: (result: T) => TasksChange) {
     setOperation(next);
     setMutationError("");
     try {
-      let result: T;
-      try {
-        result = await write();
-      } catch (cause) {
-        setMutationError(errorMessage(cause, { includeDetail: true }));
-        throw cause;
-      }
-      keep(applied(result));
-      await read().catch((cause: unknown) => setLoadError(errorMessage(cause, { includeDetail: true })));
+      const result = await write();
+      setTasks(remembered(roleId, applied(result)));
+      setRevision((current) => current + 1);
       return result;
+    } catch (cause) {
+      setMutationError(errorMessage(cause, { includeDetail: true }));
+      throw cause;
     } finally {
       setOperation(null);
     }
-  }, [keep, read]);
+  }
 
-  const create = useCallback(async (data: ScheduleTaskFormData) => {
+  async function create(data: ScheduleTaskFormData) {
     const { task } = await mutate(
       { kind: "create", taskId: "" },
       () => client.call<{ task: ScheduledTask }>("create", { ...data, role_id: roleId }),
       (result) => withTask(result.task),
     );
     return task;
-  }, [client, mutate, roleId]);
+  }
 
-  const update = useCallback(async (taskId: string, data: ScheduleTaskFormData) => {
+  async function update(taskId: string, data: ScheduleTaskFormData) {
     await mutate(
       { kind: "update", taskId },
       () => client.call<{ task: ScheduledTask }>("update", { ...data, task_id: taskId, role_id: roleId }),
       (result) => withTask(result.task),
     );
-  }, [client, mutate, roleId]);
+  }
 
-  const cancel = useCallback(async (taskId: string) => {
+  async function cancel(taskId: string) {
     await mutate(
       { kind: "cancel", taskId },
       () => client.call<{ tasks: ScheduledTask[] }>("cancel", { task_id: taskId, role_id: roleId }),
       (result) => () => result.tasks,
     );
-  }, [client, mutate, roleId]);
+  }
 
-  const clearError = useCallback(() => setMutationError(""), []);
-
-  return { tasks, operation, error: mutationError || loadError, clearError, create, update, cancel };
+  return {
+    tasks,
+    operation,
+    error: mutationError || loadError,
+    clearError: () => setMutationError(""),
+    create,
+    update,
+    cancel,
+  };
 }

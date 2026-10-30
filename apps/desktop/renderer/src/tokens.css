@@ -85,6 +85,8 @@
   --color-bg-surface: #ffffff;
   --color-bg-glass: rgba(255, 255, 255, 0.82);
   --color-bg-glass-strong: rgba(255, 255, 255, 0.92);
+  /* lighter glass of the chat right sidebar views; more of the scene shows through */
+  --color-bg-glass-soft: rgba(255, 255, 255, 0.7);
   --color-bg-hover: var(--pink-50);
   --color-bg-active: var(--pink-100);
 
@@ -102,6 +104,8 @@
   --color-border: var(--neutral-300);
   --color-border-strong: var(--neutral-400);
   --color-border-accent: var(--pink-300);
+  /* white hairline around glass panels (decorative edge, no contrast target) */
+  --color-border-glass: rgba(255, 255, 255, 0.7);
   --color-ring: var(--pink-500);              /* 3.1:1 on surface */
   /* nav rail brand motif (decorative, inside a labelled icon: no text contrast target) */
   --color-motif: var(--pink-500);
