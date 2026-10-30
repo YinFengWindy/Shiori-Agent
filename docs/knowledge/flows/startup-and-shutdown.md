@@ -37,7 +37,7 @@ sequenceDiagram
   Core->>Core: AgentLoop / spawn 绑定内核（回合与工具事件每次使用时读取）
   App->>App: GenerationManager.start(第 1 代)
   App->>App: start_channels() -> ChannelHost.start_all()
-  App->>App: RuntimeDispatcher / outbound / scheduler / RuntimeBackground / loneliness heartbeat
+  App->>App: RuntimeDispatcher / outbound / RuntimeBackground（定时任务、寂寞心跳由各自插件启动）
   Main->>Bridge: create server
   Bridge-->>Main: serve_stdio()
 ```

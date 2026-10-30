@@ -1,20 +1,16 @@
-import { Select } from "@yinfengwindy/shiori-sdk";
+import { Select, settingsInputClass } from "@yinfengwindy/shiori-sdk";
 import type { Dispatch, SetStateAction } from "react";
-import type { ScheduleTaskTrigger } from "../shared/types";
+import type { ScheduleTrigger } from "./types";
 import {
   recurringScheduleOptions,
   weekdayOptions,
   type RecurringSchedulePreset,
   type RecurringScheduleRule,
-} from "./roleTaskFormState";
-import {
-  RoleTaskFieldError,
-  roleTaskFieldClass,
-  roleTaskFieldLabelClass,
-} from "./RoleTaskFormControls";
+} from "./scheduleTaskFormState";
+import { ScheduleFieldError, scheduleFieldLabelClass } from "./ScheduleTaskFormControls";
 
 /** Renders the trigger-specific timing controls for a scheduled task. */
-export function RoleTaskScheduleFields({
+export function ScheduleTimingFields({
   trigger,
   when,
   recurringRule,
@@ -23,7 +19,7 @@ export function RoleTaskScheduleFields({
   onWhenChange,
   onRecurringRuleChange,
 }: {
-  trigger: ScheduleTaskTrigger;
+  trigger: ScheduleTrigger;
   when: string;
   recurringRule: RecurringScheduleRule;
   saving: boolean;
@@ -34,28 +30,28 @@ export function RoleTaskScheduleFields({
   if (trigger !== "every") {
     const label = trigger === "at" ? "执行时间" : "延迟时长";
     return (
-      <label className={roleTaskFieldLabelClass}>
+      <label className={scheduleFieldLabelClass}>
         <span>{label}</span>
         <input
-          className={roleTaskFieldClass}
+          className={settingsInputClass}
           type={trigger === "at" ? "datetime-local" : "text"}
           placeholder={trigger === "after" ? "例如 30m、2h" : undefined}
           value={when}
           disabled={saving}
           onChange={(event) => onWhenChange(event.target.value)}
         />
-        <RoleTaskFieldError message={error} />
+        <ScheduleFieldError message={error} />
       </label>
     );
   }
 
   return (
     <div className="grid gap-3">
-      <label className={roleTaskFieldLabelClass}>
+      <label className={scheduleFieldLabelClass}>
         <span>循环周期</span>
         <Select
           aria-label="循环周期"
-          className={roleTaskFieldClass}
+          className={settingsInputClass}
           value={recurringRule.preset}
           disabled={saving}
           onValueChange={(value) => onRecurringRuleChange((current) => ({ ...current, preset: value as RecurringSchedulePreset }))}
@@ -63,24 +59,24 @@ export function RoleTaskScheduleFields({
         />
       </label>
       {recurringRule.preset === "weekly" ? (
-        <label className={roleTaskFieldLabelClass}>
+        <label className={scheduleFieldLabelClass}>
           <span>星期</span>
-          <Select aria-label="星期" className={roleTaskFieldClass} value={recurringRule.weekday} disabled={saving} onValueChange={(value) => onRecurringRuleChange((current) => ({ ...current, weekday: value }))} options={weekdayOptions} />
+          <Select aria-label="星期" className={settingsInputClass} value={recurringRule.weekday} disabled={saving} onValueChange={(value) => onRecurringRuleChange((current) => ({ ...current, weekday: value }))} options={weekdayOptions} />
         </label>
       ) : null}
       {recurringRule.preset === "daily" || recurringRule.preset === "weekly" ? (
-        <label className={roleTaskFieldLabelClass}>
+        <label className={scheduleFieldLabelClass}>
           <span>执行时间</span>
-          <input className={roleTaskFieldClass} type="time" value={recurringRule.time} disabled={saving} onChange={(event) => onRecurringRuleChange((current) => ({ ...current, time: event.target.value }))} />
+          <input className={settingsInputClass} type="time" value={recurringRule.time} disabled={saving} onChange={(event) => onRecurringRuleChange((current) => ({ ...current, time: event.target.value }))} />
         </label>
       ) : null}
       {recurringRule.preset === "custom" ? (
-        <label className={roleTaskFieldLabelClass}>
+        <label className={scheduleFieldLabelClass}>
           <span>自定义规则</span>
-          <input className={roleTaskFieldClass} type="text" placeholder="例如 1h 或 0 9 * * *" value={recurringRule.custom} disabled={saving} onChange={(event) => onRecurringRuleChange((current) => ({ ...current, custom: event.target.value }))} />
+          <input className={settingsInputClass} type="text" placeholder="例如 1h 或 0 9 * * *" value={recurringRule.custom} disabled={saving} onChange={(event) => onRecurringRuleChange((current) => ({ ...current, custom: event.target.value }))} />
         </label>
       ) : null}
-      <RoleTaskFieldError message={error} />
+      <ScheduleFieldError message={error} />
     </div>
   );
 }

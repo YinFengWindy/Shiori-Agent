@@ -15,6 +15,21 @@ export const cardClass = "rounded-lg border border-line-soft bg-surface shadow-s
 /** Shared background for secondary workspace navigation sidebars: transparent so the app gradient shows through, matching the chat role sidebar. */
 export const secondarySidebarSurfaceClass = "bg-transparent";
 
+/**
+ * Surface of every view in the chat right sidebar (status, tasks, images),
+ * including a plugin block that fills the task panel (`roleTasks`).
+ */
+export const chatSidebarPanelClass =
+  "grid h-full min-h-0 rounded-md border border-white/70 bg-white/70 px-3 pb-3 pt-2 text-sm text-ink-secondary shadow-soft backdrop-blur-md";
+
+/** Compact header row of a chat-sidebar view (task list, detail, form); leaves room for the sidebar toggle. */
+export const chatSidebarHeaderClass =
+  "flex min-h-11 items-center border-b border-line-soft pl-1 pr-8";
+
+/** Scrolling body of a chat-sidebar view. */
+export const chatSidebarScrollableClass =
+  "scrollbar-stable min-h-0 overflow-y-auto py-3";
+
 /** Shared hover row: sidebar navigation entries and in-content expandable rows (memory timeline nodes). */
 export const sidebarNavItemClass =
   "rounded-md transition-colors hover:bg-surface-hover focus-visible:bg-surface-hover";

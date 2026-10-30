@@ -76,7 +76,7 @@ proactive tick
 | `mcp_servers.json` | **你写** | MCP server 启动命令和环境变量。也可以通过对话让 agent 调 `mcp_add` 工具写 |
 | `proactive_sources.json` | **你写** | 声明哪个 MCP server 提供哪类数据（alert/content/context） |
 | `roles/<role-id>/PROACTIVE_CONTEXT.md` | **agent 维护** | 当前角色的推送规则面板。主 agent（被动回复时）通过对话帮你写和改。proactive agent 只读不写 |
-| `schedules.json` | **都行** | 建议让主 agent 调内置的 `schedule` 工具增删改，或在桌面里给角色建任务；手写时字段要求见下文 |
+| `schedules.json` | **都行** | 建议让主 agent 调 `schedule` 工具增删改（系统插件 `schedule` 提供，默认启用），或在桌面里给角色建任务；手写时字段要求见下文 |
 | `roles/<role-id>/drift/skills/*/SKILL.md` | **你写** | 当前角色的 Drift 任务定义。也可以用内置 skill `create-drift-skill` 让 agent 帮你生成 |
 | `roles/<role-id>/memory/*.md` | **agent 维护** | 长期记忆、自我认知、近期上下文——全部由主 agent 通过被动对话自动读写 |
 | `roles/<role-id>/drift/drift.json` | **agent 维护** | 当前角色的 Drift runner 自动写运行记录，不用管 |
@@ -187,7 +187,7 @@ MCP server 通过 stdio 与 agent 通信，启动时 `McpClientPool.connect_all(
 
 ### 5. 定时任务（`schedules.json`）
 
-优先通过主 agent 对话让它调 `schedule` 工具增删（或在桌面里给角色建任务）。文件在 `~/.shiori/workspace/schedules.json`，根节点必须是数组；每个任务都属于一个角色，手写时 `role_id`、`fire_at`、`created_at` 必填，缺 `role_id` 整个文件加载失败：
+优先通过主 agent 对话让它调 `schedule` 工具增删（或在桌面里给角色建任务）；工具和执行都由系统插件 `schedule` 提供，插件停用时任务保留但不执行。文件在 `~/.shiori/workspace/schedules.json`，根节点必须是数组；每个任务都属于一个角色，手写时 `role_id`、`fire_at`、`created_at` 必填，缺 `role_id` 整个文件加载失败：
 
 ```json
 [

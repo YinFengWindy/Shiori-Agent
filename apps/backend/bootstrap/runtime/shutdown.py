@@ -60,8 +60,6 @@ class RuntimeShutdownMixin:
     async def _stop_control_tasks(self) -> None:
         if self.agent_loop is not None:
             self.agent_loop.stop()
-        if self.scheduler is not None:
-            self.scheduler.stop()
         controls = [
             task
             for task in self._background_tasks

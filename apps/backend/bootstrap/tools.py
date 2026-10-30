@@ -35,8 +35,6 @@ from agent.looping.ports import (
 from agent.provider import LLMProvider
 from agent.retrieval.default_pipeline import DefaultMemoryRetrievalPipeline
 from agent.schedule_host import HostScheduleRunner
-from shiori_sdk.core.schedule_host import ScheduleHost
-from agent.scheduler import SchedulerService
 from agent.tools.message_push import MessagePushTool
 from agent.account_delivery import AccountDelivery
 from agent.tools.account_delivery import (
@@ -57,9 +55,6 @@ from bootstrap.toolsets.meta import (
 )
 from bootstrap.toolsets.groups import register_group_tools
 from bootstrap.toolsets.protocol import ToolsetDeps
-from bootstrap.toolsets.schedule import (
-    build_scheduler,
-)
 from bootstrap.wiring import (
     wire_turn_lifecycle,
     resolve_context_factory,
@@ -107,8 +102,8 @@ class CoreRuntime:
     tools: ToolRegistry
     push_tool: MessagePushTool
     session_manager: SessionManager
-    scheduler: SchedulerService
-    # ``SCHEDULE_HOST``: like the scheduler, shared by every generation.
+    # ``SCHEDULE_HOST``: shared by every generation, like the schedule
+    # plugin's process-wide scheduler that calls it.
     schedule_host: HostScheduleRunner
     provider: LLMProvider
     light_provider: LLMProvider | None
@@ -243,11 +238,8 @@ def build_registered_tools(
     event_publisher: EventBus | None = None,
     role_runtime_registry: RoleRuntimeRegistry | None = None,
     push_tool: MessagePushTool,
-    schedule_host: ScheduleHost,
-    shared_scheduler: SchedulerService | None = None,
 ) -> tuple[
     ToolRegistry,
-    SchedulerService,
     MemoryRuntime,
 ]:
     from session.store import SessionStore
@@ -273,13 +265,6 @@ def build_registered_tools(
         ),
     )
     memory_runtime = memory_result.extras["memory_runtime"]
-    scheduler = shared_scheduler or build_scheduler(
-        workspace,
-        schedule_host,
-        role_store=(
-            role_runtime_registry.repository.store if role_runtime_registry else None
-        ),
-    )
 
     # ── 第二阶段：注册工具（所有服务已就绪）──────────────────────────────────
     for name in wiring.toolsets:
@@ -298,14 +283,12 @@ def build_registered_tools(
                 provider=provider,
                 light_provider=light_provider,
                 bus=bus,
-                scheduler=scheduler,
                 event_publisher=event_publisher,
                 role_runtime_registry=role_runtime_registry,
             ),
         )
     return (
         tools,
-        scheduler,
         memory_runtime,
     )
 
@@ -510,7 +493,7 @@ def build_core_runtime(
             agent_loop_provider or (lambda: loop_ref.get("loop")), push_tool
         )
     )
-    tools, scheduler, memory_runtime = build_registered_tools(
+    tools, memory_runtime = build_registered_tools(
         config,
         workspace,
         http_resources,
@@ -521,8 +504,6 @@ def build_core_runtime(
         event_publisher=event_bus,
         role_runtime_registry=role_runtime_registry,
         push_tool=push_tool,
-        schedule_host=schedule_host,
-        shared_scheduler=shared.scheduler if shared else None,
     )
     presence = (
         shared.presence if shared is not None else PresenceStore(session_manager._store)
@@ -736,7 +717,6 @@ def build_core_runtime(
         push_tool=push_tool,
         image_sync_service=image_sync_service,
         session_manager=session_manager,
-        scheduler=scheduler,
         schedule_host=schedule_host,
         provider=provider,
         light_provider=light_provider,

@@ -3,23 +3,25 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { ScheduleTaskFormData } from "../shared/types";
-import { RoleTaskForm } from "./RoleTaskForm";
+import { createFakeHostServices } from "@yinfengwindy/shiori-sdk/testing";
+import type { ScheduleTaskFormData } from "./types";
+import { ScheduleTaskForm } from "./ScheduleTaskForm";
 
 function renderForm(initialData: ScheduleTaskFormData, saving = false, error = "") {
   return renderToStaticMarkup(
-    <RoleTaskForm
+    <ScheduleTaskForm
       title="新增计划任务"
       initialData={initialData}
       saving={saving}
       error={error}
+      host={createFakeHostServices().host}
       onBack={() => undefined}
       onSave={async () => undefined}
     />,
   );
 }
 
-describe("RoleTaskForm", () => {
+describe("ScheduleTaskForm", () => {
   it("uses a date-time control for at schedules", () => {
     const markup = renderForm({
       name: "提醒",
@@ -31,17 +33,10 @@ describe("RoleTaskForm", () => {
 
     assert.match(markup, /type="datetime-local"/);
     assert.match(markup, /value="2026-07-18T09:30"/);
-    assert.match(markup, />基础信息</);
-    assert.match(markup, />执行设置</);
-    assert.match(markup, />任务内容</);
     assert.match(markup, /role="group" aria-label="执行模式"/);
     assert.match(markup, /role="group" aria-label="触发方式"/);
     assert.match(markup, /aria-pressed="true"[^>]*>直接发送</);
-    assert.match(markup, /class="[^"]*w-full[^"]*" type="submit"/);
     assert.match(markup, /data-autosize-textarea-mirror=""/);
-    assert.match(markup, /class="[^"]*resize-none[^"]*overflow-hidden[^"]*"[^>]*>喝水<\/textarea>/);
-    assert.doesNotMatch(markup, /resize-y/);
-    assert.match(markup, /focus:outline-none/);
     assert.doesNotMatch(markup, /focus:ring/);
   });
 

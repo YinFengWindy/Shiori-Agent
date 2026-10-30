@@ -139,7 +139,7 @@ restyle 之前的一批变量名仍然存在，它们都已指回语义层，渲
 
 ## 共享类名（`@yinfengwindy/shiori-sdk` 与 `shared/styles.ts`）
 
-控件外观的唯一来源，**不要在组件里另起一套手写串**。插件也在用的类名（`cx`、`inputClass`、`textareaClass`、`settingsInputClass`、`settingsGroupStackClass`、`ghostButtonClass`、`compactGhostButtonClass`、`iconButtonClass`、`compactIconButtonClass`、`cardClass`、`badgeClass`、`sidebarNavItemClass`、`secondarySidebarSurfaceClass`、`secondarySidebarShellClass`、`sidebarContentMotionClass`、`primaryButtonSurfaceClass` / `ghostButtonSurfaceClass`、`compactButtonSizeClass`、`pressableClass` / `compactPressableClass`，菜单的 `menuPanelClass` / `menuSeparatorClass`）从 `@yinfengwindy/shiori-sdk` 导入，其余从 `shared/styles.ts` 导入。
+控件外观的唯一来源，**不要在组件里另起一套手写串**。插件也在用的类名（`cx`、`inputClass`、`textareaClass`、`settingsInputClass`、`settingsGroupStackClass`、`ghostButtonClass`、`compactGhostButtonClass`、`iconButtonClass`、`compactIconButtonClass`、`cardClass`、`badgeClass`、`sidebarNavItemClass`、`secondarySidebarSurfaceClass`、`secondarySidebarShellClass`、`chatSidebarPanelClass` / `chatSidebarHeaderClass` / `chatSidebarScrollableClass`、`sidebarContentMotionClass`、`primaryButtonSurfaceClass` / `ghostButtonSurfaceClass`、`compactButtonSizeClass`、`pressableClass` / `compactPressableClass`，菜单的 `menuPanelClass` / `menuSeparatorClass`）从 `@yinfengwindy/shiori-sdk` 导入，其余从 `shared/styles.ts` 导入。
 菜单行的 `menuItemClass` / `menuItemSelectedClass` 只给宿主用，从 `@yinfengwindy/shiori-sdk/host-internal` 导入（不属于插件契约）。
 `dialogBackdropClass` 和对话框外框 `DialogFrame` 也定义在 SDK（SDK 的能力设置对话框要用），只经 `host-internal` 导出、不属于插件契约；宿主代码照旧从 `shared/styles.ts`（`dialogBackdropClass`，它从 `host-internal` 转出）或 `host-internal`（`DialogFrame`）导入。带标题、内容可滚动的对话框（插件详情、账号详情、能力卡片的 ⚙ 设置）统一用 `DialogFrame`：居中、`rounded-md`、限高、标题行右侧是 `compactIconButtonClass` 的关闭按钮，正文单独滚动，可带固定底栏；确认弹窗仍用 `ConfirmDialog`。
 
@@ -162,6 +162,7 @@ restyle 之前的一批变量名仍然存在，它们都已指回语义层，渲
 | `sidebarNavItemClass` | SDK | 共享的可悬停行：侧栏导航项，以及内容区里可展开的行（如记忆时间线节点） |
 | `secondarySidebarSurfaceClass` | SDK | 次级侧栏背景（透明，透出应用底色渐变） |
 | `secondarySidebarShellClass({ animating, collapsed, inset })` | SDK | 次级侧栏外壳：背景、开合淡入位移、折叠时让出指针、左右内边距（`list` 聊天列表节奏含上下 18px，`nav` 导航列表 10px） |
+| `chatSidebarPanelClass` / `chatSidebarHeaderClass` / `chatSidebarScrollableClass` | SDK | 聊天右栏各视图（状态、任务、图片）的面板、紧凑头部（右侧给侧栏开关留位）与滚动区；插件的 `roleTasks` 区块占满面板时也用它们 |
 | `underlineTabClass(selected)` | 宿主 | 页面一级分区标签（下划线，如角色详情的资料 / 记忆 / 能力 / 账号） |
 | `segmentedTabListClass` / `segmentedTabClass(selected)` | 宿主 | 嵌在一级分区里的二级标签：分段轨道 + 选中项浮起（如素材用途、记忆页视图），视觉上从属于下划线标签 |
 | `replyQuoteFrameClass` / `replyQuoteSenderClass` / `replyQuoteTextClass` / `replyQuoteButtonClass` | 宿主 | 引用消息块（聊天回复引用、小手机引用块）的边框、发送者、正文和可点击版 |

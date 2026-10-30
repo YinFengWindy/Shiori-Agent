@@ -3,6 +3,7 @@ import { PluginHostServicesProvider, type PluginInjectedProps, type PluginUiModu
 import { usePluginRpcClient } from "./usePluginRpcClient";
 import { pluginHostServicesFor } from "./pluginHostServices";
 import { affectionUiRegistry } from "./affectionUiRegistry";
+import { roleTasksUiRegistry } from "./roleTasksUiRegistry";
 import { pluginChatImageActionsRegistry, pluginRoleSettingsRegistry } from "./pluginFeatureRegistry";
 import { createPluginSchemaSettingsSection } from "./pluginSchemaSettingsSectionFactory";
 import { retiredPluginUiContribution } from "./runtimePluginUiValidation";
@@ -65,6 +66,9 @@ export function applyPluginUiModules(
     });
     if (uiModule.chatAffection) affectionUiRegistry.registerChat({
       pluginId, Component: bindPluginClient(pluginId, uiModule.chatAffection),
+    });
+    if (uiModule.roleTasks) roleTasksUiRegistry.register({
+      pluginId, Component: bindPluginClient(pluginId, uiModule.roleTasks),
     });
     if (settingsSection) {
       // Registers as a subtab of the built-in "plugins" section rather than

@@ -12,13 +12,15 @@ P7 会统一前端入口（`frontend.entry`），并删掉下面的 `renderer` /
 
 | 入口 | 默认导出 |
 | --- | --- |
-| `ui` | `PluginUiModule`：`{ pluginId, navPage?, settingsSection?, roleAssets?, accountDetail?, roleSettings?, chatImageActions?, roleAffection?, chatAffection? }` |
+| `ui` | `PluginUiModule`：`{ pluginId, navPage?, settingsSection?, roleAssets?, accountDetail?, roleSettings?, chatImageActions?, roleAffection?, chatAffection?, roleTasks? }` |
 | `background` | `PluginBackgroundContribution`：`{ pluginId, setup(ctx) }` |
 | `surface` | `PluginSurfaceModule`：`{ pluginId, surface: { component } }` |
 
 `pluginId` 必须等于 manifest 的 ID。声明已退役的 `roleMemory`（宿主自己渲染记忆页，记忆插件只提供 `roles.memory.*` RPC）或 `roleUi`（改用 `roleSettings` 卡片，私有设置放 `storage: "plugin"` 的对话框里用 `usePrivateAutosave`）的 UI 模块校验失败。代码不能依赖 Vite glob、宿主源码相对导入或宿主重新构建。
 
 `roleAffection` 挂在角色详情，`chatAffection` 挂在聊天状态栏。宿主只在该插件启用且登记了组件时挂载，两者都注入 `client` 与 `host`。props 只有定位标识：`roleAffection` 是 `{roleId, bridgeReady}`，`chatAffection` 是 `{roleId}`，宿主按角色给 `chatAffection` 加 key，换角色即重新挂载。槽里显示的数据都由插件自己取：好感插件用 `client.call("history" | "chat_status" | "stage_prompts_get" | "stage_prompts_set")`，在 `host.onEvent` 收到本角色的 `session.updated`（宿主在回合、主动消息、渠道回合存下后广播它，好感记账在此之前完成）或插件自己发的 `plugin.affection.chat_status.changed`（寂寞心跳、关系快照刷新之后）时重新读取 `chat_status`，不从宿主页面导入，宿主也不读、不转发这些数据。
+
+`roleTasks` 挂在聊天右栏的「任务」面板，宿主只在该插件启用且登记了组件时挂载，注入 `client` 与 `host`。props 是 `{roleId, view, onViewChange}`（`PluginRoleTasksComponentProps`）：`view` 为空时组件作为任务列表的一组，排在宿主的后台任务、记忆维护之前；`onViewChange(非空值)` 后宿主把整个面板交给组件，组件按自己定义的 `view` 画详情、表单等视图，自带头部，返回时 `onViewChange("")`。宿主只保存 `view`、不解读它，面板按角色加 key，换角色即清空。组件在两种位置之间移动时会重新挂载。计划任务插件经 `client.call("list" | "create" | "update" | "cancel")` 读写，在 `host.onEvent` 收到本角色的 `plugin.schedule.tasks.changed` 时重新读取。面板外观用 SDK 的 `chatSidebarPanelClass`、`chatSidebarHeaderClass`、`chatSidebarScrollableClass` 与 `DetailRow`。
 
 ## 对等依赖与 import map
 

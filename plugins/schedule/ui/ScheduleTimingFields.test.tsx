@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { it } from "node:test";
 import { mountTestComponent, chooseSelectOption } from "@yinfengwindy/shiori-sdk/testing";
-import type { RecurringScheduleRule } from "./roleTaskFormState";
+import type { RecurringScheduleRule } from "./scheduleTaskFormState";
 
-it("RoleTaskScheduleFields updates the recurrence preset and weekday without losing execution time", async () => {
+it("ScheduleTimingFields updates the recurrence preset and weekday without losing execution time", async () => {
   const view = await mountTestComponent(null);
-  const { RoleTaskScheduleFields } = await import("./RoleTaskScheduleFields");
+  const { ScheduleTimingFields } = await import("./ScheduleTimingFields");
   let rule: RecurringScheduleRule = { preset: "daily", weekday: "1", time: "09:30", custom: "" };
-  const renderFields = () => <RoleTaskScheduleFields trigger="every" when="" recurringRule={rule} saving={false} onWhenChange={() => undefined} onRecurringRuleChange={(next) => { rule = typeof next === "function" ? next(rule) : next; }} />;
+  const renderFields = () => <ScheduleTimingFields trigger="every" when="" recurringRule={rule} saving={false} onWhenChange={() => undefined} onRecurringRuleChange={(next) => { rule = typeof next === "function" ? next(rule) : next; }} />;
   try {
     await view.render(renderFields());
     await chooseSelectOption("循环周期", "每周");

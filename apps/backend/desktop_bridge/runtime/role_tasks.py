@@ -17,14 +17,13 @@ class RuntimeRoleTasks:
             core = generation.core
             spawn = core.tools.get_tool("spawn")
             yield generation, RoleTaskService(
-                scheduler=core.scheduler,
                 subagent_manager=spawn.manager if spawn is not None else None,
                 memory_optimizer=core.memory_optimizer,
                 session_key_for_role=lambda role_id: f"role:{role_id}",
             )
 
     def list_tasks(self, role_id: str):
-        """Merges background work while deduplicating the shared scheduler."""
+        """Merges background work of every retained generation, deduplicated by id."""
         if self._roles.get_role(role_id) is None:
             raise RoleNotFoundError(role_id)
         tasks = {

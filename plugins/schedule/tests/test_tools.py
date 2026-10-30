@@ -1,10 +1,14 @@
 """Schedule tools take the job owner from the turn, never from the model."""
 
-from typing import Any, cast
+from __future__ import annotations
 
-from agent.scheduler import SchedulerService
-from agent.tools.registry import ToolRegistry
-from agent.tools.schedule import CancelScheduleTool, ScheduleTool
+from pathlib import Path
+from typing import Any
+
+from shiori_sdk.tools import Tool
+
+from plugins.schedule.backend.scheduler import SchedulerService
+from plugins.schedule.backend.tools import CancelScheduleTool, ScheduleTool
 
 _TURN = {
     "role_id": "mira",
@@ -14,19 +18,20 @@ _TURN = {
 }
 
 
-def _registry(tmp_path) -> tuple[ToolRegistry, SchedulerService]:
-    scheduler = SchedulerService(tmp_path / "schedules.json", host=cast(Any, None))
-    registry = ToolRegistry()
-    registry.register(ScheduleTool(scheduler))
-    registry.register(CancelScheduleTool(scheduler))
-    return registry, scheduler
+async def _call(tool: Tool, arguments: dict[str, Any]) -> object:
+    """Runs ``tool`` as the host does: its ``context_precedence`` keys come
+    only from the turn, whatever the model passed."""
+    merged = {**_TURN, **arguments}
+    for key in tool.context_precedence:
+        merged[key] = _TURN[key]
+    return await tool.execute(**merged)
 
 
-async def test_model_arguments_cannot_reassign_a_new_job(tmp_path):
-    registry, scheduler = _registry(tmp_path)
+async def test_model_arguments_cannot_reassign_a_new_job(tmp_path: Path):
+    scheduler = SchedulerService(tmp_path / "schedules.json")
 
-    await registry.execute(
-        "schedule",
+    await _call(
+        ScheduleTool(scheduler),
         {
             "tier": "instant",
             "trigger": "after",
@@ -39,7 +44,6 @@ async def test_model_arguments_cannot_reassign_a_new_job(tmp_path):
             "thread_id": "thread:yin:desktop",
             "delivery_key": "forged",
         },
-        context=_TURN,
     )
 
     (job,) = scheduler.list_jobs()
@@ -51,8 +55,8 @@ async def test_model_arguments_cannot_reassign_a_new_job(tmp_path):
     )
 
 
-async def test_model_arguments_cannot_cancel_another_roles_job(tmp_path):
-    registry, scheduler = _registry(tmp_path)
+async def test_model_arguments_cannot_cancel_another_roles_job(tmp_path: Path):
+    scheduler = SchedulerService(tmp_path / "schedules.json")
     job = scheduler.create_job(
         name="提醒",
         tier="instant",
@@ -65,8 +69,6 @@ async def test_model_arguments_cannot_cancel_another_roles_job(tmp_path):
         role_id="yin",
     )
 
-    await registry.execute(
-        "cancel_schedule", {"id": job.id, "role_id": "yin"}, context=_TURN
-    )
+    await _call(CancelScheduleTool(scheduler), {"id": job.id, "role_id": "yin"})
 
     assert scheduler.list_jobs() == [job]

@@ -85,6 +85,24 @@ export type PluginRoleAffectionProps = {
 /** Role affection tab: slot props plus the injected client and host services. */
 export type PluginRoleAffectionComponentProps = PluginRoleAffectionProps & PluginInjectedProps;
 
+/**
+ * The chat task panel tells the scheduled-task block which role is open and
+ * which of the block's own views is shown. The block lists its jobs as one
+ * group of the panel's task list while `view` is empty. Any other value is a
+ * view the block defined (a detail, a form …): the block then fills the whole
+ * panel and draws its own header. The panel keeps `view` across its re-renders
+ * and resets it when the role changes.
+ */
+export type PluginRoleTasksProps = {
+  roleId: string;
+  view: string;
+  /** Shows one of the block's views; `""` returns to the panel's task list. */
+  onViewChange: (view: string) => void;
+};
+
+/** Role task block: slot props plus the injected client and host services. */
+export type PluginRoleTasksComponentProps = PluginRoleTasksProps & PluginInjectedProps;
+
 /** One platform's new-account and connection controls, opened from a role's account page. */
 export type PluginAccountDetailContribution = {
   /** Platform name in the role page's add-account choice. */
@@ -124,4 +142,6 @@ export type PluginUiModule = {
   roleAffection?: React.ComponentType<PluginRoleAffectionComponentProps>;
   /** The chat status sidebar's affection block (meter, relationship tags, loneliness). */
   chatAffection?: React.ComponentType<PluginChatAffectionComponentProps>;
+  /** The chat task panel's scheduled-task block. Absent means the panel lists only the host's tasks. */
+  roleTasks?: React.ComponentType<PluginRoleTasksComponentProps>;
 };

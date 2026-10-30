@@ -1,4 +1,4 @@
-import type { RoleTask, ScheduleTaskFormData } from "../shared/types";
+import type { ScheduledTask, ScheduleTaskFormData } from "./types";
 
 export type ScheduleTaskFormErrors = Partial<Record<keyof ScheduleTaskFormData, string>>;
 
@@ -10,6 +10,22 @@ export type RecurringScheduleRule = {
   weekday: string;
   custom: string;
 };
+
+export const scheduleTierLabels = {
+  instant: "直接发送",
+  soft: "AI 生成",
+} as const;
+
+export const scheduleTriggerLabels = {
+  at: "指定时间",
+  after: "延迟执行",
+  every: "循环执行",
+} as const;
+
+export const scheduleStatusLabels = {
+  running: "进行中",
+  scheduled: "待执行",
+} as const;
 
 export const recurringScheduleOptions = [
   { value: "15m", label: "每 15 分钟" },
@@ -81,10 +97,7 @@ export function createScheduleTaskFormData(): ScheduleTaskFormData {
 }
 
 /** Creates editable form values from one scheduled task read model. */
-export function scheduleTaskFormDataFromTask(task: RoleTask): ScheduleTaskFormData {
-  if (task.kind !== "schedule" || !task.schedule) {
-    throw new Error("只有计划任务可以编辑");
-  }
+export function scheduleTaskFormDataFromTask(task: ScheduledTask): ScheduleTaskFormData {
   return { name: task.label, ...task.schedule };
 }
 

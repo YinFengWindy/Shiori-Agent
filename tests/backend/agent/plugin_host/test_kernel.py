@@ -381,6 +381,7 @@ _EXPECTED_TOP_LEVEL_PLUGINS = {
     "observe",
     "plugin_undo",
     "scene",
+    "schedule",
     "qq",
     "qqbot",
     "screen_perception",

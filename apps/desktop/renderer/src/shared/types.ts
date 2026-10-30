@@ -7,23 +7,8 @@ import type {
 /** Session type a channel declares; the desktop session is private. */
 export type RoleChatType = "private" | "group";
 
-export type RoleTaskKind = "schedule" | "subagent" | "memory_maintenance";
-
-export type ScheduleTaskTier = "instant" | "soft";
-
-export type ScheduleTaskTrigger = "at" | "after" | "every";
-
-/** Editable fields accepted by the desktop scheduled-task API. */
-export type ScheduleTaskFormData = {
-  name: string;
-  tier: ScheduleTaskTier;
-  trigger: ScheduleTaskTrigger;
-  when: string;
-  content: string;
-};
-
-/** Scheduler fields exposed for one editable role task. */
-export type RoleTaskSchedule = Omit<ScheduleTaskFormData, "name">;
+/** Host-owned role work; scheduled jobs are the schedule plugin's own block. */
+export type RoleTaskKind = "subagent" | "memory_maintenance";
 
 /** Role-owned background work returned by the desktop bridge. */
 export type RoleTask = {
@@ -34,10 +19,7 @@ export type RoleTask = {
   label: string;
   detail: string;
   created_at: string;
-  next_run_at: string;
   cancellable: boolean;
-  editable: boolean;
-  schedule: RoleTaskSchedule | null;
 };
 
 export type ChatTurnMetrics = {

@@ -165,7 +165,7 @@ def test_config_load_defaults_empty_toolsets_to_full_wiring(tmp_path: Path):
 
     cfg = Config.load(cfg_path)
 
-    assert cfg.wiring.toolsets == ["meta_common", "spawn", "schedule"]
+    assert cfg.wiring.toolsets == ["meta_common", "spawn"]
 
 
 def test_config_load_migrates_legacy_memory_table(tmp_path: Path, caplog):
@@ -547,10 +547,6 @@ def test_build_registered_tools_respects_toolset_order_and_subset(
         lambda name, readonly_tools=None: _ToolsetProvider(name),
     )
     monkeypatch.setattr("bootstrap.tools.build_readonly_tools", lambda *_, **__: {})
-    monkeypatch.setattr(
-        "bootstrap.tools.build_scheduler",
-        lambda *_args, **_kwargs: SimpleNamespace(),
-    )
     config = ConfigModel(
         provider="openai",
         model="m",
@@ -568,7 +564,6 @@ def test_build_registered_tools_respects_toolset_order_and_subset(
         tools=ToolRegistry(),
         event_publisher=EventBus(),
         push_tool=MessagePushTool(role_target_validator=allow_every_role_target),
-        schedule_host=cast(Any, SimpleNamespace()),
     )
 
     assert calls == ["memory", "schedule", "mcp"]
@@ -764,17 +759,13 @@ def test_build_registered_tools_without_mcp_toolset_still_returns_memory(
         ),
     )
     monkeypatch.setattr("bootstrap.tools.build_readonly_tools", lambda *_, **__: {})
-    monkeypatch.setattr(
-        "bootstrap.tools.build_scheduler",
-        lambda *_args, **_kwargs: SimpleNamespace(),
-    )
     config = ConfigModel(
         provider="openai",
         model="m",
         api_key="k",
         wiring=WiringConfig(toolsets=["schedule"]),
     )
-    _tools, _scheduler, memory_runtime = build_registered_tools(
+    _tools, memory_runtime = build_registered_tools(
         config=config,
         workspace=tmp_path,
         http_resources=cast(Any, SimpleNamespace()),
@@ -785,7 +776,6 @@ def test_build_registered_tools_without_mcp_toolset_still_returns_memory(
         tools=ToolRegistry(),
         event_publisher=EventBus(),
         push_tool=MessagePushTool(role_target_validator=allow_every_role_target),
-        schedule_host=cast(Any, SimpleNamespace()),
     )
 
     assert memory_runtime is memory

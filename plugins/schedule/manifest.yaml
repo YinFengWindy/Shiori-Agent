@@ -1,0 +1,20 @@
+api: 4
+sdk: ">=4.0.0"
+id: schedule
+display_name: 定时任务
+version: '0.1.0'
+desc: 角色的定时提醒与定时回合。任务仍存于工作区 schedules.json。
+category: system
+inject:
+  - schedule_host
+  - process_resources
+  - workspace
+  - roles
+  - events
+  - tools
+  - rpc
+  - background
+provides:
+  - scheduler
+frontend:
+  entry: ui/index.tsx

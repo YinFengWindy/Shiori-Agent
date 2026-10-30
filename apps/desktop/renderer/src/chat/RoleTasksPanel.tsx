@@ -1,91 +1,59 @@
-import { useEffect, useState } from "react";
-import type { RoleTask, ScheduleTaskFormData } from "../shared/types";
+import { useState } from "react";
+import type { RoleTask } from "../shared/types";
+import { useRoleTasksContribution } from "../plugins/roleTasksUiRegistry";
+import { usePluginEnabledState } from "../plugins/usePluginEnabledState";
 import { RoleTaskDetails } from "./RoleTaskDetails";
-import { RoleTaskForm } from "./RoleTaskForm";
 import { RoleTaskList } from "./RoleTaskList";
-import { createScheduleTaskFormData, scheduleTaskFormDataFromTask } from "./roleTaskFormState";
-import {
-  reconcileRoleTaskPanelView,
-  reduceRoleTaskPanelView,
-  type RoleTaskPanelAction,
-  type RoleTaskPanelView,
-} from "./roleTaskPanelState";
+import { blockPanelView, reconcileRoleTaskPanelView, type RoleTaskPanelView } from "./roleTaskPanelState";
 
 export { groupRoleTasks } from "./roleTaskPanelState";
 
-/** Renders and coordinates list, detail, create, and edit task views. */
-export function RoleTasksPanel({ tasks, operation, error, onClearError, onCreate, onUpdate, onCancel }: {
+/**
+ * Renders the role's task list and a host task's details, and hands the whole
+ * panel to the plugin block (`roleTasks`) while one of its views is open.
+ */
+export function RoleTasksPanel({ roleId, tasks, cancellingTaskId, error, onClearError, onCancel }: {
+  /** The open role; the caller keys the panel by it. */
+  roleId: string;
   tasks: RoleTask[];
-  operation: { kind: "create" | "update" | "cancel"; taskId: string } | null;
+  cancellingTaskId: string;
   error: string;
   onClearError: () => void;
-  onCreate: (data: ScheduleTaskFormData) => Promise<RoleTask>;
-  onUpdate: (taskId: string, data: ScheduleTaskFormData) => Promise<RoleTask>;
   onCancel: (taskId: string) => Promise<void>;
 }) {
-  const [view, setView] = useState<RoleTaskPanelView>({ kind: "list" });
+  const [requestedView, setRequestedView] = useState<RoleTaskPanelView>({ kind: "list" });
   const [confirmingCancelTaskId, setConfirmingCancelTaskId] = useState("");
-  const selectedTask = view.kind === "detail" || view.kind === "edit"
-    ? tasks.find((task) => task.id === view.taskId)
-    : undefined;
+  const contributed = useRoleTasksContribution();
+  const pluginEnabled = usePluginEnabledState();
+  // The scheduled-task block is the plugin's own; the panel only mounts it while the plugin is on.
+  const Block = contributed && pluginEnabled(contributed.pluginId) && roleId ? contributed.Component : null;
+  const view = reconcileRoleTaskPanelView(requestedView, tasks);
 
-  useEffect(() => {
-    setView((current) => reconcileRoleTaskPanelView(current, tasks));
-  }, [tasks]);
-
-  const navigate = (action: RoleTaskPanelAction) => {
+  const navigate = (next: RoleTaskPanelView) => {
     onClearError();
     setConfirmingCancelTaskId("");
-    setView((current) => reduceRoleTaskPanelView(current, action));
+    setRequestedView(next);
   };
+  const showBlockView = (blockView: string) => navigate(blockPanelView(blockView));
 
-  if (view.kind === "create") {
-    return (
-      <RoleTaskForm
-        title="新增计划任务"
-        initialData={createScheduleTaskFormData()}
-        saving={operation?.kind === "create"}
-        error={error}
-        onBack={() => navigate({ type: "show-list" })}
-        onSave={async (data) => {
-          const task = await onCreate(data);
-          navigate({ type: "show-detail", taskId: task.id });
-        }}
-      />
-    );
+  if (view.kind === "block" && Block) {
+    return <Block roleId={roleId} view={view.blockView} onViewChange={showBlockView} />;
   }
 
-  if (view.kind === "edit" && selectedTask) {
-    return (
-      <RoleTaskForm
-        title="编辑计划任务"
-        initialData={scheduleTaskFormDataFromTask(selectedTask)}
-        saving={operation?.kind === "update" && operation.taskId === selectedTask.id}
-        error={error}
-        onBack={() => navigate({ type: "show-detail", taskId: selectedTask.id })}
-        onSave={async (data) => {
-          await onUpdate(selectedTask.id, data);
-          navigate({ type: "show-detail", taskId: selectedTask.id });
-        }}
-      />
-    );
-  }
-
-  if (view.kind === "detail" && selectedTask) {
-    const cancelling = operation?.kind === "cancel" && operation.taskId === selectedTask.id;
+  const selectedTask = view.kind === "detail" ? tasks.find((task) => task.id === view.taskId) : undefined;
+  if (selectedTask) {
     return (
       <RoleTaskDetails
         task={selectedTask}
-        cancelling={cancelling}
+        cancelling={cancellingTaskId === selectedTask.id}
         error={error}
         confirmingCancel={confirmingCancelTaskId === selectedTask.id}
-        onBack={() => navigate({ type: "show-list" })}
-        onEdit={() => navigate({ type: "show-edit", taskId: selectedTask.id })}
+        onBack={() => navigate({ kind: "list" })}
         onBeginCancel={() => setConfirmingCancelTaskId(selectedTask.id)}
         onDismissCancel={() => setConfirmingCancelTaskId("")}
         onCancel={() => {
           void onCancel(selectedTask.id)
-            .then(() => navigate({ type: "show-list" }))
+            .then(() => navigate({ kind: "list" }))
             .catch(() => undefined);
         }}
       />
@@ -95,8 +63,8 @@ export function RoleTasksPanel({ tasks, operation, error, onClearError, onCreate
   return (
     <RoleTaskList
       tasks={tasks}
-      onCreate={() => navigate({ type: "show-create" })}
-      onSelect={(taskId) => navigate({ type: "show-detail", taskId })}
+      block={Block ? <Block roleId={roleId} view="" onViewChange={showBlockView} /> : null}
+      onSelect={(taskId) => navigate({ kind: "detail", taskId })}
     />
   );
 }

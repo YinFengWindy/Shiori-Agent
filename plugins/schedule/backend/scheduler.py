@@ -10,7 +10,7 @@ Scheduler: 定时任务核心模块
   compute_actual_trigger — 计算实际触发时间（SOFT 提前 P90）
   ScheduledJob       — 任务数据类
   JobStore           — JSON 持久化
-  SchedulerService   — 主调度服务（asyncio tick 循环）
+  SchedulerService   — 主调度服务（asyncio tick 循环，进程内一份）
 """
 
 import asyncio
@@ -20,6 +20,7 @@ import statistics
 import time
 import uuid
 from collections import deque
+from contextvars import Context
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -33,7 +34,8 @@ from shiori_sdk.core.schedule_host import (
     scheduler_thread_id,
 )
 from shiori_sdk.files.json import atomic_save_json, load_json
-from agent.scheduler_cron import is_cron_expr, next_cron_fire
+
+from .cron import is_cron_expr, next_cron_fire
 
 logger = logging.getLogger(__name__)
 
@@ -260,12 +262,16 @@ class JobStore:
 
 class SchedulerService:
     """
-    asyncio 定时任务服务。
+    asyncio 定时任务服务，作为插件的进程资源跨代只有一份。
 
     - 每秒 tick 一次，检查 actual_trigger <= now 的 job
     - INSTANT: 经 ``ScheduleHost.deliver`` 直接投递
     - SOFT: ``ScheduleHost.run_turn`` + 记录延迟 + 有内容时投递
     - 持久化到 JSON，重启后自动恢复
+
+    构造时空闲；``start`` 第一次调用才恢复任务并开始 tick，之后的调用
+    （换代、代内重载）只换绑宿主端口。``close``（插件停用或进程退出）
+    停止 tick 并取消在途任务。
     """
 
     GRACE_SECONDS = 300  # 5分钟内的 misfire 仍执行
@@ -273,36 +279,56 @@ class SchedulerService:
     def __init__(
         self,
         store_path: Path,
-        host: ScheduleHost,
         tracker: LatencyTracker | None = None,
         _now_fn: Callable[[], datetime] | None = None,
-        role_exists: Callable[[str], bool] | None = None,
     ) -> None:
         self.store = JobStore(store_path)
-        self._host = host
+        self._host: ScheduleHost | None = None
         self.tracker = tracker or LatencyTracker()
         self._now = _now_fn or (lambda: datetime.now(timezone.utc))
-        self._role_exists = role_exists
         self._jobs: dict[str, ScheduledJob] = {}
         self._in_flight: set[str] = set()
         self._active_tasks: dict[str, asyncio.Task[None]] = {}
-        self._running = False
+        self._ticking: asyncio.Task[None] | None = None
+        self._closed = False
+        self._listeners: set[Callable[[str], None]] = set()
 
     # ── Public API ───────────────────────────────────────────────
 
-    async def run(self) -> None:
-        self.load_and_recover()
-        self._running = True
-        logger.info("SchedulerService started")
-        while self._running:
-            await asyncio.sleep(1)
-            await self._tick()
+    def start(self, host: ScheduleHost, role_exists: Callable[[str], bool]) -> None:
+        """Binds ``host``; the first call recovers the store and starts ticking.
 
-    def stop(self) -> None:
-        self._running = False
-        for job_id, task in list(self._active_tasks.items()):
+        Later calls (a new generation, an in-generation reload) only rebind
+        the host, so jobs are loaded once and one loop ticks per process.
+        """
+        if self._closed:
+            raise RuntimeError("计划任务服务已关闭")
+        self._host = host
+        if self._ticking is not None:
+            return
+        self.load_and_recover(role_exists)
+        # A fresh context: the loop outlives the generation that started it.
+        self._ticking = asyncio.create_task(
+            self._tick_forever(), name="schedule:tick", context=Context()
+        )
+        logger.info("SchedulerService started")
+
+    async def close(self) -> None:
+        """Stops ticking and cancels running jobs; the store keeps every job."""
+        self._closed = True
+        tasks = [*self._active_tasks.values()]
+        if self._ticking is not None:
+            tasks.append(self._ticking)
+        for task in tasks:
             task.cancel()
-            self._active_tasks.pop(job_id, None)
+        self._active_tasks.clear()
+        self._listeners.clear()
+        _ = await asyncio.gather(*tasks, return_exceptions=True)
+
+    def subscribe(self, listener: Callable[[str], None]) -> Callable[[], None]:
+        """Calls ``listener(role_id)`` after that role's jobs changed or ran."""
+        self._listeners.add(listener)
+        return lambda: self._listeners.discard(listener)
 
     def add_job(self, job: ScheduledJob) -> None:
         self._require_role_id(job.role_id)
@@ -311,6 +337,7 @@ class SchedulerService:
             job.fire_at = job.fire_at.replace(tzinfo=timezone.utc)
         next_jobs = {**self._jobs, job.id: job}
         self._replace_jobs(next_jobs)
+        self._changed(job.role_id)
         logger.info(
             f"Job added: {job.id[:8]} tier={job.tier} trigger={job.trigger} "
             f"fire_at={job.fire_at.isoformat()}"
@@ -388,6 +415,7 @@ class SchedulerService:
         )
         next_jobs = {**self._jobs, job_id: updated}
         self._replace_jobs(next_jobs)
+        self._changed(updated.role_id)
         logger.info(
             "Job updated: %s tier=%s trigger=%s fire_at=%s",
             job_id[:8],
@@ -403,6 +431,14 @@ class SchedulerService:
         self._cancel_jobs({job_id})
         return True
 
+    def cancel_role_job(self, role_id: str, job_id: str) -> bool:
+        """Cancels ``job_id`` only if ``role_id`` owns it; False when it does not."""
+        job = self._jobs.get(job_id)
+        if job is None or job.role_id != role_id:
+            return False
+        self._cancel_jobs({job_id})
+        return True
+
     def cancel_role_jobs(self, role_id: str) -> None:
         """Removes one role's schedules durably before cancelling its running work."""
         clean_role_id = self._require_role_id(role_id)
@@ -413,6 +449,7 @@ class SchedulerService:
     def _cancel_jobs(self, job_ids: set[str]) -> None:
         if not job_ids:
             return
+        roles = {self._jobs[jid].role_id for jid in job_ids}
         self._replace_jobs(
             {jid: job for jid, job in self._jobs.items() if jid not in job_ids}
         )
@@ -422,22 +459,23 @@ class SchedulerService:
                 active_task.cancel()
             # A task cancelled before its first step never reaches its finally.
             self._in_flight.discard(job_id)
+        for role_id in roles:
+            self._changed(role_id)
 
     def is_job_active(self, job_id: str) -> bool:
         """Returns whether a scheduled job currently has running work."""
         task = self._active_tasks.get(job_id)
         return task is not None and not task.done()
 
-    def cancel_job_by_name(self, name: str) -> list[str]:
-        cancelled = [jid for jid, j in self._jobs.items() if j.name == name]
-        self._cancel_jobs(set(cancelled))
-        return cancelled
-
     def list_jobs(self) -> list[ScheduledJob]:
         return list(self._jobs.values())
 
-    def load_and_recover(self) -> None:
-        """启动时清理孤儿任务并处理 misfire，成功后才发布恢复状态。"""
+    def load_and_recover(self, role_exists: Callable[[str], bool]) -> None:
+        """启动时清理孤儿任务并处理 misfire，成功后才发布恢复状态。
+
+        删除角色后才取消它的任务（``RoleDeleted``）；进程在两者之间退出时，
+        留下的孤儿任务在这里删除。
+        """
         now = self._now()
         jobs = self.store.load()
         recovered: dict[str, ScheduledJob] = {}
@@ -445,7 +483,7 @@ class SchedulerService:
 
         for job in jobs:
             # Repository failures propagate; only a confirmed missing role is orphaned.
-            if self._role_exists is not None and not self._role_exists(job.role_id):
+            if not role_exists(job.role_id):
                 jobs_changed = True
                 continue
             if not job.enabled:
@@ -571,6 +609,15 @@ class SchedulerService:
 
     # ── Internal ────────────────────────────────────────────────
 
+    def _changed(self, role_id: str) -> None:
+        for listener in tuple(self._listeners):
+            listener(role_id)
+
+    async def _tick_forever(self) -> None:
+        while True:
+            await asyncio.sleep(1)
+            await self._tick()
+
     async def _tick(self) -> None:
         now = self._now()
         for job in list(self._jobs.values()):
@@ -591,6 +638,7 @@ class SchedulerService:
                 task.add_done_callback(
                     lambda done, job_id=job.id: self._on_job_task_done(job_id, done)
                 )
+                self._changed(job.role_id)
 
     async def _execute_and_reschedule(self, job: ScheduledJob) -> None:
         cancelled = False
@@ -622,20 +670,24 @@ class SchedulerService:
             else:
                 self._jobs.pop(job.id, None)
             self.store.save(self._jobs)
+            self._changed(job.role_id)
 
     def _on_job_task_done(self, job_id: str, task: asyncio.Task[None]) -> None:
         if self._active_tasks.get(job_id) is task:
             self._active_tasks.pop(job_id, None)
 
     async def _execute(self, job: ScheduledJob) -> None:
+        host = self._host
+        if host is None:
+            raise RuntimeError("计划任务服务尚未启动")
         run = self._scheduled_run(job)
         label = job.name or job.id[:8]
         if job.tier == "instant":
-            result = await self._host.deliver(run, job.message or "")
+            result = await host.deliver(run, job.message or "")
             logger.info(f"[scheduler] instant 推送完成 {label!r}: {result}")
             return
         t0 = time.monotonic()
-        content = await self._host.run_turn(run, job.prompt or "")
+        content = await host.run_turn(run, job.prompt or "")
         if self._jobs.get(job.id) is not job:
             return
         elapsed = time.monotonic() - t0
@@ -644,7 +696,7 @@ class SchedulerService:
             f"[scheduler] soft AI 完成 {label!r}  耗时={elapsed:.1f}s  P90={self.tracker.lead:.1f}s"
         )
         if content:
-            result = await self._host.deliver(run, content, already_persisted=True)
+            result = await host.deliver(run, content, already_persisted=True)
             logger.info(f"[scheduler] soft 推送完成 {label!r}: {result}")
         else:
             logger.warning(f"[scheduler] soft AI 返回空内容 {label!r}，跳过推送")

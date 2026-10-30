@@ -2,7 +2,7 @@ import React from "react";
 import { ChatStatusSidebar } from "./ChatStatusSidebar";
 import { RoleTasksPanel } from "./RoleTasksPanel";
 import { toFileUrl } from "../shared/format";
-import type { RoleTask, ScheduleTaskFormData } from "../shared/types";
+import type { RoleTask } from "../shared/types";
 import { chatSidebarPanelClass } from "./chatSidebarStyles";
 
 export type ChatSidebarMode = "status" | "images" | "tasks";
@@ -22,10 +22,8 @@ type ChatRightSidebarProps = {
   roleSelfView: string;
   tasks: RoleTask[];
   taskError: string;
-  taskOperation: { kind: "create" | "update" | "cancel"; taskId: string } | null;
+  cancellingTaskId: string;
   onClearTaskError: () => void;
-  onCreateTask: (data: ScheduleTaskFormData) => Promise<RoleTask>;
-  onUpdateTask: (taskId: string, data: ScheduleTaskFormData) => Promise<RoleTask>;
   onCancelTask: (taskId: string) => Promise<void>;
   onGoToNextImage: () => void;
   onGoToPreviousImage: () => void;
@@ -47,10 +45,8 @@ export const ChatRightSidebar = React.memo(function ChatRightSidebar({
   roleSelfView,
   tasks,
   taskError,
-  taskOperation,
+  cancellingTaskId,
   onClearTaskError,
-  onCreateTask,
-  onUpdateTask,
   onCancelTask,
   onGoToNextImage,
   onGoToPreviousImage,
@@ -73,13 +69,14 @@ export const ChatRightSidebar = React.memo(function ChatRightSidebar({
   }
   if (mode === "tasks") {
     return (
+      // Keyed by role: a switch drops the panel's view, the plugin block's included.
       <RoleTasksPanel
+        key={roleId}
+        roleId={roleId}
         tasks={tasks}
-        operation={taskOperation}
+        cancellingTaskId={cancellingTaskId}
         error={taskError}
         onClearError={onClearTaskError}
-        onCreate={onCreateTask}
-        onUpdate={onUpdateTask}
         onCancel={onCancelTask}
       />
     );
