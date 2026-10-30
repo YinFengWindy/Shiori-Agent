@@ -77,6 +77,9 @@ DEFAULT_FILES: frozenset[str] = frozenset(
         "tests/backend/agent/core/test_turn_pipelines.py",
         # P3 golden trace（维护者 2026-10-23 确认）与 core-only 冒烟（§5.3），#902。
         "tests/backend/agent/core/test_turn_golden_trace.py",
+        # P6b 主动回合 golden trace（8 条），#907 PR0：proactive 搬进插件期间每次 CI
+        # 都要守住的行为基线。加入后计数仍在上限内，上限不变。
+        "tests/backend/agent/core/test_proactive_turn_golden_trace.py",
         "tests/backend/agent/core/test_response_parser.py",
         "tests/backend/agent/core/test_safety_retry.py",
         "tests/backend/agent/core/test_p7_commit.py",
