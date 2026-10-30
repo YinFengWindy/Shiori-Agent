@@ -33,7 +33,6 @@ from core.net.http import (
 if TYPE_CHECKING:
     from agent.looping.core import AgentLoop
     from agent.provider import LLMProvider
-    from agent.scheduler import SchedulerService
     from agent.tools.message_push import MessagePushTool
     from agent.tools.registry import ToolRegistry
     from bus.queue import MessageBus
@@ -129,10 +128,6 @@ class AppRuntime(RuntimeReloadMixin, RuntimeBackgroundMixin, RuntimeShutdownMixi
         return self.core.session_manager if self.core is not None else None
 
     @property
-    def scheduler(self) -> SchedulerService | None:
-        return self.core.scheduler if self.core is not None else None
-
-    @property
     def provider(self) -> LLMProvider | None:
         return self.core.provider if self.core is not None else None
 
@@ -204,7 +199,6 @@ class AppRuntime(RuntimeReloadMixin, RuntimeBackgroundMixin, RuntimeShutdownMixi
                     self.bus.dispatch_outbound(),
                     name="bus_dispatch_outbound",
                 ),
-                asyncio.create_task(self.scheduler.run(), name="scheduler"),
             ]
             self._prepare_background(current)
             self._publish_background(None, current)

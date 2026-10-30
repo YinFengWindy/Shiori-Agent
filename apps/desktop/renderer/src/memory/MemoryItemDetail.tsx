@@ -1,4 +1,4 @@
-import { DetailRow } from "../shared/ui/DetailRow";
+import { DetailRow } from "@yinfengwindy/shiori-sdk";
 import { memoryReadKey, readSemanticDetail, type MemoryReadContext } from "./memoryReads";
 import { ReadError, ReadStatusLine } from "../shared/feedback/ReadStatus";
 import { memoryStatusText } from "./memoryStatusText";

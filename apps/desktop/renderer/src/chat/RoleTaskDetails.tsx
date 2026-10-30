@@ -1,36 +1,28 @@
-import { ArrowLeft, PencilSimple, Trash } from "@phosphor-icons/react";
+import { ArrowLeft, Trash } from "@phosphor-icons/react";
 import { InlineError } from "../shared/feedback/InlineError";
 import { formatTimestamp } from "../shared/format";
 import type { RoleTask } from "../shared/types";
-import { cx } from "@yinfengwindy/shiori-sdk";
+import { cx, DetailRow } from "@yinfengwindy/shiori-sdk";
 import { focusResetClass } from "../shared/styles";
-import {
-  scheduleTierLabels,
-  scheduleTriggerLabels,
-  taskKindLabels,
-  taskStatusLabels,
-} from "./roleTaskPanelState";
+import { taskKindLabels, taskStatusLabels } from "./roleTaskPanelState";
 import {
   chatSidebarBackButtonClass,
   chatSidebarHeaderClass,
   chatSidebarPanelClass,
   chatSidebarScrollableClass,
 } from "./chatSidebarStyles";
-import { DetailRow } from "../shared/ui/DetailRow";
 
-/** Renders complete task information and its supported actions. */
-export function RoleTaskDetails({ task, cancelling, error, confirmingCancel, onBack, onEdit, onBeginCancel, onCancel, onDismissCancel }: {
+/** Renders one host task's information and, when it can be cancelled, its cancel action. */
+export function RoleTaskDetails({ task, cancelling, error, confirmingCancel, onBack, onBeginCancel, onCancel, onDismissCancel }: {
   task: RoleTask;
   cancelling: boolean;
   error: string;
   confirmingCancel: boolean;
   onBack: () => void;
-  onEdit: () => void;
   onBeginCancel: () => void;
   onCancel: () => void;
   onDismissCancel: () => void;
 }) {
-  const schedule = task.schedule;
   return (
     <div className={cx(chatSidebarPanelClass, "grid-rows-[auto_minmax(0,1fr)_auto]")}>
       <div className={cx(chatSidebarHeaderClass, "gap-2")}>
@@ -42,15 +34,10 @@ export function RoleTaskDetails({ task, cancelling, error, confirmingCancel, onB
       <div className={cx(chatSidebarScrollableClass, "grid content-start gap-2")}>
         <DetailRow label="类型" value={taskKindLabels[task.kind]} />
         <DetailRow label="状态" value={taskStatusLabels[task.status] ?? task.status} />
-        {schedule ? <DetailRow label="执行模式" value={scheduleTierLabels[schedule.tier]} /> : null}
-        {schedule ? <DetailRow label="触发方式" value={scheduleTriggerLabels[schedule.trigger]} /> : null}
-        {schedule ? <DetailRow label="执行设置" value={schedule.when} /> : null}
         <DetailRow label="完整内容" value={task.detail} />
         <DetailRow label="创建时间" value={formatTimestamp(task.created_at)} />
-        {task.next_run_at ? <DetailRow label="下次运行" value={formatTimestamp(task.next_run_at)} /> : null}
       </div>
       <div className="grid gap-2 pt-3">
-        {task.kind === "schedule" && !task.editable ? <div className="text-xs text-warning-text">任务运行期间不可编辑</div> : null}
         {error ? <InlineError message={error} /> : null}
         {confirmingCancel ? (
           <div className="flex items-center justify-end gap-2 rounded-md p-2">
@@ -58,20 +45,13 @@ export function RoleTaskDetails({ task, cancelling, error, confirmingCancel, onB
             <button className={cx("rounded-md px-3 py-2 text-xs transition-colors hover:bg-surface-soft", focusResetClass)} type="button" disabled={cancelling} onClick={onDismissCancel}>返回</button>
             <button className={cx("rounded-md bg-danger px-3 py-2 text-xs text-white transition hover:bg-[var(--danger-700)] disabled:opacity-50", focusResetClass)} type="button" disabled={cancelling} onClick={onCancel}>{cancelling ? "取消中…" : "确认取消"}</button>
           </div>
-        ) : (
+        ) : task.cancellable ? (
           <div className="flex justify-end gap-2">
-            {task.kind === "schedule" ? (
-              <button className={cx("inline-flex items-center gap-1 rounded-md border border-line-soft bg-white/70 px-3 py-2 text-xs transition-colors hover:border-line hover:bg-white disabled:opacity-50", focusResetClass)} type="button" disabled={!task.editable} onClick={onEdit}>
-                <PencilSimple className="h-4 w-4" />编辑
-              </button>
-            ) : null}
-            {task.cancellable ? (
-              <button className={cx("inline-flex items-center gap-1 rounded-md border border-[var(--danger-300)] bg-white/70 px-3 py-2 text-xs text-danger-text transition-colors hover:border-danger hover:bg-white", focusResetClass)} type="button" onClick={onBeginCancel}>
-                <Trash className="h-4 w-4" />取消
-              </button>
-            ) : null}
+            <button className={cx("inline-flex items-center gap-1 rounded-md border border-[var(--danger-300)] bg-white/70 px-3 py-2 text-xs text-danger-text transition-colors hover:border-danger hover:bg-white", focusResetClass)} type="button" onClick={onBeginCancel}>
+              <Trash className="h-4 w-4" />取消
+            </button>
           </div>
-        )}
+        ) : null}
       </div>
     </div>
   );

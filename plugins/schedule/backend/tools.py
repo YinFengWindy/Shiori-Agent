@@ -8,11 +8,9 @@ from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from agent.scheduler import (
-    DEFAULT_SCHEDULE_TIMEZONE,
-    SchedulerService,
-)
 from shiori_sdk.tools import Tool
+
+from .scheduler import DEFAULT_SCHEDULE_TIMEZONE, SchedulerService
 
 # The job's owner and the turn it was created in come from the execution
 # context; model arguments of the same name must not rewrite them.

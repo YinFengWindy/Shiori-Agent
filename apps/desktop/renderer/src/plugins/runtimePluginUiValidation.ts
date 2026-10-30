@@ -67,6 +67,7 @@ export function validateRuntimePluginUi(value: unknown, pluginId: string) {
   if (module.chatImageActions !== undefined) component(module.chatImageActions, "chatImageActions");
   if (module.roleAffection !== undefined) component(module.roleAffection, "roleAffection");
   if (module.chatAffection !== undefined) component(module.chatAffection, "chatAffection");
+  if (module.roleTasks !== undefined) component(module.roleTasks, "roleTasks");
   if (module.roleSettings !== undefined) {
     const settings = object(module.roleSettings);
     component(settings.Component, "roleSettings");

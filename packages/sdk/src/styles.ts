@@ -15,9 +15,48 @@ export const cardClass = "rounded-lg border border-line-soft bg-surface shadow-s
 /** Shared background for secondary workspace navigation sidebars: transparent so the app gradient shows through, matching the chat role sidebar. */
 export const secondarySidebarSurfaceClass = "bg-transparent";
 
+/**
+ * Surface of every view in the chat right sidebar (status, tasks, images),
+ * including a plugin block that fills the task panel (`roleTasks`).
+ */
+export const chatSidebarPanelClass =
+  "grid h-full min-h-0 rounded-md border border-line-glass bg-surface-glass-soft px-3 pb-3 pt-2 text-sm text-ink-secondary shadow-soft backdrop-blur-md";
+
+/** Compact header row of a chat-sidebar view (task list, detail, form); leaves room for the sidebar toggle. */
+export const chatSidebarHeaderClass =
+  "flex min-h-11 items-center border-b border-line-soft pl-1 pr-8";
+
+/** Scrolling body of a chat-sidebar view. */
+export const chatSidebarScrollableClass =
+  "scrollbar-stable min-h-0 overflow-y-auto py-3";
+
 /** Shared hover row: sidebar navigation entries and in-content expandable rows (memory timeline nodes). */
 export const sidebarNavItemClass =
   "rounded-md transition-colors hover:bg-surface-hover focus-visible:bg-surface-hover";
+
+/** Heading row of one group in the chat task panel (icon, name, count, optional action). */
+export const roleTaskGroupHeadClass =
+  "flex items-center gap-1.5 px-1 pb-2 text-[11px] font-medium tracking-wide text-ink-muted";
+
+/** The count badge at the end of a task group heading. */
+export const roleTaskGroupCountClass =
+  "ml-auto grid min-h-5 min-w-5 place-items-center rounded-md bg-surface-soft px-1 text-[10px] text-ink-muted";
+
+/**
+ * One task row of the chat task panel: title and summary, with a trailing
+ * caret (give the caret `group-hover:` styles). Hover and keyboard focus come
+ * from `sidebarNavItemClass` and the global focus ring.
+ */
+export const roleTaskRowClass = cx(
+  sidebarNavItemClass,
+  "group grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-2.5 py-2.5 text-left",
+);
+
+/** Title line of a task row. */
+export const roleTaskRowTitleClass = "block truncate text-[13px] font-semibold text-ink-secondary";
+
+/** One-line summary under a task row's title. */
+export const roleTaskRowSummaryClass = "mt-1 block truncate text-[11px] text-ink-muted";
 
 /** Shared input styling for form controls outside the chat composer. */
 export const inputClass =
@@ -85,7 +124,7 @@ export function secondarySidebarShellClass({ animating, collapsed, inset }: { an
  */
 export const primaryButtonSurfaceClass = cx(
   pressableClass,
-  "cursor-pointer rounded-md border border-white/70 bg-gradient-accent text-ink shadow-soft hover:brightness-[1.03] hover:shadow-panel active:brightness-[0.97] disabled:cursor-default disabled:opacity-50 disabled:shadow-none",
+  "cursor-pointer rounded-md border border-line-glass bg-gradient-accent text-ink shadow-soft hover:brightness-[1.03] hover:shadow-panel active:brightness-[0.97] disabled:cursor-default disabled:opacity-50 disabled:shadow-none",
 );
 
 /** Size-free secondary button surface; see `primaryButtonSurfaceClass`. */

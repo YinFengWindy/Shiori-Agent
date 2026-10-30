@@ -507,10 +507,8 @@ export function ChatSurface({
                 roleSelfView={roleSelfView}
                 tasks={roleTasks.tasks}
                 taskError={roleTasks.error}
-                taskOperation={roleTasks.operation}
+                cancellingTaskId={roleTasks.cancellingTaskId}
                 onClearTaskError={roleTasks.clearError}
-                onCreateTask={roleTasks.create}
-                onUpdateTask={roleTasks.update}
                 onCancelTask={roleTasks.cancel}
                 onGoToNextImage={onGoToNextChatImage}
                 onGoToPreviousImage={onGoToPreviousChatImage}

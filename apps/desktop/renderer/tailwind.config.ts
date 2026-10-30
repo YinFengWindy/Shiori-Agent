@@ -48,6 +48,7 @@ export default {
           app: "var(--color-bg-app)",
           hover: "var(--color-bg-hover)",
           active: "var(--color-bg-active)",
+          "glass-soft": "var(--color-bg-glass-soft)",
         },
         ink: {
           DEFAULT: "var(--color-text-primary)",
@@ -60,6 +61,7 @@ export default {
           DEFAULT: "var(--color-border)",
           strong: "var(--color-border-strong)",
           accent: "var(--color-border-accent)",
+          glass: "var(--color-border-glass)",
         },
         accent: {
           DEFAULT: "var(--color-accent-solid)",

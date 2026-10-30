@@ -1,17 +1,17 @@
 import { BridgeError, chatTerminalEventMethods, errorMessage } from "@yinfengwindy/shiori-sdk";
 import { useCallback, useEffect, useState } from "react";
-import type { RoleTask, ScheduleTaskFormData } from "../shared/types";
+import type { RoleTask } from "../shared/types";
 
 const refreshEventMethods = new Set<string>(["session.updated", ...chatTerminalEventMethods, "roles.tasks.updated"]);
 
-/** Owns loading and mutations for tasks belonging to the active role. */
+/** Owns loading and cancellation of the host's tasks belonging to the active role. */
 export function useRoleTasks({ activeRoleId, bridgeReady, enabled }: {
   activeRoleId: string;
   bridgeReady: boolean;
   enabled: boolean;
 }) {
   const [tasks, setTasks] = useState<RoleTask[]>([]);
-  const [operation, setOperation] = useState<{ kind: "create" | "update" | "cancel"; taskId: string } | null>(null);
+  const [cancellingTaskId, setCancellingTaskId] = useState("");
   const [error, setError] = useState("");
 
   const refresh = useCallback(async () => {
@@ -42,46 +42,26 @@ export function useRoleTasks({ activeRoleId, bridgeReady, enabled }: {
     };
   }, [activeRoleId, bridgeReady, enabled, refresh]);
 
-  const mutate = useCallback(async (
-    kind: "create" | "update" | "cancel",
-    taskId: string,
-    method: string,
-    payload: Record<string, unknown>,
-  ) => {
+  const cancel = useCallback(async (taskId: string) => {
     if (!activeRoleId || !bridgeReady) throw new Error("桌面服务尚未就绪");
-    setOperation({ kind, taskId });
+    setCancellingTaskId(taskId);
     setError("");
     try {
       const response = await window.miraDesktop.invoke({
-        method,
-        payload: { ...payload, role_id: activeRoleId },
+        method: "roles.tasks.cancel",
+        payload: { role_id: activeRoleId, task_id: taskId },
       });
       if (response.error) throw new BridgeError(response.error.message, response.error.code, response.error.details);
       await refresh();
-      return response.payload;
-    } catch (mutationError) {
-      setError(errorMessage(mutationError, { includeDetail: true }));
-      throw mutationError;
+    } catch (cancelError) {
+      setError(errorMessage(cancelError, { includeDetail: true }));
+      throw cancelError;
     } finally {
-      setOperation(null);
+      setCancellingTaskId("");
     }
   }, [activeRoleId, bridgeReady, refresh]);
 
-  const create = useCallback(async (data: ScheduleTaskFormData) => {
-    const payload = await mutate("create", "", "roles.tasks.create", data);
-    return payload.task as RoleTask;
-  }, [mutate]);
-
-  const update = useCallback(async (taskId: string, data: ScheduleTaskFormData) => {
-    const payload = await mutate("update", taskId, "roles.tasks.update", { ...data, task_id: taskId });
-    return payload.task as RoleTask;
-  }, [mutate]);
-
-  const cancel = useCallback(async (taskId: string) => {
-    await mutate("cancel", taskId, "roles.tasks.cancel", { task_id: taskId });
-  }, [mutate]);
-
   const clearError = useCallback(() => setError(""), []);
 
-  return { tasks, operation, error, clearError, create, update, cancel };
+  return { tasks, cancellingTaskId, error, clearError, cancel };
 }

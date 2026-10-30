@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from agent.config_models import Config
-    from agent.scheduler import SchedulerService
     from agent.tools.message_push import MessagePushTool
     from agent.tools.registry import ToolRegistry
     from bus.event_bus import EventBus
@@ -26,7 +25,6 @@ class ToolsetDeps:
     session_store: object | None = None
     push_tool: "MessagePushTool | None" = None
     bus: "MessageBus | None" = None
-    scheduler: "SchedulerService | None" = None
     event_publisher: "EventBus | None" = None
 
 

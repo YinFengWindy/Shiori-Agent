@@ -2,16 +2,16 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { RoleTask } from "../shared/types";
+import type { ScheduledTask } from "./types";
 import {
   buildRecurringScheduleRule,
   createScheduleTaskFormData,
   parseRecurringScheduleRule,
   scheduleTaskFormDataFromTask,
   validateScheduleTaskForm,
-} from "./roleTaskFormState";
+} from "./scheduleTaskFormState";
 
-describe("roleTaskFormState", () => {
+describe("scheduleTaskFormState", () => {
   it("creates defaults without a timezone field", () => {
     assert.deepEqual(createScheduleTaskFormData(), {
       name: "",
@@ -23,16 +23,14 @@ describe("roleTaskFormState", () => {
   });
 
   it("maps a scheduled task into editable values", () => {
-    const task: RoleTask = {
+    const task: ScheduledTask = {
       id: "task",
       role_id: "mira",
-      kind: "schedule",
       status: "scheduled",
       label: "天气",
       detail: "查询天气",
       created_at: "",
       next_run_at: "",
-      cancellable: true,
       editable: true,
       schedule: { tier: "soft", trigger: "every", when: "0 9 * * *", content: "查询天气" },
     };

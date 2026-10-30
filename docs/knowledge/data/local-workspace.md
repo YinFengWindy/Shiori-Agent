@@ -37,7 +37,7 @@ Shiori 是本地优先应用。默认工作区为 `~/.shiori/workspace`（`core/
 | 角色 Markdown 记忆 | `core/memory/`（`roles/<role_id>/memory`） | 删除角色时级联清理 |
 | 默认记忆引擎 | `plugins/default_memory/backend/semantic/store/`（默认 `plugin-data/default_memory/memory2.db`，旧 `memory/memory2.db` 自动迁移；可由插件配置 `db_path` 覆盖） | 带角色、会话和时间/向量索引 |
 | NovelAI 设置、生成记录与标签 | `plugins/novelai/backend/`（生成数据在 `plugin-data/novelai/generation`，旧 `private_runtime/novelai` 自动迁移） | 敏感配置不进入 Git |
-| 调度任务 | `agent/scheduler.py`（`schedules.json`） | 删除角色时检查引用 |
+| 调度任务 | `plugins/schedule/backend/scheduler.py`（`schedules.json`） | 删除角色后插件取消该角色任务，启动时清理孤儿 |
 | 账号投递与用户身份 | `core/accounts/delivery_ledger.py`（`account_deliveries.sqlite3`）、`core/identity/store.py`（`user_identities.json`） | 渠道账号与身份配对 |
 | 插件包与插件状态 | `agent/plugin_host/`、`desktop_bridge/runtime/plugin_package_*.py`（外部插件包在 `plugins/`，私有数据与 KV 在 `plugin-data/<id>/`，待执行安装事务在 `private_runtime/plugin-operations/`） | 卸载插件时同时处理私有数据 |
 

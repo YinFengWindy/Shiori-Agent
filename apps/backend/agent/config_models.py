@@ -51,7 +51,6 @@ class WiringConfig:
         default_factory=lambda: [
             "meta_common",
             "spawn",
-            "schedule",
         ]
     )
 

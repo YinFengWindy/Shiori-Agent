@@ -53,6 +53,9 @@ export { useAccountAction } from "./account/useAccountAction";
 export {
   badgeClass,
   cardClass,
+  chatSidebarHeaderClass,
+  chatSidebarPanelClass,
+  chatSidebarScrollableClass,
   compactButtonSizeClass,
   compactGhostButtonClass,
   compactIconButtonClass,
@@ -64,6 +67,11 @@ export {
   inputClass,
   pressableClass,
   primaryButtonSurfaceClass,
+  roleTaskGroupCountClass,
+  roleTaskGroupHeadClass,
+  roleTaskRowClass,
+  roleTaskRowSummaryClass,
+  roleTaskRowTitleClass,
   secondarySidebarShellClass,
   secondarySidebarSurfaceClass,
   sidebarContentMotionClass,
@@ -75,6 +83,7 @@ export { menuPanelClass, menuSeparatorClass } from "./menuStyles";
 // Components.
 export { ActionMenu, type ActionMenuItem } from "./components/ActionMenu";
 export { AutosizeTextarea } from "./components/AutosizeTextarea";
+export { DetailRow } from "./components/DetailRow";
 export { RoleCapabilityCard } from "./components/RoleCapabilityCard";
 export { Select, type SelectOption, type SelectProps } from "./components/Select";
 export { SettingsToggleCard } from "./components/SettingsToggleCard";
@@ -161,6 +170,8 @@ export type {
   PluginChatAffectionProps,
   PluginRoleAffectionComponentProps,
   PluginRoleAffectionProps,
+  PluginRoleTasksComponentProps,
+  PluginRoleTasksProps,
   PluginSettingsSectionComponentProps,
   PluginSettingsSectionContribution,
   PluginUiModule,

@@ -28,7 +28,6 @@ class DesktopSessionTaskRequestHandler:
         session_presenter: DesktopSessionPresenter,
         emit_session_updated: EmitSessionUpdated,
         emit_tasks_updated: EmitTasksUpdated,
-        schedule_task_fields: Callable[[dict[str, Any]], dict[str, str]],
     ) -> None:
         self._app_service = app_service
         self._role_service = role_service
@@ -36,7 +35,6 @@ class DesktopSessionTaskRequestHandler:
         self._session_presenter = session_presenter
         self._emit_session_updated = emit_session_updated
         self._emit_tasks_updated = emit_tasks_updated
-        self._schedule_task_fields = schedule_task_fields
 
     async def handle(
         self,
@@ -133,36 +131,6 @@ class DesktopSessionTaskRequestHandler:
             role_id = self._role_id(payload)
             self._role_service.repository.get_required(role_id)
             return {"tasks": self._role_tasks.list_tasks(role_id)}
-        if method == "roles.tasks.create":
-            role_id = self._role_id(payload)
-            self._role_service.repository.get_required(role_id)
-            task = self._role_tasks.create_schedule_task(
-                role_id,
-                **self._schedule_task_fields(payload),
-            )
-            await self._emit_tasks_updated(
-                request_id=request_id,
-                role_id=role_id,
-                emit_event=emit_event,
-            )
-            return {"task": task}
-        if method == "roles.tasks.update":
-            role_id = self._role_id(payload)
-            task_id = str(payload.get("task_id") or "").strip()
-            self._role_service.repository.get_required(role_id)
-            if not task_id:
-                raise ValueError("task_id 不能为空")
-            task = self._role_tasks.update_schedule_task(
-                role_id,
-                task_id,
-                **self._schedule_task_fields(payload),
-            )
-            await self._emit_tasks_updated(
-                request_id=request_id,
-                role_id=role_id,
-                emit_event=emit_event,
-            )
-            return {"task": task}
         if method == "roles.tasks.cancel":
             role_id = self._role_id(payload)
             task_id = str(payload.get("task_id") or "").strip()
