@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Callable
 
 from agent.config_models import Config
 from agent.looping.core import AgentLoop
-from agent.provider import LLMProvider
+from agent.provider import LLMProvider, thinking_disabled_provider
 from agent.tools.execution import KernelSource
 from agent.core.proactive_turn.gates import ProactiveGate
 from agent.core.prompt_block import build_role_user_identities_prompt
@@ -29,23 +29,6 @@ if TYPE_CHECKING:
     from core.memory.runtime import MemoryRuntime
 
 logger = logging.getLogger(__name__)
-
-
-def _build_proactive_provider(config: Config, provider: LLMProvider) -> LLMProvider:
-    api_key = str(getattr(config, "api_key", "") or "").strip()
-    base_url = getattr(config, "base_url", None)
-    if not api_key:
-        return provider
-
-    extra_body = dict(getattr(config, "extra_body", {}) or {})
-    extra_body.pop("enable_thinking", None)
-    return LLMProvider(
-        api_key=api_key,
-        base_url=base_url,
-        extra_body=extra_body,
-        provider_name=str(getattr(config, "provider", "") or ""),
-        force_disable_thinking=True,
-    )
 
 
 def build_proactive_runtime(
@@ -80,7 +63,7 @@ def build_proactive_runtime(
         return tasks, {}
 
     # 2. 为每个角色创建独立配置、状态与 agent loop。
-    proactive_provider = _build_proactive_provider(config, provider)
+    proactive_provider = thinking_disabled_provider(config, provider)
     if provider_consumer is not None and proactive_provider is not provider:
         provider_consumer(proactive_provider)
     loops: dict[str, ProactiveLoop] = {}

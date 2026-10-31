@@ -82,6 +82,15 @@ class RoleMarkdownMemory(Protocol):
         """
         ...
 
+    def read_recent_context(self) -> str:
+        """The visible ``RECENT_CONTEXT.md`` body.
+
+        Empty when the document is missing, unstamped, or no longer visible
+        to the role's current threads. The host does not recreate a deleted
+        role's memory directory.
+        """
+        ...
+
     def write_state(self, key: str, value: object) -> None:
         """Stores one JSON value under ``key``; no-op once the role is deleted.
 

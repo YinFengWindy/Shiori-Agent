@@ -37,6 +37,7 @@ _CORE_MODULES = (
     "shiori_sdk.core.memory",
     "shiori_sdk.core.memory_optimizer",
     "shiori_sdk.core.models",
+    "shiori_sdk.core.proactive_host",
     "shiori_sdk.core.reply_policy",
     "shiori_sdk.core.scene",
     "shiori_sdk.core.schedule_host",

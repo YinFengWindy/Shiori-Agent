@@ -16,27 +16,27 @@ What a plugin's ``setup(ctx)`` receives. ``provide`` / ``require`` / ``get`` tak
 - `plugin_dir: pathlib.Path`
 - `expose(api: object) -> None`
 - `effect(label: str, dispose: Dispose) -> None`
-- `provide(key: kernel.contracts.Key[T], impl: T) -> None`
+- `provide[T](key: kernel.contracts.Key[T], impl: T) -> None`
 
   Publishes ``impl`` under a key declared in manifest ``provides``.
 
-- `require(key: kernel.contracts.Key[T]) -> T`
+- `require[T](key: kernel.contracts.Key[T]) -> T`
 
   The current provider of a key declared in manifest ``inject``.
 
-- `get(key: kernel.contracts.Key[T]) -> Optional[T]`
+- `get[T](key: kernel.contracts.Key[T]) -> Optional[T]`
 
   The current provider of a key declared in ``optional_inject``, or None.
 
-- `on(event_type: type[E], handler: OnHandler[E]) -> None`
+- `on[E](event_type: type[E], handler: OnHandler[E]) -> None`
 
   Joins the ordered chain; return the (replaced) event or ``Veto``.
 
-- `watch(event_type: type[E], handler: WatchHandler[E]) -> None`
+- `watch[E](event_type: type[E], handler: WatchHandler[E]) -> None`
 
   Listens read-only to the final event, serially, without delaying emit.
 
-- `async emit(event: E) -> Union[E, kernel.contracts.Veto]`
+- `async emit[E](event: E) -> Union[E, kernel.contracts.Veto]`
 
   Emits through the kernel: ``on`` chain, core checks, then watchers.
 
@@ -105,7 +105,10 @@ Relationship runtime the host calls. Delivery and turns stay in the core.
   The affection context block, or ``None`` while uninitialized.
 
 - `handle_user_message(session_key: str) -> None`
-- `handle_proactive_sent(session_key: str) -> None`
+- `handle_initiated_sent(session_key: str) -> None`
+
+  Record that an initiated reply was delivered to the role's session.
+
 - `async apply_turn_affection(session_key: str, *, delta: int, reason: str) -> None`
 - `apply_scene_decision(session_key: str, transition: str, scene_key: str = '') -> None`
 - `should_trigger_scene_followup(session_key: str, now: datetime.datetime) -> tuple[bool, dict[str, Any]]`
@@ -197,11 +200,11 @@ Target `shiori_sdk.core.conversation.Conversation`.
 
 #### `shiori_sdk.core.conversation.Conversation`
 
-Deliver a reply the host initiated, outside a user turn. The signature is part of the 4.0 baseline. The host provides ``CONVERSATION`` when initiated delivery is generalized, before the 4.0 desktop ships (D23). 4.x cannot add methods to this protocol later.
+Deliver a reply the host initiated, outside a user turn. The host provides this key for the generation it belongs to. 4.x cannot add methods to this protocol later (D19).
 
-- `async deliver_initiated_reply(session_key: str, reply: str, source: str) -> None`
+- `async deliver_initiated_reply(reply: core.conversation.InitiatedReply) -> core.conversation.InitiatedDelivery`
 
-  Store ``reply`` on ``session_key`` and emit ``InitiatedMessageCommitted``. ``source`` is the initiator (a plugin id or host component). It is copied onto the committed event.
+  Send ``reply``, store what was sent, and emit ``InitiatedMessageCommitted``. Returns what was stored (see ``InitiatedDelivery``). Raises before writing anything when the session is not a role session, the role is gone, a desktop target is not the role's own, the reply fails validation against ``reply.moods``, natural chat is off for a multi-message reply, tool facts arrive without that sequence, or a single reply is stale (``expected_mood_updated_at``). Raises when a send fails or is refused mid-way. A single reply then stores nothing. A sequence keeps the prefix already sent (stored and announced), and the first message of a refused desktop sequence raises instead of returning an empty result. Account sends that fail or whose outcome is unknown stay on the session as delivery records marked ``failed`` / ``uncertain``, outside the conversation history. A sequence needs a runtime lease or an already bound channel-sequence owner.
 
 #### `shiori_sdk.core.conversation.ConversationMessage`
 
@@ -211,12 +214,54 @@ One message of a turn's history window.
 - `content: str`
 - `tools_used: tuple[str, ...]`
 
+#### `shiori_sdk.core.conversation.InitiatedDelivery`
+
+What one initiated delivery stored. ``message_ids`` are the committed messages, in order. ``complete`` is True only when every message of the reply was sent and stored. An incomplete result is not an error. For a single reply it means the transport refused it (the desktop did not accept the message) and nothing was stored. For a sequence it means a newer user message in that chat, the role's removal or natural chat being switched off stopped it: the prefix already sent is stored and announced (possibly none), the rest is dropped.
+
+- `message_ids: tuple[str, ...]`
+- `complete: bool`
+
 #### `shiori_sdk.core.conversation.InitiatedMessageCommitted`
 
-An initiated reply was stored. ``source`` names who started it. The host emits this when initiated delivery runs. Plugins watch it; they do not construct it. Folded into the 4.0 baseline so 4.x does not need a new method on an existing key (D19, D22).
+A role message the user did not ask for was stored on the role session. The host emits this after the message is committed, so ``message_id`` names a stored message. Two publishers emit it: - initiated delivery (``CONVERSATION`` / ``PROACTIVE_HOST.deliver``, and the host's own proactive loop until it moves into the plugin), once per delivered reply. A natural sequence emits once for the delivered messages: ``message_id`` is the last one and ``assistant_response`` their texts joined by a blank line. ``tools_used`` is ``("message_push",)``. - a host-owned push (the ``account_send`` tool reaching an external chat outside a live turn), once per push. ``tools_used`` names the tool. ``thread_id`` is the conversation thread the message belongs to; a role's session mixes threads, so subscribers read history with it. ``source`` names who started the message: the ``InitiatedReply.source`` a plugin passed (by convention its plugin id; the host's proactive loop and Drift use ``"proactive"``), or ``"push"`` for a host-owned push. Plugins watch it; they do not construct it.
 
 - `session_key: str`
+- `channel: str`
+- `role_id: str`
+- `thread_id: str`
 - `source: str`
+- `chat_id: str`
+- `assistant_response: str`
+- `tools_used: tuple[str, ...]`
+- `message_id: str`
+
+#### `shiori_sdk.core.conversation.InitiatedReply`
+
+One initiated reply, including its target, media and natural sequence. The reply speaks for the role that owns ``session_key``, which must be exactly a role session key (``role:<role_id>``); any other key raises ``ValueError``. The target must be one that role can reach: its own desktop chat (``channel="desktop"``, ``chat_id="role:<role_id>"``; another desktop chat raises ``ValueError`` before anything is written), a private chat with the bound user through one of its online accounts, or an ``account_target`` sent through the role's account on ``account_channel``. Both account fields are given together or not at all. With an account target, ``channel`` / ``chat_id`` name the chat the reply is recorded under; a sequence first opens there, so for a sequence they must also be a chat the role can reach. ``expected_mood_updated_at`` and ``moods`` are the ``PROACTIVE_HOST.reply_state(role_id)`` the caller read when its work started. The mood and thought are validated against ``moods``. When the role's stored mood changed after that read (a passive reply landed in between) the reply is stale: a single reply raises without sending; a sequence is still sent and stored, but its mood and thought do not replace the newer state. ``content`` is the text stored on the role session. When ``messages`` is non-empty it must equal those texts joined by a blank line, and natural chat must be on for the role; delivery then sends each text as its own message and stores them in order. Media rides on the first message. ``tool_facts`` ride along with ``messages`` only. The stored messages are marked ``proactive`` with source ``proactive`` and ``tools_used=["message_push"]`` whatever ``source`` says; ``source`` only reaches ``InitiatedMessageCommitted``. They carry no evidence item ids. Fields may still be added or removed until the proactive loop runs on this type (P6b-4b); they are fixed when SDK 4.0 is released.
+
+- `session_key: str`
+- `content: str`
+- `source: str`
+- `channel: str`
+- `chat_id: str`
+- `mood: str`
+- `thought: str`
+- `expected_mood_updated_at: str`
+- `moods: tuple[str, ...]`
+- `media: tuple[str, ...]`
+- `messages: tuple[str, ...]`
+- `account_channel: str`
+- `account_target: accounts.targets.AccountTarget | None`
+- `tool_facts: tuple[core.conversation.InitiatedToolFact, ...]`
+
+#### `shiori_sdk.core.conversation.InitiatedToolFact`
+
+One tool call stored beside a natural reply sequence. ``message_push``, ``finish_turn`` and ``finish_drift`` are delivery controls, not facts, and are not stored.
+
+- `call_id: str`
+- `name: str`
+- `arguments: Mapping[str, object]`
+- `result: str`
 
 #### `shiori_sdk.core.conversation.PromptRendering`
 
@@ -417,6 +462,10 @@ One role's Markdown memory documents and memory state. Merging ``PENDING.md`` in
 
   A copy of the plugin-owned memory state; empty once the role is deleted. The host's own initialization keys in the same record are left out.
 
+- `read_recent_context() -> str`
+
+  The visible ``RECENT_CONTEXT.md`` body. Empty when the document is missing, unstamped, or no longer visible to the role's current threads. The host does not recreate a deleted role's memory directory.
+
 - `write_state(key: str, value: object) -> None`
 
   Stores one JSON value under ``key``; no-op once the role is deleted. Only ``key`` changes: other values, including ones written meanwhile, are kept. Raises ``ValueError`` when ``key`` is one of the host's own initialization keys (such as ``self_seed``) or ``value`` is not JSON serializable.
@@ -493,6 +542,111 @@ Target `shiori_sdk.models.ModelProvider`.
 Runs a bounded chat request using the injected provider's routing.
 
 - `async chat(messages: list[dict[str, object]], tools: list[dict[str, object]], model: str, max_tokens: int | None, *, call_purpose: Literal['default', 'auxiliary'] = 'default') -> models.ModelResponse`
+
+## `shiori_sdk.core.proactive_host`
+
+``PROACTIVE_HOST``: host services the proactive loop needs (P6b, #907). The port is process-wide. Calls that run or deliver work pin the currently published generation, the way an incoming message does, and wait while no generation admits work. A caller that already holds a lease keeps that lease. Reads use the current lease's generation when there is one, otherwise the published generation, and do not wait. The proactive loop still calls the host directly; switching it onto this port is a later change. This key and ``InitiatedReply`` may still gain or lose members until the proactive loop runs on them (P6b-4b); they are fixed when SDK 4.0 is released.
+
+### `proactive_host`
+
+Target `shiori_sdk.core.proactive_host.ProactiveHost`.
+
+#### `shiori_sdk.core.proactive_host.ProactiveHost`
+
+Host services for a proactive tick. The host provides this.
+
+- `async run_tick[T](role_id: str, operation: Callable[[], Awaitable[T]]) -> T`
+
+  Run ``operation`` as the role's proactive tick. The tick is serialized with the role's other work, under the role's desktop thread, with the role's chat model snapshot active: a ``complete`` call inside ``operation`` uses that model. A missing role raises before ``operation`` runs.
+
+- `passive_turn_busy(role_id: str) -> bool`
+
+  Whether a passive turn is in progress for the role's session. False when the runtime is not up. This does not wait for admission.
+
+- `async execute_tool(call: core.proactive_host.ProactiveToolCall, invoker: ProactiveToolInvoker) -> core.proactive_host.ProactiveToolOutcome`
+
+  Run one tool call through the published generation's kernel. The kernel's ``ToolCalling`` chain and the core checks see the call. A denied call does not run ``invoker``. The caller owns the loop.
+
+- `async deliver(reply: core.conversation.InitiatedReply) -> core.conversation.InitiatedDelivery`
+
+  Deliver ``reply`` on the published generation. Same payload, result and errors as ``CONVERSATION.deliver_initiated_reply``. Pins a lease so a process-level loop does not keep a previous generation's conversation.
+
+- `user_at_desktop() -> bool`
+
+  Whether the desktop host last reported the user as present. True until the first report. This does not change the report.
+
+- `recent_activity(role_id: str, *, now: datetime.datetime) -> str`
+
+  External chats' recent activity around ``now``, or empty.
+
+- `compile_role_prompt(role_id: str) -> str`
+
+  The role prompt proactive turns use, including channel identities. Raises ``ValueError`` when the role is gone or the prompt is empty.
+
+- `reply_state(role_id: str) -> core.proactive_host.RoleReplyState`
+
+  Moods the role may use, and the stored mood's timestamp. Raises ``ValueError`` when the role is gone.
+
+- `validate_reply(role_id: str, *, content: str, mood: str, thought: str, allow_empty_content: bool = False) -> core.proactive_host.ValidatedRoleReply`
+
+  Validate one reply against the role's mood catalog. Raises ``ValueError`` when the role is gone, the mood is outside the catalog, the thought is not a short first-person line, or required text is blank.
+
+- `async complete(messages: Sequence[Mapping[str, object]], *, tools: Sequence[Mapping[str, object]] = (), tool_choice: str | Mapping[str, object] = 'auto', max_tokens: int | None = None, call_purpose: Literal['default', 'auxiliary'] = 'default', disable_thinking: bool = True, defer_tool_argument_errors: bool = False) -> core.proactive_host.ModelCompletion`
+
+  Complete one chat request on the published model. Inside ``run_tick`` the role's chat model snapshot answers and keeps its own reasoning effort. Outside a tick the generation's model answers through a provider that forces thinking off, or through the generation's own provider when no API key is configured; only that last case honors ``disable_thinking``. ``max_tokens`` defaults to the generation's configured cap. ``call_purpose="auxiliary"`` marks a short side request: it opts out of the configured reasoning and does not calibrate the input budget. ``tool_choice`` may be ``"auto"`` or a tool-choice object.
+
+#### `shiori_sdk.core.proactive_host.CompletionToolCall`
+
+One tool call parsed from a model completion. With ``defer_tool_argument_errors`` a call whose arguments did not parse keeps ``arguments`` empty, the model's text in ``raw_arguments`` and the parse error in ``arguments_error``; such a call must not be executed.
+
+- `id: str`
+- `name: str`
+- `arguments: Mapping[str, object]`
+- `raw_arguments: str | None`
+- `arguments_error: str | None`
+
+#### `shiori_sdk.core.proactive_host.ModelCompletion`
+
+A chat completion for the proactive loop. ``content`` is empty when the model returned no text. ``thinking`` is the provider's reasoning text when it returned one.
+
+- `content: str`
+- `tool_calls: tuple[core.proactive_host.CompletionToolCall, ...]`
+- `thinking: str | None`
+
+#### `shiori_sdk.core.proactive_host.ProactiveToolCall`
+
+One model tool call the proactive loop wants the host to run. ``arguments`` are the model's arguments, before plugins rewrite them.
+
+- `call_id: str`
+- `name: str`
+- `arguments: Mapping[str, object]`
+- `session_key: str`
+- `channel: str`
+- `chat_id: str`
+
+#### `shiori_sdk.core.proactive_host.ProactiveToolOutcome`
+
+How one checked tool call ended. ``arguments`` are the arguments the tool ran with (or the model's, when the call was denied). ``text`` is ``str()`` of what the invoker returned, the text the host's proactive tool loop records today, or the denial reason. ``finalize`` asks the loop to stop, and is only set on a denial.
+
+- `text: str`
+- `status: ToolStatus`
+- `arguments: Mapping[str, object]`
+- `finalize: bool`
+
+#### `shiori_sdk.core.proactive_host.RoleReplyState`
+
+The role's mood catalog and when its current mood was last stored. Read it when a tick starts and copy both fields into ``InitiatedReply`` (``moods`` and ``expected_mood_updated_at``).
+
+- `moods: tuple[str, ...]`
+- `mood_updated_at: str`
+
+#### `shiori_sdk.core.proactive_host.ValidatedRoleReply`
+
+A reply the host accepted as the role's current mood and thought.
+
+- `content: str`
+- `mood: str`
+- `thought: str`
 
 ## `shiori_sdk.core.reply_policy`
 
@@ -731,8 +885,8 @@ Target `shiori_sdk.extensions.BackgroundTasks`.
 
 Own cancellable coroutines until plugin cleanup finishes.
 
-- `spawn(coro: Coroutine[object, object, T], *, name: str) -> asyncio.Task[T]`
-- `spawn_runtime(coro: Coroutine[object, object, T], *, name: str) -> asyncio.Task[T]`
+- `spawn[T](coro: Coroutine[object, object, T], *, name: str) -> asyncio.Task[T]`
+- `spawn_runtime[T](coro: Coroutine[object, object, T], *, name: str) -> asyncio.Task[T]`
 
   Retain the calling runtime lease until task completion and cleanup.
 
@@ -793,9 +947,9 @@ Target `shiori_sdk.runtime.EventsCapability`.
 
 Scoped typed subscriptions and sequential event dispatch.
 
-- `on(event_type: type[EventT], handler: EventHandler[EventT]) -> None`
-- `off(event_type: type[EventT], handler: EventHandler[EventT]) -> None`
-- `async emit(event: EventT) -> EventT`
+- `on[EventT](event_type: type[EventT], handler: EventHandler[EventT]) -> None`
+- `off[EventT](event_type: type[EventT], handler: EventHandler[EventT]) -> None`
+- `async emit[EventT](event: EventT) -> EventT`
 
 ### `external_turns`
 
@@ -883,7 +1037,7 @@ A candidate may attach resources without changing the published generation. Keys
 
   Whether this attachment belongs to the currently published generation.
 
-- `acquire(key: str, factory: Callable[[], T]) -> T`
+- `acquire[T](key: str, factory: Callable[[], T]) -> T`
 
   Attach to the existing contract or construct it once for this process.
 

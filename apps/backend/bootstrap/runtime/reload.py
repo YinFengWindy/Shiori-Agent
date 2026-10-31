@@ -76,6 +76,7 @@ class RuntimeReloadMixin:
             process_resources=self._plugin_process_resources,
             background_result_runner=self._dispatcher.process_background_result,
             plugin_discovery_snapshot=plugin_discovery_snapshot,
+            published_runtime=lambda: self,
         )
         candidate = RuntimeCandidate(self.generation + 1, core, snapshot)
         try:

@@ -3,8 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from shiori_sdk.role_events import (
-    ProactiveMessageCommitted as ProactiveMessageCommitted,
+from shiori_sdk.core.conversation import (
+    InitiatedMessageCommitted as InitiatedMessageCommitted,
 )
 
 if TYPE_CHECKING:

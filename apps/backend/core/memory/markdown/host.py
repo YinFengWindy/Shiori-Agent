@@ -12,6 +12,8 @@ import json
 from collections.abc import Mapping
 from pathlib import Path
 
+from conversation.context_scope import load_user_context_threads
+from core.memory.markdown.recent_context_document import visible_recent_context
 from core.memory.markdown_schema import DOCUMENT_DEFAULTS
 from core.roles import RoleStore
 from core.roles.memory_service import HOST_MEMORY_STATE_KEYS
@@ -23,10 +25,17 @@ from .runtime import MarkdownMemoryStore, resolve_markdown_store
 class HostRoleMarkdownMemory:
     """One role's documents (``RoleMarkdownMemory``)."""
 
-    def __init__(self, store: MarkdownMemoryStore, roles: RoleStore, role_id: str):
+    def __init__(
+        self,
+        store: MarkdownMemoryStore,
+        roles: RoleStore,
+        role_id: str,
+        workspace: Path,
+    ):
         self._store = store
         self._roles = roles
         self._role_id = role_id
+        self._workspace = workspace
 
     def read_long_term(self) -> str:
         return self._store.read_long_term()
@@ -57,6 +66,12 @@ class HostRoleMarkdownMemory:
 
     def rollback_pending_snapshot(self) -> None:
         self._store.rollback_pending_snapshot()
+
+    def read_recent_context(self) -> str:
+        return visible_recent_context(
+            self._store.read_recent_context(),
+            load_user_context_threads(self._workspace, self._role_id),
+        )
 
     def read_state(self) -> Mapping[str, object]:
         role = self._roles.get_role(self._role_id)
@@ -106,4 +121,4 @@ class HostMarkdownMemory:
         if self._roles.get_role(role_id) is None:
             return None
         store = resolve_markdown_store(workspace=self._workspace, role_id=role_id)
-        return HostRoleMarkdownMemory(store, self._roles, role_id)
+        return HostRoleMarkdownMemory(store, self._roles, role_id, self._workspace)

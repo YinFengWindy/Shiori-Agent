@@ -341,6 +341,7 @@ class AgentTickFactory:
                 session_key=session_key,
                 channel=channel,
                 chat_id=chat_id,
+                source="proactive",
             )
 
         return send_message

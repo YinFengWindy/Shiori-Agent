@@ -5,10 +5,14 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable, Coroutine
 from typing import Any
 
-from shiori_sdk.core.conversation import TurnFinished, TurnStarting
+from shiori_sdk.core.conversation import (
+    InitiatedMessageCommitted,
+    TurnFinished,
+    TurnStarting,
+)
 from shiori_sdk.core.scene import SceneHost
 from shiori_sdk.roles import RoleView, Roles
-from shiori_sdk.role_events import ProactiveMessageCommitted, SceneObservationCommitted
+from shiori_sdk.role_events import SceneObservationCommitted
 from shiori_sdk.runtime import EventsCapability
 
 from .controller import SceneAwarenessController
@@ -84,7 +88,7 @@ class SceneService:
         self._active = True
         self._events.on(TurnStarting, self._capture)
         self._events.on(TurnFinished, self._passive)
-        self._events.on(ProactiveMessageCommitted, self._proactive)
+        self._events.on(InitiatedMessageCommitted, self._proactive)
 
     def deactivate(self) -> None:
         """Closes intake before task cancellation."""
@@ -93,7 +97,7 @@ class SceneService:
         self._active = False
         self._events.off(TurnStarting, self._capture)
         self._events.off(TurnFinished, self._passive)
-        self._events.off(ProactiveMessageCommitted, self._proactive)
+        self._events.off(InitiatedMessageCommitted, self._proactive)
 
     async def close(self) -> None:
         """Stops intake and waits for displaced observations."""

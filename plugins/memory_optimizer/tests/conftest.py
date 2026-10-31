@@ -64,6 +64,9 @@ class FakeRoleDocuments:
         self.snapshot = None
         self.rollbacks += 1
 
+    def read_recent_context(self) -> str:
+        return ""
+
     def read_state(self) -> Mapping[str, object]:
         return dict(self.state)
 

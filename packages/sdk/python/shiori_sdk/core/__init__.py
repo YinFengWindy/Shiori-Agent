@@ -7,8 +7,8 @@ among the memory sockets: a plugin provides it. P6a adds more plugin-provided
 keys (``REPLY_POLICY``, ``SCENE``, ``AFFECTION``) and the host ports they
 require (``SCENE_HOST``, ``AFFECTION_HOST``, ``MCP_TOOLS``). P6s adds the
 host port ``SCHEDULE_HOST`` for the scheduler and the plugin-provided
-``SCHEDULER``. P6b adds the host port ``MARKDOWN_MEMORY`` and the
-plugin-provided ``MEMORY_OPTIMIZER``. ``services`` holds
-the keys for the former capability surface (P4-3); ``tools`` holds tool-call
-events, not the ``tools`` key.
+``SCHEDULER``. P6b adds the host ports ``MARKDOWN_MEMORY`` and
+``PROACTIVE_HOST``, the host-provided ``CONVERSATION`` and the plugin-provided
+``MEMORY_OPTIMIZER``. ``services`` holds the keys for the former capability
+surface (P4-3); ``tools`` holds tool-call events, not the ``tools`` key.
 """

@@ -372,8 +372,8 @@ D2 已定 proactive 是可禁用的系统插件、核心不依赖它。本节是
 |---|---|---|
 | `agent/config.py`、`agent/config_models.py` | `ProactiveConfig`、`load_proactive_config` | 核心不再解析。P6b-2：`[agent.proactive_strategies]` 迁到 `[plugins.proactive]`；顶层 `[proactive]` 删除。类型仍在 `proactive_v2`，4b 再进插件包 |
 | `agent/looping/ports.py`、`bootstrap/app.py`、`agent/lifecycle/phases/after_reasoning.py`、`core/roles/relationship_runtime/*` | `PresenceStore` | ⚑ presence 移进核心 sessions，作为 `SESSIONS.presence`（`record_user_message`、`last_user_at`、`record_initiated_sent`、`last_initiated_at`），表结构不变 |
-| `agent/turns/orchestrator.py` 的 `handle_proactive_turn`、`agent/turns/proactive_sequence.py` | proactive 专用投递 | ⚑ 通用化成 `CONVERSATION.deliver_initiated_reply(session_key, reply, source)`。现有逻辑原样搬，不写新逻辑，drift 也用它 |
-| `bus.events_lifecycle.ProactiveMessageCommitted`（`conversation/push_sync.py`、`desktop_bridge/service.py`、`core/scene/controller.py` 在用） | proactive 命名的核心事件 | ⚑ 改名为核心事件 `InitiatedMessageCommitted(source=...)`；scene 改为 watch 它 |
+| `agent/turns/orchestrator.py` 的 `handle_proactive_turn`、`agent/turns/proactive_sequence.py` | proactive 专用投递 | ⚑ 通用化成 `CONVERSATION.deliver_initiated_reply(reply: InitiatedReply)`。P6b-1b 已 provide，4b 接上前仍可增删、4.0 发版时定稿；主动循环改走端口仍是 4a。现有编排逻辑留在 orchestrator，两个门调用同一条提交 |
+| `bus.events_lifecycle.ProactiveMessageCommitted`（`conversation/push_sync.py`、`desktop_bridge/service.py`、scene 插件在用） | proactive 命名的核心事件 | ⚑ P6b-1b：`InitiatedMessageCommitted` 带 `source` 等字段，`ProactiveMessageCommitted` 已删除（scene、desktop_bridge 改订阅新名，4.0 不带别名）。`push_sync` 已填正文，`source="push"` |
 | `agent/plugin_host/capabilities.py`、`bootstrap/tools.py` | `ProactiveGate`、strategies、scene_subscription、`proactive_motives` | 全部删除或搬进插件；gate 变成插件内部列表（0 个外部使用方） |
 | `bootstrap/runtime/background.py` | `build_proactive_runtime`、`build_memory_optimizer_task` | proactive 在 `setup` 里 `ctx.spawn` 自己的循环；memory_optimizer 拆成独立系统插件（D20 修订），不再由本 bootstrap 启动 |
 | `desktop_bridge/runtime/service.py`、`desktop_bridge/method_policy.py` | `proactive_target` 方法 | 改成插件 rpc `proactive.previewTarget`（`BRIDGE.expose`） |

@@ -271,7 +271,7 @@ class RoleRelationshipRuntimeService(_RelationshipPersistenceMixin):
         current["last_user_at"] = _now_iso(now_dt)
         return self.write_loneliness_runtime(role_id, current)
 
-    def handle_proactive_sent(
+    def handle_initiated_sent(
         self, session_key: str, *, now: datetime | None = None
     ) -> dict[str, Any] | None:
         role_id = self._role_id_from_session_key(session_key)

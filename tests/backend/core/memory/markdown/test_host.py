@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
+from conversation.context_scope import load_user_context_threads
 from core.memory.markdown.host import HostMarkdownMemory
+from core.memory.markdown.recent_context_document import stamp_recent_context
 from core.memory.markdown.runtime import MarkdownMemoryStore
 from core.roles import RoleStore
 
@@ -75,3 +78,34 @@ def test_host_keys_are_hidden_and_refused(tmp_path: Path) -> None:
 
     assert roles.get_role("mira").memory_init_state["self_seed"] == seed
     assert documents.read_state() == {"plugin_key": 2}
+
+
+def test_recent_context_returns_the_stamped_body(tmp_path: Path) -> None:
+    documents, _roles, _memory_dir = _documents(tmp_path)
+    threads = load_user_context_threads(tmp_path, "mira")
+    MarkdownMemoryStore(tmp_path / "roles" / "mira").write_recent_context(
+        stamp_recent_context("刚聊过伞", threads)
+    )
+    text = documents.read_recent_context()
+    assert "刚聊过伞" in text
+    assert "shiori-recent-context" not in text
+
+
+def test_recent_context_hides_a_stale_or_unstamped_document(tmp_path: Path) -> None:
+    documents, _roles, _memory_dir = _documents(tmp_path)
+    threads = load_user_context_threads(tmp_path, "mira")
+    store = MarkdownMemoryStore(tmp_path / "roles" / "mira")
+    stale = replace(
+        threads,
+        bound_chat_thread_ids=frozenset(
+            [*threads.bound_chat_thread_ids, "thread:extra"]
+        ),
+        context_since={
+            **dict(threads.context_since),
+            "thread:extra": "2020-01-01T00:00:00",
+        },
+    )
+    store.write_recent_context(stamp_recent_context("不该看见", stale))
+    assert documents.read_recent_context() == ""
+    store.write_recent_context("没有标记")
+    assert documents.read_recent_context() == ""

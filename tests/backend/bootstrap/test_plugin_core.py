@@ -171,7 +171,7 @@ async def test_scene_keeps_observing_after_an_in_generation_reload_or_re_enable(
     """The plugin settings page reloads scene in place; intake must not stop."""
     from session.manager import SessionManager
     from shiori_sdk.core.scene import SCENE_HOST
-    from shiori_sdk.role_events import ProactiveMessageCommitted
+    from shiori_sdk.core.conversation import InitiatedMessageCommitted
     from shiori_sdk.testing.packages import plugin_directory, stage_plugin_package
 
     from core.scene.host import HostSceneAdapter
@@ -201,12 +201,13 @@ async def test_scene_keeps_observing_after_an_in_generation_reload_or_re_enable(
         return None
 
     monkeypatch.setattr(host, "proactive_history", history)
-    event = ProactiveMessageCommitted(
+    event = InitiatedMessageCommitted(
         session_key="role:mira",
         channel="desktop",
         role_id="mira",
         thread_id="desktop:mira",
         assistant_response="在吗？",
+        source="proactive",
     )
     try:
         await bus.fanout(event)
