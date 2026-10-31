@@ -127,7 +127,7 @@ UTF-8 YAML。字段在 `apps/backend/agent/plugin_host/manifest.py` 解析；外
 
 - **外部回合的结果**：`ExternalTurnResult.status` 是 `replied`（带 `reply` 文本）、`busy` 或 `duplicate`。
 - **后台结果回报**（`BACKGROUND_RESULTS`）：只能在已认证的角色工具回合里 `capture()`，得到的目标保留原角色、线程、实际渠道和绑定发送者，插件不能另选。`report(result_id, text)` 在角色闸门内重新校验后经角色正常出站路径回报；同一个 ID 只回报一次（含失败不明的情况），返回 `False` 表示已经试过。只在进程内，不跨重启恢复。
-- **进程资源**（`PROCESS_RESOURCES`）：`acquire(key, factory)` 按插件私有、带版本的 key（如 `tasks-v1`）取同一进程内的资源。工厂只能构造空闲对象，不得持有代际上下文、提供方、RPC 或任务。候选代际只挂接、不激活；发布后激活新挂接并关闭被移除的资源，回滚只关闭无主的临时资源，退出时全部关闭。不持久化，重启后不重建。
+- **进程资源**（`PROCESS_RESOURCES`）：`acquire(key, factory)` 按插件私有、带版本的 key（如 `tasks-v1`）取同一进程内的资源。工厂只能构造空闲对象，不得持有代际上下文、提供方、RPC 或任务。候选代际只挂接、不激活；发布后激活新挂接并关闭被移除的资源，回滚只关闭无主的临时资源，退出时全部关闭。不持久化，重启后不重建。`active` 表示本挂接所在的代是否已发布；`on_published(callback)` 在本代发布时同步调用一次回调（已发布的代里，如代内重载或启用，在注册时立即调用，异常抛给调用方；发布时的异常只记日志，不影响发布和其他回调），返回取消函数；没发布就丢弃或退役的代，挂接关闭时丢掉它的回调。跨代资源用它代替轮询 `active`，返回值交给 `ctx.effect`。
 - **HTTP 上限**：`HttpGet.get` 和 `ChannelHttp.request` 接受 `max_response_bytes`。非负上限同时检查 `Content-Length` 和流式解码后的字节（含重定向），超限时关闭响应、不重试，抛 `shiori_sdk.http.ResponseTooLarge`（带 `max_response_bytes`）。不传时行为不变；testing 里的 HTTP fake 实现同样的约定。
 - **`message_push`**：插件经 `TOOLS` 拿到的 `message_push` 失败时抛异常（未知渠道、不支持的载荷、发送失败、角色未绑定的目标），正常返回就表示已发送或已随当前回合排队，不要再解析返回文本。角色只能经它发到自己的桌面会话；发往渠道用 `account_send`。宿主专用的 `push_proactive=False` 把文字 / 图片记为补充内容，不标为主动消息；它必须是严格布尔，只来自宿主的执行上下文，模型参数和工具 schema 里都没有；`False` 时带 `file` 直接拒绝。`account_send` 的同名参数（配 `push_chat_id`）语义相同。
 

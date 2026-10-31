@@ -120,3 +120,23 @@ async def test_a_run_on_a_retired_generation_reruns_on_the_current_one(
     finally:
         await new.aclose()
         await process.close()
+
+
+async def test_publication_starts_the_loop_at_once(tmp_path: Path) -> None:
+    memory = FakeMarkdownMemory()
+    memory.roles["mira"] = _overdue_role()
+    provider = HeldProvider()
+    provider.hold = asyncio.Event()
+    process = FakeProcessResources(active=False)
+    ctx = _context(tmp_path, memory, provider, process)
+    try:
+        await setup(ctx)
+        await asyncio.sleep(0.1)
+        assert not provider.started.is_set()
+
+        process.publish()
+        # Woken by the publication, not by a later poll.
+        await asyncio.wait_for(provider.started.wait(), timeout=0.2)
+    finally:
+        await ctx.aclose()
+        await process.close()

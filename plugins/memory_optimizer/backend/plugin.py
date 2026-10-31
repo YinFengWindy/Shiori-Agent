@@ -44,4 +44,9 @@ async def setup(ctx: PluginRuntimeContext) -> None:
         is_active=lambda: resources.active,
     )
     ctx.effect("memory_optimizer.binding", service.attach(binding))
+    # Wakes a loop that waits for a published binding; runs at once when this
+    # generation is already published.
+    ctx.effect(
+        "memory_optimizer.publication", resources.on_published(service.published)
+    )
     ctx.provide(MEMORY_OPTIMIZER, service)

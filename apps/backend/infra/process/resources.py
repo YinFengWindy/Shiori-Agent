@@ -7,6 +7,7 @@ processes) lives beside this module; bootstrap provides both under PROCESSES.
 """
 
 import asyncio
+import logging
 from collections.abc import Callable, Iterable
 from contextvars import Context
 from typing import cast
@@ -16,6 +17,8 @@ from shiori_sdk.process_resources import ProcessResource
 from shiori_sdk.kernel import Scope
 
 from agent.plugin_host.core_keys import PluginBinding
+
+logger = logging.getLogger(__name__)
 
 
 class ProcessResourceOwner:
@@ -31,6 +34,8 @@ class ProcessResourceOwner:
         self._closing: set[asyncio.Task[None]] = set()
         self._errors: list[BaseException] = []
         self._closed = False
+        # ``on_published`` callbacks waiting for their generation, by token.
+        self._publication_callbacks: dict[object, tuple[str, Callable[[], None]]] = {}
 
     def for_plugin(self, generation: str, plugin: str, effects: Scope):
         """Return one generation's private attachment and register its rollback."""
@@ -58,6 +63,36 @@ class ProcessResourceOwner:
         for key, attachments in tuple(self._attachments.items()):
             if generation not in attachments and previous in attachments:
                 self._retire(key)
+        self._run_publication_callbacks(generation)
+
+    def _run_publication_callbacks(self, generation: str) -> None:
+        """Runs the generation's ``on_published`` callbacks once, each guarded.
+
+        Publication is a synchronous step of the reload; one plugin's failing
+        callback must not leave it half done, so failures are only logged.
+        """
+        due = [
+            (token, callback)
+            for token, (owner, callback) in self._publication_callbacks.items()
+            if owner == generation
+        ]
+        for token, callback in due:
+            if self._publication_callbacks.pop(token, None) is None:
+                continue
+            try:
+                callback()
+            except Exception:
+                logger.exception("插件的代发布回调失败（代 %s）", generation)
+
+    def _add_publication_callback(
+        self, generation: str, callback: Callable[[], None]
+    ) -> object:
+        token = object()
+        self._publication_callbacks[token] = (generation, callback)
+        return token
+
+    def _drop_publication_callback(self, token: object) -> None:
+        self._publication_callbacks.pop(token, None)
 
     def _retire(self, key: tuple[str, str]) -> asyncio.Task[None]:
         resource = self._resources.pop(key)
@@ -77,6 +112,7 @@ class ProcessResourceOwner:
         """Stop monitors before runtimes/providers close and retain cleanup failures."""
         self._closed = True
         self._active = None
+        self._publication_callbacks.clear()
         for key in tuple(self._resources):
             self._retire(key)
         await self.drain()
@@ -125,6 +161,7 @@ class _Attachment:
         self.effects = effects
         self.keys: set[tuple[str, str]] = set()
         self.closed = False
+        self._publication_tokens: set[object] = set()
 
     @property
     def active(self) -> bool:
@@ -150,8 +187,28 @@ class _Attachment:
         # namespaces; Python class identity intentionally changes on reload.
         return cast(T, self.owner._resources[identity])
 
+    def on_published(self, callback: Callable[[], None]) -> Callable[[], None]:
+        """``PluginProcessResources.on_published``: run at ``owner.publish``."""
+        if self.closed or self.owner._closed:
+            raise RuntimeError("插件进程资源附件已关闭")
+        if self.active:
+            callback()
+            return lambda: None
+        token = self.owner._add_publication_callback(self.generation, callback)
+        self._publication_tokens.add(token)
+
+        def dispose() -> None:
+            self._publication_tokens.discard(token)
+            self.owner._drop_publication_callback(token)
+
+        return dispose
+
     async def close(self) -> None:
         self.closed = True
+        # An unpublished generation's waiting callbacks never run.
+        for token in self._publication_tokens:
+            self.owner._drop_publication_callback(token)
+        self._publication_tokens.clear()
         pending = []
         for key in self.keys:
             attachments = self.owner._attachments.get(key)

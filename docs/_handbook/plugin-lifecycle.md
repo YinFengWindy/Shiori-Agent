@@ -64,7 +64,7 @@ spec 的 `runnable = False` 表示只登记：已停用、未信任、准入失�
 - 新实例 setup 时 `RUNTIME.was_active` 为 `True`，启动恢复逻辑不要重复跑。代际替换时，上一代处于 `ACTIVE` 的插件在新一代 setup 时也是 `True`。
 - 一旦实例开始重载、卸载或终止，对它的工具、RPC 处理器和服务的调用，包括通过早先拿到的引用，都以 `PluginRpcError("plugin_unavailable")` 拒绝，不会到达旧实例。
 - `on_drain` 回调**只等待已接受的工作，不得拆资源**。它可能执行多次，也可能在实例继续存活时执行（排空超时放弃重载后旧实例重新开放）。拆资源放在 `ctx.effect`。
-- 用 `PROCESS_RESOURCES` 拿到的进程资源在代内重载之间保留，新实例重新获取到的是同一个对象。SDK 的托管运行时 helper（`shiori_sdk.managed.rpc.register_runtime_rpc`）在释放时停服务，不在 `on_drain` 里停。
+- 用 `PROCESS_RESOURCES` 拿到的进程资源在代内重载之间保留，新实例重新获取到的是同一个对象。代内重载或启用发生在已发布的代里，`on_published` 的回调在注册时立即运行；换代时候选代的回调在宿主发布它的那一步运行。SDK 的托管运行时 helper（`shiori_sdk.managed.rpc.register_runtime_rpc`）在释放时停服务，不在 `on_drain` 里停。
 
 ## 启用与停用
 

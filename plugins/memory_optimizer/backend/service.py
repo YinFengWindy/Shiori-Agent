@@ -26,16 +26,13 @@ from .optimizer import LAST_OPTIMIZED_STATE_KEY, MemoryOptimizer, self_rewrite_p
 
 logger = logging.getLogger(__name__)
 
-# How often the loop looks again for a published binding while none is.
-# Publication has no notification, so this is polled.
-_PUBLICATION_POLL_SECONDS = 1.0
-
 
 @dataclass(frozen=True, eq=False)
 class OptimizerBinding:
     """One generation's host services and interval.
 
-    ``is_active`` tells whether the generation is published.
+    ``is_active`` tells whether the generation is published; the plugin calls
+    ``MemoryOptimizerService.published`` when it becomes so.
     """
 
     roles: Roles
@@ -72,8 +69,8 @@ class MemoryOptimizerService:
         self._optimizer = optimizer or MemoryOptimizer()
         self._now = now_fn or datetime.now
         self._bindings: list[OptimizerBinding] = []
-        # Set on every attach and detach: the published binding, and with it
-        # the interval, may have changed.
+        # Set on every attach, detach and publication: the published binding,
+        # and with it the interval, may have changed.
         self._changed = asyncio.Event()
         self._loop: asyncio.Task[None] | None = None
         self._in_flight: tuple[OptimizerBinding, asyncio.Task[None]] | None = None
@@ -93,6 +90,10 @@ class MemoryOptimizerService:
             )
             self._loop.add_done_callback(_report_loop_death)
         return lambda: self._detach(binding)
+
+    def published(self) -> None:
+        """A generation was published (``PROCESS_RESOURCES.on_published``)."""
+        self._changed.set()
 
     def active_run(self) -> MemoryOptimizationRun | None:
         """The role being optimized now (``MEMORY_OPTIMIZER``)."""
@@ -163,12 +164,7 @@ class MemoryOptimizerService:
             if active:
                 return active[-1]
             self._changed.clear()
-            try:
-                _ = await asyncio.wait_for(
-                    self._changed.wait(), timeout=_PUBLICATION_POLL_SECONDS
-                )
-            except TimeoutError:
-                pass
+            _ = await self._changed.wait()
 
     async def _optimize_roles(self, *, overdue_only: bool) -> None:
         binding = await self._binding()

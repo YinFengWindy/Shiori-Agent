@@ -887,6 +887,10 @@ A candidate may attach resources without changing the published generation. Keys
 
   Attach to the existing contract or construct it once for this process.
 
+- `on_published(callback: Callable[[], None]) -> Callable[[], None]`
+
+  Call ``callback`` once this attachment's generation is published. ``active`` is already true when ``callback`` runs. In a generation that is already published (an in-generation reload or enable), ``callback`` runs before this returns and its exception propagates to the caller. Otherwise the host calls it synchronously on the event loop while it publishes the generation; there an exception is logged and neither publication nor the other callbacks are affected. Each callback runs at most once. The returned function cancels a callback that has not run; a generation that is discarded or retires unpublished drops its callbacks when its attachment closes.
+
 ### `processes`
 
 Target `shiori_sdk.processes.Processes`.
