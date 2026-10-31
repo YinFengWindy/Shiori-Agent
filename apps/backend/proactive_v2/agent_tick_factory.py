@@ -8,10 +8,7 @@ from pathlib import Path
 from typing import Any, Awaitable, Callable
 
 from agent.skills import BUILTIN_SKILLS_DIR
-from agent.tools.execution import KernelSource
-from agent.tools.registry import ToolRegistry
 from agent.tools.web_fetch import WebFetchTool
-from agent.turns.orchestrator import TurnOrchestrator
 from proactive_v2 import mcp_sources
 from proactive_v2.mcp_sources import McpClientPool
 from agent.core.proactive_turn import ProactiveTurnPipeline, ProactiveTurnPipelineDeps
@@ -22,9 +19,8 @@ from proactive_v2.drift_state import DriftStateStore
 from proactive_v2.drift_tools import DriftToolDeps
 from proactive_v2.gateway import GatewayDeps
 from proactive_v2.tools import ToolDeps
-from core.memory.group_environment import GroupEnvironment
 from core.roles.reply_state import RoleReply, RoleReplyContext
-from shiori_sdk.core.conversation import ConversationReply, InitiatedReply
+from shiori_sdk.core.conversation import Conversation, InitiatedReply
 from shiori_sdk.core.proactive_host import (
     CompletionToolCall,
     ModelCompletion,
@@ -51,9 +47,6 @@ RecentProactiveFn = Callable[[], list[dict]] | None
 class AgentTickDeps:
     cfg: Any
     sense: Any
-    presence: Any | None
-    provider: Any
-    model: str
     max_tokens: int
     memory: Any | None
     state_store: Any
@@ -63,19 +56,14 @@ class AgentTickDeps:
     rng: Any
     workspace_context_fn: Callable[[], str]
     role_prompt_fn: Callable[[], str]
-    # The generation's kernel, read on every tool call (core checks included).
-    kernel: KernelSource
-    shared_tools: ToolRegistry | None = None
-    turn_orchestrator: TurnOrchestrator | None = None
+    # ``PROACTIVE_HOST``: model, tools, target reads, history and delivery.
+    proactive_host: ProactiveHost
+    # This generation's ``CONVERSATION``; the tick copies its reply stamp.
+    conversation: Conversation
     pool: McpClientPool | None = None
     proactive_gates: ProactiveGateChain | None = None
-    # 群环境层（#497）：主动与发呆回合注入各外部会话的最近动态。
-    group_environment: GroupEnvironment | None = None
     # 好感块（#714）：每轮读取，注入主动与发呆回合的 context frame。
     affection_prompt_fn: Callable[[], str | None] | None = None
-    proactive_host: ProactiveHost | None = None
-    # ``CONVERSATION_REPLY`` for this generation. The tick copies its stamp.
-    conversation_reply: ConversationReply | None = None
 
 
 class AgentTickFactory:
@@ -106,7 +94,6 @@ class AgentTickFactory:
                 state_store=self._deps.state_store,
                 any_action_gate=self._deps.any_action_gate,
                 passive_busy_fn=self._deps.passive_busy_fn,
-                turn_orchestrator=self._deps.turn_orchestrator,
                 deduper=self._deps.deduper,
                 tool_deps=tool_deps,
                 gateway_deps=gateway_deps,
@@ -117,9 +104,8 @@ class AgentTickFactory:
                 recent_proactive_fn=recent_proactive_fn,
                 drift_pipeline=drift_pipeline,
                 target_transport_fn=self._deps.sense.target_transport,
-                kernel=self._deps.kernel,
-                proactive_host=self._host(),
-                conversation_reply=self._reply(),
+                proactive_host=self._deps.proactive_host,
+                conversation=self._deps.conversation,
                 proactive_gates=self._deps.proactive_gates,
             )
         )
@@ -131,20 +117,8 @@ class AgentTickFactory:
             raise RuntimeError("role_id required for proactive session key")
         return session_key
 
-    def _host(self) -> ProactiveHost:
-        host = self._deps.proactive_host
-        if host is None:
-            raise RuntimeError("主动回合缺少宿主端口")
-        return host
-
-    def _reply(self) -> ConversationReply:
-        reply = self._deps.conversation_reply
-        if reply is None:
-            raise RuntimeError("主动回合缺少会话回复状态")
-        return reply
-
     def _build_llm_fn(self) -> LlmFn:
-        host = self._host()
+        host = self._deps.proactive_host
 
         async def llm_fn(
             messages: list[dict],
@@ -244,8 +218,6 @@ class AgentTickFactory:
             ack_fn=self._build_ack_fn(pool),
             alert_ack_fn=self._build_alert_ack_fn(pool),
             max_chars=self._deps.cfg.agent_tick_web_fetch_max_chars,
-            shared_tools=self._deps.shared_tools,
-            group_environment=self._deps.group_environment,
             affection_prompt_fn=self._deps.affection_prompt_fn,
             proactive_host=self._deps.proactive_host,
         )
@@ -284,25 +256,20 @@ class AgentTickFactory:
                     store=store,
                     builtin_skills_dir=BUILTIN_DRIFT_SKILLS_DIR,
                     memory=self._deps.memory,
-                    shared_tools=self._deps.shared_tools,
                     send_message_fn=self._build_drift_send_message_fn(),
                     max_web_fetch_chars=tool_deps.max_chars,
-                    group_environment=self._deps.group_environment,
                     affection_prompt_fn=self._deps.affection_prompt_fn,
                     proactive_host=self._deps.proactive_host,
                 ),
                 role_prompt_fn=self._deps.role_prompt_fn,
                 max_steps=getattr(self._deps.cfg, "drift_max_steps", 20),
-                kernel=self._deps.kernel,
             )
         )
 
-    def _build_drift_send_message_fn(self) -> Callable[..., Awaitable[bool]] | None:
+    def _build_drift_send_message_fn(self) -> Callable[..., Awaitable[bool]]:
         host = self._deps.proactive_host
         session_key = self._get_session_key()
         state_store = self._deps.state_store
-        if host is None or self._deps.turn_orchestrator is None:
-            return None
 
         async def send_message(
             reply: RoleReply,
@@ -332,10 +299,8 @@ class AgentTickFactory:
                 moods=tuple(reply_context.moods),
                 media=tuple(media_paths),
             )
-            if host.natural_reply_active():
-                delivery = await host.commit_natural_reply(initiated)
-            else:
-                delivery = await host.deliver(initiated)
+            # Inside the tick's natural plan this goes out through that plan.
+            delivery = await host.deliver(initiated)
             if delivery.complete:
                 state_store.mark_delivery(session_key, delivery_key)
             return delivery.complete

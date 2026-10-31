@@ -8,6 +8,8 @@ still owns validation, the send, the committed event and the stored ids.
 from __future__ import annotations
 
 import asyncio
+import logging
+from collections.abc import Awaitable
 from contextlib import contextmanager
 from typing import Any, Iterator
 from uuid import uuid4
@@ -32,12 +34,14 @@ from core.roles.reply_policy import (
     reset_turn_reply_policy,
 )
 from conversation.service import desktop_chat_id
-from core.common.cancellation import finish_started
+from core.common.cancellation import finish_started, raise_cancellation_again
 from core.common.channel_directory import DESKTOP_CHANNEL
 from core.roles.reply_state import RoleReplyContext, validate_role_reply
 from session.manager.helpers import role_id_from_session_key, role_session_key
 from shiori_sdk.accounts.targets import AccountTarget
 from shiori_sdk.core.conversation import InitiatedDelivery, InitiatedReply
+
+logger = logging.getLogger(__name__)
 
 
 @contextmanager
@@ -108,29 +112,70 @@ async def deliver_checked_reply(
     """Deliver a reply ``check_initiated_reply`` accepted."""
     committed: list[str] = []
     if not reply.messages:
-        sent = await orchestrator.handle_proactive_turn(
-            result=_turn_result(reply, include_target=True),
-            session_key=reply.session_key,
-            channel=reply.channel,
-            chat_id=reply.chat_id,
-            source=reply.source,
-            committed=committed,
+        return await report_delivery(
+            orchestrator.handle_proactive_turn(
+                result=initiated_turn_result(reply, include_target=True),
+                session_key=reply.session_key,
+                channel=reply.channel,
+                chat_id=reply.chat_id,
+                source=reply.source,
+                committed=committed,
+            ),
+            committed,
+            total=1,
+            stops_caller=True,
         )
-        return InitiatedDelivery(message_ids=tuple(committed), complete=sent)
     interruption = ReplyInterruption()
     task = asyncio.create_task(
         _send_sequence(orchestrator, reply, interruption, committed),
         name=f"initiated-reply:{reply.session_key}",
     )
+    # A newer user message stops the sequence in its own task: the caller
+    # gets the sent prefix and goes on.
+    return await report_delivery(
+        finish_started(task, on_cancel=interruption.invalidate),
+        committed,
+        total=len(reply.messages),
+        stops_caller=False,
+    )
+
+
+async def report_delivery(
+    delivery: Awaitable[object],
+    committed: list[str],
+    *,
+    total: int,
+    stops_caller: bool,
+) -> InitiatedDelivery:
+    """Await one delivery and report the messages it stored.
+
+    ``committed`` receives each stored message id; ``total`` messages make the
+    reply complete. A cancellation that stops the caller (``stops_caller``:
+    the delivery runs on the caller's task, so any cancellation there is the
+    caller's; otherwise only one requested for the caller's task) propagates
+    while nothing is stored. Once something is stored the stored prefix is
+    returned instead and the cancellation is raised again at the caller's next
+    ``await``, so the caller still acts on what was sent. Any other
+    cancellation, a newer user message stopping a sequence in its own task,
+    returns the prefix. An exception after every message was stored is the
+    host's bookkeeping failing (final mood write, committed event): it is
+    logged and the result stays complete. Any earlier exception propagates.
+    """
     try:
-        await finish_started(task, on_cancel=interruption.invalidate)
+        await delivery
     except asyncio.CancelledError:
-        current = asyncio.current_task()
-        if current is not None and current.cancelling():
+        task = asyncio.current_task()
+        if stops_caller or (task is not None and task.cancelling()):
+            if not committed:
+                raise
+            raise_cancellation_again()
+    except Exception:
+        if len(committed) < total:
             raise
-        # A newer user message stopped the sequence; its sent prefix stays.
-        return InitiatedDelivery(message_ids=tuple(committed), complete=False)
-    return InitiatedDelivery(message_ids=tuple(committed), complete=True)
+        logger.exception("主动回复已全部存入并送出，之后的宿主收尾失败")
+    return InitiatedDelivery(
+        message_ids=tuple(committed), complete=len(committed) == total
+    )
 
 
 async def _send_sequence(
@@ -166,7 +211,7 @@ async def _send_sequence(
                 account_target_mapping(reply.account_channel, reply.account_target),
             )
         await orchestrator.handle_proactive_turn(
-            result=_turn_result(reply, include_target=False),
+            result=initiated_turn_result(reply, include_target=False),
             session_key=reply.session_key,
             channel=reply.channel,
             chat_id=reply.chat_id,
@@ -175,7 +220,12 @@ async def _send_sequence(
         )
 
 
-def _turn_result(reply: InitiatedReply, *, include_target: bool) -> TurnResult:
+def initiated_turn_result(reply: InitiatedReply, *, include_target: bool) -> TurnResult:
+    """The orchestrator's result for ``reply``, validated against its moods.
+
+    ``include_target`` carries the account target; a reply sent through an
+    open natural plan leaves it out, the plan was already retargeted.
+    """
     # The caller's tick-start state: the orchestrator rejects the reply when
     # the stored mood moved on after it (``expected_mood_updated_at``).
     context = RoleReplyContext(

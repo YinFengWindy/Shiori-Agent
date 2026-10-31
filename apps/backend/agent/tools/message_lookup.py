@@ -6,14 +6,9 @@ import json
 from pathlib import Path
 from typing import Any, cast
 
-from shiori_sdk.tools import Tool, ToolResult
+from shiori_sdk.tools import Tool
 from conversation.context_scope import ContextView, session_context_view
-from conversation.service import desktop_thread_id
-from session.manager.helpers import (
-    ROLE_SESSION_PREFIX,
-    is_role_session_key,
-    role_session_key,
-)
+from session.manager.helpers import ROLE_SESSION_PREFIX, is_role_session_key
 from session.store import SessionStore
 
 # 决定检索范围的回合身份：只从执行上下文取，模型传同名参数无效。
@@ -116,38 +111,6 @@ class FetchMessagesTool(Tool):
             {"count": len(messages), "matched_count": matched, "messages": messages},
             ensure_ascii=False,
         )
-
-
-class UserContextMessageTool(Tool):
-    """把一个消息检索工具固定在某角色的用户上下文里。
-
-    主动类回合（如 drift）不在任何会话里回复，按约定使用用户上下文：这里以
-    角色共享会话和桌面会话作为回合身份，可见范围仍由 ``context_scope`` 判定。
-    模型传入的同名参数会被覆盖；只包装消息工具，不影响其他工具收到的上下文。
-    """
-
-    def __init__(self, wrapped: Tool, role_id: str) -> None:
-        self._wrapped = wrapped
-        self._scope = {
-            "turn_session_key": role_session_key(role_id),
-            "role_id": role_id,
-            "thread_id": desktop_thread_id(role_id),
-        }
-
-    @property
-    def name(self) -> str:
-        return self._wrapped.name
-
-    @property
-    def description(self) -> str:
-        return self._wrapped.description
-
-    @property
-    def parameters(self) -> dict[str, Any]:
-        return self._wrapped.parameters
-
-    async def execute(self, **kwargs: Any) -> str | ToolResult:
-        return await self._wrapped.execute(**{**kwargs, **self._scope})
 
 
 def _turn_scope(

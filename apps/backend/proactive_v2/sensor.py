@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import math
 import random as _random_module
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
@@ -24,8 +24,6 @@ logger = logging.getLogger(__name__)
 class RecentProactiveMessage:
     content: str
     timestamp: datetime | None = None
-    state_summary_tag: str = "none"
-    source_refs: list[Any] = field(default_factory=list)
 
 
 class Sensor:
@@ -163,12 +161,7 @@ class Sensor:
         except Exception:
             return []
         return [
-            RecentProactiveMessage(
-                content=message.content,
-                timestamp=message.timestamp,
-                state_summary_tag=message.state_summary_tag,
-                source_refs=list(message.source_refs),
-            )
+            RecentProactiveMessage(content=message.content, timestamp=message.timestamp)
             for message in messages
         ]
 

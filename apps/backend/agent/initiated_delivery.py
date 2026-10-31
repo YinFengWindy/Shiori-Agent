@@ -90,6 +90,14 @@ class HostConversation:
         self._affection = affection
         self._reply_policy = reply_policy
 
+    def orchestrator(self, role_id: str) -> TurnOrchestrator:
+        """This generation's delivery wiring for one role's replies.
+
+        ``PROACTIVE_HOST`` opens a tick's natural reply plan and sends through
+        it with this orchestrator, the one ``deliver_initiated_reply`` uses.
+        """
+        return self._orchestrator_for_role(role_id)
+
     async def deliver_initiated_reply(self, reply: InitiatedReply) -> InitiatedDelivery:
         """Deliver ``reply`` for the role owning its session, on this generation."""
         role_id = role_id_from_session_key(reply.session_key)
@@ -112,8 +120,7 @@ class HostConversation:
     def reply_state(self, role_id: str) -> RoleReplyState:
         """Moods and the stored mood time on this generation's role session.
 
-        The caller copies both fields onto ``InitiatedReply`` when its work
-        starts. A missing role raises before a session is created for it.
+        A missing role raises before a session is created for it.
         """
         role = self._role_store.get_role(role_id)
         if role is None:

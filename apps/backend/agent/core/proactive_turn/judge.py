@@ -12,7 +12,6 @@ from proactive_v2.context import AgentTickContext
 from proactive_v2.gateway import GatewayResult
 from proactive_v2.tools import TOOL_SCHEMAS, dispatch
 from proactive_v2.reply_output import correct_push_call, reply_schemas
-from agent.turns.proactive_sequence import record_proactive_tool_fact
 from shiori_sdk.core.proactive_host import ProactiveHost, ProactiveToolCall
 
 logger = logging.getLogger(__name__)
@@ -35,7 +34,6 @@ class ProactiveJudgeHost(Protocol):
     _llm_fn: Any
     _last_gateway_result: GatewayResult | None
     _host: ProactiveHost
-    _turn_orchestrator: Any
     last_ctx: AgentTickContext | None
 
     def _relationship_fallback_style_hint(self) -> str: ...
@@ -228,7 +226,7 @@ async def run_tool_step(
     """调用模型并执行工具；同场景模式可纠正一次纯文本响应。"""
     if pipeline._host.reply_invalidated():
         return False
-    active_schemas = reply_schemas(schemas or TOOL_SCHEMAS, ctx)
+    active_schemas = reply_schemas(schemas or TOOL_SCHEMAS, ctx, pipeline._host)
     if schemas is None:
         active_schemas.extend(
             dict(schema)
@@ -327,12 +325,6 @@ async def run_tool_step(
             session_key=pipeline._session_key,
         ),
         lambda name, args: dispatch(name, dict(args), ctx, pipeline._tool_deps),
-    )
-    record_proactive_tool_fact(
-        call_id=call_id,
-        name=tool_name,
-        arguments=tool_args,
-        result=outcome.text,
     )
     if pipeline._host.natural_reply_active():
         if tool_name == "message_push" and ctx.account_target is not None:

@@ -38,31 +38,20 @@ class RuntimeBackground:
         self._stopped = False
         self.proactive_loops = {}
         if app.features.enable_proactive and config.model_registrations:
-            manager = core.plugin_manager
-            if manager is None:
+            if core.plugin_manager is None:
                 # Proactive tool calls must pass this generation's core checks
                 # (workspace guard included); never fall back to a bare kernel.
                 raise RuntimeError("主动循环需要本代插件内核，但运行时没有插件内核")
-            plugins = manager
             tasks, self.proactive_loops = build_proactive_runtime(
                 config,
                 app.workspace,
                 session_manager=core.session_manager,
-                provider=core.provider,
-                light_provider=core.light_provider,
-                push_tool=core.push_tool,
                 memory_store=core.memory_runtime,
                 presence=core.presence,
-                agent_loop=core.loop,
-                # Read the kernel live so plugins unloaded or loaded within this
-                # generation take effect on the next tool call or tick.
-                kernel=lambda: plugins.kernel,
+                role_store=core.role_runtime_registry.repository.store,
                 proactive_motives=core.proactive_motives,
-                event_bus=core.event_bus,
-                provider_consumer=core.additional_providers.append,
                 proactive_host=core.proactive_host,
-                conversation_reply=core.conversation,
-                group_environment=core.group_environment,
+                conversation=core.conversation,
             )
             self._coroutines.extend(tasks)
             self._loops.extend(self.proactive_loops.values())

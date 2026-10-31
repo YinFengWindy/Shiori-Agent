@@ -86,9 +86,6 @@ def _recent_meta(message: object) -> list[str]:
             meta.append(f"time={timestamp.isoformat()}")
         except Exception:
             meta.append(f"time={timestamp}")
-    tag = _field(message, "state_summary_tag", "none")
-    if tag and tag != "none":
-        meta.append(f"state_tag={tag}")
     return meta
 
 

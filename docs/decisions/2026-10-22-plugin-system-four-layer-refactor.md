@@ -372,11 +372,11 @@ D2 已定 proactive 是可禁用的系统插件、核心不依赖它。本节是
 |---|---|---|
 | `agent/config.py`、`agent/config_models.py` | `ProactiveConfig`、`load_proactive_config` | 核心不再解析。P6b-2：`[agent.proactive_strategies]` 迁到 `[plugins.proactive]`；顶层 `[proactive]` 删除。类型仍在 `proactive_v2`，4b 再进插件包 |
 | `agent/looping/ports.py`、`bootstrap/app.py`、`agent/lifecycle/phases/after_reasoning.py`、`core/roles/relationship_runtime/*` | `PresenceStore` | ⚑ presence 移进核心 sessions，作为 `SESSIONS.presence`（`record_user_message`、`last_user_at`、`record_initiated_sent`、`last_initiated_at`），表结构不变 |
-| `agent/turns/orchestrator.py` 的 `handle_proactive_turn`、`agent/turns/proactive_sequence.py` | proactive 专用投递 | ⚑ 通用化成 `CONVERSATION.deliver_initiated_reply(reply: InitiatedReply)`。P6b-1b 已 provide，4b 接上前仍可增删、4.0 发版时定稿。P6b-4a：循环仍在核心，tick 的自然回复作用域、补全、工具、目标选择、会话历史和投递改走 `PROACTIVE_HOST`。回复心情戳记走本代 `CONVERSATION_REPLY`（5.0 并回 `CONVERSATION`）。单条走 `deliver`；已经打开的自然计划走 `commit_natural_reply`，不再开第二个作用域。`InitiatedMessageCommitted` 在端口返回前发出，调用方的成功/失败副作用在返回之后；跳过不调用端口。编排仍留在 orchestrator，4b 再把循环搬进插件 |
+| `agent/turns/orchestrator.py` 的 `handle_proactive_turn`、`agent/turns/proactive_sequence.py` | proactive 专用投递 | ⚑ 通用化成 `CONVERSATION.deliver_initiated_reply(reply: InitiatedReply)`。P6b-1b 已 provide，4b 接上前仍可增删、4.0 发版时定稿。P6b-4a：循环仍在核心，tick 的自然回复作用域与工具事实、补全（含自然草稿纠正）、工具与宿主工具、目标选择、会话历史和投递改走 `PROACTIVE_HOST`；心情戳记并入 `CONVERSATION.reply_state`（4.0 基线，D22）；主动开关与配置读 `ROLES.plugin_settings`。投递只有 `deliver`：已打开的自然计划内经该计划发出本轮草稿，并校验会话与目标属于该计划。现有编排逻辑留在 orchestrator，两个门调用同一条提交 |
 | `bus.events_lifecycle.ProactiveMessageCommitted`（`conversation/push_sync.py`、`desktop_bridge/service.py`、scene 插件在用） | proactive 命名的核心事件 | ⚑ P6b-1b：`InitiatedMessageCommitted` 带 `source` 等字段，`ProactiveMessageCommitted` 已删除（scene、desktop_bridge 改订阅新名，4.0 不带别名）。`push_sync` 已填正文，`source="push"` |
 | `agent/plugin_host/capabilities.py`、`bootstrap/tools.py` | `ProactiveGate`、strategies、scene_subscription、`proactive_motives` | 全部删除或搬进插件；gate 变成插件内部列表（0 个外部使用方） |
 | `bootstrap/runtime/background.py` | `build_proactive_runtime`、`build_memory_optimizer_task` | proactive 在 `setup` 里 `ctx.spawn` 自己的循环；memory_optimizer 拆成独立系统插件（D20 修订），不再由本 bootstrap 启动 |
-| `desktop_bridge/runtime/service.py`、`desktop_bridge/method_policy.py` | `proactive_target` 方法 | 改成插件 rpc `proactive.previewTarget`（`BRIDGE.expose`） |
+| `desktop_bridge/runtime/service.py`、`desktop_bridge/method_policy.py` | `proactive_target` 方法 | renderer 没有调用方，P6b-4a 随核心不再 import 目标选择一起删除 |
 | `core/roles/models.py` | 角色记录里的 proactive 字段（agent / overrides / drift） | ⚑ `ROLES.plugin_settings(role_id, "proactive")`：读写角色 JSON 里的同一个字段，核心不解释内容 |
 | `core/common/crash_reporting.py` | logger 名单里有 `proactive_v2` | 删掉这一项 |
 | renderer 角色编辑页 | `RoleProactiveSettingsPanel` 等 | ⚑ renderer 新增具名插槽 `roleSettings`（和 `accountDetail` 同一机制），面板搬进 proactive 前端 |
@@ -384,7 +384,7 @@ D2 已定 proactive 是可禁用的系统插件、核心不依赖它。本节是
 ### 7.4 插件形态
 
 - **manifest**：`id: proactive`，`category: system`，`default_enabled: true`，inject / optional_inject 见 7.2，`provides: []`（目前没有别人需要它的服务）。
-- **监听的事件**：`watch(TurnFinished)`，用来更新冷却和能量；`watch(InitiatedMessageCommitted)`，用来记录本插件发出的消息；scene 跟进通过 `get(SCENE)` 订阅。宿主在 `RoleDeleted` 旁发出 `RoleCreated`（角色记录和会话创建成功）。主动开关仍由宿主写入的过渡期另有临时事件 `RoleProactiveChanged`（`enabled` 真正变化才发，创建角色不发）；第 5 步把开关挪进插件后删除该事件。
+- **监听的事件**：`watch(TurnFinished)`，用来更新冷却和能量；`watch(InitiatedMessageCommitted)`，用来记录本插件发出的消息；scene 跟进通过 `get(SCENE)` 订阅。宿主在 `RoleDeleted` 旁发出 `RoleCreated`（角色记录和会话创建成功）。4b 靠这两个事件为每个角色起停循环，开关和配置在 tick 时经 `ROLES.plugin_settings` 重读，不另设开关事件。
 - **发出的事件**：没有新的核心事件。取代 proactive_gates 的是插件内部的 gate 列表；以后有第三方需求时，proactive 在自己的契约里定义 `ProactiveDeciding`（`on`，可否决），不进核心。
 - **核心要提供的东西**：上表 4 个 ⚑（`SESSIONS.presence`、`CONVERSATION.deliver_initiated_reply`、`InitiatedMessageCommitted`、`ROLES.plugin_settings`），加上 renderer 的 `roleSettings` 插槽。都是把现有代码通用化，不新写逻辑。
 - **静默时段**：现在的睡眠和时段修正（如 `sleep_modifier_sleeping`）在 proactive 配置里，留在插件内，**核心不需要新增静默时段 API**。桌面在线状态通过 `SESSIONS.presence` 读取。

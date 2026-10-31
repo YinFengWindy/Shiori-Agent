@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import inspect
 import logging
 from contextlib import asynccontextmanager, nullcontext
@@ -23,13 +22,7 @@ from core.common.channel_directory import DESKTOP_CHANNEL
 from core.common.timekit import utcnow
 from core.roles.affection_access import current_affection
 from core.roles.reply_policy import natural_chat_selected
-from core.roles.services import RoleSessionService
-from core.roles.reply_state import (
-    RoleReplyContext,
-    role_mood_catalog,
-    reply_state_metadata,
-    validate_role_reply,
-)
+from core.roles.reply_state import reply_state_metadata, validate_role_reply
 from session.manager.helpers import role_session_key
 from session.manager.models import build_session_message
 from agent.account_delivery.service import ResolvedAccountTarget
@@ -252,23 +245,6 @@ class TurnOrchestrator:
         assert context is not None
         context.owner.retarget_background(plan.registration, origin, senders=senders)
 
-    def capture_reply_context(self, session_key: str) -> RoleReplyContext:
-        """Capture role output constraints and the successful-state stamp per tick."""
-        session = self._session.session_manager.get_or_create(session_key)
-        if self._role_lookup is not None:
-            role = self._role_lookup(str(session.metadata.get("role_id") or ""))
-            if role is None:
-                raise ValueError("主动回复的角色已删除")
-            session = RoleSessionService(self._session.session_manager).open_by_role(
-                role
-            )
-        return RoleReplyContext(
-            moods=role_mood_catalog(session.metadata.get("role_runtime_config", {})),
-            previous_updated_at=str(
-                session.metadata.get("current_mood_updated_at", "")
-            ),
-        )
-
     async def handle_proactive_turn(
         self,
         *,
@@ -332,28 +308,21 @@ class TurnOrchestrator:
         }
         plan = current_proactive_reply()
         if plan is not None:
-            try:
-                return await self._handle_natural_reply(
-                    result=result,
-                    session=session,
-                    template=message,
-                    plan=plan,
-                    source=source,
-                    committed=committed,
-                    state_kwargs={
-                        "expected_mood_updated_at": result.reply_context.previous_updated_at,
-                        "metadata_updates": reply_state_metadata(
-                            reply,
-                            updated_at=datetime.now(timezone.utc).isoformat(),
-                        ),
-                    },
-                )
-            except asyncio.CancelledError:
-                # A cancel that lands during the last send still finishes that
-                # send. Success effects belong to the caller, after this returns.
-                if plan.delivery_complete:
-                    return True
-                raise
+            return await self._handle_natural_reply(
+                result=result,
+                session=session,
+                template=message,
+                plan=plan,
+                source=source,
+                committed=committed,
+                state_kwargs={
+                    "expected_mood_updated_at": result.reply_context.previous_updated_at,
+                    "metadata_updates": reply_state_metadata(
+                        reply,
+                        updated_at=datetime.now(timezone.utc).isoformat(),
+                    ),
+                },
+            )
         account_target = (
             result.trace.extra.get("account_target")
             if result.trace is not None and isinstance(result.trace.extra, dict)
@@ -460,7 +429,6 @@ class TurnOrchestrator:
             )
             return True
         finally:
-            plan.delivery_complete = len(delivered) == len(sequence.messages)
 
             async def finalize() -> None:
                 if committed is not None:

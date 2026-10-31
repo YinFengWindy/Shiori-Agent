@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import asyncio
 import inspect
 import logging
 from typing import Any, Callable, Protocol
 
 from agent.turns.result import TurnResult
+from core.common.cancellation import finish_started
 from proactive_v2.context import AgentTickContext
 from shiori_sdk.accounts.targets import AccountTarget
 from shiori_sdk.core.conversation import InitiatedReply
@@ -40,8 +40,10 @@ async def deliver_execute(
 ) -> float | None:
     """记录裁定，并把主动消息投递到本轮 gate 阶段选定的唯一目标。
 
-    每条主动消息只投递一次。跳过不调用端口。成功和失败的副作用在端口返回之后
-    执行，因此晚于 ``InitiatedMessageCommitted``。发送前的副作用仍在调用之前。
+    每条主动消息只投递一次。跳过不调用端口。成功和失败的副作用按端口的返回值
+    判定：返回即按 ``complete`` 二选一；端口抛普通异常表示没有完整存下，跑失败
+    副作用；取消在什么都没存下时直接传出，两种副作用都不跑。存下之后到达的取消
+    由端口在返回后重新抛出，副作用先跑完。
     """
 
     pipeline._record_tick_log_finish(ctx, result=decision.result)
@@ -53,26 +55,19 @@ async def deliver_execute(
         return 0.0
     await _run_effects(result.side_effects)
     reply = _initiated_reply(pipeline, ctx, result)
-    host = pipeline._host
     try:
-        if host.natural_reply_active():
-            # ``deliver`` would open a second scope and drop the tick's plan.
-            delivery = await host.commit_natural_reply(reply)
-        else:
-            delivery = await host.deliver(reply)
-    except (Exception, asyncio.CancelledError):
-        await _run_effects(result.failure_side_effects)
+        # Inside the tick's natural plan this goes out through that plan.
+        delivery = await pipeline._host.deliver(reply)
+    except Exception:
+        await finish_started(_run_effects(result.failure_side_effects))
         raise
-    await _run_effects(
-        result.success_side_effects
-        if delivery.complete
-        else result.failure_side_effects
+    await finish_started(
+        _run_effects(
+            result.success_side_effects
+            if delivery.complete
+            else result.failure_side_effects
+        )
     )
-    # A completed sequence can swallow a cancel that arrived during its last
-    # send so these effects still run. Propagate it once they have.
-    task = asyncio.current_task()
-    if task is not None and task.cancelling():
-        raise asyncio.CancelledError
     return 0.0
 
 

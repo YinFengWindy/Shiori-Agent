@@ -9,13 +9,8 @@ most likely is right now:
 4. with no non-desktop candidate, the desktop.
 
 ``select_proactive_target`` is the pure rule; ``ProactiveTargetResolver`` reads
-its inputs (desktop presence, last user message per candidate thread) for the
-proactive runtime and the desktop preview alike, so both always agree.
-
-A role's own candidates are its desktop session followed by every private chat
-with the bound user (``core.identity``) through one of the role's online
-accounts (``core.roles.bound_chats``). A chosen private chat is reached
-through that account (``ProactiveTargetResolver.bound_chat_target``).
+its inputs (the role's candidate chats, desktop presence and the last user
+message per candidate thread) through ``PROACTIVE_HOST``.
 """
 
 from __future__ import annotations
@@ -23,19 +18,19 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from datetime import datetime
 
-from shiori_sdk.accounts.targets import AccountTarget
-from shiori_sdk.core.proactive_host import ProactiveHost
-from core.common.channel_directory import DESKTOP_CHANNEL
-from core.roles.models import RoleProactiveCandidate
-from core.roles.store import RoleStore
+from shiori_sdk.core.proactive_host import CandidateChat, ProactiveHost
+from shiori_sdk.roles import Roles
+
+# The desktop chat's channel (see ``InitiatedReply``).
+DESKTOP_CHANNEL = "desktop"
 
 
 def select_proactive_target(
-    candidates: Sequence[RoleProactiveCandidate],
+    candidates: Sequence[CandidateChat],
     *,
     desktop_present: bool,
-    last_user_at: Mapping[RoleProactiveCandidate, datetime],
-) -> RoleProactiveCandidate:
+    last_user_at: Mapping[CandidateChat, datetime],
+) -> CandidateChat:
     """Returns the single candidate to deliver to.
 
     ``candidates`` are in binding order; ``last_user_at`` holds the newest user
@@ -64,44 +59,30 @@ class ProactiveTargetResolver:
     """Reads the live inputs of ``select_proactive_target`` for a role.
 
     Candidate chats, the last user message on a thread and desktop presence
-    come from ``PROACTIVE_HOST``. ``roles`` is the runtime's shared store: its
-    proactive switch decides whether a saved role is eligible.
+    come from ``PROACTIVE_HOST``. The role's ``proactive`` settings on
+    ``ROLES`` decide whether it is eligible at all.
     """
 
-    def __init__(self, *, roles: RoleStore, host: ProactiveHost) -> None:
+    def __init__(self, *, roles: Roles, host: ProactiveHost) -> None:
         self._roles = roles
         self._host = host
 
-    def resolve_saved(self, role_id: str) -> RoleProactiveCandidate | None:
+    def resolve_saved(self, role_id: str) -> CandidateChat | None:
         """Selects among the role's candidates; None when proactive is disabled.
 
+        The settings are read now, so a switch edit applies on the next call.
         The candidates are the desktop session and the private chats with the
         bound user through the role's online accounts, so the desktop keeps
         the message while the user is at it or no such chat exists.
         """
-        role = self._roles.get_role(role_id)
-        if role is None:
-            raise KeyError(f"角色不存在: {role_id}")
-        if not role.proactive.enabled:
+        settings = self._roles.plugin_settings(role_id, "proactive").read()
+        if not settings.get("enabled"):
             return None
-        candidates = [
-            RoleProactiveCandidate(chat.channel, chat.chat_id)
-            for chat in self._host.candidate_chats(role_id)
-        ]
-        return self.resolve(role_id, candidates)
-
-    def bound_chat_target(
-        self, role_id: str, channel: str, chat_id: str
-    ) -> tuple[str, AccountTarget]:
-        """The account channel and private target reaching a bound user's chat.
-
-        ``channel`` / ``chat_id`` name a candidate ``resolve_saved`` chose.
-        """
-        return self._host.bound_chat_target(role_id, channel, chat_id)
+        return self.resolve(role_id, self._host.candidate_chats(role_id))
 
     def resolve(
-        self, role_id: str, candidates: Sequence[RoleProactiveCandidate]
-    ) -> RoleProactiveCandidate:
+        self, role_id: str, candidates: Sequence[CandidateChat]
+    ) -> CandidateChat:
         """Selects the target among ``candidates`` of ``role_id`` right now."""
         return select_proactive_target(
             candidates,
@@ -110,9 +91,9 @@ class ProactiveTargetResolver:
         )
 
     def _last_user_times(
-        self, role_id: str, candidates: Sequence[RoleProactiveCandidate]
-    ) -> dict[RoleProactiveCandidate, datetime]:
-        times: dict[RoleProactiveCandidate, datetime] = {}
+        self, role_id: str, candidates: Sequence[CandidateChat]
+    ) -> dict[CandidateChat, datetime]:
+        times: dict[CandidateChat, datetime] = {}
         for candidate in candidates:
             if candidate.channel == DESKTOP_CHANNEL:
                 continue

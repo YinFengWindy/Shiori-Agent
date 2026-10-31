@@ -16,7 +16,6 @@ DriftTurnPipeline — Drift 空闲时间链路顶层抽象。
 """
 
 from __future__ import annotations
-from agent.turns.proactive_sequence import record_proactive_tool_fact
 from core.roles.reply_policy import natural_chat_draft_prompt
 
 from agent.tools.turn_scope import tool_turn
@@ -32,8 +31,7 @@ from typing import TYPE_CHECKING, Any, Awaitable, Callable, cast
 from agent.core.prompt_block import strip_recent_turns
 from agent.prompting import build_context_frame_content, build_context_frame_message
 from shiori_sdk.prompting import PromptSectionRender
-from agent.tools.execution import KernelSource
-from shiori_sdk.core.proactive_host import ProactiveToolCall
+from shiori_sdk.core.proactive_host import ProactiveHost, ProactiveToolCall
 from proactive_v2.context import AgentTickContext
 from proactive_v2.drift_state import DriftStateStore, SkillMeta
 from proactive_v2.drift_tools import (
@@ -59,8 +57,6 @@ class DriftTurnPipelineDeps:
     store: DriftStateStore
     tool_deps: DriftToolDeps
     role_prompt_fn: Callable[[], str]
-    # The generation's kernel, read on every tool call (core checks included).
-    kernel: KernelSource
     max_steps: int = 20
     step_recorder: StepRecorder | None = None
 
@@ -92,7 +88,7 @@ class DriftTurnPipeline:
         self._max_steps = deps.max_steps
         self.step_recorder = deps.step_recorder
 
-    def _require_host(self):
+    def _require_host(self) -> ProactiveHost:
         host = self._tool_deps.proactive_host
         if host is None:
             raise RuntimeError("发呆回合缺少宿主端口")
@@ -133,8 +129,7 @@ class DriftTurnPipeline:
             logger.info("[drift] skip: no available drift skills")
             return []
 
-        host = self._tool_deps.proactive_host
-        connected_servers = set(host.mcp_server_names()) if host is not None else set()
+        connected_servers = set(self._require_host().mcp_server_names())
         skills = [
             s
             for s in skills
@@ -168,17 +163,14 @@ class DriftTurnPipeline:
 
         # 2.2 构建 drift tool registry。
         mounted_tool_names: set[str] = set()
-        host = self._tool_deps.proactive_host
+        # 2.3 确定 MCP 已连接 server 列表。
+        connected_servers = set(self._require_host().mcp_server_names())
         tools = build_drift_tool_registry(
             ctx=ctx,
             deps=self._tool_deps,
             mounted_tool_names=mounted_tool_names,
-            mcp_servers=set(host.mcp_server_names()) if host is not None else set(),
+            mcp_servers=connected_servers,
         )
-
-        # 2.3 确定 MCP 已连接 server 列表。
-        host = self._tool_deps.proactive_host
-        connected_servers = set(host.mcp_server_names()) if host is not None else set()
 
         # 2.4 构建初始 messages。
         messages: list[dict] = [
@@ -200,11 +192,9 @@ class DriftTurnPipeline:
     ) -> None:
         """LLM 工具调用循环：调模型 → 执行工具 → 追加 messages → 重复。"""
 
-        shared = self._tool_deps.shared_tools
-        base_schemas = reply_schemas(tools.get_schemas(), ctx)
-        steps = 0
-
         host = self._require_host()
+        base_schemas = reply_schemas(tools.get_schemas(), ctx, host)
+        steps = 0
         while steps < self._max_steps and not ctx.drift_finished:
             if host.reply_invalidated():
                 break
@@ -212,8 +202,11 @@ class DriftTurnPipeline:
             schemas = list(base_schemas)
 
             # 3.1 拼接已挂载 MCP 工具的 schema。
-            if mounted_tool_names and shared:
-                schemas += shared.get_schemas(names=mounted_tool_names)
+            if mounted_tool_names:
+                schemas += [
+                    dict(schema)
+                    for schema in host.tool_schemas(sorted(mounted_tool_names))
+                ]
 
             # 3.2 message_push 后约束工具集。
             if ctx.drift_message_sent:
@@ -268,19 +261,15 @@ class DriftTurnPipeline:
             steps += 1
             ctx.steps_taken += 1
 
-            # 3.4 双路分发：本地 drift registry → shared registry（mounted MCP tools）。
-            if tools.has_tool(tool_name):
-                exec_fn = tools.execute
-            elif tool_name in mounted_tool_names and shared:
-                exec_fn = shared.execute
-            else:
-                exec_fn = tools.execute
-
-            # 3.5 执行工具。
+            # 3.4 双路分发：本地 drift registry → 宿主工具（mounted MCP tools）。
             call_id = str(tool_call.get("id") or f"drift_{steps}")
+            role_id = role_id_from_session_key(ctx.session_key)
 
             async def invoke(name: str, arguments: Mapping[str, object]) -> object:
-                return await exec_fn(name, dict(arguments))
+                # 3.5 执行工具。
+                if not tools.has_tool(name) and name in mounted_tool_names:
+                    return await host.run_host_tool(name, arguments, role_id=role_id)
+                return await tools.execute(name, dict(arguments))
 
             outcome = await host.execute_tool(
                 ProactiveToolCall(
@@ -290,12 +279,6 @@ class DriftTurnPipeline:
                     session_key=ctx.session_key,
                 ),
                 invoke,
-            )
-            record_proactive_tool_fact(
-                call_id=call_id,
-                name=tool_name,
-                arguments=tool_args,
-                result=outcome.text,
             )
 
             # 3.6 错误处理。
@@ -414,11 +397,10 @@ class DriftTurnPipeline:
         drift_note = str(self._store.load_drift().get("note") or "")[:150]
 
         mcp_block = ""
-        shared = self._tool_deps.shared_tools
-        if connected_servers and shared:
+        if connected_servers and host is not None:
             mcp_lines = []
             for srv in sorted(connected_servers):
-                tool_count = len(shared.get_tool_names_by_source("mcp", srv))
+                tool_count = len(host.mcp_tool_names(srv))
                 mcp_lines.append(f"- {srv}（{tool_count} 个工具）")
             mcp_block = (
                 "【可挂载的外部能力】\n" + "\n".join(mcp_lines) + "\n"

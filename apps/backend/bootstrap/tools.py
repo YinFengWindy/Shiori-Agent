@@ -31,7 +31,7 @@ from agent.looping.ports import (
 from agent.provider import LLMProvider
 from agent.retrieval.default_pipeline import DefaultMemoryRetrievalPipeline
 from agent.initiated_delivery import HostConversation, orchestrator_for
-from shiori_sdk.core.conversation import Conversation, ConversationReply
+from shiori_sdk.core.conversation import Conversation
 from shiori_sdk.core.proactive_host import ProactiveHost
 from agent.proactive_host import HostProactiveRunner
 from agent.schedule_host import HostScheduleRunner
@@ -107,8 +107,7 @@ class CoreRuntime:
     # plugin's process-wide scheduler that calls it.
     schedule_host: HostScheduleRunner
     # ``PROACTIVE_HOST``: one runner for every generation. ``CONVERSATION``
-    # is this generation's initiated delivery. ``CONVERSATION_REPLY`` is the
-    # same object: the session's reply stamp.
+    # is this generation's initiated delivery and reply stamp.
     proactive_host: HostProactiveRunner
     conversation: HostConversation
     provider: LLMProvider
@@ -541,7 +540,6 @@ def build_core_runtime(
     )
     # Typed as the plugin contracts, so pyright checks the host implementations.
     conversation_api: Conversation = conversation
-    reply_api: ConversationReply = conversation
     proactive_api: ProactiveHost = proactive_host
     processing_state = (
         shared.loop.processing_state if shared is not None else ProcessingState()
@@ -707,7 +705,6 @@ def build_core_runtime(
                 schedule_host=schedule_host,
                 proactive_host=proactive_api,
                 conversation=conversation_api,
-                conversation_reply=reply_api,
             )
         ),
     )

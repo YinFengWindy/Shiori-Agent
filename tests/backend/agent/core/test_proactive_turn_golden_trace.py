@@ -48,6 +48,7 @@ from bootstrap.proactive import build_proactive_runtime
 from bus.event_bus import EventBus
 from bus.events_lifecycle import InitiatedMessageCommitted
 from bus.queue import MessageBus
+from shiori_sdk.messages import InboundMessage
 from conversation.service import desktop_thread_id
 from core.accounts.delivery_ledger import AccountDeliveryLedger
 from core.desktop_presence import DesktopPresence
@@ -79,9 +80,14 @@ class ScriptedProvider(LLMProvider):
         )
         self.script: list[LLMResponse] = []
         self.requests: list[dict[str, Any]] = []
+        # Request index -> what happens in the world while the model answers it.
+        self.meanwhile: dict[int, Callable[[], None]] = {}
 
     async def chat(self, **kwargs: Any) -> LLMResponse:  # type: ignore[override]
         self.requests.append(kwargs)
+        happening = self.meanwhile.pop(len(self.requests) - 1, None)
+        if happening is not None:
+            happening()
         return self.script.pop(0)
 
     def offered(self, request: int) -> set[str]:
@@ -155,6 +161,16 @@ class ProactiveHost:
     busy: bool = False
     # Raised by the desktop sender instead of sending, while set.
     desktop_failure: Exception | None = None
+    # Admits the user's messages, as the runtime's dispatcher does.
+    reply_sequences: ChannelSequenceOwner = field(default_factory=ChannelSequenceOwner)
+
+    def user_writes_on_desktop(self, text: str) -> None:
+        """The user sends ``text`` in the role's desktop chat."""
+        _ = self.reply_sequences.admit(
+            InboundMessage(
+                "desktop", "user", SESSION_KEY, text, metadata={"role_id": "mira"}
+            )
+        )
 
     async def tick(self) -> None:
         """Runs one proactive tick as the runtime does for a due role.
@@ -387,24 +403,23 @@ async def proactive_host(
             config,
             workspace,
             session_manager=sessions,
-            provider=provider,
-            light_provider=provider,
-            push_tool=push,
             memory_store=None,
             presence=presence,
-            agent_loop=cast(Any, agent_loop),
-            kernel=core_kernel,
+            role_store=roles,
             proactive_motives=[RelationshipStrategy(affection_getter)],
-            event_bus=bus,
             proactive_host=HostProactiveRunner(lambda: _PublishedRuntime()),
-            conversation_reply=conversation,
-            group_environment=group_environment,
+            conversation=conversation,
         )
     )
     for task in cast(list[Coroutine[Any, Any, None]], tasks):
         task.close()  # the loops are ticked by hand, never run
     host = ProactiveHost(
-        workspace, provider, affection, desktop_presence, loops["mira"]
+        workspace,
+        provider,
+        affection,
+        desktop_presence,
+        loops["mira"],
+        reply_sequences=reply_sequences,
     )
     holder["host"] = host
 
@@ -684,6 +699,35 @@ async def scenario_idle_drift_shares_and_records_run(host: ProactiveHost) -> Non
     assert len(host.delivered) == 1
 
 
+async def scenario_superseded_natural_tick_keeps_its_tool_work(
+    host: ProactiveHost,
+) -> None:
+    """Natural chat: the user writes after a tool ran, before anything is sent.
+
+    The tick stops without sending, storing a reply, announcing or changing
+    the mood, and without failing. The tool work it already did stays on the
+    session, so the next turn sees it instead of redoing it.
+    """
+    host.provider.script = [
+        _call("get_recent_chat", {}),
+        _natural_push(["刚想起你。"]),
+    ]
+    host.provider.meanwhile[1] = lambda: host.user_writes_on_desktop("我回来了")
+
+    await host.tick()
+
+    assert host.delivered == []
+    assert host.events == []
+    assert host.affection.sent == []
+    assert host.last_initiated_at() is None
+    assert host.mood() == ""
+    [facts] = host.stored()
+    assert facts["content"] == ""
+    assert [call["name"] for step in facts["tool_chain"] for call in step["calls"]] == [
+        "get_recent_chat"
+    ]
+
+
 Scenario = Callable[[ProactiveHost], Awaitable[None]]
 
 
@@ -698,6 +742,7 @@ Scenario = Callable[[ProactiveHost], Awaitable[None]]
         (scenario_repeated_message_is_not_sent_again, False),
         (scenario_failed_send_keeps_nothing_and_retries, False),
         (scenario_idle_drift_shares_and_records_run, False),
+        (scenario_superseded_natural_tick_keeps_its_tool_work, True),
     ],
     ids=lambda value: (
         value.__name__.removeprefix("scenario_") if callable(value) else None

@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
-from core.roles.reply_state import RoleReply, RoleReplyContext
+from core.roles.reply_state import RoleReply, RoleReplyContext, role_mood_catalog
 from core.roles.store import RoleStore
 
 from typing import Any, cast
@@ -39,6 +39,15 @@ from bus.queue import MessageBus
 from bus.events_lifecycle import ReplyMessageCommitted
 from shiori_sdk.messages import InboundMessage
 from session.manager.models import whole_session
+
+
+def _reply_context(owner: TurnOrchestrator) -> RoleReplyContext:
+    """The role session's mood catalog and stored mood time, read now."""
+    session = owner._session.session_manager.get_or_create("role:mira")
+    return RoleReplyContext(
+        moods=role_mood_catalog(session.metadata.get("role_runtime_config", {})),
+        previous_updated_at=str(session.metadata.get("current_mood_updated_at", "")),
+    )
 
 
 class _Policy:
@@ -360,7 +369,7 @@ async def test_proactive_media_commit_notifies_shared_session(tmp_path) -> None:
         )
     ]
 
-    result.reply_context = orchestrator.capture_reply_context("role:mira")
+    result.reply_context = _reply_context(orchestrator)
     outbound.result = None
     committed.clear()
     sent = await orchestrator.handle_proactive_turn(
@@ -597,7 +606,7 @@ def _formal_result(owner, content="hello", media=None):
         decision="reply",
         outbound=TurnOutbound("role:mira", content, media or []),
         role_reply=RoleReply(content, "平静", "我想和你聊聊。"),
-        reply_context=owner.capture_reply_context("role:mira"),
+        reply_context=_reply_context(owner),
     )
 
 

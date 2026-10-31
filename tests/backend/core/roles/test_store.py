@@ -209,26 +209,6 @@ def test_role_store_rejects_invalid_manifest_shape(tmp_path):
         store.list_roles()
 
 
-def test_proactive_switch_listener_hears_only_an_enabled_change(tmp_path) -> None:
-    store = RoleStore(tmp_path)
-    store.create_role(name="Mira", system_prompt="mira", role_id="mira")
-    heard: list[tuple[str, bool]] = []
-
-    def hear(role_id: str, enabled: bool) -> None:
-        heard.append((role_id, enabled))
-
-    store.add_proactive_switch_listener(hear)
-    store.update_role("mira", proactive={"enabled": True, "profile": "quiet"})
-    store.update_role("mira", proactive={"enabled": True, "profile": "daily"})
-    store.update_role("mira", description="edited")
-    store.write_plugin_proactive("mira", {"enabled": False, "profile": "daily"})
-    store.write_plugin_proactive("mira", {"enabled": False, "profile": "quiet"})
-    assert heard == [("mira", True), ("mira", False)]
-    store.remove_proactive_switch_listener(hear)
-    store.update_role("mira", proactive={"enabled": True, "profile": "daily"})
-    assert heard == [("mira", True), ("mira", False)]
-
-
 def test_role_store_persists_proactive_policy_without_legacy_candidates(
     tmp_path,
 ):

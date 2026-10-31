@@ -7,18 +7,19 @@ Reads use the current lease's generation when there is one, otherwise the
 published generation, and do not wait.
 
 A tick whose role has natural chat on opens one reply scope for the whole
-tick. The scope, its invalidation and its tool facts stay together: facts are
-committed before the scope ends, including when the plan is invalidated.
-Choosing a target reads candidate chats, the last user message on a thread
-and whether the user is at the desktop. Tool schemas and connected MCP server
-names come from the generation's registry. Session history reads return the
-role session's recent user-context turns and recent proactive messages.
-The reply stamp (mood catalog and stored mood time) is
-``CONVERSATION_REPLY`` on the generation the tick is using. This key
-starts the tick. The session keeps the stamp.
+tick. The scope, its invalidation, its tool facts and its delivery stay
+together: tool calls run through ``execute_tool`` are recorded on the open
+plan and committed before the scope ends, including when the plan is
+invalidated. Choosing a target reads candidate chats, the last user message on
+a thread and whether the user is at the desktop. Host tools run through
+``run_host_tool``; their schemas and the connected MCP servers come from the
+generation's registry. Session history reads return the role session's recent
+user-context turns and recent proactive messages. The reply stamp (mood
+catalog and stored mood time) is ``CONVERSATION.reply_state``.
 
 This key and ``InitiatedReply`` may still gain or lose members until the
-proactive loop moves into its plugin; they are fixed when SDK 4.0 is released.
+proactive loop moves into its plugin (P6b-4b); they are fixed when SDK 4.0 is
+released.
 """
 
 from __future__ import annotations
@@ -30,9 +31,9 @@ from datetime import datetime
 from types import MappingProxyType
 from typing import Literal, Protocol
 
-from shiori_sdk.accounts.targets import AccountTarget
 from shiori_sdk.core.conversation import InitiatedDelivery, InitiatedReply
 from shiori_sdk.core.tools import ToolStatus
+from shiori_sdk.tools import ToolResult
 from shiori_sdk.kernel import Key
 
 
@@ -172,19 +173,13 @@ class RecentTurnMessage:
 
 @dataclass(frozen=True, kw_only=True)
 class ProactiveHistoryMessage:
-    """One proactive message already stored on the role session."""
+    """One proactive message already stored on the role session.
+
+    ``timestamp`` is None when the stored time is missing or unreadable.
+    """
 
     content: str
     timestamp: datetime | None
-    state_summary_tag: str
-    source_refs: tuple[Mapping[str, object], ...]
-
-    def __post_init__(self) -> None:
-        object.__setattr__(
-            self,
-            "source_refs",
-            tuple(_freeze(ref) for ref in self.source_refs),
-        )
 
 
 class ProactiveHost(Protocol):
@@ -216,15 +211,57 @@ class ProactiveHost(Protocol):
 
         The kernel's ``ToolCalling`` chain and the core checks see the call.
         A denied call does not run ``invoker``. The caller owns the loop.
+
+        Inside a natural reply scope that has a plan, the call (with the
+        model's arguments) and ``outcome.text`` are recorded on the plan as a
+        tool fact, a denied call included. ``message_push``, ``finish_turn``
+        and ``finish_drift`` are delivery controls and are not recorded. The
+        scope commits the facts when it ends.
+        """
+        ...
+
+    async def run_host_tool(
+        self, name: str, arguments: Mapping[str, object], *, role_id: str
+    ) -> str | ToolResult:
+        """Run the generation's registered tool ``name`` for ``role_id``.
+
+        Meant as the body of an ``execute_tool`` invoker, so the kernel checks
+        have already seen the call. The tool runs in the role's user context:
+        a tool that takes the role, the turn session or the thread from its
+        execution context gets the role, the role's session and its desktop
+        thread, and the model cannot override them. No other context is
+        passed. Returns what the tool returned; a tool that raises returns its
+        error text. An unregistered ``name`` raises ``LookupError``; an empty
+        ``role_id`` raises ``ValueError``.
         """
         ...
 
     async def deliver(self, reply: InitiatedReply) -> InitiatedDelivery:
         """Deliver ``reply`` on the published generation.
 
-        Same payload, result and errors as
-        ``CONVERSATION.deliver_initiated_reply``. Pins a lease so a
-        process-level loop does not keep a previous generation's conversation.
+        Outside a natural reply plan: same payload, result and errors as
+        ``CONVERSATION.deliver_initiated_reply``.
+
+        Inside the natural reply plan open on this task, ``reply`` is the
+        tick's single draft and goes out through that plan, as the messages
+        the plan accepted from ``complete(natural_draft=True)``; no second
+        scope is opened. ``reply.session_key`` must be the scope's session and
+        ``channel`` / ``chat_id`` the chat the scope opened on or was last
+        moved to by ``retarget_natural_transport``. A reply with
+        ``messages``, ``tool_facts`` or an account target is refused too: the
+        plan carries the messages and the facts, and ``retarget_natural_reply``
+        sets the account target. A refused reply raises ``ValueError`` before
+        anything is written.
+
+        Once part of the reply is stored, the result reports it even when the
+        caller's task is cancelled, or the open plan is interrupted, while
+        the rest is being sent: ``deliver`` returns what was stored and the
+        cancellation is raised again at the caller's next ``await``. When
+        nothing was stored yet, the cancellation propagates. A failure of the
+        host's own bookkeeping after the whole reply was stored (the final
+        mood write, the committed event) is logged by the host and the result
+        stays complete. Any other exception means the reply was not stored in
+        full.
         """
         ...
 
@@ -257,8 +294,9 @@ class ProactiveHost(Protocol):
     ) -> ValidatedRoleReply:
         """Validate one reply against the role's mood catalog.
 
-        The catalog is ``CONVERSATION_REPLY.reply_state`` on the generation
-        this call can see. Raises ``ValueError`` when the role is gone, the
+        The catalog is ``CONVERSATION.reply_state`` of the generation this
+        call runs on: the lease the caller holds (inside ``run_tick``, the
+        tick's), otherwise the published one. Raises ``ValueError`` when the role is gone, the
         mood is outside the catalog, the thought is not a short first-person
         line, or required text is blank.
         """
@@ -325,13 +363,19 @@ class ProactiveHost(Protocol):
         """Whether this task is inside a natural-reply scope that has a plan."""
         ...
 
-    async def commit_natural_reply(self, reply: InitiatedReply) -> InitiatedDelivery:
-        """Deliver ``reply`` through the natural plan already open on this task.
+    def natural_reply_properties(self) -> Mapping[str, object]:
+        """JSON-schema properties of a natural draft's message list.
 
-        Does not open another scope. ``deliver`` would, and a second scope
-        drops the tick's plan. No open plan raises ``RuntimeError``. The
-        event is emitted before this returns; success and failure side
-        effects belong to the caller and therefore follow the event.
+        The draft tool puts these in place of its single message field and
+        requires ``messages``. They do not depend on an open plan.
+        """
+        ...
+
+    def natural_reply_messages(self) -> tuple[str, ...] | None:
+        """The message list the open plan accepted from the last natural draft.
+
+        None until ``complete(natural_draft=True)`` accepted one. No open plan
+        raises ``RuntimeError``.
         """
         ...
 
@@ -354,16 +398,6 @@ class ProactiveHost(Protocol):
         """
         ...
 
-    def bound_chat_target(
-        self, role_id: str, channel: str, chat_id: str
-    ) -> tuple[str, AccountTarget]:
-        """The account plugin and private target that reach a bound user's chat.
-
-        Raises ``LookupError`` when that chat is not a bound online chat of
-        the role.
-        """
-        ...
-
     def tool_schemas(
         self, names: Sequence[str] | None = None
     ) -> tuple[Mapping[str, object], ...]:
@@ -376,6 +410,13 @@ class ProactiveHost(Protocol):
 
     def mcp_server_names(self) -> tuple[str, ...]:
         """MCP servers that currently have tools on the generation, sorted."""
+        ...
+
+    def mcp_tool_names(self, server: str) -> tuple[str, ...]:
+        """Names of the tools ``server`` currently has on the generation, sorted.
+
+        Empty when the server is unknown or not connected.
+        """
         ...
 
     def require_channel_account(self, role_id: str, channel: str) -> None:
@@ -426,10 +467,14 @@ class ProactiveHost(Protocol):
         not calibrate the input budget. ``tool_choice`` may be ``"auto"`` or
         a tool-choice object.
 
-        ``natural_draft`` runs the open natural plan's one format correction
-        before returning. The plan keeps the provider response (refusal,
-        finish reason, provider fields). The returned completion is the
-        corrected tool call. No open plan raises.
+        ``natural_draft`` turns the completion into the open natural plan's
+        draft before returning: the ``message_push`` call's ``messages`` are
+        validated, with at most one format correction, and the plan keeps the
+        provider response (refusal, finish reason, provider fields). The
+        returned completion carries that ``message_push`` call with the
+        accepted messages, or unchanged business tool calls the model made
+        instead. A completion that cannot become a draft raises
+        ``ValueError``. No open plan raises ``RuntimeError``.
         """
         ...
 

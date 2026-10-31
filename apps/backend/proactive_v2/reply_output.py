@@ -6,12 +6,8 @@ import json
 import logging
 from collections.abc import Awaitable, Callable
 from copy import deepcopy
-from dataclasses import replace
 from typing import Any
 
-from agent.provider import LLMProvider, LLMResponse
-from agent.turns.proactive_sequence import current_proactive_reply
-from prompts.natural_chat import FINISH_REPLY_TOOL_NAME
 from core.roles.reply_state import InvalidRoleReply, RoleReply
 from proactive_v2.context import AgentTickContext
 from proactive_v2.outbound_text import normalize_outbound_text
@@ -32,8 +28,14 @@ def reply_properties(moods: tuple[str, ...]) -> dict[str, Any]:
     }
 
 
-def reply_schemas(schemas: list[dict], ctx: AgentTickContext) -> list[dict]:
-    """Bind the current role catalog to message_push, leaving other tools intact."""
+def reply_schemas(
+    schemas: list[dict], ctx: AgentTickContext, host: ProactiveHost
+) -> list[dict]:
+    """Bind the current role catalog to message_push, leaving other tools intact.
+
+    Inside the tick's natural plan the draft carries a message list instead of
+    one message.
+    """
     if ctx.reply_context is None:
         raise InvalidRoleReply("主动回复缺少生成起点角色状态")
     result = deepcopy(schemas)
@@ -43,18 +45,14 @@ def reply_schemas(schemas: list[dict], ctx: AgentTickContext) -> list[dict]:
             continue
         parameters = function["parameters"]
         parameters["properties"].update(reply_properties(ctx.reply_context.moods))
-        if current_proactive_reply() is not None:
-            from agent.core.passive_turn.natural_reply import finish_reply_schema
-
+        if host.natural_reply_active():
             function["description"] = function["description"].replace(
                 "向用户发送一条消息", "提交本轮要发送的消息列表"
             )
             properties = parameters["properties"]
             properties.pop("message", None)
             properties.pop("content", None)
-            properties.update(
-                finish_reply_schema()["function"]["parameters"]["properties"]
-            )
+            properties.update(host.natural_reply_properties())
             parameters["required"] = [
                 name
                 for name in parameters.get("required", [])
@@ -72,12 +70,11 @@ def parse_push_reply(
     """Validate tool fields before any draft or delivery side effect occurs."""
     if ctx.reply_context is None:
         raise InvalidRoleReply("主动回复缺少生成起点角色状态")
-    plan = current_proactive_reply()
-    if plan is not None:
-        reply = plan.protocol.reply
-        if reply is None or args.get("messages") != list(reply.sequence.messages):
+    if host.natural_reply_active():
+        accepted = host.natural_reply_messages()
+        if accepted is None or args.get("messages") != list(accepted):
             raise InvalidRoleReply("主动自然回复尚未通过消息列表校验")
-        content = reply.sequence.content
+        content = "\n\n".join(accepted)
     else:
         content = args.get("message", args.get("content", ""))
         if isinstance(content, str):
@@ -164,72 +161,3 @@ async def correct_push_call(
             raise InvalidRoleReply("主动回复格式纠正改写了消息或投递参数")
     parse_push_reply(corrected_args, ctx, host)
     return corrected
-
-
-async def complete_natural_push(
-    response: LLMResponse,
-    *,
-    messages: list[dict],
-    provider: LLMProvider,
-    model: str,
-    max_tokens: int,
-) -> LLMResponse:
-    """Adapt the internal draft's text fields to the common completion owner.
-
-    Evidence, destination and role state remain the original draft's fields.
-    A format correction only exposes finish_reply and cannot replay work or
-    choose a different destination. Ordinary explicit sends never enter here.
-    """
-    from agent.core.passive_turn.natural_reply import InvalidNaturalReply
-
-    plan = current_proactive_reply()
-    assert plan is not None
-    drafts = [call for call in response.tool_calls if call.name == "message_push"]
-    if not drafts:
-        if response.tool_calls:
-            # Validate deferred parsing failures on actual business calls.
-            if plan.protocol.pending_work(response):
-                return response
-            raise InvalidNaturalReply("主动回复需要保留 message_push 的目标和证据参数")
-        raise InvalidNaturalReply("主动自然回复缺少决策工具调用")
-    adapted = replace(
-        response,
-        tool_calls=[
-            (
-                replace(
-                    call,
-                    name=FINISH_REPLY_TOOL_NAME,
-                    arguments={"messages": call.arguments.get("messages")},
-                )
-                if call.name == "message_push"
-                else call
-            )
-            for call in response.tool_calls
-        ],
-    )
-    if plan.protocol.pending_work(adapted):
-        return adapted
-    if len(drafts) != 1 or drafts[0].arguments_error:
-        # An ambiguous/malformed envelope cannot safely retain target/evidence.
-        raise InvalidNaturalReply("主动自然回复需要一个参数完整的 message_push 草稿")
-    plan.completion = await plan.protocol.complete(
-        adapted,
-        messages=messages,
-        provider=provider,
-        model=model,
-        max_tokens=max_tokens,
-    )
-    reply = plan.protocol.reply
-    assert reply is not None
-    return replace(
-        plan.completion.response,
-        tool_calls=[
-            replace(
-                drafts[0],
-                arguments={
-                    **drafts[0].arguments,
-                    "messages": list(reply.sequence.messages),
-                },
-            )
-        ],
-    )

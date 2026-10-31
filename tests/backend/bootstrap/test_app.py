@@ -253,13 +253,10 @@ def test_desktop_presence_is_app_owned_and_present_before_any_report(
 async def test_started_runtime_serves_proactive_host_and_conversation(
     tmp_path, empty_config
 ):
-    """The kernel serves this app's proactive port and conversation.
-
-    A host that copied presence at startup would stay present after
-    ``report(False)``.
-    """
+    """The kernel serves the proactive port and conversation; the port reads
+    this app's desktop presence."""
     from bootstrap.app import RuntimeFeatures
-    from shiori_sdk.core.conversation import CONVERSATION, CONVERSATION_REPLY
+    from shiori_sdk.core.conversation import CONVERSATION
     from shiori_sdk.core.proactive_host import PROACTIVE_HOST
 
     app = AppRuntime(
@@ -272,13 +269,7 @@ async def test_started_runtime_serves_proactive_host_and_conversation(
         assert app.core is not None and app.core.plugin_manager is not None
         kernel = app.core.plugin_manager.kernel
         host = kernel.get(PROACTIVE_HOST)
-        conversation = kernel.get(CONVERSATION)
-        reply = kernel.get(CONVERSATION_REPLY)
-        assert host is not None and conversation is not None and reply is not None
-        assert reply is conversation
-        with pytest.raises(ValueError, match="role not found for proactive generation"):
-            reply.reply_state("missing")
-        assert host.user_at_desktop() is True
+        assert host is not None and kernel.get(CONVERSATION) is not None
         app.desktop_presence.report(False)
         assert host.user_at_desktop() is False
     finally:

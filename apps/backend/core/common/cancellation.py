@@ -30,3 +30,18 @@ async def finish_started[T](
     if cancelled:
         raise asyncio.CancelledError
     return result
+
+
+def raise_cancellation_again() -> None:
+    """Make this task's next ``await`` raise the cancellation it just caught.
+
+    For an operation that must report a result its caller acts on before a
+    cancellation reaches that caller. A cancellation the task raised itself
+    (none requested) becomes a requested one; a requested one keeps its count.
+    """
+    task = asyncio.current_task()
+    if task is None:
+        raise RuntimeError("raise_cancellation_again needs a running task")
+    if task.cancelling():
+        task.uncancel()
+    task.cancel()

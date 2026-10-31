@@ -89,7 +89,6 @@ class ProactiveTurnPipeline:
         self._state_store = deps.state_store
         self._any_action_gate = deps.any_action_gate
         self._passive_busy_fn = deps.passive_busy_fn
-        self._turn_orchestrator = deps.turn_orchestrator
         self._deduper = deps.deduper
         self._tool_deps = deps.tool_deps
         self._gateway_deps = deps.gateway_deps
@@ -102,7 +101,7 @@ class ProactiveTurnPipeline:
         self._target_transport_fn = deps.target_transport_fn
         self._proactive_gates = deps.proactive_gates or ProactiveGateChain()
         self._host = deps.proactive_host
-        self._reply = deps.conversation_reply
+        self._conversation = deps.conversation
 
         if (
             self._drift_pipeline is not None
@@ -130,7 +129,9 @@ class ProactiveTurnPipeline:
             session_key=self._session_key,
             now_utc=datetime.now(timezone.utc),
         )
-        state = self._reply.reply_state(role_id_from_session_key(self._session_key))
+        state = self._conversation.reply_state(
+            role_id_from_session_key(self._session_key)
+        )
         ctx.reply_context = RoleReplyContext(
             moods=state.moods,
             previous_updated_at=state.mood_updated_at,

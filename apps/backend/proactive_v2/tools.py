@@ -27,7 +27,6 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from shiori_sdk.memory.engine import MemoryRetrievalApi
-    from core.memory.group_environment import GroupEnvironment
     from core.memory.markdown import MemoryProfileApi
 
 logger = logging.getLogger(__name__)
@@ -51,9 +50,6 @@ class ToolDeps:
     ack_fn: Any = None  # async (compound_key: str, ttl_hours: int) -> None
     alert_ack_fn: Any = None  # async (compound_key: str) -> None
     max_chars: int = 8_000
-    shared_tools: Any = None
-    # 群环境层（#497）：主动回合注入各外部会话的最近动态。
-    group_environment: "GroupEnvironment | None" = None
     # 好感块（#714）：每轮读取，放进 context frame；未初始化时返回 None。
     affection_prompt_fn: "Callable[[], str | None] | None" = None
     proactive_host: Any = None
@@ -655,14 +651,11 @@ async def dispatch(
     tool_name: str, args: dict, ctx: AgentTickContext, deps: ToolDeps
 ) -> str:
     if tool_name in {"account_list", "account_targets"}:
-        if deps.shared_tools is None:
+        host = deps.proactive_host
+        if host is None:
             raise RuntimeError("账号查询工具不可用")
         role_id = _memory_scope_from_tick_context(ctx).role_id
-        return str(
-            await deps.shared_tools.execute(
-                tool_name, args, context={"role_id": role_id}
-            )
-        )
+        return str(await host.run_host_tool(tool_name, args, role_id=role_id))
     if tool_name == "get_alert_events":
         return await _get_alert_events(ctx, args)
 

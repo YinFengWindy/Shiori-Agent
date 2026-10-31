@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
 from datetime import datetime
 from types import SimpleNamespace
 from typing import Any, Callable, cast
@@ -12,22 +11,18 @@ from unittest.mock import AsyncMock, MagicMock
 from tests.support.generation_getters import bound_affection, run_in_turn
 
 from agent.core.turn_events import core_kernel
-from agent.tools.execution import ToolExecutionRequest, ToolExecutor
-from agent.turns.proactive_sequence import current_proactive_reply
-from agent.turns.reply_interruption import (
-    ReplyInterruption,
-    ReplyPlanInvalidated,
-    reply_was_invalidated,
+from agent.proactive_host import HostProactiveRunner
+from agent.tools.registry import ToolRegistry
+from bus.event_bus import EventBus
+from agent.turns.orchestrator import TurnOrchestrator
+from conversation.initiated import deliver_checked_reply
+from shiori_sdk.core.conversation import (
+    Conversation,
+    InitiatedDelivery,
+    InitiatedReply,
+    RoleReplyState,
 )
-from conversation.initiated import _turn_result
-from core.roles.reply_state import validate_role_reply
-from shiori_sdk.core.conversation import InitiatedDelivery, RoleReplyState
-from shiori_sdk.core.proactive_host import (
-    NaturalReplyInvalidated,
-    ProactiveToolCall,
-    ProactiveToolOutcome,
-    ValidatedRoleReply,
-)
+from shiori_sdk.core.proactive_host import ProactiveHost
 from proactive_v2.config import ProactiveConfig
 from proactive_v2.gateway import GatewayDeps
 from proactive_v2.tools import ToolDeps
@@ -43,6 +38,7 @@ from agent.core.proactive_turn.gates import (
 )
 from agent.core.proactive_turn.strategies import RelationshipStrategy
 from tests.support.bound_chat_delivery import bound_chat_orchestrator
+from tests.support.proactive_runtime import ProactiveGeneration, ProactiveRuntime
 
 # ── FakeStateStore ────────────────────────────────────────────────────────
 
@@ -282,177 +278,26 @@ def relationship_gate_chain(
     return ProactiveGateChain(motives=gates)
 
 
-class _ReplyTicket:
-    def __init__(self) -> None:
-        self.interruption = ReplyInterruption()
+class _PipelineConversation:
+    """``CONVERSATION`` over the test's orchestrator, with a fixed mood catalog.
 
-    def invalidate(self) -> None:
-        self.interruption.invalidate()
-
-
-class _PipelineReply:
-    """``CONVERSATION_REPLY`` for pipeline tests.
-
-    The pipeline exists only after this object is built, so the read looks
-    the orchestrator up when the tick starts.
+    Delivery skips the role-session checks so the default ``test_session``
+    still delivers; everything after them is the host's.
     """
 
-    def __init__(self, pipeline_ref: dict[str, Any]) -> None:
-        self._pipeline_ref = pipeline_ref
+    def __init__(self, orchestrator: TurnOrchestrator) -> None:
+        self._orchestrator = orchestrator
+
+    def orchestrator(self, role_id: str) -> TurnOrchestrator:
+        del role_id
+        return self._orchestrator
 
     def reply_state(self, role_id: str) -> RoleReplyState:
         del role_id
-        pipeline = self._pipeline_ref["pipeline"]
-        orchestrator = pipeline._turn_orchestrator
-        if orchestrator is None:
-            return RoleReplyState(moods=("平静",), mood_updated_at="")
-        captured = orchestrator.capture_reply_context(pipeline._session_key)
-        return RoleReplyState(
-            moods=tuple(captured.moods),
-            mood_updated_at=captured.previous_updated_at,
-        )
+        return RoleReplyState(moods=("平静",), mood_updated_at="")
 
-
-class _PipelineHost:
-    """The port surface the pipeline tests drive through their orchestrator.
-
-    ``pipeline_ref`` is filled after the pipeline exists, because the dispatcher
-    test replaces ``_turn_orchestrator`` before the tick runs.
-    """
-
-    def __init__(self, pipeline_ref: dict[str, Any], tool_deps: ToolDeps) -> None:
-        self._pipeline_ref = pipeline_ref
-        self._tool_deps = tool_deps
-
-    def _orchestrator(self) -> Any:
-        return self._pipeline_ref["pipeline"]._turn_orchestrator
-
-    def natural_chat_enabled(self, session_key: str) -> bool:
-        orchestrator = self._orchestrator()
-        if orchestrator is None:
-            return False
-        return bool(orchestrator.natural_chat_enabled(session_key))
-
-    def begin_natural_reply(self) -> _ReplyTicket:
-        return _ReplyTicket()
-
-    @asynccontextmanager
-    async def natural_reply_scope(
-        self, ticket, session_key, channel, chat_id, *, turn_id
-    ):
-        orchestrator = self._orchestrator()
-        async with orchestrator.natural_reply_scope(
-            session_key,
-            channel,
-            chat_id,
-            turn_id=turn_id,
-            interruption=ticket.interruption,
-        ):
-            try:
-                yield
-            except ReplyPlanInvalidated as exc:
-                raise NaturalReplyInvalidated(str(exc)) from exc
-            finally:
-                await orchestrator.commit_proactive_tool_facts(session_key)
-
-    def reply_invalidated(self) -> bool:
-        return reply_was_invalidated()
-
-    def natural_reply_active(self) -> bool:
-        return current_proactive_reply() is not None
-
-    async def retarget_natural_reply(self, session_key: str, target) -> None:
-        await self._orchestrator().retarget_natural_reply(session_key, dict(target))
-
-    async def retarget_natural_transport(
-        self, session_key: str, channel: str, chat_id: str
-    ) -> None:
-        await self._orchestrator().retarget_natural_transport(
-            session_key, channel, chat_id
-        )
-
-    async def deliver(self, reply) -> InitiatedDelivery:
-        return await self._commit(reply, include_target=True)
-
-    async def commit_natural_reply(self, reply) -> InitiatedDelivery:
-        return await self._commit(reply, include_target=False)
-
-    async def _commit(self, reply, *, include_target: bool) -> InitiatedDelivery:
-        committed: list[str] = []
-        complete = await self._orchestrator().handle_proactive_turn(
-            result=_turn_result(reply, include_target=include_target),
-            session_key=reply.session_key,
-            channel=reply.channel,
-            chat_id=reply.chat_id,
-            source=reply.source,
-            committed=committed,
-        )
-        return InitiatedDelivery(message_ids=tuple(committed), complete=bool(complete))
-
-    async def execute_tool(
-        self, call: ProactiveToolCall, invoker
-    ) -> ProactiveToolOutcome:
-        result = await ToolExecutor(core_kernel).execute(
-            ToolExecutionRequest(
-                call_id=call.call_id,
-                tool_name=call.name,
-                arguments=dict(call.arguments),
-                source="proactive",
-                session_key=call.session_key,
-                channel=call.channel,
-                chat_id=call.chat_id,
-            ),
-            invoker,
-        )
-        return ProactiveToolOutcome(
-            text=str(result.output),
-            status=result.status,
-            arguments=result.final_arguments,
-            finalize=result.finalize,
-        )
-
-    def tool_schemas(self, names=None):
-        shared = getattr(self._tool_deps, "shared_tools", None)
-        if shared is None:
-            return ()
-        return tuple(shared.get_schemas(None if names is None else list(names)))
-
-    def mcp_server_names(self) -> tuple[str, ...]:
-        shared = getattr(self._tool_deps, "shared_tools", None)
-        if shared is None:
-            return ()
-        return tuple(sorted(shared.get_mcp_server_names()))
-
-    def recent_activity(self, role_id: str, *, now: datetime) -> str:
-        del role_id, now
-        return ""
-
-    def validate_reply(
-        self,
-        role_id: str,
-        *,
-        content: str,
-        mood: str,
-        thought: str,
-        allow_empty_content: bool = False,
-    ) -> ValidatedRoleReply:
-        del role_id
-        reply = validate_role_reply(
-            {"content": content, "mood": mood, "thought": thought},
-            ("平静",),
-            allow_empty_content=allow_empty_content,
-        )
-        return ValidatedRoleReply(
-            content=reply.content, mood=reply.mood, thought=reply.thought
-        )
-
-    def require_channel_account(self, role_id: str, channel: str) -> None:
-        from agent.tools.account_delivery import shared_account_delivery
-
-        delivery = shared_account_delivery(self._tool_deps.shared_tools)
-        if delivery is None:
-            raise RuntimeError("账号目标发送服务不可用")
-        delivery.channel_account(channel, role_id)
+    async def deliver_initiated_reply(self, reply: InitiatedReply) -> InitiatedDelivery:
+        return await deliver_checked_reply(self._orchestrator, reply)
 
 
 def make_proactive_pipeline(
@@ -474,7 +319,17 @@ def make_proactive_pipeline(
     target_transport_fn: Any = lambda: ("telegram", "test_chat_id"),
     proactive_gates: ProactiveGateChain | None = None,
     bind_getters: bool = True,
+    tools: ToolRegistry | None = None,
+    proactive_host: ProactiveHost | None = None,
+    conversation: Conversation | None = None,
+    event_bus: EventBus | None = None,
 ):
+    """A tick pipeline on the real ``PROACTIVE_HOST``.
+
+    By default the host serves a fake published runtime whose conversation
+    sends through ``sender``. A test running under its own generation lease
+    passes that generation's ``proactive_host`` and ``conversation``.
+    """
     from agent.core.proactive_turn import (
         ProactiveTurnPipeline,
         ProactiveTurnPipelineDeps,
@@ -522,12 +377,6 @@ def make_proactive_pipeline(
     if proactive_gates is None:
         proactive_gates = relationship_gate_chain()
 
-    pipeline_ref: dict[str, Any] = {}
-    host = _PipelineHost(pipeline_ref, tool_deps)
-    reply = _PipelineReply(pipeline_ref)
-    if tool_deps.proactive_host is None:
-        tool_deps.proactive_host = host
-
     session = _FakeSession(session_key)
 
     async def append_messages(session, messages, **kwargs):
@@ -561,8 +410,28 @@ def make_proactive_pipeline(
     # The default "telegram" target is a bound private chat: the account sends
     # it through ``sender`` just as the outbound port does for the desktop.
     orchestrator, _ = bound_chat_orchestrator(
-        session_svc, _Outbound(), deliver=lambda content: sender.send(content)
+        session_svc,
+        _Outbound(),
+        deliver=lambda content: sender.send(content),
+        event_bus=event_bus,
     )
+    if proactive_host is None or conversation is None:
+        pipeline_conversation = _PipelineConversation(orchestrator)
+        runtime = ProactiveRuntime(
+            ProactiveGeneration(
+                conversation=pipeline_conversation,
+                tools=tools or ToolRegistry(),
+                plugin_manager=SimpleNamespace(kernel=core_kernel()),
+                # No external chat has recent activity.
+                group_environment=SimpleNamespace(
+                    render_recent_activity=lambda _role_id, *, now: ""
+                ),
+            )
+        )
+        proactive_host = proactive_host or HostProactiveRunner(lambda: runtime)
+        conversation = conversation or pipeline_conversation
+    if tool_deps.proactive_host is None:
+        tool_deps.proactive_host = proactive_host
 
     pipeline = ProactiveTurnPipeline(
         ProactiveTurnPipelineDeps(
@@ -571,7 +440,6 @@ def make_proactive_pipeline(
             state_store=state_store,
             any_action_gate=any_action_gate,
             passive_busy_fn=passive_busy_fn,
-            turn_orchestrator=orchestrator,
             deduper=deduper,
             tool_deps=tool_deps,
             gateway_deps=gateway_deps,
@@ -581,14 +449,12 @@ def make_proactive_pipeline(
             recent_proactive_fn=recent_proactive_fn,
             workspace_context_fn=workspace_context_fn,
             drift_pipeline=drift_pipeline,
-            kernel=core_kernel,
-            proactive_host=host,
-            conversation_reply=reply,
+            proactive_host=proactive_host,
+            conversation=conversation,
             target_transport_fn=target_transport_fn,
             proactive_gates=proactive_gates,
         )
     )
-    pipeline_ref["pipeline"] = pipeline
     if not bind_getters:
         return pipeline
     # Production ticks run under the generation lease, which carries both

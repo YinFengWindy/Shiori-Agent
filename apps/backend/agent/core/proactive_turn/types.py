@@ -6,9 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from ..drift_turn import DriftTurnPipeline
-from agent.tools.execution import KernelSource
-from agent.turns.orchestrator import TurnOrchestrator
-from shiori_sdk.core.conversation import ConversationReply
+from shiori_sdk.core.conversation import Conversation
 from shiori_sdk.core.proactive_host import ProactiveHost
 from agent.turns.result import TurnResult
 from proactive_v2.config import ProactiveConfig
@@ -54,7 +52,6 @@ class ProactiveTurnPipelineDeps:
     state_store: Any
     any_action_gate: Any | None
     passive_busy_fn: Callable[[str], bool] | None
-    turn_orchestrator: TurnOrchestrator | None
     deduper: Any | None
     tool_deps: ToolDeps
     gateway_deps: GatewayDeps | None
@@ -64,12 +61,10 @@ class ProactiveTurnPipelineDeps:
     rng: Any | None
     recent_proactive_fn: Callable[[], list] | None
     drift_pipeline: DriftTurnPipeline | None
-    # 本代插件内核，每次工具调用都重新读取，插件代内启停后下一次调用即生效。
-    kernel: KernelSource
     # ``PROACTIVE_HOST``: natural scope, completion, tools, delivery and reads.
     proactive_host: ProactiveHost
-    # ``CONVERSATION_REPLY``: this generation's session owns the reply stamp.
-    conversation_reply: ConversationReply
+    # This generation's ``CONVERSATION``: the tick copies its reply stamp.
+    conversation: Conversation
     # Selects this tick's single delivery target; None means no candidate session.
     target_transport_fn: Callable[[], tuple[str, str] | None] | None = None
     proactive_gates: ProactiveGateChain | None = None
