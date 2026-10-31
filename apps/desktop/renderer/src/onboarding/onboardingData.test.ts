@@ -13,10 +13,10 @@ describe("onboarding data", () => {
     }), /offline/);
   });
   it("preserves other settings and registrations across a retry with the same draft id", async () => {
-    let snapshot = { ...loadSettingsData("[llm]\n"), generation: 3 };
+    let snapshot = { ...loadSettingsData("[llm]\n[plugins.scene]\nobservation_enabled = false\n"), generation: 3 };
     const existing = { ...registration, id: "existing" };
     snapshot.formData.models.registrations = [existing];
-    const advanced = { ...snapshot.formData.advanced };
+    const advanced = structuredClone(snapshot.formData.advanced);
     const api = {
       readSettings: async () => snapshot,
       saveSettings: async (draft: typeof snapshot.formData, options?: { expectedGeneration?: number }) => {
