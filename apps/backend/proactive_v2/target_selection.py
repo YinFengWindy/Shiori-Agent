@@ -23,13 +23,9 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from datetime import datetime
 
-from conversation.service import desktop_chat_id
-from shiori_sdk.channels.threads import network_thread_id
-from conversation.store import ConversationStore
 from shiori_sdk.accounts.targets import AccountTarget
+from shiori_sdk.core.proactive_host import ProactiveHost
 from core.common.channel_directory import DESKTOP_CHANNEL
-from core.desktop_presence import DesktopPresence
-from core.roles.bound_chats import bound_chat_target, role_bound_chats
 from core.roles.models import RoleProactiveCandidate
 from core.roles.store import RoleStore
 
@@ -67,20 +63,14 @@ def select_proactive_target(
 class ProactiveTargetResolver:
     """Reads the live inputs of ``select_proactive_target`` for a role.
 
-    ``roles`` must be the runtime's shared store: its account index and user
-    identities decide which private chats are candidates.
+    Candidate chats, the last user message on a thread and desktop presence
+    come from ``PROACTIVE_HOST``. ``roles`` is the runtime's shared store: its
+    proactive switch decides whether a saved role is eligible.
     """
 
-    def __init__(
-        self,
-        *,
-        roles: RoleStore,
-        conversations: ConversationStore,
-        desktop_presence: DesktopPresence,
-    ) -> None:
+    def __init__(self, *, roles: RoleStore, host: ProactiveHost) -> None:
         self._roles = roles
-        self._conversations = conversations
-        self._desktop_presence = desktop_presence
+        self._host = host
 
     def resolve_saved(self, role_id: str) -> RoleProactiveCandidate | None:
         """Selects among the role's candidates; None when proactive is disabled.
@@ -95,11 +85,8 @@ class ProactiveTargetResolver:
         if not role.proactive.enabled:
             return None
         candidates = [
-            RoleProactiveCandidate(DESKTOP_CHANNEL, desktop_chat_id(role_id)),
-            *(
-                RoleProactiveCandidate(chat.channel, chat.chat_id)
-                for _, _, chat in role_bound_chats(self._roles, role_id)
-            ),
+            RoleProactiveCandidate(chat.channel, chat.chat_id)
+            for chat in self._host.candidate_chats(role_id)
         ]
         return self.resolve(role_id, candidates)
 
@@ -109,9 +96,8 @@ class ProactiveTargetResolver:
         """The account channel and private target reaching a bound user's chat.
 
         ``channel`` / ``chat_id`` name a candidate ``resolve_saved`` chose.
-        See ``core.roles.bound_chats.bound_chat_target``.
         """
-        return bound_chat_target(self._roles, role_id, channel, chat_id)
+        return self._host.bound_chat_target(role_id, channel, chat_id)
 
     def resolve(
         self, role_id: str, candidates: Sequence[RoleProactiveCandidate]
@@ -119,7 +105,7 @@ class ProactiveTargetResolver:
         """Selects the target among ``candidates`` of ``role_id`` right now."""
         return select_proactive_target(
             candidates,
-            desktop_present=self._desktop_presence.is_desktop_present(),
+            desktop_present=self._host.user_at_desktop(),
             last_user_at=self._last_user_times(role_id, candidates),
         )
 
@@ -130,10 +116,9 @@ class ProactiveTargetResolver:
         for candidate in candidates:
             if candidate.channel == DESKTOP_CHANNEL:
                 continue
-            raw = self._conversations.last_user_message_at(
-                network_thread_id(role_id, candidate.channel, candidate.chat_id)
+            when = self._host.last_user_message_at(
+                role_id, candidate.channel, candidate.chat_id
             )
-            if raw is not None:
-                # A naive legacy timestamp was written in local time.
-                times[candidate] = datetime.fromisoformat(raw).astimezone()
+            if when is not None:
+                times[candidate] = when
         return times

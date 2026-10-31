@@ -247,3 +247,35 @@ def test_desktop_presence_is_app_owned_and_present_before_any_report(
 ):
     app = AppRuntime(empty_config, tmp_path, features=DESKTOP_RUNTIME_FEATURES)
     assert app.desktop_presence.is_desktop_present() is True
+
+
+@pytest.mark.asyncio
+async def test_started_runtime_serves_proactive_host_and_conversation(
+    tmp_path, empty_config
+):
+    """The kernel serves this app's proactive port and conversation.
+
+    A host that copied presence at startup would stay present after
+    ``report(False)``.
+    """
+    from bootstrap.app import RuntimeFeatures
+    from shiori_sdk.core.conversation import CONVERSATION
+    from shiori_sdk.core.proactive_host import PROACTIVE_HOST
+
+    app = AppRuntime(
+        empty_config,
+        tmp_path,
+        features=RuntimeFeatures(enable_message_channels=False, enable_proactive=False),
+    )
+    await app.start()
+    try:
+        assert app.core is not None and app.core.plugin_manager is not None
+        kernel = app.core.plugin_manager.kernel
+        host = kernel.get(PROACTIVE_HOST)
+        conversation = kernel.get(CONVERSATION)
+        assert host is not None and conversation is not None
+        assert host.user_at_desktop() is True
+        app.desktop_presence.report(False)
+        assert host.user_at_desktop() is False
+    finally:
+        await app.shutdown()

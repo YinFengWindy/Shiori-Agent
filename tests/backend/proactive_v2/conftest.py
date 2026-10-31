@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from datetime import datetime
 from types import SimpleNamespace
 from typing import Any, Callable, cast
@@ -11,6 +12,23 @@ from unittest.mock import AsyncMock, MagicMock
 from tests.support.generation_getters import bound_affection, run_in_turn
 
 from agent.core.turn_events import core_kernel
+from agent.tools.execution import ToolExecutionRequest, ToolExecutor
+from agent.turns.proactive_sequence import current_proactive_reply
+from agent.turns.reply_interruption import (
+    ReplyInterruption,
+    ReplyPlanInvalidated,
+    reply_was_invalidated,
+)
+from conversation.initiated import _turn_result
+from core.roles.reply_state import validate_role_reply
+from shiori_sdk.core.conversation import InitiatedDelivery
+from shiori_sdk.core.proactive_host import (
+    NaturalReplyInvalidated,
+    ProactiveToolCall,
+    ProactiveToolOutcome,
+    RoleReplyState,
+    ValidatedRoleReply,
+)
 from proactive_v2.config import ProactiveConfig
 from proactive_v2.gateway import GatewayDeps
 from proactive_v2.tools import ToolDeps
@@ -265,6 +283,169 @@ def relationship_gate_chain(
     return ProactiveGateChain(motives=gates)
 
 
+class _ReplyTicket:
+    def __init__(self) -> None:
+        self.interruption = ReplyInterruption()
+
+    def invalidate(self) -> None:
+        self.interruption.invalidate()
+
+
+class _PipelineHost:
+    """The port surface the pipeline tests drive through their orchestrator.
+
+    ``pipeline_ref`` is filled after the pipeline exists, because the dispatcher
+    test replaces ``_turn_orchestrator`` before the tick runs.
+    """
+
+    def __init__(self, pipeline_ref: dict[str, Any], tool_deps: ToolDeps) -> None:
+        self._pipeline_ref = pipeline_ref
+        self._tool_deps = tool_deps
+
+    def _orchestrator(self) -> Any:
+        return self._pipeline_ref["pipeline"]._turn_orchestrator
+
+    def reply_state(self, role_id: str) -> RoleReplyState:
+        del role_id
+        orchestrator = self._orchestrator()
+        if orchestrator is None:
+            return RoleReplyState(moods=("平静",), mood_updated_at="")
+        captured = orchestrator.capture_reply_context(
+            self._pipeline_ref["pipeline"]._session_key
+        )
+        return RoleReplyState(
+            moods=tuple(captured.moods),
+            mood_updated_at=captured.previous_updated_at,
+        )
+
+    def natural_chat_enabled(self, session_key: str) -> bool:
+        orchestrator = self._orchestrator()
+        if orchestrator is None:
+            return False
+        return bool(orchestrator.natural_chat_enabled(session_key))
+
+    def begin_natural_reply(self) -> _ReplyTicket:
+        return _ReplyTicket()
+
+    @asynccontextmanager
+    async def natural_reply_scope(
+        self, ticket, session_key, channel, chat_id, *, turn_id
+    ):
+        orchestrator = self._orchestrator()
+        async with orchestrator.natural_reply_scope(
+            session_key,
+            channel,
+            chat_id,
+            turn_id=turn_id,
+            interruption=ticket.interruption,
+        ):
+            try:
+                yield
+            except ReplyPlanInvalidated as exc:
+                raise NaturalReplyInvalidated(str(exc)) from exc
+            finally:
+                await orchestrator.commit_proactive_tool_facts(session_key)
+
+    def reply_invalidated(self) -> bool:
+        return reply_was_invalidated()
+
+    def natural_reply_active(self) -> bool:
+        return current_proactive_reply() is not None
+
+    async def retarget_natural_reply(self, session_key: str, target) -> None:
+        await self._orchestrator().retarget_natural_reply(session_key, dict(target))
+
+    async def retarget_natural_transport(
+        self, session_key: str, channel: str, chat_id: str
+    ) -> None:
+        await self._orchestrator().retarget_natural_transport(
+            session_key, channel, chat_id
+        )
+
+    async def deliver(self, reply) -> InitiatedDelivery:
+        return await self._commit(reply, include_target=True)
+
+    async def commit_natural_reply(self, reply) -> InitiatedDelivery:
+        return await self._commit(reply, include_target=False)
+
+    async def _commit(self, reply, *, include_target: bool) -> InitiatedDelivery:
+        committed: list[str] = []
+        complete = await self._orchestrator().handle_proactive_turn(
+            result=_turn_result(reply, include_target=include_target),
+            session_key=reply.session_key,
+            channel=reply.channel,
+            chat_id=reply.chat_id,
+            source=reply.source,
+            committed=committed,
+        )
+        return InitiatedDelivery(message_ids=tuple(committed), complete=bool(complete))
+
+    async def execute_tool(
+        self, call: ProactiveToolCall, invoker
+    ) -> ProactiveToolOutcome:
+        result = await ToolExecutor(core_kernel).execute(
+            ToolExecutionRequest(
+                call_id=call.call_id,
+                tool_name=call.name,
+                arguments=dict(call.arguments),
+                source="proactive",
+                session_key=call.session_key,
+                channel=call.channel,
+                chat_id=call.chat_id,
+            ),
+            invoker,
+        )
+        return ProactiveToolOutcome(
+            text=str(result.output),
+            status=result.status,
+            arguments=result.final_arguments,
+            finalize=result.finalize,
+        )
+
+    def tool_schemas(self, names=None):
+        shared = getattr(self._tool_deps, "shared_tools", None)
+        if shared is None:
+            return ()
+        return tuple(shared.get_schemas(None if names is None else list(names)))
+
+    def mcp_server_names(self) -> tuple[str, ...]:
+        shared = getattr(self._tool_deps, "shared_tools", None)
+        if shared is None:
+            return ()
+        return tuple(sorted(shared.get_mcp_server_names()))
+
+    def recent_activity(self, role_id: str, *, now: datetime) -> str:
+        del role_id, now
+        return ""
+
+    def validate_reply(
+        self,
+        role_id: str,
+        *,
+        content: str,
+        mood: str,
+        thought: str,
+        allow_empty_content: bool = False,
+    ) -> ValidatedRoleReply:
+        del role_id
+        reply = validate_role_reply(
+            {"content": content, "mood": mood, "thought": thought},
+            ("平静",),
+            allow_empty_content=allow_empty_content,
+        )
+        return ValidatedRoleReply(
+            content=reply.content, mood=reply.mood, thought=reply.thought
+        )
+
+    def require_channel_account(self, role_id: str, channel: str) -> None:
+        from agent.tools.account_delivery import shared_account_delivery
+
+        delivery = shared_account_delivery(self._tool_deps.shared_tools)
+        if delivery is None:
+            raise RuntimeError("账号目标发送服务不可用")
+        delivery.channel_account(channel, role_id)
+
+
 def make_proactive_pipeline(
     *,
     cfg: ProactiveConfig | None = None,
@@ -332,12 +513,21 @@ def make_proactive_pipeline(
     if proactive_gates is None:
         proactive_gates = relationship_gate_chain()
 
+    pipeline_ref: dict[str, Any] = {}
+    host = _PipelineHost(pipeline_ref, tool_deps)
+    if tool_deps.proactive_host is None:
+        tool_deps.proactive_host = host
+
     session = _FakeSession(session_key)
 
     async def append_messages(session, messages, **kwargs):
         before_commit = kwargs.get("before_commit")
         if before_commit is not None and not await before_commit():
             return False
+        # Persistence stamps an id onto each stored draft. The port reads it.
+        for index, message in enumerate(messages):
+            if not str(message.get("id") or "").strip():
+                message["id"] = f"{session.key}:{len(session.messages) + index}"
         session.messages.extend(messages)
         session.metadata.update(kwargs.get("metadata_updates") or {})
         return True
@@ -382,10 +572,12 @@ def make_proactive_pipeline(
             workspace_context_fn=workspace_context_fn,
             drift_pipeline=drift_pipeline,
             kernel=core_kernel,
+            proactive_host=host,
             target_transport_fn=target_transport_fn,
             proactive_gates=proactive_gates,
         )
     )
+    pipeline_ref["pipeline"] = pipeline
     if not bind_getters:
         return pipeline
     # Production ticks run under the generation lease, which carries both

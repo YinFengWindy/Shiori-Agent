@@ -271,7 +271,13 @@ class RoleRuntime:
     async def run_proactive_tick(
         self, context: RoleExecutionContext, operation: Callable[[], Awaitable[T]]
     ) -> T:
-        """Runs the role's proactive capability."""
+        """Runs one proactive tick on this role's serial gate.
+
+        Production ticks enter through ``PROACTIVE_HOST.run_tick``. That port
+        keeps the caller's lease, or pins the published generation, and
+        activates the chat model, then calls ``dispatch_proactive_tick``, which
+        lands here. Calling this directly skips both.
+        """
         self._require_work_kind(context, "proactive_tick")
         return await self.execute_thread(context, operation)
 
@@ -404,7 +410,13 @@ class RoleRuntimeRegistry:
     async def dispatch_proactive_tick(
         self, context: RoleExecutionContext, operation: Callable[[], Awaitable[T]]
     ) -> T:
-        """Dispatches the proactive capability for a role."""
+        """The serial gate behind ``PROACTIVE_HOST.run_tick``.
+
+        The port is the production entry: it keeps the caller's lease, or pins
+        the published generation, builds the desktop-thread context and
+        activates the chat model, then calls this. A caller that already holds
+        the context uses this gate without asking the port to pin again.
+        """
         return await (await self.get(context.role_id)).run_proactive_tick(
             context, operation
         )

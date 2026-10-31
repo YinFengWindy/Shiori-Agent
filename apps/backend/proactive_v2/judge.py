@@ -4,8 +4,8 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from agent.provider import LLMProvider
 from proactive_v2.json_utils import extract_json_object
+from shiori_sdk.core.proactive_host import ProactiveHost
 
 logger = logging.getLogger(__name__)
 
@@ -106,14 +106,12 @@ class Judge:
     def __init__(
         self,
         *,
-        provider: LLMProvider,
-        model: str,
+        host: ProactiveHost,
         max_tokens: int,
         format_recent: Callable[[list[dict]], str],
         cfg: Any,
     ) -> None:
-        self._provider = provider
-        self._model = model
+        self._host = host
         self._max_tokens = max_tokens
         self._format_recent = format_recent
         self._cfg = cfg
@@ -238,14 +236,14 @@ class Judge:
             preference_block=preference_block,
         )
         try:
-            response = await self._provider.chat(
-                messages=[
+            response = await self._host.complete(
+                [
                     {"role": "system", "content": system_msg},
                     {"role": "user", "content": user_msg},
                 ],
-                tools=[],
-                model=self._model,
+                tools=(),
                 max_tokens=min(256, self._max_tokens),
+                disable_thinking=False,
             )
             raw = extract_json_object(response.content or "")
         except Exception:
@@ -298,15 +296,8 @@ class Judge:
 
 
 class MessageDeduper:
-    def __init__(
-        self,
-        *,
-        provider: LLMProvider,
-        model: str,
-        max_tokens: int,
-    ) -> None:
-        self._provider = provider
-        self._model = model
+    def __init__(self, *, host: ProactiveHost, max_tokens: int) -> None:
+        self._host = host
         self._max_tokens = max_tokens
 
     async def is_duplicate(
@@ -318,16 +309,16 @@ class MessageDeduper:
         if not recent_proactive:
             return False, "无近期主动消息，放行"
         try:
-            response = await self._provider.chat(
-                messages=self._build_messages(
+            response = await self._host.complete(
+                self._build_messages(
                     new_message,
                     recent_proactive,
                     new_state_summary_tag,
                 ),
-                tools=[],
-                model=self._model,
+                tools=(),
                 max_tokens=min(128, self._max_tokens),
                 call_purpose="auxiliary",
+                disable_thinking=False,
             )
             payload = extract_json_object((response.content or "").strip())
         except Exception as exc:

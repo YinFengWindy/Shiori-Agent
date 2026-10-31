@@ -191,7 +191,134 @@ async def test_natural_drift_uses_shared_messages_and_preserves_thinking(
             ],
         )
 
+    class _Host:
+        def natural_reply_active(self) -> bool:
+            return current_proactive_reply() is not None
+
+        def reply_invalidated(self) -> bool:
+            from agent.turns.reply_interruption import reply_was_invalidated
+
+            return reply_was_invalidated()
+
+        def mcp_server_names(self) -> tuple[str, ...]:
+            return ()
+
+        def recent_activity(self, role_id: str, *, now: object) -> str:
+            del role_id, now
+            return ""
+
+        def tool_schemas(self, names: object = None) -> tuple[object, ...]:
+            del names
+            return ()
+
+        def validate_reply(
+            self,
+            role_id: str,
+            *,
+            content: str,
+            mood: str,
+            thought: str,
+            allow_empty_content: bool = False,
+        ):
+            from core.roles.reply_state import validate_role_reply
+            from shiori_sdk.core.proactive_host import ValidatedRoleReply
+
+            del role_id
+            reply = validate_role_reply(
+                {"content": content, "mood": mood, "thought": thought},
+                ("平静",),
+                allow_empty_content=allow_empty_content,
+            )
+            return ValidatedRoleReply(
+                content=reply.content, mood=reply.mood, thought=reply.thought
+            )
+
+        async def complete(
+            self,
+            messages,
+            *,
+            tools=(),
+            tool_choice="auto",
+            max_tokens=None,
+            call_purpose="default",
+            disable_thinking=True,
+            defer_tool_argument_errors=False,
+            natural_draft=False,
+        ):
+            from proactive_v2.reply_output import complete_natural_push
+            from shiori_sdk.core.proactive_host import (
+                CompletionToolCall,
+                ModelCompletion,
+            )
+
+            kwargs = {
+                "messages": list(messages),
+                "tools": list(tools),
+                "model": deps.model,
+                "max_tokens": max_tokens,
+                "tool_choice": tool_choice,
+                "disable_thinking": disable_thinking,
+                "call_purpose": call_purpose,
+            }
+            if defer_tool_argument_errors:
+                kwargs["defer_tool_argument_errors"] = True
+            resp = await chat(**kwargs)
+            if natural_draft:
+                resp = await complete_natural_push(
+                    resp,
+                    messages=list(messages),
+                    provider=SimpleNamespace(chat=chat),
+                    model=deps.model,
+                    max_tokens=max_tokens,
+                )
+            calls = tuple(
+                CompletionToolCall(
+                    id=call.id,
+                    name=call.name,
+                    arguments=dict(call.arguments),
+                    raw_arguments=call.raw_arguments,
+                    arguments_error=call.arguments_error,
+                )
+                for call in (resp.tool_calls or [])
+            )
+            return ModelCompletion(
+                content=resp.content or "",
+                tool_calls=calls,
+                thinking=resp.thinking,
+            )
+
+        async def retarget_natural_transport(
+            self, session_key, channel, chat_id
+        ) -> None:
+            await owner.retarget_natural_transport(session_key, channel, chat_id)
+
+        async def commit_natural_reply(self, reply):
+            from conversation.initiated import _turn_result
+            from shiori_sdk.core.conversation import InitiatedDelivery
+
+            committed: list[str] = []
+            complete = await owner.handle_proactive_turn(
+                result=_turn_result(reply, include_target=False),
+                session_key=reply.session_key,
+                channel=reply.channel,
+                chat_id=reply.chat_id,
+                source=reply.source,
+                committed=committed,
+            )
+            return InitiatedDelivery(message_ids=tuple(committed), complete=complete)
+
+        async def execute_tool(self, call, invoker):
+            from shiori_sdk.core.proactive_host import ProactiveToolOutcome
+
+            output = await invoker(call.name, dict(call.arguments))
+            return ProactiveToolOutcome(
+                text=str(output),
+                status="ok",
+                arguments=dict(call.arguments),
+            )
+
     deps.provider = SimpleNamespace(chat=chat)
+    deps.proactive_host = _Host()
     factory = AgentTickFactory(deps)
     drift = factory._build_drift_pipeline(ToolDeps())
     assert drift is not None

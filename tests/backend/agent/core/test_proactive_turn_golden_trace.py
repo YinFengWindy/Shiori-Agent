@@ -26,6 +26,7 @@ from collections.abc import AsyncGenerator, Awaitable, Callable, Coroutine
 from contextlib import asynccontextmanager, nullcontext
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from functools import partial
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
@@ -36,11 +37,13 @@ from agent.account_delivery import AccountDelivery
 from agent.config_models import Config
 from agent.core.proactive_turn.strategies import RelationshipStrategy
 from agent.core.turn_events import core_kernel
+from agent.initiated_delivery import HostConversation, orchestrator_for
 from agent.provider import LLMProvider, LLMResponse, ToolCall
 from agent.tools.account_delivery import AccountSendTool
 from agent.tools.message_push import MessagePushTool
 from agent.tools.registry import ToolRegistry
 from agent.turns.channel_sequence import ChannelSequenceOwner
+from agent.proactive_host import HostProactiveRunner
 from bootstrap.proactive import build_proactive_runtime
 from bus.event_bus import EventBus
 from bus.events_lifecycle import InitiatedMessageCommitted
@@ -52,6 +55,7 @@ from core.identity import IdentityChat
 from core.memory.group_environment import GroupEnvironment
 from core.roles import RoleRepository, RoleRuntimeRegistry, RoleStore
 from core.roles.affection_access import AffectionGetter
+from core.roles.reply_policy import ReplyPolicyGetter
 from plugins.natural_chat.backend.plugin import NaturalChatPolicy
 from shiori_sdk.core.affection import Affection
 from proactive_v2.loop import ProactiveLoop
@@ -291,18 +295,96 @@ async def proactive_host(
     registry = RoleRuntimeRegistry(
         RoleRepository(roles), model_resolver=cast(Any, _ModelRuntime())
     )
+    # A hand-driven tick has no generation lease, so the port pins this one.
+    # Natural replies bind ``reply_sequences`` on that lease.
+    reply_sequences = ChannelSequenceOwner()
     agent_loop = SimpleNamespace(
         role_runtime_registry=registry,
         processing_state=SimpleNamespace(is_busy=passive_busy),
         tools=tools,
+        bus=MessageBus(),
     )
+    group_environment = GroupEnvironment(workspace, sessions.conversation_store)
+    presence = sessions.presence
+    config = Config(provider="test", model="m", api_key="")
     affection_getter = AffectionGetter()
     affection_getter.bind(lambda: cast(Affection, affection))
-    # The production presence of this session store (bootstrap/tools.py).
-    presence = sessions.presence
+    policy_getter = ReplyPolicyGetter()
+    policy_getter.bind(lambda: NaturalChatPolicy())
+
+    class _PluginManager:
+        @property
+        def kernel(self):
+            return core_kernel()
+
+    # The published generation the port pins. Natural scope, completion,
+    # tools and delivery read these fields; desktop presence lives on the
+    # runtime the scenarios mutate.
+    conversation = HostConversation(
+        partial(
+            orchestrator_for,
+            session_manager=sessions,
+            presence=presence,
+            push_tool=push,
+            event_bus=bus,
+            tools=tools,
+            role_store=roles,
+        ),
+        role_store=roles,
+        session_manager=sessions,
+        affection=affection_getter,
+        reply_policy=policy_getter,
+    )
+
+    class _PublishedCore:
+        """A generation core. ``SimpleNamespace`` cannot be weakly referenced."""
+
+        def __init__(self) -> None:
+            self.role_runtime_registry = registry
+            self.loop = agent_loop
+            self.group_environment = group_environment
+            self.config = config
+            self.provider = provider
+            self.session_manager = sessions
+            self.presence = presence
+            self.push_tool = push
+            self.event_bus = bus
+            self.tools = tools
+            self.additional_providers: list[Any] = []
+            self.plugin_manager = _PluginManager()
+            self.conversation = conversation
+            self.affection = affection_getter
+            self.reply_policy = policy_getter
+
+    published = _PublishedCore()
+
+    class _PublishedRuntime:
+        def __init__(self) -> None:
+            self.core = published
+            self.desktop_presence = desktop_presence
+
+        def acquire(self) -> Any:
+            runtime = self
+
+            class _Lease:
+                def __init__(self) -> None:
+                    self.core = runtime.core
+                    self.reply_sequences = reply_sequences
+
+                async def __aenter__(self) -> Any:
+                    return self
+
+                async def __aexit__(self, *_exc: object) -> None:
+                    return None
+
+            return _Lease()
+
+        async def wait_for_admission(self) -> None:
+            return None
+
     tasks, loops = (  # pyright: ignore[reportUnknownVariableType]
         build_proactive_runtime(
-            Config(provider="test", model="m", api_key=""),
+            config,
             workspace,
             session_manager=sessions,
             provider=provider,
@@ -314,8 +396,8 @@ async def proactive_host(
             kernel=core_kernel,
             proactive_motives=[RelationshipStrategy(affection_getter)],
             event_bus=bus,
-            desktop_presence=desktop_presence,
-            group_environment=GroupEnvironment(workspace, sessions.conversation_store),
+            proactive_host=HostProactiveRunner(lambda: _PublishedRuntime()),
+            group_environment=group_environment,
         )
     )
     for task in cast(list[Coroutine[Any, Any, None]], tasks):

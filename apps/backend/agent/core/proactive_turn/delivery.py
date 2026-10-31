@@ -2,19 +2,27 @@
 
 from __future__ import annotations
 
+import asyncio
+import inspect
+import logging
 from typing import Any, Callable, Protocol
 
 from agent.turns.result import TurnResult
 from proactive_v2.context import AgentTickContext
+from shiori_sdk.accounts.targets import AccountTarget
+from shiori_sdk.core.conversation import InitiatedReply
+from shiori_sdk.core.proactive_host import ProactiveHost
 
 from .types import ResolveResult
+
+logger = logging.getLogger(__name__)
 
 
 class ProactiveDeliveryHost(Protocol):
     """发送阶段访问 pipeline 状态所需的最小宿主契约。"""
 
     _session_key: str
-    _turn_orchestrator: Any
+    _host: ProactiveHost
 
     def _record_tick_log_finish(
         self,
@@ -32,22 +40,90 @@ async def deliver_execute(
 ) -> float | None:
     """记录裁定，并把主动消息投递到本轮 gate 阶段选定的唯一目标。
 
-    每条主动消息只投递一次，不再换渠道重发。
+    每条主动消息只投递一次。跳过不调用端口。成功和失败的副作用在端口返回之后
+    执行，因此晚于 ``InitiatedMessageCommitted``。发送前的副作用仍在调用之前。
     """
 
     pipeline._record_tick_log_finish(ctx, result=decision.result)
-    if pipeline._turn_orchestrator is None:
-        raise RuntimeError("proactive turn_orchestrator is required")
     if not ctx.target_channel or not ctx.target_chat_id:
         raise RuntimeError("proactive target transport unavailable at delivery time")
-    await pipeline._turn_orchestrator.handle_proactive_turn(
-        result=decision.result,
+    result = decision.result
+    if result.decision == "skip":
+        await _run_effects(result.side_effects)
+        return 0.0
+    await _run_effects(result.side_effects)
+    reply = _initiated_reply(pipeline, ctx, result)
+    host = pipeline._host
+    try:
+        if host.natural_reply_active():
+            # ``deliver`` would open a second scope and drop the tick's plan.
+            delivery = await host.commit_natural_reply(reply)
+        else:
+            delivery = await host.deliver(reply)
+    except (Exception, asyncio.CancelledError):
+        await _run_effects(result.failure_side_effects)
+        raise
+    await _run_effects(
+        result.success_side_effects
+        if delivery.complete
+        else result.failure_side_effects
+    )
+    # A completed sequence can swallow a cancel that arrived during its last
+    # send so these effects still run. Propagate it once they have.
+    task = asyncio.current_task()
+    if task is not None and task.cancelling():
+        raise asyncio.CancelledError
+    return 0.0
+
+
+def _initiated_reply(
+    pipeline: ProactiveDeliveryHost, ctx: AgentTickContext, result: TurnResult
+) -> InitiatedReply:
+    role_reply = result.role_reply
+    context = result.reply_context
+    outbound = result.outbound
+    if role_reply is None or context is None or outbound is None:
+        raise ValueError("proactive reply requires validated role state and outbound")
+    extra = (
+        result.trace.extra
+        if result.trace is not None and isinstance(result.trace.extra, dict)
+        else {}
+    )
+    account = extra.get("account_target")
+    account_channel = ""
+    account_target = None
+    # The open plan was already retargeted when the draft was accepted.
+    if (
+        isinstance(account, dict)
+        and account
+        and not pipeline._host.natural_reply_active()
+    ):
+        account_channel = str(account.get("account_channel") or "")
+        account_target = AccountTarget.from_arguments(account)
+    return InitiatedReply(
         session_key=pipeline._session_key,
+        content=role_reply.content,
+        source="proactive",
         channel=ctx.target_channel,
         chat_id=ctx.target_chat_id,
-        source="proactive",
+        mood=role_reply.mood,
+        thought=role_reply.thought,
+        expected_mood_updated_at=context.previous_updated_at,
+        moods=tuple(context.moods),
+        media=tuple(outbound.media or []),
+        account_channel=account_channel,
+        account_target=account_target,
     )
-    return 0.0
+
+
+async def _run_effects(effects: list[Any] | None) -> None:
+    for effect in effects or []:
+        try:
+            maybe = effect.run()
+            if inspect.isawaitable(maybe):
+                await maybe
+        except Exception as exc:
+            logger.warning("turn side effect failed: %s", exc)
 
 
 def resolve_target_transport(

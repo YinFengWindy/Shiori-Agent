@@ -60,7 +60,7 @@ class RuntimeBackground:
                 proactive_motives=core.proactive_motives,
                 event_bus=core.event_bus,
                 provider_consumer=core.additional_providers.append,
-                desktop_presence=app.desktop_presence,
+                proactive_host=core.proactive_host,
                 group_environment=core.group_environment,
             )
             self._coroutines.extend(tasks)

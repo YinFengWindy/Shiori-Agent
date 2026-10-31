@@ -9,19 +9,15 @@ import time
 from datetime import datetime, timezone
 from typing import Any
 
-from agent.tools.execution import ToolExecutor
 from agent.turns.result import TurnResult
 from core.common.diagnostic_log import diagnostic_context, diagnostic_line
 from proactive_v2.context import AgentTickContext
 from proactive_v2.gateway import GatewayResult
-from agent.turns.proactive_sequence import current_proactive_reply
-from agent.turns.reply_interruption import (
-    ReplyPlanInvalidated,
-    ReplyInterruption,
-    reply_was_invalidated,
-)
 from core.common.cancellation import finish_started
 from core.roles.reply_policy import natural_chat_draft_prompt
+from core.roles.reply_state import RoleReplyContext
+from session.manager.helpers import role_id_from_session_key
+from shiori_sdk.core.proactive_host import NaturalReplyInvalidated
 
 from .delivery import (
     deliver_execute as _deliver_execute,
@@ -105,7 +101,7 @@ class ProactiveTurnPipeline:
         self._drift_pipeline = deps.drift_pipeline
         self._target_transport_fn = deps.target_transport_fn
         self._proactive_gates = deps.proactive_gates or ProactiveGateChain()
-        self._tool_executor = ToolExecutor(deps.kernel)
+        self._host = deps.proactive_host
 
         if (
             self._drift_pipeline is not None
@@ -133,10 +129,11 @@ class ProactiveTurnPipeline:
             session_key=self._session_key,
             now_utc=datetime.now(timezone.utc),
         )
-        if self._turn_orchestrator is not None:
-            ctx.reply_context = self._turn_orchestrator.capture_reply_context(
-                self._session_key
-            )
+        state = self._host.reply_state(role_id_from_session_key(self._session_key))
+        ctx.reply_context = RoleReplyContext(
+            moods=state.moods,
+            previous_updated_at=state.mood_updated_at,
+        )
         with diagnostic_context(
             session=self._session_key,
             flow="proactive",
@@ -196,35 +193,32 @@ class ProactiveTurnPipeline:
             self._record_tick_log_finish(ctx, gate_exit=gate.reason)
             return gate.base_score
 
-        orchestrator = self._turn_orchestrator
-        if orchestrator is None or not orchestrator.natural_chat_enabled(
-            self._session_key
-        ):
+        host = self._host
+        if not host.natural_chat_enabled(self._session_key):
             return await self._run_admitted_context(ctx, started, gate)
 
-        interruption = ReplyInterruption()
+        ticket = host.begin_natural_reply()
 
         async def natural_turn():
-            async with orchestrator.natural_reply_scope(
-                self._session_key,
-                ctx.target_channel,
-                ctx.target_chat_id,
-                turn_id=f"proactive:{ctx.tick_id}",
-                interruption=interruption,
-            ):
-                try:
+            # The scope turns ``ReplyPlanInvalidated`` into
+            # ``NaturalReplyInvalidated`` as it exits, so the catch is outside.
+            try:
+                async with host.natural_reply_scope(
+                    ticket,
+                    self._session_key,
+                    ctx.target_channel,
+                    ctx.target_chat_id,
+                    turn_id=f"proactive:{ctx.tick_id}",
+                ):
                     return await self._run_admitted_context(ctx, started, gate)
-                except ReplyPlanInvalidated:
-                    # Shared completion correction stops at the same safe boundary.
-                    return None
-                finally:
-                    await orchestrator.commit_proactive_tool_facts(self._session_key)
+            except NaturalReplyInvalidated:
+                return None
 
         task = asyncio.create_task(
             natural_turn(), name=f"proactive-reply:{ctx.tick_id}"
         )
         try:
-            return await finish_started(task, on_cancel=interruption.invalidate)
+            return await finish_started(task, on_cancel=ticket.invalidate)
         except asyncio.CancelledError:
             if asyncio.current_task().cancelling():
                 raise
@@ -236,7 +230,7 @@ class ProactiveTurnPipeline:
         started: float,
         gate: GateResult,
     ) -> float | None:
-        if reply_was_invalidated():
+        if self._host.reply_invalidated():
             return None
         ctx.context_as_fallback_open = gate.context_as_fallback_open
         ctx.selected_gate = gate.activation
@@ -265,7 +259,7 @@ class ProactiveTurnPipeline:
             with diagnostic_context(phase="agent_loop"):
                 await self._judge_evaluate(ctx, feed.messages)
 
-        if reply_was_invalidated():
+        if self._host.reply_invalidated():
             return None
 
         with diagnostic_context(phase="resolve"):
@@ -357,12 +351,10 @@ class ProactiveTurnPipeline:
 
     def _build_system_prompt(self) -> str:
         prompt = _build_system_prompt(
-            self._role_prompt_fn(), natural_chat=current_proactive_reply() is not None
+            self._role_prompt_fn(), natural_chat=self._host.natural_reply_active()
         )
         draft = (
-            natural_chat_draft_prompt()
-            if current_proactive_reply() is not None
-            else None
+            natural_chat_draft_prompt() if self._host.natural_reply_active() else None
         )
         if draft:
             prompt += "\n\n" + draft
@@ -395,7 +387,7 @@ class ProactiveTurnPipeline:
         )
 
     def _relationship_fallback_style_hint(self) -> str:
-        if current_proactive_reply() is not None:
+        if self._host.natural_reply_active():
             return ""
         return _relationship_fallback_style_hint()
 

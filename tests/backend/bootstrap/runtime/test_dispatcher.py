@@ -172,7 +172,61 @@ async def proactive_task(
         )
 
     from agent.core.turn_events import core_kernel
+    from agent.turns.proactive_sequence import current_proactive_reply
     from proactive_v2.agent_tick_factory import AgentTickDeps, AgentTickFactory
+    from proactive_v2.reply_output import complete_natural_push
+    from shiori_sdk.core.proactive_host import CompletionToolCall, ModelCompletion
+
+    class _CompleteHost:
+        def natural_reply_active(self) -> bool:
+            return current_proactive_reply() is not None
+
+        async def complete(
+            self,
+            messages,
+            *,
+            tools=(),
+            tool_choice="auto",
+            max_tokens=None,
+            call_purpose="default",
+            disable_thinking=True,
+            defer_tool_argument_errors=False,
+            natural_draft=False,
+        ):
+            kwargs = {
+                "messages": list(messages),
+                "tools": list(tools),
+                "model": "test",
+                "max_tokens": max_tokens,
+                "tool_choice": tool_choice,
+                "disable_thinking": disable_thinking,
+                "call_purpose": call_purpose,
+            }
+            if defer_tool_argument_errors:
+                kwargs["defer_tool_argument_errors"] = True
+            resp = await provider_chat(**kwargs)
+            if natural_draft:
+                resp = await complete_natural_push(
+                    resp,
+                    messages=list(messages),
+                    provider=SimpleNamespace(chat=provider_chat),
+                    model="test",
+                    max_tokens=max_tokens,
+                )
+            return ModelCompletion(
+                content=resp.content or "",
+                tool_calls=tuple(
+                    CompletionToolCall(
+                        id=call.id,
+                        name=call.name,
+                        arguments=dict(call.arguments),
+                        raw_arguments=call.raw_arguments,
+                        arguments_error=call.arguments_error,
+                    )
+                    for call in (resp.tool_calls or [])
+                ),
+                thinking=resp.thinking,
+            )
 
     model = AgentTickFactory(
         AgentTickDeps(
@@ -182,6 +236,7 @@ async def proactive_task(
             provider=SimpleNamespace(chat=provider_chat),
             model="test",
             max_tokens=2048,
+            proactive_host=_CompleteHost(),
             memory=None,
             state_store=None,
             any_action_gate=None,

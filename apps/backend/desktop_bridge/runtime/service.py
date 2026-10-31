@@ -439,14 +439,10 @@ class ReloadableDesktopService:
 
     def _proactive_target_resolver(self) -> ProactiveTargetResolver:
         """Builds the delivery target resolver over the published generation."""
-        sessions = self.app.session_manager
-        if sessions is None:
+        core = self.app.core
+        if core is None:
             raise RuntimeError("会话存储尚未就绪")
-        return ProactiveTargetResolver(
-            roles=self.roles,
-            conversations=sessions.conversation_store,
-            desktop_presence=self.app.desktop_presence,
-        )
+        return ProactiveTargetResolver(roles=self.roles, host=core.proactive_host)
 
     def _owner(self, routing: OwnerRouting, payload):
         for entry in self._entries:

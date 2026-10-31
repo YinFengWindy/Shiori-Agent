@@ -7,12 +7,11 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from shiori_sdk.prompting import is_context_frame
-from conversation.context_scope import user_context_view
 from proactive_v2.energy import compute_energy, d_recent
 from proactive_v2.state import ProactiveStateStore
 from proactive_v2.target_selection import ProactiveTargetResolver
 from session.manager import SessionManager
+from shiori_sdk.core.proactive_host import ProactiveHost
 from shiori_sdk.core.sessions import Presence
 
 if TYPE_CHECKING:
@@ -40,6 +39,7 @@ class Sensor:
         presence: Presence | None,
         rng: Any,
         target_resolver: ProactiveTargetResolver | None = None,
+        host: ProactiveHost | None = None,
     ) -> None:
         self._cfg = cfg
         self._sessions = sessions
@@ -48,6 +48,7 @@ class Sensor:
         self._presence = presence
         self._rng = rng
         self._target_resolver = target_resolver
+        self._host = host
 
     def target_session_key(self) -> str:
         """The role session this runtime serves; empty without a role.
@@ -104,34 +105,24 @@ class Sensor:
 
     def collect_recent(self) -> list[dict]:
         """最近的用户上下文对话；主动消息只面向用户，看不到群聊和陌生私聊。"""
-        session_key = self.target_session_key()
-        if not session_key:
+        role_id = self._cfg.role_id
+        if not role_id:
             return []
+        host = self._require_host()
         try:
-            session = self._sessions.get_or_create(session_key)
+            messages = host.recent_messages(
+                role_id, limit=self._cfg.recent_chat_messages
+            )
         except Exception:
             return []
-        view = user_context_view(self._sessions.workspace, self._cfg.role_id)
-        messages = session.history_window(
-            self._cfg.recent_chat_messages, include=view.includes
-        )
-        results: list[dict] = []
-        for message in messages:
-            if message.get("role") not in ("user", "assistant"):
-                continue
-            if not message.get("content"):
-                continue
-            content = str(message.get("content", ""))
-            if is_context_frame(content):
-                continue
-            results.append(
-                {
-                    "role": message["role"],
-                    "content": content[:200],
-                    "timestamp": str(message.get("timestamp", "")),
-                }
-            )
-        return results
+        return [
+            {
+                "role": message.role,
+                "content": message.content,
+                "timestamp": message.timestamp,
+            }
+            for message in messages
+        ]
 
     def compute_interruptibility(
         self,
@@ -163,32 +154,28 @@ class Sensor:
         }
 
     def collect_recent_proactive(self, n: int = 5) -> list[RecentProactiveMessage]:
-        session_key = self.target_session_key()
-        if not session_key:
+        role_id = self._cfg.role_id
+        if not role_id:
             return []
+        host = self._require_host()
         try:
-            session = self._sessions.get_or_create(session_key)
+            messages = host.recent_proactive_messages(role_id, limit=n)
         except Exception:
             return []
-        results: list[RecentProactiveMessage] = []
-        for message in reversed(session.messages):
-            if message.get("role") != "assistant":
-                continue
-            if not message.get("proactive") or not message.get("content"):
-                continue
-            results.append(
-                RecentProactiveMessage(
-                    content=str(message["content"]),
-                    timestamp=self._parse_timestamp(message.get("timestamp")),
-                    state_summary_tag=str(
-                        message.get("state_summary_tag", "none") or "none"
-                    ),
-                    source_refs=list(message.get("source_refs") or []),
-                )
+        return [
+            RecentProactiveMessage(
+                content=message.content,
+                timestamp=message.timestamp,
+                state_summary_tag=message.state_summary_tag,
+                source_refs=list(message.source_refs),
             )
-            if len(results) >= n:
-                break
-        return list(reversed(results))
+            for message in messages
+        ]
+
+    def _require_host(self) -> ProactiveHost:
+        if self._host is None:
+            raise RuntimeError("主动感知缺少宿主端口")
+        return self._host
 
     @staticmethod
     def _default_interrupt_detail() -> dict[str, float]:
@@ -261,16 +248,3 @@ class Sensor:
             + self._cfg.interrupt_weight_activity * f_activity
             + self._cfg.interrupt_weight_fatigue * f_fatigue
         ) / w_sum
-
-    @staticmethod
-    def _parse_timestamp(raw: Any) -> datetime | None:
-        text = str(raw or "").strip()
-        if not text:
-            return None
-        try:
-            ts = datetime.fromisoformat(text)
-        except Exception:
-            return None
-        if ts.tzinfo is None:
-            return ts.replace(tzinfo=datetime.now().astimezone().tzinfo)
-        return ts

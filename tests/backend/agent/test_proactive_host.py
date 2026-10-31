@@ -9,16 +9,20 @@ from types import SimpleNamespace
 
 import pytest
 
+from agent.config_models import Config
 from agent.core.turn_events import core_kernel
 from agent.initiated_delivery import HostConversation
 from agent.looping.ports import SessionServices
 from agent.proactive_host import HostProactiveRunner
+from agent.provider import LLMProvider
+from agent.tools.message_push import MessagePushTool
 from agent.turns.orchestrator import TurnOrchestrator, TurnOrchestratorDeps
 from agent.turns.outbound import DeliveryReceipt
-from agent.provider import LLMProvider
+from bootstrap.proactive import build_proactive_runtime
 from bus.event_bus import EventBus
 from bus.processing import ProcessingState
 from conversation.service import ConversationService, LegacySessionDescriptor
+from core.common.runtime_scope import bind_runtime
 from core.desktop_presence import DesktopPresence
 from core.memory.group_environment import GroupEnvironment, GroupEnvironmentUpdate
 from core.roles import RoleRepository, RoleRuntimeRegistry, RoleStore
@@ -410,3 +414,72 @@ async def test_deliver_uses_the_generation_published_for_that_call(tmp_path) -> 
         row["content"]
         for row in second_store._store.fetch_session_messages("role:mira")
     ] == ["第二代"]
+
+
+async def test_held_lease_keeps_the_draining_generation(tmp_path) -> None:
+    """A tick that still holds the old generation uses that generation.
+
+    Production starts the loop inside ``bind_runtime(lease)``. Dropping the
+    held lease and pinning the published generation would activate the new
+    chat model and read the new generation's passive-busy flag while the
+    draining tick still uses the old provider, session and tools.
+    """
+    roles = RoleStore(tmp_path)
+    roles.create_role(role_id="mira", name="米拉", system_prompt="规矩")
+    roles.update_role("mira", proactive={"enabled": True})
+    repository = RoleRepository(roles)
+    old_models = _ChatModels()
+    new_models = _ChatModels()
+    old_registry = RoleRuntimeRegistry(repository, model_resolver=old_models)
+    new_registry = RoleRuntimeRegistry(repository, model_resolver=new_models)
+    old_state = ProcessingState()
+    new_state = ProcessingState()
+    new_state.enter(role_session_key("mira"))
+    sessions = SessionManager(tmp_path)
+    provider = LLMProvider(api_key="test")
+    old_core = SimpleNamespace(
+        role_runtime_registry=old_registry,
+        loop=SimpleNamespace(processing_state=old_state),
+    )
+    new_core = SimpleNamespace(
+        role_runtime_registry=new_registry,
+        loop=SimpleNamespace(processing_state=new_state),
+    )
+    runner = _runner(new_core)
+    old_lease = SimpleNamespace(core=old_core)
+    busy: bool | None = None
+    try:
+        tasks, loops = build_proactive_runtime(
+            Config(provider="test", model="m", api_key=""),
+            tmp_path,
+            session_manager=sessions,
+            provider=provider,
+            light_provider=provider,
+            push_tool=MessagePushTool(role_target_validator=lambda *_args: True),
+            memory_store=None,
+            presence=sessions.presence,
+            agent_loop=SimpleNamespace(  # type: ignore[arg-type]
+                role_runtime_registry=old_registry, tools=None
+            ),
+            kernel=core_kernel,
+            proactive_host=runner,
+            group_environment=GroupEnvironment(tmp_path, sessions.conversation_store),
+        )
+        for task in tasks:
+            task.close()
+
+        async def operation() -> None:
+            nonlocal busy
+            busy = runner.passive_turn_busy("mira")
+
+        with bind_runtime(old_lease):  # type: ignore[arg-type]
+            await loops["mira"]._tick_dispatcher(
+                operation
+            )  # pyright: ignore[reportPrivateUsage]
+    finally:
+        await old_registry.close_all()
+        await new_registry.close_all()
+        await provider.aclose()
+    assert busy is False
+    assert old_models.purposes == ["chat"]
+    assert new_models.purposes == []

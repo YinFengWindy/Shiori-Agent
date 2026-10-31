@@ -16,10 +16,6 @@ if TYPE_CHECKING:
 
 from agent.config_models import Config, WiringConfig
 from agent.core.proactive_turn.gates import ProactiveGate
-from agent.core.proactive_turn.strategies import (
-    SceneFollowupStrategy,
-    RelationshipStrategy,
-)
 from agent.core.proactive_turn.scene_subscription import SceneFollowupSubscription
 from agent.context import ContextBuilder
 from agent.looping.core import AgentLoop
@@ -53,7 +49,7 @@ from agent.tools.spawn import SpawnTool
 from conversation.listening import GroupListeningControl
 from core.common.cleanup import run_cleanup_steps
 from bootstrap.paths import plugin_roots
-from proactive_v2.preferences import load_proactive_preferences
+from bootstrap.proactive import assemble_generation_proactive
 from bootstrap.runtime.construction import track_build_resource
 from bootstrap.toolsets.meta import (
     build_readonly_tools,
@@ -650,7 +646,11 @@ def build_core_runtime(
     )
     plugin_rpc: PluginRpcRegistry[MethodPolicy] = PluginRpcRegistry(event_bus)
     plugin_dirs = _resolve_plugin_dirs(workspace)
-    proactive_strategies = load_proactive_preferences(config.plugins)
+    proactive_strategies, proactive_motives, scene_followup_subscription = (
+        assemble_generation_proactive(
+            config.plugins, affection=affection, event_bus=event_bus
+        )
+    )
     plugin_manager = PluginKernel(
         plugin_dirs=plugin_dirs,
         external_plugin_dirs=[workspace / "plugins"],
@@ -766,23 +766,8 @@ def build_core_runtime(
         plugin_manager=plugin_manager,
         plugin_rpc=plugin_rpc,
         channel_directory=channel_directory,
-        proactive_motives=[
-            *(
-                [SceneFollowupStrategy(affection)]
-                if proactive_strategies.scene_followup
-                else []
-            ),
-            *(
-                [RelationshipStrategy(affection)]
-                if proactive_strategies.relationship
-                else []
-            ),
-        ],
-        scene_followup_subscription=(
-            SceneFollowupSubscription(event_bus, affection)
-            if proactive_strategies.scene_followup
-            else None
-        ),
+        proactive_motives=proactive_motives,
+        scene_followup_subscription=scene_followup_subscription,
     )
 
 

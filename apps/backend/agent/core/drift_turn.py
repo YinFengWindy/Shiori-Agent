@@ -16,11 +16,7 @@ DriftTurnPipeline — Drift 空闲时间链路顶层抽象。
 """
 
 from __future__ import annotations
-from agent.turns.reply_interruption import reply_was_invalidated
-from agent.turns.proactive_sequence import (
-    current_proactive_reply,
-    record_proactive_tool_fact,
-)
+from agent.turns.proactive_sequence import record_proactive_tool_fact
 from core.roles.reply_policy import natural_chat_draft_prompt
 
 from agent.tools.turn_scope import tool_turn
@@ -28,6 +24,7 @@ from agent.tools.turn_scope import tool_turn
 import inspect
 import json
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, cast
@@ -35,7 +32,8 @@ from typing import TYPE_CHECKING, Any, Awaitable, Callable, cast
 from agent.core.prompt_block import strip_recent_turns
 from agent.prompting import build_context_frame_content, build_context_frame_message
 from shiori_sdk.prompting import PromptSectionRender
-from agent.tools.execution import KernelSource, ToolExecutionRequest, ToolExecutor
+from agent.tools.execution import KernelSource
+from shiori_sdk.core.proactive_host import ProactiveToolCall
 from proactive_v2.context import AgentTickContext
 from proactive_v2.drift_state import DriftStateStore, SkillMeta
 from proactive_v2.drift_tools import (
@@ -93,7 +91,12 @@ class DriftTurnPipeline:
         self._role_prompt_fn = deps.role_prompt_fn
         self._max_steps = deps.max_steps
         self.step_recorder = deps.step_recorder
-        self._tool_executor = ToolExecutor(deps.kernel)
+
+    def _require_host(self):
+        host = self._tool_deps.proactive_host
+        if host is None:
+            raise RuntimeError("发呆回合缺少宿主端口")
+        return host
 
     # ── 入口 ──────────────────────────────────────────────────────────
 
@@ -130,8 +133,8 @@ class DriftTurnPipeline:
             logger.info("[drift] skip: no available drift skills")
             return []
 
-        shared = self._tool_deps.shared_tools
-        connected_servers = shared.get_mcp_server_names() if shared else set()
+        host = self._tool_deps.proactive_host
+        connected_servers = set(host.mcp_server_names()) if host is not None else set()
         skills = [
             s
             for s in skills
@@ -165,15 +168,17 @@ class DriftTurnPipeline:
 
         # 2.2 构建 drift tool registry。
         mounted_tool_names: set[str] = set()
+        host = self._tool_deps.proactive_host
         tools = build_drift_tool_registry(
             ctx=ctx,
             deps=self._tool_deps,
             mounted_tool_names=mounted_tool_names,
+            mcp_servers=set(host.mcp_server_names()) if host is not None else set(),
         )
 
         # 2.3 确定 MCP 已连接 server 列表。
-        shared = self._tool_deps.shared_tools
-        connected_servers = shared.get_mcp_server_names() if shared else set()
+        host = self._tool_deps.proactive_host
+        connected_servers = set(host.mcp_server_names()) if host is not None else set()
 
         # 2.4 构建初始 messages。
         messages: list[dict] = [
@@ -199,8 +204,9 @@ class DriftTurnPipeline:
         base_schemas = reply_schemas(tools.get_schemas(), ctx)
         steps = 0
 
+        host = self._require_host()
         while steps < self._max_steps and not ctx.drift_finished:
-            if reply_was_invalidated():
+            if host.reply_invalidated():
                 break
             tool_choice: str | dict = "required"
             schemas = list(base_schemas)
@@ -226,12 +232,12 @@ class DriftTurnPipeline:
                     messages,
                     schemas,
                     tool_choice,
-                    disable_thinking=current_proactive_reply() is None,
+                    disable_thinking=not host.natural_reply_active(),
                 )
             else:
                 tool_call = await cast(Any, llm_fn)(messages, schemas, tool_choice)
 
-            if reply_was_invalidated():
+            if host.reply_invalidated():
                 break
             if tool_call is None:
                 logger.warning("[drift] llm returned no tool call at step=%d", steps)
@@ -245,9 +251,10 @@ class DriftTurnPipeline:
                 schemas=schemas,
                 llm_fn=llm_fn,
                 remaining_steps=self._max_steps - steps - 1,
+                host=host,
             )
             steps += ctx.reply_format_corrections - corrections_before
-            if reply_was_invalidated():
+            if host.reply_invalidated():
                 break
 
             tool_name = tool_call.get("name", "")
@@ -271,27 +278,30 @@ class DriftTurnPipeline:
 
             # 3.5 执行工具。
             call_id = str(tool_call.get("id") or f"drift_{steps}")
-            result = await self._tool_executor.execute(
-                ToolExecutionRequest(
+
+            async def invoke(name: str, arguments: Mapping[str, object]) -> object:
+                return await exec_fn(name, dict(arguments))
+
+            outcome = await host.execute_tool(
+                ProactiveToolCall(
                     call_id=call_id,
-                    tool_name=tool_name,
-                    arguments=tool_args,
-                    source="proactive",
+                    name=tool_name,
+                    arguments=tool_args if isinstance(tool_args, dict) else {},
                     session_key=ctx.session_key,
                 ),
-                exec_fn,
+                invoke,
             )
             record_proactive_tool_fact(
                 call_id=call_id,
                 name=tool_name,
                 arguments=tool_args,
-                result=str(result.output),
+                result=outcome.text,
             )
 
             # 3.6 错误处理。
-            if result.status == "error":
+            if outcome.status == "error":
                 logger.warning(
-                    "[drift] tool executor error at step=%d: %s", steps, result.output
+                    "[drift] tool executor error at step=%d: %s", steps, outcome.text
                 )
                 if self.step_recorder is not None:
                     self.step_recorder(
@@ -300,7 +310,7 @@ class DriftTurnPipeline:
                         tool_name,
                         call_id,
                         tool_args,
-                        str(result.output),
+                        outcome.text,
                     )
                 break
 
@@ -312,14 +322,14 @@ class DriftTurnPipeline:
                     tool_name,
                     call_id,
                     tool_args,
-                    str(result.output),
+                    outcome.text,
                 )
 
             logger.info(
                 "[drift] step=%d tool=%s result=%s",
                 steps,
                 tool_name,
-                str(result.output)[:300],
+                outcome.text[:300],
             )
 
             # 3.8 追加 tool messages 到对话历史。
@@ -328,7 +338,7 @@ class DriftTurnPipeline:
                 tool_name=tool_name,
                 tool_args=tool_args,
                 tool_call_id=call_id,
-                result=str(result.output),
+                result=outcome.text,
             )
 
     # ── 4. Finish ──────────────────────────────────────────────────────
@@ -366,10 +376,10 @@ class DriftTurnPipeline:
                 str(memory.read_recent_context() or "")
             )
         # 发呆回合属于用户上下文：注入各外部会话的最近动态（#497）。
-        group_environment = self._tool_deps.group_environment
+        host = self._tool_deps.proactive_host
         recent_activity_text = (
-            group_environment.render_recent_activity(role_id, now=ctx.now_utc)
-            if group_environment is not None and ctx is not None and role_id
+            host.recent_activity(role_id, now=ctx.now_utc)
+            if host is not None and ctx is not None and role_id
             else ""
         )
 
@@ -518,7 +528,7 @@ class DriftTurnPipeline:
         )
         draft = (
             natural_chat_draft_prompt()
-            if current_proactive_reply() is not None
+            if self._require_host().natural_reply_active()
             else None
         )
         if draft:
