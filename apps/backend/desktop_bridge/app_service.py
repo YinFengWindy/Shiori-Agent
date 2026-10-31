@@ -260,7 +260,7 @@ class DesktopAppService:
             record_presence(session.key, utcnow())
         affection = self._affection()
         if affection is not None and handle_relationship == "proactive":
-            affection.handle_proactive_sent(session.key)
+            affection.handle_initiated_sent(session.key)
         elif affection is not None and handle_relationship == "user":
             affection.handle_user_message(session.key)
         return session

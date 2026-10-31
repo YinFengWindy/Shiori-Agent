@@ -275,6 +275,7 @@ class TurnOrchestrator:
         session_key: str,
         channel: str,
         chat_id: str,
+        source: str = "",
     ) -> bool:
         # 1. proactive 先处理 skip：不发消息，只跑 skip 路径副作用。
         if result.decision == "skip":
@@ -327,6 +328,7 @@ class TurnOrchestrator:
                 session=session,
                 template=message,
                 plan=plan,
+                source=source,
                 state_kwargs={
                     "expected_mood_updated_at": result.reply_context.previous_updated_at,
                     "metadata_updates": reply_state_metadata(
@@ -378,7 +380,7 @@ class TurnOrchestrator:
                 )
             affection = current_affection()
             if affection is not None:
-                affection.handle_proactive_sent(session_key)
+                affection.handle_initiated_sent(session_key)
             await self._run_effects(result.success_side_effects)
             if self._event_bus is not None:
                 await self._event_bus.fanout(
@@ -393,6 +395,7 @@ class TurnOrchestrator:
                         tools_used=("message_push",),
                         thread_id=source_metadata.get("thread_id", ""),
                         message_id=str(message["id"]),
+                        source=source,
                     )
                 )
         else:
@@ -407,6 +410,7 @@ class TurnOrchestrator:
         session,
         template: dict[str, Any],
         plan: ProactiveReplyPlan,
+        source: str,
         state_kwargs: dict[str, Any],
     ) -> bool:
         reply = plan.protocol.reply
@@ -453,7 +457,7 @@ class TurnOrchestrator:
                     )
                 affection = current_affection()
                 if affection is not None:
-                    affection.handle_proactive_sent(session.key)
+                    affection.handle_initiated_sent(session.key)
                 if self._event_bus is not None:
                     await self._event_bus.fanout(
                         ProactiveMessageCommitted(
@@ -467,6 +471,7 @@ class TurnOrchestrator:
                             ),
                             tools_used=("message_push",),
                             message_id=str(delivered[-1]["id"]),
+                            source=source,
                         )
                     )
 

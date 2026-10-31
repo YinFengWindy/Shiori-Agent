@@ -290,7 +290,7 @@ def test_proactive_sent_marks_unanswered_and_sets_cooldown(host):
     runtime.write_snapshot("mira", _snapshot_payload())
 
     now = _utc(2026, 7, 6, 8, 0)
-    updated = runtime.handle_proactive_sent(host.role_session_key("mira"), now=now)
+    updated = runtime.handle_initiated_sent(host.role_session_key("mira"), now=now)
 
     assert updated is not None
     assert updated["awaiting_reply_after_proactive"] is True

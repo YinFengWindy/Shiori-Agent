@@ -111,6 +111,8 @@ class RuntimeShutdownMixin:
         self._background_tasks = []
 
     async def _close_events(self) -> None:
+        if self.core is not None:
+            await self.core.proactive_host.aclose()
         if self.event_bus is not None:
             await self.event_bus.aclose()
 

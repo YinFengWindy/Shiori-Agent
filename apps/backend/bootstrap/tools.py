@@ -34,6 +34,10 @@ from agent.looping.ports import (
 )
 from agent.provider import LLMProvider
 from agent.retrieval.default_pipeline import DefaultMemoryRetrievalPipeline
+from agent.initiated_delivery import HostConversation, orchestrator_for
+from shiori_sdk.core.conversation import Conversation
+from shiori_sdk.core.proactive_host import ProactiveHost
+from agent.proactive_host import HostProactiveRunner
 from agent.schedule_host import HostScheduleRunner
 from agent.tools.message_push import MessagePushTool
 from agent.account_delivery import AccountDelivery
@@ -68,6 +72,7 @@ from bus.event_bus import EventBus
 from bus.processing import ProcessingState
 from bus.queue import MessageBus
 from core.common.channel_directory import ChannelDirectory
+from core.desktop_presence import DesktopPresence
 from core.memory.group_environment import GroupEnvironment
 from core.memory.markdown import MemoryLifecycleBindRequest, MarkdownMemoryMaintenance
 from core.memory.runtime import MemoryRuntime
@@ -106,6 +111,10 @@ class CoreRuntime:
     # ``SCHEDULE_HOST``: shared by every generation, like the schedule
     # plugin's process-wide scheduler that calls it.
     schedule_host: HostScheduleRunner
+    # ``PROACTIVE_HOST``: one runner for every generation. ``CONVERSATION``
+    # is this generation's initiated delivery.
+    proactive_host: HostProactiveRunner
+    conversation: HostConversation
     provider: LLMProvider
     light_provider: LLMProvider | None
     memory_runtime: MemoryRuntime
@@ -420,6 +429,8 @@ def build_core_runtime(
     process_resources: ProcessResourceOwner | None = None,
     background_result_runner: ResultRunner | None = None,
     plugin_discovery_snapshot: list["PluginRecord"] | None = None,
+    published_runtime: Callable[[], Any] | None = None,
+    desktop_presence: DesktopPresence | None = None,
 ) -> CoreRuntime:
     """Builds version-owned capabilities around stable transport and state owners."""
     bus = shared.bus if shared is not None else MessageBus()
@@ -493,6 +504,11 @@ def build_core_runtime(
             agent_loop_provider or (lambda: loop_ref.get("loop")), push_tool
         )
     )
+    proactive_host = (
+        shared.proactive_host
+        if shared is not None
+        else HostProactiveRunner(published_runtime or (lambda: None))
+    )
     tools, memory_runtime = build_registered_tools(
         config,
         workspace,
@@ -513,6 +529,27 @@ def build_core_runtime(
     # Bound to this generation's kernel below, before any plugin starts;
     # reading it earlier raises.
     reply_policy = ReplyPolicyGetter()
+    reported_presence = (
+        desktop_presence if desktop_presence is not None else DesktopPresence()
+    )
+
+    def build_initiated_orchestrator():
+        return orchestrator_for(
+            session_manager=session_manager,
+            presence=presence,
+            push_tool=push_tool,
+            event_bus=event_bus,
+            tools=tools,
+            role_store=role_store,
+            desktop_presence=reported_presence,
+        )
+
+    conversation = HostConversation(
+        build_initiated_orchestrator, affection, reply_policy
+    )
+    # Typed as the plugin contracts, so pyright checks the host implementations.
+    conversation_api: Conversation = conversation
+    proactive_api: ProactiveHost = proactive_host
     processing_state = (
         shared.loop.processing_state if shared is not None else ProcessingState()
     )
@@ -671,6 +708,8 @@ def build_core_runtime(
                 http=http_resources.external_default,
                 process_resources=process_resources,
                 schedule_host=schedule_host,
+                proactive_host=proactive_api,
+                conversation=conversation_api,
             )
         ),
     )
@@ -717,6 +756,8 @@ def build_core_runtime(
         image_sync_service=image_sync_service,
         session_manager=session_manager,
         schedule_host=schedule_host,
+        proactive_host=proactive_host,
+        conversation=conversation,
         provider=provider,
         light_provider=light_provider,
         agent_provider=agent_provider,

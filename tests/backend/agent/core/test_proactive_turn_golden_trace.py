@@ -102,7 +102,7 @@ class RecordingAffection:
     ) -> tuple[bool, dict[str, Any]]:
         return self.lonely, {"reason": "golden"}
 
-    def handle_proactive_sent(self, session_key: str) -> None:
+    def handle_initiated_sent(self, session_key: str) -> None:
         self.sent.append(session_key)
 
 

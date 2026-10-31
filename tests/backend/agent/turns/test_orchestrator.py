@@ -647,7 +647,7 @@ async def test_natural_proactive_keeps_sent_prefix_and_finishes_one_logical_turn
     from unittest.mock import Mock
 
     presence = SimpleNamespace(record_initiated_sent=Mock())
-    relationship = SimpleNamespace(handle_proactive_sent=Mock())
+    relationship = SimpleNamespace(handle_initiated_sent=Mock())
     owner = TurnOrchestrator(
         TurnOrchestratorDeps(
             session=SessionServices(manager, presence=presence),
@@ -701,7 +701,7 @@ async def test_natural_proactive_keeps_sent_prefix_and_finishes_one_logical_turn
     success.assert_not_awaited()
     failure.assert_awaited_once()
     presence.record_initiated_sent.assert_called_once_with("role:mira", ANY)
-    relationship.handle_proactive_sent.assert_called_once_with("role:mira")
+    relationship.handle_initiated_sent.assert_called_once_with("role:mira")
     await event_bus.aclose()
 
 

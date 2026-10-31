@@ -32,6 +32,7 @@ _CORE_MODULES = (
     "shiori_sdk.core.memory",
     "shiori_sdk.core.memory_optimizer",
     "shiori_sdk.core.models",
+    "shiori_sdk.core.proactive_host",
     "shiori_sdk.core.reply_policy",
     "shiori_sdk.core.scene",
     "shiori_sdk.core.schedule_host",
@@ -233,8 +234,16 @@ def _signature(func: Any) -> str:
 
 
 def _hints(obj: Any) -> dict[str, Any]:
-    """Resolved annotations; an unresolvable forward reference fails the run."""
-    return get_type_hints(obj)
+    """Resolved annotations; an unresolvable forward reference fails the run.
+
+    PEP 695 type parameters are not in the function globals. Python 3.12's
+    ``get_type_hints`` does not add them, so a method such as ``run_tick[T]``
+    would fail to render.
+    """
+    type_params = getattr(obj, "__type_params__", ())
+    if not type_params:
+        return get_type_hints(obj)
+    return get_type_hints(obj, localns={param.__name__: param for param in type_params})
 
 
 def _fmt(annotation: object) -> str:

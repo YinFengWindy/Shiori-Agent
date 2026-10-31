@@ -1162,6 +1162,26 @@ def _strip_reasoning_content(messages: list[dict]) -> list[dict]:
     return [{k: v for k, v in m.items() if k != "reasoning_content"} for m in messages]
 
 
+def thinking_disabled_provider(config: object, provider: LLMProvider) -> LLMProvider:
+    """A chat provider that forces thinking off, or ``provider`` when it has no key.
+
+    Proactive completions use this as the fallback under ``RoleAwareProvider``.
+    An empty API key keeps the generation's own provider so it is not closed twice.
+    """
+    api_key = str(getattr(config, "api_key", "") or "").strip()
+    if not api_key:
+        return provider
+    extra_body = dict(getattr(config, "extra_body", {}) or {})
+    extra_body.pop("enable_thinking", None)
+    return LLMProvider(
+        api_key=api_key,
+        base_url=getattr(config, "base_url", None),
+        extra_body=extra_body,
+        provider_name=str(getattr(config, "provider", "") or ""),
+        force_disable_thinking=True,
+    )
+
+
 def _normalize_openai_base_url(base_url: str | None) -> str | None:
     text = (base_url or "").strip()
     if not text:

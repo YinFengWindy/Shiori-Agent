@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from shiori_sdk.role_events import (
+    InitiatedMessageCommitted as InitiatedMessageCommitted,
     ProactiveMessageCommitted as ProactiveMessageCommitted,
 )
 

@@ -54,7 +54,8 @@ from session.plugin_capability import HostSessions
 from shiori_sdk.background_results import BackgroundResults
 from shiori_sdk.commands import CommandRegistry
 from shiori_sdk.core.affection_host import AFFECTION_HOST
-from shiori_sdk.core.conversation import COMMANDS
+from shiori_sdk.core.conversation import COMMANDS, CONVERSATION, Conversation
+from shiori_sdk.core.proactive_host import PROACTIVE_HOST, ProactiveHost
 from shiori_sdk.core.markdown_memory import MARKDOWN_MEMORY, MarkdownMemory
 from shiori_sdk.core.mcp_tools import MCP_TOOLS
 from shiori_sdk.core.scene import SCENE_HOST
@@ -129,6 +130,10 @@ class PluginCoreInputs:
       attachments plugins get.
     - ``schedule_host``: scheduled role turns and deliveries
       (``SCHEDULE_HOST``). One instance serves every generation.
+    - ``proactive_host``: proactive ticks and the host facts they read
+      (``PROACTIVE_HOST``). One instance serves every generation.
+    - ``conversation``: this generation's initiated delivery
+      (``CONVERSATION``).
     """
 
     plugin_dirs: tuple[Path, ...]
@@ -156,6 +161,8 @@ class PluginCoreInputs:
     # each plugin gets its attachment (``process_resources``).
     process_resources: ProcessResourceOwner | None
     schedule_host: ScheduleHost | None = None
+    proactive_host: ProactiveHost | None = None
+    conversation: Conversation | None = None
 
 
 def _publish(provide: CoreProvide, key: object, impl: object) -> None:
@@ -274,6 +281,13 @@ def plugin_core_modules(inputs: PluginCoreInputs) -> tuple[CoreModule, ...]:
         if inputs.schedule_host is not None:
             provide(SCHEDULE_HOST, inputs.schedule_host)
 
+    def provide_proactive(provide: CoreProvide) -> None:
+        """Proactive ticks, delivery and the host facts they read."""
+        if inputs.proactive_host is not None:
+            # Typed as the plugin contract, so pyright checks the host implementation.
+            proactive: ProactiveHost = inputs.proactive_host
+            provide(PROACTIVE_HOST, proactive)
+
     def provide_mcp_tools(provide: CoreProvide) -> None:
         """Registration of dynamic MCP tools. The mcp plugin calls this."""
         if inputs.tools is not None:
@@ -309,12 +323,16 @@ def plugin_core_modules(inputs: PluginCoreInputs) -> tuple[CoreModule, ...]:
         provide(RESOURCES, resources)
 
     def provide_conversation(provide: CoreProvide) -> None:
-        """External turns, background results and ``COMMANDS`` (``conversation``)."""
+        """External turns, background results, ``COMMANDS`` and initiated delivery."""
         if inputs.external_turns is not None:
             provide(EXTERNAL_TURNS, inputs.external_turns)
         if inputs.background_results is not None:
             provide(BACKGROUND_RESULTS, inputs.background_results)
         provide(COMMANDS, CommandRegistry())
+        if inputs.conversation is not None:
+            # Typed as the plugin contract, so pyright checks the host implementation.
+            conversation: Conversation = inputs.conversation
+            provide(CONVERSATION, conversation)
 
     def provide_background(provide: CoreProvide) -> None:
         """Plugin-scoped background tasks (``core.common``)."""
@@ -349,6 +367,7 @@ def plugin_core_modules(inputs: PluginCoreInputs) -> tuple[CoreModule, ...]:
         provide_scene,
         provide_affection,
         provide_schedule,
+        provide_proactive,
         provide_mcp_tools,
         provide_memory,
         provide_processes,

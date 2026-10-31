@@ -4,7 +4,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any, Protocol
 
 from bus.event_bus import EventBus
-from bus.events_lifecycle import ExternalTextPushed, ProactiveMessageCommitted
+from bus.events_lifecycle import ExternalTextPushed, InitiatedMessageCommitted
 from conversation.service import ConversationService, LegacySessionDescriptor
 from session.manager import SessionManager
 from session.manager.models import build_session_message
@@ -28,7 +28,7 @@ class ExternalPushSyncService:
     The role owns the chat it pushed to, so a push is stored in the role's
     session (``role_session_key(role_id)``, whatever session the sender ran
     in) under the network thread of that chat, and announced with
-    ``ProactiveMessageCommitted``. A push a live turn owns is committed with
+    ``InitiatedMessageCommitted``. A push a live turn owns is committed with
     that turn instead: ``live_turn_pushes(session_key)`` finds it.
     """
 
@@ -127,12 +127,16 @@ class ExternalPushSyncService:
             pending_messages=True,
         )
         await self._event_bus.fanout(
-            ProactiveMessageCommitted(
+            InitiatedMessageCommitted(
                 session_key=session_key,
                 channel=event.channel,
                 role_id=event.role_id,
                 thread_id=str(message["thread_id"]),
+                chat_id=event.chat_id,
+                assistant_response=event.text,
+                tools_used=tuple(message.get("tools_used") or ()),
                 message_id=str(message["id"]),
+                source=event.tool,
             )
         )
 

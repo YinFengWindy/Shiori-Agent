@@ -250,35 +250,122 @@ COMMANDS: Key[Commands] = Key("commands")
 
 @dataclass(frozen=True)
 class InitiatedMessageCommitted:
-    """An initiated reply was stored. ``source`` names who started it.
+    """An initiated reply was stored.
 
-    The host emits this when initiated delivery runs. Plugins watch it; they
-    do not construct it. Folded into the 4.0 baseline so 4.x does not need a
-    new method on an existing key (D19, D22).
+    Field order matches the historical ``ProactiveMessageCommitted``
+    constructor, with ``source`` last so existing keyword and positional
+    callers stay valid. ``source`` names who started the reply (a plugin id,
+    a host component, or the push tool). Empty means the publisher did not
+    say. ``tools_used`` names the tools recorded on the committed message.
+
+    The host emits this when initiated delivery or a host-owned push commits.
+    Plugins watch it; they do not construct it. ``ProactiveMessageCommitted``
+    is this class for one release. Folded into the 4.0 baseline so 4.x does
+    not need a new event type (D19, D22).
     """
 
     session_key: str
+    channel: str
+    role_id: str
+    thread_id: str
+    chat_id: str = ""
+    assistant_response: str = ""
+    tools_used: tuple[str, ...] = ()
+    message_id: str = ""
+    source: str = ""
+
+
+def _freeze(mapping: Mapping[str, object]) -> Mapping[str, object]:
+    if isinstance(mapping, MappingProxyType):
+        return mapping
+    return MappingProxyType(dict(mapping))
+
+
+@dataclass(frozen=True, kw_only=True)
+class InitiatedAccountTarget:
+    """Where an account-channel reply is sent.
+
+    ``account_channel`` is the transport (``telegram`` and the like). The
+    remaining fields are the account target the channel already accepts.
+    """
+
+    account_channel: str
+    target_kind: str
+    target_id: str
+    message_thread_id: int | None = None
+    group_id: str = ""
+    mention_ids: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "mention_ids", tuple(self.mention_ids))
+
+
+@dataclass(frozen=True, kw_only=True)
+class InitiatedToolFact:
+    """One tool call stored beside a natural reply sequence.
+
+    ``message_push``, ``finish_turn`` and ``finish_drift`` are delivery
+    controls, not facts, and are not stored.
+    """
+
+    call_id: str
+    name: str
+    arguments: Mapping[str, object]
+    result: str
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "arguments", _freeze(self.arguments))
+
+
+@dataclass(frozen=True, kw_only=True)
+class InitiatedReply:
+    """One initiated reply, including its target, media and natural sequence.
+
+    ``content`` is the text stored on the role session. When ``messages`` is
+    non-empty it must equal those texts joined by a blank line, and natural
+    chat must be on for the role; delivery then sends each text as its own
+    message and stores them in order. ``account_target`` replaces the
+    ``channel`` / ``chat_id`` pair for account transports. ``tool_facts``
+    ride along with ``messages`` only.
+    """
+
+    session_key: str
+    content: str
     source: str
+    channel: str
+    chat_id: str
+    mood: str
+    thought: str
+    media: tuple[str, ...] = ()
+    messages: tuple[str, ...] = ()
+    account_target: InitiatedAccountTarget | None = None
+    tool_facts: tuple[InitiatedToolFact, ...] = ()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "media", tuple(self.media))
+        object.__setattr__(self, "messages", tuple(self.messages))
+        object.__setattr__(self, "tool_facts", tuple(self.tool_facts))
 
 
 class Conversation(Protocol):
     """Deliver a reply the host initiated, outside a user turn.
 
-    The signature is part of the 4.0 baseline. The host provides
-    ``CONVERSATION`` when initiated delivery is generalized, before the 4.0
-    desktop ships (D23). 4.x cannot add methods to this protocol later.
+    The host provides this key for the generation it belongs to. 4.x cannot
+    add methods to this protocol later (D19).
     """
 
-    async def deliver_initiated_reply(
-        self, session_key: str, reply: str, source: str
-    ) -> None:
-        """Store ``reply`` on ``session_key`` and emit ``InitiatedMessageCommitted``.
+    async def deliver_initiated_reply(self, reply: InitiatedReply) -> str:
+        """Store ``reply`` and emit ``InitiatedMessageCommitted``.
 
-        ``source`` is the initiator (a plugin id or host component). It is
-        copied onto the committed event.
+        Returns the last committed message id, or ``""`` when the send was
+        refused and nothing was stored. Raises when the reply fails
+        validation, the role is gone, the target is not allowed, natural chat
+        is off for a multi-message reply, tool facts arrive without that
+        sequence, or the send itself fails. A sequence needs a runtime lease
+        or an already bound channel-sequence owner.
         """
         ...
 
 
 CONVERSATION: Key[Conversation] = Key("conversation")
-"""Not provided until initiated delivery is generalized. Injecting it blocks."""
+"""Initiated delivery for one generation. The host provides this."""
