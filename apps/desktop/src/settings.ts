@@ -116,7 +116,6 @@ export function loadSettingsData(contentOverride?: string): SettingsSnapshot {
   const agent = asRecord(parsed.agent);
   const agentContext = asRecord(agent.context);
   const agentTools = asRecord(agent.tools);
-  const agentMaintenance = asRecord(agent.maintenance);
   const proactiveStrategies = asRecord(agent.proactive_strategies);
   return {
     configPath: configuredPath,
@@ -139,12 +138,6 @@ export function loadSettingsData(contentOverride?: string): SettingsSnapshot {
         searchEnabled: Boolean(agentTools.search_enabled),
         spawnEnabled: Boolean(agentTools.spawn_enabled ?? true),
         sceneObservationEnabled: sceneObservationEnabled(parsed, agent),
-        memoryOptimizerEnabled: Boolean(
-          agentMaintenance.memory_optimizer_enabled ?? true,
-        ),
-        memoryOptimizerIntervalSeconds: Number(
-          agentMaintenance.memory_optimizer_interval_seconds ?? 64800,
-        ),
       },
     },
   };
@@ -187,12 +180,6 @@ function renderSettingsToml(formData: SettingsFormData): string {
     "[agent.tools]",
     `search_enabled = ${formData.advanced.searchEnabled ? "true" : "false"}`,
     `spawn_enabled = ${formData.advanced.spawnEnabled ? "true" : "false"}`,
-    "",
-    "[agent.maintenance]",
-    `memory_optimizer_enabled = ${
-      formData.advanced.memoryOptimizerEnabled ? "true" : "false"
-    }`,
-    `memory_optimizer_interval_seconds = ${formData.advanced.memoryOptimizerIntervalSeconds}`,
     "",
     "[agent.wiring]",
     'context = "default"',

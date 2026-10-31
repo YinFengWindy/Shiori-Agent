@@ -12,7 +12,7 @@ const trustFile = resolve(workspace, "private_runtime", "plugin-trust.json");
 const executionFile = resolve(workspace, "backend-executions.txt");
 await mkdir(resolve(packageRoot, "backend"), { recursive: true });
 await mkdir(resolve(packageRoot, "ui", "dist"), { recursive: true });
-await writeFile(resolve(workspace, "config.toml"), "[llm]\nregistrations = []\n[agent.maintenance]\nmemory_optimizer_enabled = false\n[plugins.desktop_pet]\nenabled = false\n", "utf8");
+await writeFile(resolve(workspace, "config.toml"), "[llm]\nregistrations = []\n[plugins.memory_optimizer]\nenabled = false\n[plugins.desktop_pet]\nenabled = false\n", "utf8");
 await writeFile(resolve(packageRoot, "manifest.yaml"), `api: 4
 sdk: ">=4.0.0"
 id: manual_trust_qa

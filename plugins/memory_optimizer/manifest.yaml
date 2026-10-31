@@ -1,0 +1,18 @@
+api: 4
+sdk: ">=4.0.0"
+id: memory_optimizer
+display_name: 记忆整理
+version: '0.1.0'
+desc: 后台定时整理角色的长期记忆（MEMORY.md）与自我认知（SELF.md）
+category: system
+config_model: config:MemoryOptimizerConfig
+inject:
+  - markdown_memory
+  - process_resources
+  - roles
+  - models
+  - config
+optional_inject:
+  - main_model
+provides:
+  - memory_optimizer

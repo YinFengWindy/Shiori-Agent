@@ -195,7 +195,7 @@ class MemoryStore:
         """optimizer 归档后清空 PENDING.md。"""
         self.pending_file.write_text(DOCUMENT_DEFAULTS["PENDING.md"], encoding="utf-8")
 
-    # ── 两阶段提交（供 MemoryOptimizer 使用）──────────────────────
+    # ── 两阶段提交（供 MARKDOWN_MEMORY 与 memory_optimizer 插件使用）──
 
     @property
     def _snapshot_path(self) -> Path:

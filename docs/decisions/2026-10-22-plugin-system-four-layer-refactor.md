@@ -39,14 +39,14 @@
 | D17 | **scheduler 做成独立系统插件 `schedule`**（不进核心，也不并入 proactive；以本条为准） | `plugins/schedule` 包含：scheduler 服务（`agent/scheduler.py` 733 + `scheduler_cron` 137，provide `SCHEDULER`）、schedule 工具（`agent/tools/schedule.py` 267 + `bootstrap/toolsets/schedule.py`，由插件注册到核心 `TOOLS`）、桌面角色定时任务（`desktop_bridge/schedule_role_task_service.py` 96 改成插件 rpc，前端 `RoleTaskScheduleFields` 等搬进插件 frontend）。定时任务 JSON（JobStore）路径和格式不变 | 理由：schedule 是用户或角色事先约好的定时触发，proactive 是角色自己决定什么时候找你，触发方不同。两者互不依赖：proactive `optional_inject: [schedule]`，没有也能工作；禁用 proactive 不影响 schedule；禁用 schedule 时 schedule 工具不注册、角色任务里的定时任务区块不显示，proactive 照常。角色任务面板本身还列出 subagent 和记忆任务，所以面板外壳留在核心 renderer，schedule 通过前端具名插槽 `roleTasks` 挂入自己的区块（⚑ 新增一个 UI 插槽，不需要后端插座；D21 已确认）。新增阶段 P6s |
 | D18 | **渠道静态声明保留在 manifest：`contributes.channels`** | manifest v4 保留 `contributes.channels`（只放静态元数据：id、名称、图标、账号表单 schema）。bridge 不加载插件就能读到，账号页在插件禁用时也能列出渠道；运行时的连接、收发仍走 `CHANNELS` 服务 | manifest schema 增加这一段；契约测试检查声明的渠道在运行时都注册了 |
 | D19 | **proactive 拆分方案已确认**（第 7 节） | 按第 7 节执行：核心新增/通用化 5 个 API——`SESSIONS.presence`、`CONVERSATION.deliver_initiated_reply`、`InitiatedMessageCommitted` 事件、`ROLES.plugin_settings`、renderer `roleSettings` 插槽；proactive_gates 删除，gate 变成插件内部列表 | P6b 按 7.5 的 6 个 PR 实施 |
-| D20 | **memory_optimizer → 系统插件（推翻先前「进核心」）** | **证据（2026-10-22 重查）**：`proactive_v2/memory_optimizer.py`（621 行）只后台重写 `MEMORY.md` / `SELF.md`；由 `bootstrap/proactive.py::build_memory_optimizer_task` → `bootstrap/runtime/background.py` 启动；`memory_optimizer_enabled=false` 时直接跳过（`config.py` / `config_models.py`）；桌面侧仅 `desktop_bridge/role_task_service.py` 可手动触发。**回合路径零引用**：`agent/turns`、`lifecycle`、`retrieval`、`conversation` 均不 import。拔掉/禁用后照常聊天 → 按分层规则做成**系统插件** `memory_optimizer`（可禁用，默认开），provide 可选服务供角色任务面板挂「立即整理」；**不**进核心 memory。 | 回应 PR #897 / M6；覆盖先前 D20「移进核心」 |
+| D20 | **memory_optimizer → 系统插件（推翻先前「进核心」）** | **证据（2026-10-22 重查）**：`proactive_v2/memory_optimizer.py`（621 行）只后台重写 `MEMORY.md` / `SELF.md`；由 `bootstrap/proactive.py::build_memory_optimizer_task` → `bootstrap/runtime/background.py` 启动；`memory_optimizer_enabled=false` 时直接跳过（`config.py` / `config_models.py`）；桌面侧 `desktop_bridge/role_task_service.py` 只在任务面板列出进行中的整理，没有手动触发入口。**回合路径零引用**：`agent/turns`、`lifecycle`、`retrieval`、`conversation` 均不 import。拔掉/禁用后照常聊天 → 按分层规则做成**系统插件** `memory_optimizer`（可禁用，默认开），provide `MEMORY_OPTIMIZER`（只读进度）供任务面板列出进行中的整理；不做「立即整理」（#907 维护者 2026-10-30）；**不**进核心 memory。 | 回应 PR #897 / M6；覆盖先前 D20「移进核心」 |
 | D21 | **角色任务面板外壳留在核心，schedule 通过 `roleTasks` 插槽挂入** | 核心 renderer 保留面板外壳，继续列出 subagent 和记忆任务；schedule 插件前端挂入定时任务区块 | 只新增一个前端插槽，不需要后端插座；在 P6s 完成 |
 | D22 | **版本策略（修订，回应 R3）** | **大版本 = 破坏性**。manifest `api: 4` + sdk 最低约束（peer）。SDK 独立 semver；**废除** Unreleased/sync 批次。同大版本内：**禁止**给已有 Key/Protocol **新增方法**；新能力一律以**新 Key**（或新 Event）出现。缺 Key → setup 失败 + `PluginDiagnostic`。D10/D19 的新方法必须在进 4.0 前并入基线契约，4.0 之后只能开新 Key。现行 `runtime_api` 删除 | P5；改 AGENTS.md |
 | D23 | **发布边界** | 桌面发版**仅在 P1–P8 全部完成后**随 SDK 4.0 一起发。P1–P8 期间**不从 main 发桌面版**（「不发没事」，见 D26）。已装 3.x/`api:2` → 启动 BLOCKED、不迁移、保留文件配置。不要求可降级。0.5.x 用户数据正向兼容仍按 D4′ | P4/P8；D13 Diagnostic |
 | D24 | **`conflicts` / `replaces`（修订，回应 R5）** | `replaces: [other_id]` = **被替换插件整体不加载**（强于只盖 Key；UI 显示「已被 X 替换」）。`conflicts: [other_id]` = 不可同时启用。未声明关系的双 provide 同一 Key → **双方都标 BLOCKED**，诊断互相点名，其他插件照常启动；插件与核心 provide 同一个 Key 时整个启动失败（2026-10-22 维护者在 P1 实现时确认）。这三项只在可运行（启用且已准入）的插件之间计算：禁用或只登记的不参与，也不能把启用的一方标成 BLOCKED（2026-10-27 P4-1，#903） | 避免 default_memory 被替后仍注册工具/handler |
 | D25 | **热重载排空：`ctx.on_drain`，不用活代理（R2 / T3）** | `require`/`get` 返回原始对象，删掉 seal 的说法。reload 时先排空闭包里的每个插件，再 dispose，再 re-setup。**默认排空（不注册 `on_drain` 也生效）**：内核只等该插件正在执行的 `on`/`watch` handler 结束；`spawn` 出去的任务不参与排空，dispose 时按 §8.4 的顺序直接取消（2026-10-22 维护者在 P1 实现时确认：常驻循环永远不会结束，等它会让每次 reload 都超时）。注册了 **`ctx.on_drain`** 的插件，再额外执行自己的排空逻辑。总超时 60 秒，超时则中止这次 reload、保留旧实例并产出诊断。**核心不得长期持有** provider 实例，每次使用都重新 `get`。契约测试：provider 带代际 id，重载后下一次调用必须拿到新代际；另测「未注册 `on_drain`」的默认排空路径 | §8.2；P1 |
 | D26 | **重构期不发桌面版；停用自动发版（R4）** | P1–P8 期间不发桌面版。仓库的自动桌面发版已停用：`.github/workflows/windows-release.yml` 的 `schedule` cron 随 PR #897 注释掉，**必须在任何 P1 代码 PR 之前合入 main**（GitHub 定时任务只认默认分支）。`apps/desktop/scripts/daily-release.mjs` 留在仓库，恢复日程后发布流程仍走它。`v*` tag 和 `workflow_dispatch` 保留，但重构期不用。**不设 `release/0.5.x` 热修分支**：维护者确认目前没有需要热修的 bug，接受重构期 0.5.x 不出修复版的风险 | 「不发没事」 |
-| D27 | **配置外迁：只迁缺失的键，迁完从 `config.toml` 删掉（R7 / T2，2026-10-22 维护者确认）** | 从宿主 `config.toml` 搬进插件的配置，在启动时迁入插件配置存储。规则：**只有插件配置里还没有这个键时才迁入**；迁入成功后，**从 `config.toml` 删掉已迁移的键**，插件此后只读插件配置，避免 toml 旧值覆盖用户在设置页的修改，也避免用户改了旧键却静默不生效。迁移失败时不删 toml 键，并产出诊断；重复执行是安全的（插件配置里已有的键不覆盖、toml 里已经没有的键不处理）。**不**给内置插件开读取 toml 命名段的特权。迁移清单（以 976f920 源码为准）：proactive 配置段、`memory_optimizer_enabled`、`scene_observation_enabled`。`natural_chat_enabled` 存在角色 JSON 的 `runtime_config` 里，不在本条范围。与 D4′ 的关系：只改配置键的存放位置；`plugin_data/`、kv、启用状态等 0.5.x 路径和格式不变。memory_optimizer 要「插件启用」和 `memory_optimizer_enabled` 同时为真才运行（真值表见 §8.6） | P6 各外迁 PR 填写「现位置 → 新位置」表 |
+| D27 | **配置外迁：只迁缺失的键，迁完从 `config.toml` 删掉（R7 / T2，2026-10-22 维护者确认）** | 从宿主 `config.toml` 搬进插件的配置，在启动时迁入插件配置存储。规则：**只有插件配置里还没有这个键时才迁入**；迁入成功后，**从 `config.toml` 删掉已迁移的键**，插件此后只读插件配置，避免 toml 旧值覆盖用户在设置页的修改，也避免用户改了旧键却静默不生效。迁移失败时不删 toml 键，并产出诊断；重复执行是安全的（插件配置里已有的键不覆盖、toml 里已经没有的键不处理）。**不**给内置插件开读取 toml 命名段的特权。迁移清单（以 976f920 源码为准）：proactive 配置段、`memory_optimizer_enabled`、`scene_observation_enabled`。`natural_chat_enabled` 存在角色 JSON 的 `runtime_config` 里，不在本条范围。与 D4′ 的关系：只改配置键的存放位置；`plugin_data/`、kv、启用状态等 0.5.x 路径和格式不变。memory_optimizer 改为单开关：只看插件启停，`memory_optimizer_enabled = false` 迁成插件停用（#907 维护者 2026-10-30 修订，见 §8.6） | P6 各外迁 PR 填写「现位置 → 新位置」表 |
 
 **2026-10-27（P3-8，维护者确认）**：`session_key()` 与 `top_frame()` 放在 `CRASH_REPORTING` 协议上，不另开 Key。二者原来在 `HostDiagnostics` / `shiori_sdk.diagnostics`，observe 的 collector 在 `inject: [crash_reporting]` 之后仍要用它们给崩溃标注会话和栈帧。该协议尚未进入 4.0 基线，按 D22「新方法必须在进 4.0 前并入基线」并入现有协议。capability `diagnostics` 删除（**breaking**）；`PluginDiagnostic` / `PackageContractError` / `RendererActivationError` 仍留在 `shiori_sdk.kernel`。`TurnCommitted` 在 P3 继续只走领域总线。`ContextBudgetObserved` 与 `MemoryWritten` 由发布方先取一份只读副本，先在总线上发出原事件，再向内核 `emit` 副本（内核 emit 抛错时总线那份不丢）；observe 对这两类用 `ctx.watch`。`rag_queries` 死链（`RetrievalCompleted` 从未被发出）代码与表一起删：删除 `RetrievalCompleted`（**breaking**），observe 打开数据库时 `DROP TABLE IF EXISTS rag_queries`，retention 不再清理该表。
 
@@ -178,7 +178,7 @@ py/fe 为非测试 LOC。"默认关"取自 manifest 的 `default_enabled: false`
 | conversation | 2720 | 对话域模型 | — | 核心 | 同上 |
 | core/roles（去掉 relationship_runtime） | ~4.8k | 角色和资产 | roles 等 | 核心 roles | 同上 |
 | core/memory + agent/memory.py | 4945 + 397 | markdown 记忆存储（profile/group environment）和记忆服务门面 | memory / memory_engine | 核心 memory（存储 + `MEMORY_ENGINE` 插座契约） | D1：核心只有插座契约，引擎实现在插件 |
-| proactive_v2/memory_optimizer.py | 621 | 后台整理 MEMORY.md / SELF.md | `memory_optimizer_enabled`；角色任务手动触发 | **系统插件 memory_optimizer（D20 修订）** | 回合路径零引用（turns/lifecycle/retrieval/conversation 无 import）；`memory_optimizer_enabled=false` 即跳过；拔掉照常聊天 |
+| proactive_v2/memory_optimizer.py | 621 | 后台整理 MEMORY.md / SELF.md | `memory_optimizer_enabled`；任务面板只读列出进行中的整理（无手动触发） | **系统插件 memory_optimizer（D20 修订）** | 回合路径零引用（turns/lifecycle/retrieval/conversation 无 import）；`memory_optimizer_enabled=false` 即跳过；拔掉照常聊天 |
 | 记忆工具 memorize/recall/forget | 418 | 调用记忆引擎 | memory_engine | 系统（随 default_memory，属于实现） | 插座为空时就没有这些工具 |
 | bootstrap/memory*.py + runtime/memory.py + memory_capabilities.py | ~280 | 专门加载记忆引擎插件 | 特殊加载路径 | **删除** | default_memory 改走普通插件加载（D1） |
 | agent/tools registry + tool_search + 消息类工具（message_push、account_delivery、group_*、lookup） | ~1.6k + 1.4k | 工具插座和渠道投递工具 | tools / tool_turn | 核心 tools / channels | 插座由核心持有 |
@@ -403,7 +403,7 @@ D2 已定 proactive 是可禁用的系统插件、核心不依赖它。本节是
 |---|---|---|
 | 1 核心侧通用化（不改行为） | presence 移进 sessions；`deliver_initiated_reply` 从 orchestrator 抽出；`ProactiveMessageCommitted` 改名为 `InitiatedMessageCommitted`（保留一版别名）；`ROLES.plugin_settings` | 中（投递路径），用现有投递测试和一条主动回合 golden trace 守住 |
 | 2 配置解耦 | ProactiveConfig 移进插件包；核心 config 不再 import | 低 |
-| 3 memory_optimizer 插件化 | 从 proactive_v2 拆出为系统插件 `memory_optimizer`（D20 修订）；角色任务「立即整理」改挂插件服务 | 低 |
+| 3 memory_optimizer 插件化 | 从 proactive_v2 拆出为系统插件 `memory_optimizer`（D20 修订）；任务面板经插件的 `MEMORY_OPTIMIZER` 只读列出进行中的整理，不做「立即整理」 | 低 |
 | 4 搬代码 | proactive_v2 + proactive_turn + drift_turn 进 `plugins/proactive/backend`；`setup` 里 spawn 循环、全部改用 Key；删除 ProactiveGatesCapability 和 `bootstrap/proactive.py` | **高**，代码量最大；用假 LLM 跑一次 tick 的 golden trace |
 | 5 桥和前端 | `proactive_target` 改成插件 rpc；角色设置面板进 `roleSettings` 插槽 | 中 |
 | 6 清零 | import-linter 禁止核心 import `plugins.proactive`；core-only 冒烟测试禁用 proactive；删掉别名 | 低 |
@@ -452,13 +452,7 @@ D2 已定 proactive 是可禁用的系统插件、核心不依赖它。本节是
 - **`PluginDiagnostic`** 定义在 SDK/内核，不在 bridge（D13）。
 - **D10 回滚**：先 memory `rollback_turn`（可重试），再 sessions；`RollbackResult.turn_id`；测第二步失败。
 - **配置外迁（D27）**：一次性幂等迁移宿主 `config.toml` → 插件配置存储；非命名段特权读。各 P6 PR 填「现位置 → 新位置 → 迁移函数」表。`plugin_data` 等路径仍按 D4′ 不变。
-- **memory_optimizer 双开关真值表**：
-
-| 插件启用 | `memory_optimizer_enabled`（插件配置，自 config.toml 迁入） | 行为 |
-|---|---|---|
-| 否 | * | 不加载 / 不跑循环 |
-| 是 | 假 | 插件在架但不跑循环 |
-| 是 | 真 | 跑后台整理 |
+- **memory_optimizer 单开关**（#907 维护者 2026-10-30 修订，取代原双开关真值表）：只看插件启停。启动迁移把 `[agent.maintenance]`（及顶层回退键）的 `memory_optimizer_enabled = false` 写成 `[plugins.memory_optimizer] enabled = false`，间隔迁到 `interval_seconds`，迁完删除旧键；`memory_optimizer_enabled` 不再存在。插件启用（且有模型注册）就跑后台整理，停用即停止并取消在途整理。
 
 - **natural_chat 双开关真值表**：见 [`2026-10-27-natural-chat-switch.md`](2026-10-27-natural-chat-switch.md)（P3-9）。P6a 只搬迁，不另定。当前代码只读角色记录；插件启用这一列到 P6a 才进入实现。
 - **前端**：`pluginReloaded`；在途 rpc 返回「插件正在重载」。

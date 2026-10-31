@@ -20,16 +20,13 @@ from core.roles.model_runtime import RoleAwareProvider
 from core.roles.role_prompt_compiler import RolePromptCompiler
 from proactive_v2.config_loader import load_proactive_config
 from proactive_v2.loop import ProactiveLoop
-from proactive_v2.memory_optimizer import MemoryOptimizer, MemoryOptimizerLoop
 from proactive_v2.state import ProactiveStateStore
 from session.manager import SessionManager
 from shiori_sdk.core.sessions import Presence
 
 if TYPE_CHECKING:
     from bus.event_bus import EventBus
-    from core.memory.markdown import MarkdownMemoryStore
     from core.memory.runtime import MemoryRuntime
-    from core.roles.role_runtime import RoleRuntimeRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -204,32 +201,3 @@ def _build_role_tick_dispatcher(
         )
 
     return dispatch
-
-
-def build_memory_optimizer_task(
-    config: Config,
-    *,
-    provider: LLMProvider,
-    memory_store: "MarkdownMemoryStore",
-    role_runtime_registry: "RoleRuntimeRegistry | None" = None,
-    loop_consumer: Callable[[MemoryOptimizerLoop], None] | None = None,
-) -> tuple[list, "MemoryOptimizer | None"]:
-    if not config.memory_optimizer_enabled or not config.model_registrations:
-        logger.info("MemoryOptimizerLoop 已禁用（memory_optimizer_enabled=false）")
-        return [], None
-
-    mem_optimizer = MemoryOptimizer(
-        memory=memory_store,
-        provider=provider,
-        model=config.model,
-        workspace=memory_store.memory_dir.parent,
-        role_runtime_registry=role_runtime_registry,
-    )
-    interval = config.memory_optimizer_interval_seconds
-    logger.info(
-        "MemoryOptimizerLoop 已启动，间隔=%ss (%.1fh)", interval, interval / 3600
-    )
-    loop = MemoryOptimizerLoop(mem_optimizer, interval_seconds=interval)
-    if loop_consumer is not None:
-        loop_consumer(loop)
-    return [loop.run()], mem_optimizer

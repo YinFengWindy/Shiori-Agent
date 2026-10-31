@@ -13,6 +13,24 @@ from .models import RoleRecord
 from shiori_sdk.values import now_iso as _now_iso
 from .self_seed_state import resolve_self_seed_state, self_fingerprint
 
+# Keys the host itself keeps in a role's ``memory_init_state``: written here
+# and in ``self_initializer.py``, read by ``self_seed_state.py``.
+# ``seed_self_ready`` is a legacy marker the SELF seed state still reads.
+# ``MARKDOWN_MEMORY`` keeps plugins away from them.
+HOST_MEMORY_STATE_KEYS = frozenset(
+    {
+        "self_seed",
+        "seed_self_ready",
+        "seed_background_ready",
+        "seed_background_value",
+        "seed_first_impression_ready",
+        "relationship_baseline_value",
+        "relationship_baseline_source",
+        "relationship_revision_count",
+        "last_memory_initialized_at",
+    }
+)
+
 
 class RoleMemoryService:
     """角色独立记忆空间服务。"""

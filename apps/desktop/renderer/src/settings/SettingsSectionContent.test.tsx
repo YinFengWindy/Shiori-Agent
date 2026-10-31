@@ -20,8 +20,6 @@ function createSettingsFormData(): SettingsFormData {
       memoryWindow: 20,
       searchEnabled: true,
       spawnEnabled: true,
-      memoryOptimizerEnabled: false,
-      memoryOptimizerIntervalSeconds: 3600,
       contextTriggerRatio: 0.75, contextTargetRatio: 0.4, contextSafetyMarginTokens: 4096
     },
   };

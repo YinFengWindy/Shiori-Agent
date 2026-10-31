@@ -48,8 +48,8 @@ effort = "none"
 model_context_window = 128000
 [desktop.chat]
 streaming_enabled = true
-[agent.maintenance]
-memory_optimizer_enabled = false
+[plugins.memory_optimizer]
+enabled = false
 [plugins.desktop_pet]
 enabled = true
 `;

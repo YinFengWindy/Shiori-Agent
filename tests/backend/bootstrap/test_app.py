@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -11,38 +11,6 @@ from bootstrap.channels import start_channels
 def empty_config(monkeypatch):
     monkeypatch.setattr("bootstrap.tools._resolve_plugin_dirs", lambda _: [])
     return Config(provider="", model="", api_key="", model_registrations=[])
-
-
-@pytest.mark.asyncio
-async def test_app_runtime_start_passes_markdown_store_to_memory_optimizer(
-    monkeypatch,
-    tmp_path,
-    empty_config,
-):
-    optimizer = MagicMock()
-    build_optimizer = MagicMock(return_value=([], optimizer))
-    monkeypatch.setattr(
-        "bootstrap.runtime.background.build_memory_optimizer_task", build_optimizer
-    )
-    app = AppRuntime(empty_config, tmp_path)
-
-    try:
-        await app.start()
-
-        assert app.core is not None
-        build_optimizer.assert_called_once()
-        assert build_optimizer.call_args.args[0] is empty_config
-        assert (
-            build_optimizer.call_args.kwargs["memory_store"]
-            is app.core.memory_runtime.markdown.store
-        )
-        assert (
-            build_optimizer.call_args.kwargs["role_runtime_registry"]
-            is app.core.role_runtime_registry
-        )
-        assert app._memory_optimizer is optimizer
-    finally:
-        await app.shutdown()
 
 
 @pytest.mark.asyncio
@@ -119,7 +87,6 @@ async def test_initial_partial_core_failure_forces_unsafe_plugin_cleanup(
         model="",
         api_key="",
         model_registrations=[],
-        memory_optimizer_enabled=False,
     )
     app = AppRuntime(
         config,
@@ -180,7 +147,6 @@ async def test_initial_setup_cancellation_releases_plugin_and_runtime(
             model="",
             api_key="",
             model_registrations=[],
-            memory_optimizer_enabled=False,
         ),
         tmp_path,
         features=RuntimeFeatures(enable_message_channels=False, enable_proactive=False),
@@ -248,7 +214,6 @@ async def test_start_publishes_accounts_and_stop_drops_the_generation(
             model="",
             api_key="",
             model_registrations=[],
-            memory_optimizer_enabled=False,
         ),
         tmp_path,
         features=RuntimeFeatures(enable_message_channels=False, enable_proactive=False),

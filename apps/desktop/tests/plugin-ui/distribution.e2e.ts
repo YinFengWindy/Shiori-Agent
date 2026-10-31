@@ -13,7 +13,7 @@ const source = resolve(repository, "plugins/external_demo");
 const workspace = resolve(output, "workspace"), profile = resolve(output, "profile");
 await mkdir(workspace);
 await mkdir(profile);
-await writeFile(resolve(workspace, "config.toml"), '[llm]\nregistrations = []\n[agent.maintenance]\nmemory_optimizer_enabled = false\n[plugins.desktop_pet]\nenabled = false\n', "utf8");
+await writeFile(resolve(workspace, "config.toml"), '[llm]\nregistrations = []\n[plugins.memory_optimizer]\nenabled = false\n[plugins.desktop_pet]\nenabled = false\n', "utf8");
 
 const evidence = new Evidence(output);
 const app = new DevelopmentApp({ workspace, profile, executable: resolve(repository, "apps/desktop/node_modules/electron/dist/electron.exe") }, evidence, "development");

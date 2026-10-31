@@ -158,7 +158,6 @@ async def test_empty_application_hot_reload_preserves_shared_state_and_old_lease
         model="",
         api_key="",
         model_registrations=[],
-        memory_optimizer_enabled=False,
     )
     app = AppRuntime(
         config,
@@ -198,7 +197,6 @@ async def test_persistence_failure_keeps_live_runtime(tmp_path, monkeypatch):
         model="",
         api_key="",
         model_registrations=[],
-        memory_optimizer_enabled=False,
     )
     app = AppRuntime(
         config,
@@ -234,7 +232,6 @@ async def test_partial_candidate_construction_closes_new_provider_and_preserves_
         model="",
         api_key="",
         model_registrations=[],
-        memory_optimizer_enabled=False,
     )
     app = AppRuntime(
         config,
@@ -296,7 +293,6 @@ async def test_scene_intake_starts_only_when_its_generation_is_published(
         model="",
         api_key="",
         model_registrations=[],
-        memory_optimizer_enabled=False,
     )
     app = AppRuntime(
         config,
@@ -338,7 +334,6 @@ async def test_core_motives_follow_generation_publication_and_rollback(
         model="",
         api_key="",
         model_registrations=[],
-        memory_optimizer_enabled=False,
     )
     app = AppRuntime(
         config,
@@ -434,7 +429,6 @@ async def test_publish_rechecks_hot_unload_before_handover_or_commit(
         model="",
         api_key="",
         model_registrations=[],
-        memory_optimizer_enabled=False,
         plugins={"restart_required": {"enabled": False}},
     )
     app = AppRuntime(
@@ -489,7 +483,6 @@ async def test_unpublished_unsafe_candidate_is_forcibly_reclaimed_on_failure(
         model="",
         api_key="",
         model_registrations=[],
-        memory_optimizer_enabled=False,
         plugins={"restart_required": {"enabled": False}},
     )
     app = AppRuntime(

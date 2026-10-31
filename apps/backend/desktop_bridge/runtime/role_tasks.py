@@ -2,7 +2,7 @@
 
 from core.roles.errors import RoleNotFoundError
 from core.common.runtime_scope import bind_runtime
-from desktop_bridge.role_task_service import RoleTaskService
+from desktop_bridge.role_task_service import RoleTaskService, memory_optimizer_getter
 
 
 class RuntimeRoleTasks:
@@ -18,7 +18,7 @@ class RuntimeRoleTasks:
             spawn = core.tools.get_tool("spawn")
             yield generation, RoleTaskService(
                 subagent_manager=spawn.manager if spawn is not None else None,
-                memory_optimizer=core.memory_optimizer,
+                memory_optimizer=memory_optimizer_getter(core.plugin_manager),
                 session_key_for_role=lambda role_id: f"role:{role_id}",
             )
 

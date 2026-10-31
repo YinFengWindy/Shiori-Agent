@@ -64,7 +64,7 @@ spec 的 `runnable = False` 表示只登记：已停用、未信任、准入失�
 - 新实例 setup 时 `RUNTIME.was_active` 为 `True`，启动恢复逻辑不要重复跑。代际替换时，上一代处于 `ACTIVE` 的插件在新一代 setup 时也是 `True`。
 - 一旦实例开始重载、卸载或终止，对它的工具、RPC 处理器和服务的调用，包括通过早先拿到的引用，都以 `PluginRpcError("plugin_unavailable")` 拒绝，不会到达旧实例。
 - `on_drain` 回调**只等待已接受的工作，不得拆资源**。它可能执行多次，也可能在实例继续存活时执行（排空超时放弃重载后旧实例重新开放）。拆资源放在 `ctx.effect`。
-- 用 `PROCESS_RESOURCES` 拿到的进程资源在代内重载之间保留，新实例重新获取到的是同一个对象。SDK 的托管运行时 helper（`shiori_sdk.managed.rpc.register_runtime_rpc`）在释放时停服务，不在 `on_drain` 里停。
+- 用 `PROCESS_RESOURCES` 拿到的进程资源在代内重载之间保留，新实例重新获取到的是同一个对象。代内重载或启用发生在已发布的代里，`on_published` 的回调在注册时立即运行；换代时候选代的回调在宿主发布它的那一步运行。SDK 的托管运行时 helper（`shiori_sdk.managed.rpc.register_runtime_rpc`）在释放时停服务，不在 `on_drain` 里停。
 
 ## 启用与停用
 
@@ -82,15 +82,16 @@ spec 的 `runnable = False` 表示只登记：已停用、未信任、准入失�
 
 ## 启动时的配置迁移
 
-宿主启动时把旧配置一次性搬到插件表。三条迁移都只改 `config.toml` 里涉及的表，保留注释与其他表，原子写入，再跑一次文件字节不变。目标表写成内联表或点分键、编辑器定位不到时抛错，文件不动，启动失败并给出改法。
+宿主启动时把旧配置一次性搬到插件表。四条迁移都只改 `config.toml` 里涉及的表，保留注释与其他表，原子写入，再跑一次文件字节不变。目标表写成内联表或点分键、编辑器定位不到时抛错，文件不动，启动失败并给出改法。
 
 | 迁移 | 何时执行 | 写入 |
 | --- | --- | --- |
 | 记忆 | 还有顶层 `[memory]`，或 `[plugins.default_memory]` 没有显式 `enabled` | 旧值写进 `[plugins.default_memory]`（含显式 `enabled`），删除 `[memory]` |
 | 场景 | 还有 `[agent.scene_observation]` | `enabled` 写成 `[plugins.scene].observation_enabled`（插件表已有该键时不覆盖），删除旧表 |
+| 记忆整理 | 还有 `[agent.maintenance]`，或顶层还有 `memory_optimizer_enabled` / `memory_optimizer_interval_seconds` | `memory_optimizer_enabled = false` 写成 `[plugins.memory_optimizer] enabled = false`，间隔写成 `interval_seconds`（不小于 60）；与默认值相同的不写，插件表已有的键不覆盖；删除旧表与顶层旧键。改写后的文件必须解析成预期内容，否则抛错、文件不动 |
 | MCP | `<workspace>/mcp_servers.json` 的 `servers` 非空，且 `[plugins.mcp]` 没有显式 `enabled` | `[plugins.mcp] enabled = true`。显式写过 `true` 或 `false` 都不动；新装的空服务器列表保持关闭 |
 
-记忆与场景迁移在 `load_config` 里依次执行；MCP 迁移要读工作区，在桌面桥接启动、读配置之前执行。
+记忆、场景与记忆整理迁移在 `load_config` 里依次执行；MCP 迁移要读工作区，在桌面桥接启动、读配置之前执行。
 
 会话库（`<workspace>/sessions.db`）在每次打开时也做一次就地清理：宿主以前替好感插件抄进会话 metadata 的 `relationship_snapshot`、`loneliness_runtime`、`affection` 三个键被删掉，其他字段不动；没有这三个键的会话不改写，所以再次打开不变。和其它会话库升级一样在建表的同一事务里完成。
 

@@ -61,6 +61,7 @@ related:
 | 设置自动保存 | SDK 串行草稿队列（宿主设置页、schema 插件配置页与插件私有文档共用）、作用域切换迟到结果、离开时提交、失败暂停与重试，`host.ui.SettingsSavedStatus` 与宿主页角「已保存」一致，SDK 设置页布局组件 | `SerialDraftQueue usePrivateAutosave SettingsSavedStatus SettingsField pluginUiPeerExports` |
 | 插件托管环境 | SDK 托管运行时（安装位置、按原路径导入、删除、空间预检、子进程与日志解码）、provider 插件调用者、宿主选文件/选目录能力 | `ManagedRuntime Installation OwnedService OwnedChild useManagedRuntime ManagedRuntimePanel` |
 | 调度任务 | schedule 插件的进程资源调度器、工具、`SCHEDULER`、持久化、`SCHEDULE_HOST` 投递、`RoleDeleted` 清理、`roleTasks` 区块与插件 RPC | `SchedulerService compute_fire_at HostScheduleRunner ScheduleTasksBlock roleTasks` |
+| 记忆整理 | memory_optimizer 插件的进程资源整理循环、`MARKDOWN_MEMORY` 端口（PENDING 两阶段提交、角色记忆状态）、角色对话模型、`MEMORY_OPTIMIZER` 与任务面板、`[agent.maintenance]` 启动迁移 | `MemoryOptimizerService MemoryOptimizer HostMarkdownMemory migrate_legacy_memory_optimizer_config` |
 | 单角色剧情 | Story repository、Director、角色/玩家快照、bridge 事件、桌面剧情适配层 | `StorySimulationService StoryRepository StorySimulationHandler stories.beat.committed` |
 
 独立 provider、SDK 3.1.1 工具与已发布 SDK 3.1.0 接口的迁移见 [语音 Provider 与桌宠交互](../modules/voice.md) 与 [SDK 兼容说明](../../../packages/sdk/README.md#compatibility)。

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from bootstrap.tools import CoreRuntime
 from core.roles import RoleStore
+from desktop_bridge.role_task_service import memory_optimizer_getter
 from desktop_bridge.service import DesktopBridgeService
 
 
@@ -26,7 +27,7 @@ def build_desktop_service(
         affection=runtime.affection,
         presence=runtime.presence,
         subagent_manager=getattr(spawn, "manager", None),
-        memory_optimizer=runtime.memory_optimizer,
+        memory_optimizer=memory_optimizer_getter(runtime.plugin_manager),
         role_runtime_registry=registry,
         current_memory_engine=runtime.memory_runtime.current_engine,
         plugin_rpc_registry=runtime.plugin_rpc,

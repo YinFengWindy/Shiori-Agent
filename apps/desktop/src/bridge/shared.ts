@@ -121,8 +121,6 @@ export type SettingsFormData = {
     spawnEnabled: boolean;
     /** Preserves the core scene observation switch across unrelated settings saves. */
     sceneObservationEnabled?: boolean;
-    memoryOptimizerEnabled: boolean;
-    memoryOptimizerIntervalSeconds: number;
     /** Input-budget policy, preserved by ordinary settings saves. */
     contextTriggerRatio?: number;
     contextTargetRatio?: number;

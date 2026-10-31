@@ -1,46 +1,34 @@
-"""
-proactive/memory_optimizer.py — 记忆质量优化器
+"""One role's memory optimization: merge PENDING into MEMORY.md, then update SELF.md.
 
-每轮运行两步：
-  1. 重写 MEMORY.md：把 PENDING 事实整理为角色相对视角的长期记忆
-  2. 更新 SELF.md：只改写约定的三个 section
-
-SELF.md 的写入规则有版本号（``SELF_RULES_VERSION``）。角色记录的版本落后时，下一次
-优化把 SELF 步骤换成按新规则的一次性重写，成功后记下版本，之后不再重写。
+SELF.md's writing rules carry a version (``SELF_RULES_VERSION``). When a role's
+recorded version is behind, the next optimization rewrites SELF.md once under
+the new rules instead of updating it, then records the version.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timedelta
-from pathlib import Path
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Callable
+from datetime import datetime
 
-if TYPE_CHECKING:
-    from core.memory.markdown import MarkdownMemoryStore
-    from core.roles.models import RoleRecord
-    from core.roles.role_runtime import RoleRuntimeRegistry
-
-from agent.memory import DEFAULT_SELF_MD
-from agent.provider import LLMProvider
-from core.memory.markdown import resolve_markdown_store
-from core.roles import RoleStore
-from core.roles.self_seed_state import resolve_self_seed_state
+from shiori_sdk.core.markdown_memory import MarkdownMemory, RoleMarkdownMemory
+from shiori_sdk.models import ChatProvider, RoleModels
 
 logger = logging.getLogger(__name__)
-_LAST_OPTIMIZED_STATE_KEY = "last_memory_optimized_at"
-# 角色 memory_init_state 里记录“SELF.md 已按哪一版写入规则重写”的键。
-_SELF_RULES_VERSION_STATE_KEY = "self_rules_version"
+
+# Keys this plugin owns in the role's memory state (``RoleMarkdownMemory.read_state``).
+LAST_OPTIMIZED_STATE_KEY = "last_memory_optimized_at"
+# The SELF.md writing-rules version the role's SELF.md was last rewritten under.
+SELF_RULES_VERSION_STATE_KEY = "self_rules_version"
 # SELF.md 写入规则的当前版本。
 # 2（#495）：「我们的关系」只写关系定位与称呼，SELF 不含用户私人事实，因为
 # 「我的性格与形象」与「我们的关系」会在群聊等外部上下文注入。
 SELF_RULES_VERSION = 2
-
-
-class MemoryOptimizerBusy(RuntimeError):
-    pass
+# Pause between the two model requests, so they do not trip burst rate limits.
+_STEP_DELAY_SECONDS = 15.0
+_MERGE_MAX_TOKENS = 16384
+_SELF_MAX_TOKENS = 2048
 
 
 # ── Prompts ──────────────────────────────────────────────────────
@@ -230,108 +218,56 @@ _SELF_REWRITE_NOTE = """
 """
 
 
-def self_rewrite_pending(memory_init_state: Mapping[str, object]) -> bool:
-    """角色的 SELF.md 是否还没按当前写入规则（``SELF_RULES_VERSION``）重写过。"""
-    version = memory_init_state.get(_SELF_RULES_VERSION_STATE_KEY)
+def self_rewrite_pending(memory_state: Mapping[str, object]) -> bool:
+    """Whether the role's SELF.md was not yet rewritten under ``SELF_RULES_VERSION``."""
+    version = memory_state.get(SELF_RULES_VERSION_STATE_KEY)
     return not isinstance(version, int) or version < SELF_RULES_VERSION
 
 
-# ── MemoryOptimizer ───────────────────────────────────────────────
-
-
 class MemoryOptimizer:
-    def __init__(
-        self,
-        memory: "MarkdownMemoryStore",
-        provider: LLMProvider,
-        model: str,
-        workspace: Path,
-        max_tokens: int = 16384,
-        role_runtime_registry: RoleRuntimeRegistry | None = None,
+    """Optimizes one role with the role's chat model."""
+
+    def __init__(self, *, step_delay_seconds: float = _STEP_DELAY_SECONDS) -> None:
+        self._step_delay_seconds = step_delay_seconds
+
+    async def optimize(
+        self, memory: MarkdownMemory, models: RoleModels, role_id: str
     ) -> None:
-        self._memory = memory
-        self._provider = provider
-        self._model = model
-        self._role_runtime_registry = role_runtime_registry
-        self._workspace = Path(workspace)
-        self._max_tokens = max_tokens
-        self._lock = asyncio.Lock()
-        self._active_role_id = ""
-        self._active_started_at = ""
+        """Merges the role's pending facts and updates its SELF.md.
 
-    # 各步骤之间的间隔（秒），避免短时间内连续请求触发 limit_burst_rate
-    _STEP_DELAY_SECONDS: int = 15
-
-    @property
-    def is_running(self) -> bool:
-        return self._lock.locked()
-
-    @property
-    def active_role_id(self) -> str:
-        """Returns the role currently being maintained, if any."""
-        return self._active_role_id
-
-    @property
-    def active_started_at(self) -> str:
-        """Returns the start timestamp for the active maintenance run."""
-        return self._active_started_at
-
-    async def optimize(self, *, role_id: str | None = None) -> None:
-        """两步优化：合并 PENDING → MEMORY，更新 SELF。"""
-        clean_role_id = str(role_id or "").strip()
-        if not clean_role_id:
-            raise ValueError("role_id required for memory optimizer")
-        if self._lock.locked():
-            raise MemoryOptimizerBusy("memory optimizer 正在运行")
-        async with self._lock:
-            self._active_role_id = clean_role_id
-            self._active_started_at = datetime.now().astimezone().isoformat()
-            try:
-                if self._role_runtime_registry is None:
-                    await self._optimize(role_id=clean_role_id)
-                else:
-                    runtime = await self._role_runtime_registry.get(clean_role_id)
-                    with runtime.activate_model("chat") as snapshot:
-                        await self._optimize(
-                            role_id=clean_role_id,
-                            provider=snapshot.provider,
-                            model=snapshot.model,
-                        )
-            finally:
-                self._active_role_id = ""
-                self._active_started_at = ""
+        A deleted role is skipped. Cancelled while merging, the pending facts
+        go back to PENDING.md.
+        """
+        documents = memory.role(role_id)
+        if documents is None:
+            return
+        async with models.activate(role_id, "chat") as snapshot:
+            await self._optimize(
+                documents,
+                provider=snapshot.provider,
+                model=snapshot.model,
+                default_self=memory.default_self,
+            )
 
     async def _optimize(
         self,
+        documents: RoleMarkdownMemory,
         *,
-        role_id: str | None = None,
-        provider: LLMProvider | None = None,
-        model: str | None = None,
+        provider: ChatProvider,
+        model: str,
+        default_self: str,
     ) -> None:
-        clean_role_id = str(role_id or "").strip()
-        if not clean_role_id:
-            raise ValueError("role_id required for memory optimizer")
-        active_provider = provider or self._provider
-        active_model = model or self._model
-        memory_store = resolve_markdown_store(
-            workspace=self._workspace,
-            default_store=self._memory,
-            role_id=clean_role_id,
-        )
-        role_store = RoleStore(self._workspace)
-        role = role_store.get_role(clean_role_id)
         rewrite_self = False
-        if role is not None and self_rewrite_pending(role.memory_init_state):
-            seed = resolve_self_seed_state(role, memory_store.read_self())
-            if seed["status"] == "pending":
+        if self_rewrite_pending(documents.read_state()):
+            if documents.self_seed_pending():
                 # 还没生成首版 SELF 的角色只有默认模板，没有需要按新规则整理的内容；
                 # 此时改写 SELF 还会让首版生成误判为用户编辑而放弃。
-                self._mark_self_rewritten(role_store, clean_role_id)
+                _mark_self_rewritten(documents)
             else:
                 rewrite_self = True
         # ── Step 1: MEMORY.md 合并 ────────────────────────────────
-        pending = memory_store.snapshot_pending()
-        current_memory = memory_store.read_long_term().strip()
+        pending = documents.snapshot_pending()
+        current_memory = documents.read_long_term().strip()
 
         if not current_memory and not pending:
             if not rewrite_self:
@@ -339,67 +275,61 @@ class MemoryOptimizer:
                 return
             # 记忆为空也要完成 SELF.md 的一次性重写。
             if await self._update_self(
-                memory_store,
+                documents,
                 "",
-                provider=active_provider,
-                model=active_model,
+                provider=provider,
+                model=model,
+                default_self=default_self,
                 rewrite=True,
             ):
-                self._mark_self_rewritten(role_store, clean_role_id)
+                _mark_self_rewritten(documents)
             return
 
         try:
             merged_memory = await self._merge_memory(
-                current_memory,
-                pending,
-                provider=active_provider,
-                model=active_model,
+                current_memory, pending, provider=provider, model=model
             )
         except asyncio.CancelledError:
-            # 换代会取消在途整理：快照放回 PENDING，不留到下次整理才恢复。
-            memory_store.rollback_pending_snapshot()
+            # 停用或换代会取消在途整理：快照放回 PENDING，不留到下次整理才恢复。
+            documents.rollback_pending_snapshot()
             raise
         if merged_memory:
-            if current_memory:
-                memory_store.backup_long_term()
-            memory_store.write_long_term(merged_memory)
+            documents.commit_long_term(
+                merged_memory,
+                history_entry=(
+                    f"[memory_optimizer] PENDING 归档:\n{pending}" if pending else ""
+                ),
+            )
             logger.info(
-                "[memory_optimizer] 记忆已合并 before=%d after=%d chars",
+                "[memory_optimizer] 记忆已合并 before=%d after=%d chars，PENDING 已归档",
                 len(current_memory),
                 len(merged_memory),
             )
-            if pending:
-                memory_store.append_history(
-                    f"[memory_optimizer] PENDING 归档:\n{pending}"
-                )
-            memory_store.commit_pending_snapshot()
-            logger.info("[memory_optimizer] PENDING 已归档，snapshot 已提交")
         else:
-            memory_store.rollback_pending_snapshot()
+            documents.rollback_pending_snapshot()
             logger.warning(
                 "[memory_optimizer] 合并返回空，保留原有内容，snapshot 已回滚"
             )
 
         # ── Step 2: SELF.md 更新 ──────────────────────────────────
-        await asyncio.sleep(self._STEP_DELAY_SECONDS)
+        await asyncio.sleep(self._step_delay_seconds)
         self_written = await self._update_self(
-            memory_store,
+            documents,
             pending,
-            provider=active_provider,
-            model=active_model,
+            provider=provider,
+            model=model,
+            default_self=default_self,
             rewrite=rewrite_self,
         )
         if rewrite_self and self_written:
-            self._mark_self_rewritten(role_store, clean_role_id)
-        self._mark_role_optimized(role_store, clean_role_id)
+            _mark_self_rewritten(documents)
+        # 记下本次优化完成的时间，供启动补跑判断是否过期。
+        documents.write_state(
+            LAST_OPTIMIZED_STATE_KEY, datetime.now().astimezone().isoformat()
+        )
 
     async def _merge_memory(
-        self,
-        memory: str,
-        pending: str,
-        *,
-        provider: LLMProvider,
-        model: str,
+        self, memory: str, pending: str, *, provider: ChatProvider, model: str
     ) -> str:
         today = datetime.now().strftime("%Y-%m-%d")
         prompt = _MERGE_PROMPT.format(
@@ -408,12 +338,12 @@ class MemoryOptimizer:
             pending=pending or "（无新内容）",
         )
         try:
-            return await self._request_text_response(
+            return await _request_text(
+                provider,
+                model,
                 system_content=_MERGE_SYSTEM,
                 user_content=prompt,
-                max_tokens=self._max_tokens,
-                provider=provider,
-                model=model,
+                max_tokens=_MERGE_MAX_TOKENS,
             )
         except Exception as e:
             logger.error("[memory_optimizer] 记忆合并失败: %s", e)
@@ -421,18 +351,19 @@ class MemoryOptimizer:
 
     async def _update_self(
         self,
-        memory_store: "MarkdownMemoryStore",
+        documents: RoleMarkdownMemory,
         pending: str,
         *,
-        provider: LLMProvider,
+        provider: ChatProvider,
         model: str,
-        rewrite: bool = False,
+        default_self: str,
+        rewrite: bool,
     ) -> bool:
         """只更新 SELF.md 现有保留的三段，不新增 section；返回是否写入了新内容。
 
         ``rewrite`` 为真时要求模型按当前写入规则整体重写一次（见 ``SELF_RULES_VERSION``）。
         """
-        self_content = memory_store.read_self().strip() or DEFAULT_SELF_MD.strip()
+        self_content = documents.read_self().strip() or default_self.strip()
         if not self_content:
             logger.info("[memory_optimizer] SELF.md 不存在或为空，跳过更新")
             return False
@@ -442,180 +373,42 @@ class MemoryOptimizer:
             rewrite_note=_SELF_REWRITE_NOTE if rewrite else "",
         )
         try:
-            updated = await self._request_text_response(
+            updated = await _request_text(
+                provider,
+                model,
                 system_content=_SELF_SYSTEM,
                 user_content=prompt,
-                max_tokens=2048,
-                provider=provider,
-                model=model,
+                max_tokens=_SELF_MAX_TOKENS,
             )
             if updated:
-                memory_store.write_self(updated)
+                documents.write_self(updated)
                 logger.info("[memory_optimizer] SELF.md 已更新 rewrite=%s", rewrite)
                 return True
         except Exception as e:
             logger.error("[memory_optimizer] SELF.md 更新失败: %s", e)
         return False
 
-    async def _request_text_response(
-        self,
-        *,
-        system_content: str,
-        user_content: str,
-        max_tokens: int,
-        provider: LLMProvider,
-        model: str,
-    ) -> str:
-        resp = await provider.chat(
-            messages=[
-                {"role": "system", "content": system_content},
-                {"role": "user", "content": user_content},
-            ],
-            tools=[],
-            model=model,
-            max_tokens=max_tokens,
-        )
-        return (resp.content or "").strip()
 
-    @staticmethod
-    def _mark_self_rewritten(store: RoleStore, role_id: str) -> None:
-        """记下角色 SELF.md 已按当前写入规则重写，之后不再触发一次性重写。"""
-        _set_role_memory_state(
-            store, role_id, _SELF_RULES_VERSION_STATE_KEY, SELF_RULES_VERSION
-        )
-
-    @staticmethod
-    def _mark_role_optimized(store: RoleStore, role_id: str) -> None:
-        """记下角色本次优化完成的时间，供启动补跑判断是否过期。"""
-        _set_role_memory_state(
-            store,
-            role_id,
-            _LAST_OPTIMIZED_STATE_KEY,
-            datetime.now().astimezone().isoformat(),
-        )
+async def _request_text(
+    provider: ChatProvider,
+    model: str,
+    *,
+    system_content: str,
+    user_content: str,
+    max_tokens: int,
+) -> str:
+    resp = await provider.chat(
+        messages=[
+            {"role": "system", "content": system_content},
+            {"role": "user", "content": user_content},
+        ],
+        tools=[],
+        model=model,
+        max_tokens=max_tokens,
+    )
+    return (resp.content or "").strip()
 
 
-def _set_role_memory_state(
-    store: RoleStore, role_id: str, key: str, value: object
-) -> None:
-    """在角色 ``memory_init_state`` 里写入一个键；角色已不存在时不写。
-
-    优化期间要等待模型调用，其他流程（如 SELF 首版生成）可能已改写同一份状态，
-    所以写入前在存储锁内重新读取角色，只改这一个键。
-    """
-    with store.lock:
-        role = store.get_role(role_id)
-        if role is None:
-            return
-        next_state: dict[str, object] = {**role.memory_init_state, key: value}
-        if next_state != role.memory_init_state:
-            _ = store.update_role(role_id, memory_init_state=next_state)
-
-
-# ── MemoryOptimizerLoop ───────────────────────────────────────────
-
-_DEFAULT_INTERVAL_SECONDS = 64800  # 默认每 18 小时整点
-
-
-class MemoryOptimizerLoop:
-    def __init__(
-        self,
-        optimizer: MemoryOptimizer | None,
-        interval_seconds: int = _DEFAULT_INTERVAL_SECONDS,
-        _now_fn: Callable[[], datetime] | None = None,
-    ) -> None:
-        self._optimizer = optimizer
-        self._interval = max(60, interval_seconds)
-        self._now_fn = _now_fn or datetime.now
-        self._running = False
-        self._stop_requested = asyncio.Event()
-
-    async def run(self) -> None:
-        if self._stop_requested.is_set():
-            return
-        self._running = True
-        await self._catch_up_overdue_roles()
-        logger.info(
-            "[memory_optimizer] 优化循环已启动，间隔=%ds (%.1fh)，对齐整点",
-            self._interval,
-            self._interval / 3600,
-        )
-        while self._running:
-            secs = self._seconds_until_next_tick()
-            logger.info(
-                "[memory_optimizer] 距下次优化 %.0f 秒 (%.1f 小时)",
-                secs,
-                secs / 3600,
-            )
-            try:
-                await asyncio.wait_for(self._stop_requested.wait(), timeout=secs)
-            except TimeoutError:
-                pass
-            if not self._running:
-                break
-            try:
-                if self._optimizer:
-                    workspace = getattr(self._optimizer, "_workspace", None)
-                    if workspace:
-                        role_store = RoleStore(Path(workspace))
-                        for role in role_store.list_roles():
-                            if not self._running:
-                                break
-                            await self._optimizer.optimize(role_id=role.id)
-            except Exception:
-                logger.exception("[memory_optimizer] 优化异常")
-
-    def stop(self) -> None:
-        """Stops future optimization batches.
-
-        The runtime owner then cancels the task, interrupting the active role;
-        ``MemoryOptimizer`` returns its pending snapshot so nothing half-merged
-        is kept, and the next generation's loop reschedules on its own interval.
-        """
-        self._running = False
-        self._stop_requested.set()
-
-    async def _catch_up_overdue_roles(self) -> None:
-        optimizer = self._optimizer
-        if optimizer is None:
-            return
-        workspace = getattr(optimizer, "_workspace", None)
-        if not workspace:
-            return
-        role_store = RoleStore(Path(workspace))
-        now = self._now_fn().astimezone()
-        for role in role_store.list_roles():
-            if self._stop_requested.is_set():
-                break
-            if not self._is_role_overdue(role, now=now):
-                continue
-            try:
-                logger.info("[memory_optimizer] 启动补跑过期角色: %s", role.id)
-                await optimizer.optimize(role_id=role.id)
-            except Exception:
-                logger.exception("[memory_optimizer] 启动补跑角色失败: %s", role.id)
-
-    def _is_role_overdue(self, role: RoleRecord, *, now: datetime) -> bool:
-        state = (
-            role.memory_init_state if isinstance(role.memory_init_state, dict) else {}
-        )
-        # SELF.md 还没按当前写入规则重写的角色，启动时就补跑一次。
-        if self_rewrite_pending(state):
-            return True
-        raw = str(state.get(_LAST_OPTIMIZED_STATE_KEY) or "").strip()
-        if not raw:
-            return True
-        try:
-            last = datetime.fromisoformat(raw)
-        except ValueError:
-            return True
-        if last.tzinfo is None:
-            last = last.astimezone()
-        return now - last >= timedelta(seconds=self._interval)
-
-    def _seconds_until_next_tick(self) -> float:
-        """计算距下一个对齐整点的秒数。"""
-        now = self._now_fn()
-        now_ts = now.replace(second=0, microsecond=0).timestamp()
-        next_ts = (now_ts // self._interval + 1) * self._interval
-        return max(1.0, next_ts - now.timestamp())
+def _mark_self_rewritten(documents: RoleMarkdownMemory) -> None:
+    """记下角色 SELF.md 已按当前写入规则重写，之后不再触发一次性重写。"""
+    documents.write_state(SELF_RULES_VERSION_STATE_KEY, SELF_RULES_VERSION)

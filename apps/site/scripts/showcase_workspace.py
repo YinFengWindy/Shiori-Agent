@@ -61,8 +61,8 @@ model_max_output_tokens = 8192
 [desktop.chat]
 streaming_enabled = true
 
-[agent.maintenance]
-memory_optimizer_enabled = false
+[plugins.memory_optimizer]
+enabled = false
 
 # Offline credentials so default_memory starts and the memory scene shows its
 # timeline instead of "记忆已关闭"; nothing is embedded while capturing.

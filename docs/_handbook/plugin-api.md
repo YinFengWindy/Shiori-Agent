@@ -361,6 +361,66 @@ Installs one active crash collector at a time, stacked by ``owner``.
 
   The first frame the host or a plugin owns, else the innermost filename.
 
+## `shiori_sdk.core.markdown_memory`
+
+``MARKDOWN_MEMORY``: a role's Markdown memory documents on the host (#907 P6b). Each role keeps ``MEMORY.md`` (long-term memory), ``SELF.md`` (the role's self-understanding), ``PENDING.md`` (facts waiting to be merged into ``MEMORY.md``) and ``HISTORY.md`` (an append-only archive) under its role directory. The files, their schema and their locations stay with the host; this port reads and rewrites them. The host provides this key before any plugin starts. The port also keeps a role's memory state: plugin-owned values stored in the role record next to the host's own initialization state. They survive restarts and are deleted with the role. The port does not belong to a generation; a process-level plugin resource can keep one reference across runtime reloads.
+
+### `markdown_memory`
+
+Target `shiori_sdk.core.markdown_memory.MarkdownMemory`.
+
+#### `shiori_sdk.core.markdown_memory.MarkdownMemory`
+
+Markdown memory of every role on the host.
+
+- `default_self: str`
+
+  The ``SELF.md`` template a role starts from.
+
+- `role(role_id: str) -> core.markdown_memory.RoleMarkdownMemory | None`
+
+  The role's documents, or ``None`` when the role does not exist.
+
+#### `shiori_sdk.core.markdown_memory.RoleMarkdownMemory`
+
+One role's Markdown memory documents and memory state. Merging ``PENDING.md`` into ``MEMORY.md`` is two-phase. ``snapshot_pending`` moves the pending facts aside, so facts appended while the merge runs go to a new ``PENDING.md``. The merge then ends with ``commit_long_term`` (facts are merged) or ``rollback_pending_snapshot`` (the facts go back). A snapshot left by a process that exited mid-merge goes back on the next ``snapshot_pending``.
+
+- `read_long_term() -> str`
+
+  ``MEMORY.md`` as stored; empty when the document is missing.
+
+- `read_self() -> str`
+
+  ``SELF.md`` as stored; empty when the document is missing.
+
+- `write_self(content: str) -> None`
+
+  Replaces ``SELF.md``; the host normalises it to the document schema.
+
+- `self_seed_pending() -> bool`
+
+  Whether ``SELF.md`` still waits for its first generated version. True while the document is a default template the host will replace with a version generated from the role's settings. Rewriting ``SELF.md`` then would read as a user edit and stop that generation.
+
+- `snapshot_pending() -> str`
+
+  Moves ``PENDING.md`` aside and returns its facts. Returns an empty string, and moves nothing, when no fact is pending.
+
+- `commit_long_term(content: str, *, history_entry: str) -> None`
+
+  Replaces ``MEMORY.md`` with ``content`` and drops the pending snapshot. A non-empty ``MEMORY.md`` is first copied to ``MEMORY.bak.md``. ``content`` is normalised to the document schema. A non-empty ``history_entry`` is appended to ``HISTORY.md`` as it is.
+
+- `rollback_pending_snapshot() -> None`
+
+  Puts the snapshot's facts back before ones appended since; no-op without one.
+
+- `read_state() -> Mapping[str, object]`
+
+  A copy of the plugin-owned memory state; empty once the role is deleted. The host's own initialization keys in the same record are left out.
+
+- `write_state(key: str, value: object) -> None`
+
+  Stores one JSON value under ``key``; no-op once the role is deleted. Only ``key`` changes: other values, including ones written meanwhile, are kept. Raises ``ValueError`` when ``key`` is one of the host's own initialization keys (such as ``self_seed``) or ``value`` is not JSON serializable.
+
 ## `shiori_sdk.core.mcp_tools`
 
 ``MCP_TOOLS``: register a remote MCP tool with source metadata (P6a). ``ToolsCapability.register`` cannot grow a ``source_type`` parameter (D22). Drift and search still group dynamic MCP tools by ``source_type="mcp"`` and ``source_name`` equal to the server. The host provides this key and writes that metadata. The ``mcp`` plugin calls it. Manage tools (``mcp_add`` and the rest) use ordinary ``TOOLS.register``.
@@ -392,6 +452,29 @@ Target `shiori_sdk.memory.engine.MemoryEngine`.
 #### `shiori_sdk.memory.engine.MemoryEngine`
 
 Complete memory port implemented by independently installed engines.
+
+## `shiori_sdk.core.memory_optimizer`
+
+``MEMORY_OPTIMIZER``: the background memory optimizer's progress (#907 P6b). The ``memory_optimizer`` plugin provides this key; the host never does. The host reads it with ``get`` to show a running optimization in the role task panel; ``None`` means the plugin is off.
+
+### `memory_optimizer`
+
+Target `shiori_sdk.core.memory_optimizer.MemoryOptimizer`.
+
+#### `shiori_sdk.core.memory_optimizer.MemoryOptimizer`
+
+Read-only view of the process-wide optimizer.
+
+- `active_run() -> core.memory_optimizer.MemoryOptimizationRun | None`
+
+  The running optimization, or ``None`` while none runs.
+
+#### `shiori_sdk.core.memory_optimizer.MemoryOptimizationRun`
+
+The optimization running now: one role at a time. ``started_at`` is timezone-aware.
+
+- `role_id: str`
+- `started_at: datetime.datetime`
 
 ## `shiori_sdk.core.models`
 
@@ -803,6 +886,10 @@ A candidate may attach resources without changing the published generation. Keys
 - `acquire(key: str, factory: Callable[[], T]) -> T`
 
   Attach to the existing contract or construct it once for this process.
+
+- `on_published(callback: Callable[[], None]) -> Callable[[], None]`
+
+  Call ``callback`` once this attachment's generation is published. ``active`` is already true when ``callback`` runs. In a generation that is already published (an in-generation reload or enable), ``callback`` runs before this returns and its exception propagates to the caller. Otherwise the host calls it synchronously on the event loop while it publishes the generation; there an exception is logged and neither publication nor the other callbacks are affected. Each callback runs at most once. The returned function cancels a callback that has not run; a generation that is discarded or retires unpublished drops its callbacks when its attachment closes.
 
 ### `processes`
 

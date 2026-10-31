@@ -154,7 +154,7 @@ Optimizer (定时触发)
 ```
 PENDING.md（增量事实缓冲区）
     ↓
-  Optimizer 定时触发（默认 memory_optimizer_interval_seconds = 64800）
+  Optimizer 定时触发（默认 [plugins.memory_optimizer] interval_seconds = 64800）
     ↓
   读 MEMORY.md + PENDING.md → LLM 做归档决策：
     • 新事实 → 写入 MEMORY.md 对应分类
@@ -170,8 +170,8 @@ PENDING.md（增量事实缓冲区）
   （SELF 写入规则带版本号 SELF_RULES_VERSION；角色记录的版本落后时，这一步换成按新规则一次性重写）
 ```
 
-实现在 `proactive_v2/memory_optimizer.py`，按角色逐个优化；启动时先补跑已经超期的角色，之后按间隔对齐触发。
-开关和间隔在 `config.toml` 的 `[agent.maintenance]`：`memory_optimizer_enabled`（默认 true，且要有模型注册才会启动）、`memory_optimizer_interval_seconds`（默认 64800，最小 60）。
+实现是系统插件 `plugins/memory_optimizer`（#907 P6b，默认启用），按角色逐个优化，用角色自己的对话模型；启动时先补跑已经超期的角色，之后按间隔对齐触发。循环是插件的进程资源，跨代只有一份；文档经宿主端口 `MARKDOWN_MEMORY`（`shiori_sdk.core.markdown_memory`）读写，宿主实现在 `core/memory/markdown/host.py`。
+开关就是插件启停（要有模型注册才会启动）；间隔是 `[plugins.memory_optimizer]` 的 `interval_seconds`（默认 64800，最小 60），在「设置 › 插件 › 记忆整理」编辑。旧的 `[agent.maintenance]` 两个键在启动时迁入该表并删除（`bootstrap/memory_optimizer_config_migration.py`）。
 
 普通会话的消息数阈值继续触发后台记忆整理。模型请求前还会按注册容量、本次输出预留和安全余量检查完整输入；触发线默认是窗口的 75%，目标为 40%，二者均受可用输入上限约束。
 超过触发线时由 `CompactionController` 先补齐待移出范围的记忆、再写工作摘要并移出原文；压缩后仍不满足预算或整理失败时停止请求。配置与 provider usage 锚点详见 [模型输入预算](context-budget.md)。
