@@ -36,10 +36,7 @@ def plugin_runtime(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> PluginRun
             return [plugin_root]
 
         monkeypatch.setattr("bootstrap.tools._resolve_plugin_dirs", resolve_plugin_dirs)
-        text = (
-            "[llm]\nregistrations = []\n"
-            '\n[proactive]\nenabled = false\nprofile = "quiet"\n' + config_text
-        )
+        text = "[llm]\nregistrations = []\n" + config_text
         path = tmp_path / "config.toml"
         _ = path.write_text(text, encoding="utf-8")
         app = AppRuntime(

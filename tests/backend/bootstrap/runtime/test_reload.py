@@ -326,7 +326,6 @@ async def test_core_motives_follow_generation_publication_and_rollback(
     tmp_path, monkeypatch
 ):
     from shiori_sdk.role_events import SceneObservationCommitted
-    from proactive_v2.config import ProactiveStrategiesConfig
 
     monkeypatch.setattr("bootstrap.tools._resolve_plugin_dirs", lambda _: [])
     config = Config(
@@ -396,7 +395,10 @@ async def test_core_motives_follow_generation_publication_and_rollback(
         disabled = await app.prepare(
             replace(
                 prepared.config,
-                proactive_strategies=ProactiveStrategiesConfig(False, False),
+                plugins={
+                    **prepared.config.plugins,
+                    "proactive": {"scene_followup": False, "relationship": False},
+                },
             )
         )
         assert disabled.core.proactive_motives == []

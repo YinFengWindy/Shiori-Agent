@@ -18,7 +18,8 @@ source_paths:
   - apps/backend/core/identity/
   - apps/backend/agent/core/proactive_turn/strategies.py
   - apps/backend/agent/core/proactive_turn/scene_subscription.py
-  - apps/backend/agent/proactive_preferences.py
+  - apps/backend/proactive_v2/preferences.py
+  - apps/backend/bootstrap/proactive_config_migration.py
   - apps/backend/proactive_v2/drift_state.py
   - apps/backend/agent/core/drift_turn.py
   - apps/backend/proactive_v2/drift_tools.py
@@ -39,13 +40,13 @@ related:
 
 未命中原因（如 `cooldown`、`below_threshold`）保留在 gate trace 和 tick_log 的 `gate_name`、`gate_reason`、`gate_metadata`，`gate_exit` 仅记录全局拒绝。核心策略随 runtime generation 装配；场景订阅在发布时启动，旧代接受的工作排空后清理，未发布候选不消费场景事件。
 
-`[agent.proactive_strategies]` 中的 `scene_followup` 与 `relationship` 是独立布尔开关，默认均为 true，角色主动总开关仍独立生效。配置加载将旧 `[plugins.relationship_proactive].enabled = false` 或两个旧代码位置的 `plugin.disabled` 一次性迁为缺失的核心开关；已有核心键优先。旧标记和配置可保留作历史数据，不再参与插件发现，核心键齐全后不再读取旧停用偏好。候选配置验证不做文件 IO。
+`[plugins.proactive]` 里的 `scene_followup` 与 `relationship` 是独立布尔开关，默认均为 true，角色主动总开关仍独立生效。`load_config` 把旧 `[agent.proactive_strategies]` 里与默认不同的值迁入该表（插件里已有的键不覆盖），然后删掉旧表。顶层 `[proactive]` 没有运行时消费方，启动时整段删除并记日志，不把里面的值抄进插件表。角色 JSON 的 proactive 字段仍由 `load_proactive_config` 解析。桌面设置页不读也不写这两个开关，保存时 `[plugins.proactive]` 随其他插件表由后端原样保留，不会重建 `[agent.proactive_strategies]`。
 
 ### 投递目标
 
 接收会话不再由角色手工勾选或从渠道绑定派生，而是每轮从运行时实时计算（`ProactiveTargetResolver.resolve_saved`）：角色的桌面会话，加上经该角色**在线**渠道账号（`RoleStore.accounts`）与已绑定的桌面用户身份（`RoleStore.identities`，`core/identity/`）之间的私聊，按身份绑定顺序、再按账号顺序排列。角色主动推送关闭时不选目标。`RoleProactiveConfig.candidates` 仅作为旧数据按原顺序保留，运行时不读取；渲染端 `roleProactiveDefaults.ts` 保存角色时写入空数组。
 
-每轮 tick 由 `proactive_v2/sensor.py` 的 `target_transport()` 经 `proactive_v2/target_selection.py` 选出唯一目标，发送阶段只投递这一处，不再换渠道重发：桌面在场（`AppRuntime.desktop_presence`，由 `build_proactive_runtime` 显式传入）→ 桌面；否则 → 最近有用户消息的非桌面候选（读 `messages` 表中该候选线程 `network_thread_id(role, channel, chat_id)` 的最后一条用户消息）；都没有记录 → 第一个非桌面候选；没有非桌面候选 → 桌面。选中私聊时由 `bound_chat_target()` 解析为对应账号插件与 `AccountTarget("private", user_id)` 投递。桥接 RPC `roles.proactive.target`（`desktop_bridge/runtime/proactive_target.py`）用同一 resolver 对给定候选做预览。`config.toml` 不再接受全局投递目标：`[proactive.target]` 与 `[proactive]` 根级 `default_channel` / `default_chat_id` / `default_role_id` 在加载时被拒绝；按角色构建的运行时用 `ProactiveConfig.role_id` 标明所服务的角色。
+每轮 tick 由 `proactive_v2/sensor.py` 的 `target_transport()` 经 `proactive_v2/target_selection.py` 选出唯一目标，发送阶段只投递这一处，不再换渠道重发：桌面在场（`AppRuntime.desktop_presence`，由 `build_proactive_runtime` 显式传入）→ 桌面；否则 → 最近有用户消息的非桌面候选（读 `messages` 表中该候选线程 `network_thread_id(role, channel, chat_id)` 的最后一条用户消息）；都没有记录 → 第一个非桌面候选；没有非桌面候选 → 桌面。选中私聊时由 `bound_chat_target()` 解析为对应账号插件与 `AccountTarget("private", user_id)` 投递。桥接 RPC `roles.proactive.target`（`desktop_bridge/runtime/proactive_target.py`）用同一 resolver 对给定候选做预览。按角色构建的运行时用 `ProactiveConfig.role_id` 标明所服务的角色。角色配置里的全局投递目标键（`target` / `default_channel` / `default_chat_id` / `default_role_id`）在加载时被拒绝。`config.toml` 的顶层 `[proactive]` 不再解析，启动迁移直接删掉。
 
 主动行为不是绕开会话的单独机器人：成功输出应写入权威角色会话，并复用统一工具、消息推送和渠道投递。生成与评分使用不同提示词边界：生成链路显式使用角色身份，评分器保持中性，并保留完整的 1-5 分标尺与领域判分规则。
 

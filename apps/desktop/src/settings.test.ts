@@ -80,68 +80,20 @@ describe("desktop settings config path", () => {
 
 
 
-describe("core proactive strategy settings round-trip", () => {
-  const cases = [
-    {
-      name: "keeps marker-migrated disabled preferences after an unrelated save",
-      source: "[agent.proactive_strategies]\nscene_followup = false\nrelationship = false\n",
-      preferences: { sceneFollowup: false, relationship: false },
-      expectedLines: ["scene_followup = false", "relationship = false"],
-      absentLines: [],
-    },
-    {
-      name: "keeps explicit core enablement above an old disabled plugin preference",
-      source: "[plugins.relationship_proactive]\nenabled = false\n[agent.proactive_strategies]\nscene_followup = true\nrelationship = true\n",
-      preferences: { sceneFollowup: true, relationship: true },
-      expectedLines: ["scene_followup = true", "relationship = true"],
-      absentLines: [],
-    },
-    {
-      name: "leaves absent core preferences to backend defaults and marker migration",
-      source: "[agent]\nmax_tokens = 4096\n",
-      preferences: {},
-      expectedLines: [],
-      absentLines: ["[agent.proactive_strategies]", "scene_followup =", "relationship ="],
-    },
-    {
-      name: "preserves unmigrated plugin disablement without forcing core defaults",
-      source: "[plugins.relationship_proactive]\nenabled = false\n",
-      preferences: {},
-      expectedLines: [],
-      absentLines: ["[agent.proactive_strategies]", "scene_followup =", "relationship ="],
-    },
-    {
-      name: "keeps per-key core precedence and legacy fallback for a missing key",
-      source: "[plugins.relationship_proactive]\nenabled = false\n[agent.proactive_strategies]\nscene_followup = true\n",
-      preferences: { sceneFollowup: true },
-      expectedLines: ["scene_followup = true"],
-      absentLines: ["relationship ="],
-    },
-  ];
-
-  for (const scenario of cases) {
-    it(scenario.name, async () => {
-      configureSettingsConfigPath(join(tmpdir(), "unused-proactive-settings.toml"));
-      const draft = loadSettingsData(scenario.source).formData;
-      assert.deepEqual(draft.proactiveStrategies, scenario.preferences);
-      draft.advanced.maxTokens += 1;
-      let applyCalls = 0;
-      const result = await saveSettings(draft, async (request) => {
-        applyCalls += 1;
-        for (const line of scenario.expectedLines) assert.ok(request.config_toml.includes(line), line);
-        for (const line of scenario.absentLines) assert.ok(!request.config_toml.includes(line), line);
-        assert.deepEqual(loadSettingsData(request.config_toml).formData.proactiveStrategies, scenario.preferences);
-        return { ok: true, generation: 2, changed: true };
-      });
-      assert.equal(result.ok, true);
-      assert.equal(applyCalls, 1);
-    });
-  }
-
-  it("rejects invalid core switches rather than replacing them with a default", () => {
-    configureSettingsConfigPath(join(tmpdir(), "unused-proactive-settings.toml"));
-    assert.throws(() => loadSettingsData('[agent.proactive_strategies]\nrelationship = "false"\n'), /必须是布尔值/);
+it("does not resend a leftover [agent.proactive_strategies] table", async () => {
+  configureSettingsConfigPath(join(tmpdir(), "unused-proactive-settings.toml"));
+  const draft = loadSettingsData(
+    "[agent.proactive_strategies] # legacy\nscene_followup = false # disabled\nrelationship = false\n",
+  ).formData;
+  draft.advanced.maxTokens += 1;
+  let applyCalls = 0;
+  const result = await saveSettings(draft, async (request) => {
+    applyCalls += 1;
+    assert.doesNotMatch(JSON.stringify(request), /proactive_strategies|scene_followup|relationship/);
+    return { ok: true, generation: 2, changed: true };
   });
+  assert.equal(result.ok, true);
+  assert.equal(applyCalls, 1);
 });
 
 
@@ -149,22 +101,22 @@ describe("settings TOML comments", () => {
   it("round-trips commented booleans and quoted hashes without changing their values", async () => {
     configureSettingsConfigPath(join(tmpdir(), "unused-commented-settings.toml"));
     const source = String.raw`
-[agent.proactive_strategies] # core preferences
-scene_followup = false # disabled
-relationship = true # enabled
+[agent] # core
+dev_mode = true # enabled
+[plugins.scene] # scene plugin
+observation_enabled = false # disabled
 [plugins.example]
 tags = ["item#one", "item#two"] # tags
 path = "C:\\" # escaped slash before closing quote
 `;
     const draft = loadSettingsData(source).formData;
-    assert.deepEqual(draft.proactiveStrategies, { sceneFollowup: false, relationship: true });
+    assert.equal(draft.advanced.sceneObservationEnabled, false);
+    assert.equal(draft.advanced.devMode, true);
     let applyCalls = 0;
     const result = await saveSettings(draft, async (request) => {
       applyCalls += 1;
-      assert.match(request.config_toml, /scene_followup = false/);
-      assert.match(request.config_toml, /relationship = true/);
-      const saved = loadSettingsData(request.config_toml).formData;
-      assert.deepEqual(saved.proactiveStrategies, draft.proactiveStrategies);
+      assert.equal(request.scene_observation_enabled, false);
+      assert.equal(loadSettingsData(request.config_toml).formData.advanced.devMode, true);
       return { ok: true, generation: 2, changed: true };
     });
     assert.equal(result.ok, true);
@@ -174,7 +126,7 @@ path = "C:\\" # escaped slash before closing quote
   for (const value of ['"false" # still a string', "'false' # still a literal string"]) {
     it(`rejects a quoted boolean with an inline comment: ${value}`, () => {
       configureSettingsConfigPath(join(tmpdir(), "unused-commented-settings.toml"));
-      assert.throws(() => loadSettingsData(`[agent.proactive_strategies]\nrelationship = ${value}\n`), /必须是布尔值/);
+      assert.throws(() => loadSettingsData(`[plugins.scene]\nobservation_enabled = ${value}\n`), /必须是布尔值/);
     });
   }
 });

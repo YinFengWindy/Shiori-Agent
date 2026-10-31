@@ -43,7 +43,7 @@ related:
 | 记忆 schema / 检索 | SDK 记忆契约、`default_memory` engine、store、索引、过滤、注入、工具、后台写入 | `MemoryEngine MemoryQuery MemoryRuntime MemoryRetrievalPipeline` |
 | 上下文预算 / 压缩 | 模型注册 `model_context_window`、输入预算、`CompactionController`、手动 `/compact`、上下文窗口展示、记忆整理 | `CompactionController RequestCompaction build_input_budget model_context_window ContextWindowChanged` |
 | 运行时换代 / 设置发布 | CoreRuntime 构建与回滚、引用计数代、任务租约、渠道交接、后台任务交接、关闭顺序 | `GenerationManager RuntimeLease RuntimeDispatcher RuntimeBackground ChannelHost prepare_core_runtime` |
-| Proactive 门控 | sensor、presence、关系、state、Agent tick、投递 | `ProactiveLoop AgentTickFactory ProactiveStateStore` |
+| Proactive 门控 | sensor、presence、关系、state、Agent tick、投递、`[plugins.proactive]` 策略开关与启动迁移 | `ProactiveLoop AgentTickFactory ProactiveStateStore migrate_legacy_proactive_config` |
 | Drift | drift state、pipeline、tools、主动互斥、恢复 | `DriftStateStore DriftTurnPipeline` |
 | 自动 CG | phase hook、scene decision、cooldown、scene key、NovelAI、消息同步 | `AutoCgController AutoCgPolicy SceneDecision` |
 | NovelAI 请求 | settings、store、手动工具、自动 CG、桌面图片面板 | `NovelAIService GenerateImageRequest` |

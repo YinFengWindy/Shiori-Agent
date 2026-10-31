@@ -99,7 +99,7 @@ max_steps = 20              # 默认 20，最小 3
 min_interval_hours = 3      # 默认 3，0 表示不限
 ```
 
-`drift.enabled` 只为兼容旧快照而接受，不起作用——Drift 跟随主动推送开关。`config.toml` 里的 `[proactive]` 段仍会做校验，但运行时以角色自己的配置为准；全局的 `target` / `default_channel` 等投递目标键已移除，写了会报错。
+`drift.enabled` 只为兼容旧快照而接受，不起作用——Drift 跟随主动推送开关。运行时只读角色自己的 proactive 配置；`config.toml` 顶层 `[proactive]` 在启动时整段删除（没有消费方）。全局的 `target` / `default_channel` 等投递目标键写在角色配置里仍会报错。
 
 投递目标同样不在这里写死：每个角色在「主动推送」里勾选接收会话，每条主动消息只发到其中一个（桌面在场时发桌面，否则发最近对话过的外部会话）。
 

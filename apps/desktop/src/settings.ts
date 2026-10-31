@@ -62,23 +62,6 @@ function sceneObservationEnabled(
   );
 }
 
-function loadProactiveStrategies(values: Record<string, unknown>): SettingsFormData["proactiveStrategies"] {
-  const sceneFollowup = optionalBoolean(values.scene_followup, "agent.proactive_strategies.scene_followup");
-  const relationship = optionalBoolean(values.relationship, "agent.proactive_strategies.relationship");
-  // Absence is meaningful: the backend may still need to migrate a legacy disabled marker.
-  return {
-    ...(sceneFollowup === undefined ? {} : { sceneFollowup }),
-    ...(relationship === undefined ? {} : { relationship }),
-  };
-}
-
-function renderProactiveStrategies(values: SettingsFormData["proactiveStrategies"]): string[] {
-  const lines: string[] = [];
-  if (values.sceneFollowup !== undefined) lines.push(`scene_followup = ${values.sceneFollowup}`);
-  if (values.relationship !== undefined) lines.push(`relationship = ${values.relationship}`);
-  return lines.length ? ["[agent.proactive_strategies]", ...lines, ""] : [];
-}
-
 function loadSummaryTokenLimit(value: unknown): number {
   const error = summaryTokenLimitError(value);
   if (error) throw new Error(error);
@@ -116,11 +99,9 @@ export function loadSettingsData(contentOverride?: string): SettingsSnapshot {
   const agent = asRecord(parsed.agent);
   const agentContext = asRecord(agent.context);
   const agentTools = asRecord(agent.tools);
-  const proactiveStrategies = asRecord(agent.proactive_strategies);
   return {
     configPath: configuredPath,
     formData: {
-      proactiveStrategies: loadProactiveStrategies(proactiveStrategies),
       models: {
         registrations: loadModelRegistrations(llm),
       },
@@ -168,7 +149,6 @@ function renderSettingsToml(formData: SettingsFormData): string {
     "[desktop.chat]",
     `streaming_enabled = ${formData.advanced.streamingEnabled ? "true" : "false"}`,
     "",
-    ...renderProactiveStrategies(formData.proactiveStrategies),
     "[agent.context]",
     `memory_window = ${formData.advanced.memoryWindow}`,
     `compaction_retained_turns = ${formData.advanced.compactionRetainedTurns ?? desktopSettingsDefaults.compactionRetainedTurns}`,

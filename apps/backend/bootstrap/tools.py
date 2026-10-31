@@ -49,6 +49,7 @@ from agent.tools.spawn import SpawnTool
 from conversation.listening import GroupListeningControl
 from core.common.cleanup import run_cleanup_steps
 from bootstrap.paths import plugin_roots
+from proactive_v2.preferences import load_proactive_preferences
 from bootstrap.runtime.construction import track_build_resource
 from bootstrap.toolsets.meta import (
     build_readonly_tools,
@@ -617,6 +618,7 @@ def build_core_runtime(
     )
     plugin_rpc: PluginRpcRegistry[MethodPolicy] = PluginRpcRegistry(event_bus)
     plugin_dirs = _resolve_plugin_dirs(workspace)
+    proactive_strategies = load_proactive_preferences(config.plugins)
     plugin_manager = PluginKernel(
         plugin_dirs=plugin_dirs,
         external_plugin_dirs=[workspace / "plugins"],
@@ -654,7 +656,7 @@ def build_core_runtime(
                 event_bus=event_bus,
                 rpc=plugin_rpc,
                 workspace=workspace,
-                scene_followup=config.proactive_strategies.scene_followup,
+                scene_followup=proactive_strategies.scene_followup,
                 tools=tools,
                 role_store=role_store,
                 session_manager=session_manager,
@@ -731,18 +733,18 @@ def build_core_runtime(
         proactive_motives=[
             *(
                 [SceneFollowupStrategy(affection)]
-                if config.proactive_strategies.scene_followup
+                if proactive_strategies.scene_followup
                 else []
             ),
             *(
                 [RelationshipStrategy(affection)]
-                if config.proactive_strategies.relationship
+                if proactive_strategies.relationship
                 else []
             ),
         ],
         scene_followup_subscription=(
             SceneFollowupSubscription(event_bus, affection)
-            if config.proactive_strategies.scene_followup
+            if proactive_strategies.scene_followup
             else None
         ),
     )

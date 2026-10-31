@@ -99,11 +99,6 @@ export type ModelRegistrationFormData = {
 };
 
 export type SettingsFormData = {
-  /** Explicit core motive preferences; omitted keys retain backend defaults and legacy migration. */
-  proactiveStrategies: {
-    sceneFollowup?: boolean;
-    relationship?: boolean;
-  };
   models: {
     registrations: ModelRegistrationFormData[];
   };
