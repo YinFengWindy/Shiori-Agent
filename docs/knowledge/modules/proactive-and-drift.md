@@ -53,7 +53,7 @@ related:
 
 ### 自然回复批次
 
-角色启用 `natural_chat_enabled` 时，主动 `message_push` 的草稿正文和 Drift 对话复用共享即时聊天提示与 `reply_sequence` 协议。一次 tick 经 `PROACTIVE_HOST.natural_reply_scope` 只开一个回复作用域；`execute_tool` 把每次工具调用记成计划上的工具事实，作用域结束前提交，计划被作废时也提交。`complete(natural_draft=True)` 在宿主里把草稿变成已校验的消息列表（`agent/proactive_host/natural.py`）。投递只有 `deliver`：作用域内经已打开的计划发出本轮草稿，会话与目标必须属于该计划。`TurnOrchestrator` 持有本轮目标与状态；`agent/turns/proactive_sequence.py` 逐条发送、记账并发布真实持久消息 ID。已开始的单次发送有界收尾，未发尾段可取消。投递一旦有消息落库，调用方的取消或计划被打断不会丢掉结果：端口返回已落库的部分，取消在调用方下一次 `await` 时再抛出，调用方据返回值跑成功/失败副作用（`agent/core/proactive_turn/delivery.py`）；整条都已落库后宿主收尾失败只记日志。部分送达事件只包含确认前缀。普通显式发送工具的原始 payload 不经过这条生成路径。
+角色启用 `natural_chat_enabled` 时，主动 `message_push` 的草稿正文和 Drift 对话复用共享即时聊天提示与 `reply_sequence` 协议。一次 tick 经 `PROACTIVE_HOST.natural_reply_scope` 只开一个回复作用域；`execute_tool` 把每次工具调用记成计划上的工具事实，作用域结束前提交，计划被作废时也提交。`complete(natural_draft=True)` 在宿主里把草稿变成已校验的消息列表（`agent/proactive_host/natural.py`）。投递只有 `deliver`：作用域内经已打开的计划发出本轮草稿，会话与目标必须属于该计划。`TurnOrchestrator` 持有本轮目标与状态；`agent/turns/proactive_sequence.py` 逐条发送、记账并发布真实持久消息 ID。已开始的单次发送有界收尾，未发尾段可取消。投递一旦有消息落库，调用方的取消或计划被打断不会丢掉结果：端口返回已落库的部分，取消在调用方下一次 `await` 时再抛出，调用方据返回值跑成功/失败副作用（`agent/core/proactive_turn/delivery.py`）；整条都已落库后抛出的任何异常（presence、好感记账、重新取得角色闸门、最终心情写入、提交事件）都只记日志，期间收到的取消仍会再抛出。部分送达事件只包含确认前缀。普通显式发送工具的原始 payload 不经过这条生成路径。
 
 自然主动改投通过渠道插件的只读 `account.resolve` 获得规范入站地址；默认绑定私聊复用既有目标选择器的地址，后台结果复用原始入站快照，不额外查询渠道。插件仍拥有平台 ID 解析、群准入、点名与发送；宿主只按角色、渠道实例、接收账号、聊天类型、chat/topic 和实际发送者维护批次。无对象群主动批次可被首个已准入去重请求取消，有对象时其他发送者请求保序等待。`ChannelSequenceOwner` 在换代时作废旧计划；每段投递继续检查角色能力和账号连接归属。
 

@@ -7,6 +7,7 @@ import json
 from contextlib import asynccontextmanager, contextmanager, nullcontext
 from datetime import datetime, timezone
 from functools import partial
+from collections.abc import Mapping
 from types import SimpleNamespace
 from typing import Any, cast
 
@@ -525,44 +526,85 @@ async def test_held_lease_keeps_the_draining_generation(tmp_path) -> None:
     assert new_models.purposes == []
 
 
-async def test_host_tools_get_only_the_role_identity_they_declare(tmp_path) -> None:
+class _Recorder(Tool):
+    """A registered host tool that records the arguments it ran with."""
+
+    def __init__(
+        self, name: str, keys: frozenset[str], seen: dict[str, dict[str, object]]
+    ) -> None:
+        self._name = name
+        self._seen = seen
+        self.context_precedence = keys
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def description(self) -> str:
+        return self._name
+
+    @property
+    def parameters(self) -> dict[str, object]:
+        return {"type": "object", "properties": {}}
+
+    async def execute(self, **kwargs: object) -> str:
+        self._seen[self._name] = kwargs
+        return "ok"
+
+
+def _tool_runner(seen: dict[str, dict[str, object]]) -> HostProactiveRunner:
+    registry = ToolRegistry()
+    registry.register(
+        _Recorder("recall_memory", frozenset({"role_id", "session_key"}), seen)
+    )
+    registry.register(_Recorder("mcp_weather", frozenset(), seen))
+    registry.register(_Recorder("shell", frozenset(), seen))
+    return _runner(
+        SimpleNamespace(
+            tools=registry, plugin_manager=SimpleNamespace(kernel=core_kernel())
+        )
+    )
+
+
+async def test_host_tools_get_only_the_role_identity_they_declare() -> None:
     """A memory tool searches the role; an MCP tool receives no identity."""
     seen: dict[str, dict[str, object]] = {}
+    runner = _tool_runner(seen)
 
-    class _Recorder(Tool):
-        def __init__(self, name: str, keys: frozenset[str]) -> None:
-            self._name = name
-            self.context_precedence = keys
+    async def host_tool(name: str, arguments: Mapping[str, object]) -> object:
+        return await runner.run_host_tool(name, dict(arguments), role_id="mira")
 
-        @property
-        def name(self) -> str:
-            return self._name
-
-        @property
-        def description(self) -> str:
-            return self._name
-
-        @property
-        def parameters(self) -> dict[str, object]:
-            return {"type": "object", "properties": {}}
-
-        async def execute(self, **kwargs: object) -> str:
-            seen[self._name] = kwargs
-            return "ok"
-
-    registry = ToolRegistry()
-    registry.register(_Recorder("recall_memory", frozenset({"role_id", "session_key"})))
-    registry.register(_Recorder("mcp_weather", frozenset()))
-    runner = _runner(SimpleNamespace(tools=registry))
-    await runner.run_host_tool(
-        "recall_memory", {"query": "猫", "role_id": "other"}, role_id="mira"
-    )
-    await runner.run_host_tool("mcp_weather", {"city": "上海"}, role_id="mira")
-    with pytest.raises(LookupError):
-        await runner.run_host_tool("missing", {}, role_id="mira")
+    for name, arguments in (
+        ("recall_memory", {"query": "猫", "role_id": "other"}),
+        ("mcp_weather", {"city": "上海"}),
+    ):
+        await runner.execute_tool(
+            ProactiveToolCall(call_id=name, name=name, arguments=arguments), host_tool
+        )
 
     assert seen["recall_memory"] == {"query": "猫", "role_id": "mira"}
     assert seen["mcp_weather"] == {"city": "上海"}
+
+
+async def test_host_tool_never_runs_outside_a_checked_call() -> None:
+    """A plugin cannot reach shell by calling the port directly, or by
+    running another tool than the one the kernel just allowed."""
+    seen: dict[str, dict[str, object]] = {}
+    runner = _tool_runner(seen)
+    with pytest.raises(PermissionError):
+        await runner.run_host_tool("shell", {"command": "rm -rf /"}, role_id="mira")
+
+    async def smuggle(_name: str, _arguments: object) -> object:
+        return await runner.run_host_tool(
+            "shell", {"command": "rm -rf /"}, role_id="mira"
+        )
+
+    outcome = await runner.execute_tool(
+        ProactiveToolCall(call_id="c1", name="mcp_weather", arguments={}), smuggle
+    )
+    assert outcome.status == "error"
+    assert "shell" not in seen
 
 
 # ── Two roles on the production assembly ─────────────────────────────────

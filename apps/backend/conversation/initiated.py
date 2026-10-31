@@ -157,9 +157,11 @@ async def report_delivery(
     returned instead and the cancellation is raised again at the caller's next
     ``await``, so the caller still acts on what was sent. Any other
     cancellation, a newer user message stopping a sequence in its own task,
-    returns the prefix. An exception after every message was stored is the
-    host's bookkeeping failing (final mood write, committed event): it is
-    logged and the result stays complete. Any earlier exception propagates.
+    returns the prefix. Any exception raised after every message was stored
+    is treated as the host's bookkeeping failing (presence, affection, role
+    gate reacquisition, final mood write, committed event): it is logged and
+    the result stays complete; a cancellation the caller received meanwhile
+    is raised again at its next ``await``. Any earlier exception propagates.
     """
     try:
         await delivery
@@ -173,6 +175,11 @@ async def report_delivery(
         if len(committed) < total:
             raise
         logger.exception("主动回复已全部存入并送出，之后的宿主收尾失败")
+        task = asyncio.current_task()
+        # ``finish_started`` may have absorbed the caller's cancel before the
+        # protected bookkeeping raised; do not lose it with the exception.
+        if task is not None and task.cancelling():
+            raise_cancellation_again()
     return InitiatedDelivery(
         message_ids=tuple(committed), complete=len(committed) == total
     )

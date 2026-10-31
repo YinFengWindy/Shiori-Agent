@@ -201,11 +201,12 @@ class DriftTurnPipeline:
             tool_choice: str | dict = "required"
             schemas = list(base_schemas)
 
-            # 3.1 拼接已挂载 MCP 工具的 schema。
+            # 3.1 拼接已挂载 MCP 工具的 schema（按宿主注册顺序）。
             if mounted_tool_names:
                 schemas += [
                     dict(schema)
-                    for schema in host.tool_schemas(sorted(mounted_tool_names))
+                    for schema in host.tool_schemas()
+                    if _schema_name(schema) in mounted_tool_names
                 ]
 
             # 3.2 message_push 后约束工具集。
@@ -547,3 +548,8 @@ class DriftTurnPipeline:
         messages.append(
             {"role": "tool", "tool_call_id": tool_call_id, "content": result}
         )
+
+
+def _schema_name(schema: Mapping[str, object]) -> str:
+    function = schema.get("function")
+    return str(function.get("name") or "") if isinstance(function, Mapping) else ""

@@ -225,8 +225,10 @@ class ProactiveHost(Protocol):
     ) -> str | ToolResult:
         """Run the generation's registered tool ``name`` for ``role_id``.
 
-        Meant as the body of an ``execute_tool`` invoker, so the kernel checks
-        have already seen the call. The tool runs in the role's user context:
+        Only inside an ``execute_tool`` invoker, for the tool name the kernel
+        checks just allowed; any other call raises ``PermissionError`` without
+        running anything, so a host tool never skips the core checks. The
+        tool runs in the role's user context:
         a tool that takes the role, the turn session or the thread from its
         execution context gets the role, the role's session and its desktop
         thread, and the model cannot override them. No other context is
@@ -258,7 +260,8 @@ class ProactiveHost(Protocol):
         the rest is being sent: ``deliver`` returns what was stored and the
         cancellation is raised again at the caller's next ``await``. When
         nothing was stored yet, the cancellation propagates. A failure of the
-        host's own bookkeeping after the whole reply was stored (the final
+        host's own bookkeeping after the whole reply was stored (any exception
+        from then on: presence, affection, role gate reacquisition, the final
         mood write, the committed event) is logged by the host and the result
         stays complete. Any other exception means the reply was not stored in
         full.

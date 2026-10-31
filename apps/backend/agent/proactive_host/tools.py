@@ -8,6 +8,7 @@ proactive code sees names, schemas and results.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from contextvars import ContextVar
 from typing import Any
 
 from agent.proactive_host.natural import record_tool_fact
@@ -22,6 +23,13 @@ from shiori_sdk.core.proactive_host import (
 )
 from shiori_sdk.tools import ToolResult
 
+# The tool name the kernel just allowed, while ``execute_tool`` runs its
+# invoker. ``run_host_tool`` runs only that tool, so a host tool never runs
+# without the core checks (shell interception, kernel ``ToolCalling``).
+_CHECKED_TOOL: ContextVar[str | None] = ContextVar(
+    "proactive_checked_tool", default=None
+)
+
 
 async def execute_tool(
     core: Any, call: ProactiveToolCall, invoker: ProactiveToolInvoker
@@ -33,7 +41,11 @@ async def execute_tool(
     executor = ToolExecutor(lambda: manager.kernel)
 
     async def run(name: str, arguments: dict[str, Any]) -> object:
-        return await invoker(name, arguments)
+        token = _CHECKED_TOOL.set(name)
+        try:
+            return await invoker(name, arguments)
+        finally:
+            _CHECKED_TOOL.reset(token)
 
     result = await executor.execute(
         ToolExecutionRequest(
@@ -63,10 +75,14 @@ async def run_host_tool(
 ) -> str | ToolResult:
     """Run a registered tool with only the role's user-context identity.
 
-    A tool reads its identity only from the keys it declares in
+    Only the tool ``execute_tool`` has just allowed, from inside its invoker;
+    anything else raises ``PermissionError`` before the tool is looked up. A
+    tool reads its identity only from the keys it declares in
     ``context_precedence``; it gets the role, the role session as the turn
     session and the desktop thread for those, and nothing else.
     """
+    if _CHECKED_TOOL.get() != name:
+        raise PermissionError(f"宿主工具只能在已通过核心校验的调用里执行: {name}")
     if not role_id:
         raise ValueError("宿主工具需要角色")
     tool = core.tools.get_tool(name)

@@ -405,7 +405,7 @@ D2 已定 proactive 是可禁用的系统插件、核心不依赖它。本节是
 | 2 配置解耦 | ProactiveConfig 移进插件包；核心 config 不再 import | 低 |
 | 3 memory_optimizer 插件化 | 从 proactive_v2 拆出为系统插件 `memory_optimizer`（D20 修订）；任务面板经插件的 `MEMORY_OPTIMIZER` 只读列出进行中的整理，不做「立即整理」 | 低 |
 | 4 搬代码 | proactive_v2 + proactive_turn + drift_turn 进 `plugins/proactive/backend`；`setup` 里 spawn 循环、全部改用 Key；删除 ProactiveGatesCapability 和 `bootstrap/proactive.py` | **高**，代码量最大；用假 LLM 跑一次 tick 的 golden trace |
-| 5 桥和前端 | `proactive_target` 改成插件 rpc；角色设置面板进 `roleSettings` 插槽 | 中 |
+| 5 桥和前端 | 角色设置面板进 `roleSettings` 插槽（`proactive_target` 桥方法已在 P6b-4a 删除） | 中 |
 | 6 清零 | import-linter 禁止核心 import `plugins.proactive`；core-only 冒烟测试禁用 proactive；删掉别名 | 低 |
 
 ## 8. 内核语义规范 / 补强（回应 PR #897 非冲突缺口）

@@ -433,9 +433,11 @@ class Conversation(Protocol):
         Once part of the reply is stored, a cancellation of the caller's task
         does not lose it: the stored part is returned and the cancellation is
         raised again at the caller's next ``await``. Nothing stored yet, the
-        cancellation propagates. A failure of the host's own bookkeeping after
-        the whole reply was stored (the final mood write, the committed event)
-        is logged and the result stays complete.
+        cancellation propagates. Any exception raised after the whole reply
+        was stored (the host's own bookkeeping: presence, affection, role gate
+        reacquisition, the final mood write, the committed event) is logged
+        and the result stays complete; a cancellation received meanwhile is
+        still raised at the caller's next ``await``.
 
         A sequence needs a runtime lease or an already bound channel-sequence
         owner.
