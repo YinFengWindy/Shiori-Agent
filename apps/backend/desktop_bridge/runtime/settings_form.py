@@ -51,6 +51,7 @@ def settings_form_write(payload: dict[str, Any]) -> DerivedWrite | None:
         raise RuntimeApplyError(
             "runtime_invalid_request", "scene_observation_enabled 必须是布尔值"
         )
+    proactive_strategies = _proactive_strategies(payload)
 
     def build(current: str) -> str:
         document = tomllib.loads(current)
@@ -61,6 +62,8 @@ def settings_form_write(payload: dict[str, Any]) -> DerivedWrite | None:
         }
         if isinstance(scene_enabled, bool):
             _merge_scene_observation(preserved, scene_enabled)
+        if proactive_strategies:
+            _merge_proactive_strategies(preserved, proactive_strategies)
         if not preserved:
             return candidate
         # Serialize only the separately owned subtrees, retaining the ordinary
@@ -74,6 +77,8 @@ def settings_form_write(payload: dict[str, Any]) -> DerivedWrite | None:
     }
     if isinstance(scene_enabled, bool):
         fingerprint["scene_observation_enabled"] = scene_enabled
+    if proactive_strategies is not None:
+        fingerprint["proactive_strategies"] = proactive_strategies
     return DerivedWrite(
         build_config_toml=build,
         fingerprint_payload=fingerprint,
@@ -95,3 +100,42 @@ def _merge_scene_observation(preserved: dict[str, Any], enabled: bool) -> None:
     if not isinstance(scene, dict):
         raise RuntimeApplyError("runtime_invalid_request", "plugins.scene 必须是表")
     scene["observation_enabled"] = enabled
+
+
+_STRATEGY_KEYS = ("scene_followup", "relationship")
+
+
+def _proactive_strategies(payload: dict[str, Any]) -> dict[str, bool] | None:
+    """Explicit switches to merge, or ``None`` when the save does not touch them."""
+    raw = payload.get("proactive_strategies", _MISSING)
+    if raw is _MISSING:
+        return None
+    if not isinstance(raw, dict) or set(raw) - set(_STRATEGY_KEYS):
+        raise RuntimeApplyError(
+            "runtime_invalid_request",
+            "proactive_strategies 只能有 scene_followup 与 relationship",
+        )
+    if any(not isinstance(value, bool) for value in raw.values()):
+        raise RuntimeApplyError(
+            "runtime_invalid_request", "proactive_strategies 的开关必须是布尔值"
+        )
+    return {key: value for key, value in raw.items() if key in _STRATEGY_KEYS}
+
+
+def _merge_proactive_strategies(
+    preserved: dict[str, Any], strategies: dict[str, bool]
+) -> None:
+    """Sets the given switches and keeps every other plugin key."""
+    plugins = preserved.get("plugins")
+    if plugins is None:
+        plugins = {}
+        preserved["plugins"] = plugins
+    if not isinstance(plugins, dict):
+        raise RuntimeApplyError("runtime_invalid_request", "plugins 必须是表")
+    table = plugins.get("proactive")
+    if table is None:
+        table = {}
+        plugins["proactive"] = table
+    if not isinstance(table, dict):
+        raise RuntimeApplyError("runtime_invalid_request", "plugins.proactive 必须是表")
+    table.update(strategies)

@@ -6,7 +6,6 @@ from typing import Any, Literal
 import uuid
 
 from agent.prompting.input_budget import BudgetPolicy
-from proactive_v2.config import ProactiveConfig, ProactiveStrategiesConfig
 
 # Supported reasoning effort values persisted by model registrations.
 Effort = Literal["none", "low", "high", "max"]
@@ -67,10 +66,6 @@ class Config:
     summary_token_limit: int = 2000
     base_url: str | None = None
     extra_body: dict = field(default_factory=dict)
-    proactive: ProactiveConfig = field(default_factory=ProactiveConfig)
-    proactive_strategies: ProactiveStrategiesConfig = field(
-        default_factory=ProactiveStrategiesConfig
-    )
     light_model: str = ""
     light_api_key: str = ""
     light_base_url: str = ""
@@ -113,7 +108,7 @@ class Config:
 
     @classmethod
     def load(cls, path: str | Path = "config.toml") -> Config:
-        """Loads persisted settings, migrating a legacy ``[memory]`` table once."""
+        """Loads persisted settings, migrating legacy tables once."""
         from importlib import import_module
 
         return import_module("agent.config").load_config(path)

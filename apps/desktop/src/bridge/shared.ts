@@ -157,6 +157,14 @@ export type RuntimeApplyRequest = {
    * Omitted means the save does not touch that key.
    */
   scene_observation_enabled?: boolean;
+  /**
+   * Written into preserved `[plugins.proactive]`. Only keys present here are
+   * updated. Omitted means the save does not touch those switches.
+   */
+  proactive_strategies?: {
+    scene_followup?: boolean;
+    relationship?: boolean;
+  };
   config_toml: string;
   expected_generation?: number;
   operation_id: string;

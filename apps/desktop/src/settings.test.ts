@@ -80,42 +80,37 @@ describe("desktop settings config path", () => {
 
 
 
-describe("core proactive strategy settings round-trip", () => {
+describe("proactive strategy settings round-trip", () => {
   const cases = [
     {
-      name: "keeps marker-migrated disabled preferences after an unrelated save",
+      name: "sends legacy disables beside the draft and does not write the old table",
       source: "[agent.proactive_strategies]\nscene_followup = false\nrelationship = false\n",
       preferences: { sceneFollowup: false, relationship: false },
-      expectedLines: ["scene_followup = false", "relationship = false"],
-      absentLines: [],
+      payload: { scene_followup: false, relationship: false },
     },
     {
-      name: "keeps explicit core enablement above an old disabled plugin preference",
-      source: "[plugins.relationship_proactive]\nenabled = false\n[agent.proactive_strategies]\nscene_followup = true\nrelationship = true\n",
-      preferences: { sceneFollowup: true, relationship: true },
-      expectedLines: ["scene_followup = true", "relationship = true"],
-      absentLines: [],
+      name: "prefers plugins.proactive over a leftover legacy value for the same key",
+      source: "[plugins.proactive]\nscene_followup = false\n[agent.proactive_strategies]\nscene_followup = true\nrelationship = true\n",
+      preferences: { sceneFollowup: false, relationship: true },
+      payload: { scene_followup: false, relationship: true },
     },
     {
-      name: "leaves absent core preferences to backend defaults and marker migration",
+      name: "leaves absent switches unset so a save does not invent them",
       source: "[agent]\nmax_tokens = 4096\n",
       preferences: {},
-      expectedLines: [],
-      absentLines: ["[agent.proactive_strategies]", "scene_followup =", "relationship ="],
+      payload: undefined,
     },
     {
-      name: "preserves unmigrated plugin disablement without forcing core defaults",
+      name: "does not turn an unrelated plugin flag into a strategy switch",
       source: "[plugins.relationship_proactive]\nenabled = false\n",
       preferences: {},
-      expectedLines: [],
-      absentLines: ["[agent.proactive_strategies]", "scene_followup =", "relationship ="],
+      payload: undefined,
     },
     {
-      name: "keeps per-key core precedence and legacy fallback for a missing key",
-      source: "[plugins.relationship_proactive]\nenabled = false\n[agent.proactive_strategies]\nscene_followup = true\n",
+      name: "sends only the plugin keys that are present",
+      source: "[plugins.proactive]\nscene_followup = true\n",
       preferences: { sceneFollowup: true },
-      expectedLines: ["scene_followup = true"],
-      absentLines: ["relationship ="],
+      payload: { scene_followup: true },
     },
   ];
 
@@ -128,9 +123,9 @@ describe("core proactive strategy settings round-trip", () => {
       let applyCalls = 0;
       const result = await saveSettings(draft, async (request) => {
         applyCalls += 1;
-        for (const line of scenario.expectedLines) assert.ok(request.config_toml.includes(line), line);
-        for (const line of scenario.absentLines) assert.ok(!request.config_toml.includes(line), line);
-        assert.deepEqual(loadSettingsData(request.config_toml).formData.proactiveStrategies, scenario.preferences);
+        assert.deepEqual(request.proactive_strategies, scenario.payload);
+        assert.doesNotMatch(request.config_toml, /proactive_strategies/);
+        assert.doesNotMatch(request.config_toml, /\[plugins/);
         return { ok: true, generation: 2, changed: true };
       });
       assert.equal(result.ok, true);
@@ -138,9 +133,10 @@ describe("core proactive strategy settings round-trip", () => {
     });
   }
 
-  it("rejects invalid core switches rather than replacing them with a default", () => {
+  it("rejects a non-boolean switch rather than replacing it with a default", () => {
     configureSettingsConfigPath(join(tmpdir(), "unused-proactive-settings.toml"));
     assert.throws(() => loadSettingsData('[agent.proactive_strategies]\nrelationship = "false"\n'), /必须是布尔值/);
+    assert.throws(() => loadSettingsData('[plugins.proactive]\nscene_followup = "false"\n'), /必须是布尔值/);
   });
 });
 
@@ -161,10 +157,8 @@ path = "C:\\" # escaped slash before closing quote
     let applyCalls = 0;
     const result = await saveSettings(draft, async (request) => {
       applyCalls += 1;
-      assert.match(request.config_toml, /scene_followup = false/);
-      assert.match(request.config_toml, /relationship = true/);
-      const saved = loadSettingsData(request.config_toml).formData;
-      assert.deepEqual(saved.proactiveStrategies, draft.proactiveStrategies);
+      assert.deepEqual(request.proactive_strategies, { scene_followup: false, relationship: true });
+      assert.doesNotMatch(request.config_toml, /\[agent\.proactive_strategies\]/);
       return { ok: true, generation: 2, changed: true };
     });
     assert.equal(result.ok, true);

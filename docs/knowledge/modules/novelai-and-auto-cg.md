@@ -75,7 +75,7 @@ NovelAI 与故事的业务回归分别随 `plugins/novelai/tests/`、`plugins/st
 
 ## 场景插件与配置迁移
 
-`[plugins.scene].observation_enabled` 控制场景插件是否观察，缺省为真。旧的 `[agent.scene_observation].enabled` 在 `load_config` 里迁入：插件配置还没有这个键才复制，成功后删掉旧表；插件里已有的值不覆盖；内联表迁不了就抛错且不改文件。角色开启主动且宿主 `agent.proactive_strategies.scene_followup` 为真，或至少一个已装配消费者 `SCENE.request` 时才调用观察模型。没有 NovelAI 时场景观察和场景跟进照常可用。桌面设置把显式开关交给 `scene_observation_enabled`，不把缺省值写进 toml。场景插件经 `SCENE_HOST.on_published` 在本代发布时开始观察，设置页改配置触发的代内重载、以及代内重新启用后立即恢复；NovelAI 随 scene 的代内重载、启用和停用一起重新 setup，启用 scene 后立即登记需求（#949）。
+`[plugins.scene].observation_enabled` 控制场景插件是否观察，缺省为真。旧的 `[agent.scene_observation].enabled` 在 `load_config` 里迁入：插件配置还没有这个键才复制，成功后删掉旧表；插件里已有的值不覆盖；内联表迁不了就抛错且不改文件。角色开启主动且 `[plugins.proactive].scene_followup` 为真（缺省为真），或至少一个已装配消费者 `SCENE.request` 时才调用观察模型。没有 NovelAI 时场景观察和场景跟进照常可用。桌面设置把显式开关交给 `scene_observation_enabled`，不把缺省值写进 toml。场景插件经 `SCENE_HOST.on_published` 在本代发布时开始观察，设置页改配置触发的代内重载、以及代内重新启用后立即恢复；NovelAI 随 scene 的代内重载、启用和停用一起重新 setup，启用 scene 后立即登记需求（#949）。
 
 宿主在代际发布时 `activate` 场景服务，排空前 `close`。插件 setup 只构造服务，不在 setup 里订阅。状态文件仍是 `workspace/scene/state.json`。若不存在，首次真实写入从 `workspace/plugins/scene_awareness/kv.json` 和遗留 `.kv.json` 导入；已有新状态优先。
 

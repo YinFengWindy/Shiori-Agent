@@ -16,6 +16,9 @@ export type AdvancedSettingsGroup = { title: string; fields: AdvancedSettingsFie
  * The advanced page's layout, as data so the label ↔ key mapping is tested
  * in one place. `streaming_enabled` is deliberately absent: it is an
  * everyday display preference and lives in 设置 › 外观.
+ * Scene follow-up and relationship are `[plugins.proactive]` keys. This page
+ * does not render them; `settings.ts` sends explicit values beside the draft
+ * so a save cannot recreate `[agent.proactive_strategies]`.
  */
 export const advancedSettingsGroups: readonly AdvancedSettingsGroup[] = [
   {

@@ -6,7 +6,11 @@ from typing import Any
 
 @dataclass
 class ProactiveStrategiesConfig:
-    """Independent core motives, separate from the role's proactive master switch."""
+    """Scene follow-up and relationship switches from ``[plugins.proactive]``.
+
+    Both default on. They are independent of the role's proactive master
+    switch and of the future plugin's ``enabled`` key.
+    """
 
     scene_followup: bool = True
     relationship: bool = True

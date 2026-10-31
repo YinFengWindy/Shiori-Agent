@@ -20,8 +20,6 @@ from agent.config_models import (
     WiringConfig,
 )
 from core.common.workspace import resolve_default_workspace
-from proactive_v2.config import ProactiveConfig
-from proactive_v2.config_loader import ProactiveConfigError, load_proactive_config
 
 
 def load_config(path: str | Path = "config.toml") -> Config:
@@ -35,11 +33,13 @@ def load_config(path: str | Path = "config.toml") -> Config:
     from bootstrap.memory_optimizer_config_migration import (
         migrate_legacy_memory_optimizer_config,
     )
+    from bootstrap.proactive_config_migration import migrate_legacy_proactive_config
     from bootstrap.scene_config_migration import migrate_legacy_scene_config
 
     migrate_legacy_memory_config(config_path)
     migrate_legacy_scene_config(config_path)
     migrate_legacy_memory_optimizer_config(config_path)
+    migrate_legacy_proactive_config(config_path)
     return load_config_data(_load_config_data(config_path))
 
 
@@ -56,10 +56,6 @@ def load_config_data(data: dict[str, Any]) -> Config:
     desktop_chat_cfg = _as_dict(desktop_cfg.get("chat"))
     agent_context = _as_dict(agent_cfg.get("context"))
     agent_tools = _as_dict(agent_cfg.get("tools"))
-    proactive = _load_proactive_config(data)
-    from agent.proactive_preferences import load_proactive_preferences
-
-    proactive_strategies = load_proactive_preferences(data)
     wiring = _load_wiring_config(data)
     plugins = _load_plugins_config(data)
     model_registrations = _load_model_registrations(data)
@@ -91,8 +87,6 @@ def load_config_data(data: dict[str, Any]) -> Config:
             if primary_registration
             else {}
         ),
-        proactive=proactive,
-        proactive_strategies=proactive_strategies,
         light_model=str(llm_fast.get("model") or data.get("light_model", "")),
         light_api_key=resolve_config_reference(
             str(llm_fast.get("api_key") or data.get("light_api_key", ""))
@@ -192,16 +186,6 @@ def _validate_model_registrations(registrations: list[ModelRegistration]) -> Non
 
 def _effort_extra_body(effort: str) -> dict[str, Any]:
     return {} if effort == "none" else {"reasoning_effort": effort}
-
-
-def _load_proactive_config(data: dict) -> ProactiveConfig:
-    proactive = ProactiveConfig()
-    if p := data.get("proactive"):
-        try:
-            proactive = load_proactive_config(p)
-        except ProactiveConfigError as e:
-            raise ValueError(f"Proactive 配置错误: {e}") from e
-    return proactive
 
 
 def _load_wiring_config(data: dict) -> WiringConfig:
