@@ -20,6 +20,7 @@ from agent.config_models import (
     WiringConfig,
 )
 from core.common.workspace import resolve_default_workspace
+from proactive_v2.preferences import load_proactive_preferences
 
 
 def load_config(path: str | Path = "config.toml") -> Config:
@@ -58,6 +59,9 @@ def load_config_data(data: dict[str, Any]) -> Config:
     agent_tools = _as_dict(agent_cfg.get("tools"))
     wiring = _load_wiring_config(data)
     plugins = _load_plugins_config(data)
+    # Validation only, so a bad switch is a config error before any candidate
+    # runtime is built. Moves out with the proactive loop (#907 4b).
+    load_proactive_preferences(plugins)
     model_registrations = _load_model_registrations(data)
     primary_registration = model_registrations[0] if model_registrations else None
 

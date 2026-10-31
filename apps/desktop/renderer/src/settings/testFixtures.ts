@@ -3,7 +3,6 @@ import type { SettingsFormData } from "../../../src/bridge/shared.js";
 /** Builds independent complete settings drafts for transaction tests. */
 export function createSettingsDraft(): SettingsFormData {
   return {
-    proactiveStrategies: {},
     models: { registrations: [] },
     advanced: { maxTokens: 4000, maxIterations: 10, devMode: false, streamingEnabled: false, memoryWindow: 20, compactionRetainedTurns: 2, summaryTokenLimit: 2000, searchEnabled: true, spawnEnabled: true, contextTriggerRatio: 0.75, contextTargetRatio: 0.4, contextSafetyMarginTokens: 4096 },
   };

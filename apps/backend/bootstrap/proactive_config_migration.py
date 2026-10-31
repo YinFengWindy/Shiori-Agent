@@ -18,17 +18,18 @@ from pathlib import Path
 from typing import Any
 
 from bootstrap.config_text_editor import plugin_table_editor
+from proactive_v2.preferences import STRATEGY_KEYS
 from shiori_sdk.files.text import atomic_save_text
 
 logger = logging.getLogger(__name__)
 
 PROACTIVE_PLUGIN_ID = "proactive"
-_STRATEGY_KEYS = ("scene_followup", "relationship")
 _UNLOCATABLE_MESSAGE = (
     "{path} 里的 agent.proactive_strategies、proactive 或 plugins.proactive "
     "写成了内联表、点分键或引号键，无法自动迁移；请先改成独立的 "
     "[agent.proactive_strategies]、[proactive] 与 [plugins.proactive] 表"
 )
+_SCALAR_SECTION_MESSAGE = "{path} 的顶层 proactive 不是表，无法自动迁移；请先删掉这一行"
 _UNKNOWN_KEYS_MESSAGE = (
     "{path} 的 [agent.proactive_strategies] 只能有 scene_followup 与 "
     "relationship，无法自动迁移；请先删掉其他键"
@@ -50,7 +51,7 @@ def migrate_legacy_proactive_config(path: Path) -> None:
     if not has_strategies and not has_section:
         return
     if has_section and not isinstance(data.get("proactive"), dict):
-        raise ValueError(_UNLOCATABLE_MESSAGE.format(path=path))
+        raise ValueError(_SCALAR_SECTION_MESSAGE.format(path=path))
     legacy = (
         _legacy_strategies(agent["proactive_strategies"], path)
         if has_strategies and isinstance(agent, dict)
@@ -82,7 +83,7 @@ def migrate_legacy_proactive_config(path: Path) -> None:
 
 def _legacy_strategies(raw: object, path: Path) -> dict[str, Any]:
     """``[agent.proactive_strategies]`` only ever held the two switches."""
-    if not isinstance(raw, dict) or set(raw) - set(_STRATEGY_KEYS):
+    if not isinstance(raw, dict) or set(raw) - set(STRATEGY_KEYS):
         raise ValueError(_UNKNOWN_KEYS_MESSAGE.format(path=path))
     for key, value in raw.items():
         if not isinstance(value, bool):
@@ -94,7 +95,7 @@ def _legacy_strategies(raw: object, path: Path) -> dict[str, Any]:
 
 def _plugin_values(legacy: dict[str, Any]) -> dict[str, Any]:
     """Switches whose legacy value differs from the default (enabled)."""
-    return {key: legacy[key] for key in _STRATEGY_KEYS if legacy.get(key) is False}
+    return {key: legacy[key] for key in STRATEGY_KEYS if legacy.get(key) is False}
 
 
 def _reject_unreadable_plugin_table(data: dict[str, Any], path: Path) -> None:

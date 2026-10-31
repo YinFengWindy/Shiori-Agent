@@ -13,19 +13,20 @@ from typing import Any
 
 from proactive_v2.config import ProactiveStrategiesConfig
 
-_STRATEGY_KEYS = ("scene_followup", "relationship")
+# The only keys ``[agent.proactive_strategies]`` ever had; the startup
+# migration moves exactly these.
+STRATEGY_KEYS = ("scene_followup", "relationship")
 
 
 def load_proactive_preferences(
     plugins: Mapping[str, Any],
 ) -> ProactiveStrategiesConfig:
     """Loads the two switches. A missing table or key stays enabled."""
+    # ``Config.plugins`` only keeps tables, so a present value is a dict.
     raw = plugins.get("proactive", {})
-    if not isinstance(raw, dict):
-        raise ValueError("plugins.proactive 必须是表")
-    for key in _STRATEGY_KEYS:
+    for key in STRATEGY_KEYS:
         if key in raw and not isinstance(raw[key], bool):
             raise ValueError(f"plugins.proactive.{key} 必须是布尔值")
     return ProactiveStrategiesConfig(
-        **{key: bool(raw.get(key, True)) for key in _STRATEGY_KEYS}
+        **{key: bool(raw.get(key, True)) for key in STRATEGY_KEYS}
     )

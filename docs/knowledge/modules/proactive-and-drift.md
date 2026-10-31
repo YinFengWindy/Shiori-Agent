@@ -40,7 +40,7 @@ related:
 
 未命中原因（如 `cooldown`、`below_threshold`）保留在 gate trace 和 tick_log 的 `gate_name`、`gate_reason`、`gate_metadata`，`gate_exit` 仅记录全局拒绝。核心策略随 runtime generation 装配；场景订阅在发布时启动，旧代接受的工作排空后清理，未发布候选不消费场景事件。
 
-`[plugins.proactive]` 里的 `scene_followup` 与 `relationship` 是独立布尔开关，默认均为 true，角色主动总开关仍独立生效。`load_config` 把旧 `[agent.proactive_strategies]` 里与默认不同的值迁入该表（插件里已有的键不覆盖），然后删掉旧表。顶层 `[proactive]` 没有运行时消费方，启动时整段删除并记日志，不把里面的值抄进插件表。角色 JSON 的 proactive 字段仍由 `load_proactive_config` 解析。桌面保存设置不再写 `[agent.proactive_strategies]`；已经显式写下的开关经 `proactive_strategies` 合并进 `[plugins.proactive]`。
+`[plugins.proactive]` 里的 `scene_followup` 与 `relationship` 是独立布尔开关，默认均为 true，角色主动总开关仍独立生效。`load_config` 把旧 `[agent.proactive_strategies]` 里与默认不同的值迁入该表（插件里已有的键不覆盖），然后删掉旧表。顶层 `[proactive]` 没有运行时消费方，启动时整段删除并记日志，不把里面的值抄进插件表。角色 JSON 的 proactive 字段仍由 `load_proactive_config` 解析。桌面设置页不读也不写这两个开关，保存时 `[plugins.proactive]` 随其他插件表由后端原样保留，不会重建 `[agent.proactive_strategies]`。
 
 ### 投递目标
 

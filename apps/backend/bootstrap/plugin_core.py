@@ -104,7 +104,8 @@ class PluginCoreInputs:
     generation's event bus and ``rpc`` its plugin RPC registry, created over
     that bus. ``scene_followup`` is ``[plugins.proactive].scene_followup``
     (default on), the host strategy flag the scene plugin reads through
-    ``SCENE_HOST``. The proactive loop still does not live in that plugin.
+    ``SCENE_HOST``. The proactive loop that consumes the follow-ups is still
+    host code, not a plugin.
 
     The rest back capabilities; when one is None (host tests), a plugin
     declaring a capability over it fails before setup:

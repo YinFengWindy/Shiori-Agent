@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from agent.config import load_config
+from agent.config import load_config, load_config_text
 from bootstrap.proactive_config_migration import migrate_legacy_proactive_config
 
 
@@ -205,3 +205,12 @@ def test_load_config_applies_the_migration(tmp_path: Path) -> None:
     assert config.plugins["proactive"]["relationship"] is False
     load_config(path)
     assert path.read_bytes() == migrated
+
+
+def test_load_config_text_rejects_a_bad_plugin_switch() -> None:
+    # runtime.apply maps this ValueError to runtime_config_invalid before it
+    # prepares a candidate generation.
+    with pytest.raises(
+        ValueError, match="plugins.proactive.scene_followup 必须是布尔值"
+    ):
+        load_config_text('[plugins.proactive]\nscene_followup = "false"\n')

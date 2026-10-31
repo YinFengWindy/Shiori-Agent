@@ -62,39 +62,6 @@ function sceneObservationEnabled(
   );
 }
 
-function strategyBoolean(
-  table: Record<string, unknown>,
-  key: "scene_followup" | "relationship",
-  field: string,
-): boolean | undefined {
-  if (!(key in table)) return undefined;
-  return optionalBoolean(table[key], field);
-}
-
-/** Plugin keys win. A missing key may still be read from the legacy table so a save can move it. */
-function loadProactiveStrategies(parsed: unknown): SettingsFormData["proactiveStrategies"] {
-  const root = asRecord(parsed);
-  const plugin = asRecord(asRecord(root.plugins).proactive);
-  const legacy = asRecord(asRecord(root.agent).proactive_strategies);
-  const sceneFollowup = strategyBoolean(plugin, "scene_followup", "plugins.proactive.scene_followup")
-    ?? strategyBoolean(legacy, "scene_followup", "agent.proactive_strategies.scene_followup");
-  const relationship = strategyBoolean(plugin, "relationship", "plugins.proactive.relationship")
-    ?? strategyBoolean(legacy, "relationship", "agent.proactive_strategies.relationship");
-  return {
-    ...(sceneFollowup === undefined ? {} : { sceneFollowup }),
-    ...(relationship === undefined ? {} : { relationship }),
-  };
-}
-
-function proactiveStrategyPayload(
-  values: SettingsFormData["proactiveStrategies"],
-): { scene_followup?: boolean; relationship?: boolean } | undefined {
-  const payload: { scene_followup?: boolean; relationship?: boolean } = {};
-  if (values.sceneFollowup !== undefined) payload.scene_followup = values.sceneFollowup;
-  if (values.relationship !== undefined) payload.relationship = values.relationship;
-  return Object.keys(payload).length ? payload : undefined;
-}
-
 function loadSummaryTokenLimit(value: unknown): number {
   const error = summaryTokenLimitError(value);
   if (error) throw new Error(error);
@@ -135,7 +102,6 @@ export function loadSettingsData(contentOverride?: string): SettingsSnapshot {
   return {
     configPath: configuredPath,
     formData: {
-      proactiveStrategies: loadProactiveStrategies(parsed),
       models: {
         registrations: loadModelRegistrations(llm),
       },
@@ -254,14 +220,12 @@ export async function saveSettings(
   } catch (error) {
     return { ok: false, error: { code: "settings_validation_error", message: error instanceof Error ? error.message : String(error) } };
   }
-  const proactiveStrategies = proactiveStrategyPayload(formData.proactiveStrategies);
   return applySettings({
     config_toml: renderSettingsToml(formData),
     preserve_plugins: true,
     ...(formData.advanced.sceneObservationEnabled === undefined
       ? {}
       : { scene_observation_enabled: formData.advanced.sceneObservationEnabled }),
-    ...(proactiveStrategies === undefined ? {} : { proactive_strategies: proactiveStrategies }),
     expected_generation: options.expectedGeneration,
     operation_id: options.operationId ?? randomUUID(),
     role_model_updates: (formData.pendingRoleModelUpdates ?? []).map((update) => ({
