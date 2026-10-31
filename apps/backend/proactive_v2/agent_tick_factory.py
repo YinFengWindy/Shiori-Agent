@@ -11,10 +11,7 @@ from agent.skills import BUILTIN_SKILLS_DIR
 from agent.tools.execution import KernelSource
 from agent.tools.registry import ToolRegistry
 from agent.tools.web_fetch import WebFetchTool
-from agent.turns.result import TurnOutbound, TurnResult, TurnTrace
 from agent.turns.orchestrator import TurnOrchestrator
-from agent.turns.proactive_sequence import current_proactive_reply
-from proactive_v2.reply_output import complete_natural_push
 from proactive_v2 import mcp_sources
 from proactive_v2.mcp_sources import McpClientPool
 from agent.core.proactive_turn import ProactiveTurnPipeline, ProactiveTurnPipelineDeps
@@ -27,6 +24,12 @@ from proactive_v2.gateway import GatewayDeps
 from proactive_v2.tools import ToolDeps
 from core.memory.group_environment import GroupEnvironment
 from core.roles.reply_state import RoleReply, RoleReplyContext
+from shiori_sdk.core.conversation import InitiatedReply
+from shiori_sdk.core.proactive_host import (
+    CompletionToolCall,
+    ModelCompletion,
+    ProactiveHost,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +73,7 @@ class AgentTickDeps:
     group_environment: GroupEnvironment | None = None
     # 好感块（#714）：每轮读取，注入主动与发呆回合的 context frame。
     affection_prompt_fn: Callable[[], str | None] | None = None
+    proactive_host: ProactiveHost | None = None
 
 
 class AgentTickFactory:
@@ -112,6 +116,7 @@ class AgentTickFactory:
                 drift_pipeline=drift_pipeline,
                 target_transport_fn=self._deps.sense.target_transport,
                 kernel=self._deps.kernel,
+                proactive_host=self._host(),
                 proactive_gates=self._deps.proactive_gates,
             )
         )
@@ -123,8 +128,14 @@ class AgentTickFactory:
             raise RuntimeError("role_id required for proactive session key")
         return session_key
 
+    def _host(self) -> ProactiveHost:
+        host = self._deps.proactive_host
+        if host is None:
+            raise RuntimeError("主动回合缺少宿主端口")
+        return host
+
     def _build_llm_fn(self) -> LlmFn:
-        provider = self._deps.provider
+        host = self._host()
 
         async def llm_fn(
             messages: list[dict],
@@ -132,35 +143,21 @@ class AgentTickFactory:
             tool_choice: str | dict = "auto",
             disable_thinking: bool = False,
         ) -> dict | None:
-            # ProactiveTurnPipeline 自己维护 messages 和工具 schema；
-            # factory 这里只负责把 provider.chat 包成“返回首个 tool_call”的薄适配层。
-            natural = current_proactive_reply() is not None
-            resp = await provider.chat(
-                messages=messages,
+            # The pipeline owns the message list and schemas. This adapter
+            # returns the first tool call. Natural drafts are corrected inside
+            # ``complete`` so the provider response stays on the open plan.
+            del disable_thinking
+            natural = host.natural_reply_active()
+            resp = await host.complete(
+                messages,
                 tools=schemas,
-                model=self._deps.model,
-                max_tokens=self._deps.max_tokens,
                 tool_choice="auto" if natural else tool_choice,
+                max_tokens=self._deps.max_tokens,
                 disable_thinking=not natural,
-                **({"defer_tool_argument_errors": True} if natural else {}),
+                defer_tool_argument_errors=natural,
+                natural_draft=natural,
             )
-            if natural:
-                resp = await complete_natural_push(
-                    resp,
-                    messages=messages,
-                    provider=provider,
-                    model=self._deps.model,
-                    max_tokens=self._deps.max_tokens,
-                )
-            if not resp.tool_calls:
-                text = (resp.content or "").strip()
-                logger.warning(
-                    "[proactive_v2] llm_fn: no tool call returned (text=%r)",
-                    text[:300] if text else "(empty)",
-                )
-                return None
-            tc = resp.tool_calls[0]
-            return {"id": tc.id, "name": tc.name, "input": tc.arguments}
+            return _first_tool_call(resp)
 
         return llm_fn
 
@@ -241,6 +238,7 @@ class AgentTickFactory:
             shared_tools=self._deps.shared_tools,
             group_environment=self._deps.group_environment,
             affection_prompt_fn=self._deps.affection_prompt_fn,
+            proactive_host=self._deps.proactive_host,
         )
 
     def _build_gateway_deps(
@@ -282,6 +280,7 @@ class AgentTickFactory:
                     max_web_fetch_chars=tool_deps.max_chars,
                     group_environment=self._deps.group_environment,
                     affection_prompt_fn=self._deps.affection_prompt_fn,
+                    proactive_host=self._deps.proactive_host,
                 ),
                 role_prompt_fn=self._deps.role_prompt_fn,
                 max_steps=getattr(self._deps.cfg, "drift_max_steps", 20),
@@ -290,18 +289,11 @@ class AgentTickFactory:
         )
 
     def _build_drift_send_message_fn(self) -> Callable[..., Awaitable[bool]] | None:
-        orchestrator = self._deps.turn_orchestrator
+        host = self._deps.proactive_host
         session_key = self._get_session_key()
         state_store = self._deps.state_store
-        if orchestrator is None:
+        if host is None or self._deps.turn_orchestrator is None:
             return None
-
-        @dataclass
-        class _SideEffect:
-            callback: Callable[[], None]
-
-            async def run(self) -> None:
-                self.callback()
 
         async def send_message(
             reply: RoleReply,
@@ -313,35 +305,42 @@ class AgentTickFactory:
             delivery_key = sha1(
                 (content[:500] + "|".join(media_paths[:5])).encode()
             ).hexdigest()[:16]
-            result = TurnResult(
-                decision="reply",
-                role_reply=reply,
-                reply_context=reply_context,
-                outbound=TurnOutbound(
-                    session_key=session_key, content=content, media=media_paths
-                ),
-                trace=TurnTrace(source="proactive", extra={"source_mode": "drift"}),
-                success_side_effects=[
-                    _SideEffect(
-                        callback=lambda: state_store.mark_delivery(
-                            session_key,
-                            delivery_key,
-                        )
-                    )
-                ],
-            )
             # Drift picks its target when it speaks, through the tick's resolver.
             target = resolve_target_transport(self._deps.sense.target_transport)
             if target is None:
                 raise RuntimeError("drift message has no candidate session to go to")
             channel, chat_id = target
-            await orchestrator.retarget_natural_transport(session_key, channel, chat_id)
-            return await orchestrator.handle_proactive_turn(
-                result=result,
+            await host.retarget_natural_transport(session_key, channel, chat_id)
+            initiated = InitiatedReply(
                 session_key=session_key,
+                content=content,
+                source="proactive",
                 channel=channel,
                 chat_id=chat_id,
-                source="proactive",
+                mood=reply.mood,
+                thought=reply.thought,
+                expected_mood_updated_at=reply_context.previous_updated_at,
+                moods=tuple(reply_context.moods),
+                media=tuple(media_paths),
             )
+            if host.natural_reply_active():
+                delivery = await host.commit_natural_reply(initiated)
+            else:
+                delivery = await host.deliver(initiated)
+            if delivery.complete:
+                state_store.mark_delivery(session_key, delivery_key)
+            return delivery.complete
 
         return send_message
+
+
+def _first_tool_call(resp: ModelCompletion) -> dict | None:
+    if not resp.tool_calls:
+        text = resp.content.strip()
+        logger.warning(
+            "[proactive_v2] llm_fn: no tool call returned (text=%r)",
+            text[:300] if text else "(empty)",
+        )
+        return None
+    call: CompletionToolCall = resp.tool_calls[0]
+    return {"id": call.id, "name": call.name, "input": dict(call.arguments)}

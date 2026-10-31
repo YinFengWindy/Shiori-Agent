@@ -257,10 +257,10 @@ def build_runtime_context_message(
         except Exception:
             recent_context_block = ""
     # 主动消息发给用户，属于用户上下文：注入各外部会话的最近动态（#497）。
-    group_environment = tool_deps.group_environment
+    host = tool_deps.proactive_host
     recent_activity_block = (
-        group_environment.render_recent_activity(role_id, now=ctx.now_utc)
-        if group_environment is not None and role_id
+        host.recent_activity(role_id, now=ctx.now_utc)
+        if host is not None and role_id
         else ""
     )
 

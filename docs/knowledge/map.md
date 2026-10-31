@@ -33,7 +33,7 @@ related:
 | 记忆契约 | `packages/sdk/python/shiori_sdk/memory/`（`MemoryEngine`、`MemoryQuery`、`MemoryMutation`）、`apps/backend/core/memory/`（`MemoryRuntime`、Markdown 记忆、群环境、角色记忆路径） | Agent 检索与生命周期插件 |
 | 记忆整理 | `plugins/memory_optimizer/`（系统插件：整理循环、`MEMORY_OPTIMIZER`）、`apps/backend/core/memory/markdown/host.py`（`MARKDOWN_MEMORY`） | Markdown 记忆、角色模型、任务面板 |
 | 默认记忆引擎 | `plugins/default_memory/backend/`（`engine/` 查询与写入策略，`semantic/` 向量存储、召回、响应后写入；原 `memory2` 已并入此处） | 查询与提取策略、向量存储、召回与上下文注入、响应后写入 |
-| 主动行为 | `apps/backend/proactive_v2/`、`apps/backend/agent/proactive_host.py`（`PROACTIVE_HOST`）、`apps/backend/agent/initiated_delivery.py`（`CONVERSATION`） | 传感、裁定、Agent tick、投递、状态持久化；tick、角色提示词、被动忙碌和桌面在场经 `PROACTIVE_HOST`，回合内的补全、工具和投递仍在宿主模块 |
+| 主动行为 | `apps/backend/proactive_v2/`、`apps/backend/agent/proactive_host.py`（`PROACTIVE_HOST`）、`apps/backend/agent/initiated_delivery.py`（`CONVERSATION`） | 传感、裁定、Agent tick、投递、状态持久化。循环仍在核心；tick 经 `PROACTIVE_HOST`：自然回复作用域、补全、工具与 MCP、目标选择、会话历史和投递 |
 | Drift | `apps/backend/agent/core/drift_turn.py`、`apps/backend/proactive_v2/drift_state.py`、`apps/backend/proactive_v2/drift_tools.py` | 特殊回合、工具、主动状态 |
 | NovelAI | `plugins/novelai/backend/`（`service.py`、`client.py`、`store.py`、`tool.py`、`rpc.py`）、`plugins/novelai/ui/` | 手动图片生成、自动 CG、桌面图片面板 |
 | 自动 CG | `plugins/novelai/backend/auto_cg.py`、`plugins/novelai/backend/auto_cg_controller.py`，场景判断在 `plugins/scene/` | 场景判断、生成、消息推送、权威角色会话 |

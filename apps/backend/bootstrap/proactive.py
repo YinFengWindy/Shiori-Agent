@@ -36,16 +36,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class _PortDesktopPresence:
-    """Desktop presence as ``PROACTIVE_HOST.user_at_desktop`` reports it."""
-
-    def __init__(self, host: ProactiveHost) -> None:
-        self._host = host
-
-    def is_desktop_present(self) -> bool:
-        return self._host.user_at_desktop()
-
-
 def assemble_generation_proactive(
     plugins: Mapping[str, Any],
     *,
@@ -96,10 +86,11 @@ def build_proactive_runtime(
 ) -> tuple[list, dict[str, ProactiveLoop]]:
     """Builds one proactive loop per enabled role.
 
-    Ticks, the role prompt, the passive-busy check and desktop presence go
-    through ``proactive_host`` (``PROACTIVE_HOST``). ``group_environment`` is
-    the runtime's shared group environment layer (#497), read for recent
-    external activity; the port reads that same object.
+    Ticks, the role prompt, the passive-busy check, target reads and the
+    model, tools and delivery a tick uses go through ``proactive_host``
+    (``PROACTIVE_HOST``). ``group_environment`` is the runtime's shared group
+    environment layer (#497); the port reads that same object for recent
+    external activity.
     """
     tasks: list = []
     roles = [
@@ -142,7 +133,7 @@ def build_proactive_runtime(
             event_bus=event_bus,
             role_prompt_fn=_role_prompt(proactive_host, role.id),
             tick_dispatcher=_tick_through_port(proactive_host, role.id),
-            desktop_presence=_PortDesktopPresence(proactive_host),
+            proactive_host=proactive_host,
             role_store=role_store,
             group_environment=group_environment,
         )

@@ -38,6 +38,9 @@ class ProactiveReplyPlan:
     completion: CompletedReply | None = None
     tool_chain: list[dict[str, Any]] = field(default_factory=list)
     committed_tool_count: int = 0
+    # Set when the sequence's sends have all been recorded, including when
+    # the task is then cancelled. The caller still owns success effects.
+    delivery_complete: bool = False
 
     @property
     def origin(self) -> InboundMessage:

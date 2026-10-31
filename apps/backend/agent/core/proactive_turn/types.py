@@ -8,6 +8,7 @@ from typing import Any, Callable
 from ..drift_turn import DriftTurnPipeline
 from agent.tools.execution import KernelSource
 from agent.turns.orchestrator import TurnOrchestrator
+from shiori_sdk.core.proactive_host import ProactiveHost
 from agent.turns.result import TurnResult
 from proactive_v2.config import ProactiveConfig
 from proactive_v2.gateway import GatewayDeps
@@ -64,6 +65,8 @@ class ProactiveTurnPipelineDeps:
     drift_pipeline: DriftTurnPipeline | None
     # 本代插件内核，每次工具调用都重新读取，插件代内启停后下一次调用即生效。
     kernel: KernelSource
+    # ``PROACTIVE_HOST``: natural scope, completion, tools, delivery and reads.
+    proactive_host: ProactiveHost
     # Selects this tick's single delivery target; None means no candidate session.
     target_transport_fn: Callable[[], tuple[str, str] | None] | None = None
     proactive_gates: ProactiveGateChain | None = None

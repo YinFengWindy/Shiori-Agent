@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from core.memory.group_environment import GroupEnvironment
+    from shiori_sdk.core.proactive_host import ProactiveHost
 
 _MESSAGE_LOOKUP_TOOLS = frozenset({"fetch_messages", "search_messages"})
 
@@ -39,12 +40,16 @@ class DriftToolDeps:
     group_environment: "GroupEnvironment | None" = None
     # 好感块（#714）：每轮读取，放进 context frame；未初始化时返回 None。
     affection_prompt_fn: "Callable[[], str | None] | None" = None
+    proactive_host: "ProactiveHost | None" = None
 
 
 class SendMessageTool(Tool):
-    def __init__(self, ctx: AgentTickContext, send_message_fn: Any) -> None:
+    def __init__(
+        self, ctx: AgentTickContext, send_message_fn: Any, host: ProactiveHost
+    ) -> None:
         self._ctx = ctx
         self._send_message_fn = send_message_fn
+        self._host = host
 
     @property
     def name(self) -> str:
@@ -125,6 +130,7 @@ class SendMessageTool(Tool):
                 "thought": thought,
             },
             self._ctx,
+            self._host,
         )
         self._ctx.drift_message_attempted = True
         ok = await self._send_message_fn(reply, media_paths, self._ctx.reply_context)
@@ -419,6 +425,7 @@ def build_drift_tool_registry(
     ctx: AgentTickContext,
     deps: DriftToolDeps,
     mounted_tool_names: set[str] | None = None,
+    mcp_servers: set[str] | None = None,
 ) -> ToolRegistry:
     tools = ToolRegistry()
     drift_dir = deps.drift_dir
@@ -461,13 +468,15 @@ def build_drift_tool_registry(
             risk = "external-side-effect" if name == "shell" else "read-only"
             tools.register(tool, risk=risk)
 
-    # mount_server: 只有 shared registry 里有 MCP 工具时才注册
-    if shared is not None and shared.get_mcp_server_names():
+    # mount_server: 只有宿主报告已连接的 MCP 服务时才注册
+    if shared is not None and mcp_servers:
         mounted = mounted_tool_names if mounted_tool_names is not None else set()
         tools.register(MountServerTool(shared, mounted), risk="read-only")
 
+    if deps.proactive_host is None:
+        raise RuntimeError("发呆回合缺少宿主端口")
     tools.register(
-        SendMessageTool(ctx, deps.send_message_fn),
+        SendMessageTool(ctx, deps.send_message_fn, deps.proactive_host),
         risk="external-side-effect",
     )
     tools.register(FinishDriftTool(ctx, deps.store), risk="write")

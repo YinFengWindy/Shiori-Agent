@@ -12,9 +12,11 @@ from typing import Any
 from agent.provider import LLMProvider, LLMResponse
 from agent.turns.proactive_sequence import current_proactive_reply
 from prompts.natural_chat import FINISH_REPLY_TOOL_NAME
-from core.roles.reply_state import InvalidRoleReply, RoleReply, validate_role_reply
+from core.roles.reply_state import InvalidRoleReply, RoleReply
 from proactive_v2.context import AgentTickContext
 from proactive_v2.outbound_text import normalize_outbound_text
+from session.manager.helpers import role_id_from_session_key
+from shiori_sdk.core.proactive_host import ProactiveHost
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +66,9 @@ def reply_schemas(schemas: list[dict], ctx: AgentTickContext) -> list[dict]:
     return result
 
 
-def parse_push_reply(args: dict, ctx: AgentTickContext) -> RoleReply:
+def parse_push_reply(
+    args: dict, ctx: AgentTickContext, host: ProactiveHost
+) -> RoleReply:
     """Validate tool fields before any draft or delivery side effect occurs."""
     if ctx.reply_context is None:
         raise InvalidRoleReply("主动回复缺少生成起点角色状态")
@@ -87,10 +91,18 @@ def parse_push_reply(args: dict, ctx: AgentTickContext) -> RoleReply:
         or isinstance(media, list)
         and any(isinstance(item, str) and item.strip() for item in media)
     )
-    return validate_role_reply(
-        {"content": content, "mood": args.get("mood"), "thought": args.get("thought")},
-        ctx.reply_context.moods,
-        allow_empty_content=has_media,
+    try:
+        validated = host.validate_reply(
+            role_id_from_session_key(ctx.session_key),
+            content=str(content or ""),
+            mood=str(args.get("mood") or ""),
+            thought=str(args.get("thought") or ""),
+            allow_empty_content=has_media,
+        )
+    except ValueError as exc:
+        raise InvalidRoleReply(str(exc)) from exc
+    return RoleReply(
+        content=validated.content, mood=validated.mood, thought=validated.thought
     )
 
 
@@ -102,18 +114,19 @@ async def correct_push_call(
     schemas: list[dict],
     llm_fn: Callable[..., Awaitable[dict | None]],
     remaining_steps: int,
+    host: ProactiveHost,
 ) -> dict:
     """Repair only invalid formal fields once, without executing or replaying tools."""
     if call.get("name") != "message_push":
         return call
     try:
-        parse_push_reply(call.get("input", {}), ctx)
+        parse_push_reply(call.get("input", {}), ctx, host)
         return call
     except InvalidRoleReply as exc:
         # Natural content has one shared completion-only correction. Never open
         # another draft/business-tool request to repair its role-state fields.
         if (
-            current_proactive_reply() is not None
+            host.natural_reply_active()
             or ctx.reply_format_corrections
             or remaining_steps <= 0
         ):
@@ -149,7 +162,7 @@ async def correct_push_call(
             key
         ) != corrected_args.get(key):
             raise InvalidRoleReply("主动回复格式纠正改写了消息或投递参数")
-    parse_push_reply(corrected_args, ctx)
+    parse_push_reply(corrected_args, ctx, host)
     return corrected
 
 

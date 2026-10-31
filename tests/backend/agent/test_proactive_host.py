@@ -22,6 +22,7 @@ from bootstrap.proactive import build_proactive_runtime
 from bus.event_bus import EventBus
 from bus.processing import ProcessingState
 from conversation.service import ConversationService, LegacySessionDescriptor
+from core.common.runtime_scope import bind_runtime
 from core.desktop_presence import DesktopPresence
 from core.memory.group_environment import GroupEnvironment, GroupEnvironmentUpdate
 from core.roles import RoleRepository, RoleRuntimeRegistry, RoleStore
@@ -415,25 +416,38 @@ async def test_deliver_uses_the_generation_published_for_that_call(tmp_path) -> 
     ] == ["第二代"]
 
 
-async def test_assembled_tick_enters_the_registry_the_port_publishes(
-    tmp_path,
-) -> None:
-    """A tick built in core enters the generation the port was given.
+async def test_held_lease_keeps_the_draining_generation(tmp_path) -> None:
+    """A tick that still holds the old generation uses that generation.
 
-    The agent loop still carries another registry. Entering that one would
-    activate its chat model and leave the published generation's model idle.
+    Production starts the loop inside ``bind_runtime(lease)``. Dropping the
+    held lease and pinning the published generation would activate the new
+    chat model and read the new generation's passive-busy flag while the
+    draining tick still uses the old provider, session and tools.
     """
     roles = RoleStore(tmp_path)
     roles.create_role(role_id="mira", name="米拉", system_prompt="规矩")
     roles.update_role("mira", proactive={"enabled": True})
     repository = RoleRepository(roles)
-    captured = _ChatModels()
-    published = _ChatModels()
-    captured_registry = RoleRuntimeRegistry(repository, model_resolver=captured)
-    published_registry = RoleRuntimeRegistry(repository, model_resolver=published)
+    old_models = _ChatModels()
+    new_models = _ChatModels()
+    old_registry = RoleRuntimeRegistry(repository, model_resolver=old_models)
+    new_registry = RoleRuntimeRegistry(repository, model_resolver=new_models)
+    old_state = ProcessingState()
+    new_state = ProcessingState()
+    new_state.enter(role_session_key("mira"))
     sessions = SessionManager(tmp_path)
     provider = LLMProvider(api_key="test")
-    runner = _runner(SimpleNamespace(role_runtime_registry=published_registry))
+    old_core = SimpleNamespace(
+        role_runtime_registry=old_registry,
+        loop=SimpleNamespace(processing_state=old_state),
+    )
+    new_core = SimpleNamespace(
+        role_runtime_registry=new_registry,
+        loop=SimpleNamespace(processing_state=new_state),
+    )
+    runner = _runner(new_core)
+    old_lease = SimpleNamespace(core=old_core)
+    busy: bool | None = None
     try:
         tasks, loops = build_proactive_runtime(
             Config(provider="test", model="m", api_key=""),
@@ -445,7 +459,7 @@ async def test_assembled_tick_enters_the_registry_the_port_publishes(
             memory_store=None,
             presence=sessions.presence,
             agent_loop=SimpleNamespace(  # type: ignore[arg-type]
-                role_runtime_registry=captured_registry, tools=None
+                role_runtime_registry=old_registry, tools=None
             ),
             kernel=core_kernel,
             proactive_host=runner,
@@ -453,19 +467,19 @@ async def test_assembled_tick_enters_the_registry_the_port_publishes(
         )
         for task in tasks:
             task.close()
-        ran = False
 
         async def operation() -> None:
-            nonlocal ran
-            ran = True
+            nonlocal busy
+            busy = runner.passive_turn_busy("mira")
 
-        await loops["mira"]._tick_dispatcher(
-            operation
-        )  # pyright: ignore[reportPrivateUsage]
+        with bind_runtime(old_lease):  # type: ignore[arg-type]
+            await loops["mira"]._tick_dispatcher(
+                operation
+            )  # pyright: ignore[reportPrivateUsage]
     finally:
-        await captured_registry.close_all()
-        await published_registry.close_all()
+        await old_registry.close_all()
+        await new_registry.close_all()
         await provider.aclose()
-    assert ran is True
-    assert published.purposes == ["chat"]
-    assert captured.purposes == []
+    assert busy is False
+    assert old_models.purposes == ["chat"]
+    assert new_models.purposes == []

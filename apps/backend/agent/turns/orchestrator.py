@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import inspect
 import logging
 from contextlib import asynccontextmanager, nullcontext
@@ -331,21 +332,28 @@ class TurnOrchestrator:
         }
         plan = current_proactive_reply()
         if plan is not None:
-            return await self._handle_natural_reply(
-                result=result,
-                session=session,
-                template=message,
-                plan=plan,
-                source=source,
-                committed=committed,
-                state_kwargs={
-                    "expected_mood_updated_at": result.reply_context.previous_updated_at,
-                    "metadata_updates": reply_state_metadata(
-                        reply,
-                        updated_at=datetime.now(timezone.utc).isoformat(),
-                    ),
-                },
-            )
+            try:
+                return await self._handle_natural_reply(
+                    result=result,
+                    session=session,
+                    template=message,
+                    plan=plan,
+                    source=source,
+                    committed=committed,
+                    state_kwargs={
+                        "expected_mood_updated_at": result.reply_context.previous_updated_at,
+                        "metadata_updates": reply_state_metadata(
+                            reply,
+                            updated_at=datetime.now(timezone.utc).isoformat(),
+                        ),
+                    },
+                )
+            except asyncio.CancelledError:
+                # A cancel that lands during the last send still finishes that
+                # send. Success effects belong to the caller, after this returns.
+                if plan.delivery_complete:
+                    return True
+                raise
         account_target = (
             result.trace.extra.get("account_target")
             if result.trace is not None and isinstance(result.trace.extra, dict)
@@ -452,6 +460,7 @@ class TurnOrchestrator:
             )
             return True
         finally:
+            plan.delivery_complete = len(delivered) == len(sequence.messages)
 
             async def finalize() -> None:
                 if committed is not None:

@@ -1,4 +1,4 @@
-"""``PROACTIVE_HOST``: host services the proactive loop needs (P6b, #907).
+"""``PROACTIVE_HOST``: host services a proactive tick calls (P6b, #907).
 
 The port is process-wide. Calls that run or deliver work pin the currently
 published generation, the way an incoming message does, and wait while no
@@ -6,24 +6,28 @@ generation admits work. A caller that already holds a lease keeps that lease.
 Reads use the current lease's generation when there is one, otherwise the
 published generation, and do not wait.
 
-The loop assembled in core enters a tick, reads the role prompt, checks
-whether a passive turn is busy, and reads desktop presence through this port
-(P6b-4a). Scene and relationship motives stay on the generation. Completion,
-tool execution and delivery inside a turn still call host modules until the
-loop moves into the plugin (P6b-4b).
+A tick whose role has natural chat on opens one reply scope for the whole
+tick. The scope, its invalidation and its tool facts stay together: facts are
+committed before the scope ends, including when the plan is invalidated.
+Choosing a target reads candidate chats, the last user message on a thread
+and whether the user is at the desktop. Tool schemas and connected MCP server
+names come from the generation's registry. Session history reads return the
+role session's recent user-context turns and recent proactive messages.
 
-This key and ``InitiatedReply`` may still gain or lose members until that
-move; they are fixed when SDK 4.0 is released.
+This key and ``InitiatedReply`` may still gain or lose members until the
+proactive loop moves into its plugin; they are fixed when SDK 4.0 is released.
 """
 
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Mapping, Sequence
+from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
 from datetime import datetime
 from types import MappingProxyType
 from typing import Literal, Protocol
 
+from shiori_sdk.accounts.targets import AccountTarget
 from shiori_sdk.core.conversation import InitiatedDelivery, InitiatedReply
 from shiori_sdk.core.tools import ToolStatus
 from shiori_sdk.kernel import Key
@@ -130,6 +134,68 @@ class ValidatedRoleReply:
     thought: str
 
 
+class NaturalReplyInvalidated(RuntimeError):
+    """The open natural reply was superseded before it was sent.
+
+    Raised from ``natural_reply_scope`` when the plan is invalidated. Tool
+    facts recorded on the plan are already committed.
+    """
+
+
+class NaturalReplyTicket(Protocol):
+    """One natural reply, from the moment the tick accepts it until it ends.
+
+    ``begin_natural_reply`` returns the only tickets ``natural_reply_scope``
+    accepts. ``invalidate`` stops the plan once; calling it again does not
+    cancel cleanup that has already started.
+    """
+
+    def invalidate(self) -> None:
+        """Stop this reply at the next safe boundary."""
+        ...
+
+
+@dataclass(frozen=True, kw_only=True)
+class CandidateChat:
+    """One chat that may receive the role's next proactive message.
+
+    Desktop is first. The rest are private chats with the bound user through
+    the role's online accounts, in binding order.
+    """
+
+    channel: str
+    chat_id: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class RecentTurnMessage:
+    """One user or assistant turn from the role's user-context history.
+
+    ``content`` is truncated to 200 characters. Context frames are omitted.
+    """
+
+    role: str
+    content: str
+    timestamp: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class ProactiveHistoryMessage:
+    """One proactive message already stored on the role session."""
+
+    content: str
+    timestamp: datetime | None
+    state_summary_tag: str
+    source_refs: tuple[Mapping[str, object], ...]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "source_refs",
+            tuple(_freeze(ref) for ref in self.source_refs),
+        )
+
+
 class ProactiveHost(Protocol):
     """Host services for a proactive tick. The host provides this."""
 
@@ -213,6 +279,144 @@ class ProactiveHost(Protocol):
         """
         ...
 
+    def natural_chat_enabled(self, session_key: str) -> bool:
+        """Whether the role that owns ``session_key`` has natural chat on.
+
+        The role record is read now. A missing role is off. The session copy
+        of the role config is not the switch.
+        """
+        ...
+
+    def begin_natural_reply(self) -> NaturalReplyTicket:
+        """Open the ticket for one natural reply, before its scope starts.
+
+        The caller invalidates this ticket to stop the reply, including from
+        outside the task that is inside ``natural_reply_scope``.
+        """
+        ...
+
+    def natural_reply_scope(
+        self,
+        ticket: NaturalReplyTicket,
+        session_key: str,
+        channel: str,
+        chat_id: str,
+        *,
+        turn_id: str,
+    ) -> AbstractAsyncContextManager[None]:
+        """Bind ``ticket`` for one tick and commit its tool facts on the way out.
+
+        Facts are committed while the plan is still current, including when
+        the body raises ``NaturalReplyInvalidated``. A ticket this host did
+        not issue raises ``TypeError``. With natural chat off, the ticket is
+        invalidated and the body runs without a plan.
+        """
+        ...
+
+    def reply_invalidated(self) -> bool:
+        """Whether the natural reply bound on this task has been superseded."""
+        ...
+
+    async def retarget_natural_reply(
+        self, session_key: str, target: Mapping[str, object]
+    ) -> None:
+        """Point the open natural reply at an explicit account target.
+
+        ``target`` is the account-target mapping ``message_push`` recorded.
+        No open plan does nothing.
+        """
+        ...
+
+    async def retarget_natural_transport(
+        self, session_key: str, channel: str, chat_id: str
+    ) -> None:
+        """Point the open natural reply at another candidate chat.
+
+        No open plan, or a plan already aimed at that chat, does nothing.
+        """
+        ...
+
+    def natural_reply_active(self) -> bool:
+        """Whether this task is inside a natural-reply scope that has a plan."""
+        ...
+
+    async def commit_natural_reply(self, reply: InitiatedReply) -> InitiatedDelivery:
+        """Deliver ``reply`` through the natural plan already open on this task.
+
+        Does not open another scope. ``deliver`` would, and a second scope
+        drops the tick's plan. No open plan raises ``RuntimeError``. The
+        event is emitted before this returns; success and failure side
+        effects belong to the caller and therefore follow the event.
+        """
+        ...
+
+    def candidate_chats(self, role_id: str) -> tuple[CandidateChat, ...]:
+        """Desktop first, then private chats with the bound user.
+
+        Does not consult the proactive switch: a preview may pass candidates
+        for a role whose saved switch is still off. A missing role raises
+        ``KeyError``.
+        """
+        ...
+
+    def last_user_message_at(
+        self, role_id: str, channel: str, chat_id: str
+    ) -> datetime | None:
+        """When the user last wrote in that chat, or None.
+
+        Timestamps are timezone-aware. A naive legacy value was local time
+        and is converted. Target selection ignores the desktop chat.
+        """
+        ...
+
+    def bound_chat_target(
+        self, role_id: str, channel: str, chat_id: str
+    ) -> tuple[str, AccountTarget]:
+        """The account plugin and private target that reach a bound user's chat.
+
+        Raises ``LookupError`` when that chat is not a bound online chat of
+        the role.
+        """
+        ...
+
+    def tool_schemas(
+        self, names: Sequence[str] | None = None
+    ) -> tuple[Mapping[str, object], ...]:
+        """Schemas of the generation's registered tools.
+
+        ``names`` is None for every tool, in registration order. A sequence
+        keeps the caller's order and skips names that are not registered.
+        """
+        ...
+
+    def mcp_server_names(self) -> tuple[str, ...]:
+        """MCP servers that currently have tools on the generation, sorted."""
+        ...
+
+    def require_channel_account(self, role_id: str, channel: str) -> None:
+        """Raise unless ``role_id`` has an account on ``channel``.
+
+        The same check a proactive retarget makes before it keeps the draft.
+        No account-send tool raises ``RuntimeError``. No account raises
+        ``LookupError``.
+        """
+        ...
+
+    def recent_messages(
+        self, role_id: str, *, limit: int
+    ) -> tuple[RecentTurnMessage, ...]:
+        """Recent user-context turns on the role session, oldest first.
+
+        User and assistant messages with text, without context frames.
+        """
+        ...
+
+    def recent_proactive_messages(
+        self, role_id: str, *, limit: int = 5
+    ) -> tuple[ProactiveHistoryMessage, ...]:
+        """The role session's recent proactive messages, oldest first."""
+        ...
+
     async def complete(
         self,
         messages: Sequence[Mapping[str, object]],
@@ -223,6 +427,7 @@ class ProactiveHost(Protocol):
         call_purpose: Literal["default", "auxiliary"] = "default",
         disable_thinking: bool = True,
         defer_tool_argument_errors: bool = False,
+        natural_draft: bool = False,
     ) -> ModelCompletion:
         """Complete one chat request on the published model.
 
@@ -235,6 +440,11 @@ class ProactiveHost(Protocol):
         short side request: it opts out of the configured reasoning and does
         not calibrate the input budget. ``tool_choice`` may be ``"auto"`` or
         a tool-choice object.
+
+        ``natural_draft`` runs the open natural plan's one format correction
+        before returning. The plan keeps the provider response (refusal,
+        finish reason, provider fields). The returned completion is the
+        corrected tool call. No open plan raises.
         """
         ...
 

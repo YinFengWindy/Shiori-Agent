@@ -2,10 +2,8 @@
 
 One runner serves every generation. Work that runs or delivers pins the
 published generation; reads use the current lease when there is one, otherwise
-the published generation, and do not wait. The loop assembled in core enters
-ticks, reads the role prompt, checks whether a passive turn is busy, and reads
-desktop presence through this runner. Completion, tool execution and delivery
-inside a turn still call host modules until the loop moves into the plugin.
+the published generation, and do not wait. A caller that already holds a lease
+keeps that lease.
 """
 
 from __future__ import annotations
@@ -17,28 +15,72 @@ from datetime import datetime
 from typing import Any, AsyncIterator, Literal
 
 from agent.core.prompt_block import build_role_user_identities_prompt
+from agent.initiated_delivery import orchestrator_for
 from agent.provider import LLMProvider, thinking_disabled_provider
+from agent.tools.account_delivery import shared_account_delivery
 from agent.tools.execution import ToolExecutionRequest, ToolExecutor
+from agent.turns.proactive_sequence import current_proactive_reply
+from agent.turns.reply_interruption import (
+    ReplyInterruption,
+    ReplyPlanInvalidated,
+    reply_was_invalidated,
+)
+from conversation.context_scope import user_context_view
+from conversation.initiated import _turn_result
 from conversation.service import desktop_chat_id, desktop_thread_id
 from core.common.channel_directory import DESKTOP_CHANNEL
 from core.common.runtime_scope import bind_runtime, current_runtime_lease
+from core.roles.bound_chats import bound_chat_target, role_bound_chats
 from core.roles.model_runtime import RoleAwareProvider
+from core.roles.reply_policy import natural_chat_selected
 from core.roles.reply_state import role_mood_catalog, validate_role_reply
 from core.roles.role_prompt_compiler import RolePromptCompiler
 from core.roles.services import RoleSessionService
-from session.manager.helpers import role_session_key
+from session.manager.helpers import role_id_from_session_key, role_session_key
+from shiori_sdk.accounts.targets import AccountTarget
+from shiori_sdk.channels.threads import network_thread_id
 from shiori_sdk.core.conversation import InitiatedDelivery, InitiatedReply
 from shiori_sdk.core.proactive_host import (
+    CandidateChat,
     CompletionToolCall,
     ModelCompletion,
+    NaturalReplyInvalidated,
+    NaturalReplyTicket,
+    ProactiveHistoryMessage,
     ProactiveToolCall,
     ProactiveToolInvoker,
     ProactiveToolOutcome,
+    RecentTurnMessage,
     RoleReplyState,
     ValidatedRoleReply,
 )
+from shiori_sdk.prompting import is_context_frame
 
 _RUNTIME_REQUIRED = "主动端口需要已启动的运行时"
+
+
+def _parse_timestamp(raw: object) -> datetime | None:
+    """ISO timestamp, or None. A naive legacy value was local time."""
+    text = str(raw or "").strip()
+    if not text:
+        return None
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=datetime.now().astimezone().tzinfo)
+    return parsed
+
+
+class _NaturalReplyTicket:
+    """The ticket ``begin_natural_reply`` issues. Other objects are refused."""
+
+    def __init__(self) -> None:
+        self.interruption = ReplyInterruption()
+
+    def invalidate(self) -> None:
+        self.interruption.invalidate()
 
 
 class HostProactiveRunner:
@@ -189,6 +231,221 @@ class HostProactiveRunner:
             content=reply.content, mood=reply.mood, thought=reply.thought
         )
 
+    def natural_chat_enabled(self, session_key: str) -> bool:
+        """The role record's natural-chat switch, as of this call.
+
+        A missing role is off. The session copy of the role config is not
+        the switch. No published generation raises.
+        """
+        role_id = role_id_from_session_key(session_key)
+        if not role_id:
+            return False
+        store = self._require_core().role_runtime_registry.repository.store
+        return natural_chat_selected(store.get_role(role_id))
+
+    def begin_natural_reply(self) -> NaturalReplyTicket:
+        """Issue the ticket one tick invalidates from outside its scope."""
+        return _NaturalReplyTicket()
+
+    @asynccontextmanager
+    async def natural_reply_scope(
+        self,
+        ticket: NaturalReplyTicket,
+        session_key: str,
+        channel: str,
+        chat_id: str,
+        *,
+        turn_id: str,
+    ) -> AsyncIterator[None]:
+        """Open the tick's plan and commit its tool facts before the plan ends.
+
+        Facts are committed while the plan is still current, including when
+        the body raises ``NaturalReplyInvalidated``.
+        """
+        if not isinstance(ticket, _NaturalReplyTicket):
+            raise TypeError("自然回复票据不属于这个端口")
+        role_id = self._role_id(session_key)
+        async with self._pinned() as lease:
+            orchestrator = self._orchestrator(lease.core, role_id)
+            async with orchestrator.natural_reply_scope(
+                session_key,
+                channel,
+                chat_id,
+                turn_id=turn_id,
+                interruption=ticket.interruption,
+            ):
+                try:
+                    yield
+                except ReplyPlanInvalidated as exc:
+                    raise NaturalReplyInvalidated(str(exc)) from exc
+                finally:
+                    await orchestrator.commit_proactive_tool_facts(session_key)
+
+    def reply_invalidated(self) -> bool:
+        """Whether the natural reply bound on this task has been superseded."""
+        return reply_was_invalidated()
+
+    async def retarget_natural_reply(
+        self, session_key: str, target: Mapping[str, object]
+    ) -> None:
+        """Point the open plan at an explicit account target. No plan does nothing."""
+        if current_proactive_reply() is None:
+            return
+        async with self._pinned() as lease:
+            await self._orchestrator(
+                lease.core, self._role_id(session_key)
+            ).retarget_natural_reply(session_key, dict(target))
+
+    async def retarget_natural_transport(
+        self, session_key: str, channel: str, chat_id: str
+    ) -> None:
+        """Point the open plan at another candidate chat. No plan does nothing."""
+        if current_proactive_reply() is None:
+            return
+        async with self._pinned() as lease:
+            await self._orchestrator(
+                lease.core, self._role_id(session_key)
+            ).retarget_natural_transport(session_key, channel, chat_id)
+
+    def natural_reply_active(self) -> bool:
+        """Whether this task is inside a natural-reply scope that has a plan."""
+        return current_proactive_reply() is not None
+
+    async def commit_natural_reply(self, reply: InitiatedReply) -> InitiatedDelivery:
+        """Deliver through the plan already open on this task.
+
+        Does not open another scope. The committed event is emitted before
+        this returns; the caller's success and failure effects follow it.
+        """
+        if current_proactive_reply() is None:
+            raise RuntimeError("自然回复序列需要已打开的回复作用域")
+        async with self._pinned() as lease:
+            committed: list[str] = []
+            complete = await self._orchestrator(
+                lease.core, self._role_id(reply.session_key)
+            ).handle_proactive_turn(
+                result=_turn_result(reply, include_target=False),
+                session_key=reply.session_key,
+                channel=reply.channel,
+                chat_id=reply.chat_id,
+                source=reply.source,
+                committed=committed,
+            )
+            return InitiatedDelivery(message_ids=tuple(committed), complete=complete)
+
+    def candidate_chats(self, role_id: str) -> tuple[CandidateChat, ...]:
+        """Desktop first, then private chats with the bound user.
+
+        Does not consult the proactive switch. A missing role raises ``KeyError``.
+        """
+        store = self._require_core().role_runtime_registry.repository.store
+        if store.get_role(role_id) is None:
+            raise KeyError(f"角色不存在: {role_id}")
+        return (
+            CandidateChat(channel=DESKTOP_CHANNEL, chat_id=desktop_chat_id(role_id)),
+            *(
+                CandidateChat(channel=chat.channel, chat_id=chat.chat_id)
+                for _, _, chat in role_bound_chats(store, role_id)
+            ),
+        )
+
+    def last_user_message_at(
+        self, role_id: str, channel: str, chat_id: str
+    ) -> datetime | None:
+        """When the user last wrote in that chat, or None.
+
+        A naive legacy timestamp was written in local time and is converted.
+        """
+        raw = self._require_core().session_manager.conversation_store.last_user_message_at(
+            network_thread_id(role_id, channel, chat_id)
+        )
+        if raw is None:
+            return None
+        return datetime.fromisoformat(raw).astimezone()
+
+    def bound_chat_target(
+        self, role_id: str, channel: str, chat_id: str
+    ) -> tuple[str, AccountTarget]:
+        """The account plugin and private target that reach a bound user's chat."""
+        store = self._require_core().role_runtime_registry.repository.store
+        return bound_chat_target(store, role_id, channel, chat_id)
+
+    def tool_schemas(
+        self, names: Sequence[str] | None = None
+    ) -> tuple[Mapping[str, object], ...]:
+        """Schemas from the generation's registry, in the requested order."""
+        selected = None if names is None else list(names)
+        return tuple(self._require_core().tools.get_schemas(selected))
+
+    def mcp_server_names(self) -> tuple[str, ...]:
+        """MCP servers that currently have tools on the generation, sorted."""
+        return tuple(sorted(self._require_core().tools.get_mcp_server_names()))
+
+    def require_channel_account(self, role_id: str, channel: str) -> None:
+        """Raise unless ``role_id`` has an account on ``channel``."""
+        delivery = shared_account_delivery(self._require_core().tools)
+        if delivery is None:
+            raise RuntimeError("账号目标发送服务不可用")
+        delivery.channel_account(channel, role_id)
+
+    def recent_messages(
+        self, role_id: str, *, limit: int
+    ) -> tuple[RecentTurnMessage, ...]:
+        """Recent user-context turns on the role session, oldest first."""
+        core = self._require_core()
+        session = core.session_manager.get_or_create(role_session_key(role_id))
+        view = user_context_view(core.session_manager.workspace, role_id)
+        messages = session.history_window(limit, include=view.includes)
+        results: list[RecentTurnMessage] = []
+        for message in messages:
+            if message.get("role") not in ("user", "assistant"):
+                continue
+            if not message.get("content"):
+                continue
+            content = str(message.get("content", ""))
+            if is_context_frame(content):
+                continue
+            results.append(
+                RecentTurnMessage(
+                    role=str(message["role"]),
+                    content=content[:200],
+                    timestamp=str(message.get("timestamp", "")),
+                )
+            )
+        return tuple(results)
+
+    def recent_proactive_messages(
+        self, role_id: str, *, limit: int = 5
+    ) -> tuple[ProactiveHistoryMessage, ...]:
+        """The role session's recent proactive messages, oldest first."""
+        session = self._require_core().session_manager.get_or_create(
+            role_session_key(role_id)
+        )
+        found: list[ProactiveHistoryMessage] = []
+        for message in reversed(session.messages):
+            if message.get("role") != "assistant":
+                continue
+            if not message.get("proactive") or not message.get("content"):
+                continue
+            refs = tuple(
+                ref
+                for ref in message.get("source_refs") or []
+                if isinstance(ref, Mapping)
+            )
+            found.append(
+                ProactiveHistoryMessage(
+                    content=str(message["content"]),
+                    timestamp=_parse_timestamp(message.get("timestamp")),
+                    state_summary_tag=str(
+                        message.get("state_summary_tag", "none") or "none"
+                    ),
+                    source_refs=refs,
+                )
+            )
+            if len(found) >= limit:
+                break
+        return tuple(reversed(found))
+
     async def complete(
         self,
         messages: Sequence[Mapping[str, object]],
@@ -199,20 +456,25 @@ class HostProactiveRunner:
         call_purpose: Literal["default", "auxiliary"] = "default",
         disable_thinking: bool = True,
         defer_tool_argument_errors: bool = False,
+        natural_draft: bool = False,
     ) -> ModelCompletion:
         """One chat completion on the published model.
 
         The fallback provider forces thinking off. An active role-model
         snapshot (inside ``run_tick``) keeps that model's own effort.
+        ``natural_draft`` runs the open plan's format correction before the
+        completion is returned; the plan keeps the provider response.
         """
         async with self._pinned() as lease:
             config = lease.core.config
             provider = RoleAwareProvider(self._thinking_provider(lease.core))
+            payload = [dict(message) for message in messages]
+            sent_max = config.max_tokens if max_tokens is None else max_tokens
             response = await provider.chat(
-                messages=[dict(message) for message in messages],
+                messages=payload,
                 tools=[dict(tool) for tool in tools],
                 model=config.model,
-                max_tokens=config.max_tokens if max_tokens is None else max_tokens,
+                max_tokens=sent_max,
                 tool_choice=(
                     tool_choice if isinstance(tool_choice, str) else dict(tool_choice)
                 ),
@@ -220,6 +482,18 @@ class HostProactiveRunner:
                 call_purpose=call_purpose,
                 defer_tool_argument_errors=defer_tool_argument_errors,
             )
+            if natural_draft:
+                if current_proactive_reply() is None:
+                    raise RuntimeError("自然回复补全需要已打开的回复作用域")
+                from proactive_v2.reply_output import complete_natural_push
+
+                response = await complete_natural_push(
+                    response,
+                    messages=payload,
+                    provider=provider,
+                    model=config.model,
+                    max_tokens=sent_max,
+                )
         calls = tuple(
             CompletionToolCall(
                 id=call.id,
@@ -253,6 +527,23 @@ class HostProactiveRunner:
         # Drop the entry with the generation, so its id cannot be reused.
         weakref.finalize(core, self._completion_providers.pop, key, None)
         return provider
+
+    def _role_id(self, session_key: str) -> str:
+        role_id = role_id_from_session_key(session_key)
+        if not role_id:
+            raise ValueError(f"主动回复只接受角色会话: {session_key}")
+        return role_id
+
+    def _orchestrator(self, core: Any, role_id: str):
+        return orchestrator_for(
+            role_id,
+            session_manager=core.session_manager,
+            presence=core.presence,
+            push_tool=core.push_tool,
+            event_bus=core.event_bus,
+            tools=core.tools,
+            role_store=core.role_runtime_registry.repository.store,
+        )
 
     def _open_role_session(self, role_id: str):
         core = self._require_core()

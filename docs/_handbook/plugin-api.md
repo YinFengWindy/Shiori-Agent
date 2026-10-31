@@ -545,7 +545,7 @@ Runs a bounded chat request using the injected provider's routing.
 
 ## `shiori_sdk.core.proactive_host`
 
-``PROACTIVE_HOST``: host services the proactive loop needs (P6b, #907). The port is process-wide. Calls that run or deliver work pin the currently published generation, the way an incoming message does, and wait while no generation admits work. A caller that already holds a lease keeps that lease. Reads use the current lease's generation when there is one, otherwise the published generation, and do not wait. The loop assembled in core enters a tick, reads the role prompt, checks whether a passive turn is busy, and reads desktop presence through this port (P6b-4a). Scene and relationship motives stay on the generation. Completion, tool execution and delivery inside a turn still call host modules until the loop moves into the plugin (P6b-4b). This key and ``InitiatedReply`` may still gain or lose members until that move; they are fixed when SDK 4.0 is released.
+``PROACTIVE_HOST``: host services a proactive tick calls (P6b, #907). The port is process-wide. Calls that run or deliver work pin the currently published generation, the way an incoming message does, and wait while no generation admits work. A caller that already holds a lease keeps that lease. Reads use the current lease's generation when there is one, otherwise the published generation, and do not wait. A tick whose role has natural chat on opens one reply scope for the whole tick. The scope, its invalidation and its tool facts stay together: facts are committed before the scope ends, including when the plan is invalidated. Choosing a target reads candidate chats, the last user message on a thread and whether the user is at the desktop. Tool schemas and connected MCP server names come from the generation's registry. Session history reads return the role session's recent user-context turns and recent proactive messages. This key and ``InitiatedReply`` may still gain or lose members until the proactive loop moves into its plugin; they are fixed when SDK 4.0 is released.
 
 ### `proactive_host`
 
@@ -591,9 +591,80 @@ Host services for a proactive tick. The host provides this.
 
   Validate one reply against the role's mood catalog. Raises ``ValueError`` when the role is gone, the mood is outside the catalog, the thought is not a short first-person line, or required text is blank.
 
-- `async complete(messages: Sequence[Mapping[str, object]], *, tools: Sequence[Mapping[str, object]] = (), tool_choice: str | Mapping[str, object] = 'auto', max_tokens: int | None = None, call_purpose: Literal['default', 'auxiliary'] = 'default', disable_thinking: bool = True, defer_tool_argument_errors: bool = False) -> core.proactive_host.ModelCompletion`
+- `natural_chat_enabled(session_key: str) -> bool`
 
-  Complete one chat request on the published model. Inside ``run_tick`` the role's chat model snapshot answers and keeps its own reasoning effort. Outside a tick the generation's model answers through a provider that forces thinking off, or through the generation's own provider when no API key is configured; only that last case honors ``disable_thinking``. ``max_tokens`` defaults to the generation's configured cap. ``call_purpose="auxiliary"`` marks a short side request: it opts out of the configured reasoning and does not calibrate the input budget. ``tool_choice`` may be ``"auto"`` or a tool-choice object.
+  Whether the role that owns ``session_key`` has natural chat on. The role record is read now. A missing role is off. The session copy of the role config is not the switch.
+
+- `begin_natural_reply() -> core.proactive_host.NaturalReplyTicket`
+
+  Open the ticket for one natural reply, before its scope starts. The caller invalidates this ticket to stop the reply, including from outside the task that is inside ``natural_reply_scope``.
+
+- `natural_reply_scope(ticket: core.proactive_host.NaturalReplyTicket, session_key: str, channel: str, chat_id: str, *, turn_id: str) -> contextlib.AbstractAsyncContextManager[None]`
+
+  Bind ``ticket`` for one tick and commit its tool facts on the way out. Facts are committed while the plan is still current, including when the body raises ``NaturalReplyInvalidated``. A ticket this host did not issue raises ``TypeError``. With natural chat off, the ticket is invalidated and the body runs without a plan.
+
+- `reply_invalidated() -> bool`
+
+  Whether the natural reply bound on this task has been superseded.
+
+- `async retarget_natural_reply(session_key: str, target: Mapping[str, object]) -> None`
+
+  Point the open natural reply at an explicit account target. ``target`` is the account-target mapping ``message_push`` recorded. No open plan does nothing.
+
+- `async retarget_natural_transport(session_key: str, channel: str, chat_id: str) -> None`
+
+  Point the open natural reply at another candidate chat. No open plan, or a plan already aimed at that chat, does nothing.
+
+- `natural_reply_active() -> bool`
+
+  Whether this task is inside a natural-reply scope that has a plan.
+
+- `async commit_natural_reply(reply: core.conversation.InitiatedReply) -> core.conversation.InitiatedDelivery`
+
+  Deliver ``reply`` through the natural plan already open on this task. Does not open another scope. ``deliver`` would, and a second scope drops the tick's plan. No open plan raises ``RuntimeError``. The event is emitted before this returns; success and failure side effects belong to the caller and therefore follow the event.
+
+- `candidate_chats(role_id: str) -> tuple[core.proactive_host.CandidateChat, ...]`
+
+  Desktop first, then private chats with the bound user. Does not consult the proactive switch: a preview may pass candidates for a role whose saved switch is still off. A missing role raises ``KeyError``.
+
+- `last_user_message_at(role_id: str, channel: str, chat_id: str) -> datetime.datetime | None`
+
+  When the user last wrote in that chat, or None. Timestamps are timezone-aware. A naive legacy value was local time and is converted. Target selection ignores the desktop chat.
+
+- `bound_chat_target(role_id: str, channel: str, chat_id: str) -> tuple[str, accounts.targets.AccountTarget]`
+
+  The account plugin and private target that reach a bound user's chat. Raises ``LookupError`` when that chat is not a bound online chat of the role.
+
+- `tool_schemas(names: Sequence[str] | None = None) -> tuple[Mapping[str, object], ...]`
+
+  Schemas of the generation's registered tools. ``names`` is None for every tool, in registration order. A sequence keeps the caller's order and skips names that are not registered.
+
+- `mcp_server_names() -> tuple[str, ...]`
+
+  MCP servers that currently have tools on the generation, sorted.
+
+- `require_channel_account(role_id: str, channel: str) -> None`
+
+  Raise unless ``role_id`` has an account on ``channel``. The same check a proactive retarget makes before it keeps the draft. No account-send tool raises ``RuntimeError``. No account raises ``LookupError``.
+
+- `recent_messages(role_id: str, *, limit: int) -> tuple[core.proactive_host.RecentTurnMessage, ...]`
+
+  Recent user-context turns on the role session, oldest first. User and assistant messages with text, without context frames.
+
+- `recent_proactive_messages(role_id: str, *, limit: int = 5) -> tuple[core.proactive_host.ProactiveHistoryMessage, ...]`
+
+  The role session's recent proactive messages, oldest first.
+
+- `async complete(messages: Sequence[Mapping[str, object]], *, tools: Sequence[Mapping[str, object]] = (), tool_choice: str | Mapping[str, object] = 'auto', max_tokens: int | None = None, call_purpose: Literal['default', 'auxiliary'] = 'default', disable_thinking: bool = True, defer_tool_argument_errors: bool = False, natural_draft: bool = False) -> core.proactive_host.ModelCompletion`
+
+  Complete one chat request on the published model. Inside ``run_tick`` the role's chat model snapshot answers and keeps its own reasoning effort. Outside a tick the generation's model answers through a provider that forces thinking off, or through the generation's own provider when no API key is configured; only that last case honors ``disable_thinking``. ``max_tokens`` defaults to the generation's configured cap. ``call_purpose="auxiliary"`` marks a short side request: it opts out of the configured reasoning and does not calibrate the input budget. ``tool_choice`` may be ``"auto"`` or a tool-choice object. ``natural_draft`` runs the open natural plan's one format correction before returning. The plan keeps the provider response (refusal, finish reason, provider fields). The returned completion is the corrected tool call. No open plan raises.
+
+#### `shiori_sdk.core.proactive_host.CandidateChat`
+
+One chat that may receive the role's next proactive message. Desktop is first. The rest are private chats with the bound user through the role's online accounts, in binding order.
+
+- `channel: str`
+- `chat_id: str`
 
 #### `shiori_sdk.core.proactive_host.CompletionToolCall`
 
@@ -612,6 +683,27 @@ A chat completion for the proactive loop. ``content`` is empty when the model re
 - `content: str`
 - `tool_calls: tuple[core.proactive_host.CompletionToolCall, ...]`
 - `thinking: str | None`
+
+#### `shiori_sdk.core.proactive_host.NaturalReplyInvalidated`
+
+The open natural reply was superseded before it was sent. Raised from ``natural_reply_scope`` when the plan is invalidated. Tool facts recorded on the plan are already committed.
+
+#### `shiori_sdk.core.proactive_host.NaturalReplyTicket`
+
+One natural reply, from the moment the tick accepts it until it ends. ``begin_natural_reply`` returns the only tickets ``natural_reply_scope`` accepts. ``invalidate`` stops the plan once; calling it again does not cancel cleanup that has already started.
+
+- `invalidate() -> None`
+
+  Stop this reply at the next safe boundary.
+
+#### `shiori_sdk.core.proactive_host.ProactiveHistoryMessage`
+
+One proactive message already stored on the role session.
+
+- `content: str`
+- `timestamp: datetime.datetime | None`
+- `state_summary_tag: str`
+- `source_refs: tuple[Mapping[str, object], ...]`
 
 #### `shiori_sdk.core.proactive_host.ProactiveToolCall`
 
@@ -632,6 +724,14 @@ How one checked tool call ended. ``arguments`` are the arguments the tool ran wi
 - `status: ToolStatus`
 - `arguments: Mapping[str, object]`
 - `finalize: bool`
+
+#### `shiori_sdk.core.proactive_host.RecentTurnMessage`
+
+One user or assistant turn from the role's user-context history. ``content`` is truncated to 200 characters. Context frames are omitted.
+
+- `role: str`
+- `content: str`
+- `timestamp: str`
 
 #### `shiori_sdk.core.proactive_host.RoleReplyState`
 

@@ -48,8 +48,9 @@ from proactive_v2.config import ProactiveConfig
 from proactive_v2.memory_sampler import sample_memory_chunks
 from proactive_v2.sensor import Sensor
 from proactive_v2.state import ProactiveStateStore
-from proactive_v2.target_selection import DesktopPresenceView, ProactiveTargetResolver
+from proactive_v2.target_selection import ProactiveTargetResolver
 from session.manager import SessionManager
+from shiori_sdk.core.proactive_host import ProactiveHost
 from shiori_sdk.core.sessions import Presence
 
 logger = logging.getLogger(__name__)
@@ -90,14 +91,15 @@ class ProactiveLoop:
         tick_dispatcher: Callable[[Callable[[], Any]], Any] | None = None,
         event_bus: EventBus | None = None,
         role_prompt_fn: Callable[[], str] | None = None,
-        desktop_presence: DesktopPresenceView | None = None,
+        proactive_host: ProactiveHost | None = None,
         role_store: RoleStore | None = None,
         group_environment: "GroupEnvironment | None" = None,
     ) -> None:
-        """``role_store`` is the runtime's shared store; its account index and
-        user identities decide where each proactive message can go.
-        ``group_environment`` supplies the recent activity of external chats
-        injected into proactive and drift turns (#497)."""
+        """``role_store`` is the runtime's shared store; its proactive switch
+        decides whether a saved role is eligible. Candidate chats, desktop
+        presence and thread history are read through ``proactive_host``.
+        ``group_environment`` is the runtime's shared layer (#497); the port
+        reads it for recent external activity."""
         self._sessions = session_manager
         self._provider = provider
         self._push = push_tool
@@ -116,7 +118,7 @@ class ProactiveLoop:
         self._proactive_gates = ProactiveGateChain(motives=proactive_motives or ())
         self._tick_dispatcher = tick_dispatcher
         self._event_bus = event_bus
-        self._desktop_presence = desktop_presence
+        self._host = proactive_host
         self._role_store = role_store
         self._group_environment = group_environment
         if role_prompt_fn is None:
@@ -180,19 +182,22 @@ class ProactiveLoop:
             presence=self._presence,
             rng=self._rng,
             target_resolver=self._target_resolver,
+            host=self._host,
         )
+
+    def _require_host(self) -> ProactiveHost:
+        host = self._host
+        if host is None:
+            raise ValueError("proactive_host required for proactive loop")
+        return host
 
     def _build_target_resolver(self) -> ProactiveTargetResolver:
         """Selects each message's target from the role's live candidate sessions."""
-        if self._desktop_presence is None:
-            raise ValueError("desktop_presence required for proactive loop")
+        if self._host is None:
+            raise ValueError("proactive_host required for proactive loop")
         if self._role_store is None:
             raise ValueError("role_store required for proactive loop")
-        return ProactiveTargetResolver(
-            roles=self._role_store,
-            conversations=self._sessions.conversation_store,
-            desktop_presence=self._desktop_presence,
-        )
+        return ProactiveTargetResolver(roles=self._role_store, host=self._host)
 
     def _build_agent_tick(self):
         from agent.core.prompt_block import build_role_affection_prompt
@@ -224,6 +229,7 @@ class ProactiveLoop:
                 shared_tools=self._shared_tools,
                 pool=self._mcp_pool,
                 kernel=self._kernel,
+                proactive_host=self._require_host(),
                 proactive_gates=self._proactive_gates,
                 group_environment=self._group_environment,
                 # Proactive and drift turns always address the user (the user
@@ -238,8 +244,7 @@ class ProactiveLoop:
         if not self._cfg.message_dedupe_enabled:
             return None
         return MessageDeduper(
-            provider=self._provider,
-            model=self._model,
+            host=self._require_host(),
             max_tokens=self._max_tokens,
         )
 
