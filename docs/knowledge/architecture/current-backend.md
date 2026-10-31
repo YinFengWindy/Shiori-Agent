@@ -105,7 +105,7 @@ LLM 调用由 `apps/backend/agent/provider.py` 封装，使用官方 `openai` SD
 
 ## 主动回合与后台任务
 
-`apps/backend/proactive_v2` 根据时间、presence、关系和观察结果生成 tick。`apps/backend/bootstrap/proactive.py` 的 `build_proactive_runtime()` 为角色创建主动循环（由 `RuntimeBackground` 按代调度），tick dispatcher 通过 `RoleRuntimeRegistry.dispatch_proactive_tick()` 进入同一角色 runtime，并在角色桌面线程 `role:<id>` 下执行。后台任务和 drift 使用同一套 role/session/tool 基础设施；定时任务经 `RuntimeDispatcher.run_role_operation()` 固定在所属运行时代。
+`apps/backend/proactive_v2` 根据时间、presence、关系和观察结果生成 tick。`apps/backend/bootstrap/proactive.py` 的 `build_proactive_runtime()` 为角色创建主动循环（由 `RuntimeBackground` 按代调度）。tick 经 `PROACTIVE_HOST.run_tick` 进入（已持有的代租约保持不变，否则钉住当前发布代），再由 `RoleRuntimeRegistry.dispatch_proactive_tick()` 进入同一角色 runtime，并在角色桌面线程 `role:<id>` 下执行。后台任务和 drift 使用同一套 role/session/tool 基础设施；定时任务经 `RuntimeDispatcher.run_role_operation()` 固定在所属运行时代。
 
 ## 工具、Memory 与插件
 

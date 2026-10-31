@@ -22,16 +22,28 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from datetime import datetime
+from typing import Protocol
 
 from conversation.service import desktop_chat_id
 from shiori_sdk.channels.threads import network_thread_id
 from conversation.store import ConversationStore
 from shiori_sdk.accounts.targets import AccountTarget
 from core.common.channel_directory import DESKTOP_CHANNEL
-from core.desktop_presence import DesktopPresence
 from core.roles.bound_chats import bound_chat_target, role_bound_chats
 from core.roles.models import RoleProactiveCandidate
 from core.roles.store import RoleStore
+
+
+class DesktopPresenceView(Protocol):
+    """Whether the user is at the desktop right now.
+
+    The proactive loop reads this through ``PROACTIVE_HOST.user_at_desktop``.
+    The desktop preview passes the process-wide ``DesktopPresence`` itself.
+    """
+
+    def is_desktop_present(self) -> bool:
+        """True when the user counts as present at the desktop."""
+        ...
 
 
 def select_proactive_target(
@@ -76,7 +88,7 @@ class ProactiveTargetResolver:
         *,
         roles: RoleStore,
         conversations: ConversationStore,
-        desktop_presence: DesktopPresence,
+        desktop_presence: DesktopPresenceView,
     ) -> None:
         self._roles = roles
         self._conversations = conversations

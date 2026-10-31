@@ -545,7 +545,7 @@ Runs a bounded chat request using the injected provider's routing.
 
 ## `shiori_sdk.core.proactive_host`
 
-``PROACTIVE_HOST``: host services the proactive loop needs (P6b, #907). The port is process-wide. Calls that run or deliver work pin the currently published generation, the way an incoming message does, and wait while no generation admits work. A caller that already holds a lease keeps that lease. Reads use the current lease's generation when there is one, otherwise the published generation, and do not wait. The proactive loop still calls the host directly; switching it onto this port is a later change. This key and ``InitiatedReply`` may still gain or lose members until the proactive loop runs on them (P6b-4b); they are fixed when SDK 4.0 is released.
+``PROACTIVE_HOST``: host services the proactive loop needs (P6b, #907). The port is process-wide. Calls that run or deliver work pin the currently published generation, the way an incoming message does, and wait while no generation admits work. A caller that already holds a lease keeps that lease. Reads use the current lease's generation when there is one, otherwise the published generation, and do not wait. The loop assembled in core enters a tick, reads the role prompt, checks whether a passive turn is busy, and reads desktop presence through this port (P6b-4a). Scene and relationship motives stay on the generation. Completion, tool execution and delivery inside a turn still call host modules until the loop moves into the plugin (P6b-4b). This key and ``InitiatedReply`` may still gain or lose members until that move; they are fixed when SDK 4.0 is released.
 
 ### `proactive_host`
 

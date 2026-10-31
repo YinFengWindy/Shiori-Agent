@@ -9,13 +9,16 @@ from types import SimpleNamespace
 
 import pytest
 
+from agent.config_models import Config
 from agent.core.turn_events import core_kernel
 from agent.initiated_delivery import HostConversation
 from agent.looping.ports import SessionServices
 from agent.proactive_host import HostProactiveRunner
+from agent.provider import LLMProvider
+from agent.tools.message_push import MessagePushTool
 from agent.turns.orchestrator import TurnOrchestrator, TurnOrchestratorDeps
 from agent.turns.outbound import DeliveryReceipt
-from agent.provider import LLMProvider
+from bootstrap.proactive import build_proactive_runtime
 from bus.event_bus import EventBus
 from bus.processing import ProcessingState
 from conversation.service import ConversationService, LegacySessionDescriptor
@@ -410,3 +413,59 @@ async def test_deliver_uses_the_generation_published_for_that_call(tmp_path) -> 
         row["content"]
         for row in second_store._store.fetch_session_messages("role:mira")
     ] == ["第二代"]
+
+
+async def test_assembled_tick_enters_the_registry_the_port_publishes(
+    tmp_path,
+) -> None:
+    """A tick built in core enters the generation the port was given.
+
+    The agent loop still carries another registry. Entering that one would
+    activate its chat model and leave the published generation's model idle.
+    """
+    roles = RoleStore(tmp_path)
+    roles.create_role(role_id="mira", name="米拉", system_prompt="规矩")
+    roles.update_role("mira", proactive={"enabled": True})
+    repository = RoleRepository(roles)
+    captured = _ChatModels()
+    published = _ChatModels()
+    captured_registry = RoleRuntimeRegistry(repository, model_resolver=captured)
+    published_registry = RoleRuntimeRegistry(repository, model_resolver=published)
+    sessions = SessionManager(tmp_path)
+    provider = LLMProvider(api_key="test")
+    runner = _runner(SimpleNamespace(role_runtime_registry=published_registry))
+    try:
+        tasks, loops = build_proactive_runtime(
+            Config(provider="test", model="m", api_key=""),
+            tmp_path,
+            session_manager=sessions,
+            provider=provider,
+            light_provider=provider,
+            push_tool=MessagePushTool(role_target_validator=lambda *_args: True),
+            memory_store=None,
+            presence=sessions.presence,
+            agent_loop=SimpleNamespace(  # type: ignore[arg-type]
+                role_runtime_registry=captured_registry, tools=None
+            ),
+            kernel=core_kernel,
+            proactive_host=runner,
+            group_environment=GroupEnvironment(tmp_path, sessions.conversation_store),
+        )
+        for task in tasks:
+            task.close()
+        ran = False
+
+        async def operation() -> None:
+            nonlocal ran
+            ran = True
+
+        await loops["mira"]._tick_dispatcher(
+            operation
+        )  # pyright: ignore[reportPrivateUsage]
+    finally:
+        await captured_registry.close_all()
+        await published_registry.close_all()
+        await provider.aclose()
+    assert ran is True
+    assert published.purposes == ["chat"]
+    assert captured.purposes == []

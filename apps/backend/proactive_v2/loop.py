@@ -37,7 +37,6 @@ from agent.turns.orchestrator import TurnOrchestrator, TurnOrchestratorDeps
 from conversation.service import ConversationService
 from core.common.strategy_trace import StrategyTraceType, build_strategy_trace_envelope
 from core.common.diagnostic_log import diagnostic_context, diagnostic_line
-from core.desktop_presence import DesktopPresence
 from core.roles import RoleStore
 from proactive_v2.energy import (
     compute_energy,
@@ -49,7 +48,7 @@ from proactive_v2.config import ProactiveConfig
 from proactive_v2.memory_sampler import sample_memory_chunks
 from proactive_v2.sensor import Sensor
 from proactive_v2.state import ProactiveStateStore
-from proactive_v2.target_selection import ProactiveTargetResolver
+from proactive_v2.target_selection import DesktopPresenceView, ProactiveTargetResolver
 from session.manager import SessionManager
 from shiori_sdk.core.sessions import Presence
 
@@ -91,7 +90,7 @@ class ProactiveLoop:
         tick_dispatcher: Callable[[Callable[[], Any]], Any] | None = None,
         event_bus: EventBus | None = None,
         role_prompt_fn: Callable[[], str] | None = None,
-        desktop_presence: DesktopPresence | None = None,
+        desktop_presence: DesktopPresenceView | None = None,
         role_store: RoleStore | None = None,
         group_environment: "GroupEnvironment | None" = None,
     ) -> None:

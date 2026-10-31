@@ -88,7 +88,7 @@ UTF-8 YAML。字段在 `apps/backend/agent/plugin_host/manifest.py` 解析；外
 | `schedule_host` | `SCHEDULE_HOST` | 宿主（P6s）。按角色跑定时回合（`run_turn`）或直接投递（`deliver`），走当前发布代；端口本身跨代 |
 | `scheduler` | `SCHEDULER` | 系统插件 `schedule`（P6s）。只有创建、列出、取消角色的任务。消费方用 `optional_inject`，`get` 为 `None` 时不用定时能力。任务仍在 `<workspace>/schedules.json` |
 | `markdown_memory` | `MARKDOWN_MEMORY` | 宿主（P6b）。`role(role_id)` 给出角色的 Markdown 记忆：读 `MEMORY.md` / `SELF.md`、写 `SELF.md`、`PENDING.md` 两阶段合并（`snapshot_pending` → `commit_long_term` / `rollback_pending_snapshot`）、`read_recent_context`（当前仍可见的近期语境正文）、首版 SELF 是否待生成，以及角色 `memory_init_state` 里插件自有的键（`read_state` / `write_state`；宿主自己的初始化键读不到、写入抛 `ValueError`）。端口本身跨代 |
-| `proactive_host` | `PROACTIVE_HOST` | 宿主（P6b）。主动回合要用的宿主能力：角色串行 tick、被动回合是否忙碌、带核心校验的单次工具调用、主动投递、桌面在场、群动态、角色提示词、心情状态与校验、关闭思考的补全。跑回合和投递走当前发布代；端口本身跨代。主动循环尚未改走这个端口，P6b-4b 之前仍可增删成员 |
+| `proactive_host` | `PROACTIVE_HOST` | 宿主（P6b）。主动回合要用的宿主能力：角色串行 tick、被动回合是否忙碌、带核心校验的单次工具调用、主动投递、桌面在场、群动态、角色提示词、心情状态与校验、关闭思考的补全。跑回合和投递走当前发布代；端口本身跨代。P6b-4a 起，核心装配的循环经它进入 tick、读角色提示词、查被动忙碌和桌面在场；回合内的补全、工具和投递仍在宿主模块里，P6b-4b 之前仍可增删成员 |
 | `conversation` | `CONVERSATION` | 宿主（P6b），每个代一份。`deliver_initiated_reply(InitiatedReply) -> InitiatedDelivery` 以会话所属角色投递一条主动回复，可带目标、媒体、心情、自然回复序列和工具事实，返回已落库的消息 id 与是否完整发出 |
 | `memory_optimizer` | `MEMORY_OPTIMIZER` | 系统插件 `memory_optimizer`（P6b）。只有 `active_run()`：正在整理的角色与开始时间。核心 `get` 它在任务面板列出记忆维护，`None` 时不列 |
 
@@ -178,7 +178,7 @@ npm 包、宿主 `setup.py` 和 host-testing 的精确 pin 必须等于这个版
 
 角色命名空间在 `ROLES.plugin_settings(role_id, namespace)`。目前只有 `proactive`，其它名字抛 `KeyError`。宿主仍用核心的主动配置解析它，直到主动行为移出核心。写入和桌面保存角色一样会清空已退役的 `candidates`（#427），插件读出再写回不会把旧绑定带回来。渲染侧的 `roleSettings` 槽已经存在，不是这次新加的。
 
-`CONVERSATION.deliver_initiated_reply(reply: InitiatedReply)` 由宿主按代提供，返回 `InitiatedDelivery`（已落库的消息 id 与 `complete`）。投递角色由 `session_key`（`role:<role_id>`）决定，目标必须属于该角色。`InitiatedReply` 与 `PROACTIVE_HOST` 一样，在 P6b-4b 主动循环接上之前仍可增删字段，4.0 发版时定稿。进程级循环用 `PROACTIVE_HOST.deliver`，它每次都走当前发布代；持有某一代 `CONVERSATION` 的插件只在那一代里投递。`InitiatedMessageCommitted` 带角色、渠道、会话、线程、消息 id、回复正文、所用工具和 `source`（插件发出的是 `InitiatedReply.source`，宿主推送是 `"push"`）。`RoleMarkdownMemory.read_recent_context` 读当前仍可见的近期语境。`PROACTIVE_HOST` 是主动回合的宿主端口；主动循环改走它是后续改动。4.x 不能再给这些 Protocol 加方法。
+`CONVERSATION.deliver_initiated_reply(reply: InitiatedReply)` 由宿主按代提供，返回 `InitiatedDelivery`（已落库的消息 id 与 `complete`）。投递角色由 `session_key`（`role:<role_id>`）决定，目标必须属于该角色。`InitiatedReply` 与 `PROACTIVE_HOST` 一样，在 P6b-4b 主动循环接上之前仍可增删字段，4.0 发版时定稿。进程级循环用 `PROACTIVE_HOST.deliver`，它每次都走当前发布代；持有某一代 `CONVERSATION` 的插件只在那一代里投递。`InitiatedMessageCommitted` 带角色、渠道、会话、线程、消息 id、回复正文、所用工具和 `source`（插件发出的是 `InitiatedReply.source`，宿主推送是 `"push"`）。`RoleMarkdownMemory.read_recent_context` 读当前仍可见的近期语境。`PROACTIVE_HOST` 是主动回合的宿主端口。P6b-4a 起，核心装配的循环经它进入 tick、读角色提示词、查被动忙碌和桌面在场；回合内的补全、工具执行和投递仍调用宿主模块，搬进插件时再接到端口。4.x 不能再给这些 Protocol 加方法。
 
 ## 测试
 

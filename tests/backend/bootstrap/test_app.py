@@ -247,3 +247,57 @@ def test_desktop_presence_is_app_owned_and_present_before_any_report(
 ):
     app = AppRuntime(empty_config, tmp_path, features=DESKTOP_RUNTIME_FEATURES)
     assert app.desktop_presence.is_desktop_present() is True
+
+
+@pytest.mark.asyncio
+async def test_started_runtime_serves_proactive_host_and_conversation(
+    tmp_path, empty_config
+):
+    """The kernel's proactive port reads this process, and delivery rejects a bad session.
+
+    A missing provide leaves ``get`` empty. A host that copied presence at
+    startup would stay present after ``report(False)``. A conversation that
+    skipped the session check would accept ``not-a-role``.
+    """
+    from bootstrap.app import RuntimeFeatures
+    from core.roles import RoleStore
+    from shiori_sdk.core.conversation import CONVERSATION, InitiatedReply
+    from shiori_sdk.core.proactive_host import PROACTIVE_HOST
+
+    RoleStore(tmp_path).create_role(
+        role_id="mira", name="米拉", system_prompt="只有米拉会说的规矩"
+    )
+    app = AppRuntime(
+        empty_config,
+        tmp_path,
+        features=RuntimeFeatures(enable_message_channels=False, enable_proactive=False),
+    )
+    await app.start()
+    try:
+        assert app.core is not None and app.core.plugin_manager is not None
+        kernel = app.core.plugin_manager.kernel
+        host = kernel.get(PROACTIVE_HOST)
+        conversation = kernel.get(CONVERSATION)
+        assert host is not None and conversation is not None
+        assert host.compile_role_prompt("mira")
+        with pytest.raises(ValueError, match="role not found"):
+            host.compile_role_prompt("missing")
+        assert host.user_at_desktop() is True
+        app.desktop_presence.report(False)
+        assert host.user_at_desktop() is False
+        with pytest.raises(ValueError, match="主动投递只接受角色会话"):
+            await conversation.deliver_initiated_reply(
+                InitiatedReply(
+                    session_key="not-a-role",
+                    content="你好",
+                    source="proactive",
+                    channel="desktop",
+                    chat_id="role:mira",
+                    mood="平静",
+                    thought="我想问一句",
+                    expected_mood_updated_at="",
+                    moods=("平静",),
+                )
+            )
+    finally:
+        await app.shutdown()

@@ -41,6 +41,7 @@ from agent.tools.account_delivery import AccountSendTool
 from agent.tools.message_push import MessagePushTool
 from agent.tools.registry import ToolRegistry
 from agent.turns.channel_sequence import ChannelSequenceOwner
+from agent.proactive_host import HostProactiveRunner
 from bootstrap.proactive import build_proactive_runtime
 from bus.event_bus import EventBus
 from bus.events_lifecycle import InitiatedMessageCommitted
@@ -291,11 +292,49 @@ async def proactive_host(
     registry = RoleRuntimeRegistry(
         RoleRepository(roles), model_resolver=cast(Any, _ModelRuntime())
     )
+    # A hand-driven tick has no generation lease, so the port pins this one.
+    # Natural replies bind ``reply_sequences`` on that lease.
+    reply_sequences = ChannelSequenceOwner()
     agent_loop = SimpleNamespace(
         role_runtime_registry=registry,
         processing_state=SimpleNamespace(is_busy=passive_busy),
         tools=tools,
+        bus=MessageBus(),
     )
+    group_environment = GroupEnvironment(workspace, sessions.conversation_store)
+    # The published generation the port pins. Desktop presence and the busy
+    # flag are the ones the scenarios mutate.
+    published = SimpleNamespace(
+        role_runtime_registry=registry,
+        loop=agent_loop,
+        group_environment=group_environment,
+        desktop_presence=desktop_presence,
+    )
+
+    class _PublishedRuntime:
+        def __init__(self) -> None:
+            self.core = published
+            self.desktop_presence = desktop_presence
+
+        def acquire(self) -> Any:
+            runtime = self
+
+            class _Lease:
+                def __init__(self) -> None:
+                    self.core = runtime.core
+                    self.reply_sequences = reply_sequences
+
+                async def __aenter__(self) -> Any:
+                    return self
+
+                async def __aexit__(self, *_exc: object) -> None:
+                    return None
+
+            return _Lease()
+
+        async def wait_for_admission(self) -> None:
+            return None
+
     affection_getter = AffectionGetter()
     affection_getter.bind(lambda: cast(Affection, affection))
     # The production presence of this session store (bootstrap/tools.py).
@@ -314,8 +353,8 @@ async def proactive_host(
             kernel=core_kernel,
             proactive_motives=[RelationshipStrategy(affection_getter)],
             event_bus=bus,
-            desktop_presence=desktop_presence,
-            group_environment=GroupEnvironment(workspace, sessions.conversation_store),
+            proactive_host=HostProactiveRunner(lambda: _PublishedRuntime()),
+            group_environment=group_environment,
         )
     )
     for task in cast(list[Coroutine[Any, Any, None]], tasks):

@@ -2,8 +2,10 @@
 
 One runner serves every generation. Work that runs or delivers pins the
 published generation; reads use the current lease when there is one, otherwise
-the published generation, and do not wait. The proactive loop still calls the
-host directly.
+the published generation, and do not wait. The loop assembled in core enters
+ticks, reads the role prompt, checks whether a passive turn is busy, and reads
+desktop presence through this runner. Completion, tool execution and delivery
+inside a turn still call host modules until the loop moves into the plugin.
 """
 
 from __future__ import annotations
