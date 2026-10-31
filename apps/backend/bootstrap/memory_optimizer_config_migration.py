@@ -43,6 +43,12 @@ _UNLOCATABLE_MESSAGE = (
 )
 
 
+_UNKNOWN_KEYS_MESSAGE = (
+    "{path} 的 [agent.maintenance] 只能有 memory_optimizer_enabled 与 "
+    "memory_optimizer_interval_seconds，无法自动迁移；请先删掉其他键"
+)
+
+
 def migrate_legacy_memory_optimizer_config(path: Path) -> None:
     """Migrates ``path`` once; nothing to do without the legacy keys."""
     if not path.is_file():
@@ -57,7 +63,7 @@ def migrate_legacy_memory_optimizer_config(path: Path) -> None:
     root_keys = [key for key in _LEGACY_KEYS if key in data]
     if table is None and not root_keys:
         return
-    maintenance = _legacy_table(table) if table is not None else {}
+    maintenance = _legacy_table(table, path) if table is not None else {}
     legacy = {key: maintenance.get(key, data.get(key)) for key in _LEGACY_KEYS}
     existing = _existing_plugin_values(data)
     values = {**_plugin_values(legacy), **existing}
@@ -77,13 +83,10 @@ def migrate_legacy_memory_optimizer_config(path: Path) -> None:
     atomic_save_text(path, updated)
 
 
-def _legacy_table(raw: object) -> dict[str, Any]:
+def _legacy_table(raw: object, path: Path) -> dict[str, Any]:
     """``[agent.maintenance]`` only ever held the two optimizer keys."""
     if not isinstance(raw, dict) or set(raw) - set(_LEGACY_KEYS):
-        raise ValueError(
-            "agent.maintenance only accepts memory_optimizer_enabled and "
-            "memory_optimizer_interval_seconds"
-        )
+        raise ValueError(_UNKNOWN_KEYS_MESSAGE.format(path=path))
     return raw
 
 

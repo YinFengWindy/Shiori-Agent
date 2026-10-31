@@ -40,10 +40,8 @@ async def setup(ctx: PluginRuntimeContext) -> None:
         roles=ctx.require(ROLES),
         memory=ctx.require(MARKDOWN_MEMORY),
         models=ctx.require(MODELS),
+        interval_seconds=config.interval_seconds,
         is_active=lambda: resources.active,
     )
-    ctx.effect(
-        "memory_optimizer.binding",
-        service.attach(binding, interval_seconds=config.interval_seconds),
-    )
+    ctx.effect("memory_optimizer.binding", service.attach(binding))
     ctx.provide(MEMORY_OPTIMIZER, service)

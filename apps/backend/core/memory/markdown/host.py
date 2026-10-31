@@ -8,11 +8,13 @@ generations.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from pathlib import Path
 
 from core.memory.markdown_schema import DOCUMENT_DEFAULTS
 from core.roles import RoleStore
+from core.roles.memory_service import HOST_MEMORY_STATE_KEYS
 from core.roles.self_seed_state import resolve_self_seed_state
 
 from .runtime import MarkdownMemoryStore, resolve_markdown_store
@@ -58,9 +60,23 @@ class HostRoleMarkdownMemory:
 
     def read_state(self) -> Mapping[str, object]:
         role = self._roles.get_role(self._role_id)
-        return dict(role.memory_init_state) if role is not None else {}
+        if role is None:
+            return {}
+        return {
+            key: value
+            for key, value in role.memory_init_state.items()
+            if key not in HOST_MEMORY_STATE_KEYS
+        }
 
     def write_state(self, key: str, value: object) -> None:
+        if key in HOST_MEMORY_STATE_KEYS:
+            raise ValueError(f"memory state key {key!r} is reserved by the host")
+        try:
+            _ = json.dumps(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"memory state value for {key!r} is not JSON serializable"
+            ) from exc
         # Other flows (such as the first SELF generation) may rewrite the same
         # state while the caller awaited a model, so the role is read again
         # under the store lock and only this key changes.

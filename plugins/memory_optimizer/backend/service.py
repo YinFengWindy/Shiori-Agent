@@ -1,10 +1,11 @@
 """The process-wide optimization loop, shared by every generation of the plugin.
 
-Each generation's setup attaches its host services (a ``OptimizerBinding``);
-the loop always runs on the published generation's binding, or the newest one
-while none is published yet. A generation that retires while it runs a role
-has that run cancelled (the pending facts go back) and the role runs again on
-the current binding.
+Each generation's setup attaches its host services and interval (a
+``OptimizerBinding``). The loop only runs on a published generation's binding
+and reads the interval from it, so a candidate generation that is set up and
+then discarded changes nothing. A generation that retires while it runs a
+role has that run cancelled (the pending facts go back) and the role runs
+again on the current binding.
 """
 
 from __future__ import annotations
@@ -21,19 +22,26 @@ from shiori_sdk.core.memory_optimizer import MemoryOptimizationRun
 from shiori_sdk.models import RoleModels
 from shiori_sdk.roles import Roles
 
-from .config import DEFAULT_INTERVAL_SECONDS
 from .optimizer import LAST_OPTIMIZED_STATE_KEY, MemoryOptimizer, self_rewrite_pending
 
 logger = logging.getLogger(__name__)
 
+# How often the loop looks again for a published binding while none is.
+# Publication has no notification, so this is polled.
+_PUBLICATION_POLL_SECONDS = 1.0
+
 
 @dataclass(frozen=True, eq=False)
 class OptimizerBinding:
-    """One generation's host services. ``is_active`` tells whether it is published."""
+    """One generation's host services and interval.
+
+    ``is_active`` tells whether the generation is published.
+    """
 
     roles: Roles
     memory: MarkdownMemory
     models: RoleModels
+    interval_seconds: int
     is_active: Callable[[], bool]
 
 
@@ -46,11 +54,13 @@ def _report_loop_death(task: asyncio.Task[None]) -> None:
 class MemoryOptimizerService:
     """Optimizes every role once per interval, aligned to the interval's boundaries.
 
-    Idle when constructed. The first ``attach`` starts the loop: it first
-    optimizes the roles that are overdue (never optimized, optimized longer
-    than an interval ago, or whose SELF.md still waits for the current writing
-    rules), then every role at each boundary. ``close`` (plugin disabled or
-    process exit) stops the loop and cancels the running optimization.
+    Idle when constructed. The first ``attach`` starts the loop; it waits for
+    a published binding, then first optimizes the roles that are overdue
+    (never optimized, optimized longer than an interval ago, or whose SELF.md
+    still waits for the current writing rules), then every role at each
+    boundary. A round that fails is logged and the loop goes on, as each
+    optimization's own failure is. ``close`` (plugin disabled or process
+    exit) stops the loop and cancels the running optimization.
     """
 
     def __init__(
@@ -61,41 +71,27 @@ class MemoryOptimizerService:
     ) -> None:
         self._optimizer = optimizer or MemoryOptimizer()
         self._now = now_fn or datetime.now
-        self._interval = DEFAULT_INTERVAL_SECONDS
         self._bindings: list[OptimizerBinding] = []
-        self._bound = asyncio.Event()
-        self._rescheduled = asyncio.Event()
+        # Set on every attach and detach: the published binding, and with it
+        # the interval, may have changed.
+        self._changed = asyncio.Event()
         self._loop: asyncio.Task[None] | None = None
         self._in_flight: tuple[OptimizerBinding, asyncio.Task[None]] | None = None
         self._run: MemoryOptimizationRun | None = None
         self._closed = False
 
-    def attach(
-        self, binding: OptimizerBinding, *, interval_seconds: int
-    ) -> Callable[[], None]:
-        """Adds a generation's services and returns its detach.
-
-        ``interval_seconds`` replaces the current interval; the wait for the
-        next boundary is recomputed.
-        """
+    def attach(self, binding: OptimizerBinding) -> Callable[[], None]:
+        """Adds a generation's services and returns its detach."""
         if self._closed:
             raise RuntimeError("记忆整理服务已关闭")
         self._bindings.append(binding)
-        self._bound.set()
-        if interval_seconds != self._interval:
-            self._interval = interval_seconds
-            self._rescheduled.set()
+        self._changed.set()
         if self._loop is None:
             # A fresh context: the loop outlives the generation that started it.
             self._loop = asyncio.create_task(
                 self._run_forever(), name="memory_optimizer:loop", context=Context()
             )
             self._loop.add_done_callback(_report_loop_death)
-            logger.info(
-                "[memory_optimizer] 整理循环已启动，间隔=%ds (%.1fh)，对齐整点",
-                self._interval,
-                self._interval / 3600,
-            )
         return lambda: self._detach(binding)
 
     def active_run(self) -> MemoryOptimizationRun | None:
@@ -120,44 +116,59 @@ class MemoryOptimizerService:
     def _detach(self, binding: OptimizerBinding) -> None:
         if binding in self._bindings:
             self._bindings.remove(binding)
-        if not self._bindings:
-            self._bound.clear()
+        self._changed.set()
         in_flight = self._in_flight
         if in_flight is not None and in_flight[0] is binding:
             _ = in_flight[1].cancel()
 
     async def _run_forever(self) -> None:
-        await self._optimize_roles(overdue_only=True)
+        await self._round(overdue_only=True)
         while True:
             await self._wait_for_boundary()
-            await self._optimize_roles(overdue_only=False)
+            await self._round(overdue_only=False)
+
+    async def _round(self, *, overdue_only: bool) -> None:
+        """One pass over the roles; its failure skips only this pass."""
+        try:
+            await self._optimize_roles(overdue_only=overdue_only)
+        except Exception:
+            logger.exception("[memory_optimizer] 本轮整理异常，等下一轮")
 
     async def _wait_for_boundary(self) -> None:
         while True:
-            self._rescheduled.clear()
-            seconds = self._seconds_until_boundary()
+            binding = await self._binding()
+            self._changed.clear()
+            seconds = self._seconds_until_boundary(binding.interval_seconds)
             logger.info(
                 "[memory_optimizer] 距下次优化 %.0f 秒 (%.1f 小时)",
                 seconds,
                 seconds / 3600,
             )
             try:
-                _ = await asyncio.wait_for(self._rescheduled.wait(), timeout=seconds)
+                _ = await asyncio.wait_for(self._changed.wait(), timeout=seconds)
             except TimeoutError:
                 return
 
-    def _seconds_until_boundary(self) -> float:
-        """Seconds until the next multiple of the interval since the epoch."""
+    def _seconds_until_boundary(self, interval: int) -> float:
+        """Seconds until the next multiple of ``interval`` since the epoch."""
         now = self._now()
         now_ts = now.replace(second=0, microsecond=0).timestamp()
-        next_ts = (now_ts // self._interval + 1) * self._interval
+        next_ts = (now_ts // interval + 1) * interval
         return max(1.0, next_ts - now.timestamp())
 
     async def _binding(self) -> OptimizerBinding:
-        while not self._bindings:
-            _ = await self._bound.wait()
-        active = [binding for binding in self._bindings if binding.is_active()]
-        return (active or self._bindings)[-1]
+        """The newest published binding, waiting while none is published."""
+        while True:
+            active = [binding for binding in self._bindings if binding.is_active()]
+            if active:
+                return active[-1]
+            self._changed.clear()
+            try:
+                _ = await asyncio.wait_for(
+                    self._changed.wait(), timeout=_PUBLICATION_POLL_SECONDS
+                )
+            except TimeoutError:
+                pass
 
     async def _optimize_roles(self, *, overdue_only: bool) -> None:
         binding = await self._binding()
@@ -219,4 +230,4 @@ class MemoryOptimizerService:
             return True
         if last.tzinfo is None:
             last = last.astimezone()
-        return now - last >= timedelta(seconds=self._interval)
+        return now - last >= timedelta(seconds=binding.interval_seconds)

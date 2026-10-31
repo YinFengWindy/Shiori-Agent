@@ -76,15 +76,19 @@ class RoleMarkdownMemory(Protocol):
         ...
 
     def read_state(self) -> Mapping[str, object]:
-        """A copy of the role's memory state; empty once the role is deleted."""
+        """A copy of the plugin-owned memory state; empty once the role is deleted.
+
+        The host's own initialization keys in the same record are left out.
+        """
         ...
 
     def write_state(self, key: str, value: object) -> None:
         """Stores one JSON value under ``key``; no-op once the role is deleted.
 
         Only ``key`` changes: other values, including ones written meanwhile,
-        are kept. Use keys the plugin owns; the host's own initialization
-        state shares this record.
+        are kept. Raises ``ValueError`` when ``key`` is one of the host's own
+        initialization keys (such as ``self_seed``) or ``value`` is not JSON
+        serializable.
         """
         ...
 
