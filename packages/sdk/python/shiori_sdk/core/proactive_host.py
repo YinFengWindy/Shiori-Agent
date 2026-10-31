@@ -6,6 +6,9 @@ generation admits work. A caller that already holds a lease keeps that lease.
 Reads use the current lease's generation when there is one, otherwise the
 published generation, and do not wait. The proactive loop still calls the host
 directly; switching it onto this port is a later change.
+
+This key and ``InitiatedReply`` may still gain or lose members until the
+proactive loop runs on them (P6b-4b); they are fixed when SDK 4.0 is released.
 """
 
 from __future__ import annotations
@@ -14,8 +17,9 @@ from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from types import MappingProxyType
-from typing import Protocol
+from typing import Literal, Protocol
 
+from shiori_sdk.core.conversation import InitiatedDelivery, InitiatedReply
 from shiori_sdk.core.tools import ToolStatus
 from shiori_sdk.kernel import Key
 
@@ -49,8 +53,9 @@ class ProactiveToolOutcome:
     """How one checked tool call ended.
 
     ``arguments`` are the arguments the tool ran with (or the model's, when
-    the call was denied). ``text`` is the tool's text, or the denial reason.
-    ``finalize`` asks the loop to stop, and is only set on a denial.
+    the call was denied). ``text`` is ``str()`` of what the invoker returned,
+    the text the host's proactive tool loop records today, or the denial
+    reason. ``finalize`` asks the loop to stop, and is only set on a denial.
     """
 
     text: str
@@ -68,12 +73,19 @@ core checks allow the call."""
 
 
 @dataclass(frozen=True, kw_only=True)
-class ModelToolCall:
-    """One tool call parsed from a model completion."""
+class CompletionToolCall:
+    """One tool call parsed from a model completion.
+
+    With ``defer_tool_argument_errors`` a call whose arguments did not parse
+    keeps ``arguments`` empty, the model's text in ``raw_arguments`` and the
+    parse error in ``arguments_error``; such a call must not be executed.
+    """
 
     id: str
     name: str
     arguments: Mapping[str, object]
+    raw_arguments: str | None = None
+    arguments_error: str | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "arguments", _freeze(self.arguments))
@@ -88,21 +100,17 @@ class ModelCompletion:
     """
 
     content: str
-    tool_calls: tuple[ModelToolCall, ...] = ()
+    tool_calls: tuple[CompletionToolCall, ...] = ()
     thinking: str | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
-class SkillInfo:
-    """A skill the host can load. ``source`` is ``workspace`` or ``builtin``."""
-
-    name: str
-    source: str
-
-
-@dataclass(frozen=True, kw_only=True)
 class RoleReplyState:
-    """The role's mood catalog and when its current mood was last stored."""
+    """The role's mood catalog and when its current mood was last stored.
+
+    Read it when a tick starts and copy both fields into ``InitiatedReply``
+    (``moods`` and ``expected_mood_updated_at``).
+    """
 
     moods: tuple[str, ...]
     mood_updated_at: str
@@ -126,7 +134,8 @@ class ProactiveHost(Protocol):
         """Run ``operation`` as the role's proactive tick.
 
         The tick is serialized with the role's other work, under the role's
-        desktop thread, with the chat model snapshot active. A missing role
+        desktop thread, with the role's chat model snapshot active: a
+        ``complete`` call inside ``operation`` uses that model. A missing role
         raises before ``operation`` runs.
         """
         ...
@@ -148,12 +157,12 @@ class ProactiveHost(Protocol):
         """
         ...
 
-    async def deliver(self, reply: "InitiatedReply") -> str:
+    async def deliver(self, reply: InitiatedReply) -> InitiatedDelivery:
         """Deliver ``reply`` on the published generation.
 
-        Same payload and result as ``CONVERSATION.deliver_initiated_reply``.
-        Pins a lease so a process-level loop does not keep a previous
-        generation's conversation.
+        Same payload, result and errors as
+        ``CONVERSATION.deliver_initiated_reply``. Pins a lease so a
+        process-level loop does not keep a previous generation's conversation.
         """
         ...
 
@@ -168,26 +177,18 @@ class ProactiveHost(Protocol):
         """External chats' recent activity around ``now``, or empty."""
         ...
 
-    def group_note(self, role_id: str, thread_id: str) -> str:
-        """The role's note for one external chat, as a prompt section or empty."""
-        ...
-
     def compile_role_prompt(self, role_id: str) -> str:
         """The role prompt proactive turns use, including channel identities.
 
-        Raises when the role is gone or the prompt is empty.
-        """
-        ...
-
-    def affection_prompt(self, role_id: str) -> str | None:
-        """The affection block, or None while affection is off or uninitialized.
-
-        Raises when the role is gone.
+        Raises ``ValueError`` when the role is gone or the prompt is empty.
         """
         ...
 
     def reply_state(self, role_id: str) -> RoleReplyState:
-        """Moods the role may use, and the stored mood's timestamp."""
+        """Moods the role may use, and the stored mood's timestamp.
+
+        Raises ``ValueError`` when the role is gone.
+        """
         ...
 
     def validate_reply(
@@ -201,8 +202,9 @@ class ProactiveHost(Protocol):
     ) -> ValidatedRoleReply:
         """Validate one reply against the role's mood catalog.
 
-        Raises ``ValueError`` when the mood is outside the catalog, the
-        thought is not a short first-person line, or required text is blank.
+        Raises ``ValueError`` when the role is gone, the mood is outside the
+        catalog, the thought is not a short first-person line, or required
+        text is blank.
         """
         ...
 
@@ -212,43 +214,25 @@ class ProactiveHost(Protocol):
         *,
         tools: Sequence[Mapping[str, object]] = (),
         tool_choice: str | Mapping[str, object] = "auto",
+        max_tokens: int | None = None,
+        call_purpose: Literal["default", "auxiliary"] = "default",
         disable_thinking: bool = True,
         defer_tool_argument_errors: bool = False,
     ) -> ModelCompletion:
         """Complete one chat request on the published model.
 
-        The fallback provider forces thinking off. An active role model
-        snapshot keeps that model's own effort and ignores ``disable_thinking``.
-        ``tool_choice`` may be ``"auto"`` or a tool-choice object.
-        """
-        ...
-
-    def list_skills(self) -> tuple[SkillInfo, ...]:
-        """Skills visible to the role. A workspace skill hides a builtin of the same name."""
-        ...
-
-    def load_skill(self, name: str) -> str | None:
-        """The skill's ``SKILL.md``, workspace first, or None when it is absent."""
-        ...
-
-    def render_skills(self, names: Sequence[str]) -> str:
-        """Prompt text for ``names``. Unknown names are skipped."""
-        ...
-
-    def recent_context(self, role_id: str) -> str:
-        """The role's visible recent-context body.
-
-        Empty when the role is gone, the document is missing, unstamped, or
-        no longer visible. A missing role does not create a memory directory.
+        Inside ``run_tick`` the role's chat model snapshot answers and keeps
+        its own reasoning effort. Outside a tick the generation's model
+        answers through a provider that forces thinking off, or through the
+        generation's own provider when no API key is configured; only that
+        last case honors ``disable_thinking``. ``max_tokens`` defaults to the
+        generation's configured cap. ``call_purpose="auxiliary"`` marks a
+        short side request: it opts out of the configured reasoning and does
+        not calibrate the input budget. ``tool_choice`` may be ``"auto"`` or
+        a tool-choice object.
         """
         ...
 
 
 PROACTIVE_HOST: Key[ProactiveHost] = Key("proactive_host")
 """Proactive ticks, delivery and the host facts they read. The host provides this."""
-
-
-# Imported for the ``deliver`` annotation. A function-local import would hide
-# the name from ``get_type_hints``; the conversation module does not import
-# this one.
-from shiori_sdk.core.conversation import InitiatedReply as InitiatedReply  # noqa: E402

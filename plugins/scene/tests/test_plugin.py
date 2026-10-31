@@ -9,19 +9,20 @@ from typing import Any
 
 from shiori_sdk.core.scene import SCENE, SCENE_HOST, SceneHistoryMessage, SceneSubject
 from shiori_sdk.core.services import BACKGROUND
-from shiori_sdk.role_events import ProactiveMessageCommitted
+from shiori_sdk.core.conversation import InitiatedMessageCommitted
 from shiori_sdk.testing.service_context import FakeServiceContext
 
 from plugins.scene.backend.plugin import setup
 
 PACKAGE_DIR = Path(__file__).resolve().parents[1]
 
-_PROACTIVE = ProactiveMessageCommitted(
+_PROACTIVE = InitiatedMessageCommitted(
     session_key="role:mira",
     channel="desktop",
     role_id="mira",
     thread_id="desktop:mira",
     assistant_response="在吗？",
+    source="proactive",
 )
 
 

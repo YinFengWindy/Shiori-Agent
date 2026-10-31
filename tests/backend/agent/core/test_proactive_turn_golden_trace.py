@@ -4,7 +4,7 @@ P6b moves the proactive loop, its tick, delivery and Drift into a plugin.
 These scenarios record what one tick does today, seen only from outside:
 what the transport (desktop sender or the account's platform send) received
 and when, the messages and mood the role session holds afterwards, the
-``ProactiveMessageCommitted`` events on the domain bus, the session presence,
+``InitiatedMessageCommitted`` events on the domain bus, the session presence,
 what the affection socket was told, the Drift state file, and which tools the
 model was offered. They never name a phase, gate, pipeline or tool module, so
 the moved code must pass them unchanged.
@@ -43,7 +43,7 @@ from agent.tools.registry import ToolRegistry
 from agent.turns.channel_sequence import ChannelSequenceOwner
 from bootstrap.proactive import build_proactive_runtime
 from bus.event_bus import EventBus
-from bus.events_lifecycle import ProactiveMessageCommitted
+from bus.events_lifecycle import InitiatedMessageCommitted
 from bus.queue import MessageBus
 from conversation.service import desktop_thread_id
 from core.accounts.delivery_ledger import AccountDeliveryLedger
@@ -140,8 +140,8 @@ class ProactiveHost:
     desktop_presence: DesktopPresence
     loop: ProactiveLoop
     delivered: list[Delivered] = field(default_factory=list[Delivered])
-    events: list[ProactiveMessageCommitted] = field(
-        default_factory=list[ProactiveMessageCommitted]
+    events: list[InitiatedMessageCommitted] = field(
+        default_factory=list[InitiatedMessageCommitted]
     )
     # Per event: whether its message_id was already stored when it arrived
     # (the desktop bridge looks the message up by that id).
@@ -325,12 +325,12 @@ async def proactive_host(
     )
     holder["host"] = host
 
-    def committed(event: ProactiveMessageCommitted) -> None:
+    def committed(event: InitiatedMessageCommitted) -> None:
         host.events.append(event)
         stored_ids = {str(message["id"]) for message in host.stored()}
         host.events_after_store.append(event.message_id in stored_ids)
 
-    bus.on(ProactiveMessageCommitted, committed)
+    bus.on(InitiatedMessageCommitted, committed)
 
     # Natural messages are paced like typing; the golden trace does not wait.
     async def no_pause(_: object) -> None:

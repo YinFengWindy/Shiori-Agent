@@ -22,6 +22,7 @@ from datetime import datetime
 from types import MappingProxyType
 from typing import Literal, Protocol
 
+from shiori_sdk.accounts.targets import AccountTarget
 from shiori_sdk.commands import CommandInput
 from shiori_sdk.kernel import Key
 from shiori_sdk.prompting import PromptSectionRender
@@ -248,56 +249,47 @@ COMMANDS: Key[Commands] = Key("commands")
 """Provided by the core conversation module; plugins declare it in ``inject``."""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class InitiatedMessageCommitted:
-    """An initiated reply was stored.
+    """A role message the user did not ask for was stored on the role session.
 
-    Field order matches the historical ``ProactiveMessageCommitted``
-    constructor, with ``source`` last so existing keyword and positional
-    callers stay valid. ``source`` names who started the reply (a plugin id,
-    a host component, or the push tool). Empty means the publisher did not
-    say. ``tools_used`` names the tools recorded on the committed message.
+    The host emits this after the message is committed, so ``message_id``
+    names a stored message. Two publishers emit it:
 
-    The host emits this when initiated delivery or a host-owned push commits.
-    Plugins watch it; they do not construct it. ``ProactiveMessageCommitted``
-    is this class for one release. Folded into the 4.0 baseline so 4.x does
-    not need a new event type (D19, D22).
+    - initiated delivery (``CONVERSATION`` / ``PROACTIVE_HOST.deliver``, and
+      the host's own proactive loop until it moves into the plugin), once per
+      delivered reply. A natural sequence emits once for the delivered
+      messages: ``message_id`` is the last one and ``assistant_response``
+      their texts joined by a blank line. ``tools_used`` is
+      ``("message_push",)``.
+    - a host-owned push (the ``account_send`` tool reaching an external chat
+      outside a live turn), once per push. ``tools_used`` names the tool.
+
+    ``thread_id`` is the conversation thread the message belongs to; a role's
+    session mixes threads, so subscribers read history with it.
+
+    ``source`` names who started the message: the ``InitiatedReply.source``
+    a plugin passed (by convention its plugin id; the host's proactive loop
+    and Drift use ``"proactive"``), or ``"push"`` for a host-owned push.
+
+    Plugins watch it; they do not construct it.
     """
 
     session_key: str
     channel: str
     role_id: str
     thread_id: str
+    source: str
     chat_id: str = ""
     assistant_response: str = ""
     tools_used: tuple[str, ...] = ()
     message_id: str = ""
-    source: str = ""
 
 
 def _freeze(mapping: Mapping[str, object]) -> Mapping[str, object]:
     if isinstance(mapping, MappingProxyType):
         return mapping
     return MappingProxyType(dict(mapping))
-
-
-@dataclass(frozen=True, kw_only=True)
-class InitiatedAccountTarget:
-    """Where an account-channel reply is sent.
-
-    ``account_channel`` is the transport (``telegram`` and the like). The
-    remaining fields are the account target the channel already accepts.
-    """
-
-    account_channel: str
-    target_kind: str
-    target_id: str
-    message_thread_id: int | None = None
-    group_id: str = ""
-    mention_ids: tuple[str, ...] = ()
-
-    def __post_init__(self) -> None:
-        object.__setattr__(self, "mention_ids", tuple(self.mention_ids))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -321,12 +313,34 @@ class InitiatedToolFact:
 class InitiatedReply:
     """One initiated reply, including its target, media and natural sequence.
 
+    The reply speaks for the role that owns ``session_key``, which must be a
+    role session (``role:<role_id>``); any other key raises ``ValueError``.
+    The target must be one that role can reach: its own desktop chat
+    (``channel="desktop"``, ``chat_id="role:<role_id>"``), a private chat
+    with the bound user through one of its online accounts, or an
+    ``account_target`` sent through the role's account on
+    ``account_channel``. Both account fields are given together or not at
+    all. With an account target, ``channel`` / ``chat_id`` name the chat the
+    reply is recorded under; a sequence first opens there, so for a sequence
+    they must also be a chat the role can reach.
+
+    ``expected_mood_updated_at`` and ``moods`` are the
+    ``PROACTIVE_HOST.reply_state(role_id)`` the caller read when its work
+    started. The mood and thought are validated against ``moods``. When the
+    role's stored mood changed after that read (a passive reply landed in
+    between) the reply is stale: a single reply raises without sending; a
+    sequence is still sent and stored, but its mood and thought do not
+    replace the newer state.
+
     ``content`` is the text stored on the role session. When ``messages`` is
     non-empty it must equal those texts joined by a blank line, and natural
     chat must be on for the role; delivery then sends each text as its own
-    message and stores them in order. ``account_target`` replaces the
-    ``channel`` / ``chat_id`` pair for account transports. ``tool_facts``
-    ride along with ``messages`` only.
+    message and stores them in order. Media rides on the first message.
+    ``tool_facts`` ride along with ``messages`` only.
+
+    The stored messages are marked ``proactive`` with source ``proactive`` and
+    ``tools_used=["message_push"]`` whatever ``source`` says; ``source`` only
+    reaches ``InitiatedMessageCommitted``. They carry no evidence item ids.
     """
 
     session_key: str
@@ -336,15 +350,40 @@ class InitiatedReply:
     chat_id: str
     mood: str
     thought: str
+    expected_mood_updated_at: str
+    moods: tuple[str, ...]
     media: tuple[str, ...] = ()
     messages: tuple[str, ...] = ()
-    account_target: InitiatedAccountTarget | None = None
+    account_channel: str = ""
+    account_target: AccountTarget | None = None
     tool_facts: tuple[InitiatedToolFact, ...] = ()
 
     def __post_init__(self) -> None:
+        if bool(self.account_channel) != (self.account_target is not None):
+            raise ValueError("account_channel 与 account_target 必须同时给出")
+        object.__setattr__(self, "moods", tuple(self.moods))
         object.__setattr__(self, "media", tuple(self.media))
         object.__setattr__(self, "messages", tuple(self.messages))
         object.__setattr__(self, "tool_facts", tuple(self.tool_facts))
+
+
+@dataclass(frozen=True, kw_only=True)
+class InitiatedDelivery:
+    """What one initiated delivery stored.
+
+    ``message_ids`` are the committed messages, in order. ``complete`` is
+    True only when every message of the reply was sent and stored.
+
+    An incomplete result is not an error. For a single reply it means the
+    transport refused it (for instance a desktop chat that is not the role's
+    own) and nothing was stored. For a sequence it means a newer user message
+    in that chat, the role's removal or natural chat being switched off
+    stopped it: the prefix already sent is stored and announced (possibly
+    none), the rest is dropped.
+    """
+
+    message_ids: tuple[str, ...]
+    complete: bool
 
 
 class Conversation(Protocol):
@@ -354,15 +393,24 @@ class Conversation(Protocol):
     add methods to this protocol later (D19).
     """
 
-    async def deliver_initiated_reply(self, reply: InitiatedReply) -> str:
-        """Store ``reply`` and emit ``InitiatedMessageCommitted``.
+    async def deliver_initiated_reply(self, reply: InitiatedReply) -> InitiatedDelivery:
+        """Send ``reply``, store what was sent, and emit ``InitiatedMessageCommitted``.
 
-        Returns the last committed message id, or ``""`` when the send was
-        refused and nothing was stored. Raises when the reply fails
-        validation, the role is gone, the target is not allowed, natural chat
+        Returns what was stored (see ``InitiatedDelivery``). Raises before
+        sending anything when the session is not a role session, the role is
+        gone, the reply fails validation against ``reply.moods``, natural chat
         is off for a multi-message reply, tool facts arrive without that
-        sequence, or the send itself fails. A sequence needs a runtime lease
-        or an already bound channel-sequence owner.
+        sequence, or a single reply is stale (``expected_mood_updated_at``).
+
+        Raises when a send fails or is refused mid-way. A single reply then
+        stores nothing. A sequence keeps the prefix already sent (stored and
+        announced), and the first message of a refused desktop sequence
+        raises instead of returning an empty result. Account sends that fail
+        or whose outcome is unknown stay on the session as delivery records
+        marked ``failed`` / ``uncertain``, outside the conversation history.
+
+        A sequence needs a runtime lease or an already bound channel-sequence
+        owner.
         """
         ...
 

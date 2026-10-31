@@ -49,8 +49,6 @@ def host_kernel(
     background_results: Any = None,
     event_bus: EventBus | None = None,
     rpc: PluginRpcRegistry[Any] | None = None,
-    proactive_host: Any = None,
-    conversation: Any = None,
     withheld: frozenset[Key[Any]] = frozenset(),
     **options: Any,
 ) -> PluginKernel:
@@ -86,8 +84,6 @@ def host_kernel(
         background_results=background_results,
         http=http,
         process_resources=generation.process_resources,
-        proactive_host=proactive_host,
-        conversation=conversation,
     )
     return PluginKernel(
         plugin_dirs,

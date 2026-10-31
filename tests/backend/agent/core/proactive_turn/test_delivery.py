@@ -59,7 +59,11 @@ async def test_delivery_sends_once_to_the_tick_target() -> None:
     )
 
     orchestrator.handle_proactive_turn.assert_awaited_once_with(
-        result=result, session_key="role:mira", channel="qq", chat_id="gqq:7"
+        result=result,
+        session_key="role:mira",
+        channel="qq",
+        chat_id="gqq:7",
+        source="proactive",
     )
 
 

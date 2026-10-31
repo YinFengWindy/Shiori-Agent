@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from contextlib import contextmanager
 from types import SimpleNamespace
 
@@ -12,7 +13,7 @@ from agent.turns.channel_sequence import ChannelSequenceOwner
 from agent.turns.orchestrator import TurnOrchestrator, TurnOrchestratorDeps
 from agent.turns.outbound import DeliveryReceipt
 from bus.event_bus import EventBus
-from bus.events_lifecycle import ProactiveMessageCommitted
+from bus.events_lifecycle import InitiatedMessageCommitted
 from bus.queue import MessageBus
 from conversation.initiated import bound_turn_getters, commit_initiated_reply
 from conversation.service import ConversationService
@@ -21,12 +22,13 @@ from core.roles.reply_policy import ReplyPolicyGetter
 from core.roles.reply_state import InvalidRoleReply
 from core.roles.store import RoleStore
 from session.manager import SessionManager
+from shiori_sdk.accounts.targets import AccountTarget
 from shiori_sdk.core.conversation import (
-    InitiatedAccountTarget,
-    InitiatedMessageCommitted,
+    InitiatedDelivery,
     InitiatedReply,
     InitiatedToolFact,
 )
+from shiori_sdk.messages import InboundMessage
 
 
 @contextmanager
@@ -69,12 +71,25 @@ def _reply(**overrides) -> InitiatedReply:
         "chat_id": "role:mira",
         "mood": "想你",
         "thought": "我想你",
+        "expected_mood_updated_at": "",
+        "moods": ("想你",),
     }
     fields.update(overrides)
     return InitiatedReply(**fields)
 
 
-async def test_desktop_reply_stores_media_and_mood_under_the_old_event_name(
+def _natural_roles(tmp_path) -> RoleStore:
+    roles = RoleStore(tmp_path)
+    roles.create_role(
+        role_id="mira",
+        name="米拉",
+        system_prompt="规矩",
+        runtime_config={"natural_chat_enabled": True, "mood_catalog": ["想你"]},
+    )
+    return roles
+
+
+async def test_desktop_reply_stores_media_and_mood_and_reports_its_id(
     tmp_path,
 ) -> None:
     manager = SessionManager(tmp_path)
@@ -82,13 +97,13 @@ async def test_desktop_reply_stores_media_and_mood_under_the_old_event_name(
         role_id="mira", role_runtime_config={"mood_catalog": ["想你"]}
     )
     bus = EventBus()
-    events: list[ProactiveMessageCommitted] = []
-    bus.on(ProactiveMessageCommitted, events.append)
+    events: list[InitiatedMessageCommitted] = []
+    bus.on(InitiatedMessageCommitted, events.append)
     sent = []
     orchestrator = _orchestrator(manager, bus, _recording_outbound(sent))
     try:
         with _getters(policy=None):
-            message_id = await commit_initiated_reply(
+            delivery = await commit_initiated_reply(
                 orchestrator, _reply(media=("pic.png",))
             )
     finally:
@@ -98,10 +113,9 @@ async def test_desktop_reply_stores_media_and_mood_under_the_old_event_name(
     assert rows[0]["media"] == ["pic.png"]
     assert rows[0]["metadata"]["mood"] == "想你"
     assert rows[0]["metadata"]["thought"] == "我想你"
-    assert message_id == rows[0]["id"]
+    assert delivery == InitiatedDelivery(message_ids=(rows[0]["id"],), complete=True)
     assert len(events) == 1
     event = events[0]
-    assert isinstance(event, InitiatedMessageCommitted)
     assert event.source == "drift"
     assert event.channel == "desktop"
     assert event.chat_id == "role:mira"
@@ -130,6 +144,32 @@ async def test_mood_outside_the_catalog_stores_nothing(tmp_path) -> None:
     assert sent == []
 
 
+async def test_reply_older_than_the_stored_mood_is_dropped(tmp_path) -> None:
+    """A passive reply stored a newer mood while the tick was thinking."""
+    manager = SessionManager(tmp_path)
+    manager.get_or_create("role:mira").metadata.update(
+        role_id="mira",
+        role_runtime_config={"mood_catalog": ["想你", "开心"]},
+        current_mood="开心",
+        current_mood_updated_at="2026-10-31T00:05:00+00:00",
+    )
+    bus = EventBus()
+    sent = []
+    orchestrator = _orchestrator(manager, bus, _recording_outbound(sent))
+    stale = _reply(
+        expected_mood_updated_at="2026-10-31T00:00:00+00:00", moods=("想你", "开心")
+    )
+    try:
+        with _getters(policy=None):
+            with pytest.raises(ValueError, match="角色已有更新的正式回复"):
+                await commit_initiated_reply(orchestrator, stale)
+    finally:
+        await bus.aclose()
+    assert sent == []
+    assert manager._store.fetch_session_messages("role:mira") == []
+    assert manager.get_or_create("role:mira").metadata["current_mood"] == "开心"
+
+
 async def test_account_target_without_delivery_does_not_fall_back_to_desktop(
     tmp_path,
 ) -> None:
@@ -143,11 +183,8 @@ async def test_account_target_without_delivery_does_not_fall_back_to_desktop(
     reply = _reply(
         channel="telegram",
         chat_id="dm-1",
-        account_target=InitiatedAccountTarget(
-            account_channel="telegram",
-            target_kind="private",
-            target_id="user-1",
-        ),
+        account_channel="telegram",
+        account_target=AccountTarget("private", "user-1"),
     )
     try:
         with _getters(policy=None):
@@ -200,18 +237,12 @@ async def test_natural_sequence_stores_each_message_and_the_tool_fact(
         return None
 
     monkeypatch.setattr("agent.turns.reply_sequence.wait_between_messages", _no_pause)
-    roles = RoleStore(tmp_path)
-    roles.create_role(
-        role_id="mira",
-        name="米拉",
-        system_prompt="规矩",
-        runtime_config={"natural_chat_enabled": True, "mood_catalog": ["想你"]},
-    )
+    roles = _natural_roles(tmp_path)
     manager = SessionManager(tmp_path)
     manager.get_or_create("role:mira").metadata["role_id"] = "mira"
     bus = EventBus()
-    events: list[ProactiveMessageCommitted] = []
-    bus.on(ProactiveMessageCommitted, events.append)
+    events: list[InitiatedMessageCommitted] = []
+    bus.on(InitiatedMessageCommitted, events.append)
     sent_text = []
 
     async def dispatch(message):
@@ -232,7 +263,7 @@ async def test_natural_sequence_stores_each_message_and_the_tool_fact(
     )
     try:
         with _getters(policy=object()), ChannelSequenceOwner().bind(MessageBus()):
-            message_id = await commit_initiated_reply(orchestrator, reply)
+            delivery = await commit_initiated_reply(orchestrator, reply)
     finally:
         await bus.aclose()
     rows = manager._store.fetch_session_messages("role:mira")
@@ -243,21 +274,58 @@ async def test_natural_sequence_stores_each_message_and_the_tool_fact(
     assert sent_text == ["先说一句", "再说一句"]
     fact = next(row for row in rows if row.get("tool_chain"))
     assert fact["tool_chain"][0]["calls"][0]["name"] == "weather"
-    last = next(row for row in rows if row["content"] == "再说一句")
+    texts = [row for row in rows if row["content"]]
+    assert delivery == InitiatedDelivery(
+        message_ids=tuple(row["id"] for row in texts), complete=True
+    )
     assert len(events) == 1
-    assert events[0].message_id == last["id"] == message_id
+    assert events[0].message_id == texts[-1]["id"]
     assert events[0].tools_used == ("message_push",)
     assert events[0].source == "drift"
 
 
+async def test_interrupted_sequence_reports_the_stored_prefix(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A user message after the first text drops the rest; the result says so."""
+    paused = asyncio.Event()
+
+    async def pace(_seconds: float) -> None:
+        paused.set()
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr("agent.turns.reply_sequence.wait_between_messages", pace)
+    roles = _natural_roles(tmp_path)
+    manager = SessionManager(tmp_path)
+    manager.get_or_create("role:mira").metadata["role_id"] = "mira"
+    bus = EventBus()
+    sent = []
+    orchestrator = _orchestrator(manager, bus, _recording_outbound(sent), roles=roles)
+    batches = ChannelSequenceOwner()
+    reply = _reply(content="先说一句\n\n再说一句", messages=("先说一句", "再说一句"))
+
+    async def deliver() -> InitiatedDelivery:
+        with _getters(policy=object()), batches.bind(MessageBus()):
+            return await commit_initiated_reply(orchestrator, reply)
+
+    task = asyncio.create_task(deliver())
+    try:
+        await asyncio.wait_for(paused.wait(), 3)
+        batches.interrupt_background(
+            InboundMessage(
+                "desktop", "user", "role:mira", "等等", metadata={"role_id": "mira"}
+            )
+        )
+        delivery = await asyncio.wait_for(task, 3)
+    finally:
+        await bus.aclose()
+    [row] = manager._store.fetch_session_messages("role:mira")
+    assert [message.content for message in sent] == ["先说一句"]
+    assert delivery == InitiatedDelivery(message_ids=(row["id"],), complete=False)
+
+
 async def test_sequence_requires_natural_chat(tmp_path) -> None:
-    roles = RoleStore(tmp_path)
-    roles.create_role(
-        role_id="mira",
-        name="米拉",
-        system_prompt="规矩",
-        runtime_config={"natural_chat_enabled": True, "mood_catalog": ["想你"]},
-    )
+    roles = _natural_roles(tmp_path)
     manager = SessionManager(tmp_path)
     manager.get_or_create("role:mira").metadata["role_id"] = "mira"
     bus = EventBus()
@@ -278,13 +346,7 @@ async def test_sequence_requires_natural_chat(tmp_path) -> None:
 
 
 async def test_sequence_account_target_is_not_sent_as_desktop(tmp_path) -> None:
-    roles = RoleStore(tmp_path)
-    roles.create_role(
-        role_id="mira",
-        name="米拉",
-        system_prompt="规矩",
-        runtime_config={"natural_chat_enabled": True, "mood_catalog": ["想你"]},
-    )
+    roles = _natural_roles(tmp_path)
     manager = SessionManager(tmp_path)
     manager.get_or_create("role:mira").metadata["role_id"] = "mira"
     bus = EventBus()
@@ -300,11 +362,8 @@ async def test_sequence_account_target_is_not_sent_as_desktop(tmp_path) -> None:
     reply = _reply(
         content="先说一句\n\n再说一句",
         messages=("先说一句", "再说一句"),
-        account_target=InitiatedAccountTarget(
-            account_channel="telegram",
-            target_kind="private",
-            target_id="user-1",
-        ),
+        account_channel="telegram",
+        account_target=AccountTarget("private", "user-1"),
     )
     try:
         with _getters(policy=object()), ChannelSequenceOwner().bind(MessageBus()):

@@ -2,11 +2,12 @@
 
 Both doors (``CONVERSATION`` for a generation, ``PROACTIVE_HOST.deliver`` for
 the published generation) call ``commit_initiated_reply``. The orchestrator
-still owns validation, the send and the committed event.
+still owns validation, the send, the committed event and the stored ids.
 """
 
 from __future__ import annotations
 
+import asyncio
 from contextlib import contextmanager
 from typing import Any, Iterator
 from uuid import uuid4
@@ -17,6 +18,7 @@ from agent.turns.proactive_sequence import (
     current_proactive_reply,
     record_proactive_tool_fact,
 )
+from agent.turns.reply_interruption import ReplyInterruption
 from agent.turns.reply_sequence import ReplySequence
 from agent.turns.result import TurnOutbound, TurnResult, TurnTrace
 from core.roles.affection_access import (
@@ -29,12 +31,10 @@ from core.roles.reply_policy import (
     bind_turn_reply_policy,
     reset_turn_reply_policy,
 )
-from core.roles.reply_state import validate_role_reply
-from shiori_sdk.core.conversation import (
-    InitiatedAccountTarget,
-    InitiatedMessageCommitted,
-    InitiatedReply,
-)
+from core.common.cancellation import finish_started
+from core.roles.reply_state import RoleReplyContext, validate_role_reply
+from shiori_sdk.accounts.targets import AccountTarget
+from shiori_sdk.core.conversation import InitiatedDelivery, InitiatedReply
 
 
 @contextmanager
@@ -52,48 +52,50 @@ def bound_turn_getters(
         reset_turn_affection(affection_token)
 
 
-def account_target_mapping(target: InitiatedAccountTarget) -> dict[str, Any]:
+def account_target_mapping(
+    account_channel: str, target: AccountTarget
+) -> dict[str, Any]:
     """The orchestrator's account-target dict for one initiated reply."""
-    payload: dict[str, Any] = {
-        "account_channel": target.account_channel,
-        "target_kind": target.target_kind,
-        "target_id": target.target_id,
-        "group_id": target.group_id,
-        "mention_ids": list(target.mention_ids),
-    }
-    if target.message_thread_id is not None:
-        payload["message_thread_id"] = target.message_thread_id
-    return payload
+    return {"account_channel": account_channel, **target.to_payload()}
 
 
 async def commit_initiated_reply(
     orchestrator: TurnOrchestrator, reply: InitiatedReply
-) -> str:
-    """Store ``reply`` and return the last committed message id.
+) -> InitiatedDelivery:
+    """Send ``reply``, store what was sent, and report the stored message ids.
 
-    ``""`` when the send was refused and nothing was stored. Validation, a
-    missing role, a disallowed target and a failed send raise, and a failed
-    send stores nothing. A natural sequence needs natural chat and either a
-    runtime lease or an already bound channel-sequence owner.
+    The orchestrator reports the ids itself. See
+    ``Conversation.deliver_initiated_reply`` for what raises, what an
+    incomplete result means and what a failed send leaves behind. A natural
+    sequence needs natural chat and either a runtime lease or an already
+    bound channel-sequence owner.
     """
     _reject_ill_shaped(orchestrator, reply)
-    captured: list[InitiatedMessageCommitted] = []
-
-    def observe(event: InitiatedMessageCommitted) -> None:
-        if event.session_key == reply.session_key and event.source == reply.source:
-            captured.append(event)
-
-    bus = orchestrator._event_bus
-    if bus is not None:
-        bus.on(InitiatedMessageCommitted, observe)
+    committed: list[str] = []
+    if not reply.messages:
+        sent = await orchestrator.handle_proactive_turn(
+            result=_turn_result(reply, include_target=True),
+            session_key=reply.session_key,
+            channel=reply.channel,
+            chat_id=reply.chat_id,
+            source=reply.source,
+            committed=committed,
+        )
+        return InitiatedDelivery(message_ids=tuple(committed), complete=sent)
+    interruption = ReplyInterruption()
+    task = asyncio.create_task(
+        _send_sequence(orchestrator, reply, interruption, committed),
+        name=f"initiated-reply:{reply.session_key}",
+    )
     try:
-        sent = await _send(orchestrator, reply)
-    finally:
-        if bus is not None:
-            bus.off(InitiatedMessageCommitted, observe)
-    if not sent or not captured:
-        return ""
-    return captured[-1].message_id
+        await finish_started(task, on_cancel=interruption.invalidate)
+    except asyncio.CancelledError:
+        current = asyncio.current_task()
+        if current is not None and current.cancelling():
+            raise
+        # A newer user message stopped the sequence; its sent prefix stays.
+        return InitiatedDelivery(message_ids=tuple(committed), complete=False)
+    return InitiatedDelivery(message_ids=tuple(committed), complete=True)
 
 
 def _reject_ill_shaped(orchestrator: TurnOrchestrator, reply: InitiatedReply) -> None:
@@ -107,21 +109,18 @@ def _reject_ill_shaped(orchestrator: TurnOrchestrator, reply: InitiatedReply) ->
         raise RuntimeError("自然回复序列需要角色开启自然聊天")
 
 
-async def _send(orchestrator: TurnOrchestrator, reply: InitiatedReply) -> bool:
-    if not reply.messages:
-        return await orchestrator.handle_proactive_turn(
-            result=_turn_result(orchestrator, reply, include_target=True),
-            session_key=reply.session_key,
-            channel=reply.channel,
-            chat_id=reply.chat_id,
-            source=reply.source,
-        )
-    turn_id = f"initiated:{uuid4().hex}"
+async def _send_sequence(
+    orchestrator: TurnOrchestrator,
+    reply: InitiatedReply,
+    interruption: ReplyInterruption,
+    committed: list[str],
+) -> None:
     async with orchestrator.natural_reply_scope(
         reply.session_key,
         reply.channel,
         reply.chat_id,
-        turn_id=turn_id,
+        turn_id=f"initiated:{uuid4().hex}",
+        interruption=interruption,
     ):
         plan = current_proactive_reply()
         if plan is None:
@@ -139,24 +138,25 @@ async def _send(orchestrator: TurnOrchestrator, reply: InitiatedReply) -> bool:
             )
         if reply.account_target is not None:
             await orchestrator.retarget_natural_reply(
-                reply.session_key, account_target_mapping(reply.account_target)
+                reply.session_key,
+                account_target_mapping(reply.account_channel, reply.account_target),
             )
-        return await orchestrator.handle_proactive_turn(
-            result=_turn_result(orchestrator, reply, include_target=False),
+        await orchestrator.handle_proactive_turn(
+            result=_turn_result(reply, include_target=False),
             session_key=reply.session_key,
             channel=reply.channel,
             chat_id=reply.chat_id,
             source=reply.source,
+            committed=committed,
         )
 
 
-def _turn_result(
-    orchestrator: TurnOrchestrator,
-    reply: InitiatedReply,
-    *,
-    include_target: bool,
-) -> TurnResult:
-    context = orchestrator.capture_reply_context(reply.session_key)
+def _turn_result(reply: InitiatedReply, *, include_target: bool) -> TurnResult:
+    # The caller's tick-start state: the orchestrator rejects the reply when
+    # the stored mood moved on after it (``expected_mood_updated_at``).
+    context = RoleReplyContext(
+        moods=reply.moods, previous_updated_at=reply.expected_mood_updated_at
+    )
     role_reply = validate_role_reply(
         {"content": reply.content, "mood": reply.mood, "thought": reply.thought},
         context.moods,
@@ -164,7 +164,9 @@ def _turn_result(
     )
     extra: dict[str, Any] = {}
     if include_target and reply.account_target is not None:
-        extra["account_target"] = account_target_mapping(reply.account_target)
+        extra["account_target"] = account_target_mapping(
+            reply.account_channel, reply.account_target
+        )
     return TurnResult(
         decision="reply",
         role_reply=role_reply,

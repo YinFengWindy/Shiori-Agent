@@ -230,7 +230,10 @@ def _signature(func: Any) -> str:
         chunks.append(piece)
     returned = _fmt(hints.get("return", signature.return_annotation))
     suffix = f" -> {returned}" if returned else ""
-    return f"({', '.join(chunks)}){suffix}"
+    # PEP 695 parameters (``run_tick[T]``) name the ``T`` used below.
+    type_params = getattr(func, "__type_params__", ())
+    generic = f"[{', '.join(p.__name__ for p in type_params)}]" if type_params else ""
+    return f"{generic}({', '.join(chunks)}){suffix}"
 
 
 def _hints(obj: Any) -> dict[str, Any]:

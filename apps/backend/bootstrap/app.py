@@ -159,7 +159,6 @@ class AppRuntime(RuntimeReloadMixin, RuntimeBackgroundMixin, RuntimeShutdownMixi
                 process_resources=self._plugin_process_resources,
                 background_result_runner=self._dispatcher.process_background_result,
                 published_runtime=lambda: self,
-                desktop_presence=self.desktop_presence,
             )
             event_bus = self.event_bus
             await self.core.start()

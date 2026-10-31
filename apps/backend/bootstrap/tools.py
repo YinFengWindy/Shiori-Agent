@@ -72,7 +72,6 @@ from bus.event_bus import EventBus
 from bus.processing import ProcessingState
 from bus.queue import MessageBus
 from core.common.channel_directory import ChannelDirectory
-from core.desktop_presence import DesktopPresence
 from core.memory.group_environment import GroupEnvironment
 from core.memory.markdown import MemoryLifecycleBindRequest, MarkdownMemoryMaintenance
 from core.memory.runtime import MemoryRuntime
@@ -430,7 +429,6 @@ def build_core_runtime(
     background_result_runner: ResultRunner | None = None,
     plugin_discovery_snapshot: list["PluginRecord"] | None = None,
     published_runtime: Callable[[], Any] | None = None,
-    desktop_presence: DesktopPresence | None = None,
 ) -> CoreRuntime:
     """Builds version-owned capabilities around stable transport and state owners."""
     bus = shared.bus if shared is not None else MessageBus()
@@ -529,23 +527,20 @@ def build_core_runtime(
     # Bound to this generation's kernel below, before any plugin starts;
     # reading it earlier raises.
     reply_policy = ReplyPolicyGetter()
-    reported_presence = (
-        desktop_presence if desktop_presence is not None else DesktopPresence()
-    )
-
-    def build_initiated_orchestrator():
-        return orchestrator_for(
+    conversation = HostConversation(
+        partial(
+            orchestrator_for,
             session_manager=session_manager,
             presence=presence,
             push_tool=push_tool,
             event_bus=event_bus,
             tools=tools,
             role_store=role_store,
-            desktop_presence=reported_presence,
-        )
-
-    conversation = HostConversation(
-        build_initiated_orchestrator, affection, reply_policy
+        ),
+        role_store=role_store,
+        session_manager=session_manager,
+        affection=affection,
+        reply_policy=reply_policy,
     )
     # Typed as the plugin contracts, so pyright checks the host implementations.
     conversation_api: Conversation = conversation

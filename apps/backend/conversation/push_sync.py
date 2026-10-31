@@ -28,7 +28,8 @@ class ExternalPushSyncService:
     The role owns the chat it pushed to, so a push is stored in the role's
     session (``role_session_key(role_id)``, whatever session the sender ran
     in) under the network thread of that chat, and announced with
-    ``InitiatedMessageCommitted``. A push a live turn owns is committed with
+    ``InitiatedMessageCommitted`` (``source="push"``, the tool in
+    ``tools_used``). A push a live turn owns is committed with
     that turn instead: ``live_turn_pushes(session_key)`` finds it.
     """
 
@@ -136,7 +137,7 @@ class ExternalPushSyncService:
                 assistant_response=event.text,
                 tools_used=tuple(message.get("tools_used") or ()),
                 message_id=str(message["id"]),
-                source=event.tool,
+                source="push",
             )
         )
 

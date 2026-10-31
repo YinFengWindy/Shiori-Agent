@@ -52,7 +52,7 @@ NovelAI 与故事的业务回归分别随 `plugins/novelai/tests/`、`plugins/st
 
 ## 自动 CG 生命周期
 
-1. 系统插件 `plugins/scene` 在代际发布后订阅 `TurnStarting`、`TurnFinished` 和 `ProactiveMessageCommitted`。观察不在回合关键路径上。
+1. 系统插件 `plugins/scene` 在代际发布后订阅 `TurnStarting`、`TurnFinished` 和 `InitiatedMessageCommitted`。观察不在回合关键路径上。
 2. `plugins/scene/backend/decision.py` 使用独立观察器 system prompt，并强制模型调用内部函数 `submit_scene_observation`，将结果归为 `started`、`same`、`changed`、`closed` 或 `none`。观察结果同时携带持续场景 `scene_key` 与可见定格 `visual_key`。
 3. 场景插件对函数参数执行协议和语义校验；有效结果才会持久化这两个键并发布 `SceneObservationCommitted`。`scene_key` 供场景追问保持连续性，`visual_key` 供图片生成判断重复。
 4. NovelAI 用 `optional_inject: [scene]` 调用 `SCENE.request`，把返回的释放函数交给 `ctx.effect`。场景插件未启用时不登记需求。`AutoCgController` 独立检查自动 CG 开关、视觉去重、冷却与手动生成抑制；通过后才由 `scene_prompt.py` 使用既有 light 模型把冻结的中立场景事实转换为 NovelAI tags 和画幅，并校验供应商参数。角色能力中的自动场景 CG 卡片通过齿轮弹层编辑中文或多行「补充要求」，独立自动保存至 `plugin_data.novelai.<role_id>.auto_scene_cg_prompt_instructions`；开关仍跟随角色页保存，两种保存只修改各自字段。控制器在调度时读取要求快照，提示词模型将其作为绘图要求理解，空白时不注入；后续编辑影响下一次自动 CG，不改变手动生图、Story 或历史图片的请求重放。删除角色时随该角色的 NovelAI 偏好一同清理。

@@ -76,5 +76,5 @@ Drift 是独立于普通被动消息的特殊回合模式。`DriftStateStore` �
 
 - 无状态变化时 store 更新应返回旧状态，避免循环触发。
 - 主动投递必须有稳定的角色、会话和目标渠道。
-- 一条主动消息只提交一次权威角色会话、只投递到一个目标，并发出一次 `ProactiveMessageCommitted`；没有跨渠道重发。
+- 一条主动消息只提交一次权威角色会话、只投递到一个目标，并发出一次 `InitiatedMessageCommitted`（`source="proactive"`）；没有跨渠道重发。
 - 同一 tick 的裁定、工具步骤和最终结果应可追踪。

@@ -3,12 +3,6 @@
 from dataclasses import dataclass
 from typing import Literal
 
-from shiori_sdk.core.conversation import InitiatedMessageCommitted
-
-# Same class, so a subscription registered under the old name still receives
-# the event. Kept for one release; scene and the desktop bridge subscribe here.
-ProactiveMessageCommitted = InitiatedMessageCommitted
-
 
 @dataclass(frozen=True)
 class RoleDeleted:

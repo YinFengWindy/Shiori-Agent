@@ -22,7 +22,7 @@ from agent.turns.outbound import (
 from agent.turns.result import TurnOutbound, TurnResult, TurnTrace
 from session.manager import SessionManager
 from bus.event_bus import EventBus
-from bus.events_lifecycle import ProactiveMessageCommitted
+from bus.events_lifecycle import InitiatedMessageCommitted
 from agent.tools.message_push import MessagePushTool
 from tests.support.push import allow_every_role_target
 from tests.support.generation_getters import run_in_turn, turn_getters
@@ -208,7 +208,11 @@ async def test_proactive_images_reach_the_bound_private_chat(tmp_path) -> None:
     )
 
     assert await orchestrator.handle_proactive_turn(
-        result=result, session_key="chat:user-1", channel="chat", chat_id="user-1"
+        result=result,
+        session_key="chat:user-1",
+        channel="chat",
+        chat_id="user-1",
+        source="proactive",
     )
     [payload] = sent
     assert (payload["target_kind"], payload["target_id"]) == ("private", "user-1")
@@ -307,8 +311,8 @@ async def test_proactive_media_commit_notifies_shared_session(tmp_path) -> None:
             return self.result
 
     event_bus = EventBus()
-    committed: list[ProactiveMessageCommitted] = []
-    event_bus.on(ProactiveMessageCommitted, committed.append)
+    committed: list[InitiatedMessageCommitted] = []
+    event_bus.on(InitiatedMessageCommitted, committed.append)
     outbound = _Outbound()
     orchestrator = TurnOrchestrator(
         TurnOrchestratorDeps(
@@ -337,12 +341,13 @@ async def test_proactive_media_commit_notifies_shared_session(tmp_path) -> None:
         session_key="role:mira",
         channel="desktop",
         chat_id="role:mira",
+        source="proactive",
     )
 
     assert session.messages[0]["media"] == ["D:\\media\\scene.png"]
     assert dispatched[0].media == ["D:\\media\\scene.png"]
     assert committed == [
-        ProactiveMessageCommitted(
+        InitiatedMessageCommitted(
             session_key="role:mira",
             channel="desktop",
             role_id="mira",
@@ -351,6 +356,7 @@ async def test_proactive_media_commit_notifies_shared_session(tmp_path) -> None:
             tools_used=("message_push",),
             thread_id=session.messages[0]["metadata"]["thread_id"],
             message_id=session.messages[0]["id"],
+            source="proactive",
         )
     ]
 
@@ -362,6 +368,7 @@ async def test_proactive_media_commit_notifies_shared_session(tmp_path) -> None:
         session_key="role:mira",
         channel="desktop",
         chat_id="role:mira",
+        source="proactive",
     )
 
     assert sent is False
@@ -417,6 +424,7 @@ async def test_proactive_dispatch_error_is_not_converted_to_false(tmp_path) -> N
             session_key="role:mira",
             channel="desktop",
             chat_id="role:mira",
+            source="proactive",
         )
 
     failure_effect.run.assert_awaited_once_with()
@@ -461,6 +469,7 @@ async def test_orchestrator_skip_runs_side_effects_without_dispatch():
         session_key="telegram:123",
         channel="telegram",
         chat_id="123",
+        source="proactive",
     )
 
     assert sent is False
@@ -527,6 +536,7 @@ async def test_orchestrator_proactive_reply_persists_dispatches_and_runs_success
         session_key="telegram:123",
         channel="desktop",
         chat_id="role:mira",
+        source="proactive",
     )
 
     assert sent is True
@@ -575,6 +585,7 @@ async def test_orchestrator_proactive_reply_records_presence_by_role_when_availa
         session_key="role:mira",
         channel="desktop",
         chat_id="role:mira",
+        source="proactive",
     )
 
     assert sent is True
@@ -611,7 +622,11 @@ async def _natural_result(owner, messages):
 
 async def _send(owner, result):
     return await owner.handle_proactive_turn(
-        result=result, session_key="role:mira", channel="desktop", chat_id="role:mira"
+        result=result,
+        session_key="role:mira",
+        channel="desktop",
+        chat_id="role:mira",
+        source="proactive",
     )
 
 
@@ -627,7 +642,7 @@ async def test_natural_proactive_keeps_sent_prefix_and_finishes_one_logical_turn
     events, sent = [], []
     entered, release = asyncio.Event(), asyncio.Event()
     event_bus = EventBus()
-    event_bus.on(ProactiveMessageCommitted, events.append)
+    event_bus.on(InitiatedMessageCommitted, events.append)
     bubbles = []
     event_bus.on(ReplyMessageCommitted, bubbles.append)
 
@@ -717,7 +732,7 @@ async def test_natural_proactive_reads_role_flag_and_records_state_once(
     dispatch = AsyncMock(return_value=DeliveryReceipt.sent())
     event_bus = EventBus()
     events = []
-    event_bus.on(ProactiveMessageCommitted, events.append)
+    event_bus.on(InitiatedMessageCommitted, events.append)
     monkeypatch.setattr("agent.turns.reply_sequence.wait_between_messages", AsyncMock())
     owner = TurnOrchestrator(
         TurnOrchestratorDeps(
@@ -811,6 +826,7 @@ async def test_bound_private_natural_batch_uses_known_address_without_resolver_r
                     session_key="role:mira",
                     channel="chat_bot",
                     chat_id="canonical-dm",
+                    source="proactive",
                 )
 
     task = asyncio.create_task(run())
@@ -1096,6 +1112,7 @@ async def test_bound_private_chat_target_is_delivered_through_the_account(
         session_key="role:mira",
         channel="chat",
         chat_id="dm:user-1",
+        source="proactive",
     )
 
     assert lookups == [("mira", "chat", "dm:user-1")]

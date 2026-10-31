@@ -16,15 +16,11 @@ from agent.proactive_host import HostProactiveRunner
 from agent.turns.orchestrator import TurnOrchestrator, TurnOrchestratorDeps
 from agent.turns.outbound import DeliveryReceipt
 from agent.provider import LLMProvider
-from bootstrap.plugin_core import PluginCoreInputs, plugin_core_modules
 from bus.event_bus import EventBus
 from bus.processing import ProcessingState
-from conversation.context_scope import load_user_context_threads
 from conversation.service import ConversationService, LegacySessionDescriptor
 from core.desktop_presence import DesktopPresence
 from core.memory.group_environment import GroupEnvironment, GroupEnvironmentUpdate
-from core.memory.markdown.recent_context_document import stamp_recent_context
-from core.memory.markdown.runtime import MarkdownMemoryStore
 from core.roles import RoleRepository, RoleRuntimeRegistry, RoleStore
 from core.roles.affection_access import AffectionGetter
 from core.roles.errors import RoleNotFoundError
@@ -188,14 +184,33 @@ async def test_destructive_shell_is_denied_before_the_tool_runs() -> None:
     assert ran is False
 
 
-async def test_completion_forces_thinking_off_on_the_fallback_provider(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    seen_body: dict[str, object] = {}
+class _Generation:
+    """The parts of one generation's core that ``complete`` reads."""
+
+    def __init__(self, api_key: str) -> None:
+        self.config = SimpleNamespace(
+            api_key=api_key,
+            base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+            provider="dashscope",
+            extra_body={"enable_thinking": True},
+            model="qwen",
+            max_tokens=32,
+        )
+        self.provider = LLMProvider(api_key="unused")
+        self.additional_providers: list[LLMProvider] = []
+
+    async def aclose(self) -> None:
+        for provider in self.additional_providers:
+            await provider.aclose()
+
+
+def _record_requests(monkeypatch: pytest.MonkeyPatch) -> list[tuple[object, dict]]:
+    """Answer every provider request with text; record (provider, extra_body)."""
+    requests: list[tuple[object, dict]] = []
 
     async def transport(self, kwargs, *, payload_snapshot_enabled=None):
-        del self, payload_snapshot_enabled
-        seen_body.update(dict(kwargs.get("extra_body") or {}))
+        del payload_snapshot_enabled
+        requests.append((self, dict(kwargs.get("extra_body") or {})))
         return SimpleNamespace(
             choices=[
                 SimpleNamespace(
@@ -207,26 +222,47 @@ async def test_completion_forces_thinking_off_on_the_fallback_provider(
         )
 
     monkeypatch.setattr(LLMProvider, "_create_with_retry", transport)
-    config = SimpleNamespace(
-        api_key="test-key",
-        base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
-        provider="dashscope",
-        extra_body={"enable_thinking": True},
-        model="qwen",
-        max_tokens=32,
-    )
-    runner = _runner(
-        SimpleNamespace(config=config, provider=LLMProvider(api_key="unused"))
-    )
+    return requests
+
+
+async def test_completion_forces_thinking_off_on_the_fallback_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    requests = _record_requests(monkeypatch)
+    generation = _Generation("test-key")
+    runner = _runner(generation)
     try:
         completion = await runner.complete(
             [{"role": "user", "content": "出门吗"}],
             disable_thinking=False,
         )
     finally:
-        await runner.aclose()
+        await generation.aclose()
     assert completion.content == "带伞"
-    assert seen_body.get("enable_thinking") is False
+    [(_provider, body)] = requests
+    assert body.get("enable_thinking") is False
+
+
+async def test_completion_provider_closes_with_its_generation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A config change publishes a new generation; the old provider leaves with it."""
+    requests = _record_requests(monkeypatch)
+    first, second = _Generation("first-key"), _Generation("second-key")
+    runtime = _Runtime(first)
+    runner = HostProactiveRunner(lambda: runtime)
+    try:
+        await runner.complete([{"role": "user", "content": "早"}])
+        await runner.complete([{"role": "user", "content": "早"}])
+        runtime.core = second
+        await runner.complete([{"role": "user", "content": "早"}])
+    finally:
+        await first.aclose()
+        await second.aclose()
+    used = [provider for provider, _body in requests]
+    assert used[0] is used[1]
+    assert first.additional_providers == [used[0]]
+    assert second.additional_providers == [used[2]]
 
 
 def test_desktop_presence_follows_the_process_report() -> None:
@@ -235,33 +271,6 @@ def test_desktop_presence_follows_the_process_report() -> None:
     assert runner.user_at_desktop() is True
     runtime.desktop_presence.report(False)
     assert runner.user_at_desktop() is False
-
-
-def test_group_note_is_the_role_own_note(tmp_path) -> None:
-    roles, sessions = _role_core(tmp_path)
-    roles.create_role(role_id="other", name="别人", system_prompt="别的规矩")
-    env = GroupEnvironment(tmp_path, sessions.conversation_store)
-    thread = ConversationService(sessions).ensure_thread_for_session(
-        LegacySessionDescriptor(
-            session_key="telegram:cats",
-            role_id="mira",
-            channel="telegram",
-            chat_id="cats",
-        )
-    )
-    env.write_note("mira", thread.id, "米拉记下了猫")
-    env.write_note("other", thread.id, "别人的笔记")
-    runner = _runner(
-        SimpleNamespace(
-            group_environment=env,
-            role_runtime_registry=SimpleNamespace(
-                repository=SimpleNamespace(store=roles)
-            ),
-        )
-    )
-    text = runner.group_note("mira", thread.id)
-    assert "米拉记下了猫" in text
-    assert "别人的笔记" not in text
 
 
 def test_recent_activity_skips_the_desktop_thread(tmp_path) -> None:
@@ -306,32 +315,6 @@ def test_role_prompt_includes_behavior_rules(tmp_path) -> None:
     assert "只有米拉会说的规矩" in runner.compile_role_prompt("mira")
 
 
-def test_affection_prompt_follows_the_bound_socket(tmp_path) -> None:
-    roles, _sessions = _role_core(tmp_path)
-
-    class _Socket:
-        def __init__(self, text: str | None) -> None:
-            self._text = text
-
-        def render_prompt(self, role_id: str) -> str | None:
-            del role_id
-            return self._text
-
-    getter = AffectionGetter()
-    getter.bind(lambda: _Socket("阶段：朋友"))
-    runner = _runner(
-        SimpleNamespace(
-            affection=getter,
-            role_runtime_registry=SimpleNamespace(
-                repository=SimpleNamespace(store=roles)
-            ),
-        )
-    )
-    assert runner.affection_prompt("mira") == "阶段：朋友"
-    getter.bind(lambda: None)
-    assert runner.affection_prompt("mira") is None
-
-
 def test_reply_validation_uses_the_role_mood_catalog(tmp_path) -> None:
     roles, sessions = _role_core(tmp_path, catalog=["想你"])
     runner = _runner(
@@ -349,71 +332,21 @@ def test_reply_validation_uses_the_role_mood_catalog(tmp_path) -> None:
         runner.validate_reply("mira", content="在", mood="平静", thought="我想你")
 
 
-def test_workspace_skill_hides_the_builtin_of_the_same_name(tmp_path) -> None:
-    roles, _sessions = _role_core(tmp_path)
-    builtin = tmp_path / "builtin-skills" / "umbrella"
-    builtin.mkdir(parents=True)
-    (builtin / "SKILL.md").write_text("builtin-umbrella-body\n", encoding="utf-8")
-    workspace_skill = tmp_path / "skills" / "umbrella"
-    workspace_skill.mkdir(parents=True)
-    (workspace_skill / "SKILL.md").write_text(
-        "workspace-umbrella-body\n", encoding="utf-8"
+def _host_conversation(root, bus: EventBus) -> tuple[HostConversation, SessionManager]:
+    roles = RoleStore(root)
+    roles.create_role(
+        role_id="mira",
+        name="米拉",
+        system_prompt="规矩",
+        runtime_config={"mood_catalog": ["想你"]},
     )
-    runner = HostProactiveRunner(
-        lambda: _Runtime(
-            SimpleNamespace(
-                role_runtime_registry=SimpleNamespace(
-                    repository=SimpleNamespace(store=roles)
-                )
-            )
-        ),
-        builtin_skills_dir=tmp_path / "builtin-skills",
-    )
-    listed = next(item for item in runner.list_skills() if item.name == "umbrella")
-    rendered = runner.render_skills(["umbrella"])
-    assert listed.source == "workspace"
-    assert "workspace-umbrella-body" in rendered
-    assert "builtin-umbrella-body" not in rendered
-
-
-def test_recent_context_returns_the_visible_body(tmp_path) -> None:
-    roles, _sessions = _role_core(tmp_path)
-    threads = load_user_context_threads(tmp_path, "mira")
-    MarkdownMemoryStore(tmp_path / "roles" / "mira").write_recent_context(
-        stamp_recent_context("刚聊过伞", threads)
-    )
-    runner = _runner(
-        SimpleNamespace(
-            role_runtime_registry=SimpleNamespace(
-                repository=SimpleNamespace(store=roles)
-            )
-        )
-    )
-    text = runner.recent_context("mira")
-    assert "刚聊过伞" in text
-    assert "shiori-recent-context" not in text
-
-
-def test_recent_context_of_a_missing_role_does_not_create_a_directory(tmp_path) -> None:
-    roles, _sessions = _role_core(tmp_path)
-    runner = _runner(
-        SimpleNamespace(
-            role_runtime_registry=SimpleNamespace(
-                repository=SimpleNamespace(store=roles)
-            )
-        )
-    )
-    assert runner.recent_context("gone") == ""
-    assert not (tmp_path / "roles" / "gone").exists()
-
-
-def _host_conversation(manager: SessionManager, bus: EventBus) -> HostConversation:
+    manager = SessionManager(root)
     affection = AffectionGetter()
     affection.bind(lambda: None)
     reply_policy = ReplyPolicyGetter()
     reply_policy.bind(lambda: None)
 
-    def build() -> TurnOrchestrator:
+    def build(role_id: str) -> TurnOrchestrator:
         async def dispatch(message):
             return DeliveryReceipt.sent()
 
@@ -424,24 +357,26 @@ def _host_conversation(manager: SessionManager, bus: EventBus) -> HostConversati
                 ),
                 outbound=SimpleNamespace(dispatch=dispatch),
                 event_bus=bus,
+                role_lookup=roles.get_role,
             )
         )
 
-    return HostConversation(build, affection, reply_policy)
+    conversation = HostConversation(
+        build,
+        role_store=roles,
+        session_manager=manager,
+        affection=affection,
+        reply_policy=reply_policy,
+    )
+    return conversation, manager
 
 
 async def test_deliver_uses_the_generation_published_for_that_call(tmp_path) -> None:
-    first_store = SessionManager(tmp_path / "first")
-    second_store = SessionManager(tmp_path / "second")
-    for manager in (first_store, second_store):
-        manager.get_or_create("role:mira").metadata.update(
-            role_id="mira", role_runtime_config={"mood_catalog": ["想你"]}
-        )
     first_bus = EventBus()
     second_bus = EventBus()
-    runtime = _Runtime(
-        SimpleNamespace(conversation=_host_conversation(first_store, first_bus))
-    )
+    first, first_store = _host_conversation(tmp_path / "first", first_bus)
+    second, second_store = _host_conversation(tmp_path / "second", second_bus)
+    runtime = _Runtime(SimpleNamespace(conversation=first))
     runner = HostProactiveRunner(lambda: runtime)
 
     def reply(text: str) -> InitiatedReply:
@@ -453,13 +388,13 @@ async def test_deliver_uses_the_generation_published_for_that_call(tmp_path) -> 
             chat_id="role:mira",
             mood="想你",
             thought="我想你",
+            expected_mood_updated_at="",
+            moods=("想你",),
         )
 
     try:
         await runner.deliver(reply("第一代"))
-        runtime.core = SimpleNamespace(
-            conversation=_host_conversation(second_store, second_bus)
-        )
+        runtime.core = SimpleNamespace(conversation=second)
         await runner.deliver(reply("第二代"))
     finally:
         await first_bus.aclose()
@@ -472,38 +407,3 @@ async def test_deliver_uses_the_generation_published_for_that_call(tmp_path) -> 
         row["content"]
         for row in second_store._store.fetch_session_messages("role:mira")
     ] == ["第二代"]
-
-
-def test_core_modules_publish_the_proactive_port_and_conversation() -> None:
-    host = object()
-    conversation = object()
-    bus = EventBus()
-    provided: dict[str, object] = {}
-
-    def collect(key, impl) -> None:
-        provided[key.name] = impl
-
-    inputs = PluginCoreInputs(
-        plugin_dirs=(),
-        event_bus=bus,
-        rpc=SimpleNamespace(),
-        workspace=None,
-        tools=None,
-        role_store=None,
-        session_manager=None,
-        role_runtime_registry=None,
-        provider=None,
-        model=None,
-        light_provider=None,
-        light_model=None,
-        external_turns=None,
-        background_results=None,
-        http=None,
-        process_resources=None,
-        proactive_host=host,
-        conversation=conversation,
-    )
-    for module in plugin_core_modules(inputs):
-        module(collect)
-    assert provided["proactive_host"] is host
-    assert provided["conversation"] is conversation

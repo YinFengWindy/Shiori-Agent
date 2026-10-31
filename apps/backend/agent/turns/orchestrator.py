@@ -12,7 +12,7 @@ from agent.turns.outbound import OutboundDispatch, OutboundPort
 from agent.account_delivery import AccountDelivery
 from agent.turns.result import TurnResult
 from bus.event_bus import EventBus
-from bus.events_lifecycle import ProactiveMessageCommitted
+from bus.events_lifecycle import InitiatedMessageCommitted
 from conversation.service import LegacySessionDescriptor, desktop_thread_id
 from shiori_sdk.channels.threads import network_thread_id
 from shiori_sdk.accounts.targets import AccountTarget
@@ -275,8 +275,16 @@ class TurnOrchestrator:
         session_key: str,
         channel: str,
         chat_id: str,
-        source: str = "",
+        source: str,
+        committed: list[str] | None = None,
     ) -> bool:
+        """Deliver one proactive result; True when the whole reply was sent.
+
+        ``source`` names who started the reply on ``InitiatedMessageCommitted``.
+        ``committed``, when given, receives the id of every message this call
+        stores, in order, including the prefix a natural sequence stored before
+        it was interrupted or failed.
+        """
         # 1. proactive 先处理 skip：不发消息，只跑 skip 路径副作用。
         if result.decision == "skip":
             await self._run_side_effects(result)
@@ -329,6 +337,7 @@ class TurnOrchestrator:
                 template=message,
                 plan=plan,
                 source=source,
+                committed=committed,
                 state_kwargs={
                     "expected_mood_updated_at": result.reply_context.previous_updated_at,
                     "metadata_updates": reply_state_metadata(
@@ -369,6 +378,8 @@ class TurnOrchestrator:
 
         # 4. 根据是否真正发送成功，分别执行 success / failure side_effects。
         if sent:
+            if committed is not None:
+                committed.append(str(message["id"]))
             session = self._session.session_manager.get_or_create(session_key)
             if self._session.presence:
                 role_id = str(
@@ -384,7 +395,7 @@ class TurnOrchestrator:
             await self._run_effects(result.success_side_effects)
             if self._event_bus is not None:
                 await self._event_bus.fanout(
-                    ProactiveMessageCommitted(
+                    InitiatedMessageCommitted(
                         session_key=session_key,
                         channel=channel,
                         role_id=str(
@@ -411,6 +422,7 @@ class TurnOrchestrator:
         template: dict[str, Any],
         plan: ProactiveReplyPlan,
         source: str,
+        committed: list[str] | None,
         state_kwargs: dict[str, Any],
     ) -> bool:
         reply = plan.protocol.reply
@@ -442,6 +454,8 @@ class TurnOrchestrator:
         finally:
 
             async def finalize() -> None:
+                if committed is not None:
+                    committed.extend(str(m["id"]) for m in delivered)
                 await reacquire_role_gate()
                 await self._run_effects(
                     result.success_side_effects
@@ -460,7 +474,7 @@ class TurnOrchestrator:
                     affection.handle_initiated_sent(session.key)
                 if self._event_bus is not None:
                     await self._event_bus.fanout(
-                        ProactiveMessageCommitted(
+                        InitiatedMessageCommitted(
                             session_key=session.key,
                             role_id=role_id,
                             channel=plan.origin.channel,

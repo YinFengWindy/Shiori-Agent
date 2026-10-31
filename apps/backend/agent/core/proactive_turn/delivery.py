@@ -45,6 +45,7 @@ async def deliver_execute(
         session_key=pipeline._session_key,
         channel=ctx.target_channel,
         chat_id=ctx.target_chat_id,
+        source="proactive",
     )
     return 0.0
 

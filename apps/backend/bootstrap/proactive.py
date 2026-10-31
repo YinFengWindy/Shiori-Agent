@@ -31,10 +31,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def _build_proactive_provider(config: Config, provider: LLMProvider) -> LLMProvider:
-    return thinking_disabled_provider(config, provider)
-
-
 def build_proactive_runtime(
     config: Config,
     workspace: Path,
@@ -67,7 +63,7 @@ def build_proactive_runtime(
         return tasks, {}
 
     # 2. 为每个角色创建独立配置、状态与 agent loop。
-    proactive_provider = _build_proactive_provider(config, provider)
+    proactive_provider = thinking_disabled_provider(config, provider)
     if provider_consumer is not None and proactive_provider is not provider:
         provider_consumer(proactive_provider)
     loops: dict[str, ProactiveLoop] = {}

@@ -8,13 +8,14 @@ from collections.abc import Awaitable, Callable, Coroutine, Sequence
 from dataclasses import dataclass, replace
 from typing import Any
 
-from shiori_sdk.core.conversation import ConversationMessage, TurnFinished, TurnStarting
-from shiori_sdk.core.scene import SceneHistoryMessage, SceneHost
-from shiori_sdk.role_events import (
-    ProactiveMessageCommitted,
-    SceneObservationCommitted,
-    SceneTurnSource,
+from shiori_sdk.core.conversation import (
+    ConversationMessage,
+    InitiatedMessageCommitted,
+    TurnFinished,
+    TurnStarting,
 )
+from shiori_sdk.core.scene import SceneHistoryMessage, SceneHost
+from shiori_sdk.role_events import SceneObservationCommitted, SceneTurnSource
 
 from .contracts import SceneDecision, SceneDecisionInput, SceneDecisionProtocolError
 from .decision import decide_scene
@@ -113,7 +114,7 @@ class SceneAwarenessController:
             assistant_reply=ctx.reply,
         )
 
-    def schedule_proactive_turn(self, event: ProactiveMessageCommitted) -> None:
+    def schedule_proactive_turn(self, event: InitiatedMessageCommitted) -> None:
         """Schedule scene observation for one committed proactive text message.
 
         按事件自带的 ``thread_id`` 判定上下文，外部上下文不观察。

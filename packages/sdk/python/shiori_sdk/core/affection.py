@@ -26,7 +26,7 @@ class Affection(Protocol):
     def handle_user_message(self, session_key: str) -> None: ...
 
     def handle_initiated_sent(self, session_key: str) -> None:
-        """Record that an initiated reply was delivered. Was ``handle_proactive_sent``."""
+        """Record that an initiated reply was delivered to the role's session."""
         ...
 
     async def apply_turn_affection(

@@ -26,7 +26,7 @@ from agent.tools.message_push import MessagePushTool
 from agent.turns.turn_pushes import current_turn_pushes
 from bus.event_bus import EventBus
 from bus.events_context import ContextWindowChanged
-from bus.events_lifecycle import ProactiveMessageCommitted, ReplyMessageCommitted
+from bus.events_lifecycle import InitiatedMessageCommitted, ReplyMessageCommitted
 from shiori_sdk.role_events import RoleDeleted
 from shiori_sdk.memory.committed import TurnCommitted
 from shiori_sdk.memory.engine import MemoryEngine
@@ -117,7 +117,7 @@ class DesktopBridgeService:
         self.event_bus.on(ReplyMessageCommitted, self._on_background_reply_message)
         self.event_bus.on(TurnCommitted, self._turn_committed_listener)
         self.event_bus.on(
-            ProactiveMessageCommitted,
+            InitiatedMessageCommitted,
             self._proactive_message_listener,
         )
         self._account_change_listener = self._on_account_change
@@ -335,7 +335,7 @@ class DesktopBridgeService:
 
     async def _on_proactive_message_committed(
         self,
-        event: ProactiveMessageCommitted,
+        event: InitiatedMessageCommitted,
     ) -> None:
         """Broadcasts successful proactive commits for desktop and external channels."""
 
@@ -348,7 +348,7 @@ class DesktopBridgeService:
         # Raised inside a bus observer: EventBus.fanout logs it and carries on,
         # so a malformed event is visible without breaking other listeners.
         if not event.message_id:
-            raise ValueError("ProactiveMessageCommitted 缺少 message_id")
+            raise ValueError("InitiatedMessageCommitted 缺少 message_id")
         session = self.session_manager.get_or_create(session_key)
         message = next(
             (
@@ -474,7 +474,7 @@ class DesktopBridgeService:
         self.event_bus.off(ReplyMessageCommitted, self._on_background_reply_message)
         self.event_bus.off(ContextWindowChanged, self._context_window_listener)
         self.event_bus.off(
-            ProactiveMessageCommitted,
+            InitiatedMessageCommitted,
             self._proactive_message_listener,
         )
         self.role_service.remove_role_deleted_listener(self._role_deleted_listener)

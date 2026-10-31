@@ -23,7 +23,7 @@ from agent.tools.registry import ToolRegistry
 from agent.turns.turn_pushes import current_turn_pushes
 from bootstrap.runtime.generations import RuntimeCandidate
 from bus.event_bus import EventBus
-from bus.events_lifecycle import ProactiveMessageCommitted
+from bus.events_lifecycle import InitiatedMessageCommitted
 from conversation.push_sync import ExternalPushSyncService
 from core.accounts import AccountRegistry
 from core.accounts.delivery_ledger import AccountDeliveryLedger
@@ -93,7 +93,7 @@ async def test_cg_reaches_the_bound_qq_chat_through_account_delivery(
     sessions.open_role_session("mira", role_name="Mira")
     bus, registry = EventBus(), ToolRegistry()
     synced = asyncio.Event()
-    bus.on(ProactiveMessageCommitted, lambda _: synced.set())
+    bus.on(InitiatedMessageCommitted, lambda _: synced.set())
     _ = ExternalPushSyncService(
         session_manager=sessions, event_bus=bus, live_turn_pushes=current_turn_pushes
     )

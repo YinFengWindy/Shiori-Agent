@@ -14,8 +14,8 @@ proactive runtime and the desktop preview alike, so both always agree.
 
 A role's own candidates are its desktop session followed by every private chat
 with the bound user (``core.identity``) through one of the role's online
-accounts. A chosen private chat is reached through that account
-(``ProactiveTargetResolver.bound_chat_target``).
+accounts (``core.roles.bound_chats``). A chosen private chat is reached
+through that account (``ProactiveTargetResolver.bound_chat_target``).
 """
 
 from __future__ import annotations
@@ -26,11 +26,10 @@ from datetime import datetime
 from conversation.service import desktop_chat_id
 from shiori_sdk.channels.threads import network_thread_id
 from conversation.store import ConversationStore
-from shiori_sdk.accounts.models import AccountRecord
 from shiori_sdk.accounts.targets import AccountTarget
 from core.common.channel_directory import DESKTOP_CHANNEL
 from core.desktop_presence import DesktopPresence
-from core.identity import IdentityChat, UserIdentity, identities_for_account
+from core.roles.bound_chats import bound_chat_target, role_bound_chats
 from core.roles.models import RoleProactiveCandidate
 from core.roles.store import RoleStore
 
@@ -99,7 +98,7 @@ class ProactiveTargetResolver:
             RoleProactiveCandidate(DESKTOP_CHANNEL, desktop_chat_id(role_id)),
             *(
                 RoleProactiveCandidate(chat.channel, chat.chat_id)
-                for _, _, chat in self._bound_chats(role_id)
+                for _, _, chat in role_bound_chats(self._roles, role_id)
             ),
         ]
         return self.resolve(role_id, candidates)
@@ -109,38 +108,10 @@ class ProactiveTargetResolver:
     ) -> tuple[str, AccountTarget]:
         """The account channel and private target reaching a bound user's chat.
 
-        ``channel`` / ``chat_id`` name a candidate ``resolve_saved`` chose; the
-        user is reached by their platform user ID through the role's account.
-        Raises LookupError when it is no longer a bound chat of an online
-        account of the role.
+        ``channel`` / ``chat_id`` name a candidate ``resolve_saved`` chose.
+        See ``core.roles.bound_chats.bound_chat_target``.
         """
-        for record, identity, chat in self._bound_chats(role_id):
-            if (chat.channel, chat.chat_id) == (channel, chat_id):
-                return record.plugin_id, AccountTarget("private", identity.user_id)
-        raise LookupError(f"主动推送目标已不是绑定用户的私聊: {channel}:{chat_id}")
-
-    def _bound_chats(
-        self, role_id: str
-    ) -> list[tuple[AccountRecord, UserIdentity, IdentityChat]]:
-        """Private chats with the bound user through the role's online accounts."""
-        records = [
-            account.record
-            for account in self._roles.accounts.list(role_id=role_id)
-            if account.runtime_active and account.connection == "online"
-        ]
-        bindings = self._roles.identities.list()
-        applicable = {
-            record.id: identities_for_account(bindings, record) for record in records
-        }
-        # Candidates follow binding order (``select_proactive_target`` falls
-        # back to the first), then account order within one binding.
-        return [
-            (record, identity, chat)
-            for identity in bindings
-            for record in records
-            if identity in applicable[record.id]
-            and (chat := identity.chat_for(record.id)) is not None
-        ]
+        return bound_chat_target(self._roles, role_id, channel, chat_id)
 
     def resolve(
         self, role_id: str, candidates: Sequence[RoleProactiveCandidate]

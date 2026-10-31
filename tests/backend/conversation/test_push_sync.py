@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from bus.event_bus import EventBus
-from bus.events_lifecycle import ExternalTextPushed, ProactiveMessageCommitted
+from bus.events_lifecycle import ExternalTextPushed, InitiatedMessageCommitted
 from conversation.push_sync import ExternalPushSyncService
 from session.manager import SessionManager
 
@@ -33,8 +33,8 @@ def _push(**overrides) -> ExternalTextPushed:
 async def test_host_owned_push_fills_the_committed_event(tmp_path) -> None:
     manager = SessionManager(tmp_path)
     bus = EventBus()
-    events: list[ProactiveMessageCommitted] = []
-    bus.on(ProactiveMessageCommitted, events.append)
+    events: list[InitiatedMessageCommitted] = []
+    bus.on(InitiatedMessageCommitted, events.append)
     ExternalPushSyncService(
         session_manager=manager,
         event_bus=bus,
@@ -49,7 +49,7 @@ async def test_host_owned_push_fills_the_committed_event(tmp_path) -> None:
     event = events[0]
     assert event.assistant_response == "带伞"
     assert event.chat_id == "cats"
-    assert event.source == "account_send"
+    assert event.source == "push"
     assert event.tools_used == ("account_send",)
     assert event.message_id == rows[0]["id"]
 
@@ -57,8 +57,8 @@ async def test_host_owned_push_fills_the_committed_event(tmp_path) -> None:
 async def test_in_turn_push_is_not_announced_immediately(tmp_path) -> None:
     manager = SessionManager(tmp_path)
     bus = EventBus()
-    events: list[ProactiveMessageCommitted] = []
-    bus.on(ProactiveMessageCommitted, events.append)
+    events: list[InitiatedMessageCommitted] = []
+    bus.on(InitiatedMessageCommitted, events.append)
     drafts = _Drafts()
     ExternalPushSyncService(
         session_manager=manager,

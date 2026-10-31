@@ -46,7 +46,7 @@ async def proactive_task(
     from agent.turns.orchestrator import TurnOrchestrator, TurnOrchestratorDeps
     from agent.turns.outbound import DeliveryReceipt
     from agent.looping.ports import SessionServices
-    from bus.events_lifecycle import ProactiveMessageCommitted
+    from bus.events_lifecycle import InitiatedMessageCommitted
     from conversation.service import ConversationService, desktop_thread_id
     from core.accounts.delivery_ledger import AccountDeliveryLedger
     from core.common.runtime_scope import bind_runtime
@@ -56,7 +56,7 @@ async def proactive_task(
 
     sent, events = [], []
     event_bus = env.host.loop._event_bus
-    event_bus.on(ProactiveMessageCommitted, events.append)
+    event_bus.on(InitiatedMessageCommitted, events.append)
 
     async def resolve(payload):
         if stage == "retarget":
