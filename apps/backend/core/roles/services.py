@@ -185,6 +185,7 @@ class RoleAggregateService:
         # 新建角色时默认绑定的对话模型；空串表示不自动绑定（存储层仍会显式写入空绑定）。
         self._default_dialogue_registration_id = default_dialogue_registration_id
         self._role_deleted_listeners: list[Callable[[str], None]] = []
+        self._role_created_listeners: list[Callable[[str], None]] = []
         if on_role_deleted is not None:
             self.add_role_deleted_listener(on_role_deleted)
 
@@ -201,6 +202,27 @@ class RoleAggregateService:
             self._role_deleted_listeners.remove(listener)
         except ValueError:
             return
+
+    def add_role_created_listener(self, listener: Callable[[str], None]) -> None:
+        """Registers a listener for a role that finished being created.
+
+        Unlike deletion, creation does not require a listener. A listener is
+        not required to create a role, and a failed create does not notify.
+        """
+        if listener not in self._role_created_listeners:
+            self._role_created_listeners.append(listener)
+
+    def remove_role_created_listener(self, listener: Callable[[str], None]) -> None:
+        """Removes a previously registered role-creation listener."""
+
+        try:
+            self._role_created_listeners.remove(listener)
+        except ValueError:
+            return
+
+    def _notify_role_created(self, role_id: str) -> None:
+        for listener in tuple(self._role_created_listeners):
+            listener(role_id)
 
     @classmethod
     def from_runtime(
@@ -250,9 +272,11 @@ class RoleAggregateService:
         if memory_state != role.memory_init_state:
             role = self.repository.update_role(role.id, memory_init_state=memory_state)
         session = self.sessions.open_by_role(role)
-        return RoleAggregate(
+        created = RoleAggregate(
             role=role, session=session, memory_root=self.memory.memory_root(role.id)
         )
+        self._notify_role_created(created.role.id)
+        return created
 
     def _with_default_dialogue_model(
         self, runtime_config: dict[str, Any] | None

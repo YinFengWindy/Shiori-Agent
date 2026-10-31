@@ -90,6 +90,7 @@ UTF-8 YAML。字段在 `apps/backend/agent/plugin_host/manifest.py` 解析；外
 | `markdown_memory` | `MARKDOWN_MEMORY` | 宿主（P6b）。`role(role_id)` 给出角色的 Markdown 记忆：读 `MEMORY.md` / `SELF.md`、写 `SELF.md`、`PENDING.md` 两阶段合并（`snapshot_pending` → `commit_long_term` / `rollback_pending_snapshot`）、`read_recent_context`（当前仍可见的近期语境正文）、首版 SELF 是否待生成，以及角色 `memory_init_state` 里插件自有的键（`read_state` / `write_state`；宿主自己的初始化键读不到、写入抛 `ValueError`）。端口本身跨代 |
 | `proactive_host` | `PROACTIVE_HOST` | 宿主（P6b）。主动 tick 的宿主能力：角色串行 tick、被动忙碌、补全（含自然草稿的一次格式纠正）、带核心校验的工具执行、工具 schema 与已连接的 MCP 服务器、目标候选与桌面在场、会话历史、自然回复作用域与投递。跑回合和投递走当前发布代；端口本身跨代。主动循环搬进插件之前仍可增删成员，4.0 发版时定稿 |
 | `conversation` | `CONVERSATION` | 宿主（P6b），每个代一份。`deliver_initiated_reply(InitiatedReply) -> InitiatedDelivery` 以会话所属角色投递一条主动回复，可带目标、媒体、心情、自然回复序列和工具事实，返回已落库的消息 id 与是否完整发出 |
+| `conversation_reply` | `CONVERSATION_REPLY` | 宿主（P6b），每个代一份，与 `CONVERSATION` 是同一个对象。`reply_state(role_id)` 读该代角色会话的心情目录和已存心情时间。tick 开始时把这两个字段抄进 `InitiatedReply`。4.x 不能把这个方法加进 `CONVERSATION`；5.0 把这个 Key 并回去 |
 | `memory_optimizer` | `MEMORY_OPTIMIZER` | 系统插件 `memory_optimizer`（P6b）。只有 `active_run()`：正在整理的角色与开始时间。核心 `get` 它在任务面板列出记忆维护，`None` 时不列 |
 
 旧的 `scene_observations` Key 在 4.0.0 删除。NovelAI 改为 `optional_inject: [scene]`，`get(SCENE)` 为空时不登记需求。场景插件经 `SCENE_HOST.on_published` 开始观察：本代已发布时（代内重载、代内启用）立即开始，否则等宿主发布本代。`mcp` 是外部插件，新装默认关闭，没启用时没有 `mcp_add`；`mcp_servers.json` 里已有服务器的老工作区会在启动时一次性写入 `[plugins.mcp] enabled = true`（见[生命周期](plugin-lifecycle.md)）。
@@ -179,6 +180,10 @@ npm 包、宿主 `setup.py` 和 host-testing 的精确 pin 必须等于这个版
 角色命名空间在 `ROLES.plugin_settings(role_id, namespace)`。目前只有 `proactive`，其它名字抛 `KeyError`。宿主仍用核心的主动配置解析它，直到主动行为移出核心。写入和桌面保存角色一样会清空已退役的 `candidates`（#427），插件读出再写回不会把旧绑定带回来。渲染侧的 `roleSettings` 槽已经存在，不是这次新加的。
 
 `CONVERSATION.deliver_initiated_reply(reply: InitiatedReply)` 由宿主按代提供，返回 `InitiatedDelivery`（已落库的消息 id 与 `complete`）。投递角色由 `session_key`（`role:<role_id>`）决定，目标必须属于该角色。`InitiatedReply` 与 `PROACTIVE_HOST` 一样，在 P6b-4b 主动循环接上之前仍可增删字段，4.0 发版时定稿。进程级循环用 `PROACTIVE_HOST.deliver`，它每次都走当前发布代；持有某一代 `CONVERSATION` 的插件只在那一代里投递。`InitiatedMessageCommitted` 带角色、渠道、会话、线程、消息 id、回复正文、所用工具和 `source`（插件发出的是 `InitiatedReply.source`，宿主推送是 `"push"`）。`RoleMarkdownMemory.read_recent_context` 读当前仍可见的近期语境。`PROACTIVE_HOST` 是主动回合的宿主端口：自然回复作用域、补全、工具与 MCP、目标选择、会话历史和投递都从这里走。`deliver` 与 `commit_natural_reply` 在 `InitiatedMessageCommitted` 之后返回，调用方的成功/失败副作用因此晚于该事件；已打开的自然计划用 `commit_natural_reply`，`deliver` 会再开一个作用域。除 `PROACTIVE_HOST` 与 `InitiatedReply` 外，4.x 不能再给这些 Protocol 加方法；这两处在主动循环搬进插件之前仍可增删，4.0 发版时定稿。
+
+`CONVERSATION_REPLY.reply_state(role_id)` 与 `CONVERSATION` 同一代、同一个对象。它读该代角色会话的心情目录和已存心情时间；主动层只发起，会话自己记这段回复的心情走到哪。`PROACTIVE_HOST` 不再提供 `reply_state`；`validate_reply` 校验时读本代的 `CONVERSATION_REPLY`。
+
+`RoleCreated` 与 `RoleDeleted` 成对：角色记录和会话创建成功后，桌面桥接把它放上事件总线。没有监听器也能创建。`RoleProactiveChanged`（`role_id`、`enabled`）是临时事件：宿主仍在写主动开关时，`enabled` 真正变化才发；创建角色不发。P6b 第 5 步把开关完全挪进插件后，这个事件随宿主写入一起删除。
 
 ## 测试
 

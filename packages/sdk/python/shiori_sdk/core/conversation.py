@@ -12,6 +12,11 @@ read-only mappings.
 ``Veto.reason`` as the reply (``TurnStarting``, ``ReasoningStarting``) or ends
 the tool loop with it (``StepStarting``). The other events cannot be vetoed;
 a veto there fails the turn. A vetoed event reaches no watcher.
+
+``CONVERSATION`` delivers one initiated reply for its generation.
+``CONVERSATION_REPLY`` is that generation's reply stamp: the mood catalog
+and the stored mood time. 4.x cannot add the read to ``CONVERSATION``
+(D19); 5.0 folds this key back into it.
 """
 
 from __future__ import annotations
@@ -326,7 +331,7 @@ class InitiatedReply:
     they must also be a chat the role can reach.
 
     ``expected_mood_updated_at`` and ``moods`` are the
-    ``PROACTIVE_HOST.reply_state(role_id)`` the caller read when its work
+    ``CONVERSATION_REPLY.reply_state(role_id)`` the caller read when its work
     started. The mood and thought are validated against ``moods``. When the
     role's stored mood changed after that read (a passive reply landed in
     between) the reply is stale: a single reply raises without sending; a
@@ -421,3 +426,39 @@ class Conversation(Protocol):
 
 CONVERSATION: Key[Conversation] = Key("conversation")
 """Initiated delivery for one generation. The host provides this."""
+
+
+@dataclass(frozen=True, kw_only=True)
+class RoleReplyState:
+    """The role session's mood catalog and when its current mood was stored.
+
+    Read it when work starts and copy both fields onto ``InitiatedReply``
+    (``moods`` and ``expected_mood_updated_at``). The session owns this
+    stamp. The proactive layer only starts the reply.
+    """
+
+    moods: tuple[str, ...]
+    mood_updated_at: str
+
+
+class ConversationReply(Protocol):
+    """The reply stamp of one generation's role sessions.
+
+    The host provides this beside ``CONVERSATION``, on the same object.
+    4.x cannot add ``reply_state`` to ``Conversation`` (D19). 5.0 folds
+    this key back into ``CONVERSATION``.
+    """
+
+    def reply_state(self, role_id: str) -> RoleReplyState:
+        """Moods the role may use, and the stored mood's timestamp.
+
+        Raises ``ValueError`` when the role is gone.
+        """
+        ...
+
+
+CONVERSATION_REPLY: Key[ConversationReply] = Key("conversation_reply")
+"""Reply stamp for one generation. The host provides this.
+
+5.0 folds this key into ``CONVERSATION``.
+"""

@@ -26,11 +26,16 @@ from conversation.service import ConversationService
 from core.roles.affection_access import AffectionGetter
 from core.roles.bound_chats import bound_chat_target
 from core.roles.reply_policy import ReplyPolicyGetter
+from core.roles.reply_state import role_mood_catalog
 from core.roles.services import RoleSessionService
 from core.roles.store import RoleStore
 from session.manager import SessionManager
 from session.manager.helpers import role_id_from_session_key
-from shiori_sdk.core.conversation import InitiatedDelivery, InitiatedReply
+from shiori_sdk.core.conversation import (
+    InitiatedDelivery,
+    InitiatedReply,
+    RoleReplyState,
+)
 from shiori_sdk.core.sessions import Presence
 
 
@@ -103,3 +108,18 @@ class HostConversation:
         RoleSessionService(self._session_manager).open_by_role(role)
         with bound_turn_getters(self._affection, self._reply_policy):
             return await deliver_checked_reply(orchestrator, reply)
+
+    def reply_state(self, role_id: str) -> RoleReplyState:
+        """Moods and the stored mood time on this generation's role session.
+
+        The caller copies both fields onto ``InitiatedReply`` when its work
+        starts. A missing role raises before a session is created for it.
+        """
+        role = self._role_store.get_role(role_id)
+        if role is None:
+            raise ValueError(f"role not found for proactive generation: {role_id}")
+        session = RoleSessionService(self._session_manager).open_by_role(role)
+        return RoleReplyState(
+            moods=role_mood_catalog(session.metadata.get("role_runtime_config", {})),
+            mood_updated_at=str(session.metadata.get("current_mood_updated_at", "")),
+        )

@@ -36,7 +36,7 @@ related:
 
 ## Proactive
 
-`ProactiveLoop` 驱动周期性 tick。传感器、presence、时间、关系和记忆等信息形成 `AgentTickContext`，随后经过裁定、Agent tick 创建、工具执行和投递。`ProactiveStateStore` 保存节流、最近行为和裁定所需状态。
+`ProactiveLoop` 驱动周期性 tick。传感器、presence、时间、关系和记忆等信息形成 `AgentTickContext`，随后经过裁定、Agent tick 创建、工具执行和投递。`ProactiveStateStore` 保存节流、最近行为和裁定所需状态。tick 开始时从本代 `CONVERSATION_REPLY.reply_state` 读取心情目录和已存心情时间，抄进 `InitiatedReply`。主动层只发起；`PROACTIVE_HOST.validate_reply` 校验时再读同一端口上的当前目录。
 
 准入（目标、忙碌）先运行；核心场景跟进、关系动机随后独立评估，动机只能认领本轮，不能拦下。关系阈值或关系专属冷却未满足只表示该动机未命中，不阻断 alerts/content 或 Drift。外部内容优先；没有外部内容时按场景跟进、关系 fallback、可用 Drift 的顺序选择。完全没有候选时不调用模型。只有实际用于本轮的场景动机才接收完成回写，外部内容送达不会增加场景跟进次数。
 

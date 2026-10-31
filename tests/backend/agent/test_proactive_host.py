@@ -30,9 +30,10 @@ from core.roles.affection_access import AffectionGetter
 from core.roles.errors import RoleNotFoundError
 from core.roles.reply_policy import ReplyPolicyGetter
 from core.roles.reply_state import InvalidRoleReply
+from core.roles.services import RoleSessionService
 from session.manager import SessionManager
 from session.manager.helpers import role_session_key
-from shiori_sdk.core.conversation import InitiatedReply
+from shiori_sdk.core.conversation import InitiatedReply, RoleReplyState
 from shiori_sdk.core.proactive_host import ProactiveToolCall
 
 
@@ -61,6 +62,11 @@ class _Runtime:
 
 def _runner(core: object) -> HostProactiveRunner:
     return HostProactiveRunner(lambda: _Runtime(core))
+
+
+class _UnusedReply:
+    def reply_state(self, role_id: str) -> RoleReplyState:
+        raise AssertionError(role_id)
 
 
 def _role_core(tmp_path, *, catalog: list[str] | None = None):
@@ -324,8 +330,29 @@ def test_role_prompt_includes_behavior_rules(tmp_path) -> None:
 
 def test_reply_validation_uses_the_role_mood_catalog(tmp_path) -> None:
     roles, sessions = _role_core(tmp_path, catalog=["想你"])
+    affection = AffectionGetter()
+    affection.bind(lambda: None)
+    policy = ReplyPolicyGetter()
+    policy.bind(lambda: None)
+
+    def unused(_role_id: str) -> TurnOrchestrator:
+        raise AssertionError("reply_state does not deliver")
+
+    conversation = HostConversation(
+        unused,
+        role_store=roles,
+        session_manager=sessions,
+        affection=affection,
+        reply_policy=policy,
+    )
+    role = roles.get_role("mira")
+    assert role is not None
+    opened = RoleSessionService(sessions).open_by_role(role)
+    opened.metadata["current_mood_updated_at"] = "2026-01-02T03:04:05+00:00"
+    sessions.save(opened)
     runner = _runner(
         SimpleNamespace(
+            conversation=conversation,
             session_manager=sessions,
             role_runtime_registry=SimpleNamespace(
                 repository=SimpleNamespace(store=roles)
@@ -334,7 +361,9 @@ def test_reply_validation_uses_the_role_mood_catalog(tmp_path) -> None:
     )
     reply = runner.validate_reply("mira", content="在", mood="想你", thought="我想你")
     assert reply.mood == "想你"
-    assert runner.reply_state("mira").moods == ("想你",)
+    state = conversation.reply_state("mira")
+    assert state.moods == ("想你",)
+    assert state.mood_updated_at == "2026-01-02T03:04:05+00:00"
     with pytest.raises(InvalidRoleReply):
         runner.validate_reply("mira", content="在", mood="平静", thought="我想你")
 
@@ -463,6 +492,7 @@ async def test_held_lease_keeps_the_draining_generation(tmp_path) -> None:
             ),
             kernel=core_kernel,
             proactive_host=runner,
+            conversation_reply=_UnusedReply(),
             group_environment=GroupEnvironment(tmp_path, sessions.conversation_store),
         )
         for task in tasks:

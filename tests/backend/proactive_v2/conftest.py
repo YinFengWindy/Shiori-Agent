@@ -21,12 +21,11 @@ from agent.turns.reply_interruption import (
 )
 from conversation.initiated import _turn_result
 from core.roles.reply_state import validate_role_reply
-from shiori_sdk.core.conversation import InitiatedDelivery
+from shiori_sdk.core.conversation import InitiatedDelivery, RoleReplyState
 from shiori_sdk.core.proactive_host import (
     NaturalReplyInvalidated,
     ProactiveToolCall,
     ProactiveToolOutcome,
-    RoleReplyState,
     ValidatedRoleReply,
 )
 from proactive_v2.config import ProactiveConfig
@@ -291,6 +290,29 @@ class _ReplyTicket:
         self.interruption.invalidate()
 
 
+class _PipelineReply:
+    """``CONVERSATION_REPLY`` for pipeline tests.
+
+    The pipeline exists only after this object is built, so the read looks
+    the orchestrator up when the tick starts.
+    """
+
+    def __init__(self, pipeline_ref: dict[str, Any]) -> None:
+        self._pipeline_ref = pipeline_ref
+
+    def reply_state(self, role_id: str) -> RoleReplyState:
+        del role_id
+        pipeline = self._pipeline_ref["pipeline"]
+        orchestrator = pipeline._turn_orchestrator
+        if orchestrator is None:
+            return RoleReplyState(moods=("平静",), mood_updated_at="")
+        captured = orchestrator.capture_reply_context(pipeline._session_key)
+        return RoleReplyState(
+            moods=tuple(captured.moods),
+            mood_updated_at=captured.previous_updated_at,
+        )
+
+
 class _PipelineHost:
     """The port surface the pipeline tests drive through their orchestrator.
 
@@ -304,19 +326,6 @@ class _PipelineHost:
 
     def _orchestrator(self) -> Any:
         return self._pipeline_ref["pipeline"]._turn_orchestrator
-
-    def reply_state(self, role_id: str) -> RoleReplyState:
-        del role_id
-        orchestrator = self._orchestrator()
-        if orchestrator is None:
-            return RoleReplyState(moods=("平静",), mood_updated_at="")
-        captured = orchestrator.capture_reply_context(
-            self._pipeline_ref["pipeline"]._session_key
-        )
-        return RoleReplyState(
-            moods=tuple(captured.moods),
-            mood_updated_at=captured.previous_updated_at,
-        )
 
     def natural_chat_enabled(self, session_key: str) -> bool:
         orchestrator = self._orchestrator()
@@ -515,6 +524,7 @@ def make_proactive_pipeline(
 
     pipeline_ref: dict[str, Any] = {}
     host = _PipelineHost(pipeline_ref, tool_deps)
+    reply = _PipelineReply(pipeline_ref)
     if tool_deps.proactive_host is None:
         tool_deps.proactive_host = host
 
@@ -573,6 +583,7 @@ def make_proactive_pipeline(
             drift_pipeline=drift_pipeline,
             kernel=core_kernel,
             proactive_host=host,
+            conversation_reply=reply,
             target_transport_fn=target_transport_fn,
             proactive_gates=proactive_gates,
         )

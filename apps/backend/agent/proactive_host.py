@@ -33,9 +33,8 @@ from core.common.runtime_scope import bind_runtime, current_runtime_lease
 from core.roles.bound_chats import bound_chat_target, role_bound_chats
 from core.roles.model_runtime import RoleAwareProvider
 from core.roles.reply_policy import natural_chat_selected
-from core.roles.reply_state import role_mood_catalog, validate_role_reply
+from core.roles.reply_state import validate_role_reply
 from core.roles.role_prompt_compiler import RolePromptCompiler
-from core.roles.services import RoleSessionService
 from session.manager.helpers import role_id_from_session_key, role_session_key
 from shiori_sdk.accounts.targets import AccountTarget
 from shiori_sdk.channels.threads import network_thread_id
@@ -51,7 +50,6 @@ from shiori_sdk.core.proactive_host import (
     ProactiveToolInvoker,
     ProactiveToolOutcome,
     RecentTurnMessage,
-    RoleReplyState,
     ValidatedRoleReply,
 )
 from shiori_sdk.prompting import is_context_frame
@@ -203,14 +201,6 @@ class HostProactiveRunner:
         identities = build_role_user_identities_prompt(role_id, store)
         return f"{prompt}\n\n{identities}" if identities else prompt
 
-    def reply_state(self, role_id: str) -> RoleReplyState:
-        """Moods and the stored mood timestamp, from the role's session."""
-        session = self._open_role_session(role_id)
-        return RoleReplyState(
-            moods=role_mood_catalog(session.metadata.get("role_runtime_config", {})),
-            mood_updated_at=str(session.metadata.get("current_mood_updated_at", "")),
-        )
-
     def validate_reply(
         self,
         role_id: str,
@@ -220,8 +210,8 @@ class HostProactiveRunner:
         thought: str,
         allow_empty_content: bool = False,
     ) -> ValidatedRoleReply:
-        """Validate one reply against the role's mood catalog."""
-        state = self.reply_state(role_id)
+        """Validate one reply against this generation's mood catalog."""
+        state = self._require_core().conversation.reply_state(role_id)
         reply = validate_role_reply(
             {"content": content, "mood": mood, "thought": thought},
             state.moods,
@@ -544,13 +534,6 @@ class HostProactiveRunner:
             tools=core.tools,
             role_store=core.role_runtime_registry.repository.store,
         )
-
-    def _open_role_session(self, role_id: str):
-        core = self._require_core()
-        role = core.role_runtime_registry.repository.store.get_role(role_id)
-        if role is None:
-            raise ValueError(f"role not found for proactive generation: {role_id}")
-        return RoleSessionService(core.session_manager).open_by_role(role)
 
     def _visible_core(self) -> Any:
         lease = current_runtime_lease()

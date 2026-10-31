@@ -48,6 +48,32 @@ class RoleStore:
         # Cached avatars of channel senders and chats (#514): written by plugins
         # through ``ctx.avatars``, read by the phone and identity bridge.
         self.avatars = ChannelAvatarStore(workspace)
+        self._proactive_switch_listeners: list[Callable[[str, bool], None]] = []
+
+    def add_proactive_switch_listener(
+        self, listener: Callable[[str, bool], None]
+    ) -> None:
+        """Notifies when ``proactive.enabled`` actually changes.
+
+        Temporary while the host still writes the switch. Creating a role
+        does not notify: there is no previous value. A write that leaves
+        ``enabled`` unchanged does not notify either.
+        """
+        if listener not in self._proactive_switch_listeners:
+            self._proactive_switch_listeners.append(listener)
+
+    def remove_proactive_switch_listener(
+        self, listener: Callable[[str, bool], None]
+    ) -> None:
+        """Withdraws a listener added with ``add_proactive_switch_listener``."""
+        try:
+            self._proactive_switch_listeners.remove(listener)
+        except ValueError:
+            return
+
+    def _notify_proactive_switch(self, role_id: str, enabled: bool) -> None:
+        for listener in tuple(self._proactive_switch_listeners):
+            listener(role_id, enabled)
 
     def bound_user_senders(self, role_id: str) -> BoundUserSenders:
         """The senders on ``role_id``'s channels bound to the user right now.
@@ -235,7 +261,10 @@ class RoleStore:
         ``change_affection_stage_prompts`` maps the current stage guidance
         overrides to the new ones; it runs under the lock, so concurrent
         writes of different stages each apply to the latest overrides.
+        A change to ``proactive.enabled`` notifies listeners after the save.
         """
+        updated: RoleRecord | None = None
+        switch: tuple[str, bool] | None = None
         with self._lock:
             roles = self.list_roles()
             for index, role in enumerate(roles):
@@ -261,7 +290,10 @@ class RoleStore:
                         if isinstance(proactive, RoleProactiveConfig)
                         else RoleProactiveConfig.from_dict(proactive)
                     )
+                    previous_enabled = role.proactive.enabled
                     role.proactive = replace(normalized, candidates=())
+                    if role.proactive.enabled != previous_enabled:
+                        switch = (role.id, role.proactive.enabled)
                 self._update_asset_categories(
                     role,
                     asset_categories=asset_categories,
@@ -283,8 +315,13 @@ class RoleStore:
                 role.updated_at = now_iso()
                 roles[index] = role
                 self._repository.save_roles(roles, plugin_data=extension_data)
-                return role
-        raise RoleNotFoundError(role_id)
+                updated = role
+                break
+        if updated is None:
+            raise RoleNotFoundError(role_id)
+        if switch is not None:
+            self._notify_proactive_switch(*switch)
+        return updated
 
     def write_plugin_proactive(self, role_id: str, value: dict[str, Any]) -> None:
         """Write the ``proactive`` namespace for ``ROLES.plugin_settings``.
@@ -295,17 +332,24 @@ class RoleStore:
         ``plugin_data`` is left as stored.
         """
         normalized = RoleProactiveConfig.from_dict(value)
+        switch: tuple[str, bool] | None = None
         with self._lock:
             roles = self.list_roles()
             for index, role in enumerate(roles):
                 if role.id != role_id:
                     continue
+                previous_enabled = role.proactive.enabled
                 role.proactive = replace(normalized, candidates=())
+                if role.proactive.enabled != previous_enabled:
+                    switch = (role.id, role.proactive.enabled)
                 role.updated_at = now_iso()
                 roles[index] = role
                 self._repository.save_roles(roles)
-                return
-        raise RoleNotFoundError(role_id)
+                break
+            else:
+                raise RoleNotFoundError(role_id)
+        if switch is not None:
+            self._notify_proactive_switch(*switch)
 
     def delete_role(self, role_id: str, *, remove_assets: bool = True) -> bool:
         with self._lock:

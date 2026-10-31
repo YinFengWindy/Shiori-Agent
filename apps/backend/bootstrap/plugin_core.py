@@ -54,7 +54,13 @@ from session.plugin_capability import HostSessions
 from shiori_sdk.background_results import BackgroundResults
 from shiori_sdk.commands import CommandRegistry
 from shiori_sdk.core.affection_host import AFFECTION_HOST
-from shiori_sdk.core.conversation import COMMANDS, CONVERSATION, Conversation
+from shiori_sdk.core.conversation import (
+    COMMANDS,
+    CONVERSATION,
+    CONVERSATION_REPLY,
+    Conversation,
+    ConversationReply,
+)
 from shiori_sdk.core.proactive_host import PROACTIVE_HOST, ProactiveHost
 from shiori_sdk.core.markdown_memory import MARKDOWN_MEMORY, MarkdownMemory
 from shiori_sdk.core.mcp_tools import MCP_TOOLS
@@ -163,6 +169,8 @@ class PluginCoreInputs:
     schedule_host: ScheduleHost | None = None
     proactive_host: ProactiveHost | None = None
     conversation: Conversation | None = None
+    # Same object as ``conversation``: the reply stamp is a separate key.
+    conversation_reply: ConversationReply | None = None
 
 
 def _publish(provide: CoreProvide, key: object, impl: object) -> None:
@@ -333,6 +341,9 @@ def plugin_core_modules(inputs: PluginCoreInputs) -> tuple[CoreModule, ...]:
             # Typed as the plugin contract, so pyright checks the host implementation.
             conversation: Conversation = inputs.conversation
             provide(CONVERSATION, conversation)
+        if inputs.conversation_reply is not None:
+            reply: ConversationReply = inputs.conversation_reply
+            provide(CONVERSATION_REPLY, reply)
 
     def provide_background(provide: CoreProvide) -> None:
         """Plugin-scoped background tasks (``core.common``)."""

@@ -50,6 +50,7 @@ from proactive_v2.sensor import Sensor
 from proactive_v2.state import ProactiveStateStore
 from proactive_v2.target_selection import ProactiveTargetResolver
 from session.manager import SessionManager
+from shiori_sdk.core.conversation import ConversationReply
 from shiori_sdk.core.proactive_host import ProactiveHost
 from shiori_sdk.core.sessions import Presence
 
@@ -92,12 +93,15 @@ class ProactiveLoop:
         event_bus: EventBus | None = None,
         role_prompt_fn: Callable[[], str] | None = None,
         proactive_host: ProactiveHost | None = None,
+        conversation_reply: ConversationReply | None = None,
         role_store: RoleStore | None = None,
         group_environment: "GroupEnvironment | None" = None,
     ) -> None:
         """``role_store`` is the runtime's shared store; its proactive switch
         decides whether a saved role is eligible. Candidate chats, desktop
         presence and thread history are read through ``proactive_host``.
+        ``conversation_reply`` is this generation's ``CONVERSATION_REPLY``;
+        the tick copies its stamp from there.
         ``group_environment`` is the runtime's shared layer (#497); the port
         reads it for recent external activity."""
         self._sessions = session_manager
@@ -119,6 +123,7 @@ class ProactiveLoop:
         self._tick_dispatcher = tick_dispatcher
         self._event_bus = event_bus
         self._host = proactive_host
+        self._conversation_reply = conversation_reply
         self._role_store = role_store
         self._group_environment = group_environment
         if role_prompt_fn is None:
@@ -230,6 +235,7 @@ class ProactiveLoop:
                 pool=self._mcp_pool,
                 kernel=self._kernel,
                 proactive_host=self._require_host(),
+                conversation_reply=self._conversation_reply,
                 proactive_gates=self._proactive_gates,
                 group_environment=self._group_environment,
                 # Proactive and drift turns always address the user (the user

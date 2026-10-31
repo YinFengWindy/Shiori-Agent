@@ -24,7 +24,7 @@ from proactive_v2.gateway import GatewayDeps
 from proactive_v2.tools import ToolDeps
 from core.memory.group_environment import GroupEnvironment
 from core.roles.reply_state import RoleReply, RoleReplyContext
-from shiori_sdk.core.conversation import InitiatedReply
+from shiori_sdk.core.conversation import ConversationReply, InitiatedReply
 from shiori_sdk.core.proactive_host import (
     CompletionToolCall,
     ModelCompletion,
@@ -74,6 +74,8 @@ class AgentTickDeps:
     # 好感块（#714）：每轮读取，注入主动与发呆回合的 context frame。
     affection_prompt_fn: Callable[[], str | None] | None = None
     proactive_host: ProactiveHost | None = None
+    # ``CONVERSATION_REPLY`` for this generation. The tick copies its stamp.
+    conversation_reply: ConversationReply | None = None
 
 
 class AgentTickFactory:
@@ -117,6 +119,7 @@ class AgentTickFactory:
                 target_transport_fn=self._deps.sense.target_transport,
                 kernel=self._deps.kernel,
                 proactive_host=self._host(),
+                conversation_reply=self._reply(),
                 proactive_gates=self._deps.proactive_gates,
             )
         )
@@ -133,6 +136,12 @@ class AgentTickFactory:
         if host is None:
             raise RuntimeError("主动回合缺少宿主端口")
         return host
+
+    def _reply(self) -> ConversationReply:
+        reply = self._deps.conversation_reply
+        if reply is None:
+            raise RuntimeError("主动回合缺少会话回复状态")
+        return reply
 
     def _build_llm_fn(self) -> LlmFn:
         host = self._host()

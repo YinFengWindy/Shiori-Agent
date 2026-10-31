@@ -13,6 +13,9 @@ Choosing a target reads candidate chats, the last user message on a thread
 and whether the user is at the desktop. Tool schemas and connected MCP server
 names come from the generation's registry. Session history reads return the
 role session's recent user-context turns and recent proactive messages.
+The reply stamp (mood catalog and stored mood time) is
+``CONVERSATION_REPLY`` on the generation the tick is using. This key
+starts the tick. The session keeps the stamp.
 
 This key and ``InitiatedReply`` may still gain or lose members until the
 proactive loop moves into its plugin; they are fixed when SDK 4.0 is released.
@@ -111,18 +114,6 @@ class ModelCompletion:
     content: str
     tool_calls: tuple[CompletionToolCall, ...] = ()
     thinking: str | None = None
-
-
-@dataclass(frozen=True, kw_only=True)
-class RoleReplyState:
-    """The role's mood catalog and when its current mood was last stored.
-
-    Read it when a tick starts and copy both fields into ``InitiatedReply``
-    (``moods`` and ``expected_mood_updated_at``).
-    """
-
-    moods: tuple[str, ...]
-    mood_updated_at: str
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -255,13 +246,6 @@ class ProactiveHost(Protocol):
         """
         ...
 
-    def reply_state(self, role_id: str) -> RoleReplyState:
-        """Moods the role may use, and the stored mood's timestamp.
-
-        Raises ``ValueError`` when the role is gone.
-        """
-        ...
-
     def validate_reply(
         self,
         role_id: str,
@@ -273,9 +257,10 @@ class ProactiveHost(Protocol):
     ) -> ValidatedRoleReply:
         """Validate one reply against the role's mood catalog.
 
-        Raises ``ValueError`` when the role is gone, the mood is outside the
-        catalog, the thought is not a short first-person line, or required
-        text is blank.
+        The catalog is ``CONVERSATION_REPLY.reply_state`` on the generation
+        this call can see. Raises ``ValueError`` when the role is gone, the
+        mood is outside the catalog, the thought is not a short first-person
+        line, or required text is blank.
         """
         ...
 

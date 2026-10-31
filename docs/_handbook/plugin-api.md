@@ -180,7 +180,7 @@ A live session the plugin reads; the plugin does not write it.
 
 ## `shiori_sdk.core.conversation`
 
-Turn events, ``COMMANDS``, and the initiated-delivery socket (D19, #902). The host emits one event per turn stage through the plugin kernel: ``on`` handlers run in plugin order and may return a replaced event, the core's fixed checks run on the final one, then ``watch`` handlers see it. Every event is a frozen projection of the host's turn state, never the state itself: the host applies only the fields documented as *writable* back to the turn and ignores changes to the others. Container fields are tuples, frozensets or read-only mappings. ``Veto`` stops a stage where it can stop: it aborts the turn with ``Veto.reason`` as the reply (``TurnStarting``, ``ReasoningStarting``) or ends the tool loop with it (``StepStarting``). The other events cannot be vetoed; a veto there fails the turn. A vetoed event reaches no watcher.
+Turn events, ``COMMANDS``, and the initiated-delivery socket (D19, #902). The host emits one event per turn stage through the plugin kernel: ``on`` handlers run in plugin order and may return a replaced event, the core's fixed checks run on the final one, then ``watch`` handlers see it. Every event is a frozen projection of the host's turn state, never the state itself: the host applies only the fields documented as *writable* back to the turn and ignores changes to the others. Container fields are tuples, frozensets or read-only mappings. ``Veto`` stops a stage where it can stop: it aborts the turn with ``Veto.reason`` as the reply (``TurnStarting``, ``ReasoningStarting``) or ends the tool loop with it (``StepStarting``). The other events cannot be vetoed; a veto there fails the turn. A vetoed event reaches no watcher. ``CONVERSATION`` delivers one initiated reply for its generation. ``CONVERSATION_REPLY`` is that generation's reply stamp: the mood catalog and the stored mood time. 4.x cannot add the read to ``CONVERSATION`` (D19); 5.0 folds this key back into it.
 
 ### `commands`
 
@@ -205,6 +205,18 @@ Deliver a reply the host initiated, outside a user turn. The host provides this 
 - `async deliver_initiated_reply(reply: core.conversation.InitiatedReply) -> core.conversation.InitiatedDelivery`
 
   Send ``reply``, store what was sent, and emit ``InitiatedMessageCommitted``. Returns what was stored (see ``InitiatedDelivery``). Raises before writing anything when the session is not a role session, the role is gone, a desktop target is not the role's own, the reply fails validation against ``reply.moods``, natural chat is off for a multi-message reply, tool facts arrive without that sequence, or a single reply is stale (``expected_mood_updated_at``). Raises when a send fails or is refused mid-way. A single reply then stores nothing. A sequence keeps the prefix already sent (stored and announced), and the first message of a refused desktop sequence raises instead of returning an empty result. Account sends that fail or whose outcome is unknown stay on the session as delivery records marked ``failed`` / ``uncertain``, outside the conversation history. A sequence needs a runtime lease or an already bound channel-sequence owner.
+
+### `conversation_reply`
+
+Target `shiori_sdk.core.conversation.ConversationReply`.
+
+#### `shiori_sdk.core.conversation.ConversationReply`
+
+The reply stamp of one generation's role sessions. The host provides this beside ``CONVERSATION``, on the same object. 4.x cannot add ``reply_state`` to ``Conversation`` (D19). 5.0 folds this key back into ``CONVERSATION``.
+
+- `reply_state(role_id: str) -> core.conversation.RoleReplyState`
+
+  Moods the role may use, and the stored mood's timestamp. Raises ``ValueError`` when the role is gone.
 
 #### `shiori_sdk.core.conversation.ConversationMessage`
 
@@ -237,7 +249,7 @@ A role message the user did not ask for was stored on the role session. The host
 
 #### `shiori_sdk.core.conversation.InitiatedReply`
 
-One initiated reply, including its target, media and natural sequence. The reply speaks for the role that owns ``session_key``, which must be exactly a role session key (``role:<role_id>``); any other key raises ``ValueError``. The target must be one that role can reach: its own desktop chat (``channel="desktop"``, ``chat_id="role:<role_id>"``; another desktop chat raises ``ValueError`` before anything is written), a private chat with the bound user through one of its online accounts, or an ``account_target`` sent through the role's account on ``account_channel``. Both account fields are given together or not at all. With an account target, ``channel`` / ``chat_id`` name the chat the reply is recorded under; a sequence first opens there, so for a sequence they must also be a chat the role can reach. ``expected_mood_updated_at`` and ``moods`` are the ``PROACTIVE_HOST.reply_state(role_id)`` the caller read when its work started. The mood and thought are validated against ``moods``. When the role's stored mood changed after that read (a passive reply landed in between) the reply is stale: a single reply raises without sending; a sequence is still sent and stored, but its mood and thought do not replace the newer state. ``content`` is the text stored on the role session. When ``messages`` is non-empty it must equal those texts joined by a blank line, and natural chat must be on for the role; delivery then sends each text as its own message and stores them in order. Media rides on the first message. ``tool_facts`` ride along with ``messages`` only. The stored messages are marked ``proactive`` with source ``proactive`` and ``tools_used=["message_push"]`` whatever ``source`` says; ``source`` only reaches ``InitiatedMessageCommitted``. They carry no evidence item ids. Fields may still be added or removed until the proactive loop runs on this type (P6b-4b); they are fixed when SDK 4.0 is released.
+One initiated reply, including its target, media and natural sequence. The reply speaks for the role that owns ``session_key``, which must be exactly a role session key (``role:<role_id>``); any other key raises ``ValueError``. The target must be one that role can reach: its own desktop chat (``channel="desktop"``, ``chat_id="role:<role_id>"``; another desktop chat raises ``ValueError`` before anything is written), a private chat with the bound user through one of its online accounts, or an ``account_target`` sent through the role's account on ``account_channel``. Both account fields are given together or not at all. With an account target, ``channel`` / ``chat_id`` name the chat the reply is recorded under; a sequence first opens there, so for a sequence they must also be a chat the role can reach. ``expected_mood_updated_at`` and ``moods`` are the ``CONVERSATION_REPLY.reply_state(role_id)`` the caller read when its work started. The mood and thought are validated against ``moods``. When the role's stored mood changed after that read (a passive reply landed in between) the reply is stale: a single reply raises without sending; a sequence is still sent and stored, but its mood and thought do not replace the newer state. ``content`` is the text stored on the role session. When ``messages`` is non-empty it must equal those texts joined by a blank line, and natural chat must be on for the role; delivery then sends each text as its own message and stores them in order. Media rides on the first message. ``tool_facts`` ride along with ``messages`` only. The stored messages are marked ``proactive`` with source ``proactive`` and ``tools_used=["message_push"]`` whatever ``source`` says; ``source`` only reaches ``InitiatedMessageCommitted``. They carry no evidence item ids. Fields may still be added or removed until the proactive loop runs on this type (P6b-4b); they are fixed when SDK 4.0 is released.
 
 - `session_key: str`
 - `content: str`
@@ -316,6 +328,13 @@ The turn is about to reason with the retrieved memory and skills. Writable: ``sk
 - `skill_names: tuple[str, ...]`
 - `retrieved_memory_block: str`
 - `extra_hints: tuple[str, ...]`
+
+#### `shiori_sdk.core.conversation.RoleReplyState`
+
+The role session's mood catalog and when its current mood was stored. Read it when work starts and copy both fields onto ``InitiatedReply`` (``moods`` and ``expected_mood_updated_at``). The session owns this stamp. The proactive layer only starts the reply.
+
+- `moods: tuple[str, ...]`
+- `mood_updated_at: str`
 
 #### `shiori_sdk.core.conversation.StepFinished`
 
@@ -545,7 +564,7 @@ Runs a bounded chat request using the injected provider's routing.
 
 ## `shiori_sdk.core.proactive_host`
 
-``PROACTIVE_HOST``: host services a proactive tick calls (P6b, #907). The port is process-wide. Calls that run or deliver work pin the currently published generation, the way an incoming message does, and wait while no generation admits work. A caller that already holds a lease keeps that lease. Reads use the current lease's generation when there is one, otherwise the published generation, and do not wait. A tick whose role has natural chat on opens one reply scope for the whole tick. The scope, its invalidation and its tool facts stay together: facts are committed before the scope ends, including when the plan is invalidated. Choosing a target reads candidate chats, the last user message on a thread and whether the user is at the desktop. Tool schemas and connected MCP server names come from the generation's registry. Session history reads return the role session's recent user-context turns and recent proactive messages. This key and ``InitiatedReply`` may still gain or lose members until the proactive loop moves into its plugin; they are fixed when SDK 4.0 is released.
+``PROACTIVE_HOST``: host services a proactive tick calls (P6b, #907). The port is process-wide. Calls that run or deliver work pin the currently published generation, the way an incoming message does, and wait while no generation admits work. A caller that already holds a lease keeps that lease. Reads use the current lease's generation when there is one, otherwise the published generation, and do not wait. A tick whose role has natural chat on opens one reply scope for the whole tick. The scope, its invalidation and its tool facts stay together: facts are committed before the scope ends, including when the plan is invalidated. Choosing a target reads candidate chats, the last user message on a thread and whether the user is at the desktop. Tool schemas and connected MCP server names come from the generation's registry. Session history reads return the role session's recent user-context turns and recent proactive messages. The reply stamp (mood catalog and stored mood time) is ``CONVERSATION_REPLY`` on the generation the tick is using. This key starts the tick. The session keeps the stamp. This key and ``InitiatedReply`` may still gain or lose members until the proactive loop moves into its plugin; they are fixed when SDK 4.0 is released.
 
 ### `proactive_host`
 
@@ -583,13 +602,9 @@ Host services for a proactive tick. The host provides this.
 
   The role prompt proactive turns use, including channel identities. Raises ``ValueError`` when the role is gone or the prompt is empty.
 
-- `reply_state(role_id: str) -> core.proactive_host.RoleReplyState`
-
-  Moods the role may use, and the stored mood's timestamp. Raises ``ValueError`` when the role is gone.
-
 - `validate_reply(role_id: str, *, content: str, mood: str, thought: str, allow_empty_content: bool = False) -> core.proactive_host.ValidatedRoleReply`
 
-  Validate one reply against the role's mood catalog. Raises ``ValueError`` when the role is gone, the mood is outside the catalog, the thought is not a short first-person line, or required text is blank.
+  Validate one reply against the role's mood catalog. The catalog is ``CONVERSATION_REPLY.reply_state`` on the generation this call can see. Raises ``ValueError`` when the role is gone, the mood is outside the catalog, the thought is not a short first-person line, or required text is blank.
 
 - `natural_chat_enabled(session_key: str) -> bool`
 
@@ -732,13 +747,6 @@ One user or assistant turn from the role's user-context history. ``content`` is 
 - `role: str`
 - `content: str`
 - `timestamp: str`
-
-#### `shiori_sdk.core.proactive_host.RoleReplyState`
-
-The role's mood catalog and when its current mood was last stored. Read it when a tick starts and copy both fields into ``InitiatedReply`` (``moods`` and ``expected_mood_updated_at``).
-
-- `moods: tuple[str, ...]`
-- `mood_updated_at: str`
 
 #### `shiori_sdk.core.proactive_host.ValidatedRoleReply`
 

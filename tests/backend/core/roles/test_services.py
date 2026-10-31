@@ -128,6 +128,23 @@ def test_role_deletion_listener_can_be_removed(tmp_path) -> None:
     assert deleted_role_ids == []
 
 
+def test_role_creation_notifies_after_success_and_not_after_removal(tmp_path) -> None:
+    service = RoleAggregateService.from_runtime(
+        workspace=tmp_path,
+        role_store=RoleStore(tmp_path),
+        session_manager=SessionManager(tmp_path),
+    )
+    created: list[str] = []
+    service.add_role_created_listener(created.append)
+    with pytest.raises(ValueError):
+        service.create_role(role_id="mira", name="  ", system_prompt="mira")
+    assert created == []
+    service.create_role(role_id="mira", name="Mira", system_prompt="You are Mira.")
+    service.remove_role_created_listener(created.append)
+    service.create_role(role_id="nana", name="Nana", system_prompt="You are Nana.")
+    assert created == ["mira"]
+
+
 def test_sync_role_creation_persists_the_structured_profile(tmp_path) -> None:
     service = RoleAggregateService.from_runtime(
         workspace=tmp_path,

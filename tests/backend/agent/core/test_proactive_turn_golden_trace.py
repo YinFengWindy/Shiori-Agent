@@ -397,6 +397,7 @@ async def proactive_host(
             proactive_motives=[RelationshipStrategy(affection_getter)],
             event_bus=bus,
             proactive_host=HostProactiveRunner(lambda: _PublishedRuntime()),
+            conversation_reply=conversation,
             group_environment=group_environment,
         )
     )

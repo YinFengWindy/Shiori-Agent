@@ -61,6 +61,7 @@ class RuntimeBackground:
                 event_bus=core.event_bus,
                 provider_consumer=core.additional_providers.append,
                 proactive_host=core.proactive_host,
+                conversation_reply=core.conversation,
                 group_environment=core.group_environment,
             )
             self._coroutines.extend(tasks)

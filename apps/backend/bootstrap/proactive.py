@@ -26,6 +26,7 @@ from proactive_v2.loop import ProactiveLoop
 from proactive_v2.preferences import load_proactive_preferences
 from proactive_v2.state import ProactiveStateStore
 from session.manager import SessionManager
+from shiori_sdk.core.conversation import ConversationReply
 from shiori_sdk.core.proactive_host import ProactiveHost
 from shiori_sdk.core.sessions import Presence
 
@@ -82,15 +83,17 @@ def build_proactive_runtime(
     event_bus: "EventBus | None" = None,
     provider_consumer: Callable[[LLMProvider], None] | None = None,
     proactive_host: ProactiveHost,
+    conversation_reply: ConversationReply,
     group_environment: GroupEnvironment,
 ) -> tuple[list, dict[str, ProactiveLoop]]:
     """Builds one proactive loop per enabled role.
 
     Ticks, the role prompt, the passive-busy check, target reads and the
     model, tools and delivery a tick uses go through ``proactive_host``
-    (``PROACTIVE_HOST``). ``group_environment`` is the runtime's shared group
-    environment layer (#497); the port reads that same object for recent
-    external activity.
+    (``PROACTIVE_HOST``). The reply stamp is ``conversation_reply``
+    (``CONVERSATION_REPLY``) for this generation. ``group_environment`` is
+    the runtime's shared group environment layer (#497); the port reads
+    that same object for recent external activity.
     """
     tasks: list = []
     roles = [
@@ -134,6 +137,7 @@ def build_proactive_runtime(
             role_prompt_fn=_role_prompt(proactive_host, role.id),
             tick_dispatcher=_tick_through_port(proactive_host, role.id),
             proactive_host=proactive_host,
+            conversation_reply=conversation_reply,
             role_store=role_store,
             group_environment=group_environment,
         )

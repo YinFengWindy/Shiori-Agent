@@ -8,6 +8,7 @@ from typing import Any, Callable
 from ..drift_turn import DriftTurnPipeline
 from agent.tools.execution import KernelSource
 from agent.turns.orchestrator import TurnOrchestrator
+from shiori_sdk.core.conversation import ConversationReply
 from shiori_sdk.core.proactive_host import ProactiveHost
 from agent.turns.result import TurnResult
 from proactive_v2.config import ProactiveConfig
@@ -67,6 +68,8 @@ class ProactiveTurnPipelineDeps:
     kernel: KernelSource
     # ``PROACTIVE_HOST``: natural scope, completion, tools, delivery and reads.
     proactive_host: ProactiveHost
+    # ``CONVERSATION_REPLY``: this generation's session owns the reply stamp.
+    conversation_reply: ConversationReply
     # Selects this tick's single delivery target; None means no candidate session.
     target_transport_fn: Callable[[], tuple[str, str] | None] | None = None
     proactive_gates: ProactiveGateChain | None = None

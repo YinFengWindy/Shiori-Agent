@@ -259,7 +259,7 @@ async def test_started_runtime_serves_proactive_host_and_conversation(
     ``report(False)``.
     """
     from bootstrap.app import RuntimeFeatures
-    from shiori_sdk.core.conversation import CONVERSATION
+    from shiori_sdk.core.conversation import CONVERSATION, CONVERSATION_REPLY
     from shiori_sdk.core.proactive_host import PROACTIVE_HOST
 
     app = AppRuntime(
@@ -273,7 +273,11 @@ async def test_started_runtime_serves_proactive_host_and_conversation(
         kernel = app.core.plugin_manager.kernel
         host = kernel.get(PROACTIVE_HOST)
         conversation = kernel.get(CONVERSATION)
-        assert host is not None and conversation is not None
+        reply = kernel.get(CONVERSATION_REPLY)
+        assert host is not None and conversation is not None and reply is not None
+        assert reply is conversation
+        with pytest.raises(ValueError, match="role not found for proactive generation"):
+            reply.reply_state("missing")
         assert host.user_at_desktop() is True
         app.desktop_presence.report(False)
         assert host.user_at_desktop() is False

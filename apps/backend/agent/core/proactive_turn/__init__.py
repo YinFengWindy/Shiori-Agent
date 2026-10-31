@@ -102,6 +102,7 @@ class ProactiveTurnPipeline:
         self._target_transport_fn = deps.target_transport_fn
         self._proactive_gates = deps.proactive_gates or ProactiveGateChain()
         self._host = deps.proactive_host
+        self._reply = deps.conversation_reply
 
         if (
             self._drift_pipeline is not None
@@ -129,7 +130,7 @@ class ProactiveTurnPipeline:
             session_key=self._session_key,
             now_utc=datetime.now(timezone.utc),
         )
-        state = self._host.reply_state(role_id_from_session_key(self._session_key))
+        state = self._reply.reply_state(role_id_from_session_key(self._session_key))
         ctx.reply_context = RoleReplyContext(
             moods=state.moods,
             previous_updated_at=state.mood_updated_at,
