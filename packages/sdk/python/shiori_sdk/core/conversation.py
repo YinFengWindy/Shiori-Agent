@@ -313,10 +313,11 @@ class InitiatedToolFact:
 class InitiatedReply:
     """One initiated reply, including its target, media and natural sequence.
 
-    The reply speaks for the role that owns ``session_key``, which must be a
-    role session (``role:<role_id>``); any other key raises ``ValueError``.
-    The target must be one that role can reach: its own desktop chat
-    (``channel="desktop"``, ``chat_id="role:<role_id>"``), a private chat
+    The reply speaks for the role that owns ``session_key``, which must be
+    exactly a role session key (``role:<role_id>``); any other key raises
+    ``ValueError``. The target must be one that role can reach: its own
+    desktop chat (``channel="desktop"``, ``chat_id="role:<role_id>"``; another
+    desktop chat raises ``ValueError`` before anything is written), a private chat
     with the bound user through one of its online accounts, or an
     ``account_target`` sent through the role's account on
     ``account_channel``. Both account fields are given together or not at
@@ -341,6 +342,9 @@ class InitiatedReply:
     The stored messages are marked ``proactive`` with source ``proactive`` and
     ``tools_used=["message_push"]`` whatever ``source`` says; ``source`` only
     reaches ``InitiatedMessageCommitted``. They carry no evidence item ids.
+
+    Fields may still be added or removed until the proactive loop runs on
+    this type (P6b-4b); they are fixed when SDK 4.0 is released.
     """
 
     session_key: str
@@ -375,8 +379,8 @@ class InitiatedDelivery:
     True only when every message of the reply was sent and stored.
 
     An incomplete result is not an error. For a single reply it means the
-    transport refused it (for instance a desktop chat that is not the role's
-    own) and nothing was stored. For a sequence it means a newer user message
+    transport refused it (the desktop did not accept the message) and nothing
+    was stored. For a sequence it means a newer user message
     in that chat, the role's removal or natural chat being switched off
     stopped it: the prefix already sent is stored and announced (possibly
     none), the rest is dropped.
@@ -397,8 +401,8 @@ class Conversation(Protocol):
         """Send ``reply``, store what was sent, and emit ``InitiatedMessageCommitted``.
 
         Returns what was stored (see ``InitiatedDelivery``). Raises before
-        sending anything when the session is not a role session, the role is
-        gone, the reply fails validation against ``reply.moods``, natural chat
+        writing anything when the session is not a role session, the role is
+        gone, a desktop target is not the role's own, the reply fails validation against ``reply.moods``, natural chat
         is off for a multi-message reply, tool facts arrive without that
         sequence, or a single reply is stale (``expected_mood_updated_at``).
 

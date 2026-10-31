@@ -178,7 +178,7 @@ npm 包、宿主 `setup.py` 和 host-testing 的精确 pin 必须等于这个版
 
 角色命名空间在 `ROLES.plugin_settings(role_id, namespace)`。目前只有 `proactive`，其它名字抛 `KeyError`。宿主仍用核心的主动配置解析它，直到主动行为移出核心。写入和桌面保存角色一样会清空已退役的 `candidates`（#427），插件读出再写回不会把旧绑定带回来。渲染侧的 `roleSettings` 槽已经存在，不是这次新加的。
 
-`CONVERSATION.deliver_initiated_reply(reply: InitiatedReply)` 由宿主按代提供，返回 `InitiatedDelivery`（已落库的消息 id 与 `complete`）。投递角色由 `session_key`（`role:<role_id>`）决定，目标必须属于该角色。进程级循环用 `PROACTIVE_HOST.deliver`，它每次都走当前发布代；持有某一代 `CONVERSATION` 的插件只在那一代里投递。`InitiatedMessageCommitted` 带角色、渠道、会话、线程、消息 id、回复正文、所用工具和 `source`（插件发出的是 `InitiatedReply.source`，宿主推送是 `"push"`）。`RoleMarkdownMemory.read_recent_context` 读当前仍可见的近期语境。`PROACTIVE_HOST` 是主动回合的宿主端口；主动循环改走它是后续改动。4.x 不能再给这些 Protocol 加方法。
+`CONVERSATION.deliver_initiated_reply(reply: InitiatedReply)` 由宿主按代提供，返回 `InitiatedDelivery`（已落库的消息 id 与 `complete`）。投递角色由 `session_key`（`role:<role_id>`）决定，目标必须属于该角色。`InitiatedReply` 与 `PROACTIVE_HOST` 一样，在 P6b-4b 主动循环接上之前仍可增删字段，4.0 发版时定稿。进程级循环用 `PROACTIVE_HOST.deliver`，它每次都走当前发布代；持有某一代 `CONVERSATION` 的插件只在那一代里投递。`InitiatedMessageCommitted` 带角色、渠道、会话、线程、消息 id、回复正文、所用工具和 `source`（插件发出的是 `InitiatedReply.source`，宿主推送是 `"push"`）。`RoleMarkdownMemory.read_recent_context` 读当前仍可见的近期语境。`PROACTIVE_HOST` 是主动回合的宿主端口；主动循环改走它是后续改动。4.x 不能再给这些 Protocol 加方法。
 
 ## 测试
 

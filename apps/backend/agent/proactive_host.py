@@ -50,10 +50,11 @@ class HostProactiveRunner:
 
     def __init__(self, runtime_provider: Callable[[], Any]) -> None:
         self._runtime_provider = runtime_provider
-        # The last generation ``complete`` ran on, held weakly so a retired
-        # generation is not kept alive, and the provider built for it.
-        self._completion_core: weakref.ref[Any] | None = None
-        self._completion_provider: LLMProvider | None = None
+        # One provider per generation ``complete`` ran on, keyed by the core's
+        # id (``CoreRuntime`` is not hashable) and held weakly, so an old
+        # generation's long tick and the new one's ticks can interleave
+        # without rebuilding and a retired generation is not kept alive.
+        self._completion_providers: dict[int, tuple[weakref.ref[Any], LLMProvider]] = {}
 
     async def run_tick[T](
         self, role_id: str, operation: Callable[[], Awaitable[T]]
@@ -239,14 +240,16 @@ class HostProactiveRunner:
         Built once per generation and registered on its ``additional_providers``
         so it closes when that generation closes, after its leases drain.
         """
-        if self._completion_core is not None and self._completion_core() is core:
-            assert self._completion_provider is not None
-            return self._completion_provider
+        cached = self._completion_providers.get(id(core))
+        if cached is not None and cached[0]() is core:
+            return cached[1]
         provider = thinking_disabled_provider(core.config, core.provider)
         if provider is not core.provider:
             core.additional_providers.append(provider)
-        self._completion_core = weakref.ref(core)
-        self._completion_provider = provider
+        key = id(core)
+        self._completion_providers[key] = (weakref.ref(core), provider)
+        # Drop the entry with the generation, so its id cannot be reused.
+        weakref.finalize(core, self._completion_providers.pop, key, None)
         return provider
 
     def _open_role_session(self, role_id: str):

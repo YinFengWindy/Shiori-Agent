@@ -324,6 +324,47 @@ async def test_interrupted_sequence_reports_the_stored_prefix(
     assert delivery == InitiatedDelivery(message_ids=(row["id"],), complete=False)
 
 
+async def test_caller_cancel_during_pacing_propagates_and_leaves_no_task(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Cancelling the caller is not an interruption: it raises, after the prefix."""
+    paused = asyncio.Event()
+
+    async def pace(_seconds: float) -> None:
+        paused.set()
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr("agent.turns.reply_sequence.wait_between_messages", pace)
+    roles = _natural_roles(tmp_path)
+    manager = SessionManager(tmp_path)
+    manager.get_or_create("role:mira").metadata["role_id"] = "mira"
+    bus = EventBus()
+    sent = []
+    orchestrator = _orchestrator(manager, bus, _recording_outbound(sent), roles=roles)
+    reply = _reply(content="先说一句\n\n再说一句", messages=("先说一句", "再说一句"))
+
+    async def deliver() -> InitiatedDelivery:
+        with _getters(policy=object()), ChannelSequenceOwner().bind(MessageBus()):
+            return await commit_initiated_reply(orchestrator, reply)
+
+    task = asyncio.create_task(deliver())
+    try:
+        await asyncio.wait_for(paused.wait(), 3)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.wait_for(task, 3)
+    finally:
+        await bus.aclose()
+    pending = [
+        other
+        for other in asyncio.all_tasks()
+        if other.get_name().startswith("initiated-reply:") and not other.done()
+    ]
+    assert pending == []
+    assert [message.content for message in sent] == ["先说一句"]
+    assert len(manager._store.fetch_session_messages("role:mira")) == 1
+
+
 async def test_sequence_requires_natural_chat(tmp_path) -> None:
     roles = _natural_roles(tmp_path)
     manager = SessionManager(tmp_path)

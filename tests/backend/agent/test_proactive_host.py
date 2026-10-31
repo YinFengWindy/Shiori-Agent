@@ -246,23 +246,26 @@ async def test_completion_forces_thinking_off_on_the_fallback_provider(
 async def test_completion_provider_closes_with_its_generation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A config change publishes a new generation; the old provider leaves with it."""
+    """A config change publishes a new generation; each keeps one provider.
+
+    An old generation's long tick and the new generation's ticks interleave
+    while the old one drains; neither rebuilds its provider.
+    """
     requests = _record_requests(monkeypatch)
     first, second = _Generation("first-key"), _Generation("second-key")
     runtime = _Runtime(first)
     runner = HostProactiveRunner(lambda: runtime)
     try:
-        await runner.complete([{"role": "user", "content": "早"}])
-        await runner.complete([{"role": "user", "content": "早"}])
-        runtime.core = second
-        await runner.complete([{"role": "user", "content": "早"}])
+        for core in (first, second, first, second, first):
+            runtime.core = core
+            await runner.complete([{"role": "user", "content": "早"}])
     finally:
         await first.aclose()
         await second.aclose()
     used = [provider for provider, _body in requests]
-    assert used[0] is used[1]
     assert first.additional_providers == [used[0]]
-    assert second.additional_providers == [used[2]]
+    assert second.additional_providers == [used[1]]
+    assert used == [used[0], used[1], used[0], used[1], used[0]]
 
 
 def test_desktop_presence_follows_the_process_report() -> None:

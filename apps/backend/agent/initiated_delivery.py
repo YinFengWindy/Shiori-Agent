@@ -17,7 +17,11 @@ from agent.tools.registry import ToolRegistry
 from agent.turns.orchestrator import TurnOrchestrator, TurnOrchestratorDeps
 from agent.turns.outbound import PushToolOutboundPort
 from bus.event_bus import EventBus
-from conversation.initiated import bound_turn_getters, commit_initiated_reply
+from conversation.initiated import (
+    bound_turn_getters,
+    check_initiated_reply,
+    deliver_checked_reply,
+)
 from conversation.service import ConversationService
 from core.roles.affection_access import AffectionGetter
 from core.roles.bound_chats import bound_chat_target
@@ -85,15 +89,17 @@ class HostConversation:
         """Deliver ``reply`` for the role owning its session, on this generation."""
         role_id = role_id_from_session_key(reply.session_key)
         if not role_id:
-            raise ValueError(f"主动投递只接受角色会话: {reply.session_key}")
-        # Checked before the orchestrator opens the session, so a deleted
-        # role's session is not recreated. Opening it by the role keeps the
-        # session's role metadata current, as a proactive tick does.
+            raise ValueError(f"主动投递只接受角色会话: {reply.session_key!r}")
+        # Everything that can refuse the reply is checked before the session
+        # is opened, so a deleted role's session is not recreated and a
+        # refused reply writes nothing (not even a sequence's tool facts).
         role = self._role_store.get_role(role_id)
         if role is None:
             raise ValueError(f"主动投递的角色不存在: {role_id}")
+        orchestrator = self._orchestrator_for_role(role_id)
+        check_initiated_reply(orchestrator, reply)
+        # Opening it by the role keeps the session's role metadata current,
+        # as a proactive tick does.
         RoleSessionService(self._session_manager).open_by_role(role)
         with bound_turn_getters(self._affection, self._reply_policy):
-            return await commit_initiated_reply(
-                self._orchestrator_for_role(role_id), reply
-            )
+            return await deliver_checked_reply(orchestrator, reply)

@@ -31,8 +31,11 @@ from core.roles.reply_policy import (
     bind_turn_reply_policy,
     reset_turn_reply_policy,
 )
+from conversation.service import desktop_chat_id
 from core.common.cancellation import finish_started
+from core.common.channel_directory import DESKTOP_CHANNEL
 from core.roles.reply_state import RoleReplyContext, validate_role_reply
+from session.manager.helpers import role_id_from_session_key, role_session_key
 from shiori_sdk.accounts.targets import AccountTarget
 from shiori_sdk.core.conversation import InitiatedDelivery, InitiatedReply
 
@@ -70,7 +73,39 @@ async def commit_initiated_reply(
     sequence needs natural chat and either a runtime lease or an already
     bound channel-sequence owner.
     """
-    _reject_ill_shaped(orchestrator, reply)
+    check_initiated_reply(orchestrator, reply)
+    return await deliver_checked_reply(orchestrator, reply)
+
+
+def check_initiated_reply(
+    orchestrator: TurnOrchestrator, reply: InitiatedReply
+) -> None:
+    """Reject a reply whose session, target or shape is wrong, before any write.
+
+    The session must be the canonical ``role:<role_id>`` key, and a desktop
+    target must be that role's own desktop chat. Raises ``ValueError`` for
+    those and for an ill-shaped sequence, ``RuntimeError`` when a sequence
+    needs natural chat and the role has it off.
+    """
+    role_id = role_id_from_session_key(reply.session_key)
+    if not role_id or reply.session_key != role_session_key(role_id):
+        raise ValueError(f"主动投递只接受角色会话: {reply.session_key!r}")
+    if reply.channel == DESKTOP_CHANNEL and reply.chat_id != desktop_chat_id(role_id):
+        raise ValueError(f"主动投递的桌面目标不属于角色 {role_id}: {reply.chat_id}")
+    if reply.tool_facts and not reply.messages:
+        raise ValueError("工具事实只能随自然回复序列保存")
+    if not reply.messages:
+        return
+    if reply.content != "\n\n".join(reply.messages):
+        raise ValueError("主动草稿与已校验消息列表不一致")
+    if not orchestrator.natural_chat_enabled(reply.session_key):
+        raise RuntimeError("自然回复序列需要角色开启自然聊天")
+
+
+async def deliver_checked_reply(
+    orchestrator: TurnOrchestrator, reply: InitiatedReply
+) -> InitiatedDelivery:
+    """Deliver a reply ``check_initiated_reply`` accepted."""
     committed: list[str] = []
     if not reply.messages:
         sent = await orchestrator.handle_proactive_turn(
@@ -96,17 +131,6 @@ async def commit_initiated_reply(
         # A newer user message stopped the sequence; its sent prefix stays.
         return InitiatedDelivery(message_ids=tuple(committed), complete=False)
     return InitiatedDelivery(message_ids=tuple(committed), complete=True)
-
-
-def _reject_ill_shaped(orchestrator: TurnOrchestrator, reply: InitiatedReply) -> None:
-    if reply.tool_facts and not reply.messages:
-        raise ValueError("工具事实只能随自然回复序列保存")
-    if not reply.messages:
-        return
-    if reply.content != "\n\n".join(reply.messages):
-        raise ValueError("主动草稿与已校验消息列表不一致")
-    if not orchestrator.natural_chat_enabled(reply.session_key):
-        raise RuntimeError("自然回复序列需要角色开启自然聊天")
 
 
 async def _send_sequence(
