@@ -161,7 +161,7 @@ context 无需 ACK，无需 `event_id`/`kind`。
 
 实现完成后，**必须执行以下验证步骤**，确认返回值能通过 engine 的提取和归一化链路。
 直接在 MCP server 目录下用 python 调用 backend 函数，不需要启动完整 agent。
-如果需要导入当前 agent 仓库里的 `proactive_v2.*` 模块，不要写死绝对路径；先定位仓库根目录，再把它加入 `sys.path`。
+如果需要导入当前 agent 仓库里的 `plugins.proactive.backend.*` 模块，不要写死绝对路径；先定位仓库根目录，再把它加入 `sys.path`。
 
 #### alert 通道验证
 
@@ -181,12 +181,12 @@ data = json.loads(raw)
 assert isinstance(data, list), f"FAIL: 返回不是 list，是 {type(data).__name__}"
 
 # 检查点 2: 模拟 engine 提取
-from proactive_v2.mcp_sources import _extract_proactive_events
+from plugins.proactive.backend.mcp_sources import _extract_proactive_events
 events = _extract_proactive_events(data, server="你的server名", kind="alert")
 assert len(events) > 0, "FAIL: _extract_proactive_events 过滤后为空（检查 kind 字段）"
 
 # 检查点 3: 模拟 engine 归一化
-from proactive_v2.contracts import normalize_alert
+from plugins.proactive.backend.contracts import normalize_alert
 for e in events:
     contract = normalize_alert(e)
     assert contract.item_id != "?:?", f"FAIL: event_id 缺失 → item_id={contract.item_id}"
@@ -227,11 +227,11 @@ data = json.loads(raw)
 
 assert isinstance(data, list), f"FAIL: 返回不是 list"
 
-from proactive_v2.mcp_sources import _extract_proactive_events
+from plugins.proactive.backend.mcp_sources import _extract_proactive_events
 events = _extract_proactive_events(data, server="你的server名", kind="content")
 assert len(events) > 0, "FAIL: 提取后为空（检查 kind='content'）"
 
-from proactive_v2.contracts import normalize_content
+from plugins.proactive.backend.contracts import normalize_content
 for e in events:
     # content 走 gateway 预取，gateway 用 content_meta 格式
     meta = {
@@ -267,11 +267,11 @@ sys.path.insert(0, str(REPO_ROOT))
 raw = 你的context函数()
 data = json.loads(raw)
 
-from proactive_v2.mcp_sources import _extract_context_items
+from plugins.proactive.backend.mcp_sources import _extract_context_items
 items = _extract_context_items(data, server="你的server名")
 assert len(items) > 0, f"FAIL: _extract_context_items 返回空（检查返回的是 dict 或 list[dict]）"
 
-from proactive_v2.contracts import normalize_context
+from plugins.proactive.backend.contracts import normalize_context
 for item in items:
     contract = normalize_context(item)
     prompt = contract.to_prompt_item()

@@ -15,8 +15,6 @@ if TYPE_CHECKING:
     from desktop_bridge.method_policy import MethodPolicy
 
 from agent.config_models import Config, WiringConfig
-from agent.core.proactive_turn.gates import ProactiveGate
-from agent.core.proactive_turn.scene_subscription import SceneFollowupSubscription
 from agent.context import ContextBuilder
 from agent.looping.core import AgentLoop
 from agent.looping.ports import (
@@ -49,7 +47,6 @@ from agent.tools.spawn import SpawnTool
 from conversation.listening import GroupListeningControl
 from core.common.cleanup import run_cleanup_steps
 from bootstrap.paths import plugin_roots
-from bootstrap.proactive import assemble_generation_proactive
 from bootstrap.runtime.construction import track_build_resource
 from bootstrap.toolsets.meta import (
     build_readonly_tools,
@@ -128,8 +125,6 @@ class CoreRuntime:
     agent_provider: LLMProvider | None = None
     plugin_manager: "PluginKernel | None" = None
     additional_providers: list[LLMProvider] = field(default_factory=list)
-    proactive_motives: list[ProactiveGate] = field(default_factory=list)
-    scene_followup_subscription: SceneFollowupSubscription | None = None
     # Shared by every generation; bound to the long-lived channel host at start.
     channel_directory: ChannelDirectory = field(default_factory=ChannelDirectory)
     _drain_task: asyncio.Task[None] | None = field(default=None, init=False, repr=False)
@@ -188,12 +183,6 @@ class CoreRuntime:
                 ("memory.maintenance.drain", maintenance.drain),
             ]
         )
-        if self.scene_followup_subscription is not None:
-
-            async def stop_scene_followup() -> None:
-                self.scene_followup_subscription.stop()
-
-            steps.append(("scene_followup.stop", stop_scene_followup))
         await run_cleanup_steps(*steps)
 
     async def stop(self, *, force: bool = False) -> None:
@@ -646,11 +635,6 @@ def build_core_runtime(
     )
     plugin_rpc: PluginRpcRegistry[MethodPolicy] = PluginRpcRegistry(event_bus)
     plugin_dirs = _resolve_plugin_dirs(workspace)
-    proactive_strategies, proactive_motives, scene_followup_subscription = (
-        assemble_generation_proactive(
-            config.plugins, affection=affection, event_bus=event_bus
-        )
-    )
     plugin_manager = PluginKernel(
         plugin_dirs=plugin_dirs,
         external_plugin_dirs=[workspace / "plugins"],
@@ -688,7 +672,6 @@ def build_core_runtime(
                 event_bus=event_bus,
                 rpc=plugin_rpc,
                 workspace=workspace,
-                scene_followup=proactive_strategies.scene_followup,
                 tools=tools,
                 role_store=role_store,
                 session_manager=session_manager,
@@ -766,8 +749,6 @@ def build_core_runtime(
         plugin_manager=plugin_manager,
         plugin_rpc=plugin_rpc,
         channel_directory=channel_directory,
-        proactive_motives=proactive_motives,
-        scene_followup_subscription=scene_followup_subscription,
     )
 
 

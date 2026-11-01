@@ -8,6 +8,7 @@ category: system
 config_model: config:SceneConfig
 inject:
   - scene_host
+  - conversation
   - roles
   - events
   - background

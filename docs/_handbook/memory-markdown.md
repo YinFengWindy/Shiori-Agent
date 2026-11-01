@@ -278,7 +278,7 @@ Optimizer 定时任务
 |------|------|------|
 | `apps/backend/agent/retrieval/default_pipeline.py` | `query(intent="context")` | 被动 turn 每轮的语义检索入口。`DefaultMemoryRetrievalPipeline.retrieve()` 把回合上下文转成 `MemoryQuery` 交给 `engine.query()` |
 | `plugins/default_memory/backend/tools/recall_memory.py` | `query()` | `recall_memory` 工具。LLM 传入 query / intent / memory_kind / 时间范围 / limit，工具组装成 `MemoryQuery` |
-| `apps/backend/proactive_v2/tools.py` | `query(intent="interest")` | proactive tick 中评估内容候选时调用，查询用户对某条内容是否可能感兴趣 |
+| `plugins/proactive/backend/tools.py` | `query(intent="interest")` | proactive tick 中评估内容候选时调用，查询用户对某条内容是否可能感兴趣 |
 | `plugins/default_memory/backend/tools/memorize.py` | `mutate(kind="remember")` | `memorize` 工具。用户要求"记住..."时调用 |
 | `plugins/default_memory/backend/tools/forget_memory.py` | `mutate(kind="forget")` | `forget_memory` 工具。用户纠正错误记忆时调用 |
 | `apps/backend/core/memory/runtime.py` | `query()` | `MemoryRuntime` 薄封装层：每次调用都经 `current_engine()` 现取引擎；插座为空时返回 disabled，主动链路经它检索 |
@@ -298,7 +298,7 @@ MemoryRuntime.current_engine 绑定 kernel.get(MEMORY_ENGINE)（可为空）
           再 SESSIONS.rollback_last_turn(expected_turn=预读整轮)；锚点或整轮 id 变了则不删；
           插座为空只回滚会话。记忆失败则会话不动，可以重试
     ↓
-  proactive_v2/tools.py → ToolDeps.memory → query(intent="interest")
+  plugins/proactive/backend/tools.py → ToolDeps.memory → query(intent="interest")
 ```
 
 调用方拿到的都是协议类型（`MemoryRetrievalApi` / `MemoryWriteApi` / `MemoryAdminApi`），不是 `DefaultMemoryEngine`。当前启用的实现是这一代里提供了 `MEMORY_ENGINE` 的插件。

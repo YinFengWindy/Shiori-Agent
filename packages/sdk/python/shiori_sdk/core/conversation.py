@@ -260,9 +260,9 @@ class InitiatedMessageCommitted:
     The host emits this after the message is committed, so ``message_id``
     names a stored message. Two publishers emit it:
 
-    - initiated delivery (``CONVERSATION`` / ``PROACTIVE_HOST.deliver``, and
-      the host's own proactive loop until it moves into the plugin), once per
-      delivered reply. A natural sequence emits once for the delivered
+    - initiated delivery (``CONVERSATION`` / ``PROACTIVE_HOST.deliver``,
+      including the proactive plugin), once per delivered reply. A natural
+      sequence emits once for the delivered
       messages: ``message_id`` is the last one and ``assistant_response``
       their texts joined by a blank line. ``tools_used`` is
       ``("message_push",)``.
@@ -270,7 +270,8 @@ class InitiatedMessageCommitted:
       outside a live turn), once per push. ``tools_used`` names the tool.
 
     ``thread_id`` is the conversation thread the message belongs to; a role's
-    session mixes threads, so subscribers read history with it.
+    session mixes threads, so subscribers read history with it
+    (``CONVERSATION.recent_thread_messages``).
 
     ``source`` names who started the message: the ``InitiatedReply.source``
     a plugin passed (by convention its plugin id; the host's proactive loop
@@ -448,6 +449,23 @@ class Conversation(Protocol):
         """Moods the role may use, and the stored mood's timestamp.
 
         Raises ``ValueError`` when the role is gone.
+        """
+        ...
+
+    def recent_thread_messages(
+        self, session_key: str, *, thread_id: str, limit: int
+    ) -> tuple[ConversationMessage, ...] | None:
+        """The last ``limit`` messages of ``thread_id`` in a role session, oldest first.
+
+        The same history window a turn on that thread reads (only messages
+        that thread's context includes, no delivery records). Reads the
+        stored session when called; it does not wait for admission.
+
+        ``None`` when the thread is external context (a group chat or a
+        stranger's private chat), which is not part of the role's
+        conversation with the user. An empty tuple is a thread with no
+        messages yet. ``session_key`` must be a role session (``role:<id>``)
+        and ``limit`` at least 1, otherwise ``ValueError``.
         """
         ...
 

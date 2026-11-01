@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=80", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "shiori-plugin-proactive"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = ["shiori-sdk>=4.0.0,<5", "pydantic>=2.11.7", "ftfy>=6.3.1", "tzdata>=2025.2; sys_platform == 'win32'"]
+
+[project.optional-dependencies]
+test = ["shiori-sdk[testing]>=4.0.0,<5"]
+
+[tool.setuptools]
+include-package-data = false
+packages = [
+  "plugins.proactive",
+  "plugins.proactive.backend",
+  "plugins.proactive.backend.turn",
+]
+package-dir = {"plugins.proactive" = "."}
+
+[tool.setuptools.package-data]
+"plugins.proactive" = ["manifest.yaml", "TESTING.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-W error --import-mode=importlib"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+required_plugins = ["pytest-asyncio", "shiori-sdk"]

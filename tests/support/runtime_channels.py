@@ -86,9 +86,7 @@ class RuntimeChannelHarness:
             api_key="",
             model_registrations=[],
         )
-        self.app = AppRuntime(
-            config, self.workspace, features=RuntimeFeatures(enable_proactive=False)
-        )
+        self.app = AppRuntime(config, self.workspace, features=RuntimeFeatures())
         await self.app.start()
         return self.app
 

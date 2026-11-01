@@ -81,7 +81,7 @@ UTF-8 YAML。字段在 `apps/backend/agent/plugin_host/manifest.py` 解析；外
 | --- | --- | --- |
 | `reply_policy` | `REPLY_POLICY` | 系统插件 `natural_chat`。只有提示和选用。多条消息的协议和发送留在核心 |
 | `scene` | `SCENE` | 系统插件 `scene`。`request` 返回释放函数，调用方交给 `ctx.effect` |
-| `scene_host` | `SCENE_HOST` | 宿主。`followup_wanted` 读主动策略，不是 `Roles` 上的新方法 |
+| `scene_host` | `SCENE_HOST` | 宿主。角色身份与发布；场景追问需求是 `SCENE.request` |
 | `affection` | `AFFECTION` | 系统插件 `affection`。状态文件仍是 `roles/<id>/state/affection.json` |
 | `affection_host` | `AFFECTION_HOST` | 宿主事实：角色、会话、在场、记忆文档、对话模型 |
 | `mcp_tools` | `MCP_TOOLS` | 宿主。动态 MCP 工具的登记。管理工具仍走 `TOOLS.register` |

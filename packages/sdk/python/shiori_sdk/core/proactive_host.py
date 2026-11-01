@@ -16,10 +16,6 @@ a thread and whether the user is at the desktop. Host tools run through
 generation's registry. Session history reads return the role session's recent
 user-context turns and recent proactive messages. The reply stamp (mood
 catalog and stored mood time) is ``CONVERSATION.reply_state``.
-
-This key and ``InitiatedReply`` may still gain or lose members until the
-proactive loop moves into its plugin (P6b-4b); they are fixed when SDK 4.0 is
-released.
 """
 
 from __future__ import annotations
@@ -478,6 +474,67 @@ class ProactiveHost(Protocol):
         accepted messages, or unchanged business tool calls the model made
         instead. A completion that cannot become a draft raises
         ``ValueError``. No open plan raises ``RuntimeError``.
+        """
+        ...
+
+    def builtin_skills_dir(self) -> str:
+        """Directory of built-in skills (source tree or the installed resources).
+
+        Drift reads ``SKILL.md`` from here. It does not write state beside those
+        files.
+        """
+        ...
+
+    def file_tool_schema(self, name: str) -> Mapping[str, object]:
+        """OpenAI schema of the host file tool ``name`` (``read_file``, ``write_file``, ``edit_file``).
+
+        An unknown name raises ``KeyError``.
+        """
+        ...
+
+    async def run_drift_file_tool(
+        self, role_id: str, name: str, arguments: Mapping[str, object]
+    ) -> str | ToolResult:
+        """Run file tool ``name`` (see ``file_tool_schema``) for ``role_id``'s Drift.
+
+        Only inside an ``execute_tool`` invoker, for the tool name the kernel
+        checks just allowed; any other call raises ``PermissionError`` without
+        running anything. The host computes the role's drift directory
+        (``roles/<role_id>/drift``): ``write_file`` and ``edit_file`` stay
+        inside it, and so does ``read_file`` of a relative path. ``read_file``
+        of an absolute path reads that path. A path outside the directory
+        returns the tool's error text without touching the file; a tool that
+        raises returns ``工具执行出错: ...``. An unknown ``name`` raises
+        ``LookupError``; a ``role_id`` that is not one path segment raises
+        ``ValueError``.
+        """
+        ...
+
+    def web_fetch_available(self) -> bool:
+        """Whether constructing the host web fetch tool succeeds."""
+        ...
+
+    async def fetch_url(self, url: str, *, format: str = "text") -> str:
+        """Fetch ``url`` and return the tool's JSON text.
+
+        ``web_fetch_available`` is false when this cannot be constructed.
+        """
+        ...
+
+    def tool_resource_scope(self) -> AbstractAsyncContextManager[None]:
+        """Host tool-turn scope for one drift run.
+
+        Nested on the same task does not close twice. Computer-use tools see
+        the current tool turn only inside this scope.
+        """
+        ...
+
+    def configured_max_tokens(self) -> int:
+        """The generation's configured completion cap.
+
+        The current lease's generation when there is one, otherwise the
+        published generation. Does not wait for admission. Raises
+        ``RuntimeError`` when the runtime is not up.
         """
         ...
 

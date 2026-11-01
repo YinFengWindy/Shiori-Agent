@@ -8,7 +8,7 @@ source_paths:
   - apps/backend/bootstrap/
   - apps/backend/core/
   - apps/backend/agent/
-  - apps/backend/proactive_v2/
+  - plugins/proactive/
   - apps/backend/desktop_bridge/
   - plugins/
   - packages/sdk/

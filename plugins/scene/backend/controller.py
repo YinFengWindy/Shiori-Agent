@@ -9,12 +9,13 @@ from dataclasses import dataclass, replace
 from typing import Any
 
 from shiori_sdk.core.conversation import (
+    Conversation,
     ConversationMessage,
     InitiatedMessageCommitted,
     TurnFinished,
     TurnStarting,
 )
-from shiori_sdk.core.scene import SceneHistoryMessage, SceneHost
+from shiori_sdk.core.scene import SceneHost
 from shiori_sdk.role_events import SceneObservationCommitted, SceneTurnSource
 
 from .contracts import SceneDecision, SceneDecisionInput, SceneDecisionProtocolError
@@ -49,6 +50,7 @@ class SceneAwarenessController:
         self,
         *,
         host: SceneHost,
+        conversation: Conversation,
         state: SceneStateStore,
         light_provider: Any,
         light_model: str,
@@ -61,6 +63,7 @@ class SceneAwarenessController:
         self._closed = False
         self._all_tasks: set[asyncio.Task[None]] = set()
         self._host = host
+        self._conversation = conversation
         self.state = state
         self._light_provider = light_provider
         self._light_model = str(light_model or "").strip()
@@ -92,7 +95,7 @@ class SceneAwarenessController:
             role_id="",
             source="passive",
             user_message=ctx.content,
-            history_messages=ctx.history,
+            history=lambda: ctx.history,
         )
         if pending is None:
             self._pending_turns.pop(ctx.session_key, None)
@@ -117,19 +120,19 @@ class SceneAwarenessController:
     def schedule_proactive_turn(self, event: InitiatedMessageCommitted) -> None:
         """Schedule scene observation for one committed proactive text message.
 
-        按事件自带的 ``thread_id`` 判定上下文，外部上下文不观察。
+        The thread's recent messages are read only for a role someone wants
+        observed; an external-context thread is not observed.
         """
         if not event.assistant_response.strip() or not self._can_observe():
             return
-        history = self._host.proactive_history(
-            session_key=event.session_key,
-            role_id=event.role_id,
-            thread_id=event.thread_id,
-            limit=_RECENT_HISTORY_LIMIT,
-        )
-        if history is None:
-            return
-        self._cancel_pending_task(event.session_key)
+
+        def history() -> Sequence[ConversationMessage] | None:
+            return self._conversation.recent_thread_messages(
+                event.session_key,
+                thread_id=event.thread_id,
+                limit=_RECENT_HISTORY_LIMIT,
+            )
+
         pending = self._build_pending_turn(
             session_key=event.session_key,
             channel=event.channel,
@@ -137,11 +140,12 @@ class SceneAwarenessController:
             role_id=event.role_id,
             source="proactive",
             user_message="",
-            history_messages=history,
+            history=history,
             tools_used=event.tools_used,
         )
         if pending is None:
             return
+        self._cancel_pending_task(event.session_key)
         self._schedule(pending, assistant_reply=event.assistant_response)
 
     async def terminate(self) -> None:
@@ -164,13 +168,17 @@ class SceneAwarenessController:
         role_id: str,
         source: SceneTurnSource,
         user_message: str,
-        history_messages: Sequence[SceneHistoryMessage | ConversationMessage],
+        history: Callable[[], Sequence[ConversationMessage] | None],
         tools_used: tuple[str, ...] = (),
     ) -> _PendingTurn | None:
+        """The turn to observe, or None. ``history`` is read only when it is."""
         if not self._can_observe():
             return None
         subject = self._host.subject(session_key, role_id)
         if subject is None or not self._needs_observation(subject.id):
+            return None
+        history_messages = history()
+        if history_messages is None:
             return None
         current = self.state.current(session_key)
         return _PendingTurn(
@@ -289,7 +297,7 @@ class SceneAwarenessController:
 
 
 def _compact_history(
-    items: Sequence[SceneHistoryMessage | ConversationMessage],
+    items: Sequence[ConversationMessage],
 ) -> tuple[dict[str, str], ...]:
     """取最近 ``_RECENT_HISTORY_LIMIT`` 条消息转成 role/content 对。
 

@@ -16,6 +16,7 @@ from datetime import datetime
 from typing import Any, AsyncIterator, Literal
 
 from agent.core.prompt_block import build_role_user_identities_prompt
+from agent.proactive_host import files as host_files
 from agent.proactive_host import natural, reads
 from agent.proactive_host import tools as host_tools
 from agent.provider import LLMProvider, thinking_disabled_provider
@@ -23,8 +24,12 @@ from agent.turns.orchestrator import TurnOrchestrator
 from agent.turns.proactive_sequence import current_proactive_reply
 from agent.turns.reply_interruption import reply_was_invalidated
 from conversation.service import desktop_chat_id, desktop_thread_id
+from agent.tools.turn_scope import tool_turn_scope
+from agent.tools.web_fetch import WebFetchTool
+from bootstrap.paths import builtin_skills_path
 from core.common.channel_directory import DESKTOP_CHANNEL
 from core.common.runtime_scope import bind_runtime, current_runtime_lease
+from core.error_context import current_session_key
 from core.roles.model_runtime import RoleAwareProvider
 from core.roles.reply_state import validate_role_reply
 from core.roles.role_prompt_compiler import RolePromptCompiler
@@ -68,6 +73,15 @@ class HostProactiveRunner:
         self, role_id: str, operation: Callable[[], Awaitable[T]]
     ) -> T:
         """Run ``operation`` on the role's serial tick gate with the chat model on."""
+        token = current_session_key.set(role_session_key(role_id))
+        try:
+            return await self._run_tick(role_id, operation)
+        finally:
+            current_session_key.reset(token)
+
+    async def _run_tick[T](
+        self, role_id: str, operation: Callable[[], Awaitable[T]]
+    ) -> T:
         async with self._pinned() as lease:
             registry = lease.core.role_runtime_registry
             context = registry.create_context(
@@ -358,6 +372,44 @@ class HostProactiveRunner:
             ),
             thinking=response.thinking,
         )
+
+    def builtin_skills_dir(self) -> str:
+        """Built-in skills directory. Drift reads it and does not write beside it."""
+        return str(builtin_skills_path())
+
+    def file_tool_schema(self, name: str) -> dict[str, Any]:
+        """Schema of a host file tool."""
+        return host_files.file_tool_schema(name)
+
+    async def run_drift_file_tool(
+        self, role_id: str, name: str, arguments: Mapping[str, object]
+    ) -> str | ToolResult:
+        """Run a file tool for the role's Drift, confined to its drift directory."""
+        workspace = self._require_core().session_manager.workspace
+        return await host_files.run_drift_file_tool(
+            workspace, role_id, name, dict(arguments)
+        )
+
+    def web_fetch_available(self) -> bool:
+        """False when the host web fetch tool cannot be constructed."""
+        try:
+            _ = WebFetchTool()
+        except RuntimeError:
+            return False
+        return True
+
+    async def fetch_url(self, url: str, *, format: str = "text") -> str:
+        """Fetch ``url`` through the host web fetch tool."""
+        result = await WebFetchTool().execute(url=url, format=format)
+        return str(result)
+
+    def tool_resource_scope(self):
+        """The host tool-turn scope, shared with passive turns."""
+        return tool_turn_scope()
+
+    def configured_max_tokens(self) -> int:
+        """The visible generation's configured completion cap."""
+        return int(self._require_core().config.max_tokens)
 
     def _thinking_provider(self, core: Any) -> LLMProvider:
         """The thinking-disabled provider for ``core``'s config, owned by ``core``.

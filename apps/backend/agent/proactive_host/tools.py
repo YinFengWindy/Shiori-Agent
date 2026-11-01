@@ -70,6 +70,12 @@ async def execute_tool(
     )
 
 
+def require_checked_tool(name: str) -> None:
+    """Raise ``PermissionError`` unless ``execute_tool`` just allowed ``name``."""
+    if _CHECKED_TOOL.get() != name:
+        raise PermissionError(f"宿主工具只能在已通过核心校验的调用里执行: {name}")
+
+
 async def run_host_tool(
     core: Any, name: str, arguments: Mapping[str, object], *, role_id: str
 ) -> str | ToolResult:
@@ -81,8 +87,7 @@ async def run_host_tool(
     ``context_precedence``; it gets the role, the role session as the turn
     session and the desktop thread for those, and nothing else.
     """
-    if _CHECKED_TOOL.get() != name:
-        raise PermissionError(f"宿主工具只能在已通过核心校验的调用里执行: {name}")
+    require_checked_tool(name)
     if not role_id:
         raise ValueError("宿主工具需要角色")
     tool = core.tools.get_tool(name)

@@ -42,9 +42,7 @@ def plugin_runtime(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> PluginRun
         app = AppRuntime(
             load_config_text(text),
             tmp_path,
-            features=RuntimeFeatures(
-                enable_message_channels=False, enable_proactive=False
-            ),
+            features=RuntimeFeatures(enable_message_channels=False),
         )
         try:
             await app.start()

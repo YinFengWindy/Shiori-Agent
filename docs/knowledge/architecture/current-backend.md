@@ -105,7 +105,7 @@ LLM 调用由 `apps/backend/agent/provider.py` 封装，使用官方 `openai` SD
 
 ## 主动回合与后台任务
 
-`apps/backend/proactive_v2` 根据时间、presence、关系和观察结果生成 tick。`apps/backend/bootstrap/proactive.py` 的 `build_proactive_runtime()` 为角色创建主动循环（由 `RuntimeBackground` 按代调度）。tick 经 `PROACTIVE_HOST.run_tick` 进入（已持有的代租约保持不变，否则钉住当前发布代），再由 `RoleRuntimeRegistry.dispatch_proactive_tick()` 进入同一角色 runtime，并在角色桌面线程 `role:<id>` 下执行。同一端口还承担这次 tick 的自然回复作用域与工具事实、补全、工具与宿主工具、目标选择、会话历史和投递。心情目录和已存心情时间在 tick 开始时从本代 `CONVERSATION.reply_state` 读取；哪些角色开启主动、每个角色的主动配置读 `ROLES.plugin_settings(role_id, "proactive")`。后台任务和 drift 使用同一套 role/session/tool 基础设施；定时任务经 `RuntimeDispatcher.run_role_operation()` 固定在所属运行时代。
+系统插件 `plugins/proactive` 根据时间、presence、关系和观察结果生成 tick。循环是进程资源：本代发布后才按角色启动，之后只重绑已发布代的端口。tick 经 `PROACTIVE_HOST.run_tick` 进入（已持有的代租约保持不变，否则钉住当前发布代），再由 `RoleRuntimeRegistry.dispatch_proactive_tick()` 进入同一角色 runtime，并在角色桌面线程 `role:<id>` 下执行。同一端口还承担这次 tick 的自然回复作用域与工具事实、补全、工具与宿主工具、文件工具、抓取、MCP 会话、目标选择、会话历史和投递。心情目录和已存心情时间在 tick 开始时从本代 `CONVERSATION.reply_state` 读取；哪些角色开启主动、每个角色的主动配置读 `ROLES.plugin_settings(role_id, "proactive")`。场景追问经 `SCENE.request` 登记。后台任务和 drift 使用同一套 role/session/tool 基础设施；定时任务经 `RuntimeDispatcher.run_role_operation()` 固定在所属运行时代。
 
 ## 工具、Memory 与插件
 

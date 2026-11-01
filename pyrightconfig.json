@@ -19,7 +19,6 @@
     "apps/backend/desktop_bridge",
     "apps/backend/infra",
     "plugins",
-    "apps/backend/proactive_v2",
     "apps/backend/prompts",
     "apps/backend/session",
     "apps/backend/utils",

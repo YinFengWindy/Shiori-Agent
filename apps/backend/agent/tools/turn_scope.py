@@ -2,6 +2,7 @@
 
 import asyncio
 from collections.abc import Awaitable, Callable
+from contextlib import asynccontextmanager
 from contextvars import ContextVar
 from functools import wraps
 from typing import ParamSpec, TypeVar
@@ -60,19 +61,27 @@ def tool_turn(
 
     @wraps(function)
     async def run(*args: _P.args, **kwargs: _P.kwargs) -> _R:
-        existing = _current.get()
-        if existing is not None and existing.task is asyncio.current_task():
-            if existing.closed:
-                raise RuntimeError("工具回合已结束")
+        async with tool_turn_scope():
             return await function(*args, **kwargs)
-        scope = ToolTurnScope()
-        token = _current.set(scope)
-        try:
-            return await function(*args, **kwargs)
-        finally:
-            try:
-                await scope.close()
-            finally:
-                _current.reset(token)
 
     return run
+
+
+@asynccontextmanager
+async def tool_turn_scope():
+    """One tool-turn scope. Nested on the same task does not close twice."""
+    existing = _current.get()
+    if existing is not None and existing.task is asyncio.current_task():
+        if existing.closed:
+            raise RuntimeError("工具回合已结束")
+        yield
+        return
+    scope = ToolTurnScope()
+    token = _current.set(scope)
+    try:
+        yield
+    finally:
+        try:
+            await scope.close()
+        finally:
+            _current.reset(token)

@@ -18,8 +18,10 @@ from pathlib import Path
 from typing import Any
 
 from bootstrap.config_text_editor import plugin_table_editor
-from proactive_v2.preferences import STRATEGY_KEYS
 from shiori_sdk.files.text import atomic_save_text
+
+# The only keys ``[agent.proactive_strategies]`` ever had.
+STRATEGY_KEYS = ("scene_followup", "relationship")
 
 logger = logging.getLogger(__name__)
 

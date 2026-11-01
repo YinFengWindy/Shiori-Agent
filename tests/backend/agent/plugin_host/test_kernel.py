@@ -381,6 +381,7 @@ _EXPECTED_TOP_LEVEL_PLUGINS = {
     "story",
     "observe",
     "plugin_undo",
+    "proactive",
     "scene",
     "schedule",
     "qq",
