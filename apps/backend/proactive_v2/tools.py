@@ -15,7 +15,6 @@ import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
 
-from agent.tools.account_delivery import shared_account_delivery
 from shiori_sdk.accounts.targets import ACCOUNT_TARGET_PROPERTIES, AccountTarget
 from shiori_sdk.memory.engine import MemoryQuery, MemoryScope
 from shiori_sdk.prompting import is_context_frame
@@ -28,7 +27,6 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from shiori_sdk.memory.engine import MemoryRetrievalApi
-    from core.memory.group_environment import GroupEnvironment
     from core.memory.markdown import MemoryProfileApi
 
 logger = logging.getLogger(__name__)
@@ -52,11 +50,9 @@ class ToolDeps:
     ack_fn: Any = None  # async (compound_key: str, ttl_hours: int) -> None
     alert_ack_fn: Any = None  # async (compound_key: str) -> None
     max_chars: int = 8_000
-    shared_tools: Any = None
-    # 群环境层（#497）：主动回合注入各外部会话的最近动态。
-    group_environment: "GroupEnvironment | None" = None
     # 好感块（#714）：每轮读取，放进 context frame；未初始化时返回 None。
     affection_prompt_fn: "Callable[[], str | None] | None" = None
+    proactive_host: Any = None
 
 
 # ── Tool Schemas ──────────────────────────────────────────────────────────
@@ -613,15 +609,18 @@ _RETARGET_KEYS = ("account_channel", *ACCOUNT_TARGET_PROPERTIES)
 def _message_push(
     ctx: AgentTickContext, args: dict, deps: ToolDeps | None = None
 ) -> str:
-    """Stores the draft reply; a retarget needs ``deps.shared_tools`` to check
-    that the role has an account on ``account_channel`` right away, so the
-    model can correct it within the same tick. Whether that channel's plugin
-    supports the target options is still decided when sending."""
+    """Stores the draft reply; a retarget asks the host whether the role has
+    an account on ``account_channel`` right away, so the model can correct it
+    within the same tick. Whether that channel's plugin supports the target
+    options is still decided when sending."""
     if ctx.draft_message.strip():
         raise ValueError(
             "message_push already called this turn; cannot overwrite draft"
         )
-    reply = parse_push_reply(args, ctx)
+    host = deps.proactive_host if deps is not None else None
+    if host is None:
+        raise RuntimeError("主动回复缺少宿主端口")
+    reply = parse_push_reply(args, ctx, host)
     message = reply.content
     if not message.strip():
         raise ValueError("message_push requires non-empty message")
@@ -635,10 +634,9 @@ def _message_push(
         if not channel:
             raise ValueError("改投需明确 account_channel、target_kind 和 target_id")
         AccountTarget.from_arguments(target)
-        delivery = shared_account_delivery(deps.shared_tools if deps else None)
-        if delivery is None:
-            raise RuntimeError("账号目标发送服务不可用")
-        delivery.channel_account(channel, _memory_scope_from_tick_context(ctx).role_id)
+        host.require_channel_account(
+            _memory_scope_from_tick_context(ctx).role_id, channel
+        )
     ctx.draft_message = message
     ctx.account_target = target or None
     ctx.role_reply = reply
@@ -653,14 +651,11 @@ async def dispatch(
     tool_name: str, args: dict, ctx: AgentTickContext, deps: ToolDeps
 ) -> str:
     if tool_name in {"account_list", "account_targets"}:
-        if deps.shared_tools is None:
+        host = deps.proactive_host
+        if host is None:
             raise RuntimeError("账号查询工具不可用")
         role_id = _memory_scope_from_tick_context(ctx).role_id
-        return str(
-            await deps.shared_tools.execute(
-                tool_name, args, context={"role_id": role_id}
-            )
-        )
+        return str(await host.run_host_tool(tool_name, args, role_id=role_id))
     if tool_name == "get_alert_events":
         return await _get_alert_events(ctx, args)
 

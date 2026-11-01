@@ -26,11 +26,16 @@ from conversation.service import ConversationService
 from core.roles.affection_access import AffectionGetter
 from core.roles.bound_chats import bound_chat_target
 from core.roles.reply_policy import ReplyPolicyGetter
+from core.roles.reply_state import role_mood_catalog
 from core.roles.services import RoleSessionService
 from core.roles.store import RoleStore
 from session.manager import SessionManager
 from session.manager.helpers import role_id_from_session_key
-from shiori_sdk.core.conversation import InitiatedDelivery, InitiatedReply
+from shiori_sdk.core.conversation import (
+    InitiatedDelivery,
+    InitiatedReply,
+    RoleReplyState,
+)
 from shiori_sdk.core.sessions import Presence
 
 
@@ -85,6 +90,14 @@ class HostConversation:
         self._affection = affection
         self._reply_policy = reply_policy
 
+    def orchestrator(self, role_id: str) -> TurnOrchestrator:
+        """This generation's delivery wiring for one role's replies.
+
+        ``PROACTIVE_HOST`` opens a tick's natural reply plan and sends through
+        it with this orchestrator, the one ``deliver_initiated_reply`` uses.
+        """
+        return self._orchestrator_for_role(role_id)
+
     async def deliver_initiated_reply(self, reply: InitiatedReply) -> InitiatedDelivery:
         """Deliver ``reply`` for the role owning its session, on this generation."""
         role_id = role_id_from_session_key(reply.session_key)
@@ -103,3 +116,17 @@ class HostConversation:
         RoleSessionService(self._session_manager).open_by_role(role)
         with bound_turn_getters(self._affection, self._reply_policy):
             return await deliver_checked_reply(orchestrator, reply)
+
+    def reply_state(self, role_id: str) -> RoleReplyState:
+        """Moods and the stored mood time on this generation's role session.
+
+        A missing role raises before a session is created for it.
+        """
+        role = self._role_store.get_role(role_id)
+        if role is None:
+            raise ValueError(f"role not found for proactive generation: {role_id}")
+        session = RoleSessionService(self._session_manager).open_by_role(role)
+        return RoleReplyState(
+            moods=role_mood_catalog(session.metadata.get("role_runtime_config", {})),
+            mood_updated_at=str(session.metadata.get("current_mood_updated_at", "")),
+        )

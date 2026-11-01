@@ -21,24 +21,12 @@ from typing import TYPE_CHECKING, Any, Callable, cast
 
 if TYPE_CHECKING:
     from shiori_sdk.memory.engine import MemoryRetrievalApi
-    from core.memory.group_environment import GroupEnvironment
     from core.memory.markdown import MemoryProfileApi
 
-from bus.event_bus import EventBus
 from core.error_context import current_session_key
-from agent.looping.ports import SessionServices
-from agent.provider import LLMProvider
-from agent.tools.execution import KernelSource
 from agent.core.proactive_turn.gates import ProactiveGate, ProactiveGateChain
-from agent.tools.message_push import MessagePushTool
-from agent.tools.registry import ToolRegistry
-from agent.turns.outbound import PushToolOutboundPort
-from agent.turns.orchestrator import TurnOrchestrator, TurnOrchestratorDeps
-from conversation.service import ConversationService
 from core.common.strategy_trace import StrategyTraceType, build_strategy_trace_envelope
 from core.common.diagnostic_log import diagnostic_context, diagnostic_line
-from core.desktop_presence import DesktopPresence
-from core.roles import RoleStore
 from proactive_v2.energy import (
     compute_energy,
     d_energy,
@@ -51,7 +39,10 @@ from proactive_v2.sensor import Sensor
 from proactive_v2.state import ProactiveStateStore
 from proactive_v2.target_selection import ProactiveTargetResolver
 from session.manager import SessionManager
+from shiori_sdk.core.conversation import Conversation
+from shiori_sdk.core.proactive_host import ProactiveHost
 from shiori_sdk.core.sessions import Presence
+from shiori_sdk.roles import Roles
 
 logger = logging.getLogger(__name__)
 
@@ -72,56 +63,43 @@ class ProactiveLoop:
     def __init__(
         self,
         session_manager: SessionManager,
-        provider: LLMProvider,
-        push_tool: MessagePushTool,
         config: ProactiveConfig,
-        model: str,
-        kernel: KernelSource,
+        *,
+        proactive_host: ProactiveHost,
+        conversation: Conversation,
+        roles: Roles,
+        role_prompt_fn: Callable[[], str],
         max_tokens: int = 1024,
         state_store: ProactiveStateStore | None = None,
         state_path: Path | None = None,
         memory_store: "MemoryProfileApi | MemoryRetrievalApi | None" = None,
         presence: Presence | None = None,
         rng: _random_module.Random | None = None,
-        light_provider: LLMProvider | None = None,
-        light_model: str = "",
         passive_busy_fn: Callable[[str], bool] | None = None,
-        shared_tools: ToolRegistry | None = None,
         proactive_motives: list[ProactiveGate] | None = None,
         tick_dispatcher: Callable[[Callable[[], Any]], Any] | None = None,
-        event_bus: EventBus | None = None,
-        role_prompt_fn: Callable[[], str] | None = None,
-        desktop_presence: DesktopPresence | None = None,
-        role_store: RoleStore | None = None,
-        group_environment: "GroupEnvironment | None" = None,
+        affection_prompt_fn: Callable[[], str | None] | None = None,
     ) -> None:
-        """``role_store`` is the runtime's shared store; its account index and
-        user identities decide where each proactive message can go.
-        ``group_environment`` supplies the recent activity of external chats
-        injected into proactive and drift turns (#497)."""
+        """Model, tools, target reads, history and delivery go through
+        ``proactive_host`` (``PROACTIVE_HOST``). ``conversation`` is this
+        generation's ``CONVERSATION``; the tick copies its reply stamp from
+        there. ``roles`` (``ROLES``) holds the role's ``proactive`` settings,
+        whose switch decides whether a saved role is eligible.
+        ``affection_prompt_fn`` renders the role's affection block (#714)."""
         self._sessions = session_manager
-        self._provider = provider
-        self._push = push_tool
         self._cfg = config
-        self._model = config.model or model
         self._max_tokens = max_tokens
         self._state = self._build_state_store(state_store, state_path)
         self._memory = memory_store
         self._presence = presence
         self._rng = rng
-        self._light_provider = light_provider or provider
-        self._light_model = light_model or (config.model or model)
         self._passive_busy_fn = passive_busy_fn
-        self._shared_tools = shared_tools
-        self._kernel = kernel
         self._proactive_gates = ProactiveGateChain(motives=proactive_motives or ())
         self._tick_dispatcher = tick_dispatcher
-        self._event_bus = event_bus
-        self._desktop_presence = desktop_presence
-        self._role_store = role_store
-        self._group_environment = group_environment
-        if role_prompt_fn is None:
-            raise ValueError("role_prompt_fn required for proactive loop")
+        self._host = proactive_host
+        self._conversation = conversation
+        self._roles = roles
+        self._affection_prompt_fn = affection_prompt_fn
         self._role_prompt_fn = role_prompt_fn
         self._workspace_context_mtime_ns: int | None = None
         self._workspace_context_text: str = ""
@@ -147,31 +125,6 @@ class ProactiveLoop:
             return state_store
         return ProactiveStateStore(state_path or Path("proactive.db"))
 
-    def _build_turn_orchestrator(self) -> TurnOrchestrator:
-        from agent.tools.account_delivery import shared_account_delivery
-
-        return TurnOrchestrator(
-            TurnOrchestratorDeps(
-                session=SessionServices(
-                    session_manager=self._sessions,
-                    presence=self._presence,
-                    conversation_service=ConversationService(self._sessions),
-                ),
-                outbound=PushToolOutboundPort(
-                    self._push,
-                    execution_context={
-                        "role_id": self._cfg.role_id,
-                    },
-                ),
-                event_bus=self._event_bus,
-                account_delivery=shared_account_delivery(self._shared_tools),
-                bound_chat_target=self._target_resolver.bound_chat_target,
-                role_lookup=(
-                    self._role_store.get_role if self._role_store is not None else None
-                ),
-            )
-        )
-
     def _build_sense(self) -> Sensor:
         return Sensor(
             cfg=self._cfg,
@@ -181,27 +134,15 @@ class ProactiveLoop:
             presence=self._presence,
             rng=self._rng,
             target_resolver=self._target_resolver,
+            host=self._host,
         )
 
     def _build_target_resolver(self) -> ProactiveTargetResolver:
         """Selects each message's target from the role's live candidate sessions."""
-        if self._desktop_presence is None:
-            raise ValueError("desktop_presence required for proactive loop")
-        if self._role_store is None:
-            raise ValueError("role_store required for proactive loop")
-        return ProactiveTargetResolver(
-            roles=self._role_store,
-            conversations=self._sessions.conversation_store,
-            desktop_presence=self._desktop_presence,
-        )
+        return ProactiveTargetResolver(roles=self._roles, host=self._host)
 
     def _build_agent_tick(self):
-        from agent.core.prompt_block import build_role_affection_prompt
         from proactive_v2.agent_tick_factory import AgentTickDeps, AgentTickFactory
-
-        role_store = self._role_store
-        if role_store is None:
-            raise ValueError("role_store required for proactive loop")
 
         # 1. 把 loop 级公共依赖收束成 AgentTickDeps。
         # 2. 交给 factory 组装出 ProactiveTurnPipeline（主动链路顶层抽象）。
@@ -209,29 +150,20 @@ class ProactiveLoop:
             AgentTickDeps(
                 cfg=self._cfg,
                 sense=self._sense,
-                presence=self._presence,
-                provider=self._provider,
-                model=self._model,
                 max_tokens=self._max_tokens,
                 memory=self._memory,
                 state_store=self._state,
                 any_action_gate=None,
                 passive_busy_fn=self._passive_busy_fn,
-                turn_orchestrator=self._turn_orchestrator,
                 deduper=self._message_deduper,
                 rng=self._rng,
                 workspace_context_fn=self._read_workspace_proactive_context,
                 role_prompt_fn=self._role_prompt_fn,
-                shared_tools=self._shared_tools,
+                proactive_host=self._host,
+                conversation=self._conversation,
                 pool=self._mcp_pool,
-                kernel=self._kernel,
                 proactive_gates=self._proactive_gates,
-                group_environment=self._group_environment,
-                # Proactive and drift turns always address the user (the user
-                # context), so the affection block needs no visibility check.
-                affection_prompt_fn=lambda: build_role_affection_prompt(
-                    self._cfg.role_id, role_store
-                ),
+                affection_prompt_fn=self._affection_prompt_fn,
             )
         ).build()
 
@@ -239,8 +171,7 @@ class ProactiveLoop:
         if not self._cfg.message_dedupe_enabled:
             return None
         return MessageDeduper(
-            provider=self._provider,
-            model=self._model,
+            host=self._host,
             max_tokens=self._max_tokens,
         )
 
@@ -249,9 +180,8 @@ class ProactiveLoop:
         self._ensure_workspace_proactive_context_file()
         # 2. 预读规则面板内容并做缓存。
         self._read_workspace_proactive_context()
-        # 3. 构建目标选择、发送编排器、前置 gate、传感器、去重器和主动链路 pipeline。
+        # 3. 构建目标选择、传感器、去重器和主动链路 pipeline。
         self._target_resolver = self._build_target_resolver()
-        self._turn_orchestrator = self._build_turn_orchestrator()
         self._sense = self._build_sense()
         self._message_deduper = self._build_message_deduper()
         self._proactive_pipeline = self._build_agent_tick()

@@ -11,6 +11,16 @@ class RoleDeleted:
     role_id: str
 
 
+@dataclass(frozen=True)
+class RoleCreated:
+    """Signals that a role record and its session now exist.
+
+    Symmetric with ``RoleDeleted``. Plugins may attach role-owned state.
+    A failed create does not emit this."""
+
+    role_id: str
+
+
 SceneTransition = Literal["started", "same", "changed", "closed", "none"]
 SceneTurnSource = Literal["passive", "proactive"]
 

@@ -4,24 +4,32 @@ import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
 from shiori_sdk.tools import Tool, ToolResult
 from agent.tools.filesystem import EditFileTool, ReadFileTool, WriteFileTool
-from agent.tools.message_lookup import UserContextMessageTool
 from agent.tools.registry import ToolRegistry
 from proactive_v2.context import AgentTickContext
 from proactive_v2.drift_state import DriftStateStore
 from proactive_v2.outbound_text import normalize_outbound_text
 from proactive_v2.reply_output import parse_push_reply, reply_properties
-from session.manager.helpers import ROLE_SESSION_PREFIX, is_role_session_key
+from session.manager.helpers import role_id_from_session_key
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from core.memory.group_environment import GroupEnvironment
+    from shiori_sdk.core.proactive_host import ProactiveHost
 
-_MESSAGE_LOOKUP_TOOLS = frozenset({"fetch_messages", "search_messages"})
+# Host tools a drift run may call, and the risk each one is registered with.
+_HOST_TOOLS = {
+    "recall_memory": "read-only",
+    "web_fetch": "read-only",
+    "web_search": "read-only",
+    "fetch_messages": "read-only",
+    "search_messages": "read-only",
+    "shell": "external-side-effect",
+}
 
 logger = logging.getLogger(__name__)
 
@@ -32,19 +40,20 @@ class DriftToolDeps:
     store: DriftStateStore
     builtin_skills_dir: Path | None = None
     memory: Any = None
-    shared_tools: ToolRegistry | None = None
     send_message_fn: Any = None
     max_web_fetch_chars: int = 8_000
-    # 群环境层（#497）：发呆回合注入各外部会话的最近动态。
-    group_environment: "GroupEnvironment | None" = None
     # 好感块（#714）：每轮读取，放进 context frame；未初始化时返回 None。
     affection_prompt_fn: "Callable[[], str | None] | None" = None
+    proactive_host: "ProactiveHost | None" = None
 
 
 class SendMessageTool(Tool):
-    def __init__(self, ctx: AgentTickContext, send_message_fn: Any) -> None:
+    def __init__(
+        self, ctx: AgentTickContext, send_message_fn: Any, host: ProactiveHost
+    ) -> None:
         self._ctx = ctx
         self._send_message_fn = send_message_fn
+        self._host = host
 
     @property
     def name(self) -> str:
@@ -125,6 +134,7 @@ class SendMessageTool(Tool):
                 "thought": thought,
             },
             self._ctx,
+            self._host,
         )
         self._ctx.drift_message_attempted = True
         ok = await self._send_message_fn(reply, media_paths, self._ctx.reply_context)
@@ -252,8 +262,8 @@ class FinishDriftTool(Tool):
 class MountServerTool(Tool):
     """挂载一个已连接的 MCP server，使其工具在本次 drift 中可用。"""
 
-    def __init__(self, shared_tools: ToolRegistry, mounted: set[str]) -> None:
-        self._shared = shared_tools
+    def __init__(self, host: ProactiveHost, mounted: set[str]) -> None:
+        self._host = host
         self._mounted = mounted
 
     @property
@@ -284,7 +294,7 @@ class MountServerTool(Tool):
         server = str(server or "").strip()
         if not server:
             return json.dumps({"error": "server is required"}, ensure_ascii=False)
-        names = self._shared.get_tool_names_by_source("mcp", server)
+        names = set(self._host.mcp_tool_names(server))
         if not names:
             return json.dumps(
                 {"error": f"MCP server '{server}' 不存在或未连接"},
@@ -348,34 +358,37 @@ class DriftWebFetchTool(Tool):
         return json.dumps(payload, ensure_ascii=False)
 
 
-class RoleMemoryTool(Tool):
-    """把记忆工具的角色身份固定为发呆所属的角色。
+class HostTool(Tool):
+    """One host tool, run through ``PROACTIVE_HOST`` in the role's user context.
 
-    drift 的 registry 不设执行上下文，被包装工具声明的 ``context_precedence``
-    键（role_id、session_key 等）会被 registry 从模型参数里剔除；这里只补回
-    role_id，与主动推送同样按角色而不按会话检索。只包装记忆工具，其他工具
-    收到的上下文不变。
+    The host gives memory and message tools the role's identity, so recall
+    searches the role and message lookups see only its user-context threads.
     """
 
-    def __init__(self, wrapped: Tool, role_id: str) -> None:
-        self._wrapped = wrapped
+    def __init__(
+        self, host: ProactiveHost, schema: Mapping[str, Any], role_id: str
+    ) -> None:
+        function = schema["function"]
+        self._host = host
+        self._name = str(function["name"])
+        self._description = str(function.get("description") or "")
+        self._parameters = dict(function.get("parameters") or {})
         self._role_id = role_id
-        self.context_precedence = wrapped.context_precedence
 
     @property
     def name(self) -> str:
-        return self._wrapped.name
+        return self._name
 
     @property
     def description(self) -> str:
-        return self._wrapped.description
+        return self._description
 
     @property
     def parameters(self) -> dict[str, Any]:
-        return self._wrapped.parameters
+        return self._parameters
 
     async def execute(self, **kwargs: Any) -> str | ToolResult:
-        return await self._wrapped.execute(**{**kwargs, "role_id": self._role_id})
+        return await self._host.run_host_tool(self._name, kwargs, role_id=self._role_id)
 
 
 class DriftReadFileTool(Tool):
@@ -419,6 +432,7 @@ def build_drift_tool_registry(
     ctx: AgentTickContext,
     deps: DriftToolDeps,
     mounted_tool_names: set[str] | None = None,
+    mcp_servers: set[str] | None = None,
 ) -> ToolRegistry:
     tools = ToolRegistry()
     drift_dir = deps.drift_dir
@@ -429,45 +443,26 @@ def build_drift_tool_registry(
     tools.register(WriteFileTool(allowed_dir=drift_dir), risk="write")
     tools.register(EditFileTool(allowed_dir=drift_dir), risk="write")
 
-    shared = deps.shared_tools
-    role_id = (
-        ctx.session_key.removeprefix(ROLE_SESSION_PREFIX)
-        if is_role_session_key(ctx.session_key)
-        else ""
-    )
-    for name in (
-        "recall_memory",
-        "web_fetch",
-        "web_search",
-        "fetch_messages",
-        "search_messages",
-        "shell",
-    ):
-        if shared is None:
-            continue
-        tool = shared.get_tool(name)
-        if tool is not None:
-            if name == "web_fetch":
-                tool = DriftWebFetchTool(tool, deps.max_web_fetch_chars)
-            elif name == "recall_memory":
-                # 记忆按角色隔离；没有角色时不注入，工具照常因缺 role_id 失败。
-                if role_id:
-                    tool = RoleMemoryTool(tool, role_id)
-            elif name in _MESSAGE_LOOKUP_TOOLS:
-                # drift 是主动类回合，消息检索只看角色的用户上下文；没有角色时
-                # 工具无法判定上下文，角色会话的消息一律不可见。
-                if role_id:
-                    tool = UserContextMessageTool(tool, role_id)
-            risk = "external-side-effect" if name == "shell" else "read-only"
-            tools.register(tool, risk=risk)
+    host = deps.proactive_host
+    if host is None:
+        raise RuntimeError("发呆回合缺少宿主端口")
+    role_id = role_id_from_session_key(ctx.session_key)
+    if not role_id:
+        raise ValueError(f"发呆回合只服务角色会话: {ctx.session_key}")
+    # Only the host tools the generation has registered, in this order.
+    for schema in host.tool_schemas(tuple(_HOST_TOOLS)):
+        tool: Tool = HostTool(host, schema, role_id)
+        if tool.name == "web_fetch":
+            tool = DriftWebFetchTool(tool, deps.max_web_fetch_chars)
+        tools.register(tool, risk=_HOST_TOOLS[tool.name])
 
-    # mount_server: 只有 shared registry 里有 MCP 工具时才注册
-    if shared is not None and shared.get_mcp_server_names():
+    # mount_server: 只有宿主报告已连接的 MCP 服务时才注册
+    if mcp_servers:
         mounted = mounted_tool_names if mounted_tool_names is not None else set()
-        tools.register(MountServerTool(shared, mounted), risk="read-only")
+        tools.register(MountServerTool(host, mounted), risk="read-only")
 
     tools.register(
-        SendMessageTool(ctx, deps.send_message_fn),
+        SendMessageTool(ctx, deps.send_message_fn, host),
         risk="external-side-effect",
     )
     tools.register(FinishDriftTool(ctx, deps.store), risk="write")

@@ -26,6 +26,7 @@ from collections.abc import AsyncGenerator, Awaitable, Callable, Coroutine
 from contextlib import asynccontextmanager, nullcontext
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from functools import partial
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
@@ -36,15 +37,18 @@ from agent.account_delivery import AccountDelivery
 from agent.config_models import Config
 from agent.core.proactive_turn.strategies import RelationshipStrategy
 from agent.core.turn_events import core_kernel
+from agent.initiated_delivery import HostConversation, orchestrator_for
 from agent.provider import LLMProvider, LLMResponse, ToolCall
 from agent.tools.account_delivery import AccountSendTool
 from agent.tools.message_push import MessagePushTool
 from agent.tools.registry import ToolRegistry
 from agent.turns.channel_sequence import ChannelSequenceOwner
+from agent.proactive_host import HostProactiveRunner
 from bootstrap.proactive import build_proactive_runtime
 from bus.event_bus import EventBus
 from bus.events_lifecycle import InitiatedMessageCommitted
 from bus.queue import MessageBus
+from shiori_sdk.messages import InboundMessage
 from conversation.service import desktop_thread_id
 from core.accounts.delivery_ledger import AccountDeliveryLedger
 from core.desktop_presence import DesktopPresence
@@ -52,6 +56,7 @@ from core.identity import IdentityChat
 from core.memory.group_environment import GroupEnvironment
 from core.roles import RoleRepository, RoleRuntimeRegistry, RoleStore
 from core.roles.affection_access import AffectionGetter
+from core.roles.reply_policy import ReplyPolicyGetter
 from plugins.natural_chat.backend.plugin import NaturalChatPolicy
 from shiori_sdk.core.affection import Affection
 from proactive_v2.loop import ProactiveLoop
@@ -75,9 +80,14 @@ class ScriptedProvider(LLMProvider):
         )
         self.script: list[LLMResponse] = []
         self.requests: list[dict[str, Any]] = []
+        # Request index -> what happens in the world while the model answers it.
+        self.meanwhile: dict[int, Callable[[], None]] = {}
 
     async def chat(self, **kwargs: Any) -> LLMResponse:  # type: ignore[override]
         self.requests.append(kwargs)
+        happening = self.meanwhile.pop(len(self.requests) - 1, None)
+        if happening is not None:
+            happening()
         return self.script.pop(0)
 
     def offered(self, request: int) -> set[str]:
@@ -151,6 +161,16 @@ class ProactiveHost:
     busy: bool = False
     # Raised by the desktop sender instead of sending, while set.
     desktop_failure: Exception | None = None
+    # Admits the user's messages, as the runtime's dispatcher does.
+    reply_sequences: ChannelSequenceOwner = field(default_factory=ChannelSequenceOwner)
+
+    def user_writes_on_desktop(self, text: str) -> None:
+        """The user sends ``text`` in the role's desktop chat."""
+        _ = self.reply_sequences.admit(
+            InboundMessage(
+                "desktop", "user", SESSION_KEY, text, metadata={"role_id": "mira"}
+            )
+        )
 
     async def tick(self) -> None:
         """Runs one proactive tick as the runtime does for a due role.
@@ -291,37 +311,115 @@ async def proactive_host(
     registry = RoleRuntimeRegistry(
         RoleRepository(roles), model_resolver=cast(Any, _ModelRuntime())
     )
+    # A hand-driven tick has no generation lease, so the port pins this one.
+    # Natural replies bind ``reply_sequences`` on that lease.
+    reply_sequences = ChannelSequenceOwner()
     agent_loop = SimpleNamespace(
         role_runtime_registry=registry,
         processing_state=SimpleNamespace(is_busy=passive_busy),
         tools=tools,
+        bus=MessageBus(),
     )
+    group_environment = GroupEnvironment(workspace, sessions.conversation_store)
+    presence = sessions.presence
+    config = Config(provider="test", model="m", api_key="")
     affection_getter = AffectionGetter()
     affection_getter.bind(lambda: cast(Affection, affection))
-    # The production presence of this session store (bootstrap/tools.py).
-    presence = sessions.presence
+    policy_getter = ReplyPolicyGetter()
+    policy_getter.bind(lambda: NaturalChatPolicy())
+
+    class _PluginManager:
+        @property
+        def kernel(self):
+            return core_kernel()
+
+    # The published generation the port pins. Natural scope, completion,
+    # tools and delivery read these fields; desktop presence lives on the
+    # runtime the scenarios mutate.
+    conversation = HostConversation(
+        partial(
+            orchestrator_for,
+            session_manager=sessions,
+            presence=presence,
+            push_tool=push,
+            event_bus=bus,
+            tools=tools,
+            role_store=roles,
+        ),
+        role_store=roles,
+        session_manager=sessions,
+        affection=affection_getter,
+        reply_policy=policy_getter,
+    )
+
+    class _PublishedCore:
+        """A generation core. ``SimpleNamespace`` cannot be weakly referenced."""
+
+        def __init__(self) -> None:
+            self.role_runtime_registry = registry
+            self.loop = agent_loop
+            self.group_environment = group_environment
+            self.config = config
+            self.provider = provider
+            self.session_manager = sessions
+            self.presence = presence
+            self.push_tool = push
+            self.event_bus = bus
+            self.tools = tools
+            self.additional_providers: list[Any] = []
+            self.plugin_manager = _PluginManager()
+            self.conversation = conversation
+            self.affection = affection_getter
+            self.reply_policy = policy_getter
+
+    published = _PublishedCore()
+
+    class _PublishedRuntime:
+        def __init__(self) -> None:
+            self.core = published
+            self.desktop_presence = desktop_presence
+
+        def acquire(self) -> Any:
+            runtime = self
+
+            class _Lease:
+                def __init__(self) -> None:
+                    self.core = runtime.core
+                    self.reply_sequences = reply_sequences
+
+                async def __aenter__(self) -> Any:
+                    return self
+
+                async def __aexit__(self, *_exc: object) -> None:
+                    return None
+
+            return _Lease()
+
+        async def wait_for_admission(self) -> None:
+            return None
+
     tasks, loops = (  # pyright: ignore[reportUnknownVariableType]
         build_proactive_runtime(
-            Config(provider="test", model="m", api_key=""),
+            config,
             workspace,
             session_manager=sessions,
-            provider=provider,
-            light_provider=provider,
-            push_tool=push,
             memory_store=None,
             presence=presence,
-            agent_loop=cast(Any, agent_loop),
-            kernel=core_kernel,
+            role_store=roles,
             proactive_motives=[RelationshipStrategy(affection_getter)],
-            event_bus=bus,
-            desktop_presence=desktop_presence,
-            group_environment=GroupEnvironment(workspace, sessions.conversation_store),
+            proactive_host=HostProactiveRunner(lambda: _PublishedRuntime()),
+            conversation=conversation,
         )
     )
     for task in cast(list[Coroutine[Any, Any, None]], tasks):
         task.close()  # the loops are ticked by hand, never run
     host = ProactiveHost(
-        workspace, provider, affection, desktop_presence, loops["mira"]
+        workspace,
+        provider,
+        affection,
+        desktop_presence,
+        loops["mira"],
+        reply_sequences=reply_sequences,
     )
     holder["host"] = host
 
@@ -601,6 +699,35 @@ async def scenario_idle_drift_shares_and_records_run(host: ProactiveHost) -> Non
     assert len(host.delivered) == 1
 
 
+async def scenario_superseded_natural_tick_keeps_its_tool_work(
+    host: ProactiveHost,
+) -> None:
+    """Natural chat: the user writes after a tool ran, before anything is sent.
+
+    The tick stops without sending, storing a reply, announcing or changing
+    the mood, and without failing. The tool work it already did stays on the
+    session, so the next turn sees it instead of redoing it.
+    """
+    host.provider.script = [
+        _call("get_recent_chat", {}),
+        _natural_push(["刚想起你。"]),
+    ]
+    host.provider.meanwhile[1] = lambda: host.user_writes_on_desktop("我回来了")
+
+    await host.tick()
+
+    assert host.delivered == []
+    assert host.events == []
+    assert host.affection.sent == []
+    assert host.last_initiated_at() is None
+    assert host.mood() == ""
+    [facts] = host.stored()
+    assert facts["content"] == ""
+    assert [call["name"] for step in facts["tool_chain"] for call in step["calls"]] == [
+        "get_recent_chat"
+    ]
+
+
 Scenario = Callable[[ProactiveHost], Awaitable[None]]
 
 
@@ -615,6 +742,7 @@ Scenario = Callable[[ProactiveHost], Awaitable[None]]
         (scenario_repeated_message_is_not_sent_again, False),
         (scenario_failed_send_keeps_nothing_and_retries, False),
         (scenario_idle_drift_shares_and_records_run, False),
+        (scenario_superseded_natural_tick_keeps_its_tool_work, True),
     ],
     ids=lambda value: (
         value.__name__.removeprefix("scenario_") if callable(value) else None

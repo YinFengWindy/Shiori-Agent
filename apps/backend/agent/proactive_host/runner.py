@@ -1,9 +1,10 @@
-"""``PROACTIVE_HOST``: the host services a proactive tick calls.
+"""``HostProactiveRunner``: the process-wide ``PROACTIVE_HOST``.
 
 One runner serves every generation. Work that runs or delivers pins the
 published generation; reads use the current lease when there is one, otherwise
-the published generation, and do not wait. The proactive loop still calls the
-host directly.
+the published generation, and do not wait. A caller that already holds a lease
+keeps that lease. Natural replies, tools and reads live in sibling modules;
+this class pins the generation and hands them its core.
 """
 
 from __future__ import annotations
@@ -15,26 +16,33 @@ from datetime import datetime
 from typing import Any, AsyncIterator, Literal
 
 from agent.core.prompt_block import build_role_user_identities_prompt
+from agent.proactive_host import natural, reads
+from agent.proactive_host import tools as host_tools
 from agent.provider import LLMProvider, thinking_disabled_provider
-from agent.tools.execution import ToolExecutionRequest, ToolExecutor
+from agent.turns.orchestrator import TurnOrchestrator
+from agent.turns.proactive_sequence import current_proactive_reply
+from agent.turns.reply_interruption import reply_was_invalidated
 from conversation.service import desktop_chat_id, desktop_thread_id
 from core.common.channel_directory import DESKTOP_CHANNEL
 from core.common.runtime_scope import bind_runtime, current_runtime_lease
 from core.roles.model_runtime import RoleAwareProvider
-from core.roles.reply_state import role_mood_catalog, validate_role_reply
+from core.roles.reply_state import validate_role_reply
 from core.roles.role_prompt_compiler import RolePromptCompiler
-from core.roles.services import RoleSessionService
-from session.manager.helpers import role_session_key
+from session.manager.helpers import role_id_from_session_key, role_session_key
 from shiori_sdk.core.conversation import InitiatedDelivery, InitiatedReply
 from shiori_sdk.core.proactive_host import (
+    CandidateChat,
     CompletionToolCall,
     ModelCompletion,
+    NaturalReplyTicket,
+    ProactiveHistoryMessage,
     ProactiveToolCall,
     ProactiveToolInvoker,
     ProactiveToolOutcome,
-    RoleReplyState,
+    RecentTurnMessage,
     ValidatedRoleReply,
 )
+from shiori_sdk.tools import ToolResult
 
 _RUNTIME_REQUIRED = "主动端口需要已启动的运行时"
 
@@ -98,38 +106,25 @@ class HostProactiveRunner:
     ) -> ProactiveToolOutcome:
         """Run one tool call through the published kernel's checks."""
         async with self._pinned() as lease:
-            manager = lease.core.plugin_manager
-            if manager is None:
-                raise RuntimeError("主动工具需要已启动的插件内核")
-            executor = ToolExecutor(lambda: manager.kernel)
+            return await host_tools.execute_tool(lease.core, call, invoker)
 
-            async def run(name: str, arguments: dict[str, Any]) -> object:
-                return await invoker(name, arguments)
-
-            result = await executor.execute(
-                ToolExecutionRequest(
-                    call_id=call.call_id,
-                    tool_name=call.name,
-                    arguments=dict(call.arguments),
-                    source="proactive",
-                    session_key=call.session_key,
-                    channel=call.channel,
-                    chat_id=call.chat_id,
-                ),
-                run,
-            )
-            # The text the host's proactive and Drift tool loops record.
-            return ProactiveToolOutcome(
-                text=str(result.output),
-                status=result.status,
-                arguments=result.final_arguments,
-                finalize=result.finalize,
+    async def run_host_tool(
+        self, name: str, arguments: Mapping[str, object], *, role_id: str
+    ) -> str | ToolResult:
+        """Run a registered host tool for ``role_id`` in the role's user context."""
+        async with self._pinned() as lease:
+            return await host_tools.run_host_tool(
+                lease.core, name, arguments, role_id=role_id
             )
 
     async def deliver(self, reply: InitiatedReply) -> InitiatedDelivery:
-        """Deliver ``reply`` through the published generation's ``CONVERSATION``."""
+        """Deliver through the plan open on this task, or through ``CONVERSATION``."""
         async with self._pinned() as lease:
-            return await lease.core.conversation.deliver_initiated_reply(reply)
+            if current_proactive_reply() is None:
+                return await lease.core.conversation.deliver_initiated_reply(reply)
+            return await natural.deliver_through_plan(
+                self._orchestrator(lease.core, reply.session_key), reply
+            )
 
     def user_at_desktop(self) -> bool:
         """The process-wide desktop presence report."""
@@ -159,14 +154,6 @@ class HostProactiveRunner:
         identities = build_role_user_identities_prompt(role_id, store)
         return f"{prompt}\n\n{identities}" if identities else prompt
 
-    def reply_state(self, role_id: str) -> RoleReplyState:
-        """Moods and the stored mood timestamp, from the role's session."""
-        session = self._open_role_session(role_id)
-        return RoleReplyState(
-            moods=role_mood_catalog(session.metadata.get("role_runtime_config", {})),
-            mood_updated_at=str(session.metadata.get("current_mood_updated_at", "")),
-        )
-
     def validate_reply(
         self,
         role_id: str,
@@ -176,8 +163,8 @@ class HostProactiveRunner:
         thought: str,
         allow_empty_content: bool = False,
     ) -> ValidatedRoleReply:
-        """Validate one reply against the role's mood catalog."""
-        state = self.reply_state(role_id)
+        """Validate one reply against ``CONVERSATION.reply_state`` of this generation."""
+        state = self._require_core().conversation.reply_state(role_id)
         reply = validate_role_reply(
             {"content": content, "mood": mood, "thought": thought},
             state.moods,
@@ -185,6 +172,130 @@ class HostProactiveRunner:
         )
         return ValidatedRoleReply(
             content=reply.content, mood=reply.mood, thought=reply.thought
+        )
+
+    def natural_chat_enabled(self, session_key: str) -> bool:
+        """The role record's natural-chat switch, as of this call.
+
+        A missing role is off. The session copy of the role config is not
+        the switch. No published generation raises.
+        """
+        if not role_id_from_session_key(session_key):
+            return False
+        core = self._require_core()
+        return self._orchestrator(core, session_key).natural_chat_enabled(session_key)
+
+    def begin_natural_reply(self) -> NaturalReplyTicket:
+        """Issue the ticket one tick invalidates from outside its scope."""
+        return natural.HostReplyTicket()
+
+    @asynccontextmanager
+    async def natural_reply_scope(
+        self,
+        ticket: NaturalReplyTicket,
+        session_key: str,
+        channel: str,
+        chat_id: str,
+        *,
+        turn_id: str,
+    ) -> AsyncIterator[None]:
+        """Open the tick's plan and commit its tool facts before the plan ends."""
+        if not isinstance(ticket, natural.HostReplyTicket):
+            raise TypeError("自然回复票据不属于这个端口")
+        async with self._pinned() as lease:
+            async with natural.natural_reply_scope(
+                self._orchestrator(lease.core, session_key),
+                ticket,
+                session_key,
+                channel,
+                chat_id,
+                turn_id=turn_id,
+            ):
+                yield
+
+    def reply_invalidated(self) -> bool:
+        """Whether the natural reply bound on this task has been superseded."""
+        return reply_was_invalidated()
+
+    async def retarget_natural_reply(
+        self, session_key: str, target: Mapping[str, object]
+    ) -> None:
+        """Point the open plan at an explicit account target. No plan does nothing."""
+        if current_proactive_reply() is None:
+            return
+        async with self._pinned() as lease:
+            await self._orchestrator(lease.core, session_key).retarget_natural_reply(
+                session_key, dict(target)
+            )
+
+    async def retarget_natural_transport(
+        self, session_key: str, channel: str, chat_id: str
+    ) -> None:
+        """Point the open plan at another candidate chat. No plan does nothing."""
+        if current_proactive_reply() is None:
+            return
+        async with self._pinned() as lease:
+            await natural.retarget_transport(
+                self._orchestrator(lease.core, session_key),
+                session_key,
+                channel,
+                chat_id,
+            )
+
+    def natural_reply_active(self) -> bool:
+        """Whether this task is inside a natural-reply scope that has a plan."""
+        return current_proactive_reply() is not None
+
+    def natural_reply_properties(self) -> Mapping[str, object]:
+        """The ``messages`` property a natural draft carries instead of its text."""
+        return natural.natural_reply_properties()
+
+    def natural_reply_messages(self) -> tuple[str, ...] | None:
+        """The messages the open plan accepted from the last natural draft."""
+        return natural.natural_reply_messages()
+
+    def candidate_chats(self, role_id: str) -> tuple[CandidateChat, ...]:
+        """Desktop first, then private chats with the bound user."""
+        return reads.candidate_chats(self._require_core(), role_id)
+
+    def last_user_message_at(
+        self, role_id: str, channel: str, chat_id: str
+    ) -> datetime | None:
+        """When the user last wrote in that chat, or None."""
+        return reads.last_user_message_at(
+            self._require_core(), role_id, channel, chat_id
+        )
+
+    def tool_schemas(
+        self, names: Sequence[str] | None = None
+    ) -> tuple[Mapping[str, object], ...]:
+        """Schemas from the generation's registry, in the requested order."""
+        return host_tools.tool_schemas(self._require_core(), names)
+
+    def mcp_server_names(self) -> tuple[str, ...]:
+        """MCP servers that currently have tools on the generation, sorted."""
+        return host_tools.mcp_server_names(self._require_core())
+
+    def mcp_tool_names(self, server: str) -> tuple[str, ...]:
+        """The tools ``server`` currently has on the generation, sorted."""
+        return host_tools.mcp_tool_names(self._require_core(), server)
+
+    def require_channel_account(self, role_id: str, channel: str) -> None:
+        """Raise unless ``role_id`` has an account on ``channel``."""
+        host_tools.require_channel_account(self._require_core(), role_id, channel)
+
+    def recent_messages(
+        self, role_id: str, *, limit: int
+    ) -> tuple[RecentTurnMessage, ...]:
+        """Recent user-context turns on the role session, oldest first."""
+        return reads.recent_messages(self._require_core(), role_id, limit=limit)
+
+    def recent_proactive_messages(
+        self, role_id: str, *, limit: int = 5
+    ) -> tuple[ProactiveHistoryMessage, ...]:
+        """The role session's recent proactive messages, oldest first."""
+        return reads.recent_proactive_messages(
+            self._require_core(), role_id, limit=limit
         )
 
     async def complete(
@@ -197,20 +308,27 @@ class HostProactiveRunner:
         call_purpose: Literal["default", "auxiliary"] = "default",
         disable_thinking: bool = True,
         defer_tool_argument_errors: bool = False,
+        natural_draft: bool = False,
     ) -> ModelCompletion:
         """One chat completion on the published model.
 
         The fallback provider forces thinking off. An active role-model
         snapshot (inside ``run_tick``) keeps that model's own effort.
+        ``natural_draft`` turns the completion into the open plan's draft
+        before it is returned; the plan keeps the provider response.
         """
+        if natural_draft and current_proactive_reply() is None:
+            raise RuntimeError("自然回复补全需要已打开的回复计划")
         async with self._pinned() as lease:
             config = lease.core.config
             provider = RoleAwareProvider(self._thinking_provider(lease.core))
+            payload = [dict(message) for message in messages]
+            sent_max = config.max_tokens if max_tokens is None else max_tokens
             response = await provider.chat(
-                messages=[dict(message) for message in messages],
+                messages=payload,
                 tools=[dict(tool) for tool in tools],
                 model=config.model,
-                max_tokens=config.max_tokens if max_tokens is None else max_tokens,
+                max_tokens=sent_max,
                 tool_choice=(
                     tool_choice if isinstance(tool_choice, str) else dict(tool_choice)
                 ),
@@ -218,19 +336,26 @@ class HostProactiveRunner:
                 call_purpose=call_purpose,
                 defer_tool_argument_errors=defer_tool_argument_errors,
             )
-        calls = tuple(
-            CompletionToolCall(
-                id=call.id,
-                name=call.name,
-                arguments=dict(call.arguments),
-                raw_arguments=call.raw_arguments,
-                arguments_error=call.arguments_error,
-            )
-            for call in (response.tool_calls or [])
-        )
+            if natural_draft:
+                response = await natural.complete_natural_draft(
+                    response,
+                    messages=payload,
+                    provider=provider,
+                    model=config.model,
+                    max_tokens=sent_max,
+                )
         return ModelCompletion(
             content=response.content or "",
-            tool_calls=calls,
+            tool_calls=tuple(
+                CompletionToolCall(
+                    id=call.id,
+                    name=call.name,
+                    arguments=dict(call.arguments),
+                    raw_arguments=call.raw_arguments,
+                    arguments_error=call.arguments_error,
+                )
+                for call in (response.tool_calls or [])
+            ),
             thinking=response.thinking,
         )
 
@@ -252,12 +377,13 @@ class HostProactiveRunner:
         weakref.finalize(core, self._completion_providers.pop, key, None)
         return provider
 
-    def _open_role_session(self, role_id: str):
-        core = self._require_core()
-        role = core.role_runtime_registry.repository.store.get_role(role_id)
-        if role is None:
-            raise ValueError(f"role not found for proactive generation: {role_id}")
-        return RoleSessionService(core.session_manager).open_by_role(role)
+    @staticmethod
+    def _orchestrator(core: Any, session_key: str) -> TurnOrchestrator:
+        """The generation's delivery wiring for the role owning ``session_key``."""
+        role_id = role_id_from_session_key(session_key)
+        if not role_id:
+            raise ValueError(f"主动回复只接受角色会话: {session_key}")
+        return core.conversation.orchestrator(role_id)
 
     def _visible_core(self) -> Any:
         lease = current_runtime_lease()

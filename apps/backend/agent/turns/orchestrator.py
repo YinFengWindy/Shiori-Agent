@@ -22,13 +22,7 @@ from core.common.channel_directory import DESKTOP_CHANNEL
 from core.common.timekit import utcnow
 from core.roles.affection_access import current_affection
 from core.roles.reply_policy import natural_chat_selected
-from core.roles.services import RoleSessionService
-from core.roles.reply_state import (
-    RoleReplyContext,
-    role_mood_catalog,
-    reply_state_metadata,
-    validate_role_reply,
-)
+from core.roles.reply_state import reply_state_metadata, validate_role_reply
 from session.manager.helpers import role_session_key
 from session.manager.models import build_session_message
 from agent.account_delivery.service import ResolvedAccountTarget
@@ -250,23 +244,6 @@ class TurnOrchestrator:
         context = channel_sequence_context()
         assert context is not None
         context.owner.retarget_background(plan.registration, origin, senders=senders)
-
-    def capture_reply_context(self, session_key: str) -> RoleReplyContext:
-        """Capture role output constraints and the successful-state stamp per tick."""
-        session = self._session.session_manager.get_or_create(session_key)
-        if self._role_lookup is not None:
-            role = self._role_lookup(str(session.metadata.get("role_id") or ""))
-            if role is None:
-                raise ValueError("主动回复的角色已删除")
-            session = RoleSessionService(self._session.session_manager).open_by_role(
-                role
-            )
-        return RoleReplyContext(
-            moods=role_mood_catalog(session.metadata.get("role_runtime_config", {})),
-            previous_updated_at=str(
-                session.metadata.get("current_mood_updated_at", "")
-            ),
-        )
 
     async def handle_proactive_turn(
         self,

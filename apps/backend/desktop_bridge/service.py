@@ -27,7 +27,7 @@ from agent.turns.turn_pushes import current_turn_pushes
 from bus.event_bus import EventBus
 from bus.events_context import ContextWindowChanged
 from bus.events_lifecycle import InitiatedMessageCommitted, ReplyMessageCommitted
-from shiori_sdk.role_events import RoleDeleted
+from shiori_sdk.role_events import RoleCreated, RoleDeleted
 from shiori_sdk.memory.committed import TurnCommitted
 from shiori_sdk.memory.engine import MemoryEngine
 from shiori_sdk.core.sessions import Presence
@@ -146,6 +146,7 @@ class DesktopBridgeService:
             Callable[[dict[str, Any]], Awaitable[None] | None]
         ] = set()
         self._role_deleted_listener = self._on_role_deleted
+        self._role_created_listener = self._on_role_created
         self.role_service = role_service or RoleAggregateService.from_runtime(
             workspace=workspace,
             role_store=role_store,
@@ -158,6 +159,7 @@ class DesktopBridgeService:
             ),
         )
         self.role_service.add_role_deleted_listener(self._role_deleted_listener)
+        self.role_service.add_role_created_listener(self._role_created_listener)
         self.conversation_service = ConversationService(session_manager)
         self.presence = presence
         self.role_tasks = RoleTaskService(
@@ -445,6 +447,12 @@ class DesktopBridgeService:
             invalidate(clean_role_id)
         self.event_bus.enqueue(RoleDeleted(clean_role_id))
 
+    def _on_role_created(self, role_id: str) -> None:
+        clean_role_id = str(role_id or "").strip()
+        if not clean_role_id:
+            raise ValueError("role_id required for role creation lifecycle")
+        self.event_bus.enqueue(RoleCreated(clean_role_id))
+
     def remove_event_listener(
         self,
         listener: Callable[[dict[str, Any]], Awaitable[None] | None],
@@ -478,6 +486,7 @@ class DesktopBridgeService:
             self._proactive_message_listener,
         )
         self.role_service.remove_role_deleted_listener(self._role_deleted_listener)
+        self.role_service.remove_role_created_listener(self._role_created_listener)
         self.role_store.accounts.remove_change_listener(self._account_change_listener)
         self.role_store.identities.remove_change_listener(
             self._identity_change_listener

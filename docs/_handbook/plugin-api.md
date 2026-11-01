@@ -180,7 +180,7 @@ A live session the plugin reads; the plugin does not write it.
 
 ## `shiori_sdk.core.conversation`
 
-Turn events, ``COMMANDS``, and the initiated-delivery socket (D19, #902). The host emits one event per turn stage through the plugin kernel: ``on`` handlers run in plugin order and may return a replaced event, the core's fixed checks run on the final one, then ``watch`` handlers see it. Every event is a frozen projection of the host's turn state, never the state itself: the host applies only the fields documented as *writable* back to the turn and ignores changes to the others. Container fields are tuples, frozensets or read-only mappings. ``Veto`` stops a stage where it can stop: it aborts the turn with ``Veto.reason`` as the reply (``TurnStarting``, ``ReasoningStarting``) or ends the tool loop with it (``StepStarting``). The other events cannot be vetoed; a veto there fails the turn. A vetoed event reaches no watcher.
+Turn events, ``COMMANDS``, and the initiated-delivery socket (D19, #902). The host emits one event per turn stage through the plugin kernel: ``on`` handlers run in plugin order and may return a replaced event, the core's fixed checks run on the final one, then ``watch`` handlers see it. Every event is a frozen projection of the host's turn state, never the state itself: the host applies only the fields documented as *writable* back to the turn and ignores changes to the others. Container fields are tuples, frozensets or read-only mappings. ``Veto`` stops a stage where it can stop: it aborts the turn with ``Veto.reason`` as the reply (``TurnStarting``, ``ReasoningStarting``) or ends the tool loop with it (``StepStarting``). The other events cannot be vetoed; a veto there fails the turn. A vetoed event reaches no watcher. ``CONVERSATION`` delivers one initiated reply for its generation and reads the reply stamp (the mood catalog and the stored mood time) that reply carries.
 
 ### `commands`
 
@@ -204,7 +204,11 @@ Deliver a reply the host initiated, outside a user turn. The host provides this 
 
 - `async deliver_initiated_reply(reply: core.conversation.InitiatedReply) -> core.conversation.InitiatedDelivery`
 
-  Send ``reply``, store what was sent, and emit ``InitiatedMessageCommitted``. Returns what was stored (see ``InitiatedDelivery``). Raises before writing anything when the session is not a role session, the role is gone, a desktop target is not the role's own, the reply fails validation against ``reply.moods``, natural chat is off for a multi-message reply, tool facts arrive without that sequence, or a single reply is stale (``expected_mood_updated_at``). Raises when a send fails or is refused mid-way. A single reply then stores nothing. A sequence keeps the prefix already sent (stored and announced), and the first message of a refused desktop sequence raises instead of returning an empty result. Account sends that fail or whose outcome is unknown stay on the session as delivery records marked ``failed`` / ``uncertain``, outside the conversation history. A sequence needs a runtime lease or an already bound channel-sequence owner.
+  Send ``reply``, store what was sent, and emit ``InitiatedMessageCommitted``. Returns what was stored (see ``InitiatedDelivery``). Raises before writing anything when the session is not a role session, the role is gone, a desktop target is not the role's own, the reply fails validation against ``reply.moods``, natural chat is off for a multi-message reply, tool facts arrive without that sequence, or a single reply is stale (``expected_mood_updated_at``). Raises when a send fails or is refused mid-way. A single reply then stores nothing. A sequence keeps the prefix already sent (stored and announced), and the first message of a refused desktop sequence raises instead of returning an empty result. Account sends that fail or whose outcome is unknown stay on the session as delivery records marked ``failed`` / ``uncertain``, outside the conversation history. Once part of the reply is stored, a cancellation of the caller's task does not lose it: the stored part is returned and the cancellation is raised again at the caller's next ``await``. Nothing stored yet, the cancellation propagates. Any exception raised after the whole reply was stored (the host's own bookkeeping: presence, affection, role gate reacquisition, the final mood write, the committed event) is logged and the result stays complete; a cancellation received meanwhile is still raised at the caller's next ``await``. A sequence needs a runtime lease or an already bound channel-sequence owner.
+
+- `reply_state(role_id: str) -> core.conversation.RoleReplyState`
+
+  Moods the role may use, and the stored mood's timestamp. Raises ``ValueError`` when the role is gone.
 
 #### `shiori_sdk.core.conversation.ConversationMessage`
 
@@ -216,7 +220,7 @@ One message of a turn's history window.
 
 #### `shiori_sdk.core.conversation.InitiatedDelivery`
 
-What one initiated delivery stored. ``message_ids`` are the committed messages, in order. ``complete`` is True only when every message of the reply was sent and stored. An incomplete result is not an error. For a single reply it means the transport refused it (the desktop did not accept the message) and nothing was stored. For a sequence it means a newer user message in that chat, the role's removal or natural chat being switched off stopped it: the prefix already sent is stored and announced (possibly none), the rest is dropped.
+What one initiated delivery stored. ``message_ids`` are the committed messages, in order. ``complete`` is True only when every message of the reply was sent and stored. An incomplete result is not an error. For a single reply it means the transport refused it (the desktop did not accept the message) and nothing was stored. For a sequence it means a newer user message in that chat, the role's removal or natural chat being switched off stopped it, or the caller's task was cancelled after part of it was stored: the prefix already sent is stored and announced (possibly none), the rest is dropped.
 
 - `message_ids: tuple[str, ...]`
 - `complete: bool`
@@ -237,7 +241,7 @@ A role message the user did not ask for was stored on the role session. The host
 
 #### `shiori_sdk.core.conversation.InitiatedReply`
 
-One initiated reply, including its target, media and natural sequence. The reply speaks for the role that owns ``session_key``, which must be exactly a role session key (``role:<role_id>``); any other key raises ``ValueError``. The target must be one that role can reach: its own desktop chat (``channel="desktop"``, ``chat_id="role:<role_id>"``; another desktop chat raises ``ValueError`` before anything is written), a private chat with the bound user through one of its online accounts, or an ``account_target`` sent through the role's account on ``account_channel``. Both account fields are given together or not at all. With an account target, ``channel`` / ``chat_id`` name the chat the reply is recorded under; a sequence first opens there, so for a sequence they must also be a chat the role can reach. ``expected_mood_updated_at`` and ``moods`` are the ``PROACTIVE_HOST.reply_state(role_id)`` the caller read when its work started. The mood and thought are validated against ``moods``. When the role's stored mood changed after that read (a passive reply landed in between) the reply is stale: a single reply raises without sending; a sequence is still sent and stored, but its mood and thought do not replace the newer state. ``content`` is the text stored on the role session. When ``messages`` is non-empty it must equal those texts joined by a blank line, and natural chat must be on for the role; delivery then sends each text as its own message and stores them in order. Media rides on the first message. ``tool_facts`` ride along with ``messages`` only. The stored messages are marked ``proactive`` with source ``proactive`` and ``tools_used=["message_push"]`` whatever ``source`` says; ``source`` only reaches ``InitiatedMessageCommitted``. They carry no evidence item ids. Fields may still be added or removed until the proactive loop runs on this type (P6b-4b); they are fixed when SDK 4.0 is released.
+One initiated reply, including its target, media and natural sequence. The reply speaks for the role that owns ``session_key``, which must be exactly a role session key (``role:<role_id>``); any other key raises ``ValueError``. The target must be one that role can reach: its own desktop chat (``channel="desktop"``, ``chat_id="role:<role_id>"``; another desktop chat raises ``ValueError`` before anything is written), a private chat with the bound user through one of its online accounts, or an ``account_target`` sent through the role's account on ``account_channel``. Both account fields are given together or not at all. With an account target, ``channel`` / ``chat_id`` name the chat the reply is recorded under; a sequence first opens there, so for a sequence they must also be a chat the role can reach. ``expected_mood_updated_at`` and ``moods`` are the ``CONVERSATION.reply_state(role_id)`` the caller read when its work started. The mood and thought are validated against ``moods``. When the role's stored mood changed after that read (a passive reply landed in between) the reply is stale: a single reply raises without sending; a sequence is still sent and stored, but its mood and thought do not replace the newer state. ``content`` is the text stored on the role session. When ``messages`` is non-empty it must equal those texts joined by a blank line, and natural chat must be on for the role; delivery then sends each text as its own message and stores them in order. Media rides on the first message. ``tool_facts`` ride along with ``messages`` only. The stored messages are marked ``proactive`` with source ``proactive`` and ``tools_used=["message_push"]`` whatever ``source`` says; ``source`` only reaches ``InitiatedMessageCommitted``. They carry no evidence item ids. Fields may still be added or removed until the proactive loop runs on this type (P6b-4b); they are fixed when SDK 4.0 is released.
 
 - `session_key: str`
 - `content: str`
@@ -316,6 +320,13 @@ The turn is about to reason with the retrieved memory and skills. Writable: ``sk
 - `skill_names: tuple[str, ...]`
 - `retrieved_memory_block: str`
 - `extra_hints: tuple[str, ...]`
+
+#### `shiori_sdk.core.conversation.RoleReplyState`
+
+The role session's mood catalog and when its current mood was stored. Read it when work starts and copy both fields onto ``InitiatedReply`` (``moods`` and ``expected_mood_updated_at``).
+
+- `moods: tuple[str, ...]`
+- `mood_updated_at: str`
 
 #### `shiori_sdk.core.conversation.StepFinished`
 
@@ -545,7 +556,7 @@ Runs a bounded chat request using the injected provider's routing.
 
 ## `shiori_sdk.core.proactive_host`
 
-``PROACTIVE_HOST``: host services the proactive loop needs (P6b, #907). The port is process-wide. Calls that run or deliver work pin the currently published generation, the way an incoming message does, and wait while no generation admits work. A caller that already holds a lease keeps that lease. Reads use the current lease's generation when there is one, otherwise the published generation, and do not wait. The proactive loop still calls the host directly; switching it onto this port is a later change. This key and ``InitiatedReply`` may still gain or lose members until the proactive loop runs on them (P6b-4b); they are fixed when SDK 4.0 is released.
+``PROACTIVE_HOST``: host services a proactive tick calls (P6b, #907). The port is process-wide. Calls that run or deliver work pin the currently published generation, the way an incoming message does, and wait while no generation admits work. A caller that already holds a lease keeps that lease. Reads use the current lease's generation when there is one, otherwise the published generation, and do not wait. A tick whose role has natural chat on opens one reply scope for the whole tick. The scope, its invalidation, its tool facts and its delivery stay together: tool calls run through ``execute_tool`` are recorded on the open plan and committed before the scope ends, including when the plan is invalidated. Choosing a target reads candidate chats, the last user message on a thread and whether the user is at the desktop. Host tools run through ``run_host_tool``; their schemas and the connected MCP servers come from the generation's registry. Session history reads return the role session's recent user-context turns and recent proactive messages. The reply stamp (mood catalog and stored mood time) is ``CONVERSATION.reply_state``. This key and ``InitiatedReply`` may still gain or lose members until the proactive loop moves into its plugin (P6b-4b); they are fixed when SDK 4.0 is released.
 
 ### `proactive_host`
 
@@ -565,11 +576,15 @@ Host services for a proactive tick. The host provides this.
 
 - `async execute_tool(call: core.proactive_host.ProactiveToolCall, invoker: ProactiveToolInvoker) -> core.proactive_host.ProactiveToolOutcome`
 
-  Run one tool call through the published generation's kernel. The kernel's ``ToolCalling`` chain and the core checks see the call. A denied call does not run ``invoker``. The caller owns the loop.
+  Run one tool call through the published generation's kernel. The kernel's ``ToolCalling`` chain and the core checks see the call. A denied call does not run ``invoker``. The caller owns the loop. Inside a natural reply scope that has a plan, the call (with the model's arguments) and ``outcome.text`` are recorded on the plan as a tool fact, a denied call included. ``message_push``, ``finish_turn`` and ``finish_drift`` are delivery controls and are not recorded. The scope commits the facts when it ends.
+
+- `async run_host_tool(name: str, arguments: Mapping[str, object], *, role_id: str) -> str | tools.ToolResult`
+
+  Run the generation's registered tool ``name`` for ``role_id``. Only inside an ``execute_tool`` invoker, for the tool name the kernel checks just allowed; any other call raises ``PermissionError`` without running anything, so a host tool never skips the core checks. The tool runs in the role's user context: a tool that takes the role, the turn session or the thread from its execution context gets the role, the role's session and its desktop thread, and the model cannot override them. No other context is passed. Returns what the tool returned; a tool that raises returns its error text. An unregistered ``name`` raises ``LookupError``; an empty ``role_id`` raises ``ValueError``.
 
 - `async deliver(reply: core.conversation.InitiatedReply) -> core.conversation.InitiatedDelivery`
 
-  Deliver ``reply`` on the published generation. Same payload, result and errors as ``CONVERSATION.deliver_initiated_reply``. Pins a lease so a process-level loop does not keep a previous generation's conversation.
+  Deliver ``reply`` on the published generation. Outside a natural reply plan: same payload, result and errors as ``CONVERSATION.deliver_initiated_reply``. Inside the natural reply plan open on this task, ``reply`` is the tick's single draft and goes out through that plan, as the messages the plan accepted from ``complete(natural_draft=True)``; no second scope is opened. ``reply.session_key`` must be the scope's session and ``channel`` / ``chat_id`` the chat the scope opened on or was last moved to by ``retarget_natural_transport``. A reply with ``messages``, ``tool_facts`` or an account target is refused too: the plan carries the messages and the facts, and ``retarget_natural_reply`` sets the account target. A refused reply raises ``ValueError`` before anything is written. Once part of the reply is stored, the result reports it even when the caller's task is cancelled, or the open plan is interrupted, while the rest is being sent: ``deliver`` returns what was stored and the cancellation is raised again at the caller's next ``await``. When nothing was stored yet, the cancellation propagates. A failure of the host's own bookkeeping after the whole reply was stored (any exception from then on: presence, affection, role gate reacquisition, the final mood write, the committed event) is logged by the host and the result stays complete. Any other exception means the reply was not stored in full.
 
 - `user_at_desktop() -> bool`
 
@@ -583,17 +598,88 @@ Host services for a proactive tick. The host provides this.
 
   The role prompt proactive turns use, including channel identities. Raises ``ValueError`` when the role is gone or the prompt is empty.
 
-- `reply_state(role_id: str) -> core.proactive_host.RoleReplyState`
-
-  Moods the role may use, and the stored mood's timestamp. Raises ``ValueError`` when the role is gone.
-
 - `validate_reply(role_id: str, *, content: str, mood: str, thought: str, allow_empty_content: bool = False) -> core.proactive_host.ValidatedRoleReply`
 
-  Validate one reply against the role's mood catalog. Raises ``ValueError`` when the role is gone, the mood is outside the catalog, the thought is not a short first-person line, or required text is blank.
+  Validate one reply against the role's mood catalog. The catalog is ``CONVERSATION.reply_state`` of the generation this call runs on: the lease the caller holds (inside ``run_tick``, the tick's), otherwise the published one. Raises ``ValueError`` when the role is gone, the mood is outside the catalog, the thought is not a short first-person line, or required text is blank.
 
-- `async complete(messages: Sequence[Mapping[str, object]], *, tools: Sequence[Mapping[str, object]] = (), tool_choice: str | Mapping[str, object] = 'auto', max_tokens: int | None = None, call_purpose: Literal['default', 'auxiliary'] = 'default', disable_thinking: bool = True, defer_tool_argument_errors: bool = False) -> core.proactive_host.ModelCompletion`
+- `natural_chat_enabled(session_key: str) -> bool`
 
-  Complete one chat request on the published model. Inside ``run_tick`` the role's chat model snapshot answers and keeps its own reasoning effort. Outside a tick the generation's model answers through a provider that forces thinking off, or through the generation's own provider when no API key is configured; only that last case honors ``disable_thinking``. ``max_tokens`` defaults to the generation's configured cap. ``call_purpose="auxiliary"`` marks a short side request: it opts out of the configured reasoning and does not calibrate the input budget. ``tool_choice`` may be ``"auto"`` or a tool-choice object.
+  Whether the role that owns ``session_key`` has natural chat on. The role record is read now. A missing role is off. The session copy of the role config is not the switch.
+
+- `begin_natural_reply() -> core.proactive_host.NaturalReplyTicket`
+
+  Open the ticket for one natural reply, before its scope starts. The caller invalidates this ticket to stop the reply, including from outside the task that is inside ``natural_reply_scope``.
+
+- `natural_reply_scope(ticket: core.proactive_host.NaturalReplyTicket, session_key: str, channel: str, chat_id: str, *, turn_id: str) -> contextlib.AbstractAsyncContextManager[None]`
+
+  Bind ``ticket`` for one tick and commit its tool facts on the way out. Facts are committed while the plan is still current, including when the body raises ``NaturalReplyInvalidated``. A ticket this host did not issue raises ``TypeError``. With natural chat off, the ticket is invalidated and the body runs without a plan.
+
+- `reply_invalidated() -> bool`
+
+  Whether the natural reply bound on this task has been superseded.
+
+- `async retarget_natural_reply(session_key: str, target: Mapping[str, object]) -> None`
+
+  Point the open natural reply at an explicit account target. ``target`` is the account-target mapping ``message_push`` recorded. No open plan does nothing.
+
+- `async retarget_natural_transport(session_key: str, channel: str, chat_id: str) -> None`
+
+  Point the open natural reply at another candidate chat. No open plan, or a plan already aimed at that chat, does nothing.
+
+- `natural_reply_active() -> bool`
+
+  Whether this task is inside a natural-reply scope that has a plan.
+
+- `natural_reply_properties() -> Mapping[str, object]`
+
+  JSON-schema properties of a natural draft's message list. The draft tool puts these in place of its single message field and requires ``messages``. They do not depend on an open plan.
+
+- `natural_reply_messages() -> tuple[str, ...] | None`
+
+  The message list the open plan accepted from the last natural draft. None until ``complete(natural_draft=True)`` accepted one. No open plan raises ``RuntimeError``.
+
+- `candidate_chats(role_id: str) -> tuple[core.proactive_host.CandidateChat, ...]`
+
+  Desktop first, then private chats with the bound user. Does not consult the proactive switch: a preview may pass candidates for a role whose saved switch is still off. A missing role raises ``KeyError``.
+
+- `last_user_message_at(role_id: str, channel: str, chat_id: str) -> datetime.datetime | None`
+
+  When the user last wrote in that chat, or None. Timestamps are timezone-aware. A naive legacy value was local time and is converted. Target selection ignores the desktop chat.
+
+- `tool_schemas(names: Sequence[str] | None = None) -> tuple[Mapping[str, object], ...]`
+
+  Schemas of the generation's registered tools. ``names`` is None for every tool, in registration order. A sequence keeps the caller's order and skips names that are not registered.
+
+- `mcp_server_names() -> tuple[str, ...]`
+
+  MCP servers that currently have tools on the generation, sorted.
+
+- `mcp_tool_names(server: str) -> tuple[str, ...]`
+
+  Names of the tools ``server`` currently has on the generation, sorted. Empty when the server is unknown or not connected.
+
+- `require_channel_account(role_id: str, channel: str) -> None`
+
+  Raise unless ``role_id`` has an account on ``channel``. The same check a proactive retarget makes before it keeps the draft. No account-send tool raises ``RuntimeError``. No account raises ``LookupError``.
+
+- `recent_messages(role_id: str, *, limit: int) -> tuple[core.proactive_host.RecentTurnMessage, ...]`
+
+  Recent user-context turns on the role session, oldest first. User and assistant messages with text, without context frames.
+
+- `recent_proactive_messages(role_id: str, *, limit: int = 5) -> tuple[core.proactive_host.ProactiveHistoryMessage, ...]`
+
+  The role session's recent proactive messages, oldest first.
+
+- `async complete(messages: Sequence[Mapping[str, object]], *, tools: Sequence[Mapping[str, object]] = (), tool_choice: str | Mapping[str, object] = 'auto', max_tokens: int | None = None, call_purpose: Literal['default', 'auxiliary'] = 'default', disable_thinking: bool = True, defer_tool_argument_errors: bool = False, natural_draft: bool = False) -> core.proactive_host.ModelCompletion`
+
+  Complete one chat request on the published model. Inside ``run_tick`` the role's chat model snapshot answers and keeps its own reasoning effort. Outside a tick the generation's model answers through a provider that forces thinking off, or through the generation's own provider when no API key is configured; only that last case honors ``disable_thinking``. ``max_tokens`` defaults to the generation's configured cap. ``call_purpose="auxiliary"`` marks a short side request: it opts out of the configured reasoning and does not calibrate the input budget. ``tool_choice`` may be ``"auto"`` or a tool-choice object. ``natural_draft`` turns the completion into the open natural plan's draft before returning: the ``message_push`` call's ``messages`` are validated, with at most one format correction, and the plan keeps the provider response (refusal, finish reason, provider fields). The returned completion carries that ``message_push`` call with the accepted messages, or unchanged business tool calls the model made instead. A completion that cannot become a draft raises ``ValueError``. No open plan raises ``RuntimeError``.
+
+#### `shiori_sdk.core.proactive_host.CandidateChat`
+
+One chat that may receive the role's next proactive message. Desktop is first. The rest are private chats with the bound user through the role's online accounts, in binding order.
+
+- `channel: str`
+- `chat_id: str`
 
 #### `shiori_sdk.core.proactive_host.CompletionToolCall`
 
@@ -612,6 +698,25 @@ A chat completion for the proactive loop. ``content`` is empty when the model re
 - `content: str`
 - `tool_calls: tuple[core.proactive_host.CompletionToolCall, ...]`
 - `thinking: str | None`
+
+#### `shiori_sdk.core.proactive_host.NaturalReplyInvalidated`
+
+The open natural reply was superseded before it was sent. Raised from ``natural_reply_scope`` when the plan is invalidated. Tool facts recorded on the plan are already committed.
+
+#### `shiori_sdk.core.proactive_host.NaturalReplyTicket`
+
+One natural reply, from the moment the tick accepts it until it ends. ``begin_natural_reply`` returns the only tickets ``natural_reply_scope`` accepts. ``invalidate`` stops the plan once; calling it again does not cancel cleanup that has already started.
+
+- `invalidate() -> None`
+
+  Stop this reply at the next safe boundary.
+
+#### `shiori_sdk.core.proactive_host.ProactiveHistoryMessage`
+
+One proactive message already stored on the role session. ``timestamp`` is None when the stored time is missing or unreadable.
+
+- `content: str`
+- `timestamp: datetime.datetime | None`
 
 #### `shiori_sdk.core.proactive_host.ProactiveToolCall`
 
@@ -633,12 +738,13 @@ How one checked tool call ended. ``arguments`` are the arguments the tool ran wi
 - `arguments: Mapping[str, object]`
 - `finalize: bool`
 
-#### `shiori_sdk.core.proactive_host.RoleReplyState`
+#### `shiori_sdk.core.proactive_host.RecentTurnMessage`
 
-The role's mood catalog and when its current mood was last stored. Read it when a tick starts and copy both fields into ``InitiatedReply`` (``moods`` and ``expected_mood_updated_at``).
+One user or assistant turn from the role's user-context history. ``content`` is truncated to 200 characters. Context frames are omitted.
 
-- `moods: tuple[str, ...]`
-- `mood_updated_at: str`
+- `role: str`
+- `content: str`
+- `timestamp: str`
 
 #### `shiori_sdk.core.proactive_host.ValidatedRoleReply`
 

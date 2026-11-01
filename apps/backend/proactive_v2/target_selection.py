@@ -9,13 +9,8 @@ most likely is right now:
 4. with no non-desktop candidate, the desktop.
 
 ``select_proactive_target`` is the pure rule; ``ProactiveTargetResolver`` reads
-its inputs (desktop presence, last user message per candidate thread) for the
-proactive runtime and the desktop preview alike, so both always agree.
-
-A role's own candidates are its desktop session followed by every private chat
-with the bound user (``core.identity``) through one of the role's online
-accounts (``core.roles.bound_chats``). A chosen private chat is reached
-through that account (``ProactiveTargetResolver.bound_chat_target``).
+its inputs (the role's candidate chats, desktop presence and the last user
+message per candidate thread) through ``PROACTIVE_HOST``.
 """
 
 from __future__ import annotations
@@ -23,23 +18,19 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from datetime import datetime
 
-from conversation.service import desktop_chat_id
-from shiori_sdk.channels.threads import network_thread_id
-from conversation.store import ConversationStore
-from shiori_sdk.accounts.targets import AccountTarget
-from core.common.channel_directory import DESKTOP_CHANNEL
-from core.desktop_presence import DesktopPresence
-from core.roles.bound_chats import bound_chat_target, role_bound_chats
-from core.roles.models import RoleProactiveCandidate
-from core.roles.store import RoleStore
+from shiori_sdk.core.proactive_host import CandidateChat, ProactiveHost
+from shiori_sdk.roles import Roles
+
+# The desktop chat's channel (see ``InitiatedReply``).
+DESKTOP_CHANNEL = "desktop"
 
 
 def select_proactive_target(
-    candidates: Sequence[RoleProactiveCandidate],
+    candidates: Sequence[CandidateChat],
     *,
     desktop_present: bool,
-    last_user_at: Mapping[RoleProactiveCandidate, datetime],
-) -> RoleProactiveCandidate:
+    last_user_at: Mapping[CandidateChat, datetime],
+) -> CandidateChat:
     """Returns the single candidate to deliver to.
 
     ``candidates`` are in binding order; ``last_user_at`` holds the newest user
@@ -67,73 +58,48 @@ def select_proactive_target(
 class ProactiveTargetResolver:
     """Reads the live inputs of ``select_proactive_target`` for a role.
 
-    ``roles`` must be the runtime's shared store: its account index and user
-    identities decide which private chats are candidates.
+    Candidate chats, the last user message on a thread and desktop presence
+    come from ``PROACTIVE_HOST``. The role's ``proactive`` settings on
+    ``ROLES`` decide whether it is eligible at all.
     """
 
-    def __init__(
-        self,
-        *,
-        roles: RoleStore,
-        conversations: ConversationStore,
-        desktop_presence: DesktopPresence,
-    ) -> None:
+    def __init__(self, *, roles: Roles, host: ProactiveHost) -> None:
         self._roles = roles
-        self._conversations = conversations
-        self._desktop_presence = desktop_presence
+        self._host = host
 
-    def resolve_saved(self, role_id: str) -> RoleProactiveCandidate | None:
+    def resolve_saved(self, role_id: str) -> CandidateChat | None:
         """Selects among the role's candidates; None when proactive is disabled.
 
+        The settings are read now, so a switch edit applies on the next call.
         The candidates are the desktop session and the private chats with the
         bound user through the role's online accounts, so the desktop keeps
         the message while the user is at it or no such chat exists.
         """
-        role = self._roles.get_role(role_id)
-        if role is None:
-            raise KeyError(f"角色不存在: {role_id}")
-        if not role.proactive.enabled:
+        settings = self._roles.plugin_settings(role_id, "proactive").read()
+        if not settings.get("enabled"):
             return None
-        candidates = [
-            RoleProactiveCandidate(DESKTOP_CHANNEL, desktop_chat_id(role_id)),
-            *(
-                RoleProactiveCandidate(chat.channel, chat.chat_id)
-                for _, _, chat in role_bound_chats(self._roles, role_id)
-            ),
-        ]
-        return self.resolve(role_id, candidates)
-
-    def bound_chat_target(
-        self, role_id: str, channel: str, chat_id: str
-    ) -> tuple[str, AccountTarget]:
-        """The account channel and private target reaching a bound user's chat.
-
-        ``channel`` / ``chat_id`` name a candidate ``resolve_saved`` chose.
-        See ``core.roles.bound_chats.bound_chat_target``.
-        """
-        return bound_chat_target(self._roles, role_id, channel, chat_id)
+        return self.resolve(role_id, self._host.candidate_chats(role_id))
 
     def resolve(
-        self, role_id: str, candidates: Sequence[RoleProactiveCandidate]
-    ) -> RoleProactiveCandidate:
+        self, role_id: str, candidates: Sequence[CandidateChat]
+    ) -> CandidateChat:
         """Selects the target among ``candidates`` of ``role_id`` right now."""
         return select_proactive_target(
             candidates,
-            desktop_present=self._desktop_presence.is_desktop_present(),
+            desktop_present=self._host.user_at_desktop(),
             last_user_at=self._last_user_times(role_id, candidates),
         )
 
     def _last_user_times(
-        self, role_id: str, candidates: Sequence[RoleProactiveCandidate]
-    ) -> dict[RoleProactiveCandidate, datetime]:
-        times: dict[RoleProactiveCandidate, datetime] = {}
+        self, role_id: str, candidates: Sequence[CandidateChat]
+    ) -> dict[CandidateChat, datetime]:
+        times: dict[CandidateChat, datetime] = {}
         for candidate in candidates:
             if candidate.channel == DESKTOP_CHANNEL:
                 continue
-            raw = self._conversations.last_user_message_at(
-                network_thread_id(role_id, candidate.channel, candidate.chat_id)
+            when = self._host.last_user_message_at(
+                role_id, candidate.channel, candidate.chat_id
             )
-            if raw is not None:
-                # A naive legacy timestamp was written in local time.
-                times[candidate] = datetime.fromisoformat(raw).astimezone()
+            if when is not None:
+                times[candidate] = when
         return times

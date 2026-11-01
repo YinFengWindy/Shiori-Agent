@@ -74,7 +74,7 @@ Electron main 通过 `apps/desktop/src/bridge/bridgeClient.ts` 启动 Python bri
 
 `RoleRuntimeRegistry` 按 `role_id` 缓存一个稳定 `RoleRuntime`。`RoleRuntime` 以角色为并发边界，使用一把 role-wide turn lock（`RoleExecutionState.turn_lock`，跨运行时代共享）串行化 passive turn、proactive tick、background task 和 role state 操作；每次操作释放锁后发布一次 `ContextWindowChanged`。`RoleExecutionContext` 校验 role、config version、thread、transport、source 和 work kind。
 
-角色会话 key 为 `role:{role_id}`。角色与唯一活跃会话是同一生命周期边界，不存在独立的 Session Plugin 产品概念。角色删除先删除角色记录，再删除 role session，最后通知 role-deleted 监听器级联清理角色记忆和其他 role-owned 状态；监听器未注册时直接报错。
+角色会话 key 为 `role:{role_id}`。角色与唯一活跃会话是同一生命周期边界，不存在独立的 Session Plugin 产品概念。角色删除先删除角色记录，再删除 role session，最后通知 role-deleted 监听器级联清理角色记忆和其他 role-owned 状态；监听器未注册时直接报错。角色创建成功后通知 role-created 监听器，桌面桥接发出 `RoleCreated`；没有监听器也能创建。
 
 事实依据：`apps/backend/core/roles/role_runtime.py` 的 `RoleRuntime.execute_thread()` 与 `RoleRuntimeRegistry`、`apps/backend/session/manager/role_sessions.py`、`apps/backend/core/roles/services.py` 的 `RoleAggregateService.delete_role()`。
 
@@ -105,7 +105,7 @@ LLM 调用由 `apps/backend/agent/provider.py` 封装，使用官方 `openai` SD
 
 ## 主动回合与后台任务
 
-`apps/backend/proactive_v2` 根据时间、presence、关系和观察结果生成 tick。`apps/backend/bootstrap/proactive.py` 的 `build_proactive_runtime()` 为角色创建主动循环（由 `RuntimeBackground` 按代调度），tick dispatcher 通过 `RoleRuntimeRegistry.dispatch_proactive_tick()` 进入同一角色 runtime，并在角色桌面线程 `role:<id>` 下执行。后台任务和 drift 使用同一套 role/session/tool 基础设施；定时任务经 `RuntimeDispatcher.run_role_operation()` 固定在所属运行时代。
+`apps/backend/proactive_v2` 根据时间、presence、关系和观察结果生成 tick。`apps/backend/bootstrap/proactive.py` 的 `build_proactive_runtime()` 为角色创建主动循环（由 `RuntimeBackground` 按代调度）。tick 经 `PROACTIVE_HOST.run_tick` 进入（已持有的代租约保持不变，否则钉住当前发布代），再由 `RoleRuntimeRegistry.dispatch_proactive_tick()` 进入同一角色 runtime，并在角色桌面线程 `role:<id>` 下执行。同一端口还承担这次 tick 的自然回复作用域与工具事实、补全、工具与宿主工具、目标选择、会话历史和投递。心情目录和已存心情时间在 tick 开始时从本代 `CONVERSATION.reply_state` 读取；哪些角色开启主动、每个角色的主动配置读 `ROLES.plugin_settings(role_id, "proactive")`。后台任务和 drift 使用同一套 role/session/tool 基础设施；定时任务经 `RuntimeDispatcher.run_role_operation()` 固定在所属运行时代。
 
 ## 工具、Memory 与插件
 

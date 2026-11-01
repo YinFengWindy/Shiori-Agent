@@ -11,6 +11,18 @@ from unittest.mock import AsyncMock, MagicMock
 from tests.support.generation_getters import bound_affection, run_in_turn
 
 from agent.core.turn_events import core_kernel
+from agent.proactive_host import HostProactiveRunner
+from agent.tools.registry import ToolRegistry
+from bus.event_bus import EventBus
+from agent.turns.orchestrator import TurnOrchestrator
+from conversation.initiated import deliver_checked_reply
+from shiori_sdk.core.conversation import (
+    Conversation,
+    InitiatedDelivery,
+    InitiatedReply,
+    RoleReplyState,
+)
+from shiori_sdk.core.proactive_host import ProactiveHost
 from proactive_v2.config import ProactiveConfig
 from proactive_v2.gateway import GatewayDeps
 from proactive_v2.tools import ToolDeps
@@ -26,6 +38,7 @@ from agent.core.proactive_turn.gates import (
 )
 from agent.core.proactive_turn.strategies import RelationshipStrategy
 from tests.support.bound_chat_delivery import bound_chat_orchestrator
+from tests.support.proactive_runtime import ProactiveGeneration, ProactiveRuntime
 
 # ── FakeStateStore ────────────────────────────────────────────────────────
 
@@ -265,6 +278,28 @@ def relationship_gate_chain(
     return ProactiveGateChain(motives=gates)
 
 
+class _PipelineConversation:
+    """``CONVERSATION`` over the test's orchestrator, with a fixed mood catalog.
+
+    Delivery skips the role-session checks so the default ``test_session``
+    still delivers; everything after them is the host's.
+    """
+
+    def __init__(self, orchestrator: TurnOrchestrator) -> None:
+        self._orchestrator = orchestrator
+
+    def orchestrator(self, role_id: str) -> TurnOrchestrator:
+        del role_id
+        return self._orchestrator
+
+    def reply_state(self, role_id: str) -> RoleReplyState:
+        del role_id
+        return RoleReplyState(moods=("平静",), mood_updated_at="")
+
+    async def deliver_initiated_reply(self, reply: InitiatedReply) -> InitiatedDelivery:
+        return await deliver_checked_reply(self._orchestrator, reply)
+
+
 def make_proactive_pipeline(
     *,
     cfg: ProactiveConfig | None = None,
@@ -284,7 +319,17 @@ def make_proactive_pipeline(
     target_transport_fn: Any = lambda: ("telegram", "test_chat_id"),
     proactive_gates: ProactiveGateChain | None = None,
     bind_getters: bool = True,
+    tools: ToolRegistry | None = None,
+    proactive_host: ProactiveHost | None = None,
+    conversation: Conversation | None = None,
+    event_bus: EventBus | None = None,
 ):
+    """A tick pipeline on the real ``PROACTIVE_HOST``.
+
+    By default the host serves a fake published runtime whose conversation
+    sends through ``sender``. A test running under its own generation lease
+    passes that generation's ``proactive_host`` and ``conversation``.
+    """
     from agent.core.proactive_turn import (
         ProactiveTurnPipeline,
         ProactiveTurnPipelineDeps,
@@ -338,6 +383,10 @@ def make_proactive_pipeline(
         before_commit = kwargs.get("before_commit")
         if before_commit is not None and not await before_commit():
             return False
+        # Persistence stamps an id onto each stored draft. The port reads it.
+        for index, message in enumerate(messages):
+            if not str(message.get("id") or "").strip():
+                message["id"] = f"{session.key}:{len(session.messages) + index}"
         session.messages.extend(messages)
         session.metadata.update(kwargs.get("metadata_updates") or {})
         return True
@@ -361,8 +410,28 @@ def make_proactive_pipeline(
     # The default "telegram" target is a bound private chat: the account sends
     # it through ``sender`` just as the outbound port does for the desktop.
     orchestrator, _ = bound_chat_orchestrator(
-        session_svc, _Outbound(), deliver=lambda content: sender.send(content)
+        session_svc,
+        _Outbound(),
+        deliver=lambda content: sender.send(content),
+        event_bus=event_bus,
     )
+    if proactive_host is None or conversation is None:
+        pipeline_conversation = _PipelineConversation(orchestrator)
+        runtime = ProactiveRuntime(
+            ProactiveGeneration(
+                conversation=pipeline_conversation,
+                tools=tools or ToolRegistry(),
+                plugin_manager=SimpleNamespace(kernel=core_kernel()),
+                # No external chat has recent activity.
+                group_environment=SimpleNamespace(
+                    render_recent_activity=lambda _role_id, *, now: ""
+                ),
+            )
+        )
+        proactive_host = proactive_host or HostProactiveRunner(lambda: runtime)
+        conversation = conversation or pipeline_conversation
+    if tool_deps.proactive_host is None:
+        tool_deps.proactive_host = proactive_host
 
     pipeline = ProactiveTurnPipeline(
         ProactiveTurnPipelineDeps(
@@ -371,7 +440,6 @@ def make_proactive_pipeline(
             state_store=state_store,
             any_action_gate=any_action_gate,
             passive_busy_fn=passive_busy_fn,
-            turn_orchestrator=orchestrator,
             deduper=deduper,
             tool_deps=tool_deps,
             gateway_deps=gateway_deps,
@@ -381,7 +449,8 @@ def make_proactive_pipeline(
             recent_proactive_fn=recent_proactive_fn,
             workspace_context_fn=workspace_context_fn,
             drift_pipeline=drift_pipeline,
-            kernel=core_kernel,
+            proactive_host=proactive_host,
+            conversation=conversation,
             target_transport_fn=target_transport_fn,
             proactive_gates=proactive_gates,
         )

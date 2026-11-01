@@ -9,22 +9,30 @@ from types import SimpleNamespace
 
 import pytest
 
+from agent.config_models import Config
 from agent.core.turn_events import core_kernel
+from agent.provider import LLMProvider, LLMResponse
+from agent.proactive_host import HostProactiveRunner
 from proactive_v2.agent_tick_factory import AgentTickDeps, AgentTickFactory
 from proactive_v2.context import AgentTickContext
 from proactive_v2.mcp_sources import McpClientPool
+from tests.support.proactive_runtime import ProactiveGeneration, ProactiveRuntime
 
 
-class _FakeProvider:
-    def __init__(self) -> None:
-        self.calls: list[dict] = []
+class _ScriptedProvider(LLMProvider):
+    """The generation's provider: every chat request goes to ``answer``."""
 
-    async def chat(self, **kwargs):
-        self.calls.append(kwargs)
-        return SimpleNamespace(tool_calls=[], content="")
+    def __init__(self, answer) -> None:
+        super().__init__(
+            api_key="test", model_context_window=128000, default_max_tokens=512
+        )
+        self._answer = answer
+
+    async def chat(self, **kwargs) -> LLMResponse:  # type: ignore[override]
+        return await self._answer(**kwargs)
 
 
-def _build_deps(*, with_pool: bool):
+def _build_deps(*, with_pool: bool, host, conversation):
     cfg = SimpleNamespace(
         role_id="",
         agent_tick_web_fetch_max_chars=4000,
@@ -42,9 +50,6 @@ def _build_deps(*, with_pool: bool):
     deps = AgentTickDeps(
         cfg=cfg,
         sense=sense,
-        presence=SimpleNamespace(last_user_at=lambda _: None),
-        provider=_FakeProvider(),
-        model="m",
         max_tokens=128,
         memory=None,
         state_store=SimpleNamespace(),
@@ -54,7 +59,8 @@ def _build_deps(*, with_pool: bool):
         rng=SimpleNamespace(),
         workspace_context_fn=lambda: "",
         role_prompt_fn=lambda: "测试角色提示词",
-        kernel=core_kernel,
+        proactive_host=host,
+        conversation=conversation,
         pool=McpClientPool() if with_pool else None,
     )
     return deps
@@ -66,13 +72,18 @@ async def test_natural_drift_uses_shared_messages_and_preserves_thinking(
     tmp_path, monkeypatch, needs_correction, late_target
 ):
     from unittest.mock import AsyncMock, Mock
-    from agent.provider import LLMResponse, ToolCall
+    from agent.initiated_delivery import HostConversation
+    from agent.provider import ToolCall
     from agent.looping.ports import SessionServices
+    from agent.tools.registry import ToolRegistry
     from agent.turns.channel_sequence import ChannelSequenceOwner
     from agent.turns.orchestrator import TurnOrchestrator, TurnOrchestratorDeps
     from agent.turns.outbound import DeliveryReceipt
     from agent.turns.proactive_sequence import current_proactive_reply
     from bus.queue import MessageBus
+    from core.roles.affection_access import AffectionGetter
+    from core.roles.reply_policy import ReplyPolicyGetter
+    from core.roles.reply_state import RoleReplyContext
     from proactive_v2.tools import ToolDeps
     from session.manager import SessionManager
 
@@ -97,12 +108,39 @@ async def test_natural_drift_uses_shared_messages_and_preserves_thinking(
             role_lookup=roles.get_role,
         )
     )
-    deps = _build_deps(with_pool=True)
+    affection = AffectionGetter()
+    affection.bind(lambda: None)
+    policy = ReplyPolicyGetter()
+    policy.bind(lambda: NaturalChatPolicy())
+    conversation = HostConversation(
+        lambda _role_id: owner,
+        role_store=roles,
+        session_manager=manager,
+        affection=affection,
+        reply_policy=policy,
+    )
+    batches = ChannelSequenceOwner()
+    generation = ProactiveGeneration(
+        conversation=conversation,
+        config=Config(provider="test", model="m", api_key=""),
+        provider=None,
+        additional_providers=[],
+        tools=ToolRegistry(),
+        plugin_manager=SimpleNamespace(kernel=core_kernel()),
+        loop=SimpleNamespace(bus=MessageBus()),
+        group_environment=SimpleNamespace(
+            render_recent_activity=lambda _role_id, *, now: ""
+        ),
+    )
+    # The natural reply binds the lease's channel-sequence owner.
+    host = HostProactiveRunner(
+        lambda: ProactiveRuntime(generation, reply_sequences=batches)
+    )
+    deps = _build_deps(with_pool=True, host=host, conversation=conversation)
     deps.cfg.role_id = "mira"
     deps.cfg.drift_enabled = True
     deps.sense.target_transport = lambda: ("desktop", "role:mira")
     deps.state_store = SimpleNamespace(workspace_dir=tmp_path, mark_delivery=Mock())
-    deps.turn_orchestrator = owner
     from agent.account_delivery import AccountDelivery
     from core.accounts import AccountRegistry
     from core.accounts.delivery_ledger import AccountDeliveryLedger
@@ -191,19 +229,24 @@ async def test_natural_drift_uses_shared_messages_and_preserves_thinking(
             ],
         )
 
-    deps.provider = SimpleNamespace(chat=chat)
+    generation.provider = _ScriptedProvider(chat)
     factory = AgentTickFactory(deps)
     drift = factory._build_drift_pipeline(ToolDeps())
     assert drift is not None
+    state = conversation.reply_state("mira")
     ctx = AgentTickContext(
-        session_key="role:mira", reply_context=owner.capture_reply_context("role:mira")
+        session_key="role:mira",
+        reply_context=RoleReplyContext(state.moods, state.mood_updated_at),
     )
     monkeypatch.setattr("agent.turns.reply_sequence.wait_between_messages", AsyncMock())
-    batches = ChannelSequenceOwner()
     # The natural_chat plugin is on, as the drift tick's lease would say.
-    with turn_getters(policy=NaturalChatPolicy()), batches.bind(MessageBus()):
-        async with owner.natural_reply_scope(
-            "role:mira", "desktop", "role:mira", turn_id="drift:test"
+    with turn_getters(policy=NaturalChatPolicy()):
+        async with host.natural_reply_scope(
+            host.begin_natural_reply(),
+            "role:mira",
+            "desktop",
+            "role:mira",
+            turn_id="drift:test",
         ):
             if late_target == "revoked":
                 accounts.release(record.record.id, "live")

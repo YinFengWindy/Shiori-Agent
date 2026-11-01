@@ -15,7 +15,12 @@ from agent.turns.outbound import DeliveryReceipt
 from bus.event_bus import EventBus
 from bus.events_lifecycle import InitiatedMessageCommitted
 from bus.queue import MessageBus
-from conversation.initiated import bound_turn_getters, commit_initiated_reply
+from conversation.initiated import (
+    bound_turn_getters,
+    commit_initiated_reply,
+    report_delivery,
+)
+from core.common.cancellation import finish_started
 from conversation.service import ConversationService
 from core.roles.affection_access import AffectionGetter
 from core.roles.reply_policy import ReplyPolicyGetter
@@ -414,3 +419,36 @@ async def test_sequence_account_target_is_not_sent_as_desktop(tmp_path) -> None:
         await bus.aclose()
     assert manager._store.fetch_session_messages("role:mira") == []
     assert sent_text == []
+
+
+async def test_cancel_absorbed_before_failed_bookkeeping_still_stops_caller() -> None:
+    """The reply is stored; the caller is cancelled while protected bookkeeping
+    finishes, and that bookkeeping then fails. The result is reported and the
+    cancellation still reaches the caller."""
+    committed: list[str] = []
+    after: list[str] = []
+
+    async def delivery() -> None:
+        committed.append("m1")
+
+        async def finalize() -> None:
+            await asyncio.sleep(0.02)
+            raise RuntimeError("提交事件失败")
+
+        await finish_started(finalize())
+
+    async def caller() -> None:
+        result = await report_delivery(
+            delivery(), committed, total=1, stops_caller=True
+        )
+        after.append(f"complete={result.complete}")
+        await asyncio.sleep(0.01)
+        after.append("continued")
+
+    task = asyncio.create_task(caller())
+    await asyncio.sleep(0.005)
+    task.cancel()
+    await asyncio.wait([task])
+
+    assert task.cancelled()
+    assert after == ["complete=True"]

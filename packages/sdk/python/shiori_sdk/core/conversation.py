@@ -12,6 +12,10 @@ read-only mappings.
 ``Veto.reason`` as the reply (``TurnStarting``, ``ReasoningStarting``) or ends
 the tool loop with it (``StepStarting``). The other events cannot be vetoed;
 a veto there fails the turn. A vetoed event reaches no watcher.
+
+``CONVERSATION`` delivers one initiated reply for its generation and reads
+the reply stamp (the mood catalog and the stored mood time) that reply
+carries.
 """
 
 from __future__ import annotations
@@ -326,7 +330,7 @@ class InitiatedReply:
     they must also be a chat the role can reach.
 
     ``expected_mood_updated_at`` and ``moods`` are the
-    ``PROACTIVE_HOST.reply_state(role_id)`` the caller read when its work
+    ``CONVERSATION.reply_state(role_id)`` the caller read when its work
     started. The mood and thought are validated against ``moods``. When the
     role's stored mood changed after that read (a passive reply landed in
     between) the reply is stale: a single reply raises without sending; a
@@ -382,12 +386,25 @@ class InitiatedDelivery:
     transport refused it (the desktop did not accept the message) and nothing
     was stored. For a sequence it means a newer user message
     in that chat, the role's removal or natural chat being switched off
-    stopped it: the prefix already sent is stored and announced (possibly
-    none), the rest is dropped.
+    stopped it, or the caller's task was cancelled after part of it was
+    stored: the prefix already sent is stored and announced (possibly none),
+    the rest is dropped.
     """
 
     message_ids: tuple[str, ...]
     complete: bool
+
+
+@dataclass(frozen=True, kw_only=True)
+class RoleReplyState:
+    """The role session's mood catalog and when its current mood was stored.
+
+    Read it when work starts and copy both fields onto ``InitiatedReply``
+    (``moods`` and ``expected_mood_updated_at``).
+    """
+
+    moods: tuple[str, ...]
+    mood_updated_at: str
 
 
 class Conversation(Protocol):
@@ -413,8 +430,24 @@ class Conversation(Protocol):
         or whose outcome is unknown stay on the session as delivery records
         marked ``failed`` / ``uncertain``, outside the conversation history.
 
+        Once part of the reply is stored, a cancellation of the caller's task
+        does not lose it: the stored part is returned and the cancellation is
+        raised again at the caller's next ``await``. Nothing stored yet, the
+        cancellation propagates. Any exception raised after the whole reply
+        was stored (the host's own bookkeeping: presence, affection, role gate
+        reacquisition, the final mood write, the committed event) is logged
+        and the result stays complete; a cancellation received meanwhile is
+        still raised at the caller's next ``await``.
+
         A sequence needs a runtime lease or an already bound channel-sequence
         owner.
+        """
+        ...
+
+    def reply_state(self, role_id: str) -> RoleReplyState:
+        """Moods the role may use, and the stored mood's timestamp.
+
+        Raises ``ValueError`` when the role is gone.
         """
         ...
 

@@ -21,6 +21,7 @@ from agent.provider import LLMResponse, ToolCall
 from tests.support.host_external_turns import ExternalTurnHost
 from tests.support.chat_replies import chat_reply
 from tests.support.generation_getters import bound_affection, bound_reply_policy
+from tests.support.proactive_runtime import ProactiveGeneration
 from session.manager import SessionManager
 
 
@@ -172,15 +173,46 @@ async def proactive_task(
         )
 
     from agent.core.turn_events import core_kernel
+    from agent.initiated_delivery import HostConversation
+    from agent.proactive_host import HostProactiveRunner
+    from agent.provider import LLMProvider
     from proactive_v2.agent_tick_factory import AgentTickDeps, AgentTickFactory
 
+    class _Provider(LLMProvider):
+        """The candidate's provider; every request goes to ``provider_chat``."""
+
+        def __init__(self) -> None:
+            super().__init__(
+                api_key="test", model_context_window=128000, default_max_tokens=512
+            )
+
+        async def chat(self, **kwargs):  # type: ignore[override]
+            return await provider_chat(**kwargs)
+
+    # The candidate generation the tick runs on: the real port reads its
+    # conversation (this test's delivery wiring), registry, kernel and model.
+    core = env.candidate.core
+    core.conversation = HostConversation(
+        lambda _role_id: owner,
+        role_store=env.host.roles,
+        session_manager=env.host.manager,
+        affection=core.affection,
+        reply_policy=core.reply_policy,
+    )
+    core.tools = env.host.loop.tools
+    core.plugin_manager = SimpleNamespace(kernel=core_kernel())
+    core.config = Config(provider="test", model="test", api_key="")
+    core.provider = _Provider()
+    core.additional_providers = []
+    core.group_environment = SimpleNamespace(
+        render_recent_activity=lambda _role_id, *, now: ""
+    )
+    # Every port call runs under the candidate's lease.
+    host = HostProactiveRunner(lambda: None)
     model = AgentTickFactory(
         AgentTickDeps(
             cfg=None,
             sense=None,
-            presence=None,
-            provider=SimpleNamespace(chat=provider_chat),
-            model="test",
             max_tokens=2048,
             memory=None,
             state_store=None,
@@ -190,7 +222,8 @@ async def proactive_task(
             rng=None,
             workspace_context_fn=lambda: "",
             role_prompt_fn=lambda: "",
-            kernel=core_kernel,
+            proactive_host=host,
+            conversation=core.conversation,
         )
     )._build_llm_fn()
 
@@ -204,14 +237,12 @@ async def proactive_task(
         session_key="role:mira",
         llm_fn=model,
         target_transport_fn=lambda: ("desktop", "role:mira"),
-        tool_deps=ToolDeps(
-            shared_tools=env.host.loop.tools,
-            recent_chat_fn=recent_chat,
-        ),
+        tool_deps=ToolDeps(recent_chat_fn=recent_chat),
         # The tick runs under the candidate's lease, which carries its getters.
         bind_getters=False,
+        proactive_host=host,
+        conversation=core.conversation,
     )
-    pipeline._turn_orchestrator = owner
     registry = env.host.loop.role_runtime_registry
     context = registry.create_context(
         role_id="mira",
@@ -836,9 +867,10 @@ async def natural_dispatcher(
 
     for channel in ("qq", "telegram"):
         bus.subscribe_outbound(channel, send, supports_reply_sequence=True)
+    # A plain object: the proactive port holds the generation weakly.
     candidate = RuntimeCandidate(
         1,
-        SimpleNamespace(
+        ProactiveGeneration(
             loop=host.loop,
             role_runtime_registry=host.loop.role_runtime_registry,
             reply_policy=policy,
