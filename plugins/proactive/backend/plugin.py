@@ -1,8 +1,9 @@
 """Proactive loops: one process resource, rebound by each published generation.
 
 Role loops start in ``PROCESS_RESOURCES.on_published``, not during setup of a
-candidate generation. Scene follow-up demand is ``SCENE.request``. The scene
-subscription that writes decisions into affection also starts at publication.
+candidate generation, and follow role creation and deletion from then on.
+Scene follow-up demand is ``SCENE.request``. The scene subscription that
+writes decisions into affection also starts at publication.
 """
 
 from __future__ import annotations
@@ -21,41 +22,40 @@ from shiori_sdk.core.services import (
     CONFIG,
     EVENTS,
     PROCESS_RESOURCES,
+    PROCESSES,
     ROLES,
     WORKSPACE,
 )
 from shiori_sdk.core.sessions import SESSIONS
-from shiori_sdk.role_events import RoleCreated, RoleDeleted, RoleProactiveChanged
-from shiori_sdk.roles import RoleView
+from shiori_sdk.role_events import RoleCreated, RoleDeleted
+from shiori_sdk.roles import Roles, RoleView
 from shiori_sdk.runtime import PluginRuntimeContext
 
-from .preferences import load_proactive_preferences
+from .plugin_config import ProactivePluginConfig
 from .service import ProactiveBinding, ProactiveService
 from .turn.scene_subscription import SceneFollowupSubscription
 
 logger = logging.getLogger(__name__)
 
 # Bump when the retained service's methods change incompatibly.
-_RESOURCE_KEY = "proactive-v1"
+_RESOURCE_KEY = "proactive-v2"
 
 
-def _switch_on(roles: object, role_id: str) -> bool:
-    settings = roles.plugin_settings(role_id, "proactive").read()  # type: ignore[attr-defined]
+def _switch_on(roles: Roles, role: RoleView) -> bool:
+    settings = roles.plugin_settings(role.id, "proactive").read()
     return bool(settings.get("enabled"))
 
 
 async def setup(ctx: PluginRuntimeContext) -> None:
     """Attaches this generation. Role loops start once it is published."""
-    preferences = load_proactive_preferences(
-        {"proactive": ctx.require(CONFIG).as_dict()}
-    )
+    config = ProactivePluginConfig.model_validate(ctx.require(CONFIG).as_dict())
     events = ctx.require(EVENTS)
     roles = ctx.require(ROLES)
     scene = ctx.get(SCENE)
-    if scene is not None and preferences.scene_followup:
+    if scene is not None and config.scene_followup:
         ctx.effect(
             "proactive.scene_demand",
-            scene.request(lambda role: _role_wants_scene(roles, role)),
+            scene.request(lambda role: _switch_on(roles, role)),
         )
 
     resources = ctx.require(PROCESS_RESOURCES)
@@ -71,12 +71,13 @@ async def setup(ctx: PluginRuntimeContext) -> None:
             host=ctx.require(PROACTIVE_HOST),
             conversation=ctx.require(CONVERSATION),
             roles=roles,
+            processes=ctx.require(PROCESSES),
             workspace=ctx.require(WORKSPACE),
             presence=ctx.require(SESSIONS).presence,
             markdown=ctx.require(MARKDOWN_MEMORY),
             memory_engine=ctx.get(MEMORY_ENGINE),
-            scene_followup=preferences.scene_followup,
-            relationship=preferences.relationship,
+            scene_followup=config.scene_followup,
+            relationship=config.relationship,
             affection=ctx.get(AFFECTION),
             draft_prompt=(
                 (lambda: policy.draft_prompt())
@@ -96,14 +97,9 @@ async def setup(ctx: PluginRuntimeContext) -> None:
 
             events.on(RoleCreated, _roles)
             events.on(RoleDeleted, _roles)
-            events.on(RoleProactiveChanged, _roles)
-        if preferences.scene_followup:
+        if config.scene_followup:
             subscription = SceneFollowupSubscription(events, lambda: ctx.get(AFFECTION))
             subscription.start()
             ctx.effect("proactive.scene_followup", subscription.stop)
 
     ctx.effect("proactive.publication", resources.on_published(on_published))
-
-
-def _role_wants_scene(roles: object, role: RoleView) -> bool:
-    return _switch_on(roles, role.id)

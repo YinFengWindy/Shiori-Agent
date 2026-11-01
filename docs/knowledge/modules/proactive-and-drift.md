@@ -13,7 +13,7 @@ source_paths:
   - plugins/proactive/backend/target_selection.py
   - plugins/proactive/backend/sensor.py
   - plugins/proactive/backend/config_loader.py
-  - plugins/proactive/backend/preferences.py
+  - plugins/proactive/backend/plugin_config.py
   - plugins/proactive/backend/drift.py
   - plugins/proactive/backend/drift_state.py
   - plugins/proactive/backend/drift_tools.py
@@ -35,7 +35,7 @@ related:
 
 准入（目标、忙碌）先运行；核心场景跟进、关系动机随后独立评估，动机只能认领本轮，不能拦下。关系阈值或关系专属冷却未满足只表示该动机未命中，不阻断 alerts/content 或 Drift。外部内容优先；没有外部内容时按场景跟进、关系 fallback、可用 Drift 的顺序选择。完全没有候选时不调用模型。只有实际用于本轮的场景动机才接收完成回写，外部内容送达不会增加场景跟进次数。
 
-未命中原因（如 `cooldown`、`below_threshold`）保留在 gate trace 和 tick_log 的 `gate_name`、`gate_reason`、`gate_metadata`，`gate_exit` 仅记录全局拒绝。循环是插件的进程资源：每个角色一份，只在本代发布后启动或重绑，执行走已发布代的宿主端口。场景追问用 `SCENE.request` 登记；场景订阅在发布时启动，旧代接受的工作排空后清理，未发布候选不消费场景事件。
+未命中原因（如 `cooldown`、`below_threshold`）保留在 gate trace 和 tick_log 的 `gate_name`、`gate_reason`、`gate_metadata`，`gate_exit` 仅记录全局拒绝。循环是插件的进程资源：每个角色一份，只在本代发布后启动或重绑，随 `RoleCreated` / `RoleDeleted` 增减，执行走已发布代的宿主端口。每次 tick 前经 `ROLES.plugin_settings` 重读开关与配置：关闭就跳过本次 tick，并关掉 `proactive.db` 与 MCP 会话（经 `PROCESSES.mcp` 创建）；配置改动下一次 tick 生效。循环任务用全新的 contextvars 上下文启动，不继承触发它的请求租约；异常退出的循环在下一次发布或角色增删时重建，异常留给 `close()` 抛出。场景追问用 `SCENE.request` 登记；场景订阅在发布时启动，旧代接受的工作排空后清理，未发布候选不消费场景事件。
 
 `[plugins.proactive]` 里的 `scene_followup` 与 `relationship` 是独立布尔开关，默认均为 true，角色主动总开关仍独立生效。`load_config` 把旧 `[agent.proactive_strategies]` 里与默认不同的值迁入该表（插件里已有的键不覆盖），然后删掉旧表。顶层 `[proactive]` 没有运行时消费方，启动时整段删除并记日志，不把里面的值抄进插件表。角色 JSON 的 proactive 字段仍由 `load_proactive_config` 解析。桌面设置页不读也不写这两个开关，保存时 `[plugins.proactive]` 随其他插件表由后端原样保留，不会重建 `[agent.proactive_strategies]`。
 
@@ -57,7 +57,7 @@ related:
 
 角色「能力 → 运行能力」的「主动推送」开关统一控制主动消息与空闲活动。空闲活动的最大步数、最小间隔位于「运行能力」下方「主动推送」分区（同区还有推送策略 profile）的「执行参数」折叠项中。配置加载时 `drift_enabled` 由主开关派生；旧数据中的 `drift.enabled` 仍可读取，但不再覆盖主开关，角色编辑保存时移除该旧字段。
 
-Drift 是独立于普通被动消息的特殊回合模式。`DriftStateStore` 保存状态，`DriftTurnPipeline` 负责执行，`plugins/proactive/backend/drift_tools.py` 提供相关工具接入。它与 Proactive 共享触发和投递基础设施，但拥有自己的回合语义与状态迁移。Drift 必须显式取得当前角色 prompt，并完整读取该角色的 `SELF.md`、长期记忆与最近上下文；任一读取失败都终止本轮，不能退化为无记忆的通用回复。内置 skill 的 `state.json` 写在角色自己的 drift skills 目录，`SKILL.md` 仍留在安装树。
+Drift 是独立于普通被动消息的特殊回合模式。`DriftStateStore` 保存状态，`DriftTurnPipeline` 负责执行，`plugins/proactive/backend/drift_tools.py` 提供相关工具接入。它与 Proactive 共享触发和投递基础设施，但拥有自己的回合语义与状态迁移。Drift 必须显式取得当前角色 prompt，并完整读取该角色的 `SELF.md`、长期记忆与最近上下文；任一读取失败都终止本轮，不能退化为无记忆的通用回复。内置 skill 的 `state.json` 写在角色自己的 drift skills 目录，`SKILL.md` 仍留在安装树；`read_file("skills/<name>/...")` 先读 drift 目录里的那份，没有才读内置目录。Drift 的文件工具走 `PROACTIVE_HOST.run_drift_file_tool`：只能在 `execute_tool` 的 invoker 里调用，写入与编辑由宿主限制在 `roles/<role_id>/drift`。
 
 ## 修改影响
 

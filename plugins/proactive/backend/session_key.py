@@ -1,10 +1,13 @@
-"""Role session keys and the session surface a proactive loop reads."""
+"""The session surface a proactive loop reads, and the role a session key names."""
 
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Protocol
 
+# The host's role session key format. ``SESSION_STORE.role_session_key``
+# builds the same keys, but the plugin injects ``sessions`` (presence) and a
+# builtin plugin does not inject both; the SDK has no reverse lookup either.
 ROLE_SESSION_PREFIX = "role:"
 
 
@@ -25,7 +28,7 @@ def role_id_from_session_key(key: str) -> str:
 
 
 class SessionWorkspace(Protocol):
-    """Workspace root and role session keys. A host ``SessionManager`` satisfies this."""
+    """Workspace root and role session keys."""
 
     workspace: Path
 

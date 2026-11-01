@@ -19,7 +19,7 @@ from plugins.proactive.backend.context import AgentTickContext
 from plugins.proactive.backend.gateway import GatewayDeps
 from plugins.proactive.backend.tools import ToolDeps
 from shiori_sdk.core.conversation import InitiatedDelivery, InitiatedReply
-from tests.backend.proactive_v2.conftest import (
+from tests.backend.agent.proactive_host.conftest import (
     FakeAckSink,
     FakeLLM,
     FakeStateStore,

@@ -14,7 +14,6 @@ from plugins.proactive.backend.turn.strategies import (
     SceneFollowupStrategy,
     RelationshipStrategy,
 )
-from tests.support.generation_getters import bound_affection
 
 
 def _context():
@@ -27,7 +26,7 @@ def _context():
 def test_scene_claims_before_relationship_and_finalizes_exact_outcome(outcome):
     runtime = MagicMock()
     runtime.should_trigger_scene_followup.return_value = (True, {"attempt_index": 1})
-    affection = bound_affection(runtime)
+    affection = lambda: runtime  # noqa: E731
     chain = ProactiveGateChain(
         motives=[RelationshipStrategy(affection), SceneFollowupStrategy(affection)]
     )
@@ -52,7 +51,7 @@ def test_missing_relationship_preserves_diagnostics_and_does_not_block(reason):
         False,
         {"reason": reason, "loneliness_value": 20},
     )
-    affection = bound_affection(runtime)
+    affection = lambda: runtime  # noqa: E731
     result = ProactiveGateChain(
         motives=[SceneFollowupStrategy(affection), RelationshipStrategy(affection)]
     ).evaluate(_context())

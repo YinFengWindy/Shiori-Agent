@@ -390,25 +390,16 @@ class HostTool(Tool):
         return await self._host.run_host_tool(self._name, kwargs, role_id=self._role_id)
 
 
-class _HostFileTool(Tool):
-    """One host file tool confined to ``root`` (``None`` reads any absolute path)."""
+class DriftFileTool(Tool):
+    """A host file tool on the role's drift directory (``run_drift_file_tool``)."""
 
-    def __init__(
-        self,
-        host: ProactiveHost,
-        name: str,
-        *,
-        root: str | None,
-        schema: Mapping[str, Any],
-    ) -> None:
-        function = schema["function"]
+    def __init__(self, host: ProactiveHost, name: str, role_id: str) -> None:
+        function = host.file_tool_schema(name)["function"]
         self._host = host
-        self._name = str(function["name"])
+        self._name = name
+        self._role_id = role_id
         self._description = str(function.get("description") or "")
         self._parameters = dict(function.get("parameters") or {})
-        self._root = root
-        if name != self._name:
-            raise ValueError(f"文件工具 schema 与名称不一致: {name}")
 
     @property
     def name(self) -> str:
@@ -423,55 +414,35 @@ class _HostFileTool(Tool):
         return self._parameters
 
     async def execute(self, **kwargs: Any) -> str | ToolResult:
-        return await self._host.run_restricted_file_tool(
-            self._name, kwargs, root=self._root
-        )
+        return await self._host.run_drift_file_tool(self._role_id, self._name, kwargs)
 
 
-class DriftReadFileTool(Tool):
+class DriftReadFileTool(DriftFileTool):
+    """``read_file`` where ``skills/<name>/...`` prefers the drift copy.
+
+    State and files Drift writes under ``skills/`` live in the drift directory,
+    so a read finds them there first; only a file the drift directory does not
+    have falls back to the built-in skill.
+    """
+
     def __init__(
         self,
         host: ProactiveHost,
+        role_id: str,
         drift_dir: Path,
         builtin_skills_dir: Path | None = None,
     ) -> None:
-        self._host = host
+        super().__init__(host, "read_file", role_id)
         self._drift_dir = drift_dir
         self._builtin_skills_dir = builtin_skills_dir
-        schema = host.file_tool_schema("read_file")
-        function = schema["function"]
-        self._description = str(function.get("description") or "")
-        self._parameters = dict(function.get("parameters") or {})
 
-    @property
-    def name(self) -> str:
-        return "read_file"
-
-    @property
-    def description(self) -> str:
-        return self._description
-
-    @property
-    def parameters(self) -> dict[str, Any]:
-        return self._parameters
-
-    async def execute(self, path: str, **kwargs: Any) -> Any:
-        raw = str(path or "").strip()
-        root: str | None = str(self._drift_dir)
-        target = path
-        if raw:
-            raw_path = Path(raw).expanduser()
-            if raw_path.is_absolute():
-                root = None
-            elif raw.startswith("skills/") and self._builtin_skills_dir is not None:
-                builtin_path = self._builtin_skills_dir / raw.removeprefix("skills/")
-                if builtin_path.exists():
-                    root = None
-                    target = str(builtin_path)
-        arguments = {"path": target, **kwargs}
-        return await self._host.run_restricted_file_tool(
-            "read_file", arguments, root=root
-        )
+    async def execute(self, **kwargs: Any) -> str | ToolResult:
+        raw = str(kwargs.get("path") or "").strip()
+        if raw.startswith("skills/") and self._builtin_skills_dir is not None:
+            builtin_path = self._builtin_skills_dir / raw.removeprefix("skills/")
+            if not (self._drift_dir / raw).exists() and builtin_path.exists():
+                kwargs = {**kwargs, "path": str(builtin_path)}
+        return await super().execute(**kwargs)
 
 
 def build_drift_tool_registry(
@@ -482,36 +453,19 @@ def build_drift_tool_registry(
     mcp_servers: set[str] | None = None,
 ) -> LocalToolRegistry:
     tools = LocalToolRegistry()
-    drift_dir = deps.drift_dir
     host = deps.proactive_host
     if host is None:
         raise RuntimeError("发呆回合缺少宿主端口")
-    tools.register(
-        DriftReadFileTool(host, drift_dir, deps.builtin_skills_dir),
-        risk="read-only",
-    )
-    tools.register(
-        _HostFileTool(
-            host,
-            "write_file",
-            root=str(drift_dir),
-            schema=host.file_tool_schema("write_file"),
-        ),
-        risk="write",
-    )
-    tools.register(
-        _HostFileTool(
-            host,
-            "edit_file",
-            root=str(drift_dir),
-            schema=host.file_tool_schema("edit_file"),
-        ),
-        risk="write",
-    )
-
     role_id = role_id_from_session_key(ctx.session_key)
     if not role_id:
         raise ValueError(f"发呆回合只服务角色会话: {ctx.session_key}")
+    tools.register(
+        DriftReadFileTool(host, role_id, deps.drift_dir, deps.builtin_skills_dir),
+        risk="read-only",
+    )
+    tools.register(DriftFileTool(host, "write_file", role_id), risk="write")
+    tools.register(DriftFileTool(host, "edit_file", role_id), risk="write")
+
     # Only the host tools the generation has registered, in this order.
     for schema in host.tool_schemas(tuple(_HOST_TOOLS)):
         tool: Tool = HostTool(host, schema, role_id)

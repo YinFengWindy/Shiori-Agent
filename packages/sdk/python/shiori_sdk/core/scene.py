@@ -2,9 +2,9 @@
 
 Observation is not on the turn's critical path, so it stays a plugin. The
 ``scene`` plugin provides ``SCENE``. The host provides ``SCENE_HOST``: role
-identity and publication. Demand is ``SCENE.request``. Recent history rides
-on ``InitiatedMessageCommitted.history``. ``None`` from ``get(SCENE)`` means
-observation is off; chat still runs.
+identity and publication. Demand is ``SCENE.request``. The plugin reads a
+proactive message's recent history with ``CONVERSATION.recent_messages``.
+``None`` from ``get(SCENE)`` means observation is off; chat still runs.
 
 ``request`` returns a disposer. The caller effects it so demand leaves with
 the caller. The plugin starts intake through ``SceneHost.on_published``: at
@@ -31,14 +31,6 @@ class SceneSubject:
     id: str
     name: str
     system_prompt: str
-
-
-@dataclass(frozen=True)
-class SceneHistoryMessage:
-    """One recent message, already limited to the user's own context."""
-
-    role: str
-    content: str
 
 
 class SceneHost(Protocol):

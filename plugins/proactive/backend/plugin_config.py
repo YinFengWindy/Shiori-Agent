@@ -2,18 +2,17 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, StrictBool
 
 
 class ProactivePluginConfig(BaseModel):
     """Scene follow-up and relationship motives. Both default on.
 
-    A non-boolean value is rejected when the host loads ``config.toml``.
-    This model is the settings schema; unknown keys (including ``enabled``)
-    are ignored.
+    A non-boolean value fails ``setup`` (and ``plugin.config.set``). Unknown
+    keys, ``enabled`` included, are ignored.
     """
 
     model_config = ConfigDict(extra="ignore")
 
-    scene_followup: bool = True
-    relationship: bool = True
+    scene_followup: StrictBool = True
+    relationship: StrictBool = True

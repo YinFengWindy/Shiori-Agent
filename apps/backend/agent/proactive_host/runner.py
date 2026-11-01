@@ -47,7 +47,6 @@ from shiori_sdk.core.proactive_host import (
     RecentTurnMessage,
     ValidatedRoleReply,
 )
-from shiori_sdk.mcp import McpSession
 from shiori_sdk.tools import ToolResult
 
 _RUNTIME_REQUIRED = "主动端口需要已启动的运行时"
@@ -382,16 +381,13 @@ class HostProactiveRunner:
         """Schema of a host file tool."""
         return host_files.file_tool_schema(name)
 
-    async def run_restricted_file_tool(
-        self,
-        name: str,
-        arguments: Mapping[str, object],
-        *,
-        root: str | None,
+    async def run_drift_file_tool(
+        self, role_id: str, name: str, arguments: Mapping[str, object]
     ) -> str | ToolResult:
-        """Run a file tool jailed to ``root``."""
-        return await host_files.run_restricted_file_tool(
-            name, dict(arguments), root=root
+        """Run a file tool for the role's Drift, confined to its drift directory."""
+        workspace = self._require_core().session_manager.workspace
+        return await host_files.run_drift_file_tool(
+            workspace, role_id, name, dict(arguments)
         )
 
     def web_fetch_available(self) -> bool:
@@ -406,14 +402,6 @@ class HostProactiveRunner:
         """Fetch ``url`` through the host web fetch tool."""
         result = await WebFetchTool().execute(url=url, format=format)
         return str(result)
-
-    def open_mcp_session(
-        self, name: str, command: Sequence[str], env: Mapping[str, str]
-    ) -> McpSession:
-        """An unconnected stdio session. The pool calls ``connect``."""
-        from infra.process.mcp_client import McpClient
-
-        return McpClient(name=name, command=list(command), env=dict(env))
 
     def tool_resource_scope(self):
         """The host tool-turn scope, shared with passive turns."""

@@ -9,7 +9,11 @@ from typing import Any
 
 from shiori_sdk.core.scene import SCENE, SCENE_HOST, SceneSubject
 from shiori_sdk.core.services import BACKGROUND
-from shiori_sdk.core.conversation import ConversationMessage, InitiatedMessageCommitted
+from shiori_sdk.core.conversation import (
+    CONVERSATION,
+    ConversationMessage,
+    InitiatedMessageCommitted,
+)
 from shiori_sdk.testing.service_context import FakeServiceContext
 
 from plugins.scene.backend.plugin import setup
@@ -23,8 +27,21 @@ _PROACTIVE = InitiatedMessageCommitted(
     thread_id="desktop:mira",
     assistant_response="在吗？",
     source="proactive",
-    history=(ConversationMessage(role="user", content="hi"),),
 )
+
+
+class _Conversation:
+    """``CONVERSATION.recent_messages``; ``None`` stands for external context."""
+
+    def __init__(self, history: tuple[ConversationMessage, ...] | None) -> None:
+        self.history = history
+        self.reads = 0
+
+    def recent_messages(
+        self, session_key: str, *, thread_id: str, limit: int
+    ) -> tuple[ConversationMessage, ...] | None:
+        self.reads += 1
+        return self.history
 
 
 class _Host:
@@ -66,9 +83,15 @@ class _Background:
         return asyncio.create_task(asyncio.sleep(0))
 
 
-def _context(tmp_path: Path, host: _Host) -> FakeServiceContext:
+def _context(
+    tmp_path: Path, host: _Host, conversation: _Conversation | None = None
+) -> FakeServiceContext:
     context = FakeServiceContext("scene", tmp_path, package_dir=PACKAGE_DIR)
     context.serve(SCENE_HOST, host)
+    context.serve(
+        CONVERSATION,
+        conversation or _Conversation((ConversationMessage("user", "hi"),)),
+    )
     return context
 
 
@@ -117,9 +140,10 @@ async def test_setup_in_a_published_generation_listens_at_once(
 
 
 async def test_only_a_registered_demand_starts_an_observation(tmp_path: Path) -> None:
-    """Without a consumer's demand, intake does not call the model."""
+    """Without a consumer's demand, intake neither reads history nor calls the model."""
     host = _Host(published=True)
-    context = _context(tmp_path, host)
+    conversation = _Conversation((ConversationMessage("user", "hi"),))
+    context = _context(tmp_path, host, conversation)
     background = _Background()
     context.serve(BACKGROUND, background)
     context.fake_roles.create_role(role_id="mira", name="Mira", system_prompt="test")
@@ -128,12 +152,17 @@ async def test_only_a_registered_demand_starts_an_observation(tmp_path: Path) ->
         scene = context.kernel.get(SCENE)
         assert scene is not None
         await context.fake_events.fanout(_PROACTIVE)
-        assert background.names == []
+        assert (background.names, conversation.reads) == ([], 0)
 
         dispose = scene.request(lambda role: role.id == "mira")
         await context.fake_events.fanout(_PROACTIVE)
         assert background.names == ["scene_awareness:role:mira"]
 
+        conversation.history = None  # the thread turned out to be external
+        await context.fake_events.fanout(_PROACTIVE)
+        assert background.names == ["scene_awareness:role:mira"]
+
+        conversation.history = (ConversationMessage("user", "hi"),)
         dispose()
         await context.fake_events.fanout(_PROACTIVE)
         assert background.names == ["scene_awareness:role:mira"]

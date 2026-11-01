@@ -9,7 +9,7 @@ Drift 是一个**你写模型可以做什么、模型照着执行**的后台任�
 - **怎么做**：SKILL.md 是一份分步操作指南——先读哪个文件、跑什么脚本、怎么判断、什么时候发消息——模型一步步按着走
 - **跟 proactive 的本质区别**：proactive 的行为是代码里写死的 system prompt，drift 的行为是你写的 SKILL.md
 
-**一次 drift 就是一个 agent run**：system prompt 是角色身份 + 代码里固定的 Drift 执行规则（`agent/core/drift_turn.py` 的 `_build_system_prompt`），skill 列表、记忆、近期语境等放在后续的 system context frame 里；模型自己挑一个 skill，用 `read_file` 读 `skills/<skill-name>/SKILL.md` 按步骤执行，拿到一套工具（read_file / write_file / shell / fetch_messages / message_push...），最后调 `finish_drift` 收尾。
+**一次 drift 就是一个 agent run**：system prompt 是角色身份 + 代码里固定的 Drift 执行规则（`plugins/proactive/backend/drift.py` 的 `_build_system_prompt`），skill 列表、记忆、近期语境等放在后续的 system context frame 里；模型自己挑一个 skill，用 `read_file` 读 `skills/<skill-name>/SKILL.md` 按步骤执行，拿到一套工具（read_file / write_file / shell / fetch_messages / message_push...），最后调 `finish_drift` 收尾。
 
 ## 什么是 Drift（展开）
 
@@ -19,7 +19,7 @@ Drift 跟随角色的主动推送开关：主动推送开了，Drift 就开（`p
 ```
 tick
   └── DataGateway.run() → 无 alert / 无 content / 无 context（且不走 relationship fallback）
-       └── DriftTurnPipeline.run()            agent/core/drift_turn.py
+       └── DriftTurnPipeline.run()            plugins/proactive/backend/drift.py
             ├── _scan_skills()     读取当前角色 roles/<role-id>/drift/skills/*/SKILL.md
             │                      + 内置 drift skill（create-drift-skill、meme-manage）
             │                      跳过 requires_mcp 未满足的 skill

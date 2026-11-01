@@ -21,19 +21,6 @@ class RoleCreated:
     role_id: str
 
 
-@dataclass(frozen=True)
-class RoleProactiveChanged:
-    """The role's proactive switch changed.
-
-    Temporary until the proactive settings panel owns the switch (P6b PR5).
-    Emitted only when ``enabled`` changes, not when the role is created and
-    not when a write leaves the switch as it was.
-    """
-
-    role_id: str
-    enabled: bool
-
-
 SceneTransition = Literal["started", "same", "changed", "closed", "none"]
 SceneTurnSource = Literal["passive", "proactive"]
 

@@ -22,6 +22,8 @@ from conversation.initiated import (
     check_initiated_reply,
     deliver_checked_reply,
 )
+from agent.core.passive_support import to_history_messages
+from conversation.context_scope import history_filter, session_context_view
 from conversation.service import ConversationService
 from core.roles.affection_access import AffectionGetter
 from core.roles.bound_chats import bound_chat_target
@@ -32,6 +34,7 @@ from core.roles.store import RoleStore
 from session.manager import SessionManager
 from session.manager.helpers import role_id_from_session_key
 from shiori_sdk.core.conversation import (
+    ConversationMessage,
     InitiatedDelivery,
     InitiatedReply,
     RoleReplyState,
@@ -129,4 +132,34 @@ class HostConversation:
         return RoleReplyState(
             moods=role_mood_catalog(session.metadata.get("role_runtime_config", {})),
             mood_updated_at=str(session.metadata.get("current_mood_updated_at", "")),
+        )
+
+    def recent_messages(
+        self, session_key: str, *, thread_id: str, limit: int
+    ) -> tuple[ConversationMessage, ...] | None:
+        """The thread's history window on the role session, or None when external."""
+        role_id = role_id_from_session_key(session_key)
+        if not role_id:
+            raise ValueError(f"只能读取角色会话: {session_key!r}")
+        if limit < 1:
+            raise ValueError(f"limit 至少为 1: {limit}")
+        view = session_context_view(
+            self._session_manager.workspace,
+            session_key=session_key,
+            role_id=role_id,
+            thread_id=thread_id,
+        )
+        if view is not None and view.is_external:
+            return None
+        session = self._session_manager.get_or_create(session_key)
+        messages = to_history_messages(
+            session.history_window(limit, include=history_filter(view))
+        )
+        return tuple(
+            ConversationMessage(
+                role=item.role,
+                content=item.content,
+                tools_used=tuple(item.tools_used),
+            )
+            for item in messages
         )

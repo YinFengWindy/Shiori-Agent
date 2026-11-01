@@ -58,9 +58,6 @@ def load_config_data(data: dict[str, Any]) -> Config:
     agent_tools = _as_dict(agent_cfg.get("tools"))
     wiring = _load_wiring_config(data)
     plugins = _load_plugins_config(data)
-    # A non-boolean switch is a config error before any candidate runtime is
-    # built. The plugin's own model would coerce some strings.
-    _validate_proactive_switches(plugins)
     model_registrations = _load_model_registrations(data)
     primary_registration = model_registrations[0] if model_registrations else None
 
@@ -205,14 +202,6 @@ def _load_wiring_config(data: dict) -> WiringConfig:
         memory=str(raw.get("memory", "default") or "default"),
         toolsets=[str(name) for name in toolsets if str(name).strip()],
     )
-
-
-def _validate_proactive_switches(plugins: dict[str, dict[str, Any]]) -> None:
-    """``scene_followup`` and ``relationship`` must be real booleans."""
-    raw = plugins.get("proactive", {})
-    for key in ("scene_followup", "relationship"):
-        if key in raw and not isinstance(raw[key], bool):
-            raise ValueError(f"plugins.proactive.{key} 必须是布尔值")
 
 
 def _load_plugins_config(data: dict) -> dict[str, dict[str, Any]]:

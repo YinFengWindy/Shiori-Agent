@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
+
+import pytest
+from pydantic import ValidationError
 
 from shiori_sdk.core.affection import AFFECTION
 from shiori_sdk.core.conversation import CONVERSATION
@@ -11,7 +15,7 @@ from shiori_sdk.core.models import MAIN_MODEL
 from shiori_sdk.core.proactive_host import PROACTIVE_HOST
 from shiori_sdk.core.services import ROLES
 from shiori_sdk.core.sessions import SESSIONS
-from shiori_sdk.role_events import RoleProactiveChanged, SceneObservationCommitted
+from shiori_sdk.role_events import RoleCreated, SceneObservationCommitted
 from shiori_sdk.testing.events import FakeEvents
 from shiori_sdk.testing.service_context import FakeServiceContext
 
@@ -50,14 +54,17 @@ class _Settings:
 
 
 class _Roles:
-    def __init__(self, role: _Role) -> None:
-        self.role = role
+    def __init__(self, *roles: _Role) -> None:
+        self._roles = {role.id: role for role in roles}
+
+    def add(self, role: _Role) -> None:
+        self._roles[role.id] = role
 
     def list_roles(self) -> list[_Role]:
-        return [self.role]
+        return list(self._roles.values())
 
     def plugin_settings(self, role_id: str, namespace: str) -> _Settings:
-        return _Settings(self.role)
+        return _Settings(self._roles[role_id])
 
 
 class _Docs:
@@ -125,22 +132,32 @@ def _scene_event() -> SceneObservationCommitted:
     )
 
 
-async def test_role_loop_starts_when_publication_sees_the_switch(
+def _loop_running(role_id: str) -> bool:
+    return any(
+        task.get_name() == f"proactive:{role_id}" for task in asyncio.all_tasks()
+    )
+
+
+async def test_role_loops_start_at_publication_and_follow_new_roles(
     tmp_path: Path,
 ) -> None:
-    role = _Role("mira", False)
+    roles = _Roles(_Role("mira", False))
     context = _context(tmp_path, model="m")
-    context.serve(ROLES, _Roles(role))  # type: ignore[arg-type]
+    context.serve(ROLES, roles)  # type: ignore[arg-type]
     try:
         await setup(context)
-        await context.fake_events.fanout(RoleProactiveChanged("mira", True))
-        assert not (tmp_path / "roles" / "mira" / "proactive.db").exists()
+        await context.fake_events.fanout(RoleCreated("mira"))
+        assert not _loop_running("mira")
 
         context.fake_process_resources.publish()
-        assert not (tmp_path / "roles" / "mira" / "proactive.db").exists()
-        role.settings["enabled"] = True
-        await context.fake_events.fanout(RoleProactiveChanged("mira", True))
-        assert (tmp_path / "roles" / "mira" / "proactive.db").is_file()
+        await asyncio.sleep(0)
+        assert _loop_running("mira")
+        roles.add(_Role("nana", True))
+        await context.fake_events.fanout(RoleCreated("nana"))
+        await asyncio.sleep(0)
+        assert _loop_running("nana")
+        # Loops open nothing until a tick runs.
+        assert not (tmp_path / "roles").exists()
     finally:
         await context.aclose()
 
@@ -193,3 +210,18 @@ async def test_each_generations_scene_subscription_applies_until_stopped() -> No
     await bus_a.fanout(event)
     await bus_b.fanout(event)
     assert (first.calls, second.calls) == (1, 2)
+
+
+async def test_a_non_boolean_switch_fails_setup(tmp_path: Path) -> None:
+    context = FakeServiceContext(
+        "proactive",
+        tmp_path,
+        package_dir=PACKAGE_DIR,
+        config={"scene_followup": "false"},
+    )
+    context.serve(ROLES, _Roles())  # type: ignore[arg-type]
+    try:
+        with pytest.raises(ValidationError, match="scene_followup"):
+            await setup(context)
+    finally:
+        await context.aclose()

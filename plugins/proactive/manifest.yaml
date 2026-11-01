@@ -9,6 +9,7 @@ config_model: plugin_config:ProactivePluginConfig
 inject:
   - proactive_host
   - process_resources
+  - processes
   - roles
   - conversation
   - sessions

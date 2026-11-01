@@ -1,6 +1,6 @@
 # 场景观察（scene）
 
-系统插件。提供 `SCENE`：回合结束后用轻量模型观察当前场景，供自动场景 CG（NovelAI）和场景追问读取。只观察有人登记需求的角色：其他插件用 `SCENE.request` 登记。主动消息的近期窗口在 `InitiatedMessageCommitted.history` 上。
+系统插件。提供 `SCENE`：回合结束后用轻量模型观察当前场景，供自动场景 CG（NovelAI）和场景追问读取。只观察有人登记需求的角色：其他插件用 `SCENE.request` 登记。主动消息的近期窗口按需经 `CONVERSATION.recent_messages` 读取。
 
 ## 配置
 

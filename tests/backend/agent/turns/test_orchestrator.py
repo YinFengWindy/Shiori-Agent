@@ -23,7 +23,6 @@ from agent.turns.result import TurnOutbound, TurnResult, TurnTrace
 from session.manager import SessionManager
 from bus.event_bus import EventBus
 from bus.events_lifecycle import InitiatedMessageCommitted
-from shiori_sdk.core.conversation import ConversationMessage
 from agent.tools.message_push import MessagePushTool
 from tests.support.push import allow_every_role_target
 from tests.support.generation_getters import run_in_turn, turn_getters
@@ -367,13 +366,6 @@ async def test_proactive_media_commit_notifies_shared_session(tmp_path) -> None:
             thread_id=session.messages[0]["metadata"]["thread_id"],
             message_id=session.messages[0]["id"],
             source="proactive",
-            history=(
-                ConversationMessage(
-                    role="assistant",
-                    content="给你看张图",
-                    tools_used=("message_push",),
-                ),
-            ),
         )
     ]
 

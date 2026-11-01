@@ -19,6 +19,7 @@ from agent.turns.orchestrator import TurnOrchestrator
 from conversation.initiated import deliver_checked_reply
 from shiori_sdk.core.conversation import (
     Conversation,
+    ConversationMessage,
     InitiatedDelivery,
     InitiatedReply,
     RoleReplyState,
@@ -308,6 +309,11 @@ class _PipelineConversation:
 
     async def deliver_initiated_reply(self, reply: InitiatedReply) -> InitiatedDelivery:
         return await deliver_checked_reply(self._orchestrator, reply)
+
+    def recent_messages(
+        self, session_key: str, *, thread_id: str, limit: int
+    ) -> tuple[ConversationMessage, ...] | None:
+        raise AssertionError(f"a tick does not read {session_key} history")
 
 
 def make_proactive_pipeline(

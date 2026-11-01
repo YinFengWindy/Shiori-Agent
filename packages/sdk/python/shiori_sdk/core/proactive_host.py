@@ -16,9 +16,6 @@ a thread and whether the user is at the desktop. Host tools run through
 generation's registry. Session history reads return the role session's recent
 user-context turns and recent proactive messages. The reply stamp (mood
 catalog and stored mood time) is ``CONVERSATION.reply_state``.
-
-This key's method set is frozen by the proactive plugin move (P6b-4b). SDK
-4.0 ships this set.
 """
 
 from __future__ import annotations
@@ -32,7 +29,6 @@ from typing import Literal, Protocol
 
 from shiori_sdk.core.conversation import InitiatedDelivery, InitiatedReply
 from shiori_sdk.core.tools import ToolStatus
-from shiori_sdk.mcp import McpSession
 from shiori_sdk.tools import ToolResult
 from shiori_sdk.kernel import Key
 
@@ -496,19 +492,21 @@ class ProactiveHost(Protocol):
         """
         ...
 
-    async def run_restricted_file_tool(
-        self,
-        name: str,
-        arguments: Mapping[str, object],
-        *,
-        root: str | None,
+    async def run_drift_file_tool(
+        self, role_id: str, name: str, arguments: Mapping[str, object]
     ) -> str | ToolResult:
-        """Run file tool ``name`` confined to ``root``.
+        """Run file tool ``name`` (see ``file_tool_schema``) for ``role_id``'s Drift.
 
-        ``root`` is None for an absolute read (no directory jail). Writes and
-        edits pass the drift directory. An unknown tool returns the same
-        missing-tool text the host registry does. A tool that raises becomes
-        ``工具执行出错: ...``.
+        Only inside an ``execute_tool`` invoker, for the tool name the kernel
+        checks just allowed; any other call raises ``PermissionError`` without
+        running anything. The host computes the role's drift directory
+        (``roles/<role_id>/drift``): ``write_file`` and ``edit_file`` stay
+        inside it, and so does ``read_file`` of a relative path. ``read_file``
+        of an absolute path reads that path. A path outside the directory
+        returns the tool's error text without touching the file; a tool that
+        raises returns ``工具执行出错: ...``. An unknown ``name`` raises
+        ``LookupError``; a ``role_id`` that is not one path segment raises
+        ``ValueError``.
         """
         ...
 
@@ -523,15 +521,6 @@ class ProactiveHost(Protocol):
         """
         ...
 
-    def open_mcp_session(
-        self,
-        name: str,
-        command: Sequence[str],
-        env: Mapping[str, str],
-    ) -> McpSession:
-        """An unconnected stdio MCP session. The caller connects and disconnects it."""
-        ...
-
     def tool_resource_scope(self) -> AbstractAsyncContextManager[None]:
         """Host tool-turn scope for one drift run.
 
@@ -544,7 +533,8 @@ class ProactiveHost(Protocol):
         """The generation's configured completion cap.
 
         The current lease's generation when there is one, otherwise the
-        published generation. Does not wait for admission.
+        published generation. Does not wait for admission. Raises
+        ``RuntimeError`` when the runtime is not up.
         """
         ...
 

@@ -46,6 +46,7 @@ def host_kernel(
     role_runtime_registry: Any = None,
     external_turns: Any = None,
     background_results: Any = None,
+    conversation: Any = None,
     event_bus: EventBus | None = None,
     rpc: PluginRpcRegistry[Any] | None = None,
     withheld: frozenset[Key[Any]] = frozenset(),
@@ -80,6 +81,7 @@ def host_kernel(
         light_model=light_model,
         external_turns=external_turns,
         background_results=background_results,
+        conversation=conversation,
         http=http,
         process_resources=generation.process_resources,
     )

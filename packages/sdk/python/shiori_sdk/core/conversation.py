@@ -269,12 +269,9 @@ class InitiatedMessageCommitted:
     - a host-owned push (the ``account_send`` tool reaching an external chat
       outside a live turn), once per push. ``tools_used`` names the tool.
 
-    ``thread_id`` is the conversation thread the message belongs to.
-
-    ``history`` is the recent window the publisher attached, oldest first.
-    ``None`` means the turn is external context, or the publisher did not
-    attach a window, and scene observation must not run. An empty tuple is a
-    real window with no earlier messages.
+    ``thread_id`` is the conversation thread the message belongs to; a role's
+    session mixes threads, so subscribers read history with it
+    (``CONVERSATION.recent_messages``).
 
     ``source`` names who started the message: the ``InitiatedReply.source``
     a plugin passed (by convention its plugin id; the host's proactive loop
@@ -292,7 +289,6 @@ class InitiatedMessageCommitted:
     assistant_response: str = ""
     tools_used: tuple[str, ...] = ()
     message_id: str = ""
-    history: tuple[ConversationMessage, ...] | None = None
 
 
 def _freeze(mapping: Mapping[str, object]) -> Mapping[str, object]:
@@ -453,6 +449,23 @@ class Conversation(Protocol):
         """Moods the role may use, and the stored mood's timestamp.
 
         Raises ``ValueError`` when the role is gone.
+        """
+        ...
+
+    def recent_messages(
+        self, session_key: str, *, thread_id: str, limit: int
+    ) -> tuple[ConversationMessage, ...] | None:
+        """The last ``limit`` messages of ``thread_id`` in a role session, oldest first.
+
+        The same history window a turn on that thread reads (only messages
+        that thread's context includes, no delivery records). Reads the
+        stored session when called; it does not wait for admission.
+
+        ``None`` when the thread is external context (a group chat or a
+        stranger's private chat), which is not part of the role's
+        conversation with the user. An empty tuple is a thread with no
+        messages yet. ``session_key`` must be a role session (``role:<id>``)
+        and ``limit`` at least 1, otherwise ``ValueError``.
         """
         ...
 

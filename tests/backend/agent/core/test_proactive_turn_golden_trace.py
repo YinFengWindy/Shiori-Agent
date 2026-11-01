@@ -9,8 +9,8 @@ what the affection socket was told, the Drift state file, and which tools the
 model was offered. They never name a phase, gate, pipeline or tool module, so
 the moved code must pass them unchanged.
 
-Allowed edits during P6b: ``proactive_host`` (the assembly: today
-``build_proactive_runtime`` and the role tick dispatcher, later the plugin),
+Allowed edits during P6b: ``proactive_host`` (the assembly: now the
+proactive plugin's own setup and service, ``plugin_role_loops``),
 ``_seed_role`` and ``_bind_private_chat`` (how the role is switched on and
 bound; PR5 moves the proactive switch from ``roles.update`` to the plugin's
 settings) and ``ProactiveHost.tick`` (how one tick is driven), plus the event and
@@ -36,7 +36,6 @@ import pytest
 
 from agent.account_delivery import AccountDelivery
 from agent.config_models import Config
-from agent.core.prompt_block import build_role_affection_prompt
 from agent.core.turn_events import core_kernel
 from agent.initiated_delivery import HostConversation, orchestrator_for
 from agent.provider import LLMProvider, LLMResponse, ToolCall
@@ -56,15 +55,13 @@ from core.identity import IdentityChat
 from core.memory.group_environment import GroupEnvironment
 from core.roles import RoleRepository, RoleRuntimeRegistry, RoleStore
 from core.roles.affection_access import AffectionGetter
-from core.roles.plugin_capability import HostRoles
-from core.roles.reply_policy import ReplyPolicyGetter, natural_chat_draft_prompt
+from core.roles.reply_policy import ReplyPolicyGetter
 from plugins.natural_chat.backend.plugin import NaturalChatPolicy
 from plugins.proactive.backend.loop import ProactiveLoop
-from plugins.proactive.backend.service import build_role_loops
-from plugins.proactive.backend.turn.strategies import RelationshipStrategy
 from shiori_sdk.core.affection import Affection
 from session.manager import SessionManager
 from tests.support.generation_getters import turn_getters
+from tests.support.proactive_runtime import plugin_role_loops
 from tests.support.push import allow_every_role_target
 
 ROLE_PROMPT = "你是 Mira，说话温柔。"
@@ -437,48 +434,47 @@ async def proactive_host(
         async def wait_for_admission(self) -> None:
             return None
 
-    loops = build_role_loops(
+    # The proactive plugin builds the role loops on this port, as in
+    # production; its scene follow-up motive is off, as the golden never had it.
+    async with plugin_role_loops(
         workspace,
+        roles=roles,
         sessions=sessions,
-        roles=HostRoles(roles),
         proactive_host=HostProactiveRunner(lambda: _PublishedRuntime()),
         conversation=conversation,
-        presence=presence,
-        motives=[RelationshipStrategy(affection_getter)],
-        max_tokens=config.max_tokens,
-        draft_prompt_fn=natural_chat_draft_prompt,
-        affection_prompt_for=lambda role_id: partial(
-            build_role_affection_prompt, role_id, roles
-        ),
-    )
-    host = ProactiveHost(
-        workspace,
-        provider,
-        affection,
-        desktop_presence,
-        loops["mira"],
-        loops=loops,
-        reply_sequences=reply_sequences,
-    )
-    holder["host"] = host
+        affection=affection,
+        policy=NaturalChatPolicy(),
+    ) as loops:
+        host = ProactiveHost(
+            workspace,
+            provider,
+            affection,
+            desktop_presence,
+            loops["mira"],
+            loops=loops,
+            reply_sequences=reply_sequences,
+        )
+        holder["host"] = host
 
-    def committed(event: InitiatedMessageCommitted) -> None:
-        host.events.append(event)
-        stored_ids = {str(message["id"]) for message in host.stored()}
-        host.events_after_store.append(event.message_id in stored_ids)
+        def committed(event: InitiatedMessageCommitted) -> None:
+            host.events.append(event)
+            stored_ids = {str(message["id"]) for message in host.stored()}
+            host.events_after_store.append(event.message_id in stored_ids)
 
-    bus.on(InitiatedMessageCommitted, committed)
+        bus.on(InitiatedMessageCommitted, committed)
 
-    # Natural messages are paced like typing; the golden trace does not wait.
-    async def no_pause(_: object) -> None:
-        return None
+        # Natural messages are paced like typing; the golden trace does not wait.
+        async def no_pause(_: object) -> None:
+            return None
 
-    monkeypatch.setattr("agent.turns.reply_sequence.wait_between_messages", no_pause)
-    try:
-        yield host
-    finally:
-        await registry.close_all()
-        await bus.aclose()
+        monkeypatch.setattr(
+            "agent.turns.reply_sequence.wait_between_messages", no_pause
+        )
+        try:
+            yield host
+        finally:
+            await registry.close_all()
+            await bus.aclose()
 
 
 def _call(name: str, arguments: dict[str, Any], raw: str | None = None):

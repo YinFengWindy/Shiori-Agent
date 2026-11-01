@@ -13,9 +13,7 @@ from .gates import (
     ProactiveMode,
 )
 
-# A host ``AffectionGetter`` still works: it is called, and an unbound one
-# (``bound is False``) is skipped by the scene subscription. A plain callable
-# is what the plugin passes.
+# Returns this generation's ``AFFECTION``, or None when the plugin is off.
 AffectionSource = Callable[[], Any]
 
 

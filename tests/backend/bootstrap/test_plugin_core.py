@@ -203,6 +203,11 @@ async def test_scene_demand_is_reregistered_after_reload_or_re_enable(
         session_manager=SessionManager(workspace),
         light_provider=SimpleNamespace(),
         light_model="light",
+        conversation=SimpleNamespace(
+            recent_messages=lambda *_args, **_kwargs: (
+                ConversationMessage(role="user", content="hi"),
+            )
+        ),
         event_bus=bus,
     )
     await kernel.load_all()
@@ -215,7 +220,6 @@ async def test_scene_demand_is_reregistered_after_reload_or_re_enable(
         thread_id="desktop:mira",
         assistant_response="在吗？",
         source="proactive",
-        history=(ConversationMessage(role="user", content="hi"),),
     )
 
     def demand():

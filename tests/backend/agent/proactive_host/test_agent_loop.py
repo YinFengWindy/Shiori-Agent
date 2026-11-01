@@ -28,7 +28,7 @@ from shiori_sdk.prompting import is_context_frame
 from plugins.proactive.backend.context import AgentTickContext
 from plugins.proactive.backend.gateway import GatewayDeps, GatewayResult
 from plugins.proactive.backend.tools import ToolDeps
-from tests.backend.proactive_v2.conftest import (
+from tests.backend.agent.proactive_host.conftest import (
     FakeLLM,
     cfg_with,
     make_proactive_pipeline,

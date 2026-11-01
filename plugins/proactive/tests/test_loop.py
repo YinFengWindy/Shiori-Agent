@@ -78,12 +78,6 @@ async def test_proactive_loop_wrapper_methods_cover_paths(tmp_path: Path):
     (tmp_path / "AGENTS.md").write_text("guide", encoding="utf-8")
     loop._sender = SimpleNamespace(send=AsyncMock(return_value=True))
     loop._proactive_pipeline = SimpleNamespace(run=AsyncMock(return_value=0.2))
-    loop._init_runtime_state(loop._cfg)
-    loop._mcp_pool = SimpleNamespace(
-        connect_all=AsyncMock(return_value=None),
-        disconnect_all=AsyncMock(return_value=None),
-    )
-    loop._run_loop = AsyncMock(return_value=None)
 
     assert loop._has_role_memory() is True
     assert loop._read_memory_text() == "mem"
@@ -104,51 +98,64 @@ async def test_proactive_loop_wrapper_methods_cover_paths(tmp_path: Path):
             lambda *args, **kwargs: 7,
         )
         assert loop._next_interval() == 7
-    await loop.run()
-    loop._mcp_pool.connect_all.assert_awaited_once()
-    loop._run_loop.assert_awaited_once()
-    loop._mcp_pool.disconnect_all.assert_awaited_once()
 
 
-def _bare_run_loop() -> ProactiveLoop:
+class _Sessions:
+    def __init__(self, workspace: Path) -> None:
+        self.workspace = workspace
+
+    def role_session_key(self, role_id: str) -> str:
+        return f"role:{role_id}"
+
+
+def _bare_run_loop(tmp_path: Path) -> ProactiveLoop:
+    """A constructed loop whose run only prepares; MCP and state are fakes."""
     loop = ProactiveLoop.__new__(ProactiveLoop)
-    loop._cfg = SimpleNamespace(role_id="mira")
-    loop._running = False
-    loop._stop_requested = asyncio.Event()
-    loop._poll_task = None
+    loop._cfg = SimpleNamespace(role_id="mira", enabled=True)
+    loop._state = None
+    loop._sessions = _Sessions(tmp_path)
+    loop._init_runtime_state()
     loop._mcp_pool = SimpleNamespace(
         connect_all=AsyncMock(return_value=None),
         disconnect_all=AsyncMock(return_value=None),
     )
+    loop._state_path = tmp_path / "proactive.db"
+    loop._init_runtime_components = lambda: None
     return loop
 
 
 @pytest.mark.asyncio
-async def test_run_disconnects_mcp_when_cancelled_while_connecting():
-    loop = _bare_run_loop()
+async def test_run_disconnects_mcp_when_cancelled_while_connecting(tmp_path: Path):
+    loop = _bare_run_loop(tmp_path)
     connecting = asyncio.Event()
 
     async def connect_all():
         connecting.set()
         await asyncio.Event().wait()
 
+    async def run_loop():
+        await loop._prepare()
+
     loop._mcp_pool.connect_all = connect_all
+    loop._run_loop = run_loop
     run = asyncio.create_task(loop.run())
     await connecting.wait()
     run.cancel()
     with pytest.raises(asyncio.CancelledError):
         await run
     loop._mcp_pool.disconnect_all.assert_awaited_once()
+    assert loop._state is None
 
 
 @pytest.mark.asyncio
-async def test_run_disconnects_mcp_and_reports_a_failed_feed_poll():
-    loop = _bare_run_loop()
+async def test_run_disconnects_mcp_and_reports_a_failed_feed_poll(tmp_path: Path):
+    loop = _bare_run_loop(tmp_path)
 
     async def failing_poll():
         raise OSError("poll failed")
 
     async def run_loop():
+        loop._prepared = True
         loop._poll_task = asyncio.create_task(failing_poll())
         await asyncio.sleep(0)
 
@@ -182,7 +189,8 @@ def test_sample_random_memory_reads_long_term_and_workspace_guide(tmp_path: Path
         read_long_term=lambda: "remember",
         get_memory_context=lambda: "ctx",
     )
-    loop._sessions = SimpleNamespace(workspace=tmp_path)
+    loop._cfg = SimpleNamespace(role_id="mira")
+    loop._sessions = _Sessions(tmp_path)
     (tmp_path / "AGENTS.md").write_text("guide", encoding="utf-8")
 
     assert loop._sample_random_memory(1)
@@ -194,12 +202,11 @@ async def test_tick_target_error_is_logged_at_loop_boundary_and_loop_continues(
 ):
     from plugins.proactive.backend.turn.delivery import resolve_target_transport
     from plugins.proactive.backend.sensor import Sensor
-    from session.manager import SessionManager
 
     # Without a target resolver every tick fails when it picks its target.
     sensor = Sensor(
         cfg=SimpleNamespace(role_id="mira"),
-        sessions=SessionManager(tmp_path),
+        sessions=_Sessions(tmp_path),
         state=SimpleNamespace(),
         memory=None,
         presence=None,
@@ -216,16 +223,13 @@ async def test_tick_target_error_is_logged_at_loop_boundary_and_loop_continues(
 
     loop = ProactiveLoop.__new__(ProactiveLoop)
     loop._running = True
-    loop._poll_feeds_once = AsyncMock(return_value=None)
-    loop._poll_loop = AsyncMock(return_value=None)
+    loop._cfg = SimpleNamespace(enabled=True, role_id="mira")
     loop._next_interval = lambda base_score=None: 0
     loop._wait_interval = AsyncMock(return_value=None)
     loop._run_tick = run_tick
 
     with caplog.at_level("INFO", logger="plugins.proactive.backend.loop"):
         await loop._run_loop()
-    assert loop._poll_task is not None
-    await loop._poll_task
 
     # Both ticks ran: the first failure did not end the loop.
     assert ticks == 2

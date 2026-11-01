@@ -5,7 +5,6 @@ from typing import Any, Protocol
 
 from bus.event_bus import EventBus
 from bus.events_lifecycle import ExternalTextPushed, InitiatedMessageCommitted
-from conversation.initiated_history import initiated_history as _initiated_history
 from conversation.service import ConversationService, LegacySessionDescriptor
 from session.manager import SessionManager
 from session.manager.models import build_session_message
@@ -139,12 +138,6 @@ class ExternalPushSyncService:
                 tools_used=tuple(message.get("tools_used") or ()),
                 message_id=str(message["id"]),
                 source="push",
-                history=_initiated_history(
-                    self._sessions,
-                    session_key=session_key,
-                    role_id=event.role_id,
-                    thread_id=str(message["thread_id"]),
-                ),
             )
         )
 

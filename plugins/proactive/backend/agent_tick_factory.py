@@ -218,12 +218,7 @@ class AgentTickFactory:
 
     def _build_tool_deps(self, pool: McpClientPool) -> ToolDeps:
         host = self._deps.proactive_host
-        web_fetch_tool = None
-        try:
-            if host.web_fetch_available():
-                web_fetch_tool = _PortWebFetch(host)
-        except RuntimeError as e:
-            logger.warning("[proactive_v2] web_fetch 不可用，已降级禁用: %s", e)
+        web_fetch_tool = _PortWebFetch(host) if host.web_fetch_available() else None
         return ToolDeps(
             web_fetch_tool=web_fetch_tool,
             memory=self._deps.memory,

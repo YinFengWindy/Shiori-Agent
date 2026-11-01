@@ -11,7 +11,7 @@ Shiori 不只是被动回复——它每 N 秒/分钟跑一轮 tick，检查你�
 Proactive 本质上是：
 
 1. **一套固定工具**（`plugins/proactive/backend/tools.py` 的 `TOOL_SCHEMAS`）：`get_alert_events`、`get_content_events`、`get_context_data`、`recall_memory`、`get_content`、`web_fetch`、`web_search`、`get_recent_chat`、`mark_interesting`、`mark_not_interesting`、`message_push`、`finish_turn`，外加共享的 `account_list` / `account_targets`
-2. **一段固定 system prompt**（角色身份 + 固定规则，在 `agent/core/proactive_turn/prompt_context.py` 的 `build_system_prompt()`）
+2. **一段固定 system prompt**（角色身份 + 固定规则，在 `plugins/proactive/backend/turn/prompt_context.py` 的 `build_system_prompt()`）
 3. **一个 MCP 数据源池**：从你配置的 server 拉 alert / content / context
 
 每次 tick 做的事非常机械：**把 MCP server 返回的数据灌进 prompt → LLM 按 prompt 指令逐条判断 → 调用工具写分类结果 → 如果有内容值得推就 message_push 完事**。
@@ -83,7 +83,7 @@ proactive tick
 
 ### 1. 开启 proactive（角色的「主动推送」）
 
-主动推送按角色配置、按角色各跑一个 loop（`bootstrap/proactive.py` 只为开启了主动推送的角色建 loop）。配置存在 `roles/roles.json` 里该角色的 `proactive` 对象，平时在桌面角色的「主动推送」里改：开关、接收会话、推送策略（profile），以及执行参数（每次推送最大步数、候选内容数、网页上下文字符数、空闲活动最大步数与最小间隔）。结构如下（用 TOML 写法示意）：
+主动推送按角色配置。系统插件 `proactive` 在进程里只有一份服务（`plugins/proactive/backend/service.py`），本代发布时（`PROCESS_RESOURCES.on_published`）给每个角色建一个 loop，之后随角色创建、删除增减；每次 tick 前重读该角色的设置，开关关闭就跳过这次 tick，不打开 `proactive.db` 和 MCP 会话，改了配置下一次 tick 生效。配置存在 `roles/roles.json` 里该角色的 `proactive` 对象，平时在桌面角色的「主动推送」里改：开关、接收会话、推送策略（profile），以及执行参数（每次推送最大步数、候选内容数、网页上下文字符数、空闲活动最大步数与最小间隔）。结构如下（用 TOML 写法示意）：
 
 ```toml
 enabled = true
@@ -274,7 +274,7 @@ ProactiveLoop.run()
        │    ├── _fetch_alerts()            # 调 MCP tool: get_proactive_events(kind=alert)
        │    ├── _fetch_content()           # 调 MCP tool: get_proactive_events(kind=content) → 并行 web_fetch 正文
        │    └── _fetch_context()           # 调 MCP tool: get_context / get_sleep_context / get_steam_context
-       ├── ProactiveTurnPipeline（agent/core/proactive_turn/）
+       ├── ProactiveTurnPipeline（plugins/proactive/backend/turn/）
        │    ├── Pre-gate（ProactiveGateChain：各核心动机 gate，如场景跟进、关系兜底；动机只能认领本轮，不能拦下）
        │    ├── 无 alert/content 时：关系兜底或 drift（见上文）
        │    ├── agent loop（LLM 逐条评分分类 → mark_interesting/mark_not_interesting → message_push → finish_turn）
@@ -288,7 +288,7 @@ ProactiveLoop.run()
 - **常驻 MCP 连接**：启动时 `connect_all()`，整个生命周期不复连，避免每次 tick 重启子进程
 - **数据先到齐再决策**：三路预取在 agent loop 之前完成，单源失败不影响其他源
 - **去重分层**：delivery 级（同一批内容不重复发）+ message 级（语义去重，新消息和最近主动消息如果实质重复也跳过）
-- **ACK 机制**：每个被消费的事件都要 ACK，带不同 TTL（cited 168h / interesting uncited 24h / 发送前被去重等守卫拦下 24h / discarded 720h，见 `agent/core/proactive_turn/resolution.py`）
+- **ACK 机制**：每个被消费的事件都要 ACK，带不同 TTL（cited 168h / interesting uncited 24h / 发送前被去重等守卫拦下 24h / discarded 720h，见 `plugins/proactive/backend/turn/resolution.py`）
 
 ---
 

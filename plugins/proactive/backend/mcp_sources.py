@@ -4,7 +4,7 @@ proactive/mcp_sources.py — 从 MCP server 拉取 ProactiveEvent 的通用客�
 读取 ~/.shiori/workspace/proactive_sources.json 中的配置，
 动态调用各 MCP server 的 get_tool / ack_tool。
 
-会话由宿主 ``PROACTIVE_HOST.open_mcp_session`` 打开。用户服务器登记在插件 mcp。
+stdio 会话由宿主 ``PROCESSES.mcp`` 创建（进程树归属由宿主决定）。用户服务器登记在插件 mcp。
 """
 
 from __future__ import annotations

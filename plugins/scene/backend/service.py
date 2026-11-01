@@ -6,6 +6,7 @@ from collections.abc import Awaitable, Callable, Coroutine
 from typing import Any
 
 from shiori_sdk.core.conversation import (
+    Conversation,
     InitiatedMessageCommitted,
     TurnFinished,
     TurnStarting,
@@ -50,6 +51,7 @@ class SceneService:
         self,
         *,
         host: SceneHost,
+        conversation: Conversation,
         roles: Roles,
         state: SceneStateStore,
         light_provider: object,
@@ -65,6 +67,7 @@ class SceneService:
         self._active = False
         self._controller = SceneAwarenessController(
             host=host,
+            conversation=conversation,
             state=state,
             light_provider=light_provider,
             light_model=light_model,

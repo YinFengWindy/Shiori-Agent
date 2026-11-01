@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any, Protocol
 
+from shiori_sdk.core.affection import Affection
 from shiori_sdk.role_events import SceneObservationCommitted
 
 
@@ -17,7 +18,9 @@ class _EventBus(Protocol):
 class SceneFollowupSubscription:
     """Subscribes on publication and releases that exact callback."""
 
-    def __init__(self, bus: _EventBus, affection: Callable[[], Any]) -> None:
+    def __init__(
+        self, bus: _EventBus, affection: Callable[[], Affection | None]
+    ) -> None:
         self._bus = bus
         self._affection = affection
         self._handler = self._apply
@@ -36,11 +39,7 @@ class SceneFollowupSubscription:
             self._started = False
 
     def _apply(self, event: SceneObservationCommitted) -> None:
-        getter = self._affection
-        # An unbound host getter must not be called; a plain lambda is.
-        if getattr(getter, "bound", True) is False:
-            return
-        runtime = getter()
+        runtime = self._affection()
         if runtime is None:
             return
         runtime.apply_scene_decision(

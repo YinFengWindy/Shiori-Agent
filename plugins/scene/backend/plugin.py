@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 
+from shiori_sdk.core.conversation import CONVERSATION
 from shiori_sdk.core.scene import SCENE, SCENE_HOST
 from shiori_sdk.core.services import (
     BACKGROUND,
@@ -36,6 +37,7 @@ async def setup(ctx: PluginRuntimeContext) -> None:
     config = SceneConfig.model_validate(ctx.require(CONFIG).as_dict())
     service = SceneService(
         host=host,
+        conversation=ctx.require(CONVERSATION),
         roles=ctx.require(ROLES),
         state=SceneStateStore(ctx.require(WORKSPACE), host.legacy_state_paths()),
         light_provider=light_provider,

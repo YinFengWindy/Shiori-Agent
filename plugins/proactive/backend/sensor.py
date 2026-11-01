@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any
 from .energy import compute_energy, d_recent
 from .state import ProactiveStateStore
 from .target_selection import ProactiveTargetResolver
-from .session_key import SessionWorkspace as SessionManager
+from .session_key import SessionWorkspace
 from shiori_sdk.core.proactive_host import ProactiveHost
 from shiori_sdk.core.sessions import Presence
 
@@ -31,7 +31,7 @@ class Sensor:
         self,
         *,
         cfg: Any,
-        sessions: SessionManager,
+        sessions: SessionWorkspace,
         state: ProactiveStateStore,
         memory: "MemoryProfileApi | None",
         presence: Presence | None,

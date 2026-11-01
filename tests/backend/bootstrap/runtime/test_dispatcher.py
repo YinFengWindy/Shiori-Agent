@@ -53,7 +53,7 @@ async def proactive_task(
     from core.common.runtime_scope import bind_runtime
     from core.identity import UserIdentityStore
     from plugins.proactive.backend.tools import ToolDeps
-    from tests.backend.proactive_v2.conftest import (
+    from tests.backend.agent.proactive_host.conftest import (
         make_proactive_pipeline,
         FakeLLM,
     )

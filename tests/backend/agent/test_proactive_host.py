@@ -11,11 +11,12 @@ from collections.abc import Mapping
 from types import SimpleNamespace
 from typing import Any, cast
 
+from pathlib import Path
+
 import pytest
 
 from agent.config_models import Config
 from agent.core.turn_events import core_kernel
-from plugins.proactive.backend.turn.strategies import RelationshipStrategy
 from agent.initiated_delivery import HostConversation, orchestrator_for
 from agent.looping.ports import SessionServices
 from agent.proactive_host import HostProactiveRunner
@@ -41,7 +42,6 @@ from core.roles.reply_policy import ReplyPolicyGetter
 from core.roles.reply_state import InvalidRoleReply
 from core.roles.services import RoleSessionService
 from plugins.natural_chat.backend.plugin import NaturalChatPolicy
-from plugins.proactive.backend.service import build_role_loops
 from plugins.proactive.backend.state import ProactiveStateStore
 from session.manager import SessionManager
 from session.manager.helpers import role_session_key
@@ -50,7 +50,11 @@ from shiori_sdk.core.conversation import InitiatedReply, RoleReplyState
 from shiori_sdk.core.proactive_host import ProactiveToolCall
 from shiori_sdk.tools import Tool
 from tests.support.generation_getters import turn_getters
-from tests.support.proactive_runtime import ProactiveGeneration, ProactiveRuntime
+from tests.support.proactive_runtime import (
+    ProactiveGeneration,
+    ProactiveRuntime,
+    plugin_role_loops,
+)
 
 
 class _Lease:
@@ -493,30 +497,28 @@ async def test_held_lease_keeps_the_draining_generation(tmp_path) -> None:
     new_core = SimpleNamespace(
         role_runtime_registry=new_registry,
         loop=SimpleNamespace(processing_state=new_state),
+        config=Config(provider="test", model="m", api_key=""),
     )
     runner = _runner(new_core)
     old_lease = SimpleNamespace(core=old_core)
     busy: bool | None = None
     try:
-        config = Config(provider="test", model="m", api_key="")
-        loops = build_role_loops(
+        async with plugin_role_loops(
             tmp_path,
+            roles=roles,
             sessions=sessions,
-            roles=HostRoles(roles),
             proactive_host=runner,
-            conversation=_UnusedConversation(),  # type: ignore[arg-type]
-            presence=sessions.presence,
-            max_tokens=config.max_tokens,
-        )
+            conversation=_UnusedConversation(),
+        ) as loops:
 
-        async def operation() -> None:
-            nonlocal busy
-            busy = runner.passive_turn_busy("mira")
+            async def operation() -> None:
+                nonlocal busy
+                busy = runner.passive_turn_busy("mira")
 
-        with bind_runtime(old_lease):  # type: ignore[arg-type]
-            await loops["mira"]._tick_dispatcher(
-                operation
-            )  # pyright: ignore[reportPrivateUsage]
+            with bind_runtime(old_lease):  # type: ignore[arg-type]
+                await loops["mira"]._tick_dispatcher(
+                    operation
+                )  # pyright: ignore[reportPrivateUsage]
     finally:
         await old_registry.close_all()
         await new_registry.close_all()
@@ -604,6 +606,116 @@ async def test_host_tool_never_runs_outside_a_checked_call() -> None:
     )
     assert outcome.status == "error"
     assert "shell" not in seen
+
+
+def _drift_runner(workspace: Path) -> HostProactiveRunner:
+    return _runner(
+        SimpleNamespace(
+            session_manager=SimpleNamespace(workspace=workspace),
+            plugin_manager=SimpleNamespace(kernel=core_kernel()),
+        )
+    )
+
+
+async def test_drift_writes_stay_inside_the_roles_drift_directory(
+    tmp_path: Path,
+) -> None:
+    runner = _drift_runner(tmp_path)
+    outside = tmp_path / "escape.txt"
+
+    async def drift_file(name: str, arguments: Mapping[str, object]) -> object:
+        return await runner.run_drift_file_tool("mira", name, arguments)
+
+    for name, arguments in (
+        ("write_file", {"path": "../../../escape.txt", "content": "x"}),
+        ("write_file", {"path": str(outside), "content": "x"}),
+        ("edit_file", {"path": str(outside), "old_text": "a", "new_text": "b"}),
+        ("write_file", {"path": "notes.md", "content": "ok"}),
+    ):
+        await runner.execute_tool(
+            ProactiveToolCall(call_id=name, name=name, arguments=arguments),
+            drift_file,
+        )
+
+    assert not outside.exists()
+    notes = tmp_path / "roles" / "mira" / "drift" / "notes.md"
+    assert notes.read_text(encoding="utf-8") == "ok"
+
+
+async def test_drift_file_tool_never_runs_outside_a_checked_call(
+    tmp_path: Path,
+) -> None:
+    runner = _drift_runner(tmp_path)
+    target = tmp_path / "roles" / "mira" / "drift" / "direct.md"
+    with pytest.raises(PermissionError):
+        await runner.run_drift_file_tool(
+            "mira", "write_file", {"path": "direct.md", "content": "x"}
+        )
+    assert not target.exists()
+
+
+async def test_a_loop_started_inside_a_request_does_not_keep_its_lease(
+    tmp_path: Path,
+) -> None:
+    """A role created by a bridge request starts a loop that pins nothing."""
+    from bootstrap.runtime.events import RuntimeEventBus
+    from core.common.runtime_scope import current_runtime_lease
+    from plugins.proactive.backend.service import ProactiveBinding, ProactiveService
+    from shiori_sdk.role_events import RoleCreated
+    from shiori_sdk.testing.processes import FakeProcesses
+
+    leases: list[object] = []
+
+    class _Loop:
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            self._stop = asyncio.Event()
+
+        def stop(self) -> None:
+            self._stop.set()
+
+        async def run(self) -> None:
+            leases.append(current_runtime_lease())
+            await self._stop.wait()
+
+    class _RequestLease:
+        def retain(self) -> "_RequestLease":
+            return self
+
+        async def release(self) -> None:
+            return None
+
+    roles = RoleStore(tmp_path)
+    service = ProactiveService(loop_factory=_Loop)
+    service.attach(
+        ProactiveBinding(
+            host=cast(Any, SimpleNamespace(configured_max_tokens=lambda: 1)),
+            conversation=cast(Any, _UnusedConversation()),
+            roles=HostRoles(roles),
+            processes=FakeProcesses(),
+            workspace=tmp_path,
+            presence=None,
+            markdown=cast(Any, None),
+            memory_engine=None,
+            scene_followup=False,
+            relationship=False,
+            affection=None,
+            draft_prompt=lambda: None,
+            is_active=lambda: True,
+        )
+    )
+    service.published()
+    bus = RuntimeEventBus(EventBus())
+    bus.on(RoleCreated, lambda _event: service.on_roles_changed())
+    try:
+        roles.create_role(role_id="mira", name="米拉", system_prompt="规矩")
+        with bind_runtime(cast(Any, _RequestLease())):
+            bus.enqueue(RoleCreated("mira"))
+        await bus.drain()
+        await asyncio.sleep(0)
+        assert leases == [None]
+    finally:
+        await service.close()
+        await bus.aclose()
 
 
 # ── Two roles on the production assembly ─────────────────────────────────
@@ -738,32 +850,29 @@ async def _assembly(
     )
     runtime = ProactiveRuntime(generation, reply_sequences=ChannelSequenceOwner())
     runner = HostProactiveRunner(lambda: runtime)
-    config = Config(provider="test", model="m", api_key="")
-    loops = build_role_loops(
-        tmp_path,
-        sessions=sessions,
-        roles=HostRoles(roles),
-        proactive_host=runner,
-        conversation=conversation,
-        presence=sessions.presence,
-        motives=[RelationshipStrategy(affection)],
-        max_tokens=config.max_tokens,
-    )
 
     async def no_pause(_: object) -> None:
         return None
 
     monkeypatch.setattr("agent.turns.reply_sequence.wait_between_messages", no_pause)
     try:
-        with turn_getters(affection=_LonelyAffection(), policy=NaturalChatPolicy()):
-            yield SimpleNamespace(
-                runner=runner,
-                runtime=runtime,
-                loops=loops,
-                sent=sent,
-                events=events,
-                workspace=tmp_path,
-            )
+        async with plugin_role_loops(
+            tmp_path,
+            roles=roles,
+            sessions=sessions,
+            proactive_host=runner,
+            conversation=conversation,
+            affection=_LonelyAffection(),
+        ) as loops:
+            with turn_getters(affection=_LonelyAffection(), policy=NaturalChatPolicy()):
+                yield SimpleNamespace(
+                    runner=runner,
+                    runtime=runtime,
+                    loops=loops,
+                    sent=sent,
+                    events=events,
+                    workspace=tmp_path,
+                )
     finally:
         await registry.close_all()
         await bus.aclose()

@@ -48,7 +48,6 @@ class RoleStore:
         # Cached avatars of channel senders and chats (#514): written by plugins
         # through ``ctx.avatars``, read by the phone and identity bridge.
         self.avatars = ChannelAvatarStore(workspace)
-        self._proactive_enabled_listeners: list[Callable[[str, bool], None]] = []
 
     def bound_user_senders(self, role_id: str) -> BoundUserSenders:
         """The senders on ``role_id``'s channels bound to the user right now.
@@ -62,25 +61,6 @@ class RoleStore:
                 account.record for account in self.accounts.list(role_id=role_id)
             ),
         )
-
-    def add_proactive_enabled_listener(
-        self, listener: Callable[[str, bool], None]
-    ) -> None:
-        """Notifies after ``enabled`` changes, once the manifest lock is released."""
-        if listener not in self._proactive_enabled_listeners:
-            self._proactive_enabled_listeners.append(listener)
-
-    def remove_proactive_enabled_listener(
-        self, listener: Callable[[str, bool], None]
-    ) -> None:
-        try:
-            self._proactive_enabled_listeners.remove(listener)
-        except ValueError:
-            return
-
-    def _notify_proactive_enabled(self, role_id: str, enabled: bool) -> None:
-        for listener in tuple(self._proactive_enabled_listeners):
-            listener(role_id, enabled)
 
     @property
     def lock(self):
@@ -255,10 +235,7 @@ class RoleStore:
         ``change_affection_stage_prompts`` maps the current stage guidance
         overrides to the new ones; it runs under the lock, so concurrent
         writes of different stages each apply to the latest overrides.
-        A change to the proactive switch is announced after the lock is released.
         """
-        updated: RoleRecord | None = None
-        enabled_change: tuple[str, bool] | None = None
         with self._lock:
             roles = self.list_roles()
             for index, role in enumerate(roles):
@@ -279,15 +256,12 @@ class RoleStore:
                         dict(role.affection_stage_prompts)
                     )
                 if proactive is not None:
-                    previous_enabled = role.proactive.enabled
                     normalized = (
                         proactive
                         if isinstance(proactive, RoleProactiveConfig)
                         else RoleProactiveConfig.from_dict(proactive)
                     )
                     role.proactive = replace(normalized, candidates=())
-                    if role.proactive.enabled != previous_enabled:
-                        enabled_change = (role_id, role.proactive.enabled)
                 self._update_asset_categories(
                     role,
                     asset_categories=asset_categories,
@@ -309,13 +283,8 @@ class RoleStore:
                 role.updated_at = now_iso()
                 roles[index] = role
                 self._repository.save_roles(roles, plugin_data=extension_data)
-                updated = role
-                break
-        if updated is None:
-            raise RoleNotFoundError(role_id)
-        if enabled_change is not None:
-            self._notify_proactive_enabled(*enabled_change)
-        return updated
+                return role
+        raise RoleNotFoundError(role_id)
 
     def write_plugin_proactive(self, role_id: str, value: dict[str, Any]) -> None:
         """Write the ``proactive`` namespace for ``ROLES.plugin_settings``.
@@ -326,26 +295,17 @@ class RoleStore:
         ``plugin_data`` is left as stored.
         """
         normalized = RoleProactiveConfig.from_dict(value)
-        updated = False
-        enabled_change: tuple[str, bool] | None = None
         with self._lock:
             roles = self.list_roles()
             for index, role in enumerate(roles):
                 if role.id != role_id:
                     continue
-                previous_enabled = role.proactive.enabled
                 role.proactive = replace(normalized, candidates=())
-                if role.proactive.enabled != previous_enabled:
-                    enabled_change = (role_id, role.proactive.enabled)
                 role.updated_at = now_iso()
                 roles[index] = role
                 self._repository.save_roles(roles)
-                updated = True
-                break
-        if not updated:
-            raise RoleNotFoundError(role_id)
-        if enabled_change is not None:
-            self._notify_proactive_enabled(*enabled_change)
+                return
+        raise RoleNotFoundError(role_id)
 
     def delete_role(self, role_id: str, *, remove_assets: bool = True) -> bool:
         with self._lock:
