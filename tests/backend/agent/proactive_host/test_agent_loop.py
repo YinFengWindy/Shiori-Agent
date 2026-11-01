@@ -1,5 +1,5 @@
 """
-TDD — Phase 5: proactive_v2/ProactiveTurnPipeline — Agent Loop
+TDD — Phase 5: proactive 插件 ProactiveTurnPipeline — Agent Loop
 
 测试覆盖：
   - max_steps 保护：loop 不超过 agent_tick_max_steps

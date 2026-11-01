@@ -9,6 +9,7 @@ import pytest
 
 from shiori_sdk.testing.processes import FakeProcesses
 
+from plugins.proactive.backend import loop as loop_module
 from plugins.proactive.backend.loop import ProactiveLoop
 from plugins.proactive.backend.service import (
     ProactiveBinding,
@@ -371,3 +372,82 @@ async def test_each_tick_rereads_the_role_settings(tmp_path: Path) -> None:
     finally:
         loop.stop()
         await loop._release()
+
+
+async def test_a_role_whose_settings_do_not_load_does_not_block_other_roles(
+    tmp_path: Path,
+) -> None:
+    broken = _Role("broken", False)
+    broken.settings["overrides"] = {"gate": {"nope": 1}}
+    roles = _Roles(broken, _Role("mira", True))
+    service = ProactiveService(loop_factory=_Loop)
+    service.attach(_binding(tmp_path, roles, _Host(1), active=True))
+    try:
+        service.published()
+        assert set(service._loops) == {"broken", "mira"}
+    finally:
+        await service.close()
+
+
+async def test_one_roles_failing_loop_construction_spares_the_others(
+    tmp_path: Path,
+) -> None:
+    def factory(_sessions: object, config: object, **kwargs: object) -> object:
+        if config.role_id == "broken":  # type: ignore[attr-defined]
+            raise ValueError("broken role")
+        return _Loop(_sessions, config, **kwargs)  # type: ignore[arg-type]
+
+    roles = _Roles(_Role("broken", True), _Role("mira", True))
+    service = ProactiveService(loop_factory=factory)
+    service.attach(_binding(tmp_path, roles, _Host(1), active=True))
+    service.published()
+    assert set(service._loops) == {"mira"}
+    with pytest.raises(ValueError, match="broken role"):
+        await service.close()
+
+
+async def test_switching_off_releases_mcp_and_feeds_within_a_check(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(loop_module, "SETTINGS_CHECK_SECONDS", 0.01)
+    role = _Role("mira", True)
+    roles = _Roles(role)
+    ticks: list[int] = []
+
+    def read(current: _Roles):
+        settings = current.plugin_settings("mira", "proactive").read()
+        return role_proactive_config("mira", settings)
+
+    async def dispatch(operation: object) -> None:
+        ticks.append(1)
+
+    loop = ProactiveLoop(
+        _Sessions(tmp_path),
+        read(roles),
+        proactive_host=_Host(1),  # type: ignore[arg-type]
+        conversation=object(),  # type: ignore[arg-type]
+        roles=roles,  # type: ignore[arg-type]
+        role_prompt_fn=lambda: "",
+        state_path=_db(tmp_path, "mira"),
+        processes=FakeProcesses(),
+        config_fn=read,  # type: ignore[arg-type]
+        tick_dispatcher=dispatch,  # type: ignore[arg-type]
+    )
+    # The first tick is due at once; the next one only after an hour.
+    intervals = iter([0, 3600])
+    loop._next_interval = lambda base_score=None: next(intervals)  # type: ignore[method-assign]
+    run = asyncio.create_task(loop.run())
+    try:
+        async with asyncio.timeout(2):
+            while not (ticks and loop._poll_task is not None):
+                await asyncio.sleep(0.005)
+        poll = loop._poll_task
+        role.settings["enabled"] = False
+        async with asyncio.timeout(2):
+            while loop._state is not None:
+                await asyncio.sleep(0.005)
+        assert poll.done() and loop._poll_task is None
+        assert ticks == [1]
+    finally:
+        loop.stop()
+        await run

@@ -1,5 +1,5 @@
 """
-proactive_v2/gateway.py — DataGateway
+proactive/gateway.py — DataGateway
 
 在 agent loop 启动前并行预取所有数据：
 - alerts / context：直接透传给 agent（完整内容）

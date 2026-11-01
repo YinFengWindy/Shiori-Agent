@@ -61,7 +61,7 @@ class ProactivePhaseHost(Protocol):
 
 def _log_content_candidates(gateway_result: GatewayResult) -> None:
     if not gateway_result.content_meta:
-        logger.info("[proactive_v2] content candidates: 0")
+        logger.info("[proactive] content candidates: 0")
         return
     lines: list[str] = []
     for index, item in enumerate(gateway_result.content_meta, 1):
@@ -72,7 +72,7 @@ def _log_content_candidates(gateway_result: GatewayResult) -> None:
             line += f" | source={source}"
         lines.append(line)
     logger.info(
-        "[proactive_v2] content candidates: %d\n%s",
+        "[proactive] content candidates: %d\n%s",
         len(gateway_result.content_meta),
         "\n".join(lines),
     )
@@ -84,12 +84,12 @@ def gate_check(pipeline: ProactivePhaseHost, ctx: AgentTickContext) -> GateResul
     # The one target this tick may deliver to is fixed here, before any gate runs.
     transport = pipeline._resolve_target_transport()
     if transport is None:
-        logger.debug("[proactive_v2] gate: no candidate session → blocked")
+        logger.debug("[proactive] gate: no candidate session → blocked")
         return GateResult(blocked=True, reason="no_target", base_score=None)
     ctx.target_channel, ctx.target_chat_id = transport
 
     if pipeline._passive_busy_fn and pipeline._passive_busy_fn(pipeline._session_key):
-        logger.debug("[proactive_v2] gate: passive_busy → blocked")
+        logger.debug("[proactive] gate: passive_busy → blocked")
         return GateResult(blocked=True, reason="busy", base_score=None)
 
     gate_result = pipeline._proactive_gates.evaluate(
@@ -189,7 +189,7 @@ async def fetch_pull(
         if pipeline._allow_relationship_only_fallback(ctx):
             ctx.active_gate = ctx.selected_gate
             logger.info(
-                "[proactive_v2] fetch: no data but relationship gate passed → relationship fallback"
+                "[proactive] fetch: no data but relationship gate passed → relationship fallback"
             )
         elif pipeline._drift_pipeline is not None and pipeline._cfg.drift_enabled:
             last_drift_at = pipeline._state_store.get_last_drift_at(
@@ -219,7 +219,7 @@ async def fetch_pull(
                     )
                 )
                 logger.info(
-                    "[proactive_v2] fetch: drift blocked by interval last_drift_at=%s min_interval_hours=%d",
+                    "[proactive] fetch: drift blocked by interval last_drift_at=%s min_interval_hours=%d",
                     last_drift_at.isoformat(),
                     min_interval_hours,
                 )
@@ -227,7 +227,7 @@ async def fetch_pull(
                 ctx.skip_reason = "no_content"
                 pipeline.last_ctx = ctx
                 return FeedResult(drift_entered=False, base_score=None)
-            logger.info("[proactive_v2] fetch: empty gateway, attempting drift")
+            logger.info("[proactive] fetch: empty gateway, attempting drift")
             entered_drift = await pipeline._drift_pipeline.run(ctx, pipeline._llm_fn)
             if entered_drift:
                 pipeline._state_store.mark_drift_run(
@@ -235,18 +235,18 @@ async def fetch_pull(
                     ctx.now_utc,
                 )
                 logger.info(
-                    "[proactive_v2] fetch: drift entered, message_sent=%s",
+                    "[proactive] fetch: drift entered, message_sent=%s",
                     ctx.drift_message_sent,
                 )
                 pipeline.last_ctx = ctx
                 return FeedResult(drift_entered=True, base_score=0.0)
-            logger.info("[proactive_v2] fetch: drift not entered")
+            logger.info("[proactive] fetch: drift not entered")
             ctx.terminal_action = "skip"
             ctx.skip_reason = "no_content"
             pipeline.last_ctx = ctx
             return FeedResult(drift_entered=False, base_score=None)
         else:
-            logger.info("[proactive_v2] fetch: no data and fallback off → skip")
+            logger.info("[proactive] fetch: no data and fallback off → skip")
             logger.info(
                 diagnostic_line(
                     "ProactiveTurnPipeline._fetch_pull",
@@ -317,7 +317,7 @@ def finalize_after_drift(
     """drift 进入后跳过正常 post-loop 并收尾。"""
 
     logger.info(
-        "[proactive_v2] drift entered, skipping normal post_loop message_sent=%s finished=%s",
+        "[proactive] drift entered, skipping normal post_loop message_sent=%s finished=%s",
         ctx.drift_message_sent,
         ctx.drift_finished,
     )

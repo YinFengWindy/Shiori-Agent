@@ -1,5 +1,5 @@
 """
-proactive_v2/tools.py — Tool schemas + execute dispatcher
+proactive/tools.py — Tool schemas + execute dispatcher
 
 数据层已由 DataGateway 预取，agent 只需：
   recall_memory  — 检索偏好记忆（HyDE 正/负假设）
@@ -377,7 +377,7 @@ def _get_content(ctx: AgentTickContext, args: dict) -> str:
     unknown = [i for i in item_ids if i not in valid]
     if unknown:
         logger.warning(
-            "[proactive_v2] get_content: unknown item_ids=%s (valid=%s)",
+            "[proactive] get_content: unknown item_ids=%s (valid=%s)",
             unknown,
             sorted(valid),
         )
@@ -464,7 +464,7 @@ def _mark_interesting(ctx: AgentTickContext, args: dict) -> str:
     valid = _valid_content_ids(ctx)
     unknown = [i for i in item_ids if i not in valid]
     if unknown and valid:
-        logger.warning("[proactive_v2] mark_interesting: unknown item_ids=%s", unknown)
+        logger.warning("[proactive] mark_interesting: unknown item_ids=%s", unknown)
         return json.dumps(
             {
                 "error": f"以下 id 不在本轮候选列表中，无法标记：{unknown}。本轮有效 id：{sorted(valid)}"
@@ -475,7 +475,7 @@ def _mark_interesting(ctx: AgentTickContext, args: dict) -> str:
         if key not in ctx.discarded_item_ids:
             ctx.interesting_item_ids.add(key)
     logger.info(
-        "[proactive_v2] classified interesting ids=%s reason=%s",
+        "[proactive] classified interesting ids=%s reason=%s",
         item_ids,
         reason or "(none)",
     )
@@ -488,9 +488,7 @@ def _mark_not_interesting(ctx: AgentTickContext, args: dict) -> str:
     valid = _valid_content_ids(ctx)
     unknown = [i for i in item_ids if i not in valid]
     if unknown and valid:
-        logger.warning(
-            "[proactive_v2] mark_not_interesting: unknown item_ids=%s", unknown
-        )
+        logger.warning("[proactive] mark_not_interesting: unknown item_ids=%s", unknown)
         return json.dumps(
             {
                 "error": f"以下 id 不在本轮候选列表中，无法标记：{unknown}。本轮有效 id：{sorted(valid)}"
@@ -500,7 +498,7 @@ def _mark_not_interesting(ctx: AgentTickContext, args: dict) -> str:
     ctx.discarded_item_ids.update(item_ids)
     ctx.interesting_item_ids -= set(item_ids)
     logger.info(
-        "[proactive_v2] classified not_interesting ids=%s reason=%s",
+        "[proactive] classified not_interesting ids=%s reason=%s",
         item_ids,
         reason or "(none)",
     )

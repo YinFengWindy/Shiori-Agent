@@ -82,7 +82,7 @@ class AgentTickFactory:
 
     def build(self) -> ProactiveTurnPipeline:
         if self._deps.pool is None:
-            raise RuntimeError("proactive_v2 依赖 MCP 连接池，pool 不能为空")
+            raise RuntimeError("主动循环依赖 MCP 连接池，pool 不能为空")
         # 上面的 raise 已经保证 pool 非空；此处收窄一次类型，
         # 后续构建方法直接接收非空 pool，不必再逐处断言。
         pool = self._deps.pool
@@ -322,7 +322,7 @@ def _first_tool_call(resp: ModelCompletion) -> dict | None:
     if not resp.tool_calls:
         text = resp.content.strip()
         logger.warning(
-            "[proactive_v2] llm_fn: no tool call returned (text=%r)",
+            "[proactive] llm_fn: no tool call returned (text=%r)",
             text[:300] if text else "(empty)",
         )
         return None

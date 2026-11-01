@@ -3,7 +3,7 @@
 Observation is not on the turn's critical path, so it stays a plugin. The
 ``scene`` plugin provides ``SCENE``. The host provides ``SCENE_HOST``: role
 identity and publication. Demand is ``SCENE.request``. The plugin reads a
-proactive message's recent history with ``CONVERSATION.recent_messages``.
+proactive message's recent history with ``CONVERSATION.recent_thread_messages``.
 ``None`` from ``get(SCENE)`` means observation is off; chat still runs.
 
 ``request`` returns a disposer. The caller effects it so demand leaves with

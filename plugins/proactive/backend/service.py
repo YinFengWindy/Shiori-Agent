@@ -6,9 +6,10 @@ and the role create and delete events reconcile: every role has one loop,
 built and rebound on the published binding only. A candidate that is set up
 and then discarded changes nothing.
 
-A loop rereads its role's ``proactive`` settings before every tick: a role
-whose switch is off skips the tick and holds no state store or MCP sessions,
-and a changed config applies from the next tick.
+A loop reads its role's ``proactive`` settings before its first tick and
+then at least every ``SETTINGS_CHECK_SECONDS``: a role whose switch is off
+does not tick and holds no state store or MCP sessions, a changed config
+reschedules the next tick, and settings that do not load fail only that role.
 """
 
 from __future__ import annotations
@@ -271,43 +272,55 @@ class ProactiveService:
                 self._stop_role(role_id)
         max_tokens = binding.host.configured_max_tokens()
         for role_id in role_ids:
-            running = self._loops.get(role_id)
-            if running is not None and running.task.done():
-                # Died (already logged and kept for ``close``): start anew.
-                del self._loops[role_id]
-                running = None
-            if running is None:
-                self._start_role(binding, role_id, max_tokens)
-                continue
-            running.loop.rebind(
-                sessions=_Sessions(binding.workspace),
-                processes=binding.processes,
-                conversation=binding.conversation,
-                roles=binding.roles,
-                max_tokens=max_tokens,
-                memory_store=_RoleMemory(binding.markdown, binding.memory_engine),
-                presence=binding.presence,
-                proactive_motives=_motives(binding),
-                role_prompt_fn=_role_prompt(binding.host, role_id),
-                passive_busy_fn=_passive_busy(binding.host, role_id),
-                affection_prompt_fn=_affection_prompt(binding, role_id),
-                draft_prompt_fn=binding.draft_prompt,
-            )
+            # One role's failure is logged and kept for ``close``; the other
+            # roles still get their loops.
+            try:
+                self._reconcile_role(binding, role_id, max_tokens)
+            except Exception as error:
+                logger.exception("[proactive] 角色循环装配失败 role=%s", role_id)
+                self._failures.append(error)
+
+    def _reconcile_role(
+        self, binding: ProactiveBinding, role_id: str, max_tokens: int
+    ) -> None:
+        running = self._loops.get(role_id)
+        if running is not None and running.task.done():
+            # Died (already logged and kept for ``close``): start anew.
+            del self._loops[role_id]
+            running = None
+        if running is None:
+            self._start_role(binding, role_id, max_tokens)
+            return
+        running.loop.rebind(
+            sessions=_Sessions(binding.workspace),
+            processes=binding.processes,
+            conversation=binding.conversation,
+            roles=binding.roles,
+            max_tokens=max_tokens,
+            memory_store=_RoleMemory(binding.markdown, binding.memory_engine),
+            presence=binding.presence,
+            proactive_motives=_motives(binding),
+            role_prompt_fn=_role_prompt(binding.host, role_id),
+            passive_busy_fn=_passive_busy(binding.host, role_id),
+            affection_prompt_fn=_affection_prompt(binding, role_id),
+            draft_prompt_fn=binding.draft_prompt,
+        )
 
     def _start_role(
         self, binding: ProactiveBinding, role_id: str, max_tokens: int
     ) -> None:
-        read_config = _read_config(role_id)
         loop = self._loop_factory(
             _Sessions(binding.workspace),
-            read_config(binding.roles),
+            # Not the role's settings: the loop reads those before its first
+            # tick, so a role whose settings do not load fails only itself.
+            ProactiveConfig(role_id=role_id),
             proactive_host=binding.host,
             conversation=binding.conversation,
             roles=binding.roles,
             role_prompt_fn=_role_prompt(binding.host, role_id),
             state_path=binding.workspace / "roles" / role_id / "proactive.db",
             processes=binding.processes,
-            config_fn=read_config,
+            config_fn=_read_config(role_id),
             max_tokens=max_tokens,
             memory_store=_RoleMemory(binding.markdown, binding.memory_engine),
             presence=binding.presence,

@@ -134,7 +134,7 @@ class HostConversation:
             mood_updated_at=str(session.metadata.get("current_mood_updated_at", "")),
         )
 
-    def recent_messages(
+    def recent_thread_messages(
         self, session_key: str, *, thread_id: str, limit: int
     ) -> tuple[ConversationMessage, ...] | None:
         """The thread's history window on the role session, or None when external."""

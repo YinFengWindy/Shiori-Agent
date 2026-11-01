@@ -204,7 +204,7 @@ async def test_scene_demand_is_reregistered_after_reload_or_re_enable(
         light_provider=SimpleNamespace(),
         light_model="light",
         conversation=SimpleNamespace(
-            recent_messages=lambda *_args, **_kwargs: (
+            recent_thread_messages=lambda *_args, **_kwargs: (
                 ConversationMessage(role="user", content="hi"),
             )
         ),

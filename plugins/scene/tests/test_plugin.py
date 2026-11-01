@@ -31,13 +31,13 @@ _PROACTIVE = InitiatedMessageCommitted(
 
 
 class _Conversation:
-    """``CONVERSATION.recent_messages``; ``None`` stands for external context."""
+    """``CONVERSATION.recent_thread_messages``; ``None`` stands for external context."""
 
     def __init__(self, history: tuple[ConversationMessage, ...] | None) -> None:
         self.history = history
         self.reads = 0
 
-    def recent_messages(
+    def recent_thread_messages(
         self, session_key: str, *, thread_id: str, limit: int
     ) -> tuple[ConversationMessage, ...] | None:
         self.reads += 1

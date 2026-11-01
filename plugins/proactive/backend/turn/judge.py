@@ -125,7 +125,7 @@ async def judge_evaluate(
                 "全部分类完毕后再调用 message_push + finish_turn(decision=reply)，或 finish_turn(decision=skip, reason=...)。"
             )
             logger.info(
-                "[proactive_v2] judge completeness: %d unclassified, resetting → %s",
+                "[proactive] judge completeness: %d unclassified, resetting → %s",
                 len(unclassified_ids),
                 sorted(unclassified_ids),
             )
@@ -161,7 +161,7 @@ async def judge_evaluate(
             + pipeline._relationship_fallback_style_hint()
         )
         logger.info(
-            "[proactive_v2] judge relationship fallback: forcing one more reply-focused pass"
+            "[proactive] judge relationship fallback: forcing one more reply-focused pass"
         )
         messages.append({"role": "user", "content": relationship_reflection})
         for _ in range(3):
@@ -191,7 +191,7 @@ async def judge_evaluate(
             "或直接调用 finish_turn(decision=skip, reason=...)。不允许直接结束。"
         )
         logger.info(
-            "[proactive_v2] judge reflection: interesting=%d, injecting prompt",
+            "[proactive] judge reflection: interesting=%d, injecting prompt",
             len(ctx.interesting_item_ids),
         )
         messages.append({"role": "user", "content": reflection})
@@ -250,7 +250,7 @@ async def run_tool_step(
         ctx.reply_format_corrections += 1
         ctx.steps_taken += 1
         logger.warning(
-            "[proactive_v2] %s: missing required tool call, retrying once",
+            "[proactive] %s: missing required tool call, retrying once",
             loop_tag,
         )
         messages.append({"role": "user", "content": _SCENE_TOOL_PROTOCOL_RETRY_PROMPT})
@@ -277,7 +277,7 @@ async def run_tool_step(
             return False
     if tool_call is None:
         logger.warning(
-            "[proactive_v2] %s: llm_fn returned None at step %d, stopping",
+            "[proactive] %s: llm_fn returned None at step %d, stopping",
             loop_tag,
             ctx.steps_taken,
         )
@@ -309,7 +309,7 @@ async def run_tool_step(
         )
     )
     logger.info(
-        "[proactive_v2] %s step %d: %s  args=%s",
+        "[proactive] %s step %d: %s  args=%s",
         loop_tag,
         ctx.steps_taken,
         tool_name,
@@ -348,7 +348,7 @@ async def run_tool_step(
             )
         )
         logger.warning(
-            "[proactive_v2] %s: tool error: %s",
+            "[proactive] %s: tool error: %s",
             loop_tag,
             outcome.text,
         )

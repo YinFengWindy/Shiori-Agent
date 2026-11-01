@@ -271,7 +271,7 @@ class InitiatedMessageCommitted:
 
     ``thread_id`` is the conversation thread the message belongs to; a role's
     session mixes threads, so subscribers read history with it
-    (``CONVERSATION.recent_messages``).
+    (``CONVERSATION.recent_thread_messages``).
 
     ``source`` names who started the message: the ``InitiatedReply.source``
     a plugin passed (by convention its plugin id; the host's proactive loop
@@ -452,7 +452,7 @@ class Conversation(Protocol):
         """
         ...
 
-    def recent_messages(
+    def recent_thread_messages(
         self, session_key: str, *, thread_id: str, limit: int
     ) -> tuple[ConversationMessage, ...] | None:
         """The last ``limit`` messages of ``thread_id`` in a role session, oldest first.

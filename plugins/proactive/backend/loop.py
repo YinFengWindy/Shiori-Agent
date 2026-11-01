@@ -11,12 +11,11 @@ ProactiveLoop - 主动触达核心循环。
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import random as _random_module
 import time
 from collections.abc import Sequence
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, cast
 
@@ -25,7 +24,8 @@ if TYPE_CHECKING:
     from .memory_profile import MemoryProfile as MemoryProfileApi
 
 from .turn.gates import ProactiveGate, ProactiveGateChain
-from .traces import StrategyTraceType, build_strategy_trace_envelope
+from .traces import append_loop_trace, config_snapshot_payload, rate_decision_payload
+from .context_panel import PROACTIVE_CONTEXT_FILE, ProactiveContextPanel
 from .diagnostics import diagnostic_context, diagnostic_line
 from .energy import (
     compute_energy,
@@ -47,20 +47,13 @@ from shiori_sdk.roles import Roles
 
 logger = logging.getLogger(__name__)
 
+# How often a waiting loop rereads its role's switch and config: a switch
+# turned off releases MCP sessions, feed polling and the state store within
+# this many seconds, and a changed config reschedules the next tick.
+SETTINGS_CHECK_SECONDS = 60.0
+
 
 class ProactiveLoop:
-    _PROACTIVE_CONTEXT_FILE = "PROACTIVE_CONTEXT.md"
-    _PROACTIVE_CONTEXT_TEMPLATE = """# Proactive Context
-
-在这里写用户当前对主动推送的明确要求和规则。
-
-- 主 agent 负责维护这份文件。
-- proactive agent 每轮都会读取它,并把它视为需要遵守的规则,不是普通参考建议。
-- 这里适合写白名单、黑名单、过滤条件、优先级、必须先验证的步骤。
-- 这里不提供新闻事实,不提供候选内容,只定义规则。
-- 写结论即可,不要写冗长过程。
-"""
-
     def __init__(
         self,
         session_manager: SessionWorkspace,
@@ -91,11 +84,12 @@ class ProactiveLoop:
         ``affection_prompt_fn`` renders the role's affection block (#714).
 
         ``config_fn`` rereads the role's config from ``roles`` before every
-        tick: a tick whose switch is off is skipped, and a changed config
-        rebuilds the tick pipeline. Nothing is opened until a tick runs: the
-        state store at ``state_path``, the MCP pool (stdio sessions from
-        ``processes``) and the feed poller start with the first tick that
-        runs, and close again when a tick finds the switch off."""
+        tick and, while the loop waits, every ``SETTINGS_CHECK_SECONDS``: a
+        switch found off skips ticks and closes what is open, a changed config
+        rebuilds the tick pipeline and reschedules. ``config`` is only the
+        starting point. Nothing is opened until a tick runs: the state store
+        at ``state_path``, the MCP pool (stdio sessions from ``processes``)
+        and the feed poller start with the first tick that runs."""
         self._sessions = session_manager
         self._cfg = config
         self._config_fn = config_fn
@@ -115,8 +109,9 @@ class ProactiveLoop:
         self._affection_prompt_fn = affection_prompt_fn
         self._draft_prompt_fn = draft_prompt_fn
         self._role_prompt_fn = role_prompt_fn
-        self._workspace_context_mtime_ns: int | None = None
-        self._workspace_context_text: str = ""
+        self._context_panel = ProactiveContextPanel(
+            state_path.parent / PROACTIVE_CONTEXT_FILE
+        )
         self._init_runtime_state()
 
     def _init_runtime_state(self) -> None:
@@ -220,7 +215,7 @@ class ProactiveLoop:
                 passive_busy_fn=self._passive_busy_fn,
                 deduper=self._message_deduper,
                 rng=self._rng,
-                workspace_context_fn=self._read_workspace_proactive_context,
+                workspace_context_fn=self._context_panel.read,
                 role_prompt_fn=self._role_prompt_fn,
                 proactive_host=self._host,
                 conversation=self._conversation,
@@ -240,10 +235,8 @@ class ProactiveLoop:
         )
 
     def _init_runtime_components(self) -> None:
-        # 1. 准备主动规则面板文件（PROACTIVE_CONTEXT.md）。
-        self._ensure_workspace_proactive_context_file()
-        # 2. 预读规则面板内容并做缓存。
-        self._read_workspace_proactive_context()
+        # 1. 准备并预读主动规则面板（PROACTIVE_CONTEXT.md）。
+        self._context_panel.read()
         # 3. 构建目标选择、传感器、去重器和主动链路 pipeline。
         self._target_resolver = self._build_target_resolver()
         self._sense = self._build_sense()
@@ -252,45 +245,13 @@ class ProactiveLoop:
         # 4. 启动时把当前 proactive 配置落一份 trace，方便回看。
         self._trace_proactive_config_snapshot()
 
-    def _workspace_proactive_context_path(self) -> Path | None:
-        return self._state_path.parent / self._PROACTIVE_CONTEXT_FILE
-
-    def _ensure_workspace_proactive_context_file(self) -> None:
-        path = self._workspace_proactive_context_path()
-        if path is None or path.exists():
-            return
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(self._PROACTIVE_CONTEXT_TEMPLATE, encoding="utf-8")
-
-    def _read_workspace_proactive_context(self) -> str:
-        path = self._workspace_proactive_context_path()
-        if path is None:
-            return ""
-        self._ensure_workspace_proactive_context_file()
-        try:
-            stat = path.stat()
-            mtime_ns = int(stat.st_mtime_ns)
-            if self._workspace_context_mtime_ns == mtime_ns:
-                return self._workspace_context_text
-            text = path.read_text(encoding="utf-8").strip()
-            self._workspace_context_mtime_ns = mtime_ns
-            self._workspace_context_text = text
-            return text
-        except Exception as e:
-            logger.warning("[proactive] 读取 workspace proactive context 失败: %s", e)
-            return self._workspace_context_text
-
     def _trace_proactive_config_snapshot(self) -> None:
-        payload = {
-            "enabled": self._cfg.enabled,
-            "score_llm_threshold": self._cfg.score_llm_threshold,
-            "tick_interval_s0": self._cfg.tick_interval_s0,
-            "tick_interval_s1": self._cfg.tick_interval_s1,
-            "tick_jitter": self._cfg.tick_jitter,
-            "memory_history_gate_enabled": self._cfg.memory_history_gate_enabled,
-            "sleep_modifier_sleeping": self._cfg.sleep_modifier_sleeping,
-        }
-        self._append_trace_line("proactive_config_trace.jsonl", payload)
+        append_loop_trace(
+            self._sessions.workspace,
+            "proactive_config_trace.jsonl",
+            config_snapshot_payload(self._cfg),
+            role_id=self._cfg.role_id,
+        )
 
     def _trace_proactive_rate_decision(
         self,
@@ -299,49 +260,14 @@ class ProactiveLoop:
         interval: int,
         mode: str,
     ) -> None:
-        self._append_trace_line(
+        append_loop_trace(
+            self._sessions.workspace,
             "proactive_rate_trace.jsonl",
-            {
-                "mode": mode,
-                "base_score": round(base_score, 4) if base_score is not None else None,
-                "interval_seconds": int(interval),
-                "score_llm_threshold": self._cfg.score_llm_threshold,
-                "tick_interval_s0": self._cfg.tick_interval_s0,
-                "tick_interval_s1": self._cfg.tick_interval_s1,
-                "tick_jitter": self._cfg.tick_jitter,
-            },
+            rate_decision_payload(
+                self._cfg, base_score=base_score, interval=interval, mode=mode
+            ),
+            role_id=self._cfg.role_id,
         )
-
-    def _append_trace_line(self, filename: str, payload: dict[str, Any]) -> None:
-        try:
-            memory_dir = self._sessions.workspace / "memory"
-            memory_dir.mkdir(parents=True, exist_ok=True)
-            trace_file = memory_dir / filename
-            if "trace_type" not in payload or "payload" not in payload:
-                trace_type: StrategyTraceType = (
-                    "proactive_config" if "config" in filename else "proactive_rate"
-                )
-                source = (
-                    "proactive.config"
-                    if trace_type == "proactive_config"
-                    else "proactive.rate"
-                )
-                role_id = self._cfg.role_id
-                payload = {
-                    **build_strategy_trace_envelope(
-                        trace_type=trace_type,
-                        source=source,
-                        subject_kind="role" if role_id else "global",
-                        subject_id=role_id or filename.removesuffix(".jsonl"),
-                        payload=payload,
-                        timestamp=datetime.now(timezone.utc).isoformat(),
-                    ),
-                    **payload,
-                }
-            with trace_file.open("a", encoding="utf-8") as handle:
-                handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
-        except Exception as exc:
-            logger.warning("[proactive] write trace failed %s: %s", filename, exc)
 
     async def _poll_feeds_once(self) -> None:
         """执行一次 feed 轮询,加锁保证不并发。
@@ -361,14 +287,26 @@ class ProactiveLoop:
                 logger.warning("[proactive] feed poll 系统级失败: %s", e)
 
     async def _poll_loop(self) -> None:
-        """每配置间隔秒周期性触发 feed 轮询。"""
+        """每配置间隔秒周期性触发 feed 轮询；开关已关闭时不再轮询。"""
         while self._running:
             await self._wait_interval(
                 max(1, int(self._cfg.feed_poller_interval_seconds))
             )
-            if not self._running:
+            if not self._running or not self._switch_on():
                 break
             await self._poll_feeds_once()
+
+    def _switch_on(self) -> bool:
+        """Whether the role's switch is on now, without applying the config."""
+        if self._config_fn is None:
+            return bool(self._cfg.enabled)
+        try:
+            return bool(self._config_fn(self._roles).enabled)
+        except Exception:
+            logger.exception(
+                "[proactive] 读取角色主动设置失败 role=%s", self._cfg.role_id
+            )
+            return False
 
     async def run(self) -> None:
         if self._stop_requested.is_set():
@@ -418,17 +356,41 @@ class ProactiveLoop:
                     state.close()
 
     async def _run_loop(self) -> None:
+        """Ticks when due; rereads the role's settings at least every check.
+
+        A switch found off (or settings that fail to load) releases what the
+        last tick opened; a changed config reschedules the next tick.
+        """
         last_base_score: float | None = None
+        due: float | None = None
+        settings_error: str | None = None
         while self._running:
-            if self._cfg.enabled:
+            previous = self._cfg
+            try:
+                enabled = self._refresh_config().enabled
+                settings_error = None
+            except Exception as error:
+                # Logged once per distinct failure, not at every check.
+                if repr(error) != settings_error:
+                    settings_error = repr(error)
+                    logger.exception(
+                        "[proactive] 读取角色主动设置失败 role=%s", self._cfg.role_id
+                    )
+                enabled = False
+            if not enabled:
+                due, last_base_score = None, None
+                await self._release()
+                await self._wait_interval(SETTINGS_CHECK_SECONDS)
+                continue
+            if due is None or self._cfg is not previous:
                 interval = self._next_interval(last_base_score)
                 logger.info("[proactive] 下次 tick 间隔=%ds", interval)
-            else:
-                # Switched off: only check the switch again, without traces.
-                interval = max(1, int(self._cfg.tick_interval_s1))
-            await self._wait_interval(interval)
-            if not self._running:
-                break
+                due = time.monotonic() + interval
+            remaining = due - time.monotonic()
+            if remaining > 0:
+                await self._wait_interval(min(remaining, SETTINGS_CHECK_SECONDS))
+                continue
+            due = None
             try:
                 last_base_score = await self._run_tick()
             except Exception:

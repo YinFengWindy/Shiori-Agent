@@ -224,6 +224,7 @@ async def test_tick_target_error_is_logged_at_loop_boundary_and_loop_continues(
     loop = ProactiveLoop.__new__(ProactiveLoop)
     loop._running = True
     loop._cfg = SimpleNamespace(enabled=True, role_id="mira")
+    loop._config_fn = None
     loop._next_interval = lambda base_score=None: 0
     loop._wait_interval = AsyncMock(return_value=None)
     loop._run_tick = run_tick

@@ -125,16 +125,16 @@ async def test_padded_session_key_is_not_a_role_session(tmp_path) -> None:
     assert manager._store.fetch_session_messages("role:mira ") == []
 
 
-async def test_recent_messages_reads_the_users_thread_and_not_an_external_one(
+async def test_recent_thread_messages_reads_the_users_thread_and_not_an_external_one(
     tmp_path,
 ) -> None:
     conversation, _manager, bus, _sent = _conversation(tmp_path)
     try:
         await conversation.deliver_initiated_reply(_reply(content="在吗"))
-        desktop = conversation.recent_messages(
+        desktop = conversation.recent_thread_messages(
             "role:mira", thread_id=desktop_thread_id("mira"), limit=6
         )
-        group = conversation.recent_messages(
+        group = conversation.recent_thread_messages(
             "role:mira", thread_id="qq:group:1", limit=6
         )
     finally:

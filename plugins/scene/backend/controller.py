@@ -127,7 +127,7 @@ class SceneAwarenessController:
             return
 
         def history() -> Sequence[ConversationMessage] | None:
-            return self._conversation.recent_messages(
+            return self._conversation.recent_thread_messages(
                 event.session_key,
                 thread_id=event.thread_id,
                 limit=_RECENT_HISTORY_LIMIT,

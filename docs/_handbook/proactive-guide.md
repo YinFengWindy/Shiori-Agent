@@ -83,7 +83,7 @@ proactive tick
 
 ### 1. 开启 proactive（角色的「主动推送」）
 
-主动推送按角色配置。系统插件 `proactive` 在进程里只有一份服务（`plugins/proactive/backend/service.py`），本代发布时（`PROCESS_RESOURCES.on_published`）给每个角色建一个 loop，之后随角色创建、删除增减；每次 tick 前重读该角色的设置，开关关闭就跳过这次 tick，不打开 `proactive.db` 和 MCP 会话，改了配置下一次 tick 生效。配置存在 `roles/roles.json` 里该角色的 `proactive` 对象，平时在桌面角色的「主动推送」里改：开关、接收会话、推送策略（profile），以及执行参数（每次推送最大步数、候选内容数、网页上下文字符数、空闲活动最大步数与最小间隔）。结构如下（用 TOML 写法示意）：
+主动推送按角色配置。系统插件 `proactive` 在进程里只有一份服务（`plugins/proactive/backend/service.py`），本代发布时（`PROCESS_RESOURCES.on_published`）给每个角色建一个 loop，之后随角色创建、删除增减；循环至少每 60 秒重读一次该角色的设置：开关关闭后约 60 秒内停止 tick、断开 MCP 会话、停掉 feed 轮询并关闭 `proactive.db`；改了配置在下一次检查时生效，并重新计算下一次 tick 的时间。配置存在 `roles/roles.json` 里该角色的 `proactive` 对象，平时在桌面角色的「主动推送」里改：开关、接收会话、推送策略（profile），以及执行参数（每次推送最大步数、候选内容数、网页上下文字符数、空闲活动最大步数与最小间隔）。结构如下（用 TOML 写法示意）：
 
 ```toml
 enabled = true

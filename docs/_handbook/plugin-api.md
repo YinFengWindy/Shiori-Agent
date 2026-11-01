@@ -210,7 +210,7 @@ Deliver a reply the host initiated, outside a user turn. The host provides this 
 
   Moods the role may use, and the stored mood's timestamp. Raises ``ValueError`` when the role is gone.
 
-- `recent_messages(session_key: str, *, thread_id: str, limit: int) -> tuple[core.conversation.ConversationMessage, ...] | None`
+- `recent_thread_messages(session_key: str, *, thread_id: str, limit: int) -> tuple[core.conversation.ConversationMessage, ...] | None`
 
   The last ``limit`` messages of ``thread_id`` in a role session, oldest first. The same history window a turn on that thread reads (only messages that thread's context includes, no delivery records). Reads the stored session when called; it does not wait for admission. ``None`` when the thread is external context (a group chat or a stranger's private chat), which is not part of the role's conversation with the user. An empty tuple is a thread with no messages yet. ``session_key`` must be a role session (``role:<id>``) and ``limit`` at least 1, otherwise ``ValueError``.
 
@@ -231,7 +231,7 @@ What one initiated delivery stored. ``message_ids`` are the committed messages, 
 
 #### `shiori_sdk.core.conversation.InitiatedMessageCommitted`
 
-A role message the user did not ask for was stored on the role session. The host emits this after the message is committed, so ``message_id`` names a stored message. Two publishers emit it: - initiated delivery (``CONVERSATION`` / ``PROACTIVE_HOST.deliver``, including the proactive plugin), once per delivered reply. A natural sequence emits once for the delivered messages: ``message_id`` is the last one and ``assistant_response`` their texts joined by a blank line. ``tools_used`` is ``("message_push",)``. - a host-owned push (the ``account_send`` tool reaching an external chat outside a live turn), once per push. ``tools_used`` names the tool. ``thread_id`` is the conversation thread the message belongs to; a role's session mixes threads, so subscribers read history with it (``CONVERSATION.recent_messages``). ``source`` names who started the message: the ``InitiatedReply.source`` a plugin passed (by convention its plugin id; the host's proactive loop and Drift use ``"proactive"``), or ``"push"`` for a host-owned push. Plugins watch it; they do not construct it.
+A role message the user did not ask for was stored on the role session. The host emits this after the message is committed, so ``message_id`` names a stored message. Two publishers emit it: - initiated delivery (``CONVERSATION`` / ``PROACTIVE_HOST.deliver``, including the proactive plugin), once per delivered reply. A natural sequence emits once for the delivered messages: ``message_id`` is the last one and ``assistant_response`` their texts joined by a blank line. ``tools_used`` is ``("message_push",)``. - a host-owned push (the ``account_send`` tool reaching an external chat outside a live turn), once per push. ``tools_used`` names the tool. ``thread_id`` is the conversation thread the message belongs to; a role's session mixes threads, so subscribers read history with it (``CONVERSATION.recent_thread_messages``). ``source`` names who started the message: the ``InitiatedReply.source`` a plugin passed (by convention its plugin id; the host's proactive loop and Drift use ``"proactive"``), or ``"push"`` for a host-owned push. Plugins watch it; they do not construct it.
 
 - `session_key: str`
 - `channel: str`
@@ -808,7 +808,7 @@ Prompt text for a selected natural-chat turn. ``passive_prompt`` is the system s
 
 ## `shiori_sdk.core.scene`
 
-``SCENE`` and ``SCENE_HOST``: demand-driven scene observation (P6a, D7). Observation is not on the turn's critical path, so it stays a plugin. The ``scene`` plugin provides ``SCENE``. The host provides ``SCENE_HOST``: role identity and publication. Demand is ``SCENE.request``. The plugin reads a proactive message's recent history with ``CONVERSATION.recent_messages``. ``None`` from ``get(SCENE)`` means observation is off; chat still runs. ``request`` returns a disposer. The caller effects it so demand leaves with the caller. The plugin starts intake through ``SceneHost.on_published``: at once when its setup runs in a published generation (an in-generation reload or enable), otherwise when the host publishes that generation. The host calls ``close`` before the generation is dropped.
+``SCENE`` and ``SCENE_HOST``: demand-driven scene observation (P6a, D7). Observation is not on the turn's critical path, so it stays a plugin. The ``scene`` plugin provides ``SCENE``. The host provides ``SCENE_HOST``: role identity and publication. Demand is ``SCENE.request``. The plugin reads a proactive message's recent history with ``CONVERSATION.recent_thread_messages``. ``None`` from ``get(SCENE)`` means observation is off; chat still runs. ``request`` returns a disposer. The caller effects it so demand leaves with the caller. The plugin starts intake through ``SceneHost.on_published``: at once when its setup runs in a published generation (an in-generation reload or enable), otherwise when the host publishes that generation. The host calls ``close`` before the generation is dropped.
 
 ### `scene`
 

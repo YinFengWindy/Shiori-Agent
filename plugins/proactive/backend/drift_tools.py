@@ -437,7 +437,8 @@ class DriftReadFileTool(DriftFileTool):
         self._builtin_skills_dir = builtin_skills_dir
 
     async def execute(self, **kwargs: Any) -> str | ToolResult:
-        raw = str(kwargs.get("path") or "").strip()
+        # A Windows-style ``skills\name\...`` names the same skill file.
+        raw = str(kwargs.get("path") or "").strip().replace("\\", "/")
         if raw.startswith("skills/") and self._builtin_skills_dir is not None:
             builtin_path = self._builtin_skills_dir / raw.removeprefix("skills/")
             if not (self._drift_dir / raw).exists() and builtin_path.exists():

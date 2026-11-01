@@ -237,7 +237,7 @@ async def resolve_decide(
             )
         )
         logger.info(
-            "[proactive_v2] resolve: action=%s steps=%d discarded=%d interesting=%d skip_reason=%s note=%s",
+            "[proactive] resolve: action=%s steps=%d discarded=%d interesting=%d skip_reason=%s note=%s",
             ctx.terminal_action or "none",
             ctx.steps_taken,
             len(ctx.discarded_item_ids),
@@ -299,7 +299,7 @@ async def resolve_decide(
                 note="delivery_dedupe",
             )
         )
-        logger.info("[proactive_v2] resolve: delivery_dedupe hit")
+        logger.info("[proactive] resolve: delivery_dedupe hit")
         return ResolveResult(
             action="skip",
             result=TurnResult(
@@ -362,7 +362,7 @@ async def resolve_decide(
                     note=str(reason or "message_dedupe")[:160],
                 )
             )
-            logger.info("[proactive_v2] resolve: message_dedupe hit: %s", reason)
+            logger.info("[proactive] resolve: message_dedupe hit: %s", reason)
             return ResolveResult(
                 action="skip",
                 result=TurnResult(
